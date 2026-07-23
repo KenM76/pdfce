@@ -1,0 +1,17 @@
+# Force LF for anything that must run as a script or gets parsed
+# line-sensitively, regardless of the checkout platform's autocrlf
+# setting — a CRLF-mangled shebang script fails to run.
+*.sh text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Markdown/docs: normalize to LF too, for consistent diffs across
+# Windows/Linux/macOS contributors — content doesn't depend on it,
+# but mixed line endings make diffs noisy.
+*.md text eol=lf
+
+# Everything else: let git decide based on content (default safe
+# autocrlf-aware behavior).
+* text=auto
