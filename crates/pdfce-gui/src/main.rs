@@ -215,6 +215,7 @@
 #![forbid(unsafe_code)]
 
 mod canvas;
+mod object_provider;
 mod raster;
 mod ui_text;
 mod viewer;
@@ -235,6 +236,7 @@ use canvas::{
     CanvasTargetProvider, CanvasTool, EmptyTargetProvider, EscapeOutcome, GestureInterrupt,
     TargetId,
 };
+use object_provider::ObjectModelProvider;
 use raster::{PageTexture, ThumbnailCache};
 use viewer::{FitMode, ViewState};
 
@@ -1240,6 +1242,18 @@ struct OpenDoc {
     /// `pdfce-core`'s read-only object model. Boxed `dyn` behind an `Option`
     /// so Pass 9a can detach/replace it without changing this field's type.
     target_provider: Option<Box<dyn CanvasTargetProvider>>,
+    /// The page index [`Self::target_provider`] was last built for (Pass 9a).
+    /// The provider decomposes only the CURRENT page (module docs of
+    /// `object_provider`), so it is rebuilt lazily whenever this stops
+    /// matching `view.page_index` or an edit invalidates it (set to `None`
+    /// by [`Self::refresh_pages`]). `None` means "no object provider built
+    /// yet — the shippable `EmptyTargetProvider` is installed."
+    provider_page: Option<usize>,
+    /// The in-progress rubber-band marquee's start point, in **canvas
+    /// space** (Pass 9a). `Some` only between a canvas drag's start and its
+    /// release while in object-selection mode; `None` otherwise. Session
+    /// state — a marquee is never an edit.
+    marquee_start: Option<egui::Pos2>,
 }
 
 impl OpenDoc {
@@ -1275,6 +1289,11 @@ impl OpenDoc {
             text_edit: None,
             add_text: None,
             target_provider: Some(Box::new(EmptyTargetProvider)),
+            // Pass 9a: the real object-model provider is built lazily for
+            // the current page on the first `canvas` frame (and rebuilt on
+            // page change / edit) — `None` forces that first build.
+            provider_page: None,
+            marquee_start: None,
         }
     }
 
@@ -1376,7 +1395,39 @@ impl OpenDoc {
         self.page_texture = None;
         self.render_error = None;
         self.thumbnails = ThumbnailCache::default();
+        // Pass 9a: an edit (rotate/delete/reorder, and later move/delete of
+        // vector objects) can change the current page's object set, so the
+        // provider is stale — force a rebuild on the next `canvas` frame and
+        // drop any in-progress marquee. `prune_canvas_selection` then drops
+        // selection targets the freshly-built provider can no longer resolve.
+        self.provider_page = None;
+        self.marquee_start = None;
         self.prune_canvas_selection();
+    }
+
+    /// Ensure [`Self::target_provider`] is the object-model provider for the
+    /// CURRENT page (Pass 9a), rebuilding it when the page changed or an
+    /// edit invalidated it. Cheap on the steady state (a single index
+    /// compare); on a rebuild it decomposes exactly one page's content.
+    ///
+    /// If the page's content cannot be decoded, it installs the shippable
+    /// [`EmptyTargetProvider`] so selection simply finds nothing rather than
+    /// the app breaking — the same honesty posture the renderer takes on an
+    /// undecodable page.
+    fn ensure_object_provider(&mut self) {
+        let page_index = self.view.page_index;
+        if self.provider_page == Some(page_index) {
+            return;
+        }
+        let built = self
+            .pages
+            .get(page_index)
+            .and_then(|page| ObjectModelProvider::build(self.session.document(), page, page_index));
+        self.target_provider = match built {
+            Some(provider) => Some(Box::new(provider)),
+            None => Some(Box::new(EmptyTargetProvider)),
+        };
+        self.provider_page = Some(page_index);
     }
 
     /// Drop any canvas-selection target the provider can no longer resolve
@@ -4893,8 +4944,23 @@ impl PdfceApp {
         // and panning is byte-for-byte unchanged. `canvas_suppresses_pan`
         // (always `false` here) is the same pure function Pass 6.1/7 will
         // feed differently — neither invents its own `drag_to_scroll` call.
+        // Pass 9a: keep the current page's object-model provider fresh, so
+        // click-select, marquee, and the selection outline all query the
+        // right page's geometry (rebuilt lazily on page change / edit).
+        doc.ensure_object_provider();
+
         let tool_active = doc.active_tool.is_some();
-        let suppress_pan = canvas::canvas_suppresses_pan(tool_active, None);
+        // Pass 9a interaction decision (the marquee-vs-pan disambiguation the
+        // Pass 12.0 substrate deferred to this Pass, spec §4.2): with NO tool
+        // active the canvas is in object-selection mode, where a drag is a
+        // rubber-band MARQUEE, not a pan — the Inkscape/Illustrator
+        // convention (R61). Panning moves to the mouse wheel and the
+        // scrollbars (both unchanged). With a tool active, the tool's own
+        // suppression rule (`canvas_suppresses_pan`) applies as before. (A UX
+        // review by `pdfce-ui-specialist` is owed on this default; it was
+        // decided here to satisfy the Pass 9a marquee acceptance criterion.)
+        let selection_mode = !tool_active;
+        let suppress_pan = selection_mode || canvas::canvas_suppresses_pan(tool_active, None);
         let canvas_sense = if suppress_pan {
             egui::Sense::click_and_drag()
         } else {
@@ -4985,6 +5051,56 @@ impl PdfceApp {
                     .and_then(|p| p.hit_test(doc.view.page_index, canvas_pos));
                 doc.canvas_selection =
                     canvas::selection_after_click(&doc.canvas_selection, hit, shift);
+            }
+
+            // §4.2 marquee — Pass 9a's rubber-band selection. A drag on the
+            // canvas (which now suppresses pan in selection mode) records its
+            // start in canvas space, draws the in-progress rectangle, and on
+            // release asks the provider which objects it fully encloses,
+            // folding them into the selection (plain = replace, Shift = add).
+            if image_response.drag_started() {
+                doc.marquee_start = image_response
+                    .interact_pointer_pos()
+                    .map(|s| viewer::screen_to_page(s, image_rect, extent, zoom));
+            }
+            if let Some(start_canvas) = doc.marquee_start {
+                match image_response.interact_pointer_pos() {
+                    Some(cur_screen) => {
+                        let cur_canvas =
+                            viewer::screen_to_page(cur_screen, image_rect, extent, zoom);
+                        let canvas_rect = egui::Rect::from_two_pos(start_canvas, cur_canvas);
+                        // Draw the marquee outline (a 1px shape, projected
+                        // back to the screen), never a re-raster.
+                        let painter = ui.painter_at(image_rect);
+                        let min_s =
+                            viewer::page_to_screen(canvas_rect.min, image_rect, extent, zoom);
+                        let max_s =
+                            viewer::page_to_screen(canvas_rect.max, image_rect, extent, zoom);
+                        painter.rect_stroke(
+                            egui::Rect::from_two_pos(min_s, max_s),
+                            0.0,
+                            egui::Stroke::new(1.0, ui.visuals().selection.stroke.color),
+                            egui::StrokeKind::Inside,
+                        );
+                        if image_response.drag_stopped() {
+                            let shift = ui.input(|i| i.modifiers.shift);
+                            let hits = doc
+                                .target_provider
+                                .as_deref()
+                                .map(|p| p.hit_test_rect(doc.view.page_index, canvas_rect))
+                                .unwrap_or_default();
+                            doc.canvas_selection = canvas::selection_after_marquee(
+                                &doc.canvas_selection,
+                                &hits,
+                                shift,
+                            );
+                            doc.marquee_start = None;
+                        }
+                    }
+                    // The pointer left the window mid-drag: abandon the marquee
+                    // rather than commit a rectangle with no end point.
+                    None => doc.marquee_start = None,
+                }
             }
 
             // §5.1 live-preview overlay: painted above the raster via the

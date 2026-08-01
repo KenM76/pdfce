@@ -235,3 +235,17 @@ path = "fuzz_targets/recover_roundtrip.rs"
 test = false
 doc = false
 bench = false
+
+# Pass 9a (decision 011 Appendix A): the vector object-decomposition
+# target. Drives `pdfce_core::vector::decompose` + hit-test + centerline
+# over attacker-controlled content streams — the malformed/degenerate
+# paths, huge node counts, and unbalanced q/Q the acceptance criterion
+# names — asserting the MAX_NODES/MAX_OBJECTS bounds hold and nothing
+# panics. Shares the content-stream tokenizer entry with
+# `content_and_filters`, so that target's corpus keeps its value here.
+[[bin]]
+name = "vector_decompose"
+path = "fuzz_targets/vector_decompose.rs"
+test = false
+doc = false
+bench = false

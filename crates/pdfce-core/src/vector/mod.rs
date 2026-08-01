@@ -1,0 +1,61 @@
+//! # `vector` — the read-only vector object / selection model (Pass 9a)
+//!
+//! The first buildable slice of the operator's first beta — the scaled
+//! measurement/dimensioning tool
+//! (`docs/decisions/011-first-beta-scaled-measurement-dimensioning-tool.md`).
+//! This module is a **read-only decomposition layer that indexes** the
+//! lossless content-token model ([`crate::content`]); it never rewrites a
+//! byte (Pass 9a is byte-inert, R46). It provides three things the
+//! dimensioning subsystem, the snapping engine (12.M1), and the GUI
+//! selection all consume:
+//!
+//! 1. **Object decomposition** ([`decompose`], [`decompose_page`]) — the
+//!    page content walked into selectable [`VectorObject`]s: path objects
+//!    with user-space node lists, an effective CTM, paint style, and the
+//!    content-token index range that is the future editing handle; text and
+//!    image/form objects as bbox-only selectables.
+//! 2. **Hit-test geometry** ([`hit`]) — point→object and marquee→objects in
+//!    page space.
+//! 3. **Centerline derivation** ([`centerline`]) — the "line center, not
+//!    thickness" requirement: a filled thin bar's midline, offered as a
+//!    confirmable fuzzy candidate (rule 4), never auto-applied.
+//!
+//! ## Crate placement (GUI-core separation, binding invariant)
+//!
+//! Everything here lives in `pdfce-core` and has **no GUI/windowing
+//! dependency** (no egui/eframe/winit/wgpu, and — unlike `pdfce-render` —
+//! not even `tiny-skia`): the object model, hit-test math, and centerline
+//! derivation are pure geometry over the token model. The GUI's
+//! `CanvasTargetProvider` (Pass 12.0) is a thin `pdfce-gui` adapter that
+//! calls into this module and only translates coordinate spaces. This is
+//! what keeps the eventual WASM engine fork a shell-crate swap
+//! (`docs/ARCHITECTURE.md` §3).
+//!
+//! ## Agreement with the renderer (decision 011 Z2)
+//!
+//! The decomposition reuses the SAME construction primitives
+//! ([`geometry::cubic_from_v`]/[`geometry::cubic_from_y`]/
+//! [`geometry::rect_corners`]) `pdfce-render`'s interpreter calls, and the
+//! same `cm` composition ([`geometry::Matrix::post_concat`]). A cross-check
+//! acceptance test in `pdfce-render` compares the full page-space geometry
+//! the two pipelines produce on the vector fixtures, so the object model
+//! and the render agree by construction — the geometry analogue of the
+//! R49/R60 "one pipeline" discipline.
+
+pub mod centerline;
+pub mod decompose;
+pub mod geometry;
+pub mod hit;
+
+// Re-export the primary surface at `crate::vector::…` so callers do not
+// reach through the submodule paths for the everyday types.
+pub use centerline::{
+    CENTERLINE_ASPECT_THRESHOLD, CenterlineCandidate, derive_from_path, page_candidates,
+};
+pub use decompose::{
+    DecomposeDiagnostics, DocumentXObjects, FillRule, ImageObject, ImageSource, MAX_NODES,
+    MAX_OBJECTS, NoXObjects, PageObjects, PaintStyle, PathObject, Segment, Subpath, TextObject,
+    TokenRange, VectorObject, XObjectResolver, XObjectShape, decompose, decompose_page,
+};
+pub use geometry::{Bounds, Matrix, Point, Rgb, cubic_from_v, cubic_from_y, rect_corners};
+pub use hit::{FLATTEN_STEPS, MarqueeMode, hit_test_point, hit_test_rect};

@@ -98,6 +98,7 @@ pub mod text_edit;
 pub mod text_extract;
 pub mod textstring;
 pub mod vartext;
+pub mod vector;
 pub mod writer;
 pub mod xref;
 

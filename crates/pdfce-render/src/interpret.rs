@@ -561,6 +561,97 @@ pub fn run(
     )
 }
 
+/// One painted path recorded by [`trace_paths`], in the renderer's own
+/// terms: the finished path's nodes in **user space** (as the interpreter's
+/// `PathBuilder` built them, before any transform) plus the CTM captured at
+/// the path's first construction op (`path_ctm`).
+///
+/// This exists solely so Pass 9a's `pdfce_core::vector` object model can be
+/// cross-checked against the renderer's ACTUAL construction walk — not a
+/// second copy of it — on the fixtures (decision 011's Z2 "agree by
+/// construction" acceptance gate). Transform each node's endpoint by
+/// [`TracedPath::ctm`] to get the page-space geometry the object model
+/// stores in `PathObject::page_subpaths`.
+#[derive(Debug, Clone)]
+pub struct TracedPath {
+    /// The finished path's segments, in construction order, user space.
+    pub nodes: Vec<TracedNode>,
+    /// The CTM captured at the path's first construction op.
+    pub ctm: Transform,
+    /// Whether the terminating operator filled.
+    pub fill: bool,
+    /// Whether the terminating operator stroked.
+    pub stroke: bool,
+}
+
+/// One node of a [`TracedPath`], mirroring `tiny_skia`'s own path segments
+/// (all PDF path construction lowers to moves, lines, and cubics — a PDF
+/// content stream never emits a quadratic).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TracedNode {
+    /// A `move_to` (subpath start), user space.
+    Move(f32, f32),
+    /// A `line_to`, user space.
+    Line(f32, f32),
+    /// A cubic `curve_to` — two control points then the endpoint, user
+    /// space.
+    Cubic(f32, f32, f32, f32, f32, f32),
+    /// A subpath close.
+    Close,
+}
+
+/// Trace the paths the interpreter builds for `content`, WITHOUT caring
+/// about the pixels — the geometry oracle for the Pass 9a object-model
+/// cross-check (see [`TracedPath`]).
+///
+/// It runs the **real** interpreter (the same `paint` path the renderer
+/// uses), recording each finished path's nodes and captured CTM instead of
+/// forking a second decomposition. Pass [`GraphicsState::default_with_ctm`]
+/// with `Transform::identity()` as `initial` to trace in PDF user space,
+/// matching `pdfce_core::vector::decompose(_, Matrix::IDENTITY, _)`.
+///
+/// Painting still happens (onto a throwaway pixmap) so the trace reflects
+/// exactly what the renderer would draw; only top-level paths are traced
+/// (a nested form's paths are the form's own concern and are not part of
+/// this page-level cross-check).
+#[must_use]
+pub fn trace_paths(
+    doc: &Document,
+    content: &ContentStream,
+    resources: &Dict,
+    fonts: &FontEnvironment,
+    initial: GraphicsState,
+) -> Vec<TracedPath> {
+    // A tiny throwaway target: we discard the pixels, so its size only has
+    // to be non-zero for `Pixmap::new` to succeed.
+    let Some(mut pixmap) = Pixmap::new(8, 8) else {
+        return Vec::new();
+    };
+    let mut interp = Interpreter {
+        gs: GStateStack::new(initial),
+        diag: Diagnostics::default(),
+        path: PathBuilder::new(),
+        path_ctm: None,
+        current: None,
+        subpath_start: None,
+        needs_move: false,
+        pending_clip: None,
+        compat_depth: 0,
+        resources,
+        doc,
+        fonts,
+        text: None,
+        font_cache: HashMap::new(),
+        depth: 0,
+        active: Vec::new(),
+        trace: Some(Vec::new()),
+    };
+    for op in content.operations() {
+        interp.execute(&op, content, &mut pixmap);
+    }
+    interp.trace.unwrap_or_default()
+}
+
 /// The recursive body of [`run`]: interpret one content stream at
 /// XObject nesting `depth`, with `active` naming the form XObjects
 /// currently being executed further up the stack (the cycle guard).
@@ -599,6 +690,7 @@ fn run_nested(
         font_cache: HashMap::new(),
         depth,
         active,
+        trace: None,
     };
     for op in content.operations() {
         interp.execute(&op, content, pixmap);
@@ -672,6 +764,7 @@ pub fn run_form_at(
         font_cache: HashMap::new(),
         depth: 0,
         active: Vec::new(),
+        trace: None,
     };
     interp.do_form(id, stream, pixmap);
     interp.diag
@@ -727,6 +820,11 @@ struct Interpreter<'a> {
     /// name so a cycle reached through two different names is still
     /// caught (module docs).
     active: Vec<ObjId>,
+    /// When `Some`, [`Interpreter::paint`] records each finished path here
+    /// (nodes + captured CTM) instead of only painting it — the Pass 9a
+    /// object-model cross-check oracle ([`trace_paths`]). `None` for
+    /// ordinary rendering, so the render path is byte-for-byte unchanged.
+    trace: Option<Vec<TracedPath>>,
 }
 
 impl Interpreter<'_> {
@@ -1892,6 +1990,34 @@ impl Interpreter<'_> {
             }
             return;
         };
+
+        // Pass 9a cross-check: record this finished path's nodes + captured
+        // CTM for the object-model geometry oracle (module docs of
+        // `trace_paths`), before painting, using the SAME `path`/`ctm` the
+        // renderer is about to draw. `None` in ordinary rendering.
+        if let Some(trace) = self.trace.as_mut() {
+            let mut nodes = Vec::new();
+            for seg in path.segments() {
+                nodes.push(match seg {
+                    tiny_skia::PathSegment::MoveTo(p) => TracedNode::Move(p.x, p.y),
+                    tiny_skia::PathSegment::LineTo(p) => TracedNode::Line(p.x, p.y),
+                    tiny_skia::PathSegment::CubicTo(a, b, c) => {
+                        TracedNode::Cubic(a.x, a.y, b.x, b.y, c.x, c.y)
+                    }
+                    // A PDF content stream never emits a quadratic; if a
+                    // future path source ever did, lower it to its
+                    // endpoint so the anchor cross-check still holds.
+                    tiny_skia::PathSegment::QuadTo(_, p) => TracedNode::Line(p.x, p.y),
+                    tiny_skia::PathSegment::Close => TracedNode::Close,
+                });
+            }
+            trace.push(TracedPath {
+                nodes,
+                ctm,
+                fill,
+                stroke,
+            });
+        }
 
         // Paint under the CURRENT clip (the deferred-W rule: the new
         // clip must NOT affect this paint).
