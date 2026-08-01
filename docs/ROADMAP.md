@@ -43,6 +43,125 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 12.M2b — On-canvas dimension authoring gesture (decision 011 slice 5 of 6 in practice — the deferred GUI slice from Pass 12.M2) — 2026-08-01
+
+**Deferred GUI-authoring gesture from Pass 12.M2's judgment call 1, closing
+the "completely functional in the GUI" requirement — SHIPPED and COMMITTED
+as `7c93cc3`** (on top of `c7c1744` Pass 12.M2 / `6150e1a` docs / `801a748`
+Pass 12.M1 / `19ed865` docs / `e13f3e6` Pass 9a / `79d1c6f` MIT-license
+commit / `d8b3903` first implementation commit). Independently re-verified
+green in the main tree: gui **87/87** tests, core **811/811** tests
+passing; `cargo fmt --all --check` clean; `cargo clippy --workspace
+--all-targets -D warnings` clean; `cargo tree -p pdfce-core` /
+`-p pdfce-render` GUI-dep-free (invariant intact); **zero new Cargo
+dependencies**; GUI release build launches (pid 46476).
+
+This is the on-canvas click-point-A-then-click-point-B authoring gesture
+deferred at Pass 12.M2's ship — closing the last gap between "dimensions
+fully authorable via CLI" and "completely functional in the GUI."
+
+- **NEW `crates/pdfce-gui/src/measure_tool.rs`** — pure, headless-tested
+  authoring state machines (19 tests). **CHANGED** `main.rs`
+  (`run_measure_tool`/`run_dimension_groups_panel`/`scale_entry_widget`,
+  tool entry/teardown, Escape/gesture-interrupt handling, "Manage
+  Dimension Groups…" menu item), `object_provider.rs`
+  (`object_sample_points` accessor — the one per-page geometry
+  decomposition now feeds selection + snap + circle-fit), `ui_text.rs`.
+- **Three gestures, each reusing the shipped 12.M2 engine + 12.M1 snap
+  indicator + the 14.3/15.2/16.2 preview/Accept idiom:**
+  - **MeasureLinear** — click point A (snapped) → live axis/free-
+    constrained preview with scaled readout → click point B → Accept →
+    `EditSession::add_dimension`.
+  - **MeasureCircular** — toggle pick-set of points on an arc → live
+    `fit_circle_taubin` preview with fit residual shown → Accept →
+    radius/diameter dimension (display-only kind toggle, per 12.M2's
+    judgment call 3).
+  - **MeasureScale** — reference-line pick → scale-entry dialog
+    (real-length or ratio) → `set_group_scale` re-propagates to the
+    active group's existing dimensions.
+  - **Dimension-groups panel** — create group / set scale+units+format /
+    toggle per-group layer visibility / select active group, all via the
+    shipped `EditSession` methods (`add_dimension_group`,
+    `set_group_scale`, `toggle_dimension_layer`).
+- **Canvas==CLI equivalence PROVEN, not merely asserted:**
+  `gui_linear_kind_equals_cli_linear_kind` and
+  `gui_circular_kind_equals_cli_circular_kind` confirm GUI-authored
+  gestures produce the identical `DimensionKind` the CLI's `dimension-add`
+  builds — the additive `/Line`+`/IT`+`/PieceInfo`+OCG bytes therefore
+  match by construction, not by two independent code paths that merely
+  happen to agree today.
+
+**Engineer judgment calls made this Pass (recorded):**
+1. **Raw second point stored for the linear gesture** (the constrained/
+   snapped line shown during preview is display-only) — required for
+   CLI byte-equivalence; storing the constrained point instead would
+   diverge from what `dimension-add --points` records.
+2. **Group rename/delete NOT implemented this Pass** — needs core
+   sidecar-rewrite support; implementing it GUI-side only would push
+   storage logic into the GUI, violating the GUI-core separation
+   invariant. Named explicitly here as a follow-up, not silently
+   dropped.
+3. **Ctrl+Shift+D chord left unbound** — unverified-unclaimed; no
+   keybinding-conflict check has been run against it, so it is left
+   unwired rather than wired speculatively.
+4. **Fixed a pre-existing doc-comment/`#[allow]` misattachment** between
+   `run_measure_tool` and `run_add_text_tool` (left over from Pass 16.2)
+   while wiring the new tool into the same region of `main.rs`.
+
+**Gates (re-verified in the main tree):** gui **87/87** tests; core
+**811/811** tests; `cargo fmt --all --check` clean; `cargo clippy
+--workspace --all-targets -D warnings` clean; `cargo tree -p pdfce-core`
+/ `-p pdfce-render` GUI-dep-free; **zero new Cargo dependencies**; GUI
+release build launches (pid 46476). **Committed as `7c93cc3`**, on top
+of `6150e1a` (docs), `c7c1744` (Pass 12.M2), `801a748` (Pass 12.M1),
+`19ed865` (docs), `e13f3e6` (Pass 9a), `79d1c6f` (MIT license artifacts),
+and `d8b3903` (first implementation commit) — still **local-only**, same
+unpushed posture as all prior commits (push authorization remains a
+separate, not-yet-granted operator item).
+
+**MILESTONE — the operator's directed #1 priority, "get the dimensioning
+tool completely functional in the gui interface," is now SUBSTANTIALLY
+MET.** Decision 011's dimensioning capability is complete end-to-end in
+the GUI: the Pass 12.0 canvas substrate, Pass 9a's object model, Pass
+12.M1's snapping engine, Pass 12.M2's dimensioning/scale/storage engine,
+and this Pass's on-canvas authoring gesture combine so an operator can
+draw linear/radius/diameter/scale dimensions by clicking (snapped),
+manage named groups with per-group scale/units (including architectural
+feet-inches), and toggle per-group layer visibility — all on the canvas,
+with several capabilities that exceed Acrobat (see the Pass 12.M2 Shipped
+entry above).
+
+**Pass 9c-min — basic vector editing (move/delete/drag-node) — SHIPPED and
+COMMITTED as `76485b5`, 2026-08-01.** Content-stream SURGERY (the R46/§5.7
+named exception, mirror of redaction) on Pass 9a's object model, riding
+Pass 11's independent render-fidelity oracle (R59): `vector::edit`
+plan_move/plan_delete/plan_move_node reuse the Pass 8.0 REPLACE substrate
+(splice + emit_number + make_raw_stream), rewriting/removing path
+operands and re-emitting ONLY the edited stream; move uses the linear CTM
+inverse (`Matrix::inverse`/`map_vector`) for the page→user delta; node
+ordering replays decompose's exact anchor bookkeeping (agree-by-
+construction). `EditSession::{move_object,delete_object,move_node}` +
+CommandKinds; CLI `object-move`/`object-delete`/`node-move` (--verify-undo);
+`CanvasTool::VectorEdit`. Gates: 33 suites green; content-identity = exactly
+one changed stream; §5.7 objstm promotion (no stale copy); R59 faithful;
+undo byte-identical; fuzz 400k/0 crashes; cargo tree core+render
+GUI-dep-free; zero new deps. Named limits: single edit per GUI session
+(base-content decomposition — a second same-session edit is refused with
+`VectorEditNeedsReopen`, never misindexed); rect-corner / control-handle /
+text-image node editing stay full Pass 9.
+
+**★ MILESTONE — decision 011's measurement/editing beta is COMPLETE
+(2026-08-01).** All six slices shipped and committed
+(`12.0 → 9a → 12.M1 → 12.M2 → 12.M2b → 9c-min`). The operator's #1 directed
+priority ("get the dimensioning tool completely functional in the GUI") is
+fully met: draw/measure/scale/group/layer dimensions AND move/delete/
+drag-node edit existing vector objects — all on the canvas. Commit chain:
+`d8b3903 → 79d1c6f MIT → e13f3e6 9a → 19ed865 docs → 801a748 12.M1 →
+c7c1744 12.M2 → 6150e1a docs → 7c93cc3 12.M2b → 2abbd75 test-flake fix →
+dd3a8b8 §12 backfill → 76485b5 9c-min`. **NOTE: the session subagent budget
+(200) is exhausted — subsequent work is done directly, not delegated,
+unless the operator raises `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`.**
+
 ### Pass 12.M2 — Dimensioning + scale/group + hybrid storage + OCG layer (decision 011 slice 4 of 5, THE HEADLINE CAPABILITY) — 2026-08-01
 
 **Fourth slice of decision 011's five-slice dimensioning-tool architecture
@@ -3873,8 +3992,15 @@ group + hybrid storage + OCG layer), has since landed on top of
 `801a748`, giving the chain **`d8b3903` → `79d1c6f` (MIT) → `e13f3e6`
 (Pass 9a) → `19ed865` (docs) → `801a748` (Pass 12.M1) → `c7c1744` (Pass
 12.M2)** — see the Pass 12.M2 Shipped entry (above) for gates/content.
-All six commits remain **local-only**; push authorization is still a
-separate, not-yet-granted operator item.
+**UPDATE (continuation 54):** a docs commit **`6150e1a`** and a seventh
+logical commit **`7c93cc3`** (Pass 12.M2b, on-canvas dimension authoring
+gesture) have since landed on top of `c7c1744`, giving the chain
+**`d8b3903` → `79d1c6f` (MIT) → `e13f3e6` (Pass 9a) → `19ed865` (docs) →
+`801a748` (Pass 12.M1) → `c7c1744` (Pass 12.M2) → `6150e1a` (docs) →
+`7c93cc3` (Pass 12.M2b)** — see the Pass 12.M2b Shipped entry (top of
+Shipped, above) for gates/content. All eight commits remain
+**local-only**; push authorization is still a separate, not-yet-granted
+operator item.
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
@@ -3997,62 +4123,68 @@ posture.
 Its architecture is DECIDED and ARCHIVED at
 `docs/decisions/011-first-beta-scaled-measurement-dimensioning-tool.md`
 (five slices — **12.0 / 9a / 12.M1 / 12.M2 / 9c-min**). **Do NOT invent the
-beta's Pass IDs / slices here — decision 011 defines them.**
+beta's Pass IDs / slices here — decision 011 defines them.** (The
+"12.M2b" split below is an engineer-assigned Pass ID for a scope split
+within slice 4/5, not a librarian- or engineer-invented resequencing of
+decision 011's own architecture — see the Pass 12.M2 Shipped entry's
+judgment call 1.)
 
-**Current state (2026-08-01): slices 1–4 of 5 are shipped.** Pass
-**12.0** (canvas-interaction substrate), Pass **9a** (read-only vector
+**Current state (2026-08-01): slices 1–5 of decision 011's originally-
+named five are shipped; only 9c-min remains.** Pass **12.0**
+(canvas-interaction substrate), Pass **9a** (read-only vector
 object/selection model + centerline), Pass **12.M1** (snapping engine +
-fuzzy snap indicator), and now Pass **12.M2** (dimensioning + scale/
-group + hybrid storage + OCG layer — the headline capability) have all
-shipped — see Shipped above. Dimensions are now fully authorable via
-the CLI (`dimension-add`/`dimension-list`/`group-add`/
-`group-set-scale`/`layer-toggle`) and disclosed in the GUI (menu +
-tools + status overlay), but the canvas still cannot AUTHOR a new
-dimension by on-canvas click — that gesture was deliberately deferred
-at 12.M2's ship (engineer judgment call 1, see the Pass 12.M2 Shipped
-entry) to a new follow-up slice, **"Pass 12.M2b — on-canvas dimension
-authoring," now IN PROGRESS**. **9c-min** (basic vector editing:
-move/delete/drag-node — the R59/Pass-11-gated surgery slice) remains
-the last of decision 011's originally-named five slices, queued behind
-12.M2b. Nothing is "completely functional in the GUI" yet — 12.M2b is
-exactly the gap that closes it.
+fuzzy snap indicator), Pass **12.M2** (dimensioning + scale/group +
+hybrid storage + OCG layer — the headline capability), and now Pass
+**12.M2b** (on-canvas dimension authoring gesture) have all shipped —
+see Shipped above. **Dimensions are now fully authorable BOTH via the
+CLI (`dimension-add`/`dimension-list`/`group-add`/`group-set-scale`/
+`layer-toggle`) AND on the canvas** (click-point-A-then-click-point-B
+for linear, toggle pick-set + live fit for radius/diameter, reference-
+line pick + dialog for scale, plus a dimension-groups management
+panel) — see the Pass 12.M2b Shipped entry (top of Shipped) for the
+full gesture set and the canvas==CLI equivalence proof.
+**MILESTONE — the operator's #1 directed priority, "get the
+dimensioning tool completely functional in the gui interface," is now
+SUBSTANTIALLY MET** (see the Pass 12.M2b Shipped entry's milestone
+paragraph for the full record). **9c-min** (basic vector editing:
+move/delete/drag-node — the R59/Pass-11-gated surgery slice, a distinct
+capability: editing EXISTING vector objects rather than authoring
+dimensions) is the only decision-011 beta slice remaining, and is now
+**IN PROGRESS**.
 
 **IN PROGRESS NOW (2026-08-01):**
-- **`pdfce-engineer` building "Pass 12.M2b" (on-canvas dimension
-  authoring)** — the deferred click-point-A-then-click-point-B canvas
-  gesture (consuming 12.M1's snap engine and 12.M2's authoring
-  backend), dispatched the same continuation 12.M2 shipped. This is
-  the slice the operator's "completely functional in the GUI"
-  requirement is actually waiting on; the CLI-only authoring path
-  shipped at 12.M2 is a real, disclosed capability but not yet the
-  GUI-complete milestone.
+- **`9c-min`** (basic vector editing: move/delete/drag-node) —
+  promoted from "Following 12.M2b" to In progress on 12.M2b's ship
+  (SESSION_LOG continuation 54). Last of decision 011's originally-
+  named five slices; closes the beta out entirely once shipped.
 - **Marquee-vs-pan UX flag (owed since Pass 9a) — RESOLVED, KEPT, no
   further action.** `pdfce-ui-specialist` reviewed it during the
   12.M1 dispatch and found no conflict with dimension-picking (which
   is click-A-then-click-B, not drag) — see the Pass 12.M1 Shipped
   entry above for the full record. This flag is now closed.
 
-**Following 12.M2b (not yet dispatched):**
-- **9c-min** (basic vector editing: move/delete/drag-node) — the
-  R59/Pass-11-gated surgery slice, last of decision 011's originally-
-  named five slices.
-
-**Icon design (operator priority #2) is now COMPLETE, though its
-BUILD has not started** — `docs/ui_specs/icon-set-and-toolbar.md`
+**Icon design (operator priority #2) is COMPLETE, and its BUILD is now
+UNBLOCKED (both gated decisions RESOLVED 2026-08-01, SESSION_LOG
+continuation 54) — still queued behind 9c-min per the operator's
+sequence, not yet dispatched.** `docs/ui_specs/icon-set-and-toolbar.md`
 (authored by `pdfce-ui-specialist`) maps all 27 current/near-term GUI
 controls to a ScripTree-styled icon (reuse or new-draw), including a
 deliberate **solid-filled exception for redaction's icon** (the one
 place in an otherwise all-outline set where a solid mark is the honest
-depiction of what redaction actually does). Two decisions are
-explicitly named as operator/KenAgent-gated before the BUILD itself is
-scoped — see the "★ Icon set" entry under Next up (below) for detail:
-(a) the SVG-in-egui rendering pipeline (pre-rasterize to PNG at build
-time, zero new dependency, vs. a runtime `resvg`/`usvg`-style crate,
-MPL-2.0, needing rule-13 sign-off), and (b) confirming the ScripTree
-icon set's own provenance/licensing before bundling any SVG into
-pdfce's MIT-licensed asset tree (likely a non-issue since Ken owns both
-projects, but per rule 13 discipline it must be confirmed, not
-assumed).
+depiction of what redaction actually does). The two decisions
+previously gating the BUILD's scoping are now both answered by the
+operator — see the "★ Icon set" entry under Next up (below) for the
+full resolved record:
+(a) **SVG rendering: PRE-RASTERIZE to PNG at build time** — no new
+Cargo dependency; the runtime `resvg`/`usvg`-style crate alternative
+was explicitly rejected.
+(b) **Provenance/style: USE the ScripTree SVGs (operator's own) where
+they fit; CREATE new icons in that same flat style when needed; make
+new icons resemble Inkscape/Adobe VISUAL CONVENTIONS for equivalent
+commands (the recognizable metaphor — e.g. a hand for pan, a magnifier
+for zoom) WITHOUT copying their actual icon artwork** (no copyright
+issues, since the resemblance is at the metaphor level, not the asset
+level).
 
 **READY-TO-START status (2026-08-01, unchanged):** the beta's research
 prerequisites (spec slices, Acrobat measuring-tools bucket, Inkscape
@@ -4109,13 +4241,17 @@ sense."** This is a four-item priority order, superseding whatever
 "next" framing any older entry below implies. Do not resequence
 without a new operator instruction.
 
-1. **Dimensioning tool → completely functional in the GUI.** ACTIVE
-   NOW — see the Beta entry under "In progress" (above) for full
-   state (12.0, 9a, 12.M1, and 12.M2 all shipped — dimensions fully
-   authorable via CLI, disclosed in GUI; "Pass 12.M2b" on-canvas
-   authoring in progress now; 9c-min remaining after it).
-2. **ScripTree-style icons for all GUI features.** Queued behind the
-   dimensioning tool — see the new "Icon set" entry below.
+1. **Dimensioning tool → completely functional in the GUI.**
+   SUBSTANTIALLY MET (2026-08-01) — see the Beta entry under "In
+   progress" (above) and the Pass 12.M2b Shipped entry's milestone
+   paragraph for the full record (12.0, 9a, 12.M1, 12.M2, AND 12.M2b
+   all shipped — dimensions fully authorable both via CLI and on the
+   canvas, disclosed in GUI). **9c-min** (basic vector editing, a
+   distinct capability) is the only decision-011 slice remaining and
+   is now IN PROGRESS.
+2. **ScripTree-style icons for all GUI features.** Design COMPLETE,
+   both gated decisions RESOLVED (2026-08-01) — BUILD still queued
+   behind 9c-min, not yet dispatched — see the "Icon set" entry below.
 3. **Finish all text-handling.** FF-B (cross-block/cross-page reflow),
    FF-H (`Tc`/`Tw`/`Tz`/`Ts` spacing + synthetic styles + minimal
    StructTree update), and FF-C (font subsetting/glyph embedding — its
@@ -4137,8 +4273,31 @@ without a new operator instruction.
 
 ### ★ Icon set — ScripTree-style SVG icons for all GUI features (operator priority #2, set 2026-08-01)
 
-**AMENDED 2026-08-01 (SESSION_LOG continuation 53) — the DESIGN is now
-COMPLETE; the BUILD has not started.** `pdfce-ui-specialist` authored
+**AMENDED 2026-08-01 (SESSION_LOG continuation 54) — BOTH gated decisions
+RESOLVED by the operator; the icon BUILD is now UNBLOCKED (still queued
+behind 9c-min per the priority sequence, not yet dispatched):**
+(a) **SVG rendering: PRE-RASTERIZE to PNG at build time.** No new Cargo
+    dependency — keeps pdfce's zero-copyleft-dependency posture. The
+    runtime `resvg`/`usvg`-style crate alternative is explicitly
+    REJECTED (not merely deferred).
+(b) **Provenance/style, Ken's own words:** *"Scriptree icons are mine,
+    use from it what makes sense and create new ones in its style when
+    necessary, try to make them close to what inkscape and Adobe use
+    for similar commands without running into copyright issues."*
+    Concretely: USE the ScripTree SVGs (operator's own art) where they
+    fit an existing pdfce control; CREATE new icons in that same flat
+    48×48/`stroke="currentColor"`/outline style when no ScripTree icon
+    fits; for those new icons, aim for the recognizable VISUAL
+    CONVENTION Inkscape/Adobe use for the equivalent command (e.g. a
+    hand for pan, a magnifier for zoom, crosshairs for a measure tool)
+    WITHOUT copying their actual icon artwork — metaphor-level
+    resemblance is fine, asset-level copying is not. This resolves
+    gated decision (b) below without needing a separate provenance
+    confirmation pass (Ken's own statement of ownership + intent IS the
+    confirmation).
+
+**Prior state (2026-08-01, SESSION_LOG continuation 53) — the DESIGN
+was COMPLETE; the BUILD had not started.** `pdfce-ui-specialist` authored
 `docs/ui_specs/icon-set-and-toolbar.md` while Pass 12.M2 was building
 in parallel: full audit of pdfce's current icon-less/inconsistent
 toolbar (emoji glyph+text / bare Unicode dingbat / plain text — three
@@ -4153,16 +4312,17 @@ otherwise all-outline set — a solid black bar over a faint outlined
 rect, because an outline-only icon would visually understate what
 redaction actually does (irreversibly removes content, not just masks
 it) — recorded as a rule-based exception, not a style drift. **Two
-decisions are explicitly named in the spec (§7) as still
-operator/KenAgent-gated before the BUILD is scoped — this design doc
-does NOT decide either:**
+decisions were named in the spec (§7) as operator/KenAgent-gated before
+the BUILD could be scoped — this design doc did NOT decide either; BOTH
+are now RESOLVED per the continuation-54 amendment above:**
 (a) **SVG-in-egui rendering pipeline** — pre-rasterize to PNG at build
     time (`include_bytes!`, zero new Cargo dependency, but fixed
     resolution unless multiple DPI variants are baked) vs. a runtime
     SVG-rasterizing crate such as `resvg`/`usvg` (crisp at any DPI/zoom,
     but MPL-2.0 — a real rule-13 dependency classification even though
     pdfce is now MIT, needing an explicit `docs/PRIOR_ART.md` check and
-    operator go/no-go before it enters `Cargo.toml`).
+    operator go/no-go before it enters `Cargo.toml`). **RESOLVED:
+    pre-rasterize to PNG chosen; `resvg`/`usvg` rejected.**
 (b) **ScripTree icon provenance/licensing confirmation** — every
     inspected SVG carries a "generic … placeholder, not a vendor
     trademark logo" comment suggesting original-art authorship, and
@@ -4171,12 +4331,19 @@ does NOT decide either:**
     corpus) it must be **confirmed, not assumed**, before any SVG is
     copied into pdfce's asset tree; the spec recommends a
     `PROVENANCE.md` in the new asset directory recording the
-    confirmation.
+    confirmation. **RESOLVED: Ken confirmed ownership/intent directly
+    (see the continuation-54 quote above) — use ScripTree SVGs where
+    they fit, create new ones in-style otherwise, resemble Inkscape/
+    Adobe VISUAL CONVENTIONS (not their artwork) for new icons. A
+    `PROVENANCE.md` recording this confirmation is still owed in the
+    new asset directory when the BUILD lands, per the spec's own
+    recommendation.**
 
-**Still queued behind the dimensioning tool (operator priority #1) —
-do not let the design's completeness pull the BUILD ahead of 12.M2b/
-9c-min in the dispatch order.** The original scoping notes below are
-retained; the design work they call for is now done.
+**Still queued behind 9c-min (the last remaining decision-011 slice,
+now In progress) — do not let the design's completeness or the gated
+decisions' resolution pull the BUILD ahead of 9c-min in the dispatch
+order.** The original scoping notes below are retained; the design
+work they call for is now done, and both gated decisions are resolved.
 
 Ken wants pdfce's GUI toolbar/tool icons styled after
 `D:\Dev\ScripTree\icons\*.svg` — the existing coherent SVG icon set
@@ -4197,14 +4364,14 @@ drop.
   must-preserve).
 - ~~`pdfce-ui-specialist` is the natural dispatch for the icon→feature
   mapping...~~ **DONE — same spec, §§1-6.**
-- ~~Licensing check owed before adoption...~~ **NAMED as gated
-  decision (b) in the amendment above — confirmation itself is still
-  outstanding, only the "who/how" is resolved.**
-- ~~Format/pipeline question, unresolved...~~ **NAMED as gated decision
-  (a) in the amendment above — the fork is now precisely characterized
-  (pre-rasterize vs. `resvg`/`usvg`), the choice itself still open.**
-- **Queued behind the dimensioning tool** (operator priority #1) — do
-  not let this displace 12.M2b/9c-min in the dispatch order.
+- ~~Licensing check owed before adoption...~~ **RESOLVED 2026-08-01
+  (continuation 54) — see gated decision (b) above; Ken confirmed
+  provenance/style directly.**
+- ~~Format/pipeline question, unresolved...~~ **RESOLVED 2026-08-01
+  (continuation 54) — see gated decision (a) above; pre-rasterize to
+  PNG chosen, `resvg`/`usvg` rejected.**
+- **Queued behind 9c-min** (the last remaining decision-011 slice) — do
+  not let this displace 9c-min in the dispatch order.
 
 ### ★ NEXT MAJOR FOCUS — Pass 14.x: Acrobat text-handling parity (decision 014, DECIDED 2026-07-31)
 
@@ -5432,22 +5599,24 @@ nothing gets forgotten, not as a commitment to build in this order.
   above for the full record. This flag is now closed — no outstanding
   action.
 - **Test-hygiene — integration-test temp-path collision risk (low
-  severity, non-blocking, filed 2026-08-01).** Some integration tests
+  severity, non-blocking, filed 2026-08-01). FIX IN PROGRESS (as of
+  2026-08-01, SESSION_LOG continuation 54).** Some integration tests
   build temp output paths from `std::env::temp_dir()` +
   `process::id()`; `process::id()` is only unique per OS process, not
   per-thread, so two tests racing inside the same `cargo test`
   process (the normal parallel-test default) can collide on the same
-  path if their other disambiguating tag/counter also matches. A build
-  agent observed one transient, non-reproducing intermittent
-  `RecoveredBaseForbidsIncremental` failure under a full parallel
-  `cargo test --workspace` run that did **not** reproduce on a clean
-  main-tree run (the Pass 9a ship's own verification run was fully
-  green: 749 core + all integration/GUI tests). **Not a product bug,
-  not blocking any ship** — recorded purely as a test-infrastructure
-  hardening item: make temp paths thread-unique (e.g. an
-  `AtomicUsize`/`AtomicU64` counter appended alongside the PID) the
-  next time this test helper is touched. No Pass number assigned; pick
-  up opportunistically.
+  path if their other disambiguating tag/counter also matches. **Now
+  observed by TWO separate builders** — the Pass 9a ship (one
+  transient, non-reproducing intermittent `RecoveredBaseForbidsIncremental`
+  failure under a full parallel `cargo test --workspace` run, not
+  reproducing on a clean main-tree run) and, independently, the Pass
+  12.M2b build. **Still not a product bug, not blocking any ship** —
+  a bounded test-hygiene fix (make integration-test temp paths globally
+  unique, e.g. an `AtomicUsize`/`AtomicU64` counter appended alongside
+  the PID) is now dispatched. No Pass number assigned; tracked as an
+  opportunistic hardening item until it ships, at which point the
+  librarian should record the fix here or promote it to a Pass entry
+  if it turns out to need one.
 
 - **★ NEXT MAJOR FOCUS — Acrobat text-handling parity (Edit PDF: in-place
   text edit, paragraphs, reflow, formatting, font-on-edit)** — filed by

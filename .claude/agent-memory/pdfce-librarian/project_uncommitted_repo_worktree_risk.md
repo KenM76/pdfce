@@ -142,3 +142,14 @@ recording a future commit, verify the current tip with `git log
 --oneline -1` rather than trusting this memory's hash list, since it
 will keep growing across sessions and this file updates lag behind the
 actual repo.
+
+**UPDATE — continuation 54 (2026-08-01, Pass 12.M2b shipped).** Cadence
+held again: `6150e1a` (docs) and `7c93cc3` (Pass 12.M2b) landed on top
+of `c7c1744`. Chain now eight deep, all **local-only**: `d8b3903` →
+`79d1c6f` (MIT) → `e13f3e6` (Pass 9a) → `19ed865` (docs) → `801a748`
+(Pass 12.M1) → `c7c1744` (Pass 12.M2) → `6150e1a` (docs) → `7c93cc3`
+(Pass 12.M2b). This commit closes out the decision-011 dimensioning-tool
+GUI milestone (see `project_mit_license_and_priority_sequence.md`'s
+continuation-54 update) — same "completed-milestone-sized" framing as
+continuation 47's text-parity-arc note applies here too. Still verify
+tip with `git log --oneline -1` before trusting any hash list here.

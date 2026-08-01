@@ -7018,3 +7018,226 @@ sub-decisions):**
 - Still owed: operator push/publish call (now six commits deep);
   `ARCHITECTURE.md` §12 decision-016 backfill; encryption-refusal
   sign-off; the other oldest-first still-open items above.
+
+**Same-day continuation 54 — Pass 12.M2b SHIPPED and COMMITTED
+(`7c93cc3`): on-canvas dimension authoring gesture; DIMENSIONING TOOL
+NOW COMPLETE END-TO-END IN THE GUI (operator priority #1, substantially
+met); icon set's two gated decisions RESOLVED by the operator (priority
+#2 unblocked); test-hygiene flake fix dispatched:**
+
+**Shipped:**
+- **Pass 12.M2b** — on-canvas dimension authoring gesture (decision 011
+  slice 5 of 6 in practice — the deferred GUI slice from Pass 12.M2's
+  judgment call 1). NEW `crates/pdfce-gui/src/measure_tool.rs` — pure,
+  headless-tested authoring state machines (19 tests). CHANGED
+  `main.rs` (`run_measure_tool`/`run_dimension_groups_panel`/
+  `scale_entry_widget`, tool entry/teardown, Escape/gesture-interrupt,
+  "Manage Dimension Groups…" menu item), `object_provider.rs`
+  (`object_sample_points` accessor — one geometry decomposition now
+  feeds selection + snap + circle-fit), `ui_text.rs`.
+  - Three gestures, all reusing the shipped 12.M2 engine + 12.M1 snap
+    indicator + the 14.3/15.2/16.2 preview/Accept idiom: **MeasureLinear**
+    (click A snapped → live constrained preview + scaled readout →
+    click B → Accept → `EditSession::add_dimension`); **MeasureCircular**
+    (toggle pick-set → live `fit_circle_taubin` preview with residual →
+    Accept → radius/diameter dimension); **MeasureScale** (reference
+    line → scale dialog, real-length or ratio → `set_group_scale`
+    re-propagates). Plus a **dimension-groups panel** (create / set
+    scale+units+format / layer-toggle / select-active via the shipped
+    `EditSession` methods).
+  - **Canvas==CLI equivalence PROVEN**
+    (`gui_linear_kind_equals_cli_linear_kind`,
+    `gui_circular_kind_equals_cli_circular_kind`) — GUI authoring
+    produces the identical `DimensionKind` the CLI's `dimension-add`
+    builds, so the additive `/Line`+`/IT`+`/PieceInfo`+OCG bytes match
+    by construction, not by coincidence between two independent code
+    paths.
+  - **Gates (re-verified in the main tree):** gui 87/87, core 811/811
+    tests passing; `cargo fmt --all --check` clean; `cargo clippy
+    --workspace --all-targets -D warnings` clean; `cargo tree -p
+    pdfce-core` / `-p pdfce-render` GUI-dep-free (invariant intact);
+    **zero new Cargo dependencies**; GUI release build launches (pid
+    46476).
+  - **Committed as `7c93cc3`**, on top of `6150e1a` (docs), `c7c1744`
+    (Pass 12.M2), `801a748` (Pass 12.M1), `19ed865` (docs), `e13f3e6`
+    (Pass 9a), `79d1c6f` (MIT license artifacts), `d8b3903` (first
+    implementation commit). All eight commits remain **local-only** —
+    push authorization still a separate, not-yet-granted operator
+    item.
+  - Full `ROADMAP.md` record: new Pass 12.M2b Shipped entry (top of
+    Shipped, above Pass 12.M2), including the milestone paragraph;
+    GIT STATUS note amended with the `7c93cc3` chain; Beta "In
+    progress" section amended (5 of decision 011's originally-named 5
+    slices now shipped, only 9c-min remaining, promoted to In
+    progress); ★★★ operator priority sequence item 1 updated to
+    "SUBSTANTIALLY MET"; ★ Icon set entry amended with both gated
+    decisions RESOLVED; Backlog test-hygiene flake entry amended
+    "FIX IN PROGRESS."
+
+**Decisions made this session:**
+- **Engineer judgment calls recorded in full in the Pass 12.M2b Shipped
+  entry, not repeated here:** raw second point stored for the linear
+  gesture (constrained line is display-only, needed for CLI byte-
+  equivalence); group rename/delete NOT implemented (needs core
+  sidecar-rewrite support — GUI-only implementation would violate the
+  GUI-core separation invariant, named as a follow-up); Ctrl+Shift+D
+  chord left unbound (unverified-unclaimed, no conflict check run); a
+  pre-existing doc-comment/`#[allow]` misattachment between
+  `run_measure_tool` and `run_add_text_tool` (leftover from Pass 16.2)
+  fixed opportunistically while wiring the new tool into the same
+  region of `main.rs`.
+- **Operator decision — icon-set SVG rendering pipeline: PRE-RASTERIZE
+  to PNG at build time.** No new Cargo dependency; the runtime
+  `resvg`/`usvg`-style crate alternative is explicitly rejected, not
+  merely deferred. Resolves gated decision (a) from continuation 53's
+  icon-design-complete record.
+- **Operator decision — ScripTree icon provenance/style, verbatim:**
+  *"Scriptree icons are mine, use from it what makes sense and create
+  new ones in its style when necessary, try to make them close to what
+  inkscape and Adobe use for similar commands without running into
+  copyright issues."* Concretely: use the ScripTree SVGs (Ken's own
+  art) where they fit an existing pdfce control; create new icons in
+  that same flat/outline style where none fits; for new icons, aim for
+  the recognizable visual CONVENTION Inkscape/Adobe use for the
+  equivalent command (the metaphor — hand for pan, magnifier for zoom,
+  etc.), explicitly WITHOUT copying their actual icon artwork, so there
+  is no copyright exposure. Resolves gated decision (b) from
+  continuation 53. A `PROVENANCE.md` recording this confirmation is
+  still owed in the new asset directory when the icon BUILD itself
+  lands (per the ui-spec's own recommendation) — the decision is
+  resolved, the paperwork artifact is a build-time task, not an open
+  question.
+
+**Findings + decisions:**
+- **MILESTONE — the operator's #1 directed priority, "get the
+  dimensioning tool completely functional in the gui interface," is now
+  SUBSTANTIALLY MET.** Decision 011's dimensioning capability is
+  complete end-to-end in the GUI: Pass 12.0 (canvas substrate) → Pass
+  9a (object model) → Pass 12.M1 (snapping) → Pass 12.M2 (dimensioning/
+  scale/storage/OCG engine) → Pass 12.M2b (on-canvas authoring gesture)
+  combine so an operator can draw linear/radius/diameter/scale
+  dimensions by clicking (snapped), manage named groups with per-group
+  scale/units (including architectural feet-inches), and toggle
+  per-group layer visibility — all on the canvas, with several
+  capabilities exceeding Acrobat (Taubin-fit radius/diameter dimensions,
+  feet-inches units, named per-group scale, a first-class CLI). **The
+  ONLY remaining decision-011 beta slice is 9c-min** (basic vector
+  editing: move/delete/drag-node) — a distinct capability, editing
+  EXISTING vector objects rather than authoring dimensions, now
+  promoted to In progress.
+- **Icon-set BUILD (operator priority #2) is now fully unblocked** —
+  design was already complete (continuation 53); both decisions that
+  were gating the build itself are now resolved by direct operator
+  answer (see Decisions above). The build remains queued behind
+  9c-min per the operator's own four-item priority sequence — resolving
+  the gates does not jump the queue.
+- **Test-hygiene flake now confirmed by a SECOND independent builder.**
+  The intermittent `RecoveredBaseForbidsIncremental` failure under a
+  full parallel `cargo test --workspace` run (temp-path collision from
+  `process::id()` not being per-thread-unique), first flagged at Pass
+  9a's ship and non-reproducing on a clean run, has now also been
+  observed during the Pass 12.M2b build. Still not a product bug, still
+  not blocking any ship, but two independent sightings raise it above
+  "note and move on" — a bounded fix (thread-unique temp paths, e.g. an
+  `AtomicUsize`/`AtomicU64` counter alongside the PID) is dispatched
+  now rather than left purely opportunistic. `ROADMAP.md`'s Backlog
+  entry amended to "FIX IN PROGRESS."
+- No new generalizable Rust/egui finding graduated to `D:\dev\rag\rust\`
+  or `D:\dev\rag\egui\` this continuation — the measure-tool state
+  machines and the canvas==CLI equivalence tests are pdfce-architecture-
+  specific (built directly on decision 011's own requirements), not
+  generalizable Rust/egui-ecosystem findings. (If the test-hygiene fix,
+  once shipped, yields a generalizable "thread-unique temp path in
+  `cargo test --workspace`" pattern, that is a `D:\dev\rag\rust\`
+  candidate to write when it lands — flagged here so it isn't missed.)
+- No new PDF-domain finding graduated to `C:\personal_rag\pdf\` this
+  continuation — nothing this Pass surfaced was an empirical "how
+  real-world PDFs diverge from spec" observation; it was all pdfce-
+  internal GUI-authoring engineering.
+
+**Still in flight:**
+- **9c-min** (basic vector editing: move/delete/drag-node) — now the
+  active build, last of decision 011's originally-named five slices;
+  closes the beta out entirely once shipped.
+- Icon-set BUILD (priority #2) unblocked but not yet dispatched —
+  queued behind 9c-min, no work started.
+- Priority items #3 (finish text-handling: FF-B/FF-H/FF-C) and #4
+  (form-building tools) remain unchanged — still queued behind items
+  #1 (now substantially met) and #2, no work started on either.
+- Test-hygiene fix (thread-unique integration-test temp paths) —
+  dispatched, in progress; no Pass number assigned.
+- Push/publish authorization for the local commits (`d8b3903`,
+  `79d1c6f`, `e13f3e6`, `19ed865`, `801a748`, `c7c1744`, `6150e1a`,
+  `7c93cc3`) remains a separate, not-yet-granted operator item.
+
+**Still-open operator items (re-surfaced, ordered oldest-first):**
+- Encryption-refusal operator sign-off — oldest owed, unchanged.
+- Push/publish authorization for the local commit chain — unchanged,
+  now eight commits deep (`d8b3903` → `79d1c6f` → `e13f3e6` →
+  `19ed865` → `801a748` → `c7c1744` → `6150e1a` → `7c93cc3`), all
+  local-only.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged,
+  unchanged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5) — unchanged.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question — still no operator answer, unchanged;
+  explicitly distinct from "finish off all the text handling stuff"
+  (continuation 50, item 3).
+- `ARCHITECTURE.md` §12 decision-016 (FF-D) backfill — flagged
+  continuation 50, still not done.
+- Icon-set SVG-in-egui rendering pipeline and ScripTree-asset
+  provenance/style — **RESOLVED this continuation** (see Decisions
+  above); listed here only for the oldest-first trail's continuity, no
+  further action needed on the decisions themselves. A `PROVENANCE.md`
+  write-up is still owed when the icon BUILD lands.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); listed only for the oldest-first trail's
+  continuity, no action needed.
+
+**For next session:**
+- Build **9c-min** (basic vector editing: move/delete/drag-node) to
+  completion — this closes out decision 011's beta entirely.
+- When 9c-min ships and the icon-set BUILD (priority #2) is dispatched,
+  proceed directly to implementation — both gating decisions are
+  already resolved; no further sign-off needed before the build itself,
+  only remember to write the `PROVENANCE.md` confirmation record.
+- Land the test-hygiene fix (thread-unique temp paths) opportunistically;
+  consider writing a `D:\dev\rag\rust\` finding once it ships if the
+  pattern generalizes beyond pdfce's own test helpers.
+- Still owed: operator push/publish call (now eight commits deep);
+  `ARCHITECTURE.md` §12 decision-016 backfill; encryption-refusal
+  sign-off; the other oldest-first still-open items above.
+
+**Same-day continuation 55 — Pass 9c-min SHIPPED + decision-011 beta
+COMPLETE + subagent budget exhausted (2026-08-01, engineer-authored — the
+subagent limit was reached, so the librarian filing is done directly).**
+- **Shipped:** Pass 9c-min (basic vector editing: move/delete/drag-node),
+  committed `76485b5`. Content-stream surgery on Pass 9a's object model
+  (Pass 8.0 REPLACE substrate reuse; linear-CTM-inverse page→user delta;
+  agree-by-construction node ordering), CLI object-move/object-delete/
+  node-move + `CanvasTool::VectorEdit`. Gates: 33 suites green,
+  content-identity (one changed stream), §5.7 objstm promotion, R59
+  faithful, undo byte-identical, fuzz 400k/0. Named limits: single edit
+  per GUI session (VectorEditNeedsReopen), rect-corner/handle/text-image
+  node editing stay full Pass 9.
+- **MILESTONE:** decision 011's measurement/editing beta is COMPLETE —
+  all six slices (`12.0→9a→12.M1→12.M2→12.M2b→9c-min`) shipped+committed.
+  The operator's #1 directed priority ("dimensioning tool completely
+  functional in the GUI") is fully met. GUI relaunched for the operator.
+- **Also this continuation (engineer-direct, no agents):** `ARCHITECTURE.md`
+  §12 backfilled with the decision-016 entry (committed `dd3a8b8` — closes
+  the flagged §12 gap; the §12 log now records 013/014/015/016 + MIT); the
+  integration-test temp-path flake fixed (committed `2abbd75`).
+- **CONSTRAINT — subagent budget (200) EXHAUSTED.** No further work can be
+  DELEGATED to builder/librarian/spec agents this session. Remaining
+  operator priorities (ScripTree icons; finish text-handling FF-B/FF-H/
+  FF-C; form-building) must be built DIRECTLY in the main loop (slower,
+  in-context) OR the operator raises `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`.
+  Surfaced to the operator for a decision on how to proceed.
+- **Commit chain (11):** `d8b3903 → 79d1c6f → e13f3e6 → 19ed865 → 801a748
+  → c7c1744 → 6150e1a → 7c93cc3 → 2abbd75 → dd3a8b8 → 76485b5`.
+- **Still owed (operator):** how to proceed past the agent limit;
+  push/publish call; encryption-refusal sign-off; `LEGAL.md` §2; `/R 6`;
+  list-authoring scope.

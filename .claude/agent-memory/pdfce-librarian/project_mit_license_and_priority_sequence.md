@@ -63,6 +63,29 @@ in one operator instruction:
       (likely fine, Ken owns both, but must be confirmed not assumed).
       Neither decision made yet — check current state before assuming
       either is resolved.
+      **UPDATE (continuation 54, 2026-08-01):** Pass 12.M2b (on-canvas
+      dimension authoring gesture) SHIPPED and committed (`7c93cc3`,
+      chain now `d8b3903`/`79d1c6f`/`e13f3e6`/`19ed865`/`801a748`/
+      `c7c1744`/`6150e1a`/`7c93cc3`, eight deep, all local-only).
+      **MILESTONE: priority #1 ("dimensioning tool completely functional
+      in the GUI") is now SUBSTANTIALLY MET** — dimensions fully
+      authorable both via CLI and on-canvas (click-A/click-B linear,
+      pick-set+fit circular, reference-line+dialog scale, dimension-
+      groups panel). **Only 9c-min (basic vector editing) remains** of
+      decision 011's five originally-named slices, now IN PROGRESS.
+      **Both icon-build gated decisions RESOLVED this continuation** by
+      direct operator answer: (a) pre-rasterize SVGs to PNG at build
+      time, zero new dep, `resvg`/`usvg` rejected; (b) use ScripTree's
+      own SVGs where they fit, draw new ones in-style otherwise,
+      resemble Inkscape/Adobe visual CONVENTIONS (not their artwork) for
+      new icons — Ken's own confirmation of ownership/intent, verbatim
+      captured in `ROADMAP.md`'s Icon-set entry and `SESSION_LOG.md`
+      continuation 54. Icon BUILD is now unblocked but still queued
+      behind 9c-min. Also this continuation: the pre-existing
+      integration-test temp-path-collision flake (Backlog, filed at
+      Pass 9a) was independently observed a second time during 12.M2b —
+      a bounded fix (thread-unique temp paths) is now dispatched,
+      Backlog entry amended "FIX IN PROGRESS."
    2. ScripTree-style SVG icons for all GUI features (styled after
       `D:\Dev\ScripTree\icons\*.svg`) — new, unscoped Backlog item,
       queued behind #1.
