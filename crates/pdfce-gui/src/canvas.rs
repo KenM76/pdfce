@@ -104,6 +104,32 @@ pub enum CanvasTool {
     /// construction — [`tool_builds_text_edit`]/[`tool_builds_add_text`] make
     /// that invariant a headless-tested predicate.
     AddText,
+    /// Linear dimension (Pass 12.M2, ui-spec §1.1): two snapped point picks
+    /// author a scaled measurement. A plain click while this tool is active is
+    /// always a point-pick, never an object-selection click.
+    MeasureLinear,
+    /// Radius/diameter dimension from a best-fit (Taubin) circle (Pass 12.M2):
+    /// object/node picks build the fit set; a display toggle picks radius vs
+    /// diameter on the SAME geometry (ui-spec §1.1 — one tool, not two).
+    MeasureCircular,
+    /// Scale dimension (Pass 12.M2, ui-spec §4): draw a reference line, then
+    /// enter a real length + units OR a ratio to back-calc the active group's
+    /// scale. A distinct, deliberately-entered tool (never a hidden linear
+    /// sub-mode — ui-spec §1.1).
+    MeasureScale,
+}
+
+impl CanvasTool {
+    /// Whether this is one of the three Pass 12.M2 measure tools (they share
+    /// the snap-indicator overlay and the two-point-pick gesture family —
+    /// ui-spec §1.1/§2.2).
+    #[must_use]
+    pub fn is_measure(self) -> bool {
+        matches!(
+            self,
+            CanvasTool::MeasureLinear | CanvasTool::MeasureCircular | CanvasTool::MeasureScale
+        )
+    }
 }
 
 /// A resolved add-text placement from a pointer gesture (Pass 16.2 §3), in PDF
@@ -190,6 +216,34 @@ pub fn tool_builds_text_edit(tool: Option<CanvasTool>) -> bool {
 #[must_use]
 pub fn tool_builds_add_text(tool: Option<CanvasTool>) -> bool {
     matches!(tool, Some(CanvasTool::AddText))
+}
+
+/// Whether entering `tool` builds a Pass 12.M2 measure-tool state (linear /
+/// circular / scale). Like the text-tool predicates, this is a headless-tested
+/// projection of `active_tool` — a measure gesture and a text-edit gesture are
+/// mutually exclusive by the single-value `Option<CanvasTool>` (ui-spec §1.3).
+#[must_use]
+pub fn tool_builds_measure(tool: Option<CanvasTool>) -> bool {
+    tool.is_some_and(CanvasTool::is_measure)
+}
+
+/// Whether `tool` specifically builds the linear-dimension pick (ui-spec §2.1).
+#[must_use]
+pub fn tool_builds_measure_linear(tool: Option<CanvasTool>) -> bool {
+    matches!(tool, Some(CanvasTool::MeasureLinear))
+}
+
+/// Whether `tool` builds the circular (radius/diameter) best-fit pick
+/// (ui-spec §3).
+#[must_use]
+pub fn tool_builds_measure_circular(tool: Option<CanvasTool>) -> bool {
+    matches!(tool, Some(CanvasTool::MeasureCircular))
+}
+
+/// Whether `tool` builds the scale-dimension pick (ui-spec §4).
+#[must_use]
+pub fn tool_builds_measure_scale(tool: Option<CanvasTool>) -> bool {
+    matches!(tool, Some(CanvasTool::MeasureScale))
 }
 
 /// Whether the canvas's own click-drag should win over the `ScrollArea`'s
@@ -1148,6 +1202,33 @@ mod tests {
             selection_after_marquee(&BTreeSet::new(), &enclosed, false),
             ids(&[1])
         );
+    }
+
+    // ---- measure-tool predicates (Pass 12.M2 ui-spec §1.1) ------------
+
+    #[test]
+    fn measure_tool_predicates_are_mutually_exclusive_with_the_text_tools() {
+        // The three measure tools are recognised, and none of the text-tool
+        // predicates fire for them (single-value `Option<CanvasTool>` invariant).
+        for tool in [
+            CanvasTool::MeasureLinear,
+            CanvasTool::MeasureCircular,
+            CanvasTool::MeasureScale,
+        ] {
+            assert!(tool.is_measure());
+            assert!(tool_builds_measure(Some(tool)));
+            assert!(!tool_builds_text_edit(Some(tool)));
+            assert!(!tool_builds_add_text(Some(tool)));
+        }
+        assert!(tool_builds_measure_linear(Some(CanvasTool::MeasureLinear)));
+        assert!(tool_builds_measure_circular(Some(
+            CanvasTool::MeasureCircular
+        )));
+        assert!(tool_builds_measure_scale(Some(CanvasTool::MeasureScale)));
+        // The text tools are not measure tools.
+        assert!(!CanvasTool::TextEdit.is_measure());
+        assert!(!tool_builds_measure(Some(CanvasTool::AddText)));
+        assert!(!tool_builds_measure(None));
     }
 
     // ---- add-text placement resolution (Pass 16.2 §3.2) ---------------

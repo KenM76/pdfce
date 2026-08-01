@@ -1636,6 +1636,18 @@ pub fn command_label(kind: CommandKind) -> String {
             lines_before,
             lines_after,
         } => format!("reflow block ({lines_before}->{lines_after} lines)"),
+        // Pass 12.M2 dimensioning commands.
+        CommandKind::AddDimension => "add dimension".to_owned(),
+        CommandKind::SetGroupScale { members } => {
+            format!("change group scale ({members} dimension(s) updated)")
+        }
+        CommandKind::ToggleDimensionLayer { visible } => {
+            if visible {
+                "show dimension layer".to_owned()
+            } else {
+                "hide dimension layer".to_owned()
+            }
+        }
         // `CommandKind` is #[non_exhaustive]: a future variant must not
         // make the tooltip lie, so it degrades to the generic word rather
         // than to a wrong one.
@@ -2343,6 +2355,55 @@ Text ▾. To fix text that's already on the page, use Edit Text (Ctrl+E)."
 /// Title of the Add-Text tool's floating property bar (§3.3/§5.2).
 pub fn add_text_propbar_title() -> &'static str {
     "Add Text"
+}
+
+/// The "Measure ▾" toolbar menu label (Pass 12.M2 ui-spec §1.2). A menu, not
+/// four toolbar icons, because dimensioning is used in short deliberate bursts
+/// (rule 3 — avoid primary-toolbar icon creep).
+pub fn measure_menu_button() -> &'static str {
+    "Measure ▾"
+}
+
+/// The Measure menu's dynamic-label prefix shown when a measure tool is active
+/// (ui-spec §1.2): "Measure: Linear ▾" etc., so the active tool is never hidden
+/// by the menu's closed state.
+pub fn measure_menu_active_label(tool_name: &str) -> String {
+    format!("Measure: {tool_name} ▾")
+}
+
+/// Tooltip on the Measure menu (§1.2 / §7.1) — states what it does and when to
+/// reach for it versus the annotation-authoring Markup ▾ menu.
+pub fn measure_menu_tooltip() -> &'static str {
+    "Add scaled measurement dimensions — linear distances, radius/diameter from a best-fit \
+circle, and per-group scale calibration. Dimensions are additive annotations on their own \
+toggleable layer; the value updates when you change the group's scale. This is measurement, \
+not drawing — for shapes and callouts use Markup ▾."
+}
+
+/// The Measure menu's Linear-Dimension row (§1.2).
+pub fn measure_linear_menu_item() -> &'static str {
+    "Linear Dimension"
+}
+
+/// The Measure menu's Radius/Diameter row (§1.2). One tool — the display toggle
+/// between radius and diameter is on the same best-fit geometry (§1.1).
+pub fn measure_circular_menu_item() -> &'static str {
+    "Radius / Diameter Dimension"
+}
+
+/// The Measure menu's Set-Group-Scale row (§1.2 / §4).
+pub fn measure_set_scale_menu_item() -> &'static str {
+    "Set Group Scale…"
+}
+
+/// Status-strip disclosure shown while a measure tool is active in this build:
+/// the on-canvas snap-pick authoring interaction is the documented follow-up
+/// slice; the full authoring path (dimension-add / group-set-scale /
+/// layer-toggle, all the core capabilities) is available today via `pdfce-cli`.
+/// Honest about scope (fuzzy-never-sneaky applied to capability disclosure).
+pub fn measure_tool_status() -> &'static str {
+    "Measure tool selected. On-canvas snap-picking is the next UI slice; author \
+dimensions now with the pdfce-cli dimension-add / group-set-scale / layer-toggle commands."
 }
 
 /// A one-line hint under the property-bar title (§3): how to place, and the

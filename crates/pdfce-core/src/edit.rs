@@ -126,6 +126,11 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use crate::annot::AnnotFlags;
 use crate::annot_author::{self, MarkupSpec, TextAnnotSpec};
+use crate::dimension::{
+    DEFAULT_GROUP_ID, DimensionId, DimensionKind, DimensionModel, GroupId, NumberFormat,
+    ScaleState, Unit, author_dimension, build_ocg, build_ocproperties, deserialize_model,
+    serialize_model,
+};
 use crate::document::Document;
 use crate::fontdata::Std14;
 use crate::forms::{self, ButtonKind, Field, FieldType};
@@ -325,6 +330,25 @@ pub enum CommandKind {
     /// provenance, tagged-untagged, inheritance-safe resources) is returned by
     /// that method, not carried on the command.
     AddText,
+    /// A dimension (Pass 12.M2) was authored onto a page: the `/Line`
+    /// `/IT /LineDimension` annotation + its baked `/AP`, its group's `/OCG`
+    /// (allocated on first use) registered in the catalog `/OCProperties`,
+    /// and the authoritative `/PieceInfo` sidecar updated — all ONE undo
+    /// entry (decision 011 §2.4, §12.9 / §8.11 / §14.5).
+    AddDimension,
+    /// A dimension group's scale/units/format changed and every wired
+    /// member's baked `/AP` label was regenerated (Pass 12.M2, the Pass 7.1
+    /// regenerate pattern) — ONE undo entry however many members updated.
+    SetGroupScale {
+        /// How many member dimensions had their appearance regenerated.
+        members: usize,
+    },
+    /// A dimension group's optional-content layer visibility was toggled
+    /// (Pass 12.M2, §8.11 `/D` config `/OFF`) — ONE undo entry.
+    ToggleDimensionLayer {
+        /// The resulting default visibility.
+        visible: bool,
+    },
 }
 
 /// Which geometric-markup subtype [`EditSession::add_markup`] authored,
@@ -5163,6 +5187,410 @@ fn collect_references(value: &Object, skip_parent: bool, depth: usize, out: &mut
             }
         }
         _ => {}
+    }
+}
+
+/// The fixed `/LastModified` date pdfce writes on the `/PieceInfo` data
+/// dictionary (§14.5 Table 319 requires the key in valid §7.9.4 form). A
+/// stable placeholder rather than a wall-clock read keeps a re-saved but
+/// logically-unchanged sidecar byte-stable; a real authoring clock is a
+/// trivial follow-up that does not change the storage contract.
+const SIDECAR_DATE: &str = "D:20260801000000Z";
+
+// =====================================================================
+// Dimensioning subsystem wiring (Pass 12.M2, decision 011 §2.3/§2.4)
+// =====================================================================
+//
+// The additive in-document integration of the `pdfce-core::dimension`
+// subsystem. Each method reads the authoritative model from the catalog
+// `/PieceInfo /pdfce /Private` sidecar (or starts fresh), mutates it,
+// re-authors any affected `/AP`(s), (re)registers the per-group `/OCG` in
+// `/OCProperties`, writes the sidecar back, and commits everything as ONE
+// undoable command. All authoring is ADDITIVE (overlay-append, §5.8, R46
+// zero-exception): no page content-stream byte is touched — the same
+// discipline (and the same private helpers: `alloc_number`, `stage_bytes`,
+// `annots_writes`, `commit`) as `add_markup`.
+impl EditSession {
+    /// The authoritative dimensioning model stored in this document's
+    /// catalog `/PieceInfo` sidecar, or a fresh model if none is stored
+    /// (Pass 12.M2). Overlay-aware — reflects edits made in this session.
+    #[must_use]
+    pub fn dimension_model(&self) -> DimensionModel {
+        self.read_dimension_model()
+    }
+
+    /// Author a dimension onto a page: a `/Line` `/IT /LineDimension`
+    /// annotation with a baked `/AP` (leader + value label), placed on its
+    /// group's optional-content layer (`/OC` → the group `/OCG`, allocated on
+    /// first use and registered in `/OCProperties`), its scale mirrored into
+    /// a portable `/Measure` dict, and the authoritative `/PieceInfo` sidecar
+    /// updated — ALL additive, ALL one undo entry (decision 011 §2.4).
+    ///
+    /// Returns the created annotation's [`ObjId`] and the model's
+    /// [`DimensionId`]. If `group` is unknown, the dimension joins the
+    /// always-present default group (ui-spec §5.3).
+    ///
+    /// # Errors
+    ///
+    /// The same guards as [`EditSession::add_markup`]: encryption,
+    /// enforced certification, page range, and hidden-object exposure.
+    pub fn add_dimension(
+        &mut self,
+        page_index: usize,
+        group: GroupId,
+        kind: DimensionKind,
+    ) -> Result<(ObjId, DimensionId), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let slots = self.page_slots()?;
+        let count = slots.len();
+        let page_id = slots
+            .get(page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count,
+            })?
+            .id;
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+
+        let mut model = self.read_dimension_model();
+        let dim_id = model.add_dimension(group, kind);
+        let gid = model
+            .dimension(dim_id)
+            .map_or(DEFAULT_GROUP_ID, |d| d.group);
+
+        // Ensure the group has an OCG (allocate one on first use).
+        let mut ocg_writes: Vec<ObjectWrite> = Vec::new();
+        let ocg_id = match model.group(gid).and_then(|g| g.ocg) {
+            Some(id) => id,
+            None => {
+                let id = ObjId::new(self.alloc_number()?, 0);
+                let name = model
+                    .group(gid)
+                    .map_or_else(|| "Dimensions".to_owned(), |g| g.name.clone());
+                ocg_writes.push(ObjectWrite {
+                    id,
+                    before: None,
+                    after: Some(build_ocg(&name)),
+                });
+                if let Some(g) = model.group_mut(gid) {
+                    g.ocg = Some(id);
+                }
+                id
+            }
+        };
+        let (scale, format) = model.group(gid).map_or(
+            (ScaleState::NeverSet, Unit::Millimeter.default_format()),
+            |g| (g.scale, g.format),
+        );
+
+        // Author the /Line + baked /AP from the geometry and the group scale.
+        let authored = author_dimension(&kind, scale, format);
+        let ap_id = ObjId::new(self.alloc_number()?, 0);
+        let annot_id = ObjId::new(self.alloc_number()?, 0);
+
+        let mut ap_dict = authored.ap_dict;
+        ap_dict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(authored.ap_content.len()).unwrap_or(i64::MAX)),
+        );
+        let ap_span = self.stage_bytes(&authored.ap_content);
+        let ap_stream = Object::Stream(Stream {
+            dict: ap_dict,
+            data_span: ap_span,
+        });
+
+        let mut annot = authored.annot;
+        let mut ap = Dict::new();
+        ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+        annot.insert(Name::from(b"AP"), Object::Dict(ap));
+        annot.insert(Name::from(b"P"), Object::Reference(page_id));
+        annot.insert(
+            Name::from(b"F"),
+            Object::Integer(i64::from(AnnotFlags::PRINT)),
+        );
+        // The authored-layer /OC entry (§8.11.3.3) — pdfce's render honours
+        // it, and any OCG-aware reader toggles the dimension by its layer.
+        annot.insert(Name::from(b"OC"), Object::Reference(ocg_id));
+
+        // Record the wiring handles so a later scale change can regenerate.
+        if let Some(d) = model.dimension_mut(dim_id) {
+            d.annot = Some(annot_id);
+            d.ap = Some(ap_id);
+        }
+
+        let catalog_write = self.catalog_dimension_write(&model)?;
+        let mut annots_writes = self.annots_writes(page_id, annot_id, &slots)?;
+
+        let mut objects = ocg_writes;
+        objects.push(ObjectWrite {
+            id: ap_id,
+            before: None,
+            after: Some(ap_stream),
+        });
+        objects.push(ObjectWrite {
+            id: annot_id,
+            before: None,
+            after: Some(Object::Dict(annot)),
+        });
+        objects.push(catalog_write);
+        objects.append(&mut annots_writes);
+
+        self.commit(Command {
+            kind: CommandKind::AddDimension,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok((annot_id, dim_id))
+    }
+
+    /// Create a new named dimension group with `unit`'s default number
+    /// format (Pass 12.M2). The group starts scale-never-set and visible;
+    /// its OCG is allocated lazily on the first dimension. Returns the new
+    /// [`GroupId`]. One undo entry.
+    ///
+    /// # Errors
+    ///
+    /// Encryption / enforced-certification guards, as the other dimension
+    /// operations.
+    pub fn add_dimension_group(&mut self, name: &str, unit: Unit) -> Result<GroupId, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        let mut model = self.read_dimension_model();
+        let id = model.add_group(name, unit);
+        let catalog_write = self.catalog_dimension_write(&model)?;
+        self.commit(Command {
+            kind: CommandKind::AddDimension,
+            objects: vec![catalog_write],
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(id)
+    }
+
+    /// Set a dimension group's scale + number format and **regenerate every
+    /// wired member's baked `/AP`** (the "change the group scale → all member
+    /// dimensions update" story, decision 011 §2.3, the Pass 7.1 regenerate
+    /// pattern). Returns how many members were regenerated. One undo entry.
+    ///
+    /// # Errors
+    ///
+    /// Encryption / enforced-certification guards.
+    pub fn set_group_scale(
+        &mut self,
+        group: GroupId,
+        scale: ScaleState,
+        format: NumberFormat,
+    ) -> Result<usize, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let mut model = self.read_dimension_model();
+        model.set_group_scale(group, scale, format);
+
+        let members: Vec<(DimensionKind, ObjId, ObjId)> = model
+            .members(group)
+            .filter_map(|d| Some((d.kind, d.annot?, d.ap?)))
+            .collect();
+
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        for (kind, annot_id, ap_id) in &members {
+            let authored = author_dimension(kind, scale, format);
+            // Replace the /AP stream object with the regenerated appearance.
+            let mut ap_dict = authored.ap_dict;
+            ap_dict.insert(
+                Name::from(b"Length"),
+                Object::Integer(i64::try_from(authored.ap_content.len()).unwrap_or(i64::MAX)),
+            );
+            let ap_span = self.stage_bytes(&authored.ap_content);
+            objects.push(ObjectWrite {
+                id: *ap_id,
+                before: self.state.get(ap_id).cloned(),
+                after: Some(Object::Stream(Stream {
+                    dict: ap_dict,
+                    data_span: ap_span,
+                })),
+            });
+            // Update the annotation's /Rect, /Contents and /Measure in place,
+            // preserving its /AP, /P, /OC, /F wiring.
+            if let Some(Object::Dict(old)) = self.value(*annot_id) {
+                let mut a = old.clone();
+                if let Some(rect) = authored.annot.get(b"Rect") {
+                    a.insert(Name::from(b"Rect"), rect.clone());
+                }
+                a.insert(
+                    Name::from(b"Contents"),
+                    Object::String(authored.label.clone().into_bytes()),
+                );
+                match authored.annot.get(b"Measure") {
+                    Some(m) => {
+                        a.insert(Name::from(b"Measure"), m.clone());
+                    }
+                    None => {
+                        a.remove(b"Measure");
+                    }
+                }
+                objects.push(ObjectWrite {
+                    id: *annot_id,
+                    before: self.state.get(annot_id).cloned(),
+                    after: Some(Object::Dict(a)),
+                });
+            }
+        }
+
+        let catalog_write = self.catalog_dimension_write(&model)?;
+        objects.push(catalog_write);
+        self.commit(Command {
+            kind: CommandKind::SetGroupScale {
+                members: members.len(),
+            },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(members.len())
+    }
+
+    /// Toggle a dimension group's optional-content layer default visibility
+    /// (§8.11 `/D` config `/OFF`, Pass 12.M2). Returns the resulting
+    /// visibility (the default group is un-hideable, ui-spec §5.3). One undo
+    /// entry.
+    ///
+    /// # Errors
+    ///
+    /// Encryption / enforced-certification guards.
+    pub fn toggle_dimension_layer(
+        &mut self,
+        group: GroupId,
+        visible: bool,
+    ) -> Result<bool, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        let mut model = self.read_dimension_model();
+        let result = model.set_group_visible(group, visible);
+        let catalog_write = self.catalog_dimension_write(&model)?;
+        self.commit(Command {
+            kind: CommandKind::ToggleDimensionLayer { visible: result },
+            objects: vec![catalog_write],
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(result)
+    }
+
+    // ---- private helpers ----
+
+    /// Read the authoritative model from the catalog `/PieceInfo /pdfce
+    /// /Private` sidecar, or a fresh model if absent/unparseable (the
+    /// disclose-and-start-fresh posture: a malformed sidecar never panics).
+    fn read_dimension_model(&self) -> DimensionModel {
+        self.try_read_dimension_model().unwrap_or_default()
+    }
+
+    fn try_read_dimension_model(&self) -> Option<DimensionModel> {
+        let cid = self.graph().catalog_id()?;
+        let catalog = self.value(cid)?.as_dict()?.clone();
+        let piece = self.deref_dict(catalog.get(b"PieceInfo"))?;
+        let pdfce = self.deref_dict(piece.get(b"pdfce"))?;
+        let private = self.deref_value(pdfce.get(b"Private"))?;
+        deserialize_model(&private)
+    }
+
+    /// Resolve an optional object (following one indirect reference) to an
+    /// owned clone, overlay-aware.
+    fn deref_value(&self, obj: Option<&Object>) -> Option<Object> {
+        match obj? {
+            Object::Reference(r) => self.value(*r).cloned(),
+            other => Some(other.clone()),
+        }
+    }
+
+    /// Resolve an optional object to an owned dictionary clone (a `/Stream`'s
+    /// dict counts), overlay-aware.
+    fn deref_dict(&self, obj: Option<&Object>) -> Option<Dict> {
+        match self.deref_value(obj)? {
+            Object::Dict(d) => Some(d),
+            Object::Stream(s) => Some(s.dict),
+            _ => None,
+        }
+    }
+
+    /// Build the single catalog [`ObjectWrite`] that carries the updated
+    /// `/PieceInfo` sidecar (§14.5) and the rebuilt `/OCProperties` (§8.11),
+    /// preserving any foreign product `/PieceInfo` keys and foreign OCGs.
+    fn catalog_dimension_write(&self, model: &DimensionModel) -> Result<ObjectWrite, EditError> {
+        let catalog_id = self.graph().catalog_id().ok_or(EditError::NotADictionary {
+            id: ObjId::new(0, 0),
+            key: "Root",
+        })?;
+        let catalog = match self.value(catalog_id) {
+            Some(Object::Dict(d)) => d.clone(),
+            _ => {
+                return Err(EditError::NotADictionary {
+                    id: catalog_id,
+                    key: "Root",
+                });
+            }
+        };
+
+        // /PieceInfo — preserve foreign product keys, replace /pdfce.
+        let sidecar = serialize_model(model);
+        let mut data_dict = Dict::new();
+        data_dict.insert(
+            Name::from(b"LastModified"),
+            Object::String(SIDECAR_DATE.as_bytes().to_vec()),
+        );
+        data_dict.insert(Name::from(b"Private"), sidecar);
+        let mut piece = self
+            .deref_dict(catalog.get(b"PieceInfo"))
+            .unwrap_or_default();
+        piece.insert(Name::from(b"pdfce"), Object::Dict(data_dict));
+
+        // /OCProperties — rebuild from pdfce's group OCGs, preserving foreign.
+        let mine: Vec<(ObjId, bool)> = model
+            .groups()
+            .iter()
+            .filter_map(|g| g.ocg.map(|o| (o, g.visible)))
+            .collect();
+        let mine_ids: std::collections::BTreeSet<ObjId> = mine.iter().map(|(id, _)| *id).collect();
+        let foreign: Vec<ObjId> = self
+            .deref_dict(catalog.get(b"OCProperties"))
+            .and_then(|ocp| {
+                ocp.get(b"OCGs").and_then(Object::as_array).map(|a| {
+                    a.iter()
+                        .filter_map(Object::as_reference)
+                        .filter(|r| !mine_ids.contains(r))
+                        .collect()
+                })
+            })
+            .unwrap_or_default();
+
+        let mut cat2 = catalog.clone();
+        cat2.insert(Name::from(b"PieceInfo"), Object::Dict(piece));
+        if !mine.is_empty() || !foreign.is_empty() {
+            cat2.insert(
+                Name::from(b"OCProperties"),
+                build_ocproperties(&mine, &foreign),
+            );
+        }
+        Ok(ObjectWrite {
+            id: catalog_id,
+            before: self.state.get(&catalog_id).cloned(),
+            after: Some(Object::Dict(cat2)),
+        })
     }
 }
 

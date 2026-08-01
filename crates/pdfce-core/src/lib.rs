@@ -74,6 +74,7 @@
 pub mod annot;
 pub mod annot_author;
 pub mod content;
+pub mod dimension;
 pub mod document;
 pub mod edit;
 pub mod fdf;

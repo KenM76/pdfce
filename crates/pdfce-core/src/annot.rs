@@ -56,6 +56,8 @@
 //!   they are interaction states no static display drives (§12.5.5); this
 //!   module models only `/N`.
 
+use std::collections::BTreeSet;
+
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Name, ObjId, Object};
 use crate::page_tree::Rect;
@@ -234,6 +236,13 @@ pub struct Annotation {
     /// UI window, **never** page content — a structural non-paint rule
     /// stronger than R43, checked before flags or appearance (risk X4).
     pub is_popup: bool,
+    /// The `/OC` optional-content group/membership reference (§8.11.3.3), if
+    /// the annotation carries one. Its default visibility is resolved against
+    /// the catalog `/OCProperties /D` config: the annotation is visible only
+    /// if the flags permit AND its OCG is ON (Pass 12.M2 authored-layer `/OC`
+    /// honouring — decision 011 §2.4; full content-stream BDC/EMC `/OC` stays
+    /// deferred). `None` when the annotation is on no layer.
+    pub oc: Option<ObjId>,
 }
 
 impl Annotation {
@@ -344,6 +353,11 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
 
     let appearance = select_normal_appearance(graph, dict);
 
+    // §8.11.3.3 annotation /OC entry — an OCG or OCMD indirect reference. Only
+    // the reference is modelled here; the render path resolves its default
+    // visibility against /OCProperties /D (Pass 12.M2).
+    let oc = dict.get(b"OC").and_then(Object::as_reference);
+
     Annotation {
         id,
         subtype,
@@ -351,6 +365,89 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
         flags,
         appearance,
         is_popup,
+        oc,
+    }
+}
+
+/// The set of optional-content groups that are **OFF by default** per the
+/// catalog `/OCProperties /D` configuration (ISO 32000-1 §8.11.4.3, Table
+/// 101). Pass 12.M2 render-visibility input: an annotation whose `/OC`
+/// resolves to (or through an OCMD to) an OFF group is hidden.
+///
+/// Follows the spec initialisation order: `/BaseState` (default `ON`) sets
+/// all groups, then `/ON`/`/OFF` override. If `/OCProperties` or `/D` is
+/// absent, the set is empty (nothing hidden by default). A missing
+/// `/OCProperties` means optional content is ignored entirely (§8.11.4.2) —
+/// returning an empty OFF set realises exactly that.
+#[must_use]
+pub fn optional_content_default_off<G: ObjectGraph + ?Sized>(graph: &G) -> BTreeSet<ObjId> {
+    let mut off = BTreeSet::new();
+    let Some(catalog) = graph.catalog_dict() else {
+        return off;
+    };
+    let Some(ocp) = graph
+        .resolve(catalog.get(b"OCProperties").unwrap_or(&Object::Null))
+        .as_dict()
+    else {
+        return off;
+    };
+    let Some(d) = graph
+        .resolve(ocp.get(b"D").unwrap_or(&Object::Null))
+        .as_dict()
+    else {
+        return off;
+    };
+    let base_off = graph
+        .resolve(d.get(b"BaseState").unwrap_or(&Object::Null))
+        .as_name()
+        .is_some_and(|n| n.as_bytes() == b"OFF");
+    if base_off {
+        // All OCGs start OFF; /ON re-enables.
+        off.extend(oc_refs(graph, ocp.get(b"OCGs")));
+        for on in oc_refs(graph, d.get(b"ON")) {
+            off.remove(&on);
+        }
+    } else {
+        // Default BaseState ON; /OFF disables specific groups.
+        off.extend(oc_refs(graph, d.get(b"OFF")));
+    }
+    off
+}
+
+/// Whether an annotation's `/OC` reference resolves to a hidden state, given
+/// the default-OFF set from [`optional_content_default_off`] (§8.11.3.3).
+///
+/// A direct `/OCG` is hidden iff it is in `off`. An `/OCMD` is evaluated with
+/// its default `AnyOn` policy (§8.11.2.2): hidden iff **all** its member OCGs
+/// are OFF (an empty/undetermined membership is visible — the spec's "no
+/// effect" rule). An unresolvable or non-optional-content target is treated as
+/// visible (never hide by guessing).
+#[must_use]
+pub fn oc_is_hidden<G: ObjectGraph + ?Sized>(graph: &G, oc: ObjId, off: &BTreeSet<ObjId>) -> bool {
+    let Some(d) = graph.resolved(oc).as_dict() else {
+        return false;
+    };
+    let is_ocmd = graph
+        .resolve(d.get(b"Type").unwrap_or(&Object::Null))
+        .as_name()
+        .is_some_and(|n| n.as_bytes() == b"OCMD");
+    if is_ocmd {
+        let members = oc_refs(graph, d.get(b"OCGs"));
+        !members.is_empty() && members.iter().all(|g| off.contains(g))
+    } else {
+        // Treat the reference itself as the OCG (Type /OCG or an untyped
+        // group-shaped dict — the authored-layer case, §8.11 NOTE 3).
+        off.contains(&oc)
+    }
+}
+
+/// Collect the OCG references an `/OCGs`/`/ON`/`/OFF` entry names — either a
+/// single indirect reference or an array of them (§8.11 Table 99/100/101).
+fn oc_refs<G: ObjectGraph + ?Sized>(graph: &G, obj: Option<&Object>) -> Vec<ObjId> {
+    match obj.map(|o| graph.resolve(o)) {
+        Some(Object::Reference(r)) => vec![*r],
+        Some(Object::Array(items)) => items.iter().filter_map(Object::as_reference).collect(),
+        _ => obj.and_then(Object::as_reference).into_iter().collect(),
     }
 }
 

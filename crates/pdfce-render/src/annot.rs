@@ -106,6 +106,14 @@ pub(crate) fn survey_page_annotations(
     diag: &mut Diagnostics,
     pixmap: &mut Pixmap,
 ) {
+    // Pass 12.M2 (§8.11.3.3): the set of optional-content groups the catalog
+    // /OCProperties /D config leaves OFF by default. An annotation whose /OC
+    // resolves to an OFF group is not painted (authored-layer /OC honouring;
+    // full content-stream BDC/EMC /OC stays deferred — decision 011 §2.4).
+    // Computed once; empty (⇒ nothing hidden) when the file has no optional
+    // content, so this is a no-op on every pre-12.M2 file.
+    let oc_off = pdfce_core::annot::optional_content_default_off(doc);
+
     for annot in &pdfce_core::annot::page_annotations(doc, page.id) {
         diag.annotations_total += 1;
         if annot.is_widget() {
@@ -121,6 +129,15 @@ pub(crate) fn survey_page_annotations(
         // §12.5.3 Table 165 (R50): Hidden (screen+print) and NoView
         // (screen) suppress on-screen painting — honoured AND counted.
         if annot.flags.suppressed_on_screen() {
+            diag.annotations_hidden += 1;
+            continue;
+        }
+        // §8.11.3.3: annotation visibility = (flags permit) AND (OC state
+        // visible). An /OC pointing at an OFF group hides the annotation,
+        // counted alongside the flag-hidden ones (Pass 12.M2).
+        if let Some(oc) = annot.oc
+            && pdfce_core::annot::oc_is_hidden(doc, oc, &oc_off)
+        {
             diag.annotations_hidden += 1;
             continue;
         }
@@ -472,6 +489,68 @@ mod tests {
         let (x0, y0, x1, y1) = ink_bbox(&out.pixmap).unwrap();
         assert!(x0 >= 39 && x1 <= 61, "x extent {x0}..{x1}");
         assert!(y0 >= 49 && y1 <= 71, "y extent {y0}..{y1}");
+    }
+
+    // -----------------------------------------------------------------
+    // §8.11.3.3 authored-layer /OC visibility (Pass 12.M2)
+    // -----------------------------------------------------------------
+
+    /// A one-page doc whose catalog carries `/OCProperties` and whose only
+    /// annotation sits on OCG object 10, with the given `/D` config body.
+    fn doc_with_oc_annot(d_config: &str) -> (Document, Page) {
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (
+                1,
+                format!(
+                    "<< /Type /Catalog /Pages 2 0 R /OCProperties \
+                     << /OCGs [10 0 R] /D << {d_config} >> >> >>"
+                )
+                .into_bytes(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 100 100] \
+                  /Resources << >> >>"
+                    .to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Annots [5 0 R] >>".to_vec(),
+            ),
+            (
+                5,
+                b"<< /Subtype /Stamp /Rect [40 30 60 50] /OC 10 0 R /AP << /N 6 0 R >> >>".to_vec(),
+            ),
+            (6, black_fill_ap("/Resources << >>", "[0 0 20 20]")),
+            (10, b"<< /Type /OCG /Name (Dimensions) >>".to_vec()),
+        ];
+        build_pdf(&objects)
+    }
+
+    #[test]
+    fn an_annotation_on_an_off_layer_is_not_painted() {
+        // The OCG is registered and placed in /D /OFF ⇒ hidden by default.
+        let (doc, page) = doc_with_oc_annot("/Order [10 0 R] /OFF [10 0 R]");
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert_eq!(
+            out.diagnostics.annotations_painted, 0,
+            "an /OC annotation on an OFF layer must not paint"
+        );
+        assert_eq!(out.diagnostics.annotations_hidden, 1);
+        // No ink at all: the layer is hidden.
+        assert!(ink_bbox(&out.pixmap).is_none(), "the page must be blank");
+    }
+
+    #[test]
+    fn an_annotation_on_an_on_layer_is_painted() {
+        // Same OCG, but NOT in /OFF ⇒ ON by default (BaseState default ON).
+        let (doc, page) = doc_with_oc_annot("/Order [10 0 R]");
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        assert_eq!(
+            out.diagnostics.annotations_painted, 1,
+            "an /OC annotation on an ON layer paints normally"
+        );
+        assert_eq!(pixel(&out.pixmap, 50, 60), (0, 0, 0));
     }
 
     #[test]

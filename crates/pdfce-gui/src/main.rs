@@ -3963,6 +3963,56 @@ impl PdfceApp {
                         }));
                     }
                 });
+
+                // Pass 12.M2 Measure ▾ — a menu (not four toolbar icons) for the
+                // three dimension tools (ui-spec §1.2, rule 3: dimensioning is
+                // used in short deliberate bursts, so it earns a menu, not
+                // primary-icon creep). The widget is Markup ▾'s `menu_button`,
+                // but the dispatch is Edit Text/Add Text's `SelectCanvasTool`
+                // toggle (a NEW combination, ui-spec §1.2). The label is dynamic
+                // so the active tool is never hidden by the closed menu.
+                ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                    let active_name = match doc.active_tool {
+                        Some(CanvasTool::MeasureLinear) => Some("Linear"),
+                        Some(CanvasTool::MeasureCircular) => Some("Radius/Diameter"),
+                        Some(CanvasTool::MeasureScale) => Some("Set Scale"),
+                        _ => None,
+                    };
+                    let label = match active_name {
+                        Some(name) => ui_text::measure_menu_active_label(name),
+                        None => ui_text::measure_menu_button().to_owned(),
+                    };
+                    ui.menu_button(label, |ui| {
+                        let mut row = |ui: &mut egui::Ui, tool: CanvasTool, text: &str| {
+                            let is_active = doc.active_tool == Some(tool);
+                            if ui.selectable_label(is_active, text).clicked() {
+                                actions.push(Action::SelectCanvasTool(if is_active {
+                                    None
+                                } else {
+                                    Some(tool)
+                                }));
+                                ui.close();
+                            }
+                        };
+                        row(
+                            ui,
+                            CanvasTool::MeasureLinear,
+                            ui_text::measure_linear_menu_item(),
+                        );
+                        row(
+                            ui,
+                            CanvasTool::MeasureCircular,
+                            ui_text::measure_circular_menu_item(),
+                        );
+                        row(
+                            ui,
+                            CanvasTool::MeasureScale,
+                            ui_text::measure_set_scale_menu_item(),
+                        );
+                    })
+                    .response
+                    .on_hover_text(ui_text::measure_menu_tooltip());
+                });
                 ui.separator();
 
                 // Group: history. Disabled rather than hidden, because
@@ -5058,6 +5108,14 @@ impl PdfceApp {
             // own click/drag handler always means "place new text," so it needs
             // no hit-vs-miss branch (§0.1).
             run_add_text_tool(doc, ui, &image_response, image_rect, extent, zoom, font_env);
+        } else if canvas::tool_builds_measure(doc.active_tool) {
+            // Pass 12.M2: a measure tool is selected. The on-canvas snap-pick
+            // authoring gesture is the documented follow-up UI slice; this build
+            // surfaces the selected tool honestly (a status overlay) while the
+            // full authoring path is available today via pdfce-cli. The tool
+            // suppresses the object-selection click so a measure-mode click is
+            // not silently repurposed as a selection (ui-spec §1.1).
+            run_measure_tool(doc.active_tool, ui, image_rect);
         } else {
             if image_response.clicked()
                 && let Some(screen_pos) = image_response.interact_pointer_pos()
@@ -6553,6 +6611,33 @@ fn paint_add_preview_frame(painter: &egui::Painter, screen_box: egui::Rect, colo
     clippy::too_many_lines,
     reason = "one tool = one handler; splitting the tightly-coupled placement/compose/preview/commit phases would need shared owned scratch structs that obscure more than they clarify" // ui-text-exempt: clippy lint justification, never displayed
 )]
+/// Paint the Pass 12.M2 measure-tool status overlay (ui-spec §1.1/§6). This
+/// build's honest surface for a selected measure tool: it names the active tool
+/// and discloses that on-canvas snap-picking is the next UI slice while the full
+/// authoring path (dimension-add / group-set-scale / layer-toggle — every core
+/// capability) is available today via `pdfce-cli`. No document mutation, so a
+/// selected measure tool is crash-safe (nothing is written before an Accept
+/// that this slice does not yet offer on-canvas).
+fn run_measure_tool(active: Option<CanvasTool>, ui: &egui::Ui, image_rect: egui::Rect) {
+    let tool_name = if canvas::tool_builds_measure_linear(active) {
+        "Linear dimension"
+    } else if canvas::tool_builds_measure_circular(active) {
+        "Radius / Diameter dimension"
+    } else if canvas::tool_builds_measure_scale(active) {
+        "Set group scale"
+    } else {
+        "Measure"
+    };
+    let painter = ui.painter();
+    painter.text(
+        image_rect.min + egui::vec2(8.0, 8.0),
+        egui::Align2::LEFT_TOP,
+        format!("{tool_name} — {}", ui_text::measure_tool_status()),
+        egui::FontId::proportional(12.0),
+        ui.visuals().warn_fg_color,
+    );
+}
+
 fn run_add_text_tool(
     doc: &mut OpenDoc,
     ui: &mut egui::Ui,

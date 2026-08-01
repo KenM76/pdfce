@@ -1420,6 +1420,169 @@ enum Command {
         #[arg(short, long)]
         output: PathBuf,
     },
+    /// Author a dimension (Pass 12.M2): a scaled measurement `/Line`
+    /// `/IT /LineDimension` annotation with a baked appearance, on its group's
+    /// optional-content layer, with the scale mirrored into a portable
+    /// `/Measure` dict and the authoritative `/PieceInfo` sidecar updated.
+    /// Purely additive — existing page content is left byte-verbatim.
+    DimensionAdd {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// Dimension kind.
+        #[arg(long, value_enum, default_value_t = DimKindArg::Linear)]
+        kind: DimKindArg,
+        /// Points as `x,y x,y ...` (space- or `;`-separated, in points).
+        /// Linear uses the first two; radius/diameter fits a Taubin circle to
+        /// all of them (needs at least 3 non-collinear points).
+        #[arg(long)]
+        points: String,
+        /// Target group id (0 = the always-present default group).
+        #[arg(long, default_value_t = 0)]
+        group: u32,
+        /// Linear alignment constraint.
+        #[arg(long, value_enum, default_value_t = ConstraintArg::Aligned)]
+        constraint: ConstraintArg,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+    /// List the dimension groups and dimensions stored in a document
+    /// (Pass 12.M2) — reads the authoritative `/PieceInfo` sidecar.
+    DimensionList {
+        /// Input PDF.
+        input: PathBuf,
+    },
+    /// Create a named dimension group (Pass 12.M2). Prints the new group id.
+    GroupAdd {
+        /// Input PDF.
+        input: PathBuf,
+        /// The group name.
+        #[arg(long)]
+        name: String,
+        /// The display unit: `mm|cm|m|in|ft|ft-in`.
+        #[arg(long, default_value = "mm")]
+        unit: String,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+    /// Set a dimension group's scale + units, regenerating every member's
+    /// baked appearance (Pass 12.M2).
+    GroupSetScale {
+        /// Input PDF.
+        input: PathBuf,
+        /// Target group id (0 = default group).
+        #[arg(long, default_value_t = 0)]
+        group: u32,
+        /// Real-length path: the real-world length of a drawn reference line.
+        #[arg(long)]
+        real_length: Option<f64>,
+        /// Real-length path: the drawn reference line's length in points.
+        #[arg(long)]
+        drawn: Option<f64>,
+        /// Direct-ratio path, e.g. `1:100` (paper:real; inch paper-unit basis).
+        #[arg(long)]
+        ratio: Option<String>,
+        /// Display unit: `mm|cm|m|in|ft|ft-in`.
+        #[arg(long, default_value = "mm")]
+        unit: String,
+        /// Set an explicit 1:1 (full-size) scale instead of calibrating.
+        #[arg(long)]
+        one_to_one: bool,
+        /// Decimal precision (decimal units) or fraction denominator (ft-in).
+        #[arg(long)]
+        precision: Option<u32>,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+    /// Toggle a dimension group's optional-content layer visibility
+    /// (Pass 12.M2, §8.11 `/D` config).
+    LayerToggle {
+        /// Input PDF.
+        input: PathBuf,
+        /// Target group id.
+        #[arg(long, default_value_t = 0)]
+        group: u32,
+        /// Hide the layer (default is to show it).
+        #[arg(long)]
+        hide: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+}
+
+/// Which dimension kind [`Command::DimensionAdd`] authors. Radius and diameter
+/// share one Taubin fit and differ only in DISPLAY (decision 011 §2.3).
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum DimKindArg {
+    /// A linear (distance) dimension between the first two points.
+    Linear,
+    /// A radius dimension over a best-fit circle.
+    Radius,
+    /// A diameter dimension over a best-fit circle (2×radius).
+    Diameter,
+}
+
+impl DimKindArg {
+    /// A stable token for CLI output.
+    const fn token(self) -> &'static str {
+        match self {
+            DimKindArg::Linear => "linear",
+            DimKindArg::Radius => "radius",
+            DimKindArg::Diameter => "diameter",
+        }
+    }
+}
+
+/// The linear alignment constraint for [`Command::DimensionAdd`].
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum ConstraintArg {
+    /// Free Euclidean direction.
+    Aligned,
+    /// Project onto the page X axis (measured length `|Δx|`).
+    Horizontal,
+    /// Project onto the page Y axis (measured length `|Δy|`).
+    Vertical,
+}
+
+impl ConstraintArg {
+    /// The `pdfce_core` constraint this maps to.
+    const fn to_core(self) -> pdfce_core::vector::AxisConstraint {
+        match self {
+            ConstraintArg::Aligned => pdfce_core::vector::AxisConstraint::Aligned,
+            ConstraintArg::Horizontal => pdfce_core::vector::AxisConstraint::Horizontal,
+            ConstraintArg::Vertical => pdfce_core::vector::AxisConstraint::Vertical,
+        }
+    }
 }
 
 /// Which save path `round-trip` exercises.
@@ -1911,6 +2074,69 @@ fn run() -> ExitCode {
             color: color.as_deref(),
             font_dirs: &font_dirs,
         }),
+        Command::DimensionAdd {
+            input,
+            page,
+            kind,
+            points,
+            group,
+            constraint,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_dimension_add(&DimensionAddArgs {
+            input: &input,
+            page,
+            kind,
+            points: &points,
+            group,
+            constraint,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::DimensionList { input } => cmd_dimension_list(&input),
+        Command::GroupAdd {
+            input,
+            name,
+            unit,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_group_add(&input, &name, &unit, &output, mode, verify_undo),
+        Command::GroupSetScale {
+            input,
+            group,
+            real_length,
+            drawn,
+            ratio,
+            unit,
+            one_to_one,
+            precision,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_group_set_scale(&GroupSetScaleArgs {
+            input: &input,
+            group,
+            real_length,
+            drawn,
+            ratio: ratio.as_deref(),
+            unit: &unit,
+            one_to_one,
+            precision,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::LayerToggle {
+            input,
+            group,
+            hide,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_layer_toggle(&input, group, hide, &output, mode, verify_undo),
         Command::RotatePage {
             input,
             page,
@@ -6706,6 +6932,399 @@ fn open_for_read(path: &Path) -> Result<Document, u8> {
         eprintln!("pdfce-cli: {}: {err}", path.display());
         exit_code_for_doc(&err)
     })
+}
+
+// =====================================================================
+// Pass 12.M2 dimensioning subcommands (decision 011 §2.3/§2.4)
+// =====================================================================
+
+/// Parse a `x,y x,y ...` (space/`;`-separated) point list into page-space
+/// points. `None` on any malformed token or an empty list.
+fn parse_dim_points(s: &str) -> Option<Vec<pdfce_core::vector::Point>> {
+    let mut out = Vec::new();
+    for tok in s.split([' ', ';', '\t', '\n']).filter(|t| !t.is_empty()) {
+        let (x, y) = tok.split_once(',')?;
+        out.push(pdfce_core::vector::Point::new(
+            x.trim().parse().ok()?,
+            y.trim().parse().ok()?,
+        ));
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// Parse an `N:M` ratio into `(paper, real)`. `None` if malformed.
+fn parse_ratio(s: &str) -> Option<(f64, f64)> {
+    let (a, b) = s.split_once(':')?;
+    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+}
+
+/// Borrowed argument bundle for [`cmd_dimension_add`] (clippy arg-count).
+struct DimensionAddArgs<'a> {
+    input: &'a Path,
+    page: u32,
+    kind: DimKindArg,
+    points: &'a str,
+    group: u32,
+    constraint: ConstraintArg,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `dimension-add` — author a scaled dimension additively (Pass 12.M2).
+fn cmd_dimension_add(args: &DimensionAddArgs<'_>) -> u8 {
+    use pdfce_core::dimension::{DimensionKind, GroupId, fit_circle_taubin};
+    let &DimensionAddArgs {
+        input,
+        page,
+        kind,
+        points,
+        group,
+        constraint,
+        output,
+        mode,
+        verify_undo,
+    } = args;
+
+    let Some(pts) = parse_dim_points(points) else {
+        eprintln!(
+            "pdfce-cli: {}: --points must be `x,y x,y ...` in points",
+            input.display()
+        );
+        return exit::EDIT_REFUSED;
+    };
+    let dk = match kind {
+        DimKindArg::Linear => {
+            let [a, b, ..] = pts.as_slice() else {
+                eprintln!(
+                    "pdfce-cli: {}: a linear dimension needs at least two points",
+                    input.display()
+                );
+                return exit::EDIT_REFUSED;
+            };
+            DimensionKind::Linear {
+                a: *a,
+                b: *b,
+                constraint: constraint.to_core(),
+            }
+        }
+        DimKindArg::Radius | DimKindArg::Diameter => {
+            let Some(fit) = fit_circle_taubin(&pts) else {
+                eprintln!(
+                    "pdfce-cli: {}: need at least 3 non-collinear points to fit a circle",
+                    input.display()
+                );
+                return exit::EDIT_REFUSED;
+            };
+            DimensionKind::Circular {
+                fit,
+                show_diameter: matches!(kind, DimKindArg::Diameter),
+            }
+        }
+    };
+
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let Some(page_index) = page.checked_sub(1).map(|i| i as usize) else {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            input.display()
+        );
+        return exit::EDIT_REFUSED;
+    };
+    let (annot_id, dim_id) = match session.add_dimension(page_index, GroupId(group), dk) {
+        Ok(v) => v,
+        Err(err) => return report_edit_error(input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "dimension-add {} page {page} kind={} group={group} mode={} -> {}; \
+annot={annot_id} dim={} changed={} objects={} verbatim={} appended={} out_bytes={} \
+undo_verified={} undo_identical={}",
+        input.display(),
+        kind.token(),
+        mode.name(),
+        output.display(),
+        dim_id.0,
+        outcome.changed,
+        r.objects_written,
+        r.objects_verbatim,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
+}
+
+/// `dimension-list` — inventory the stored dimension model (read-only).
+fn cmd_dimension_list(input: &Path) -> u8 {
+    use pdfce_core::dimension::{DimensionKind, ScaleState};
+
+    let doc = match open_for_read(input) {
+        Ok(doc) => doc,
+        Err(code) => return code,
+    };
+    let session = pdfce_core::edit::EditSession::new(doc);
+    let model = session.dimension_model();
+    println!(
+        "dimension-list {} groups={} dimensions={}",
+        input.display(),
+        model.groups().len(),
+        model.dimensions().len()
+    );
+    for g in model.groups() {
+        let scale = match g.scale {
+            ScaleState::NeverSet => "no-scale".to_owned(),
+            ScaleState::OneToOne => "1:1".to_owned(),
+            ScaleState::Calibrated { scale } => format!("{scale} {}/pt", g.unit().abbrev()),
+        };
+        println!(
+            "  group {} \"{}\" unit={} scale={scale} visible={} members={}",
+            g.id.0,
+            g.name,
+            g.unit().token(),
+            g.visible,
+            model.member_count(g.id),
+        );
+    }
+    for d in model.dimensions() {
+        let value = model.display(d.id).map_or_else(String::new, |m| m.text);
+        let kind = match d.kind {
+            DimensionKind::Linear { .. } => "linear",
+            DimensionKind::Circular {
+                show_diameter: true,
+                ..
+            } => "diameter",
+            DimensionKind::Circular { .. } => "radius",
+        };
+        println!(
+            "  dim {} group={} kind={kind} value=\"{value}\"",
+            d.id.0, d.group.0
+        );
+    }
+    exit::SUCCESS
+}
+
+/// `group-add` — create a named dimension group (Pass 12.M2).
+fn cmd_group_add(
+    input: &Path,
+    name: &str,
+    unit_str: &str,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let Some(unit) = pdfce_core::dimension::Unit::parse(unit_str) else {
+        eprintln!(
+            "pdfce-cli: {}: unknown --unit `{unit_str}` (mm|cm|m|in|ft|ft-in)",
+            input.display()
+        );
+        return exit::EDIT_REFUSED;
+    };
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let group = match session.add_dimension_group(name, unit) {
+        Ok(id) => id,
+        Err(err) => return report_edit_error(input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "group-add {} name=\"{name}\" unit={} mode={} -> {}; group={} changed={} objects={} \
+appended={} out_bytes={}",
+        input.display(),
+        unit.token(),
+        mode.name(),
+        output.display(),
+        group.0,
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+    );
+    finish_edit(input, &outcome)
+}
+
+/// Borrowed argument bundle for [`cmd_group_set_scale`] (clippy arg-count).
+struct GroupSetScaleArgs<'a> {
+    input: &'a Path,
+    group: u32,
+    real_length: Option<f64>,
+    drawn: Option<f64>,
+    ratio: Option<&'a str>,
+    unit: &'a str,
+    one_to_one: bool,
+    precision: Option<u32>,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `group-set-scale` — set a group's scale + units and regenerate members.
+fn cmd_group_set_scale(args: &GroupSetScaleArgs<'_>) -> u8 {
+    use pdfce_core::dimension::{
+        GroupId, NumberFormat, ScaleEntry, ScaleState, Unit, preview_group_scale,
+    };
+
+    let Some(unit) = Unit::parse(args.unit) else {
+        eprintln!(
+            "pdfce-cli: {}: unknown --unit `{}` (mm|cm|m|in|ft|ft-in)",
+            args.input.display(),
+            args.unit
+        );
+        return exit::EDIT_REFUSED;
+    };
+    let format = match args.precision {
+        Some(p) if unit == Unit::FeetInches => NumberFormat::feet_inches(p, false),
+        Some(p) => NumberFormat::decimal(unit, p),
+        None => unit.default_format(),
+    };
+
+    let scale = if args.one_to_one {
+        ScaleState::OneToOne
+    } else if let Some(ratio) = args.ratio {
+        let Some((paper, real)) = parse_ratio(ratio) else {
+            eprintln!("pdfce-cli: {}: --ratio must be `N:M`", args.input.display());
+            return exit::EDIT_REFUSED;
+        };
+        match preview_group_scale(ScaleEntry::Ratio {
+            paper,
+            real,
+            basis: unit,
+        }) {
+            Some(p) => ScaleState::Calibrated { scale: p.scale },
+            None => {
+                eprintln!("pdfce-cli: {}: invalid ratio", args.input.display());
+                return exit::EDIT_REFUSED;
+            }
+        }
+    } else if let (Some(real_length), Some(drawn)) = (args.real_length, args.drawn) {
+        match preview_group_scale(ScaleEntry::RealLength {
+            drawn_pdf_length: drawn,
+            real_length,
+            unit,
+        }) {
+            Some(p) => ScaleState::Calibrated { scale: p.scale },
+            None => {
+                eprintln!(
+                    "pdfce-cli: {}: --drawn must be a positive length",
+                    args.input.display()
+                );
+                return exit::EDIT_REFUSED;
+            }
+        }
+    } else {
+        eprintln!(
+            "pdfce-cli: {}: give --one-to-one, --ratio N:M, or --real-length L --drawn D",
+            args.input.display()
+        );
+        return exit::EDIT_REFUSED;
+    };
+
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let members = match session.set_group_scale(GroupId(args.group), scale, format) {
+        Ok(n) => n,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "group-set-scale {} group={} mode={} -> {}; members_regenerated={members} \
+changed={} objects={} appended={} out_bytes={}",
+        args.input.display(),
+        args.group,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// `layer-toggle` — show/hide a dimension group's optional-content layer.
+fn cmd_layer_toggle(
+    input: &Path,
+    group: u32,
+    hide: bool,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    use pdfce_core::dimension::GroupId;
+
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let visible = match session.toggle_dimension_layer(GroupId(group), !hide) {
+        Ok(v) => v,
+        Err(err) => return report_edit_error(input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "layer-toggle {} group={group} mode={} -> {}; visible={visible} changed={} \
+objects={} appended={} out_bytes={}",
+        input.display(),
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+    );
+    finish_edit(input, &outcome)
 }
 
 /// The file-name stem a `{stem}` placeholder and a per-source bookmark
