@@ -6246,3 +6246,315 @@ is now closed and dropped from this list):**
 - Confirm the beta (measurement/dimensioning) sequencing whenever the
   operator wants to revisit it, OR use this idle window to give the
   `/loop` its next major-direction steer — unchanged, still open.
+
+**Same-day continuation 49 — FIRST IMPLEMENTATION COMMIT (operator-
+authorized, LOCAL ONLY): commit `d8b3903` on branch `pass-8-redaction`;
+the "commit authorization" operator item is DISCHARGED — push remains
+gated on the `LEGAL.md` §1 license decision:**
+
+**Shipped:**
+- No new Pass this continuation — this is a git-process/institutional
+  milestone, not a feature Pass. The operator said "commit all work";
+  the engineer performed the project's FIRST implementation commit
+  since the 2026-07-23 bootstrap commit (`67967b2`).
+  - **Commit `d8b3903`** on branch **`pass-8-redaction`** (branched
+    from `67967b2`): **373 files changed, 168,217 insertions.** Title:
+    "Implement pdfce: full PDF read/write/edit stack + Acrobat
+    text-handling parity."
+  - **LOCAL ONLY — NOT pushed to any remote.** `LEGAL.md` §1 (OSS
+    license choice) remains undecided, and project rule 8 explicitly
+    forbids publishing to a public repository, a release, or
+    describing the project as "open source" before that decision is
+    made. A local commit satisfies "commit all work" without crossing
+    that line; pushing is a separate, still-ungranted authorization.
+  - `.gitignore` was extended BEFORE committing (proactive, not
+    asked-for) to exclude generated/scratch artifacts:
+    `/fixtures/external-report.tsv`; `tools/**/out/` and
+    `tools/**/out-*/` (corpus-harness output dirs); `/.claude/worktrees/`;
+    `/demo_*.pdf` and `/demo_*.png`. `target/` (~20GB) and
+    `/fixtures/external/` (354MB real-world OSS corpus) were already
+    ignored from bootstrap.
+  - **Committed:** all crate source (`crates/`); `docs/decisions/`
+    (17-file KenAgent decision log); `docs/ui_specs/`; synthetic-only
+    fixtures (`fixtures/synthetic/`); corpus-harness SOURCE plus fuzz
+    targets/seeds (`tools/`); `.claude/agent-memory/` and the
+    inkscape-librarian agent definition; launchers (`pdfce.bat`/
+    `pdfce.ps1`); `cargo-about` scaffolding (`about.toml`/`about.hbs`);
+    `Cargo.toml`/`Cargo.lock`; `rust-toolchain.toml`;
+    `THIRD_PARTY_LICENSES.md`.
+  - **Explicitly NOT committed:** build artifacts (`target/`), the
+    external real-world OSS PDF corpus, harness output/report
+    directories, any proprietary or unknown-provenance PDFs, and no
+    secrets/tokens are present in the commit.
+  - **Working tree is now clean** — nothing uncommitted except
+    gitignored artifacts. This RETIRES the "entire project
+    uncommitted" risk tracked since at least Pass 14.0 (see
+    `D:\Dev\pdfce\.claude\agent-memory\pdfce-librarian\project_uncommitted_repo_worktree_risk.md`,
+    now marked RESOLVED) and closes out the largest-uncommitted-span
+    framing repeated through continuations 39/42/46/47/48.
+
+**Decisions made this session:**
+- **Operator granted commit authorization for the first time this
+  project — the long-standing #1 open operator item.** Scope as
+  executed: LOCAL commit only. The engineer deliberately did NOT read
+  "commit all work" as also authorizing a push, given the still-open
+  `LEGAL.md` §1 license decision and project rule 8's explicit
+  prohibition on a public-facing commit posture before that decision.
+  If the operator intends to also authorize a push, that needs its own
+  explicit confirmation in a future session — it is not implied by
+  this one.
+- `.gitignore` was extended proactively before the commit so generated/
+  scratch/output artifacts never entered version control in the first
+  place, rather than committing them and cleaning up after.
+
+**Findings + decisions:**
+- No new generalizable Rust/egui or PDF-domain finding this
+  continuation — this is pdfce's own git-process housekeeping, not an
+  ecosystem- or domain-generalizable discovery. Nothing filed to
+  `D:\dev\rag\rust\`, `D:\dev\rag\egui\`, or `C:\personal_rag\pdf\`.
+
+**Still in flight:**
+- Unchanged from continuation 48: the text-parity arc (decisions
+  014+015+016) is fully shipped and hardened; the `/loop` remains
+  throttled to an idle heartbeat awaiting operator steer; the Beta
+  (measurement/dimensioning) awaits operator go-ahead.
+- **The one structural change: the tree is no longer uncommitted.**
+  Future autonomous-builder `git worktree` dispatches now check out
+  real, current content instead of the stale 2026-07-23 bootstrap
+  commit — retiring the recurring worktree-isolation cost documented
+  in `D:\dev\rag\rust\autonomous_builder_worktree_isolation_uncommitted_substrate.md`.
+  New work from this point commits normally onto `d8b3903` (or
+  whatever branch it lands on); it does not reopen this risk unless a
+  future session again lets uncommitted work pile up.
+
+**Still-open operator items (re-surfaced, oldest-first; COMMIT
+AUTHORIZATION REMOVED THIS CONTINUATION — discharged, see above):**
+- Encryption-refusal operator sign-off — oldest owed, unchanged.
+- `LEGAL.md` §1 license decision — still undecided. **Now doubly
+  pointed in a new way:** it already gated the FF-C unblock (unchanged)
+  and now ALSO gates whether the just-made local commit (`d8b3903`) may
+  ever be PUSHED to a remote/public repository (project rule 8). The
+  local commit does not resolve this decision — it raises the stakes
+  of getting it right, since a push call is now the only remaining
+  step between the working tree and public visibility.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged,
+  unchanged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5) — unchanged.
+- W15 — no remote/CI — unchanged; also relevant to the push question
+  above, since no CI exists to validate a pushed branch yet regardless.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question — still no operator answer, unchanged.
+- FF-C (font subsetting/glyph embedding) license/dependency gate —
+  unchanged; recommendation stands to unblock now that FF-D is done.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); listed only for the oldest-first trail's
+  continuity, no action needed.
+- ~~Commit authorization~~ — **DISCHARGED this continuation.** Local
+  commit `d8b3903` performed on branch `pass-8-redaction`, operator-
+  authorized. Dropped from active tracking; superseded by the
+  push/license question above, which is now the load-bearing open item
+  in this space.
+
+**For next session:**
+- **Get the operator's explicit call on PUSHING** — a separate
+  authorization from the local-commit one just exercised, gated on
+  `LEGAL.md` §1. Do not push without it.
+- Everything else unchanged from continuation 48: FF-C unblock,
+  list-authoring scope answer, Beta sequencing confirmation, or a new
+  `/loop` major-direction steer.
+
+**Same-day continuation 50 — LICENSE DECIDED (MIT) + NEW OPERATOR
+PRIORITY SEQUENCE SET: dimensioning tool (active) → GUI icons → finish
+text-handling → form-building tools:**
+
+**Shipped:**
+- No new feature Pass this continuation — this is a legal-decision +
+  reprioritization milestone, not a build.
+- **License artifacts implemented (engineer, this continuation):**
+  repo-root `LICENSE` (standard MIT text, "Copyright (c) 2026 Ken
+  Mantle"); `license = "MIT"` in `Cargo.toml` `[workspace.package]`;
+  `license.workspace = true` added to all four member crates
+  (`pdfce-core`, `pdfce-render`, `pdfce-gui`, `pdfce-cli`) —
+  `cargo metadata` confirms each resolves to MIT.
+- **Dependency-license audit performed as part of the decision:**
+  every dependency in the lockfile is permissive (MIT/Apache-2.0/BSD/
+  ISC/Zlib/Unicode) — zero copyleft — verified against
+  `THIRD_PARTY_LICENSES.md`. MIT is fully compatible; no dependency
+  needed to change.
+
+**Decisions made this session:**
+- **`LEGAL.md` §1 — OSS license DECIDED: MIT.** Operator's explicit
+  choice, delivered in the same instruction as the new work-focus
+  directive below. Recorded in `docs/LEGAL.md` §1/§6.1/§7 and
+  `docs/ARCHITECTURE.md` §12 (both updated this continuation, mirrored
+  entries) — see "Files touched" below.
+  - **Consequence (binding, recorded in both files):** GPL/AGPL prior
+    art — MuPDF, Poppler, Ghostscript (`docs/PRIOR_ART.md`) — is now
+    categorically and *permanently* excluded as a real dependency.
+    This was already the practical posture (nothing copyleft was ever
+    adopted), but the license decision forecloses the hypothetical
+    "choose AGPL instead and unlock them" branch for good.
+  - **Project rule 8's license precondition is now satisfied** — pdfce
+    may be described as having a real, settled license, and a
+    public-facing commit posture is no longer blocked *by the license
+    question specifically*.
+  - **Push/publish is explicitly NOT authorized by this decision.**
+    The operator asked for the license choice and the new priority
+    sequence (below) — not a push. The existing local commit
+    (`d8b3903`, continuation 49) stays local-only until a separate,
+    explicit go-ahead is given. This is a narrower, distinct open item
+    from the license decision itself — see the still-open list below.
+- **Operator set a four-item priority sequence for upcoming work**
+  (verbatim: *"get the dimensioning tool completely functional in the
+  gui interface. add d:/dev/scriptree style icons for all gui
+  features. finish off all the text handling stuff. work on form
+  building tools after if that makes sense."*). Recorded in
+  `ROADMAP.md` as a new "★★★ Operator priority sequence" block at the
+  top of "Next up":
+  1. **Dimensioning tool → completely functional in the GUI.** Promoted
+     from "awaits go-ahead" to **ACTIVE**. Current state: only Pass
+     **12.0** (canvas substrate, uninhabited) is shipped; the four
+     remaining decision-011 slices — **9a** (object/selection model +
+     centerline), **12.M1** (snapping), **12.M2** (dimensioning +
+     scale/group + hybrid storage + OCG), **9c-min** (basic editing:
+     move/delete/drag-node) — are NOT built. **Pass 9a dispatched to
+     build now** (first of the four, per decision 011's own dependency
+     order). **`pdfce-inkscape-librarian` dispatched now** for the
+     9a/12.M1 grounding (selection + snapping capability bucket).
+     **Queued for the 12.M1/12.M2 stage** (not yet dispatched):
+     `pdfce-spec-librarian` (§12.9 measurement / §14.5 optional
+     content / §8.11 measurement dicts), `pdfce-acrobat-librarian`
+     (measuring-tools bucket), `pdfce-ui-specialist` (dimension-tool
+     canvas UX) — decision 011's own prerequisite grounding was already
+     sourced earlier, so these are queued for their build stage, not a
+     fresh research round.
+  2. **ScripTree-style SVG icons for all GUI features.** NEW backlog
+     item, filed this continuation as a new "★ Icon set" entry under
+     Next up — not yet scoped to a Pass. Styled after
+     `D:\Dev\ScripTree\icons\*.svg`; applies across every current GUI
+     tool/feature, present and future (including the dimensioning tool
+     once built). Queued behind the dimensioning tool.
+  3. **Finish all text-handling.** FF-B (cross-block/cross-page
+     reflow), FF-H (spacing/synthetic styles + StructTree), and FF-C
+     (font subsetting/glyph embedding) are now all schedulable — FF-C
+     specifically because its rule-8 license gate is lifted by the MIT
+     decision, and because the operator's "finish off all the text
+     handling stuff" instruction is itself the go-ahead decision 016
+     was waiting on. Rule 13 (copyleft flag) still applies to whichever
+     concrete subsetter crate is chosen for FF-C — the license decision
+     doesn't pre-clear an unverified crate. **List-authoring is
+     explicitly NOT resolved by this instruction** — it's a separate,
+     still-open scope question (see below); "text handling" and "list
+     authoring" are tracked as two distinct open items in `ROADMAP.md`,
+     and the operator did not answer the list-authoring one.
+  4. **Form-building tools, after — "if that makes sense."** Queued
+     last. This is form-FIELD CREATION/authoring (new AcroForm fields),
+     distinct from the shipped Pass 7.0/7.1 form-FILL/flatten
+     subsystem. Recorded as an amendment to the existing "Forms
+     (AcroForm)" Backlog bucket. The operator's own hedge ("if that
+     makes sense") is noted verbatim — re-evaluate scope when items 1–3
+     are done rather than treating it as unconditionally committed.
+
+**Findings + decisions:**
+- No new generalizable Rust/egui or PDF-domain finding this
+  continuation — this is a legal/process decision plus a
+  reprioritization instruction, not an empirical or ecosystem finding.
+  Nothing filed to `D:\dev\rag\rust\`, `D:\dev\rag\egui\`, or
+  `C:\personal_rag\pdf\`.
+- **Files touched this continuation:** `docs/LEGAL.md` (§1 rewritten
+  DECIDED, §6.1 amended, §7 new dated entry); `docs/ARCHITECTURE.md`
+  (§12 new dated entry, §9 body amended to reflect the decided
+  license); `docs/ROADMAP.md` ("In progress" GIT STATUS note amended;
+  Beta/dimensioning entry promoted to ACTIVE with dispatch detail; new
+  "★★★ Operator priority sequence" and "★ Icon set" entries added under
+  Next up; the FF-D text-parity milestone paragraph amended; the FF-C
+  Backlog bullet marked UNBLOCKED; the "Forms (AcroForm)" Backlog
+  bucket amended with the form-building-tools priority note; the
+  "Release & distribution channel" Backlog bullet amended — license
+  manifest-property blocker lifted, still blocked on the separate
+  push/publish authorization).
+- **Flag for the operator (not an edit made by the librarian):**
+  `C:\Users\Ken\.claude\CLAUDE.md`'s project-instructions mirror in
+  `D:\Dev\pdfce\CLAUDE.md` lists "OSS license — not yet chosen" under
+  "Outstanding open items." That file is engineer/operator-owned, not
+  the librarian's to edit — flagging so the engineer updates it to
+  reflect the MIT decision in a future pass over that file.
+- **Also noticed, not actioned:** `ARCHITECTURE.md` §12's decision log
+  has no entry for decision 016 (FF-D) — Pass 16.0/16.1/16.2 and the
+  FF-D follow-up hardening are all recorded in `ROADMAP.md` and in
+  `docs/decisions/016-ffd-add-new-page-text.md`, but the §12 mirror
+  entry was apparently never written. Out of scope for this
+  continuation's dispatch (MIT decision + reprioritization only); flag
+  for a future "decision log entry" dispatch to backfill.
+
+**Still in flight:**
+- The Beta (measurement/dimensioning) is now the project's ACTIVE
+  focus (see above) — Pass 9a is dispatched and building.
+- The text-parity fast-follow ladder (FF-B/FF-C/FF-H) is now
+  operator-directed to finish, but not yet scoped to specific Passes
+  or dispatched to build — that scoping is upcoming work, sequenced
+  behind the dimensioning tool and the icon set per the priority
+  order.
+- The icon-set work and the form-building-tools work are both filed as
+  new backlog items this continuation; neither has started.
+- The `/loop`'s prior "throttled, awaiting operator steer" status
+  (continuation 48) is now resolved — the operator steer arrived this
+  continuation. Whether the `/loop` reactivates autonomously or the
+  engineer works interactively through this priority sequence is an
+  engineer-session call, not recorded here.
+
+**Still-open operator items (re-surfaced, oldest-first):**
+- Encryption-refusal operator sign-off — oldest owed, unchanged.
+- ~~`LEGAL.md` §1 license decision~~ — **DECIDED this continuation:
+  MIT.** Removed from active tracking as an open item; see "Decisions
+  made this session" above for the full record.
+- **Push/publish authorization — NEW, narrow, optional item, split
+  off from the now-resolved license decision.** The local commit
+  `d8b3903` (continuation 49) remains unpushed; MIT satisfies rule 8's
+  license precondition, but the operator has not asked for a push or a
+  public release, and none should happen without that separate,
+  explicit go-ahead.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged,
+  unchanged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5) — unchanged.
+- W15 — no remote/CI — unchanged; also relevant to the push question
+  above, since no CI exists to validate a pushed branch yet regardless.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question — still no operator answer, unchanged.
+  **Explicitly NOT answered by this continuation's "finish off all the
+  text handling stuff" instruction** — see "Decisions made this
+  session" item 3 above for why the two are tracked separately.
+- FF-C (font subsetting/glyph embedding) license/dependency gate —
+  **RESOLVED this continuation** (MIT decision lifts rule 8; operator
+  directive is the go-ahead). Kept in this list one more continuation
+  for the oldest-first trail's continuity, then drop it once a Pass
+  number is assigned.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); listed only for the oldest-first trail's
+  continuity, no action needed.
+
+**For next session:**
+- Continue/complete **Pass 9a** (object/selection model + centerline)
+  and proceed through decision 011's sequence (12.M1 → 12.M2 →
+  9c-min), dispatching `pdfce-spec-librarian` / `pdfce-acrobat-librarian`
+  / `pdfce-ui-specialist` at the 12.M1/12.M2 stage as queued.
+  Dimensioning-tool completeness (priority #1) is the top of the queue.
+  - **When the beta lands "completely functional," move to priority
+    #2 (ScripTree-style icons)**, dispatching `pdfce-ui-specialist`
+    for the icon→feature mapping first.
+  - **Then priority #3** (FF-B/FF-C/FF-H) — pick a permissive-only
+    subsetter for FF-C and flag it per rule 13 even though rule 8 is
+    clear; scope FF-B/FF-H into real Passes off the existing decision
+    016 §2 prioritization.
+  - **Then priority #4** (form-building tools) — re-evaluate scope
+    against the "if that makes sense" hedge before committing, and
+    dispatch `pdfce-acrobat-librarian` for the field-creation
+    capability bucket first.
+- Get the operator's explicit call on **pushing** the existing local
+  commit (or a later one) — separate from, and not implied by, the
+  MIT decision.
+- Backfill `ARCHITECTURE.md` §12 with a decision-016 (FF-D) entry —
+  flagged above as a pre-existing gap noticed but not fixed this
+  continuation.

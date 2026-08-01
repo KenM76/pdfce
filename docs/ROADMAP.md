@@ -3478,6 +3478,29 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 
 ## In progress
 
+**GIT STATUS (2026-08-01) — first implementation commit made, LOCAL
+ONLY.** The operator authorized "commit all work"; the engineer
+committed the entire working tree as **`d8b3903`** on branch
+**`pass-8-redaction`** (373 files changed, 168,217 insertions) on top
+of the 2026-07-23 bootstrap commit `67967b2`. This is a **local commit
+only — NOT pushed to any remote.** **`LEGAL.md` §1 (OSS license
+choice) is now DECIDED — MIT (2026-08-01)** — see `LICENSE` (repo
+root) + `Cargo.toml` `[workspace.package] license = "MIT"` +
+`license.workspace = true` on all four member crates. Project rule 8's
+license precondition for a public-facing commit posture is therefore
+now **satisfied**, but pushing is still a **separate, not-yet-granted
+authorization**: the operator asked for the license decision and the
+new work focus (below), not a push. Do not push without an explicit
+go-ahead. The working tree is now clean (nothing uncommitted except
+gitignored build/scratch/corpus artifacts); every "Passes 0–N ALL
+uncommitted in git" note embedded in the older Shipped entries below
+(Pass 2.2 through Pass 8.0) describes the true state **at the time
+each of those Passes shipped** and is left as-is (append-only
+history) — as of this commit, none of it is uncommitted any longer.
+Full record: `docs/SESSION_LOG.md`, same-day continuation 49
+(2026-08-01) for the commit, continuation 50 for the license decision
+and new focus.
+
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
 text as real page content) is now COMPLETE end-to-end.** 16.0
@@ -3569,22 +3592,76 @@ engineering work awaiting dispatch** — the next move on this arc is an
 operator decision (FF-C unblock, list-authoring scope call), not
 further autonomous engineering.
 
-### Beta — Scaled measurement / dimensioning tool (decision 011 ARCHIVED; prerequisites COMPLETE; awaits operator go-ahead)
+**AMENDMENT (2026-08-01, SESSION_LOG continuation 50) — the awaited
+operator move arrived: "finish off all the text handling stuff."**
+Combined with the same-continuation MIT license decision (which lifts
+FF-C's rule-8/rule-13 license gate — see `LEGAL.md` §1, `ARCHITECTURE.md`
+§12), **FF-B, FF-H, and FF-C are now all schedulable** — this directive
+is the operator go-ahead the milestone above was waiting on. **List-
+authoring is explicitly NOT resolved by this instruction** — "text
+handling" and "list authoring" are two different open items in this
+file (see Backlog), and the operator did not answer the list-authoring
+scope question; do not schedule it without a separate, explicit
+answer. Sequencing note: per the ★★★ Operator priority sequence (top
+of Next up), this text-handling work is priority **#3**, queued behind
+the dimensioning tool (#1) and the icon set (#2) — do not jump the
+queue.
 
-**Promoted to In progress 2026-08-01 by operator REPRIORITIZATION.** Ken
-has requested a **measurement / dimensioning BETA** as his first usable
-deliverable: **scaled dimensions + vector selection/snapping + basic
-vector editing**. Its architecture is now DECIDED and ARCHIVED at
+### Beta — Scaled measurement / dimensioning tool (decision 011 ARCHIVED; NOW ACTIVE — operator go-ahead received 2026-08-01)
+
+**Promoted to In progress 2026-08-01 by operator REPRIORITIZATION;
+GO-AHEAD RECEIVED same day (2026-08-01, SESSION_LOG continuation 50).**
+Ken's directed instruction — "get the dimensioning tool completely
+functional in the gui interface" — is the **#1 item in a four-item
+priority sequence** he set this continuation (icons → text-handling
+completion → form-building tools follow it; see the three new/updated
+entries below and under Backlog). This is now the project's **ACTIVE
+engineering focus**, superseding the prior "awaits operator go-ahead"
+posture.
+
+Its architecture is DECIDED and ARCHIVED at
 `docs/decisions/011-first-beta-scaled-measurement-dimensioning-tool.md`
 (five slices — **12.0 / 9a / 12.M1 / 12.M2 / 9c-min**). **Do NOT invent the
 beta's Pass IDs / slices here — decision 011 defines them.**
 
-**READY-TO-START status (2026-08-01):** the beta's research prerequisites
-are **COMPLETE** — the spec slices (§12.9 measurement / §14.5 optional
-content / §8.11 measurement dictionaries), the Acrobat measuring-tools
-feature bucket, and the Inkscape selection+snapping capability bucket are
-all sourced. **The beta build now awaits operator go-ahead** — Ken is
-reviewing the plan; the engineer starts on his confirmation.
+**Current state (2026-08-01): only slice 1 of 5 is shipped.** Pass
+**12.0** (canvas-interaction substrate) shipped 2026-08-01 — see
+Shipped above — but it is explicitly **UNINHABITED** (zero
+document-mutating tools, zero dimensioning capability). The remaining
+four slices are **NOT built**: **9a** (object/selection model +
+centerline, read-only), **12.M1** (snapping engine), **12.M2**
+(dimensioning + scale/group + hybrid storage + OCG layer — the
+render-touching, R59-gated slice), and **9c-min** (basic vector
+editing: move/delete/drag-node — the R59/Pass-11-gated surgery slice).
+Nothing here is "completely functional in the GUI" yet — that is
+exactly the gap this active focus closes.
+
+**DISPATCHED NOW (2026-08-01):**
+- **`pdfce-engineer` building Pass 9a** (object/selection model +
+  centerline) — the first of the four remaining slices, per decision
+  011's own dependency order (`12.0 → 9a → 12.M1 → 12.M2`/`9c-min`).
+- **`pdfce-inkscape-librarian`** dispatched now for the 9a + 12.M1
+  grounding (node/object selection + snap-target/priority capability
+  bucket) — decision 011 §4 names this as a parallel-now prerequisite,
+  not something to defer until 9a's build is already underway.
+
+**QUEUED for the 12.M1/12.M2 stage (not yet dispatched):**
+- **`pdfce-spec-librarian`** — §12.9 (measurement), §14.5 (optional
+  content/OCG), §8.11 (measurement dictionaries) — blocking for
+  **12.M2** specifically (decision 011 §4 names it as grounding 12.M2's
+  acceptance criteria), not needed to start 9a.
+- **`pdfce-acrobat-librarian`** — Measuring-Tool / dimension capability
+  bucket (distance + scale ratio + snap-to-content + measurement-markup
+  persistence + units), also grounding 12.M2.
+- **`pdfce-ui-specialist`** — dimension-tool UX design, needed before
+  12.M2's canvas UI lands (same precedent as every other canvas-tool
+  Pass in this project: UI-specialist design precedes canvas-UI build).
+
+**READY-TO-START status (2026-08-01, unchanged):** the beta's research
+prerequisites (spec slices, Acrobat measuring-tools bucket, Inkscape
+selection+snapping bucket) were already sourced before this
+continuation — that is why 9a could be dispatched immediately on the
+operator's go-ahead rather than waiting on a fresh research round.
 
 **GUI-polish interlude (2026-08-01, does NOT displace the beta):** an
 operator-requested GUI polish + launcher interlude shipped ahead of the
@@ -3624,6 +3701,80 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 22. Only its queue position changed.
 
 ## Next up
+
+### ★★★ OPERATOR PRIORITY SEQUENCE (set 2026-08-01, SESSION_LOG continuation 50) — READ THIS FIRST
+
+Ken's directive, same continuation as the MIT license decision: **"get
+the dimensioning tool completely functional in the gui interface. add
+d:/dev/scriptree style icons for all gui features. finish off all the
+text handling stuff. work on form building tools after if that makes
+sense."** This is a four-item priority order, superseding whatever
+"next" framing any older entry below implies. Do not resequence
+without a new operator instruction.
+
+1. **Dimensioning tool → completely functional in the GUI.** ACTIVE
+   NOW — see the Beta entry under "In progress" (above) for full
+   state (12.0 shipped; 9a dispatched now; 9c-min/12.M1/12.M2
+   remaining).
+2. **ScripTree-style icons for all GUI features.** Queued behind the
+   dimensioning tool — see the new "Icon set" entry below.
+3. **Finish all text-handling.** FF-B (cross-block/cross-page reflow),
+   FF-H (`Tc`/`Tw`/`Tz`/`Ts` spacing + synthetic styles + minimal
+   StructTree update), and FF-C (font subsetting/glyph embedding — its
+   license/rule-8 gate is now LIFTED by the MIT decision) are all now
+   schedulable per this directive — see the ★ Pass 16.x entry's Backlog
+   pointers (FF-C bullet, amended) for detail. **List-authoring remains
+   a separate, still-unanswered scope question** (see Backlog) — this
+   directive does not resolve it; do not fold list-authoring into
+   "text-handling" without a further, explicit operator answer to that
+   specific question.
+4. **Form-building tools, after — "if that makes sense."** Queued
+   behind items 1–3. This is form field CREATION/authoring (adding new
+   AcroForm fields to a document), distinct from the already-shipped
+   Pass 7.0/7.1 form FILL/flatten subsystem — see the "Forms (AcroForm)"
+   Backlog bucket (amended) for detail. The "if that makes sense"
+   qualifier is the operator's own hedge — re-evaluate scope/priority
+   against whatever's shipped by the time items 1–3 are done, don't
+   treat it as an unconditional commitment.
+
+### ★ Icon set — ScripTree-style SVG icons for all GUI features (operator priority #2, set 2026-08-01)
+
+**NEW entry, filed by this continuation — not yet scoped to a Pass
+number.** Ken wants pdfce's GUI toolbar/tool icons styled after
+`D:\Dev\ScripTree\icons\*.svg` — the existing coherent SVG icon set
+used elsewhere in Ken's tooling (flat, simple, single-purpose glyphs
+per tool). Applies across **every** GUI feature/tool currently
+exposed without a proper icon (viewer navigation, the Pass 6.x/8.0
+markup/redaction tools, the Pass 12.0+ canvas tools including the
+dimensioning tool once built, Pass 14.x/15.x/16.x text tools, etc.) —
+a coherent icon language for the whole toolbar, not a one-off asset
+drop.
+
+**Scoping notes for whoever picks this up:**
+- **Not yet audited:** which of pdfce's current GUI affordances are
+  glyph-only vs. text-labeled, and which already have a
+  `Self::icon_button()`-style accessible-name treatment (see the GUI-
+  polish Shipped entry's P1 accessible-icon-button work, above) that
+  an icon swap must not regress. That audit is the natural first step
+  when this is picked up.
+- **`pdfce-ui-specialist`** is the natural dispatch for the
+  icon→feature mapping (which glyph reads as "redact," "reflow," "add
+  dimension," etc.) before any egui wiring — same precedent as every
+  other non-trivial UI decision in this project.
+- **Licensing check owed before adoption (rule 13 discipline,
+  applied to art assets the same as code):** confirm the ScripTree
+  icon set's own license/rights situation before bundling any SVG
+  into pdfce's asset tree — `D:\Dev\ScripTree` is Ken's own project, so
+  this is likely a non-issue (Ken owns both), but it should be
+  confirmed, not assumed, the same way any other asset provenance
+  would be checked per `LEGAL.md` §5's spirit (applied here to icon
+  art rather than test-corpus PDFs).
+- **Format/pipeline question, unresolved:** how SVGs get into egui
+  (rasterize-at-build via a build script, `egui_extras`'s SVG loader,
+  or a pre-rendered PNG atlas) is an implementation decision for
+  whoever builds this, not predetermined here.
+- **Queued behind the dimensioning tool** (operator priority #1) — do
+  not let this displace 9a/12.M1/12.M2/9c-min in the dispatch order.
 
 ### ★ NEXT MAJOR FOCUS — Pass 14.x: Acrobat text-handling parity (decision 014, DECIDED 2026-07-31)
 
@@ -5075,6 +5226,24 @@ nothing gets forgotten, not as a commitment to build in this order.
 - **Forms (AcroForm)** — field creation/editing, appearance-stream
   generation, form-field auto-detection (as a *hint*, per
   fuzzy-never-sneaky), flatten-to-static.
+  **AMENDED 2026-08-01 (SESSION_LOG continuation 50) — "form-building
+  tools" is operator priority #4, queued after the dimensioning tool /
+  icon set / text-handling (see the ★★★ Operator priority sequence,
+  top of Next up).** This is **field CREATION/authoring** — adding NEW
+  AcroForm fields (text/checkbox/choice/etc.) to a document — which is
+  a genuinely different subsystem from the already-shipped Pass 7.0
+  (field model + fill) and Pass 7.1 (flatten + FDF/XFDF + choice fill +
+  regenerate). Pass 7.x is the FILL/read/flatten side of AcroForm;
+  field creation is the AUTHORING side, unscoped, unbuilt, no Pass
+  number assigned. Ken's own framing — "after, if that makes sense" —
+  is an explicit hedge, not a firm commitment; re-evaluate scope and
+  priority against whatever's shipped by the time items 1–3 are
+  reached, rather than treating this as an unconditionally queued Pass.
+  When it is picked up: dispatch `pdfce-acrobat-librarian` for the
+  Form-Field-creation capability bucket (widget appearance-stream
+  generation rules, default field properties per type, Acrobat's own
+  auto-detect heuristics) before scoping a Pass, same discipline as
+  every other Backlog-to-Pass promotion.
 - **XFA** — legacy Adobe forms tech. **Verify current status before
   scoping** — Adobe has been deprecating XFA in Acrobat; consult the
   spec RAG + a fresh web check before committing engineering time here.
@@ -5320,10 +5489,16 @@ nothing gets forgotten, not as a commitment to build in this order.
   week, each with an archived decision record in `docs/decisions/`.
 - **Release & distribution channel** — filed 2026-07-30 per
   `docs/decisions/003-distribution-posture.md` §10 item 12.
-  **Explicitly BLOCKED ON `LEGAL.md` §1** (Scoop requires a `license`
-  manifest property; WinGet requires `License` in the defaultLocale
-  manifest; no public repo/release until the license is decided). The
-  work, in order:
+  **AMENDED 2026-08-01: the `LEGAL.md` §1 manifest-property blocker is
+  LIFTED** — `license = "MIT"` now exists and can populate both Scoop's
+  `license` manifest property and WinGet's `License` defaultLocale
+  field. **Still blocked in practice, on a separate gate: no public
+  repo/release exists yet** — the project's one implementation commit
+  (`d8b3903`) is local-only, and pushing/publishing requires its own,
+  not-yet-granted operator authorization (distinct from the license
+  decision — see `docs/SESSION_LOG.md` continuations 49–50). Do not
+  build or publish either manifest until that authorization arrives.
+  The work, in order, once unblocked:
   - **Scoop manifest** first (natural fit for a portable app:
     user-scope, no UAC, no registry; `checkver: "github"` +
     `autoupdate`; use `persist` for the R15 user-state partition).
@@ -5375,24 +5550,34 @@ nothing gets forgotten, not as a commitment to build in this order.
   15.x reflow engine once/if the operator says yes.
 
 - **FF-D fast-follow FF-C — font subsetting / glyph embedding.
-  AWAITING OPERATOR DECISION — DO NOT SCHEDULE TO A PASS.** Filed
-  2026-08-01 by decision 016 §10 (`docs/decisions/016-ffd-add-new-page-text.md`),
-  ranked **#2 by value** in decision 016's text-parity fast-follow
-  prioritization (§2) — it lifts the single most common wall in real
-  editing, the embedded-subset "can't originate that glyph" refusal
-  from `text_edit__font_handling_on_edit.md` (R71) — but it **cannot
-  start solo**: adding a font subsetter/embedder is a new Cargo
-  dependency, which triggers **rule 13** (copyleft classification —
-  must be flagged to and approved by the operator, never decided solo)
-  and is gated by **rule 8** (pdfce's own OSS license is still
-  undecided, `LEGAL.md` §1 — which gates what dependency posture is
-  even usable). **Recommendation surfaced by decision 016:** unblock in
-  parallel with the now-scoped Pass 16.x (FF-D) build — operator
-  approves a permissive-only subsetter path and, ideally, settles
-  `LEGAL.md` §1, so FF-C can follow FF-D directly; the
+  UNBLOCKED 2026-08-01 — schedulable, no Pass number assigned yet.**
+  Filed 2026-08-01 by decision 016 §10
+  (`docs/decisions/016-ffd-add-new-page-text.md`), ranked **#2 by
+  value** in decision 016's text-parity fast-follow prioritization
+  (§2) — it lifts the single most common wall in real editing, the
+  embedded-subset "can't originate that glyph" refusal from
+  `text_edit__font_handling_on_edit.md` (R71). Originally could not
+  start solo because adding a font subsetter/embedder is a new Cargo
+  dependency, gated by **rule 8** (pdfce's own OSS license — was
+  undecided) and requiring **rule 13** flagging if the chosen crate
+  turns out copyleft.
+  **AMENDMENT (2026-08-01, SESSION_LOG continuation 50): both gates are
+  now clear.** `LEGAL.md` §1 is DECIDED — MIT — closing the rule-8 gate
+  outright, and the operator's same-continuation "finish off all the
+  text handling stuff" directive is the explicit go-ahead decision 016
+  recommended waiting for. **Rule 13 still applies to the specific
+  crate chosen** — whoever scopes this into a Pass must pick a
+  **permissive-only** font subsetter/embedder (MIT/Apache-2.0/BSD-class)
+  and flag it in `PRIOR_ART.md`/the dependency audit same as any other
+  new dependency; a copyleft candidate still needs an explicit
+  operator check-in per rule 13, even though the *project* license
+  question that used to gate this is now settled. The
   `pdfce-spec-librarian` font-subsetting dispatch (named at decision
-  014) is queued to run meanwhile so the spec grounding is ready when
-  the operator unblocks it. No Pass number invented here.
+  014) remains queued to run ahead of the actual build so spec grounding
+  is ready. **No Pass number invented here** — assignment is the
+  engineer's call when this is actually scoped, per the ★★★ Operator
+  priority sequence (top of Next up), behind the dimensioning tool and
+  icon set.
 
 - ~~**FF-D follow-up — certification-signature guard gap on
   `add_text`/`EditSession::add_text`. Flagged 2026-08-01 at Pass 16.0's

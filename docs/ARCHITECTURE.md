@@ -885,11 +885,21 @@ pdfce builds on the existing Rust/OSS ecosystem rather than
 reinventing every primitive — see `docs/PRIOR_ART.md` for the
 survey/decision record and `docs/LEGAL.md` §6 for the binding
 licensing discipline (permissive-vs-copyleft classification, the
-mandatory per-dependency license check, and why pdfce's own §1
-license decision gates which prior art is even usable). Attribution
-for whatever's actually adopted is **generated**, not hand-maintained
-— `cargo-about` produces `THIRD_PARTY_LICENSES.md` from the real
-`Cargo.lock`, regenerated at every packaging pass (§6).
+mandatory per-dependency license check, and why pdfce's own license
+gates which prior art is even usable). Attribution for whatever's
+actually adopted is **generated**, not hand-maintained — `cargo-about`
+produces `THIRD_PARTY_LICENSES.md` from the real `Cargo.lock`,
+regenerated at every packaging pass (§6).
+
+**pdfce's own license is MIT (decided 2026-08-01, `LEGAL.md` §1; see
+§12 decision log).** `LICENSE` (repo root) + `license = "MIT"` in
+`Cargo.toml` `[workspace.package]`, inherited by all four member
+crates via `license.workspace = true`. Every current dependency is
+permissive (verified against `THIRD_PARTY_LICENSES.md`), so this
+decision required no dependency rework. **Consequence: GPL/AGPL prior
+art (MuPDF, Poppler, Ghostscript) is now categorically, permanently
+excluded as a real dependency** — reference-only (architecture/
+algorithms studied, never linked or copied), per `LEGAL.md` §6.1.
 
 ## 10. Adversarial input hardening & fuzzing
 
@@ -3253,3 +3263,27 @@ with a forward pointer.
     surgery, `vartext.rs`'s packing core (factored), decision 012's
     `GlyphSource`. `pdfce-spec-librarian` is dispatched for §9.4.3 `TJ` /
     §9.3.3 `Tw` ahead of 15.1.
+- **2026-08-01 — License = MIT (operator decision).** `docs/LEGAL.md`
+  §1 flipped from "OPEN DECISION" to **DECIDED: MIT**, as part of a
+  combined operator instruction that also set the project's next work
+  focus (dimensioning tool → GUI-complete; ScripTree-style icons for
+  all GUI features; finish text-handling fast-follows; form-building
+  tools after — see `ROADMAP.md` "In progress"/"Next up" for the full
+  sequencing record). **Rationale:** MIT is maximally permissive
+  (easiest third-party adoption/embedding) and is fully compatible with
+  the existing dependency set — a per-dependency audit against
+  `THIRD_PARTY_LICENSES.md` found every current dependency permissive
+  (MIT/Apache-2.0/BSD/ISC/Zlib/Unicode), zero copyleft, so the decision
+  requires no dependency rework. Implemented same-session: `LICENSE`
+  file at repo root, `license = "MIT"` in `Cargo.toml`
+  `[workspace.package]`, `license.workspace = true` on all four member
+  crates (`cargo metadata`-confirmed). **Consequence (§9 below,
+  amended):** GPL/AGPL prior art — MuPDF, Poppler, Ghostscript (see
+  `docs/PRIOR_ART.md`) — is now categorically and permanently excluded
+  as a real dependency; it was already reference-only in practice, but
+  the license decision now forecloses the alternative (an AGPL pdfce
+  unlocking them) for good. Project rule 8's license precondition for a
+  public-facing commit posture is now satisfied, but pushing the
+  existing local commit (`d8b3903`) or publishing a release still
+  requires its own, separate operator go-ahead — not implied by this
+  decision. Full record: `docs/LEGAL.md` §1/§6.1/§7.

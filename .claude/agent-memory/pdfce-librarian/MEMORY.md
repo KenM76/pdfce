@@ -1,3 +1,4 @@
-- [Repo stays uncommitted, recurring worktree cost](project_uncommitted_repo_worktree_risk.md) — everything in `crates/` is uncommitted; bites autonomous-builder dispatches repeatedly.
+- [Repo uncommitted-tree risk — RESOLVED 2026-08-01](project_uncommitted_repo_worktree_risk.md) — commit `d8b3903` (local only); license decided MIT (continuation 50), push now gated only on separate operator go-ahead.
 - [SESSION_LOG continuation numbering convention](feedback_session_log_continuation_style.md) — one date header per calendar session start; further work same day is "Same-day continuation N", not a new header.
-- [`/loop` throttled, awaiting operator steer](project_loop_throttled_awaiting_steer.md) — as of continuation 48 (2026-08-01) the autonomous loop stopped spawning feature work; check current status before describing "in flight."
+- [`/loop` throttled, awaiting operator steer](project_loop_throttled_awaiting_steer.md) — steer ARRIVED continuation 50 (2026-08-01, MIT decision + 4-item priority order); verify current mode before describing status.
+- [License = MIT + operator's 4-item priority sequence](project_mit_license_and_priority_sequence.md) — dimensioning tool (active) → GUI icons → finish text-handling → form-building, set 2026-08-01.

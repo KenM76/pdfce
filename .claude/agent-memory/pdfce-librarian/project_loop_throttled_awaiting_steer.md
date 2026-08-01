@@ -31,3 +31,16 @@ session-log entry the same way this throttle-down was noted, since it's
 a recurring status flag readers of the log rely on. See also
 [[project-uncommitted-repo-worktree-risk]] — the uncommitted-tree risk
 stopped growing autonomously at the same moment, for the same reason.
+
+**UPDATE — steer arrived, continuation 50 (2026-08-01).** The operator
+gave a combined MIT-license decision + four-item priority sequence
+(dimensioning tool → GUI icons → finish text-handling → form-building
+tools). This is the new-direction steer this memory said to watch for.
+The Beta (dimensioning) went ACTIVE with Pass 9a dispatched same
+continuation — check `SESSION_LOG.md` continuation 50 and the
+`ROADMAP.md` "★★★ Operator priority sequence" block (top of Next up)
+for current status before assuming the throttled/idle framing above
+still holds. Whether the `/loop` itself formally reactivated or the
+engineer is working this sequence interactively wasn't recorded in
+continuation 50 — verify current mode before describing it either way
+in a future session.

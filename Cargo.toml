@@ -76,10 +76,14 @@ edition = "2024"
 rust-version = "1.92"
 authors = ["The pdfce authors"]
 publish = false
-# license: intentionally UNSET. pdfce's license is undecided (docs/LEGAL.md
-# §1) and must not be published until the user picks one (CLAUDE.md rule 8).
-# `publish = false` above makes `cargo publish` fail closed in the meantime,
-# so the missing license can never leak into a registry release by accident.
+# license: MIT — chosen by the operator 2026-08-01 (docs/LEGAL.md §1 decided;
+# ARCHITECTURE.md §12 decision log). All dependencies are permissive
+# (MIT/Apache-2.0/BSD/ISC/Zlib/Unicode — zero copyleft, verified against
+# THIRD_PARTY_LICENSES.md), so MIT is compatible (LEGAL.md §6.1, rule 13).
+# The MIT text lives in the repo-root LICENSE file. `publish = false` is
+# retained deliberately: pdfce ships as source + binaries, not a crates.io
+# registry package, so the workspace stays unpublished even under a license.
+license = "MIT"
 
 [workspace.dependencies]
 # Internal path dependencies, declared once here and referenced by members

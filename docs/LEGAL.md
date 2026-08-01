@@ -9,30 +9,53 @@ product. None of this blocks the project; all of it needs a documented,
 consistent posture so nobody (human or LLM) makes an ad hoc call under
 time pressure that creates exposure later.
 
-## 1. Open-source license — OPEN DECISION, ask the user before first commit
+## 1. Open-source license — DECIDED: MIT (2026-08-01)
 
-pdfce does not yet have a license. **Do not commit code to a public
-repository, do not publish a release, do not accept the project being
-"open source" as a settled fact in any user-facing copy** until the
-user picks one. This is a case of the global "claim-bearing copy"
-rule: license terms are a claim, not a detail to default plausibly.
+**pdfce is MIT-licensed.** The operator chose MIT explicitly on
+2026-08-01. Implemented same-session: a standard-text `LICENSE` file
+at the repo root (`Copyright (c) 2026 Ken Mantle`), `license = "MIT"`
+in `Cargo.toml`'s `[workspace.package]`, and `license.workspace = true`
+on all four member crates (`pdfce-core`, `pdfce-render`, `pdfce-gui`,
+`pdfce-cli`) — `cargo metadata` confirms each resolves to MIT. Recorded
+in `ARCHITECTURE.md` §12 Decision log (2026-08-01 entry) per this
+section's former instruction.
 
-Realistic candidates to present to the user when this comes up:
+**Dependency-compatibility check performed as part of the decision:**
+every dependency in the workspace's `Cargo.lock` is permissive
+(MIT/Apache-2.0/BSD/ISC/Zlib/Unicode) — **zero copyleft** — verified
+against the generated `THIRD_PARTY_LICENSES.md` (§6.3). MIT is
+therefore compatible with the dependency set as it stands; no existing
+dependency needs to change or be re-flagged as a result of this
+decision.
 
-- **MIT or Apache-2.0** (or dual MIT/Apache-2.0, the common Rust-
-  ecosystem default) — maximally permissive, easiest for others to
-  build on or embed pdfce-core in their own tools (including a
-  hypothetical future commercial fork by someone else — the user
-  should decide if that's acceptable).
-- **GPL-3.0 or AGPL-3.0** — copyleft; blocks proprietary forks/embeds
-  without also open-sourcing them. AGPL specifically closes the
-  "run it as a hosted service without releasing source" loophole,
-  which is directly relevant if a future web-fork SaaS competitor
-  tried to build on pdfce without contributing back.
+**Consequence — copyleft prior art is now categorically, permanently
+off the table as a dependency.** Per §6.1 below: an MIT-licensed pdfce
+cannot link GPL/AGPL code into its own distributed binary. This
+forecloses **MuPDF, Poppler, and Ghostscript** (all AGPL-3.0 or
+GPL-family, see `docs/PRIOR_ART.md`) as real dependencies for good —
+they remain read-only architectural/algorithmic reference only
+(independently reimplemented, never copied), the same posture
+`PRIOR_ART.md` already recommended on the merits, now also locked in
+by the license itself. This is not a new restriction in practice (no
+copyleft dependency was ever adopted), but it removes the
+hypothetical "choose AGPL and unlock MuPDF/Poppler/Ghostscript" branch
+this section used to describe as a live option.
 
-Whichever is chosen, add a `LICENSE` file at the repo root and a
-one-line `license` field in `Cargo.toml`, and note the decision + date
-in `ARCHITECTURE.md` §12 Decision log.
+**What this decision does NOT do — it does not authorize a push.**
+MIT satisfies project rule 8's license precondition for a public-
+facing commit posture, but the operator did not separately ask to
+push or publish. The project's first implementation commit
+(`d8b3903`, SESSION_LOG continuation 49) remains **local only**. A
+push/publish action requires its own explicit operator go-ahead —
+track that as a distinct, narrower open item from the (now-resolved)
+license decision itself.
+
+Historical note (context for why this took the shape it did):
+realistic candidates presented to the operator were **MIT or
+Apache-2.0** (permissive, easiest adoption/embedding) vs. **GPL-3.0 or
+AGPL-3.0** (copyleft, blocks proprietary forks/hosted-service
+loopholes, would have unlocked MuPDF/Poppler/Ghostscript as real
+dependencies). The operator chose MIT.
 
 ## 2. ISO / ITU-T / ETSI standard copyright — how the spec RAG is scoped
 
@@ -179,6 +202,10 @@ section is the binding discipline for that intersection.
 - **Permissive** (MIT, Apache-2.0, BSD-2/3-Clause, Zlib): safe to
   depend on regardless of what pdfce's own license ends up being.
   Most of the Rust crate ecosystem defaults to MIT/Apache-2.0 dual.
+  **This is also pdfce's own license as of 2026-08-01 (§1) — the
+  entire current dependency set is permissive, so nothing here
+  changes in practice; this classification tier is simply the one
+  pdfce itself now belongs to.**
 - **Weak copyleft** (LGPL, MPL-2.0): usable as a dynamically-linked
   dependency in most cases without forcing pdfce's own license to
   match, but static linking (the Rust ecosystem's norm — everything
@@ -188,17 +215,15 @@ section is the binding discipline for that intersection.
 - **Strong copyleft** (GPL-2/3, AGPL-3): if pdfce **links** GPL/AGPL
   code into its own binary (not just "reads it for inspiration" —
   actual linking/embedding), pdfce's own distributed binary must also
-  be GPL/AGPL-compatible. **This means: if pdfce ends up MIT/Apache-2.0
-  licensed, GPL/AGPL dependencies are categorically off the table as
-  real dependencies** — they can only ever be read-only architectural/
-  algorithmic reference (independently reimplemented, not copied).
-  Conversely, choosing AGPL-3.0 for pdfce itself would make certain
-  otherwise-attractive GPL/AGPL prior art (e.g. MuPDF, Poppler,
-  Ghostscript — see `docs/PRIOR_ART.md`) legally available as real
-  dependencies. **This is a concrete, practical argument for resolving
-  the §1 license decision early** — it isn't just an abstract
-  preference, it changes which real engineering shortcuts are
-  available.
+  be GPL/AGPL-compatible. **DECIDED 2026-08-01: pdfce is MIT-licensed
+  (§1), so GPL/AGPL dependencies are now categorically, permanently
+  off the table as real dependencies** — they can only ever be
+  read-only architectural/algorithmic reference (independently
+  reimplemented, not copied). This forecloses MuPDF, Poppler, and
+  Ghostscript (see `docs/PRIOR_ART.md`) as real dependencies for good;
+  the "choose AGPL and unlock them instead" branch this paragraph used
+  to describe as a live option no longer exists — §1's decision is
+  final, not a per-dependency judgment call to revisit.
 
 ### 6.2 Rule: no dependency added without a license check
 
@@ -279,3 +304,23 @@ user checking license compliance).
   Not a formal USPTO trademark-database search (recommended before
   any actual trademark filing, not required to keep using the name
   for the repo/crate). See §4 Trademark posture.
+- **2026-08-01 — §1 license decision made: MIT.** The operator chose
+  MIT (over Apache-2.0 or a GPL/AGPL copyleft option) as part of a
+  combined instruction that also set the project's next work focus
+  (dimensioning tool, icons, text-handling completion, form-building —
+  see `ROADMAP.md` "In progress"/"Next up"). Implemented same-session:
+  `LICENSE` file (repo root, standard MIT text, "Copyright (c) 2026
+  Ken Mantle"), `license = "MIT"` in `Cargo.toml`
+  `[workspace.package]`, `license.workspace = true` on all four member
+  crates, `cargo metadata`-confirmed. Dependency-license audit: 100%
+  permissive (MIT/Apache-2.0/BSD/ISC/Zlib/Unicode), zero copyleft, per
+  `THIRD_PARTY_LICENSES.md` — MIT is fully compatible, nothing to
+  unwind. **Consequence, recorded in §1/§6.1 above:** GPL/AGPL prior
+  art (MuPDF, Poppler, Ghostscript) is now categorically and
+  permanently excluded as a real dependency — reference-only, as
+  `PRIOR_ART.md` already recommended on the merits. **Project rule 8's
+  license precondition is now satisfied**, but this decision alone
+  does NOT authorize pushing the existing local commit (`d8b3903`) or
+  publishing a release — that remains a separate, still-open operator
+  authorization. See `ARCHITECTURE.md` §12 (2026-08-01 entry, same
+  decision) for the architectural-decision-log mirror of this record.

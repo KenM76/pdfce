@@ -198,9 +198,11 @@ lookup needs, cut it. This is a standing instruction from the user
   Pass 0. Not yet decided — surface this before any from-scratch
   `pdfce-core` scaffolding begins.
 - egui vs iced — not yet confirmed with the user (default: egui/eframe).
-- OSS license — not yet chosen. Also gates whether AGPL/GPL prior art
-  (MuPDF, Poppler, Ghostscript) is usable as a real dependency later —
-  see `LEGAL.md` §6.1 and `PRIOR_ART.md`'s copyleft-landmine notes.
+- OSS license — **DECIDED: MIT** (operator, 2026-08-01; `LEGAL.md` §1,
+  `ARCHITECTURE.md` §12). Consequence: AGPL/GPL prior art (MuPDF, Poppler,
+  Ghostscript) is now categorically **off the table** as a dependency — an
+  MIT project cannot link GPL/AGPL (`LEGAL.md` §6.1). Publishing/pushing is
+  now unblocked by the license but still awaits an explicit operator go-ahead.
 - XFA scope — verify Adobe's current XFA support/deprecation status
   before committing engineering time to it (see `ROADMAP.md` backlog).
 - OCR engine binding — not yet decided. `PRIOR_ART.md` notes KillerPDF

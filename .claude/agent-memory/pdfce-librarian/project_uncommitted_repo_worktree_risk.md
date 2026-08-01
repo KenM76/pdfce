@@ -1,9 +1,49 @@
 ---
 name: project-uncommitted-repo-worktree-risk
-description: pdfce's entire crates/ tree is uncommitted in git; this recurringly breaks autonomous-builder subagent dispatch via git worktree isolation.
+description: RESOLVED 2026-08-01 (commit d8b3903) — pdfce's crates/ tree is no longer uncommitted. Kept as a resolved record; see bottom of file for the resolution and what still remains open (push, gated on the license decision).
 metadata:
   type: project
 ---
+
+**RESOLVED — 2026-08-01, SESSION_LOG same-day continuation 49.** The
+operator authorized "commit all work." The engineer performed the
+project's FIRST implementation commit: **`d8b3903`** on branch
+**`pass-8-redaction`** (branched from bootstrap `67967b2`), 373 files
+changed, 168,217 insertions. Working tree is now clean except
+gitignored build/scratch/corpus artifacts. This retires the risk
+described below: future autonomous-builder `git worktree` dispatches
+now check out real, current content instead of the stale bootstrap
+commit, so the "isolated workspace is effectively empty/stale" failure
+mode this file documents should no longer occur. See
+`D:\dev\rag\rust\autonomous_builder_worktree_isolation_uncommitted_substrate.md`
+for the mechanics writeup (that file's finding about worktree
+semantics remains generally true and does NOT need retraction — only
+pdfce's own instance of the risk is resolved).
+
+**What is NOT resolved:** the commit is **LOCAL ONLY, not pushed to
+any remote.** `LEGAL.md` §1 (OSS license choice) is still undecided,
+and project rule 8 forbids a public-facing commit posture (pushing to
+a public repo, publishing a release) before that decision is made. So
+there is a *new*, narrower open item — "push authorization, gated on
+the license decision" — but it is materially smaller than the
+retired risk: it no longer threatens worktree-dispatch correctness,
+only public visibility. Future librarian sessions should track that
+under the `LEGAL.md` §1 operator item (already tracked in
+`SESSION_LOG.md`'s still-open-operator-items list), not revive this
+file's "commit authorization" framing.
+
+**UPDATE — license decided, continuation 50 (2026-08-01).**
+`LEGAL.md` §1 is no longer undecided: the operator chose **MIT**, and
+the engineer implemented it (`LICENSE` file, `Cargo.toml`
+`license = "MIT"`, `license.workspace = true` on all four crates).
+Project rule 8's license precondition is now satisfied. **Push
+authorization is now the sole remaining gate on public visibility** —
+it is NOT implied by the license decision and was not requested
+alongside it; it is tracked as its own narrow, optional open item
+(`SESSION_LOG.md` continuation 50's still-open-operator-items list).
+Do not treat the license decision as also authorizing a push.
+
+**Historical record below (kept for context, not for action):**
 
 As of at least Pass 14.0 (2026-08-01), the entire pdfce workspace source
 (`crates/`, `Cargo.toml`/`Cargo.lock`, `fixtures/synthetic/`, `tools/`,
