@@ -215,6 +215,7 @@
 #![forbid(unsafe_code)]
 
 mod canvas;
+mod measure_tool;
 mod object_provider;
 mod raster;
 mod ui_text;
@@ -1255,6 +1256,30 @@ struct OpenDoc {
     /// release while in object-selection mode; `None` otherwise. Session
     /// state — a marquee is never an edit.
     marquee_start: Option<egui::Pos2>,
+    /// Pass 12.M2b measure-tool state (`docs/ui_specs/pass-12.M2-dimension-
+    /// tools.md`). `Some` only while one of the three `CanvasTool::Measure*`
+    /// tools is active; `None` otherwise and between pages. Mutually exclusive
+    /// with [`Self::text_edit`]/[`Self::add_text`] (a single `active_tool`).
+    /// Session/view state — a pick, fit, or scale entry is never an edit; only
+    /// an accepted Accept is, and that goes through `session` (one undoable
+    /// `EditSession::add_dimension`/`set_group_scale`), like every other tool.
+    measure: Option<measure_tool::MeasureState>,
+    /// Whether the modeless "Dimension Groups" panel is open (ui-spec §5).
+    /// Opened from the Measure ▾ menu; independent of the active tool so a
+    /// scale can be set/units changed/layer toggled without drawing a line
+    /// (ui-spec §7.2 accessibility). Session/view state.
+    dimension_groups_open: bool,
+    /// The "+ New Group" draft name in the group panel (ui-spec §5.2).
+    group_new_name: String,
+    /// The "+ New Group" draft unit in the group panel.
+    group_new_unit: pdfce_core::dimension::Unit,
+    /// The group currently expanded for scale editing in the panel, with its
+    /// live scale-entry fields (ui-spec §5.2 — the SAME scale-entry widget the
+    /// MeasureScale dialog uses). `None` when no row is being edited.
+    group_scale_edit: Option<(
+        pdfce_core::dimension::GroupId,
+        measure_tool::ScaleEntryFields,
+    )>,
 }
 
 impl OpenDoc {
@@ -1296,6 +1321,13 @@ impl OpenDoc {
             object_model: None,
             provider_page: None,
             marquee_start: None,
+            // Pass 12.M2b: no measure tool active, the group panel closed, a
+            // fresh (metre) new-group draft. Built on measure-tool entry.
+            measure: None,
+            dimension_groups_open: false,
+            group_new_name: String::new(),
+            group_new_unit: pdfce_core::dimension::Unit::Meter,
+            group_scale_edit: None,
         }
     }
 
@@ -1596,6 +1628,10 @@ enum Action {
     /// (the first stage of the two-stage Escape, spec §3.5). No tool exists
     /// to have a gesture this Pass, so applying it is a no-op.
     CancelToolGesture,
+    /// Show or hide the modeless "Dimension Groups" panel (Pass 12.M2b
+    /// ui-spec §5). Opened from the Measure ▾ menu; independent of the active
+    /// tool. Pure view-state — opening a panel is never an edit.
+    ToggleDimensionGroups,
     /// Reverse the most recent edit.
     Undo,
     /// Re-apply the most recently reversed edit.
@@ -2983,13 +3019,40 @@ impl PdfceApp {
                     if canvas::tool_builds_text_edit(tool) {
                         doc.build_text_edit_state();
                         doc.add_text = None;
+                        doc.measure = None;
                     } else if canvas::tool_builds_add_text(tool) {
                         doc.build_add_text_state(default_add_text_font);
                         doc.text_edit = None;
+                        doc.measure = None;
+                    } else if canvas::tool_builds_measure(tool) {
+                        // Pass 12.M2b §1.3: entering any of the three measure
+                        // tools builds the shared per-page pick state; the other
+                        // tools' state is torn down (the single-`active_tool`
+                        // mutual exclusion). A tool SWITCH among the three
+                        // measure tools keeps the state (same page) so the
+                        // active group / snap toggle persist.
+                        if doc
+                            .measure
+                            .as_ref()
+                            .is_none_or(|m| m.page_index != doc.view.page_index)
+                        {
+                            doc.measure =
+                                Some(measure_tool::MeasureState::new(doc.view.page_index));
+                        }
+                        doc.text_edit = None;
+                        doc.add_text = None;
                     } else {
                         doc.text_edit = None;
                         doc.add_text = None;
+                        doc.measure = None;
                     }
+                }
+                return;
+            }
+            Action::ToggleDimensionGroups => {
+                // Pass 12.M2b ui-spec §5: flip the modeless group-panel window.
+                if let Status::Open(doc) = &mut self.status {
+                    doc.dimension_groups_open = !doc.dimension_groups_open;
                 }
                 return;
             }
@@ -3014,6 +3077,14 @@ impl PdfceApp {
                     if let Some(state) = doc.add_text.as_mut() {
                         state.draft = None;
                         state.drag_anchor = None;
+                    }
+                    // Pass 12.M2b §1.3: Esc stage 1 discards the in-progress
+                    // measure gesture (the first pick, the circular pick-set,
+                    // the scale line/dialog, or a completed-but-unauthored
+                    // linear pending) WITHOUT exiting the tool. Nothing was ever
+                    // written (rule 7).
+                    if let Some(state) = doc.measure.as_mut() {
+                        state.clear_gesture();
                     }
                 }
                 return;
@@ -3098,6 +3169,7 @@ impl PdfceApp {
             | Action::CancelTextEntry
             | Action::SelectCanvasTool(_)
             | Action::CancelToolGesture
+            | Action::ToggleDimensionGroups
             | Action::MoveSelection(_)
             | Action::DropDragged(_)
             | Action::ExtractSelection
@@ -3242,7 +3314,13 @@ impl PdfceApp {
                     // Pass 16.2 §8: an in-progress add-text draft is the SAME
                     // class of discardable, never-yet-written gesture — one more
                     // disjunct on this ONE query, not a second enforcement point.
-                    || doc.add_text.as_ref().is_some_and(|s| s.draft.is_some()) =>
+                    || doc.add_text.as_ref().is_some_and(|s| s.draft.is_some())
+                    // Pass 12.M2b §8: an in-progress measure gesture (a pick, a
+                    // circular fit-set, a scale line/dialog, a linear pending)
+                    // is the SAME class of discardable, never-yet-written
+                    // gesture — one more disjunct on this ONE query, not a
+                    // second enforcement point.
+                    || doc.measure.as_ref().is_some_and(measure_tool::MeasureState::gesture_in_progress) =>
             {
                 GestureInterrupt::Discard
             }
@@ -3271,6 +3349,11 @@ impl PdfceApp {
             if let Some(state) = doc.add_text.as_mut() {
                 state.draft = None;
                 state.drag_anchor = None;
+            }
+            // Pass 12.M2b §8: discard the measure gesture (a pick, fit-set,
+            // scale line/dialog, or linear pending — none ever written).
+            if let Some(state) = doc.measure.as_mut() {
+                state.clear_gesture();
             }
         }
     }
@@ -4009,6 +4092,16 @@ impl PdfceApp {
                             CanvasTool::MeasureScale,
                             ui_text::measure_set_scale_menu_item(),
                         );
+                        ui.separator();
+                        // "Manage Dimension Groups…" — opens the §5 modeless
+                        // window; does NOT change active_tool (ui-spec §1.2).
+                        if ui
+                            .button(ui_text::measure_manage_groups_menu_item())
+                            .clicked()
+                        {
+                            actions.push(Action::ToggleDimensionGroups);
+                            ui.close();
+                        }
                     })
                     .response
                     .on_hover_text(ui_text::measure_menu_tooltip());
@@ -5115,7 +5208,7 @@ impl PdfceApp {
             // full authoring path is available today via pdfce-cli. The tool
             // suppresses the object-selection click so a measure-mode click is
             // not silently repurposed as a selection (ui-spec §1.1).
-            run_measure_tool(doc.active_tool, ui, image_rect);
+            run_measure_tool(doc, ui, &image_response, image_rect, extent, zoom);
         } else {
             if image_response.clicked()
                 && let Some(screen_pos) = image_response.interact_pointer_pos()
@@ -5205,6 +5298,12 @@ impl PdfceApp {
                 }
             }
         } // end: non-text-edit-tool object-selection path (Pass 14.3 gate)
+
+        // Pass 12.M2b ui-spec §5: the modeless "Dimension Groups" panel. Drawn
+        // here (inside the open-doc scope) so it is available with or without a
+        // measure tool active — a scale can be set / a layer toggled by typing,
+        // no line required (ui-spec §7.2). A no-op when closed.
+        run_dimension_groups_panel(doc, ui);
 
         // Ctrl+wheel over the canvas: multiply the zoom. Gated on hover
         // so a ctrl+wheel aimed at the thumbnail rail does not zoom the
@@ -6611,33 +6710,6 @@ fn paint_add_preview_frame(painter: &egui::Painter, screen_box: egui::Rect, colo
     clippy::too_many_lines,
     reason = "one tool = one handler; splitting the tightly-coupled placement/compose/preview/commit phases would need shared owned scratch structs that obscure more than they clarify" // ui-text-exempt: clippy lint justification, never displayed
 )]
-/// Paint the Pass 12.M2 measure-tool status overlay (ui-spec §1.1/§6). This
-/// build's honest surface for a selected measure tool: it names the active tool
-/// and discloses that on-canvas snap-picking is the next UI slice while the full
-/// authoring path (dimension-add / group-set-scale / layer-toggle — every core
-/// capability) is available today via `pdfce-cli`. No document mutation, so a
-/// selected measure tool is crash-safe (nothing is written before an Accept
-/// that this slice does not yet offer on-canvas).
-fn run_measure_tool(active: Option<CanvasTool>, ui: &egui::Ui, image_rect: egui::Rect) {
-    let tool_name = if canvas::tool_builds_measure_linear(active) {
-        "Linear dimension"
-    } else if canvas::tool_builds_measure_circular(active) {
-        "Radius / Diameter dimension"
-    } else if canvas::tool_builds_measure_scale(active) {
-        "Set group scale"
-    } else {
-        "Measure"
-    };
-    let painter = ui.painter();
-    painter.text(
-        image_rect.min + egui::vec2(8.0, 8.0),
-        egui::Align2::LEFT_TOP,
-        format!("{tool_name} — {}", ui_text::measure_tool_status()),
-        egui::FontId::proportional(12.0),
-        ui.visuals().warn_fg_color,
-    );
-}
-
 fn run_add_text_tool(
     doc: &mut OpenDoc,
     ui: &mut egui::Ui,
@@ -7475,6 +7547,695 @@ fn annotation_status(
     // /NeedAppearances disclosure (R51), likewise document-level.
     if need_appearances {
         ui.label(ui_text::annotations_need_appearances());
+    }
+}
+
+// ===================================================================
+// Pass 12.M2b — the on-canvas dimension-authoring gesture handlers
+// (`docs/ui_specs/pass-12.M2-dimension-tools.md`, decision 011 §2.3/§2.4)
+// ===================================================================
+//
+// These wire the ALREADY-SHIPPED `pdfce-core::dimension` engine (12.M2) +
+// snapping (12.M1) to the canvas. The testable authoring-state logic lives in
+// `measure_tool` (headless unit tests); these handlers are the thin,
+// compile-and-launch-only egui frame that drives it: the snap query + indicator
+// (12.M1), the live preview, the property/status bars, and the Phase-C commit
+// through the SAME `EditSession::{add_dimension, set_group_scale}` path the CLI
+// uses — so a canvas-authored dimension is byte-identical to `dimension-add`
+// for the same picks (measure_tool's equivalence tests pin the shared `kind`).
+
+/// The measure tools' per-frame handler (ui-spec §§2–4): resolve the snapped
+/// pick, draw the indicator + live preview, render the property/status bars,
+/// and commit an accepted dimension / scale as ONE undoable `EditSession`
+/// command. A free function (like `run_add_text_tool`) so `doc.pages`
+/// (immutable, coordinate bridge), `doc.object_model` (immutable, the ONE
+/// decomposition — snap + fit), and `doc.measure` (mutable, tool state) are
+/// borrowed as disjoint fields across the frame; `doc.session`/`refresh_pages`
+/// are touched only in the Phase-C commit, after those borrows drop.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one tool family = one handler; the pick/preview/propbar/status/commit phases are tightly coupled and splitting them would need shared owned scratch structs that obscure more than they clarify" // ui-text-exempt: clippy lint justification, never displayed
+)]
+fn run_measure_tool(
+    doc: &mut OpenDoc,
+    ui: &mut egui::Ui,
+    image_response: &egui::Response,
+    image_rect: egui::Rect,
+    extent: (f32, f32),
+    zoom: f32,
+) {
+    use pdfce_core::dimension::{
+        DEFAULT_GROUP_ID, DimensionKind, ScaleState, Unit, format_measurement,
+    };
+    use pdfce_core::vector::{AxisConstraint, Point, SnapConfig, SnapKind, snap_candidates};
+
+    let active = doc.active_tool;
+    let page_index = doc.view.page_index;
+
+    // Repoint on page navigation while the tool stays active (ui-spec §1.3):
+    // the picks/fit/scale of page N have no meaning on page N+1.
+    match doc.measure.as_mut() {
+        Some(st) if st.page_index != page_index => {
+            st.page_index = page_index;
+            st.clear_gesture();
+            st.last_disclosures.clear();
+        }
+        Some(_) => {}
+        None => return,
+    }
+    if doc.pages.get(page_index).is_none() {
+        return;
+    }
+
+    // The authoritative model (owned clone — no lingering `doc.session` borrow):
+    // the active group's scale/format for the live readout + the group picker.
+    let model = doc.session.dimension_model();
+
+    // Intents captured in the UI closures, applied in Phase C.
+    let mut do_accept = false;
+    let mut do_reject = false;
+    let mut open_groups = false;
+
+    {
+        let page = &doc.pages[page_index];
+        let painter = ui.painter_at(image_rect);
+        let preview_color = egui::Color32::from_rgb(210, 90, 40);
+        let snap_color = ui.visuals().selection.stroke.color;
+        let text_color = ui.visuals().text_color();
+        let warn_color = ui.visuals().warn_fg_color;
+
+        // Coordinate bridges — the 14.3/16.2 canvas↔PDF bridge (rotation/zoom
+        // correct), never `screen_to_page` alone.
+        let to_screen = |pt: Point| -> Option<egui::Pos2> {
+            #[allow(clippy::cast_possible_truncation)]
+            let p = egui::pos2(pt.x as f32, pt.y as f32);
+            viewer::pdf_space_to_canvas(p, page)
+                .map(|c| viewer::page_to_screen(c, image_rect, extent, zoom))
+        };
+        let to_pdf = |sp: egui::Pos2| -> Option<Point> {
+            viewer::canvas_to_pdf_space(viewer::screen_to_page(sp, image_rect, extent, zoom), page)
+                .map(|p| Point::new(f64::from(p.x), f64::from(p.y)))
+        };
+
+        // The ONE page decomposition (shared with selection, ui-spec §3.3).
+        let objects = doc.object_model.as_ref().map(|p| p.page_objects());
+
+        let Some(st) = doc.measure.as_mut() else {
+            return;
+        };
+
+        // Tab cycles the tied snap candidates; Alt suppresses snapping for this
+        // pick (ui-spec §2.4). Consuming Tab keeps egui focus traversal off it
+        // while the tool is active.
+        let tab = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab));
+        let alt = ui.input(|i| i.modifiers.alt);
+
+        let pointer_pdf = image_response.hover_pos().and_then(to_pdf);
+        let snap_on = canvas::snap_query_enabled(st.snap_master, alt);
+        let cands = match (snap_on, pointer_pdf, objects) {
+            (true, Some(q), Some(objs)) => {
+                let tol = canvas::screen_tolerance_to_page(canvas::SNAP_SCREEN_TOLERANCE_PX, zoom);
+                snap_candidates(q, &SnapConfig::new(tol), objs)
+            }
+            _ => Vec::new(),
+        };
+        if tab {
+            st.snap_cycle = canvas::next_snap_index(st.snap_cycle, cands.len());
+        }
+        let active_cand = canvas::active_snap_candidate(&cands, st.snap_cycle);
+        let active_is_derived = active_cand.is_some_and(|c| c.kind.is_derived());
+        // The effective pick point: the snapped candidate, else the raw pointer.
+        let effective = active_cand.map(|c| c.point).or(pointer_pdf);
+
+        // The snap indicator (12.M1 primitive: shape distinguishes kind, rule 6)
+        // + its type label, drawn BEFORE the click commits (fuzzy-never-sneaky).
+        if let Some(c) = active_cand
+            && let Some(sp) = to_screen(c.point)
+        {
+            painter.extend(canvas::snap_marker_shapes(sp, c.kind, snap_color, 5.0));
+            painter.text(
+                sp + egui::vec2(9.0, -2.0),
+                egui::Align2::LEFT_CENTER,
+                ui_text::snap_indicator_label(c.kind),
+                egui::FontId::proportional(11.0),
+                text_color,
+            );
+        }
+
+        // A click resolves against the active candidate (derived ⇒ two-click
+        // confirm, ui-spec §2.3) → advance the active tool's state machine.
+        if image_response.clicked()
+            && let Some(pick) = effective
+            && let measure_tool::ClickOutcome::Commit(point) =
+                st.resolve_click(pick, active_is_derived)
+        {
+            st.snap_cycle = 0;
+            if canvas::tool_builds_measure_linear(active) {
+                if st.pending.is_none()
+                    && let Some(kind) = st.linear.commit_point(point)
+                {
+                    st.pending = Some(kind);
+                }
+            } else if canvas::tool_builds_measure_scale(active) {
+                st.scale.commit_point(point);
+            } else if canvas::tool_builds_measure_circular(active)
+                && let Some(sp) = image_response.interact_pointer_pos()
+            {
+                // Toggle the clicked object into the fit set (ui-spec §3.1) —
+                // its page-space anchors feed the SAME `fit_circle_taubin`.
+                let canvas_pos = viewer::screen_to_page(sp, image_rect, extent, zoom);
+                if let Some(provider) = doc.object_model.as_ref()
+                    && let Some(target) = provider.hit_test(page_index, canvas_pos)
+                {
+                    let idx = target.0 as usize;
+                    let samples = provider.object_sample_points(idx);
+                    st.circular.toggle_object(idx, samples);
+                }
+            }
+        }
+
+        // Live preview (dashed-preview colour, ui-spec §2.5/§3.4 — display only).
+        let draw_seg = |a: Point, b: Point| {
+            if let (Some(sa), Some(sb)) = (to_screen(a), to_screen(b)) {
+                painter.line_segment([sa, sb], egui::Stroke::new(1.5, preview_color));
+            }
+        };
+        if canvas::tool_builds_measure_linear(active) {
+            if let Some(DimensionKind::Linear { a, b, .. }) = st.pending {
+                draw_seg(a, b);
+            } else if let Some(ptr) = pointer_pdf
+                && let Some((a, b)) = st.linear.preview_segment(ptr)
+            {
+                draw_seg(a, b);
+            }
+        } else if canvas::tool_builds_measure_scale(active) {
+            if let Some(ptr) = pointer_pdf
+                && let Some((a, b)) = st.scale.line.preview_segment(ptr)
+            {
+                draw_seg(a, b);
+            }
+        } else if canvas::tool_builds_measure_circular(active) {
+            // Outline every object currently in the fit set (ui-spec §3.4 —
+            // the picked sources are visible), reusing the ONE decomposition's
+            // canvas-space bounds.
+            if let Some(provider) = doc.object_model.as_ref() {
+                for idx in st.circular.object_indices() {
+                    if let Some(r) = provider.bounds(page_index, TargetId(idx as u64)) {
+                        let min = viewer::page_to_screen(r.min, image_rect, extent, zoom);
+                        let max = viewer::page_to_screen(r.max, image_rect, extent, zoom);
+                        painter.rect_stroke(
+                            egui::Rect::from_two_pos(min, max),
+                            0.0,
+                            egui::Stroke::new(1.0, snap_color),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
+                }
+            }
+            // The live best-fit circle (dashed-preview colour) + centre glyph,
+            // with its residual surfaced in the status strip (fuzzy, §3.4).
+            if let Some(fit) = st.circular.fit()
+                && let Some(c) = to_screen(fit.center)
+            {
+                #[allow(clippy::cast_possible_truncation)]
+                let rad = fit.radius as f32 * zoom;
+                painter.circle_stroke(c, rad, egui::Stroke::new(1.5, preview_color));
+                painter.extend(canvas::snap_marker_shapes(
+                    c,
+                    SnapKind::Center,
+                    preview_color,
+                    5.0,
+                ));
+            }
+        }
+
+        // -- Property bar (ui-spec §2.5/§2.6/§3.4/§4.2): a floating top panel;
+        //    every control a REAL egui widget (accesskit). --
+        egui::Area::new(egui::Id::new("pdfce-measure-propbar"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(image_rect.min + egui::vec2(8.0, 8.0))
+            .show(ui.ctx(), |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.set_max_width(440.0);
+                    if canvas::tool_builds_measure_linear(active) {
+                        ui.label(ui_text::measure_linear_menu_item());
+                        ui.label(ui_text::measure_linear_hint());
+                    } else if canvas::tool_builds_measure_circular(active) {
+                        ui.label(ui_text::measure_circular_menu_item());
+                        ui.label(ui_text::measure_circular_hint());
+                    } else {
+                        ui.label(ui_text::measure_set_scale_menu_item());
+                        ui.label(ui_text::measure_scale_hint());
+                    }
+                    ui.separator();
+                    // Active-group picker + the group-panel opener (ui-spec §2.6).
+                    ui.horizontal(|ui| {
+                        ui.label(ui_text::measure_group_label());
+                        let cur = model
+                            .group(st.group)
+                            .map_or_else(String::new, |g| g.name.clone());
+                        egui::ComboBox::from_id_salt("pdfce-measure-group")
+                            .selected_text(cur)
+                            .show_ui(ui, |ui| {
+                                for g in model.groups() {
+                                    ui.selectable_value(&mut st.group, g.id, g.name.clone());
+                                }
+                            });
+                        if ui.button(ui_text::measure_open_groups_button()).clicked() {
+                            open_groups = true;
+                        }
+                    });
+                    ui.checkbox(&mut st.snap_master, ui_text::snap_toggle_label())
+                        .on_hover_text(ui_text::snap_toggle_tooltip());
+                    // H/V/aligned constraint (linear + scale, ui-spec §2.5).
+                    if canvas::tool_builds_measure_linear(active)
+                        || canvas::tool_builds_measure_scale(active)
+                    {
+                        ui.horizontal(|ui| {
+                            ui.label(ui_text::measure_alignment_label());
+                            for c in [
+                                AxisConstraint::Aligned,
+                                AxisConstraint::Horizontal,
+                                AxisConstraint::Vertical,
+                            ] {
+                                let label = ui_text::axis_constraint_label(c);
+                                if canvas::tool_builds_measure_linear(active) {
+                                    ui.selectable_value(&mut st.linear.constraint, c, label);
+                                } else {
+                                    ui.selectable_value(&mut st.scale.line.constraint, c, label);
+                                }
+                            }
+                        });
+                    }
+                    // Radius/diameter display toggle (circular, ui-spec §3.4).
+                    if canvas::tool_builds_measure_circular(active) {
+                        ui.horizontal(|ui| {
+                            ui.label(ui_text::measure_display_label());
+                            ui.selectable_value(
+                                &mut st.circular.show_diameter,
+                                false,
+                                ui_text::measure_radius_option(),
+                            );
+                            ui.selectable_value(
+                                &mut st.circular.show_diameter,
+                                true,
+                                ui_text::measure_diameter_option(),
+                            );
+                        });
+                    }
+                    // The scale-entry dialog once the reference line is drawn
+                    // (ui-spec §4.2), via the SHARED scale-entry widget.
+                    if canvas::tool_builds_measure_scale(active) && st.scale.dialog_open() {
+                        ui.separator();
+                        let drawn = st.scale.drawn_pdf_length;
+                        if let Some(len) = drawn {
+                            ui.label(ui_text::scale_entry_drawn_length(len));
+                        }
+                        scale_entry_widget(ui, &mut st.scale.fields, drawn);
+                    }
+                });
+            });
+
+        // -- Status / disclosure strip + Accept/Reject (ui-spec §2.6/§6). --
+        let gscale = model
+            .group(st.group)
+            .map_or(ScaleState::NeverSet, |g| g.scale);
+        let gformat = model
+            .group(st.group)
+            .map_or_else(|| Unit::Millimeter.default_format(), |g| g.format);
+        egui::Area::new(egui::Id::new("pdfce-measure-status"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(egui::pos2(image_rect.min.x + 8.0, image_rect.max.y - 8.0))
+            .pivot(egui::Align2::LEFT_BOTTOM)
+            .show(ui.ctx(), |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.set_max_width(480.0);
+                    let mut can_accept = false;
+
+                    if canvas::tool_builds_measure_linear(active) {
+                        let raw = st
+                            .pending
+                            .map(|k| k.measured_points())
+                            .or_else(|| pointer_pdf.and_then(|ptr| st.linear.measured(ptr)));
+                        if let Some(raw) = raw {
+                            let d = format_measurement(raw, gscale, gformat);
+                            ui.label(ui_text::measure_length_readout(
+                                raw,
+                                &d.text,
+                                d.raw_page_units,
+                            ));
+                            if d.raw_page_units {
+                                ui.label(pdfce_core::dimension::NO_SCALE_DISCLOSURE);
+                            }
+                        }
+                        can_accept = st.pending.is_some();
+                    } else if canvas::tool_builds_measure_circular(active) {
+                        if let Some(fit) = st.circular.fit() {
+                            ui.label(ui_text::best_fit_circle_disclosure(
+                                st.circular.object_count(),
+                                fit.radius,
+                                fit.residual,
+                            ));
+                            if fit.residual > fit.radius * 0.1 {
+                                ui.colored_label(warn_color, ui_text::best_fit_residual_high());
+                            }
+                            let raw = if st.circular.show_diameter {
+                                2.0 * fit.radius
+                            } else {
+                                fit.radius
+                            };
+                            let d = format_measurement(raw, gscale, gformat);
+                            ui.label(ui_text::measure_length_readout(
+                                raw,
+                                &d.text,
+                                d.raw_page_units,
+                            ));
+                            if d.raw_page_units {
+                                ui.label(pdfce_core::dimension::NO_SCALE_DISCLOSURE);
+                            }
+                            can_accept = true;
+                        }
+                    } else if canvas::tool_builds_measure_scale(active) {
+                        if let Some(prev) = st.scale.preview() {
+                            ui.label(ui_text::scale_entry_preview(&prev.ratio_label));
+                        }
+                        can_accept = st.scale.commit().is_some();
+                    }
+
+                    // The derived-centerline confirm (fuzzy inference, §2.3.1).
+                    if active_is_derived {
+                        ui.colored_label(warn_color, ui_text::measure_confirm_derived_centerline());
+                    }
+
+                    ui.horizontal(|ui| {
+                        if ui
+                            .add_enabled(can_accept, egui::Button::new(ui_text::measure_accept()))
+                            .clicked()
+                        {
+                            do_accept = true;
+                        }
+                        if ui
+                            .add(egui::Button::new(ui_text::measure_reject()))
+                            .clicked()
+                        {
+                            do_reject = true;
+                        }
+                    });
+
+                    // The last Accept's disclosures, verbatim (ui-spec §6).
+                    if !st.last_disclosures.is_empty() {
+                        ui.separator();
+                        for d in &st.last_disclosures {
+                            ui.label(ui_text::disclosure_bullet(d));
+                        }
+                    }
+                });
+            });
+    }
+
+    // ---- Phase C: the session mutation (one undoable command) ----
+    if do_reject {
+        if let Some(st) = doc.measure.as_mut() {
+            st.clear_gesture();
+        }
+        return;
+    }
+    if open_groups {
+        doc.dimension_groups_open = true;
+    }
+    if !do_accept {
+        return;
+    }
+    let group = doc.measure.as_ref().map_or(DEFAULT_GROUP_ID, |s| s.group);
+    let group_name = model
+        .group(group)
+        .map_or_else(String::new, |g| g.name.clone());
+
+    if canvas::tool_builds_measure_linear(active) || canvas::tool_builds_measure_circular(active) {
+        // Both author a dimension via the SAME `add_dimension` path the CLI
+        // uses (byte-identical output for the same kind — measure_tool's
+        // equivalence tests). Linear commits its `pending`; circular its fit.
+        let kind = if canvas::tool_builds_measure_linear(active) {
+            doc.measure.as_ref().and_then(|s| s.pending)
+        } else {
+            doc.measure.as_ref().and_then(|s| s.circular.author())
+        };
+        if let Some(kind) = kind {
+            match doc.session.add_dimension(page_index, group, kind) {
+                Ok(_) => {
+                    doc.refresh_pages(); // the page's annots changed
+                    if let Some(st) = doc.measure.as_mut() {
+                        st.pending = None;
+                        st.circular.clear();
+                        st.last_disclosures =
+                            vec![ui_text::measure_dimension_authored(&group_name)];
+                    }
+                }
+                Err(err) => {
+                    if let Some(st) = doc.measure.as_mut() {
+                        st.last_disclosures = vec![ui_text::refusal_line(&err.to_string())];
+                    }
+                }
+            }
+        }
+    } else if canvas::tool_builds_measure_scale(active)
+        && let Some((scale, format)) = doc.measure.as_ref().and_then(|s| s.scale.commit())
+    {
+        {
+            match doc.session.set_group_scale(group, scale, format) {
+                Ok(updated) => {
+                    doc.refresh_pages(); // members' /AP regenerated
+                    if let Some(st) = doc.measure.as_mut() {
+                        st.scale.clear();
+                        st.last_disclosures =
+                            vec![ui_text::measure_scale_applied(&group_name, updated)];
+                    }
+                }
+                Err(err) => {
+                    if let Some(st) = doc.measure.as_mut() {
+                        st.last_disclosures = vec![ui_text::refusal_line(&err.to_string())];
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The SHARED scale-entry sub-form (ui-spec §4.2 / §5.2) — the ONE scale-entry
+/// UI in the whole app, driven by both the MeasureScale dialog and the
+/// group-panel inline editor. Renders the two co-equal paths (real-length
+/// recommended when a line exists, direct ratio otherwise) + the live preview,
+/// mutating `fields` in place. `drawn` is the drawn reference length (points)
+/// when a line exists (enables the real-length path); `None` ⇒ ratio only.
+fn scale_entry_widget(
+    ui: &mut egui::Ui,
+    fields: &mut measure_tool::ScaleEntryFields,
+    drawn: Option<f64>,
+) {
+    use pdfce_core::dimension::Unit;
+    // Real-length path — only offered when a reference line was drawn.
+    if drawn.is_some() {
+        ui.selectable_value(
+            &mut fields.use_real_length,
+            true,
+            ui_text::scale_entry_real_length_label(),
+        );
+        if fields.use_real_length {
+            ui.horizontal(|ui| {
+                ui.add(
+                    egui::DragValue::new(&mut fields.real_length)
+                        .range(0.0..=1.0e9)
+                        .speed(0.1),
+                );
+                egui::ComboBox::from_id_salt("pdfce-scale-real-unit")
+                    .selected_text(ui_text::unit_dropdown_label(fields.unit))
+                    .show_ui(ui, |ui| {
+                        for u in Unit::all() {
+                            ui.selectable_value(
+                                &mut fields.unit,
+                                u,
+                                ui_text::unit_dropdown_label(u),
+                            );
+                        }
+                    });
+            });
+        }
+    } else {
+        fields.use_real_length = false; // no line ⇒ ratio only (ui-spec §7.2)
+    }
+    // Direct-ratio path (needs no line).
+    ui.selectable_value(
+        &mut fields.use_real_length,
+        false,
+        ui_text::scale_entry_ratio_label(),
+    );
+    if !fields.use_real_length {
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::DragValue::new(&mut fields.ratio_paper)
+                    .range(0.0001..=1.0e9)
+                    .speed(0.1),
+            );
+            ui.label(ui_text::ratio_colon());
+            ui.add(
+                egui::DragValue::new(&mut fields.ratio_real)
+                    .range(0.0..=1.0e9)
+                    .speed(0.5),
+            );
+            egui::ComboBox::from_id_salt("pdfce-scale-basis-unit")
+                .selected_text(ui_text::unit_dropdown_label(fields.basis))
+                .show_ui(ui, |ui| {
+                    for u in Unit::all() {
+                        ui.selectable_value(&mut fields.basis, u, ui_text::unit_dropdown_label(u));
+                    }
+                });
+        });
+    }
+    // The paper-unit basis is ALWAYS shown, even when the ratio path is not
+    // selected (ui-spec §4.2 — the operator learns the basis exists first).
+    ui.label(ui_text::scale_entry_paper_basis_caption());
+    // Live preview of the resulting scale, BEFORE Accept (ui-spec §4.2).
+    if let Some(prev) = fields.preview(drawn) {
+        ui.label(ui_text::scale_entry_preview(&prev.ratio_label));
+    }
+}
+
+/// The modeless "Dimension Groups" panel (ui-spec §5): create groups, set a
+/// group's scale + units, and toggle its layer — each mapping onto exactly ONE
+/// shipped `EditSession` command (one undo step, ui-spec §5.4). Available with
+/// or without a measure tool active (ui-spec §7.2). A no-op when closed.
+fn run_dimension_groups_panel(doc: &mut OpenDoc, ui: &mut egui::Ui) {
+    if !doc.dimension_groups_open {
+        return;
+    }
+    use pdfce_core::dimension::{DEFAULT_GROUP_ID, Unit};
+    let model = doc.session.dimension_model();
+    // Engine intents + editor-close captured in the closure, applied after it
+    // (so `doc.session`/`refresh_pages` are touched with no field borrow live).
+    let mut actions: Vec<measure_tool::GroupAction> = Vec::new();
+    let mut close_editor = false;
+    let mut open = doc.dimension_groups_open;
+
+    egui::Window::new(ui_text::group_manager_title())
+        .open(&mut open)
+        .resizable(true)
+        .default_width(520.0)
+        .show(ui.ctx(), |ui| {
+            // -- New group (ui-spec §5.2). --
+            ui.horizontal(|ui| {
+                ui.label(ui_text::group_new_group_name_label());
+                ui.text_edit_singleline(&mut doc.group_new_name);
+                egui::ComboBox::from_id_salt("pdfce-newgroup-unit")
+                    .selected_text(ui_text::unit_dropdown_label(doc.group_new_unit))
+                    .show_ui(ui, |ui| {
+                        for u in Unit::all() {
+                            ui.selectable_value(
+                                &mut doc.group_new_unit,
+                                u,
+                                ui_text::unit_dropdown_label(u),
+                            );
+                        }
+                    });
+                if ui.button(ui_text::group_new_group_button()).clicked()
+                    && !doc.group_new_name.trim().is_empty()
+                {
+                    actions.push(measure_tool::GroupAction::Create {
+                        name: doc.group_new_name.trim().to_owned(),
+                        unit: doc.group_new_unit,
+                    });
+                    doc.group_new_name.clear();
+                }
+            });
+            ui.separator();
+
+            // -- One row per group (ui-spec §5.2). --
+            for g in model.groups() {
+                let summary = ui_text::group_scale_summary(g.scale, g.unit());
+                let mut label =
+                    ui_text::group_row_summary(&g.name, &summary, model.member_count(g.id));
+                if !g.visible {
+                    label.push(' ');
+                    label.push_str(ui_text::group_hidden_suffix());
+                }
+                // Greyed when hidden — rule 6: never the eye glyph alone.
+                if g.visible {
+                    ui.label(label);
+                } else {
+                    ui.weak(label);
+                }
+                ui.horizontal(|ui| {
+                    // Layer visibility toggle (default group un-hideable — the
+                    // engine enforces it, ui-spec §5.3; disabled here too).
+                    let is_default = g.id == DEFAULT_GROUP_ID;
+                    if ui
+                        .add_enabled(
+                            !is_default,
+                            egui::Button::new(ui_text::group_visibility_button(g.visible)),
+                        )
+                        .clicked()
+                    {
+                        actions.push(measure_tool::GroupAction::ToggleLayer {
+                            group: g.id,
+                            visible: !g.visible,
+                        });
+                    }
+                    if ui.button(ui_text::group_set_scale_button()).clicked() {
+                        doc.group_scale_edit =
+                            Some((g.id, measure_tool::ScaleEntryFields::for_group_panel()));
+                    }
+                });
+                // The inline scale editor for the expanded group (ui-spec §5.2).
+                if let Some((gid, fields)) = doc.group_scale_edit.as_mut()
+                    && *gid == g.id
+                {
+                    egui::Frame::group(ui.style()).show(ui, |ui| {
+                        scale_entry_widget(ui, fields, None);
+                        ui.horizontal(|ui| {
+                            if ui.button(ui_text::group_apply_button()).clicked() {
+                                if let Some((scale, format)) = fields.commit(None) {
+                                    actions.push(measure_tool::GroupAction::SetScale {
+                                        group: g.id,
+                                        scale,
+                                        format,
+                                    });
+                                }
+                                close_editor = true;
+                            }
+                            if ui.button(ui_text::group_cancel_button()).clicked() {
+                                close_editor = true;
+                            }
+                        });
+                    });
+                }
+                ui.separator();
+            }
+        });
+
+    doc.dimension_groups_open = open;
+    if close_editor {
+        doc.group_scale_edit = None;
+    }
+    // Apply the captured engine intents — each ONE undoable command.
+    for action in actions {
+        match action {
+            measure_tool::GroupAction::Create { name, unit } => {
+                let _ = doc.session.add_dimension_group(&name, unit);
+            }
+            measure_tool::GroupAction::SetScale {
+                group,
+                scale,
+                format,
+            } => {
+                if doc.session.set_group_scale(group, scale, format).is_ok() {
+                    doc.refresh_pages();
+                }
+            }
+            measure_tool::GroupAction::ToggleLayer { group, visible } => {
+                if doc.session.toggle_dimension_layer(group, visible).is_ok() {
+                    doc.refresh_pages();
+                }
+            }
+        }
     }
 }
 

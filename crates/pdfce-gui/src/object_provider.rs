@@ -42,7 +42,8 @@ use eframe::egui::{Pos2, Rect};
 use pdfce_core::document::Document;
 use pdfce_core::page_tree::Page;
 use pdfce_core::vector::{
-    Bounds, MarqueeMode, Matrix, PageObjects, Point, decompose_page, hit_test_point, hit_test_rect,
+    Bounds, MarqueeMode, Matrix, PageObjects, Point, VectorObject, decompose_page, hit_test_point,
+    hit_test_rect,
 };
 use pdfce_render::page_device_geometry;
 use pdfce_render::tiny_skia::{Point as SkPoint, Transform};
@@ -125,6 +126,31 @@ impl ObjectModelProvider {
     )]
     pub(crate) fn page_objects(&self) -> &PageObjects {
         &self.objects
+    }
+
+    /// The page-space anchor sample points of the object at paint-order
+    /// `index` (Pass 12.M2b — the circular best-fit tool's fit input, ui-spec
+    /// §3.3). A path object contributes every anchor of every subpath, in
+    /// **PDF user / page space** (the frame [`Self::page_objects`] stores and
+    /// [`fit_circle_taubin`](pdfce_core::dimension::fit_circle_taubin)
+    /// consumes); a text/image/form object (or an out-of-range index)
+    /// contributes nothing (they carry no snap/fit node geometry in the beta,
+    /// the same exclusion `snap.rs` applies). Reuses the ONE decomposition the
+    /// selection provider already built — never a second `decompose_page`
+    /// (the Z2 divergence guard, ui-spec §3.3).
+    #[allow(
+        dead_code,
+        reason = "Pass 12.M2b circular-fit accessor; the live consumer is the MeasureCircular tool's fit set (ui-spec 3.3)" // ui-text-exempt: clippy lint justification, never displayed
+    )]
+    pub(crate) fn object_sample_points(&self, index: usize) -> Vec<Point> {
+        match self.objects.objects.get(index) {
+            Some(VectorObject::Path(path)) => path
+                .page_subpaths()
+                .iter()
+                .flat_map(|sp| sp.anchors().collect::<Vec<_>>())
+                .collect(),
+            _ => Vec::new(),
+        }
     }
 
     /// Map a canvas-space point into PDF user space (the object model's

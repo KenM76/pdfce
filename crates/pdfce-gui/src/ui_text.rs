@@ -45,8 +45,9 @@
 use std::path::Path;
 
 use pdfce_core::PdfVersion;
+use pdfce_core::dimension::Unit;
 use pdfce_core::edit::{CommandKind, InfoField};
-use pdfce_core::vector::SnapKind;
+use pdfce_core::vector::{AxisConstraint, SnapKind};
 
 // ---------------------------------------------------------------------------
 // Toolbar — file
@@ -2396,14 +2397,240 @@ pub fn measure_set_scale_menu_item() -> &'static str {
     "Set Group Scale…"
 }
 
-/// Status-strip disclosure shown while a measure tool is active in this build:
-/// the on-canvas snap-pick authoring interaction is the documented follow-up
-/// slice; the full authoring path (dimension-add / group-set-scale /
-/// layer-toggle, all the core capabilities) is available today via `pdfce-cli`.
-/// Honest about scope (fuzzy-never-sneaky applied to capability disclosure).
-pub fn measure_tool_status() -> &'static str {
-    "Measure tool selected. On-canvas snap-picking is the next UI slice; author \
-dimensions now with the pdfce-cli dimension-add / group-set-scale / layer-toggle commands."
+/// The Measure menu's "Manage Dimension Groups…" row (Pass 12.M2b ui-spec §5.1)
+/// — opens the modeless group panel; does not change the active tool.
+pub fn measure_manage_groups_menu_item() -> &'static str {
+    "Manage Dimension Groups…"
+}
+
+/// One-line hint at the top of the Measure property bar for the active tool
+/// (Pass 12.M2b), stating the gesture (ui-spec §2.1/§3.2/§4.1).
+pub fn measure_linear_hint() -> &'static str {
+    "Click two points to measure a distance. Snap locks onto nearby geometry; press Tab to \
+cycle candidates, hold Alt to skip snapping. Then Accept."
+}
+
+/// Circular-tool hint (ui-spec §3).
+pub fn measure_circular_hint() -> &'static str {
+    "Click a circle, or several line segments forming an arc, to best-fit a circle. Click again \
+to add/remove. The fit and its residual preview live; then Accept."
+}
+
+/// Scale-tool hint (ui-spec §4).
+pub fn measure_scale_hint() -> &'static str {
+    "Draw a reference line of known real length, then enter that length (or a ratio) to set the \
+group's scale. Every dimension in the group updates."
+}
+
+/// The property-bar "Group:" active-group picker label (ui-spec §2.6).
+pub fn measure_group_label() -> &'static str {
+    "Group:"
+}
+
+/// The property-bar button opening the group panel (ui-spec §5.1).
+pub fn measure_open_groups_button() -> &'static str {
+    "Groups…"
+}
+
+/// The linear/scale alignment-constraint segmented-control label (ui-spec §2.5).
+pub fn measure_alignment_label() -> &'static str {
+    "Alignment:"
+}
+
+/// The human label for an [`AxisConstraint`] segmented-control button
+/// (ui-spec §2.5): Aligned (free), Horizontal (page X), Vertical (page Y).
+pub fn axis_constraint_label(c: AxisConstraint) -> &'static str {
+    match c {
+        AxisConstraint::Aligned => "Aligned",
+        AxisConstraint::Horizontal => "Horizontal",
+        AxisConstraint::Vertical => "Vertical",
+    }
+}
+
+/// The circular display-toggle label (ui-spec §3.4).
+pub fn measure_display_label() -> &'static str {
+    "Display:"
+}
+
+/// The circular "Radius" display option (ui-spec §3.4).
+pub fn measure_radius_option() -> &'static str {
+    "Radius"
+}
+
+/// The circular "Diameter" display option (ui-spec §3.4).
+pub fn measure_diameter_option() -> &'static str {
+    "Diameter"
+}
+
+/// The measure-tool Accept button (ui-spec §2.6) — authors the dimension /
+/// commits the scale as ONE undoable command.
+pub fn measure_accept() -> &'static str {
+    "Accept"
+}
+
+/// The measure-tool Reject button (ui-spec §2.6) — discards the in-progress
+/// gesture; nothing was written (rule 7).
+pub fn measure_reject() -> &'static str {
+    "Reject"
+}
+
+/// The live length readout while a linear dimension is in progress (ui-spec
+/// §2.6): the raw page-space length and the scaled value side by side
+/// (`12.40 pt → 3.10 m`), or the raw value alone when the group has no scale.
+/// `scaled` is the group-formatted display string; `raw_units` is whether it is
+/// already a raw page-units reading (⇒ the arrow form would be redundant).
+pub fn measure_length_readout(raw_points: f64, scaled: &str, raw_units: bool) -> String {
+    if raw_units {
+        format!("{raw_points:.2} pt ({scaled})")
+    } else {
+        format!("{raw_points:.2} pt \u{2192} {scaled}")
+    }
+}
+
+/// The best-fit-circle disclosure (ui-spec §3.4 / §6): "Best-fit circle from N
+/// objects — radius R, fit residual ε (RMS)." Always shown while a fit exists,
+/// the residual surfaced so the operator sees fit quality (decision 011 §2.3).
+pub fn best_fit_circle_disclosure(count: usize, radius: f64, residual: f64) -> String {
+    format!(
+        "Best-fit circle from {count} object(s) — radius {radius:.2} pt, fit residual {residual:.2} pt (RMS)."
+    )
+}
+
+/// The warn-coloured pairing shown when a best-fit's residual is large relative
+/// to its radius (ui-spec §3.4 — colour is never the sole signal, rule 6).
+pub fn best_fit_residual_high() -> &'static str {
+    "The fit is loose — the picked geometry is not very circular."
+}
+
+/// The scale-entry sub-panel's drawn-reference-length caption (ui-spec §4.2).
+pub fn scale_entry_drawn_length(pdf_length: f64) -> String {
+    format!("Drawn reference length: {pdf_length:.1} pt")
+}
+
+/// The scale-entry real-length path label (recommended, ui-spec §4.2).
+pub fn scale_entry_real_length_label() -> &'static str {
+    "Real length of this line  (recommended)"
+}
+
+/// The scale-entry direct-ratio path label (ui-spec §4.2).
+pub fn scale_entry_ratio_label() -> &'static str {
+    "Direct ratio (paper : real)"
+}
+
+/// The `:` separator between the ratio's paper and real drag values (ui-spec
+/// §4.2). A catalog entry (not an inline literal) so the whole scale-entry
+/// sub-form's text lives in one place, per R1.
+pub fn ratio_colon() -> &'static str {
+    ":"
+}
+
+/// The scale-entry paper-unit-basis caption, always shown (ui-spec §4.2).
+pub fn scale_entry_paper_basis_caption() -> &'static str {
+    "Paper-unit basis: 1 in = 72 pt."
+}
+
+/// The scale-entry live preview (ui-spec §4.2 "→ scale = 1:100"). `ratio` is
+/// the engine-computed `ScalePreview::ratio_label`, rendered verbatim.
+pub fn scale_entry_preview(ratio: &str) -> String {
+    format!("\u{2192} scale = {ratio}")
+}
+
+/// The group-panel window title (ui-spec §5.1).
+pub fn group_manager_title() -> &'static str {
+    "Dimension Groups"
+}
+
+/// The group-panel "+ New Group" button (ui-spec §5.2).
+pub fn group_new_group_button() -> &'static str {
+    "+ New Group"
+}
+
+/// Placeholder/label for the new-group name field (ui-spec §5.2).
+pub fn group_new_group_name_label() -> &'static str {
+    "Name:"
+}
+
+/// One group row's summary line (ui-spec §5.2): name, its scale summary, and
+/// its member count.
+pub fn group_row_summary(name: &str, scale_summary: &str, count: usize) -> String {
+    format!("{name} — {scale_summary} — {count} dim(s)")
+}
+
+/// The "(hidden)" suffix on a group row whose layer is off (ui-spec §5.2 —
+/// paired with the greyed styling, never the eye glyph alone, rule 6).
+pub fn group_hidden_suffix() -> &'static str {
+    "(hidden)"
+}
+
+/// The per-group "Set scale…" button that expands the inline scale editor
+/// (ui-spec §5.2).
+pub fn group_set_scale_button() -> &'static str {
+    "Set scale…"
+}
+
+/// The inline group-scale editor's Apply button (ui-spec §5.2).
+pub fn group_apply_button() -> &'static str {
+    "Apply"
+}
+
+/// The inline group-scale editor's Cancel button (ui-spec §5.2).
+pub fn group_cancel_button() -> &'static str {
+    "Cancel"
+}
+
+/// The per-group layer visibility toggle button label, given the current
+/// visibility (ui-spec §5.2 — show/hide the group's OCG layer).
+pub fn group_visibility_button(visible: bool) -> &'static str {
+    if visible { "Hide layer" } else { "Show layer" }
+}
+
+/// A human scale summary for a group (ui-spec §4.3 tri-state), for the group
+/// row + the property bar: never-set, explicit 1:1, or a calibrated ratio.
+pub fn group_scale_summary(scale: pdfce_core::dimension::ScaleState, unit: Unit) -> String {
+    use pdfce_core::dimension::ScaleState;
+    match scale {
+        ScaleState::NeverSet => "no scale set".to_owned(),
+        ScaleState::OneToOne => "1:1 (set by operator)".to_owned(),
+        ScaleState::Calibrated { scale } if scale > 0.0 => {
+            // Report as "1 <unit> = <pt> pt" — the inverse of the per-point
+            // factor, the architectural reading (ui-spec §5.2 example).
+            format!("1 {} = {:.2} pt", unit.token(), 1.0 / scale)
+        }
+        ScaleState::Calibrated { .. } => "calibrated".to_owned(),
+    }
+}
+
+/// The unit-dropdown display label for a [`Unit`] (ui-spec §5.2 units menu).
+pub fn unit_dropdown_label(u: Unit) -> &'static str {
+    match u {
+        Unit::Millimeter => "mm",
+        Unit::Centimeter => "cm",
+        Unit::Meter => "m",
+        Unit::Inch => "in",
+        Unit::DecimalFeet => "decimal ft",
+        Unit::FeetInches => "ft-in",
+    }
+}
+
+/// The status-strip confirm shown while a derived-centerline candidate is the
+/// active snap target (ui-spec §2.3.1): the fuzzy inference needs a second
+/// click to confirm it is a drawn line, not a rectangle (never auto-applied).
+pub fn measure_confirm_derived_centerline() -> &'static str {
+    "Derived centerline (a line drawn as a filled shape) — click again to confirm it is a \
+drawn line, not a rectangle."
+}
+
+/// The post-Accept disclosure after authoring a dimension (Pass 12.M2b): the
+/// dimension is additive on its group's toggleable layer, one undo step.
+pub fn measure_dimension_authored(group_name: &str) -> String {
+    format!("Dimension added to group '{group_name}' — additive, on its own layer, one undo step.")
+}
+
+/// The post-Accept disclosure after a scale calibration re-propagated to a
+/// group's members (ui-spec §4.4 / §6): "Scale applied to '<name>' — N
+/// dimension(s) updated."
+pub fn measure_scale_applied(group_name: &str, updated: usize) -> String {
+    format!("Scale applied to '{group_name}' — {updated} dimension(s) updated.")
 }
 
 /// A one-line hint under the property-bar title (§3): how to place, and the
