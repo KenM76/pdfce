@@ -3263,6 +3263,31 @@ with a forward pointer.
     surgery, `vartext.rs`'s packing core (factored), decision 012's
     `GlyphSource`. `pdfce-spec-librarian` is dispatched for §9.4.3 `TJ` /
     §9.3.3 `Tw` ahead of 15.1.
+- **2026-08-01 — Next text-parity step prioritized + FF-D scoped
+  (decision 016).** After the Pass 14.x in-place-editing family and the
+  15.x reflow family shipped, KenAgent ranked the remaining fast-follows
+  and scoped the top solo-startable one. Full record:
+  `docs/decisions/016-ffd-add-new-page-text.md`.
+  - **Prioritization:** FF-D (add NEW text as page content) is the
+    recommended next build — highest product of frequency × substrate
+    leverage × low-risk × solo-startable. FF-C (font subsetting) ranks
+    higher on ceiling value but is operator-gated (rule 13 copyleft-dep
+    + the then-open license); FF-B (cross-block reflow) is the largest
+    new subsystem and least frequent; FF-H (spacing) is `should_have`.
+    List-authoring needs an operator scope call.
+  - **FF-D design:** add-new-text synthesizes a new `BT…ET` object
+    APPENDED to the page `/Contents` array (§7.7.3.3 — original stream
+    byte-verbatim), defaulting to a bundled Standard-14 face (§9.6.2.2 —
+    no embedding, so FF-D needs no FF-C), routed into the same 14.x
+    model/edit/format + 15.x reflow pipeline as existing page text; it
+    is page-content surgery, NEVER a Pass-6.2 FreeText annotation.
+    Sliced as Pass 16.0 (point-insert engine+CLI) / 16.1 (boxed+wrap) /
+    16.2 (canvas UI) — all shipped this session.
+  - **Standing rules added:** R78 (add-new-text is page-content
+    surgery, never FreeText, one undo-able `CommandKind::AddText`); R79
+    (new text uses a bundled/supplied face by name+code, no embedding,
+    disclosed provenance). **Amends** decision 014 §5.3 (schedules the
+    named fast-follow FF-D into the concrete Pass 16.x family).
 - **2026-08-01 — License = MIT (operator decision).** `docs/LEGAL.md`
   §1 flipped from "OPEN DECISION" to **DECIDED: MIT**, as part of a
   combined operator instruction that also set the project's next work
