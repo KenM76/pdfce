@@ -1,0 +1,2 @@
+- [helpx.adobe.com fetch reliability](feedback_helpx_fetch_reliability.md) — WebFetch times out on Adobe help pages; budget 2 tries, fall back to search snippets + PDF Association issues + SDK-vendor docs
+- [Bucket-building file-decomposition pattern](project_bucket_building_pattern.md) — N per-capability files + cross-cutting files (always permissions/signatures); ask what bucket-specific cross-cutting files are needed too

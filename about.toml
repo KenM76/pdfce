@@ -1,0 +1,60 @@
+# cargo-about configuration — generates THIRD_PARTY_LICENSES.md from the
+# real Cargo.lock (docs/LEGAL.md §6.3). Run: `cargo about generate about.hbs
+# -o THIRD_PARTY_LICENSES.md`. Regenerate whenever the dependency set changes
+# and before any packaging pass (docs/ARCHITECTURE.md §6, §9).
+#
+# The `accepted` list is deliberately PERMISSIVE-ONLY. If a dependency (or a
+# transitive one) carries a copyleft license (MPL/LGPL/GPL/AGPL) that is not
+# in this list, `cargo about generate` FAILS and names the offending crate —
+# which is exactly the license audit docs/LEGAL.md §6 mandates. A copyleft
+# dependency is never silently accepted; it is surfaced to the user, and
+# only added here after a deliberate, recorded decision. Do not add MPL-2.0
+# or any *GPL id to this list to "make the error go away."
+#
+# NOTE: all top-level keys must appear BEFORE the [private] table header —
+# in TOML every key after a table header belongs to that table.
+
+# Only harvest licenses for the target(s) pdfce actually distributes today.
+# Windows-first per docs/ARCHITECTURE.md §6; add macOS/Linux/wasm triples
+# here when those artifacts are actually shipped (avoids pulling in
+# platform-only deps' licenses for platforms we don't distribute yet).
+targets = ["x86_64-pc-windows-msvc"]
+
+# Build- and dev-dependencies are not shipped in the binaries, so their
+# licenses don't need attribution in the distributed artifact.
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+
+# Permissive software SPDX ids only. Alphabetical for easy diffing.
+accepted = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    # --- Bundled-FONT licenses (a distinct category from the software
+    # licenses above). egui's default font set (epaint_default_fonts) embeds
+    # the Ubuntu font and OFL-licensed faces. These govern the FONT FILES,
+    # not pdfce's code: both permit embedding/redistribution and impose only
+    # an attribution obligation (satisfied by reproducing their notices in
+    # THIRD_PARTY_LICENSES.md). Neither constrains pdfce's own (still
+    # undecided) software license the way a copyleft *software* dependency
+    # would — the OFL's "derivatives stay OFL" clause applies to modified
+    # fonts, which pdfce does not create; it only embeds them. Flagged to the
+    # user and to be recorded in docs/PRIOR_ART.md.
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+]
+
+# Skip pdfce's own crates (all publish = false) — we attribute third-party
+# code, not our own.
+[private]
+ignore = true

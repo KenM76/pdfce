@@ -14,7 +14,7 @@ discipline, etc.) — this file adds pdfce-specific rules on top.
 
 ## Project agents
 
-This project has five agents under `.claude/agents/`:
+This project has six agents under `.claude/agents/`:
 
 | Agent | Role | When to dispatch |
 |---|---|---|
@@ -22,6 +22,7 @@ This project has five agents under `.claude/agents/`:
 | `pdfce-librarian.md` | Institutional memory: `ROADMAP.md` / `SESSION_LOG.md` / `ARCHITECTURE.md` decision-log keeper | Dispatched by the engineer for every new request (→ roadmap entry), every Pass completion (→ Shipped row), pre-compaction captures, and generalizable findings that graduate to `D:\dev\rag\rust\` / `D:\dev\rag\egui\` (ecosystem-wide) or `C:\personal_rag\pdf\` (PDF-domain). |
 | `pdfce-spec-librarian.md` | Builds/maintains the PDF-standard reference RAG at `D:\Dev\Rag-Specialized\PDF_Spec\` | Dispatched whenever a spec question needs canonical sourcing (object model, filters, fonts, crypto, PAdES, PDF/A, PDF/UA), and self-directed for corpus-building sessions. |
 | `pdfce-acrobat-librarian.md` | Builds/maintains the Acrobat Pro feature-parity RAG at `D:\Dev\Rag-Specialized\Acrobat_Features\` | Dispatched when scoping a `ROADMAP.md` Backlog bucket into a real Pass, so acceptance criteria match actual Acrobat behavior. Catalogs capabilities only — never Acrobat's GUI mechanics. |
+| `pdfce-inkscape-librarian.md` | Builds/maintains the Inkscape feature-parity RAG at `D:\Dev\Rag-Specialized\Inkscape_Features\` | Dispatched when scoping the vector-editing Passes (Pass 9), so acceptance criteria match actual Inkscape behavior. Catalogs capability/behavior/limits only — never Inkscape's GUI mechanics; Inkscape is a behavioral reference only (GPL-2.0-or-later, never a dependency or code source — standing rule R61). |
 | `pdfce-ui-specialist.md` | egui/eframe UX design + review | Dispatched by the engineer for non-trivial UI changes (new panel, new tool, an accessibility/discoverability judgment call). Returns critique + a change list; does not write code. |
 
 The engineer agent file is the single source of truth for *how* work

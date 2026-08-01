@@ -1,0 +1,42 @@
+# corpus-report — pdfce's out-of-tree corpus measurement harness.
+#
+# WHY THIS EXISTS (docs/ROADMAP.md Pass 1.1): Pass 1 shipped a parser +
+# renderer proven only against synthetic fixtures. This tool MEASURES
+# pdfce-core/pdfce-render against real, rights-cleared corpora (veraPDF
+# corpus, PDF Association PDF 2.0 examples — fetched by
+# fixtures/fetch-corpora.sh into the gitignored fixtures/external/) and
+# classifies every file: loads? page tree walks? first page renders?
+# which refusal/error otherwise? The output is the evidence Pass 1.1's
+# prioritization questions need (xref-stream refusal rate, /Resources
+# omission frequency, decision 001 §6.3's <~95%-parse-rate
+# xref-recovery-harvest gate).
+#
+# WHY OUT-OF-TREE (workspace-excluded via the root manifest's `exclude`,
+# same pattern as tools/difftest): keeps `cargo test --workspace` fast;
+# keeps the GUI-core-separation `cargo tree` invariant checks
+# unambiguous; keeps cargo-about's THIRD_PARTY_LICENSES.md describing
+# the SHIPPING dependency graph only. This tool is never shipped.
+#
+# FIXTURE RULE (docs/LEGAL.md §5): corpus files fed to this tool are
+# rights-cleared corpora only, and are NEVER committed to the repo —
+# fixtures/external/ is gitignored scratch space.
+
+[package]
+name = "corpus-report"
+version = "0.0.0"
+edition = "2024"
+publish = false
+# license intentionally unset — internal tool, never shipped or published
+# (same posture as the workspace, docs/LEGAL.md §1).
+
+# Detach from the parent workspace explicitly (belt to the root
+# manifest's `exclude` braces): this package is its own single-crate
+# workspace with its own Cargo.lock, so its dependency tree never
+# mingles with the shipping one.
+[workspace]
+
+[dependencies]
+# The crates under measurement, path-referenced so the harness fails to
+# compile (rather than silently drifting) if their APIs change under it.
+pdfce-core = { path = "../../crates/pdfce-core" }
+pdfce-render = { path = "../../crates/pdfce-render" }

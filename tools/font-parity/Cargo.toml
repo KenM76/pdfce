@@ -1,0 +1,46 @@
+# font-parity — the embedded-font-program parse/routing regression gate.
+#
+# WHY THIS EXISTS: FontProgram::parse (crates/pdfce-render/src/font/program.rs)
+# routes an embedded font-program stream to one of three parsers by matching
+# BINARY MAGICS on the RAW decoded bytes (sfnt 0x00010000/OTTO/true/ttcf →
+# Sfnt; bare CFF 0x01?? → Cff; PostScript Type 1 %!/PFB → Type1). A regression
+# in that routing (the NUL-whitespace-trim misroute — a leading-whitespace
+# trim that ate the 0x00 of a TrueType 0x00010000 version tag, leaving 0x01...
+# which then matched the bare-CFF magic) rejected an entire class of real
+# embedded TrueType (SolidWorks/AutoCAD/Office CIDFontType2) and only surfaced
+# far downstream at the render-parity gate as "missing text". This harness is
+# the TARGETED guard that catches such a misroute AT THE SOURCE: it walks every
+# embedded font program in the corpus and asserts each either parses to the
+# CORRECT variant (agreeing with its magic bytes) or fails with a named
+# ProgramError — never a misroute, never a panic.
+#
+# It is a separate OUT-OF-TREE tool for the same reasons tools/content-identity
+# and tools/roundtrip are (docs/decisions/008, docs/decisions/001 §7): kept out
+# of `cargo test --workspace`, out of the GUI-core `cargo tree` invariant, and
+# out of cargo-about's shipping dependency graph. Never shipped.
+#
+# R21 NOTE: skrifa stays confined to program.rs. This harness depends on
+# pdfce-render and touches font programs ONLY through the public FontProgram /
+# ProgramError surface — it never names a skrifa type, so the confinement the
+# module docs rely on is preserved.
+#
+# FIXTURE RULE (docs/LEGAL.md §5): reads rights-cleared corpora in place, emits
+# only aggregate counts + enumerated anomalies. Never commits corpus files.
+
+[package]
+name = "font-parity"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Detach from the parent workspace (belt to the root manifest `exclude`).
+[workspace]
+
+[dependencies]
+# The crates under measurement, path-referenced so an API drift breaks the
+# build rather than silently mismeasuring.
+pdfce-core = { path = "../../crates/pdfce-core" }
+pdfce-render = { path = "../../crates/pdfce-render" }
+
+[profile.release]
+opt-level = 3

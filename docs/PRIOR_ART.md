@@ -22,28 +22,55 @@ if this file is more than ~6 months old at the time** — crate
 maintenance status and licensing terms both drift, and one entry
 below (Poppler) is already flagged unresolved.
 
-## OPEN QUESTION — resolve before scaffolding pdfce-core from scratch (Pass 0 blocker candidate)
+## RESOLVED (2026-07-30) — `oxidize-pdf` adopt-vs-build: build `pdfce-core` from scratch
 
-**`oxidize-pdf`** (github.com/bzsanti/oxidizePdf, MIT, v4.2.1 as of
-2026-07-22) claims to already cover nearly all of `pdfce-core`'s
-target scope: COS parsing (99.3% claimed success on 9,000+ real
-PDFs), xref tables + streams, object streams, **incremental updates**,
-RC4-40/128 + AES-128/256 (R5/R6) encryption read/write, PKCS#7
-signature **verification**, pure-Rust JBIG2/CCITT/DCT/JPX, PDF/A
-validation, 7,993 tests claimed. Single-maintainer project (bus-factor
-risk, claims not third-party-audited), marketed toward "AI/RAG" text
-extraction rather than general editing, so full object-model fidelity
-for a true editor is unverified beyond its own numbers.
+**Full decision record: `docs/decisions/001-oxidize-pdf-adopt-vs-build.md`**
+(decided via the KenAgent decision protocol; audit of `bzsanti/oxidizePdf`
+HEAD `5f3e8b3`, v4.2.1, MIT). This section previously carried the
+2026-07-23 "OPEN QUESTION" — dedicated audit required before Pass 1,
+do not silently default to build-from-scratch. That audit happened;
+this is the resolution.
 
-**Action before Pass 1 (not yet decided — flag to the user, don't
-decide solo):** dedicated audit of `oxidize-pdf` against pdfce-core's
-actual requirements (round-trip fidelity on adversarial/malformed
-input, signature-safe incremental-save semantics specifically, PAdES
-signing not just PKCS#7 verify) to decide: adopt as foundation, vendor
-+ audit, or treat as reference-only and build independently. This is
-the single highest-leverage decision in this whole survey — it could
-change `ARCHITECTURE.md` §3/§4 materially. **Do not silently default
-to "build from scratch" without this audit having happened.**
+**Verdict: reference-only / differential oracle — out-of-tree only,
+never a shipping dependency.** Build `pdfce-core` from scratch.
+Concretely: `cargo tree` on all four crates must never show
+`oxidize-pdf`; no fork, no vendoring; **zero literal code ports
+planned** (two narrowly gated conditional candidates — xref-recovery
+heuristics and JBIG2 — recorded in decision 001 §6.3, neither
+authorized). Where oxidize-pdf holds a genuinely valuable
+self-contained subsystem, the **maintained permissive upstream crate
+is preferred over any vendored copy**: `hayro-jbig2`, `hayro-ccitt`,
+`subsetter` (fallback `allsorts`), and the RustCrypto stack. The one
+adopted use is an out-of-tree differential test oracle at
+`tools/difftest/` (`[workspace]`-excluded, pinned version,
+advisory-never-authoritative, fixtures never sourced from
+oxidize-pdf's own repo — decision 001 §7).
+
+**Factual corrections to the 2026-07-23 claim summary (audit
+findings — the original entry took the project's own claims at face
+value):**
+
+- **"Pure-Rust JBIG2/CCITT/DCT/JPX" is FALSE for JPX** — its
+  JPXDecode path returns "not yet implemented" — **and MISLEADING for
+  DCT** — it validates/trims JPEG markers and returns the
+  still-encoded bytes; actual pixel decode is delegated to the
+  optional `image` crate. JBIG2 (~8,000 lines) and CCITT (~1,000
+  lines) are real pure-Rust decoders.
+- **Real digital signing is a placeholder stub in the MIT repo**
+  (writes zeroed bytes) — "Digital signatures" sits on the commercial
+  PRO tier of an open-core model. The 2026-07-23 entry's "PKCS#7
+  signature verification" was accurate; signing is not shipped.
+- **Every written PDF receives a non-suppressible build-hash
+  fingerprint in `/Info`**, deliberately not exposed in the public
+  API — would violate the round-trip invariant on every save.
+- **Filter decoders silently return raw undecoded bytes on
+  zlib/predictor failure** — the exact inverse of pdfce's fail-clean
+  invariant (`ARCHITECTURE.md` §10), and the reason the differential
+  oracle is advisory, never authoritative.
+- **Round-trip fails by design**: two disconnected object models
+  (read-only parser vs from-scratch generator) with no bridge, no
+  `Document::load()`; the one API named "incremental" drops
+  `/Outlines`/`/AcroForm`/`/Names` from the new catalog.
 
 ## How to read the tables below
 
@@ -54,7 +81,11 @@ to "build from scratch" without this audit having happened.**
 - **Verdict**: `adopt` / `reference-only` (read for understanding,
   reimplement independently, never copy expression — see MuPDF/
   Poppler/Ghostscript notes below on what "reference-only" actually
-  means in practice) / `evaluate` (the oxidize-pdf case) / `skip`.
+  means in practice; for MIT-licensed oxidize-pdf specifically there
+  is no clean-room requirement, only the engineering-grounds no-port
+  policy of decision 001 §5.4) / `evaluate` (still pending a
+  decision — the oxidize-pdf case was RESOLVED 2026-07-30, see above)
+  / `skip`.
 - **Last verified**: 2026-07-23 for everything below unless noted.
 
 ## Core PDF parsing/writing/manipulation crates
@@ -68,8 +99,9 @@ to "build from scratch" without this audit having happened.**
 | `pdfium-render` | MIT (PDFium itself: BSD-3-Clause OR Apache-2.0, dual) | permissive | reference-only | Idiomatic wrapper over Google's PDFium (Chromium's engine). Requires a large prebuilt C++ shared lib (tens of MB) even statically linked — conflicts with "single Rust binary, no heavy runtime" and undermines the native-Rust-engine thesis. WASM target exists but is a separate C++→WASM module, not unified with pdfce's own Rust→WASM build. Good rendering-fidelity comparison target later, not the core engine. |
 | `mupdf-rs` / `mupdf` | **AGPL-3.0** (dual w/ paid Artifex commercial license) | strong-copyleft | **skip as dependency** | See "Copyleft landmines" below — linking forces pdfce itself to AGPL or a paid license. Reference-only, and even then subject to the clean-room caution below. |
 | `pdf-extract` (jrmuizel) | MIT | permissive | reference-only | Text extraction only, maintained by ex-Mozilla graphics eng. Narrow scope; pdfce needs this as part of a full content-stream interpreter anyway. |
-| **`oxidize-pdf`** | MIT | permissive | **evaluate** | See "OPEN QUESTION" above. |
+| **`oxidize-pdf`** | MIT | permissive | **reference-only / differential oracle (out-of-tree only, never a shipping dep)** | RESOLVED 2026-07-30, see section above + `docs/decisions/001-oxidize-pdf-adopt-vs-build.md`. Strong COS parser/hybrid-xref worth disagreeing with deliberately (`tools/difftest/` oracle); disqualified as foundation by no `Document::load()`, destructive "incremental" save, `/Info` fingerprint, silent filter fallbacks, PRO-gated signing, bus factor 1. |
 | `hayro` + `hayro-syntax`/`hayro-interpret` (LaurenzV, adopted by Typst) | MIT OR Apache-2.0 | permissive | reference-only (engine architecture) | From-scratch pure-Rust PDF interpreter/renderer, read+render only, no edit/write. NOTICE.md discloses incorporating Apache-2.0 code from PDFBox and pdf.js (font encoding maps, function evaluators, AES/MD5/SHA/RC4, flate/PNG-predictor) — all permissive, nothing copyleft. Worth reviewing as a whole-engine architecture reference; also a good real-world example of proper attribution practice to emulate. |
+| **`hayro-write`** (LaurenzV, Typst family) | MIT OR Apache-2.0 | permissive | reference-only — **watch item, decision-001 revisit trigger** | Added 2026-07-30 (v0.7.0, 2026-05-27, >1M downloads). Now provides parse→rewrite of PDF pages via `pdf-writer` — **closes the read→rewrite bridge gap this survey previously recorded as absent ecosystem-wide.** BUT: full re-serialization only, NOT byte-preserving incremental save — pdfce's differentiation stands. Confirmed 2026-07-30: nobody in the Rust ecosystem has signature-safe byte-preserving incremental save (lopdf issue #305 still open). Decision 001 §9 trigger 2: if hayro-write gains byte-preserving incremental append, evaluate depend-or-contribute rather than continuing solo. |
 | `printpdf` | MIT | permissive | reference-only | Generation-focused (new PDFs/reports), some read, not an incremental-round-trip editor engine. WASM-compilability precedent worth noting. |
 | `pdf_signing` (ralpha) | Apache-2.0/MIT | permissive | skip (immature) | Built on lopdf, explicitly WIP, PNG-signature-image only, no PAdES/PKCS#7/incremental-signing. |
 | `trust_pdf` | — | — | skip (immature) | Verification-only, narrow. |
@@ -107,19 +139,34 @@ of which is a Rust-native engine.
 
 | Crate | License | Verdict | Why |
 |---|---|---|---|
-| `ttf-parser` | MIT OR Apache-2.0 | adopt (read) — **watch item** | Zero-alloc TrueType/OpenType/AAT read. Transferred from solo maintainer to the HarfBuzz org after maintainer stepped back (late 2024); no release since Nov 2024 (~20mo stale at verification). Not archived, not yet a red flag — re-verify before Pass 1 font work starts. |
-| `rustybuzz` | MIT | adopt (shaping) — same watch item | Pure-Rust HarfBuzz port, pinned to ttf-parser, same maintenance-transfer caveat. |
-| `allsorts` (Yeslogic) | Apache-2.0 | adopt/reference | Parser+shaper+**subsetter**, extracted from Yeslogic's Prince (HTML→PDF) — built to solve exactly "read fonts, subset, embed in PDF." Actively maintained; strong alternative-or-companion to the ttf-parser/rustybuzz stack. |
+| `ttf-parser` | MIT OR Apache-2.0 (crates.io) / Apache-2.0 (repo field — discrepancy unresolved) | **DO NOT ADOPT (read path)** — verdict flipped 2026-07-30, decision 004 §3.2/§5.2 | The anticipated re-verify happened: aged another 8 months with no commit (last 2025-11-22, no release since 2024-11-29) and grew a queue of unmerged SECURITY-flavored PRs (COLRv1 paint-graph recursion cap, glyf/gvar composite visit cap, CFF2 BLEND empty-stack guard, avar i16 overflow — four filed 2026-07-20, unlanded). Exactly the hardening class pdfce's §10 threat model needs landed, not pending. No bare-Type1 support either. |
+| `rustybuzz` | MIT | superseded by `harfrust` for any future AUTHORING shaping (decision 004 R17: the RENDER path never shapes) | Pure-Rust HarfBuzz port, pinned to ttf-parser, same staleness (0.20.1, 2024-11-12). Note epaint 0.35 itself moved to `harfrust`. |
+| `allsorts` (Yeslogic) | **Apache-2.0 ONLY (no MIT arm)** | write-side fallback only (decision 001 §6.2), REJECTED for the read path (decision 004 §3.2) | Parser+shaper+**subsetter** from Prince. Actively maintained, but: 23 direct deps incl. `libc`/`ouroboros`/`brotli-decompressor`, no `no_std` (jeopardizes the wasm32 invariant, R11), no crate-level unsafe forbid, no bare-Type1 outline path. Decision 004 §9 flags this evidence into the eventual write-side scoping. |
 | `subsetter` (Typst) | MIT OR Apache-2.0 | adopt | Purpose-built PDF-embedding subsetter for TrueType/CFF, minimal deps — what Typst itself uses. Leanest option for the write-side embedding/subsetting need. |
 | `fontdue` | MIT OR Apache-2.0 OR Zlib | reference-only | Rasterizer only, no shaping (maintainer has publicly declined to add it). |
-| `read-fonts`/`skrifa`/`write-fonts` (Google "fontations") | MIT OR Apache-2.0 | reference/alternative | Most actively maintained font stack currently (all released within days of survey), corporate-backed. No dedicated subsetter yet in this family. Alternative to ttf-parser/rustybuzz if their staleness becomes a real problem. |
-| `postscript` crate | Apache-2.0 OR MIT | evaluate | Type1 (`eexec`-encrypted charstrings) + Type2. Widely depended-on (873k dl/mo) but depth not independently verified — prototype against a real legacy-Type1 PDF before committing. |
-| `font` (pdf-rs org) | Apache-2.0 OR MIT | evaluate, flagged | Claims Type1+TrueType+CFF+OpenType+WOFF/WOFF2. **crates.io metadata shows 2026-05 but GitHub last push is 2024-07-23 — date mismatch, verify actual freshness via `git log` on the real tag before depending on it.** |
+| `read-fonts`/`skrifa`/`write-fonts` (Google "fontations") | MIT OR Apache-2.0 | **ADOPT (read path)** — decision 004 §4.1, R21: the single font-program parser in pdfce-render | Most actively maintained font stack, corporate-backed, `#![forbid(unsafe_code)]`, no_std/wasm-clean. THE finding (004 §3.1): `skrifa` re-exports read-fonts as `skrifa::raw`, whose public `ps` module parses bare PostScript **Type 1** (PFB/PFA/eexec/lenIV, verified at source) and bare **CFF** with charstring-to-outline evaluation — all four PDF FontFile cases via one dependency, already in Cargo.lock via epaint 0.35 (zero new packages; pin 0.42 to epaint's resolution, `cargo tree --duplicates` guard). hayro and krilla independently converged on the same stack. |
+| `postscript` crate | Apache-2.0 OR MIT | **REJECT** — verdict resolved 2026-07-30 (decision 004 §3.2) | The prototype check happened by source inspection: it is a TOKENIZER — its type2 module exposes Program/Operator/Operations and no path/segment/pen types. It does not evaluate charstrings to outlines. |
+| `font` (pdf-rs org) | **no `license` field in Cargo.toml** (README says MIT — conflicting) | **REJECT** (decision 004 §3.2) | Not published on crates.io as depended-on form; pulls 8 git dependencies. Unusable under LEGAL.md §6.2 regardless of capability claims. |
 
-**Type1 is the weakest link ecosystem-wide** — no fully-verified,
+~~**Type1 is the weakest link ecosystem-wide** — no fully-verified,
 actively-maintained pure-Rust Type1 decoder confirmed. Budget for
-possible partial custom implementation (Type1 charstring decoding is
-small and well-specified per the Adobe Type 1 Font Format spec).
+possible partial custom implementation.~~ **RESOLVED 2026-07-30
+(decision 004 §3.1/§5.1): `read_fonts::ps::type1` — reachable as
+`skrifa::raw::ps::type1` — is a maintained, pure-Rust bare-Type 1
+parser with full charstring-to-outline evaluation (PFB segment tags,
+PFA hex eexec, raw binary eexec, lenIV all handled; verified at source
+in read-fonts 0.39.2). The custom-implementation budget line is
+released. One trap: input must begin with `%!PS-AdobeFont`/`%!FontType`
+— normalize leading whitespace first (see `C:\personal_rag\pdf\`).**
+
+**Bundled standard-14 shapes (decision 004 §4.2):** the Foxit base-14
+CFF set from pdfium's `core/fxge/fontdata/chromefontdata/` —
+BSD-3-Clause via Google's pdfium grant, 14 faces, 264,741 bytes,
+byte-exact Symbol/ZapfDingbats metrics vs the Core-14 AFMs. NOTE the
+copyleft trap decision 004 documented: URW/Nimbus (the "obvious"
+Ghostscript set) is `AGPL-3.0-only WITH
+PS-or-PDF-font-exception-20170817`, and the exception covers embedding
+into a *document* only — NOT bundling with an application.
 
 ### Rasterization (`pdfce-render`)
 
@@ -277,3 +324,46 @@ decision log).
   KillerPDF (GPL-3.0) are the closest native-desktop attempts, both
   with confirmed gaps (no OCR/Bates/PDF-A/accessibility for the
   former; GPL+Windows-only+no redaction/PDF-A for the latter).
+- **2026-07-23 (Pass 0 — workspace bootstrap)** — first real
+  dependencies adopted. **Deps added this Pass (with pinned versions):**
+  `eframe` 0.35.0 (features: `glow`, `default_fonts`, `accesskit`,
+  `wayland`, `x11` — with `default-features=false` to EXCLUDE wgpu),
+  `egui` 0.35.0, `rfd` 0.17.2, `clap` 4.6.4, `thiserror` 2.0.19.
+  `tiny-skia` remains PLANNED only (Pass 1, not yet a dependency).
+  - **New finding (rasterization/GUI backend):** eframe's DEFAULT
+    backend is now **wgpu**, and the wgpu 29 stack currently breaks on
+    Windows MSVC (`wgpu-hal` 29.0.4 → `windows` crate 0.61.2 vs
+    `gpu-allocator` 0.28.0 → `windows` 0.62.2; incompatible D3D12
+    `ID3D12Heap` types). **glow chosen as the working backend.** In
+    practice today this means `ARCHITECTURE.md` §2's "wgpu preferred,
+    glow fallback" ordering is glow-FIRST until the wgpu stack
+    stabilizes. Version-stamped finding lives in `D:\dev\rag\egui\`.
+  - **Font-license note (NOT a copyleft landmine):** egui's
+    `epaint_default_fonts` bundles fonts under OFL-1.1 and
+    Ubuntu-font-1.0. These are **font-file** licenses (they permit
+    embedding; attribution is satisfied by `THIRD_PARTY_LICENSES.md`) —
+    they do NOT constrain pdfce's own (still-undecided, §1/`LEGAL.md`
+    §1) *software* license the way a copyleft software dependency would.
+    Recorded explicitly so a future session doesn't misread them as
+    copyleft contamination when scanning the generated attribution file.
+  - **Reaffirmed:** the `oxidize-pdf` audit (then the "OPEN QUESTION"
+    above, since resolved 2026-07-30) remained the outstanding gate
+    before Pass 1 — Pass 0 deliberately shipped a thin
+    header-probe-only `pdfce-core` to keep that decision open, and did
+    not adopt or reject `oxidize-pdf`.
+- **2026-07-30** — **`oxidize-pdf` audit completed; adopt-vs-build
+  RESOLVED (KenAgent decision protocol):** build `pdfce-core` from
+  scratch; `oxidize-pdf` is reference-only + out-of-tree differential
+  test oracle, never a shipping dependency; zero literal ports
+  planned; maintained permissive crates (`hayro-jbig2`, `hayro-ccitt`,
+  `subsetter`/`allsorts`, RustCrypto) preferred over any vendoring.
+  Full record: `docs/decisions/001-oxidize-pdf-adopt-vs-build.md`.
+  Two factual corrections filed against the 2026-07-23 entry (JPX
+  claim false, DCT claim misleading — see the RESOLVED section above),
+  plus three audit findings recorded there (signing is a PRO-gated
+  stub, non-suppressible `/Info` fingerprint, silent filter
+  fallbacks). New `hayro-write` row added: parse→rewrite via
+  `pdf-writer` now exists (full re-serialization only) — the
+  signature-safe byte-preserving incremental-save gap remains
+  ecosystem-wide (lopdf #305 still open); pdfce's differentiation
+  stands.

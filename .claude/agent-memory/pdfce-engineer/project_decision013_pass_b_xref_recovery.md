@@ -1,0 +1,19 @@
+---
+name: decision013-pass-b-xref-recovery
+description: Decision 013 Pass B (rebuild-by-scan xref recovery) shipped — design, results, standing-rule-number flag, gen-65536 deviation
+metadata:
+  type: project
+---
+
+Decision 013 Pass B (rebuild-by-scan cross-reference recovery) shipped 2026-07-31 (core + CLI + GUI + fixtures + fuzz + corpus tool). NOT yet committed to git; librarians NOT yet dispatched (session was directed to skip both).
+
+**What shipped:** `crates/pdfce-core/src/recover.rs` (the module: `recover(&[u8], RecoveryReason) -> Result<RecoveredXref, RecoverError>`; scan `N G obj` backward, confirm by real parse (drops binary false positives), last-valid-wins; phase 2 decodes `/Type /ObjStm` for type-2 entries; trailer from last `trailer` kw → `/Type /XRef` dict → synthesize-from-`/Catalog`; re-checks `/Encrypt`, refuses; fail-clean `NoCatalog`/`NoObjects`). Wired in `document.rs::from_bytes` on the strict-error path via `recovery_reason_for` (gates `EncryptionUnsupported` out). `Document` gained `recovery: Option<RecoveryReport>` + `recovery()`/`loaded_via_recovery()`. Writer: `WriteError::RecoveredBaseForbidsIncremental` (save_incremental refused first thing). `save_full` for recovered docs: emits a FRESH header (drops offset-start junk) + PROMOTES compressed objects to file-level (Classic shape can't express type-2). CLI: `exit::OPENED_VIA_RECOVERY = 11`, `inspect` full-loads + discloses, `round-trip` discloses. GUI: status-bar `recovery_note` banner. Fixtures: `fixtures/synthetic/xref-recover/` via `tools/gen-xref-recover-fixtures.py`. Tools: `tools/recover-sweep/` (out-of-tree, load-only corpus tally). Fuzz: `fuzz/fuzz_targets/recover_roundtrip.rs`.
+
+**Results (recover-sweep):** real-world 1109 files (qpdf 639/pdfium 331/pdfbox 139): **566 converted** (were failing → now open), by reason NotAnXrefSection 417, TrailerParse 99, BadEntry 20, BadXrefStream 13, StartxrefNotFound 7, BadStartxrefOffset 7, MissingHeader 3; still-failing 53 (object-level corruption — documented non-goal: BadObject 14, Header/not-a-pdf 24, ObjectIdMismatch 8, ObjectStream 5, ObjStmIdMismatch 2); encrypted-refused 58; recovery-refused 9. veraPDF 2907: 2892 clean UNCHANGED (zero regression — recovery never fired on a clean file), 5 recovered (all `*-fail-*` §6.1.2 File-header / §6.2.3.3 colour PDF/A-conformance files — defensible reader recovery, not bug-masking). Fuzz: 21,595 runs, 0 crashes.
+
+**Why:** the #1 real-world robustness fix (605/712 = 85% of real-file load failures were this one missing capability). See [[project_pass8_redaction]] for the sibling forced-full-rewrite pattern (R35/R58).
+
+**How to apply:**
+- **STANDING-RULE NUMBER FLAG for the librarian:** decision 013 proposed "R59" for the recovered-base-forces-full-rewrite rule, but R59/R60/R61 are ALREADY TAKEN (decision 010: render-fidelity/one-canvas/inkscape). Code comments reference it DESCRIPTIVELY + flag ~R62 as likely-next-free; the librarian must assign the canonical number and reconcile with decision 012's clashing proposals. See [[feedback_kenagent_decisions]].
+- **gen-65536 DEVIATION to flag:** the task said "do NOT recover the 17 gen-65536 files (leave failing)." They fail strict with BadEntry (gen 65536 in an xref free-list-head ENTRY, not in object headers). Rebuild-by-scan ignores the broken xref entirely and opens them via the BadEntry trigger (they're in the recovered BadEntry=20 bucket where their objects are sound). This is NOT the strict-parser gen-65536 TOLERANCE the separate decision defers (strict parser still rejects gen 65536 — untouched); it's correct reader behavior (qpdf/pdfium open them too) and does NOT foreclose the separate decision. Flagged as a deliberate, defensible deviation for the decision owner.
+- Corpus measurement: `cargo run --release` in `tools/recover-sweep` over `fixtures/external/<dir>`; `PDFCE_LIST_RECOVERED=1` prints recovered paths (for `*-fail-*` enumeration).

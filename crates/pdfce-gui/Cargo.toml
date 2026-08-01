@@ -1,0 +1,50 @@
+[package]
+name = "pdfce-gui"
+description = "pdfce native desktop shell (egui/eframe). The GUI binary. Depends on pdfce-core (+ pdfce-render from the Pass that needs rendering). Pass 0 scope: window + Open-File header probe."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "pdfce-gui"
+path = "src/main.rs"
+
+[dependencies]
+# eframe = egui's application shell. GUI dependencies live HERE and only
+# here (plus pdfce-cli's clap) — never in pdfce-core/pdfce-render
+# (docs/ARCHITECTURE.md §3). MIT-OR-Apache-2.0 (permissive).
+#
+# Backend = glow (OpenGL), NOT the eframe default (wgpu). docs/ARCHITECTURE.md
+# §2 specifies "wgpu, falls back to glow/OpenGL if needed" — and it is needed:
+# the current wgpu 29 stack pulls wgpu-hal (windows-crate 0.61) and
+# gpu-allocator 0.28 (windows-crate 0.62), whose D3D12 types are mutually
+# incompatible, so the wgpu build fails to compile on Windows (see
+# D:\dev\rag\rust for the full finding). glow is also lighter (no D3D12/
+# shader-compilation stack) and entirely sufficient for pdfce's 2D egui UI,
+# which is better for the single-folder-portable goal. `default-features =
+# false` drops egui-wgpu/wgpu/wgpu-hal/gpu-allocator entirely. Revisit wgpu
+# when that upstream stack stabilizes.
+eframe = { version = "0.35", default-features = false, features = [
+    "glow",         # OpenGL backend via glutin
+    "default_fonts",
+    "accesskit",    # native accessibility tree — a11y is a pdfce UI goal
+    "wayland",      # Linux windowing; compiles to nothing on Windows
+    "x11",          # Linux windowing; compiles to nothing on Windows
+] }
+# rfd: native file-open/save dialogs, no C dependency (docs/PRIOR_ART.md). MIT.
+rfd = "0.17.2"
+pdfce-core.workspace = true
+# pdfce-render: added at Pass 1, the Pass that first draws a page. The GUI
+# consumes exactly the same headless rasterizer `pdfce-cli render-page` does
+# — the shell decides where pixels GO, never how they are made
+# (docs/ARCHITECTURE.md §3). Note the direction of the dependency: the GUI
+# depends on the renderer, never the other way round, which is the whole
+# invariant CI's `cargo tree` job checks.
+#
+# `egui` and `tiny_skia` are deliberately NOT direct dependencies here: egui
+# is reached through `eframe`'s re-export and tiny-skia through
+# `pdfce-render`'s, so neither can drift to a version incompatible with the
+# crate that actually produces the values we consume.
+pdfce-render.workspace = true

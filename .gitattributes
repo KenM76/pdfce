@@ -12,6 +12,28 @@
 # but mixed line endings make diffs noisy.
 *.md text eol=lf
 
+# Binary test fixtures and assets: NEVER apply end-of-line normalization.
+# A PDF's cross-reference table stores absolute byte offsets; if git
+# rewrote CRLF<->LF inside a committed .pdf on checkout, every offset past
+# the first rewrite would be wrong and the file would fail to parse. Mark
+# these binary explicitly so `* text=auto` below can never misdetect a
+# NUL-free synthetic PDF as text and mangle it. (`binary` == `-text -diff`.)
+*.pdf binary
+*.bin binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.p12 binary
+*.pfx binary
+
 # Everything else: let git decide based on content (default safe
 # autocrlf-aware behavior).
 * text=auto
+
+# Font binaries (decision 004 §10 item 4): bundled/fixture font files
+# must never pass through EOL normalization — same rationale as the
+# PDF-fixture rules above.
+*.cff binary
+*.ttf binary
+*.otf binary
+*.pfb binary

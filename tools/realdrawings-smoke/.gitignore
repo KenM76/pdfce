@@ -1,0 +1,6 @@
+# The report and JSON derive from PROPRIETARY TOP Steel drawings under
+# R:\Products (LEGAL.md §5). They contain proprietary product filenames and
+# per-file diagnostics and MUST NEVER be committed. Ignore the whole out dir.
+out/
+# Any stray render output, just in case.
+*.png

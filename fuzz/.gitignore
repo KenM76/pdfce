@@ -1,0 +1,15 @@
+# cargo-fuzz build/run outputs — never committed. (Cargo.lock IS
+# committed, matching the tools/difftest convention for standalone
+# non-workspace bin crates — reproducible fuzz builds.)
+target/
+artifacts/
+coverage/
+
+# The corpus directories hold two kinds of files: hand-written SEED
+# inputs (committed — they bootstrap coverage on a fresh clone) and the
+# entries libFuzzer synthesizes during a run (machine-generated, hash
+# named, thousands of them — not committed). Ignore everything in the
+# per-target corpus dirs, then re-include the recognizable seeds.
+corpus/*/*
+!corpus/*/seed_*
+!corpus/load_document/minimal.pdf

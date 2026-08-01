@@ -1,0 +1,33 @@
+# recover-sweep — decision 013 Pass B cross-reference-recovery measurement.
+#
+# WHY THIS EXISTS: Pass B's acceptance is a COUNTED before/after over the
+# real-world corpus (how many previously-failing files rebuild-by-scan
+# opens, by reason) plus a ZERO-REGRESSION proof over the clean conformance
+# corpus (recovery must never fire on a cleanly-loading file). Because
+# recovery triggers ONLY on the strict-load error path, a single
+# recovery-aware LOAD pass yields the whole before/after: every recovered
+# open is, by construction, a file that failed strict load before — so the
+# "recovered" tally IS the converted set (by reason), and any "clean" file
+# is one that always loaded (a recovered clean file would be a regression).
+#
+# LOAD-ONLY (no render), so it is fast enough to sweep the whole corpus.
+#
+# WHY OUT-OF-TREE (workspace-excluded via the root manifest's `exclude`,
+# same pattern as tools/corpus-report): keeps `cargo test --workspace`
+# fast and the GUI-core-separation `cargo tree` invariant unambiguous.
+# Never shipped. Corpus files are rights-cleared, gitignored scratch
+# (docs/LEGAL.md §5).
+
+[package]
+name = "recover-sweep"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+pdfce-core = { path = "../../crates/pdfce-core" }
+
+[profile.release]
+opt-level = 2

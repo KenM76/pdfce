@@ -1,0 +1,6959 @@
+//! # The editing session — command log, undo/redo, and the save-time diff
+//!
+//! `ARCHITECTURE.md` §11 in executable form. This module is the **only**
+//! mutation path in pdfce: `pdfce-gui` and `pdfce-cli` both go through
+//! [`EditSession`], and nothing anywhere constructs a
+//! [`DirtySet`](crate::writer::DirtySet) with real changes except
+//! [`EditSession::dirty_set`].
+//!
+//! §11.4 is why this lands in Pass 3.1 rather than later: *"the first
+//! Pass that introduces any editing capability must build the
+//! command-log/undo-stack mechanism as part of that Pass, not after"*.
+//! Retrofitting undo onto edit code written for direct mutation is the
+//! expensive move, so the very first two edits pdfce ever performs go
+//! through the stack.
+//!
+//! ## The design in one picture
+//!
+//! ```text
+//!   Document (the BASE revision)          ← immutable for the session's life
+//!      buf: the retained source bytes     ← every ByteSpan indexes into this
+//!      objects: id -> parsed value
+//!      trailer
+//!            │
+//!            │  overlay
+//!            ▼
+//!   EditSession
+//!      state:   id -> CURRENT value       ← only for objects an edit touched
+//!      trailer: working copy
+//!      undo:    Vec<Command>              ← each carries its own inverse
+//!      redo:    Vec<Command>
+//!            │
+//!            │  dirty_set()  =  structural diff(state, base), at SAVE time
+//!            ▼
+//!   DirtySet  ──►  writer::save_incremental / save_full
+//! ```
+//!
+//! The base document is **never mutated**. An edit writes into `state`;
+//! an undo writes the recorded prior value back into `state`. That is
+//! not merely convenient — it is what makes §5's verbatim-re-emission
+//! path keep working while edits are in flight, because every untouched
+//! object still has its original bytes and its original `ByteSpan`.
+//!
+//! ## THE bug this module exists to prevent (§11.1)
+//!
+//! > "the 'dirty set' … is computed as a **structural diff against the
+//! > base revision at save time** — it is *not* the union of every object
+//! > any command ever touched during the session. If a user edits an
+//! > object and then undoes that specific edit before saving, that object
+//! > must **not** appear in the incremental update."
+//!
+//! §7.5.6 requirement 1 is the spec-side reason: an update section
+//! *"shall contain entries **only for** objects that have been changed,
+//! replaced, or deleted"* — a restriction, not permission.
+//!
+//! [`EditSession::dirty_set`] enforces it **structurally rather than by
+//! discipline**: it iterates `state` and *skips every entry whose value
+//! equals the base document's*. An edit-then-undo leaves an entry in
+//! `state` holding a value equal to the base, so it is skipped, and the
+//! save is byte-identical to the input. There is no code path that could
+//! do otherwise, because history is never consulted at save time at all.
+//!
+//! Three properties fall out of that, and each is worth naming because
+//! each would need its own defensive code under a history-replay design:
+//!
+//! - **Bounding the undo stack is free.** [`MAX_UNDO_DEPTH`] can drop the
+//!   oldest command without affecting what gets saved: the state is the
+//!   truth, and the dropped command only cost the operator the ability to
+//!   step back that far.
+//! - **Coalescing is free.** N edits to one object leave one entry in
+//!   `state`, so the update section carries that object once, not N
+//!   times. Not a special case — a consequence of keying by id.
+//! - **A "modified?" indicator cannot lie.** [`EditSession::is_modified`]
+//!   asks the same question the writer will: *does anything currently
+//!   differ from the base?* An edit-then-undo reports unmodified, which
+//!   is what the operator sees on screen.
+//!
+//! ## Why each command stores its prior value rather than an operation
+//!
+//! §11.1 asks for commands with `apply()` and an inverse. For a *value
+//! replacement* — which is all Pass 3.1 has — the inverse **is** the
+//! prior value, and storing it is strictly more robust than recomputing
+//! it: a recomputed inverse can drift from what was actually replaced if
+//! any other code path touches the same object in between.
+//!
+//! This is not §11.3's snapshot fallback in disguise. A snapshot is a
+//! copy of state the command did not itself change; a [`Command`] here
+//! records **exactly the entries it wrote**, and nothing else. When Pass
+//! 3.2 adds structural operations whose before-image is genuinely large
+//! (a page reorder), §11.3 permits a coarse before/after page-order
+//! snapshot as *one entry on this same stack* — the [`Command`] type is
+//! where that variant goes. Do not build a second, parallel undo system
+//! for it.
+//!
+//! ## Pass 3.1's mutation surface, and why it is this small
+//!
+//! Two edits only — document `/Info` metadata (§14.3.3) and page
+//! `/Rotate` (Table 30). Decision 007 §5.1 chose them deliberately:
+//! *"dictionary values only — no content stream, no appearance stream,
+//! no font. That isolates the dirty-set machinery so it can be tested
+//! without content re-emission confounding it."* Everything in this
+//! module is therefore about **when** an object is written, never about
+//! how its bytes are produced.
+//!
+//! One consequence to hold on to for Pass 3.2: because no Pass 3.1 edit
+//! touches a content stream, a resource, or the page tree's *shape*, the
+//! renderer may keep reading the **base** document's object graph and
+//! still be correct — the one rendering-relevant value an edit can change
+//! is `/Rotate`, and that travels in the [`Page`] value
+//! [`EditSession::pages`] hands out. The moment an edit can alter a
+//! content stream, that shortcut is gone and the renderer needs an
+//! overlay-aware view.
+//!
+//! ## Spec sources
+//!
+//! - `iso32000__s__7.5.6.md` — update sections carry changed objects only
+//! - `iso32000__s__14.4.md` — `/ID[1]` refreshes when something changed
+//! - `iso32000__s__7.7.3.md` — Table 30 `/Rotate`: *"shall be a multiple
+//!   of 90"*, clockwise, inheritable
+//! - `iso32000__s__7.5.5.md` — Table 15: `/Info` *"shall be an indirect
+//!   reference"*
+//! - `iso32000__s__7.3.4.md` — string syntax (the *interpretation* of the
+//!   bytes is §7.9.2, which is a **recorded gap** in the spec RAG; see
+//!   [`encode_text_string`])
+
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
+use crate::annot::AnnotFlags;
+use crate::annot_author::{self, MarkupSpec, TextAnnotSpec};
+use crate::document::Document;
+use crate::fontdata::Std14;
+use crate::forms::{self, ButtonKind, Field, FieldType};
+use crate::graph::ObjectGraph;
+use crate::object::{Dict, IndirectObject, Name, ObjId, Object, Stream};
+use crate::page_tree::{self, Page, PageSlot, PageTreeError};
+use crate::pageops::references::{DanglingReport, census_dangling};
+use crate::signature::{SaveMode, SignatureCensus, SignatureImpact, census, impact_of};
+use crate::span::ByteSpan;
+use crate::vartext::FontResource;
+use crate::writer::content::ContentBuilder;
+use crate::writer::{DirtySet, SaveOptions, SaveReport, WriteError};
+
+/// How many commands the undo stack keeps before the oldest is dropped.
+///
+/// `ARCHITECTURE.md` §11.1: *"Bound the undo history (a configurable max
+/// operation count) rather than keeping it unbounded — large documents
+/// with long editing sessions shouldn't accumulate unbounded command-
+/// object memory. Acrobat itself bounds undo."*
+///
+/// Dropping the oldest command is safe **only** because the dirty set is
+/// a diff against the base rather than a replay of history (module
+/// docs). Under a replay design, dropping a command would corrupt what
+/// gets saved; here it costs exactly what it appears to cost — the
+/// operator can no longer step back past that point.
+pub const MAX_UNDO_DEPTH: usize = 256;
+
+/// The document-information-dictionary fields an operator may edit
+/// (§14.3.3, Table 317).
+///
+/// A closed enum rather than an arbitrary key, for two reasons. The
+/// first is ordinary API hygiene: a typo'd key would silently create a
+/// dead entry. The second is R41 — `/Producer` is deliberately **absent
+/// from this list**, because pdfce's producer identity is governed by
+/// [`ProducerPolicy`](crate::writer::ProducerPolicy) and is the one
+/// field whose no-fingerprint rule must not be reachable through a
+/// general-purpose metadata editor.
+///
+/// `/CreationDate` and `/ModDate` are absent for a different reason:
+/// they are §7.9.4 date strings, which need their own encoder and their
+/// own "does pdfce set `/ModDate` automatically?" policy question (it
+/// should not, silently — that is a fingerprint). Both belong to a later
+/// Pass with the Acrobat-parity scoping the metadata bucket will get.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum InfoField {
+    /// `/Title` — the document's title.
+    Title,
+    /// `/Author` — the name of the person who created the document.
+    Author,
+    /// `/Subject` — the subject of the document.
+    Subject,
+    /// `/Keywords` — keywords associated with the document.
+    Keywords,
+}
+
+impl InfoField {
+    /// The dictionary key this field is stored under.
+    #[must_use]
+    pub const fn key(self) -> &'static [u8] {
+        match self {
+            Self::Title => b"Title",
+            Self::Author => b"Author",
+            Self::Subject => b"Subject",
+            Self::Keywords => b"Keywords",
+        }
+    }
+
+    /// Every editable field, in the order a properties panel should show
+    /// them. Provided so a front end enumerates the real list instead of
+    /// hard-coding one that drifts when a field is added.
+    #[must_use]
+    pub const fn all() -> [Self; 4] {
+        [Self::Title, Self::Author, Self::Subject, Self::Keywords]
+    }
+}
+
+/// What an undo-stack entry did, in structured form.
+///
+/// Deliberately **not** a display string. Decision 002 R1 keeps every
+/// user-facing string in `pdfce-gui`'s `ui_text` catalog, and R4 makes
+/// core diagnostics structured data a front end maps to its own text —
+/// so `pdfce-core` returning "Set title" would put an English string in
+/// the wrong crate and make it invisible to a future localization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CommandKind {
+    /// A document-information field was given a value.
+    SetInfoField(InfoField),
+    /// A document-information field was removed.
+    ClearInfoField(InfoField),
+    /// One page's `/Rotate` was set. The index is into
+    /// [`EditSession::pages`]' document-order list.
+    SetPageRotation {
+        /// 0-based page index.
+        page_index: usize,
+        /// The rotation that was applied, normalized to {0, 90, 180, 270}.
+        degrees: u16,
+    },
+    /// Pages were removed from the document (Pass 3.2).
+    DeletePages {
+        /// How many pages the one operation removed.
+        count: usize,
+    },
+    /// The document's page order changed (Pass 3.2).
+    ///
+    /// Carries only a count, because §11.3 makes a reorder **one**
+    /// undo entry however many pages moved (*"reordering 50 pages in one
+    /// drag operation"* is its named example) and a front end labelling
+    /// the Undo control needs a magnitude, not a permutation.
+    ReorderPages {
+        /// How many pages ended up somewhere different.
+        count: usize,
+    },
+    /// Several pages were rotated in one operation (Pass 3.2).
+    RotatePages {
+        /// How many pages the one operation turned.
+        count: usize,
+        /// The turn that was applied, in degrees, signed.
+        delta: i32,
+    },
+    /// A geometric-markup annotation was authored onto a page (Pass 6.1).
+    /// One gesture — one annotation — is one undo entry (§11.3, R49): the
+    /// created appearance stream, the created annotation dictionary, and
+    /// the page's `/Annots` patch all undo together.
+    AddAnnotation {
+        /// Which markup subtype was added, for an undo-control label.
+        kind: AnnotKind,
+    },
+    /// A text or choice field's value was set and its appearance
+    /// regenerated (Pass 7, §12.7.3.3). One fill — the field's `/V` and
+    /// every widget's `/AP` — is one undo entry.
+    FillTextField,
+    /// A check-box or radio-button field's state was selected (Pass 7,
+    /// §12.7.4.2.3): the field's `/V` and the widgets' `/AS` set together,
+    /// with no appearance regeneration (state selection, not generation).
+    SetButtonState,
+    /// A choice (list/combo) field's selection was set (Pass 7.1,
+    /// §12.7.4.4): the field's `/V` (a string, or an array under
+    /// `MultiSelect`), its `/I` selected-index array, and every widget's
+    /// `/AP` regenerated to show the selected display value(s).
+    SetChoiceValue,
+    /// All widget appearances that needed regeneration were rebuilt and
+    /// `/NeedAppearances` cleared (Pass 7.1, R51). One save-side operation,
+    /// one undo entry.
+    RegenerateAppearances {
+        /// How many widget appearances were regenerated.
+        count: usize,
+    },
+    /// Form fields were flattened — their appearances burned into page
+    /// content and the fields removed from `/AcroForm` and `/Annots`
+    /// (Pass 7.1, R48). Destructive; one undo entry.
+    FlattenFields {
+        /// How many fields were flattened.
+        count: usize,
+    },
+    /// One in-place page-text REPLACE edit (Pass 14.3 §0.2): the page's
+    /// content stream object (+ any collapsed extra content streams) was
+    /// rewritten by the 14.1 advance-preserving surgery, recorded as ONE
+    /// undo-able command so the GUI's per-keystroke-accepted edits undo one
+    /// at a time exactly like every other mutation. The mutation lands on the
+    /// session's in-memory content object (staged bytes + `state` overlay),
+    /// NOT as pre-saved bytes — see
+    /// [`EditSession::edit_text`]. The verbatim disclosure/report is returned
+    /// by that method, not carried on the command (a front end labels its
+    /// Undo control from this kind alone).
+    EditText,
+    /// One in-place page-text FORMAT edit (size / fill-colour model / font
+    /// family; Pass 14.3 §0.2), recorded as ONE undo-able command by the same
+    /// session-integrated 14.2 surgery. See [`EditSession::format_text`].
+    FormatText,
+    /// One within-block reflow (Pass 15.1): a recognized paragraph was
+    /// re-wrapped to a new width/alignment/leading and its own
+    /// content-stream object re-emitted at the new per-line origins/breaks
+    /// (justified lines via `TJ` slack), recorded as ONE undo-able command so
+    /// the operator's accepted re-wrap undoes atomically exactly like every
+    /// other mutation (decision 015 §3.4, R75). Undo restores the
+    /// byte-identical pre-reflow stream. The line-count magnitudes label a
+    /// front end's Undo control; the verbatim disclosure/report is returned by
+    /// [`EditSession::reflow_block`], not carried on the command.
+    ReflowBlock {
+        /// Line count before the re-wrap.
+        lines_before: usize,
+        /// Line count after the re-wrap.
+        lines_after: usize,
+    },
+    /// One add-new-text operation (Pass 16.0 / FF-D): a fresh `BT…ET` run was
+    /// synthesized at operator coordinates and APPENDED as a new content stream
+    /// in the page `/Contents` array (§7.7.3.3), leaving every original content
+    /// stream byte-identical, with one new Standard-14 font dict added to the
+    /// page `/Resources` `/Font` (no embedding, R79). Recorded as ONE undo-able
+    /// command so the operator's placed run undoes atomically exactly like
+    /// every other mutation (decision 016 §3.5, R78); undo removes the two
+    /// created objects and restores the byte-identical original page dict. It
+    /// is page-content surgery, NEVER a FreeText annotation (R78) — see
+    /// [`EditSession::add_text`]. The verbatim disclosure/report (font
+    /// provenance, tagged-untagged, inheritance-safe resources) is returned by
+    /// that method, not carried on the command.
+    AddText,
+}
+
+/// Which geometric-markup subtype [`EditSession::add_markup`] authored,
+/// for a [`CommandKind::AddAnnotation`] undo label. A projection of
+/// [`crate::annot_author::MarkupSpec`]'s variant, kept `Copy` so it fits
+/// the `Copy` [`CommandKind`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AnnotKind {
+    /// `/Square`.
+    Square,
+    /// `/Circle`.
+    Circle,
+    /// `/Line`.
+    Line,
+    /// `/Ink`.
+    Ink,
+    /// `/Polygon`.
+    Polygon,
+    /// `/PolyLine`.
+    PolyLine,
+    /// `/Highlight`.
+    Highlight,
+    /// `/Underline`.
+    Underline,
+    /// `/StrikeOut`.
+    StrikeOut,
+    /// `/Squiggly`.
+    Squiggly,
+    /// `/FreeText` (Pass 6.2).
+    FreeText,
+    /// `/Text` (sticky note, Pass 6.2).
+    Text,
+    /// `/Stamp` (Pass 6.2).
+    Stamp,
+    /// `/Redact` — a redaction mark (Pass 8, §12.5.6.23). The
+    /// non-destructive MARK phase; removal is
+    /// [`crate::redact::apply_redactions`].
+    Redact,
+}
+
+/// One entry on the undo stack: the set of writes it performed, each
+/// paired with the value that was there before.
+///
+/// `before`/`after` are `Option<Object>` because "absent from the
+/// session state" is a real, distinct value: it means *fall through to
+/// the base document*, and for a created object it means *this object
+/// does not exist at all*. Collapsing the two into a sentinel `Object`
+/// would make undoing a creation impossible to express.
+#[derive(Debug, Clone)]
+struct Command {
+    kind: CommandKind,
+    objects: Vec<ObjectWrite>,
+    /// Objects whose *existence* this command changed, each with the
+    /// before/after flag.
+    ///
+    /// A separate axis from `objects` because deletion is a separate
+    /// axis: an object can be edited without being deleted, deleted
+    /// without being edited, or — when a page is removed and its parent
+    /// node rewritten in the same command — both, on different objects.
+    /// Folding "deleted" into `ObjectWrite`'s `Option<Object>` would
+    /// collide with the meaning that option already carries ("absent
+    /// from the overlay, read through to the base").
+    removals: Vec<Removal>,
+    /// The whole working trailer before/after, when the command changed
+    /// it. Whole rather than per-key because the only Pass 3.1 command
+    /// that touches the trailer adds exactly one key to it, so a whole
+    /// copy of a handful of entries is cheaper than the bookkeeping to
+    /// track which — and it cannot get the restore subtly wrong.
+    trailer: Option<(Dict, Dict)>,
+}
+
+/// One object-level write inside a [`Command`].
+#[derive(Debug, Clone)]
+struct ObjectWrite {
+    id: ObjId,
+    before: Option<Object>,
+    after: Option<Object>,
+}
+
+/// One object-existence change inside a [`Command`].
+#[derive(Debug, Clone, Copy)]
+struct Removal {
+    id: ObjId,
+    was_deleted: bool,
+    is_deleted: bool,
+}
+
+/// Why an edit could not be performed.
+///
+/// Every variant names a condition the operator (or the calling front
+/// end) can act on. There is deliberately no catch-all "edit failed".
+#[derive(Debug, Clone, thiserror::Error)]
+#[non_exhaustive]
+pub enum EditError {
+    /// The page index is past the end of the document.
+    #[error("page index {index} is out of range (the document has {count} page(s))")]
+    PageOutOfRange {
+        /// The 0-based index that was asked for.
+        index: usize,
+        /// How many pages the document actually has.
+        count: usize,
+    },
+    /// The page tree could not be walked, so no page could be named.
+    #[error("the page tree could not be resolved: {0}")]
+    PageTree(#[from] PageTreeError),
+    /// Table 30: a page's `/Rotate` *"shall be a multiple of 90"*.
+    /// Refused rather than rounded — silently turning 45° into 90° would
+    /// be pdfce deciding what the operator meant.
+    #[error("rotation {degrees}° is not a multiple of 90 (ISO 32000-1 Table 30)")]
+    RotationNotMultipleOf90 {
+        /// The value that was rejected.
+        degrees: i32,
+    },
+    /// The object that must carry the edited entry is not a dictionary.
+    ///
+    /// A page object that is not a dictionary, or an `/Info` that points
+    /// at a string, is a malformed file. pdfce refuses rather than
+    /// replacing the value wholesale, which would destroy whatever the
+    /// object actually held.
+    #[error("object {id} is not a dictionary, so /{key} cannot be set on it")]
+    NotADictionary {
+        /// The offending object.
+        id: ObjId,
+        /// The key the edit wanted to write.
+        key: &'static str,
+    },
+    /// No object number is left to allocate (see
+    /// [`Document::next_object_number`]).
+    #[error("the document has no unused object number left")]
+    ObjectNumbersExhausted,
+    /// An object would have to be created, but this file's trailer
+    /// `/Size` is **suppressing** cross-reference entries, and creating
+    /// an object raises `/Size` — which would expose them.
+    ///
+    /// Refused rather than performed, because the exposed objects are
+    /// ones the operator did not touch and may not even parse; the
+    /// document is frequently loadable *only* because the filter is
+    /// hiding them (§7.5.5: an object at or above `/Size` *"shall be
+    /// ignored and defined to be missing"*). See
+    /// [`Document::suppressed_object_count`].
+    ///
+    /// Editing an existing object in such a file is unaffected — only
+    /// creation is refused.
+    #[error(
+        "creating an object would raise /Size and expose {count} cross-reference \
+         entr{} this file's /Size currently hides; edit an existing object instead",
+        if *count == 1 { "y" } else { "ies" }
+    )]
+    ObjectCreationWouldExposeHiddenObjects {
+        /// How many entries would be exposed.
+        count: usize,
+    },
+    /// A **certification signature** with an enforced permissions entry
+    /// forbids this structural change (§12.8.4 Table 258).
+    ///
+    /// Not a warning — a refusal. Table 258 says *"consumer applications
+    /// **shall enforce** the permissions specified by the `P`
+    /// attribute"*, and pdfce is a consumer application, so performing
+    /// the edit and reporting the resulting invalidation would be pdfce
+    /// declining to do something the spec requires of it. Table 254's
+    /// permitted-change lists are closed at every `P` value and contain
+    /// no operation pdfce can perform, so every Pass-3.2 structural
+    /// operation lands here. See [`crate::signature`].
+    ///
+    /// A certification signature **without** the `/Perms` entry is
+    /// detection only; those edits proceed and report
+    /// [`SignatureImpact::Invalidated`] instead.
+    #[error(
+        "this document carries a certification signature whose permissions are enforced          (ISO 32000-1 §12.8.4, /Perms /DocMDP, P={permission}); structural page changes are          not among the changes it permits, so pdfce refuses rather than silently breaking it"
+    )]
+    CertificationForbidsChange {
+        /// The certification's `/P` access permission (Table 254: 1–3).
+        /// **2 when the transform parameters omit `/P`**, which is that
+        /// table's documented default.
+        permission: u8,
+    },
+    /// The operation would leave the document with no pages.
+    ///
+    /// §7.7.3.3 requires a page tree to contain at least one page, and
+    /// Acrobat refuses the same operation for the same reason
+    /// (`core_ops__delete_pages.md`: *"Cannot delete the only remaining
+    /// page"*).
+    #[error("removing {removing} of {total} page(s) would leave the document with none")]
+    WouldRemoveEveryPage {
+        /// How many pages the operation asked to remove.
+        removing: usize,
+        /// How many the document has.
+        total: usize,
+    },
+    /// Annotation authoring was attempted on an **encrypted** document
+    /// (§7.6). Refused **by name** (X10, R27 posture): an annotation's
+    /// `/Contents`/`/T`/`/Subj` strings are encrypted per object, and
+    /// writing them plaintext into an encrypted file would produce a
+    /// document that opens and shows mojibake — a plausible, working,
+    /// wrong file.
+    ///
+    /// Encryption support is Pass 5. The [`crate::writer::encoder`]
+    /// object-encoder seam (R37) already exists, so the eventual fix is a
+    /// plug-in, not a retrofit. Until then, authoring is declined rather
+    /// than attempted.
+    #[error(
+        "this document is encrypted (/Encrypt); pdfce cannot yet author annotations into an \
+         encrypted file (encryption is Pass 5) — authoring is refused rather than corrupting \
+         the file's per-object string encryption"
+    )]
+    DocumentEncrypted,
+    /// A markup annotation was authored with geometry that names no point
+    /// (an empty `/InkList`, an empty vertex list, or no quads). Refused
+    /// rather than emit an empty appearance for a non-empty subtype, which
+    /// would be an invisible annotation the operator could not find.
+    #[error("the annotation has no geometry to draw")]
+    EmptyGeometry,
+    /// A text-bearing annotation's variable-text appearance could not be
+    /// generated (Pass 6.2, §12.7.3.3) — e.g. a symbolic font was chosen
+    /// for a Latin text body. Named, never a silent blank appearance.
+    #[error("the text annotation's appearance could not be generated: {0}")]
+    VariableText(#[from] crate::vartext::VarTextError),
+    /// The target page's `/Annots` is present but is neither an array nor
+    /// an indirect reference to one (§12.5.2: `/Annots` is an array).
+    /// Refused rather than clobber whatever the malformed value really is.
+    #[error(
+        "page {page} has an /Annots entry that is not an array, so an annotation cannot be appended to it"
+    )]
+    AnnotsNotAnArray {
+        /// The offending page object.
+        page: ObjId,
+    },
+    /// A form-fill edit named a field the document's `/AcroForm` does not
+    /// contain (or the document has no `/AcroForm` at all). Refused by name
+    /// rather than silently creating a field — pdfce fills existing fields,
+    /// it does not invent form structure from a fill.
+    #[error("the document has no fillable form field with the fully-qualified name {name:?}")]
+    FieldNotFound {
+        /// The fully-qualified name that was requested.
+        name: String,
+    },
+    /// A fill named a field that cannot hold a fillable value: a
+    /// `ReadOnly` field, a pushbutton, or a signature field.
+    #[error("field {name:?} is not fillable (it is read-only, a pushbutton, or a signature field)")]
+    FieldNotFillable {
+        /// The field's fully-qualified name.
+        name: String,
+    },
+    /// A check-box/radio fill named an appearance state the field's widgets
+    /// do not define (§12.7.4.2.3). Refused rather than writing a `/V`/`/AS`
+    /// no widget can display — that would be an invisible, unselectable
+    /// state.
+    #[error("field {name:?} has no selectable state {state:?} (its widgets define {available:?})")]
+    FieldStateUnknown {
+        /// The field's fully-qualified name.
+        name: String,
+        /// The state that was requested.
+        state: String,
+        /// The on-states the field's widgets actually define (plus `Off`).
+        available: Vec<String>,
+    },
+    /// A fill was attempted on a field locked by a `/FieldMDP` signature
+    /// transform (§12.8.2.4). Refused **by name**: filling a field a
+    /// signature locks would break that signature's field-lock guarantee.
+    ///
+    /// pdfce does not yet resolve *which* fields a `/FieldMDP` transform
+    /// locks, so it refuses fill conservatively whenever any `/FieldMDP`
+    /// transform is present — a fail-clean-safe over-refusal (worst case a
+    /// fillable field is declined, never a locked one silently filled). A
+    /// per-field `/FieldMDP` lock resolution is a named follow-up.
+    #[error(
+        "a /FieldMDP signature transform is present (§12.8.2.4); pdfce refuses form fill \
+         conservatively rather than risk breaking a field-lock signature"
+    )]
+    FieldLockedBySignature,
+    /// A choice fill supplied several values but the field is not
+    /// `MultiSelect` (§12.7.4.4 bit 22). Refused by name rather than
+    /// silently keeping only the first — a data file that lists two values
+    /// for a single-select field is a mismatch the operator should see.
+    #[error(
+        "field {name:?} is a single-select choice but {count} values were supplied \
+         (only a MultiSelect choice may hold several)"
+    )]
+    ChoiceRequiresMultiSelect {
+        /// The field's fully-qualified name.
+        name: String,
+        /// How many values were supplied.
+        count: usize,
+    },
+    /// A choice fill named a value that is not among the field's `/Opt`
+    /// options (by export or display value) and the field is not an editable
+    /// combo (§12.7.4.4 bit 19 `Edit`). Refused by name rather than storing
+    /// a value no option can display.
+    #[error(
+        "field {name:?} has no option {value:?} (its options are {available:?}); \
+         only an editable combo box accepts a free-text value"
+    )]
+    ChoiceValueNotInOptions {
+        /// The field's fully-qualified name.
+        name: String,
+        /// The value that was not found.
+        value: String,
+        /// The export/display values the field's `/Opt` actually offers.
+        available: Vec<String>,
+    },
+    /// A regenerate/flatten/import operation found no `/AcroForm` at all.
+    /// Refused by name rather than silently doing nothing.
+    #[error("the document has no interactive form (/AcroForm)")]
+    NoInteractiveForm,
+    /// An FDF/XFDF data file could not be parsed on import.
+    #[error("the form-data file could not be parsed: {0}")]
+    FormData(#[from] crate::fdf::FdfError),
+    /// A reorder was given something that is not a permutation of the
+    /// document's pages.
+    ///
+    /// Refused rather than repaired: a "reorder" that silently dropped a
+    /// page the caller forgot to list, or duplicated one they listed
+    /// twice, would be a **delete** or a **duplicate** wearing a
+    /// reorder's name.
+    #[error("the new order must list each of the {expected} page(s) exactly once, and lists {got}")]
+    NotAPermutation {
+        /// How many pages the document has.
+        expected: usize,
+        /// How many distinct, in-range indices the caller supplied.
+        got: usize,
+    },
+    /// Search-and-redact could not extract the document's text, so no
+    /// matches could be located (Pass 8).
+    #[error("text could not be extracted for search-and-redact: {0}")]
+    TextExtraction(String),
+}
+
+/// Find every occurrence of `needle` in `hay`, returned as `(start, end)`
+/// byte ranges into `hay`. Case-insensitive matching (when requested) is
+/// ASCII-only and **byte-offset preserving** — it compares windows with
+/// [`u8::eq_ignore_ascii_case`] rather than lower-casing (which would
+/// shift offsets for non-ASCII text and break the glyph mapping).
+fn find_matches(hay: &str, needle: &str, case_insensitive: bool) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let hb = hay.as_bytes();
+    let nb = needle.as_bytes();
+    if nb.is_empty() || nb.len() > hb.len() {
+        return out;
+    }
+    let mut i = 0;
+    while i + nb.len() <= hb.len() {
+        let matched = hb.get(i..i + nb.len()).is_some_and(|w| {
+            if case_insensitive {
+                w.eq_ignore_ascii_case(nb)
+            } else {
+                w == nb
+            }
+        });
+        if matched && hay.is_char_boundary(i) && hay.is_char_boundary(i + nb.len()) {
+            out.push((i, i + nb.len()));
+            i += nb.len();
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Find every match of a simple pattern in `hay`, as `(start, end)` byte
+/// ranges. `#` matches any ASCII digit, `?` matches any single character,
+/// every other pattern character is a literal (ASCII case-insensitive when
+/// requested). Matches are non-overlapping. Character-aligned, so a
+/// multi-byte code point is never split.
+fn find_pattern_matches(hay: &str, pattern: &str, case_insensitive: bool) -> Vec<(usize, usize)> {
+    let pchars: Vec<char> = pattern.chars().collect();
+    let hchars: Vec<(usize, char)> = hay.char_indices().collect();
+    let mut out = Vec::new();
+    if pchars.is_empty() {
+        return out;
+    }
+    let mut i = 0;
+    while i < hchars.len() {
+        let mut k = i;
+        let mut matched = true;
+        for pc in &pchars {
+            let Some(&(_, hc)) = hchars.get(k) else {
+                matched = false;
+                break;
+            };
+            let ok = match pc {
+                '#' => hc.is_ascii_digit(),
+                '?' => true,
+                _ => {
+                    if case_insensitive {
+                        hc.eq_ignore_ascii_case(pc)
+                    } else {
+                        hc == *pc
+                    }
+                }
+            };
+            if !ok {
+                matched = false;
+                break;
+            }
+            k += 1;
+        }
+        if matched {
+            let start = hchars.get(i).map_or(0, |&(o, _)| o);
+            let end = hchars.get(k).map_or(hay.len(), |&(o, _)| o);
+            out.push((start, end));
+            i = k.max(i + 1);
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// A decoded PDF text string, and whether the decode was exact.
+///
+/// Returned by [`EditSession::info_text`] so a front end can show the
+/// value **and** know whether showing it back to the user and saving it
+/// again would be lossless — see [`decode_text_string`] for why that is
+/// currently a real question.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct InfoText {
+    /// The text. Bytes with no known mapping appear as U+FFFD.
+    pub text: String,
+    /// `true` when every byte was decoded with certainty. When `false`,
+    /// re-encoding [`InfoText::text`] would **not** reproduce the
+    /// original bytes, so a front end must not write the field back
+    /// unless the operator actually changed it.
+    pub exact: bool,
+}
+
+/// An open document plus the operator's unsaved edits.
+///
+/// See the module docs for the overlay design and the §11.1 rule it
+/// makes structural. Construct with [`EditSession::new`]; every mutation
+/// goes through a `set_*` method, which is what puts it on the undo
+/// stack.
+///
+/// # Examples
+///
+/// The Pass's headline contract — edit, undo, save, byte-identical:
+///
+/// ```
+/// use pdfce_core::document::Document;
+/// use pdfce_core::edit::EditSession;
+/// use pdfce_core::writer::{SaveOptions, save_incremental};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let bytes: Vec<u8> =
+///     include_bytes!("../../../fixtures/synthetic/hello.pdf").to_vec();
+/// let mut session = EditSession::new(Document::from_bytes(bytes.clone())?);
+///
+/// session.set_page_rotation(0, 90)?;
+/// assert!(session.is_modified());
+///
+/// session.undo();
+/// assert!(!session.is_modified());
+///
+/// let (out, report) = save_incremental(
+///     session.document(),
+///     &session.dirty_set(),
+///     &SaveOptions::identity(),
+/// )?;
+/// assert_eq!(out, bytes);
+/// assert!(report.byte_identical);
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug)]
+pub struct EditSession {
+    /// The base revision. Never mutated; every `ByteSpan` in the
+    /// document indexes into its retained buffer, which is what keeps
+    /// verbatim re-emission available for untouched objects.
+    base: Document,
+    /// Current value of every object an edit has touched. An id absent
+    /// here reads through to `base`.
+    state: BTreeMap<ObjId, Object>,
+    /// Objects the session has **deleted**. Read as absent by
+    /// [`EditSession::value`], emitted as §7.5.4 free entries by the
+    /// writer, and restored by undo.
+    ///
+    /// A set rather than a sentinel in `state`, because `state`'s
+    /// `Option`-shaped absence already means *"read through to the
+    /// base"* — the opposite of what deletion means.
+    deleted: BTreeSet<ObjId>,
+    /// Working copy of the trailer, seeded from the base.
+    trailer: Dict,
+    /// The next object number to hand out for a created object. Cached
+    /// so two creations in one session cannot collide.
+    next_number: Option<u32>,
+    /// Authored stream bytes (R45, Pass 6.1) — the appearance content
+    /// streams of annotations added this session. A created appearance
+    /// [`Stream`](crate::object::Stream) keeps the span model: its
+    /// `data_span` points into this buffer, expressed in the combined
+    /// `base.len() + local` coordinate system (see
+    /// [`EditSession::stage_bytes`] and
+    /// [`crate::writer::DirtySet::combined_source`]). Empty until the
+    /// first annotation is authored, so a session that only performs
+    /// pre-6.1 edits carries no staging and its save path is unchanged.
+    staging: Vec<u8>,
+    undo: Vec<Command>,
+    redo: Vec<Command>,
+}
+
+impl EditSession {
+    /// Open an editing session over `doc`.
+    ///
+    /// Takes the document by value: the session **is** the open
+    /// document from this point on, and a second handle to the same
+    /// `Document` would be a second, stale view of it. Recover it with
+    /// [`EditSession::into_document`].
+    #[must_use]
+    pub fn new(doc: Document) -> Self {
+        let trailer = doc.trailer().clone();
+        let next_number = doc.next_object_number();
+        Self {
+            base: doc,
+            state: BTreeMap::new(),
+            deleted: BTreeSet::new(),
+            trailer,
+            next_number,
+            staging: Vec::new(),
+            undo: Vec::new(),
+            redo: Vec::new(),
+        }
+    }
+
+    /// The base document — the parse result, and the writer's source of
+    /// verbatim bytes.
+    ///
+    /// **This is the base revision, not the edited state.** Reading
+    /// `session.document().get(id)` gives the value as loaded, not as
+    /// edited; use [`EditSession::value`] for the current one. The
+    /// accessor exists because everything that reads *unedited* structure
+    /// — the renderer, the page-tree walk, the writer's span lookups —
+    /// wants exactly this.
+    #[must_use]
+    pub const fn document(&self) -> &Document {
+        &self.base
+    }
+
+    /// Give the base document back, discarding any unsaved edits.
+    #[must_use]
+    pub fn into_document(self) -> Document {
+        self.base
+    }
+
+    /// The current value of `id`: the session's overlay if an edit
+    /// touched it, otherwise the base document's.
+    /// A deleted object reads as absent, exactly as a freed
+    /// cross-reference entry does after the save (§7.5.4, §7.3.10) — so
+    /// the in-memory view and the saved file agree about what exists.
+    #[must_use]
+    pub fn value(&self, id: ObjId) -> Option<&Object> {
+        if self.deleted.contains(&id) {
+            return None;
+        }
+        self.state
+            .get(&id)
+            .or_else(|| self.base.get(id).map(|io: &IndirectObject| &io.value))
+    }
+
+    /// A read view of the document **as the operator currently has it**:
+    /// the base revision with every unsaved edit applied.
+    ///
+    /// This is what makes [`EditSession::pages`] correct after a
+    /// structural edit. Pass 3.1's page list was produced by walking the
+    /// base tree and patching each leaf's rotation, and its own doc
+    /// comment recorded the expiry date on that shortcut: *"the moment an
+    /// edit can add or remove a `Kids` entry, patching a base-derived
+    /// list is not an approximation — it is wrong."* Pass 3.2 is that
+    /// moment.
+    #[must_use]
+    pub const fn graph(&self) -> SessionGraph<'_> {
+        SessionGraph { session: self }
+    }
+
+    // -- the save-time diff ------------------------------------------
+
+    /// Compute the dirty set: **what currently differs from the base
+    /// revision**, right now, at save time.
+    ///
+    /// This is the function §11.1 is about. It never consults the undo
+    /// history; it compares values. An object edited and then undone
+    /// holds a value equal to the base's and is skipped, so it does not
+    /// appear in the update section — which is what makes
+    /// *edit → undo → save* produce a byte-identical file.
+    ///
+    /// Equality uses `Object`'s derived `PartialEq`, and that is correct
+    /// **here specifically**: both sides come from the same retained
+    /// buffer, so a `Stream`'s `ByteSpan` is comparable rather than
+    /// misleading (see [`crate::object::equivalent_across_buffers`] for
+    /// the cross-buffer case, which this is not).
+    #[must_use]
+    pub fn dirty_set(&self) -> DirtySet {
+        let mut dirty = DirtySet::empty();
+        for (id, value) in &self.state {
+            match self.base.get(*id) {
+                // Net-zero against the base: NOT dirty. The one line
+                // this whole module exists to make unavoidable.
+                Some(io) if io.value == *value => {}
+                _ => dirty.replace(*id, value.clone()),
+            }
+        }
+        // Deletions are a diff against the base too: an id the base
+        // never defined cannot be "deleted" into it, and emitting a free
+        // entry for one would put a cross-reference entry in the update
+        // section for an object §7.5.6 says has not changed.
+        for id in &self.deleted {
+            if self.base.get(*id).is_some() {
+                dirty.delete(*id);
+            }
+        }
+        for (key, value) in self.trailer.iter() {
+            if self.base.trailer().get(key.as_bytes()) != Some(value) {
+                dirty.patch_trailer(key.clone(), value.clone());
+            }
+        }
+        // R45: hand the writer the authored-stream staging buffer so a
+        // replacement value that is an authored appearance Stream resolves
+        // its span (which points past the base into this buffer). Cloned
+        // because the DirtySet is the writer's owned input; empty for any
+        // session that authored nothing, which keeps the pre-6.1 save path
+        // byte-for-byte unchanged.
+        if !self.staging.is_empty() {
+            dirty.set_staging(self.staging.clone());
+        }
+        dirty
+    }
+
+    /// The buffer this session's stream spans index into (R45): the base
+    /// file alone when nothing has been authored, or `base ++ staging`
+    /// when the session carries authored appearance streams.
+    ///
+    /// This is what a [`DocumentView`](crate::pageops::DocumentView) built
+    /// over an editing session must use as its `bytes`, so that
+    /// extract/merge/split reading an authored appearance's `data_span`
+    /// (which points past the base) resolves it — the X5 hazard the
+    /// `DocumentView` assertion was written to catch. Returns a borrowed
+    /// slice (zero-copy) in the common no-authoring case.
+    #[must_use]
+    pub fn authored_source(&self) -> std::borrow::Cow<'_, [u8]> {
+        if self.staging.is_empty() {
+            std::borrow::Cow::Borrowed(self.base.bytes())
+        } else {
+            let base = self.base.bytes();
+            let mut combined = Vec::with_capacity(base.len() + self.staging.len());
+            combined.extend_from_slice(base);
+            combined.extend_from_slice(&self.staging);
+            std::borrow::Cow::Owned(combined)
+        }
+    }
+
+    /// Whether anything currently differs from the base revision.
+    ///
+    /// Asks the same question [`EditSession::dirty_set`] does, so a
+    /// "unsaved changes" indicator can never disagree with what a save
+    /// would actually write. In particular an edit-then-undo reports
+    /// `false`.
+    #[must_use]
+    pub fn is_modified(&self) -> bool {
+        !self.dirty_set().is_empty()
+    }
+
+    // -- undo / redo --------------------------------------------------
+
+    /// Whether there is a command to undo.
+    #[must_use]
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+
+    /// Whether there is a command to redo.
+    #[must_use]
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
+    }
+
+    /// What [`EditSession::undo`] would undo, without doing it — for a
+    /// front end that labels its Undo control with the operation name.
+    #[must_use]
+    pub fn undo_kind(&self) -> Option<CommandKind> {
+        self.undo.last().map(|c| c.kind)
+    }
+
+    /// What [`EditSession::redo`] would redo, without doing it.
+    #[must_use]
+    pub fn redo_kind(&self) -> Option<CommandKind> {
+        self.redo.last().map(|c| c.kind)
+    }
+
+    /// Undo the most recent command, returning what was undone.
+    ///
+    /// Restores each write's recorded `before` value; a `None` before
+    /// means the entry is removed from the overlay, which either
+    /// restores read-through to the base or — for a created object —
+    /// makes it not exist again.
+    pub fn undo(&mut self) -> Option<CommandKind> {
+        let command = self.undo.pop()?;
+        for write in &command.objects {
+            Self::write_state(&mut self.state, write.id, write.before.clone());
+        }
+        for removal in &command.removals {
+            Self::write_deleted(&mut self.deleted, removal.id, removal.was_deleted);
+        }
+        if let Some((before, _)) = &command.trailer {
+            self.trailer = before.clone();
+        }
+        let kind = command.kind;
+        self.redo.push(command);
+        Some(kind)
+    }
+
+    /// Redo the most recently undone command, returning what was redone.
+    pub fn redo(&mut self) -> Option<CommandKind> {
+        let command = self.redo.pop()?;
+        for write in &command.objects {
+            Self::write_state(&mut self.state, write.id, write.after.clone());
+        }
+        for removal in &command.removals {
+            Self::write_deleted(&mut self.deleted, removal.id, removal.is_deleted);
+        }
+        if let Some((_, after)) = &command.trailer {
+            self.trailer = after.clone();
+        }
+        let kind = command.kind;
+        self.undo.push(command);
+        Some(kind)
+    }
+
+    /// How many commands are currently undoable (bounded by
+    /// [`MAX_UNDO_DEPTH`]).
+    #[must_use]
+    pub fn undo_depth(&self) -> usize {
+        self.undo.len()
+    }
+
+    // -- edits ---------------------------------------------------------
+
+    /// Set or clear one document-information field (§14.3.3).
+    ///
+    /// `Some(text)` sets it; `None` removes the entry entirely (see
+    /// [`Dict::remove`] for why removal rather than an explicit `null`).
+    /// Text is encoded by [`encode_text_string`].
+    ///
+    /// ## Creating `/Info` when the file has none
+    ///
+    /// A file with no document information dictionary gets one, together
+    /// with the trailer's `/Info` reference (Table 15: *"shall be an
+    /// indirect reference"*). That is **not** in tension with R41's
+    /// no-fingerprint rule, which
+    /// [`ProducerPolicy::Set`](crate::writer::ProducerPolicy::Set)
+    /// deliberately narrows itself to avoid: R41 forbids pdfce writing
+    /// *its own* identity into a file unasked. An operator who types a
+    /// title has asked, by name, for exactly this dictionary to exist.
+    /// The distinction is authorship, not novelty.
+    ///
+    /// ## No-ops do not reach the undo stack
+    ///
+    /// Setting a field to the value it already has, or clearing an
+    /// absent one, changes nothing — so no command is recorded and the
+    /// redo stack is left alone. An Undo control that steps through
+    /// entries which visibly do nothing is worse than useless.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::NotADictionary`] if `/Info` points at a non-dictionary;
+    /// [`EditError::ObjectNumbersExhausted`] if a new object is needed
+    /// and no number is free.
+    pub fn set_info_field(
+        &mut self,
+        field: InfoField,
+        value: Option<&str>,
+    ) -> Result<(), EditError> {
+        let kind = match value {
+            Some(_) => CommandKind::SetInfoField(field),
+            None => CommandKind::ClearInfoField(field),
+        };
+        let key = Name::from(field.key());
+
+        match self.info_id() {
+            // The document already has an /Info dictionary: edit it.
+            Some(id) => {
+                let Some(Object::Dict(current)) = self.value(id) else {
+                    // No /Info dictionary value to edit. If the operator
+                    // is CLEARING a field on a malformed /Info, doing
+                    // nothing is right; setting one must refuse rather
+                    // than overwrite whatever is really there.
+                    if value.is_none() {
+                        return Ok(());
+                    }
+                    return Err(EditError::NotADictionary {
+                        id,
+                        key: field_key_str(field),
+                    });
+                };
+                let mut updated = current.clone();
+                match value {
+                    Some(text) => {
+                        updated.insert(key, Object::String(encode_text_string(text)));
+                    }
+                    None => {
+                        updated.remove(field.key());
+                    }
+                }
+                if updated == *current {
+                    return Ok(()); // no-op
+                }
+                let before = self.state.get(&id).cloned();
+                self.commit(Command {
+                    kind,
+                    objects: vec![ObjectWrite {
+                        id,
+                        before,
+                        after: Some(Object::Dict(updated)),
+                    }],
+                    removals: Vec::new(),
+                    trailer: None,
+                });
+                Ok(())
+            }
+            // No /Info at all. Clearing a field is already true; setting
+            // one creates the dictionary and the trailer reference in a
+            // single undoable command.
+            None => {
+                let Some(text) = value else {
+                    return Ok(()); // no-op
+                };
+                // Creating an object raises `/Size`, which exposes every
+                // entry this file's `/Size` is suppressing. Refuse by
+                // name rather than resurrect objects nobody touched —
+                // see `Document::suppressed_object_count`.
+                let suppressed = self.base.suppressed_object_count();
+                if suppressed > 0 {
+                    return Err(EditError::ObjectCreationWouldExposeHiddenObjects {
+                        count: suppressed,
+                    });
+                }
+                let id = ObjId::new(
+                    self.next_number.ok_or(EditError::ObjectNumbersExhausted)?,
+                    0,
+                );
+                let mut info = Dict::new();
+                info.insert(key, Object::String(encode_text_string(text)));
+
+                let trailer_before = self.trailer.clone();
+                let mut trailer_after = self.trailer.clone();
+                trailer_after.insert(Name::from(b"Info"), Object::Reference(id));
+
+                self.next_number = self.next_number.and_then(|n| n.checked_add(1));
+                self.commit(Command {
+                    kind,
+                    objects: vec![ObjectWrite {
+                        id,
+                        before: None, // did not exist
+                        after: Some(Object::Dict(info)),
+                    }],
+                    removals: Vec::new(),
+                    trailer: Some((trailer_before, trailer_after)),
+                });
+                Ok(())
+            }
+        }
+    }
+
+    /// The current raw bytes of a document-information field, or `None`
+    /// if it is absent. Reflects unsaved edits.
+    #[must_use]
+    pub fn info_bytes(&self, field: InfoField) -> Option<Vec<u8>> {
+        let id = self.info_id()?;
+        let Some(Object::Dict(dict)) = self.value(id) else {
+            return None;
+        };
+        match dict.get(field.key()) {
+            Some(Object::String(bytes)) => Some(bytes.clone()),
+            _ => None,
+        }
+    }
+
+    /// The current value of a document-information field as displayable
+    /// text, or `None` if it is absent. Reflects unsaved edits.
+    ///
+    /// Check [`InfoText::exact`] before writing the text back: a
+    /// non-exact decode means re-encoding would change the bytes, so a
+    /// front end must only save the field if the operator actually edited
+    /// it. See [`decode_text_string`].
+    #[must_use]
+    pub fn info_text(&self, field: InfoField) -> Option<InfoText> {
+        self.info_bytes(field).as_deref().map(decode_text_string)
+    }
+
+    /// Set one page's `/Rotate` to an absolute value (Table 30).
+    ///
+    /// `degrees` must be a multiple of 90; negative and ≥360 values are
+    /// accepted and normalized with a **positive** modulo, because Table
+    /// 30 says only *"a multiple of 90"* and `-90` is one (the spec RAG
+    /// records this explicitly as a real-world shape).
+    ///
+    /// The entry is written on the **page object itself**, which
+    /// overrides any value inherited from an ancestor `Pages` node
+    /// (§7.7.3.4). That is both the correct semantics and the
+    /// minimal-diff choice: rotating one page must not rewrite an
+    /// ancestor node that governs its siblings.
+    ///
+    /// ## Rotating back to where you started writes nothing
+    ///
+    /// When the requested rotation equals the page's **base** effective
+    /// rotation, the page object's own `/Rotate` is restored to exactly
+    /// what the base file carried — present, absent, or oddly spelled —
+    /// rather than an explicit normalized entry being written. Three
+    /// things follow, and all three matter:
+    ///
+    /// - Four quarter-turns net to nothing, so the document reports
+    ///   itself unmodified and a save is byte-identical. That is the same
+    ///   §11.1 net-zero rule undo relies on, reached without undo.
+    /// - A page whose 90° is *inherited* from an ancestor and is set to
+    ///   90° does not gain a redundant explicit entry. Writing one would
+    ///   be modifying an object pdfce was not asked to modify — §5's
+    ///   invariant, not a nicety.
+    /// - A base `/Rotate 450` set to 90° keeps its `450`. It means the
+    ///   same thing (Table 30 constrains only "a multiple of 90"), and
+    ///   rewriting it to `90` would be exactly the silent normalization
+    ///   R33 forbids.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::RotationNotMultipleOf90`], [`EditError::PageOutOfRange`],
+    /// [`EditError::PageTree`], or [`EditError::NotADictionary`].
+    pub fn set_page_rotation(&mut self, page_index: usize, degrees: i32) -> Result<(), EditError> {
+        let write = self.rotation_write(page_index, degrees)?;
+        let Some((write, normalized)) = write else {
+            return Ok(()); // no-op
+        };
+        self.commit(Command {
+            kind: CommandKind::SetPageRotation {
+                page_index,
+                degrees: normalized,
+            },
+            objects: vec![write],
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(())
+    }
+
+    /// Work out the single object write that setting `page_index`'s
+    /// rotation to `degrees` requires, or `None` when it requires none.
+    ///
+    /// Extracted from [`EditSession::set_page_rotation`] so that
+    /// [`EditSession::rotate_pages`] can build **one** command holding N
+    /// writes rather than pushing N commands — §11.3's rule that one
+    /// operator gesture is one undo entry.
+    ///
+    /// ## The three-way choice, and why the order matters
+    ///
+    /// 1. **The base file's own spelling wins if it means the same
+    ///    thing.** A base `/Rotate 450` asked for 90° keeps its `450`:
+    ///    Table 30 constrains only *"a multiple of 90"*, the two mean the
+    ///    same, and rewriting one to the other is exactly the silent
+    ///    normalization R33 forbids. Looked up **physically** rather than
+    ///    through [`Dict::get`], which collapses a `null` value to absent
+    ///    (§7.3.7) — a base `/Rotate null` must be restored as `null`, or
+    ///    "restore" is still a byte change.
+    /// 2. **Otherwise, if the target equals what the page would
+    ///    *inherit*, the page's own entry is removed** rather than an
+    ///    explicit one written. Writing a redundant `/Rotate 90` onto a
+    ///    page whose ancestor already says 90 would be modifying an
+    ///    object pdfce was not asked to modify (§5). The inherited value
+    ///    is read from the **current** slot walk, not the base one, so
+    ///    this stays correct after a reorder has moved the page under a
+    ///    different ancestor.
+    /// 3. **Otherwise** an explicit normalized entry is written.
+    ///
+    /// Rule 1 before rule 2 is what makes four quarter-turns net to
+    /// nothing on a page that had an explicit entry, *and* leaves an
+    /// unusual-but-legal spelling alone.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::RotationNotMultipleOf90`], [`EditError::PageOutOfRange`],
+    /// [`EditError::PageTree`], or [`EditError::NotADictionary`].
+    fn rotation_write(
+        &self,
+        page_index: usize,
+        degrees: i32,
+    ) -> Result<Option<(ObjectWrite, u16)>, EditError> {
+        if degrees % 90 != 0 {
+            return Err(EditError::RotationNotMultipleOf90 { degrees });
+        }
+        let normalized = normalize_rotation(i64::from(degrees));
+
+        let slots = self.page_slots()?;
+        let count = slots.len();
+        let slot = slots.get(page_index).ok_or(EditError::PageOutOfRange {
+            index: page_index,
+            count,
+        })?;
+        let id = slot.id;
+        // What this page would show with no entry of its own — from the
+        // CURRENT tree, so a page moved under a different ancestor by a
+        // reorder is judged against its new ancestry.
+        let inherited = slot
+            .inherited
+            .rotate
+            .as_ref()
+            .map(|value| self.graph().resolve(value).clone())
+            .and_then(|value| value.as_int())
+            .map_or(0, normalize_rotation);
+
+        let Some(Object::Dict(current)) = self.value(id) else {
+            return Err(EditError::NotADictionary { id, key: "Rotate" });
+        };
+        let mut updated = current.clone();
+
+        // Rule 1: the base file's physical entry, if it means the target.
+        let base_own = self
+            .base
+            .get(id)
+            .and_then(|io| io.value.as_dict())
+            .and_then(|d| d.0.iter().find(|(k, _)| k.as_bytes() == b"Rotate"))
+            .map(|(_, value)| value.clone());
+        let base_own_means_target = base_own
+            .as_ref()
+            .and_then(Object::as_int)
+            .is_some_and(|v| normalize_rotation(v) == normalized);
+
+        if let (true, Some(original)) = (base_own_means_target, base_own.as_ref()) {
+            updated.insert(Name::from(b"Rotate"), original.clone());
+        } else if normalized == inherited {
+            updated.remove(b"Rotate");
+        } else {
+            updated.insert(
+                Name::from(b"Rotate"),
+                Object::Integer(i64::from(normalized)),
+            );
+        }
+
+        if updated == *current {
+            return Ok(None); // no-op — nothing reaches the undo stack
+        }
+        Ok(Some((
+            ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(Object::Dict(updated)),
+            },
+            normalized,
+        )))
+    }
+
+    /// Rotate one page **relative to its current effective rotation**.
+    ///
+    /// The turn-it-90°-clockwise operation a toolbar button performs.
+    /// "Effective" matters: the base value may be inherited from an
+    /// ancestor `Pages` node rather than written on the page, and a
+    /// relative rotation computed from a missing entry (i.e. from 0)
+    /// would visibly jump.
+    ///
+    /// # Errors
+    ///
+    /// As [`EditSession::set_page_rotation`].
+    pub fn rotate_page_by(&mut self, page_index: usize, delta: i32) -> Result<(), EditError> {
+        if delta % 90 != 0 {
+            return Err(EditError::RotationNotMultipleOf90 { degrees: delta });
+        }
+        let pages = self.pages()?;
+        let count = pages.len();
+        let current = pages
+            .get(page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count,
+            })?
+            .rotate;
+        let target = i64::from(current) + i64::from(delta);
+        self.set_page_rotation(page_index, i32::from(normalize_rotation(target)))
+    }
+
+    /// The document's pages in document order, **as the operator
+    /// currently has them** — every unsaved structural and rotation edit
+    /// applied.
+    ///
+    /// Pass 3.1 produced this by walking the *base* page tree and
+    /// patching each leaf's rotation, and recorded the expiry date on
+    /// that shortcut in its own doc comment: *"Pass 3.2 must replace this
+    /// with an overlay-aware walk. The moment an edit can add or remove a
+    /// `Kids` entry, patching a base-derived list is not an
+    /// approximation — it is wrong."* It now walks
+    /// [`EditSession::graph`], which is the overlay, through the same
+    /// [`page_tree::pages_in`] every other consumer uses. There is one
+    /// page-tree walk in pdfce, and this is a caller of it.
+    ///
+    /// # Errors
+    ///
+    /// [`PageTreeError`] — structural damage or a guard violation in the
+    /// page tree as currently edited.
+    pub fn pages(&self) -> Result<Vec<Page>, PageTreeError> {
+        page_tree::pages_in(&self.graph())
+    }
+
+    /// The document's pages as **structural slots** — parent node, index
+    /// within it, ancestor chain, inherited raw attributes.
+    ///
+    /// What every structural operation actually needs, and deliberately
+    /// separate from [`EditSession::pages`]: resolving a page's
+    /// appearance can fail on a damaged file
+    /// ([`PageTreeError::MissingRequired`]), and a page with no
+    /// `MediaBox` anywhere is still a page that can be deleted.
+    ///
+    /// # Errors
+    ///
+    /// [`PageTreeError`] — structural damage or a guard violation.
+    pub fn page_slots(&self) -> Result<Vec<page_tree::PageSlot>, PageTreeError> {
+        page_tree::page_slots(&self.graph())
+    }
+
+    // -- saving ---------------------------------------------------------
+
+    /// Save an incremental update (§7.5.6) and return the bytes.
+    ///
+    /// pdfce's default save mode. The dirty set is computed here, at save
+    /// time, from the current state — which is the whole point (module
+    /// docs).
+    ///
+    /// ⚠️ Incremental save **structurally preserves superseded content**
+    /// (`ARCHITECTURE.md` §5.2): the old bytes of every replaced object
+    /// stay in the file by construction. Any operation whose contract is
+    /// *removal* must use [`EditSession::to_full_bytes`] instead — and
+    /// must read that method's note about compressed objects.
+    ///
+    /// # Errors
+    ///
+    /// [`WriteError`].
+    pub fn to_incremental_bytes(
+        &self,
+        options: &SaveOptions,
+    ) -> Result<(Vec<u8>, SaveReport), WriteError> {
+        crate::writer::save_incremental(&self.base, &self.dirty_set(), options)
+    }
+
+    /// Rewrite the whole document as one revision, applying the current
+    /// edits, and return the bytes.
+    ///
+    /// ⚠️ Destroys every existing digital signature (§12.8.1), and does
+    /// **not** by itself remove the superseded value of a compressed
+    /// object that an edit promoted out of its object stream — see
+    /// `crate::writer::save`'s "Promotion, and the stale copy it leaves".
+    ///
+    /// # Errors
+    ///
+    /// [`WriteError`], notably a refusal for a hybrid-reference input.
+    pub fn to_full_bytes(
+        &self,
+        options: &SaveOptions,
+    ) -> Result<(Vec<u8>, SaveReport), WriteError> {
+        crate::writer::save_full(&self.base, &self.dirty_set(), options)
+    }
+
+    // -- in-place page-text editing (Pass 14.3 §0.2) ------------------
+
+    /// Apply one in-place page-text REPLACE edit as a single undo-able
+    /// command — the session-integrated sibling of the free function
+    /// [`text_edit::edit_text`](crate::text_edit::edit_text).
+    ///
+    /// It reuses the EXACT locate / re-encode / relayout / font-on-edit-gate
+    /// surgery (through the shared
+    /// [`plan_edit`](crate::text_edit::edit::plan_edit)) but applies the
+    /// result to THIS session's in-memory content-stream object as one
+    /// command on the undo stack — returning the same
+    /// [`EditReport`](crate::text_edit::EditReport) the free function
+    /// produces, NOT already-saved bytes. `to_incremental_bytes` is called
+    /// later, at real Save, exactly like every other command.
+    ///
+    /// ## Why both this and the free function exist
+    ///
+    /// The free function returns already-incrementally-saved bytes — the
+    /// right shape for `pdfce-cli edit-text` (one-shot batch), the WRONG
+    /// shape for an interactive GUI that must let the operator make five
+    /// edits and Ctrl+Z them one at a time. Reloading the whole document from
+    /// the saved bytes after every accepted keystroke would force a full
+    /// save + reparse + re-extract per edit and splice two structurally
+    /// different undo-entry kinds together (Pass 14.3 UI spec §0.2). This
+    /// method is the addition that avoids that; the free function is
+    /// unchanged for the CLI.
+    ///
+    /// ## Multi-edit accumulation + minimal-diff (R32/R46)
+    ///
+    /// The surgery walks the page's CURRENT content: the session's own edited
+    /// raw stream when a prior text/format edit already rewrote this content
+    /// object this session (read back from the staging buffer — see
+    /// [`Self::current_page_content`]), else the base document's decoded
+    /// content. So five sequential edits compose correctly, and each is one
+    /// undo-stack entry whose `before` restores the exact prior
+    /// content-object value (a prior edit's raw stream, or
+    /// read-through-to-base on the first). Saved output stays minimal-diff:
+    /// only the content stream object (+ any collapsed extras) differs from
+    /// the base — everything else is byte-verbatim (incremental append),
+    /// identical to the free function's output for a text-edit-only session.
+    ///
+    /// # Errors
+    ///
+    /// The same [`text_edit::EditError`](crate::text_edit::EditError) the free
+    /// function raises: a named font-on-edit refusal, no match, an
+    /// unsupported run, an encrypted document, or a content-parse failure. A
+    /// refusal happens BEFORE any mutation — the session is left untouched
+    /// (rule 4), because `plan_edit` returns `Err` before any `commit`.
+    pub fn edit_text(
+        &mut self,
+        req: &crate::text_edit::EditRequest,
+        opts: &crate::text_edit::EditOptions,
+    ) -> Result<crate::text_edit::EditReport, crate::text_edit::EditError> {
+        use crate::text_edit::EditError as TeError;
+        use crate::text_edit::edit::plan_edit;
+
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(TeError::Encrypted);
+        }
+        let pages = page_tree::pages(&self.base)?;
+        let page = pages
+            .get(req.page_index)
+            .ok_or(TeError::PageIndex(req.page_index))?;
+        let content_id = *page
+            .contents
+            .first()
+            .ok_or_else(|| TeError::Unsupported("the page has no /Contents to edit".to_owned()))?;
+
+        let stream = self
+            .current_page_content(content_id, page)
+            .map_err(TeError::Content)?;
+        let plan = plan_edit(&self.base, page, &stream, req, opts)?;
+
+        let command =
+            self.text_edit_command(CommandKind::EditText, content_id, page, plan.new_content);
+        self.commit(command);
+        Ok(plan.report)
+    }
+
+    /// Apply one in-place page-text FORMAT edit (size / fill-colour model /
+    /// font family) as a single undo-able command — the session-integrated
+    /// sibling of [`text_edit::set_format`](crate::text_edit::set_format),
+    /// reusing the shared [`plan_format`](crate::text_edit::format::plan_format)
+    /// surgery. See [`Self::edit_text`] for the accumulation / minimal-diff /
+    /// why-both-exist rationale (identical, one class of command up).
+    ///
+    /// # Errors
+    ///
+    /// The same [`text_edit::FormatError`](crate::text_edit::FormatError) the
+    /// free function raises: a no-op request, an invalid colour, a missing
+    /// target font, a named coverage/classification refusal, no match, an
+    /// unsupported run, an encrypted document, or a content-parse failure.
+    /// A refusal happens BEFORE any mutation (rule 4).
+    pub fn format_text(
+        &mut self,
+        req: &crate::text_edit::FormatRequest,
+        opts: &crate::text_edit::FormatOptions,
+    ) -> Result<crate::text_edit::FormatReport, crate::text_edit::FormatError> {
+        use crate::text_edit::FormatError as FmtError;
+        use crate::text_edit::format::plan_format;
+
+        // The pre-checks `plan_format` assumes (mirrors the free `set_format`):
+        // a no-op request and encryption are refused before any surgery. The
+        // request's operation fields are public, so no private accessor is
+        // needed.
+        if req.set_size.is_none() && req.set_fill.is_none() && req.set_font.is_none() {
+            return Err(FmtError::NoOp);
+        }
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(FmtError::Encrypted);
+        }
+        let pages = page_tree::pages(&self.base)?;
+        let page = pages
+            .get(req.page_index)
+            .ok_or(FmtError::PageIndex(req.page_index))?;
+        let content_id = *page
+            .contents
+            .first()
+            .ok_or_else(|| FmtError::Unsupported("the page has no /Contents to edit".to_owned()))?;
+
+        let stream = self
+            .current_page_content(content_id, page)
+            .map_err(FmtError::Content)?;
+        let plan = plan_format(&self.base, page, &stream, req, opts)?;
+
+        let command =
+            self.text_edit_command(CommandKind::FormatText, content_id, page, plan.new_content);
+        self.commit(command);
+        Ok(plan.report)
+    }
+
+    /// Apply one within-block reflow (Pass 15.1) as a single undo-able
+    /// command — the session-integrated sibling of the free-function
+    /// [`apply_reflow`](crate::text_edit::apply_reflow), reusing the shared
+    /// [`plan_reflow_from_doc`](crate::text_edit::reflow_apply::plan_reflow_from_doc)
+    /// surgery. The block `block_index` on page `page_index` is re-wrapped
+    /// under `req` (width/alignment/leading, all optional) and its own
+    /// content-stream object re-emitted at the new origins/breaks; the change
+    /// lands as ONE [`CommandKind::ReflowBlock`] whose `before` restores the
+    /// byte-identical pre-reflow stream on undo (decision 015 §3.4/R75).
+    ///
+    /// The reflow is planned against the **base** document's content (it
+    /// extracts + recognises the page fresh, needing provenance the staging
+    /// buffer does not carry), so — unlike the accumulating
+    /// [`Self::edit_text`]/[`Self::format_text`] — it refuses when the page's
+    /// content object was **already** rewritten this session (a prior text or
+    /// format edit): the base-relative byte offsets would not match the staged
+    /// content. Save and reopen to reflow after an in-session edit of the same
+    /// page. This is a clean, named refusal, never a silent mis-splice
+    /// (rule 4).
+    ///
+    /// # Errors
+    ///
+    /// The same [`ReflowApplyError`](crate::text_edit::ReflowApplyError) the
+    /// free function raises — a named composite refusal, a
+    /// rotated/shared/non-contiguous block, a missing-provenance or
+    /// bad-index/width error — plus an [`ReflowApplyError::Unsupported`] when
+    /// the page's content was already edited this session. A refusal happens
+    /// BEFORE any mutation (rule 4): the session is left untouched.
+    pub fn reflow_block(
+        &mut self,
+        page_index: usize,
+        block_index: usize,
+        req: &crate::text_edit::ReflowRequest,
+    ) -> Result<crate::text_edit::ReflowApplyReport, crate::text_edit::ReflowApplyError> {
+        use crate::text_edit::ReflowApplyError as RErr;
+        use crate::text_edit::reflow_apply::plan_reflow_from_doc;
+
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(RErr::Encrypted);
+        }
+        let pages = page_tree::pages(&self.base)?;
+        let page = pages.get(page_index).ok_or(RErr::PageIndex(page_index))?;
+        let content_id = *page
+            .contents
+            .first()
+            .ok_or_else(|| RErr::Unsupported("the page has no /Contents to reflow".to_owned()))?;
+
+        // Reflow is planned from base content; refuse if this content object
+        // was already rewritten this session (see the method docs).
+        if self.state.contains_key(&content_id) {
+            return Err(RErr::Unsupported(
+                "the page's content was already edited this session; reflow is planned against \
+                 the base content, so save and reopen before reflowing this page"
+                    .to_owned(),
+            ));
+        }
+
+        let plan = plan_reflow_from_doc(&self.base, page_index, block_index, req)?;
+        let kind = CommandKind::ReflowBlock {
+            lines_before: plan.report.lines_before,
+            lines_after: plan.report.lines_after,
+        };
+        let command = self.text_edit_command(kind, content_id, page, plan.new_content);
+        self.commit(command);
+        Ok(plan.report)
+    }
+
+    /// Add a NEW single-line text run at operator coordinates as one undo-able
+    /// command (Pass 16.0 / FF-D) — the session-integrated sibling of the
+    /// free-function [`add_text`](crate::text_edit::add_text), reusing the
+    /// shared [`plan_add_text`](crate::text_edit::addtext::plan_add_text)
+    /// planner so the two never drift.
+    ///
+    /// Synthesizes a fresh `BT…ET` run and APPENDS it as a new content stream
+    /// in the page `/Contents` array (§7.7.3.3), leaving every original content
+    /// stream **byte-identical** (R32/R46); adds one Standard-14 font dict to
+    /// the page `/Resources` `/Font` (no embedding, R79; the §7.7.3.4
+    /// inheritance trap handled by the planner). It is genuine page content —
+    /// editable afterward by [`Self::edit_text`] / [`Self::format_text`] —
+    /// **never** a FreeText annotation (R78).
+    ///
+    /// Lands as ONE [`CommandKind::AddText`]: the two created objects
+    /// (before `None`) and the modified page dict (before = the current value)
+    /// are one undo entry, so undo removes the created objects and restores the
+    /// byte-identical original page dict. The planner reads the SESSION-current
+    /// page dict (via [`Self::graph`]), so an `/Annots` a prior op added to the
+    /// same page is preserved.
+    ///
+    /// # Errors
+    ///
+    /// The same [`AddTextError`](crate::text_edit::AddTextError) the free
+    /// function raises — a named font refusal (R71), an out-of-range page,
+    /// empty text, an invalid size, encryption, or an object-creation/`/Size`
+    /// conflict. A refusal happens BEFORE any mutation (rule 4): the session is
+    /// left untouched, because [`plan_add_text`](crate::text_edit::addtext::plan_add_text)
+    /// returns `Err` before any `commit`.
+    pub fn add_text(
+        &mut self,
+        req: &crate::text_edit::AddTextRequest,
+    ) -> Result<crate::text_edit::AddTextReport, crate::text_edit::AddTextError> {
+        use crate::text_edit::AddTextError as AtError;
+        use crate::text_edit::addtext::plan_add_text;
+        use crate::text_edit::edit::make_raw_stream;
+
+        // Guards mirror the free function and `add_markup`, in the SAME order
+        // (encryption → certification → /Size-hides-objects): each is a named
+        // refusal made before any work.
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(AtError::Encrypted);
+        }
+        // An enforced-DocMDP certification forbids adding page content
+        // (ISO 32000-1 §12.8.4 Table 258). This is the add-text mirror of the
+        // `self.check_certification()?` guard `EditSession::add_markup` runs
+        // before authoring an annotation — the SAME census machinery, placed
+        // in the SAME position relative to the encryption/suppressed guards.
+        // Delegating to the shared `refuse_if_certification_forbids` (which the
+        // free `add_text` also calls) keeps the GUI and CLI paths in lockstep,
+        // so neither operator-facing entry can add page content to an
+        // enforced-certified document unguarded.
+        crate::text_edit::addtext::refuse_if_certification_forbids(&self.graph())?;
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(AtError::HiddenObjects { count: suppressed });
+        }
+
+        // Plan against the SESSION overlay (session-aware page dict + resources),
+        // then drop the immutable graph borrow before mutating.
+        let prep = {
+            let pages = self.pages()?;
+            let page = pages
+                .get(req.page_index)
+                .ok_or(AtError::PageIndex(req.page_index))?;
+            plan_add_text(req, page, &self.graph())?
+        };
+
+        let content_num = self
+            .alloc_number()
+            .map_err(|_| AtError::ObjectNumbersExhausted)?;
+        let font_num = self
+            .alloc_number()
+            .map_err(|_| AtError::ObjectNumbersExhausted)?;
+        let content_id = ObjId::new(content_num, 0);
+        let font_id = ObjId::new(font_num, 0);
+
+        let new_page = prep.build_page_dict(content_id, font_id);
+        let content_len = prep.content_data.len();
+        let span = self.stage_bytes(&prep.content_data);
+        let content_stream = make_raw_stream(span, content_len);
+        let page_before = self.value(prep.page_id).cloned();
+
+        let objects = vec![
+            ObjectWrite {
+                id: content_id,
+                before: None,
+                after: Some(content_stream),
+            },
+            ObjectWrite {
+                id: font_id,
+                before: None,
+                after: Some(prep.font_dict.clone()),
+            },
+            ObjectWrite {
+                id: prep.page_id,
+                before: page_before,
+                after: Some(Object::Dict(new_page)),
+            },
+        ];
+        self.commit(Command {
+            kind: CommandKind::AddText,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        let mut report = prep.report;
+        report.content_object = content_num;
+        report.font_object = font_num;
+        Ok(report)
+    }
+
+    /// The page's CURRENT decoded content, tokenized: the session's own
+    /// edited raw stream (read back from the staging buffer) when a prior
+    /// text/format edit already rewrote `content_id` this session, else the
+    /// base document's decoded page content.
+    ///
+    /// This is what makes sequential edits ACCUMULATE (Pass 14.3 §0.2 /
+    /// UI spec §2.1's post-edit rebuild): a second edit must compose on top
+    /// of the first, not re-splice the base. A page's first `/Contents`
+    /// object is touched in `state` ONLY by [`Self::edit_text`] /
+    /// [`Self::format_text`] (no other `EditSession` operation rewrites a page
+    /// content stream), so `state.contains_key(content_id)` reliably means "a
+    /// prior text edit this session," and its overlay value is the raw
+    /// (unfiltered) stream those methods staged — read directly, no decode.
+    fn current_page_content(
+        &self,
+        content_id: ObjId,
+        page: &Page,
+    ) -> Result<crate::content::ContentStream, crate::content::ContentError> {
+        use crate::content::{ContentError, ContentStream};
+        if let Some(Object::Stream(s)) = self.state.get(&content_id) {
+            // A prior edit rewrote this content object into a raw stream whose
+            // data lives in the staging buffer; walk THAT.
+            let span = s.data_span;
+            let src = self.authored_source();
+            let raw = span
+                .slice(src.as_ref())
+                .ok_or(ContentError::NotAStream)?
+                .to_vec();
+            return ContentStream::parse(raw);
+        }
+        ContentStream::from_page(&self.base, page)
+    }
+
+    /// Build the one [`Command`] that replaces `content_id` with the freshly
+    /// spliced `new_content` (staged into this session's buffer as a raw
+    /// stream) and, on the FIRST edit to this content object, empties any
+    /// extra content streams on a multi-stream page.
+    ///
+    /// Shared by [`Self::edit_text`] and [`Self::format_text`]; the only
+    /// difference between a REPLACE and a FORMAT command is the
+    /// [`CommandKind`] label. On the first edit the whole edited content lives
+    /// in the first object and the extras are emptied so byte offsets stay
+    /// coherent (mirrors `write_incremental`); on a subsequent edit the extras
+    /// are already emptied, so no redundant no-op write is recorded (kept out
+    /// of the undo entry by the `first_edit` gate — the offset in an empty
+    /// stream's span would otherwise make an all-empty re-write look like a
+    /// change).
+    fn text_edit_command(
+        &mut self,
+        kind: CommandKind,
+        content_id: ObjId,
+        page: &Page,
+        new_content: Vec<u8>,
+    ) -> Command {
+        use crate::text_edit::edit::make_raw_stream;
+        let content_before = self.state.get(&content_id).cloned();
+        let first_edit = content_before.is_none();
+
+        let len = new_content.len();
+        let span = self.stage_bytes(&new_content);
+        let mut objects = vec![ObjectWrite {
+            id: content_id,
+            before: content_before,
+            after: Some(make_raw_stream(span, len)),
+        }];
+
+        if first_edit {
+            for id in page.contents.iter().skip(1) {
+                let empty = self.stage_bytes(&[]);
+                objects.push(ObjectWrite {
+                    id: *id,
+                    before: self.state.get(id).cloned(),
+                    after: Some(make_raw_stream(empty, 0)),
+                });
+            }
+        }
+
+        Command {
+            kind,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        }
+    }
+
+    // -- internals ------------------------------------------------------
+
+    /// The `/Info` object id from the **working** trailer, so a
+    /// just-created dictionary is visible immediately.
+    fn info_id(&self) -> Option<ObjId> {
+        self.trailer.get(b"Info").and_then(Object::as_reference)
+    }
+
+    /// Apply a command, push it on the undo stack, and invalidate redo.
+    ///
+    /// Clearing the redo stack on a new edit is standard editor
+    /// behaviour (§11.1 states it for completeness rather than because
+    /// it is subtle): the redone future no longer exists once history
+    /// diverges.
+    fn commit(&mut self, command: Command) {
+        for write in &command.objects {
+            Self::write_state(&mut self.state, write.id, write.after.clone());
+        }
+        for removal in &command.removals {
+            Self::write_deleted(&mut self.deleted, removal.id, removal.is_deleted);
+        }
+        if let Some((_, after)) = &command.trailer {
+            self.trailer = after.clone();
+        }
+        self.redo.clear();
+        self.undo.push(command);
+        // Bound the history (§11.1). Safe to drop the oldest ONLY
+        // because the dirty set is a diff, never a replay — see the
+        // module docs.
+        if self.undo.len() > MAX_UNDO_DEPTH {
+            self.undo.remove(0);
+        }
+    }
+
+    /// Write one overlay slot, where `None` means "remove the entry".
+    ///
+    /// Removing rather than storing a copy of the base value keeps the
+    /// overlay minimal, but note that it is **not** required for
+    /// correctness: [`EditSession::dirty_set`] skips any entry equal to
+    /// the base regardless. Both halves of that belt-and-braces are
+    /// deliberate, because the equality check is the one that has to hold
+    /// for the edit → undo → save contract, and it must not depend on
+    /// this function having tidied up.
+    fn write_state(state: &mut BTreeMap<ObjId, Object>, id: ObjId, value: Option<Object>) {
+        match value {
+            Some(v) => {
+                state.insert(id, v);
+            }
+            None => {
+                state.remove(&id);
+            }
+        }
+    }
+
+    /// Set or clear one object's deleted flag.
+    fn write_deleted(deleted: &mut BTreeSet<ObjId>, id: ObjId, is_deleted: bool) {
+        if is_deleted {
+            deleted.insert(id);
+        } else {
+            deleted.remove(&id);
+        }
+    }
+}
+
+/// The `/Rotate` key name for an [`EditError::NotADictionary`] on an
+/// `/Info` field.
+const fn field_key_str(field: InfoField) -> &'static str {
+    match field {
+        InfoField::Title => "Title",
+        InfoField::Author => "Author",
+        InfoField::Subject => "Subject",
+        InfoField::Keywords => "Keywords",
+    }
+}
+
+/// Normalize a `/Rotate` value to {0, 90, 180, 270}.
+///
+/// Table 30 requires a multiple of 90 and gives 0 as the default, but
+/// says nothing about range — so `-90` and `450` are both conforming and
+/// both mean 270 and 90 respectively. A **positive** modulo is required:
+/// Rust's `%` keeps the sign of the dividend, so `-90 % 360` is `-90`,
+/// and using it directly would produce a rotation no renderer expects.
+///
+/// A value that is not a multiple of 90 cannot reach here through
+/// [`EditSession::set_page_rotation`] (which refuses it), but can arrive
+/// from a malformed file through [`EditSession::pages`]; rounding it down
+/// to the enclosing quarter turn matches what
+/// [`crate::page_tree`] already does on load.
+const fn normalize_rotation(degrees: i64) -> u16 {
+    let wrapped = degrees.rem_euclid(360);
+    // `rem_euclid` on a positive modulus yields 0..=359, so the cast is
+    // exact; the quarter-turn floor handles a malformed non-multiple.
+    ((wrapped / 90) * 90) as u16
+}
+
+/// Encode operator-entered text as a PDF text string (§7.9.2).
+///
+/// Two forms, chosen by content:
+///
+/// - **Pure ASCII** (0x20–0x7E) is emitted as those bytes directly.
+///   Those code points are identical in PDFDocEncoding, so the value is
+///   unambiguous, and it keeps a title like `Quarterly Report` readable
+///   in a hex dump — which matters for a format whose files get
+///   diagnosed by eye.
+/// - **Anything else** becomes **UTF-16BE with a leading U+FEFF byte
+///   order mark**, which §7.9.2 defines as the escape hatch for text
+///   outside PDFDocEncoding and which every reader implements.
+///
+/// ## Why not PDFDocEncoding for the middle ground
+///
+/// A Latin-1-ish title (`Café`) is representable in PDFDocEncoding, and
+/// encoding it that way would be two bytes shorter. pdfce does not,
+/// because **the PDFDocEncoding table is a recorded gap in the spec
+/// RAG** — Annex D.3 is listed as not yet ingested, and §7.9.2 itself is
+/// not ingested at all (only §7.3.4's byte *syntax* is). Guessing the
+/// table from memory is exactly the failure mode the spec-fidelity rule
+/// exists to prevent, and the cost of not guessing is a handful of bytes
+/// on a metadata string. The ASCII subset used above is the part that is
+/// certain.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::edit::encode_text_string;
+///
+/// assert_eq!(encode_text_string("Report"), b"Report".to_vec());
+///
+/// // Non-ASCII takes the UTF-16BE + BOM form (§7.9.2).
+/// let cafe = encode_text_string("Café");
+/// assert_eq!(cafe.get(..2), Some(&[0xFE, 0xFF][..]));
+/// assert_eq!(cafe.len(), 2 + 4 * 2);
+/// ```
+#[must_use]
+pub fn encode_text_string(text: &str) -> Vec<u8> {
+    if text.bytes().all(|b| (0x20..=0x7E).contains(&b)) {
+        return text.as_bytes().to_vec();
+    }
+    let mut out = vec![0xFE, 0xFF];
+    for unit in text.encode_utf16() {
+        out.extend_from_slice(&unit.to_be_bytes());
+    }
+    out
+}
+
+/// Decode a PDF text string (§7.9.2) for display, reporting whether the
+/// decode was exact.
+///
+/// - A leading U+FEFF BOM selects UTF-16BE; unpaired surrogates become
+///   U+FFFD and mark the result inexact.
+/// - Otherwise bytes 0x20–0x7E (plus tab, LF and CR) decode as
+///   themselves. **Any other byte becomes U+FFFD and marks the result
+///   inexact**, because decoding it correctly needs the PDFDocEncoding
+///   table from Annex D.3, which the spec RAG does not yet carry (see
+///   [`encode_text_string`]).
+///
+/// Guessing Latin-1 for those bytes would look right most of the time
+/// and be silently wrong for the 0x80–0x9F range, where PDFDocEncoding
+/// and Latin-1 disagree — and "silently wrong most of the time" is worse
+/// than a visible U+FFFD, because a front end can *see* the `exact` flag
+/// and decline to write the field back.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::edit::decode_text_string;
+///
+/// let plain = decode_text_string(b"Report");
+/// assert_eq!(plain.text, "Report");
+/// assert!(plain.exact);
+///
+/// let utf16 = decode_text_string(&[0xFE, 0xFF, 0x00, 0x48, 0x00, 0x69]);
+/// assert_eq!(utf16.text, "Hi");
+/// assert!(utf16.exact);
+///
+/// // A byte with no certain mapping is shown, and flagged.
+/// let unknown = decode_text_string(&[0x91]);
+/// assert!(!unknown.exact);
+/// ```
+#[must_use]
+pub fn decode_text_string(bytes: &[u8]) -> InfoText {
+    if let (Some(0xFE), Some(0xFF)) = (bytes.first(), bytes.get(1)) {
+        let body = bytes.get(2..).unwrap_or(&[]);
+        let units: Vec<u16> = body
+            .chunks_exact(2)
+            .map(|pair| {
+                u16::from_be_bytes([*pair.first().unwrap_or(&0), *pair.get(1).unwrap_or(&0)])
+            })
+            .collect();
+        let text = String::from_utf16_lossy(&units);
+        // An odd trailing byte, or a lone surrogate, means the value was
+        // not a well-formed UTF-16BE string.
+        let exact = body.len() % 2 == 0 && !text.contains('\u{FFFD}');
+        return InfoText { text, exact };
+    }
+    let mut text = String::with_capacity(bytes.len());
+    let mut exact = true;
+    for &b in bytes {
+        if (0x20..=0x7E).contains(&b) || matches!(b, b'\t' | b'\n' | b'\r') {
+            text.push(b as char);
+        } else {
+            text.push('\u{FFFD}');
+            exact = false;
+        }
+    }
+    InfoText { text, exact }
+}
+
+// ---------------------------------------------------------------------------
+// Pass 3.2 — structural page operations
+// ---------------------------------------------------------------------------
+
+/// A read view of an [`EditSession`]: the base revision with the
+/// operator's unsaved edits applied.
+///
+/// Exists so that the **one** page-tree walk in pdfce
+/// ([`page_tree::pages_in`]) can run over the edited document as easily
+/// as over a loaded file. See [`crate::graph`] for why that is a trait
+/// rather than a second walk.
+#[derive(Debug, Clone, Copy)]
+pub struct SessionGraph<'a> {
+    session: &'a EditSession,
+}
+
+impl ObjectGraph for SessionGraph<'_> {
+    fn value(&self, id: ObjId) -> Option<&Object> {
+        self.session.value(id)
+    }
+
+    fn trailer_entry(&self, key: &[u8]) -> Option<&Object> {
+        self.session.trailer.get(key)
+    }
+}
+
+/// A read view of a session **plus pending, uncommitted writes**.
+///
+/// Used for exactly one thing: computing what is still reachable *after*
+/// a structural splice, before that splice is committed. A delete has to
+/// know which objects the removed pages owned exclusively, and that is a
+/// question about the document as it will be, not as it is.
+///
+/// Private, because a half-applied document is not a thing any caller
+/// outside this module should be able to hold.
+struct PendingGraph<'a> {
+    session: &'a EditSession,
+    scratch: &'a BTreeMap<ObjId, Object>,
+    removed: &'a HashSet<ObjId>,
+}
+
+impl ObjectGraph for PendingGraph<'_> {
+    fn value(&self, id: ObjId) -> Option<&Object> {
+        if self.removed.contains(&id) {
+            return None;
+        }
+        self.scratch.get(&id).or_else(|| self.session.value(id))
+    }
+
+    fn trailer_entry(&self, key: &[u8]) -> Option<&Object> {
+        self.session.trailer.get(key)
+    }
+}
+
+/// Maximum objects a reachability walk will visit (pdfce policy,
+/// `ARCHITECTURE.md` §10). Bounds the delete-time garbage sweep on a
+/// hostile object graph.
+pub const MAX_REACHABLE_OBJECTS: usize = 5_000_000;
+
+/// What a delete actually did.
+///
+/// Everything here is something the operator cannot see by looking at the
+/// result, which is the test for whether a counter earns its place.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DeleteOutcome {
+    /// Pages removed.
+    pub pages_removed: usize,
+    /// Objects that left the document graph entirely and will be written
+    /// as §7.5.4 free entries — the removed pages, any page-tree node
+    /// left empty by their removal, and everything the removed pages
+    /// owned exclusively (their content streams, their annotations).
+    pub objects_freed: usize,
+    /// What the removal broke elsewhere in the document.
+    ///
+    /// pdfce **exceeds** Acrobat here on purpose.
+    /// `core_ops__delete_pages.md` records that Acrobat *"does not
+    /// auto-delete, auto-repoint, or warn by default"* and recommends
+    /// pdfce *"surface (don't silently leave) dangling
+    /// bookmarks/links/destinations as a reviewable post-delete
+    /// report … rather than silently leaving them broken the way Acrobat
+    /// does. … Acrobat's native behavior here is a low bar, not a target
+    /// to literally copy."*
+    ///
+    /// pdfce reports and does **not** repair. Repointing a bookmark at
+    /// "whatever page now occupies that index" would be pdfce deciding
+    /// what the author meant — the fuzzy-never-sneaky rule cuts against
+    /// silent repair exactly as hard as it cuts against silent breakage.
+    pub dangling: DanglingReport,
+    /// What saving this edit will do to the document's signatures.
+    pub signature: SignatureImpact,
+}
+
+/// What a text/choice form fill actually did (Pass 7).
+///
+/// The disclosures a fuzzy-never-sneaky fill owes the operator: how many
+/// widgets it repainted, and the two variable-text caveats the §12.7.3.3
+/// generator surfaces (an applied auto-size, and any characters it could not
+/// encode in `WinAnsi`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct FillOutcome {
+    /// The primary field object that was filled.
+    pub field_id: ObjId,
+    /// How many widget appearances were regenerated (≥1 per filled field,
+    /// more when the field is presented in several places).
+    pub widgets_updated: usize,
+    /// `Some(size)` when the field's `/DA` requested auto-size (`0 Tf`) and a
+    /// size was chosen — surfaced for disclosure (VT1), never presented as
+    /// spec-mandated.
+    pub applied_autosize: Option<f64>,
+    /// How many characters of the filled text had no `WinAnsi` code and were
+    /// substituted with `?` (the named Base-14-Latin limit, disclosed).
+    pub unencodable_chars: usize,
+}
+
+/// What a [`regenerate_appearances`](EditSession::regenerate_appearances)
+/// operation did (Pass 7.1, R51).
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct RegenOutcome {
+    /// How many fields had a widget appearance regenerated.
+    pub regenerated: usize,
+    /// Whether `/NeedAppearances` was present and was cleared on output.
+    pub need_appearances_cleared: bool,
+    /// An applied auto-size, if any (disclosure; VT1).
+    pub applied_autosize: Option<f64>,
+    /// Characters that had no `WinAnsi` code (disclosure).
+    pub unencodable_chars: usize,
+}
+
+/// What an [`import_form_data`](EditSession::import_form_data) operation did
+/// (Pass 7.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ImportOutcome {
+    /// How many fields the data file set on the document.
+    pub applied: usize,
+    /// How many named fields the document did not have (counted + skipped,
+    /// never an error — a data file may name a superset).
+    pub skipped: usize,
+}
+
+/// What a [`flatten_fields`](EditSession::flatten_fields) operation did
+/// (Pass 7.1, R48).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FlattenOutcome {
+    /// How many fields were flattened (removed from the form).
+    pub fields_flattened: usize,
+    /// How many widget appearances were burned into page content.
+    pub widgets_burned: usize,
+    /// How many pages had content appended.
+    pub pages_touched: usize,
+}
+
+/// Per-page accumulation of a flatten: the `q cm /Name Do Q` invocations to
+/// author into the overlay content stream, and the `(name, appearance-stream)`
+/// pairs to add to the page's `/Resources` `/XObject`.
+#[derive(Debug, Default)]
+struct PageFlatten {
+    /// `(resource-name, placement-cm)` per burned widget, in page order.
+    invocations: Vec<(Vec<u8>, [f64; 6])>,
+    /// `(resource-name, appearance-stream-id)` to register in `/XObject`.
+    xobjects: Vec<(Vec<u8>, ObjId)>,
+}
+
+/// Match a choice selection against a field's `/Opt` options, by export
+/// value first then display value (§12.7.4.4). Returns the option index and a
+/// reference to it. Comparison is on the §7.9.2-decoded text so a UTF-16
+/// option matches a decoded selection string.
+fn match_option<'a>(
+    options: &'a [forms::ChoiceOption],
+    sel: &str,
+) -> Option<(usize, &'a forms::ChoiceOption)> {
+    options
+        .iter()
+        .enumerate()
+        .find(|(_, o)| decode_text_string(&o.export).text == sel)
+        .or_else(|| {
+            options
+                .iter()
+                .enumerate()
+                .find(|(_, o)| decode_text_string(&o.display).text == sel)
+        })
+}
+
+/// The display text a choice field's current `/V` should show: each stored
+/// **export** value mapped to its `/Opt` **display** value, joined by newline
+/// (§12.7.4.4 — the appearance shows the display, `/V` stores the export).
+/// `None` when the field has no value.
+fn choice_display_text(field: &Field) -> Option<String> {
+    let exports: Vec<Vec<u8>> = match &field.value {
+        forms::FieldValue::Choice(items) => items.clone(),
+        _ => return None,
+    };
+    if exports.is_empty() {
+        return None;
+    }
+    let lines: Vec<String> = exports
+        .iter()
+        .map(|ex| {
+            let ex_text = decode_text_string(ex).text;
+            field
+                .options
+                .iter()
+                .find(|o| decode_text_string(&o.export).text == ex_text)
+                .map_or(ex_text, |o| decode_text_string(&o.display).text)
+        })
+        .collect();
+    Some(lines.join("\n"))
+}
+
+/// The §12.5.5 placement matrix **A** that maps an appearance form XObject's
+/// `/BBox` (transformed by its `/Matrix`) onto a widget's `/Rect`, emitted as
+/// the `cm` before a `/Name Do` (the `Do` procedure itself re-applies
+/// `/Matrix`, so this is A alone — never A×Matrix, the double-apply trap).
+///
+/// Step a: transform the four `/BBox` corners by `/Matrix`, take the upright
+/// bounding box. Step b: A scales-and-translates that box onto `/Rect`
+/// (anisotropic — aspect ratio is not preserved; normative). A degenerate
+/// transformed box (either extent ≈ 0) yields the identity translated to the
+/// rect origin, so a sliver appearance still lands rather than dividing by
+/// zero.
+fn fit_matrix_for(bbox: [f64; 4], matrix: [f64; 6], rect: crate::page_tree::Rect) -> [f64; 6] {
+    let [a, b, c, d, e, f] = matrix;
+    // Normalise BBox corners (§7.9.5 — BBox may be given in any corner order).
+    let (bx0, by0, bx1, by1) = (bbox[0], bbox[1], bbox[2], bbox[3]);
+    let corners = [(bx0, by0), (bx1, by0), (bx1, by1), (bx0, by1)];
+    let (mut minx, mut miny, mut maxx, mut maxy) = (
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
+    for (x, y) in corners {
+        let tx = a * x + c * y + e;
+        let ty = b * x + d * y + f;
+        minx = minx.min(tx);
+        miny = miny.min(ty);
+        maxx = maxx.max(tx);
+        maxy = maxy.max(ty);
+    }
+    let tw = maxx - minx;
+    let th = maxy - miny;
+    let (rw, rh) = (rect.width(), rect.height());
+    let sx = if tw.abs() > 1e-6 { rw / tw } else { 1.0 };
+    let sy = if th.abs() > 1e-6 { rh / th } else { 1.0 };
+    let tx = rect.llx - sx * minx;
+    let ty = rect.lly - sy * miny;
+    [sx, 0.0, 0.0, sy, tx, ty]
+}
+
+/// Read a four-number rectangle array (each element possibly indirect) as
+/// `[x0, y0, x1, y1]` (not normalised — the caller's fit handles corner
+/// order). `None` when it is not four numbers.
+fn read_rect_array<G: ObjectGraph + ?Sized>(graph: &G, obj: &Object) -> Option<[f64; 4]> {
+    let arr = graph.resolve(obj).as_array()?;
+    let nums: Vec<f64> = arr
+        .iter()
+        .filter_map(|o| graph.resolve(o).as_number())
+        .collect();
+    match nums.as_slice() {
+        &[a, b, c, d] => Some([a, b, c, d]),
+        _ => None,
+    }
+}
+
+/// Map a `/BaseFont` name to the standard-14 face it denotes, for resolving
+/// a field `/DA` font against the AcroForm `/DR` (§12.7.3.3).
+///
+/// Handles the canonical §9.6.2.2 spellings and the common producer
+/// shorthands (`Helv`, `HeBo`, `Cour`, `TiRo`, `Symb`, `ZaDb`) Acrobat's
+/// default `/DR` uses. A subset-prefixed name (`ABCDEF+Helvetica`) is
+/// matched on the suffix. `None` for anything not a standard-14 face — the
+/// caller then falls back to Helvetica (the Base-14 generator cannot lay out
+/// an embedded/CID font).
+fn basefont_to_std14(name: &[u8]) -> Option<Std14> {
+    // Strip a subset prefix `ABCDEF+`.
+    let bare = match name.iter().position(|&b| b == b'+') {
+        Some(i) if i == 6 => name.get(i + 1..).unwrap_or(name),
+        _ => name,
+    };
+    Some(match bare {
+        b"Helvetica" | b"Helv" | b"Arial" | b"ArialMT" => Std14::Helvetica,
+        b"Helvetica-Bold" | b"HeBo" | b"Arial-Bold" | b"Arial-BoldMT" => Std14::HelveticaBold,
+        b"Helvetica-Oblique" | b"Arial-Italic" | b"Arial-ItalicMT" => Std14::HelveticaOblique,
+        b"Helvetica-BoldOblique" | b"Arial-BoldItalic" => Std14::HelveticaBoldOblique,
+        b"Times-Roman" | b"TiRo" | b"TimesNewRoman" | b"TimesNewRomanPSMT" => Std14::TimesRoman,
+        b"Times-Bold" | b"TimesNewRomanPS-BoldMT" => Std14::TimesBold,
+        b"Times-Italic" | b"TimesNewRomanPS-ItalicMT" => Std14::TimesItalic,
+        b"Times-BoldItalic" | b"TimesNewRomanPS-BoldItalicMT" => Std14::TimesBoldItalic,
+        b"Courier" | b"Cour" | b"CourierNew" | b"CourierNewPSMT" => Std14::Courier,
+        b"Courier-Bold" => Std14::CourierBold,
+        b"Courier-Oblique" => Std14::CourierOblique,
+        b"Courier-BoldOblique" => Std14::CourierBoldOblique,
+        b"Symbol" | b"Symb" => Std14::Symbol,
+        b"ZapfDingbats" | b"ZaDb" => Std14::ZapfDingbats,
+        _ => return None,
+    })
+}
+
+impl EditSession {
+    /// Refuse a structural change that an **enforced** certification
+    /// signature forbids (§12.8.4 Table 258).
+    ///
+    /// The distinction this enforces, from `iso32000__s__12.8.md`'s
+    /// VALIDATION MODEL: a DocMDP transform in a signature's
+    /// `/Reference` is **detection** — pdfce performs the edit and
+    /// reports the invalidation. The catalog's `/Perms → /DocMDP` entry
+    /// upgrades it to **prevention**: *"consumer applications shall
+    /// enforce the permissions specified by the `P` attribute"*. For an
+    /// editor, enforcing means declining, and Table 254's permitted lists
+    /// are closed at every `P` value with nothing pdfce can do inside
+    /// them.
+    ///
+    /// ## What is deliberately **not** gated here, and why
+    ///
+    /// Document `/Info` metadata edits (Pass 3.1). Table 254's `P=1`
+    /// forbids *any* change, so a strict reading gates those too — but
+    /// that would silently narrow a contract Pass 3.1 already shipped,
+    /// on a reading rather than on a measurement, and the RAG's
+    /// permitted-change vocabulary is phrased in document-content terms
+    /// that `/Info` sits awkwardly against. Recorded as an owed decision
+    /// rather than made in passing.
+    fn check_certification(&self) -> Result<SignatureCensus, EditError> {
+        let found = census(&self.graph());
+        if found.forbids_structural_change() {
+            return Err(EditError::CertificationForbidsChange {
+                permission: found.certification_permission.unwrap_or(2),
+            });
+        }
+        Ok(found)
+    }
+
+    /// What saving right now would do to the document's signatures.
+    ///
+    /// `mode` is required because the answer genuinely differs by save
+    /// path — see [`crate::signature::impact_of`]'s table. A front end
+    /// asks this **immediately before Save**, not at edit time: per
+    /// §11.1 the dirty set is a diff computed at save time, so "does this
+    /// save change structure?" is not knowable when the edit is made.
+    ///
+    /// ⚠️ [`SignatureImpact::ByteRangePreserved`] must never be rendered
+    /// on its own as "the signature is still valid" — read
+    /// [`crate::signature`]'s module docs before writing that string.
+    #[must_use]
+    pub fn signature_impact_of_save(&self, mode: SaveMode) -> SignatureImpact {
+        impact_of(&census(&self.graph()), mode, self.changes_structure())
+    }
+
+    /// A census of the signatures the open document carries.
+    #[must_use]
+    pub fn signature_census(&self) -> SignatureCensus {
+        census(&self.graph())
+    }
+
+    /// Whether the unsaved edits include a **structural** change — a page
+    /// added, removed, or moved.
+    ///
+    /// Computed from the page tree rather than from the command history,
+    /// for the same reason [`EditSession::dirty_set`] is: an edit that
+    /// has been undone is not a change, and asking history would say it
+    /// was.
+    #[must_use]
+    pub fn changes_structure(&self) -> bool {
+        if !self.deleted.is_empty() {
+            return true;
+        }
+        let (Ok(before), Ok(after)) = (page_tree::page_slots(&self.base), self.page_slots()) else {
+            // A tree that cannot be walked on one side is a change worth
+            // reporting conservatively; the alternative is claiming
+            // "nothing structural happened" about a document pdfce
+            // cannot describe.
+            return true;
+        };
+        before.len() != after.len()
+            || before
+                .iter()
+                .zip(after.iter())
+                .any(|(a, b)| a.id != b.id || a.parent != b.parent)
+    }
+
+    /// Author a geometric-markup annotation onto a page (Pass 6.1).
+    ///
+    /// Generates a full `/AP` `/N` appearance (R44 — never a private
+    /// pdfce-only rendering) with [`crate::annot_author::build_appearance`],
+    /// creates the appearance stream and the annotation dictionary as new
+    /// indirect objects, and patches the page's `/Annots` array — **without
+    /// touching the page's content stream** (R47, the minimal-diff best
+    /// case). The whole thing is **one** undoable command (§11.3, R49): the
+    /// appearance, the annotation, and the `/Annots` patch undo together.
+    ///
+    /// Returns the new annotation object's id.
+    ///
+    /// ## Guards, in order
+    ///
+    /// 1. **Encrypted document ⇒ refused by name** ([`EditError::DocumentEncrypted`],
+    ///    X10). Authoring strings into an encrypted file needs per-object
+    ///    encryption, which is Pass 5; the R37 encoder seam already exists,
+    ///    so the future fix is a plug-in.
+    /// 2. **Enforced certification signature ⇒ refused**
+    ///    ([`EditError::CertificationForbidsChange`], X11). This reuses the
+    ///    Pass 3.2 [`EditSession::check_certification`] machinery unchanged
+    ///    rather than re-deriving §12.8.2.2's per-`/P` gradation. It is
+    ///    **deliberately conservative and may over-refuse**: DocMDP Table
+    ///    254 permits annotation *addition* at `P = 3`, but the existing
+    ///    check treats every enforced certification as forbidding. Over-
+    ///    refusal is fail-clean-safe (worst case pdfce declines an edit
+    ///    DocMDP would allow, never the reverse); a per-`/P` annotation-
+    ///    permission refinement is a named residual for a spec-verified
+    ///    follow-up.
+    /// 3. **Object creation that would expose `/Size`-hidden objects ⇒
+    ///    refused** ([`EditError::ObjectCreationWouldExposeHiddenObjects`]),
+    ///    the same guard [`EditSession::set_info_field`] applies.
+    /// 4. **Geometry with no points ⇒ refused** ([`EditError::EmptyGeometry`]).
+    ///
+    /// # Errors
+    ///
+    /// Any of the guards above, plus [`EditError::PageOutOfRange`],
+    /// [`EditError::PageTree`], [`EditError::ObjectNumbersExhausted`],
+    /// [`EditError::AnnotsNotAnArray`], or [`EditError::NotADictionary`]
+    /// (a page that is not a dictionary).
+    pub fn add_markup(&mut self, page_index: usize, spec: &MarkupSpec) -> Result<ObjId, EditError> {
+        // Guard 1 (X10): encryption. Checked against the base trailer —
+        // pdfce does not yet load most encrypted files, but a defensive
+        // named refusal here is the R37 seam the Pass-5 fix plugs into.
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        // Guard 2 (X11): enforced certification. Conservative reuse.
+        self.check_certification()?;
+        // Guard 4: geometry must draw something.
+        validate_geometry(spec)?;
+
+        // Resolve the target page.
+        let slots = self.page_slots()?;
+        let count = slots.len();
+        let page_id = slots
+            .get(page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count,
+            })?
+            .id;
+
+        // Guard 3: creating objects raises /Size, which would expose any
+        // entries a filtering /Size is hiding (§7.5.5). Refuse by name.
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+
+        // Generate the appearance + annotation dictionary.
+        let authored = annot_author::build_appearance(spec);
+
+        // Allocate object numbers: appearance stream, then annotation.
+        let ap_id = ObjId::new(self.alloc_number()?, 0);
+        let annot_id = ObjId::new(self.alloc_number()?, 0);
+
+        // Stage the appearance content (R45) and build the stream object.
+        // A correct /Length is written for well-formedness; the serializer
+        // recomputes it from the emitted bytes to the same value.
+        let mut ap_dict = authored.ap_dict;
+        ap_dict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(authored.ap_content.len()).unwrap_or(i64::MAX)),
+        );
+        let ap_span = self.stage_bytes(&authored.ap_content);
+        let ap_stream = Object::Stream(Stream {
+            dict: ap_dict,
+            data_span: ap_span,
+        });
+
+        // Complete the annotation dictionary: wire the appearance (/AP /N),
+        // the back-reference to the page (/P), and /F Print (Table 165 bit
+        // 3) so the markup prints, matching Acrobat's default for markup.
+        let mut annot = authored.annot;
+        let mut ap = Dict::new();
+        ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+        annot.insert(Name::from(b"AP"), Object::Dict(ap));
+        annot.insert(Name::from(b"P"), Object::Reference(page_id));
+        annot.insert(
+            Name::from(b"F"),
+            Object::Integer(i64::from(AnnotFlags::PRINT)),
+        );
+
+        // Patch the page's /Annots (X7: create / append / copy-on-write a
+        // shared array). May allocate one more object number.
+        let mut annots_writes = self.annots_writes(page_id, annot_id, &slots)?;
+
+        let mut objects = vec![
+            ObjectWrite {
+                id: ap_id,
+                before: None,
+                after: Some(ap_stream),
+            },
+            ObjectWrite {
+                id: annot_id,
+                before: None,
+                after: Some(Object::Dict(annot)),
+            },
+        ];
+        objects.append(&mut annots_writes);
+
+        self.commit(Command {
+            kind: CommandKind::AddAnnotation {
+                kind: annot_kind_of(spec),
+            },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(annot_id)
+    }
+
+    /// Author a `/Redact` redaction **mark** onto a page (Pass 8,
+    /// §12.5.6.23) — the non-destructive first phase.
+    ///
+    /// The mark is a reviewable, saveable, round-trippable annotation
+    /// (fuzzy-never-sneaky): the document can be saved marked-but-not-
+    /// applied, and the operator can move or delete the mark before
+    /// committing. The destructive removal is a **separate** operation
+    /// ([`crate::redact::apply_redactions`], R52 — apply is never a side
+    /// effect of marking, and is separately confirmed).
+    ///
+    /// Shares every guard, the R45 staging buffer, and the X7 `/Annots`
+    /// copy-on-write path with [`EditSession::add_markup`]. The authored
+    /// preview appearance is a **red outline** (never a solid fill), so a
+    /// marked region can never be mistaken for a completed redaction.
+    ///
+    /// # Errors
+    ///
+    /// The same guards as [`EditSession::add_markup`].
+    pub fn add_redaction(
+        &mut self,
+        page_index: usize,
+        spec: &annot_author::RedactSpec,
+    ) -> Result<ObjId, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        if spec.quads.is_empty() {
+            return Err(EditError::EmptyGeometry);
+        }
+
+        let slots = self.page_slots()?;
+        let count = slots.len();
+        let page_id = slots
+            .get(page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count,
+            })?
+            .id;
+
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+
+        let authored = annot_author::build_redact_mark(spec);
+        let ap_id = ObjId::new(self.alloc_number()?, 0);
+        let annot_id = ObjId::new(self.alloc_number()?, 0);
+
+        let mut ap_dict = authored.ap_dict;
+        ap_dict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(authored.ap_content.len()).unwrap_or(i64::MAX)),
+        );
+        let ap_span = self.stage_bytes(&authored.ap_content);
+        let ap_stream = Object::Stream(Stream {
+            dict: ap_dict,
+            data_span: ap_span,
+        });
+
+        let mut annot = authored.annot;
+        let mut ap = Dict::new();
+        ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+        annot.insert(Name::from(b"AP"), Object::Dict(ap));
+        annot.insert(Name::from(b"P"), Object::Reference(page_id));
+        // No /F Print: a redaction MARK is transient review state, not
+        // page content — it must not print, and it is removed on apply.
+
+        let mut annots_writes = self.annots_writes(page_id, annot_id, &slots)?;
+        let mut objects = vec![
+            ObjectWrite {
+                id: ap_id,
+                before: None,
+                after: Some(ap_stream),
+            },
+            ObjectWrite {
+                id: annot_id,
+                before: None,
+                after: Some(Object::Dict(annot)),
+            },
+        ];
+        objects.append(&mut annots_writes);
+
+        self.commit(Command {
+            kind: CommandKind::AddAnnotation {
+                kind: AnnotKind::Redact,
+            },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(annot_id)
+    }
+
+    /// Mark every occurrence of `query` in the document's extracted text
+    /// for redaction (search-and-redact, Pass 8). Returns the created
+    /// `/Redact` mark ids.
+    ///
+    /// This is the fuzzy-never-sneaky search half: it authors reviewable
+    /// marks over the matched glyphs, never a silent removal. The match
+    /// geometry comes from the Pass-4 per-glyph extraction, so a match is
+    /// covered exactly where its glyphs sit on the page.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::TextExtraction`] if the document's text cannot be
+    /// extracted, plus the guards of [`EditSession::add_redaction`].
+    pub fn mark_redactions_by_search(
+        &mut self,
+        query: &str,
+        case_insensitive: bool,
+    ) -> Result<Vec<ObjId>, EditError> {
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
+        let q = query.to_string();
+        self.author_text_matches(|text| find_matches(text, &q, case_insensitive))
+    }
+
+    /// Mark every match of a simple pattern for redaction (Pass 8). In the
+    /// pattern, `#` matches any ASCII digit, `?` matches any single
+    /// character, and every other character is a literal (case-insensitive
+    /// when requested). Example: `###-##-####` marks US-SSN-shaped runs.
+    ///
+    /// The fuzzy-never-sneaky sibling of
+    /// [`EditSession::mark_redactions_by_search`]: it authors reviewable
+    /// marks, never a silent removal.
+    ///
+    /// # Errors
+    ///
+    /// As [`EditSession::mark_redactions_by_search`].
+    pub fn mark_redactions_by_pattern(
+        &mut self,
+        pattern: &str,
+        case_insensitive: bool,
+    ) -> Result<Vec<ObjId>, EditError> {
+        if pattern.is_empty() {
+            return Ok(Vec::new());
+        }
+        let p = pattern.to_string();
+        self.author_text_matches(|text| find_pattern_matches(text, &p, case_insensitive))
+    }
+
+    /// Shared engine for search/pattern redaction: extract the document's
+    /// text, run `matcher` over each glyph run, turn each match's glyph
+    /// geometry into a `/Redact` mark. The document borrow is released
+    /// before any mark is authored.
+    fn author_text_matches<F>(&mut self, matcher: F) -> Result<Vec<ObjId>, EditError>
+    where
+        F: Fn(&str) -> Vec<(usize, usize)>,
+    {
+        use crate::annot_author::{Quad, RedactSpec};
+        use crate::page_tree::Rect;
+        use crate::text_extract::{self, ExtractOptions, TextOrigin};
+        use crate::vartext::Quadding;
+
+        let extracted = text_extract::extract_document(self.document(), &ExtractOptions::default())
+            .map_err(|e| EditError::TextExtraction(e.to_string()))?;
+
+        let mut matches: Vec<(usize, Quad)> = Vec::new();
+        for page in &extracted.pages {
+            for run in &page.runs {
+                if run.origin != TextOrigin::Glyphs || run.glyphs.is_empty() {
+                    continue;
+                }
+                for (start, end) in matcher(&run.text) {
+                    let matched: Vec<_> = run
+                        .glyphs
+                        .iter()
+                        .filter(|g| {
+                            let gs = g.text_start as usize;
+                            let ge = gs + g.text_len.max(1) as usize;
+                            gs < end && start < ge
+                        })
+                        .collect();
+                    if matched.is_empty() {
+                        continue;
+                    }
+                    let mut llx = f64::INFINITY;
+                    let mut lly = f64::INFINITY;
+                    let mut urx = f64::NEG_INFINITY;
+                    let mut ury = f64::NEG_INFINITY;
+                    for g in &matched {
+                        let x0 = f64::from(g.x);
+                        let x1 = f64::from(g.x + g.advance);
+                        let size = f64::from(g.size);
+                        let y0 = f64::from(g.y) - 0.22 * size;
+                        let y1 = f64::from(g.y) + 0.85 * size;
+                        llx = llx.min(x0.min(x1));
+                        urx = urx.max(x0.max(x1));
+                        lly = lly.min(y0);
+                        ury = ury.max(y1);
+                    }
+                    if llx.is_finite() && urx > llx {
+                        matches.push((
+                            page.page_index,
+                            Quad::from_rect(Rect::from_corners(llx, lly, urx, ury)),
+                        ));
+                    }
+                }
+            }
+        }
+
+        let mut created = Vec::with_capacity(matches.len());
+        for (page_index, quad) in matches {
+            let spec = RedactSpec {
+                quads: vec![quad],
+                fill: None,
+                overlay_text: None,
+                quadding: Quadding::Left,
+            };
+            created.push(self.add_redaction(page_index, &spec)?);
+        }
+        Ok(created)
+    }
+
+    /// Author a text-bearing annotation onto a page (Pass 6.2): FreeText,
+    /// Text (sticky note) + its `/Popup`, or Stamp.
+    ///
+    /// The text-family sibling of [`EditSession::add_markup`]. It shares
+    /// every guard (X10 encryption, X11 conservative certification, the
+    /// `/Size`-suppression refusal), the R45 staging buffer, and the X7
+    /// `/Annots` copy-on-write path, and is likewise **one** undoable
+    /// command (§11.3, R49) — for a sticky note, the appearance stream, the
+    /// annotation, the `/Popup` companion, and the `/Annots` patch all undo
+    /// together. It never touches a page content stream (R47).
+    ///
+    /// Returns the new annotation object's id (the note itself, not its
+    /// popup).
+    ///
+    /// # Errors
+    ///
+    /// The same guards as [`EditSession::add_markup`], plus
+    /// [`EditError::VariableText`] when the §12.7.3.3 appearance generation
+    /// fails (e.g. a symbolic font chosen for a Latin text body).
+    pub fn add_text_annotation(
+        &mut self,
+        page_index: usize,
+        spec: &TextAnnotSpec,
+    ) -> Result<ObjId, EditError> {
+        // Guards, identical order to add_markup (X10, X11, /Size).
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let slots = self.page_slots()?;
+        let count = slots.len();
+        let page_id = slots
+            .get(page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count,
+            })?
+            .id;
+
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+
+        // Generate the appearance + annotation dictionary (§12.7.3.3).
+        let authored = annot_author::build_text_annotation(spec)?;
+
+        // Allocate: appearance stream, annotation, and (if any) popup.
+        let ap_id = ObjId::new(self.alloc_number()?, 0);
+        let annot_id = ObjId::new(self.alloc_number()?, 0);
+        let popup_id = if authored.popup.is_some() {
+            Some(ObjId::new(self.alloc_number()?, 0))
+        } else {
+            None
+        };
+
+        // Stage the appearance bytes (R45) and build the /AP /N stream.
+        let mut ap_dict = authored.ap_dict;
+        ap_dict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(authored.ap_content.len()).unwrap_or(i64::MAX)),
+        );
+        let ap_span = self.stage_bytes(&authored.ap_content);
+        let ap_stream = Object::Stream(Stream {
+            dict: ap_dict,
+            data_span: ap_span,
+        });
+
+        // Complete the annotation dictionary: /AP /N, /P, /F, and — for a
+        // sticky note — the /Popup back-link.
+        let mut annot = authored.annot;
+        let mut ap = Dict::new();
+        ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+        annot.insert(Name::from(b"AP"), Object::Dict(ap));
+        annot.insert(Name::from(b"P"), Object::Reference(page_id));
+        annot.insert(Name::from(b"F"), Object::Integer(i64::from(authored.flags)));
+        if let Some(pid) = popup_id {
+            annot.insert(Name::from(b"Popup"), Object::Reference(pid));
+        }
+
+        let mut objects = vec![
+            ObjectWrite {
+                id: ap_id,
+                before: None,
+                after: Some(ap_stream),
+            },
+            ObjectWrite {
+                id: annot_id,
+                before: None,
+                after: Some(Object::Dict(annot)),
+            },
+        ];
+
+        // The /Popup companion object (Text only): /Parent points back at
+        // the note; it carries no appearance (never painted — Pass 6.0 X4).
+        let mut annot_refs = vec![annot_id];
+        if let (Some(mut popup), Some(pid)) = (authored.popup, popup_id) {
+            popup.insert(Name::from(b"Parent"), Object::Reference(annot_id));
+            objects.push(ObjectWrite {
+                id: pid,
+                before: None,
+                after: Some(Object::Dict(popup)),
+            });
+            annot_refs.push(pid);
+        }
+
+        // Patch /Annots with the note (and popup) in one command (X7).
+        let mut annots_writes = self.annots_append(page_id, &annot_refs, &slots)?;
+        objects.append(&mut annots_writes);
+
+        self.commit(Command {
+            kind: CommandKind::AddAnnotation {
+                kind: text_annot_kind_of(spec),
+            },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(annot_id)
+    }
+
+    /// The `/P`-aware certification gate for **form fill** (§12.8 VALIDATION
+    /// MODEL; decision 009 §10).
+    ///
+    /// Form fill is DocMDP tier 2 — the tier whose documented purpose
+    /// (Table 254 `/P = 2`) is *"filling in forms, … and digital
+    /// signatures"*. So fill is **permitted at `/P >= 2`, including `/P`
+    /// absent (default 2)**, and **refused by name only at `/P = 1`** (which
+    /// forbids every change). This is deliberately **less strict** than the
+    /// structural gate [`EditSession::check_certification`], which stays
+    /// conservative (over-refusing a structural edit is still fail-clean-
+    /// safe) — fill is the one operation the spec explicitly permits at the
+    /// default tier, so hard-refusing it on every `/P 2` document would
+    /// break the headline scenario.
+    ///
+    /// A `/FieldMDP` transform (§12.8.2.4) locks specific field *values*; a
+    /// fill on a locked field would break that lock. pdfce does not yet
+    /// resolve *which* fields a `/FieldMDP` locks, so it refuses fill
+    /// conservatively whenever any `/FieldMDP` is present — a named
+    /// over-refusal, precise per-field resolution a follow-up.
+    fn check_certification_for_fill(&self) -> Result<(), EditError> {
+        let found = census(&self.graph());
+        if found.perms_enforced && found.signatures > 0 && found.certification_permission == Some(1)
+        {
+            return Err(EditError::CertificationForbidsChange { permission: 1 });
+        }
+        if found.field_mdp > 0 {
+            return Err(EditError::FieldLockedBySignature);
+        }
+        Ok(())
+    }
+
+    /// The shared preamble for every fill: the encryption guard, the
+    /// `/P`-aware fill certification gate, and the `/Size`-suppression guard
+    /// (a fill creates appearance-stream objects for text/choice fields).
+    fn fill_guards(&self) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification_for_fill()?;
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+        Ok(())
+    }
+
+    /// Set a **text** or **choice** field's value and regenerate its
+    /// appearance (Pass 7, §12.7.3.3).
+    ///
+    /// Sets the field's `/V` to `text` (a §7.9.2 text string) and rebuilds
+    /// the `/AP` `/N` of **every** widget of the field via the shared
+    /// variable-text generator (R49 — the same §12.7.3.3 pipeline Pass 6.2's
+    /// FreeText uses, reused for widgets). The whole fill — the field `/V`
+    /// and every widget appearance — is **one** undoable command (§11.3).
+    /// It never touches a page content stream (R47) and never rewrites the
+    /// `/AcroForm` dictionary, so `/CO`/`/AA`/JavaScript carriers re-emit
+    /// verbatim (decision 009 byte-preservation).
+    ///
+    /// Every field sharing `fqn` is updated together (§12.7.3.2 same-FQN
+    /// representations share `/V`).
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::FieldNotFound`] — no such fillable field.
+    /// - [`EditError::FieldNotFillable`] — the field is read-only, a button,
+    ///   or a signature field.
+    /// - [`EditError::VariableText`] — the appearance could not be generated
+    ///   (a malformed/unresolvable `/DA`, or a symbolic font).
+    /// - [`EditError::DocumentEncrypted`], the fill certification gate, the
+    ///   `/Size`-suppression guard, [`EditError::ObjectNumbersExhausted`].
+    pub fn fill_text_field(&mut self, fqn: &str, text: &str) -> Result<FillOutcome, EditError> {
+        self.fill_guards()?;
+
+        let form =
+            forms::parse_acroform(&self.graph()).ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+        let targets: Vec<Field> = form
+            .fields
+            .iter()
+            .filter(|f| f.fully_qualified_name == fqn)
+            .cloned()
+            .collect();
+        // The primary target dictates fillability; all same-FQN reps share it.
+        let Some(primary) = targets.first() else {
+            return Err(EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            });
+        };
+        if !matches!(
+            primary.field_type,
+            Some(FieldType::Text | FieldType::Choice)
+        ) || primary.flags.read_only()
+        {
+            return Err(EditError::FieldNotFillable {
+                name: fqn.to_owned(),
+            });
+        }
+        let primary_id = primary.id;
+
+        let fonts = self.resolve_dr_fonts(&form);
+        let default_da = form
+            .default_appearance
+            .clone()
+            .unwrap_or_else(|| b"/Helv 0 Tf 0 g".to_vec());
+
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        let mut widgets_updated = 0usize;
+        let mut applied_autosize = None;
+        let mut unencodable_chars = 0usize;
+        // The new /V string, shared across every same-FQN representation.
+        let v_string = Object::String(encode_text_string(text));
+
+        for field in &targets {
+            let da = field
+                .default_appearance
+                .clone()
+                .unwrap_or_else(|| default_da.clone());
+            let quad = field.quadding;
+            let multiline = field.flags.has(forms::FieldFlags::MULTILINE);
+
+            // Regenerate each widget's appearance and collect the /AP stream
+            // writes; a merged (Shape A) widget's /AP patch is folded into
+            // the field-dict patch below rather than written twice.
+            let mut merged_ap: Option<ObjId> = None;
+            for widget in &field.widgets {
+                let (w, h) = widget.rect.map_or((0.0, 0.0), |r| (r.width(), r.height()));
+                let appearance = annot_author::build_field_text_appearance(
+                    w, h, text, &da, quad, multiline, &fonts,
+                )?;
+                if appearance.applied_autosize.is_some() {
+                    applied_autosize = appearance.applied_autosize;
+                }
+                unencodable_chars += appearance.unencodable_chars;
+
+                let ap_id = ObjId::new(self.alloc_number()?, 0);
+                let mut ap_dict = appearance.ap_dict;
+                ap_dict.insert(
+                    Name::from(b"Length"),
+                    Object::Integer(i64::try_from(appearance.content.len()).unwrap_or(i64::MAX)),
+                );
+                let span = self.stage_bytes(&appearance.content);
+                objects.push(ObjectWrite {
+                    id: ap_id,
+                    before: None,
+                    after: Some(Object::Stream(Stream {
+                        dict: ap_dict,
+                        data_span: span,
+                    })),
+                });
+                widgets_updated += 1;
+
+                if widget.merged {
+                    merged_ap = Some(ap_id);
+                } else {
+                    // Shape B: patch the separate widget dict's /AP /N.
+                    objects.push(self.set_widget_ap(widget.id, ap_id)?);
+                }
+            }
+
+            // Patch the field dictionary: set /V, and (Shape A) its own /AP.
+            let Some(Object::Dict(field_dict)) = self.value(field.id) else {
+                return Err(EditError::NotADictionary {
+                    id: field.id,
+                    key: "V",
+                });
+            };
+            let before = self.state.get(&field.id).cloned();
+            let mut updated = field_dict.clone();
+            updated.insert(Name::from(b"V"), v_string.clone());
+            if let Some(ap_id) = merged_ap {
+                let mut ap = Dict::new();
+                ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+                updated.insert(Name::from(b"AP"), Object::Dict(ap));
+            }
+            objects.push(ObjectWrite {
+                id: field.id,
+                before,
+                after: Some(Object::Dict(updated)),
+            });
+        }
+
+        self.commit(Command {
+            kind: CommandKind::FillTextField,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(FillOutcome {
+            field_id: primary_id,
+            widgets_updated,
+            applied_autosize,
+            unencodable_chars,
+        })
+    }
+
+    /// Select a **check-box** or **radio-button** field's state (Pass 7,
+    /// §12.7.4.2.3).
+    ///
+    /// Sets the field's `/V` to the state name and each widget's `/AS` to the
+    /// matching state — a widget offering `on_state` shows it, every other
+    /// widget shows `Off`. This is **state selection, not generation**: the
+    /// per-state appearances are pre-authored, so **no appearance is
+    /// regenerated** (the fundamental Btn/Tx split). `RadiosInUnison` falls
+    /// out for free — every kid whose on-state name equals `on_state` turns
+    /// on together. Pass `Off` (or an empty string) to clear the field.
+    ///
+    /// The whole selection is **one** undoable command (§11.3).
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::FieldNotFound`] — no such button field.
+    /// - [`EditError::FieldNotFillable`] — the field is read-only or not a
+    ///   check-box/radio.
+    /// - [`EditError::FieldStateUnknown`] — no widget defines `on_state`.
+    /// - The fill certification/encryption guards.
+    pub fn set_button_state(&mut self, fqn: &str, on_state: &str) -> Result<(), EditError> {
+        // Buttons author no new objects, so the /Size guard is not needed;
+        // the encryption + certification guards still are.
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification_for_fill()?;
+
+        let form =
+            forms::parse_acroform(&self.graph()).ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+        let targets: Vec<Field> = form
+            .fields
+            .iter()
+            .filter(|f| f.fully_qualified_name == fqn)
+            .cloned()
+            .collect();
+        let Some(primary) = targets.first() else {
+            return Err(EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            });
+        };
+        if !matches!(
+            primary.button_kind,
+            Some(ButtonKind::Check | ButtonKind::Radio)
+        ) || primary.flags.read_only()
+        {
+            return Err(EditError::FieldNotFillable {
+                name: fqn.to_owned(),
+            });
+        }
+
+        // Normalise the requested state; empty ⇒ Off (§12.7.4.2.3 off name).
+        let want = if on_state.is_empty() { "Off" } else { on_state };
+        let want_bytes = want.as_bytes();
+
+        // Unless clearing to Off, the state must be one some widget defines.
+        if want != "Off" {
+            let mut available: Vec<String> = Vec::new();
+            let mut found = false;
+            for field in &targets {
+                for w in &field.widgets {
+                    for s in &w.on_states {
+                        if s == want_bytes {
+                            found = true;
+                        }
+                        available.push(String::from_utf8_lossy(s).into_owned());
+                    }
+                }
+            }
+            if !found {
+                available.sort();
+                available.dedup();
+                return Err(EditError::FieldStateUnknown {
+                    name: fqn.to_owned(),
+                    state: want.to_owned(),
+                    available,
+                });
+            }
+        }
+
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        let v_name = Object::Name(Name(want_bytes.to_vec()));
+
+        for field in &targets {
+            // Each widget's /AS: the requested state if this widget offers it,
+            // else Off (a radio's non-selected kids, or a cleared checkbox).
+            for widget in &field.widgets {
+                let this_state: &[u8] =
+                    if want != "Off" && widget.on_states.iter().any(|s| s == want_bytes) {
+                        want_bytes
+                    } else {
+                        b"Off"
+                    };
+                if widget.merged {
+                    // Shape A: /AS lives on the field dict, patched below with
+                    // /V — but a merged checkbox is its own single widget, so
+                    // fold /AS in with the field patch.
+                    continue;
+                }
+                objects.push(self.set_widget_as(widget.id, this_state)?);
+            }
+
+            // Patch the field dict: /V, and (merged) its own /AS.
+            let Some(Object::Dict(field_dict)) = self.value(field.id) else {
+                return Err(EditError::NotADictionary {
+                    id: field.id,
+                    key: "V",
+                });
+            };
+            let before = self.state.get(&field.id).cloned();
+            let mut updated = field_dict.clone();
+            updated.insert(Name::from(b"V"), v_name.clone());
+            if let Some(w) = field.widgets.iter().find(|w| w.merged) {
+                let this_state: &[u8] =
+                    if want != "Off" && w.on_states.iter().any(|s| s == want_bytes) {
+                        want_bytes
+                    } else {
+                        b"Off"
+                    };
+                updated.insert(Name::from(b"AS"), Object::Name(Name(this_state.to_vec())));
+            }
+            objects.push(ObjectWrite {
+                id: field.id,
+                before,
+                after: Some(Object::Dict(updated)),
+            });
+        }
+
+        self.commit(Command {
+            kind: CommandKind::SetButtonState,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(())
+    }
+
+    /// An [`ObjectWrite`] setting a Shape-B widget dict's `/AP` `/N` to
+    /// `ap_id`, preserving every other key (round-trip; JS carriers, `/MK`,
+    /// `/DA`, `/Parent` are untouched).
+    fn set_widget_ap(&self, widget_id: ObjId, ap_id: ObjId) -> Result<ObjectWrite, EditError> {
+        let Some(Object::Dict(dict)) = self.value(widget_id) else {
+            return Err(EditError::NotADictionary {
+                id: widget_id,
+                key: "AP",
+            });
+        };
+        let before = self.state.get(&widget_id).cloned();
+        let mut updated = dict.clone();
+        // Preserve /R and /D if the /AP was a dict; overwrite /N only.
+        let mut ap = match updated.get(b"AP").and_then(Object::as_dict) {
+            Some(existing) => existing.clone(),
+            None => Dict::new(),
+        };
+        ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+        updated.insert(Name::from(b"AP"), Object::Dict(ap));
+        Ok(ObjectWrite {
+            id: widget_id,
+            before,
+            after: Some(Object::Dict(updated)),
+        })
+    }
+
+    /// An [`ObjectWrite`] setting a Shape-B widget dict's `/AS` to `state`,
+    /// preserving every other key.
+    fn set_widget_as(&self, widget_id: ObjId, state: &[u8]) -> Result<ObjectWrite, EditError> {
+        let Some(Object::Dict(dict)) = self.value(widget_id) else {
+            return Err(EditError::NotADictionary {
+                id: widget_id,
+                key: "AS",
+            });
+        };
+        let before = self.state.get(&widget_id).cloned();
+        let mut updated = dict.clone();
+        updated.insert(Name::from(b"AS"), Object::Name(Name(state.to_vec())));
+        Ok(ObjectWrite {
+            id: widget_id,
+            before,
+            after: Some(Object::Dict(updated)),
+        })
+    }
+
+    /// Regenerate every widget appearance of `field` to display `text`,
+    /// pushing the created `/AP` stream writes (and Shape-B widget `/AP`
+    /// patches) onto `objects`, and returning the merged-widget `/AP` stream
+    /// id (Shape A) to fold into the field-dictionary patch.
+    ///
+    /// The single §12.7.3.3 appearance engine (R49) — shared by
+    /// [`EditSession::fill_text_field`], [`EditSession::set_choice_value`],
+    /// [`EditSession::regenerate_appearances`], and form-data import — so
+    /// every path that authors a widget appearance authors it identically.
+    #[allow(clippy::too_many_arguments)]
+    fn regen_field_appearance(
+        &mut self,
+        field: &Field,
+        text: &str,
+        default_da: &[u8],
+        multiline: bool,
+        fonts: &[FontResource],
+        objects: &mut Vec<ObjectWrite>,
+        applied_autosize: &mut Option<f64>,
+        unencodable: &mut usize,
+    ) -> Result<Option<ObjId>, EditError> {
+        let da = field
+            .default_appearance
+            .clone()
+            .unwrap_or_else(|| default_da.to_vec());
+        let quad = field.quadding;
+        let mut merged_ap: Option<ObjId> = None;
+        for widget in &field.widgets {
+            let (w, h) = widget.rect.map_or((0.0, 0.0), |r| (r.width(), r.height()));
+            let appearance =
+                annot_author::build_field_text_appearance(w, h, text, &da, quad, multiline, fonts)?;
+            if appearance.applied_autosize.is_some() {
+                *applied_autosize = appearance.applied_autosize;
+            }
+            *unencodable += appearance.unencodable_chars;
+
+            let ap_id = ObjId::new(self.alloc_number()?, 0);
+            let mut ap_dict = appearance.ap_dict;
+            ap_dict.insert(
+                Name::from(b"Length"),
+                Object::Integer(i64::try_from(appearance.content.len()).unwrap_or(i64::MAX)),
+            );
+            let span = self.stage_bytes(&appearance.content);
+            objects.push(ObjectWrite {
+                id: ap_id,
+                before: None,
+                after: Some(Object::Stream(Stream {
+                    dict: ap_dict,
+                    data_span: span,
+                })),
+            });
+            if widget.merged {
+                merged_ap = Some(ap_id);
+            } else {
+                objects.push(self.set_widget_ap(widget.id, ap_id)?);
+            }
+        }
+        Ok(merged_ap)
+    }
+
+    /// Set a **choice** field's selection(s) and regenerate its appearance
+    /// (Pass 7.1, §12.7.4.4).
+    ///
+    /// Each string in `selections` is matched against the field's `/Opt`
+    /// options by **export value first, then display value**; the matched
+    /// **export** value is stored in `/V` (§12.7.4.4: `/V` holds the export
+    /// value), and the matched **display** value drives the regenerated
+    /// appearance (that is what the user sees). An editable combo box
+    /// (`Combo` + `Edit`, §12.7.4.1 bits 18/19) additionally accepts a
+    /// **free-text** value not present in `/Opt`.
+    ///
+    /// `/V` is a single string for one selection and — only when the field is
+    /// `MultiSelect` (bit 22) — an **array** for several. The `/I`
+    /// selected-index array (§12.7.4.4) is rewritten to the matched option
+    /// indices (a free-text combo value contributes no index), or removed
+    /// when nothing matched an option. Every same-FQN representation is
+    /// updated together.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::FieldNotFound`] / [`EditError::FieldNotFillable`] — no
+    ///   such choice field, or it is read-only.
+    /// - [`EditError::ChoiceRequiresMultiSelect`] — several values on a
+    ///   single-select field.
+    /// - [`EditError::ChoiceValueNotInOptions`] — an unknown value on a
+    ///   non-editable choice.
+    /// - The shared fill guards and [`EditError::VariableText`].
+    pub fn set_choice_value(
+        &mut self,
+        fqn: &str,
+        selections: &[&str],
+    ) -> Result<FillOutcome, EditError> {
+        self.fill_guards()?;
+
+        let form =
+            forms::parse_acroform(&self.graph()).ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+        let targets: Vec<Field> = form
+            .fields
+            .iter()
+            .filter(|f| f.fully_qualified_name == fqn)
+            .cloned()
+            .collect();
+        let Some(primary) = targets.first() else {
+            return Err(EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            });
+        };
+        if primary.field_type != Some(FieldType::Choice) || primary.flags.read_only() {
+            return Err(EditError::FieldNotFillable {
+                name: fqn.to_owned(),
+            });
+        }
+        let multi = primary.flags.has(forms::FieldFlags::MULTI_SELECT);
+        let editable_combo = primary.flags.has(forms::FieldFlags::COMBO)
+            && primary.flags.has(forms::FieldFlags::EDIT);
+        let list_box = !primary.flags.has(forms::FieldFlags::COMBO);
+        if selections.len() > 1 && !multi {
+            return Err(EditError::ChoiceRequiresMultiSelect {
+                name: fqn.to_owned(),
+                count: selections.len(),
+            });
+        }
+
+        // Resolve each selection to (export, display, matched-index?).
+        let mut export_values: Vec<Vec<u8>> = Vec::new();
+        let mut display_values: Vec<String> = Vec::new();
+        let mut indices: Vec<i64> = Vec::new();
+        for sel in selections {
+            match match_option(&primary.options, sel) {
+                Some((idx, opt)) => {
+                    export_values.push(opt.export.clone());
+                    display_values.push(String::from_utf8_lossy(&opt.display).into_owned());
+                    indices.push(i64::try_from(idx).unwrap_or(0));
+                }
+                None if editable_combo => {
+                    // Free-text combo value: export == display == the typed text.
+                    export_values.push(encode_text_string(sel));
+                    display_values.push((*sel).to_owned());
+                }
+                None => {
+                    let available: Vec<String> = primary
+                        .options
+                        .iter()
+                        .map(|o| String::from_utf8_lossy(&o.display).into_owned())
+                        .collect();
+                    return Err(EditError::ChoiceValueNotInOptions {
+                        name: fqn.to_owned(),
+                        value: (*sel).to_owned(),
+                        available,
+                    });
+                }
+            }
+        }
+
+        // /V: single string, or an array under MultiSelect.
+        let v_object = if multi {
+            Object::Array(
+                export_values
+                    .iter()
+                    .map(|b| Object::String(b.clone()))
+                    .collect(),
+            )
+        } else {
+            Object::String(export_values.first().cloned().unwrap_or_default())
+        };
+        // The appearance shows the display value(s): joined by newline for a
+        // (multiline) list box, a single line for a combo.
+        let display_text = display_values.join("\n");
+
+        let fonts = self.resolve_dr_fonts(&form);
+        let default_da = form
+            .default_appearance
+            .clone()
+            .unwrap_or_else(|| b"/Helv 0 Tf 0 g".to_vec());
+
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        let mut widgets_updated = 0usize;
+        let mut applied_autosize = None;
+        let mut unencodable_chars = 0usize;
+
+        for field in &targets {
+            let before_len = objects.len();
+            let merged_ap = self.regen_field_appearance(
+                field,
+                &display_text,
+                &default_da,
+                list_box,
+                &fonts,
+                &mut objects,
+                &mut applied_autosize,
+                &mut unencodable_chars,
+            )?;
+            widgets_updated += field.widgets.len().max(objects.len() - before_len);
+
+            let Some(Object::Dict(field_dict)) = self.value(field.id) else {
+                return Err(EditError::NotADictionary {
+                    id: field.id,
+                    key: "V",
+                });
+            };
+            let before = self.state.get(&field.id).cloned();
+            let mut updated = field_dict.clone();
+            updated.insert(Name::from(b"V"), v_object.clone());
+            // /I selected-index array (§12.7.4.4): present when options matched.
+            if indices.is_empty() {
+                updated.remove(b"I");
+            } else {
+                updated.insert(
+                    Name::from(b"I"),
+                    Object::Array(indices.iter().map(|i| Object::Integer(*i)).collect()),
+                );
+            }
+            if let Some(ap_id) = merged_ap {
+                let mut ap = Dict::new();
+                ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+                updated.insert(Name::from(b"AP"), Object::Dict(ap));
+            }
+            objects.push(ObjectWrite {
+                id: field.id,
+                before,
+                after: Some(Object::Dict(updated)),
+            });
+        }
+
+        let primary_id = primary.id;
+        self.commit(Command {
+            kind: CommandKind::SetChoiceValue,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(FillOutcome {
+            field_id: primary_id,
+            widgets_updated,
+            applied_autosize,
+            unencodable_chars,
+        })
+    }
+
+    /// Build the [`FontResource`] set the variable-text generator resolves a
+    /// field `/DA` font name against, from the AcroForm `/DR` `/Font`
+    /// (§12.7.2 / §12.7.3.3).
+    ///
+    /// Each `/DR` `/Font` entry maps a resource name to a font dictionary;
+    /// pdfce resolves its `/BaseFont` to a standard-14 face (the Base-14
+    /// generator's remit — an embedded/CID form font is not laid out by this
+    /// path, and its name simply falls through to the Helvetica default). A
+    /// synthetic `Helv → Helvetica` entry is always included so the common
+    /// `/DA /Helv …` resolves even when a producer omitted `/DR`.
+    fn resolve_dr_fonts(&self, _form: &forms::AcroForm) -> Vec<FontResource> {
+        let mut out = vec![FontResource {
+            name: b"Helv".to_vec(),
+            font: Std14::Helvetica,
+        }];
+        let graph = self.graph();
+        let dr_font = graph
+            .catalog_dict()
+            .and_then(|c| c.get(b"AcroForm").map(|o| graph.resolve(o)))
+            .and_then(Object::as_dict)
+            .and_then(|af| af.get(b"DR").map(|o| graph.resolve(o)))
+            .and_then(Object::as_dict)
+            .and_then(|dr| dr.get(b"Font").map(|o| graph.resolve(o)))
+            .and_then(Object::as_dict)
+            .cloned();
+        if let Some(fonts) = dr_font {
+            for (name, val) in fonts.iter() {
+                let base = graph
+                    .resolve(val)
+                    .as_dict()
+                    .and_then(|fd| fd.get(b"BaseFont"))
+                    .and_then(Object::as_name)
+                    .and_then(|n| basefont_to_std14(n.as_bytes()))
+                    .unwrap_or(Std14::Helvetica);
+                let nm = name.as_bytes().to_vec();
+                if !out.iter().any(|r| r.name == nm) {
+                    out.push(FontResource {
+                        name: nm,
+                        font: base,
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    // -- Pass 7.1: export/import, regenerate, flatten -------------------
+
+    /// Export the document's filled form-field data (Pass 7.1, §12.7.7).
+    ///
+    /// A read-only projection of the modelled `/AcroForm` into a
+    /// format-independent [`FormData`](crate::fdf::FormData) the caller
+    /// serializes to FDF or XFDF. `None` when the document has no form.
+    #[must_use]
+    pub fn export_form_data(&self) -> Option<crate::fdf::FormData> {
+        forms::parse_acroform(&self.graph()).map(|form| crate::fdf::FormData::from_acroform(&form))
+    }
+
+    /// Import form-field data (Pass 7.1): set each named field's value and
+    /// regenerate its appearance.
+    ///
+    /// Each [`FieldData`](crate::fdf::FieldData) is dispatched by the
+    /// **target** field's modelled type — text via [`fill_text_field`], a
+    /// checkbox/radio via [`set_button_state`], a choice via
+    /// [`set_choice_value`] — so the same data file applies correctly
+    /// whatever the document's field types are. A named field the document
+    /// does not have is **counted and skipped**, never an error (a data file
+    /// may name a superset), the fuzzy-never-sneaky posture. Each field is
+    /// its own undoable command.
+    ///
+    /// [`fill_text_field`]: EditSession::fill_text_field
+    /// [`set_button_state`]: EditSession::set_button_state
+    /// [`set_choice_value`]: EditSession::set_choice_value
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::NoInteractiveForm`] when the document has no `/AcroForm`;
+    /// any fill error raised while applying a matched field (the guards,
+    /// [`EditError::VariableText`], …).
+    pub fn import_form_data(
+        &mut self,
+        data: &crate::fdf::FormData,
+    ) -> Result<ImportOutcome, EditError> {
+        if forms::parse_acroform(&self.graph()).is_none() {
+            return Err(EditError::NoInteractiveForm);
+        }
+        let mut applied = 0usize;
+        let mut skipped = 0usize;
+        for entry in &data.fields {
+            // Re-model each time so later imports see earlier overlay writes.
+            let Some(form) = forms::parse_acroform(&self.graph()) else {
+                return Err(EditError::NoInteractiveForm);
+            };
+            let Some(field) = form.field_by_name(&entry.name) else {
+                skipped += 1;
+                continue;
+            };
+            match field.field_type {
+                Some(FieldType::Button) => {
+                    let state = entry.values.first().map_or("Off", String::as_str);
+                    self.set_button_state(&entry.name, state)?;
+                }
+                Some(FieldType::Choice) => {
+                    let sel: Vec<&str> = entry.values.iter().map(String::as_str).collect();
+                    self.set_choice_value(&entry.name, &sel)?;
+                }
+                Some(FieldType::Text) => {
+                    let text = entry.values.first().map_or("", String::as_str);
+                    self.fill_text_field(&entry.name, text)?;
+                }
+                Some(FieldType::Signature) | None => {
+                    skipped += 1;
+                    continue;
+                }
+            }
+            applied += 1;
+        }
+        Ok(ImportOutcome { applied, skipped })
+    }
+
+    /// Regenerate widget appearances that need it and clear
+    /// `/NeedAppearances` on pdfce's own output (Pass 7.1, R51).
+    ///
+    /// A save-side operation: for every text/choice field that either has no
+    /// usable `/AP` or whose document sets `/NeedAppearances true`, the
+    /// widget appearance is rebuilt from the field's current `/V` through the
+    /// shared §12.7.3.3 generator, and the AcroForm's `/NeedAppearances` flag
+    /// is **removed** — pdfce never emits a stale "appearances need
+    /// regenerating" assertion on a file it just regenerated (R51). Buttons
+    /// are untouched (their appearances are pre-authored state selections,
+    /// not generated). One undoable command.
+    ///
+    /// This is the one form operation that touches the `/AcroForm`
+    /// dictionary (to clear the flag); the JS carriers it also holds (`/CO`,
+    /// `/DR`, `/DA`) re-emit unchanged, and no `/JS` is stripped
+    /// (decision 009).
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::NoInteractiveForm`]; the shared fill guards;
+    /// [`EditError::VariableText`].
+    pub fn regenerate_appearances(&mut self) -> Result<RegenOutcome, EditError> {
+        self.fill_guards()?;
+        let form = forms::parse_acroform(&self.graph()).ok_or(EditError::NoInteractiveForm)?;
+        let want_all = form.need_appearances;
+        let fonts = self.resolve_dr_fonts(&form);
+        let default_da = form
+            .default_appearance
+            .clone()
+            .unwrap_or_else(|| b"/Helv 0 Tf 0 g".to_vec());
+
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        let mut regenerated = 0usize;
+        let mut applied_autosize = None;
+        let mut unencodable = 0usize;
+
+        for field in &form.fields {
+            if field.widgets.is_empty() {
+                continue;
+            }
+            // Only regenerate what needs it: a field with no usable /AP, or
+            // (when /NeedAppearances is set) every variable-text field.
+            if !want_all && field.has_appearance() {
+                continue;
+            }
+            let (display, multiline) = match field.field_type {
+                Some(FieldType::Text) => match &field.value {
+                    forms::FieldValue::Text(b) => (
+                        decode_text_string(b).text,
+                        field.flags.has(forms::FieldFlags::MULTILINE),
+                    ),
+                    _ => continue,
+                },
+                Some(FieldType::Choice) => match choice_display_text(field) {
+                    Some(t) => (t, !field.flags.has(forms::FieldFlags::COMBO)),
+                    None => continue,
+                },
+                _ => continue,
+            };
+            let merged_ap = self.regen_field_appearance(
+                field,
+                &display,
+                &default_da,
+                multiline,
+                &fonts,
+                &mut objects,
+                &mut applied_autosize,
+                &mut unencodable,
+            )?;
+            regenerated += 1;
+            // Shape A: fold the new /AP /N into the field dictionary.
+            if let Some(ap_id) = merged_ap {
+                let Some(Object::Dict(fd)) = self.value(field.id) else {
+                    continue;
+                };
+                let before = self.state.get(&field.id).cloned();
+                let mut updated = fd.clone();
+                let mut ap = Dict::new();
+                ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+                updated.insert(Name::from(b"AP"), Object::Dict(ap));
+                objects.push(ObjectWrite {
+                    id: field.id,
+                    before,
+                    after: Some(Object::Dict(updated)),
+                });
+            }
+        }
+
+        // Clear /NeedAppearances on our own output (R51).
+        let cleared = self.clear_need_appearances_write(&mut objects);
+
+        if objects.is_empty() {
+            return Ok(RegenOutcome {
+                regenerated: 0,
+                need_appearances_cleared: false,
+                applied_autosize,
+                unencodable_chars: unencodable,
+            });
+        }
+        self.commit(Command {
+            kind: CommandKind::RegenerateAppearances { count: regenerated },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(RegenOutcome {
+            regenerated,
+            need_appearances_cleared: cleared,
+            applied_autosize,
+            unencodable_chars: unencodable,
+        })
+    }
+
+    /// Flatten form fields: burn each field's appearance into its page's
+    /// content and remove the fields from `/AcroForm` and `/Annots`
+    /// (Pass 7.1, R48). **Destructive** — the fields stop being interactive.
+    ///
+    /// `names = Some(&[…])` flattens exactly the named fields; `None`
+    /// flattens every field. This is the project's **first modification of a
+    /// page's rendered content**: for each flattened widget, its existing
+    /// `/AP` `/N` appearance (an existing form XObject) is added to the
+    /// page's `/Resources` `/XObject` and invoked by a `q <cm> /Name Do Q`
+    /// overlay authored **as a new content stream appended to the page's
+    /// `/Contents` array** (§7.8.2). The page's *original* content streams
+    /// stay **byte-verbatim** — only a new stream is added and the page dict
+    /// re-pointed — so the R46 content-identity gate is unperturbed (no
+    /// existing stream is re-emitted; this is a deliberately more
+    /// minimal-diff design than an in-place stream rewrite). The §12.5.5
+    /// placement `cm` maps the appearance's `/BBox` (via its `/Matrix`) onto
+    /// the widget's `/Rect`.
+    ///
+    /// The flattened field and widget dictionaries are **deleted** (§7.5.4):
+    /// under a **full rewrite** they are omitted entirely (the field data is
+    /// physically gone); under the default **incremental** save the prior
+    /// revision still holds them, so the pre-flatten value is recoverable in
+    /// the earlier revision — the R35 sibling. This is the R48
+    /// destructive-disclosure the caller must surface: incremental flatten is
+    /// reversible-by-revision until a full rewrite removes it.
+    ///
+    /// Flatten is **structural** (it removes fields), so it uses the strict
+    /// certification gate ([`EditSession::check_certification`]): a certified
+    /// document refuses flatten by name, unlike the `/P >= 2` fill gate.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::NoInteractiveForm`] — the document has no `/AcroForm`.
+    /// - [`EditError::FieldNotFound`] — a named field is absent.
+    /// - [`EditError::CertificationForbidsChange`] — a certified document.
+    /// - [`EditError::DocumentEncrypted`],
+    ///   [`EditError::ObjectCreationWouldExposeHiddenObjects`],
+    ///   [`EditError::ObjectNumbersExhausted`], [`EditError::PageTree`].
+    pub fn flatten_fields(&mut self, names: Option<&[&str]>) -> Result<FlattenOutcome, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        // STRICT gate: flatten removes structure, so it uses the same
+        // conservative refusal the page ops use — a certified document is
+        // refused by name.
+        self.check_certification()?;
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+
+        let form = forms::parse_acroform(&self.graph()).ok_or(EditError::NoInteractiveForm)?;
+        let slots = self.page_slots()?;
+
+        // Select the fields to flatten (all, or the named subset).
+        let targets: Vec<Field> = match names {
+            None => form.fields.clone(),
+            Some(ns) => {
+                for n in ns {
+                    if !form.fields.iter().any(|f| f.fully_qualified_name == *n) {
+                        return Err(EditError::FieldNotFound {
+                            name: (*n).to_owned(),
+                        });
+                    }
+                }
+                form.fields
+                    .iter()
+                    .filter(|f| ns.iter().any(|n| f.fully_qualified_name == *n))
+                    .cloned()
+                    .collect()
+            }
+        };
+
+        // Phase 1 (reads only): plan the per-page burns and the object
+        // deletions, cloning everything so no borrow is held into phase 2.
+        let mut per_page: BTreeMap<ObjId, PageFlatten> = BTreeMap::new();
+        let mut delete_ids: Vec<ObjId> = Vec::new();
+        let mut widget_removals: BTreeMap<ObjId, Vec<ObjId>> = BTreeMap::new();
+        let mut xobj_counter = 0u32;
+        let mut widgets_burned = 0usize;
+
+        for field in &targets {
+            for widget in &field.widgets {
+                let Some(page_id) = self.page_of_widget(widget, &slots) else {
+                    continue;
+                };
+                let Some((ap_id, bbox, matrix)) = self.burn_target(widget) else {
+                    continue;
+                };
+                let Some(rect) = widget.rect else {
+                    continue;
+                };
+                let cm = fit_matrix_for(bbox, matrix, rect);
+                xobj_counter += 1;
+                let name = format!("pdfceFm{xobj_counter}").into_bytes();
+                let entry = per_page.entry(page_id).or_default();
+                entry.invocations.push((name.clone(), cm));
+                entry.xobjects.push((name, ap_id));
+                widget_removals.entry(page_id).or_default().push(widget.id);
+                widgets_burned += 1;
+                // A Shape-B widget is its own object to delete; a merged
+                // widget's object IS the field dict, deleted with the field.
+                if !widget.merged {
+                    delete_ids.push(widget.id);
+                }
+            }
+            delete_ids.push(field.id);
+        }
+
+        // Phase 2 (writes): overlay content, resource + /Contents patches,
+        // /Annots removals, /Fields removal, object deletions.
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        let mut removals: Vec<Removal> = Vec::new();
+
+        for (page_id, pf) in &per_page {
+            // The overlay content stream: `q cm /Name Do Q` per widget.
+            let mut cb = ContentBuilder::new();
+            for (name, cm) in &pf.invocations {
+                cb.save_state();
+                cb.concat_matrix(cm[0], cm[1], cm[2], cm[3], cm[4], cm[5]);
+                cb.invoke_xobject(name);
+                cb.restore_state();
+            }
+            let content = cb.into_bytes();
+            let overlay_id = ObjId::new(self.alloc_number()?, 0);
+            let mut sdict = Dict::new();
+            sdict.insert(
+                Name::from(b"Length"),
+                Object::Integer(i64::try_from(content.len()).unwrap_or(i64::MAX)),
+            );
+            let span = self.stage_bytes(&content);
+            objects.push(ObjectWrite {
+                id: overlay_id,
+                before: None,
+                after: Some(Object::Stream(Stream {
+                    dict: sdict,
+                    data_span: span,
+                })),
+            });
+            objects.push(self.append_page_content(*page_id, overlay_id)?);
+            objects.push(self.add_page_xobjects(*page_id, &pf.xobjects, &slots)?);
+        }
+
+        // Remove flattened widgets from each page's /Annots.
+        for (page_id, widget_ids) in &widget_removals {
+            if let Some(w) = self.remove_from_annots(*page_id, widget_ids, &slots)? {
+                objects.push(w);
+            }
+        }
+
+        // Remove flattened fields from /AcroForm /Fields (and any parent
+        // /Kids). Root fields drop from /Fields; nested ones from /Parent.
+        let field_ids: Vec<ObjId> = targets.iter().map(|f| f.id).collect();
+        objects.extend(self.remove_fields_from_form(&field_ids)?);
+
+        // Delete the flattened field/widget dictionaries (§7.5.4). Their
+        // /AP appearance streams survive — they are now page resources.
+        for id in delete_ids {
+            if self.base.get(id).is_some() || self.state.contains_key(&id) {
+                removals.push(Removal {
+                    id,
+                    was_deleted: self.deleted.contains(&id),
+                    is_deleted: true,
+                });
+            }
+        }
+
+        if objects.is_empty() && removals.is_empty() {
+            return Ok(FlattenOutcome {
+                fields_flattened: 0,
+                widgets_burned: 0,
+                pages_touched: 0,
+            });
+        }
+        let pages_touched = per_page.len();
+        let fields_flattened = targets.len();
+        self.commit(Command {
+            kind: CommandKind::FlattenFields {
+                count: fields_flattened,
+            },
+            objects,
+            removals,
+            trailer: None,
+        });
+        Ok(FlattenOutcome {
+            fields_flattened,
+            widgets_burned,
+            pages_touched,
+        })
+    }
+
+    /// Resolve a widget's burn target: the object id of the `/AP` `/N`
+    /// appearance stream to invoke (honoring `/AS` for a state
+    /// sub-dictionary), plus its `/BBox` and `/Matrix` for §12.5.5
+    /// placement. `None` when there is no usable indirect appearance stream
+    /// (an inline `/N` stream, or a state with no matching entry — flatten
+    /// then simply skips that widget rather than fabricating one).
+    fn burn_target(&self, widget: &forms::Widget) -> Option<(ObjId, [f64; 4], [f64; 6])> {
+        let graph = self.graph();
+        let wd = graph.resolved(widget.id).as_dict()?;
+        let ap = wd
+            .get(b"AP")
+            .map(|o| graph.resolve(o))
+            .and_then(Object::as_dict)?;
+        let n = ap.get(b"N")?;
+        let ap_id = match n {
+            Object::Reference(r) => *r,
+            Object::Dict(states) => {
+                let state = widget.appearance_state.as_deref()?;
+                match states.get(state) {
+                    Some(Object::Reference(r)) => *r,
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        };
+        let stream_dict = graph.resolved(ap_id).as_dict()?;
+        let bbox = read_rect_array(&graph, stream_dict.get(b"BBox")?)?;
+        let matrix = stream_dict
+            .get(b"Matrix")
+            .map(|o| graph.resolve(o))
+            .and_then(Object::as_array)
+            .and_then(|a| {
+                let nums: Vec<f64> = a
+                    .iter()
+                    .filter_map(|o| graph.resolve(o).as_number())
+                    .collect();
+                match nums.as_slice() {
+                    &[a, b, c, d, e, f] => Some([a, b, c, d, e, f]),
+                    _ => None,
+                }
+            })
+            .unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        Some((ap_id, bbox, matrix))
+    }
+
+    /// The page a widget appears on: its `/P` back-reference, or (failing
+    /// that) the page whose `/Annots` array lists the widget id.
+    fn page_of_widget(&self, widget: &forms::Widget, slots: &[PageSlot]) -> Option<ObjId> {
+        if let Some(p) = widget.page
+            && slots.iter().any(|s| s.id == p)
+        {
+            return Some(p);
+        }
+        let graph = self.graph();
+        for slot in slots {
+            if let Some(Object::Dict(page)) = self.value(slot.id) {
+                let annots = page.get(b"Annots").map(|o| graph.resolve(o));
+                if let Some(arr) = annots.and_then(Object::as_array)
+                    && arr.iter().any(|o| o.as_reference() == Some(widget.id))
+                {
+                    return Some(slot.id);
+                }
+            }
+        }
+        None
+    }
+
+    /// Append a content-stream reference to a page's `/Contents` (§7.8.2),
+    /// producing the page-dict write. `/Contents` becomes an array
+    /// `[…existing, overlay]`; the existing content stream object(s) are
+    /// untouched (byte-verbatim).
+    fn append_page_content(
+        &self,
+        page_id: ObjId,
+        overlay_id: ObjId,
+    ) -> Result<ObjectWrite, EditError> {
+        let Some(Object::Dict(page)) = self.value(page_id) else {
+            return Err(EditError::NotADictionary {
+                id: page_id,
+                key: "Contents",
+            });
+        };
+        let mut updated = page.clone();
+        let new_contents = match page.get(b"Contents").cloned() {
+            None => Object::Array(vec![Object::Reference(overlay_id)]),
+            Some(Object::Reference(r)) => {
+                Object::Array(vec![Object::Reference(r), Object::Reference(overlay_id)])
+            }
+            Some(Object::Array(mut arr)) => {
+                arr.push(Object::Reference(overlay_id));
+                Object::Array(arr)
+            }
+            // A direct or malformed /Contents: wrap what is referenceable
+            // plus the overlay, keeping the original as a reference only if
+            // it already was one (handled above). Otherwise append after.
+            Some(_) => Object::Array(vec![Object::Reference(overlay_id)]),
+        };
+        updated.insert(Name::from(b"Contents"), new_contents);
+        Ok(ObjectWrite {
+            id: page_id,
+            before: self.state.get(&page_id).cloned(),
+            after: Some(Object::Dict(updated)),
+        })
+    }
+
+    /// Add form-XObject resources to a page's `/Resources` `/XObject`
+    /// sub-dictionary, materializing inherited `/Resources` onto the page if
+    /// needed (so the addition never shadows the page's real resources).
+    fn add_page_xobjects(
+        &self,
+        page_id: ObjId,
+        xobjects: &[(Vec<u8>, ObjId)],
+        slots: &[PageSlot],
+    ) -> Result<ObjectWrite, EditError> {
+        let Some(Object::Dict(page)) = self.value(page_id) else {
+            return Err(EditError::NotADictionary {
+                id: page_id,
+                key: "Resources",
+            });
+        };
+        let mut updated = page.clone();
+        // The page's own /Resources, or a materialized copy of the inherited
+        // one (never a fresh empty dict, which would hide inherited fonts).
+        let mut resources = self.effective_resources(page_id, slots);
+        let mut xobj = resources
+            .get(b"XObject")
+            .and_then(Object::as_dict)
+            .cloned()
+            .unwrap_or_default();
+        for (name, id) in xobjects {
+            xobj.insert(Name(name.clone()), Object::Reference(*id));
+        }
+        resources.insert(Name::from(b"XObject"), Object::Dict(xobj));
+        updated.insert(Name::from(b"Resources"), Object::Dict(resources));
+        Ok(ObjectWrite {
+            id: page_id,
+            before: self.state.get(&page_id).cloned(),
+            after: Some(Object::Dict(updated)),
+        })
+    }
+
+    /// The `/Resources` in effect for a page (§7.7.3.4): the page's own, or
+    /// the nearest ancestor's, cloned. Empty when none is found.
+    fn effective_resources(&self, page_id: ObjId, slots: &[PageSlot]) -> Dict {
+        let graph = self.graph();
+        let mut chain = vec![page_id];
+        if let Some(slot) = slots.iter().find(|s| s.id == page_id) {
+            chain.extend(slot.ancestors.iter().copied());
+        }
+        for id in chain {
+            if let Some(dict) = graph.resolved(id).as_dict()
+                && let Some(res) = dict
+                    .get(b"Resources")
+                    .map(|o| graph.resolve(o))
+                    .and_then(Object::as_dict)
+            {
+                return res.clone();
+            }
+        }
+        Dict::new()
+    }
+
+    /// Remove annotation references from a page's `/Annots`, producing the
+    /// page-dict (or shared-array) write, or `None` if nothing changed.
+    fn remove_from_annots(
+        &self,
+        page_id: ObjId,
+        remove: &[ObjId],
+        _slots: &[PageSlot],
+    ) -> Result<Option<ObjectWrite>, EditError> {
+        let Some(Object::Dict(page)) = self.value(page_id) else {
+            return Ok(None);
+        };
+        let page = page.clone();
+        match page.get(b"Annots").cloned() {
+            Some(Object::Array(arr)) => {
+                let kept: Vec<Object> = arr
+                    .into_iter()
+                    .filter(|o| o.as_reference().is_none_or(|id| !remove.contains(&id)))
+                    .collect();
+                let mut updated = page.clone();
+                updated.insert(Name::from(b"Annots"), Object::Array(kept));
+                Ok(Some(ObjectWrite {
+                    id: page_id,
+                    before: self.state.get(&page_id).cloned(),
+                    after: Some(Object::Dict(updated)),
+                }))
+            }
+            Some(Object::Reference(array_id)) => {
+                let entries = self
+                    .value(array_id)
+                    .and_then(Object::as_array)
+                    .map(<[Object]>::to_vec)
+                    .unwrap_or_default();
+                let kept: Vec<Object> = entries
+                    .into_iter()
+                    .filter(|o| o.as_reference().is_none_or(|id| !remove.contains(&id)))
+                    .collect();
+                Ok(Some(ObjectWrite {
+                    id: array_id,
+                    before: self.state.get(&array_id).cloned(),
+                    after: Some(Object::Array(kept)),
+                }))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Remove flattened fields from the `/AcroForm` `/Fields` array and from
+    /// any parent field's `/Kids`. Root fields drop from `/Fields`; a nested
+    /// field drops from its `/Parent`'s `/Kids`.
+    fn remove_fields_from_form(&self, field_ids: &[ObjId]) -> Result<Vec<ObjectWrite>, EditError> {
+        let mut writes: Vec<ObjectWrite> = Vec::new();
+        let graph = self.graph();
+        // Group the removals by the container that holds each field id: its
+        // /Parent's /Kids, or the AcroForm /Fields root.
+        let acro_holder = self.acroform_id();
+        // Map container-object-id -> (array-key, ids to drop).
+        let mut by_parent: BTreeMap<ObjId, Vec<ObjId>> = BTreeMap::new();
+        let mut root_drop: Vec<ObjId> = Vec::new();
+        for id in field_ids {
+            let parent = graph
+                .resolved(*id)
+                .as_dict()
+                .and_then(|d| d.get(b"Parent").and_then(Object::as_reference));
+            match parent {
+                Some(p) => by_parent.entry(p).or_default().push(*id),
+                None => root_drop.push(*id),
+            }
+        }
+        // Parent /Kids patches.
+        for (parent_id, drop) in &by_parent {
+            if let Some(Object::Dict(pd)) = self.value(*parent_id) {
+                let mut updated = pd.clone();
+                if let Some(kids) = pd
+                    .get(b"Kids")
+                    .map(|o| graph.resolve(o))
+                    .and_then(Object::as_array)
+                {
+                    let kept: Vec<Object> = kids
+                        .iter()
+                        .filter(|o| o.as_reference().is_none_or(|id| !drop.contains(&id)))
+                        .cloned()
+                        .collect();
+                    updated.insert(Name::from(b"Kids"), Object::Array(kept));
+                    writes.push(ObjectWrite {
+                        id: *parent_id,
+                        before: self.state.get(parent_id).cloned(),
+                        after: Some(Object::Dict(updated)),
+                    });
+                }
+            }
+        }
+        // AcroForm /Fields root patch. Clone the fields array up front so the
+        // immutable borrow of the AcroForm dict is released before its own
+        // (direct-array) case mutates it.
+        if let Some(holder_id) = acro_holder {
+            let acro = graph.resolved(holder_id).as_dict().cloned();
+            let fields_owned: Option<Vec<Object>> = acro
+                .as_ref()
+                .and_then(|d| d.get(b"Fields"))
+                .map(|o| graph.resolve(o))
+                .and_then(Object::as_array)
+                .map(<[Object]>::to_vec);
+            if let (Some(mut acro), Some(fields)) = (acro, fields_owned) {
+                let fields_holder = match acro.get(b"Fields") {
+                    Some(Object::Reference(r)) => Some(*r),
+                    _ => None,
+                };
+                let kept: Vec<Object> = fields
+                    .into_iter()
+                    .filter(|o| o.as_reference().is_none_or(|id| !root_drop.contains(&id)))
+                    .collect();
+                match fields_holder {
+                    // /Fields is an indirect array object: patch it directly.
+                    Some(arr_id) => writes.push(ObjectWrite {
+                        id: arr_id,
+                        before: self.state.get(&arr_id).cloned(),
+                        after: Some(Object::Array(kept)),
+                    }),
+                    // /Fields is a direct array in the AcroForm dict.
+                    None => {
+                        acro.insert(Name::from(b"Fields"), Object::Array(kept));
+                        writes.push(ObjectWrite {
+                            id: holder_id,
+                            before: self.state.get(&holder_id).cloned(),
+                            after: Some(Object::Dict(acro)),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(writes)
+    }
+
+    /// The object id that holds the `/AcroForm` dictionary: the referenced
+    /// object when `/AcroForm` is an indirect reference, else the catalog
+    /// (an inline `/AcroForm`).
+    fn acroform_id(&self) -> Option<ObjId> {
+        let graph = self.graph();
+        let catalog_id = graph.catalog_id()?;
+        let catalog = graph.resolved(catalog_id).as_dict()?;
+        match catalog.get(b"AcroForm") {
+            Some(Object::Reference(r)) => Some(*r),
+            Some(_) => Some(catalog_id),
+            None => None,
+        }
+    }
+
+    /// Push the write that removes `/NeedAppearances` from the AcroForm
+    /// dictionary (R51), returning whether it was present to clear.
+    fn clear_need_appearances_write(&self, objects: &mut Vec<ObjectWrite>) -> bool {
+        let Some(holder_id) = self.acroform_id() else {
+            return false;
+        };
+        let graph = self.graph();
+        // The AcroForm dict may be the referenced object or inline in the
+        // catalog; patch whichever holds it.
+        let catalog_id = graph.catalog_id();
+        if Some(holder_id) == catalog_id {
+            // Inline: patch the catalog's /AcroForm dict.
+            let Some(Object::Dict(cat)) = self.value(holder_id) else {
+                return false;
+            };
+            let Some(Object::Dict(acro)) = cat.get(b"AcroForm") else {
+                return false;
+            };
+            if !acro.contains_key(b"NeedAppearances") {
+                return false;
+            }
+            let mut acro2 = acro.clone();
+            acro2.remove(b"NeedAppearances");
+            let mut cat2 = cat.clone();
+            cat2.insert(Name::from(b"AcroForm"), Object::Dict(acro2));
+            objects.push(ObjectWrite {
+                id: holder_id,
+                before: self.state.get(&holder_id).cloned(),
+                after: Some(Object::Dict(cat2)),
+            });
+            true
+        } else {
+            let Some(Object::Dict(acro)) = self.value(holder_id) else {
+                return false;
+            };
+            if !acro.contains_key(b"NeedAppearances") {
+                return false;
+            }
+            let mut acro2 = acro.clone();
+            acro2.remove(b"NeedAppearances");
+            objects.push(ObjectWrite {
+                id: holder_id,
+                before: self.state.get(&holder_id).cloned(),
+                after: Some(Object::Dict(acro2)),
+            });
+            true
+        }
+    }
+
+    /// Allocate the next object number for a created object, advancing the
+    /// cached counter so two creations in one session cannot collide.
+    ///
+    /// The counter is **not** rewound on undo — §7.5.4/§7.5.7 never reuse
+    /// a number, so a skipped one is harmless, and rewinding would risk a
+    /// collision with a redo. Matches [`EditSession::set_info_field`].
+    fn alloc_number(&mut self) -> Result<u32, EditError> {
+        let n = self.next_number.ok_or(EditError::ObjectNumbersExhausted)?;
+        self.next_number = self.next_number.and_then(|v| v.checked_add(1));
+        Ok(n)
+    }
+
+    /// Append `content` to the session staging buffer (R45) and return its
+    /// span in the combined `base.len() + local` coordinate system, so a
+    /// created appearance [`Stream`](crate::object::Stream) keeps the span
+    /// model rather than owning bytes.
+    fn stage_bytes(&mut self, content: &[u8]) -> ByteSpan {
+        let start = self.base.bytes().len() + self.staging.len();
+        self.staging.extend_from_slice(content);
+        ByteSpan::new(start, content.len())
+    }
+
+    /// Compute the object write(s) that add `annot_ref_id` to `page_id`'s
+    /// `/Annots` array (X7).
+    ///
+    /// Three shapes, all handled without perturbing another page:
+    ///
+    /// - **No `/Annots`** — write a fresh direct array `[annot]` onto the
+    ///   page dictionary.
+    /// - **Direct array** — clone, append, write back onto the page.
+    /// - **Indirect array** — if the array object is referenced by only
+    ///   this page, modify it in place (the page dictionary is untouched).
+    ///   If it is **shared** by more than one page (malformed per §12.5.2's
+    ///   *"referenced from only one page"*, but seen in the wild), **copy
+    ///   on write**: a new array object carries the old entries plus the
+    ///   new one and this page is repointed at it — so the other sharing
+    ///   pages keep their original annotation set.
+    fn annots_writes(
+        &mut self,
+        page_id: ObjId,
+        annot_ref_id: ObjId,
+        slots: &[PageSlot],
+    ) -> Result<Vec<ObjectWrite>, EditError> {
+        self.annots_append(page_id, &[annot_ref_id], slots)
+    }
+
+    /// Append several annotation references to a page's `/Annots` in one
+    /// command (the [`annots_writes`](EditSession::annots_writes)
+    /// generalization Pass 6.2 needs: a sticky note plus its `/Popup`
+    /// companion are two entries added together). Same three `/Annots`
+    /// shapes and the same X7 copy-on-write handling.
+    fn annots_append(
+        &mut self,
+        page_id: ObjId,
+        new_ids: &[ObjId],
+        slots: &[PageSlot],
+    ) -> Result<Vec<ObjectWrite>, EditError> {
+        let new_refs = || new_ids.iter().map(|id| Object::Reference(*id));
+        let Some(Object::Dict(page)) = self.value(page_id) else {
+            return Err(EditError::NotADictionary {
+                id: page_id,
+                key: "Annots",
+            });
+        };
+        let page = page.clone();
+        match page.get(b"Annots").cloned() {
+            None => {
+                let mut updated = page.clone();
+                updated.insert(Name::from(b"Annots"), Object::Array(new_refs().collect()));
+                Ok(vec![self.page_write(page_id, updated)])
+            }
+            Some(Object::Array(mut arr)) => {
+                arr.extend(new_refs());
+                let mut updated = page.clone();
+                updated.insert(Name::from(b"Annots"), Object::Array(arr));
+                Ok(vec![self.page_write(page_id, updated)])
+            }
+            Some(Object::Reference(array_id)) => {
+                let mut entries = self
+                    .value(array_id)
+                    .and_then(Object::as_array)
+                    .map(<[Object]>::to_vec)
+                    .unwrap_or_default();
+                entries.extend(new_refs());
+                if self.annots_array_is_shared(array_id, slots) {
+                    // Copy-on-write: a new array, this page repointed.
+                    let new_id = ObjId::new(self.alloc_number()?, 0);
+                    let mut updated = page.clone();
+                    updated.insert(Name::from(b"Annots"), Object::Reference(new_id));
+                    Ok(vec![
+                        ObjectWrite {
+                            id: new_id,
+                            before: None,
+                            after: Some(Object::Array(entries)),
+                        },
+                        self.page_write(page_id, updated),
+                    ])
+                } else {
+                    // Sole owner: edit the array object in place; the page
+                    // dictionary is unchanged (no write for it).
+                    let before = self.state.get(&array_id).cloned();
+                    Ok(vec![ObjectWrite {
+                        id: array_id,
+                        before,
+                        after: Some(Object::Array(entries)),
+                    }])
+                }
+            }
+            Some(_) => Err(EditError::AnnotsNotAnArray { page: page_id }),
+        }
+    }
+
+    /// An [`ObjectWrite`] replacing `page_id`'s dictionary with `updated`,
+    /// carrying the correct `before` (the session overlay's value, so undo
+    /// restores exactly what was there — possibly nothing).
+    fn page_write(&self, page_id: ObjId, updated: Dict) -> ObjectWrite {
+        ObjectWrite {
+            id: page_id,
+            before: self.state.get(&page_id).cloned(),
+            after: Some(Object::Dict(updated)),
+        }
+    }
+
+    /// Whether an indirect `/Annots` array is referenced by more than one
+    /// page — the copy-on-write trigger (X7). Short-circuits at the second
+    /// referrer.
+    fn annots_array_is_shared(&self, array_id: ObjId, slots: &[PageSlot]) -> bool {
+        let mut count = 0usize;
+        for slot in slots {
+            if let Some(Object::Dict(d)) = self.value(slot.id)
+                && matches!(d.get(b"Annots"), Some(Object::Reference(r)) if *r == array_id)
+            {
+                count += 1;
+                if count > 1 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Remove pages from the document.
+    ///
+    /// `indices` are 0-based positions in the **current** page order;
+    /// duplicates and any ordering are accepted and normalized, because
+    /// "delete the pages I selected" is the operation and a selection has
+    /// no inherent order.
+    ///
+    /// ## What deletion is, and what it is not
+    ///
+    /// It is a **page-tree splice**: the page leaves its parent's
+    /// `/Kids`, every ancestor's `/Count` drops, a node left empty is
+    /// removed too, and every object the removed pages owned exclusively
+    /// is freed (§7.5.4 type-0 entries, with the generation discipline
+    /// [`crate::writer`] documents). Objects shared with a surviving page
+    /// are untouched — the sweep is a reachability computation against
+    /// the document *as it will be*, not a guess.
+    ///
+    /// It is **not redaction**. Under the default incremental save the
+    /// removed page's bytes remain in the file by construction (§7.5.6
+    /// appends; it does not erase), and `ARCHITECTURE.md` §5.7 records
+    /// that a full rewrite is not sufficient either when the content sits
+    /// in an object stream. Front ends must say so; pdfce-gui's delete
+    /// tooltip does, at length.
+    ///
+    /// ## `/PageLabels` is left stale, and reported
+    ///
+    /// `core_ops__page_labels_and_bates_interaction.md` records that
+    /// Acrobat does not adjust an existing label tree for any structural
+    /// operation, and recommends pdfce match that baseline for this Pass
+    /// (*"leave `/PageLabels` numerically stale exactly as Acrobat
+    /// does … recommended baseline for Pass 3.2 acceptance criteria"*).
+    /// pdfce matches it **and says so** —
+    /// [`DanglingReport::page_labels_stale`] — which is the parity-plus
+    /// half: Acrobat leaves them stale *and silent*.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::CertificationForbidsChange`] — an enforced
+    ///   certification signature (§12.8.4).
+    /// - [`EditError::WouldRemoveEveryPage`] — §7.7.3.3 requires at least
+    ///   one page.
+    /// - [`EditError::PageOutOfRange`], [`EditError::PageTree`].
+    pub fn delete_pages(&mut self, indices: &[usize]) -> Result<DeleteOutcome, EditError> {
+        self.check_certification()?;
+
+        let slots = self.page_slots()?;
+        let total = slots.len();
+        let mut targets: Vec<usize> = indices.to_vec();
+        targets.sort_unstable();
+        targets.dedup();
+        if let Some(&past) = targets.iter().find(|index| **index >= total) {
+            return Err(EditError::PageOutOfRange {
+                index: past,
+                count: total,
+            });
+        }
+        if targets.is_empty() {
+            return Ok(DeleteOutcome {
+                pages_removed: 0,
+                objects_freed: 0,
+                dangling: DanglingReport::default(),
+                signature: self.signature_impact_of_save(SaveMode::Incremental),
+            });
+        }
+        if targets.len() >= total {
+            return Err(EditError::WouldRemoveEveryPage {
+                removing: targets.len(),
+                total,
+            });
+        }
+
+        let removed_pages: HashSet<ObjId> = targets
+            .iter()
+            .filter_map(|index| slots.get(*index))
+            .map(|slot| slot.id)
+            .collect();
+        let surviving: Vec<ObjId> = slots
+            .iter()
+            .filter(|slot| !removed_pages.contains(&slot.id))
+            .map(|slot| slot.id)
+            .collect();
+
+        // Census BEFORE the splice: afterwards the removed pages are
+        // gone and nothing can be found to have pointed at them.
+        let dangling = census_dangling(&self.graph(), &removed_pages, &surviving);
+
+        // --- splice the tree ------------------------------------------
+        let mut scratch: BTreeMap<ObjId, Object> = BTreeMap::new();
+        let mut freed: HashSet<ObjId> = removed_pages.clone();
+
+        // Every node that loses pages, and how many. A node's new /Count
+        // is derived from the walk (how many leaves are under it now)
+        // minus the loss — never from the file's own /Count, which
+        // `page_tree` deliberately does not trust.
+        let mut leaves_under: HashMap<ObjId, usize> = HashMap::new();
+        let mut lost_under: HashMap<ObjId, usize> = HashMap::new();
+        for slot in &slots {
+            for ancestor in &slot.ancestors {
+                *leaves_under.entry(*ancestor).or_insert(0) += 1;
+                if removed_pages.contains(&slot.id) {
+                    *lost_under.entry(*ancestor).or_insert(0) += 1;
+                }
+            }
+        }
+        let touched: Vec<ObjId> = {
+            let mut all: Vec<ObjId> = slots
+                .iter()
+                .flat_map(|slot| slot.ancestors.iter().copied())
+                .collect();
+            all.sort_unstable();
+            all.dedup();
+            all
+        };
+        let root_id = self
+            .graph()
+            .catalog_dict()
+            .and_then(|catalog| catalog.get(b"Pages").and_then(Object::as_reference));
+
+        // Drop the removed pages from their parents' /Kids, then prune
+        // any node left empty, repeatedly, until nothing more empties.
+        // Bounded by the number of nodes: each pass frees at least one,
+        // or stops.
+        let mut drop_from_parent: HashSet<ObjId> = removed_pages.clone();
+        for _ in 0..=touched.len() {
+            let mut newly_empty: HashSet<ObjId> = HashSet::new();
+            for node_id in &touched {
+                let Some(node) = self.pending_dict(&scratch, &freed, *node_id) else {
+                    continue;
+                };
+                let Some(kids) = node
+                    .get(b"Kids")
+                    .map(|o| self.resolve_value(o))
+                    .and_then(Object::as_array)
+                    .map(<[Object]>::to_vec)
+                else {
+                    continue;
+                };
+                let kept: Vec<Object> = kids
+                    .iter()
+                    .filter(|kid| {
+                        kid.as_reference()
+                            .is_none_or(|id| !drop_from_parent.contains(&id))
+                    })
+                    .cloned()
+                    .collect();
+                if kept.len() == kids.len() {
+                    continue;
+                }
+                let mut updated = node.clone();
+                let empty = kept.is_empty();
+                updated.insert(Name::from(b"Kids"), Object::Array(kept));
+                let count = leaves_under
+                    .get(node_id)
+                    .copied()
+                    .unwrap_or(0)
+                    .saturating_sub(lost_under.get(node_id).copied().unwrap_or(0));
+                updated.insert(
+                    Name::from(b"Count"),
+                    Object::Integer(i64::try_from(count).unwrap_or(0)),
+                );
+                scratch.insert(*node_id, Object::Dict(updated));
+                // An intermediate node with no kids left is not a legal
+                // page-tree node (Table 29 requires `Kids`), so it goes
+                // too — unless it is the root, which must survive even
+                // empty because the catalog names it.
+                if empty && Some(*node_id) != root_id {
+                    newly_empty.insert(*node_id);
+                }
+            }
+            if newly_empty.is_empty() {
+                break;
+            }
+            for id in &newly_empty {
+                scratch.remove(id);
+                freed.insert(*id);
+            }
+            drop_from_parent = newly_empty;
+        }
+
+        // --- sweep what the removed pages owned exclusively ------------
+        //
+        // Two closures, and the pairing is what makes this safe. The
+        // CANDIDATE set is everything the removed pages could reach, so
+        // nothing outside their subgraph is ever considered. The LIVE set
+        // is everything still reachable from the trailer AFTER the
+        // splice. A candidate that is not live was owned exclusively by a
+        // page that just left; a candidate that IS live is shared with a
+        // surviving page and must not be touched.
+        //
+        // Restricting to candidates matters as much as the liveness test:
+        // sweeping every unreachable object in the file would also free
+        // objects that were already orphaned before this edit, which
+        // pdfce was not asked to remove (§5).
+        let roots: Vec<ObjId> = removed_pages.iter().copied().collect();
+        let candidates = reachable(&self.graph(), &roots, &removed_pages);
+        let live_after = {
+            let pending = PendingGraph {
+                session: self,
+                scratch: &scratch,
+                removed: &freed,
+            };
+            let mut live_roots: Vec<ObjId> = Vec::new();
+            live_roots.extend(pending.catalog_id());
+            live_roots.extend(
+                pending
+                    .trailer_entry(b"Info")
+                    .and_then(Object::as_reference),
+            );
+            reachable(&pending, &live_roots, &HashSet::new())
+        };
+        for id in candidates {
+            if !live_after.contains(&id) {
+                freed.insert(id);
+            }
+        }
+
+        // --- build the one command ------------------------------------
+        let objects: Vec<ObjectWrite> = scratch
+            .into_iter()
+            .map(|(id, value)| ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(value),
+            })
+            .collect();
+        let removals: Vec<Removal> = freed
+            .iter()
+            .map(|id| Removal {
+                id: *id,
+                was_deleted: self.deleted.contains(id),
+                is_deleted: true,
+            })
+            .collect();
+        let objects_freed = removals.len();
+        let pages_removed = targets.len();
+
+        self.commit(Command {
+            kind: CommandKind::DeletePages {
+                count: pages_removed,
+            },
+            objects,
+            removals,
+            trailer: None,
+        });
+
+        Ok(DeleteOutcome {
+            pages_removed,
+            objects_freed,
+            dangling,
+            signature: self.signature_impact_of_save(SaveMode::Incremental),
+        })
+    }
+
+    /// Put the document's pages in a new order.
+    ///
+    /// `new_order[i]` is the **current** 0-based index of the page that
+    /// should end up at position `i`. It must be a permutation of
+    /// `0..page_count`.
+    ///
+    /// ## One command, however many pages moved
+    ///
+    /// §11.3 names this case explicitly — *"for bulk structural
+    /// operations where per-item commands would be awkward (e.g.
+    /// reordering 50 pages in one drag operation), a coarser
+    /// before/after page-order snapshot command is an acceptable
+    /// specialization of the same pattern — still one undo-stack
+    /// entry"*. The snapshot here is the set of object writes the reorder
+    /// performs, each carrying its own prior value — the same mechanism
+    /// every other command uses, rather than a parallel one.
+    ///
+    /// ## How the tree is rewritten, and what it deliberately does not do
+    ///
+    /// pdfce **permutes which page sits in each existing leaf slot**
+    /// rather than flattening the tree. A document whose 900 pages are
+    /// balanced across intermediate `Pages` nodes keeps that shape, and a
+    /// reorder touches only the nodes whose `Kids` actually changed. The
+    /// obvious alternative — rebuild one flat root `Kids` array — would
+    /// rewrite the whole tree for a two-page swap and orphan every
+    /// intermediate node, which is normalization by another name (R33).
+    ///
+    /// The cost of keeping the shape is that a page can land under a
+    /// **different ancestor**, and §7.7.3.4's inheritable attributes
+    /// resolve from ancestors. So any page whose parent changes has the
+    /// attributes it *used* to resolve written onto it explicitly, raw,
+    /// and only where they would otherwise change. That is the same
+    /// materialization rule [`crate::pageops::assemble`] applies, for the
+    /// same reason.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::CertificationForbidsChange`].
+    /// - [`EditError::NotAPermutation`] — `new_order` is not one.
+    /// - [`EditError::PageTree`].
+    pub fn reorder_pages(&mut self, new_order: &[usize]) -> Result<(), EditError> {
+        self.check_certification()?;
+
+        let slots = self.page_slots()?;
+        let count = slots.len();
+        let distinct: BTreeSet<usize> = new_order.iter().copied().filter(|i| *i < count).collect();
+        if new_order.len() != count || distinct.len() != count {
+            return Err(EditError::NotAPermutation {
+                expected: count,
+                got: distinct.len(),
+            });
+        }
+        if new_order.iter().copied().eq(0..count) {
+            return Ok(()); // identity — nothing to record
+        }
+
+        let mut scratch: BTreeMap<ObjId, Object> = BTreeMap::new();
+        let mut moved = 0usize;
+
+        // Each leaf slot keeps its position in the tree; the page that
+        // occupies it changes.
+        for (position, source) in new_order.iter().copied().enumerate() {
+            let (Some(target_slot), Some(source_slot)) = (slots.get(position), slots.get(source))
+            else {
+                continue;
+            };
+            if target_slot.id == source_slot.id {
+                continue;
+            }
+            moved += 1;
+
+            // Rewrite the destination slot's parent /Kids entry.
+            if let Some(parent_id) = target_slot.parent {
+                let current_parent = scratch
+                    .get(&parent_id)
+                    .and_then(Object::as_dict)
+                    .cloned()
+                    .or_else(|| self.value(parent_id).and_then(Object::as_dict).cloned());
+                if let Some(mut parent) = current_parent {
+                    let kids = parent
+                        .get(b"Kids")
+                        .map(|o| self.resolve_value(o))
+                        .and_then(Object::as_array)
+                        .map(<[Object]>::to_vec);
+                    if let Some(mut kids) = kids {
+                        if let Some(entry) = kids.get_mut(target_slot.index_in_parent) {
+                            *entry = Object::Reference(source_slot.id);
+                        }
+                        parent.insert(Name::from(b"Kids"), Object::Array(kids));
+                        scratch.insert(parent_id, Object::Dict(parent));
+                    }
+                }
+            }
+
+            // The moved page's own /Parent, and any attributes it is
+            // about to stop inheriting.
+            if source_slot.parent == target_slot.parent {
+                continue;
+            }
+            let Some(page) = self
+                .value(source_slot.id)
+                .and_then(Object::as_dict)
+                .cloned()
+            else {
+                continue;
+            };
+            let mut updated = page.clone();
+            if let Some(new_parent) = target_slot.parent {
+                updated.insert(Name::from(b"Parent"), Object::Reference(new_parent));
+            }
+            for (key, replacement) in
+                preserve_inherited(&page, &source_slot.inherited, &target_slot.inherited)
+            {
+                updated.insert(Name::from(key), replacement);
+            }
+            scratch.insert(source_slot.id, Object::Dict(updated));
+        }
+
+        if scratch.is_empty() {
+            return Ok(());
+        }
+        let objects: Vec<ObjectWrite> = scratch
+            .into_iter()
+            .map(|(id, value)| ObjectWrite {
+                id,
+                before: self.state.get(&id).cloned(),
+                after: Some(value),
+            })
+            .collect();
+        self.commit(Command {
+            kind: CommandKind::ReorderPages { count: moved },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(())
+    }
+
+    /// Turn several pages by the same amount, as **one** undoable
+    /// operation.
+    ///
+    /// `delta` is a relative turn in degrees (a multiple of 90), applied
+    /// to each page's own current effective rotation — so a selection of
+    /// pages at 0°, 90° and 180° turned by 90° lands at 90°, 180° and
+    /// 270°, not all at 90°. That is what a toolbar turn-right button
+    /// means, and `core_ops__rotate_pages.md` confirms Acrobat persists
+    /// the *"absolute `/Rotate` (existing value + applied increment, mod
+    /// 360) — net effect only, not a stored delta."*
+    ///
+    /// Returns how many pages actually changed; a page already at the
+    /// requested rotation contributes nothing, and if none of them
+    /// changed, no command reaches the undo stack.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::CertificationForbidsChange`] — rotating a page is a
+    ///   page-attribute change, which Table 254 permits at no `P` value.
+    /// - [`EditError::RotationNotMultipleOf90`] (Table 30),
+    ///   [`EditError::PageOutOfRange`], [`EditError::PageTree`].
+    pub fn rotate_pages(&mut self, indices: &[usize], delta: i32) -> Result<usize, EditError> {
+        self.check_certification()?;
+        if delta % 90 != 0 {
+            return Err(EditError::RotationNotMultipleOf90 { degrees: delta });
+        }
+        let mut targets: Vec<usize> = indices.to_vec();
+        targets.sort_unstable();
+        targets.dedup();
+
+        let pages = self.pages()?;
+        let count = pages.len();
+        let mut writes: Vec<ObjectWrite> = Vec::new();
+        for index in &targets {
+            let current = pages
+                .get(*index)
+                .ok_or(EditError::PageOutOfRange {
+                    index: *index,
+                    count,
+                })?
+                .rotate;
+            let target = i64::from(current) + i64::from(delta);
+            if let Some((write, _)) =
+                self.rotation_write(*index, i32::from(normalize_rotation(target)))?
+            {
+                writes.push(write);
+            }
+        }
+        let changed = writes.len();
+        if changed == 0 {
+            return Ok(0);
+        }
+        self.commit(Command {
+            kind: CommandKind::RotatePages {
+                count: changed,
+                delta,
+            },
+            objects: writes,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(changed)
+    }
+
+    /// Follow a reference chain over the session's own view (§7.3.10).
+    ///
+    /// Identical in behaviour to [`ObjectGraph::resolve`] on
+    /// [`EditSession::graph`], and it exists only because the trait
+    /// method borrows the *graph*: `self.graph().resolve(o)` builds a
+    /// temporary `SessionGraph`, so the returned reference would outlive
+    /// it. Binding the graph to a local would work too, and is worse —
+    /// it holds a shared borrow of `self` across code that needs a
+    /// mutable one.
+    fn resolve_value<'a>(&'a self, obj: &'a Object) -> &'a Object {
+        const NULL: &Object = &Object::Null;
+        let mut current = obj;
+        for _ in 0..crate::document::MAX_RESOLVE_DEPTH {
+            match current {
+                Object::Reference(id) => match self.value(*id) {
+                    Some(value) => current = value,
+                    None => return NULL,
+                },
+                other => return other,
+            }
+        }
+        NULL
+    }
+
+    /// A dictionary as it stands with `scratch` layered over the session
+    /// and `freed` removed — the mid-splice view.
+    fn pending_dict(
+        &self,
+        scratch: &BTreeMap<ObjId, Object>,
+        freed: &HashSet<ObjId>,
+        id: ObjId,
+    ) -> Option<Dict> {
+        if freed.contains(&id) {
+            return None;
+        }
+        scratch
+            .get(&id)
+            .or_else(|| self.value(id))
+            .and_then(Object::as_dict)
+            .cloned()
+    }
+}
+
+/// The entries a page must gain to keep resolving the §7.7.3.4
+/// inheritable attributes it had, now that it sits under `after` instead
+/// of `before`.
+///
+/// ## The asymmetry that makes this more than a diff
+///
+/// Two directions, and only the first is obvious:
+///
+/// 1. **The old chain supplied a value and the new one does not (or
+///    supplies a different one).** Write the old raw value onto the page.
+///    Raw, not resolved — it is usually a single indirect reference, so
+///    the shared resource dictionary stays shared.
+/// 2. **The old chain supplied *nothing* and the new one supplies
+///    something.** This is the case a naive implementation misses
+///    entirely, because there is no old value to copy — and it is the one
+///    that silently *changes* the page. A page that inherited no
+///    `/Rotate` was displaying at 0°; moved under a node that says
+///    `/Rotate 90`, it silently turns. The fix is to write §7.7.3.4's
+///    **default** explicitly: `/Rotate 0`, and `/CropBox` = the
+///    resolved `/MediaBox` (Table 30's documented default for it).
+///
+/// `Resources` and `MediaBox` have no "absent" default — §7.7.3.4 says a
+/// value *"shall be supplied in an ancestor node"* — so direction 2
+/// cannot arise for them in a conforming file, and in a malformed one
+/// there is nothing to write that would not be invented. They are left
+/// alone in that case, and the page keeps whatever the new chain gives
+/// it, which is strictly better than a fabricated box.
+///
+/// An attribute the page already carries itself is never touched: its own
+/// entry wins (§7.7.3.4) and restating it would modify an object pdfce
+/// was not asked to modify (§5).
+/// Refuse a markup spec whose geometry draws nothing
+/// ([`EditError::EmptyGeometry`], Pass 6.1 guard 4). The geometrically
+/// closed subtypes (Square/Circle/Line) always have geometry; the
+/// list-driven ones (Ink/Polygon/PolyLine/text markup) can be handed empty
+/// point lists, which would produce an invisible annotation.
+fn validate_geometry(spec: &MarkupSpec) -> Result<(), EditError> {
+    let empty = match spec {
+        MarkupSpec::Ink { strokes, .. } => {
+            strokes.is_empty() || strokes.iter().all(std::vec::Vec::is_empty)
+        }
+        MarkupSpec::Polygon { vertices, .. } | MarkupSpec::PolyLine { vertices, .. } => {
+            vertices.len() < 2
+        }
+        MarkupSpec::TextMarkup { quads, .. } => quads.is_empty(),
+        MarkupSpec::Square { .. } | MarkupSpec::Circle { .. } | MarkupSpec::Line { .. } => false,
+    };
+    if empty {
+        Err(EditError::EmptyGeometry)
+    } else {
+        Ok(())
+    }
+}
+
+/// The [`AnnotKind`] undo label for a markup spec.
+const fn annot_kind_of(spec: &MarkupSpec) -> AnnotKind {
+    use crate::annot_author::TextMarkupKind;
+    match spec {
+        MarkupSpec::Square { .. } => AnnotKind::Square,
+        MarkupSpec::Circle { .. } => AnnotKind::Circle,
+        MarkupSpec::Line { .. } => AnnotKind::Line,
+        MarkupSpec::Ink { .. } => AnnotKind::Ink,
+        MarkupSpec::Polygon { .. } => AnnotKind::Polygon,
+        MarkupSpec::PolyLine { .. } => AnnotKind::PolyLine,
+        MarkupSpec::TextMarkup { kind, .. } => match kind {
+            TextMarkupKind::Highlight => AnnotKind::Highlight,
+            TextMarkupKind::Underline => AnnotKind::Underline,
+            TextMarkupKind::StrikeOut => AnnotKind::StrikeOut,
+            TextMarkupKind::Squiggly => AnnotKind::Squiggly,
+        },
+    }
+}
+
+/// The [`AnnotKind`] undo label for a text-bearing spec (Pass 6.2).
+const fn text_annot_kind_of(spec: &TextAnnotSpec) -> AnnotKind {
+    match spec {
+        TextAnnotSpec::FreeText { .. } => AnnotKind::FreeText,
+        TextAnnotSpec::Sticky { .. } => AnnotKind::Text,
+        TextAnnotSpec::Stamp { .. } => AnnotKind::Stamp,
+    }
+}
+
+fn preserve_inherited(
+    page: &Dict,
+    before: &page_tree::InheritedRaw,
+    after: &page_tree::InheritedRaw,
+) -> Vec<(&'static [u8], Object)> {
+    let mut out: Vec<(&'static [u8], Object)> = Vec::new();
+    let attributes: [(&'static [u8], &Option<Object>, &Option<Object>); 4] = [
+        (b"Resources", &before.resources, &after.resources),
+        (b"MediaBox", &before.media_box, &after.media_box),
+        (b"CropBox", &before.crop_box, &after.crop_box),
+        (b"Rotate", &before.rotate, &after.rotate),
+    ];
+    for (key, old, new) in attributes {
+        // `contains_key` collapses a null-valued entry to absent
+        // (§7.3.7), which is the right test: `/Rotate null` inherits.
+        if page.contains_key(key) || old == new {
+            continue;
+        }
+        match old {
+            // Direction 1.
+            Some(value) => out.push((key, value.clone())),
+            // Direction 2 — write the spec default, where there is one.
+            None => match key {
+                b"Rotate" => out.push((key, Object::Integer(0))),
+                b"CropBox" => {
+                    if let Some(media) = before.media_box.clone() {
+                        out.push((key, media));
+                    }
+                }
+                _ => {}
+            },
+        }
+    }
+    out
+}
+
+/// Every object reachable from `roots`, over `graph`.
+///
+/// `skip_parent_of` names objects whose `/Parent` entry must **not** be
+/// followed. That single exception is what keeps a page's reachability
+/// closure from being "the entire document": §7.7.3.2 gives every page a
+/// `/Parent` pointing at its `Pages` node, which points at every sibling.
+///
+/// Iterative and budgeted ([`MAX_REACHABLE_OBJECTS`]): this runs on
+/// untrusted input, and a recursive walk over an object *graph* — as
+/// opposed to over one object's small value tree — is a stack overflow
+/// waiting for a deep enough file.
+fn reachable<G: ObjectGraph + ?Sized>(
+    graph: &G,
+    roots: &[ObjId],
+    skip_parent_of: &HashSet<ObjId>,
+) -> HashSet<ObjId> {
+    let mut seen: HashSet<ObjId> = HashSet::new();
+    let mut stack: Vec<ObjId> = roots.to_vec();
+    let mut budget = MAX_REACHABLE_OBJECTS;
+
+    while let Some(id) = stack.pop() {
+        if budget == 0 || !seen.insert(id) {
+            continue;
+        }
+        budget -= 1;
+        let Some(value) = graph.value(id) else {
+            continue;
+        };
+        collect_references(value, skip_parent_of.contains(&id), 0, &mut stack);
+    }
+    seen
+}
+
+/// Push every reference in one value tree onto `out`.
+///
+/// `skip_parent` drops a top-level `/Parent` entry only — a nested
+/// `/Parent` (an annotation's field parent, say) is a genuine ownership
+/// edge and is followed.
+fn collect_references(value: &Object, skip_parent: bool, depth: usize, out: &mut Vec<ObjId>) {
+    if depth > crate::pageops::assemble::MAX_COPY_DEPTH {
+        return;
+    }
+    match value {
+        Object::Reference(id) => out.push(*id),
+        Object::Array(items) => {
+            for item in items {
+                collect_references(item, false, depth + 1, out);
+            }
+        }
+        Object::Dict(dict) => {
+            for (key, entry) in dict.iter() {
+                if skip_parent && key.as_bytes() == b"Parent" {
+                    continue;
+                }
+                collect_references(entry, false, depth + 1, out);
+            }
+        }
+        Object::Stream(stream) => {
+            for (key, entry) in stream.dict.iter() {
+                if skip_parent && key.as_bytes() == b"Parent" {
+                    continue;
+                }
+                collect_references(entry, false, depth + 1, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod tests {
+    use super::*;
+
+    /// A small classic PDF with one page and an `/Info` dictionary.
+    fn pdf_with_info() -> Vec<u8> {
+        build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << >> >>",
+                "<< /Title (Original) >>",
+            ],
+            "/Info 4 0 R /ID [<0102> <0304>] ",
+        )
+    }
+
+    /// The same document with no `/Info` and no `/ID`.
+    fn pdf_without_info() -> Vec<u8> {
+        build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << >> >>",
+            ],
+            "",
+        )
+    }
+
+    fn build(bodies: &[&str], trailer_extra: &str) -> Vec<u8> {
+        let mut buf = b"%PDF-1.4\n%\xE2\xE3\xCF\xD3\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, body) in bodies.iter().enumerate() {
+            offsets.push(buf.len());
+            buf.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+        }
+        let xref_at = buf.len();
+        let size = bodies.len() + 1;
+        buf.extend_from_slice(format!("xref\n0 {size}\n0000000000 65535 f \n").as_bytes());
+        for off in &offsets {
+            buf.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes());
+        }
+        buf.extend_from_slice(
+            format!(
+                "trailer\n<< /Size {size} /Root 1 0 R {trailer_extra}>>\nstartxref\n{xref_at}\n%%EOF\n"
+            )
+            .as_bytes(),
+        );
+        buf
+    }
+
+    fn session(bytes: Vec<u8>) -> EditSession {
+        EditSession::new(Document::from_bytes(bytes).unwrap())
+    }
+
+    #[test]
+    fn a_fresh_session_is_unmodified_and_has_no_history() {
+        let s = session(pdf_with_info());
+        assert!(!s.is_modified());
+        assert!(s.dirty_set().is_empty());
+        assert!(!s.can_undo());
+        assert!(!s.can_redo());
+    }
+
+    #[test]
+    fn edit_then_undo_leaves_a_structurally_empty_dirty_set() {
+        // THE Pass 3.1 contract, at the dirty-set level. "Empty-ish" is
+        // not good enough: the writer branches on `is_empty()`, and a
+        // set holding a net-zero entry would append a revision.
+        let mut s = session(pdf_with_info());
+        s.set_info_field(InfoField::Title, Some("Changed")).unwrap();
+        assert!(s.is_modified());
+        assert_eq!(s.dirty_set().len(), 1);
+
+        s.undo();
+        let dirty = s.dirty_set();
+        assert!(dirty.is_empty(), "dirty set must be structurally empty");
+        assert_eq!(dirty.len(), 0);
+        assert!(!dirty.changes_content());
+        assert!(!s.is_modified());
+    }
+
+    #[test]
+    fn redo_restores_the_edit() {
+        let mut s = session(pdf_with_info());
+        s.set_info_field(InfoField::Title, Some("Changed")).unwrap();
+        s.undo();
+        assert_eq!(s.redo(), Some(CommandKind::SetInfoField(InfoField::Title)));
+        assert!(s.is_modified());
+        assert_eq!(s.info_text(InfoField::Title).unwrap().text, "Changed");
+    }
+
+    #[test]
+    fn a_new_edit_after_an_undo_clears_the_redo_stack() {
+        let mut s = session(pdf_with_info());
+        s.set_info_field(InfoField::Title, Some("A")).unwrap();
+        s.undo();
+        assert!(s.can_redo());
+        s.set_info_field(InfoField::Author, Some("B")).unwrap();
+        assert!(!s.can_redo(), "the redone future no longer exists");
+    }
+
+    #[test]
+    fn repeated_edits_to_one_object_coalesce_into_one_dirty_entry() {
+        // Three edits, three undo entries, but ONE object in the update
+        // section — an update that restated the object three times would
+        // be a minimal-diff violation.
+        let mut s = session(pdf_with_info());
+        s.set_info_field(InfoField::Title, Some("One")).unwrap();
+        s.set_info_field(InfoField::Author, Some("Two")).unwrap();
+        s.set_info_field(InfoField::Subject, Some("Three")).unwrap();
+        assert_eq!(s.undo_depth(), 3);
+        assert_eq!(s.dirty_set().len(), 1);
+    }
+
+    #[test]
+    fn partial_undo_of_several_edits_leaves_only_the_net_difference() {
+        let mut s = session(pdf_with_info());
+        s.set_info_field(InfoField::Title, Some("One")).unwrap();
+        s.set_info_field(InfoField::Author, Some("Two")).unwrap();
+        s.undo(); // author gone; title still changed
+        assert!(s.is_modified());
+        assert_eq!(s.dirty_set().len(), 1);
+        s.undo(); // back to base
+        assert!(!s.is_modified());
+    }
+
+    #[test]
+    fn setting_a_field_to_its_existing_value_is_a_no_op() {
+        let mut s = session(pdf_with_info());
+        s.set_info_field(InfoField::Title, Some("Original"))
+            .unwrap();
+        assert!(!s.can_undo(), "a no-op must not reach the undo stack");
+        assert!(!s.is_modified());
+    }
+
+    #[test]
+    fn clearing_a_field_removes_the_entry_rather_than_nulling_it() {
+        let mut s = session(pdf_with_info());
+        s.set_info_field(InfoField::Title, None).unwrap();
+        let id = s.info_id().unwrap();
+        let Some(Object::Dict(d)) = s.value(id) else {
+            panic!("info is not a dict");
+        };
+        assert!(
+            !d.0.iter().any(|(k, _)| k.as_bytes() == b"Title"),
+            "the physical entry must be gone, not set to null"
+        );
+        assert!(s.is_modified());
+    }
+
+    #[test]
+    fn creating_info_writes_both_the_object_and_the_trailer_reference() {
+        let mut s = session(pdf_without_info());
+        assert!(s.info_id().is_none());
+        s.set_info_field(InfoField::Title, Some("Fresh")).unwrap();
+
+        let dirty = s.dirty_set();
+        assert_eq!(dirty.len(), 1, "one created object");
+        assert!(dirty.changes_content());
+        assert!(
+            dirty.trailer_patch().contains_key(b"Info"),
+            "the trailer must gain /Info"
+        );
+        // Table 15: /Info "shall be an indirect reference".
+        assert!(
+            dirty
+                .trailer_patch()
+                .get(b"Info")
+                .and_then(Object::as_reference)
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn undoing_the_creation_of_info_removes_the_object_and_the_reference() {
+        let mut s = session(pdf_without_info());
+        s.set_info_field(InfoField::Title, Some("Fresh")).unwrap();
+        s.undo();
+        assert!(s.info_id().is_none(), "the trailer reference must be gone");
+        assert!(s.dirty_set().is_empty());
+        assert!(!s.is_modified());
+    }
+
+    #[test]
+    fn created_objects_get_a_number_past_everything_the_base_uses() {
+        let mut s = session(pdf_without_info());
+        s.set_info_field(InfoField::Title, Some("Fresh")).unwrap();
+        let id = s.info_id().unwrap();
+        assert_eq!(id, ObjId::new(4, 0));
+        assert!(s.document().get(id).is_none(), "must be a NEW number");
+    }
+
+    /// The bug the `writer_roundtrip` fuzz target found on its first
+    /// 60-second run: a file whose `/Size` under-reports loads with real
+    /// cross-reference entries invisible, and creating an object both
+    /// (a) picked a number the file already used, and (b) raised
+    /// `/Size` enough to resurrect the hidden — and unparseable —
+    /// objects. The saved file then failed to reload.
+    #[test]
+    fn object_creation_is_refused_when_size_is_hiding_entries() {
+        // Five real entries, `/Size 3`. Objects 3 and 4 exist in the
+        // file and are invisible to a conforming reader.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [] /Count 0 >>",
+                "<< /Hidden (three) >>",
+                "<< /Hidden (four) >>",
+            ],
+            "",
+        );
+        let bytes = shrink_size(bytes, 3);
+        let doc = Document::from_bytes(bytes).unwrap();
+        assert_eq!(doc.suppressed_object_count(), 2);
+        // Allocation is computed from the UNFILTERED maximum, so it can
+        // never collide with object 3 or 4 even if creation were allowed.
+        assert_eq!(doc.next_object_number(), Some(5));
+
+        let mut s = EditSession::new(doc);
+        let err = s.set_info_field(InfoField::Title, Some("New")).unwrap_err();
+        assert!(matches!(
+            err,
+            EditError::ObjectCreationWouldExposeHiddenObjects { count: 2 }
+        ));
+        assert!(!s.can_undo(), "a refused edit must leave no history");
+        assert!(!s.is_modified());
+    }
+
+    #[test]
+    fn editing_an_existing_object_still_works_when_size_hides_entries() {
+        // The refusal is scoped to *creation*: raising /Size is what
+        // exposes hidden entries, and editing an existing object does
+        // not raise it. Refusing more broadly would decline a safe
+        // operation on a damaged-but-readable file.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Resources << >> >>",
+                "<< /Hidden (four) >>",
+            ],
+            "",
+        );
+        let bytes = shrink_size(bytes, 4);
+        let doc = Document::from_bytes(bytes).unwrap();
+        assert_eq!(doc.suppressed_object_count(), 1);
+        let mut s = EditSession::new(doc);
+        s.set_page_rotation(0, 90).unwrap();
+        assert!(s.is_modified());
+    }
+
+    /// Rewrite a fixture's trailer `/Size` to `size`, leaving the
+    /// cross-reference table's own entries alone — which is exactly the
+    /// damaged shape real files exhibit.
+    fn shrink_size(bytes: Vec<u8>, size: usize) -> Vec<u8> {
+        // Byte-level, because the fixture's §7.5.2 binary-comment line
+        // is deliberately not valid UTF-8.
+        let needle = b"/Size ";
+        let at = bytes
+            .windows(needle.len())
+            .rposition(|w| w == needle)
+            .expect("fixture has no /Size");
+        let value_start = at + needle.len();
+        let digits = bytes
+            .get(value_start..)
+            .unwrap_or(&[])
+            .iter()
+            .take_while(|b| b.is_ascii_digit())
+            .count();
+        let mut out = bytes;
+        out.splice(
+            value_start..value_start + digits,
+            size.to_string().into_bytes(),
+        );
+        out
+    }
+
+    #[test]
+    fn rotation_must_be_a_multiple_of_ninety() {
+        let mut s = session(pdf_with_info());
+        let err = s.set_page_rotation(0, 45).unwrap_err();
+        assert!(matches!(
+            err,
+            EditError::RotationNotMultipleOf90 { degrees: 45 }
+        ));
+        assert!(!s.can_undo());
+    }
+
+    #[test]
+    fn rotation_normalizes_negative_and_overflowing_values() {
+        // Table 30 says "a multiple of 90" and nothing about range, so
+        // -90 and 450 are both conforming inputs.
+        let mut s = session(pdf_with_info());
+        s.set_page_rotation(0, -90).unwrap();
+        assert_eq!(s.pages().unwrap()[0].rotate, 270);
+        s.set_page_rotation(0, 450).unwrap();
+        assert_eq!(s.pages().unwrap()[0].rotate, 90);
+    }
+
+    #[test]
+    fn relative_rotation_accumulates_from_the_effective_value() {
+        let mut s = session(pdf_with_info());
+        s.rotate_page_by(0, 90).unwrap();
+        s.rotate_page_by(0, 90).unwrap();
+        assert_eq!(s.pages().unwrap()[0].rotate, 180);
+        s.rotate_page_by(0, -90).unwrap();
+        assert_eq!(s.pages().unwrap()[0].rotate, 90);
+    }
+
+    #[test]
+    fn rotating_back_to_the_original_is_not_a_change() {
+        // Four quarter turns land on the base value, so the diff is
+        // empty even though commands are on the stack — the same
+        // net-zero rule undo relies on, reached a different way. The
+        // fourth turn must NOT leave an explicit `/Rotate 0` behind on
+        // a page that never had the entry.
+        let mut s = session(pdf_with_info());
+        for _ in 0..4 {
+            s.rotate_page_by(0, 90).unwrap();
+        }
+        assert!(s.can_undo());
+        assert!(
+            !s.is_modified(),
+            "0 -> 90 -> 180 -> 270 -> 0 must net to nothing"
+        );
+        assert_eq!(s.pages().unwrap()[0].rotate, 0);
+    }
+
+    #[test]
+    fn setting_an_inherited_rotation_writes_no_redundant_entry() {
+        // The page inherits 90 from its Pages node. Setting 90 must not
+        // stamp an explicit /Rotate 90 onto the page — that would be
+        // modifying an object pdfce was not asked to modify (§5).
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 /Rotate 90 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << >> >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        assert_eq!(s.pages().unwrap()[0].rotate, 90);
+        s.set_page_rotation(0, 90).unwrap();
+        assert!(!s.is_modified());
+        assert!(!s.can_undo());
+
+        // But overriding the inherited value DOES write the entry.
+        s.set_page_rotation(0, 0).unwrap();
+        assert!(s.is_modified());
+        assert_eq!(s.pages().unwrap()[0].rotate, 0);
+    }
+
+    #[test]
+    fn an_unusual_but_legal_rotate_spelling_is_not_normalized() {
+        // R33: `/Rotate 450` means 90 (Table 30 constrains only "a
+        // multiple of 90"). Setting 90 must leave the file's own
+        // spelling alone rather than rewriting it to `90`.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << >> /Rotate 450 >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        assert_eq!(s.pages().unwrap()[0].rotate, 90);
+        s.set_page_rotation(0, 90).unwrap();
+        assert!(!s.is_modified(), "no normalization, no change");
+    }
+
+    #[test]
+    fn page_index_out_of_range_is_a_named_refusal() {
+        let mut s = session(pdf_with_info());
+        let err = s.set_page_rotation(7, 90).unwrap_err();
+        assert!(matches!(
+            err,
+            EditError::PageOutOfRange { index: 7, count: 1 }
+        ));
+    }
+
+    #[test]
+    fn pages_reflect_unsaved_rotation_edits() {
+        let mut s = session(pdf_with_info());
+        assert_eq!(s.pages().unwrap()[0].rotate, 0);
+        s.set_page_rotation(0, 270).unwrap();
+        assert_eq!(s.pages().unwrap()[0].rotate, 270);
+        s.undo();
+        assert_eq!(s.pages().unwrap()[0].rotate, 0);
+    }
+
+    #[test]
+    fn the_base_document_is_never_mutated() {
+        // The retained buffer and the parsed graph are what verbatim
+        // re-emission depends on; an edit that touched them would break
+        // §5 for every OTHER object in the file.
+        let bytes = pdf_with_info();
+        let mut s = session(bytes.clone());
+        s.set_page_rotation(0, 90).unwrap();
+        s.set_info_field(InfoField::Title, Some("Changed")).unwrap();
+        assert_eq!(s.document().bytes(), bytes.as_slice());
+        let page = s.document().get(ObjId::new(3, 0)).unwrap();
+        assert!(page.value.as_dict().unwrap().get(b"Rotate").is_none());
+    }
+
+    #[test]
+    fn undo_history_is_bounded_without_affecting_the_diff() {
+        // Overflowing the stack must cost history, never correctness:
+        // the dirty set is a diff, not a replay.
+        let mut s = session(pdf_with_info());
+        for i in 0..(MAX_UNDO_DEPTH + 10) {
+            s.set_info_field(InfoField::Title, Some(&format!("v{i}")))
+                .unwrap();
+        }
+        assert_eq!(s.undo_depth(), MAX_UNDO_DEPTH);
+        assert_eq!(s.dirty_set().len(), 1);
+        assert_eq!(
+            s.info_text(InfoField::Title).unwrap().text,
+            format!("v{}", MAX_UNDO_DEPTH + 9)
+        );
+    }
+
+    #[test]
+    fn undo_and_redo_return_what_they_moved() {
+        let mut s = session(pdf_with_info());
+        s.set_page_rotation(0, 90).unwrap();
+        assert_eq!(
+            s.undo_kind(),
+            Some(CommandKind::SetPageRotation {
+                page_index: 0,
+                degrees: 90
+            })
+        );
+        assert_eq!(s.undo(), s.redo_kind());
+        assert!(s.redo().is_some());
+        assert!(s.redo().is_none());
+    }
+
+    #[test]
+    fn text_strings_round_trip_through_both_encodings() {
+        for text in ["Plain ASCII", "Café", "日本語", ""] {
+            let encoded = encode_text_string(text);
+            let decoded = decode_text_string(&encoded);
+            assert_eq!(decoded.text, text, "round trip failed for {text:?}");
+            assert!(decoded.exact, "round trip was inexact for {text:?}");
+        }
+    }
+
+    #[test]
+    fn ascii_stays_readable_and_non_ascii_takes_the_bom_form() {
+        assert_eq!(encode_text_string("Report 2026"), b"Report 2026".to_vec());
+        assert_eq!(encode_text_string("é").first(), Some(&0xFE));
+    }
+
+    #[test]
+    fn undecodable_bytes_are_flagged_rather_than_guessed() {
+        // 0x91 is where PDFDocEncoding and Latin-1 disagree, and the
+        // PDFDocEncoding table is a recorded spec-RAG gap. Guessing
+        // would be silently wrong; U+FFFD plus `exact: false` is
+        // visibly incomplete, which a front end can act on.
+        let decoded = decode_text_string(&[b'A', 0x91, b'B']);
+        assert!(!decoded.exact);
+        assert!(decoded.text.contains('\u{FFFD}'));
+
+        // An odd-length UTF-16BE body is malformed, and says so.
+        assert!(!decode_text_string(&[0xFE, 0xFF, 0x00]).exact);
+    }
+
+    #[test]
+    fn normalize_rotation_uses_a_positive_modulo() {
+        // Rust's `%` keeps the dividend's sign, so a naive
+        // implementation yields -90 here and every renderer downstream
+        // sees a rotation it does not expect.
+        assert_eq!(normalize_rotation(-90), 270);
+        assert_eq!(normalize_rotation(-450), 270);
+        assert_eq!(normalize_rotation(360), 0);
+        assert_eq!(normalize_rotation(0), 0);
+        // A malformed non-multiple floors to the enclosing quarter turn.
+        assert_eq!(normalize_rotation(100), 90);
+    }
+
+    #[test]
+    fn info_fields_all_have_distinct_keys() {
+        let mut keys: Vec<&[u8]> = InfoField::all().iter().map(|f| f.key()).collect();
+        keys.sort_unstable();
+        let before = keys.len();
+        keys.dedup();
+        assert_eq!(keys.len(), before);
+        // R41: /Producer is deliberately NOT editable here.
+        assert!(!keys.contains(&&b"Producer"[..]));
+    }
+
+    // -- Pass 6.1 annotation authoring ---------------------------------
+
+    use crate::annot_author::{Color, MarkupSpec, TextMarkupKind};
+    use crate::page_tree::Rect;
+
+    /// A square spec on a fixed rect, the simplest authoring case.
+    fn square_spec() -> MarkupSpec {
+        MarkupSpec::Square {
+            rect: Rect {
+                llx: 20.0,
+                lly: 20.0,
+                urx: 120.0,
+                ury: 70.0,
+            },
+            border: Some(Color::Rgb(1.0, 0.0, 0.0)),
+            interior: None,
+            border_width: 2.0,
+        }
+    }
+
+    #[test]
+    fn adding_a_markup_creates_appearance_annotation_and_patches_annots() {
+        // One gesture ⇒ appearance stream + annotation dict + /Annots patch,
+        // all in one command (§11.3, R49).
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+        assert!(s.is_modified());
+        assert_eq!(s.undo_depth(), 1, "one undo entry for the whole gesture");
+
+        // The annotation dict is present, geometry + AP wired.
+        let Some(Object::Dict(annot)) = s.value(annot_id) else {
+            panic!("annotation not created");
+        };
+        assert_eq!(
+            annot.get(b"Subtype").unwrap().as_name().unwrap().as_bytes(),
+            b"Square"
+        );
+        assert!(annot.get(b"AP").is_some(), "R44: a full /AP is baked");
+        assert!(annot.get(b"P").is_some(), "back-reference to the page");
+
+        // The page's /Annots now references it (page 3 in pdf_without_info).
+        let Some(Object::Dict(page)) = s.value(ObjId::new(3, 0)) else {
+            panic!("page missing");
+        };
+        let Some(Object::Array(annots)) = page.get(b"Annots") else {
+            panic!("/Annots not created as an array");
+        };
+        assert_eq!(annots.len(), 1);
+        assert_eq!(annots[0].as_reference(), Some(annot_id));
+    }
+
+    #[test]
+    fn authored_appearance_survives_save_reload_byte_exact_r44() {
+        // R44 round-trip: author → save → reload → the /AP /N stream's
+        // decoded bytes equal what the generator emitted, and Pass 6.0
+        // selects it as the normal appearance.
+        let expected = {
+            let a = crate::annot_author::build_appearance(&square_spec());
+            a.ap_content
+        };
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_markup(0, &square_spec()).unwrap();
+        let (bytes, _report) = s
+            .to_incremental_bytes(&crate::writer::SaveOptions::identity())
+            .unwrap();
+
+        let reloaded = Document::from_bytes(bytes).unwrap();
+        // The reloaded annotation still resolves a usable normal appearance.
+        let annots = crate::annot::page_annotations(&reloaded, ObjId::new(3, 0));
+        assert_eq!(annots.len(), 1);
+        let ap_id = match &annots[0].appearance {
+            crate::annot::Appearance::Normal { stream_id } => stream_id.unwrap(),
+            other => panic!("expected a normal appearance, got {other:?}"),
+        };
+        // Its content bytes survived the staging → save → reload path exact.
+        let Some(io) = reloaded.get(ap_id) else {
+            panic!("appearance stream missing after reload");
+        };
+        let Object::Stream(stream) = &io.value else {
+            panic!("appearance is not a stream");
+        };
+        let raw = stream.data_span.slice(reloaded.bytes()).unwrap();
+        let decoded = crate::filters::decode_stream(&stream.dict, raw).unwrap();
+        assert_eq!(decoded, expected, "authored appearance bytes must survive");
+        // The annotation id we created is the one referenced (basic sanity).
+        assert!(reloaded.get(annot_id).is_some());
+    }
+
+    #[test]
+    fn undo_of_authoring_removes_everything_and_empties_the_dirty_set() {
+        let mut s = session(pdf_without_info());
+        s.add_markup(0, &square_spec()).unwrap();
+        assert!(!s.dirty_set().is_empty());
+        s.undo();
+        assert!(!s.is_modified(), "undo of authoring nets to nothing");
+        assert!(s.dirty_set().is_empty());
+        // The page's /Annots patch is gone too (the page reads through to
+        // the base, which had no /Annots).
+        let Some(Object::Dict(page)) = s.value(ObjId::new(3, 0)) else {
+            panic!("page missing");
+        };
+        assert!(page.get(b"Annots").is_none());
+    }
+
+    fn freetext_spec() -> TextAnnotSpec {
+        TextAnnotSpec::FreeText {
+            rect: page_tree::Rect {
+                llx: 20.0,
+                lly: 40.0,
+                urx: 180.0,
+                ury: 70.0,
+            },
+            text: "Reviewed".to_owned(),
+            font: crate::fontdata::Std14::Helvetica,
+            font_size: 12.0,
+            color: crate::vartext::TextColor::Gray(0.0),
+            quadding: crate::vartext::Quadding::Center,
+            multiline: false,
+            border: None,
+            border_width: 0.0,
+        }
+    }
+
+    #[test]
+    fn adding_freetext_bakes_da_contents_q_and_ap() {
+        let mut s = session(pdf_without_info());
+        let annot_id = s.add_text_annotation(0, &freetext_spec()).unwrap();
+        assert_eq!(s.undo_depth(), 1, "one undo entry for the whole gesture");
+        let Some(Object::Dict(annot)) = s.value(annot_id) else {
+            panic!("annotation not created");
+        };
+        assert_eq!(
+            annot.get(b"Subtype").unwrap().as_name().unwrap().as_bytes(),
+            b"FreeText"
+        );
+        assert!(annot.get(b"DA").is_some(), "/DA is required on FreeText");
+        assert!(annot.get(b"Contents").is_some(), "text goes in /Contents");
+        assert_eq!(
+            annot.get(b"Q").unwrap().as_number().unwrap() as i64,
+            1,
+            "centre quadding recorded"
+        );
+        assert!(annot.get(b"AP").is_some(), "R44: a baked /AP");
+        // Print flag only (no NoZoom/NoRotate for FreeText).
+        assert_eq!(annot.get(b"F").unwrap().as_number().unwrap() as u32, 1 << 2);
+    }
+
+    #[test]
+    fn sticky_note_creates_popup_companion_and_is_nozoom_norotate() {
+        let mut s = session(pdf_without_info());
+        let annot_id = s
+            .add_text_annotation(
+                0,
+                &TextAnnotSpec::Sticky {
+                    rect: page_tree::Rect {
+                        llx: 80.0,
+                        lly: 80.0,
+                        urx: 100.0,
+                        ury: 100.0,
+                    },
+                    icon: crate::annot_author::StickyIcon::Note,
+                    contents: "note body".to_owned(),
+                    color: crate::annot_author::Color::Rgb(1.0, 0.9, 0.2),
+                    open: false,
+                },
+            )
+            .unwrap();
+        let Some(Object::Dict(annot)) = s.value(annot_id) else {
+            panic!("note not created");
+        };
+        // Always NoZoom + NoRotate + Print (§12.5.6.4).
+        let f = annot.get(b"F").unwrap().as_number().unwrap() as u32;
+        assert_eq!(f, (1 << 2) | (1 << 3) | (1 << 4));
+        assert_eq!(
+            annot.get(b"Name").unwrap().as_name().unwrap().as_bytes(),
+            b"Note"
+        );
+        // The /Popup companion exists, points back at the note, and is a
+        // Popup subtype (never painted as page content).
+        let popup_id = annot.get(b"Popup").unwrap().as_reference().unwrap();
+        let Some(Object::Dict(popup)) = s.value(popup_id) else {
+            panic!("popup not created");
+        };
+        assert_eq!(
+            popup.get(b"Subtype").unwrap().as_name().unwrap().as_bytes(),
+            b"Popup"
+        );
+        assert_eq!(popup.get(b"Parent").unwrap().as_reference(), Some(annot_id));
+        // The page's /Annots holds BOTH the note and its popup.
+        let Some(Object::Dict(page)) = s.value(ObjId::new(3, 0)) else {
+            panic!("page missing");
+        };
+        let Some(Object::Array(annots)) = page.get(b"Annots") else {
+            panic!("/Annots missing");
+        };
+        assert_eq!(annots.len(), 2, "note + popup");
+    }
+
+    #[test]
+    fn undo_of_text_authoring_nets_to_nothing() {
+        // A sticky note authors THREE objects (appearance, note, popup) plus
+        // the /Annots patch, all one command — undo removes them all.
+        let mut s = session(pdf_without_info());
+        s.add_text_annotation(
+            0,
+            &TextAnnotSpec::Sticky {
+                rect: page_tree::Rect {
+                    llx: 80.0,
+                    lly: 80.0,
+                    urx: 100.0,
+                    ury: 100.0,
+                },
+                icon: crate::annot_author::StickyIcon::Note,
+                contents: "x".to_owned(),
+                color: crate::annot_author::Color::Rgb(1.0, 0.9, 0.2),
+                open: false,
+            },
+        )
+        .unwrap();
+        assert!(!s.dirty_set().is_empty());
+        s.undo();
+        assert!(!s.is_modified(), "undo of authoring nets to nothing");
+        assert!(s.dirty_set().is_empty());
+        let Some(Object::Dict(page)) = s.value(ObjId::new(3, 0)) else {
+            panic!("page missing");
+        };
+        assert!(page.get(b"Annots").is_none());
+    }
+
+    #[test]
+    fn symbolic_font_freetext_is_a_named_refusal() {
+        let mut s = session(pdf_without_info());
+        let err = s
+            .add_text_annotation(
+                0,
+                &TextAnnotSpec::FreeText {
+                    rect: page_tree::Rect {
+                        llx: 20.0,
+                        lly: 40.0,
+                        urx: 180.0,
+                        ury: 70.0,
+                    },
+                    text: "x".to_owned(),
+                    font: crate::fontdata::Std14::Symbol,
+                    font_size: 12.0,
+                    color: crate::vartext::TextColor::Gray(0.0),
+                    quadding: crate::vartext::Quadding::Left,
+                    multiline: false,
+                    border: None,
+                    border_width: 0.0,
+                },
+            )
+            .unwrap_err();
+        assert!(matches!(err, EditError::VariableText(_)), "{err:?}");
+        assert!(!s.is_modified(), "a refused edit changes nothing");
+    }
+
+    #[test]
+    fn appending_to_an_existing_direct_annots_array_preserves_it() {
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Resources << >> \
+                 /Annots [4 0 R] >>",
+                "<< /Type /Annot /Subtype /Text /Rect [0 0 10 10] >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        let new_id = s
+            .add_markup(
+                0,
+                &MarkupSpec::TextMarkup {
+                    kind: TextMarkupKind::Highlight,
+                    quads: vec![crate::annot_author::Quad::from_rect(Rect {
+                        llx: 10.0,
+                        lly: 10.0,
+                        urx: 90.0,
+                        ury: 24.0,
+                    })],
+                    color: Color::Rgb(1.0, 1.0, 0.0),
+                },
+            )
+            .unwrap();
+        let Some(Object::Dict(page)) = s.value(ObjId::new(3, 0)) else {
+            panic!("page missing");
+        };
+        let Some(Object::Array(annots)) = page.get(b"Annots") else {
+            panic!("annots");
+        };
+        assert_eq!(annots.len(), 2, "the existing entry is preserved");
+        assert_eq!(annots[0].as_reference(), Some(ObjId::new(4, 0)));
+        assert_eq!(annots[1].as_reference(), Some(new_id));
+    }
+
+    #[test]
+    fn shared_indirect_annots_array_is_copied_on_write_x7() {
+        // Two pages reference the SAME indirect /Annots array (object 6).
+        // Annotating page 0 must NOT annotate page 1.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 300 300] \
+                 /Resources << >> >>",
+                "<< /Type /Page /Parent 2 0 R /Annots 6 0 R >>",
+                "<< /Type /Page /Parent 2 0 R /Annots 6 0 R >>",
+                "<< /Type /Annot /Subtype /Text /Rect [0 0 5 5] >>",
+                "[5 0 R]",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        s.add_markup(0, &square_spec()).unwrap();
+
+        // Page 0 (obj 3) now points at a NEW array with two entries.
+        let Some(Object::Dict(p0)) = s.value(ObjId::new(3, 0)) else {
+            panic!("p0");
+        };
+        let Some(Object::Reference(p0_arr)) = p0.get(b"Annots") else {
+            panic!("p0 annots ref");
+        };
+        assert_ne!(*p0_arr, ObjId::new(6, 0), "page 0 was repointed (COW)");
+
+        // Page 1 (obj 4) still points at the ORIGINAL array (obj 6), which
+        // still has exactly its one original entry — unperturbed.
+        let Some(Object::Dict(p1)) = s.value(ObjId::new(4, 0)) else {
+            panic!("p1");
+        };
+        assert_eq!(
+            p1.get(b"Annots").unwrap().as_reference(),
+            Some(ObjId::new(6, 0))
+        );
+        let Some(Object::Array(orig)) = s.value(ObjId::new(6, 0)) else {
+            panic!("orig array");
+        };
+        assert_eq!(orig.len(), 1, "the shared array must be untouched");
+    }
+
+    #[test]
+    fn sole_owner_indirect_annots_array_is_edited_in_place() {
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 300] \
+                 /Resources << >> >>",
+                "<< /Type /Page /Parent 2 0 R /Annots 5 0 R >>",
+                "[]",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        s.add_markup(0, &square_spec()).unwrap();
+        // The array object (obj 5) gained the entry; the page dict is
+        // unchanged (still references obj 5) — no COW.
+        let Some(Object::Array(arr)) = s.value(ObjId::new(5, 0)) else {
+            panic!("array");
+        };
+        assert_eq!(arr.len(), 1);
+    }
+
+    #[test]
+    fn encrypted_documents_are_refused_before_authoring_can_be_reached_x10() {
+        // Today pdfce refuses to LOAD an encrypted file at all
+        // (`EncryptionUnsupported`), so the `DocumentEncrypted` guard in
+        // `add_markup` is a forward-compatible R37 seam, not a path a
+        // loadable file reaches. This test pins the load-time refusal so
+        // the seam's rationale stays visible: when Pass 5 makes encrypted
+        // files loadable, the guard is what keeps authoring from writing
+        // plaintext strings into them (X10).
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 300] \
+                 /Resources << >> >>",
+                "<< /Type /Page /Parent 2 0 R >>",
+            ],
+            "/Encrypt 9 0 R /ID [<01> <02>] ",
+        );
+        assert!(
+            Document::from_bytes(bytes).is_err(),
+            "an encrypted file is refused at load today; the add_markup guard is the Pass-5 seam"
+        );
+    }
+
+    #[test]
+    fn empty_geometry_is_refused() {
+        let mut s = session(pdf_without_info());
+        let empty_ink = MarkupSpec::Ink {
+            strokes: vec![],
+            color: Color::Gray(0.0),
+            width: 1.0,
+        };
+        assert!(matches!(
+            s.add_markup(0, &empty_ink),
+            Err(EditError::EmptyGeometry)
+        ));
+    }
+
+    #[test]
+    fn out_of_range_page_is_a_named_refusal() {
+        let mut s = session(pdf_without_info());
+        assert!(matches!(
+            s.add_markup(9, &square_spec()),
+            Err(EditError::PageOutOfRange { index: 9, count: 1 })
+        ));
+    }
+
+    #[test]
+    fn authored_source_extends_the_base_only_when_something_is_staged() {
+        let mut s = session(pdf_without_info());
+        let base_len = s.document().bytes().len();
+        assert_eq!(s.authored_source().len(), base_len, "no staging yet");
+        s.add_markup(0, &square_spec()).unwrap();
+        assert!(
+            s.authored_source().len() > base_len,
+            "staging appended past the base"
+        );
+    }
+
+    // -- Pass 7 form fill ------------------------------------------------
+
+    /// A one-page document with an `/AcroForm` carrying a merged (Shape A)
+    /// text field `Name` (obj 4) and a merged checkbox `Agree` (obj 5) whose
+    /// `/AP` `/N` subdictionary offers `/Yes` and `/Off` (obj 6). `trailer`
+    /// may add `/Perms`/`/Info` etc.
+    fn pdf_with_form(catalog_extra: &str, trailer_extra: &str) -> Vec<u8> {
+        build(
+            &[
+                &format!(
+                    "<< /Type /Catalog /Pages 2 0 R {catalog_extra} /AcroForm << /Fields [4 0 R 5 0 R] \
+                     /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv << /Type /Font /Subtype /Type1 \
+                     /BaseFont /Helvetica >> >> >> >> >>"
+                ),
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> \
+                 /Annots [4 0 R 5 0 R] >>",
+                "<< /FT /Tx /T (Name) /Subtype /Widget /Rect [20 150 200 172] /P 3 0 R >>",
+                "<< /FT /Btn /T (Agree) /V /Off /AS /Off /Subtype /Widget /Rect [20 100 32 112] \
+                 /P 3 0 R /AP << /N << /Yes 6 0 R /Off 6 0 R >> >> >>",
+                "<< /Type /XObject /Subtype /Form /BBox [0 0 12 12] /Length 0 >>\nstream\n\nendstream",
+            ],
+            trailer_extra,
+        )
+    }
+
+    #[test]
+    fn fill_text_field_sets_value_and_regenerates_appearance() {
+        let mut s = session(pdf_with_form("", ""));
+        let out = s.fill_text_field("Name", "Ada Lovelace").unwrap();
+        assert_eq!(out.widgets_updated, 1);
+        // Auto-size was requested (0 Tf) → disclosed.
+        assert!(out.applied_autosize.is_some());
+        assert_eq!(out.unencodable_chars, 0);
+
+        let (bytes, _r) = s
+            .to_incremental_bytes(&crate::writer::SaveOptions::identity())
+            .unwrap();
+        let reloaded = Document::from_bytes(bytes).unwrap();
+        let form = forms::parse_acroform(&reloaded).unwrap();
+        let f = form.field_by_name("Name").unwrap();
+        assert_eq!(f.value, forms::FieldValue::Text(b"Ada Lovelace".to_vec()));
+        // A regenerated /AP now paints through the Pass 6.0 read path.
+        assert!(f.has_appearance(), "the field got a baked /AP");
+        let annots = crate::annot::page_annotations(&reloaded, ObjId::new(3, 0));
+        let name_widget = annots
+            .iter()
+            .find(|a| a.id == Some(ObjId::new(4, 0)))
+            .unwrap();
+        assert!(matches!(
+            name_widget.appearance,
+            crate::annot::Appearance::Normal { .. }
+        ));
+    }
+
+    #[test]
+    fn checkbox_state_selection_sets_v_and_as_without_new_appearance() {
+        let mut s = session(pdf_with_form("", ""));
+        s.set_button_state("Agree", "Yes").unwrap();
+        // /V and /AS both become /Yes; no new object is created (state
+        // selection, not generation).
+        let Some(Object::Dict(d)) = s.value(ObjId::new(5, 0)) else {
+            panic!("checkbox field missing");
+        };
+        assert_eq!(
+            d.get(b"V").and_then(Object::as_name).unwrap().as_bytes(),
+            b"Yes"
+        );
+        assert_eq!(
+            d.get(b"AS").and_then(Object::as_name).unwrap().as_bytes(),
+            b"Yes"
+        );
+        // Clearing goes back to Off.
+        s.set_button_state("Agree", "Off").unwrap();
+        let Some(Object::Dict(d)) = s.value(ObjId::new(5, 0)) else {
+            panic!("checkbox field missing");
+        };
+        assert_eq!(
+            d.get(b"V").and_then(Object::as_name).unwrap().as_bytes(),
+            b"Off"
+        );
+    }
+
+    #[test]
+    fn fill_then_undo_is_byte_identical() {
+        // The minimal-diff proof for fill: fill → undo → save re-emits the
+        // input exactly (the §11.1 dirty-set-is-a-diff contract).
+        let input = pdf_with_form("", "");
+        let mut s = session(input.clone());
+        s.fill_text_field("Name", "Grace Hopper").unwrap();
+        assert!(s.is_modified());
+        s.undo();
+        assert!(!s.is_modified(), "fill undo nets to nothing");
+        assert!(s.dirty_set().is_empty());
+    }
+
+    #[test]
+    fn unknown_field_and_state_are_named_refusals() {
+        let mut s = session(pdf_with_form("", ""));
+        assert!(matches!(
+            s.fill_text_field("Nonexistent", "x"),
+            Err(EditError::FieldNotFound { .. })
+        ));
+        assert!(matches!(
+            s.set_button_state("Agree", "Maybe"),
+            Err(EditError::FieldStateUnknown { .. })
+        ));
+        // A text field is not a button.
+        assert!(matches!(
+            s.set_button_state("Name", "Yes"),
+            Err(EditError::FieldNotFillable { .. })
+        ));
+    }
+
+    #[test]
+    fn read_only_field_is_refused() {
+        // /Ff bit 1 (ReadOnly) on the text field.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /DA (/Helv 0 Tf 0 g) >> >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Annots [4 0 R] >>",
+                "<< /FT /Tx /Ff 1 /T (Locked) /Subtype /Widget /Rect [0 0 100 20] >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        assert!(matches!(
+            s.fill_text_field("Locked", "x"),
+            Err(EditError::FieldNotFillable { .. })
+        ));
+    }
+
+    #[test]
+    fn certification_p2_permits_fill_p1_refuses() {
+        // A /P 2 certification (the form-filling tier) permits fill; a /P 1
+        // (no changes) refuses by name. Perms enforced via catalog /Perms.
+        let sig = "<< /Type /Sig /Filter /Adobe.PPKLite /ByteRange [0 1 2 3] \
+                   /Reference [ << /TransformMethod /DocMDP /TransformParams << /P 2 >> >> ] >>";
+        // Field 4 text; field 7 a Sig field holding the certification; catalog
+        // /Perms /DocMDP references the sig field's /V (obj 8).
+        let p2 = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R /Perms << /DocMDP 8 0 R >> \
+                 /AcroForm << /Fields [4 0 R 7 0 R] /DA (/Helv 0 Tf 0 g) >> >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Annots [4 0 R] >>",
+                "<< /FT /Tx /T (Name) /Subtype /Widget /Rect [0 0 100 20] >>",
+                "<< /Length 0 >>\nstream\n\nendstream",
+                "<< /Length 0 >>\nstream\n\nendstream",
+                "<< /FT /Sig /T (sig) /V 8 0 R >>",
+                sig,
+            ],
+            "",
+        );
+        let mut s = session(p2);
+        assert!(
+            s.fill_text_field("Name", "ok").is_ok(),
+            "P=2 certification permits form fill"
+        );
+
+        let p1 = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R /Perms << /DocMDP 8 0 R >> \
+                 /AcroForm << /Fields [4 0 R 7 0 R] /DA (/Helv 0 Tf 0 g) >> >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Annots [4 0 R] >>",
+                "<< /FT /Tx /T (Name) /Subtype /Widget /Rect [0 0 100 20] >>",
+                "<< /Length 0 >>\nstream\n\nendstream",
+                "<< /Length 0 >>\nstream\n\nendstream",
+                "<< /FT /Sig /T (sig) /V 8 0 R >>",
+                "<< /Type /Sig /Filter /Adobe.PPKLite /ByteRange [0 1 2 3] \
+                 /Reference [ << /TransformMethod /DocMDP /TransformParams << /P 1 >> >> ] >>",
+            ],
+            "",
+        );
+        let mut s = session(p1);
+        assert!(matches!(
+            s.fill_text_field("Name", "no"),
+            Err(EditError::CertificationForbidsChange { permission: 1 })
+        ));
+    }
+
+    // -- FF-D follow-up: add-text certification guard (§12.8.4 Table 258) --
+    //
+    // Adding NEW page text (`EditSession::add_text` and the free
+    // `text_edit::add_text` engine) is a structural page-content change, so an
+    // enforced-DocMDP certified document must refuse it — exactly as
+    // `add_markup` does — rather than silently invalidate the signature. These
+    // mirror the `fill_text_field` cert tests above, using the same `build`
+    // helper and the same P=1 DocMDP signature.
+
+    /// A one-page document (own `/Contents` + `/Resources /Font`, like the
+    /// `plain.pdf` fixture) carrying an enforced-DocMDP certification with the
+    /// most restrictive `/P 1` — `census().forbids_structural_change()` is
+    /// true, so any add-text must refuse.
+    fn pdf_certified_locked_page() -> Vec<u8> {
+        build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R /Perms << /DocMDP 6 0 R >> >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] >>",
+                "<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+                 /Resources << /Font << /F1 5 0 R >> >> >>",
+                "<< /Length 50 >>\nstream\nBT /F1 12 Tf 72 720 Td (Certified page text) Tj ET\nendstream",
+                "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+                "<< /Type /Sig /Filter /Adobe.PPKLite /ByteRange [0 1 2 3] \
+                 /Reference [ << /TransformMethod /DocMDP /TransformParams << /P 1 >> >> ] >>",
+            ],
+            "",
+        )
+    }
+
+    /// The same page WITHOUT the certification (no `/Perms`) — the common,
+    /// permissive case that must still add text (regression guard).
+    fn pdf_uncertified_page() -> Vec<u8> {
+        build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] >>",
+                "<< /Type /Page /Parent 2 0 R /Contents 4 0 R \
+                 /Resources << /Font << /F1 5 0 R >> >> >>",
+                // Stream body is exactly 50 bytes (same as the certified helper
+                // and the `plain.pdf` fixture) so `/Length` is correct.
+                "<< /Length 50 >>\nstream\nBT /F1 12 Tf 72 720 Td (Uncertified doc run) Tj ET\nendstream",
+                "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+            ],
+            "",
+        )
+    }
+
+    #[test]
+    fn session_add_text_point_is_refused_on_an_enforced_certified_document() {
+        use crate::text_edit::AddTextRequest;
+        let mut s = session(pdf_certified_locked_page());
+        let req = AddTextRequest::new(0, (100.0, 650.0), "Blocked point run");
+        assert!(matches!(
+            s.add_text(&req),
+            Err(crate::text_edit::AddTextError::CertificationForbidsChange { permission: 1 })
+        ));
+        // Refusal is before any mutation (rule 4): the session is untouched.
+        assert!(!s.is_modified());
+    }
+
+    #[test]
+    fn session_add_text_box_is_refused_on_an_enforced_certified_document() {
+        use crate::text_edit::AddTextRequest;
+        let mut s = session(pdf_certified_locked_page());
+        // The boxed variant shares `EditSession::add_text` / the same planner,
+        // so it is covered by the same guard.
+        let req = AddTextRequest::new(0, (0.0, 0.0), "Blocked boxed run")
+            .with_box(72.0, 600.0, 180.0, 120.0);
+        assert!(matches!(
+            s.add_text(&req),
+            Err(crate::text_edit::AddTextError::CertificationForbidsChange { permission: 1 })
+        ));
+        assert!(!s.is_modified());
+    }
+
+    #[test]
+    fn free_add_text_is_refused_on_an_enforced_certified_document() {
+        use crate::text_edit::{AddTextRequest, add_text};
+        let doc = Document::from_bytes(pdf_certified_locked_page()).unwrap();
+        let req = AddTextRequest::new(0, (100.0, 650.0), "Blocked free run");
+        assert!(matches!(
+            add_text(&doc, &req),
+            Err(crate::text_edit::AddTextError::CertificationForbidsChange { permission: 1 })
+        ));
+    }
+
+    #[test]
+    fn add_text_still_works_on_an_uncertified_document() {
+        use crate::text_edit::{AddTextRequest, add_text};
+        // Session path adds fine (no regression on the common case)…
+        let mut s = session(pdf_uncertified_page());
+        let req = AddTextRequest::new(0, (100.0, 650.0), "Allowed run");
+        assert!(
+            s.add_text(&req).is_ok(),
+            "a non-certified doc still adds text"
+        );
+        assert!(s.is_modified());
+        // …and so does the free engine.
+        let doc = Document::from_bytes(pdf_uncertified_page()).unwrap();
+        assert!(add_text(&doc, &req).is_ok());
+    }
+
+    #[test]
+    fn add_text_certification_message_is_a_verbatim_mirror_of_edit_error() {
+        // The add-text refusal must reuse `EditError::CertificationForbidsChange`'s
+        // exact wording/citation, not a reinvented message. Assert the two
+        // `Display` strings are byte-identical for the same `/P` value.
+        for permission in [1_u8, 2, 3] {
+            let at = crate::text_edit::AddTextError::CertificationForbidsChange { permission };
+            let ee = EditError::CertificationForbidsChange { permission };
+            assert_eq!(
+                at.to_string(),
+                ee.to_string(),
+                "add-text cert message must mirror EditError's verbatim (P={permission})"
+            );
+        }
+    }
+
+    // -- Pass 7.1: choice fields, regenerate, flatten, FDF/XFDF ----------
+
+    /// A one-page document with a single choice field `Color` (obj 4). `ff`
+    /// is its `/Ff`; `opt` is the raw `/Opt` array text.
+    fn pdf_with_choice(ff: u32, opt: &str) -> Vec<u8> {
+        build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /DA (/Helv 0 Tf 0 g) \
+                 /DR << /Font << /Helv << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> >> >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> /Annots [4 0 R] >>",
+                &format!(
+                    "<< /FT /Ch /Ff {ff} /T (Color) /Opt {opt} /Subtype /Widget /Rect [20 50 200 72] /P 3 0 R >>"
+                ),
+            ],
+            "",
+        )
+    }
+
+    #[test]
+    fn choice_single_select_stores_export_and_index() {
+        // Combo (131072). Two-element opts: export != display.
+        let mut s = session(pdf_with_choice(
+            131072,
+            "[ [(r)(Red)] [(g)(Green)] [(b)(Blue)] ]",
+        ));
+        // Match by display "Green" → export "g", index 1.
+        let out = s.set_choice_value("Color", &["Green"]).unwrap();
+        assert_eq!(out.widgets_updated, 1);
+        let Some(Object::Dict(d)) = s.value(ObjId::new(4, 0)) else {
+            panic!("choice field missing");
+        };
+        assert_eq!(
+            str_bytes(d.get(b"V").unwrap()).unwrap(),
+            b"g",
+            "/V stores the EXPORT value"
+        );
+        let i = d.get(b"I").and_then(Object::as_array).unwrap();
+        assert_eq!(i.len(), 1);
+        assert_eq!(i[0].as_int(), Some(1));
+    }
+
+    #[test]
+    fn choice_multi_select_stores_array_and_indices() {
+        // List box + MultiSelect (2097152).
+        let mut s = session(pdf_with_choice(2097152, "[ (Red) (Green) (Blue) ]"));
+        s.set_choice_value("Color", &["Red", "Blue"]).unwrap();
+        let Some(Object::Dict(d)) = s.value(ObjId::new(4, 0)) else {
+            panic!("choice field missing");
+        };
+        let v = d.get(b"V").and_then(Object::as_array).unwrap();
+        assert_eq!(v.len(), 2, "/V is an array under MultiSelect");
+        assert_eq!(str_bytes(&v[0]), Some(&b"Red"[..]));
+        let i = d.get(b"I").and_then(Object::as_array).unwrap();
+        assert_eq!(
+            i.iter().filter_map(Object::as_int).collect::<Vec<_>>(),
+            vec![0, 2]
+        );
+    }
+
+    #[test]
+    fn choice_single_select_refuses_multiple_values() {
+        let mut s = session(pdf_with_choice(131072, "[ (Red) (Green) ]"));
+        assert!(matches!(
+            s.set_choice_value("Color", &["Red", "Green"]),
+            Err(EditError::ChoiceRequiresMultiSelect { count: 2, .. })
+        ));
+    }
+
+    #[test]
+    fn choice_unknown_value_refused_unless_editable_combo() {
+        // Non-editable combo refuses an out-of-/Opt value.
+        let mut s = session(pdf_with_choice(131072, "[ (Red) (Green) ]"));
+        assert!(matches!(
+            s.set_choice_value("Color", &["Purple"]),
+            Err(EditError::ChoiceValueNotInOptions { .. })
+        ));
+        // Editable combo (Combo|Edit = 131072|262144) accepts free text.
+        let mut s2 = session(pdf_with_choice(393216, "[ (Red) (Green) ]"));
+        s2.set_choice_value("Color", &["Purple"]).unwrap();
+        let Some(Object::Dict(d)) = s2.value(ObjId::new(4, 0)) else {
+            panic!("choice field missing");
+        };
+        assert_eq!(str_bytes(d.get(b"V").unwrap()).unwrap(), b"Purple");
+        assert!(d.get(b"I").is_none(), "free-text value has no /Opt index");
+    }
+
+    #[test]
+    fn regenerate_appearances_clears_need_appearances() {
+        // A form asserting /NeedAppearances, with a text field carrying a /V
+        // but no /AP. Regenerate should build the /AP and clear the flag.
+        let bytes = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /NeedAppearances true \
+                 /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> >> >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Annots [4 0 R] >>",
+                "<< /FT /Tx /T (Name) /V (Ada) /Subtype /Widget /Rect [20 150 200 172] /P 3 0 R >>",
+            ],
+            "",
+        );
+        let mut s = session(bytes);
+        let out = s.regenerate_appearances().unwrap();
+        assert_eq!(out.regenerated, 1);
+        assert!(out.need_appearances_cleared);
+
+        let (saved, _r) = s
+            .to_incremental_bytes(&crate::writer::SaveOptions::identity())
+            .unwrap();
+        let reloaded = Document::from_bytes(saved).unwrap();
+        let form = forms::parse_acroform(&reloaded).unwrap();
+        assert!(!form.need_appearances, "the flag was cleared on output");
+        assert!(
+            form.field_by_name("Name").unwrap().has_appearance(),
+            "the field now carries a baked /AP"
+        );
+    }
+
+    #[test]
+    fn flatten_burns_appearance_and_removes_field() {
+        // Fill the text field (which authors its /AP), then flatten it.
+        let mut s = session(pdf_with_form("", ""));
+        s.fill_text_field("Name", "Ada").unwrap();
+        let out = s.flatten_fields(Some(&["Name"])).unwrap();
+        assert_eq!(out.fields_flattened, 1);
+        assert_eq!(out.widgets_burned, 1);
+        assert_eq!(out.pages_touched, 1);
+
+        let (saved, _r) = s
+            .to_incremental_bytes(&crate::writer::SaveOptions::identity())
+            .unwrap();
+        let reloaded = Document::from_bytes(saved.clone()).unwrap();
+
+        // The field is GONE from /AcroForm.
+        let form = forms::parse_acroform(&reloaded).unwrap();
+        assert!(
+            form.field_by_name("Name").is_none(),
+            "the flattened field left /AcroForm /Fields"
+        );
+        // The widget is GONE from the page /Annots.
+        let annots = crate::annot::page_annotations(&reloaded, ObjId::new(3, 0));
+        assert!(
+            !annots.iter().any(|a| a.id == Some(ObjId::new(4, 0))),
+            "the flattened widget left /Annots"
+        );
+        // The page now invokes the burned appearance (byte-grep: the `Do`
+        // and the value both live in the saved page content).
+        assert!(
+            saved.windows(3).any(|w| w == b"Do\n") || find(&saved, b"Do"),
+            "the overlay content invokes the appearance XObject"
+        );
+        assert!(
+            find(&saved, b"Ada"),
+            "the flattened value is in page content"
+        );
+    }
+
+    #[test]
+    fn flatten_is_refused_on_a_certified_document() {
+        // Even a /P 2 (fill-permitting) certification refuses the STRUCTURAL
+        // flatten by name — flatten uses the strict gate, not the fill gate.
+        let p2 = build(
+            &[
+                "<< /Type /Catalog /Pages 2 0 R /Perms << /DocMDP 6 0 R >> \
+                 /AcroForm << /Fields [4 0 R] /DA (/Helv 0 Tf 0 g) >> >>",
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Annots [4 0 R] >>",
+                "<< /FT /Tx /T (Name) /V (Ada) /Subtype /Widget /Rect [0 0 100 20] /AP << /N 5 0 R >> >>",
+                "<< /Type /XObject /Subtype /Form /BBox [0 0 100 20] /Length 0 >>\nstream\n\nendstream",
+                "<< /Type /Sig /Filter /Adobe.PPKLite /ByteRange [0 1 2 3] \
+                 /Reference [ << /TransformMethod /DocMDP /TransformParams << /P 2 >> >> ] >>",
+            ],
+            "",
+        );
+        let mut s = session(p2);
+        assert!(matches!(
+            s.flatten_fields(None),
+            Err(EditError::CertificationForbidsChange { .. })
+        ));
+    }
+
+    #[test]
+    fn export_import_form_data_round_trips_through_fdf_and_xfdf() {
+        // Fill a form, export its data, import into a fresh copy, and confirm
+        // the values match — for both FDF and XFDF.
+        let input = pdf_with_form("", "");
+        let mut src = session(input.clone());
+        src.fill_text_field("Name", "Ada Lovelace").unwrap();
+        src.set_button_state("Agree", "Yes").unwrap();
+        let data = src.export_form_data().unwrap();
+        assert_eq!(data.fields.len(), 2);
+
+        for bytes in [data.to_fdf(None), data.to_xfdf(None)] {
+            let parsed = crate::fdf::FormData::parse_fdf(&bytes)
+                .or_else(|_| crate::fdf::FormData::parse_xfdf(&bytes))
+                .unwrap();
+            let mut dst = session(input.clone());
+            let out = dst.import_form_data(&parsed).unwrap();
+            assert_eq!(out.applied, 2);
+            assert_eq!(out.skipped, 0);
+            let form = forms::parse_acroform(&dst.graph()).unwrap();
+            assert_eq!(
+                form.field_by_name("Name").unwrap().value,
+                forms::FieldValue::Text(b"Ada Lovelace".to_vec())
+            );
+            assert_eq!(
+                form.field_by_name("Agree").unwrap().value,
+                forms::FieldValue::Name(b"Yes".to_vec())
+            );
+        }
+    }
+
+    #[test]
+    fn import_skips_fields_the_document_lacks() {
+        let mut s = session(pdf_with_form("", ""));
+        let data = crate::fdf::FormData {
+            fields: vec![
+                crate::fdf::FieldData {
+                    name: "Name".to_owned(),
+                    values: vec!["Grace".to_owned()],
+                },
+                crate::fdf::FieldData {
+                    name: "Ghost".to_owned(),
+                    values: vec!["x".to_owned()],
+                },
+            ],
+        };
+        let out = s.import_form_data(&data).unwrap();
+        assert_eq!(out.applied, 1);
+        assert_eq!(out.skipped, 1);
+    }
+
+    /// Substring search helper for byte-grep assertions.
+    fn find(haystack: &[u8], needle: &[u8]) -> bool {
+        haystack.windows(needle.len()).any(|w| w == needle)
+    }
+
+    /// The bytes of a string object (tests only — `Object` has no public
+    /// string accessor because the writer round-trips raw bytes).
+    fn str_bytes(o: &Object) -> Option<&[u8]> {
+        match o {
+            Object::String(s) => Some(s.as_slice()),
+            _ => None,
+        }
+    }
+}
+
+/// Pass 14.3 §0.2 — the session-integrated in-place text edit/format
+/// commands: applied as ONE undo-able command each, undo/redo revert/reapply
+/// cleanly, saved output is minimal-diff (incremental append, byte-identical
+/// to the free function for a text-edit-only session), the free-function CLI
+/// path stays unchanged (verified by the untouched 14.1/14.2 tests).
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod text_edit_session_tests {
+    use super::*;
+    use crate::text_edit::{
+        EditError, EditOptions, EditRequest, FillModel, FontSelector, FormatOptions, FormatRequest,
+        NewFill,
+    };
+
+    /// A minimal one-page PDF with a Helvetica (WinAnsi, non-embedded) run —
+    /// the SAME synthetic shape the 14.1 free-function tests use, rebuilt here
+    /// so the session tests own their fixture. `content` is the page content
+    /// stream; the font is object 5.
+    fn text_pdf(content: &str) -> Vec<u8> {
+        let mut objects: Vec<(u32, Vec<u8>)> = Vec::new();
+        objects.push((1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()));
+        objects.push((
+            2,
+            b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] \
+              /Resources << /Font << /F1 5 0 R >> >> >>"
+                .to_vec(),
+        ));
+        objects.push((
+            3,
+            b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".to_vec(),
+        ));
+        let body = content.as_bytes();
+        let mut s = format!("<< /Length {} >>\nstream\n", body.len()).into_bytes();
+        s.extend_from_slice(body);
+        s.extend_from_slice(b"\nendstream");
+        objects.push((4, s));
+        objects.push((
+            5,
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+                .to_vec(),
+        ));
+
+        let mut out = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n".to_vec();
+        let mut offsets = std::collections::BTreeMap::new();
+        for (num, obj) in &objects {
+            offsets.insert(*num, out.len());
+            out.extend_from_slice(format!("{num} 0 obj\n").as_bytes());
+            out.extend_from_slice(obj);
+            out.extend_from_slice(b"\nendobj\n");
+        }
+        let xref_at = out.len();
+        let highest = 5u32;
+        out.extend_from_slice(format!("xref\n0 {}\n", highest + 1).as_bytes());
+        out.extend_from_slice(b"0000000000 65535 f \n");
+        for num in 1..=highest {
+            match offsets.get(&num) {
+                Some(off) => out.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes()),
+                None => out.extend_from_slice(b"0000000000 65535 f \n"),
+            }
+        }
+        out.extend_from_slice(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n",
+                highest + 1
+            )
+            .as_bytes(),
+        );
+        out
+    }
+
+    /// The sourced page-0 text of a saved PDF.
+    fn page0_text(bytes: &[u8]) -> String {
+        let doc = Document::from_bytes(bytes.to_vec()).unwrap();
+        let pages = crate::page_tree::pages(&doc).unwrap();
+        let page =
+            crate::text_extract::extract_page(&doc, &pages[0], 0, &Default::default()).unwrap();
+        page.sourced_text()
+    }
+
+    fn save(session: &EditSession) -> Vec<u8> {
+        session
+            .to_incremental_bytes(&SaveOptions::identity())
+            .unwrap()
+            .0
+    }
+
+    #[test]
+    fn edit_text_is_one_undoable_command_that_reverts_and_reapplies() {
+        let src = text_pdf("BT /F1 12 Tf 72 700 Td (teh cat) Tj ET\n");
+        let mut session = EditSession::new(Document::from_bytes(src.clone()).unwrap());
+        assert!(!session.is_modified());
+
+        let report = session
+            .edit_text(
+                &EditRequest::find_replace(0, "teh", "the"),
+                &EditOptions::default(),
+            )
+            .unwrap();
+        // Exactly ONE undo entry, labelled as a text edit.
+        assert_eq!(session.undo_depth(), 1);
+        assert_eq!(session.undo_kind(), Some(CommandKind::EditText));
+        assert!(session.is_modified());
+        assert_eq!(
+            report.glyph_source,
+            crate::text_edit::EditGlyphSource::NonEmbedded
+        );
+        // The edit round-trips through a save.
+        assert!(page0_text(&save(&session)).contains("the cat"));
+
+        // Undo reverts to byte-identical to the input (the §11.1 net-zero
+        // rule — dirty set is a diff, not a replay).
+        session.undo();
+        assert!(!session.is_modified());
+        assert_eq!(save(&session), src);
+
+        // Redo reapplies the same one command.
+        session.redo();
+        assert!(session.is_modified());
+        assert!(page0_text(&save(&session)).contains("the cat"));
+    }
+
+    #[test]
+    fn reflow_block_is_one_undoable_command_and_undo_is_byte_identical() {
+        // A three-line left paragraph; reflow to a wide width collapses it to
+        // one line. The whole thing is ONE ReflowBlock command; undo restores
+        // the byte-identical pre-reflow stream (decision 015 §3.4/R75).
+        let src = text_pdf(
+            "BT /F1 10 Tf 72 740 Td (alpha beta) Tj ET\n\
+             BT /F1 10 Tf 72 726 Td (gamma delta) Tj ET\n\
+             BT /F1 10 Tf 72 712 Td (epsilon) Tj ET\n",
+        );
+        let mut session = EditSession::new(Document::from_bytes(src.clone()).unwrap());
+        assert!(!session.is_modified());
+
+        let report = session
+            .reflow_block(
+                0,
+                0,
+                &crate::text_edit::ReflowRequest::new().with_wrap_width(400.0),
+            )
+            .unwrap();
+        // Exactly ONE undo entry, labelled ReflowBlock with the line counts.
+        assert_eq!(session.undo_depth(), 1);
+        assert_eq!(
+            session.undo_kind(),
+            Some(CommandKind::ReflowBlock {
+                lines_before: 3,
+                lines_after: 1,
+            })
+        );
+        assert!(session.is_modified());
+        assert_eq!(report.lines_after, 1);
+        // The re-wrap round-trips: the words survive on one line.
+        assert!(page0_text(&save(&session)).contains("alpha beta gamma delta epsilon"));
+
+        // Undo reverts to byte-identical to the input (§11.1 net-zero rule).
+        session.undo();
+        assert!(!session.is_modified());
+        assert_eq!(save(&session), src);
+
+        // Redo reapplies the same one command.
+        session.redo();
+        assert!(session.is_modified());
+        assert!(page0_text(&save(&session)).contains("alpha beta gamma delta epsilon"));
+    }
+
+    #[test]
+    fn reflow_after_an_in_session_edit_of_the_same_page_is_refused() {
+        // Reflow is planned from base content; refuse if the page's content
+        // was already rewritten this session (a clean named refusal, rule 4).
+        let src = text_pdf("BT /F1 10 Tf 72 740 Td (teh cat) Tj ET\n");
+        let mut session = EditSession::new(Document::from_bytes(src).unwrap());
+        session
+            .edit_text(
+                &EditRequest::find_replace(0, "teh", "the"),
+                &EditOptions::default(),
+            )
+            .unwrap();
+        let err = session
+            .reflow_block(0, 0, &crate::text_edit::ReflowRequest::new())
+            .unwrap_err();
+        assert!(
+            matches!(err, crate::text_edit::ReflowApplyError::Unsupported(m)
+                if m.contains("already edited this session")),
+            "reflow after an in-session edit is refused by name"
+        );
+        // The failed reflow left the session at exactly the one prior edit.
+        assert_eq!(session.undo_depth(), 1);
+    }
+
+    #[test]
+    fn session_edit_output_matches_the_free_function_for_a_single_edit() {
+        // The minimal-diff claim made concrete: for a text-edit-only session,
+        // the incremental save is byte-identical to what the free function
+        // `edit_text` produces — same object rewritten, everything else
+        // verbatim (R32/R46).
+        let src = text_pdf("BT /F1 12 Tf 72 700 Td (teh cat) Tj ET\n");
+        let doc = Document::from_bytes(src.clone()).unwrap();
+        let free = crate::text_edit::edit_text(
+            &doc,
+            &EditRequest::find_replace(0, "teh", "the"),
+            &EditOptions::default(),
+        )
+        .unwrap();
+
+        let mut session = EditSession::new(Document::from_bytes(src.clone()).unwrap());
+        session
+            .edit_text(
+                &EditRequest::find_replace(0, "teh", "the"),
+                &EditOptions::default(),
+            )
+            .unwrap();
+        let sessioned = save(&session);
+
+        // Incremental append: the original is a byte-prefix of both.
+        assert_eq!(sessioned.get(..src.len()), Some(src.as_slice()));
+        assert_eq!(sessioned, free.bytes);
+    }
+
+    #[test]
+    fn two_edits_accumulate_and_undo_one_at_a_time() {
+        // Two distinct runs; edit each. The second edit must compose on top of
+        // the first (walk the CURRENT content), and the two must undo
+        // independently.
+        let src = text_pdf("BT /F1 12 Tf 72 700 Td (teh cat) Tj 72 680 Td (sut) Tj ET\n");
+        let mut session = EditSession::new(Document::from_bytes(src.clone()).unwrap());
+        session
+            .edit_text(
+                &EditRequest::find_replace(0, "teh", "the"),
+                &EditOptions::default(),
+            )
+            .unwrap();
+        session
+            .edit_text(
+                &EditRequest::find_replace(0, "sut", "sat"),
+                &EditOptions::default(),
+            )
+            .unwrap();
+        assert_eq!(session.undo_depth(), 2);
+        let both = page0_text(&save(&session));
+        assert!(both.contains("the cat"), "got {both:?}");
+        assert!(both.contains("sat"), "got {both:?}");
+
+        // Undo the second edit only: "the cat" survives, "sat" reverts to "sut".
+        session.undo();
+        let after_one_undo = page0_text(&save(&session));
+        assert!(after_one_undo.contains("the cat"));
+        assert!(after_one_undo.contains("sut"));
+        assert!(!after_one_undo.contains("sat"));
+
+        // Undo the first edit: back to byte-identical input.
+        session.undo();
+        assert!(!session.is_modified());
+        assert_eq!(save(&session), src);
+    }
+
+    #[test]
+    fn a_refused_edit_leaves_the_session_untouched() {
+        // WinAnsi Helvetica cannot encode an astral char ⇒ R-INV refusal, and
+        // no command must reach the undo stack (rule 4 — refuse before mutate).
+        let src = text_pdf("BT /F1 12 Tf 72 700 Td (hi) Tj ET\n");
+        let mut session = EditSession::new(Document::from_bytes(src.clone()).unwrap());
+        let err = session
+            .edit_text(
+                &EditRequest::find_replace(0, "hi", "h\u{1D54F}"),
+                &EditOptions::default(),
+            )
+            .unwrap_err();
+        assert!(matches!(err, EditError::Refused(_)));
+        assert_eq!(session.undo_depth(), 0);
+        assert!(!session.is_modified());
+        assert_eq!(save(&session), src);
+    }
+
+    #[test]
+    fn format_text_is_one_undoable_command() {
+        let src = text_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let mut session = EditSession::new(Document::from_bytes(src.clone()).unwrap());
+        let report = session
+            .format_text(
+                &FormatRequest::new(0, "hello")
+                    .fill(NewFill::new(FillModel::Cmyk, vec![0.0, 1.0, 1.0, 0.0]).unwrap()),
+                &FormatOptions::default(),
+            )
+            .unwrap();
+        assert_eq!(session.undo_depth(), 1);
+        assert_eq!(session.undo_kind(), Some(CommandKind::FormatText));
+        assert_eq!(report.fill_space, Some("k")); // parity-plus: CMYK stored as k
+        // The stored device space appears in the appended revision.
+        let saved = save(&session);
+        assert!(String::from_utf8_lossy(&saved).contains("0 1 1 0 k"));
+
+        session.undo();
+        assert!(!session.is_modified());
+        assert_eq!(save(&session), src);
+    }
+
+    #[test]
+    fn format_text_no_op_and_missing_font_are_refused_without_mutating() {
+        let src = text_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let mut session = EditSession::new(Document::from_bytes(src).unwrap());
+        assert!(
+            session
+                .format_text(&FormatRequest::new(0, "hello"), &FormatOptions::default())
+                .is_err()
+        );
+        assert!(
+            session
+                .format_text(
+                    &FormatRequest::new(0, "hello").font(FontSelector::new("Nonexistent")),
+                    &FormatOptions::default(),
+                )
+                .is_err()
+        );
+        assert_eq!(session.undo_depth(), 0);
+        assert!(!session.is_modified());
+    }
+}

@@ -1,0 +1,607 @@
+---
+name: pdf-spec-corpus-state
+description: PDF_Spec RAG conventions that are NOT recorded in its own index.md — the font__* vs iso32000__s__9.* prefix split, the two-tier gap vocabulary, retraction markers, shall/should modality tabulation, and targeted codec-spec cross-reference reads.
+metadata:
+  type: project
+---
+
+Two conventions established for `D:\Dev\Rag-Specialized\PDF_Spec\` that are easy
+to violate on a later session because they are judgement calls, not rules stated
+in the agent file.
+
+**1. `font__*` is for EXTERNAL font data only.** PDF's *font dictionaries*,
+encodings, metrics and descriptors **as specified** are ISO 32000-1 clause 9 and
+live in `iso32000\` as `iso32000__s__9.*.md` + `iso32000__annex__d.md`. The
+`font__*` prefix holds the external files clause 9 depends on but does not
+contain. Populated 2026-07-30 with 8 files: the Core 14 AFM metrics
+(`font__std14_afm_licensing.md`, `font__std14_descriptors.md`,
+`font__std14_widths__{helvetica,times,courier,symbol,zapfdingbats}.md`) and the
+Adobe Glyph List (`font__agl.md`). Still to come: TrueType/CFF/OpenType
+internals — `glyf`, `loca`, `cmap`, `post`, charstrings.
+Same logic for `color__*` (spaces beyond the device spaces) vs `iso32000__s__8.6.md`.
+
+Working rule of thumb: **"what does the standard say" → `iso32000__s__9.*`;
+"what is the actual number/mapping" → `font__*`.**
+
+**Why:** the original prefix table said `font__*` = "OpenType/TrueType/CFF
+structure, encoding, cmaps"; putting PDF clause-9 material there would have made
+`iso32000__s__*` non-contiguous and broken the "one targeted Glob finds the
+clause" property the whole naming scheme exists for.
+
+**How to apply:** when adding a font/colour file, ask "is this ISO 32000-1 clause
+text, or an external format?" Clause text → `iso32000__s__<clause>.md`.
+
+**2. Gap vocabulary is two-tier and greppable.** Distinguish, in every file:
+- **GAP** / **SOURCING GAP** — the corpus doesn't cover it yet (fixable by work).
+- **NEEDS VERIFICATION** — a claim IS stated but its citation is unconfirmed.
+- **genuine spec ambiguity** — the standard itself is unclear; no amount of
+  further ingestion fixes it. `index.md` keeps a dedicated table of these.
+- **GAP CLOSED <date>** — left in place as a dated update footer when a gap is
+  filled, so the audit trail survives.
+
+**2b. A gap can close on a NEGATIVE result, and a gap can be PERMANENT.**
+Established 2026-07-31 closing `filter__dct.md`'s TN #5116 SOURCING GAP. Three
+sub-rules, all easy to get wrong:
+
+- **A negative result closes a gap.** "The cited document does not contain X" is
+  a *stronger* closure than a positive citation, because it disarms every future
+  appeal to that document. Write it as the answer, not as a failure to find one.
+  Canonical instance: **"invert" appears zero times in Adobe TN #5116**, the
+  document ISO 32000-1 §7.4.8 footnote *a* makes normative by reference — which
+  is what settles the "Adobe CMYK inversion" folklore.
+- **A gap that no document can close is PERMANENT, and must be labelled so** —
+  otherwise a future session schedules an ingestion that cannot succeed. The
+  APP14 transform-byte 0/1/2 value table is the instance: ISO defers to TN
+  #5116, TN #5116 doesn't have it, so the de-facto source (libjpeg
+  `jdapimin.c` + ExifTool) is the *end state*. Permanent gaps graduate into
+  `index.md`'s **spec-ambiguity table**, not its Known-gaps table.
+- **Split-sourcing within one topic must be tabulated, not prose'd.** When
+  layout comes from source A and semantics from source B with different
+  license bases, lead the section with a fact→source→basis table. Prose blends
+  them and a later reader mis-cites the weaker one.
+
+**How to apply:** when closing a gap, always ask "*could* any document close
+the residue?" If no, say so explicitly and move the row.
+
+**Why:** an engineer acting on a "GAP" schedules a librarian session; an engineer
+acting on a "spec ambiguity" has to make a product decision and diagnose it.
+Collapsing the two wastes sessions and produces silent wrong behaviour.
+
+**How to apply:** never delete a gap marker — convert it to `GAP CLOSED <date>`
+plus a pointer to the file that closed it. See [[spec-source-extraction-toolchain]].
+
+**3. Retractions get a third marker class: `CORRECTION <date>` / `AMENDMENT <date>`,
+with the WRONG text retained.** Established 2026-07-30 when two claims had to be
+walked back (URW font license; the Pass-1 text-ladder scope). The convention:
+
+- Fix the claim **in place** wherever it is stated (table row, scope line), so a
+  reader who greps only that row gets the right answer.
+- Add a dated `CORRECTION <date>` / `AMENDMENT <date>` block that **quotes the
+  superseded wording in a blockquote** and names what was wrong about it.
+- `index.md` carries a "Superseded-content discipline" note warning that **a
+  blockquote under one of those headings is the OLD, WRONG text**, plus a search
+  recipe: `CORRECTION [0-9]{4}-|AMENDMENT [0-9]{4}-|superseded|RECLASSIFIED`.
+
+**Why:** deleting a wrong claim guarantees a later session re-derives it from the
+same faulty recall or the same stale upstream summary that produced it the first
+time. Retaining it, labelled, makes the error self-defeating. Same reasoning as
+`GAP CLOSED` — the audit trail *is* the value. **Risk this manages:** a retained
+wrong claim is only safe if it is unmistakably marked, hence the blockquote-plus-
+heading convention and the index-level warning; never leave old text inline.
+
+**How to apply:** when an edit contradicts something already on disk, also sweep
+`index.md` for *derived* statements that quietly depended on it — the ladder
+rescope silently invalidated a "not blocking Pass 1" row in the Known-gaps table
+that nothing in the edit brief mentioned. Same sweep applies to *verifications*:
+closing `filter__ccitt.md`'s `BlackIs1` flag (2026-07-30) also required editing
+`iso32000__s__8.9.5.2.md`, which cited that flag by name.
+
+**4. `NEEDS VERIFICATION` closures use `VERIFICATION CLOSED <date>`** — the same
+retained-blockquote shape as `CORRECTION`/`AMENDMENT`, plus an explicit
+**"outcome"** line saying whether the recalled claim was right. Both outcomes
+have occurred and both are worth recording: CCITT's three recalled Table 11
+defaults were **correct**, while DCT's recalled `ColorTransform` summary was
+**materially incomplete** (missed that the APP14 marker *overrides* the
+dictionary entry, and that the fallback default is 1-for-3-components /
+0-otherwise). Recall being right once is not evidence it can be trusted.
+
+**6. Modality (`shall` / `should` / `can`) is load-bearing — tabulate it, never
+flatten it to "the spec says".** Established 2026-07-31 verifying ISO 32000-1
+§7.4.7 (JBIG2). That clause's five embedding rules mix all three modalities, and
+two of the splits change what an implementation must do:
+
+- Rule 4 splits **mid-sentence**: page-0 segments **`shall`** go to a separate
+  stream, but `/JBIG2Globals` only **`should`** point at it.
+- The "one page per image XObject" constraint everyone quotes as a requirement is
+  a **`should`** (segment page association set to 1) — so a decoder that filters
+  on `page == 1` silently blanks a file that violated only a recommendation.
+
+**Why:** a `should` violation produces files that are *non-conforming but
+common*, and a reader that treats `should` as `shall` fails them silently — the
+worst failure shape. A `shall`/`should` split within one sentence is invisible to
+paraphrase and survives only if the file reproduces the modal verb per rule.
+
+**How to apply:** when a clause states embedding/conformance rules, write them as
+a numbered table with a **Modality column**, quoting the modal verb. Where a
+`should` has no stated reader-side recovery rule, that is a **spec-ambiguity row**
+for `index.md`, not a gap.
+
+**7. Resolve ISO 32000-1's dangling cross-references with a TARGETED read of the
+staged codec spec — this does not open full codec extraction.** §7.4.7 forbids
+"the optional 2-byte combination (marker) mentioned in the specification"
+**without naming the bytes**; one grep of the staged T.88 for its Annex D
+headings, plus reading D.3's body, produced `0xFF 0xAA` / `0xFF 0xAB` and
+confirmed D.3 "Embedded organisation" as the mandated one. Cost: two commands.
+**Record in `index.md` exactly which sub-clause was read**, so the codec spec's
+"not yet extracted" status stays accurate rather than becoming a lie.
+
+**How to apply:** whenever a PDF clause says "mentioned in the specification",
+"described in an annex of", or similar without a number, that is a resolvable
+citation, not a gap — and resolving it is in scope even in a session otherwise
+scoped to the PDF side.
+
+**8. A clause file can be audited a SECOND time along a different AXIS — record
+it as an appended `## WRITE DIRECTION` section, never a rewrite.** Established
+2026-07-31 auditing §7.5.4/.5/.6/.7/.8 for emission constraints (they had been
+built for the read path during Pass 1). The convention:
+
+- Append `## WRITE DIRECTION — <scope> (audit <date>)` **before** the file's
+  `## Cross-references` section, opening with `**GAP CLOSED <date>.**` plus a
+  one-line statement that the read-path material above was re-verified.
+- **Do not rewrite the original sections.** The read-path content is still
+  correct; the axis is new, not the facts.
+- Bump `date:` → keep, add `updated:` to frontmatter; extend `keywords` with
+  write-side terms (`emission`, `writer`, plus the specific ones) and
+  `pdfce_relevance` with `pdfce-core::writer`.
+- Add a **derived `iso32000__ref__*` consolidator** when the audit spans ≥4
+  clause files — `iso32000__ref__writer_emission.md` collects every writer-facing
+  `shall`/`shall not`/`should` into modality tables keyed `A1…G9`, so the
+  engineer greps one file instead of five. Same role as
+  `iso32000__ref__operator_index.md` / `__text_pipeline.md`.
+
+**Why:** the read/write asymmetry is real and large — §7.5.4 alone gained the
+exact 20-byte offset table, the three legal EOL *byte pairs*, and a `shall not`
+(no comments in an xref table) **that lives in §7.5.8.4, not §7.5.4**. A
+reader-path file is not evidence about the write path, and must not be assumed
+to be.
+
+**How to apply:** whenever a Pass changes *direction* (read→write, parse→emit,
+validate→produce), assume every existing file on that topic is half-covered and
+re-audit rather than trusting it.
+
+**9. Scope a file explicitly in its title + a bold SCOPED banner when ingesting
+part of a large clause.** Two shapes now in use, both established 2026-07-31:
+`iso32000__annex__f.md` is *"DETECTION SCOPE ONLY"* (Annex F minus all of F.4's
+hint tables), `iso32000__s__12.8.md` is a *"SCOPED STUB"* (§12.8's `/ByteRange`
+model only). Both carry an explicit **"NOT ingested:"** enumeration and a
+"do not answer X from this file" line. Third instance of the pattern after
+`iso32000__s__9.7.5.md` (CMaps, DEFERRED STUB).
+
+**Why:** partial ingestion is usually the *right* call — decision 007 asked for
+detection-level linearization and the ByteRange model only — but an unlabelled
+partial file reads as complete and gets cited for things it never covered. The
+`NOT ingested` list is what makes the partial safe.
+
+**9b. When a SCOPED file's scope later WIDENS, the banner must be edited in
+place — `NOT ingested` → `NOW ingested (was "NOT")` + a trimmed `STILL NOT`
+list.** Established 2026-07-31 widening `iso32000__s__12.8.md` from the
+`/ByteRange` stub to the full DocMDP validation model. This is the **one part of
+a SCOPED file that append-only discipline does not protect**: an untouched
+banner actively lies about the file's own coverage, and the lie is worse than a
+missing section because it *stops* a future lookup from reading further. Also
+sweep the file's earlier sections for one-line summaries the new depth
+supersedes and mark them `(Imprecise — superseded by …)` in place rather than
+rewriting (the §12.8 stub's "P=2/P=3 permit form-fill and comment workflows
+respectively" was wrong twice: P=3 is P=2 ∪ annotations, and P=2 also permits
+signing + page-template instantiation).
+
+**11. A file can be re-audited along a COVERAGE-DEPTH axis, not just a
+direction axis.** Item 8 covered read→write. 2026-07-31 added stage-1→stage-2:
+`iso32000__s__12.8.md` had the cryptographic half (`/ByteRange` digest) and none
+of the policy half (permitted-changes / MDP). Same mechanics as item 8 — append
+`## <AXIS NAME>` before `## Cross-references`, open with `**GAP CLOSED
+<date>.**`, state that the existing material was re-verified and is unchanged.
+
+**How to apply:** when a question is phrased as "X or merely Y?" (here: "valid,
+or merely byte-range-intact?"), that phrasing is itself the signal that an
+existing file covers Y and not X. Check before assuming the file answers it.
+
+**12. A negative result must NOT be closed with a recalled real-world fact —
+mark it `NEEDS VERIFICATION` and route it to `personal_rag\pdf`.** Established
+2026-07-31. ISO 32000-1 defines **no** permitted-changes analysis for a plain
+approval signature; the obvious completion ("but real validators flag altered
+documents anyway") is *empirical tool behaviour*, was not verified in-session,
+and belongs to `pdfce-librarian`'s corpus, not this one. Recording the silence
+is the deliverable; resolving it from recall would have re-created exactly the
+URW-license failure mode in a new domain.
+
+**How to apply:** when a sourced silence has a plausible-sounding practical
+answer, write the silence as the finding, mark the practical answer
+`NEEDS VERIFICATION / OUT OF SCOPE`, name which corpus owns it, and — this is
+the useful part — note that the *unverified* status is itself an argument for
+the conservative engineering choice, not a reason to ignore it.
+
+**10. Negative results are now a first-class deliverable class with their own
+grep marker: `NEGATIVE RESULT`.** The write-direction audit produced 19 of them,
+consolidated into `iso32000__ref__writer_emission.md` § D. Highest-value ones are
+the *absences* a writer would otherwise burn a session searching for: no
+predictor requirement for xref streams, `/Columns == sum(W)` is convention not
+spec, the spec never addresses appending to an existing hybrid file, no `shall
+not` forbids rewriting a signed file. Extends memory item 2b (a gap can close on
+a negative result) with a searchable marker.
+
+**13. Direction changes come in TWO shapes — decide which before starting.**
+Memory item 8 (append a `## WRITE DIRECTION` section) applies when the **same
+clauses** are re-read on a new axis (§7.5.4 read→write). It does **not** apply
+when the opposite direction is governed by **different clauses**. Established
+2026-07-31 building text *extraction* (Pass 4) against the existing text
+*rendering* pipeline (Pass 1):
+
+- Rendering is §9.6.6 + Annex D.2 + §9.7 → `iso32000__ref__text_pipeline.md`.
+- Extraction is **§9.10** + Annex D.3 + §14.6/.7/.8/.9 → new files and a new
+  consolidator `iso32000__ref__text_extraction.md`.
+- Same input (a font dictionary, a show string), **opposite output**, and they
+  give *different answers for the same font* — `/ToUnicode` is irrelevant to
+  rendering and decisive for extraction.
+
+**How to apply:** when a new Pass reverses direction, first ask "**do the same
+clauses govern both directions?**" Same clauses → append an axis section.
+Different clauses → **new files + a mirror consolidator, and make the two
+consolidators cross-warn against each other in both directions** ("do not answer
+an extraction question from this file"). An LLM that greps "text pipeline" and
+lands on the rendering file will otherwise answer confidently and wrongly.
+
+**14. A dispatch can ASK for negative results — satisfy it with EVIDENCE, not
+assertion.** Established 2026-07-31; the Pass-4 dispatch explicitly requested
+"largely negative results — record them" for whitespace/segmentation/bidi.
+"The spec doesn't say X" is only trustworthy if the file shows **how it was
+determined**. The shape that works:
+
+- **Term-frequency evidence**: exhaustive full-text search of the staged source,
+  with the **hit count and every hit's location**. Canonical instances: "word
+  break" = **7 hits, all inside §14.8/§14.9** (so clause 9 never mentions words);
+  "bidirectional" = **2 hits**, one of them an unrelated sense; "shaping" /
+  "GSUB" / "GPOS" / "grapheme cluster" / "normalization" = **0 hits**.
+- **Quote the clause that DOES exist and show its scope is narrower than
+  assumed** — §14.8.2.5's spacing `shall` binds a *writer* and only inside
+  Tagged PDF; UAX #9 is cited once, in a *layout* attribute.
+- **Give each negative an ID** (`S1`–`S9`, `B1`–`B5`, `A1`–`A3`) so the derived
+  consolidator and `index.md` triggers can cite them by number.
+- **Convert the negatives into a SOURCED-vs-DERIVED table** keyed on the
+  condition that flips them (here: tagged vs untagged). That table is what the
+  engineer actually consumes — it says which outputs may be presented as fact.
+
+**Why:** these silences are load-bearing product constraints, not gaps. They tell
+the engineer which parts of a feature must be labelled fuzzy/heuristic under the
+project's fuzzy-never-sneaky rule. An unevidenced "the spec is silent" gets
+re-litigated every session; a hit-counted one does not.
+
+**15. When a dispatch asks for material by a numbering scheme, CHECK THE STAGED
+SOURCE ACTUALLY CONTAINS IT — with term-frequency evidence — BEFORE writing
+anything.** Established 2026-07-31 on the §7.6 encryption build. The dispatch
+asked for "Algorithm 2.A (the R6 hash — the SHA-256/384/512 iterated
+construction, **verbatim step by step**)", "Algorithms 8/9/10/11/12/13", `/OE`,
+`/UE`, `AESV3`. **None of it exists in ISO 32000-1:2008.** Measured counts over
+the 756-page staged source: `AESV3` **0**, `SHA-256` **0**, `revision 5` **0**,
+`revision 6` **0**, `Algorithm 2.A`/`2.B`/`8`/`9`/`13` **0 each**; the single
+`/OE` hit is the **glyph name** in Annex D.2 and all three `Perms` hits are the
+**catalog** §12.8.4 key, not the encryption-dictionary one.
+
+Three sub-rules:
+
+- **A dispatch's clause/algorithm numbering is a *hypothesis*, not a citation.**
+  ISO 32000-1's own §7.6.2 warns that its algorithms are "uniquely numbered …
+  in a manner that maintains compatibility with previous documentation" — so
+  **three** schemes are in circulation for the same algorithms (ISO 32000-1 `N`
+  ≡ *PDF Reference 1.7* / Adobe supplement `3.N` ≡ ISO 32000-2 `N`/`N.A`/`2.B`).
+  Build the mapping table early and mark the column you cannot verify
+  `NEEDS VERIFICATION`.
+- **The absence is itself the headline deliverable** — lead the file with it
+  (`§0 READ THIS FIRST`), not with a caveat buried in Gotchas. Extends memory
+  item 14 (evidencing negatives) to the case where the negative is about *the
+  source*, not *the subject*.
+- **When part of a requested topic turns out to live in a differently-licensed
+  document, SPLIT IT INTO A SIBLING PREFIX** rather than mixing licence bases in
+  one file. `iso32000__s__7.6.*` = ISO 32000-1, `free_primary`, quotable;
+  `security__aes256_r5_r6.md` = Adobe supplement, `free_secondary_paraphrase`,
+  paraphrase-only. **"Is it in ISO 32000-1?" is the whole test** — the same
+  shape as the `font__*` vs `iso32000__s__9.*` split in item 1 and `color__*`
+  vs §8.6, now applied on a **licensing** axis rather than a *content-origin*
+  axis. See [[pdf-spec-embeddable-data-licensing]] item 6.
+
+**16. REFUSING to write an algorithm is a valid deliverable — even when the
+dispatch explicitly asked for it verbatim.** ISO 32000-2's `/R 6` Algorithm 2.B
+was requested and is **not obtainable**: ISO 32000-2 paywalled, no public Adobe
+ExtensionLevel 8 document locatable, `pdfa.org` 403. Recall could supply
+plausible, specific detail (round counts, the SHA-384/512 selector, the inner
+AES-128-CBC step) — which is **exactly** the shape of the URW-licence claim that
+had to be retracted 2026-07-30. What was written instead:
+
+- the gap, with **every acquisition route tried and its failure mode**;
+- the **product consequence**, stated bluntly (`/R 6` is what Acrobat X+ writes,
+  so this is the *common* AES-256 case; encrypt-on-save AES-256 is currently
+  buildable only at the security-weakened `/R 5`);
+- three named closure routes, the third of which — deriving the algorithm from
+  ≥3 permissively-licensed implementations — is **legitimate under the licensing
+  table's "free secondary sources" rule but must be put to the user first**,
+  because it would be the corpus's first normative algorithm sourced from *code*
+  rather than a *document*.
+
+**How to apply:** when a dispatch asks for X verbatim and X is unobtainable, the
+deliverable is the enumerated failure + the consequence + the routes. Never
+close the hole with recall to make the deliverable look complete.
+
+**5. Filter files carry an "Implementation reference (pdfce decision NNN)" line
+naming the chosen crate** — but crate *capabilities* are **never asserted** in
+this corpus, only listed as things to verify against the crate's own docs. The
+corpus sources specs, not dependencies. Current mapping (decision 005):
+`zune-jpeg` / `weezl` / `hayro-ccitt` / `hayro-jbig2` / `hayro-jpeg2000`.
+
+**15. `index.md` can be edited by ANOTHER spec-librarian session concurrently —
+re-read every region before editing and anchor on unique strings.** Established
+2026-07-31 building §12.5 (annotations, Pass 6.0) **while a parallel §7.6
+encryption session was live-editing the same `index.md`**. Every Edit after the
+first returned "the file had been modified on disk since you last read it." The
+edits still applied because each `old_string` was unique, but a stale
+line-number-based or long-context-spanning edit would have failed or clobbered
+the other session's rows. Concretely: the prefix-table `iso32000__s__*` count and
+the total-file count both moved (52→56 under me but the base had already jumped
+to 88 from the encryption build I never saw in my first read). **How to apply:**
+grep for section anchors immediately before each index edit; never reuse a
+line number across two edits; make each edit target a short unique substring;
+and recompute counts from the *current* on-disk values, not the values from your
+first read.
+
+**17. A WRITE-DIRECTION audit of clause C must trace C's emitted artifact to its
+CONSUMER clause(s) — a binding write-side constraint can be invisible from C
+alone.** Established 2026-07-31 auditing §8.10 (form XObjects) for authoring an
+`/AP` appearance stream (Pass 6.1). §8.10 (the *producer/container* clause)
+**tolerates a zero-area `/BBox`** — Do step c just clips to nothing, "paint
+nothing," legal, not an error. But §12.5.5 (the *consumer* clause — the annotation
+placement algorithm that receives an `/AP` `/BBox`) makes that same zero-area box
+**undefined**: step b's fit-to-`Rect` divides by the box extent ⇒ matrix A
+singular ⇒ NEGATIVE RESULT. So the real write rule — **"an `/AP` `/BBox` shall
+have strictly positive width AND height"** (WF4 in `iso32000__s__8.10.md`) — does
+**not** exist anywhere in §8.10; it emerges only when you follow the emitted
+artifact downstream. A read-path re-audit that only re-reads the producer clause
+misses it.
+
+**How to apply:** when auditing clause C for emission, list every clause that
+*consumes* what C emits (here: appearance stream → §12.5.5 placement → §12.5.3
+NoZoom/NoRotate → clause 11 compositing) and check each for constraints tighter
+than C's own tolerances. Record the derived constraint in C's WRITE DIRECTION
+section with a cross-ref to the consumer clause's negative-result row, and make
+the cross-ref bidirectional (the consumer file gets a "this is the read-side face
+of C's write rule" pointer). Extends memory item 8: same-clause/both-axes still
+applies, but the *content* of the write axis may be sourced from a neighbour.
+
+**18. A direction-change dispatch can be BOTH item-8 (append axis section) AND
+item-13 (new file) IN ONE BUILD — and a dispatch's FLAG-BIT VALUES are hypotheses,
+not just its clause numbers.** Established 2026-07-31 on the Pass-6.2 text-bearing
+GENERATION build. Two sub-findings:
+
+- **Split the build by clause, not by direction.** The GENERATION axis touched the
+  SAME subtype clauses already covered on the DISPLAY axis (§12.5.6.4/.6/.12) →
+  appended `## GENERATION DIRECTION` to `iso32000__s__12.5.6.md` (item 8). But the
+  bulk of the NEW normative machinery (`/DA` grammar, `/Q`, auto-size, `/Tx BMC…EMC`)
+  lives in a DIFFERENT clause (§12.7.3.3) not yet in the corpus → **new file**
+  `iso32000__s__12.7.3.3.md` (item 13). One dispatch, both mechanisms. **How to
+  decide:** ask per-clause "is THIS clause already in the corpus?" — a covered
+  clause gets an appended axis section, an uncovered clause gets a new file, even
+  within a single build. (Also appended a `## WRITE DIRECTION` to `iso32000__s__9.6.md`
+  for the standard-14-dict authoring rule — a THIRD, tangential same-clause axis.)
+- **Extends item 15 to flag values.** The dispatch said "comb fields /Ff 24"; Comb
+  is Table 228 **bit 25 ⇒ value 16777216** (bit 24 is `DoNotScroll`). And the
+  dispatch's "MUST set a font+size via Tf AND a colour" was wrong: §12.7.3.3's
+  `shall`-minimum is **`Tf` only** (colour defaults to `0 g`). A dispatch's stated
+  bit positions, flag values, and "must include X" assertions are all hypotheses to
+  verify against the source verbatim — same discipline as clause/algorithm numbers.
+
+**How to apply:** on any GENERATION/authoring dispatch, expect a mix — one new
+clause file for the algorithm + appended axis sections on the subtype/font files it
+reuses. And re-derive every flag value from the source's bit-position + the
+1-based `2^(bit−1)` rule; never transcribe a value the dispatch supplied.
+
+**19. BEHAVIORAL negative results have two extra shapes beyond "the source lacks
+X" (item 15) and "no document can close it" (item 2b): the HOLLOW SHALL and the
+NO-CLAUSE-AT-ALL tool-verb.** Established 2026-07-31 on the Pass-7 §12.7 forms
+build (NF1–NF4 in `iso32000__s__12.7.2.md`):
+
+- **Hollow `shall`** — the spec states an imperative but defers ALL semantics to a
+  non-normative external document, so a conformant reader can decline the behaviour.
+  §12.6.4.16: a reader "**shall execute**" form JavaScript, but ISO 32000-1 defines
+  no JS language/API/security model (deferred to Adobe/Mozilla Bibliography docs).
+  ⇒ **recognize-and-disclose-NEVER-execute is spec-conformant** — there is no
+  normative behaviour to conform to. The deliverable quotes the `shall`, then shows
+  it is unbacked. Same move applies to any "shall <verb>" whose object is defined
+  only in a referenced non-ISO spec.
+- **No-clause-at-all tool-verb** — a term every PDF tool ships (here **flatten**)
+  that has ZERO normative clause. The deliverable is NOT "GAP" (nothing to ingest);
+  it is a NEGATIVE RESULT naming which *other* normative facts CONSTRAIN the
+  convention (flatten must reproduce §12.5.5 placement when it inlines an `/AP`).
+  Check the term's own frequency in the source to prove the absence before asserting
+  it. Extends item 16 (refusing to write) — here there is nothing to refuse; the
+  operation is real but wholly a product decision.
+- **`shall`-vs-`may` on a producer-set flag:** `/NeedAppearances` (Table 218) is
+  *descriptive* — no imperative attaches to a reader honouring it — so honouring it
+  is effectively a `may`, and a regenerate-on-operator-request policy (pdfce R51) is
+  conformant. Contrast the ONE place regeneration IS a `shall`: RichText fields,
+  "entire annotation appearance **shall** be regenerated each time the value is
+  changed." Tabulate WHICH regime carries the modal verb (item 6 discipline applied
+  to a behaviour, not an embedding rule).
+
+**Also confirmed (validated approach, per feedback-memory "record successes"):**
+item-18's flag-value re-derivation paid off but this time EVERY dispatched bit
+value was already correct — `Pushbutton` 17=65536 / `Radio` 16=32768 /
+`Multiline` 13=4096 / `Comb` 25=16777216 / `Combo` 18=131072 all matched Tables
+226/228/230 verbatim. Re-deriving from `2^(bit−1)` cost nothing and produced a
+"DISPATCH CONFIRMED (no off-by-one)" line that is itself useful provenance. Do it
+every time regardless of whether the previous dispatch had errors.
+
+**20. A DESTRUCTIVE-OP dispatch (redaction, Pass 8) has a distinct shape: the
+spec judges the RESULT, not the METHOD — split pure-spec clause file from a DERIVED
+removal-mechanics `ref` file, and expect the op to INVERT existing invariants.**
+Established 2026-07-31 building §12.5.6.23 (Redact). Four sub-findings:
+
+- **OUTCOME-BOUND / METHOD-DEFERRED `shall` — a fourth behavioral-negative shape
+  beyond item 19's three.** The dispatch's key question ("does the spec define the
+  APPLY algorithm?") has a *refined* answer that is NOT "only the mark": ISO 32000-1
+  §12.5.6.23 defines the /Redact MARK **and imposes four `shall` OUTCOME constraints
+  on apply** ("remove all traces", "image data shall be destroyed"/not clip-or-mask,
+  remove the annots, "diligent … XFA/XMP") — but **specifies NO procedure** ("this
+  phase is **application-specific**"). Contrast item 19's HOLLOW SHALL (§12.6.4.16 JS:
+  even the outcome is unbacked ⇒ decline-conformant). Here the `shall`s ARE binding
+  (on the *result*, an acceptance test), only the *how* is deferred to the
+  implementation. Write it as "spec gives you the JUDGE, not the METHOD"; the pdfce
+  procedure is policy grounded in the outcome `shall`s + the product rule (R35).
+  Evidence it the item-14 way: `redact`/`redaction` = **28 hits, ALL** in one
+  subtype-list row + one clause; zero in any processing/annex ⇒ single locus, no
+  hidden algorithm.
+- **Pure-spec clause file vs DERIVED mechanics `ref` file.** The removal *mechanics*
+  (how to physically delete from an ObjStm, slice a content stream, re-encode an
+  image) are cross-clause engineering the standard omits ⇒ they go in a derived
+  `iso32000__ref__redaction_removal.md` (spans §7.5.7/.8 + §9.4/§8.2 + §8.9 + §7.5.6,
+  ≥4 files ⇒ consolidator per item 8), NOT in the clause file. Keep the clause file
+  (§12.5.6.23) pure normative (Table 192 verbatim, the outcome `shall`s, the negative
+  result). Label everything in the `ref` file "derived — NOT normative".
+- **A destructive op INVERTS the corpus's own invariants — record the inversion as
+  the headline.** Redaction inverts TWO: (1) minimal-diff/round-trip (R34 — every
+  other op preserves untouched bytes; redaction's correctness *requires* destroying
+  them, R35); (2) incremental-save-is-safe (§7.5.6 makes append signature-SAFE by
+  leaving prior revisions — which makes it redaction-UNSAFE ⇒ forced full rewrite).
+  Plus the pdfce-architecture trap: `save_full` re-emits `/ObjStm` verbatim ⇒ a
+  logically-removed compressed object SURVIVES = security failure ⇒ container
+  decomposition mandatory. The most valuable output was tracing the spec `shall`
+  ("remove all traces") to pdfce's *own save model* and showing a spec-correct
+  region-redact still fails on this machine. (Same "trace the artifact to its
+  consumer" discipline as item 17, applied to a save-model consequence.)
+- **A "what OTHER carriers can hold X" CARRIER-SWEEP is a first-class deliverable**
+  — a scope-defining table (region-redact misses `/Info`/XMP/XFA/`/ActualText`/OCG
+  layers/prior revisions/ObjStm survivors/overlapping annots). Half the rows point at
+  GAP files (`xmp__*`=0, §7.11, §8.11, §12.7.8) ⇒ the honest verdict is
+  "detect-and-disclose until built", never silent. And **a Table-N cross-reference
+  inside a clause is a hypothesis like a clause/flag number (extends items 15/18):**
+  Table 192's QuadPoints cites "Table 175" but Table 175 is *line* annotations —
+  the format meant is Table 179. Verify cross-ref table numbers against the source;
+  found a genuine ISO 32000-1 erratum by doing so.
+
+**21. A dispatch's asserted SPEC GUARANTEE/RULE is a hypothesis too — and when it
+doesn't exist, the negative result targets the dispatch's PREMISE.** Established
+2026-07-31 on the Pass-12.M2 measurement build. The dispatch stated as fact "the rule
+that a conforming writer preserves /PieceInfo it doesn't own across edits (the
+round-trip-survival property the beta depends on)." **That rule does not exist in ISO
+32000-1** (5-hit term-frequency proof; §14.5 NOTE 1's only semantics is "may be
+ignored by general-purpose conforming readers" — the OPPOSITE of a preservation
+guarantee; a whole-document search for `shall preserve`/`discard`/preservation-of-
+unknown-keys found nothing tied to foreign dictionary entries). Extends items 15/18/20
+(clause numbers, flag values, Table-N cross-refs are hypotheses) to a **named
+normative RULE the dispatch relies on**. Three sub-rules:
+
+- **Verify the rule EXISTS before building on it.** A dispatch that says "the spec
+  says X preserves Y" is asserting a citation; grep for it. Absence is the headline.
+- **When a relied-on guarantee is absent, split the honest completion by WHO
+  guarantees it.** The beta's sidecar surviving *pdfce's own save* is real — but via
+  **pdfce invariant R34 (minimal-diff), NOT the spec clause**. Surviving a *foreign
+  editor's* save is **empirical, not spec-guaranteed** → route to `personal_rag\pdf`,
+  mark `NEEDS VERIFICATION` (same discipline as item 12). Never let "pdfce preserves
+  it" silently stand in for "the spec guarantees it."
+- **The MIRROR-INTO-READER-VISIBLE-STRUCTURE interop move.** When a private carrier
+  (`/PieceInfo`) has no cross-tool survival guarantee, recommend ALSO encoding the
+  load-bearing datum into a spec-honored reader-visible structure (`/Measure` §12.9)
+  so interop survives even if the private carrier is dropped. A design recommendation
+  the corpus can make because it's grounded in two clauses' coexistence, not recall.
+
+**How to apply:** on any dispatch whose premise is "the spec guarantees behavior B",
+treat B as a citation to verify. If B is real, cite it. If B is absent, the negative
+result IS the deliverable — and separate pdfce-invariant-provided behavior from
+spec-provided behavior from empirical-tool behavior, three distinct guarantors.
+
+**22. An INVERSE/RE-ENCODE dispatch (write-side of a decode/extract pass) — invert
+the font's OWN forward chain, refute the "invert the extract map" premise, and make
+the REFUSE-TRIGGER TABLE the deliverable.** Established 2026-07-31 on the Pass-14.1
+in-place-text-edit (REPLACE) build (`iso32000__ref__inverse_encoding.md` +
+`iso32000__ref__text_edit_surgery.md`). Extends item 13 (opposite-direction = new
+files) and item 21 (dispatch premise is a hypothesis) with three edit-specific moves:
+
+- **Invert the forward chain, NOT an abstract reverse map.** To go Unicode→code for a
+  simple font, invert the font's own resolved `/Encoding` table `E[code]→name→AGL_forward→U`
+  (build `reverse[U]=[codes]`), NOT a standalone Unicode→glyph-name reverse-AGL lookup.
+  The font's `E` already fixes which name/Unicode each code carries, so inverting it
+  sidesteps reverse-AGL ambiguity entirely. General principle: to reverse a multi-stage
+  forward pipeline, enumerate the forward domain and index the outputs — don't build an
+  independent reverse of each stage.
+- **The load-bearing NEGATIVE targets the dispatch's IMPLICIT method-premise.** The
+  obvious way to re-encode is to invert the decode ladder's first rung (`/ToUnicode`).
+  Refute it explicitly: `/ToUnicode` is not injective (2 codes→1 U), one-to-many forward
+  (1 code→ligature string), partial (presence≠coverage, §9.10 N2/N4), and carries no
+  rendering authority — so re-encode from `/Encoding`, and a font relating codes to chars
+  ONLY via `/ToUnicode` (symbolic/composite subset) has NO well-defined inverse ⇒ REFUSE.
+  This is the write-side face of an existing extraction negative result; put it as a
+  `## INVERSE DIRECTION` section in the decode-ladder file (§9.10) AND full in the new ref.
+- **Under a REFUSE-AND-DISCLOSE product posture, the enumerated trigger table IS the
+  deliverable** (analogue of item 16's AP-vs-fallback binary map). Give each trigger an ID
+  (`R-INV-1..8`), a hard-vs-soft posture, and the precise failing condition; the engineer
+  consumes the table to know when to emit nothing vs a disclosed heuristic choice. Pair
+  with a QUEUE STUB (`font__subsetting_ffc_queue.md`) for the deferred pass (FF-C
+  subsetting) that LIFTS specific refuse triggers — stub the spec surface + clause
+  pointers only, mark "NOT needed for Pass 14.1–14.3", so it's ready without being built.
+  Also: an in-place operand REPLACE is minimal-diff/incremental-safe (R34) — it does NOT
+  invert minimal-diff the way a destructive op does (contrast item 20 redaction).
+
+**23. An APPEND/ORIGINATION dispatch (add NEW content, Pass 16.0 / FF-D) — the
+load-bearing normative HOOK can live in a clause the dispatch did NOT name; and
+"byte-identical" is achieved by editing a REFERENCE, not the referand.** Established
+2026-08-01 building the add-new-page-text APPEND recipe (decision 016). Five clauses
+were dispatched (§7.7.3.3 /Contents array, §7.8.3 resources, §9.6.2.2 Std-14, §9.4
+text objects, §9.10 encode) and ALL were already covered on the read path ⇒ the build
+was **item-8/item-13 in its purest form: 1 new DERIVED consolidator
+(`iso32000__ref__page_content_append.md`) + 5 same-clause axis sections
+(`## APPEND DIRECTION` / `## ORIGINATION DIRECTION`)**. Because NO dispatched clause
+was uncovered, the only new FILE was the consolidator, never a clause file (contrast
+item 20, where the new file spanned an uncovered clause). Four sub-findings:
+
+- **The binding rule was in §8.4.2, a clause the dispatch never mentioned.** The
+  dispatch asked for the append mechanism (§7.7.3.3) and the q/Q caveat as prose. The
+  actual normative hook — *"Occurrences of the `q` and `Q` operators shall be balanced
+  within a given content stream (or within the sequence of streams specified in a page
+  dictionary's `Contents` array)"* — was already sitting verbatim in
+  `iso32000__s__8.4.md` §8.4.2 from the Pass-1 build. Extends item 17 ("trace the
+  artifact to its CONSUMER clause"): here, **trace the operation to the INVARIANT
+  clause** — grep sibling clause files for the `shall` that governs the mechanism
+  before writing it as a derived caveat. The self-balanced-`q/Q` requirement is not a
+  hygiene recommendation; it is §8.4.2 applied to the array.
+- **Byte-identical via reference-edit.** Single→array append changes only the page
+  dict's `/Contents` VALUE (`R_orig` ⇒ `[R_orig R_new]`); the stream object is never
+  re-emitted ⇒ byte-identical (R32/R46) falls out mechanically. The general shape:
+  "keep X byte-identical while adding to its role" = wrap X in a container that
+  references it, edit the container, never X. Append at END ⇒ new content paints on
+  top (§8.2 painters model).
+- **Graphics state is initialized ONCE at page start, NOT between /Contents-array
+  elements** (§8.4 Table 52). So the appended run inherits the prior stream's
+  colour/text-state/CTM and **shall** self-set `Tf` (no default, §9.3.1) + explicit
+  colour (black is only the page-initial default, not guaranteed) + `Tm`, and
+  self-wrap in `q…Q`. The un-resettable-CTM hazard (no operator sets CTM=identity;
+  `cm` only concatenates) is a real but rare disclose/accept limit → `personal_rag\pdf`.
+- **The /Resources inheritance trap** (§7.7.3.4 + §7.8.3): if a page OMITS `/Resources`
+  it inherits an ancestor `/Pages` node's dict, SHARED by sibling pages. Adding a
+  `/Font` must NOT mutate the shared dict (pollutes siblings, breaks their minimal-diff)
+  — give THIS page its own `/Resources` that references the same subdict objects + a
+  merged `/Font`. And the PDF-2.0 `/Widths`-advisability question was answerable
+  WITHOUT a 2.0 source: recommend the full form from the 1.5 free-primary
+  `should`-deprecation + "pdfce already owns `fontdata::std14_*` ⇒ free/self-contained/
+  forward-safe", explicitly independent of the unverifiable 2.0 clause (item 15/21
+  discipline — do not cite a paywalled clause to justify a recommendation that stands
+  without it).
+
+**16. Under a NO-FALLBACK-SYNTHESIS product rule (pdfce R43), per-subtype spec
+coverage collapses to a binary "AP-vs-fallback map".** Every ISO 32000-1 §12.5.6
+geometry subtype defines a fallback look from its own keys (`L`/`Vertices`/
+`InkList`/`QuadPoints`/`/IC`/`Name` icon) AND states "`/AP`, if present, shall
+take precedence." When the engineering rule is "paint `/AP` or nothing, never
+synthesize," that precedence sentence becomes the whole coverage: has `/AP` →
+paint via §12.5.5; no `/AP` → **named-not-painted, counted by subtype.** The
+useful file shape is a single table keyed on subtype with columns {fallback look,
+fallback source keys, the verbatim AP-precedence quote, no-`/AP` verdict}. The
+fallback geometry is still *modeled* (recognition/round-trip data), just not
+painted. Same move applies to any future "recognize but don't act" scope
+(e.g. `Border`/`BS` styles at display time).

@@ -1,0 +1,123 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 220] /Resources << /Font << /F1 7 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 220] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>
+endobj
+5 0 obj
+<< /Length 103 >>
+stream
+BT /F1 24 Tf 40 150 Td (SECRET dossier) Tj /F1 14 Tf 0 -40 Td (This SECRET line and PUBLIC text.) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Length 65 >>
+stream
+BT /F1 18 Tf 40 150 Td (Account SECRET and PUBLIC balance.) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+8 0 obj
+<< /Title (SECRET dossier) /Author (pdfce test) >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000253 00000 n 
+0000000379 00000 n 
+0000000533 00000 n 
+0000000648 00000 n 
+0000000718 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R /Info 8 0 R >>
+startxref
+784
+%%EOF
+3 0 obj
+<</Type /Page/Parent 2 0 R/MediaBox [0 0 400 220]/Resources <</Font <</F1 7 0 R>>>>/Contents 5 0 R/Annots [10 0 R 12 0 R]>>
+endobj
+4 0 obj
+<</Type /Page/Parent 2 0 R/MediaBox [0 0 400 220]/Resources <</Font <</F1 7 0 R>>>>/Contents 6 0 R/Annots [14 0 R]>>
+endobj
+9 0 obj
+<</Type /XObject/Subtype /Form/BBox [39.0 143.72 138.34400939941406 171.4]/Resources <<>>/Length 95>>
+stream
+1 0 0 RG
+1 w
+40 170.4 m
+137.34400939941406 170.4 l
+137.34400939941406 144.72 l
+40 144.72 l
+h
+S
+
+endstream
+endobj
+10 0 obj
+<</Type /Annot/Subtype /Redact/Rect [39.0 143.72 138.34400939941406 171.4]/QuadPoints [40.0 170.4 137.34400939941406 170.4 40.0 144.72 137.34400939941406 144.72]/AP <</N 9 0 R>>/P 3 0 R>>
+endobj
+11 0 obj
+<</Type /XObject/Subtype /Form/BBox [69.33799743652344 105.92 128.1219940185547 122.9]/Resources <<>>/Length 125>>
+stream
+1 0 0 RG
+1 w
+70.33799743652344 121.9 m
+127.12199401855469 121.9 l
+127.12199401855469 106.92 l
+70.33799743652344 106.92 l
+h
+S
+
+endstream
+endobj
+12 0 obj
+<</Type /Annot/Subtype /Redact/Rect [69.33799743652344 105.92 128.1219940185547 122.9]/QuadPoints [70.33799743652344 121.9 127.12199401855469 121.9 70.33799743652344 106.92 127.12199401855469 106.92]/AP <</N 11 0 R>>/P 3 0 R>>
+endobj
+13 0 obj
+<</Type /XObject/Subtype /Form/BBox [109.03800201416016 145.04 184.04600524902344 166.3]/Resources <<>>/Length 127>>
+stream
+1 0 0 RG
+1 w
+110.03800201416016 165.3 m
+183.04600524902344 165.3 l
+183.04600524902344 146.04 l
+110.03800201416016 146.04 l
+h
+S
+
+endstream
+endobj
+14 0 obj
+<</Type /Annot/Subtype /Redact/Rect [109.03800201416016 145.04 184.04600524902344 166.3]/QuadPoints [110.03800201416016 165.3 183.04600524902344 165.3 110.03800201416016 146.04 183.04600524902344 146.04]/AP <</N 13 0 R>>/P 4 0 R>>
+endobj
+xref
+0 1
+0000000000 65535 f 
+3 2
+0000001039 00000 n 
+0000001178 00000 n 
+9 6
+0000001310 00000 n 
+0000001540 00000 n 
+0000001744 00000 n 
+0000002018 00000 n 
+0000002261 00000 n 
+0000002539 00000 n 
+trailer
+<</Size 15/Root 1 0 R/Info 8 0 R/Prev 784>>
+startxref
+2786
+%%EOF

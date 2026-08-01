@@ -1,0 +1,11 @@
+render-parity: 2914 files, dpi=125.0 (scale 1.7361), pages/file cap=1, annots=off
+  [0/2914] external/pdf20examples/PDF 2.0 UTF-8 string and annotation.pdf
+  [200/2914] external/veraPDF-corpus/Isartor test files/PDFA-1b/6.7 Metadata/6.7.5 XMP header/isartor-6-7-5-t02-fail-a.pdf
+  [400/2914] external/veraPDF-corpus/PDF_A-1b/6.6 Actions/6.6.1 General/veraPDF test suite 6-6-1-t01-fail-a.pdf
+  [600/2914] external/veraPDF-corpus/PDF_A-1b/6.7 Metadata/6.7.2 Properties/veraPDF test suite 6-7-2-t14-pass-j.pdf
+  [800/2914] external/veraPDF-corpus/PDF_A-1b/6.7 Metadata/6.7.9 Validation/veraPDF test suite 6-7-9-t04-pass-d.pdf
+  [1000/2914] external/veraPDF-corpus/PDF_A-2b/6.2 Graphics/6.2.11 Fonts/6.2.11.5 Font metrics/veraPDF test suite 6-2-11-5-t01-fail-a.pdf
+  [1200/2914] external/veraPDF-corpus/PDF_A-2b/6.3 Annotations/6.3.3 Annotation appearances/veraPDF test suite 6-3-3-t01-fail-m.pdf
+  [1400/2914] external/veraPDF-corpus/PDF_A-2b/6.6 Metadata/6.6.2 Metadata streams/6.6.2.3 Schemas/6.6.2.3.1 General/veraPDF test suite 6-6-2-3-1-t04-pass-o.pdf
+  [1600/2914] external/veraPDF-corpus/PDF_A-2b/6.6 Metadata/6.6.2 Metadata streams/6.6.2.3 Schemas/6.6.2.3.1 General/veraPDF test suite 6-6-2-3-1-t14-fail-p.pdf
+  [1800/2914] external/veraPDF-corpus/PDF_A-2b/6.6 Metadata/6.6.2 Metadata streams/6.6.2.3 Schemas/6.6.2.3.3 Extension schema container schemas/veraPDF test suite 6-6-2-3-3-t01-fail-a.pdf

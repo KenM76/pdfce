@@ -1,0 +1,237 @@
+# pdfce fuzzing harness (docs/ARCHITECTURE.md §10.2 — required for Pass 1).
+#
+# This crate is NOT a member of the shipping workspace: the root
+# Cargo.toml lists "fuzz" in `exclude`, and the empty [workspace] table
+# below makes this directory its own workspace root. Two load-bearing
+# reasons (same rationale as tools/difftest):
+#   (1) libfuzzer-sys must never appear in the shipping dependency graph
+#       or in the cargo-about-generated THIRD_PARTY_LICENSES.md;
+#   (2) the GUI-core-separation `cargo tree` checks stay unambiguous.
+#
+# Build/run (cargo-fuzz drives nightly itself; no rust-toolchain override
+# needed here):
+#   cargo +nightly fuzz build                       # compile all targets
+#   cargo +nightly fuzz run <target> -- -max_total_time=90
+# Targets: parse_object, load_document, content_and_filters,
+# image_codec_dct, image_codec_ccitt, image_codec_jbig2, image_codec_jpx,
+# writer_roundtrip
+# — see the doc comment at the top of each fuzz_targets/*.rs for the
+# invariant it asserts.
+#
+# Windows note: cargo-fuzz builds with AddressSanitizer, whose runtime
+# DLL ships with MSVC rather than with rustup, so `cargo fuzz run` needs
+# the MSVC bin directory on PATH or the built binary exits immediately
+# with a missing-DLL error. See
+# D:\dev\rag\rust\cargo_fuzz_windows_msvc_asan_dll_path.md.
+
+[package]
+name = "pdfce-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+# `arbitrary-derive` pulls in `arbitrary`'s derive macro, which the two
+# Pass 2.2 bilevel targets need. Decision 005 §6.5 requires the CCITT
+# target to fuzz Table 11's PARAMETERS — not just the codestream —
+# because CCITT, unlike JPEG, carries no geometry of its own: the row
+# stride and the allocation bound come entirely from `/DecodeParms`
+# integers. A hand-rolled byte-slicing scheme cannot steer eight
+# independent typed parameters plus a present/absent mask; `arbitrary`
+# can, and libFuzzer's coverage feedback then drives the cross-product.
+#
+# This is a fuzz-harness dependency only. The fuzz/ crate is outside the
+# shipping workspace (root Cargo.toml `exclude`), so `arbitrary` never
+# reaches any pdfce binary, never appears in `cargo tree -p pdfce-core`,
+# and never enters the cargo-about-generated THIRD_PARTY_LICENSES.md.
+# (It is MIT OR Apache-2.0 regardless — no docs/LEGAL.md §6.2 flag.)
+libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
+
+[dependencies.pdfce-core]
+path = "../crates/pdfce-core"
+
+# cargo-fuzz builds with the release profile; keep debuginfo so crash
+# backtraces point at real source lines.
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "parse_object"
+path = "fuzz_targets/parse_object.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "load_document"
+path = "fuzz_targets/load_document.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "content_and_filters"
+path = "fuzz_targets/content_and_filters.rs"
+test = false
+doc = false
+bench = false
+
+# Pass 2.1 (decision 005 §6.5): fuzz the ADAPTER, not the vendor's
+# codec core — zune-jpeg already has its own targets and transitive
+# OSS-Fuzz coverage, so pdfce's bugs will be in the marker pre-sniff,
+# the geometry reconciliation, the buffer sizing and the colour routing.
+[[bin]]
+name = "image_codec_dct"
+path = "fuzz_targets/image_codec_dct.rs"
+test = false
+doc = false
+bench = false
+
+# Pass 2.2 (decision 005 §6.5). Same principle as image_codec_dct — fuzz
+# the adapter, not the vendor's codec core (`hayro-fuzz` already carries
+# fuzz_ccitt and fuzz_jbig2 upstream). What no upstream target can cover
+# is the PDF-side glue: Table 11's parameter cross-product for CCITT, and
+# `/JBIG2Globals`'s reference -> stream -> span -> filter-chain
+# resolution for JBIG2.
+[[bin]]
+name = "image_codec_ccitt"
+path = "fuzz_targets/image_codec_ccitt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "image_codec_jbig2"
+path = "fuzz_targets/image_codec_jbig2.rs"
+test = false
+doc = false
+bench = false
+
+# Pass 2.3 (decision 005 §6.5). Same principle again, with the sharpest
+# glue surface of the four: JPXDecode is the ONE filter whose image
+# dictionary does not govern its own samples (Table 89 makes
+# /ColorSpace optional, /BitsPerComponent ignored-if-present and /Decode
+# ignored outright), so the dictionary and the codestream are steered
+# independently here. It also covers the /SMaskInData channel split and
+# the marker pre-sniff — a hand-written walk over attacker-controlled
+# segment lengths that runs on the error path, which is where a fuzzer
+# spends most of its time.
+[[bin]]
+name = "image_codec_jpx"
+path = "fuzz_targets/image_codec_jpx.rs"
+test = false
+doc = false
+bench = false
+
+# Detach from the parent workspace (root Cargo.toml also excludes this
+# directory — both halves are required for cargo to treat fuzz/ as
+# standalone).
+[workspace]
+members = ["."]
+
+# Pass 3.0: the write-direction target (decision 007 R40). Asserts the
+# ARCHITECTURE.md §5 round-trip invariant in all three of its distinct
+# shapes — see the doc comment at the top of the target for why they must
+# not be merged into one weaker assertion.
+[[bin]]
+name = "writer_roundtrip"
+path = "fuzz_targets/writer_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+# Pass 3.2: the composition target (decision 007 R40, extended). The
+# writer targets prove a save does not corrupt an untouched document and
+# that ONE edit does not perturb its neighbours; this one proves that no
+# SEQUENCE of structural operations produces a document pdfce cannot read
+# back, and that undoing all of them reproduces the input byte for byte.
+# Structural ops compose in ways single ops do not — a delete shifts the
+# indices a following reorder addresses, a reorder changes which ancestor
+# a following rotate inherits from — and every one of those is a
+# two-operation bug a one-operation target cannot reach.
+[[bin]]
+name = "pageops_sequence"
+path = "fuzz_targets/pageops_sequence.rs"
+test = false
+doc = false
+bench = false
+
+# Pass 4: the extraction target. Three parsers over one input — the
+# ToUnicode CMap grammar (§9.10.3, with attacker-controlled arithmetic in
+# four places the clause specifies with a `shall` and no recovery), the
+# §7.9.2.2 text-string decoder, and the whole stateful content-stream
+# walk. It also asserts the per-glyph text-range invariant that every
+# consumer of the provenance model slices by, so a range bug surfaces
+# here rather than in a caller's `&run.text[..]`.
+[[bin]]
+name = "text_extract"
+path = "fuzz_targets/text_extract.rs"
+test = false
+doc = false
+bench = false
+
+# Pass 6.0 (docs/decisions/008): the annotation-walk target. Drives the
+# read-side annotation model — the /Annots walk and the §12.5.5 /AP /N
+# appearance selection with its negative-result taxonomy (cyclic /AP,
+# degenerate/inverted /Rect, /AS naming a missing state, an /N that is
+# neither stream nor dictionary). Shares the loader entry point, so the
+# existing corpus keeps its value.
+[[bin]]
+name = "annot_walk"
+path = "fuzz_targets/annot_walk.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "annot_author"
+path = "fuzz_targets/annot_author.rs"
+test = false
+doc = false
+bench = false
+
+# Target 13: the interactive-form field model (pdfce_core::forms, §12.7;
+# Pass 7). Drives parse_acroform over untrusted input: the /AcroForm walk,
+# the /Kids field-tree DFS with inheritance, the field-vs-widget merge, FQN
+# construction, per-type /V decoding, and XFA/SigFlags detection. The
+# hostile shapes decision 008 names — cyclic /Parent//Kids, huge /Kids,
+# merge-shape edge cases, malformed values — must terminate bounded by
+# MAX_FORM_FIELDS / MAX_FIELD_TREE_DEPTH and never panic. Shares the loader
+# entry point, so the existing corpus keeps its value.
+[[bin]]
+name = "form_model"
+path = "fuzz_targets/form_model.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fdf_parse"
+path = "fuzz_targets/fdf_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "redact_apply"
+path = "fuzz_targets/redact_apply.rs"
+test = false
+doc = false
+bench = false
+
+# Decision 013 Pass B: the cross-reference RECOVERY target. `load_document`
+# already fuzzes the entry to rebuild-by-scan (from_bytes routes an
+# unparseable xref through recovery), so this target adds the
+# recovery-SPECIFIC invariants: a recovered document refuses incremental
+# save by name (the recovered-base rule), and its save_full output re-loads
+# without panicking. The O(n) scan + MAX_XREF_ENTRIES cap + no-catalog
+# refusal bound the work (R25); this asserts termination + fail-clean.
+[[bin]]
+name = "recover_roundtrip"
+path = "fuzz_targets/recover_roundtrip.rs"
+test = false
+doc = false
+bench = false

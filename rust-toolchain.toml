@@ -1,0 +1,19 @@
+# Toolchain pin — see docs/ARCHITECTURE.md §2.1a.
+#
+# WHY an exact patch version rather than the floating "stable" channel:
+# pdfce is meant to be reproducibly buildable by other people (and by CI)
+# long after this commit. Floating on "whatever stable is installed" means
+# two machines can silently disagree on compiler behavior, lint sets, and
+# rustfmt output (a formatting-rule change between rustfmt versions would
+# make `cargo fmt --check` fail in CI for code that was clean locally).
+# Pinning removes that class of "works on my machine" drift.
+#
+# Bump deliberately: when this is raised, add a dated entry to
+# docs/ARCHITECTURE.md's decision log (via pdfce-librarian) and re-run the
+# full fmt/clippy/test gate, since a new toolchain can introduce new
+# clippy lints or rustfmt formatting changes that must be reconciled in
+# the same commit.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]
+profile = "default"

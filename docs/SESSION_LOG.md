@@ -234,3 +234,6015 @@ the affected entry. Maintained by `pdfce-librarian`.
   first and bolt undo on after.
 - Resolve the Isartor test-suite URL via a real browser/WebFetch check
   before Pass 1 needs PDF/A conformance fixtures.
+
+## 2026-07-23 — Pass 0: workspace bootstrap
+
+**Shipped:**
+- **Pass 0 — Workspace bootstrap.** Cargo workspace with four crates
+  (`ARCHITECTURE.md` §3/§7), each at its Pass 0 acceptance bar:
+  - `pdfce-core` (dep `thiserror` 2.0.19) — `%PDF-` header probe:
+    `probe_header(&[u8])`, `probe_file(&Path)` → `PdfVersion{major,minor}`;
+    `PdfError` (`thiserror`, `#[non_exhaustive]`, C-GOOD-ERR). Scans
+    first 1024 bytes (`HEADER_SCAN_WINDOW`) tolerating leading
+    BOM/whitespace, parses `M.N`. Cites ISO 32000-2:2020 §7.5.2. Zero
+    GUI deps.
+  - `pdfce-render` — Pass 0 stub: re-exports core's
+    `PdfVersion`/`PdfError` + `PLANNED_RASTERIZER` const; `tiny-skia`
+    deferred to Pass 1. Zero GUI deps.
+  - `pdfce-gui` — `eframe` 0.35.0 (GLOW backend) + `rfd` 0.17.2. Native
+    window, blank canvas, working Open… dialog that runs the probe and
+    shows version or a clear error.
+  - `pdfce-cli` — `clap` 4.6.4. `inspect <file>` implemented; 9 stub
+    subcommands print "not implemented, later Pass". Exit-code contract:
+    0 ok / 1 generic / 3 IO / 4 not-a-PDF / 64 unimplemented (2 reserved
+    by clap). Zero GUI deps.
+- 13 tests passing (8 core unit + 2 core doctests + 3 cli).
+- `cargo tree` GUI-core-separation invariant verified explicitly on
+  `pdfce-core`/`pdfce-render`/`pdfce-cli` (zero
+  egui/eframe/winit/wgpu/glow/glutin/rfd); `pdfce-gui` has glow, not
+  wgpu. `fmt --check` + `clippy -D warnings` clean workspace-wide.
+- Packaging smoke test PASSED: static-CRT release build, both binaries
+  copied to a fresh temp folder and run with no install — `pdfce-cli
+  inspect` → "PDF 1.7" exit 0; `pdfce-gui` opened a window (glow/OpenGL
+  init, valid handle, no crash). `dumpbin /dependents` confirms no VC++
+  redistributable dependency. Sizes: cli 0.83 MB, gui 7.27 MB.
+- `cargo-about` set up; `THIRD_PARTY_LICENSES.md` generated (158 crates,
+  all permissive + 2 bundled-font licenses OFL-1.1/Ubuntu-font-1.0 via
+  `epaint_default_fonts`; ZERO copyleft).
+
+**Decisions made this session:** (full text in `ARCHITECTURE.md` §12,
+dated 2026-07-23 Pass 0)
+- **egui/eframe CONFIRMED over iced** (user decision) — closes the
+  `ARCHITECTURE.md` §2.1 open question.
+- **`oxidize-pdf` decision DEFERRED** — user chose a thin,
+  header-probe-only `pdfce-core` for Pass 0; the
+  build-from-scratch-vs-adopt audit stays the gate before Pass 1
+  (unchanged).
+- **Rendering backend = GLOW, not wgpu** (eframe's default). Reason:
+  the wgpu 29.0.4 stack FAILS TO COMPILE on Windows MSVC — `wgpu-hal`
+  29.0.4 uses `windows` crate 0.61.2 while `gpu-allocator` 0.28.0 uses
+  `windows` 0.62.2, and their D3D12 `ID3D12Heap` types are mutually
+  incompatible (`windows_core::imp::CanInto` mismatch in
+  `CreatePlacedResource`). `ARCHITECTURE.md` §2 already specified "wgpu,
+  falls back to glow/OpenGL if needed" — this exercises that documented
+  fallback; glow is also lighter for single-folder packaging. A routine
+  engineering call within the pre-authorized §2 design, not a reversal.
+  Revisit wgpu when the upstream `windows`-crate versions realign.
+- **Toolchain pinned 1.97.1; edition 2024; resolver 3; MSRV = 1.92**
+  (driven up from the edition-2024 floor of 1.85 by `eframe` 0.35, which
+  needs rustc 1.92 — exactly the "deps force MSRV higher" re-check
+  §2.1a anticipated); `Cargo.lock` committed.
+- **Static CRT on Windows** (`.cargo/config.toml`,
+  `target-feature=+crt-static`) so binaries need no VC++ redistributable
+  — serves the §6 single-folder/no-system-runtime requirement, verified
+  via `dumpbin`.
+- **`.gitattributes` hardened** — `*.pdf`/`*.bin`/`*.png`/etc. marked
+  `binary` so EOL normalization can't corrupt byte-exact binary PDF
+  fixtures.
+
+**Findings + decisions:**
+- Rust **1.97.1 was installed on the machine this session** — it was
+  absent before Pass 0.
+- The wgpu-29-on-Windows build break and the glow-backend feature-flag
+  recipe are captured in `D:\dev\rag\egui\` (four findings); the
+  `cargo-about --features cli`, static-CRT, MSRV-resolver, and
+  `.gitattributes`-binary findings in `D:\dev\rag\rust\` (four
+  findings). egui/eframe version line in `D:\dev\rag\egui\index.md`
+  updated to 0.35.0; the rust `index.md` toolchain line to edition
+  2024 / 1.97.1 / MSRV 1.92 / resolver 3.
+
+**Still in flight:**
+- **`oxidize-pdf` audit** — the outstanding gate before Pass 1
+  (build-from-scratch vs adopt/vendor). Highest-leverage open decision.
+- Pass 1 proper: `tiny-skia` rasterizer, FlateDecode filter, and the
+  tokenizer/COS object model + xref parsing (none started).
+
+**For next session:**
+- Run the `oxidize-pdf` audit BEFORE any from-scratch `pdfce-core`
+  parser work (round-trip fidelity on adversarial input, signature-safe
+  incremental-save semantics, PAdES signing vs PKCS#7-verify-only).
+- **Kick off `pdfce-spec-librarian`** for the object-model / xref /
+  FlateDecode slice of the spec RAG as Pass 1 starts — the first
+  spec-governed behavior lands there.
+- Wire the `cargo-fuzz` tokenizer/parser target and FlateDecode
+  output-size ceiling into Pass 1's acceptance criteria
+  (`ARCHITECTURE.md` §10) as that Pass is scoped.
+
+## 2026-07-30 — scope expansion + decision-protocol setup
+
+*(Session in progress — this entry may get a same-day continuation as
+the session develops.)*
+
+**Shipped:**
+- Nothing code-wise yet this session; this entry records the session
+  kickoff, a scope expansion, and a new operator process rule.
+
+**Decisions made this session:**
+- **Scope expansion: Inkscape-parity vector editing.** Operator's
+  words: "For this project I want it to have all of the capabilities
+  to edit pdfs that inkscape and acrobat pro does." Acrobat Pro parity
+  was already the target; the NEW part is Inkscape-level vector
+  editing of PDF page content. Filed as a new `ROADMAP.md` Backlog
+  bucket **"Vector graphics editing (Inkscape-parity)"** (adjacent to
+  and cross-referenced from "Text & object editing"): node/Bézier path
+  editing, boolean path ops, stroke/fill/gradient/pattern editing,
+  precise transforms, alignment/distribution, z-order, group/ungroup,
+  text-to-path, OCG layers. Binding notes recorded in the bucket:
+  Inkscape (GPL-2.0-or-later) is a behavioral reference ONLY, never a
+  dependency or code source; the scope raises the bar on
+  `pdfce-core`'s content-stream model (full round-trip decomposition
+  of graphics operators into editable objects, minimal-diff
+  re-emission per `ARCHITECTURE.md` §5); Pass-scoping will need an
+  Inkscape capability catalog (capability/behavior only, never GUI
+  mechanics — same discipline as the Acrobat Features RAG).
+- **KenAgent decision protocol established (operator process rule,
+  2026-07-30).** Non-trivial technical decisions are routed through
+  the "KenAgent" autonomous-builder agent, which returns a decision
+  with reasoning in JSON (used to implement) + Markdown (archived to
+  `docs/decisions/NNN-slug.md` for project history). Legal/license
+  decisions remain Ken's directly, unchanged. Recorded in
+  `ROADMAP.md` Standing rules.
+
+**Still in flight:**
+- **The `oxidize-pdf` adopt-vs-build audit — the outstanding Pass-1
+  gate — was launched this session.** Its decision will be routed
+  through KenAgent per the new protocol and archived in
+  `docs/decisions/`. Outcome not yet recorded at time of this entry.
+
+**For next session:**
+- If the audit concludes this session, expect a same-day continuation
+  below with the decision and its `docs/decisions/` archive path;
+  otherwise pick up the audit's state from `docs/decisions/` and
+  `ROADMAP.md` Pass 1's gate note.
+
+**Same-day continuation — audit completed, decision accepted, gate
+closed:**
+
+- **`oxidize-pdf` adopt-vs-build audit COMPLETED** (target:
+  `bzsanti/oxidizePdf` HEAD `5f3e8b3`, v4.2.1, MIT). Headline
+  findings: **round-trip fails by design** — two disconnected object
+  models (read-only parser vs from-scratch generator) with no bridge
+  and no `Document::load()`; **general incremental save is
+  absent/destructive** (the one "incremental" API drops
+  `/Outlines`/`/AcroForm`/`/Names`); **no content-stream serializer**
+  (operator model is read-only, lossy); **non-suppressible build-hash
+  fingerprint in `/Info`** on every written PDF; **silent filter
+  fallbacks** (raw undecoded bytes returned on zlib/predictor
+  failure); **bus factor 1 with four major version bumps in year
+  one**; **real signing is PRO-gated** (MIT tree ships a placeholder
+  stub). Also corrected two PRIOR_ART claims: the JPX decoder claim is
+  FALSE ("not yet implemented") and the DCT claim MISLEADING
+  (validates/trims markers, delegates pixel decode to the optional
+  `image` crate); JBIG2/CCITT are real.
+- **Decision 001 ACCEPTED via the KenAgent protocol (first use):
+  option (c) reference-only — build `pdfce-core` from scratch.** Zero
+  literal ports planned; maintained permissive crates preferred over
+  vendoring (`hayro-jbig2`, `hayro-ccitt`, `subsetter`/`allsorts`,
+  RustCrypto); oxidize-pdf serves only as an out-of-tree differential
+  oracle (`tools/difftest/`, workspace-excluded, pinned,
+  advisory-never-authoritative, fixtures never from its repo).
+  Record archived: `docs/decisions/001-oxidize-pdf-adopt-vs-build.md`.
+- **Pass 1 GATE CLOSED** (`ROADMAP.md` updated): Pass 1 gains the
+  ByteSpan-provenanced object model + lossless content-stream token
+  model as in-Pass scope, and stands up `tools/difftest/` BEFORE the
+  parser is written. `ARCHITECTURE.md` §12 records the six Pass-1
+  architecture obligations (ByteSpan provenance; lossless token model;
+  ONE object model; fail-clean filter contract; unwrap-deny lints in
+  `pdfce-core`; no output fingerprint / `/Info` untouched on
+  incremental save).
+- **`pdfce-spec-librarian` dispatched for the Pass 1 spec slice** —
+  ISO 32000-1 §7.5.4–§7.5.8 + hybrid `/XRefStm` (the byte-layout
+  contract the ByteSpan design must honor). **In flight** at the time
+  of this entry.
+- **PRIOR_ART corrections filed**: OPEN QUESTION rewritten as RESOLVED
+  (2026-07-30); oxidize-pdf verdict now "reference-only / differential
+  oracle (out-of-tree only, never a shipping dep)"; new `hayro-write`
+  row (parse→rewrite via `pdf-writer` now exists — full
+  re-serialization only, NOT byte-preserving incremental save;
+  lopdf #305 still open, so the ecosystem gap pdfce fills stands).
+- **`C:\personal_rag\pdf\` extended** (subject already existed —
+  seeded 2026-07-29 from the Open PDF Studio project): two new
+  lessons — the silent-corruption filter-fallback antipattern
+  (quirk/HIGH, cites oxidize-pdf `filters.rs:1600+`) and the
+  xref-recovery conditional-harvest methodology (decision 001 §6.3
+  gate). Subject + master indexes updated.
+
+**Operator flag (from decision 001 §10 — do not lose this):** pdfce is
+now deliberately committed to being the **first project in the Rust
+ecosystem to implement signature-safe, byte-preserving incremental
+save**. Nobody upstream has it (including `hayro-write`). This is
+accepted solo-engineering cost — a deliberate differentiation bet, not
+an assumption that an upstream crate will eventually cover it. Revisit
+triggers are listed in decision 001 §9.
+
+**Still in flight (continuation):**
+- `pdfce-spec-librarian` Pass 1 spec-slice dispatch (see above).
+- Pass 1 engineering proper: not started; next session begins with
+  `tools/difftest/` per the new Pass 1 scope order.
+
+**Same-day continuation 2 — decision 002 accepted; Pass 1 parse stack
+landed:**
+
+- **Decision 002 (i18n/l10n architecture) ACCEPTED via the KenAgent
+  protocol (second use).** Record archived:
+  `docs/decisions/002-i18n-timing.md`. Outcome: centralized
+  zero-dependency function-based string catalog
+  (`crates/pdfce-gui/src/ui_text.rs`, `pub fn` entries, English-only);
+  `pdfce-cli` English-only PERMANENTLY by design with a binding
+  locale-invariant-stdout contract (clap's own text is untranslatable,
+  clap-rs/clap#380); `pdfce-core` errors never localized but must
+  carry structured data (R4 — binds decision 001's new Pass-1 error
+  variants); eight standing rules R1–R8 added to `ROADMAP.md`; new
+  `ui-strings` CI grep job; `gettext-rs` pre-disqualified (LGPL static
+  link on Windows). The old "Internationalization/localization"
+  deferred bullet is struck as RESOLVED; a new Backlog entry files the
+  independent live tofu bug ("UI font coverage for non-Latin file
+  paths and document metadata" — epaint bundles no CJK fonts,
+  emilk/egui#3060/#5233). `ARCHITECTURE.md` §12 entry added; egui
+  text-stack finding escalated to
+  `D:\dev\rag\egui\epaint_0.35_text_stack_i18n_limits.md` and the clap
+  ceiling to `D:\dev\rag\rust\clap_4_no_i18n_own_text_hardcoded.md`.
+- **Harness note (KenAgent protocol):** the first dispatch attempts
+  for decision 002 hit a stale-worktree `EEXIST` harness bug; fixed by
+  pruning `.claude/worktrees` before re-dispatch.
+- **Engineering progress this session — full Pass 1 parse stack landed
+  in `pdfce-core`:** span / lexer / object / parser / xref / document
+  modules, plus the filter layer with FlateDecode and PNG/TIFF
+  predictors. **113 unit tests + 4 doctests green; clippy/fmt clean.**
+  `flate2` added with the pure-Rust backend per decision 001 §6.2
+  (never the C `zlib`/`zlib-ng` backend). GUI-core invariant
+  re-verified via `cargo tree`.
+- **`tools/difftest/` oracle upgraded** from header-probe comparison to
+  **full-`Document` comparison**, and it AGREEs with `oxidize-pdf` on
+  the synthetic fixtures.
+- **In progress at time of this entry (decision 002 engineering
+  items):** `ui_text.rs` + the `ui-strings` CI job + the `pdfce-cli`
+  module-doc paragraph (R5, English-only-by-design +
+  locale-invariant-stdout beside the exit-code contract).
+
+**Still in flight (continuation 2):**
+- Decision 002 §10 engineering items 1–5 (ui_text.rs / CI job / CLI
+  doc paragraph) — in progress, see above.
+- Remaining Pass 1 scope: `pdfce-render` content-stream interpreter +
+  `tiny-skia` rasterization, GUI viewer chrome, cargo-fuzz target,
+  FlateDecode resource-limit ceiling, fixture-corpus pull-down.
+
+**Same-day continuation 3 — Pass 1 parse surface COMPLETE; decision
+002 engineering done; decision 003 dispatched (pre-compaction
+capture):**
+
+- **`pdfce-core`'s Pass 1 parse surface is now COMPLETE** — two more
+  modules landed on top of continuation 2's parse stack:
+  - **`page_tree.rs`** — the ISO 32000 §7.7.3 page-tree walk:
+    top-down inheritance of the exactly-four inheritable attributes
+    (`/Resources`, `/MediaBox`, `/CropBox`, `/Rotate`); the normative
+    empty-dict-vs-absent `/Resources` distinction preserved; §7.9.5
+    rectangle corner normalization; negative `/Rotate` normalized via
+    positive modulo; `/Count` never trusted (pages counted by actual
+    walk); `/Kids`-cycle detection plus hard guards
+    (`MAX_TREE_DEPTH` 64, `MAX_PAGES` 1M); structural fallback when
+    `/Type` is absent; `/Contents` accepted in all three spec shapes
+    (absent = empty page / single stream / array of streams).
+  - **`content.rs`** — decision 001 §6.1.2's lossless
+    span-provenanced content-stream token model:
+    `ContentToken{kind,span}` where spans index the **decoded**
+    buffer; a semantic `operations()` view exists only as a pure
+    projection over the tokens (never a second stored
+    representation); reuses the §7.2 lexer — no second lexer;
+    §8.9.7 inline images captured as single `BI..EI` tokens with an
+    EI-detection strategy ladder (unfiltered = computed length from
+    the image dict; `AHx`/`A85` = the filter's own EOD marker; other
+    filters = whitespace-delimited-`EI` scan, documented in-code as a
+    non-spec heuristic); Table 93/94 abbreviation normalization
+    including the `I` = `Interpolate`-(key)-vs-`Indexed`-(value)
+    disambiguation; `/Contents`-array concatenation with an LF
+    separator per §7.7.3.3; `true`/`false`/`null` classified as
+    operands; the reference syntax `1 0 R` deliberately left as an
+    unknown operator so the interpreter rejects it per §7.8.2.
+  - Totals: **137 unit tests + 4 doctests green**;
+    `clippy -D warnings` + `fmt --check` clean workspace-wide;
+    GUI-core invariant re-verified.
+- **Decision 002's engineering actions are COMPLETE** (items that were
+  "in progress" at continuation 2): `crates/pdfce-gui/src/ui_text.rs`
+  catalog created with all 7 GUI strings moved into it
+  (functions-not-consts per decision 002 §5.2); the `ui-strings` CI
+  job added to `.github/workflows/ci.yml` and validated locally (zero
+  false positives); `pdfce-cli`'s module docs gained the
+  English-only-by-design + locale-invariant-stdout (R5) paragraph.
+- **Decision 003 dispatched, in flight:** distribution posture —
+  cross-platform scope beyond Windows-first, plus the update/release
+  mechanism for the no-installer portable app (both were deliberately
+  deferred flags from the 2026-07-23 bootstrap session). Routed
+  through KenAgent per the standing protocol; the record will land at
+  `docs/decisions/003-distribution-posture.md` when it returns. Not
+  yet concluded at time of this capture.
+- **Harness lesson (hit twice today):** stale `.claude/worktrees`
+  state blocks agent dispatch with `EEXIST`; the fix is pruning all
+  three residues — the `.claude/worktrees/` dirs, the repo's
+  `.git/worktrees/` metadata, and leftover `worktree-agent-*`
+  branches. Written up as a lesson in `C:\personal_rag\claude_code\`.
+
+**Still in flight (continuation 3):**
+- **Decision 003** (distribution posture) — KenAgent dispatch
+  outstanding, see above.
+- **`pdfce-render` content-stream interpreter + `tiny-skia`
+  rasterizer** — next engineering item. The render-gap spec slice it
+  needs landed today (§8.2 graphics-state machine, §8.4/§8.5
+  graphics + path ops, §9.x text/fonts). **Spec-librarian flag, do
+  not lose:** the standard-14 AFM widths (Adobe TN #5004) and the
+  Adobe Glyph List are still-unsourced items the text pipeline will
+  need — dispatch `pdfce-spec-librarian` for them before the text
+  rendering path is written.
+- GUI page canvas with pan/zoom + thumbnails; `pdfce-cli render-page`.
+- `cargo-fuzz` tokenizer/parser target — still required before Pass 1
+  ships (`ARCHITECTURE.md` §10.2).
+- Corpus fixtures via `fixtures/fetch-corpora.sh`; packaging smoke
+  test.
+- **Everything remains UNCOMMITTED in git** — the operator has not
+  yet said to commit.
+
+**Same-day continuation 4 — decision 003 accepted; pdfce-render came
+alive; font sourcing complete:**
+
+- **Decision 003 (distribution posture) ACCEPTED via the KenAgent
+  protocol (third use) and archived:**
+  `docs/decisions/003-distribution-posture.md`. Outcome: **v1 ships
+  Windows x64 only, as a deliberate decision**; the code stays
+  platform-clean, enforced by cross-target `cargo check` CI (macOS +
+  wasm32 on the ubuntu runner — the wasm32 check is a first positive
+  web-fork invariant guard) instead of new runners; **manual
+  folder-replace is the only update mechanism permanently** (pdfce
+  never self-updates, R13), discovery delegated to Scoop-then-WinGet
+  manifests (gated on `LEGAL.md` §1); **no network client crate ever**
+  without a new decision record (R12, fail-closed `no-network` CI
+  job). Eight standing rules **R9–R16** added to `ROADMAP.md`; both
+  remaining "deliberately deferred" bullets struck as RESOLVED — **the
+  deferred list is now EMPTY** (every bootstrap-flagged product-scope
+  question answered within one week). New Backlog entry "Release &
+  distribution channel" (Scoop/WinGet manifests, per-release SHA-256,
+  README §6.3 copy verbatim — BLOCKED ON `LEGAL.md` §1).
+  `ARCHITECTURE.md` §12 entry added, including the
+  `webbrowser`-unconditional-in-eframe finding (§1.1 precision
+  correction pending engineering) and the two latent CI defects
+  (wrong-target `cargo tree` invariant check; toolchain-action
+  mismatch). Findings escalated: two to `D:\dev\rag\egui\`
+  (webbrowser hardcoded via egui-winit `links`; cross-target check +
+  dlopen/musl), one to `D:\dev\rag\rust\` (cross-target `cargo check`
+  portability gate + multi-target cargo-about recipe).
+- **`pdfce-render` CAME ALIVE this continuation** — the crate went
+  from Pass 0 stub to a working rasterizer: `gstate` / `interpret` /
+  `lib` modules landed; path rendering, clipping, transforms, and
+  device colours all working. **10 pixel-level tests green first-run**
+  (cm premultiplication, even-odd vs nonzero fill, deferred W clip,
+  `/Rotate` 90 geometry, q/Q restore, stroke). `clippy -D warnings` +
+  `fmt --check` clean. Dependencies added to `pdfce-render`:
+  `tiny-skia` 0.11 + `thiserror` (licenses checked per `LEGAL.md` §6).
+- **Font-sourcing session COMPLETE** (spec RAG `fonts\` dir, 8 files,
+  by `pdfce-spec-librarian` — closes continuation 3's "do not lose"
+  flag): licensing verdicts **APAFML** for the Core 14 AFM data
+  (permissive, embeddable; Adobe copyright notice must be retained in
+  the generated file header) and **BSD-3-Clause** for the Adobe Glyph
+  List (NOT Apache-2.0); all 14 fonts' width tables + descriptor
+  metrics; AGL mapping. **Text rendering is now unblocked.** Both are
+  non-Cargo data sources invisible to `cargo-about` →
+  `THIRD_PARTY_LICENSES.md` needs a hand-maintained "embedded data"
+  section, filed as a Pass 1 obligation in `ROADMAP.md` (documented
+  exception to `LEGAL.md` §6.3). The std-14 NAME-ALIASING empirical
+  lesson (/Helv, /Arial, /ArialMT, …) written to
+  `C:\personal_rag\pdf\`.
+
+**Still in flight (continuation 4) — remaining for Pass 1:**
+- Text-rendering slice in `pdfce-render` (std-14 metrics now sourced).
+- GUI viewer canvas (pan/zoom, thumbnails); `pdfce-cli render-page`.
+- `cargo-fuzz` tokenizer/parser target (`ARCHITECTURE.md` §10.2).
+- Fixture corpus pull-down.
+- Ship checklist + launch (packaging smoke test, `cargo tree`
+  invariants, decision 003 §10 engineering items 1–7 on the next
+  CI/packaging touch).
+
+**Same-day continuation 5 — /loop autonomous mode; decision 004
+accepted; decision 003 engineering completed:**
+
+- **Operator engaged `/loop` autonomous mode** — the session now
+  self-paces through the Pass 1 queue.
+- **Decision 004 (Pass 1 text-rendering font strategy) ACCEPTED via
+  the KenAgent protocol (fourth use) and archived:**
+  `docs/decisions/004-text-rendering-fonts.md`. Headline: **`skrifa`
+  is zero-cost** (pinned 0.42 to epaint's resolved version — zero new
+  lock packages; its `raw::ps` module closes the PRIOR_ART "Type1
+  weakest link" risk outright); **Foxit shapes** (base-14 bundled,
+  BSD-3-Clause via pdfium, 264,741 bytes, provenance-verified);
+  **URW AGPL trap caught** (Nimbus is
+  `AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817` — document
+  embedding only, not app bundling; rejected on the merits, never
+  escalated because unneeded); **Pass 1 scope grows to `Identity-H`**
+  composite fonts (`CIDFontType2` + `CIDFontType0`), Type 3, and the
+  full simple-font chain, per the record's documented departure from
+  the spec RAG ladder (§4.3 — steps 4–6 collapse to cheap once the
+  parser question is settled; steps 1–3 alone would render no text in
+  most modern subsetted PDFs). Six standing rules **R17–R22** added to
+  `ROADMAP.md`; `ARCHITECTURE.md` §12 entry added. Findings escalated:
+  one to `C:\personal_rag\pdf\` (read-fonts Type 1 parser coverage +
+  the `%!PS-AdobeFont` header trap), one to `D:\dev\rag\rust\`
+  (`skrifa::raw` re-export = bare Type1/CFF from one dependency +
+  the version-pin-to-avoid-duplicates pattern).
+- **Decision 003 engineering completed earlier this continuation:**
+  cross-check + `no-network` CI jobs added and locally validated;
+  `gui-core-separation` now checks the shipped Windows target
+  (`cargo tree --target x86_64-pc-windows-msvc`); toolchain action
+  pinned 1.97.1; `ARCHITECTURE.md` §1.1 `webbrowser` precision clause
+  + §6 platform-scope/R15 partition amendments landed.
+
+**Still in flight (continuation 5) — next:**
+- **Font implementation slice** per decision 004 §10 items 1–8:
+  `skrifa = "0.42"` dep + `cargo tree --duplicates` guard,
+  `tools/extract-base14/` (pdfium CFF arrays → assets + PROVENANCE),
+  `src/font/{mod,program,bundled,select}.rs` + the
+  `FontEnvironment`/`RenderOptions` seam + R20 diagnostics, text
+  interpreter ops (`BT`…`ET`, `Tj`/`TJ`/`'`/`"`).
+
+**Same-day continuation 6 — Pass 1 SHIPPED:**
+
+- **Pass 1 SHIPPED 2026-07-30** — the entire Pass, spec RAG to
+  launched GUI, in one day, same day as decisions 001–004, completed
+  in the operator-initiated `/loop` autonomous session. Moved to
+  `ROADMAP.md` Shipped (full record there). The numbers:
+  - `pdfce-core` complete read stack (span/lexer/object/parser/xref/
+    document/page_tree/content/filters/fontdata), 197+ unit tests;
+    ByteSpan provenance first-class; ONE object model; fail-clean
+    filters with bomb guards; lossless content token model; std-14
+    metrics/Annex-D/AGL tables generated from sourced data.
+  - `pdfce-render`: full path rendering (all Table 59/60/61 ops,
+    deferred-`W` clip, §8.3 CTM math), device colours,
+    dash/caps/joins, `gs` subset, `BX`/`EX`, AND full text rendering —
+    simple fonts through the complete §9.6.6 encoding chain (all four
+    FontFile flavors via `skrifa`), `Identity-H` composites
+    (CIDFontType0+2), §9.4.4 Trm/advance math, std-14 substitution via
+    14 bundled Foxit faces (BSD-3-Clause, provenance-verified);
+    R17–R22 enforced.
+  - `pdfce-gui` read-only viewer (canvas pan/zoom with debounce,
+    thumbnail rail, page nav with shortcuts, three-way failure
+    distinction incl. honest "unsupported ≠ broken", R20 diagnostics
+    status bar, ui-specialist-reviewed, HiDPI-correct); `pdfce-cli
+    render-page` with a documented machine-parseable stdout contract.
+  - Fuzzing: 3 cargo-fuzz targets, ~4M ASan-instrumented execs, ZERO
+    crashes — §10.2 requirement met.
+  - `THIRD_PARTY_LICENSES.md` regenerated (164 crates, zero copyleft)
+    + manual embedded-data epilogue (APAFML/AGL/Foxit); the template's
+    empty-license-text bug found + fixed along the way.
+  - New fixture `fixtures/synthetic/hello.pdf` (loadable,
+    text+graphics). 245 workspace tests green; fmt/clippy clean; ALL
+    CI invariant guards verified locally (GUI-separation native +
+    shipped-target, duplicates, ui-strings, no-network, wasm32
+    cross-check).
+- **Packaging smoke test PASSED** — fresh temp folder, no install
+  step: `pdfce-cli render-page` produced correct output; `pdfce-gui`
+  launched and rendered. Per the launch-on-completion rule, the GUI
+  was launched on the operator's desktop at Pass completion.
+- **The `/loop` fan-out worked:** the fontdata agent and the
+  text-interpreter agent composed cleanly against a pre-agreed API
+  contract; the fuzz agent and the shell agent ran in parallel.
+- **Honest remainders filed as Pass 1.1 — corpus validation &
+  hardening** (`ROADMAP.md` Next up): veraPDF/PDF-Association corpus
+  pull + pixel-parity measurement (the original acceptance bar is NOT
+  yet demonstrated — synthetic fixtures only); the
+  `/Resources`-missing tolerance question (strict-refusal today;
+  `fixtures/synthetic/minimal.pdf` itself unloadable for this reason);
+  xref/object streams + hybrid files (biggest real-world gap,
+  currently clean-refused); Type 3 rendering; `Tr` 4–7 clipping;
+  GUI file argument (open-with); R20 panel revisit when editing lands.
+- **RAG escalations this continuation:**
+  - `D:\dev\rag\egui\egui_0.35_zoom_with_keyboard_vs_app_zoom_chords.md`
+    — eframe/egui 0.35 `zoom_with_keyboard` defaults ON and consumes
+    Ctrl+Plus/Minus/0 for UI scaling (set `false` when the app owns
+    those chords), plus the wheel-event routing fact (zoom-modifier
+    wheel events become `zoom_delta` and contribute nothing to
+    `smooth_scroll_delta`, so pan and zoom can't fight).
+  - `C:\personal_rag\pdf\lesson_20260730_resources_required_but_omitted_open_question.md`
+    — the `/Resources` Required-inheritable vs real-world-omission
+    OPEN question (corpus data needed; Pass 1.1 owns resolution).
+  - `D:\dev\rag\rust\` — the fuzz and cargo-about lessons
+    (`cargo_fuzz_windows_msvc_asan_dll_path.md`,
+    `cargo_about_template_text_var_and_epilogue.md`) were already
+    written and indexed by the fuzz agent; verified present, no gaps
+    to fill.
+
+**Still in flight (continuation 6):**
+- Pass 1.1 (see `ROADMAP.md` Next up) — not started.
+- **Everything remains UNCOMMITTED in git** — the operator has not
+  yet said to commit.
+
+**For next session:**
+- Start Pass 1.1 with the corpus pull-down
+  (`fixtures/fetch-corpora.sh`), then the `/Resources` frequency
+  measurement — it gates both the tolerance decision and the
+  minimal.pdf fixture question.
+
+**Same-day continuation 7 — Pass 1.1 corpus measurement; data-driven
+reprioritization; MAX_TOKEN_LEN bug fixed:**
+
+- **Corpus run executed** via `tools/corpus-report` (new
+  workspace-excluded measurement tool; corpora fetched to gitignored
+  `fixtures/external/`): **2,907 veraPDF files + 7 PDF-Association
+  files = 2,914 total. ZERO panics, ZERO timeouts.** 82.4% achieved
+  full load + render of page 1.
+- **Failure profile is a single spike, not a spread:**
+  - `RefusedXrefStream`: **489 files (16.8% of corpus) = 97.8% of ALL
+    failures**, concentrated in the PDF/UA and PDF/A-2/4 subcorpora
+    (modern conformance files use cross-reference streams).
+  - `RefusedHybrid`: exactly 1 file.
+  - `MissingResources`: **ZERO in both corpora.** Conformance corpora
+    are hand-built to spec, so this does NOT close the real-world
+    `/Resources` tolerance question — but it does establish that
+    strict mode is corpus-cost-free today.
+  - All 11 `LoadError`s and 10 of 11 `RenderError`s are deliberate
+    `*-fail-*` conformance files — the strict parser rejecting exactly
+    what validators must reject. Correct behavior, not bugs.
+- **Aggregate render honesty counters** (fidelity, distinct from
+  parse rate): 3,387 deferred ops (XObjects/shading — the biggest
+  fidelity gap), 732 substituted glyphs, 303 unsupported fonts, 7
+  notdefs, 3 unknown ops. `LZWDecode` observed in actual use (2
+  files) — not a dead filter.
+- **One real bug found and FIXED same session:** the lexer's
+  `MAX_TOKEN_LEN` 8 KiB guard rejected veraPDF `6-1-12-t02-pass-k.pdf`
+  — a VALID file (PDF/A §6.1.12: readers must not impose Annex C
+  implementation limits). Raised to 1 MiB with a corpus-cited doc
+  comment; file verified rendering (exit 0). This was the ONLY
+  pass-classified corpus file pdfce mishandled.
+- **Decision 001 §6.3 gate CLEARED by measurement:** landing xref
+  streams + object streams projects to ~99.6% parse rate — far above
+  the <~95% threshold that would have triggered the oxidize-pdf
+  xref-recovery harvest. **No harvest needed.**
+- **Pass 1.1 reprioritized on the data** (recorded in `ROADMAP.md`):
+  1. xref streams + object streams (489 files — everything else is
+  noise by comparison); 2. MAX_TOKEN_LEN — already DONE this
+  continuation; 3. `/Resources` tolerance DEPRIORITIZED (zero corpus
+  pressure; needs organic real-world non-conformance files); 4.
+  Type 3 / `Tr` 4–7 low (near-zero corpus presence). The 3,387
+  deferred XObject/shading ops are the biggest FIDELITY item — a
+  future rendering Pass, not a Pass 1.1 parse-rate item.
+- **RAG escalations this continuation:**
+  - `C:\personal_rag\pdf\lesson_20260730_resources_required_but_omitted_open_question.md`
+    — amended with the corpus datum (zero omissions in 2,914
+    conformance files; question stays OPEN pending real-world files).
+  - `C:\personal_rag\pdf\lesson_20260730_filter_names_case_sensitive.md`
+    — NEW: filter names are case-sensitive per spec and real
+    fail-corpora test exactly that (`Flatedecode`); pdfce correctly
+    refuses.
+
+**Still in flight (continuation 7):**
+- Pass 1.1 continues — xref/object streams now the sole big-ticket
+  item; MAX_TOKEN_LEN sub-item done.
+- Everything remains UNCOMMITTED in git — the operator has not yet
+  said to commit.
+
+**For next session:**
+- Implement xref streams + object streams (ISO 32000 §7.5.8 /
+  §7.5.7) — 489-file payoff, clears the corpus to ~99.6%.
+- Re-run `tools/corpus-report` after landing to confirm the projected
+  parse rate and record it in the Pass 1.1 ship entry.
+
+**Same-day continuation 8 — Pass 1.1 item 1 SHIPPED (xref streams /
+object streams / hybrid files); harvest gate cleared by measurement:**
+
+- **All three PDF-1.5 structures implemented:**
+  - **Cross-reference streams** (§7.5.8; Tables 17/18): `W` array
+    field widths including the field-1 zero-width default (type
+    defaults to 1), entry types 0 (free) / 1 (uncompressed) / 2
+    (in-object-stream).
+  - **Object streams** (§7.5.7): new `objstm.rs`; decoded container
+    streams are cached per-container; `/Extends` is inert by design
+    (accepted, never followed — no chain semantics pdfce needs).
+  - **Hybrid files** (§7.5.8.4): `/XRefStm` consulted before `/Prev`,
+    per the spec's search order.
+- **Corpus re-run** (`tools/corpus-report`): veraPDF Ok **2,395 →
+  2,884 (99.2%)**; `RefusedXrefStream` **489 → 0**; ALL 24 remaining
+  non-Ok files across both corpora are deliberate `*-fail-*`
+  conformance files; ZERO panics, ZERO timeouts; 12,927 pages
+  rendered.
+- **Decision 001 §6.3 gate now CLEARED BY MEASUREMENT, not
+  projection:** 82.4% → **99.2% actual**, vs the <~95% trigger that
+  would have forced the oxidize-pdf xref-recovery harvest. No harvest
+  ever needed. Formal close recorded in `ARCHITECTURE.md` §12
+  (2026-07-30, continuation 8 entry).
+- **Tests:** 280 workspace tests green (17 new end-to-end PDF-1.5
+  tests). **Fuzz smoke:** 879k executions/60 s, zero crashes;
+  libFuzzer dictionary confirmed exploring xref-dict inputs.
+- **API changes in `pdfce-core`:**
+  - `IndirectObject.span` → `provenance: Provenance` enum
+    (`File(ByteSpan)` | `ObjectStream { container, index }`) with a
+    `file_span()` accessor. This makes the §5 round-trip contract
+    **expressible-or-consciously-absent** for compressed objects: a
+    compressed object has no contiguous file bytes, so a writer must
+    promote it to an uncompressed object or rewrite its container —
+    the obligation is documented on the type itself.
+  - `XrefEntry` is now `#[non_exhaustive]`, with a new `InStream`
+    variant.
+- **Scope addition (engineer judgment — flagged to operator):**
+  `XrefErrorKind::EncryptionUnsupported` — encrypted PDFs (§7.6) are
+  now refused up front instead of silently rendering ciphertext. GUI
+  `Status::Unsupported` repointed accordingly; 4 corpus files
+  reclassified `RefusedEncrypted` (they are among the 24 non-Ok
+  `*-fail-*` accounting above).
+- **Tolerances chosen (recorded here so the posture is auditable):**
+  - `/Type` **absent** is tolerated on XRef and ObjStm streams;
+    `/Type` **present-but-wrong** is refused.
+  - A malformed individual xref-stream row is skipped, per
+    §7.5.8.3's unknown-type posture (treat as absent, keep going).
+  - A broken `/XRefStm` degrades to the classic xref view —
+    spec-guaranteed safe per §7.5.8.4's completeness guarantee (the
+    classic section must be usable by pre-1.5 readers).
+  - ObjStm `/N` and `/First` must be direct objects.
+- **RAG escalations this continuation:**
+  - `C:\personal_rag\pdf\lesson_20260730_xref_stream_w_default_hybrid_fallback_objstm_drop.md`
+    — NEW: the corpus-verified xref-stream facts (W field-1
+    zero-width default = type 1; hybrid `/XRefStm`-before-`/Prev`
+    with classic-view fallback safe; §7.5.7's streams-in-objstm
+    prohibition is what makes dropping the decoded container buffer
+    safe).
+  - `ARCHITECTURE.md` §12 dated entry (gate closure + `Provenance`
+    API evolution + encryption-refusal scope addition) and a §5
+    body amendment for the compressed-object round-trip posture.
+
+**Still in flight (continuation 8):**
+- Pass 1.1 continues — remaining items: pixel-parity measurement
+  against a reference renderer; `pdfce-gui` file argument; Type 3 /
+  `Tr` 4–7 (low); `/Resources` tolerance (deprioritized, awaiting
+  organic files).
+- Everything remains UNCOMMITTED in git — the operator has not yet
+  said to commit.
+
+**For next session:**
+- Pick up the remaining Pass 1.1 items (pixel parity is the
+  substantive one — it is what closes Pass 1's original acceptance
+  bar).
+- Surface the encryption-refusal scope addition to the operator (it
+  was engineer judgment, not an operator request).
+
+**Same-day continuation 9 — Pass 1.1 slice SHIPPED (Form/Image
+XObjects `Do` + inline images); MAX_XOBJECT_DEPTH corpus-corrected:**
+
+- **Shipped:** Form and Image XObjects (`Do`) + inline images — the
+  biggest measured render-fidelity gap flagged by continuation 7's
+  corpus run. Full detail in `ROADMAP.md` Shipped, "Pass 1.1 (slice) —
+  Form and Image XObjects (`Do`) + inline images." New
+  `crates/pdfce-core/src/filters/ascii.rs` (`ASCIIHexDecode`/
+  `ASCII85Decode`, §7.4.2/§7.4.3 — required first because they're the
+  only two filters that make an inline image's data length unambiguous
+  per §8.9.7); new `crates/pdfce-render/src/image.rs` (image XObjects +
+  inline images → RGBA, full §8.9.5.2 pipeline, DeviceGray/RGB/CMYK +
+  CalGray/CalRGB + ICCBased-via-`/N` + Indexed, bpc 1/2/4/8/16, stencil
+  masks as a separate polarity-switch path, `MAX_IMAGE_PIXELS` = 32 Mpx
+  guard); `crates/pdfce-render/src/interpret.rs` gained `Do` dispatch
+  (§8.10.1 five-step form procedure) and inline-image routing.
+- **Decisions made this session (recorded `ARCHITECTURE.md` §12,
+  2026-07-30 continuation 9):**
+  1. Nested form execution = fresh `Interpreter` over a cloned
+     `GraphicsState`, never `q`/`Q` on the shared stack — makes
+     §8.10.1 steps (a)/(e) structural, gives each form its own font
+     cache (correctness, not optimization: `/F1` in a form's own
+     `/Resources` is a different font than the page's `/F1`).
+  2. XObject cycle guard keyed on object number, not resource name.
+  3. Text objects don't cross the form boundary (§9.4.1 BT/ET scoping
+     holds structurally); text *state* is inherited (§9.3 makes it
+     graphics state). Pinned by a test.
+  4. Images drawn via a tiny-skia `Pattern` shader over the user-space
+     unit square, not `Pixmap::draw_pixmap` (whose integer x/y origin
+     can't express §8.9.4's arbitrary-affine placement). Escalated to
+     `D:\dev\rag\rust\tiny_skia_0.11_pattern_shader_arbitrary_affine_image_placement.md`
+     (ecosystem-wide tiny-skia finding, not pdfce-specific).
+  5. `MAX_XOBJECT_DEPTH` raised 16 → 64.
+- **Findings + decisions:**
+  - **The `MAX_XOBJECT_DEPTH` = 16 intuition guard overflowed on
+    exactly one of 2,914 corpus files** —
+    `veraPDF-corpus/PDF_A-1b/6.1 File structure/6.1.12 Implementation
+    limits/veraPDF test suite 6-1-12-t08-pass-c.pdf`, a **conformant**
+    32-deep form-XObject chain (objects 19–50). Annex C sets no
+    form-nesting limit; PDF/A §6.1.12 forbids imposing Annex C limits.
+    Raised to 64 (2× the deepest conformant structure measured);
+    corpus-wide overflows now 0. **Second incident of the identical
+    bug shape** (first was `MAX_TOKEN_LEN`, continuation 7) — new
+    `ROADMAP.md` Standing rule added: validate every resource guard
+    against veraPDF's §6.1.12 suite specifically before it ships.
+    Filed: `C:\personal_rag\pdf\lesson_20260730_max_xobject_depth_verapdf_32_deep_conformant_chain.md`.
+  - **Corpus re-run** (same 2,914 files, isolated via a scratch
+    build with only `Do`/inline-image arms reverted): deferred ops
+    7,347 → 6,079 (−17.3%); images rendered 0 → 76; images unsupported
+    0 → 137; forms rendered 0 → 1,168; glyphs substituted +37 (text
+    inside forms now paints); xobject depth overflows 0; zero panics/
+    timeouts/hangs. Full table in `ROADMAP.md`'s Shipped entry.
+  - **`images_unsupported` (137) now EXCEEDS `images_rendered` (76) —
+    DCTDecode (baseline JPEG) is the measured next priority**, ahead
+    of CCITT/JBIG2/JPX/LZW. Filed:
+    `C:\personal_rag\pdf\lesson_20260730_corpus_image_codec_priority_dct_first.md`.
+    `ROADMAP.md` Pass 1.1 item 6 records the full follow-on priority
+    list (DCTDecode; CCITT/JBIG2/JPX/LZW; `/SMask`+`/Mask` — blocked
+    on a spec-RAG clause-11 GAP, dispatch `pdfce-spec-librarian`
+    first; Lab/Separation/DeviceN for images; `/OC` on XObjects).
+  - `tiny-skia` 0.11 `Pattern`-shader-vs-`draw_pixmap` finding written
+    to `D:\dev\rag\rust\` (decision 4 above) — `Shader::transform`
+    post-concatenates `fill_path`'s CTM argument into the pattern's own
+    transform, giving image→user→device in one matrix; `draw_pixmap`
+    hardcodes `anti_alias: false` and an integer blit origin, so it
+    cannot be used for arbitrary-affine image placement.
+- **Tests:** 337 workspace tests green (was 245 at Pass 1; 74 new in
+  pdfce-render). `cargo fmt --all --check` + `cargo clippy --workspace
+  --all-targets --all-features -- -D warnings` clean.
+- **Invariant checks:** `cargo tree` for pdfce-core/pdfce-render/
+  pdfce-cli on host, `x86_64-pc-windows-msvc`, and
+  `wasm32-unknown-unknown` — no egui/eframe/winit/wgpu; `cargo tree
+  --duplicates` clean; `cargo check -p pdfce-core -p pdfce-render
+  --target wasm32-unknown-unknown` clean. One new test-only
+  dev-dependency (`flate2` on pdfce-render, already resolved via
+  pdfce-core, adds zero packages — no `THIRD_PARTY_LICENSES.md`
+  regeneration needed).
+- **Packaging:** untouched this slice, no smoke test owed; per the
+  launch-on-completion rule the GUI was rebuilt and launched, and
+  `pdfce-cli render-page` run against real corpus files (a gradient
+  image, a 4-image page, the 32-deep form chain) with visually
+  verified PNG output.
+
+**Still in flight (continuation 9):**
+- Pass 1.1 remains open: pixel-parity measurement (the substantive
+  remaining item), `pdfce-gui` file argument, R20 diagnostics panel,
+  and the item-6 image-codec/transparency follow-on (DCTDecode first).
+- Everything remains UNCOMMITTED in git — the operator has not yet
+  said to commit.
+
+**For next session:**
+- Implement `DCTDecode` next — corpus-justified as the single
+  highest-value remaining image filter (`images_unsupported` >
+  `images_rendered` today).
+- Dispatch `pdfce-spec-librarian` for PDF_Spec clause 11 (soft/
+  explicit/colour-key transparency) before starting `/SMask`/`/Mask` —
+  currently a flagged GAP in the spec RAG.
+
+**Same-day continuation 10 — addendum to continuation 9's Form/Image
+XObjects slice (fuzz-target extension + post-slice refinements):**
+
+- **`cargo-fuzz` coverage extended in the same slice**, per
+  `ARCHITECTURE.md` §10.2's "expand fuzz targets to each filter decoder
+  as they're implemented."
+  `fuzz/fuzz_targets/content_and_filters.rs` now also calls
+  `pdfce_core::filters::ascii::decode_hex` and `decode_85` directly on
+  the raw fuzz input (not through `decode_stream`, so no dictionary
+  shape stands between libFuzzer and the byte loops). Rationale
+  (recorded in the target's module docs): ASCII85 has genuine overflow
+  surface — a five-digit group accumulates to a value that can
+  legitimately exceed `u32::MAX` (`uuuuu` = 85^5 − 1), partial final
+  groups index a fixed-size array by a running count, and `z`/`~>` are
+  position-sensitive.
+- **Campaign result: 588,048 ASan-instrumented executions in 120 s,
+  ZERO crashes** on the extended target
+  (nightly-x86_64-pc-windows-msvc, using the documented
+  `clang_rt.asan_dynamic-x86_64.dll` PATH workaround from
+  `D:\dev\rag\rust\cargo_fuzz_windows_msvc_asan_dll_path.md` — that
+  lesson was followed and remains accurate, no update needed to it).
+- **Two small test/API refinements after the main dispatch:** a
+  regression test pinning §8.10's "a `/BBox` with zero width or height
+  is legal and means paint nothing" (the failure mode guarded against
+  is treating the degenerate rectangle as *absent* and painting the
+  form unclipped — the exact opposite of the spec), and removal of an
+  unused `pub` helper (`ImageNotes::any`) from `pdfce-render`'s public
+  surface, per the Rust API Guidelines' don't-ship-unused-public-items
+  posture.
+- **Final counts (supersede continuation 9's provisional numbers,
+  `ROADMAP.md` Shipped entry amended to match):** **338 workspace
+  tests passing** (not the 337 quoted in continuation 9), fmt clean,
+  clippy `-D warnings` clean, GUI-separation verified for
+  pdfce-core/pdfce-render/pdfce-cli on host + `x86_64-pc-windows-msvc`
+  + `wasm32-unknown-unknown`, `cargo tree --duplicates` clean, wasm32
+  `cargo check` clean.
+- `ROADMAP.md`'s Shipped entry for "Pass 1.1 (slice) — Form and Image
+  XObjects" was amended in place (same Pass, same day, still an open
+  entry — not a rewrite of settled history) to fold in the fuzz-target
+  extension, the campaign result, the two refinements, and the
+  corrected test count.
+
+**Still in flight (continuation 10):**
+- Same as continuation 9 — Pass 1.1 remains open: pixel-parity
+  measurement (substantive remaining item), `pdfce-gui` file argument,
+  R20 diagnostics panel, item-6 image-codec/transparency follow-on
+  (DCTDecode first).
+- Everything remains UNCOMMITTED in git — the operator has not yet
+  said to commit.
+
+**Same-day continuation 11 — decision 005 (image-codec strategy)
+accepted + archived; Pass 2.1/2.2/2.3 scoped:**
+
+- **Decision 005 accepted and archived** (fifth use of the KenAgent
+  protocol): `docs/decisions/005-image-codecs.md`. Headline: **five
+  permissive pure-Rust codecs, zero copyleft escalations needed** —
+  the GPL C alternatives that were the obvious answers for two of the
+  five (`jbig2dec`, OpenJPEG wrappers) were made moot; `LEGAL.md` §1
+  stays open and unconstrained, and every codec is
+  `forbid(unsafe_code)` compiler-enforced in the configuration pdfce
+  builds (SIMD features off, R24).
+- **Decisions made this session (recorded `ARCHITECTURE.md` §12,
+  2026-07-30 decision-005 entry):**
+  1. **Two-tier codec architecture** (R23): image codecs
+     (DCT/CCITT/JBIG2/JPX) are a terminal stage dispatched by a new
+     `pdfce_core::image_codec` module returning `CodedImage` (samples
+     + codec-declared geometry + colour model, never a bare
+     `Vec<u8>`); `filters::decode_stream` returns
+     `FilterError::ImageCodec` for them; LZW alone stays a
+     byte-stream filter in the cascade.
+  2. **Crate selections:** `zune-jpeg 0.5` (DCT), `weezl 0.2` (LZW),
+     `hayro-ccitt 0.3` (+`fax` fallback), `hayro-jbig2 0.3`,
+     `hayro-jpeg2000 0.4` — all `default-features = false` per R24.
+  3. **Priority order set by measurement** (2,914-file corpus:
+     DCT 82.3% of unimplemented-filter occurrences / LZW 10.4% /
+     JPX 7.3% / CCITT+JBIG2 zero *by corpus construction*): Pass 2.1
+     DCT+LZW, Pass 2.2 CCITT+JBIG2 (roadmap-dependency-driven, one
+     vendor), Pass 2.3 JPX. Filed under `ROADMAP.md` Next up with the
+     full measurement tables so the order stays auditable.
+  4. Standing rules **R23–R28** filed in `ROADMAP.md` (terminal-stage
+     codecs; SIMD/unsafe features off with CI feature-state
+     assertion; explicit ceilings, never vendor defaults; codec layer
+     never decides colour; named fail-clean diagnostics; read-compat
+     only — pdfce writes none of these codecs, LZW never).
+- **3 BLOCKING spec verifications dispatched** to
+  `pdfce-spec-librarian`, one gating each Pass: §7.4.8 Table 13
+  `/ColorTransform` (blocks 2.1), Table 11
+  `/Columns`/`/EndOfBlock`/`/BlackIs1` defaults (blocks 2.2 —
+  `BlackIs1` inverts every fax image plausibly if defaulted wrong),
+  §8.9.5 `/SMaskInData` + Table 89 JPX overrides (blocks 2.3).
+- **RAG escalations this continuation:**
+  - `D:\dev\rag\rust\cargo_lock_unenabled_optional_deps_not_build_graph.md`
+    — lockfile presence ≠ build-graph presence (the record's §3.6
+    correction: `zune-jpeg`/`weezl` sat in `Cargo.lock` as unenabled
+    optional deps of `image`; verify with `cargo tree -i`, never
+    `grep Cargo.lock`).
+  - `D:\dev\rag\rust\unsafe_simd_cargo_features_cfg_attr_forbid.md`
+    — "does this crate use unsafe" is a feature-set question;
+    feature unification can flip it silently; assert with
+    `cargo tree -e features` in CI.
+  - `C:\personal_rag\pdf\lesson_20260730_corpus_jpeg_shape_progressive_dri_app14.md`
+    — corpus JPEG shape (14% progressive, 74% DRI, 80% APP14, 100%
+    8-bit, 0% 4-component).
+  - `C:\personal_rag\pdf\lesson_20260730_zune_jpeg_cmyk_app14_ambiguity.md`
+    — zune-jpeg's CMYK report is ambiguous; PDF consumers must sniff
+    APP14 themselves.
+- **Still in flight (continuation 11):**
+  - **Pass 2.1 (DCT + LZW) is next** — gated only on the Table 13
+    spec verification above.
+  - Pass 1.1 remainders unchanged (pixel parity, `pdfce-gui` file
+    argument, R20 diagnostics panel).
+  - Everything remains UNCOMMITTED in git — the operator has not yet
+    said to commit.
+
+**Same-day continuation 12 — Pass 2.1 SHIPPED (DCTDecode + LZWDecode
++ RunLengthDecode; two-tier image_codec architecture); decision 005
+§3.2 measurement corrected; decision 006 dispatched:**
+
+**Shipped:**
+- **Pass 2.1** — full detail in `ROADMAP.md` Shipped. Highlights:
+  - `DCTDecode` via `zune-jpeg 0.5.15` (SIMD off,
+    compiler-enforced `forbid(unsafe_code)`, R24). The blocking
+    Table 13 verification returned and the implemented precedence is
+    verified against it: **APP14 marker overrides the dict
+    `/ColorTransform`; default 1 for 3-component, 0 otherwise.**
+    APP14 pre-sniff in pdfce's own adapter; **in-house YCCK→CMYK**
+    (zune-jpeg has no YCCK→CMYK arm — YCCK passthrough requested).
+  - `LZWDecode` via `weezl 0.2.1` (byte-stream cascade per R23, both
+    `/EarlyChange` modes); `RunLengthDecode` in-house ~130 lines
+    (small scope addition).
+  - The **two-tier image-codec architecture landed** (R23):
+    `pdfce_core::image_codec`, `CodedImage` seam, `terminal_codec`
+    dispatch; **explicit ceilings** `MAX_IMAGE_PIXELS` /
+    `MAX_IMAGE_DIMENSION` / `MAX_IMAGE_SAMPLE_BYTES` per R25
+    (zune-jpeg's 16,384-pixel vendor default overridden).
+  - **Corpus:** Ok 99.2% → **99.3% (2,886)**; images rendered
+    **74 → 201**; images unsupported **135 → 8** (7 JPX for
+    Pass 2.3 + 1 deliberate `/Lzw`-misspelling fail-file). Zero
+    panics. **Tests: 412** workspace (was 338); fmt/clippy clean.
+    **Fuzz: 4 targets, zero crashes** (per-codec targets + both LZW
+    `EarlyChange` modes in `content_and_filters.rs`).
+  - `THIRD_PARTY_LICENSES.md` regenerated: **+3 permissive entries**
+    (`zune-jpeg`/`zune-core`/`weezl`), zero copyleft.
+  - **All invariant gates green incl. the new R24 feature assertion**
+    (`cargo tree -e features`: no `x86`/`neon`/`simd`).
+
+**Decisions made this session (recorded `ARCHITECTURE.md` §12,
+continuation-12 entry):**
+- Three **engineer deviations from decision 005's §6.3 API sketch**,
+  all additive: (1) `CodedImage::codec` is an `Option` with an
+  `Unspecified` variant; (2) `decode_image` takes an `inline: bool`
+  parameter; (3) RunLength truncation is a strict `Err`.
+- **Decision 006 dispatched** (KenAgent protocol) — the CMYK/YCCK
+  inversion rule, now that revisit trigger 2 fired (below).
+
+**Findings + decisions:**
+- **CORRECTION — decision 005 §3.2's "0 four-component JPEGs" was
+  WRONG: 12 exist**, in veraPDF's "6.2.4.3 Uncalibrated -Device
+  colour spaces" section (the §3.2 scan missed them — the record's
+  own method caveats anticipated this failure mode). **Revisit
+  trigger 2 (§9) is LIVE:** `6-2-4-3-t02-pass-a.pdf` is
+  `/DeviceCMYK` `/DCTDecode` with Adobe APP14 transform 2 (YCCK) and
+  NO `/Decode` array — it relies on the bare Adobe convention;
+  pdfce currently passes raw samples through (§5.5's deliberate
+  no-guess), so these 12 likely render inverted today. Filed as a
+  dated addendum at the END of
+  `docs/decisions/005-image-codecs.md` (record not rewritten);
+  corpus-shape lesson amended to match.
+- **Pass 1 inline-image bug found and fixed (content.rs):** `ID`
+  followed by CRLF is ONE white-space character (§8.9.7's "single
+  white-space character" read with §7.2.2's CRLF-is-one-EOL rule);
+  Pass 1 consumed only the CR, leaving a stray `\n` prepended to the
+  image data — silently corrupting 4 corpus inline DCT images
+  (caught by their SOI check failing).
+- **zune-jpeg defers the 3-component/transform-0 CMYK→RGB fixup into
+  `decode_into`** — `input_colorspace()` at header time reports CMYK
+  for such images, so sizing/requesting by header-time colorspace
+  fails; and a no-APP14 `/ColorTransform 0` stream needs a **YCbCr
+  passthrough** request, not RGB — two visually-identical cases with
+  different correct requests.
+- **RAG escalations this continuation:**
+  - `C:\personal_rag\pdf\lesson_20260730_inline_image_id_crlf_single_whitespace.md`
+    — NEW: the ID-CRLF inline-image trap.
+  - `C:\personal_rag\pdf\lesson_20260730_zune_jpeg_cmyk_app14_ambiguity.md`
+    — AMENDED (dated addendum): the `decode_into` fixup deferral +
+    the YCbCr-vs-RGB request distinction.
+  - `C:\personal_rag\pdf\lesson_20260730_corpus_jpeg_shape_progressive_dri_app14.md`
+    — AMENDED (dated footer): the 4-component figure corrected
+    (0 → 12, veraPDF 6.2.4.3).
+  - `docs/decisions/005-image-codecs.md` — dated addendum appended
+    (the §3.2 correction + trigger-2 activation).
+
+**Still in flight (continuation 12):**
+- **Decision 006 (CMYK/YCCK inversion rule) is pending** — until it
+  lands, the 12 four-component corpus files likely render inverted
+  (visible, counted, deliberate per §5.5).
+- Pass 2.2 (CCITT + JBIG2) is next in the codec sequence — still
+  gated on its Table 11 blocking verification.
+- Pass 1.1 remainders unchanged (pixel parity, `pdfce-gui` file
+  argument, R20 diagnostics panel).
+- Everything remains UNCOMMITTED in git — the operator has not yet
+  said to commit.
+
+**For next session:**
+- Consume decision 006 when it returns; implement the sourced
+  inversion rule and re-render the 12 four-component files as its
+  acceptance check.
+- Pass 2.2 after its Table 11 verification (BlackIs1 polarity is the
+  dangerous default).
+
+**Continuation 13 (2026-07-31) — decision 006 RETURNED and consumed:
+the premise was falsified; the rule is the null rule; no behavioral
+change needed:**
+
+**Shipped:**
+- Nothing behavioral — by decision. Decision 006's deliverables are a
+  permanent rule, a corrected/split diagnostic, documentation, and six
+  regression fixtures (engineering follow-ups this continuation).
+
+**Decisions made this session (recorded `ARCHITECTURE.md` §12,
+2026-07-31 entry; full record
+`docs/decisions/006-cmyk-jpeg-inversion.md`):**
+- **Decision 006 (CMYK/YCCK JPEG inversion) ACCEPTED via the KenAgent
+  protocol (sixth use). The rule is the NULL rule: pdfce never applies
+  an "Adobe CMYK inversion"** — not on APP14 presence, transform-byte
+  value, component count, or producer sniffing; `/Decode` is the sole
+  polarity control (R29). Sourced by four-engine consensus (pdf.js,
+  pdfium, MuPDF PDF path, Poppler — conditions read at source) plus a
+  twice-shipped-twice-reverted upstream trail for the marker heuristic
+  (cairo issue 156, Firefox bug 674619).
+- **The 005-Addendum premise was FALSIFIED, in a good way:** pdfce
+  already pixel-matches pdfium on ALL real four-component corpus JPEGs
+  — count corrected 12 → **9** (two independent scans; 2 payloads,
+  9 PDFs, all YCCK transform-2, no `/Decode`). The "likely render
+  inverted today" inference was flatly false; §5.5's no-guess posture
+  was CORRECT, not merely cautious — the plausible APP14-gated guess
+  would have broken all 9. Second dated addendum appended to
+  `docs/decisions/005-image-codecs.md` (first addendum left as
+  written).
+- **TN #5116 negative result:** the normative-by-reference primary
+  contains the word "invert" zero times; §13.1's `255 −` is the YCCK
+  definition (on true ink), and §18 does not enumerate transform
+  values 0/1/2. The inversion convention is undocumented Photoshop
+  behavior, compensated out of band via `/Decode` — never detectable
+  from the codestream.
+- **R31 born from a near-miss:** Pillow (first reference consulted)
+  applies `CMYK;I` to every 4-component JPEG unconditionally and
+  reported the exact complement — trusting it would have "fixed" a
+  non-bug and broken all 9 files under a green suite. Reference
+  decoders are evidence only after their conventions are verified.
+- **R26 clarified: observing is not applying** — the codec adapter may
+  observe `dict` to classify diagnostics; its anti-inversion clause is
+  now permanent and sourced.
+- Standing rules **R29–R31 + the R26 clarification** added to
+  `ROADMAP.md` (librarian filing, this continuation).
+
+**Findings + decisions:**
+- **Separate `DeviceCMYK`→RGB colorimetry gap found in passing (006
+  §3.7), deliberately excluded from 006:** `Rgb::from_cmyk`
+  (`gstate.rs:112`) naive additive vs pdfium's `AdobeCMYK_to_sRGB1` —
+  37.4% of pixels differ >8 in some channel (max Δ `[11,37,30]`) on
+  the corpus CMYK image; affects EVERY DeviceCMYK fill/stroke, not
+  just images. **Filed as a new `ROADMAP.md` Backlog entry
+  ("DeviceCMYK→RGB colorimetry")** — scope via
+  `pdfce-acrobat-librarian` before engineering.
+- **RAG escalations this continuation** (four new
+  `C:\personal_rag\pdf\` lessons + indexes; corpus-shape lesson
+  re-amended 12 → 9):
+  - `lesson_20260731_pillow_cmyk_i_rawmode_trap.md` (methodology/HIGH)
+  - `lesson_20260731_cmyk_jpeg_never_invert_four_engine_consensus.md`
+    (quirk/HIGH)
+  - `lesson_20260731_libjpeg_ycck_255_minus_is_definitional.md`
+    (format-spec/HIGH)
+  - `lesson_20260731_corpus_cmyk_resurvey_9_not_12.md`
+    (methodology/MEDIUM)
+
+**Follow-ups dispatched / in flight (006 §10):**
+- **Engineering items 2–6 (this continuation, docs/diagnostics/
+  fixtures ONLY — no behavioral change):** dct.rs module + function
+  doc rewrite (settled R29 rule + TN #5116 §13.1 citation); split
+  `dct_cmyk_images` (benign census, no warning) vs
+  `dct_cmyk_polarity_unverifiable` (R30 named warning citing 006),
+  classified in `dct::decode`; CLI/GUI note text updated so only the
+  R30 counter warns; six `fixtures/synthetic/cmyk-variants/`
+  regression fixtures (transform 2/0/marker-removed × ±`/Decode`)
+  asserting CMYK sample values at named pixels + render polarity,
+  with CC BY 4.0 veraPDF attribution per `LEGAL.md` §5.
+- **`pdfce-spec-librarian` dispatch pending** for `filter__dct.md`
+  (close the SOURCING GAP with the negative result; rewrite the
+  hazard note; add the consensus table + revert trail) — 006 §6.5.
+- Re-derive or retire the "12" figure (006 §10 item 10).
+
+**Still in flight (continuation 13):**
+- Pass 2.2 (CCITT + JBIG2) — unchanged, still gated on Table 11
+  verification.
+- Pass 1.1 remainders unchanged (pixel parity, `pdfce-gui` file
+  argument, R20 diagnostics panel).
+- Everything remains UNCOMMITTED in git — operator has not said to
+  commit.
+
+**For next session:**
+- Decision 006 is fully consumed once the engineering follow-ups above
+  are verified green (fmt/clippy/tests/ui-strings/invariants). The
+  "re-render the 12 files as acceptance check" item from continuation
+  12 is superseded: the files (9, not 12) already render correctly —
+  the acceptance check became the six committed fixtures.
+- Scope the DeviceCMYK colorimetry Backlog entry when reached.
+
+**Continuation 14 (2026-07-31) — Pass 2.2 SHIPPED (CCITTFaxDecode +
+JBIG2Decode + shared bilevel sink):**
+
+**Shipped:**
+- **Pass 2.2** — full detail in `ROADMAP.md` Shipped. Highlights:
+  - `CCITTFaxDecode` via `hayro-ccitt 0.3` (zero deps, `no_std`,
+    `forbid(unsafe_code)`): `DecodeSettings` maps 1:1 onto Table 11,
+    defaults verified against the returned blocking spec dispatch;
+    `/K` trichotomy implemented; **`/Rows` 0 → `/Height` fallback is
+    load-bearing** (hayro-ccitt decodes ZERO rows at `rows: 0`).
+  - `JBIG2Decode` via `hayro-jbig2 0.3` (`image`/`simd` off, R24);
+    `Image::new_embedded()` carries `/JBIG2Globals`; inline-image
+    path rejects JBIG2 per §7.4.7/§8.9.7.
+  - **Shared bilevel sink** (§8.9.3 packing, per-row byte budget) —
+    one packing implementation behind both codecs.
+  - **Polarity chain PROVEN by executable identity:** `/BlackIs1` →
+    hayro `invert_black` by DIRECT assignment (hayro XORs
+    internally, sink writes 1-for-white, PDF 0 = black); JBIG2's
+    T.88 1 = black inverted unconditionally; the same Group-4
+    payload decodes **byte-identical** through the CCITT route and
+    the JBIG2-MMR-generic-region route (asserted in `pdfce-core` +
+    pixel-identical renders). Decision 005 §10 item 2's
+    silent-inversion hazard closed by proof, not code read.
+  - **Corpus honestly UNCHANGED at 99.3%** — 0 files / 0 occurrences
+    of either filter in the conformance corpora, confirming the
+    decision 005 §5.1 zero-by-construction prediction by direct
+    scan. Ship-on-zero-pressure was the scoped, deliberate posture
+    (OCR/scanned-document buckets are the demand signal).
+  - **Tests: 457** workspace (was 420; ~45 new incl. 17 core +
+    6 render). **Fuzz: 6 targets, 60 s each, zero crashes.**
+    **R25 gate: veraPDF §6.1.12 suite 44/44.**
+  - `THIRD_PARTY_LICENSES.md` regenerated: **+2 permissive entries**
+    (`hayro-ccitt`/`hayro-jbig2`), 169 total, zero copyleft.
+    **Binary +306.5 KiB (+10.28%), measured.**
+
+**Decisions made this session (engineer deviations, all additive —
+recorded in the `ROADMAP.md` Shipped entry):**
+- Extra named diagnostic for CCITT damaged rows beyond the scoped set
+  (R27 posture).
+- `pdfce-render` needed NO code change — `SampleLayout` was already
+  generic over 1-bpc data; the render side is 6 new tests, zero code.
+- New `fixtures/synthetic/bilevel/` (5 demo PDFs + `PROVENANCE`).
+- One **honest test relaxation:** `[0xFF; 32]` is VALID Group 4 data —
+  T.4/T.6 carry no checksum, so fail-clean cannot detect undetectable
+  garbage; documented in a comment rather than asserted falsely.
+
+**Findings + decisions:**
+- **libtiff's fax codec is bit-based and IGNORES
+  PhotometricInterpretation** — T.4 white runs correspond to Pillow
+  BLACK pixels, so fixture generators must build the visual
+  complement (byte-exact asserted). Lesson filed (below).
+- **hayro-ccitt `rows: 0` decodes nothing** — PDF's `/Rows`-absent/
+  0 → `/Height` fallback is what makes real streams decode; treating
+  it as cosmetic default-plumbing would have shipped a decoder that
+  silently produces zero rows. Lesson filed (below).
+- **CCITT↔JBIG2 polarity identity** — the same Group-4 payload
+  embedded as a JBIG2 MMR generic region decodes byte-identical to
+  the CCITTFaxDecode route once each side's convention (BlackIs1
+  XOR; T.88 unconditional inversion) is applied; a reusable
+  cross-codec differential oracle. Lesson filed (below).
+
+**RAG escalations this continuation:**
+- `C:\personal_rag\pdf\lesson_20260731_libtiff_fax_ignores_photometric_generators_complement.md`
+- `C:\personal_rag\pdf\lesson_20260731_hayro_ccitt_rows_zero_decodes_nothing.md`
+- `C:\personal_rag\pdf\lesson_20260731_ccitt_jbig2_mmr_polarity_identity.md`
+- `D:\dev\rag\rust\libfuzzer_arbitrary_derive_parameter_space_fuzzing.md`
+  — deriving codec parameter dicts from fuzz input alongside the
+  payload (the CCITT parameter cross-product pattern).
+- Subject + master indexes updated for all four.
+
+**Open spec item (carried in ROADMAP too):**
+- `PDF_Spec\filter__jbig2.md` still marks **Table 12's exact contents
+  unverified** — Pass 2.2 implemented against §7.4.7's quoted prose;
+  a future `pdfce-spec-librarian` dispatch closes it. T.4/T.6/T.88
+  source specs staged in the spec RAG, code tables unextracted.
+
+**Still in flight (continuation 14):**
+- Pass 2.3 (JPXDecode) is next in the codec sequence — still gated on
+  its §8.9.5 `/SMaskInData` + Table 89 blocking verification.
+- Pass 1.1 remainders unchanged (pixel parity, `pdfce-gui` file
+  argument, R20 diagnostics panel).
+- Everything remains UNCOMMITTED in git — operator has not said to
+  commit.
+
+**For next session:**
+- Pass 2.3 after its blocking spec verification (§8.9.5
+  `/SMaskInData`, Table 89 JPX overrides, Table 6 no-parameters).
+- Dispatch `pdfce-spec-librarian` to close the Table 12 gap in
+  `filter__jbig2.md` (and extract the staged T.4/T.6/T.88 code
+  tables) when convenient — non-blocking.
+- Re-measure CCITT/JBIG2 corpus presence the moment an organic
+  (non-conformance) corpus exists.
+
+**Continuation 15 (2026-07-31) — Pass 2.3 SHIPPED (JPXDecode) — Pass 2
+COMPLETE:**
+
+**Shipped:**
+- **Pass 2.3** — full detail in `ROADMAP.md` Shipped. Highlights:
+  - `JPXDecode` via `hayro-jpeg2000 0.4` (`default-features = false,
+    features = ["std"]` — `simd`/`image` off per R24; Apache-2.0 OR
+    MIT, permissive, no license escalation). New `image_codec/jpx.rs`
+    + `fixtures_jpx.rs` (12 generated fixtures,
+    `tools/gen-jpx-fixtures.py` via OpenJPEG/Pillow 12.1.0,
+    lossless-round-trip-asserted) + 6 demo PDFs in
+    `fixtures/synthetic/jpx/` + new fuzz target `image_codec_jpx`.
+  - **Fuzz bug found AND fixed:** a 310-byte codestream declaring a
+    65,536-tile grid over 512×1024 → 32 s decode; the tile grid is
+    declared independently of image size, so NO existing pixel/byte
+    ceiling saw it. `jpx::MAX_TILES = 4096` (8× most aggressive real
+    tiling; 32 Mpx can still tile 91×91); same input now 3 ms; kept
+    as fuzz corpus seed + an accept-side test so the ceiling can't
+    silently over-tighten. Final campaign 15,694 runs / 60 s / zero
+    crashes.
+  - **Corpus** (same 2,914): Ok holds 2,892 (99.2%); images rendered
+    204 → 210; images unsupported 9 → 3; codec-unsupported 7 → 0;
+    codec-FEATURE-unsupported 0 → 1 — NAMED:
+    JPX/enumerated-colour-space (CIEJab, space 19, §7.4.9-permitted,
+    unimplemented upstream; was a generic corrupt-file error before).
+    Zero panics/timeouts.
+  - **Tests: 487** workspace (was 457). Gates all clean incl. MSRV
+    1.92 builds core+render (no bump), `cargo-about` regen (+1
+    entry), R24 assertion on 4 targets, `--duplicates` guard, wasm32.
+    GUI launched on `jpx-rgba-smaskindata1.pdf`.
+  - **Pass 2 (image codecs, decision 005) is COMPLETE as planned** —
+    all five standard filter families now decode or fail with named
+    diagnostics.
+
+**Decisions made this session (six engineer deviations — full record
+in `ARCHITECTURE.md` §12, continuation-15 entry; also condensed in
+the `ROADMAP.md` Shipped entry):**
+- **The dispatch brief stated Table 89 precedence BACKWARDS**;
+  verified rule implemented: a PRESENT `/ColorSpace` wins ("any
+  colour space specifications in the JPEG2000 data shall be
+  ignored"); the codestream wins only when absent.
+  `/BitsPerComponent` + `/Decode` ignored as briefed. Test:
+  `jpx_present_colour_space_still_wins`.
+- `/Width`/`/Height` are not a Table 89 override — dict-for-placement
+  / codestream-for-stride split retained, divergence counted;
+  per-filter contrast table added to `mod.rs` docs.
+- Bit depth normalized by full-range scale to 8
+  (`round(v/(2^d−1)×255)`), not high-byte — Table 89 leaves depth to
+  the conforming reader; 16-bit fixture carries a `0x00FF`
+  discriminator pixel.
+- `/SMaskInData` 2 recognize-and-defer: preblended colour returned as
+  stored, alpha not exposed; counter `jpx_smask_in_data_preblended` →
+  CLI key `jpx_preblended` (appended, stable-line contract kept) +
+  GUI line.
+- EXTRA Table 89 gap found in the audit and closed: `decode_stencil`
+  hard-required 1-bit and would have sheared a JPX `/ImageMask`'s
+  8-bit samples 8× — stencil path now takes stride/depth from the
+  codec, thresholds against zero, `/Decode` still honoured (§7.4.9
+  exemption).
+- hayro's `data_u8()` deliberately unused: interleaves alpha AND
+  computes `1 << bit_depth` on a palette-box depth that may be 128 —
+  shift-overflow panic reachable from fuzzed input; pdfce interleaves
+  itself and refuses depths outside `1..=31` (`JPX/bit-depth`).
+
+**Findings + decisions:**
+- **`jpx::MAX_TILES` — declared-work amplification is its own guard
+  class:** a decode-WORK ceiling orthogonal to every pixel/byte
+  ceiling; third guard-by-intuition encounter (after MAX_TOKEN_LEN
+  and MAX_XOBJECT_DEPTH), FIRST found by the fuzzer rather than a
+  rejected real file. Lesson filed (below).
+- **CIEJab / §7.4.9-ladder divergence:** when the codec can't decode
+  an unsupported enumerated colour space at all, the spec's "fall
+  back to Device* by channel count" rung is unreachable —
+  decode-then-classify orderings matter. Lesson filed (below).
+- **hayro-jpeg2000 `data_u8()` shift-overflow hazard** (deviation
+  above) as an api-usage lesson. Lesson filed (below).
+- **libFuzzer slow-unit calibration:** the 1 s slow-unit threshold
+  isn't calibrated for megapixel decoders — a 17 Mpx legitimate image
+  is 1.0 s native vs 22 s under ASan (false positive); prescribe
+  `-report_slow_units=30` in the target's docs. Lesson filed (below).
+
+**RAG escalations this continuation:**
+- `C:\personal_rag\pdf\lesson_20260731_jpx_max_tiles_declared_work_amplification.md`
+- `C:\personal_rag\pdf\lesson_20260731_jpx_ciejab_decode_then_classify_fallback_unreachable.md`
+- `C:\personal_rag\pdf\lesson_20260731_hayro_jpeg2000_data_u8_shift_overflow_palette_depth.md`
+- `D:\dev\rag\rust\libfuzzer_slow_units_asan_threshold_calibration.md`
+- Subject + master indexes updated for all four.
+
+**Correction to Continuation 14 (recorded here per the append-only
+rule — 14 is not edited):** its "Still in flight" note carried
+Pass 2.3 as "still gated on its §8.9.5 `/SMaskInData` + Table 89
+blocking verification." That verification had in fact ALREADY
+returned before Pass 2.3 was dispatched — the Pass started unblocked.
+(The dispatch brief derived from that verification then stated the
+Table 89 precedence backwards; caught and implemented correctly —
+see the first deviation above.)
+
+**Still in flight (continuation 15):**
+- The Pass 2.2 open Table 12 spec item: the `pdfce-spec-librarian`
+  dispatch is now **IN FLIGHT** (running in parallel with this
+  filing) — dispatched, not pending. Covers `filter__jbig2.md`'s
+  Table 12 gap + the staged T.4/T.6/T.88 code-table extraction.
+- **Decision 007** (next-subsystem priority) — KenAgent consultation
+  in flight; the next Pass is unscoped until it returns.
+- Pass 1.1 remainders unchanged (pixel parity, `pdfce-gui` file
+  argument, R20 diagnostics panel).
+- Everything remains UNCOMMITTED in git — operator has not said to
+  commit.
+
+**For next session:**
+- Scope the next subsystem Pass once decision 007 returns.
+- Fold the Table 12 dispatch result into the spec RAG's
+  `filter__jbig2.md` open item when it lands (closes the Pass 2.2
+  carried item).
+- Re-measure CCITT/JBIG2/JPX corpus presence the moment an organic
+  (non-conformance) corpus exists.
+
+**Continuation 16 (2026-07-31) — decision 007 RETURNED and filed
+(next subsystem = the incremental-save writer, sliced 3.0 → 3.1 →
+3.2); Table 12 spec gap CLOSED same day; write-direction audit
+dispatched:**
+
+**Decisions made this session:**
+- **Decision 007** (next-subsystem-after-read-stack) — KenAgent
+  consultation returned and consumed; archived to
+  `docs/decisions/007-next-subsystem-after-read-stack.md` via the
+  transcript-extraction pattern: Markdown record + base JSON decision
+  block, the consultation's final-message patch applied (effective
+  JSON in Appendix A; raw patch block retained verbatim in Appendix B
+  for auditability), and an orchestrator reconciliation note appended
+  at archival grounding the record's §11 housekeeping items against
+  Continuation 15's state.
+- **Outcome: candidate A — the incremental-save writer — sliced into
+  three Passes, the first with NO editing capability.** Ranking
+  A ≫ D > B > C. Pass 3.0 = identity writer + corpus-wide round-trip
+  proof harness (the §5 invariant becomes an executable 2,892-file
+  gate BEFORE any mutation code exists; §11.4's undo obligation does
+  not bind a Pass with no mutation). Pass 3.1 = mutation writer +
+  dirty-set diff + undo/redo command log (`/Info` + `/Rotate` only;
+  key test: edit → undo → save byte-identity). Pass 3.2 = structural
+  page ops (blocked on the EMPTY Acrobat_Features RAG — a
+  `pdfce-acrobat-librarian` "Core document ops" dispatch is owed
+  before its acceptance criteria are written). Pass 4 = text
+  extraction (Backlog bucket newly CREATED — ranked second overall,
+  designated fallback track if a writer Pass hits the three-attempts
+  wall). Pass 5 = encryption (decrypt ALL handlers; encrypt-on-save
+  AES-128/256 ONLY, RC4 never written; promotion ahead of Pass 4
+  rides on the organic `/Encrypt` census run in parallel with
+  Pass 3.0; §7.6 is the largest spec gap — a full spec-librarian
+  corpus session precedes it). Pass 6+ = render remainders
+  DECOMPOSED, not one Pass (shading/transparency fold into the
+  Vector-graphics-editing bucket; Type 3 + `Tr` 4–7 and
+  `/SMask`/`/Mask` are already Pass 1.1 items 4 and 6.3). Sixteen
+  risks enumerated **W1–W16** (W2's redaction/incremental-save
+  content-leak hole and W1's per-object-vs-per-file identity
+  confusion the sharpest); standing rules **R32–R41** added to
+  `ROADMAP.md`. Filing anomaly recorded at the ROADMAP rules block:
+  the archived record's header says "Adds standing rules: R32–R40" —
+  R41 arrived via the final-message patch; the archived file is not
+  edited (append-only), a dated librarian note at the rules block
+  carries the reconciliation.
+- **ROADMAP restructured accordingly:** Pass 3.0 filed as the active
+  Next-up Pass (10 deliverables, 6 acceptance criteria, 4 binding
+  non-goals, the parallel `/Encrypt` census, the self-vs-reference
+  raster-oracle distinction, both blockers recorded — the
+  write-direction audit and the hayro-write changelog re-check);
+  Passes 3.1/3.2 queued behind it; the "Text extraction / structured
+  content" Backlog bucket created; the Encryption Backlog entry
+  updated; the Vector-graphics bucket gained the decision 007
+  fold-in note; `ARCHITECTURE.md` §12 entry appended.
+
+**Findings + decisions:**
+- **Table 12 spec gap CLOSED same day** (Pass 2.2's carried open spec
+  item; the dispatch was in flight at Continuation 15):
+  `pdfce-spec-librarian` verified Table 12 — **one key,
+  `/JBIG2Globals`**; **no code defects** in pdfce; the `jbig2.rs`
+  doc-comment paraphrase was corrected the same day, with
+  `cargo fmt --check` / `cargo check` clean. One follow-up robustness
+  question filed in ROADMAP as a Pass 2.x remainder: §7.4.7 rule 3a
+  (segment page association = 1) is should-only — `hayro-jbig2`'s
+  behavior on non-1 page association (blank-page risk) and on
+  Annex D.2 random-access input is undetermined.
+
+**Still in flight (continuation 16):**
+- **`pdfce-spec-librarian` write-direction audit DISPATCHED, in
+  flight** — Pass 3.0 blocker (a): §7.5.4/.5/.6/.8 emission
+  coverage, §7.5.8.4 hybrid write side, §14.4 `/ID` (absent from the
+  RAG).
+- Pass 3.0 blocker (b) is the engineer's designated FIRST action:
+  re-check `hayro-write`'s changelog for byte-preserving incremental
+  append (decision 001 §9 trigger 2 is live).
+- KenAgent worktree pruned after archival.
+- Pass 1.1 remainders unchanged (pixel parity, `pdfce-gui` file
+  argument, R20 diagnostics panel).
+
+**For next session / operator items still open:**
+- **Encryption-refusal sign-off (SESSION_LOG:879)** — decision 007
+  flags this as the TOP operator action: pdfce refuses encrypted PDFs
+  (`XrefErrorKind::EncryptionUnsupported`, an engineer-judgment scope
+  addition during Pass 1.1 item 1) and the operator has not yet been
+  told pdfce declines a category of file every other reader opens.
+  Surface it BEFORE the `/Encrypt` census runs.
+- License decision (`LEGAL.md` §1) — still open; gates public repo,
+  release, and distribution manifests.
+- Commit authorization — everything remains UNCOMMITTED in git.
+- Git remote / CI (decision 007 **W15**): CI has never run; whether
+  to establish a remote is the operator's call, gated on LEGAL §1.
+  Pass 3.0's round-trip gate must accordingly be runnable and green
+  LOCALLY as a hard acceptance criterion, never depending on CI for
+  its correctness claim.
+
+**Continuation 17 (2026-07-31/08-01) — Pass 3.0 SHIPPED (identity
+writer + round-trip proof harness; the §5 invariant is now an
+executable, GREEN, corpus-wide gate); `/Encrypt` census RETURNED
+(promotion trigger NOT met); Pass 3.1 engineer DISPATCHED:**
+
+**Shipped:**
+- **Pass 3.0 — identity writer + round-trip proof harness** (full
+  entry: `ROADMAP.md` Shipped, Pass 3.0; deviations:
+  `ARCHITECTURE.md` §12 continuation-17 entry). Headline numbers,
+  over 2,898 loadable of 2,914 corpus files (16 NotLoadable =
+  deliberate `*-fail-*` files): empty-dirty-set `save_incremental`
+  whole-file byte identity **2,898/2,898 = 100.00%**; append
+  identity 2,898/2,898; `save_full` per-object-definition verbatim
+  2,897/2,898 = 99.97%, the single miss a CORRECT named refusal
+  (hybrid "Isartor test suite manual.pdf" →
+  `WriteError::HybridFullRewrite`, CLI exit 8, R33/R27 posture;
+  incremental works on it via form A); raster self-oracle
+  5,783/5,783; 0 objects re-serialized under
+  `SaveOptions::identity()`; 0 panics/timeouts; W14's ~98% STOP
+  threshold never approached. Structural census byproduct: 2,410
+  classic / 487 xref-stream / 1 hybrid / 36 live-linearized.
+
+**Decisions made this session:**
+- **Blocker (b) — the engineer's designated first action — resolved
+  NEGATIVE:** `hayro-write` 0.7.0 (2026-05-27) self-describes as an
+  internal `pdf-writer` converter, ~580 LoC, no incremental append.
+  Decision 001 §9 trigger 2 does NOT fire; depend-or-contribute
+  stays closed and Pass 3.0 proceeded on pdfce's own writer.
+- **Six engineer deviations, recorded as decisions**
+  (`ARCHITECTURE.md` §12 continuation-17, items a–f):
+  `ProducerPolicy::Set` never CREATES a missing `/Info` (R41
+  anti-stamping); `save_full` carries object streams intact, zero
+  promotions (structurally avoids W3 — type-2 entries name
+  container+index, not offsets); hybrid full-rewrite refused BY
+  NAME; no predictor on emitted xref streams (§7.5.8 never mentions
+  write-side predictors — negative audit result); no wildcard match
+  arms in the writer (`#[non_exhaustive]` doesn't bind in the
+  defining crate — new variant = compile error, not silent null); a
+  NUL-bearing Name emits `#00` and fails reload deliberately
+  (§7.3.5).
+- **`ARCHITECTURE.md` §5.1–5.6 + §11.2 amendments LANDED in-Pass**
+  (deliverable 9), closing the body-section deferral carried by the
+  continuation-16 §12 entry.
+
+**Findings + decisions:**
+- **`/Encrypt` census RETURNED** (decision 007 parallel cheap task,
+  run by a parallel agent — the engineer's residual saying it "was
+  not run" is STALE): 19,940 organic PDFs scanned (20k cap hit,
+  Dropbox-dominated; read-only, aggregate counts only, nothing
+  copied — LEGAL §5). **134 = 0.67% carry `/Encrypt`**; 26 R2 /
+  30 R3 / 67 R4 / 10 R6 / 1 undetermined-R (FOPN FileOpen DRM,
+  non-Standard handler — never silently openable); **92.5% legacy
+  R≤4**; empty-vs-real user password not determinable pre-Pass-5.
+  **Promotion trigger NOT met — Pass 5 stays behind Pass 4.** Dated
+  result recorded at the Encryption Backlog entry.
+- Demo run: `round-trip` identical=1 (709 → 709 bytes);
+  append-identity `/Prev`=base-startxref, 20-byte SP-LF entries;
+  producer preserve-vs-set; hybrid refusal exit 8; linearization
+  warning. GUI launched but opened BLANK — `pdfce-gui` still lacks a
+  file argument (open Pass 1.1 remainder); rendering verified via
+  the CLI `render-page` PNG instead.
+- Gates: fmt/clippy clean; **585 workspace tests** (was 487);
+  GUI-free invariant on 3 targets; wasm32; `--duplicates` guard;
+  veraPDF §6.1.12 suite **44/44** on the new writer-side guards; all
+  8 fuzz targets build; `writer_roundtrip` fuzz campaign 661,190
+  ASan execs / 61 s, zero crashes; dependency set UNCHANGED (no
+  `cargo-about` regeneration owed).
+- **RAG escalations filed this continuation:**
+  `C:\personal_rag\pdf\lesson_20260731_span_backed_stream_derived_partialeq_cross_buffer.md`
+  (span-backed Stream derived-PartialEq trap; the
+  `equivalent_across_buffers` fix pattern),
+  `C:\personal_rag\pdf\lesson_20260731_roundtrip_verify_linear_span_reload_not_quadratic_substring.md`
+  (linear span-comparison-through-reload beats quadratic per-object
+  substring search AND is strictly stronger — proves reachability
+  via the new xref, not mere presence), and
+  `D:\dev\rag\rust\non_exhaustive_no_effect_defining_crate_wildcard_free_match.md`
+  (`#[non_exhaustive]` has no effect inside the defining crate).
+  All three indexes updated.
+
+**Still in flight (continuation 17):**
+- **Pass 3.1 (mutation writer + dirty-set diff + undo/redo command
+  log) engineer DISPATCHED — in flight, parallel with this filing.**
+  Promoted to ROADMAP In progress.
+
+**For next session / operator items still open (corrected list — the
+engineer's carried items 1 and 5 predated same-day closures: the
+census WAS run, `filter__jbig2` Table 12 CLOSED 2026-07-31, the
+`filter__dct` sourcing gap closed earlier):**
+- Pass 1.1 pdfium pixel-parity harness — still open; NOT closed by
+  Pass 3.0's self-comparison oracle (do not overclaim; the
+  raster-oracle note binds).
+- Encryption-refusal operator sign-off (SESSION_LOG:879) — still the
+  TOP operator action; now informed by the census: 0.67% of organic
+  files are affected, 92.5% of those legacy R≤4.
+- W15 — no git remote, CI never run; operator's call per LEGAL §1.
+- License decision (LEGAL §1) — still open.
+- Commit authorization — everything remains UNCOMMITTED in git.
+
+**Continuation 18 (2026-07-31) — Pass 3.1 SHIPPED (mutation writer +
+dirty-set diff + undo/redo command log; §11.1's union-bug is now an
+executable green gate); CRITICAL stale-copy correction to decision
+007 W3 / ARCHITECTURE §5.2 filed forward; Pass 3.2 promoted (blocked,
+acrobat-librarian dispatch in flight):**
+
+**Shipped:**
+- **Pass 3.1 — mutation writer + dirty-set + undo command log** (full
+  entry: `ROADMAP.md` Shipped, Pass 3.1; deviations + correction:
+  `ARCHITECTURE.md` §12 continuation-18 entry; design record: §5.7 +
+  §11.5). New surface: `EditSession` command log
+  (`crates/pdfce-core/src/edit.rs`, 1,608 lines), `writer/fileid.rs`
+  (§14.4 `/ID[1]` derivation), `DirtySet` (replacements + trailer
+  patch + `changes_content`), `save_full` now takes `&DirtySet` (one
+  writer path — `DirtySet::empty()` makes identity a strict pinned
+  subset), CLI `set-info` / `rotate-page` / `--verify-undo` / exit 9 /
+  appended `promoted=` key, GUI properties panel + rotate +
+  undo/redo + "Save a copy…", `tools/roundtrip` mutation mode, fuzz
+  edit-history extension. **Key test: edit → undo → save
+  byte-identical 2,897/2,897 (100%)** + 6 dedicated fixture tests
+  (incl. an object-stream file, a 12-command history, undo → redo →
+  save). Pass 3.0 identity gate UNPERTURBED per R34 (2,892/2,892 +
+  6/6; full-rewrite 2,891/2,892 with the same correct hybrid named
+  refusal; raster 5,783/5,783; 0 re-serialized). Mutation gate: edit
+  applied + reloaded 100%; all other objects byte-verbatim 100%.
+  52 new tests (32 core + 20 CLI) over the 585 baseline; fmt/clippy
+  clean; GUI-core separation verified; dependency set UNCHANGED;
+  nothing committed.
+
+**CRITICAL correction (prominent by design — recorded forward; the
+archived 007 decision file is NOT edited):**
+- Decision 007 W3's mitigation and `ARCHITECTURE.md` §5.2's original
+  framing claimed R35's full rewrite "closes the stale-copy path" for
+  promoted compressed objects. **FALSE — object streams carry through
+  verbatim in BOTH save modes**, so a promoted object's old value
+  survives inside its untouched container. Documented at the creating
+  code. **The Redaction Pass must rewrite/decompose every container
+  stream holding a redacted object** — R35's incremental-save refusal
+  is necessary but NOT sufficient. Filed: dated correction note at
+  `ROADMAP.md` R38; §5.2 correction footer + new §5.7 + §11.2
+  cross-ref in `ARCHITECTURE.md`; §12 continuation-18 entry.
+
+**Decisions made this session (engineer deviations 1–5, recorded as
+decisions — `ARCHITECTURE.md` §12 continuation-18, items a–e):**
+- (1) One writer path: `save_full` takes `&DirtySet`; identity is a
+  strict pinned subset via `DirtySet::empty()`.
+- (2) `/ID` never synthesised when absent, either mode (R41) — the
+  spec RAG's synthesise-on-full-rewrite recommendation DECLINED;
+  deferred to a real Save-As path.
+- (3) Rotate-to-base-value writes nothing — exact spelling restored,
+  4 quarter-turns net zero, `/Rotate 450` not normalised (R33).
+- (4) Text encoding ASCII-or-UTF-16BE+BOM only — §7.9.2/Annex D.3
+  PDFDocEncoding is a RECORDED RAG GAP; undecodable bytes → U+FFFD
+  with `exact: false` surfaced in the GUI (fuzzy-never-sneaky).
+- (5) GUI applies on button, not keystroke — one undo step per
+  operator intent.
+
+**Findings + decisions:**
+- **Fuzzer found + fixed a real bug:** object creation raised `/Size`
+  and RESURRECTED xref entries the base `/Size` was suppressing (they
+  then failed to parse). Fix: `next_object_number` allocates above
+  the UNFILTERED chain maximum (was reusing live numbers) + creation
+  refused by name when `/Size` suppresses entries
+  (`EditError::ObjectCreationWouldExposeHiddenObjects`, exit 9;
+  editing existing objects still works). Post-fix 408,886 runs / 91 s
+  zero crashes; `load_document` 681,645 / 61 s clean.
+- **R38 promotion is fixture-covered, NOT corpus-covered:** 75 corpus
+  files hold 2,197 compressed objects but page objects are
+  uncompressed in all — rotation never promotes on the corpus; the
+  harness reports both numbers so the gap stays visible.
+- **RAG escalations filed this continuation:**
+  `C:\personal_rag\pdf\lesson_20260731_xref_size_suppresses_trailing_entries_raising_resurrects.md`
+  (under-reported `/Size` is a live real-world shape: entries beyond
+  `/Size` must stay hidden; raising `/Size` resurrects them — the
+  fuzz find). `D:\dev\rag\rust\cargo_fuzz_windows_msvc_asan_dll_path.md`
+  CONFIRMED still accurate (already names
+  `clang_rt.asan_dynamic-x86_64.dll` + the PATH fix; `last_verified`
+  bumped, no duplicate written). Indexes updated.
+
+**Still in flight (continuation 18):**
+- **UI follow-up items handed to `pdfce-ui-specialist` — review in
+  flight, parallel with this filing.**
+- **Pass 3.2 promoted to In progress but BLOCKED:
+  `pdfce-acrobat-librarian` dispatched for the "Core document ops"
+  bucket — in flight, parallel.** Engineer not yet dispatched;
+  acceptance criteria wait for the bucket.
+
+**For next session / operator items still open (unchanged from
+continuation 17 except as noted):**
+- Pass 1.1 pdfium pixel-parity harness — still open.
+- Encryption-refusal operator sign-off (SESSION_LOG:879) — still the
+  TOP operator action.
+- W15 — no git remote, CI never run; operator's call per LEGAL §1.
+- License decision (LEGAL §1) — still open.
+- Commit authorization — everything remains UNCOMMITTED in git
+  (Pass 3.1 included).
+
+**Continuation 19 (2026-07-31) — Pass 3.2 SHIPPED (structural page
+operations — the first operator-visible editing feature: seven ops,
+real free-list deletion, DocMDP-grounded signature awareness); the
+R36 rule-number collision reconciled (§5.4's rule is now R42); the
+Tools-dock/toolbar-cap UI conventions adopted as standing decisions;
+Pass 4 (text extraction) promoted, spec sourcing in flight:**
+
+**Shipped:**
+- **Pass 3.2 — structural page operations** (full entry:
+  `ROADMAP.md` Shipped, Pass 3.2; decisions + deviations:
+  `ARCHITECTURE.md` §12 continuation-19 entry; implemented against
+  `docs/ui_specs/pass-3.2-page-ops.md` + the acrobat-librarian
+  "Core document ops" bucket). New pdfce-core surface: `graph.rs`
+  (`ObjectGraph` — ONE page-tree walk over the loaded file OR the
+  `EditSession` overlay; `edit.rs`'s Pass-3.1 comment predicted the
+  need), `signature.rs` (810 lines), `pageops/` (2,833),
+  `tests/page_ops.rs` (967). Seven ops, two shapes: in-place
+  `EditSession` commands `delete_pages`/`reorder_pages`/
+  `rotate_pages` (one undo entry each); producers
+  `extract`/`merge`/`split`/`insert` via one shared `assemble()`
+  (new documents, no undo). W9 deletion: `DirtySet::delete` +
+  `apply_free_list` (type-0, gen+1 saturating 65,535,
+  front-spliced; pre-existing detached free entries untouched per
+  R33; two-closure sweep proves shared objects never freed).
+  **769 workspace tests (was 707).**
+
+**Decisions made this session (`ARCHITECTURE.md` §12
+continuation-19):**
+- **UI-surface conventions adopted as standing decisions** (from the
+  ui-specialist spec §1–2): the Tools dock is pdfce's ONE "more
+  tools" secondary surface (future buckets become dock entries,
+  never new floating windows; Properties stays the single legacy
+  exception); the toolbar is CAPPED at 6 groups + the Tools toggle;
+  rail-vs-dock rule — pages-in-the-open-document arguments live on
+  the thumbnail rail, outside-the-document arguments live in the
+  Tools dock.
+- **R36 collision reconciled (the UI spec's flagged record
+  defect):** `ARCHITECTURE.md` §5.4's linearization-never-repaired
+  rule is now **R42** (dated note in `ROADMAP.md` Standing rules);
+  decision 007's R36 (save-mode disclosure / signature either-or)
+  keeps the number — code comments stay as-is; §5.4's citation
+  corrected. No rule content changed, numbering only.
+- **`SignatureImpact::ByteRangePreserved`** — renamed from the
+  spec's `PreservedIncremental` per the mid-Pass DocMDP relay
+  (§12.8.1 NOTE 1 preserves the byte range; DocMDP validity is a
+  separate verdict). Classification via `/Reference` →
+  `/TransformMethod` (`/DocMDP` never `/Perms`; `/P` defaults 2);
+  `/Perms`→`/DocMDP` with forbidding `/P` ⇒
+  `EditError::CertificationForbidsChange` NAMED refusal (Table
+  258); `/FieldMDP` recognized. Spec closure:
+  `PDF_Spec\iso32000__s__12.8.md` now 689 lines (a/b/c verdicts +
+  the ByteRangePreserved-never-reported-alone rule).
+- **Carryover policy table** (documented + cited in `pageops/`):
+  outlines subset+repoint / per-source-top-level merge /
+  target-only insert; `/Dests` never carried, carried bookmarks
+  rewritten explicit; `/PageLabels` stale-for-insert + named
+  diagnostic, dropped-for-subsets; `/StructTreeRoot` dropped +
+  counted; form fields `Doc<N>_` auto-rename, straddling fields
+  dropped whole + counted; barrier hits counted.
+- **Engineer deviations from the UI spec (recorded):** insert is a
+  producer, not an `EditSession` command (overlay insert needs
+  per-object source buffers + an overlay-aware renderer — GUI
+  Insert deferred, the dock names the CLI command); rail checkbox =
+  one interaction + position test; `egui::Window` not `egui::Modal`
+  (the spec's named fallback); `signature_impact_of_save(mode)`
+  takes the mode; split's file-size criterion deferred + named.
+- **Spec priority ledger:** P0 ALL shipped (incl. the REAL
+  SignatureImpact API, not the fallback, and the dangling-reference
+  count shipping WITH Delete); P1 signature API + dangling count
+  shipped, GUI Insert deferred; P2 Merge GUI SHIPPED, Split GUI
+  deferred (CLI complete).
+- **Carried small items applied:** Apply/Revert grey-out, per-field
+  lossy marking, command-named undo tooltips, **GUI file argument —
+  the Pass 1.1 remainder is CLOSED**, rotate shortcut `[`/`]`.
+
+**Findings + decisions:**
+- **Two real bugs caught by this Pass's own tests:** (1) reorder
+  lost inherited rotation — `materialize_for` was one-directional;
+  `preserve_inherited` now writes §7.7.3.4's DEFAULT when the new
+  parent chain supplies a value the old chain didn't (the
+  silent-rotation bug class); (2) extract left `/Dest [null /Fit]`
+  — the reference barrier now propagates through WHOLE destination
+  arrays, dropping + counting the composite.
+- **Gates:** fmt/clippy clean; 3.0/3.1 gates UNMOVED per R34
+  (identity 2,892/2,892; full-rewrite 2,891/2,892 with the same
+  correct hybrid refusal; edit → undo → save 2,891/2,891; raster
+  5,771/5,771); corpus page-op sweep 2,892 extract-ok + 23/23
+  delete-ok, 0 failures; §6.1.12 40 files clean, guard headroom
+  MEASURED (outlines 10 vs 200k, dests 62 vs 100k, depth 3 vs 64,
+  pages 10k vs 1M); fuzz `pageops_sequence` 130,400/61 s zero
+  crashes + `writer_roundtrip` re-run clean; GUI-free both targets;
+  wasm32 + aarch64 clean; `--duplicates` + R24 clean;
+  **`ui-strings` R1 gate clean for the FIRST time** (3 pre-existing
+  false positives fixed — more evidence CI has never run, W15). No
+  new dependencies. GUI launched PID 23332 (via the new file
+  argument); CLI demo split-by-bookmark → reverse-merge → render.
+- **RAG escalations filed this continuation:**
+  `C:\personal_rag\pdf\lesson_20260731_inherited_page_attr_move_writes_default_direction_trap.md`
+  (bidirectional inherited-attribute materialization — write the
+  spec default when the NEW chain supplies a value the old didn't)
+  and
+  `C:\personal_rag\pdf\lesson_20260731_dest_array_null_element_barrier_whole_array.md`
+  (reference barriers must treat destination arrays as semantic
+  units — never emit `[null /Fit]`). Subject + master indexes
+  updated.
+
+**Still in flight (continuation 19):**
+- **Pass 4 (text extraction / structured content) promoted to In
+  progress; engineer not yet dispatched;
+  `pdfce-spec-librarian` §9.10 sourcing dispatch IN FLIGHT**
+  (parallel with this filing) — `ToUnicode` CMaps, `/ActualText`,
+  reading order.
+
+**For next session / operator items still open:**
+- `/Info` edits not certification-gated (`/P 1` strict reading —
+  owed decision, recorded at `check_certification`).
+- `PermissionGate::NotApplicableYet` — awaits Pass 5.
+- Delete corpus coverage thin (23 multi-page files) — fixtures +
+  fuzz carry it; re-measure on an organic corpus.
+- `qpdf` not on PATH — R40's external oracle unused; an
+  operator-installable improvement.
+- Pass 1.1 pdfium pixel-parity harness — still open (GUI file
+  argument is now closed; the harness is the main Pass 1.1
+  remainder).
+- Encryption-refusal operator sign-off (SESSION_LOG:879) — still
+  the TOP operator action.
+- W15 — no git remote, CI never run (the `ui-strings` false
+  positives sat undetected until this Pass); operator's call per
+  LEGAL §1.
+- License decision (LEGAL §1) — still open.
+- Commit authorization — everything remains UNCOMMITTED in git
+  (Pass 3.2 included).
+
+**Continuation 20 (2026-08-01) — Pass 4 SHIPPED (text extraction /
+structured content: the §9.10.2 ladder verbatim, sourced total
+99.78%, plain/sourced dual API); the placement taxonomy extended
+three-way; a real pre-existing Ctrl+S GUI bug found and fixed; Pass 5
+(encryption) promoted, §7.6 spec corpus session dispatched:**
+
+**Shipped:**
+- **Pass 4 — text extraction / structured content** (full entry:
+  `ROADMAP.md` Shipped, Pass 4; decisions: `ARCHITECTURE.md` §12
+  continuation-20 entry; implemented against the returned
+  `pdfce-spec-librarian` §9.10 corpus + the ui-specialist spec
+  `docs/ui_specs/pass-4-text-extraction.md`, 573 lines). 5,469 new
+  `pdfce-core` lines: `textstring.rs` (§7.9.2 + Annex D.3
+  PDFDocEncoding built from the annex's FOUR STRUCTURAL RULES, not
+  256 transcribed rows — 4 source-table typos caught: 0xA0 = EURO,
+  0xAD undefined, 0x18–0x1F modifier letters; 232 defined
+  cross-checked vs D.2's 229 + 3);
+  `text_extract/{cmap,font,page,layout,mod}.rs` — §9.10.3 ToUnicode
+  parser, the §9.10.2 ladder VERBATIM with rung 3 structural+named
+  (`Rung3Gap::{IdentityNoToUnicode, Ucs2NotBundled,
+  PredefinedCmapNotBundled}` — never silently skipped), derived
+  layout isolated in `layout.rs`. API: `ExtractedText` with
+  `plain_text()` vs `sourced_text()` (the Drucker `/ActualText`
+  example verifies both directions: sourced "Drucker", plain
+  "Druc\nker" with one labelled derived break). **875 workspace
+  tests (was 769).**
+
+**Decisions made this session (`ARCHITECTURE.md` §12
+continuation-20):**
+- **(a) Confirmation-dialog convention → standing pattern** (two
+  independent uses: Pass 3.2 signature confirmation + Pass 4
+  pre-copy reliability gate): one centre-anchored, one-question,
+  input-blocking window; the gate lives in the action dispatcher,
+  not the window code.
+- **(b) Placement taxonomy is now THREE-way** — rail
+  (pages-in-document) / Tools dock (outside-the-document files) /
+  toolbar-menu snapshot actions (copy-text, the first instance) — a
+  dated EXTENSION of the Pass 3.2 rail-vs-dock convention (that
+  record stands; forward pointer appended in §12). Copy-text is
+  deliberately NOT a Tools-dock entry.
+- **(c) `plain_text()`/`sourced_text()` dual API adopted as THE
+  fuzzy-never-sneaky pattern for all extraction-like features** (OCR
+  next): sourced characters and derived judgments are separate API
+  surfaces, every derived insertion labelled.
+- **Two additive counted deviations:** per-code fallthrough (§9.10.3
+  NOTE 4 — unsourced universal practice) + glyph-name extension for
+  fonts failing method 2's whole-array precondition;
+  `FontNote::BuiltinEncodingUnreadable` names the one R21-unreachable
+  case (embedded symbolic built-in encoding → StandardEncoding
+  fallback — counted as extension, never sourced).
+- **Bidi deferred-not-half-done:** RTL detected + counted;
+  `unicode-bidi` NOT added (B1–B3 make reordering wholly derived).
+- **Extraction diagnostics are a snapshot surface**, separate from
+  the per-frame render header (merging would lie on navigation);
+  pre-copy gate fires on `identity_fonts_without_to_unicode > 0 ||
+  sourced < 50%` (deliberately not a low threshold).
+
+**Findings + decisions:**
+- **Measurements (2,907 files, 281,516 codes, 0 panics/timeouts):**
+  rung 1 78,101 (27.74%); rung 2 202,793 (72.04%); rung 3 ZERO;
+  extension 39 (0.01% — almost all the deliberately non-conforming
+  Isartor 6-3-7 encodings file); failed 583 (0.21%); **SOURCED TOTAL
+  99.78%**. Derived: 752 spaces, 1,905 line breaks.
+- **Real pre-existing GUI bug found by the ui-specialist's
+  verification and FIXED:** Ctrl+S fired through a live signature
+  confirmation (doc comment claimed a guard that didn't exist;
+  Pass 4's second centre-anchored window made it collidable) —
+  one-question gate now at the top of `apply()`, doc comments
+  corrected; `status_is_open()` now requires a page (`/Count 0`
+  nit).
+- **Gates:** fmt/clippy clean; **875 tests**; GUI-free both targets;
+  wasm32/`--duplicates`/R24/`no-network`/`ui-strings` clean; Pass
+  3.x gates UNMOVED; §6.1.12 44/44 with measured headroom (1,674
+  CMap singles vs 500k, 2,044 ranges vs 100k); fuzz `text_extract`
+  50,215 / 61 s zero crashes, 10 targets build; NO new deps;
+  `cargo-about` byte-identical. Demo: CLI `hello.pdf` + CID fixtures
+  both directions; GUI relaunched (PID 41588); 20-page tagged manual
+  34,037 codes 100% sourced in 66 ms (the specialist's
+  background-extraction concern measured-and-unneeded).
+- **RAG escalations filed this continuation:**
+  `C:\personal_rag\pdf\lesson_20260801_character_table_from_structural_rules_not_transcription.md`
+  (build character tables from a source's structural rules, not
+  row-by-row transcription, when the source table has known typos —
+  the Annex D.3 pattern; the construction caught 4 typos);
+  `C:\personal_rag\pdf\lesson_20260801_actualtext_no_per_glyph_offset_correspondence.md`
+  (an `/ActualText` run has NO per-glyph offset correspondence — the
+  API must model sourced text as run-level, the Drucker trap);
+  `D:\dev\rag\egui\egui_0.35_two_center_anchored_windows_pending_state_gate_dispatcher.md`
+  (two centre-anchored modal-ish windows collide silently in
+  immediate mode — pending-state gates must live in the action
+  dispatcher, not the window code; the Ctrl+S bug class — filed at
+  the egui tier because it is immediate-mode-GUI-generic, not
+  PDF-domain). Subject + master + egui indexes updated.
+
+**Still in flight (continuation 20):**
+- **Pass 5 (encryption) promoted to In progress — by decision-007
+  SEQUENCE, not promotion** (the census result stands recorded at
+  the Encryption Backlog entry: 0.67% `/Encrypt`, 92.5% legacy R≤4,
+  trigger NOT met). **Engineer not yet dispatched;
+  `pdfce-spec-librarian` §7.6 spec-corpus session DISPATCHED**
+  (parallel with this filing) — §7.6 is the largest spec gap across
+  all decision-007 candidates.
+
+**For next session / operator items still open:**
+- Pass 4 residuals (all named in the Shipped entry): bidi reordering;
+  `/Alt`//`/E` counted-not-substituted; nested `/ActualText`
+  outermost-wins; artifacts excluded-by-policy but present in runs;
+  structure-tree order recognition-only; axis-aligned derived-layout
+  assumption (rotated text over-produces line breaks); canvas
+  text-selection deferred with its spec written (no core addition
+  needed — `ExtractedGlyph` carries per-glyph `LadderRung` +
+  geometry).
+- `/Info` edits not certification-gated (`/P 1` strict reading) —
+  still owed.
+- Delete corpus coverage thin; `qpdf` not on PATH (R40 oracle);
+  Pass 1.1 pdfium pixel-parity harness — all still open.
+- Encryption-refusal operator sign-off — still the TOP operator
+  action, now directly on Pass 5's path.
+- W15 (no remote/CI), license decision, commit authorization —
+  everything remains UNCOMMITTED in git (Pass 4 included).
+
+**Addendum to Continuation 20 (2026-08-01, recorded per the
+append-only rule):** two facts from the Pass 4 filing brief that the
+entry above omits.
+(1) **The decision-007 read→write→edit→extract stack is COMPLETE with
+Pass 4** — Pass 4 was the last member of the 007 ranked sequence
+except Pass 5 (encryption), which the `/Encrypt` census left
+untriggered (0.67%) and which now proceeds in sequence order (see
+Still in flight, above, and the `ROADMAP.md` In progress entry).
+(2) **Decision 008 — the next subsystem AFTER the 007 sequence — is
+in consultation via KenAgent (autonomous-builder), dispatched at
+Pass 4's ship, in flight parallel with this filing.** Its result
+files as `docs/decisions/008-*.md` per the KenAgent decision-routing
+standing rule (2026-07-30) and will govern what follows Pass 5. A
+dated librarian note carrying both facts is also at the `ROADMAP.md`
+In progress (Pass 5) entry.
+
+**Continuation 21 (2026-08-01) — Decision 008 CONSULTED and ARCHIVED;
+next subsystem = Annotations & markup, sliced; Pass 5 repositioned;
+R43–R52 added:**
+
+**Decisions made this session (`ARCHITECTURE.md` §12
+continuation-21; full record
+`docs/decisions/008-next-subsystem-after-extract.md`, archived in
+parallel by another agent):**
+- **Decision 008 outcome:** after the decision-007
+  read→write→edit→extract stack, the next subsystem is **Annotations &
+  markup (candidate A)**, SLICED. Ranking across candidates
+  **A ≫ B > C > E > D > F** (A = Annotations & markup,
+  B = Forms/AcroForm, C = Redaction, E = Vector/Inkscape-parity,
+  D = Text-&-object editing, F = Signatures/PAdES).
+- **The slice / new sequence** (recorded in `ROADMAP.md` "Next up →
+  Decision 008 sequence"): **Pass 6.0** — annotation & widget
+  appearance rendering (read-side), now IN PROGRESS; **Pass 6.1** —
+  authored streams + the project's first content-stream serializer +
+  geometric markup authoring (Ink/Square/Circle/Line/Polygon/
+  quad-point); **Pass 6.2** — text-bearing annotations + §12.7.3.3
+  variable text (no `harfrust` per R17; Base-14 + embedded widget
+  widths); **Pass 7** — Forms/AcroForm (B, second overall; display
+  half IS 6.0, appearance half IS 6.2; embedded-JS posture is an
+  explicit security decision — recommend never-execute); **Pass 8** —
+  Redaction (C; content-stream surgery + container decomposition per
+  §5.7; `/Redact` mark consumes 6.1; promotion trigger = a real
+  operator redaction need); **Pass 9+** — Vector/Inkscape parity (E,
+  sliced a–g; foundation is 6.1 so it can promote right after 6.1);
+  **then Pass 5** — Encryption (fallback/interleave track, retains its
+  007 ID); **Pass 10** — Signatures/PAdES (F, last; read half already
+  far along).
+- **Standing rules R43–R52 added** (`ROADMAP.md` Standing rules):
+  R43 render-from-`/AP`-or-not-at-all (display sibling of R29);
+  R44 generated appearances written to the file, never rendered from a
+  private buffer; R45 authored bytes in a session staging buffer,
+  `Stream` keeps its span model, the `DocumentView` assertion
+  discharged by amending the type; R46 content-stream serializer proven
+  by a corpus identity gate before it authors; R47 an annotation edit
+  never touches the page content stream; R48 flatten is destructive and
+  discloses incremental-save recoverability (R35 sibling); R49 a widget
+  is an annotation first (one appearance pipeline); R50 hidden
+  annotations honored AND counted (forensics); R51 `/NeedAppearances`
+  disclosed, never silent auto-generate; R52 redaction mark and apply
+  are separate operations with separate confirmations.
+
+**Findings + decisions:**
+- **Census (read-only, pypdf, aggregates only, LEGAL §5 posture):**
+  conformance corpus **338/2,914 files (11.6%)** have annotations,
+  228 with `/AP`, 127 `/AcroForm`, 4 `/XFA`; organic sample
+  **2,500/25,203 Dropbox files** — 814 (32.6%) annotations, **753
+  (30.1%) `/AcroForm`**, 43,508/55,545 annots have `/AP` (78.3%),
+  `/Widget` 87.8% of annots, `/Tx` 99.8% of 47,868 fields, `/SigFlags`
+  16 (0.64%), `/XFA` 2 (0.08%). **Per-file figures robust; the
+  per-annotation figures are concentration-skewed and MUST be
+  re-measured with pdfce's own tooling before any becomes a gate
+  denominator** (decision 008 caveat W16). 0.64% `/SigFlags` recorded
+  against the Signatures Backlog bucket; 0.08% `/XFA` recorded against
+  the XFA bucket AND the standing `CLAUDE.md` "verify XFA status" open
+  item — this answers the DEMAND half only; Adobe's XFA
+  deprecation/support status is still unverified and NOT closed.
+- **Structural finding F1 — pdfce renders NO annotations and does not
+  even COUNT them: an UNDISCLOSED shortfall, unique in the project.**
+  Every other unsupported item is R20/R27-counted; annotations are the
+  one gap filed nowhere and reported to no operator. A new "Annotation
+  display (read-side)" Backlog bucket was created for it (exactly as
+  text extraction was unfiled pre-decision-007). R50 is the fix (honor
+  AND count). F2: the §8.10.1 form-XObject execution path already
+  shipped in Pass 1.1 and an `/AP` `/N` IS a form XObject — 6.0's
+  rendering primitive already exists. F3: there is no content-stream
+  writer yet and `Stream` cannot hold authored bytes (Pass 6.1 builds
+  the first one). F4: the pageops/assemble staging-buffer pattern is
+  the model for authored bytes, and `DocumentView`'s written assertion
+  "a Pass that authors stream bytes must revisit this type" is
+  discharged in 6.1 by deliberately amending the type (R45).
+- **Pass-5-repositioning correction (append-only):** continuation 20
+  promoted Pass 5 (Encryption) to In progress "by the decision-007
+  SEQUENCE." Decision 008 supersedes that sequencing — the next
+  subsystem is Annotations, not Encryption. **Pass 5 keeps its 007 ID,
+  is NOT next, and moves to the fallback/interleave track after
+  Pass 7.** Scope and the 0.67% `/Encrypt` census unchanged. A dated
+  append-only correction note is at the `ROADMAP.md` In-progress
+  (Pass 6.0) entry; the Pass 4 Shipped entry was NOT rewritten.
+- **Two §4 staleness items logged as OWED (not fixed):** (1)
+  `ARCHITECTURE.md` §4 still describes the Pass-0 header-probe state —
+  decisions 001/004/005 owe their §4 core-data-model integration; (2)
+  a consolidation session is owed to bring §4 up to Passes-1–5 reality
+  BEFORE the annotation data model is documented there.
+
+**Still in flight (continuation 21) — blocking dispatches:**
+- **`pdfce-spec-librarian` §12.5 (Annotations) corpus session** —
+  Pass 6.0 is blocked on it; IN FLIGHT; the engineer is NOT yet
+  dispatched.
+- **`pdfce-acrobat-librarian` "Comments & markup" bucket** —
+  dispatched to ground Pass 6.1's acceptance criteria; IN FLIGHT.
+- **Decision-008 record archival** to
+  `docs/decisions/008-next-subsystem-after-extract.md` — another agent,
+  IN FLIGHT (parallel with this filing).
+- **Pass 9+ (Vector) needs an UNOWNED Inkscape capability catalog** —
+  FLAGGED: no librarian owns an Inkscape feature-parity RAG today; one
+  must be commissioned before 9+ is scoped into real Passes.
+
+**For next session / STILL-OPEN operator items (ordered by age):**
+- **Encryption-refusal operator sign-off** — now the OLDEST owed
+  operator item, flagged by decision 008 as overdue. (Pass 5 has moved
+  behind Pass 7, so the sign-off is no longer on the immediate build
+  path, but it remains unresolved and is the longest-standing open
+  operator action.)
+- **License decision (`LEGAL.md` §1)** — still undecided; gates the
+  public repo/release, the distribution-channel work, and whether
+  copyleft prior art is ever usable.
+- **Commit authorization** — everything remains UNCOMMITTED in git;
+  Passes 0–4 (~20k+ lines) are all uncommitted, awaiting the operator's
+  go-ahead (tied to the license decision).
+- **W15 — no remote/CI** — CI has never run; the operator's call per
+  `LEGAL.md` §1.
+- Carried Pass-4 residuals and the `/Info`-not-certification-gated
+  item remain open (see continuation 20).
+
+**Continuation 22 (2026-08-01) — §7.6 encryption spec-corpus session
+COMPLETE; Pass 5 spec-unblocked (still queue-deferred behind Pass 7);
+`/R 6` sourcing gap found; two operator decisions raised:**
+
+*(Spec-corpus filing, NOT a Pass ship. Append-only. A pre-compaction
+dispatch that just returned.)*
+
+**Shipped:**
+- Nothing code-wise. This entry records the return of the
+  `pdfce-spec-librarian` §7.6 corpus session dispatched at Pass 4's
+  ship (continuation 20) and two operator decisions it surfaced.
+
+**Findings + decisions:**
+- **§7.6 encryption spec-corpus COMPLETE** (`pdfce-spec-librarian`, at
+  `D:\Dev\Rag-Specialized\PDF_Spec\`): **7 new + 2 updated files** —
+  `iso32000__s__7.6.1`–`7.6.5.md`; new `security__aes256_r5_r6.md`
+  under a new `security__` prefix; `iso32000__ref__encryption_impl.md`
+  (derived implementation checklist); `filter__crypt.md` de-stubbed;
+  the Adobe ExtensionLevel 3 supplement staged. **This CLOSES the
+  §7.6-largest-spec-gap prerequisite** that both decision 007 and
+  decision 008 named as the blocker before Pass 5. **Pass 5 is no
+  longer spec-blocked** — it remains **queue-deferred behind Pass 7**
+  as the fallback/interleave track per decision 008 (only the spec
+  prerequisite closed; queue position unchanged).
+- **Finding that changes the Pass 5 plan (recorded, dated, at the
+  ROADMAP Encryption Backlog bucket):** ISO 32000-1 contains **NO
+  AES-256** — AESV3/AESV5, revisions R5/R6, SHA-256, Algorithms
+  1.A/2.A/2.B and 8–13, and the `/OE` `/UE` `/Perms` `/Encrypt` entries
+  are ALL sourced from **Adobe's ExtensionLevel 3 supplement**, not the
+  base ISO standard. **`/R 6` — the AES-256 revision Acrobat X+ actually
+  WRITES — could NOT be sourced** (ISO 32000-2 paywalled; no public
+  ExtensionLevel 8 locatable; pdfa.org 403). The spec-librarian
+  **correctly REFUSED to reconstruct Algorithm 2.B from memory** — the
+  same no-fabrication discipline as the retracted URW claim.
+- **Consequence for decision 007's "encrypt-on-save AES-128/256 only":**
+  AES-256 is buildable **only at `/R 5`** (published weaknesses) today;
+  `/R 6` cannot be implemented from sourced material. **Three honest
+  options, a Pass-5 OPEN SUB-DECISION to settle BEFORE Pass 5 is scoped
+  (a future KenAgent decision when Pass 5 activates):** (i) close the
+  `/R 6` sourcing gap first; (ii) ship **AES-128 (`/V 4` AESV2) as the
+  only write target**; (iii) **decrypt-only for AES-256** (never write
+  it).
+
+**Two OPERATOR decisions added to the standing operator-items list
+(Ken's calls — cannot be resolved autonomously):**
+1. **LEGAL.md §2 contradiction (do NOT edit LEGAL.md — flagged for
+   Ken):** LEGAL.md §2 lists Adobe Supplements as freely publishable,
+   but the ExtensionLevel 3 supplement's own copyright page says "no
+   part … may be reproduced, stored … or transmitted" (a Technical Note
+   #5004 posture, NOT the ISO 32000-1 posture). The spec-librarian
+   applied the conservative reading (`license_basis:
+   free_secondary_paraphrase` — paraphrase only, no bulk quotation) and
+   flagged it in the RAG index's licensing table. Ken must confirm or
+   override the LEGAL.md §2 wording.
+2. **`/R 6` sourcing method:** closing the `/R 6` gap via
+   cross-implementation triangulation (deriving Algorithm 2.B from ≥3
+   permissively-licensed impls — qpdf / PDFBox / pdf.js) is permitted by
+   the RAG's licensing rules but would be the FIRST time this corpus
+   sources a NORMATIVE algorithm from code rather than a document.
+   Alternative: Ken provides a purchased ISO 32000-2 copy. Ken's call.
+
+**Still in flight (continuation 22):**
+- **Pass 5 (Encryption)** — spec-unblocked, queue-deferred behind
+  Pass 7 (decision 008). Engineer not dispatched; the two operator
+  decisions above and the `/R 6` open sub-decision gate the Pass-5
+  scoping when it activates.
+- **Pass 6.0** and the decision-008 dispatches from continuation 21
+  (`pdfce-spec-librarian` §12.5; `pdfce-acrobat-librarian` "Comments &
+  markup"; decision-008 archival) — unchanged, see continuation 21.
+
+**For next session / STILL-OPEN operator items (ordered by age —
+oldest first):**
+- **Encryption-refusal operator sign-off** — STILL the oldest owed
+  operator item (unchanged). Now doubly relevant: the §7.6 corpus that
+  would let Pass 5 replace the up-front refusal is complete, but Pass 5
+  itself stays behind Pass 7.
+- **NEW — LEGAL.md §2 Adobe-supplement copyright contradiction** (see
+  operator decision 1 above): confirm/override the "Adobe Supplements
+  freely publishable" wording against the ExtensionLevel 3 supplement's
+  own restrictive copyright page. Flagged for Ken; LEGAL.md NOT edited.
+- **NEW — `/R 6` sourcing method** (see operator decision 2 above):
+  cross-implementation triangulation vs a purchased ISO 32000-2 copy.
+- **License decision (`LEGAL.md` §1)** — still undecided (unchanged).
+- **Commit authorization** — everything remains UNCOMMITTED in git
+  (unchanged).
+- **W15 — no remote/CI** — unchanged.
+- Carried Pass-4 residuals and the `/Info`-not-certification-gated
+  item remain open (see continuation 20).
+
+**Same-day continuation 23 — Pass 6.0 SHIPPED (annotation & widget
+appearance rendering, read-side):**
+
+**Shipped:**
+- **Pass 6.0 — Annotation & widget appearance rendering (read-side).**
+  Moved to `ROADMAP.md` Shipped (full record there; top of Shipped,
+  above Pass 4). The read-side display half of decision 008's
+  Annotations & markup subsystem (candidate A). **ZERO authoring —
+  R43 honored throughout:** pdfce paints an existing `/AP` `/N` or
+  counts-by-name, and never synthesizes an appearance. Direct remedy
+  for decision 008 finding **F1** (annotations were the project's one
+  UNDISCLOSED, uncounted shortfall — every other unsupported item was
+  already R20/R27-counted). **F2 confirmed in code:** an `/AP` `/N` IS
+  a form XObject, so §12.5.5 placement routes through the EXISTING
+  Pass 1.1 `interpret::run_form_at` → `do_form` path — X8 resource
+  scoping, cycle guard, `MAX_XOBJECT_DEPTH`, and the per-form font
+  cache all inherited unchanged, pinned by
+  `appearance_uses_its_own_resources_not_the_page_font`.
+- New surface: `pdfce-core` `annot.rs` (§12.5 walk/model/select,
+  `AnnotFlags` §12.5.3 — `/Hidden`/`/NoView`/`/Print`/`/NoZoom`/
+  `/NoRotate` each honored + counted per R50 — the `/AP`→`/N` + `/AS`
+  `Appearance` taxonomy, and the document-scoped `need_appearances`
+  query per R51); `pdfce-render` `annot.rs`; new public API
+  `RenderOptions.annotations` + `RenderOptions::with_annotations`;
+  Diagnostics +8 appended keys; CLI `render-page --no-annotations` +
+  new `list-annotations` subcommand; GUI toolbar visibility toggle +
+  status-bar disclosure line; `tools/corpus-report` census +
+  `tools/gen-annot-fixtures.py` + `fixtures/synthetic/annot/PROVENANCE.md`
+  (16 fixtures) + `tools/annot-pdfium-diff.py`; fuzz target 11
+  `annot_walk.rs` (1.1M runs / 46 s, 0 crashes — cyclic `/AP`,
+  degenerate/inverted `/Rect`, missing `/AS` state, `/N` neither stream
+  nor dict).
+
+**Findings + decisions:**
+- **Census baseline PINNED (pdfce-native; replaces decision 008's
+  pypdf conformance figures per W16 — now DISCHARGED for the
+  conformance corpus):** 2,914 files, **ZERO panics** — **338 with
+  annotations / 429 annotations total / 224 USABLE `/AP` `/N` / 127
+  `/AcroForm` / 34 `/Popup` / 87 `/Widget`.** The per-file 338 and 127
+  match pypdf exactly (tooling agreement). **The 224-vs-228 (pypdf)
+  `/AP` gap is DEFINITIONAL, not an error** — pdfce counts a *usable*
+  `/AP` `/N` (resolvable stream / selectable `/AS` state), pypdf counts
+  raw `/AP`-key presence; the 4-file difference = ~2 `/AS`-unresolved
+  state subdicts + ~2 absent/dangling/non-stream `/N`. pdfce's
+  predicate is deliberately stronger. Recorded as a `personal_rag/pdf`
+  finding (see RAG escalations).
+- **Placement correctness (X2), NOT a pixel-parity close:**
+  `tools/annot-pdfium-diff.py` (pypdfium2, decision 006 §3.2
+  precedent) — 7/7 pure-geometry placement fixtures agree with pdfium
+  within 4 px, 0 mismatches (identity, non-origin BBox, BBox-larger,
+  BBox-smaller, Matrix-scale, Matrix-rotate, inverted `/Rect`); 6
+  blank-expected cases (hidden/noview/popup/no-AP/state-missing/
+  degenerate) correctly blank. **The engineer explicitly does NOT claim
+  the Pass 1.1 pixel-parity remainder is closed** — this is an ink-bbox
+  differential on the annotation subset only; full-page pixel parity
+  over real corpus pages stays OWED.
+- **Four deviations, recorded as decisions** (`ARCHITECTURE.md` §12
+  continuation-23, item (c)): (1) `/NoZoom`/`/NoRotate` post-AA
+  transform DEFERRED (counted + named; rare, near-exclusively on icon
+  subtypes lacking `/AP` anyway; a wrong post-transform is worse than a
+  disclosed omission); (2) `/OC` optional-content visibility test not
+  implemented (consistent with NO optional content anywhere — BDC/EMC
+  deferred, §8.11 a RAG GAP; an OC-off annotation currently paints,
+  named); (3) `need_appearances_documents` is a document-scoped query,
+  not folded into per-page `Diagnostics`; (4) GUI diagnostics are a
+  separate always-evaluated status line below the content-diagnostics
+  header, not folded into the content unsupported-tally (avoids
+  destabilizing the tested content clean-return path; still honest
+  R50/R27/R51; flagged for future ui-specialist refinement).
+- **Durable FIVE-way GUI placement taxonomy** (ui-specialist
+  deliverable — resolves the X14 drift; `ARCHITECTURE.md` §12
+  continuation-23 (b); supersedes/extends the continuation-20 three-way
+  taxonomy): view-state → toolbar view group; edit → toolbar/window;
+  selection-scoped → rail; advanced → Tools dock; disclosure → status
+  bar. THE settled convention for all future GUI placement.
+- **Demand signals for 6.1/6.2/7:** the `annotations_without_ap`
+  by-subtype histogram is corpus-dominated by no-`/AP` `/Link`,
+  `/Widget`, `/Circle`; `/NoZoom`-`/NoRotate` and `/OC` are the two
+  named display deferrals.
+
+**Gates:**
+- **901 workspace tests green (was 875)**; `cargo fmt --check` /
+  `clippy -D warnings` clean; GUI-free invariant verified host +
+  `x86_64-pc-windows-msvc`; wasm32; `--duplicates`; `ui-strings`;
+  `no-network` all clean.
+- **R34 holds STRUCTURALLY** — no pinned reference raster exists; the
+  round-trip oracle is a runtime self-comparison, so painting
+  annotations perturbs nothing the Pass 3.x/4 gates measure.
+- **veraPDF §6.1.12:** new `MAX_ANNOTS_PER_PAGE = 1_000_000` (pure
+  memory backstop — Annex C imposes no limit, §6.1.12 forbids imposing
+  one; busiest corpus page ≪100, >10,000× headroom); `/AP` recursion
+  reuses `MAX_XOBJECT_DEPTH = 64` unchanged (2× headroom vs veraPDF's
+  32-deep conformant chain).
+
+**RAG escalations this continuation** (`C:\personal_rag\pdf\`):
+- `lesson_20260801_pdfium_widget_appearances_need_fpdf_ffldraw.md` —
+  **api-usage / MEDIUM** — pdfium renders `/Widget` appearances only via
+  `FPDF_FFLDraw` (the form-fill layer), not `FPDF_RenderPageBitmap`
+  alone; a differential harness that omits it reports false diffs. The
+  two apparent diffs in pdfce's pdfium comparison were REFERENCE
+  divergences, not pdfce errors — pdfium also SYNTHESIZES the no-`/AP`
+  `/Circle` `/IC` fill that R43 makes pdfce refuse. Verify a reference
+  engine's own synthesis/fill behavior before trusting it as ground
+  truth (sibling of the Pillow-CMYK and R31 lessons).
+- `lesson_20260801_quadpoints_ccw_vs_z_order_producer_divergence.md` —
+  **format-spec / MEDIUM — OPEN QUESTION** — §12.5.6 QuadPoints are
+  spec'd CCW, but real producers / Acrobat emit them in Z / reading
+  order; a generator that assumes CCW mis-orders quads on real files.
+  Read-side (Pass 6.0) paints whatever `/AP` `/N` exists, so this does
+  NOT bite until Pass 6.1 generates quad-point appearances. Carried to
+  Pass 6.1 as the first place it matters.
+- `lesson_20260801_usable_ap_n_vs_raw_ap_key_census_predicate.md` —
+  **methodology / MEDIUM** — "has an appearance" is definitional: a raw
+  `/AP`-key census (pypdf) over-counts vs a *usable* `/AP` `/N` census
+  (resolvable stream / selectable `/AS` state). pdfce 224 usable vs
+  pypdf 228 raw over 2,914 files; the 4-file gap = `/AS`-unresolved
+  state subdicts + absent/dangling/non-stream `/N`. Pin the stronger
+  predicate and re-measure before any census figure becomes a gate
+  denominator (discharges decision 008's W16 for the conformance
+  corpus).
+- Subject + master indexes updated.
+
+**Still in flight (continuation 23):**
+- **Pass 6.1** (authored streams + content-stream serializer +
+  geometric markup) — promoted to In progress; **blocked on the
+  §8.10.2 form-XObject WRITE-direction audit** (`pdfce-spec-librarian`
+  dispatched, in flight, parallel with this filing). The "Comments &
+  markup" `pdfce-acrobat-librarian` bucket is COMPLETE. First Pass
+  where the carried QuadPoints CCW-vs-Z-order question bites.
+- **Pass 5 (Encryption)** — spec-unblocked, queue-deferred behind
+  Pass 7 (decision 008); its `/R 6` open sub-decision and the two
+  operator decisions gate scoping when it activates. Unchanged.
+
+**For next session / STILL-OPEN operator items (ordered by age —
+oldest first, unchanged from continuation 22):**
+- **Encryption-refusal operator sign-off** — still the oldest owed
+  operator item.
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged
+  for Ken; LEGAL.md NOT edited.
+- **`/R 6` sourcing method** — cross-implementation triangulation vs a
+  purchased ISO 32000-2 copy. Ken's call.
+- **License decision (`LEGAL.md` §1)** — still undecided.
+- **Commit authorization** — everything remains UNCOMMITTED in git.
+- **W15 — no remote/CI** — unchanged.
+- **Full-page pixel-parity remainder** (Pass 1.1) — still owed; Pass
+  6.0's 4-px annotation-subset differential is NOT a substitute.
+- Carried Pass-4 residuals and the `/Info`-not-certification-gated item
+  remain open (see continuation 20).
+
+**Same-day continuation 24 — Pass 6.1 SHIPPED (authored streams +
+content-stream serializer + geometric markup authoring — the project's
+FIRST content-stream authoring Pass):**
+
+**Shipped:**
+- **Pass 6.1 — Authored streams + content-stream serializer +
+  geometric markup authoring.** Moved to `ROADMAP.md` Shipped (full
+  record there; top of Shipped, above Pass 6.0). Discharges decision
+  008 findings **F3** (no content-stream serializer; `Stream` couldn't
+  hold authored bytes) and **F4/R45** (authored bytes need a session
+  staging buffer, not a mutated `Stream` type). Authors the
+  **pure-geometry** markup annotations — Ink, Square, Circle, Line,
+  Polygon, PolyLine, and the quad-point text-markup family
+  (Highlight/Underline/StrikeOut/Squiggly). **NO text-bearing
+  annotations** — FreeText/Text/Stamp + §12.7.3.3 variable text
+  deferred to Pass 6.2 (one appearance pipeline). R43/R44/R47 honored:
+  every authored appearance is a real baked `/AP` `/N` displayed by the
+  SAME Pass-6.0 read path — never a private "what I just drew" render.
+- New surface: `pdfce-core` `writer/content.rs` (`ContentBuilder` —
+  §8.2 path/paint/gstate/colour operators + the §8.10 WF6 form-XObject
+  ordering from the unblocking spec audit; `reemit_canonical` +
+  `number_divergence_reason` for the R46 gate), `annot_author.rs`
+  (`MarkupSpec`/`Color`/`Quad`/`LineEnding`/`TextMarkupKind`;
+  `build_appearance` → `AuthoredAppearance` = annotation dict + `/AP`
+  `/N` form XObject + content bytes). Modified: `writer/serialize.rs`
+  (`write_real`/`write_name`/`write_string` now `pub(crate)`);
+  `writer/mod.rs` (`DirtySet` gains the R45 staging buffer +
+  `combined_source()`); `writer/save.rs` (serialize replacement/created
+  objects against base++staging); `edit.rs` (`EditSession::add_markup`
+  + staging + guards + `authored_source()` + COW `/Annots` patching +
+  `AnnotKind` + `CommandKind::AddAnnotation` +
+  `EditError::{DocumentEncrypted, EmptyGeometry, AnnotsNotAnArray}`);
+  `pageops/assemble.rs` (`DocumentView` doc comment AMENDED to
+  discharge — not delete — the R45 written assertion). **CLI**
+  `annotate` subcommand (unified `--type`, per-subtype geometry flags,
+  stable append-only stdout). **GUI** toolbar "Markup ▾" menu
+  (minimal). `tools/content-identity/` (R46 corpus gate, out-of-tree).
+  **Fuzz target 12** `annot_author.rs`.
+
+**Findings + decisions:**
+- **R46 content-stream identity gate — HEADLINE (serializer proven
+  BEFORE it authors):** over the full corpus — **12,936 content streams
+  across 2,898 loadable files; 12,854 byte-identical (99.37%); 82
+  non-identical (0.63%); 0 CORRUPTED → GATE PASS.** The 82 are all
+  spec-legal, VALUE-PRESERVED number re-spellings, enumerated by
+  file+reason (R20): `.05`→`0.05` leading-zero insertion (20×), `-0`→`0`
+  (18×), one 300-digit pathological real, `1.`→`1.0`. **Framing
+  (recorded so it is never misread as fidelity loss):** this is a
+  SERIALIZER-correctness test — the gate deliberately re-emits every
+  stream. pdfce NEVER re-serializes untouched page content in normal
+  save (span re-emission keeps it byte-verbatim, §5); authoring writes
+  only NEW streams — so these divergences never occur in production
+  save. X6 (silent normalization) is caught mechanically.
+- **R44 round-trip verified** author→save→reload→paint: CLI authored a
+  square+highlight+ink incrementally, `undo_identical=1` on the first
+  (minimal-diff holds); `render-page` reports annots=3/painted=3/forms=3
+  through Pass 6.0's read path; a render test confirms the red square
+  paints red after reload — every appearance a real baked `/AP`.
+- **X5** extract-from-authoring-session resolves via `authored_source()`
+  (base++staging); the authored appearance survives BYTE-EXACT (the
+  `DocumentView` assertion discharged by amendment). **X7** `/Annots`
+  create / append-direct / COW-shared-indirect-array (sibling page
+  provably untouched, tested) + a compressed-page fixture promotes out
+  (R38, reload verified).
+- **QuadPoints policy DECIDED (closes the Pass 6.0 carried open item):**
+  pdfce authors quads in **Z / reading order (UL, UR, LL, LR)** — the
+  dominant Acrobat/PDFBox/pdf.js convention, chosen for max third-party
+  interop, documented in `annot_author.rs`. pdfce's own render is
+  convention-independent (it paints the baked `/AP`) — so this is an
+  interop decision, not a correctness one.
+- **Deviations / residuals (recorded as decisions):** (1) X11
+  certification gating is CONSERVATIVE — reuses `check_certification()`
+  (refuses on ANY enforced `/DocMDP`), over-refuses annotation addition
+  that `/DocMDP` `/P 3` permits; fail-clean-safe; per-`/P` refinement is
+  a scoped spec-verified follow-up (check
+  `certification_permission == Some(3)` for annotation-adding — §12.8
+  already sourced). (2) X10 encryption guard is a forward-compat R37
+  seam — encrypted files refused at LOAD today, so `DocumentEncrypted`
+  in `add_markup` is unreachable until Pass 5; a test pins the load-time
+  refusal. (3) NO `/M` mod-date / `/CreationDate` on authored
+  annotations — avoids clock non-determinism breaking byte-compare
+  tests; named residual (revisit when a deterministic-clock-injection or
+  metadata policy exists). (4) Line-ending set = None/OpenArrow/
+  ClosedArrow (Acrobat default Open honored); full §12.5.6.7 Table 176
+  set not authored. (5) Square/Circle/Underline/StrikeOut/Squiggly
+  default colours are pdfce's own (Acrobat RAG marks them a GAP);
+  Highlight yellow + Multiply is the sourced default, locked.
+- **Named GUI follow-up slice (Pass-6.1-followup, filed to the
+  "Comments & markup" Backlog bucket):** the full canvas markup drawing
+  state machine (drag/marquee/multi-click/ink-freehand + live preview +
+  the screen↔page transform pass-4-only-planned + the ten-tool set +
+  keyboard map) and P1 glyph-accurate text-selection markup.
+  `docs/ui_specs/pass-6.1-markup-tools.md` is the design; the shipped
+  GUI is a minimal menu affordance authoring at a default page-centred
+  rect through the same `EditSession::add_markup` path. Core authoring
+  path complete → this slice is pure GUI/interaction work, promotable
+  independently of 6.2.
+- **ARCHITECTURE §12 continuation-24 entry** appended (content-stream
+  serializer landing + R45 staging-buffer reality + R46 gate result +
+  QuadPoints Z-order decision).
+
+**Gates:**
+- **939 workspace tests green (was 901)**; `cargo fmt --check` /
+  `clippy -D warnings` clean; **R34 re-runs GREEN** (Pass 3.0 identity
+  identical=1 raster_identical=1 — authoring never perturbs untouched
+  objects); GUI-free invariant verified core+render host +
+  `x86_64-pc-windows-msvc`; wasm32; `--duplicates`; `ui-strings`;
+  `no-network` all clean; fuzz target 12 `annot_author.rs` 696,098 runs
+  / 61 s, 0 crashes.
+- **ZERO new dependencies** — content serializer + markup authoring
+  hand-rolled (no `harfrust`, consistent with R17);
+  `THIRD_PARTY_LICENSES.md` unchanged.
+
+**RAG escalations this continuation** (`C:\personal_rag\pdf\`):
+- `lesson_20260801_quadpoints_ccw_vs_z_order_producer_divergence.md` —
+  **UPDATED OPEN → RESOLVED-for-authoring** — pdfce authors quads in
+  Z / reading order (the de-facto Acrobat/PDFBox/pdf.js convention);
+  render is convention-independent (paints the baked `/AP`), so the
+  ordering choice is interop, not correctness. Dated amendment footer
+  added; the read-side note preserved.
+- `lesson_20260801_serializer_number_respelling_reemit_gate_catalogue.md`
+  — **NEW — quirk / MEDIUM** — the R46-gate number-respelling catalogue:
+  which real-world number spellings a canonical PDF number serializer
+  diverges from — leading-zero-absent `.05`→`0.05`, `-0`→`0`,
+  trailing-dot `1.`→`1.0`, a 300-digit pathological real — all
+  VALUE-PRESERVING. A re-emit-everything identity gate surfaces these
+  (82 / 12,936 streams over 2,898 files); production span-re-emission
+  never does (untouched streams pass through byte-verbatim). Serializer-
+  authoring lesson.
+- Subject + master indexes updated.
+
+**Still in flight (continuation 24):**
+- **Pass 6.2** (text-bearing annotations FreeText/Text/Stamp +
+  §12.7.3.3 variable-text appearance generation) — promoted to In
+  progress; **blocked on the §12.7.3.3 variable-text spec**
+  (`pdfce-spec-librarian` dispatched, in flight, parallel with this
+  filing). No `harfrust` (R17); appearance text laid out with Base-14
+  metrics + embedded widget-font widths from Pass 1. The "appearance
+  half" Pass 7 (Forms) reuses (R49).
+- **Pass-6.1-followup GUI slice** — named, filed to Backlog; core
+  authoring path complete, promotable independently.
+- **Pass 5 (Encryption)** — spec-unblocked, queue-deferred behind Pass
+  7 (decision 008); `/R 6` open sub-decision + two operator decisions
+  gate scoping when it activates. Unchanged.
+
+**For next session / STILL-OPEN operator items (ordered by age —
+oldest first, unchanged from continuation 23):**
+- **Encryption-refusal operator sign-off** — still the oldest owed
+  operator item.
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged
+  for Ken; LEGAL.md NOT edited.
+- **`/R 6` sourcing method** — cross-implementation triangulation vs a
+  purchased ISO 32000-2 copy. Ken's call.
+- **License decision (`LEGAL.md` §1)** — still undecided.
+- **Commit authorization** — everything remains UNCOMMITTED in git
+  (Passes 0–6.1 ALL uncommitted).
+- **W15 — no remote/CI** — unchanged.
+- **Full-page pixel-parity remainder** (Pass 1.1) — still owed.
+- Carried Pass-4 residuals and the `/Info`-not-certification-gated item
+  remain open (see continuation 20).
+
+**Same-day continuation 25 — Pass 6.2 SHIPPED (text-bearing annotations +
+§12.7.3.3 variable-text appearance generation — COMPLETES the decision-008
+6.x annotation arc):**
+
+**Shipped:**
+- **Pass 6.2 — Text-bearing annotations + §12.7.3.3 variable-text
+  appearance generation.** Moved to `ROADMAP.md` Shipped (full record
+  there; top of Shipped, above Pass 6.1). Adds the text-bearing subtypes
+  Pass 6.1 deferred — **FreeText, Text (sticky note), Stamp** — plus the
+  shared §12.7.3.3 variable-text pipeline. **This COMPLETES the
+  decision-008 6.x arc: 6.0 (display) → 6.1 (geometry) → 6.2 (text), all
+  SHIPPED.** The `vartext.rs` pipeline is the appearance half **Pass 7
+  (Forms) REUSES** for widget-field appearances (R49). R43/R44/R47
+  honored: every authored appearance is a real baked `/AP` `/N` shown by
+  the SAME Pass-6.0 read path.
+- New surface: `pdfce-core` **`vartext.rs`** (the §12.7.3.3 variable-text
+  pipeline — `/DA` parsing, the auto-font-size `0` rule, field-value →
+  appearance-stream layout with line breaking / `/Q` quadding / baseline
+  placement; the shared FreeText + widget generator Pass 7 reuses).
+  Modified: `writer/content.rs` (`ContentBuilder` + text/marked-content/
+  clip/matrix operators BT/ET/Tf/Td/TD/TL/Tj/Tc/Tw/Tz/q/Q/BMC/EMC/W/cm +
+  `emit_literal_string` — **PURELY ADDITIVE**; the R46 re-emission path
+  `reemit_canonical`/`emit_token_canonical`/`number_divergence_reason`/
+  `emit_number` NOT touched); `annot_author.rs` (`TextAnnotSpec`
+  FreeText/Sticky/Stamp, `StickyIcon`, `StampName`, `AuthoredTextAnnot`,
+  `build_text_annotation`, R44 icon/stamp look); `edit.rs`
+  (`EditSession::add_text_annotation` + X10/X11 inherited-conservative
+  guards + R45 staging + X7 `/Annots` multi-append + one-command undo
+  incl. the `/Popup` companion; `AnnotKind::{FreeText,Text,Stamp}`;
+  `EditError::VariableText`). **CLI** `annotate --type freetext|text|stamp`
+  (`--text`/`--font`/`--size`/`--quad`/`--multiline`/`--icon`/
+  `--stamp-name`). **GUI** "Text ▾" menu + modeless text-entry popup.
+
+**Findings + decisions:**
+- **R44 TEXT round-trip verified WITH GLYPH PIXELS (headline):**
+  `authored_freetext_paints_glyph_pixels_after_reload_r44` — author
+  FreeText → save incremental → reload fresh `Document` → render via the
+  Pass 6.0 read path → **>100 dark glyph pixels, `annotations_painted=1`**.
+  Demo: `annots_painted=3 / forms=3`, substituted 35→55 = **20 authored
+  glyphs** via bundled Foxit substitutes. The text analogue of Pass 6.1's
+  baked-`/AP` proof.
+- **`/Q` alignment measured vs AFM widths**
+  (`quadding_places_lines_by_afm_width`): "AV" Helvetica = 13.34 pt; the
+  `Tm` x-origin matches left / centre / right exactly.
+- **Bare standard-14 font dict renders with NO embedded program**
+  (`bare_standard14_font_dict_renders_with_no_embedded_program`): no
+  `/FontDescriptor`, no `/Widths`. Modality choice — authored the bare
+  form, reader-shall-honour §9.6.2.1, PDF-1.5 should-embed deprecation
+  noted; `+/Encoding /WinAnsiEncoding` for deterministic Latin
+  byte→glyph.
+- **Auto-size VT1 heuristic (no spec formula):**
+  `auto_size(rect_h) = ((rect_h − 2·PAD) / 1.15).clamp(4.0, 12.0)`,
+  `PAD = 2`, line-factor 1.15 — reviewable, every appearance reports
+  `applied_autosize`, never presented as spec-mandated (S-class spec
+  silence → counted heuristic).
+- **Deviations (recorded as decisions):** (1) text specs in a SEPARATE
+  `TextAnnotSpec` enum, NOT folded into `MarkupSpec` — keeps the
+  R46/R34-proven geometric `add_markup` path + its exhaustive match arms
+  byte-unchanged (text needs `/DA`, popup, `/NoZoom`/`/NoRotate`); (2)
+  FreeText font dict is 4-key (adds `/Encoding /WinAnsiEncoding`), not
+  literally 3-key — deterministic Latin byte→glyph for the glyph-pixel
+  proof + `/Q` measurement; still program-free (the gate's real meaning);
+  (3) CLI `--fill` doubles as the optional FreeText border colour; (4)
+  `/M` // `/CreationDate` still omitted (inherited 6.1 residual — clock
+  non-determinism breaks byte-compare).
+- **Residuals (named):** Base-14 **LATIN ONLY** (no complex-script / RTL
+  shaping — R17; non-WinAnsi chars → "?" counted as `unencodable_chars`);
+  `/RC` rich text recognition-only (VT3 non-goal); no comb fields (Pass 7;
+  comb = field-flag bit 25 = 16777216); X11 certification gating still
+  conservative (over-refuses `/P 3` — scoped fix = check
+  `certification_permission == Some(3)` for annotation-adding, §12.8
+  already sourced); X10 encryption refusal still the load-time R37 seam.
+  GUI: full in-canvas text editing + the sticky-note marker's exact
+  artwork join the already-named Pass-6.1-followup GUI slice — NOT built
+  here.
+- **ARCHITECTURE §12 continuation-25 entry** appended (arc complete,
+  `vartext.rs` pipeline landing, the bare-Base-14 modality choice, the
+  auto-size heuristic).
+
+**Full-corpus R46 — measurement correction + GATE PASS:** the engineer's
+completion report ran the R46 content-identity gate over synthetic
+fixtures only (46/46 byte-identical) plus proof-by-inspection that the
+re-emission path is additive-only-untouched, having reported the
+conformance corpus "not present on this machine." **That was a
+path-resolution miss — the corpus IS present (3,020 files under
+`fixtures/external` — veraPDF-corpus + pdf20examples).** The orchestrator
+RE-RAN the full content-identity gate over the corpus: **GATE PASS —
+every content stream semantically preserved, zero corruptions**; all
+divergences are value-preserving number re-spellings, the same class
+Pass 6.1 enumerated (`-0`→`0` majority, `.050003`→`0.050003` leading-zero
+on the Isartor file, `-.001`→`-0.001`, one 300-digit pathological real
+value-preserved within f64). This CONFIRMS Pass 6.2's additive-only claim
+BY MEASUREMENT; the earlier fixture-only run is superseded. **For the
+record: the corpus IS present and runnable at `fixtures/external` —
+future Passes must NOT accept a "corpus absent" caveat without checking
+`fixtures/external` first.**
+
+**Gates:**
+- **971 workspace tests green (was 939)**; `cargo fmt --check` /
+  `clippy -D warnings` clean; GUI-free core+render invariant verified
+  (zero egui/eframe/winit/wgpu); wasm32; `--duplicates`; `ui-strings`;
+  `no-network` all clean; fuzz `annot_author` extended (`/DA` parsing +
+  text-appearance gen: malformed `/DA`, unresolvable font, symbolic font,
+  huge text, size 0) — **13,871 runs / 61 s, 0 crashes**; **no new
+  §6.1.12 guards**.
+- **ZERO new dependencies** — Base-14 only, **NO `harfrust`** (R17
+  upheld; the text-authoring path reserved by decision 004 for a future
+  `harfrust` built WITHOUT it); `THIRD_PARTY_LICENSES.md` unchanged.
+
+**RAG escalations this continuation** (`C:\personal_rag\pdf\`):
+- `lesson_20260801_bare_base14_font_dict_renders_no_embedded_program.md`
+  — **NEW — format-spec / MEDIUM** — a Base-14 font dict authored with
+  NO `/FontDescriptor` and NO `/Widths` (§9.6.2.1 reader-shall-supply
+  metrics) renders correctly; the PDF-1.5 should-embed deprecation is a
+  should, not a shall. Add `/Encoding /WinAnsiEncoding` for deterministic
+  Latin byte→glyph (the 4-key vs 3-key deviation) when you need to assert
+  glyph pixels / measure `/Q`. pdfce `vartext.rs` / `annot_author.rs`.
+- `lesson_20260801_variable_text_autosize_is_implementation_defined.md`
+  — **NEW — methodology / MEDIUM** — §12.7.3.3's auto-font-size (`/DA`
+  size `0`) has NO spec formula (S-class spec silence); pick a reviewable
+  heuristic, COUNT it, and surface it (never present it as spec-mandated).
+  pdfce: `auto_size(rect_h) = ((rect_h − 2·PAD)/1.15).clamp(4.0,12.0)`,
+  every appearance reports `applied_autosize`. General pattern for
+  spec-silent layout parameters. pdfce `vartext.rs`.
+- Subject + master indexes updated.
+
+**Still in flight (continuation 25):**
+- **Pass 7 (Forms / AcroForm)** — promoted to In progress; **blocked on
+  TWO prerequisites both DISPATCHED in parallel**: the §12.7.1–12.7.4
+  form-field spec (`pdfce-spec-librarian`) and the "Forms (AcroForm)"
+  acrobat parity bucket (`pdfce-acrobat-librarian`). Open Pass-7
+  sub-decision: the embedded-JavaScript posture (recommend never-execute —
+  recognize + disclose; a SECURITY decision needing its own
+  decision-008-continuation record at scoping time).
+- **Pass-6.1-followup GUI slice** — now also carries Pass 6.2's GUI
+  residuals (full in-canvas text editing + the sticky-note marker
+  artwork); core authoring path complete, promotable independently.
+- **Pass 5 (Encryption)** — spec-unblocked, queue-deferred behind Pass 7
+  (decision 008); `/R 6` open sub-decision + two operator decisions gate
+  scoping. Unchanged.
+
+**For next session / STILL-OPEN operator items (ordered by age —
+oldest first, unchanged from continuation 24):**
+- **Encryption-refusal operator sign-off** — still the oldest owed
+  operator item.
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged
+  for Ken; LEGAL.md NOT edited.
+- **`/R 6` sourcing method** — cross-implementation triangulation vs a
+  purchased ISO 32000-2 copy. Ken's call.
+- **License decision (`LEGAL.md` §1)** — still undecided.
+- **Commit authorization** — everything remains UNCOMMITTED in git
+  (Passes 0–6.2 ALL uncommitted).
+- **W15 — no remote/CI** — unchanged.
+- **Full-page pixel-parity remainder** (Pass 1.1) — still owed.
+- Carried Pass-4 residuals and the `/Info`-not-certification-gated item
+  remain open (see continuation 20).
+
+**Same-day continuation 27 — Pass 7.1 SHIPPED (form flatten + FDF/XFDF +
+choice fields + regenerate-all — COMPLETES the AcroForm subsystem CORE):**
+
+Pass 7.1 finishes the residuals Pass 7.0 named. With 7.0 (field model +
+text/checkbox fill) and 7.1 (flatten + data interchange + choice fields +
+regenerate-all), **the AcroForm subsystem CORE is done** — the remaining
+forms items (GUI form-fill slice, field auto-detection, posture-B native
+recompute) are FOLLOW-UP SLICES, not core.
+
+**Shipped:**
+- **Pass 7.1 — Form flatten + FDF/XFDF + choice fields + regenerate-all.**
+  Moved to `ROADMAP.md` Shipped (full record there; top of Shipped, above
+  Pass 7.0).
+- **New `pdfce-core` `fdf.rs` (~700 lines)** — FDF (§12.7.7) + XFDF
+  import/export. The FDF reader REUSES `crate::parser::Parser` (FDF is
+  PDF-syntax). XFDF uses a **HAND-ROLLED ~200-line scoped XML reader**
+  (element/attribute/text, the 5 predefined entities, numeric character
+  refs, comments, `<?xml?>`/DOCTYPE skip, MAX_XML_DEPTH-guarded) — **ZERO
+  new dependencies** (rule 13; the brief's preference — no `quick-xml`/
+  `roxmltree` for a reader this small and scoped).
+- **`edit.rs`** — `set_choice_value`, `regenerate_appearances`,
+  `flatten_fields`, `export_form_data`/`import_form_data`,
+  `regen_field_appearance`, flatten helpers (`burn_target`,
+  `page_of_widget`, `append_page_content`, `add_page_xobjects`,
+  `effective_resources`, `remove_from_annots`, `remove_fields_from_form`,
+  `clear_need_appearances_write`), the §12.5.5 `fit_matrix_for`,
+  `match_option`, `choice_display_text`; `RegenOutcome`/`ImportOutcome`/
+  `FlattenOutcome` (+9 tests).
+- **`forms.rs`** — `scan_javascript` + the `FormJavaScript` histogram
+  (decision 009 posture A, recognition-only) (+2 tests).
+- **`writer/content.rs`** — `ContentBuilder::invoke_xobject` (`/Name Do`).
+- **CLI** — `regenerate-appearances` / `flatten` / `export-data` /
+  `import-data` subcommands + choice routing + `|`-multi-select in
+  `fill-field` + the JS histogram on `list-fields`.
+- **ARCHITECTURE §5.8 + §12 continuation-27 entries** appended (the
+  flatten overlay-append design + the AcroForm-core-complete milestone).
+
+**Key design win — FLATTEN is APPEND-not-rewrite (adopted design,
+supersedes the brief's in-place-rewrite anticipation):** flatten appends a
+NEW overlay content stream to the page `/Contents` array and invokes the
+widget's existing `/AP` `/N` as a page XObject
+(`ContentBuilder::invoke_xobject`), rather than rewriting the existing page
+content stream. Consequence: **existing content streams stay byte-verbatim,
+so the R46 re-emit-everything gate has ZERO flattened-page exceptions**
+(GATE PASS over `fixtures/synthetic` + `fixtures/external`; all divergences
+the known value-preserving `-0`→`0` number re-spellings, 0 corruptions).
+This is MORE minimal-diff than the in-place content-stream surgery the
+scope anticipated — recorded as a general pattern (overlay-append beats
+content-stream-surgery for additive burn-in). **R48 verified:** incremental
+flatten leaves the field dict recoverable in the prior revision;
+`--full-rewrite` output has no `/FT`/`/Tx` yet renders the burned value.
+Flatten uses the STRICT cert gate (refused on `/P 2` certified, by test —
+correct: flatten is STRUCTURAL, distinct from the fill path's `/P >= 2`
+permit).
+
+**Choice-field matrix (recorded):** single-select combo → `/V` = EXPORT
+value, `/I=[idx]`, appearance shows DISPLAY value; multi-select list →
+`/V` array + `/I` array; single-value-given-multiselect-required →
+`ChoiceRequiresMultiSelect` refusal; unknown-value non-editable →
+`ChoiceValueNotInOptions`; editable combo (`Combo|Edit`) accepts free text,
+no `/I`. FDF/XFDF round-trip: fill → export FDF+XFDF → re-import →
+identical `/V` + regenerated appearances; import SKIPS fields the doc lacks
+(counted, never an error).
+
+**Gates:**
+- **1,010 workspace tests** (core lib 620, was 601); `cargo fmt --check` /
+  `clippy -D warnings` clean; GUI-free `cargo tree` core+render (zero
+  egui/eframe/winit/wgpu); wasm32; `--duplicates`; `no-network` clean;
+  `ui-strings` N/A (no GUI changes); **R34** (Pass 3.0 identity) green +
+  **R46** re-emit-everything GATE PASS (Pass 7.1 additive — flatten
+  appends, never rewrites); fuzz **target 14 `fdf_parse`** 624,202 runs /
+  61 s, 0 crashes (malformed FDF/XFDF, huge arrays, entity edges).
+- **veraPDF §6.1.12 N/A** — MAX_XML_DEPTH is XFDF-only, outside PDF-
+  conformance scope. **ZERO new dependencies**; `THIRD_PARTY_LICENSES.md`
+  unchanged.
+
+**Gotcha found + fixed (RAG-escalated to `D:\dev\rag\rust\`):** adding the
+CLI subcommands overflowed the DEBUG `pdfce-cli` main-thread stack on
+Windows (clap's `debug_assert` recursion vs the MSVC ~1 MB main-thread
+stack), surfacing as `TryFromIntError(NegOverflow)` in CLI integration
+tests. Fixed by running `main()` on a 16 MB worker thread. The engineer
+had noted it to agent memory (`reference_clap_windows_stack.md`) — promoted
+to `D:\dev\rag\rust\` + index this continuation.
+
+**Deviations:** (1) flatten APPEND-not-rewrite (a POSITIVE deviation —
+more minimal-diff than scoped); (2) JS histogram is posture-A ONLY
+(`custom_scripts` counts all field-level JS actions, no whitelist recompute
+— posture B is Pass 7.x per decision 009), surfaced on `list-fields` + a
+loud stderr flag when network/launch `/AA` actions are present.
+
+**Residuals (named):** list-box multi-select appearance is a simplified
+display-text newline-join, NOT the §12.7.4.4 highlight-rectangle rendering
+(named simplification); corpus flatten-burn coverage is thin (sampled
+external forms were certified / pushbutton / no-`/AP` per the 6.0 census —
+synthetic fixtures + unit tests carry the burn path); import applies as
+per-field commands (each undoable), NOT one atomic `ImportFormData`
+command. STILL OPEN from Pass 7 as the forms FOLLOW-UP slices (NOT core):
+GUI form-fill (`docs/ui_specs/pass-7-form-fill.md`), field auto-detection
+("Prepare Form", fuzzy-never-sneaky HINT), posture-B native recompute
+(decision 009), X10/encryption, full-page pixel-parity.
+
+**Demo:** CLI `fill` (text + checkbox) → `export-data` FDF+XFDF → re-import
+round-trip → `flatten` (`fields_flattened=1 widgets_burned=1`) →
+`list-fields` shows the field gone → `render-page` renders the burned
+appearance (`forms=1`) → `--full-rewrite` removes it. GUI launched
+(PID 42444) on the flattened file.
+
+**RAG escalations this continuation:**
+- (`C:\personal_rag\pdf\`)
+  `lesson_20260801_flatten_overlay_append_beats_content_stream_surgery.md`
+  — **NEW — quirk / MEDIUM** — burning a widget appearance into page
+  content by APPENDING a new overlay content stream + `Do`-invoking the
+  existing `/AP` `/N` as a page XObject keeps every existing content stream
+  byte-verbatim (R46 GATE PASS, zero flattened-page exceptions), and is
+  strictly more minimal-diff than rewriting the page content stream in
+  place. General pattern: overlay-append beats content-stream-surgery when
+  the goal is additive burn-in; reserve in-place surgery for true removal
+  (redaction). pdfce Pass 7.1 `edit.rs::flatten_fields` /
+  `ContentBuilder::invoke_xobject`. Subject + master indexes updated.
+- (`D:\dev\rag\rust\`)
+  `clap_windows_debug_stack_overflow.md` — clap 4's `debug_assert`
+  command-tree recursion overflows the MSVC ~1 MB main-thread stack in
+  DEBUG builds as subcommand count grows, surfacing as an opaque
+  `TryFromIntError(NegOverflow)` in tests; run `main()` on a large
+  (16 MB) worker thread. Subdir index updated.
+
+**Still in flight (continuation 27):**
+- **Pass 8 (Redaction)** — promoted to In progress (the standing R35
+  obligation; the one truly destructive op). Blocked on two prerequisites
+  both DISPATCHED in parallel: the Redaction acrobat-parity bucket
+  (`pdfce-acrobat-librarian`) + a redaction spec dispatch for
+  container-decomposition + `/Redact`-apply semantics
+  (`pdfce-spec-librarian`). Redaction is the OPPOSITE discipline from
+  7.1's flatten — it DOES rewrite existing page content (R46's named
+  exception) AND must decompose object-stream containers (§5.7).
+- **AcroForm CORE COMPLETE** — 7.0 (model+fill) + 7.1 (flatten+data+choice
+  +regenerate); forms GUI + auto-detection + posture-B are follow-up
+  slices tracked in Backlog.
+- **Pass-6.1-followup GUI slice** — unchanged (full in-canvas text editing
+  + sticky-note marker artwork); promotable independently.
+- **Pass 5 (Encryption)** — spec-unblocked, queue-deferred behind Pass 7
+  (decision 008); now behind Pass 8 on the fallback/interleave track.
+  `/R 6` open sub-decision + two operator decisions gate scoping.
+
+**For next session / STILL-OPEN operator items (ordered by age —
+oldest first, unchanged from continuation 26 except the commit-scope
+line):**
+- **Encryption-refusal operator sign-off** — still the oldest owed
+  operator item.
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged for
+  Ken; LEGAL.md NOT edited.
+- **`/R 6` sourcing method** — cross-implementation triangulation vs a
+  purchased ISO 32000-2 copy. Ken's call.
+- **License decision (`LEGAL.md` §1)** — still undecided.
+- **Commit authorization** — everything remains UNCOMMITTED in git
+  (**Passes 0–7.1 ALL uncommitted**).
+- **W15 — no remote/CI** — unchanged.
+- **Full-page pixel-parity remainder** (Pass 1.1) — still owed.
+- Carried Pass-4 residuals and the `/Info`-not-certification-gated item
+  remain open (see continuation 20).
+
+**Same-day continuation 26 — Pass 7.0 SHIPPED (AcroForm field model +
+text/checkbox fill — the forms FOUNDATIONAL SLICE, NOT all of Forms) +
+decision 009 (embedded form/document JavaScript posture) FILED:**
+
+Pass 7 was **split on ship.** The engineer delivered the field-model read
+path plus the dominant fill path and honestly named the rest as
+residuals; those residuals are filed as **Pass 7.1 (In progress) —
+"completes the forms subsystem."** This is NOT "Forms shipped."
+
+**Shipped:**
+- **Pass 7.0 — AcroForm field model + text/checkbox fill.** Moved to
+  `ROADMAP.md` Shipped (full record there; top of Shipped, above Pass
+  6.2). The `/AcroForm` field-model parser + the field↔widget merge + the
+  `/P`-aware fill gate + text/checkbox fill through the SAME §12.7.3.3
+  appearance generator Pass 6.2 built (R49 — one appearance pipeline for
+  widgets and annotations alike).
+- **New `pdfce-core` `forms.rs` (~1,050 lines, 13 model tests).**
+  `parse_acroform(graph)` walks `/AcroForm` → `/Fields` DFS, resolving
+  §12.7.3.1 inheritance of `/FT`//`/V`//`/DV`//`/Ff`//`/DA`//`/Q` down
+  `/Kids` via `/Parent`, building the dotted fully-qualified field name
+  (§12.7.3.2). The **field-vs-widget MERGE** (R49): *Shape A* single
+  merged dict (~88% of real fields), *Shape B* field + `/Kids` widget
+  array. `FieldFlags` verbatim bits pinned by test (Radio 32768 /
+  Pushbutton 65536 / NoToggleToOff 16384 / RadiosInUnison 33554432;
+  Multiline 4096 / Comb 16777216; Combo 131072 / MultiSelect 2097152).
+  Per-type `/V` decode; `/Opt` export/display pairing; `/I`//`/TI`; XFA
+  **detect-only** (`XfaPresence`); `/SigFlags`; `/CO` count. Generic over
+  `ObjectGraph` (loaded `Document` + `EditSession`). Cycle-guarded
+  (visited set + `MAX_FIELD_TREE_DEPTH = 64`), bounded (`MAX_FORM_FIELDS =
+  500_000`).
+- **Fill (`edit.rs`, 6 fill tests):** `fill_text_field` sets `/V` and
+  regenerates `/AP` for every widget via the shared §12.7.3.3 generator
+  (R49 reuses Pass 6.2 `vartext.rs`, wrapped by
+  `annot_author::build_field_text_appearance`; `/DA` font from `/DR` via
+  `basefont_to_std14`). `set_button_state` selects checkbox/radio `/V` +
+  `/AS` with no regen (RadiosInUnison, `/Off` convention). One command
+  per fill (undo inherited); encryption + `/Size` guards inherited.
+- **`/P`-aware certification gate** (`check_certification_for_fill`, built
+  per the orchestrator's mid-Pass correction): permits fill at `/DocMDP`
+  `/P >= 2` (incl. absent = 2), refuses BY NAME at `/P 1`, refuses on any
+  `/FieldMDP` — structural gate stays STRICT. Proven by
+  `certification_p2_permits_fill_p1_refuses`. This is the per-`/P`
+  refinement the 6.1/6.2 X11 residual scoped, applied to the fill path.
+- **Decision 009 honored structurally:** fill touches only `/V`//`/AP`//
+  `/AS`, never the AcroForm dict — so `/CO`//`/AA`//`/Names /JavaScript`
+  re-emit byte-verbatim. `has_additional_actions` + `calc_order_count`
+  surfaced recognition-only (the full JS-disclosure histogram → Pass 7.1
+  per decision 009 posture A).
+- **CLI** `list-fields` + `fill-field --set Name=value` (text +
+  checkbox/radio; auto-size disclosed).
+- **ARCHITECTURE §12 continuation-26 entry** appended (Pass 7.0 + decision
+  009, with the field-vs-widget merge, the fill gate, and the hollow-shall
+  finding).
+
+**R44 form-fill round-trip with GLYPH PIXELS (HEADLINE):** the demo
+authors a text fill + a checkbox on-state → save incremental
+(`undo_identical=1`, minimal-diff holds) → reload fresh `Document` →
+`render-page` **paints 11 real glyphs**, `annots_painted=2 forms=2`. An
+authored field value is real glyph pixels through the SAME Pass-6.0 read
+path — never a private "what I just filled" render.
+
+**Decision 009 (embedded form/document JavaScript) — FILED this
+continuation.** Archived at `docs/decisions/009-forms-javascript-posture.md`;
+discharges the decision-008 §5.1 embedded-JS scope trap and the Pass 6.2
+open sub-decision. **Outcome: NEVER execute embedded PDF JavaScript** —
+field `/AA`, document `/AA`, `/OpenAction`, `/Names /JavaScript`,
+built-in or custom, on load or interaction. Fully ISO-conformant:
+**§12.6.4.16 is a "hollow shall"** — it mandates execution but defines no
+JS semantics/API/DOM/security model (deferring to two non-ISO external
+docs), specifying only the carrier (Table 217) + hook points; there is no
+normative JS behavior to conform to, so non-execution forfeits nothing.
+Phased hybrid: **posture A** (recognize + classify + disclose + byte-exact
+round-trip, zero execution) = the mandatory floor + Pass 7's whole JS
+scope; **posture B** (native recompute of an exact-match whitelist —
+`AFSimple_Calculate` SUM/AVG/PRD/MIN/MAX changes `/V`, `AF*_Format`
+changes display only, opt-in / off-by-default, every recompute a
+reviewable/undoable `EditSession` edit leaving the source script in place)
+= deferred demand-driven Pass 7.x; **posture C** (a sandboxed JS engine) =
+REJECTED + prohibited (re-imports the attack surface Adobe's broker
+contains; hook points reference `/URI`//`/SubmitForm`//`/ImportData`//
+`/Launch` — R12/R13 forbid; nothing to conform to).
+- **Standing rules R53–R57 added** (decision 009's R-JS-1…R-JS-5,
+  renumbered to the next-free slot after R52 — verified against the
+  R1–R52 list): R53 never-execute (+ C prohibited); R54
+  no-trigger-ever-fires (R51 sibling, enforced by R12/R13); R55
+  JS-carriers-byte-preserved-never-stripped-never-baked; R56
+  recognize+disclose / recompute opt-in+whitelisted+fuzzy-never-sneaky+
+  leaves-source-script-in-place; R57 recompute-changing-`/V` is
+  DocMDP/FieldMDP-gated.
+- **Spec prerequisites (queued Pass 7.x, non-blocking):** verify §12.6
+  carrier/hook coverage + formalize the hollow-shall finding
+  (`pdfce-spec-librarian`); source the `AF*` canonical shapes
+  (`pdfce-acrobat-librarian`); confirm PDF/A forbids JS actions.
+
+**Full-corpus R46 — GATE PASS (post-7.0 re-run, residual DISCHARGED):**
+the orchestrator re-ran the R46 content-identity gate over `fixtures/
+external` (3,020 files) post-7.0: **every content stream semantically
+preserved, zero corruptions**, identical to the post-6.2 result (same
+value-preserving number-respelling divergences). Additivity confirmed BY
+MEASUREMENT — fill authors NEW `/AP` streams via the proven §12.7.3.3
+generator; the re-emission path (`reemit_canonical` /
+`emit_token_canonical` / `number_divergence_reason` / `emit_number`) is
+byte-unchanged. This DISCHARGES the "full-corpus R46 re-run owed" residual
+from the engineer's report. **R34 (Pass 3.0 roundtrip) accepted as
+additivity-preserved** (fill authors new streams, never re-serializes
+untouched objects) — not separately re-run this Pass.
+
+**Gates:**
+- **601 `pdfce-core` lib tests green (was 582; +13 model +6 fill)** +
+  integration green; `cargo fmt --check` / `clippy -D warnings` clean
+  (core + cli); GUI-free `cargo tree` invariant verified core + render
+  (zero egui/eframe/winit/wgpu); fuzz **target 13 `form_model`**
+  1,306,476 runs / 61 s, 0 crashes (cyclic `/Parent`//`/Kids`, huge
+  `/Kids`, merge-shape edges, malformed values); real-corpus
+  `list-fields` clean on all `/AcroForm` files (pushbutton `flags =
+  0x10000`, no panics).
+- **veraPDF §6.1.12:** the two new guards `MAX_FORM_FIELDS` /
+  `MAX_FIELD_TREE_DEPTH = 64` are pure memory backstops (corpus max ≈ 63
+  fields/file).
+- **ZERO new dependencies**; `THIRD_PARTY_LICENSES.md` unchanged. R34/R46
+  preserved BY ADDITIVITY (new module + additive methods/variants + one
+  new `pub fn`; re-emission path + `add_markup`/`add_text_annotation`
+  byte-unchanged).
+
+**Demo:** `fixtures/synthetic/forms/demo-form.pdf` (+ `PROVENANCE.md` +
+`tools/gen-form-fixtures.py`): `list-fields` → `fill-field --set
+FullName="Ada Lovelace" --set Subscribe=on` (auto-size disclosed) →
+incremental save `undo_identical=1` (minimal-diff) → reload shows "Ada
+Lovelace" + "Yes" with regenerated `/AP` → `render-page` paints 11 glyphs,
+`annots_painted=2 forms=2`.
+
+**RAG escalation this continuation** (`C:\personal_rag\pdf\`):
+- `lesson_20260801_field_widget_merge_shape_a_vs_b.md` — **NEW — quirk /
+  MEDIUM** — a terminal AcroForm field with a single widget MERGES field
+  dict + widget dict into ONE dictionary (§12.7.3.3 / §12.5.6.19); this is
+  the ~88% common case. A field with multiple widgets keeps a `/Kids`
+  array of separate widget annotations (Shape B). A reader that ALWAYS
+  expects `/Kids` widgets breaks on the Shape-A common case. pdfce
+  `forms.rs::parse_acroform`. Subject + master indexes updated.
+
+**Still in flight (continuation 26):**
+- **Pass 7.1 (Completes the forms subsystem)** — promoted to In progress.
+  regenerate-all + clear `/NeedAppearances` (R51); **Flatten** (destructive
+  R48 — the FIRST controlled modification of EXISTING page content,
+  page-content-stream APPEND + byte-grep test, distinct from 6.1's
+  new-stream-only authoring); FDF/XFDF import/export (XFDF needs a minimal
+  XML reader — classify per rule 13); choice-field multi-select (array
+  `/V`, `/I` maintenance, `/Opt` display↔export); the JS-disclosure
+  histogram (decision 009 posture A); GUI form-fill
+  (`docs/ui_specs/pass-7-form-fill.md` P0). Field auto-detection ("Prepare
+  Form") and posture-B native recompute (Pass 7.x) are explicitly OUT of
+  7.1.
+- **Pass-6.1-followup GUI slice** — unchanged (full in-canvas text editing
+  + sticky-note marker artwork); promotable independently.
+- **Pass 5 (Encryption)** — spec-unblocked, queue-deferred behind Pass 7
+  (decision 008); `/R 6` open sub-decision + two operator decisions gate
+  scoping. Unchanged.
+
+**For next session / STILL-OPEN operator items (ordered by age —
+oldest first, unchanged from continuation 25 except the commit-scope
+line):**
+- **Encryption-refusal operator sign-off** — still the oldest owed
+  operator item.
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged for
+  Ken; LEGAL.md NOT edited.
+- **`/R 6` sourcing method** — cross-implementation triangulation vs a
+  purchased ISO 32000-2 copy. Ken's call.
+- **License decision (`LEGAL.md` §1)** — still undecided.
+- **Commit authorization** — everything remains UNCOMMITTED in git
+  (**Passes 0–7.0 ALL uncommitted**).
+- **W15 — no remote/CI** — unchanged.
+- **Full-page pixel-parity remainder** (Pass 1.1) — still owed.
+- Carried Pass-4 residuals and the `/Info`-not-certification-gated item
+  remain open (see continuation 20).
+
+**Same-day continuation 28 — Pass 8.0 SHIPPED (Redaction — mark + apply,
+text + region: the highest-stakes Pass, and the cardinal rule held —
+never claim redacted what isn't):**
+
+Pass 8.0 discharges the standing **R35** obligation and is the ONE
+operation whose contract is genuine REMOVAL (§5's sole deliberate
+exception; R46's one named content-stream-surgery exception). Redaction
+MARK and APPLY are separate operator actions (R52): a mark is a reviewable,
+reversible `/Redact` annotation drawn as a RED OUTLINE (never a solid
+fill); apply is the destructive act that proves the covered bytes are GONE
+from the entire saved file. This is the MIRROR IMAGE of Pass 7.1's flatten
+— flatten ADDS by overlay-append and never touches page content; redaction
+REMOVES and is the one op that DOES rewrite existing page content.
+
+**Shipped:**
+- **Pass 8.0 — Redaction (mark + apply, text + region).** Moved to
+  `ROADMAP.md` Shipped (full record there; top of Shipped, above Pass 7.1).
+- **New `pdfce-core` `redact.rs`** — the self-contained advance-preserving
+  content-stream surgery interpreter + apply orchestration + carrier sweep
+  + container decomposition + `RedactionReport` + `count_redaction_marks`.
+- **`edit.rs`** — `add_redaction`, `mark_redactions_by_search`/`_by_pattern`,
+  `find_matches`/`find_pattern_matches`.
+- **`annot_author.rs`** — `RedactSpec` + `build_redact_mark` (RED-OUTLINE
+  preview, never solid fill — the mark-vs-apply rule made visible).
+- **`text_extract/font.rs`** — exposed `codes`/`width`/`to_unicode`/
+  `bytes_per_code`/`width_estimated`/`base_font_name` as `pub(crate)` (the
+  surgery interpreter needs per-code widths for the exact advance).
+- **CLI** — `redact-mark` (`--rect`/`--search`/`--pattern`), `redact-apply`
+  (report + `--acknowledge-residuals`; **exit 10 `REDACTION_RESIDUALS`**),
+  `list-redactions`.
+- **GUI — the ONE non-negotiable item:** a persistent status-bar disclosure
+  of unapplied `/Redact` marks (computed from the document's own
+  annotations), targeting the #1 real-world redaction failure — saving a
+  marked-but-not-applied document believing it is redacted.
+- **Fuzz target 15 `redact_apply`**; `tools/gen-redact-fixtures.py` +
+  `fixtures/synthetic/redact/`.
+- **ARCHITECTURE §5.9 + §12 continuation-28 entries** appended (the
+  removal/scrub-forces-full-rewrite rule generalizing R35; the redaction
+  landing).
+
+**THE HEADLINE — ABSENCE PROOF PASSES (R46 INVERTED):** demo on
+`demo-secret.pdf` ("SECRET" in heading + body, "PUBLIC" surrounding,
+`/Info /Title (SECRET dossier)`): `redact-mark --search SECRET` → **3
+marks, doc NOT yet redacted**; `redact-apply` → `glyphs_removed=21
+info_strings_scrubbed=1`; `grep "SECRET" redacted.pdf` → **0** (control
+`marked.pdf` → 3). ZERO occurrences in the ENTIRE saved file — raw bytes
+AND every decoded content stream. R46 inverted: absence proven for
+redacted content, presence preserved for everything else.
+
+**The proofs:**
+1. **Advance preservation.** Redacted-page render: "SECRET" is a baked
+   black box while "dossier"/"PUBLIC text" sit EXACTLY where they were (not
+   shifted left) — proven visually AND numerically (survivor x moved
+   <1.0 pt); the removed run is replaced by a `TJ` advance
+   `N = −Σtx·1000/(Tfs·Th)`.
+2. **Container decomposition (§7.5.7 Strategy B).** A redacted `/Info`
+   compressed in an `/ObjStm` would survive verbatim without it (§5.7); the
+   test proves absence AND `containers_decomposed >= 1`.
+3. **Forced full rewrite (R35).** Output has no `/Prev`; prior revisions
+   (holding un-redacted content) dropped; every carrier scrub rides
+   `save_full`.
+4. **Image handling — REFUSE by name** (`RedactError::ImageRegion`, NO
+   output written) — never overlay-and-leave-pixels.
+5. **Carrier sweep/report.** `/Info`+XMP SCRUBBED (asserted absent);
+   object-streams+prior-revisions DROPPED-BY-REWRITE; OCG
+   REDACTED-BY-GEOMETRY (ignores `/OC` visibility); XFA/structure-tree/
+   attachments DETECTED+DISCLOSED (`DISCLOSED_NOT_SCRUBBED`), gated by
+   `--acknowledge-residuals` (exit 10 otherwise — ui-spec §4.4).
+
+**NEW STANDING RULE R58 (the ui-specialist finding — generalizes R35):**
+every removal/scrub operation must ride R35's forced FULL REWRITE —
+including any future Sanitize / Remove-Hidden-Information — because an
+incremental save leaves the "removed" content recoverable in the prior
+revision, defeating removal. R35 covered redaction-apply; R58 generalizes
+it to ALL scrub ops. Recorded in ROADMAP Standing rules + `ARCHITECTURE.md`
+§5.9 + the ui-spec that surfaced it.
+
+**Gates:**
+- **1,018 workspace tests (+8)**; `cargo fmt --check` / `clippy -D warnings`
+  clean workspace-wide; GUI-free core+render (zero egui/eframe/winit/wgpu);
+  wasm32; `--duplicates`; `no-network`; `ui-strings` all clean; **R34/R46
+  additive-preserved** (`writer/` + `content.rs` re-emission paths + gates
+  byte-unchanged — surgery is a NEW code path, identity path does not move);
+  fuzz **target 15 `redact_apply`** 9,262 runs / 61 s, 0 crashes (multi-byte
+  CID, nested q/Q, overlapping/degenerate quads, all/none covered — the
+  security assert held).
+- **ZERO new dependencies**; `THIRD_PARTY_LICENSES.md` unchanged. GUI
+  launched PID 40828.
+
+**Deviations/residuals (ALL disclosed, none silent):** image pixels
+refuse-not-clear (named, safe, disclosed); `/RO`+`/OverlayText` burn-in
+deferred — apply draws the `/IC`/default-black fill (Acrobat default),
+overlay-text LABEL not drawn (COSMETIC only, content removed regardless,
+disclosed at mark time); form-XObject content in-region NOT surgically
+redacted — disclosed loudly (`form_intersect` note), never claimed
+removed; XFA/structure-tree `/ActualText`/attachments detect+disclose not
+scrubbed this cut; GUI apply-button + canvas marking DEFERRED to the named
+GUI follow-up (it depends on the Pass 6.1 canvas tool-mode that never
+shipped — the engineer correctly did NOT build a parallel drag tool).
+
+**Demo:** `redact-mark --search SECRET` on `demo-secret.pdf` → 3 marks (doc
+NOT yet redacted) → `redact-apply` → `glyphs_removed=21
+info_strings_scrubbed=1 containers_decomposed>=1` → `grep "SECRET"` = 0 →
+`list-redactions` on control `marked.pdf` = 3. GUI launched (PID 40828) with
+the unapplied-marks status-bar disclosure live.
+
+**RAG escalations this continuation** (`C:\personal_rag\pdf\`):
+- `lesson_20260801_redaction_advance_preserving_content_stream_surgery.md`
+  — **NEW — format-spec / HIGH** — remove a text run without shifting
+  surviving same-line text: delete the `Tj`, substitute a `TJ` offset
+  consuming the exact `tx` (`N = −Σtx·1000/(Tfs·Th)`). The
+  content-stream-surgery correctness lesson; the mirror image of Pass 7.1's
+  overlay-append flatten. pdfce Pass 8.0 `redact.rs`.
+- `lesson_20260801_redaction_absence_proof_acceptance_gate.md` — **NEW —
+  methodology / HIGH** — redaction's four-shalls embodied as an executable
+  gate: grep the WHOLE saved output (raw bytes AND every decoded content
+  stream) for the redacted bytes → zero (R46 inverted — R46 proves
+  presence for untouched content, the absence test proves deletion for
+  redacted content). Control-vs-treatment (`marked.pdf` = 3 /
+  `redacted.pdf` = 0). pdfce Pass 8.0.
+- `lesson_20260801_redaction_diligence_carriers_checklist.md` — **NEW —
+  methodology / HIGH** — the carriers a naive region-redact misses:
+  ObjStm survivors (§7.5.7 Strategy B decomposition), prior revisions
+  (drop `/Prev` / full rewrite), `/Info`, XMP, XFA, overlapping annots,
+  attachments, OCG (redact by geometry, ignore `/OC` visibility),
+  StructTree `/ActualText`. Refusing incremental save (R35) is necessary
+  but NOT sufficient (§5.7). pdfce Pass 8.0 `redact.rs` carrier sweep.
+- Subject + master indexes updated.
+
+**Still in flight (continuation 28):**
+- **Decision 010 (post-redaction priority)** — promoted to In progress;
+  KenAgent consultation IN FLIGHT (vector/Inkscape editing vs GUI-editing
+  consolidation vs render-fidelity verification vs encryption). Record will
+  land at `docs/decisions/010-post-redaction-priority.md`.
+- **MILESTONE:** read → write → edit → extract → annotations → forms →
+  redaction ALL shipped.
+- **Accumulated GUI-editing follow-up slices** — canvas markup drawing /
+  form-fill / redaction-marking / in-canvas text editing; a candidate for
+  decision 010's GUI-editing-consolidation option; promotable independently.
+- **Pass 5 (Encryption)** — spec-unblocked, queue-deferred; now a decision
+  010 candidate. `/R 6` open sub-decision + two operator decisions gate
+  scoping.
+
+**For next session / STILL-OPEN operator items (ordered by age —
+oldest first, unchanged from continuation 27 except the commit-scope
+line):**
+- **Encryption-refusal operator sign-off** — still the oldest owed
+  operator item.
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged for
+  Ken; LEGAL.md NOT edited.
+- **`/R 6` sourcing method** — cross-implementation triangulation vs a
+  purchased ISO 32000-2 copy. Ken's call.
+- **License decision (`LEGAL.md` §1)** — still undecided.
+- **Commit authorization** — everything remains UNCOMMITTED in git
+  (**Passes 0–8.0 ALL uncommitted**).
+- **W15 — no remote/CI** — unchanged.
+- **Full-page pixel-parity remainder** (Pass 1.1) — still owed.
+- Carried Pass-4 residuals and the `/Info`-not-certification-gated item
+  remain open (see continuation 20).
+
+**Same-day continuation 29 — Decision 010 concluded + archived; the
+C→B→A sequence; Pass 11 (render-fidelity verification) DISPATCHED.**
+
+**Decisions made this session:**
+- **Decision 010 (post-redaction priority) consulted + archived** at
+  `docs/decisions/010-highest-value-investment-after-the-editing-arc.md`
+  (KenAgent consultation of continuation 28 RETURNED). **Outcome — the
+  DESTINATION is UNCHANGED, the PATH is AMENDED:** vector/Inkscape editing
+  (decision 008's candidate E / Pass 9) remains the highest-value major
+  investment and pdfce's distinctive purpose. The accumulated GUI-editing +
+  render-verification debt amends the PATH into the three-Pass sequence
+  **C → B → A** = **Pass 11** (render-fidelity verification) → **Pass 12**
+  (canvas-interaction foundation + editing-GUI consolidation) → **Pass 9**
+  (vector editing, repositioned onto C+B, keeping its decision-008 Pass ID).
+  D = encryption (Pass 5) stays fallback/interleave; E = signatures
+  (Pass 10) unchanged-last. *(Decision-010's candidate letters A–E are LOCAL
+  and differ from decision 008's A–F — not conflated.)*
+- **Decision 010 AMENDS decision 008's revisit-trigger-7** (the clean jump
+  to Pass 9 straight after Pass 6.1) into the C→B→A sequence; decision 008's
+  ranking and Pass IDs are otherwise intact.
+- **Three standing rules added (R59/R60/R61):** R59 render-fidelity gate
+  (prove against an INDEPENDENT renderer at corpus scale before any
+  subsystem edits content it re-renders; self-comparison proves
+  agreement-with-self, not correctness; re-run on every render-touching
+  Pass; residual enumerated by file+reason, never a threshold tuned to pass
+  — W14); R60 one-canvas-interaction-substrate (exactly one focusable-canvas/
+  transform/tool-mode/hit-test/selection/overlay; markup/form-fill/
+  redaction/vector all layer on it; a second parallel path forbidden — R49
+  applied to interaction); R61 Inkscape-is-behavioral-reference-only
+  (GPL-2.0-or-later, never a dependency/code-source/GUI-mimicry;
+  `pdfce-inkscape-librarian` catalogs capability/behavior/limits,
+  `pdfce-ui-specialist` designs the UI independently).
+
+**Filed this session:**
+- **ROADMAP In progress** = **Pass 11 — Render-fidelity verification
+  harness** (full scope from decision 010's `first_pass_scope`: generalize
+  `tools/annot-pdfium-diff.py` to full-page pdfium/pypdfium2 pixel-parity
+  over the loadable corpus; documented justified tolerance band reporting
+  DISTRIBUTIONS; three-bucket classification [benign-renderer-noise /
+  known-disclosed-gap (subtract the Diagnostics unsupported-tally, don't
+  re-report) / unexplained], enumerated by file+reason; triage+fix cheap
+  bucket-iii bugs, file the rest as counted named render-gaps; encode the
+  known pdfium reference-divergences [`FPDF_FFLDraw` widgets + synthesized
+  no-`/AP` appearances R43 refuses]; WIRE into the standing gate set;
+  DeviceCMYK colorimetry characterized corpus-wide, fixed only if bounded).
+  **Engineer DISPATCHED** (no blocking spec — pure measurement).
+- **ROADMAP Next up** = **Pass 12** (canvas-interaction foundation +
+  editing-GUI consolidation — reconciles the three named GUI follow-up
+  slices [Pass-6.1 markup-drawing state machine; Pass-7 form-fill GUI
+  `docs/ui_specs/pass-7-form-fill.md`; Pass-8 redaction-marking GUI
+  `docs/ui_specs/pass-8-redaction.md`] as SLICES on ONE shared substrate,
+  not three independent buckets), then **Pass 9** (Vector/Inkscape,
+  repositioned after Pass 12, promoted onto C+B + the 6.1 serializer + 8.0
+  surgery interpreter, sliced (a)–(g) per decision 008 §5.3).
+- **ARCHITECTURE §12** — dated decision-010 entry (the C→B→A sequence, the
+  render-fidelity + one-canvas + Inkscape-reference rules, the
+  destination-unchanged/path-amended framing, the
+  `pdfce-inkscape-librarian` commissioning).
+
+**THE Pass-1.1-remainder discharge (via Pass 11):** Pass 11 is scoped to
+DISCHARGE the long-owed "full-page pixel-parity remainder (Pass 1.1)"
+carried in every recent "still open" list — EXPLICITLY and conditionally:
+report it closed ONLY if the harness genuinely generalizes to full-page
+corpus scale (not a "pixel-perfect" claim).
+
+**Commissioning:** a new sibling agent **`pdfce-inkscape-librarian`** + the
+**`Inkscape_Features` RAG** (`D:\Dev\Rag-Specialized\Inkscape_Features\`)
+are being COMMISSIONED 2026-08-01 in parallel (another agent creating the
+agent file + scaffold) — closes decision 008 §11.4's previously-unowned
+Inkscape-catalog item. Registered in the project agent roster
+(`CLAUDE.md`'s "Project agents" table — the roster row only). A private
+development-reference corpus (same posture as the Acrobat Features RAG):
+never shipped, never committed to the pdfce repo.
+
+**Still in flight (continuation 29):**
+- **Pass 11 (render-fidelity verification) — IN PROGRESS, engineer
+  dispatched.** No blocking spec.
+- **Pass 12 (canvas-interaction foundation) — NEXT.** Scope into full
+  acceptance criteria via `pdfce-ui-specialist` when reached; governed by
+  R60 (one substrate).
+- **Pass 9 (Vector/Inkscape) — DESTINATION, after Pass 12.** Awaits the
+  `Inkscape_Features` catalog being built out; R61 (behavioral reference
+  only).
+
+**For next session / STILL-OPEN operator items (RE-SURFACED, not re-filed;
+ordered by age — oldest first, led by the encryption sign-off which is now
+owed across FOUR decisions 007/008/009/010):**
+- **Encryption-refusal operator sign-off** — STILL the oldest owed
+  operator item; now owed across FOUR decisions (007/008/009/010). Pass 5
+  stays fallback/interleave; this sign-off gates its scoping.
+- **License decision (`LEGAL.md` §1)** — still undecided (gates any public
+  repo/release and what copyleft prior art is even usable).
+- **Commit authorization** — everything remains UNCOMMITTED in git
+  (**Passes 0–8.0 ALL uncommitted**).
+- **W15 — no remote/CI** — unchanged.
+- **`/R 6` sourcing method** — cross-implementation triangulation vs a
+  purchased ISO 32000-2 copy. Ken's call (gates Pass 5).
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged for
+  Ken; LEGAL.md NOT edited.
+- Carried Pass-4 residuals and the `/Info`-not-certification-gated item
+  remain open (see continuation 20).
+
+**Same-day continuation 30 — Pass 11 (render-fidelity verification) SHIPPED;
+operator reprioritization to a measurement/dimensioning beta (decision 011 IN
+FLIGHT).**
+
+**Shipped:**
+- **Pass 11 — Render-fidelity verification harness SHIPPED 2026-08-01** (full
+  record: `ROADMAP.md` Shipped). Decision 010's candidate C, the first Pass of
+  the C → B → A sequence, delivered as **PURE MEASUREMENT — ZERO Rust touched,
+  ZERO new pdfce dependency** (pypdfium2 is dev-tooling only, out-of-tree, NOT
+  vendored, absent from `THIRD_PARTY_LICENSES.md`). New files:
+  `tools/render-parity/render_parity.py` (drives `pdfce-cli render-page` +
+  pypdfium2, aligns rasters, per-channel per-pixel deltas — mirrors
+  `tools/content-identity/`), `tools/render-parity/README.md`, and
+  `tools/render-parity/out/{summary.txt,summary.json,per-page.tsv,diffs/}`.
+
+**Findings + decisions:**
+- **The tolerance band is EMPIRICAL, not tuned (the analytical core, Y1/W14).**
+  Metric `frac_over_32` = fraction of pixels whose max-channel |Δ| > 32/255.
+  Benign AA/hinting/sub-pixel noise is confined to a thin edge band (small
+  AREA) even where edge pixels swing full-range, so the noise-robust
+  discriminator is AREA-fraction, not max delta. Band = **p99.9 of
+  `frac_over_32` over the 1,728 clean-by-construction pages** (zero disclosed
+  gaps + no DeviceCMYK) — a property of the known-benign population, so it
+  CANNOT be tuned to pass a bug (W14 structurally satisfied). This run: band
+  **0.0294**; clean floor mean 0.00096 / p95 0.0022 / p99 0.0098 (tight,
+  well-separated). The report always prints the DISTRIBUTION.
+- **Three buckets — full loadable corpus (2,914 files → 2,890 pages, 125 DPI,
+  content-only; ZERO panics/timeouts; 24 skips = unloadable `fail-*` files):**
+  (i) benign-renderer-noise 2,840; (ii) known-disclosed-gap 49
+  (cross-referenced against pdfce's existing Diagnostics tally so
+  already-counted gaps are SUBTRACTED, not re-reported — 48 deferred-op
+  sh/OC/Type3, 7 font-unsupported, 6 DeviceCMYK-file, 2 substituted, 2
+  image-unsupported, 1 codec-feature); (iii) **unexplained-divergence 1.**
+- **The single unexplained page = `A019-pdfa2-pass-a.pdf`** (TWG test suite): a
+  form XObject fills a triangle with a vertex at x ≈ 3.4028e38 (≈ `f32::MAX`);
+  pdfium rejects/clips the out-of-range path, pdfce rasterizes a spurious cyan
+  bar. **FILED as a named counted render-gap (R20/R27), NOT fixed** — the fix
+  is a clamp/reject-policy call in `pdfce-render` (R34 risk), Pass-9-adjacent;
+  the measurement-only non-goal (Y3) binds.
+- **DeviceCMYK = FIRST NAMED RESIDUAL (NOT fixed).** DeviceCMYK-only pages
+  diverge 3.0× the clean-page mean; the delta lights the whole filled area
+  uniformly with POLARITY IDENTICAL (R29 holds) — the naive additive
+  `Rgb::from_cmyk` vs pdfium `AdobeCMYK_to_sRGB1` gap. Filed as a follow-up
+  colour Pass (decision 006 §3.4 polarity matrix must be re-pinned FIRST; 006
+  revisit-trigger 7; scope via `pdfce-acrobat-librarian`). Cross-refs decision
+  010 revisit-trigger 6.
+- **R59 discharged for the first time.** `--gate --max-unexplained <baseline>`
+  returns non-zero when the unexplained count rises; **baseline = 1** (the A019
+  file), verified PASS. A REQUIRED re-run on every render-touching Pass
+  (R34/R46 pattern), especially Pass 9. Local-corpus gate (pypdfium2 not in CI,
+  like content-identity / roundtrip). Reference-side pdfium quirks (`--annots`
+  mode: `FPDF_FFLDraw` widgets + synthesized no-`/AP` looks R43 refuses)
+  bucketed reference-side (Y2), 3 pages verified.
+- **Pass 1.1 pixel-parity remainder DISCHARGED — stated exactly.** The harness
+  genuinely generalizes to full-page corpus scale (per-channel per-pixel; full
+  loadable corpus; first-page coverage of every file; multi-page via
+  `--pages-per-file 0`, demonstrated) — decision 010's exact bar. Scope named
+  precisely (first-page corpus coverage + a multi-page knob), NOT overclaimed
+  as exhaustive-multi-page or pixel-perfect. **STRUCK from the "still open"
+  lists going forward** (prior entries not rewritten).
+
+**Reprioritization (operator, 2026-08-01):**
+- **Operator requested a measurement/dimensioning BETA as his first usable
+  deliverable** — scaled dimensions + vector selection/snapping + basic vector
+  editing. Its architecture is being decided via KenAgent as **decision 011 —
+  IN FLIGHT** (record will land at `docs/decisions/011-*.md`). The beta PULLS
+  FORWARD decision 010's **Pass 12** (canvas-interaction foundation / B) + the
+  **first slices of Pass 9** (vector editing / A) and adds a new dimensioning
+  subsystem. Mechanism = decision 010 revisit-trigger 3 (operator wants vector
+  editing sooner, now on a *corpus-measured* render rather than spot-checked).
+- **Decision 010's C → B → A sequence CONTINUES after the beta;** Pass 11 (C)
+  is now Shipped so the render is VERIFIED for the editing work. The beta's
+  Pass IDs / slices are defined by decision 011, NOT invented here. ROADMAP In
+  progress = "Beta: scaled measurement/dimensioning tool (decision 011
+  IN FLIGHT)"; the decision-010 forward-sequence Pass-11 bullet flipped to
+  SHIPPED.
+
+**Filed this session:**
+- **ROADMAP Shipped** = Pass 11 (full record). **ROADMAP In progress** replaced
+  with the Beta entry (decision 011 in flight); the carried Pass-5
+  reconciliation pointer retained. **ROADMAP Next up** decision-010 sequence:
+  Pass 11 → SHIPPED + a reprioritization note. **ROADMAP Backlog** = two new
+  named render-fidelity residuals: (a) out-of-range (near-`f32::MAX`)
+  path-coordinate robustness in `pdfce-render` (the A019 gap); (b) DeviceCMYK →
+  sRGB colorimetry colour Pass. **ARCHITECTURE §12** = dated Pass-11-shipped
+  entry (harness, area-fraction band, 1 unexplained, DeviceCMYK residual,
+  Pass-1.1 discharge, R59 baseline, the beta reprioritization).
+- **RAG escalations:** `C:\personal_rag\pdf\` — new lesson on the
+  area-fraction-not-max-delta tolerance-band methodology (separating benign
+  independent-renderer noise from real divergence; band from the
+  clean-by-construction population so it can't be tuned to pass).
+  `D:\dev\rag\rust\` — new lesson on the `nohup`-detach background-sweep gotcha.
+  Subject + master + subdir indexes updated.
+
+**Gates:** `cargo fmt --check` clean; `cargo tree` core+render GUI-free; ZERO
+Rust delta → clippy/test/R34/R46 unmoved by construction; no `Cargo.toml`
+change → `THIRD_PARTY_LICENSES.md` unchanged; deterministic/locale-invariant
+(sorted files, fixed DPI, no clocks).
+
+**Still in flight (continuation 30):**
+- **Beta (measurement/dimensioning) — IN PROGRESS;** decision 011 (architecture)
+  IN FLIGHT via KenAgent.
+- **Pass 12 (canvas-interaction foundation) + Pass 9 (vector/Inkscape)** — the
+  remaining C → B → A work, resumes after the beta.
+- **Pass 5 (Encryption)** — fallback/interleave, unchanged.
+
+**For next session / STILL-OPEN operator items (RE-SURFACED, not re-filed;
+ordered by age — oldest first; MINUS the now-discharged Pass 1.1 pixel-parity
+item):**
+- **Encryption-refusal operator sign-off** — the oldest owed operator item
+  (now owed across FOUR decisions 007/008/009/010).
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged; LEGAL.md
+  NOT edited.
+- **`/R 6` sourcing method** — Ken's call (gates Pass 5).
+- **License decision (`LEGAL.md` §1)** — still undecided.
+- **Commit authorization** — everything remains UNCOMMITTED
+  (**Passes 0–8.0 + the `tools/render-parity` additions ALL uncommitted**).
+- **W15 — no remote/CI** — unchanged.
+- Carried Pass-4 residuals and the `/Info`-not-certification-gated item remain
+  open (see continuation 20).
+
+**Same-day continuation 31 — GUI polish (current feature set) + launcher
+shipped (operator-requested interlude, NOT a feature Pass); measurement/
+dimensioning beta prerequisites COMPLETE, awaiting operator go-ahead.**
+
+**Shipped:**
+- **GUI polish (current feature set) + launcher** (full record: `ROADMAP.md`
+  Shipped, top — filed WITHOUT a Pass number, correctly: no new document
+  capability, `pdfce-gui` + `ui_text.rs` only, ZERO new deps). Operator's
+  ask: "get the GUI polished up for the current feature set, then give me a
+  way to launch it from `D:\Dev\pdfce`." Executed against
+  `docs/ui_specs/gui-polish-current-featureset.md`.
+- **All 6 P0 items:** (1) `open_path()` resets stale per-document narration
+  (`edit_note`/`copy_result`/`copy_detail_expanded`/`pending_text_kind`/
+  `text_input`); (2) Properties panel reseeds on opening a second file (no
+  empty grid); (3) window title reflects the open file
+  (`ViewportCommand::Title`; new `ui_text` `window_title_idle`/`_open`); (4)
+  status-bar height cap (`ScrollArea max_height=220`, no disclosure
+  suppressed); (5) real empty state (heading + inline Open button + drop
+  hint) + working drag-and-drop (`dropped_files`, `.pdf`, restricted to
+  Idle/Failed/Unsupported so unsaved edits can't be silently discarded); (6)
+  annotation-visibility toggle uses `ICON_BUTTON_SIZE`.
+- **All P1 items:** colour-not-sole-signal on the four toggles (bold active
+  label); keyboard-shortcuts reference window (⌨ button,
+  `ui_text::shortcuts_reference`, doc-commented to stay in step with
+  `collect_keyboard_actions`); text-menu wording + colour note + per-add
+  jitter (`author_jitter` mod-6×12pt so repeated author-at-center adds don't
+  stack invisibly); utility-cluster spacing; Revert-disabled tooltip;
+  **accessible names on every glyph-only icon button** via a new
+  `Self::icon_button()` helper (egui 0.35 `Response::widget_info` +
+  `WidgetInfo::labeled`/`selected` — API verified available in 0.35).
+- **Launcher (repo root, NEW):** `D:\Dev\pdfce\pdfce.bat` +
+  `D:\Dev\pdfce\pdfce.ps1` — double-clickable / drag-a-PDF / `pdfce.bat
+  [file]`; both `cd` to repo root, `cargo build --release -p pdfce-gui`
+  (fast freshness check → always latest), then `Start-Process` the exe
+  detached with an optional file arg. Smoke-tested end-to-end (release GUI
+  launches, no startup crash).
+
+**Gates:** `cargo fmt --check` / `clippy -D warnings` clean; **31 pdfce-gui
+tests pass**; GUI-core-separation invariant confirmed (`cargo tree -p
+pdfce-core`/`-p pdfce-render` still egui/eframe/winit/wgpu/glow/rfd-free);
+`ui-strings` R1 gate clean; release rebuilt + smoke-tested. **ZERO new
+dependencies** → `THIRD_PARTY_LICENSES.md` unchanged.
+
+**Deferred (named follow-ups, NOT built — filed to `ROADMAP.md` Backlog):**
+- **Polish residuals (cosmetic, low priority):** P2-1 recent-files list
+  (needs settings persistence); P2-2 window/taskbar app-icon asset (needs
+  artwork); P2-3 light-mode visual QA pass (no hardcoded colours added —
+  stays OS-theme-driven); P2-4 markup colour-picker tooltip; P2-5
+  screenshot-driven spacing QA.
+- **TWO DATA-SAFETY items — NOT polish, real, still-open** (the crash-safe-
+  autosave / non-destructive-by-default standing UX rule, ui-specialist's
+  territory; filed as their own Backlog bucket, above the polish residuals):
+  (1) **no autosave / crash-recovery scratch file exists** — an unsaved
+  editing session is lost on a crash; (2) **true in-place Save remains
+  (correctly) GATED on that autosave existing** — "Save a copy" is still the
+  only save affordance. Recorded prominently so a future session does not
+  read them as done.
+
+**Still in flight (continuation 31):**
+- **Beta (measurement/dimensioning) — decision 011 CONCLUDED + ARCHIVED**
+  at `docs/decisions/011-first-beta-scaled-measurement-dimensioning-tool.md`
+  (five slices **12.0 / 9a / 12.M1 / 12.M2 / 9c-min**). Its research
+  **prerequisites are COMPLETE** — spec §12.9/§14.5/§8.11, the Acrobat
+  measuring-tools bucket, and the Inkscape selection+snapping bucket are all
+  sourced. **The beta build awaits operator go-ahead** (Ken is reviewing the
+  plan); the engineer starts on his confirmation. Decision 010's C → B → A
+  sequence continues after the beta (Pass 11 shipped → render verified).
+- **Operator is now actively / interactively using the GUI** — the `/loop`
+  autonomous mode is STOPPED; work is interactive from here.
+- **Pass 12 (canvas-interaction foundation) + Pass 9 (vector/Inkscape)** —
+  the remaining C → B → A work, resumes after the beta.
+- **Pass 5 (Encryption)** — fallback/interleave, unchanged.
+
+**For next session / STILL-OPEN operator items (RE-SURFACED, not re-filed;
+ordered by age — oldest first; PLUS the two new data-safety follow-ups):**
+- **Encryption-refusal operator sign-off** — the oldest owed operator item
+  (owed across decisions 007/008/009/010).
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged;
+  LEGAL.md NOT edited.
+- **`/R 6` sourcing method** — Ken's call (gates Pass 5).
+- **License decision (`LEGAL.md` §1)** — still undecided.
+- **Commit authorization** — everything remains UNCOMMITTED (**Passes 0–8.0,
+  the `tools/render-parity` additions, AND the GUI-polish + launcher changes
+  ALL uncommitted**).
+- **W15 — no remote/CI** — unchanged.
+- **NEW — Autosave / crash-recovery scratch file** — none exists; an unsaved
+  editing session is lost on a crash (data-safety, standing UX rule).
+- **NEW — True in-place Save** — deliberately gated on the autosave/recovery
+  mechanism; "Save a copy" is the only save affordance until it lands.
+- Carried Pass-4 residuals and the `/Info`-not-certification-gated item remain
+  open (see continuation 20).
+
+**Same-day continuation 32 — OPERATOR PRIORITIZATION DIRECTIVE recorded:
+Acrobat TEXT-handling parity is the NEXT MAJOR FOCUS after the in-flight
+decided work, ahead of the Inkscape/vector breadth.**
+
+**Operator directive (Ken, 2026-08-01) — verbatim intent:** *"Continue the
+autonomous loop, but when you finish doing the decided work, focus on bringing
+the software to parity with Adobe Acrobat's text-handling capabilities such as
+paragraphs, etc. Focus on bringing parity with Acrobat first before continuing
+to build what Inkscape is better at."*
+
+**Reprioritization recorded (append-only — no prior entry rewritten):**
+- **NEXT MAJOR FOCUS = Adobe Acrobat TEXT-handling parity** — "Edit PDF"-style
+  in-place text editing, paragraph/text-block recognition, reflow, text
+  formatting, and font-handling-on-edit. This is a **NEW major subsystem:
+  editing the document's own page TEXT CONTENT** — explicitly distinct from
+  the shipped text **EXTRACTION** path (Pass 4) and the text-bearing
+  **ANNOTATIONS** path (Pass 6.2, overlays authored on top of the page).
+- **It starts only AFTER the currently-DECIDED / IN-FLIGHT work completes:**
+  operator-supplied **font-supply** (decision 012, building now); the **Pass
+  12.0 canvas-interaction substrate** (decision 010 candidate B / beta slice,
+  being designed→built); **xref-recovery** (decision 013, in KenAgent
+  consultation now); and the **measurement/dimensioning beta foundation**
+  (decision 011). The directive defines what comes NEXT — it does not
+  interrupt the decided work.
+- **Prioritized AHEAD of the further Inkscape/vector-editing BREADTH.** It
+  LEAPFROGS decision 008's Pass 9 vector-editing slices **(b)–(g)** (boolean
+  ops; gradients/shading/transparency; node/Bézier beyond basic; text-to-path;
+  OCG layers) and the "Vector graphics editing (Inkscape-parity)" Backlog
+  bucket. **Recorded as AMENDING decision 010's destination-ranking:** decision
+  010 made vector/Inkscape editing candidate **A** (highest-value
+  post-foundation investment); the operator now places **Acrobat TEXT parity
+  ahead of the Inkscape-vector breadth**. Pass 9's ID + destination survive —
+  a ranking amendment, not a cancellation. Formal record will be KenAgent
+  decision ~014 once the in-flight work + parity catalog land (rule-12
+  discipline: parity reference → scope → KenAgent decision → build).
+
+**Shared-canvas note (why decision 010's C and B are UNAFFECTED):** candidate
+C (render-fidelity verification, **Pass 11**) is SHIPPED; candidate B (**Pass
+12** canvas foundation) proceeds unchanged. Acrobat-style in-place text editing
+needs the **same interactive canvas substrate** (R60: focusable canvas +
+screen↔page transform + hit-test/selection + live-preview overlay) as the
+Pass-9 vector work, so the canvas is **doubly justified** and continues.
+Acrobat-text parity is a CONSUMER of that substrate.
+
+**Beta-sequencing FLAG (decision 011 — not cancelled):** the beta's SHARED
+Pass-12.0 canvas foundation proceeds; the beta is Ken's stated "first beta."
+Its dimensioning slices are unaffected. But its **vector-selection /
+basic-editing slices (9a / 9c-min)** are Inkscape-adjacent, so their placement
+RELATIVE to Acrobat-text parity is an **operator sequencing question to
+confirm** — recorded as a flag, NOT a cancellation of the beta.
+
+**Teed up NOW:** `pdfce-acrobat-librarian` is cataloging Acrobat's **"Edit
+PDF" text-handling** capabilities (in-place edit, paragraph/reflow, formatting,
+font-on-edit, limits) at `D:\Dev\Rag-Specialized\Acrobat_Features\` — the
+parity reference that will ground the future KenAgent architecture decision.
+
+**Recorded in (this continuation):**
+- `ROADMAP.md` Backlog — new top "★ NEXT MAJOR FOCUS — Acrobat text-handling
+  parity" bucket (full framing + capability list + ahead-of-Inkscape
+  prioritization + acrobat-librarian-cataloging-now status).
+- `ROADMAP.md` Next up — dated AMENDMENT note in the decision-010
+  forward-sequence block (the destination-ranking amendment; C/B unchanged;
+  shared canvas; beta sequencing flag).
+
+**Still-open operator items (UNCHANGED — re-surfaced, not re-filed; ordered
+oldest-first):**
+- **Encryption-refusal operator sign-off** — the oldest owed operator item.
+  **Now DOUBLY confirmed as low-payoff:** the OSS-corpus `/Encrypt` sweep at
+  **~5%** (92.5% legacy R≤4) PLUS the operator's stamped-drawings context both
+  point the same way; promotion trigger still NOT met.
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged; LEGAL.md
+  not edited.
+- **`/R 6` sourcing method** — Ken's call (gates Pass 5).
+- **License decision (`LEGAL.md` §1)** — still undecided.
+- **Commit authorization** — everything remains UNCOMMITTED.
+- **W15 — no remote/CI** — unchanged.
+- **Autosave / crash-recovery scratch file** + **true in-place Save** (gated on
+  it) — the two data-safety follow-ups (continuation 31), still open.
+- **Top ROBUSTNESS item — the xref-recovery finding at ~85% of real-file
+  failures** (decision 013, in KenAgent consultation now) is the current
+  leading robustness priority within the in-flight decided work.
+
+**Same-day continuation 33 — CONSOLIDATED filing: root-cause font fix +
+operator-supplied fonts (decision 012) + Pass 12.0 canvas substrate +
+decision 013 (xref recovery, Pass 13a shipped / 13b in progress) + test
+infrastructure; standing-rule collision reconciled (R62–R68 assigned);
+autonomous /loop RESUMED.**
+
+**LOOP-STATUS CORRECTION (supersedes continuation 31):** continuation 31
+recorded the `/loop` autonomous mode as STOPPED/interactive. That is now
+CORRECTED — the operator RESUMED the autonomous loop
+(`/loop @agent invoke autonomous-builder`). **The autonomous loop is ACTIVE
+again**, with interactive check-ins interleaving. (Append-only correction;
+continuation 31's entry is not rewritten.)
+
+**Shipped (full records in `ROADMAP.md` Shipped):**
+- **Font-fix — NUL-misroute of no-cmap CIDFontType2 embedded TrueType —
+  COMPLETE.** The root-cause bug behind the operator's real drawing
+  rendering with missing text. Format detection trimmed leading whitespace
+  **including NUL** before magic-sniffing → the leading NUL of sfnt magic
+  `0x00010000` was stripped → `01 00 …` matched bare-CFF magic → TrueType
+  handed to the CFF parser ("offset out of bounds" that *looked* like a
+  read-fonts objection but was a caller-side misroute). Fix: match magics on
+  RAW bytes, trim only on the Type 1 `%!` text path, never NUL. **skrifa
+  stays 0.42.1 pinned — pdfce-side routing bug, no bump.** Class impact: all
+  embedded TrueType from SolidWorks/AutoCAD/Office CAD. **Render-parity
+  footer IN → COMPLETE** (the earlier "corpus-regression footer owed"
+  residual is discharged): R59 gate `--max-unexplained 1` exit 0 over 2,914
+  files / 2,922 pages — unexplained **1→1** (no regression; the 1 is the
+  pre-existing A019 f32 case), font-unsupported **7→0**, benign **2840→2868**,
+  known-gap **49→53** (correct rise — text now renders, revealing already-
+  disclosed shading/marked-content gaps previously MASKED by the whole-font
+  skip), band **0.02942→0.02963**. New `Diagnostics::fonts_unsupported_by_
+  reason` (+6 CLI tokens). Synthetic CC0 fixture
+  `fixtures/synthetic/text/cidfonttype2-nocmap-embedded.pdf` +
+  `tools/gen-cidfont-nocmap-fixtures.py` + `tests/cidfont_nocmap_render.rs`
+  (never the proprietary file). 1,018+ tests green, ZERO dep change, release
+  rebuilt. **Residual (Backlog):** no dedicated `font_program` fuzz target
+  yet.
+- **Operator-supplied fonts (decision 012 first cut).** Non-embedded,
+  non-Base-14 SIMPLE fonts render from an operator-supplied folder via the
+  `FontEnvironment.named` seam (decision 004 §5.3). `substituted: bool` →
+  `GlyphSource {Embedded, Bundled, Supplied}`; `substitute_face` returns the
+  source + subset-tag retry; `face_names()` on the one skrifa parser (R21);
+  `Diagnostics.glyphs_supplied`/`supplied_fonts` distinct from bundled. CLI
+  `--font-dir` (repeatable, render-page) + shell folder-walk + three-way
+  disclosure. GUI "Font folders" tool (**session-state — not persisted; the
+  R15 user-state partition doesn't exist yet, so persistence deferred with
+  it**). Acceptance all met: non-embedded Calibri renders bundled without /
+  supplied with `--font-dir`; **positions BYTE-IDENTICAL** when
+  supplied==bundled (positions come from `/Widths`); subset-tag resolution;
+  corrupt files skip-and-note; composite still `CompositeNotEmbedded`; the
+  R64-equiv font-dir-independence gate holds. **1,045 tests, all gates green,
+  ZERO new deps, release rebuilt.** Deviations: `--font-dir` render-page only;
+  GUI session-state not persisted; inline "supply this font" link deferred.
+  Fast-follows FF1 (OS-font enumeration) / FF2 (composite via Unicode route) /
+  FF3 (descriptor auto-routing). **FONT-ON-EDIT CONNECTION:** decision 012 is
+  the enabler for the upcoming Acrobat text-editing (a typed glyph needs the
+  font available).
+- **Pass 12.0 — canvas-interaction substrate.** The single shared substrate
+  R60 mandates, shipped UNINHABITED (no tools → viewer behavior unchanged).
+  New `crates/pdfce-gui/src/canvas.rs` (`CanvasTool` ships uninhabited;
+  `CanvasTargetProvider` trait + `EmptyTargetProvider`; selection-set model;
+  pure state-machine fns + tests). `viewer.rs` FOUR geometry bridges —
+  `screen_to_page`/`page_to_screen` + the **new `canvas_to_pdf_space`/
+  `pdf_space_to_canvas`** built by inverting `page_device_geometry`'s
+  `Transform` (a genuine finding beyond decision 011's literal 12.0
+  deliverables: device-Y-down ↔ PDF-Y-up correctness), proven at 0/90/180/270°
+  + 1/zoom invariance. `main.rs` wiring (focusable canvas
+  `Sense::click_and_drag`, pan-suppression, four-way Escape precedence,
+  overlay). **`MarkupTool` → `CanvasTool` rename** (permanent; noted vs
+  pass-6.1/pass-8 specs). 47 gui tests, full-workspace gates green, GUI-core
+  separation intact, wasm32 clean, ZERO new deps, release rebuilt.
+  Deviations: image drag-sense gated on `suppress_pan` (egui 0.35 pans
+  first); `target_provider = Some(EmptyTargetProvider)` not `None`
+  (observably identical). Out-of-scope pre-existing fix: a doc-comment clippy
+  error in `pdfce-core/document.rs` (zero functional impact). Residuals: Pass
+  9a plugs the real target provider + marquee-vs-pan; 6.1/8/12.M2/9c-min plug
+  real `CanvasTool` variants; Pass 7 the global-vs-focused keyboard
+  reconciliation. Decision 010's Pass 12 / candidate-B foundation slice —
+  **doubly justified** (shared by Acrobat text editing + measurement +
+  vector per the continuation-32 reprioritization).
+- **Pass 13a — cross-reference EOL/CRLF audit (decision 013 Pass A, NEGATIVE
+  RESULT filed).** Parser confirmed EOL/CRLF-correct (9 synthetic legal-EOL
+  fixtures all parse); **547/567 sampled real failures are OFFSET-SHIFT
+  corruption** (LF→CRLF byte-growth invalidating startxref + offsets), **0
+  genuine parser bugs**; no parser code changed (tests + fixtures + tools
+  only: `fixtures/synthetic/xref-eol/`, `tools/gen-xref-eol-fixtures.py`,
+  `tools/xref-crlf-classify.py`, `tests/xref_eol.rs`). Surfaced a `gen-65536`
+  tolerance candidate (17 files, out-of-spec generation > 65535, NOT
+  CRLF-related — a separate future decision).
+- **Test infrastructure (standing gates + tools).** (a) font-parse
+  regression harness `tools/font-parity/` (parses every embedded font,
+  asserts routing-or-clean-fail, 0 misroutes, guards the NUL bug; standing
+  rule **R68**); (b) `tools/realdrawings-smoke/` (operator's private
+  read-only `R:\Products` render smoke — **results gitignored, nothing
+  proprietary committed**; font fix holds across 339 real drawings,
+  `unsupported=0`); (c) OSS-corpus expansion — **+1,109 real-world PDFs**
+  (pdfium BSD 331, qpdf Apache 639, PDFBox Apache 139) into gitignored
+  `fixtures/external/` with per-source PROVENANCE (**pdf.js SKIPPED** —
+  unclear per-file provenance; GPL/AGPL projects avoided). Corpus now **~4,000
+  files**. Sweep tooling `fixtures/external/realworld-sweep.sh`.
+
+**Decisions filed this session:**
+- **Decision 012 (operator-supplied fonts)** — archived
+  `docs/decisions/012-operator-supplied-fonts.md`, dated 2026-07-31. Folder-
+  based supply for non-embedded SIMPLE fonts; three trust levels; renderer
+  bytes-in; composite/OS-fonts/descriptor-routing deferred as named fast-
+  follows.
+- **Decision 013 (xref recovery)** — archived
+  `docs/decisions/013-xref-recovery.md`, dated 2026-07-31. Two sequenced
+  Passes: 13a (EOL audit — done, negative result) → 13b (rebuild-by-scan —
+  in progress). Subsumes decision 007 §10 item 6 (offset-start file).
+
+**STANDING-RULE COLLISION RECONCILED (the gating action):** three recent
+decisions proposed COLLIDING R-numbers. Verified the current highest assigned
+= **R61** (decision-010 Inkscape-behavioral-reference). Assigned the next-free
+numbers IN ORDER and recorded the mapping in `ROADMAP.md` Standing rules:
+- **Decision 012** proposed R61–R65 (R61 taken) → assigned **R62–R66**
+  (record-R61→R62 supplied-shell-sourced; R62→R63 three-trust-levels;
+  R63→R64 supplied-outside-determinism-gate; R64→R65 composite-Unicode-route-
+  only; R65→R66 OS-fonts-opt-in).
+- **Decision 013** proposed R59 (taken) → assigned **R67**
+  (recovered-base-forces-full-rewrite).
+- **Font-parse regression harness** proposed R62 (would collide) → assigned
+  **R68** (embedded font programs route to the correct parser or fail clean;
+  magic/variant disagreement = gate failure; R46/R59 re-run pattern).
+
+**OWED CODE FOLLOW-UPS (recorded, NOT done — librarian does not edit code):**
+1. The operator-supplied-fonts `pdfce-render` implementation uses R61/R62/R63
+   in in-code doc comments (the record's proposed numbers) — must be updated
+   to the **assigned R62/R63/R64**.
+2. Any Pass-13b code comments citing the recovered-base rule as "R59" must be
+   updated to **R67** when Pass 13b lands.
+
+**Findings + decisions:**
+- ARCHITECTURE `§12` gained dated decision-log entries for decisions 012 and
+  013; `§5.10` (recovered-base-forces-full-rewrite, sibling to §5.2/R35 and
+  §5.9/R58) written **marked pending Pass-13b ship**.
+- RAG lessons filed this continuation (see below).
+
+**RAG escalations this continuation:**
+- `C:\personal_rag\pdf\` — the NUL-misroute finding: read-fonts `FontRef::new`
+  ACCEPTS valid no-cmap subset-TrueType CIDFontType2; an "offset out of
+  bounds" is a caller-side misroute (NUL-as-whitespace stripping the sfnt
+  magic), not a read-fonts objection.
+- `D:\dev\rag\rust\` — `skrifa::FontRef` is a re-export of
+  `read_fonts::FontRef`; `FontRef::new` is lenient, so `ReadError::OutOfBounds`
+  from a font-detection wrapper almost always means the WRONG parser was
+  invoked (CFF on TrueType bytes); NUL-as-whitespace corrupts the `0x00010000`
+  magic.
+
+**Still in flight (continuation 33):**
+- **Pass 13b (rebuild-by-scan xref recovery)** — IN PROGRESS (the 85%
+  real-world robustness fix). Queued to avoid concurrent pdfce-cli edits with
+  the just-shipped font-supply work.
+- **Beta (measurement/dimensioning, decision 011)** — foundation (Pass 12.0)
+  now SHIPPED; remaining slices await operator go-ahead. The 9a/9c-min
+  vector-selection slices' placement relative to Acrobat-text parity is the
+  flagged operator sequencing question (continuation 32).
+- **★ NEXT MAJOR FOCUS — Acrobat text-handling parity** — routes through a
+  future KenAgent decision (~014) AFTER the in-flight decided work
+  (012/013/Pass 12.0/011) lands; `pdfce-acrobat-librarian` cataloging "Edit
+  PDF" text-handling now. **Decision 012 is its font-on-edit enabler.**
+- **Pass 5 (Encryption)** — fallback/interleave; now DOUBLY confirmed
+  low-payoff (~5% corpus `/Encrypt` + operator stamped-drawings context).
+
+**Still-open operator items (UNCHANGED — re-surfaced, not re-filed; ordered
+oldest-first):**
+- **Encryption-refusal operator sign-off** — oldest owed; now the #2
+  real-world gap (~5%, empty-password permissions) + the stamped-drawings
+  context; promotion trigger still NOT met.
+- **LEGAL.md §1 license decision** — still undecided (LEGAL.md not edited).
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged; not
+  edited.
+- **`/R 6` sourcing method** — Ken's call (gates Pass 5).
+- **Commit authorization** — everything remains UNCOMMITTED; the tree is now
+  **very large** (Passes 0–8.0, Pass 11, Pass 12.0, Pass 13a, the font-fix +
+  decision-012 font-supply, the render-parity + font-parity + realdrawings +
+  OSS-sweep tooling, GUI-polish + launcher — all uncommitted).
+- **W15 — no remote/CI** — unchanged.
+- **Autosave / crash-recovery scratch file** + **true in-place Save** (gated
+  on it) — the two data-safety follow-ups (continuation 31), still open; the
+  GUI "Font folders" persistence is now DEFERRED with the same R15 user-state
+  partition.
+
+**For next session:**
+- Land **Pass 13b** (rebuild-by-scan recovery) against decision 013 §3.3–§5
+  acceptance; then flip `ARCHITECTURE.md` §5.10 from "pending Pass-13b ship"
+  to shipped and dispatch the librarian to move Pass 13b to Shipped.
+- Apply the **two owed code follow-ups** (R61/R62/R63 → R62/R63/R64 in the
+  font-supply doc comments; "R59" → R67 in Pass-13b comments).
+- Work the ranked OSS real-world gaps (Backlog): after xref recovery, the
+  `/Resources`-omission tolerance, LZW EarlyChange edges, remaining font
+  subtypes, and the undecodable-image cases.
+
+**Same-day continuation 34 — decision 014 filed (Acrobat text-handling
+parity, the ★ NEXT MAJOR FOCUS), Pass 13.x→14.x RENUMBER + R69–R74;
+Pass 13b SHIPPED (the 85%-real-world-recovery win, zero regression);
+autonomous loop still ACTIVE:**
+
+**Decisions filed this session:**
+- **Decision 014 (Acrobat-style in-place text editing) ACCEPTED via the
+  KenAgent protocol and archived: `docs/decisions/014-acrobat-text-editing.md`
+  (dated 2026-07-31).** This is the formal architecture record the
+  operator's ★ NEXT MAJOR FOCUS directive (continuation 32) named as
+  "~014" — Acrobat "Edit PDF" parity: in-place editing of the page's OWN
+  text content (distinct from the shipped EXTRACTION path, Pass 4, and the
+  ANNOTATIONS overlay path, Pass 6.2). Headline design calls: **M-hier**
+  text model (Run→Line→Block, derived from Pass 4's extraction, fully
+  reviewable — never authoritative); **E-surgery** edit mechanism (extends
+  Pass 8.0's advance-preserving REMOVE interpreter to REPLACE — the second
+  sanctioned page-content-rewrite operation after redaction, R47's line);
+  **F-refuse** font-on-edit posture (edit only with glyphs the run's font
+  can already provide; refuse-and-disclose a glyph an embedded SUBSET
+  lacks; font-subsetting deferred as FF-C, permissive-only); **RL-line**
+  first-cut relayout (single-line advance-preserving; block reflow is
+  FF-A/FF-B, the ladder's exceed-Acrobat play — pdfce's offline cross-block
+  reflow beats Acrobat's cloud-gated, English-only one); **default
+  INCREMENTAL save (R36)**, explicitly NOT a fourth forced-full-rewrite
+  sibling (redaction stays the one operation that truly removes); **T-
+  disclose** tagged-PDF handling (preserve BDC/EMC+MCID, disclose
+  `/ActualText` staleness — Acrobat's own in-place edit is known to
+  corrupt the structure tree; pdfce doesn't).
+- **PASS-NUMBER RENUMBER, recorded explicitly (do not lose this):**
+  decision 014's own archived record proposes the family as "Pass 13.x
+  (13.0–13.3)". **13.x was already taken** — Pass 13a and Pass 13b
+  (decision 013, xref recovery) were both assigned that number and BOTH
+  SHIPPED before decision 014 landed (see below). The librarian assigned
+  the text-editing family the next free MAJOR number, **Pass 14.x**:
+  **14.0** read-only text model + block recognition (core + CLI
+  `inspect --text-blocks`); **14.1** in-place edit + single-line relayout
+  + the font-on-edit gate + CLI `edit-text` (core surgery); **14.2**
+  formatting on a selection — size/colour/gated family (core + CLI);
+  **14.3** edit UI on the Pass 12.0 canvas (gui, `pdfce-ui-specialist`
+  first). Filed in `ROADMAP.md` "Next up" (new top entry) with the full
+  fast-follow ladder (FF-A offline reflow → FF-H spacing/synthetic
+  styles) and honest limits named up front.
+- **Six standing rules filed, NO collisions: R69–R74** (highest prior was
+  R68 — the font-parity harness). In order per decision 014 §5.1: **R69**
+  text-edit-is-surgery-not-overlay; **R70**
+  text-edit-is-incremental-not-a-scrub; **R71** font-on-edit-trust-ladder;
+  **R72** recognized-blocks-and-reflow-are-reviewable-hints; **R73**
+  tagged-edits-disclose-never-corrupt; **R74**
+  text-model-in-core-edit-UI-in-gui. Added to `ROADMAP.md` Standing rules.
+- **`ARCHITECTURE.md` updated**: new **§5.11** (in-place text editing is
+  surgery-under-incremental-save, explicitly NOT a fourth member of the
+  §5.2/§5.9/§5.10 forced-full-rewrite family — marked DECIDED, pending
+  Pass 14.0–14.3 ship, mirroring how §5.10 was written ahead of Pass 13b);
+  a new §12 decision-log entry for decision 014 (renumber recorded, all
+  six design calls summarized, R69–R74 cross-referenced).
+- **Backlog "★ NEXT MAJOR FOCUS" bullet amended (not deleted, append-only
+  spirit honored)** — a dated 2026-08-01 note now forward-points to the
+  new Pass 14.x "Next up" entry as the live record; the Backlog bullet
+  itself stays as the historical directive record. The "~014" placeholder
+  references at two other spots in `ROADMAP.md` (the decision-010
+  forward-sequence amendment block; the Backlog STATUS sub-bullet) both
+  got a matching forward-pointer footnote.
+- **Timing note recorded:** all four gating items the operator's
+  directive named before this focus could begin — font-supply (decision
+  012), the Pass 12.0 canvas substrate, xref-recovery (decision 013), and
+  the measurement/dimensioning beta foundation (Pass 12.0, shared) — are
+  now ALL SHIPPED (see Pass 13b below). Starting Pass 14.0 is an
+  engineering scheduling call, not a blocked prerequisite. The beta's
+  remaining vector-selection/basic-editing slices (9a/9c-min) vs. Pass
+  14.x ordering remains the flagged, unresolved operator sequencing
+  question from continuations 32/33.
+
+**Shipped this session:**
+- **Pass 13b — Rebuild-by-scan cross-reference recovery (decision 013
+  Pass B) — SHIPPED, CLOSING decision 013.** The #1 real-world robustness
+  fix. **Headline: 566 previously-strict-failing real-world files now
+  open** (corpus of 1,109: qpdf Apache 639 / pdfium BSD 331 / PDFBox
+  Apache 139), reason-bucketed — `NotAnXrefSection` 417, `TrailerParse`
+  99, `BadEntry` 20, `BadXrefStream` 13, `StartxrefNotFound` 7,
+  `BadStartxrefOffset` 7, `MissingHeader`/offset-start 3. **Zero
+  regression** on the 2,907-file veraPDF corpus — 2,892 clean files
+  unchanged via the strict path, **0 clean files diverted into
+  recovery** (verified by an object-outcome tally, not assumed); 6
+  still-failing `BadObject` files unchanged. **The hardest gate —
+  `*-fail-*` reconciliation — is COMPLETE:** all 5 veraPDF status changes
+  (refused→opens) are PDF/A-conformance files failing a File-header or
+  colour-space rule, never an xref-parse bug — defensible reader
+  recovery, qpdf/pdfium open the same files too. **Named non-goal
+  (unchanged scope):** 53 real-world files with OBJECT-level corruption
+  AFTER a clean xref recovery — filed to Backlog as a future Pass
+  (object-level lenient loading), not silently absorbed. Encrypted-and-
+  refused 58 (unchanged gap); recovery-refused 9 (`NoCatalog` 2,
+  `NoObjects` 7). Gates: fuzz 21,595 runs / 0 crashes; fmt/clippy clean;
+  `cargo tree` core+render GUI-dep-free; **ZERO new dependency**; 638
+  `pdfce-core` lib tests + integration suites green. Demo:
+  `add-contents.pdf` opens `(recovered)`, `round-trip --mode full` →
+  clean reloadable PDF, incremental refused by name (CLI exit 8),
+  recovery-load reports CLI exit 11. Files: `crates/pdfce-core/
+  src/recover.rs` (new) + edits to `document.rs`/`objstm.rs`/`xref.rs`/
+  `writer/{mod,save}.rs`; `pdfce-cli` exit 11; `pdfce-gui` recovery
+  banner; `fixtures/synthetic/xref-recover/` +
+  `tools/gen-xref-recover-fixtures.py`; `tests/xref_recover.rs`; fuzz
+  `fuzz/fuzz_targets/recover_roundtrip.rs`; `tools/recover-sweep/`.
+  **`ARCHITECTURE.md` §5.10 FLIPPED from "pending Pass-13b ship" to
+  shipped/active — R67 is now IN FORCE**, not merely filed against
+  future code.
+
+**Two engineer flags recorded (NOT actioned by the librarian — code is
+the engineer's territory):**
+1. **Code-comment number lag, being discharged this session.** `recover.rs`
+   cites the recovered-base rule descriptively as "~R62/R59"; the
+   canonical number is **R67**. The engineer is fixing this (R59→R67) in
+   `recover.rs` this session — recorded here as being discharged, not as
+   an outstanding owed item.
+2. **`gen-65536` deviation — deliberate, defensible, flagged.** Rebuild-
+   by-scan opens some recoverable gen-65536 files via the `BadEntry`
+   trigger (one of decision 013's own target buckets — a malformed
+   generation number is exactly the entry-corruption shape recovery
+   routes around). This is **NOT** the separate strict-parser gen-65536
+   TOLERANCE question Pass 13a flagged (Backlog) — the strict parser
+   still correctly REJECTS gen 65536 today; only the recovery path
+   (which never reads the original malformed entry) opens these files.
+   Written up as a new `personal_rag/pdf` lesson (below) since the
+   distinction is non-obvious and durable beyond this session.
+
+**RAG escalations this continuation:**
+- `C:\personal_rag\pdf\lesson_20260801_gen_65536_recoverable_via_badentry_not_strict_tolerance.md`
+  (NEW) — the gen-65536-via-`BadEntry`-recovery vs. strict-parser-
+  tolerance distinction (engineer flag 2, above). Subject + master
+  indexes updated.
+
+**Still in flight (continuation 34):**
+- **Pass 14.0** (editable text model + block recognition) — next
+  engineering item once the operator confirms sequencing against the
+  beta's remaining 9a/9c-min slices (the flagged, still-open question).
+- **Beta (measurement/dimensioning, decision 011)** — foundation (Pass
+  12.0) SHIPPED; remaining slices still await operator go-ahead /
+  sequencing confirmation relative to Pass 14.x.
+- **Pass 5 (Encryption)** — fallback/interleave, unchanged, low-payoff.
+- **The autonomous `/loop` remains ACTIVE** (resumed continuation 33,
+  unchanged this continuation).
+
+**Still-open operator items (UNCHANGED — re-surfaced, not re-filed;
+ordered oldest-first):**
+- **Encryption-refusal operator sign-off** — oldest owed.
+- **LEGAL.md §1 license decision** — still undecided.
+- **LEGAL.md §2 Adobe-supplement copyright contradiction** — flagged.
+- **`/R 6` sourcing method** — Ken's call (gates Pass 5).
+- **Commit authorization** — everything remains UNCOMMITTED; the tree
+  keeps growing (now includes Pass 13b's recovery module + tooling).
+- **W15 — no remote/CI** — unchanged.
+- **Autosave / crash-recovery scratch file** + **true in-place Save**
+  (gated on it) — still open, unchanged.
+
+**For next session:**
+- Confirm the operator's sequencing call: Pass 14.0 (Acrobat text-editing)
+  now vs. the beta's remaining 9a/9c-min vector slices first.
+- Once sequencing is confirmed, start **Pass 14.0** per decision 014 §5.2
+  / `ROADMAP.md`'s Pass 14.x entry — provenance-linkage extension of Pass
+  4 first, then the Run→Line→Block clustering pass.
+- Confirm the engineer's in-session R59→R67 `recover.rs` comment fix
+  landed; if not, it remains the one owed code follow-up from this
+  continuation.
+
+**Same-day continuation 35 — Pass 14.0 SHIPPED (read-only text model +
+block recognition + provenance substrate for 14.1); Pass 14.1 PROMOTED;
+autonomous loop still ACTIVE:**
+
+**Shipped:**
+- **Pass 14.0 — Editable text model + block recognition (read-only;
+  decision 014 Pass 1 of 4), SHIPPED and independently re-verified green
+  in the main tree** (all 10 new tests pass: 5 core `text_edit.rs` + 5
+  CLI `inspect_text_blocks.rs`, including
+  `sourced_view_is_unchanged_by_provenance_capture`, which pins Pass 4's
+  output as byte-identical). Full record now in `ROADMAP.md` Shipped
+  (above); summary here for the session trail:
+  - New `pdfce-core` module `text_edit` (`mod.rs` + `model.rs`): a
+    Run→Line→Block recognition pipeline built as a SECOND clustering
+    pass over Pass 4's `PageText.runs` — no re-extraction. Lines split at
+    Pass 4's `DerivedLineBreak` + a defensive baseline-jump check;
+    columns cluster by horizontal overlap then order left-to-right
+    (derived §14.8.2.3.1 reading order); blocks/paragraphs break on
+    leading-gap or first-line indent. All four thresholds exposed in
+    `BlockRecognitionOptions`; every inference counted in
+    `BlockDiagnostics`; the sourced-only view is always available via
+    `EditableTextModel::sourced_view()`. Everything DERIVED/COUNTED/
+    REVIEWABLE (§14.8 S1–S9, R72).
+  - Provenance linkage added to the read path (the substrate Pass 14.1
+    surgery needs), gated behind `ExtractOptions::capture_provenance`
+    (default OFF → Pass 4 output byte-for-byte unchanged). New per-glyph
+    fields: show-operator byte span, content-stream ref (page vs. form
+    object), font resource name, `Tf` size, fill colour (g/rg/k decoded;
+    sc/scn → `Other`, never guessed), text matrix, CTM.
+  - CLI: `inspect --text-blocks [--pages …] [--json]` (plain `inspect`
+    unchanged, pinned by a regression test). Derived-structure
+    disclosures go to stderr; `--json` carries full structure + per-line
+    provenance.
+  - Fixture: `fixtures/synthetic/textblocks/multi-column.pdf` (CC0
+    synthetic, 1,154 bytes, 2 columns × 2 paragraphs × 10 lines; content
+    emitted left-then-right to prove geometric ordering; one paragraph in
+    blue to exercise colour provenance) + `tools/gen-textblocks-fixtures.py`
+    + PROVENANCE.md.
+  - **Gates:** `cargo fmt --check` clean; `clippy --workspace --all-targets
+    -D warnings` clean (new code uses checked `.get()` per the crate's
+    panic-free `#![deny(clippy::indexing_slicing)]` policy); `cargo tree
+    -p pdfce-core` / `-p pdfce-render` GUI-dep-free; **no new
+    dependency**; full workspace tests green (core lib 645,
+    `text_extract` integration 26 UNCHANGED, `text_edit` 5,
+    `inspect_text_blocks` 5, render/gui green, 6 doctests).
+  - **Public API surface added to `pdfce-core`** (rule-10 API-guidelines
+    trail): `text_extract::ContentStreamRef` / `TextColor` /
+    `GlyphProvenance` (all #[non_exhaustive]); `ExtractedGlyph.provenance`
+    (new field); `ExtractOptions.capture_provenance` + `with_provenance`;
+    new `text_edit` module (`EditableTextModel`, `GlyphRef`,
+    `TextPosition`, `Line`, `Block`, `BlockKind`, `BlockDiagnostics`,
+    `BlockRecognitionOptions`).
+
+**Decisions made this session (continued):**
+- **Four engineer judgment calls recorded** (all defensible, none
+  blocking — filed to `ROADMAP.md`'s Shipped entry for the API-guidelines
+  trail): (1) `ExtractedGlyph` dropped `Copy` (now owns a `Vec` via the
+  provenance `Option`), kept `Clone` — technically breaking but zero
+  external consumers and every workspace consumer accesses glyphs by
+  reference; (2) `TextPosition` uses a **byte** offset (glyph-boundary),
+  not the decision record's literal "char-offset" wording, because Pass 4
+  already keys glyphs by byte offsets — a UI layer converts to char index
+  if needed; (3) fill-colour deliberately partial (device g/rg/k decoded,
+  named-space sc/scn → `TextColor::Other`, never guessed to black — rule
+  4); (4) `ActualText` runs left atomic (counted, not glyph-split —
+  §14.9.4 N4), artifact runs excluded + counted.
+- **Pass 14.1 PROMOTED from Next up to In progress** (`ROADMAP.md`) —
+  its font-on-edit surgery consumes Pass 14.0's `text_edit` model +
+  provenance linkage directly. Status at promotion: spec grounding
+  (§9.4.x advance math + inverse encoding) is being sourced in parallel
+  by `pdfce-spec-librarian`; 14.1's build starts once that lands. 14.2/
+  14.3 remain in Next up, scope unchanged.
+
+**Findings + decisions:**
+- **Recurring systemic finding: autonomous-builder worktree isolation +
+  the uncommitted git substrate = an empty workspace.** The autonomous
+  builder was again launched into an isolated git worktree that lacked
+  the uncommitted Pass 1–13 substrate — everything in `crates/` is
+  uncommitted on the main tree, so a worktree branched from the bootstrap
+  commit (`67967b2`) can't see any of it. The builder worked around it by
+  writing the authoritative deliverable to the main tree per its
+  instructions; the stale worktree was then removed. This has now bitten
+  **multiple** builder dispatches (not a one-off) — written up as a new
+  `D:\dev\rag\rust\` finding (below) since it's a general Rust/git-
+  worktree + Claude-Code-orchestration gotcha, not PDF-specific. It also
+  strengthens the case for the still-pending commit authorization: an
+  initial commit would make worktree-based dispatch actually viable
+  instead of relying on the "write to main tree" workaround every time.
+
+**Still in flight:**
+- **Pass 14.1** — spec grounding in flight (`pdfce-spec-librarian`,
+  §9.4.x advance math + inverse encoding); build starts once that lands.
+- **Pass 14.2 / 14.3** — queued behind 14.1, unchanged scope.
+- **Beta (measurement/dimensioning, decision 011)** — foundation (Pass
+  12.0) SHIPPED; remaining slices still await operator go-ahead/
+  sequencing confirmation relative to Pass 14.x (unchanged).
+- **Pass 5 (Encryption)** — fallback/interleave, unchanged, low-payoff.
+- **The autonomous `/loop` remains ACTIVE.**
+
+**Still-open operator items (UNCHANGED — re-surfaced, not re-filed;
+ordered oldest-first):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- Commit authorization — everything remains UNCOMMITTED; the tree keeps
+  growing (now includes Pass 14.0's `text_edit` module + fixtures). **This
+  session's worktree-isolation finding (above) adds a concrete engineering
+  cost to the "still uncommitted" state, beyond the standing risk.**
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+
+**RAG escalations this continuation:**
+- `D:\dev\rag\rust\autonomous_builder_worktree_isolation_uncommitted_substrate.md`
+  (NEW) — the worktree-isolation-vs-uncommitted-substrate finding above.
+  Subject + master indexes updated.
+
+**For next session:**
+- Once `pdfce-spec-librarian`'s §9.4.x spec grounding lands, start Pass
+  14.1's build proper (advance-preserving REPLACE interpreter, inverse
+  encoding, font-on-edit gate, incremental save + prior-text disclosure).
+- Consider whether commit authorization should be revisited given the
+  recurring worktree-isolation cost — flagged, not actioned (Ken's call).
+
+**Same-day continuation 36 — Pass 14.1 SHIPPED (in-place text editing
+now works); list-authoring Backlog gap filed; alignment adjudicated;
+14.2 fill-colour design decision recorded:**
+
+- **Pass 14.1 SHIPPED 2026-08-01** — in-place text editing via
+  content-stream surgery + the font-on-edit refusal gate + CLI
+  `edit-text` (decision 014 Pass 2 of 4). Full record moved to
+  `ROADMAP.md` Shipped (above Pass 14.0's entry). Independently
+  re-verified in the main tree: 19 core `text_edit` unit tests + 6 CLI
+  `edit_text` integration tests all pass; a live edit ("Hello"→"Hi")
+  produced `advance_delta = -16.008` with the Tm-follower repositioned
+  and all three disclosures surfaced; a subset-missing glyph was
+  refused BY NAME (R-INV-1, exit 9, verbatim Acrobat
+  "embedded-but-not-local" framing). **In-place editing of a PDF's own
+  page text now works end-to-end for the first time in this project.**
+- **What it built:** REMOVE→REPLACE content-stream surgery extending
+  Pass 8.0's machinery (REMOVE is the `A_new = 0` case); new
+  `text_edit/encoding.rs` (inverse-encoding builder inverting the
+  font's OWN resolved `/Encoding` via AGL, never `/ToUnicode` —
+  documented non-injective/lossy) + `text_edit/edit.rs` (REPLACE
+  surgery, single-line relayout, font-on-edit gate, incremental save);
+  advance-delta relayout is REFLOW-default with a `--pin` fallback to
+  Pass 8.0's compensating-`TJ` path; CLI `edit-text` subcommand; five
+  new synthetic fixtures + generator + PROVENANCE.md.
+- **Gates:** fmt/clippy clean (panic-free); `cargo tree` GUI-dep-free
+  on core/render; full workspace green (core lib 657 incl. 19 new; 6
+  new CLI; Pass 4 + Pass 14.0 tests unchanged); R59 on the edited
+  `embedded_full.pdf` fixture = substituted=0/notdef=0/unsupported=0;
+  round-trip = edited output is a byte-identical prefix on all five
+  test flows.
+- **Five engineer judgment calls recorded** (all defensible, none
+  blocking — filed to the `ROADMAP.md` Shipped entry for the
+  API-guidelines trail): (1) trust levels split across the crate seam —
+  core reports `Embedded`/`NonEmbedded` only, CLI refines
+  `NonEmbedded`→`Bundled`/`Supplied` via its own `FontEnvironment`
+  (keeps core rasterizer-free, R21); (2) `subset = "ABCDEF+"` tag,
+  "carried" = codes used on the page (a safe under-approximation,
+  disclosed, not an overclaim); (3) anchor = find-in-operator with an
+  optional `pinned_span` from Pass 14.0's `GlyphProvenance` — Form-
+  XObject content, `'`/`"` anchors, and cross-`TJ`-element matches are
+  refused BY NAME (first-cut non-goals); (4) multi-stream pages
+  collapse into the first content object + empty extras (disclosed);
+  (5) reflow applies `ΔA` to ALL absolute `Tm` operators on the line,
+  not just the edited run's own.
+- **Follow-up flagged, not yet a Pass:** R-INV-2/3/4 (symbolic-no-
+  encoding, ToUnicode-only, composite) are logic-covered in
+  `classify_font` but have NO fixture exercising them end-to-end —
+  clean scoped follow-up before FF-E/FF-F (composite/CJK/RTL editing)
+  is attempted, since those slices depend on the same gate paths.
+- **New Backlog gap filed: bulleted/numbered list authoring.** Surfaced
+  while scoping Pass 14.2 against
+  `D:\Dev\Rag-Specialized\Acrobat_Features\text_edit__formatting_options.md`
+  — real Acrobat Edit-PDF behavior with no home anywhere in decision
+  014's Pass 14.x family or the FF-A..FF-H ladder, not even as a named
+  deferral. It's content AUTHORING (kin to FF-D, but structured), not
+  in-place editing of existing runs. Filed to `ROADMAP.md` Backlog as
+  an open bucket with no invented Pass number/priority — an **operator
+  scope question surfaced to Ken**: do we want list authoring as
+  Acrobat parity, and if so, where in the sequence?
+- **Alignment ADJUDICATED, not a gap.** The same scoping pass flagged
+  text alignment (left/center/right/justified) as possibly unscoped —
+  it isn't: decision 014 already covers it, FF-A (left/center/right,
+  within-block reflow) + FF-B (adds justified). Alignment only applies
+  when a block re-wraps, so it correctly lives in the reflow ladder,
+  not Pass 14.2. Recorded as an engineer decision (2026-08-01) in
+  `ROADMAP.md` so this was adjudicated, not overlooked.
+- **Pass 14.2 fill-colour design decision recorded** (forward-looking,
+  attached to the Pass 14.2 Backlog/Next-up bullet ahead of its own
+  ship entry): unlike Acrobat, which always stores `DeviceRGB`
+  regardless of the picker mode shown, pdfce will let the operator
+  choose RGB/CMYK/gray and STORE the actual chosen space (`rg`/`k`/`g`
+  respectively) — a minimal-diff parity-plus. Binding constraint: a
+  size-only edit must never touch the fill-colour operator at all
+  (byte-identical on that operator when colour wasn't part of the
+  requested edit).
+
+**Still in flight (continuation 36):**
+- **Pass 14.2 (formatting on a selection)** — build dispatched in
+  parallel per the operator's `/loop` continuation; not yet landed.
+  Will move to Shipped once its own build report arrives.
+- **Pass 14.3 (edit UI on the Pass 12.0 canvas)** — queued behind 14.2,
+  unchanged scope; needs `pdfce-ui-specialist` dispatched first.
+- The R-INV-2/3/4 fixture-coverage follow-up (above) — not yet
+  scheduled as a Pass.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation relative to Pass 14.x.
+- **The autonomous `/loop` remains ACTIVE.**
+
+**Still-open operator items (UNCHANGED — re-surfaced, not re-filed;
+ordered oldest-first):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- Commit authorization — everything remains UNCOMMITTED; the tree keeps
+  growing (now includes Pass 14.1's `text_edit::encoding`/`edit`
+  modules + fixtures). Unchanged recurring worktree-isolation cost.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- **NEW this continuation — list-authoring scope question** (see
+  above): does the operator want bulleted/numbered list authoring as
+  an Acrobat-parity target, and if so where in the Pass sequence?
+
+**For next session:**
+- Land Pass 14.2's build report (formatting on a selection) and file it
+  to Shipped once it arrives.
+- Dispatch `pdfce-ui-specialist` ahead of Pass 14.3 (edit UI on the
+  canvas) per decision 014's prescribed dispatch order.
+- Consider scheduling the R-INV-2/3/4 fixture follow-up before FF-E/
+  FF-F (composite/CJK/RTL editing) is attempted.
+- Get an operator answer on the list-authoring scope question before
+  it becomes load-bearing for any Pass sequencing decision.
+
+**Same-day continuation 37 — Pass 14.2 SHIPPED (formatting on a
+selection); decision 014's text-editing subsystem now feature-complete
+at core/CLI level; Pass 14.3 UI design dispatched in parallel:**
+
+- **Pass 14.2 SHIPPED 2026-08-01** — formatting on a selection: size
+  (`Tf`), fill colour (`rg`/`g`/`k`), gated font-family/style change
+  (decision 014 Pass 3 of 4). Full record moved to `ROADMAP.md` Shipped
+  (directly below Pass 14.1's entry, ahead of Pass 13b). Independently
+  re-verified in the main tree: 10 core `text_edit::format` unit tests
+  + 11 CLI `format_text` integration tests all pass; a live CMYK colour
+  change stored the `k` operator (NOT DeviceRGB) with the parity-plus
+  disclosure surfaced; full workspace **1134 passed / 0 failed**.
+  **Decision 014's in-place-text-editing subsystem is now
+  feature-complete at the core/CLI level** — 14.0 (model) + 14.1 (edit)
+  + 14.2 (format) all shipped; only 14.3 (the canvas UI) remains in the
+  family.
+- **What shipped:** new `crates/pdfce-core/src/text_edit/format.rs`
+  (the three ops + `set_format`); `edit.rs` extended with fill-colour
+  graphics-state tracking (`FillState`/`DeviceSpace`) added to the
+  shared walk across `g`/`rg`/`k`/`cs`/`sc`/`scn`, plus walk/record/
+  match/classify/emit/save helpers exposed `pub(crate)` for reuse —
+  **14.1's `edit_text` output bytes are unchanged**, its tests pass
+  verbatim; `mod.rs` re-exports; CLI `format-text` subcommand +
+  `cmd_format_text` + `parse_set_color`; new
+  `crates/pdfce-cli/tests/format_text.rs` (11 tests); three new
+  fixtures (`format_color`/`format_other`/`format_family`) + generator
+  update + PROVENANCE.md, with the 5 existing 14.1 fixtures
+  regenerated byte-identical.
+- **Mechanism — state-wrap-and-restore emission**, reused by all three
+  ops: the anchor operator is split at the matched code-range into
+  `pre | mid | post` and re-emitted as `[pre] <state-set> [mid]
+  <state-restore> [post]`, so only the anchor operator's bytes change
+  and every following operator stays byte-verbatim. Size wraps
+  `/F newsize Tf … /F origsize Tf` (fill operator untouched). Colour
+  swaps in the chosen device operator then restores the recorded prior
+  `FillState` byte-verbatim (advance unaffected). Family swaps
+  `/Ftarget Tf` and re-encodes via 14.1's `InverseEncoding` against the
+  target's `/Encoding`, gated by 14.1's `classify_font` + the
+  embedded-subset carried-codes floor. All three reuse 14.1's
+  locate→recompute-advance→relayout→incremental-save pipeline.
+- **Fill-colour parity-PLUS demonstrated exactly as designed** (the
+  forward-looking decision recorded ahead of this Pass's ship, back in
+  continuation 36): the operator picks RGB/CMYK/gray and pdfce STORES
+  the actual space (`rg`/`k`/`g`), never force-converted to DeviceRGB
+  like Acrobat — disclosed. A run whose original space is non-device
+  (`Other`: ICCBased/Separation/DeviceN/Indexed) has its tail restored
+  byte-verbatim, with the edited `mid`'s narrowing to device DISCLOSED,
+  never silent. Size-only edits never touch the colour operator
+  (minimal-diff) — verified by test.
+- **The anti-Acrobat-tag-corruption test**: a tagged-run colour change
+  keeps `/MCID` 0 and discloses ActualText/tag staleness rather than
+  silently invalidating or regenerating the tag
+  (`tagged_run_color_change_keeps_mcid_and_discloses`) — this is the
+  Pass's structural-tagging correctness proof, parallel to 14.1's
+  tagged-run preservation guarantee.
+- **Six engineer judgment calls recorded** (all defensible, none
+  blocking — filed to the `ROADMAP.md` Shipped entry for the
+  API-guidelines trail): (1) state-wrap-and-restore emission chosen for
+  robustness — handles substring matches and `TJ`-array matches
+  uniformly; (2) the coverage gate for family changes stays
+  encoding-level (rasterizer-free, R21) with trust-level
+  (Embedded/Bundled/Supplied) staying in the CLI shell, not core; (3)
+  non-device (`Other`) colour-space restore uses the recorded raw
+  operator bytes rather than re-deriving from a decoded model; (4)
+  size- and colour-only edits are deliberately NOT gated by
+  R-INV-2/3/4 — a symbolic-no-encoding, ToUnicode-only, or composite
+  font can still be resized/recoloured; only a family CHANGE runs the
+  full classifier against the target font; (5) family target is
+  restricted to an existing page font resource only — no new
+  embedding, no resource-dict edit, a missing/new target is a clean
+  named refusal pointing at FF-C (font-subsetting/glyph-embedding);
+  (6) Pin = trailing compensating `TJ`; Reflow (default) adjusts
+  absolute-`Tm` followers by `ΔA`; colour-only edits (`ΔA = 0`) never
+  relayout.
+- **Honest note (not a defect):** a Calibri-Bold family change
+  discloses the R-INV-5 ambiguity for the space character (WinAnsi
+  maps space at two codes) — the inverse map picks the lowest code and
+  discloses it, the same established fuzzy-never-sneaky behavior 14.1
+  already exhibits for other ambiguous mappings.
+- **Gates (re-verified main tree):** `cargo fmt --all --check` clean;
+  `clippy -p pdfce-core -p pdfce-cli --all-targets -D warnings` clean
+  (panic-free); `cargo tree -p pdfce-core` / `-p pdfce-render` zero GUI
+  deps; **ZERO new dependency**; full workspace **1134 passed / 0
+  failed** (14.1/14.0/Pass-4 tests unchanged); R59 render (notdef=0,
+  unsupported=0) + round-trip (reloaded=1) green on all three
+  formatted outputs.
+- **Pass 14.3 (edit UI on the Pass 12.0 canvas) is next** — the sole
+  remaining slice of decision 014's family. `pdfce-ui-specialist`'s
+  interaction-design work is being produced IN PARALLEL now (design
+  only); 14.3's implementation follows once that design lands. Prereqs
+  unchanged: 14.0–14.2 (all now shipped) + Pass 12.0.
+- **The autonomous `/loop` remains ACTIVE.**
+
+**Still in flight (continuation 37):**
+- **Pass 14.3** — UI-specialist interaction-design dispatch in
+  progress; implementation not started; will move to In progress once
+  design lands and build begins, then to Shipped on its own build
+  report.
+- The R-INV-2/3/4 fixture-coverage follow-up (flagged at Pass 14.1) —
+  still not yet scheduled as a Pass.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation relative to Pass 14.x.
+- Everything remains UNCOMMITTED in git — the tree keeps growing (now
+  includes Pass 14.2's `text_edit::format` module + fixtures).
+
+**Still-open operator items (UNCHANGED — re-surfaced, not re-filed;
+ordered oldest-first):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- Commit authorization — everything remains UNCOMMITTED; the tree keeps
+  growing (now includes Pass 14.2's `text_edit::format` module +
+  fixtures). Unchanged recurring worktree-isolation cost.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36) — does the
+  operator want bulleted/numbered list authoring as an Acrobat-parity
+  target, and if so where in the Pass sequence? Still no operator
+  answer.
+
+**For next session:**
+- Land Pass 14.3's UI-specialist design output, then dispatch the
+  implementation build; file it to Shipped once it arrives.
+- Consider scheduling the R-INV-2/3/4 fixture follow-up before FF-E/
+  FF-F (composite/CJK/RTL editing) is attempted.
+- Get an operator answer on the list-authoring scope question before
+  it becomes load-bearing for any Pass sequencing decision.
+- Re-surface commit authorization and the license decision — both
+  remain the two oldest-standing, highest-leverage unresolved operator
+  items in the project.
+
+**Same-day continuation 38 — Pass 14.3 SHIPPED (on-canvas text-editing
+UI + the `EditSession` undo-integration prerequisite, decision 014 Pass
+4 of 4, FINAL SLICE); decision 014's Acrobat in-place text-editing
+subsystem is now COMPLETE end-to-end; FF-A scoped + KenAgent decision
+015 opened, including a flagged justified-alignment question:**
+
+- **Pass 14.3 SHIPPED 2026-08-01** — the FINAL slice of decision 014.
+  Full record moved to `ROADMAP.md` Shipped (directly below Pass
+  14.2's entry, ahead of Pass 13b). Independently re-verified in the
+  main tree: 39 core `text_edit` tests (incl. new `EditSession` edit/
+  format commands, undo/redo, and a byte-identical-to-free-function
+  minimal-diff proof) + 50 GUI tests all pass; release GUI builds and
+  launches without panic. The GUI was launched live with the
+  multi-column fixture, Edit Text tool / `Ctrl+E` operable.
+- **Core — the blocking §0.2 `EditSession` undo-integration
+  prerequisite, discharged this Pass:** `text_edit/edit.rs`'s
+  `edit_text` surgery split into `plan_edit(...) -> EditPlan` (used by
+  both the free function and the session path) + `write_incremental`;
+  the matching `plan_format(...) -> FormatPlan` split in `format.rs`;
+  `model.rs` gained `line_at`/`word_range_at`/`line_range_at` (+
+  `word_bounds`) accessors + 4 tests; `edit.rs` gained
+  `EditSession::edit_text`/`format_text`, `current_page_content`,
+  `text_edit_command`, `CommandKind::{EditText, FormatText}` + 6
+  session tests. Each edit is ONE undo-able command over the session's
+  in-memory object graph; multi-edit accumulation walks the session's
+  staged content; **proven byte-identical to the free function for a
+  single edit.** The free functions are behaviorally UNCHANGED — 14.1's
+  and 14.2's tests pass verbatim.
+- **Render/CLI hoist:** `FontEnvironment::subset_stem` +
+  `classify_nonembedded` shared between `pdfce-render` and
+  `pdfce-cli`, deleting the CLI's private duplicate — no behavior
+  change.
+- **GUI — the first slice with a real `CanvasTool` variant.**
+  `CanvasTool::TextEdit` (previously-synthetic `resolve_escape`/
+  `canvas_suppresses_pan`/gesture-interrupt branches now actually
+  fire); `TextEditState`/`PendingEdit` wiring in `main.rs`; ~30 new
+  `ui_text.rs` strings. Shipped the full P0 spine: click→caret,
+  Shift-click extend, double-click→word, rotation/zoom-correct
+  caret+selection rendering (first live consumers of the Pass-12.0
+  `canvas_to_pdf_space`/`pdf_space_to_canvas` bridges), live preview
+  (mask + draft text in an egui font + a dashed "PREVIEW — not yet
+  applied" tag), real Accept/Reject buttons, the verbatim disclosure
+  strip + refusal strip (§8.2 "what would lift it" table), cross-run
+  refusal, a read-only block-boundary review overlay (split/merge/
+  reorder named as a deferred non-goal), and the property bar (size /
+  colour-model RGB-CMYK-Gray / font `ComboBox`, trust-labelled).
+- **Named simplifications (deferred, substrate already shipped):**
+  selection-replace-on-type (insert+backspace at caret, not a single
+  replace op); triple-click/drag-select/arrow-Home-End caret nav (the
+  `line_at`/`line_range_at` accessors Home/End needs are shipped and
+  tested, ready to wire); property-bar edits apply via an explicit
+  "Apply" button rather than commit-on-focus-loss.
+- **Five judgment calls recorded** (filed to the `ROADMAP.md` Shipped
+  entry): (1) "free functions unchanged" read as behaviorally
+  unchanged (mechanical `plan_edit`/`plan_format` extraction, 14.1/14.2
+  tests verbatim); (2) multi-edit accumulation walks the session's
+  staged content, a first-edit-gated extra-stream-emptying step keeps
+  undo clean; (3) session methods surface `text_edit::EditError`/
+  `FormatError` directly, not wrapped in a session-local error type;
+  (4) the preview draws draft text in an egui font (no new
+  font-shaping dependency); (5) the delegated GUI sub-fork returned 0
+  tool-uses, so the builder implemented the GUI directly.
+- **Gates (re-verified main tree):** `cargo fmt --all --check` clean;
+  `clippy --workspace --all-targets -D warnings` clean; `cargo tree -p
+  pdfce-core` / `-p pdfce-render` still zero egui/eframe/winit/wgpu/
+  glow (GUI-core separation intact); `cargo test --workspace` 23/23
+  binaries, 0 failures (677 core incl. §0.2 tests, 42 gui incl. new
+  canvas tests per the build report; independently re-run at 39 core
+  `text_edit` + 50 gui, all green); R59 + round-trip green; GUI release
+  build launches, no startup panic; **ZERO new dependency**.
+- **MILESTONE — decision-014's Acrobat in-place-text-editing subsystem
+  is now COMPLETE end-to-end** (core model → in-place edit →
+  formatting → GUI edit tool, 14.0 through 14.3). The operator's
+  directed "Acrobat text-handling parity" focus (Backlog's ★ NEXT MAJOR
+  FOCUS, filed 2026-08-01) is **substantially achieved at the P0
+  level**. The GUI was launched for the operator. Remaining
+  text-parity work is the reflow ladder (FF-A within-block next, FF-B
+  cross-block after) plus the named GUI refinements above.
+- **FF-A scoped; KenAgent decision 015 opened.**
+  `pdfce-acrobat-librarian` scoped FF-A (within-block reflow) into
+  `D:\Dev\Rag-Specialized\Acrobat_Features\text_edit__paragraph_reflow_and_auto_adjust_layout.md`.
+  A KenAgent decision (**015**) is being taken to settle FF-A's
+  architecture (rule 12: parity reference → scope → KenAgent decision
+  → build). **Two FF-A differentiators the scoping surfaced:** (1)
+  alignment auto-detect + preserve through reflow (never reset to a
+  default); (2) never silently drop page-overflowed content
+  (fuzzy-never-sneaky — disclose, don't truncate).
+- **FLAGGED OPEN QUESTION for decision 015, NOT DEFAULTED — the
+  justified-alignment tension.** Acrobat exposes a **Justify** button
+  on its BASE (non-cloud) Edit-Text panel, in tension with decision
+  014's working assumption that justified alignment needs FF-B
+  (cross-block reflow). Whether Acrobat's classic Justify does a true
+  re-wrap-and-distribute (meaning justified could ship at FF-A, ahead
+  of FF-B) or only a lighter per-line nudge (consistent with the
+  original FF-A/FF-B split) is **unresolved** and must be decided by
+  015, not assumed. Filed to `ROADMAP.md`'s ★ NEXT MAJOR FOCUS entry
+  (Next up) and the Backlog bucket's amendment chain.
+- **The autonomous `/loop` remains ACTIVE.**
+
+**Still in flight (continuation 38):**
+- **KenAgent decision 015** — FF-A architecture, including the
+  justified-alignment question — not yet decided.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation.
+- The R-INV-2/3/4 fixture-coverage follow-up (flagged at Pass 14.1) —
+  still not yet scheduled as a Pass.
+- The list-authoring scope question (filed continuation 36) — still no
+  operator answer.
+- Everything remains UNCOMMITTED in git — the tree keeps growing (now
+  includes Pass 14.3's `EditSession` text-edit/format commands + GUI
+  `CanvasTool::TextEdit` + fixtures) and is now VERY LARGE, compounding
+  the recurring worktree-isolation cost on every autonomous-builder
+  dispatch.
+
+**Still-open operator items (re-surfaced, ordered oldest-first; one
+addition this continuation):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- Commit authorization — everything remains UNCOMMITTED; the tree is
+  now VERY LARGE (23 test binaries, the full decision-014 text-editing
+  subsystem, the whole shipped-Pass history) — the worktree-isolation
+  workaround cost compounds with every additional Pass. Highest-leverage
+  unresolved item alongside the license decision.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36) — does the
+  operator want bulleted/numbered list authoring as an Acrobat-parity
+  target, and if so where in the Pass sequence? Still no operator
+  answer.
+- **NEW — justified-alignment question (filed this continuation,
+  2026-08-01):** does Acrobat's base-panel Justify button do a true
+  re-wrap (implying justified is FF-A-reachable) or a lighter nudge
+  (consistent with the original FF-B gating)? Needed to scope KenAgent
+  decision 015.
+
+**For next session:**
+- Take KenAgent decision 015 (FF-A architecture) — resolve the
+  justified-alignment question as part of it, not as an afterthought.
+- Re-surface commit authorization and the license decision — both
+  remain the two oldest-standing, highest-leverage unresolved operator
+  items in the project, now more pointed given the tree's size.
+- Consider scheduling the R-INV-2/3/4 fixture follow-up before FF-E/
+  FF-F (composite/CJK/RTL editing) is attempted.
+- Get an operator answer on the list-authoring scope question before
+  it becomes load-bearing for any Pass sequencing decision.
+- Confirm the beta (measurement/dimensioning) sequencing relative to
+  the now-complete Pass 14.x family and the upcoming FF-A work.
+
+**Same-day continuation 39 — KenAgent decision 015 filed (FF-A: within-block
+offline reflow); justified-alignment question RESOLVED (relocated FF-B →
+FF-A); decision 014 amended; R75–R77 assigned; new ★ Pass 15.x reflow family
+filed; ARCHITECTURE §5.11 flipped to shipped; Pass 15.0 dispatched to build:**
+
+- **Decision 015 ACCEPTED** via the KenAgent protocol. Full record:
+  `docs/decisions/015-ffa-within-block-offline-reflow.md`. Scopes FF-A
+  (decision 014's fast-follow ladder) as the active thread now that Pass
+  14.0–14.3 is complete end-to-end.
+- **The justified-alignment open question (flagged continuation 38) is
+  RESOLVED, not left open.** Acrobat's Justify button sits on the BASE
+  (non-cloud) Edit-Text panel — proof it is a classic-engine, single-block
+  capability. Decision 015 §3.1 moves justified OUT of FF-B and INTO FF-A
+  as a fourth within-block alignment mode (peer of left/center/right); FF-B
+  narrows to cross-block + cross-page offline reflow only (the genuine
+  exceed-Acrobat headline, since Acrobat's cross-block reflow is
+  cloud-gated + English-only).
+- **decision 014 AMENDED (not rewritten).** Dated footnotes/pointers added
+  at `docs/decisions/014-acrobat-text-editing.md`'s header ("Amended by"
+  line), §3 (Reflow paragraph), §5.3 (fast-follow ladder), and §6
+  (justified/Knuth-Plass bullet) — each marks the justified-relocation and
+  points at decision 015 §3.1/§6. The original 014 prose is left in place;
+  nothing was deleted.
+- **New standing rules R75–R77 filed** (ceiling was R74, no collisions):
+  **R75** reflow-is-explicit-reviewable-single-block-one-undo-command
+  (Pass 14.1's single-line relayout stays the default; reflow is opt-in);
+  **R76** reflow-overflow-discloses-never-disappears (off-page content
+  emitted as real recoverable content, never clipped-to-deleted — a
+  deliberate divergence from Acrobat's own documented silent-disappear
+  behavior); **R77** alignment-auto-detected-and-preserved-through-rewrap
+  (counted, operator-overridable; single-line block defaults to left +
+  disclosed ambiguity). **Kept as three separate rules, not folded** — R77
+  was NOT folded into R75 (the decision left this to librarian discretion);
+  each names a genuinely distinct invariant (operation shape/scope,
+  overflow disclosure, alignment fidelity), matching the granularity
+  decision 014's own six rules (R69–R74) already established for this
+  family.
+- **New Pass family filed: ★ Pass 15.x (assigned FRESH, not folded into
+  14.4–14.6 — decision 015 §6 explicitly delegated this call).** Keeps
+  "Pass 14.x = in-place editing" and "Pass 15.x = reflow" as two coherent,
+  separately-citable families, the same precedent set when 14.x itself was
+  assigned fresh after 13a/13b had already taken 13.x. Filed to
+  `ROADMAP.md` "Next up", directly after the Pass 14.x entry:
+  - **15.0 — Alignment inference + within-block greedy re-wrap engine
+    (core, READ-ONLY, CLI inspect). DISPATCHED TO BUILD NOW.** `ReflowEngine`
+    building a `ReflowPreview` via a greedy breaker factored out of
+    `vartext.rs`'s packing core (provenance-§9.4.4-advance measurer, one
+    breaker two callers); alignment auto-detect from Pass 14.0's x-band
+    geometry; `pdfce-cli inspect --reflow-preview`. No write; no UI;
+    single-block only.
+  - **15.1 — Reflow surgery + one undo-able `CommandKind::ReflowBlock`
+    (core + CLI).** Applies an accepted preview via 14.1's advance-preserving
+    surgery; justified slack via `TJ` (§9.4.3) / `Tw` (§9.3.3); default
+    incremental save; page-overflow disclose-and-allow (R76); `pdfce-cli
+    edit-text --reflow`. Prereqs: 15.0, Pass 14.1; a `pdfce-spec-librarian`
+    dispatch queued for §9.4.3/§9.3.3.
+  - **15.2 — Reflow UI on the Pass 12.0 canvas (gui).** Preview overlay,
+    width/alignment drag-adjust, accept/reject. Prereqs: 15.0–15.1 + Pass
+    14.3; `pdfce-ui-specialist` dispatched first.
+  - Also amended the ROADMAP's Pass-14.x "Fast-follow ladder" bullet, the
+    "Alignment cross-reference — adjudicated" note, the "OPEN QUESTION
+    flagged for decision 015" note, and the Backlog ★ NEXT MAJOR FOCUS
+    bucket's amendment chain — each got a dated footnote pointing at the
+    new ★ Pass 15.x entry rather than being silently rewritten.
+- **`ARCHITECTURE.md` §5.11 FLIPPED from "pending Pass 14.0–14.3 ship" to
+  the actual shipped module layout** (an owed fix — all four slices have
+  been shipped since Pass 14.3, but §5.11 still read as forward-looking).
+  Now documents: `text_edit/model.rs` (Run→Line→Block, `BlockDiagnostics`,
+  the Pass-14.3 navigation accessors), `text_edit/edit.rs` (the
+  REMOVE→REPLACE surgery, the font-on-edit gate, AND the `EditSession`
+  undo-integration — `plan_edit`/`plan_format`/`write_incremental`,
+  `CommandKind::{EditText, FormatText}`), `text_edit/format.rs`
+  (formatting-on-selection), and the Pass 14.3 GUI layer
+  (`CanvasTool::TextEdit`, `TextEditState`/`PendingEdit`, `ui_text.rs`).
+  Reconfirmed explicitly: text editing is **surgery-under-incremental-save,
+  NOT a fourth forced-full-rewrite sibling** (R34/R70) — a content CHANGE,
+  not a removal, distinct from R35/R58/R67's family. Also added a forward
+  pointer from §5.11 to the new Pass 15.x reflow family, and a new §12
+  decision-log entry for decision 015 (cross-referencing the decision file,
+  R75–R77, Pass 15.x, and the 014 amendment).
+- **Pass 15.0 (read-only reflow engine) is DISPATCHED TO BUILD NOW.**
+- **The autonomous `/loop` remains ACTIVE.**
+
+**Still in flight (continuation 39):**
+- **Pass 15.0** — dispatched to build; not yet shipped.
+- **Pass 15.1/15.2** — scoped, not yet started; 15.1 needs a
+  `pdfce-spec-librarian` dispatch for §9.4.3/§9.3.3 first; 15.2 needs
+  `pdfce-ui-specialist` first.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting operator
+  go-ahead/sequencing confirmation relative to Pass 15.x.
+- The R-INV-2/3/4 fixture-coverage follow-up (flagged at Pass 14.1) — still
+  not yet scheduled as a Pass.
+- The list-authoring scope question (filed continuation 36) — still no
+  operator answer.
+- Everything remains UNCOMMITTED in git — the tree keeps growing (now also
+  includes decision 015's record and whatever Pass 15.0 lands) and is VERY
+  LARGE, compounding the recurring worktree-isolation cost on every
+  autonomous-builder dispatch.
+
+**Still-open operator items (re-surfaced, ordered oldest-first — unchanged
+in substance this continuation, no new items):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- **Commit authorization — now especially pointed.** Everything remains
+  UNCOMMITTED; the tree is VERY LARGE (23+ test binaries, the full
+  decision-014 text-editing subsystem, decision 015's reflow work about to
+  land, the whole shipped-Pass history) — the worktree-isolation workaround
+  cost compounds with every additional Pass, and Pass 15.x will add more.
+  Highest-leverage unresolved item alongside the license decision.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36) — does the
+  operator want bulleted/numbered list authoring as an Acrobat-parity
+  target, and if so where in the Pass sequence? Still no operator answer.
+- Justified-alignment question — **RESOLVED this continuation** by decision
+  015 (relocated FF-B → FF-A); struck from this list going forward.
+
+**For next session:**
+- Ship Pass 15.0 (read-only reflow engine); verify the acceptance criteria
+  in decision 015 §6 / `ROADMAP.md`'s ★ Pass 15.x entry (greedy wrap
+  matches hand-computed breaks; L/C/R/justified inferred correctly;
+  single-line → left + disclosed; oversized word → one overflowing line +
+  disclosure; no write; `cargo tree -p pdfce-core` clean; Pass 14.0 tests
+  unchanged; fmt/clippy clean).
+- Dispatch `pdfce-spec-librarian` for §9.4.3 `TJ` / §9.3.3 `Tw` ahead of
+  Pass 15.1.
+- Re-surface commit authorization and the license decision — both remain
+  the two oldest-standing, highest-leverage unresolved operator items,
+  now more pointed than last continuation given the tree's continued
+  growth.
+- Get an operator answer on the list-authoring scope question.
+- Confirm the beta (measurement/dimensioning) sequencing relative to Pass
+  15.x.
+
+**Same-day continuation 40 — Pass 15.0 SHIPPED (read-only within-block
+reflow engine + alignment auto-detect, FF-A slice 1 of 3); Pass 15.1
+PROMOTED; autonomous loop remains ACTIVE:**
+
+**Shipped:**
+- **Pass 15.0 — Within-block greedy reflow engine + alignment
+  auto-detect (read-only; decision 015, FF-A slice 1 of 3), SHIPPED and
+  independently re-verified green in the main tree** (11 core
+  `reflow::tests` + 11 CLI `inspect_reflow_preview` tests pass;
+  **vartext's 17 tests pass unchanged**, confirming the greedy-core
+  factoring preserved behavior; the demo detected left/right/center/
+  justified correctly across the 4 fixture pages with new bboxes/
+  height-deltas computed). Full record now in `ROADMAP.md` Shipped
+  (above); summary here for the session trail:
+  - NEW `crates/pdfce-core/src/linebreak.rs` — the factored shared
+    greedy first-fit breaker `greedy_pack(word_count, max_width,
+    line_width_closure) -> Vec<Range<usize>>` (pure index arithmetic +
+    a width-measuring closure). NEW
+    `crates/pdfce-core/src/text_edit/reflow.rs` (~1030 lines, 11
+    tests) — the `ReflowEngine` + alignment auto-detect +
+    `ReflowPreview`. `vartext.rs`'s `wrap_lines` now calls
+    `greedy_pack` with an Std14-AFM measurer — byte-for-byte identical
+    output, all 17 vartext tests pass verbatim. `lib.rs` gains `pub mod
+    linebreak`; `text_edit/mod.rs` re-exports.
+  - CLI: `inspect --reflow-preview --block N --width W [--align
+    L|R|C|J] [--leading pt] [--json]`. Fixture:
+    `fixtures/synthetic/reflow/reflow.pdf` (5-page Courier synthetic:
+    left/right/center/justified + a small page proving computed
+    page-overflow) + `tools/gen-reflow-fixtures.py` + PROVENANCE.md.
+    Tests: `crates/pdfce-cli/tests/inspect_reflow_preview.rs` (11
+    tests).
+  - ONE greedy breaker, two callers (vartext = AFM measurer; reflow =
+    provenance §9.4.4-advance measurer via `ExtractedGlyph::advance` —
+    no font re-measurement). Whitespace-only breaks, no hyphenation.
+    READ-ONLY: no surgery/session/save path exists in 15.0.
+  - Alignment auto-detect from the 14.0 line boxes: per-line left/
+    right/mid edges, `tol = max(2.0, 0.5·size)` pt; priority
+    Justified(n≥3, left-flush + all-but-last right-flush + short
+    last) → Left → Right → Center → Left/Ambiguous; single-line →
+    Left/SingleLineDefault. Counted + disclosed + overridable.
+    Justified preview computes per-line slack; last line never
+    justified.
+  - Page-overflow COMPUTED + disclosed here (all lines still computed
+    with negative baselines), applied/enforced in 15.1 (R76).
+  - **Gates:** `cargo fmt --all --check` clean; `clippy --workspace
+    --all-targets --all-features -D warnings` clean; `cargo test
+    --workspace` all green (core lib 694; CLI reflow-preview 11;
+    text-blocks 5 UNCHANGED; edit/format/undo/render all pass;
+    doctests incl. `greedy_pack` + `ReflowRequest::new`); `cargo tree`
+    core/render GUI-dep-free; **ZERO new dependency** (no
+    `Cargo.toml`/`Cargo.lock` touched); Pass 14.x + vartext tests
+    unchanged.
+  - **Public API surface added to `pdfce-core`** (rule-10
+    API-guidelines trail): `ReflowEngine<'m, 'a>` (new/
+    detect_alignment/preview); `enum BlockAlignment { Left, Right,
+    Center, Justified }` (as_str/parse/is_justified); `enum
+    AlignmentSource { Detected, SingleLineDefault, AmbiguousDefault,
+    Overridden }`; `DetectedAlignment`; `ReflowLine`; `PageOverflow`;
+    `ReflowDiagnostics`; `ReflowPreview` (+ `height_delta()`);
+    `ReflowRequest` (builders new/with_wrap_width[_opt]/
+    with_alignment[_opt]/with_leading[_opt]/with_page_cropbox); `enum
+    ReflowError { BlockIndexOutOfRange, EmptyBlock, BadWidth }`
+    (`thiserror`). `#[non_exhaustive]` on options/outputs; builders
+    exist because `#[non_exhaustive]` blocks cross-crate literals.
+
+**Decisions made this session (continued):**
+- **Engineer judgment call recorded** (defensible, non-blocking —
+  filed to `ROADMAP.md`'s Shipped entry for the API-guidelines trail):
+  a right/center/justified paragraph has ragged LEFT edges, which Pass
+  14.0's first-line-indent recognizer rule would fragment into
+  single-line blocks; reflow therefore recognizes with
+  **indent-splitting relaxed** (`indent_ratio` pushed out of practical
+  reach; leading-gap splitting kept unchanged) —
+  `reflow_recognition_options()` in the CLI / `recognise_relaxed` in
+  tests, documented at both call sites. Left/justified (flush-left)
+  paragraphs are unaffected. Threshold constants named + documented as
+  corpus-tunable (decision 015 §10 revisit trigger 2).
+- **Pass 15.1 PROMOTED from Next up to In progress** (`ROADMAP.md`) —
+  its reflow surgery consumes Pass 15.0's `ReflowEngine`/
+  `ReflowPreview` directly, the same direct-prerequisite promotion
+  pattern used for every prior slice in this family. Status at
+  promotion: `pdfce-spec-librarian` is sourcing §9.4.3 `TJ` numeric-
+  position-adjustment distribution + the §9.3.3 `Tw` single-byte-
+  code-32 caveat **in parallel with** 15.1's build start (the operator
+  explicitly authorized starting the build without waiting on the spec
+  dispatch to land first, only that its findings be confirmed before
+  the justified-slack surgery path is finalized). 15.2 (reflow UI)
+  remains in Next up, unscheduled until 15.0–15.1 + Pass 14.3 are all
+  consumed by it.
+
+**Findings + decisions:**
+- No new generalizable Rust/egui or PDF-domain finding this
+  continuation beyond what's already captured — the greedy-breaker
+  factoring and the indent-relaxation call are both pdfce-internal
+  engineering judgment calls, not ecosystem- or domain-generalizable
+  discoveries, so nothing new was filed to `D:\dev\rag\rust\`,
+  `D:\dev\rag\egui\`, or `C:\personal_rag\pdf\` this continuation.
+
+**Still in flight (continuation 40):**
+- **Pass 15.1** — promoted to In progress; not yet started building;
+  `pdfce-spec-librarian`'s §9.4.3/§9.3.3 dispatch running in parallel.
+- **Pass 15.2** — scoped, not yet started; needs `pdfce-ui-specialist`
+  first; also needs 15.0–15.1 + Pass 14.3 (already shipped) consumed.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation relative to Pass 15.x.
+- The R-INV-2/3/4 fixture-coverage follow-up (flagged at Pass 14.1) —
+  still not yet scheduled as a Pass.
+- The list-authoring scope question (filed continuation 36) — still no
+  operator answer.
+- Everything remains UNCOMMITTED in git — the tree keeps growing (now
+  also includes Pass 15.0's `linebreak.rs`/`reflow.rs` + fixtures) and
+  is VERY LARGE, compounding the recurring worktree-isolation cost on
+  every autonomous-builder dispatch.
+- The autonomous `/loop` remains ACTIVE — Pass 15.1 (reflow surgery) is
+  next.
+
+**Still-open operator items (re-surfaced, ordered oldest-first — one
+item's framing escalated, no items newly added or resolved this
+continuation):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- **Commit authorization — escalating further this continuation.**
+  Everything remains UNCOMMITTED; the tree is VERY LARGE and grew
+  again this continuation (Pass 15.0's reflow engine + fixtures on top
+  of the full decision-014 text-editing subsystem and the entire
+  shipped-Pass history) — the worktree-isolation workaround cost
+  compounds with every additional Pass, and Pass 15.1/15.2 will add
+  more still. Remains the highest-leverage unresolved item alongside
+  the license decision; flagging again per the standing instruction to
+  keep escalating the framing as the tree keeps growing, not just
+  repeat the same wording.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36) — does the
+  operator want bulleted/numbered list authoring as an Acrobat-parity
+  target, and if so where in the Pass sequence? Still no operator
+  answer.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); not re-opened, listed here only for continuity of
+  the oldest-first trail, no action needed.
+
+**For next session:**
+- Build and ship Pass 15.1 (reflow surgery + `CommandKind::ReflowBlock`);
+  confirm `pdfce-spec-librarian`'s §9.4.3 `TJ` / §9.3.3 `Tw` findings
+  before finalizing the justified-slack distribution path; verify the
+  acceptance criteria in decision 015 §6 / `ROADMAP.md`'s ★ Pass 15.x
+  entry (re-wrap correctness on embedded-full and non-embedded blocks;
+  only the block's own content-stream object changed; incremental-
+  save-safe; justified slack correct with last line un-justified;
+  page-overflow disclosed never clipped; undo restores byte-identical
+  pre-reflow stream; R59 + round-trip green; fmt/clippy clean).
+- Re-surface commit authorization and the license decision — both
+  remain the two oldest-standing, highest-leverage unresolved operator
+  items, now more pointed than last continuation given the tree's
+  continued growth.
+- Get an operator answer on the list-authoring scope question.
+- Confirm the beta (measurement/dimensioning) sequencing relative to
+  Pass 15.x.
+
+**Same-day continuation 41 — Pass 15.1 SHIPPED (reflow now APPLIES —
+justified re-wrap demonstrated with correct right-flush + un-stretched
+last line, undo byte-identical, overflow emitted-not-clipped, composite
+refused); Pass 15.2 PROMOTED; only 15.2 remains to complete FF-A;
+autonomous loop remains ACTIVE:**
+
+**Shipped:**
+- **Pass 15.1 — Reflow surgery + one undo-able
+  `CommandKind::ReflowBlock` + CLI `reflow` (decision 015, FF-A slice 2
+  of 3), SHIPPED and independently re-verified green in the main tree**
+  (6 core `reflow_apply` + 5 CLI `reflow` + 2 render tests pass; a live
+  justified reflow on page 4 at width 180 re-wrapped 4→5 lines with 4
+  justified lines + an un-stretched last line, only the block's content
+  object changed, round-trip reports `identical=1, raster_identical=1,
+  reloaded=1`). Full record now in `ROADMAP.md` Shipped (above); summary
+  here for the session trail:
+  - NEW `crates/pdfce-core/src/text_edit/reflow_apply.rs` (~660 LoC +
+    tests) — re-emits a block's show operators at the new line
+    origins/breaks via Pass 14.1's advance-preserving machinery
+    (`emit_tm`/`splice`/`write_incremental`/`make_raw_stream`/§9.4.4
+    advance) from a Pass 15.0 `ReflowPreview`. CHANGED `reflow.rs`
+    (`WordTok` carries source `codes`; `tokenise_block` now
+    `pub(crate)` — 15.0's preview behaviour byte-unchanged), `mod.rs`
+    (re-exports), `edit.rs` (`CommandKind::ReflowBlock { lines_before,
+    lines_after }` + `EditSession::reflow_block`, mirroring 14.3's
+    plan/effect split), `pdfce-cli/src/main.rs` (`reflow` subcommand,
+    `--page`/`--block`/`--width`/`--align`/`--leading`),
+    `pdfce-render/src/lib.rs` (2 new R59 tests), `pdfce-gui/src/
+    ui_text.rs` (undo label). NEW `pdfce-cli/tests/reflow.rs` (5
+    tests). Reused `fixtures/synthetic/reflow/reflow.pdf`
+    (`PROVENANCE.md` updated).
+  - Justify (`TJ` general path): per full non-last line `N_gap =
+    −(S/G)·1000/emit_scale`, `emit_scale = Tfs·Th·a·ca`, emitted as one
+    `[ (w0 SP) N (w1 SP) … (wlast) ] TJ` with the original code-32
+    spaces kept + `0 Tw` set once — sign-mirror of 14.1's compensating-
+    `TJ` pin. Last line and single-word lines never stretched. Justify
+    with non-zero `Tc`/`Tw` refused-and-disclosed. `Tw`-word-spacing
+    documented as the non-goal alternative (can't serve composite;
+    leaks into the last line).
+  - Line origin = recipe C (absolute `Tm` per line, whole block
+    re-emitted as one fresh `BT…ET`) — immune to the §3.1 relative-`Td`
+    re-basing bug, drives L/C/R/justified uniformly. `(a,b,c,d)` from
+    provenance text-matrix; `(e,f)` from the preview origin through the
+    axis-aligned CTM.
+  - Codes carried, never re-encoded (only R-INV-4/composite applies).
+    Page-overflow (R76): all lines emitted at true position, never
+    clipped, disclosed. Tagged (R72): block's own `BT…ET` re-emitted
+    preserving the enclosing `BDC`/`EMC` + `MCID` by construction.
+    Incremental save (R34): only the block's own content object
+    re-emitted.
+  - **Gates:** `cargo fmt --all --check` clean; `clippy --workspace
+    --all-targets --all-features -D warnings` clean; `cargo tree`
+    core/render GUI-dep-free; full workspace green, 25 ok-blocks 0
+    failures (core lib 702; CLI reflow 5; render reflow 2); R59 on
+    reflowed output (real glyphs, `unknown_ops=0`, justified ink
+    reaches box right margin); round-trip `identical=1
+    raster_identical=1`; **ZERO new dependency**; Pass 14.x/15.0/
+    vartext tests unchanged.
+  - **Public API surface added to `pdfce-core`** (rule-10
+    API-guidelines trail): `apply_reflow(&Document, page_index,
+    block_index, &ReflowRequest) -> Result<ReflowOutcome,
+    ReflowApplyError>`; `ReflowOutcome { bytes, report }`;
+    `ReflowApplyReport { block_index, lines_before/after, alignment,
+    justified_lines, base_font, glyph_source, tagged_mcid,
+    height_delta, overflow, content_object, extra_objects_emptied,
+    disclosures }`; `ReflowApplyError` (`thiserror`,
+    `#[non_exhaustive]`); `EditSession::reflow_block(page_index,
+    block_index, &ReflowRequest)`; `CommandKind::ReflowBlock
+    { lines_before, lines_after }`. ISO-cited doc comments (§9.4.3/
+    §9.3.3/§9.4.2/§9.3.5 + R-INV/R76/R72).
+
+**Decisions made this session (continued):**
+- **Eight engineer judgment calls recorded** (defensible, non-blocking
+  — filed to `ROADMAP.md`'s Shipped entry for the API-guidelines
+  trail): (1) codes carried, never re-encoded; (2) recipe C over
+  compact `Td`/`T*`; (3) region = the block's own `BT…ET` re-emitted as
+  one fresh `BT…ET`, refused if the block shares a text object /
+  is non-contiguous / has a show op outside `BT`/`ET` — keeps the
+  surgery provably safe and preserves the MCID wrapper by
+  construction; (4) axis-aligned scope only — rotated/skewed/
+  multi-transform/form-XObject text refused by name, recipe-C rotation
+  left as a documented future extension, not a claimed-but-untested
+  path; (5) justify requires `Tc = Tw = 0` else refused-and-disclosed;
+  (6) **`reflow_block` plans against BASE content and refuses if the
+  page was already edited earlier in the same session** (offsets are
+  base-relative; a clean named refusal beats a silent mis-splice) —
+  recorded explicitly as a **known first-cut limitation** to lift in a
+  later Pass, not a permanent constraint; (7) filtered out the 15.0
+  preview's carried-through disclosures whose wording asserted
+  "nothing written / READ-ONLY" and re-emitted apply-stage-equivalent
+  disclosures so nothing contradicts the write that just happened;
+  (8) text state (`Tf`/`Tz`/`Tc`/`Tw`) read from the content walk,
+  geometry from provenance — kept as two deliberately separate
+  sources.
+- **Pass 15.2 PROMOTED from Next up to In progress** (`ROADMAP.md`) —
+  its reflow UI consumes Pass 15.1's `CommandKind::ReflowBlock` +
+  15.0's `ReflowPreview` directly, the same direct-prerequisite
+  promotion pattern used for every prior slice in this family.
+  `pdfce-ui-specialist` dispatch is the required first step before any
+  GUI code, per the standing rule for non-trivial UI changes. Once
+  15.2 ships, decision 015 / FF-A is COMPLETE end-to-end and the
+  fast-follow ladder (FF-B onward) becomes the next scoping question.
+
+**Findings + decisions:**
+- No new generalizable Rust/egui or PDF-domain finding this
+  continuation beyond what's already captured — all eight judgment
+  calls above are pdfce-internal engineering trade-offs (surgery
+  scope, refusal posture, disclosure wording), not ecosystem- or
+  domain-generalizable discoveries, so nothing new was filed to
+  `D:\dev\rag\rust\`, `D:\dev\rag\egui\`, or `C:\personal_rag\pdf\`
+  this continuation.
+
+**Still in flight (continuation 41):**
+- **Pass 15.2** — promoted to In progress; not yet started building;
+  needs `pdfce-ui-specialist` dispatch first.
+- FF-A is now ONE Pass from complete end-to-end (15.0 and 15.1 both
+  shipped; only 15.2's UI remains).
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation relative to Pass 15.x.
+- The R-INV-2/3/4 fixture-coverage follow-up (flagged at Pass 14.1) —
+  still not yet scheduled as a Pass.
+- The list-authoring scope question (filed continuation 36) — still no
+  operator answer.
+- Item 6 above (already-edited-this-session refusal) is a named,
+  disclosed first-cut limitation, not a bug — worth a fixture-coverage
+  follow-up whenever the reflow-ladder work resumes past 15.2.
+- Everything remains UNCOMMITTED in git — the tree keeps growing (now
+  also includes Pass 15.1's `reflow_apply.rs` + CLI/render/GUI changes)
+  and is VERY LARGE, compounding the recurring worktree-isolation cost
+  on every autonomous-builder dispatch.
+- The autonomous `/loop` remains ACTIVE — Pass 15.2 (reflow UI) is
+  next.
+
+**Still-open operator items (re-surfaced, ordered oldest-first — one
+item's framing escalated again, no items newly added or resolved this
+continuation):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- **Commit authorization — escalating further this continuation.**
+  Everything remains UNCOMMITTED; the tree is VERY LARGE and grew again
+  this continuation (Pass 15.1's reflow-apply surgery, CLI `reflow`
+  subcommand, and render/GUI changes on top of the full decision-014/
+  015 text-editing and reflow subsystems, plus the entire shipped-Pass
+  history) — the worktree-isolation workaround cost compounds with
+  every additional Pass, and Pass 15.2 will add more still. Remains the
+  highest-leverage unresolved item alongside the license decision;
+  flagging again per the standing instruction to keep escalating the
+  framing as the tree keeps growing, not just repeat the same wording.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36) — does the
+  operator want bulleted/numbered list authoring as an Acrobat-parity
+  target, and if so where in the Pass sequence? Still no operator
+  answer.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); not re-opened, listed here only for continuity of
+  the oldest-first trail, no action needed.
+
+**For next session:**
+- Build and ship Pass 15.2 (reflow UI: preview overlay + width/
+  alignment adjust + accept/reject) — dispatch `pdfce-ui-specialist`
+  FIRST; verify the acceptance criteria in decision 015 §6 /
+  `ROADMAP.md`'s ★ Pass 15.x entry (ghost preview matches 15.0's
+  `ReflowPreview` exactly; width drag re-runs preview live; alignment
+  picker round-trips through 15.1's surgery correctly including
+  justified; accept commits exactly the one `CommandKind::ReflowBlock`
+  15.1 defines with byte-identical undo; reject writes nothing;
+  overflow/staleness disclosures visible in the panel not buried in a
+  log). Once shipped, decision 015 / FF-A is COMPLETE end-to-end.
+- Re-surface commit authorization and the license decision — both
+  remain the two oldest-standing, highest-leverage unresolved operator
+  items, now more pointed than last continuation given the tree's
+  continued growth.
+- Get an operator answer on the list-authoring scope question.
+- Confirm the beta (measurement/dimensioning) sequencing relative to
+  Pass 15.x (now that FF-A is nearly complete, this becomes more
+  pressing).
+
+**Same-day continuation 42 — Pass 15.2 SHIPPED (on-canvas within-block
+reflow UI — the FINAL FF-A slice); DECISION 015 / FF-A COMPLETE
+end-to-end (15.0 + 15.1 + 15.2); GUI relaunched and running live
+against the reflow fixture; autonomous loop remains ACTIVE:**
+
+**Shipped:**
+- **Pass 15.2 — On-canvas within-block reflow UI (decision 015, FF-A
+  slice 3 of 3, FINAL SLICE), SHIPPED and independently re-verified
+  green in the main tree**: 60 core `text_edit` tests; CLI reflow
+  intact after the P0 dedup (5 `reflow` + 11
+  `inspect_reflow_preview`); 53 GUI tests; release GUI builds +
+  launches; the GUI is confirmed running with the reflow fixture, the
+  reflow sub-mode of the Edit Text tool live. Full record now in
+  `ROADMAP.md` Shipped (above); summary here for the session trail:
+  - **P0 consolidation paid down before the UI landed:**
+    `reflow_recognition_options()` (the relaxed block-recognition that
+    keeps ragged-left justified/right/center paragraphs whole — R77)
+    collapsed to ONE `pub fn` in `pdfce-core::text_edit::reflow`
+    (re-exported at `pdfce_core::text_edit::reflow_recognition_options`).
+    The `pub(crate)` duplicate in `reflow_apply.rs` and the private
+    duplicate in `pdfce-cli/src/main.rs` are DELETED; every consumer
+    (CLI inspect, apply/session path, engine tests, GUI ×3) now calls
+    the one source. CLI reflow tests stayed green across the dedup.
+  - **NEW `EditableTextModel::block_at(pos) -> Option<usize>`**
+    (`#[must_use]`) — sugar over `line_at` + `Line::block`, no GUI type
+    in the signature.
+  - **GUI (`crates/pdfce-gui/src/main.rs` + `ui_text.rs`): reflow is a
+    SUB-MODE of `CanvasTool::TextEdit`, NOT a new tool variant** (R60).
+    `TextEditState.reflow: Option<ReflowState>` is mutually exclusive
+    with `pending` (14.3's in-place-edit state). "Reflow paragraph…"
+    targets the caret's block via the relaxed recognition; the
+    property bar offers width (`DragValue` + a canvas drag-handle),
+    alignment (pre-filled DETECTED, switchable L/C/R/Justify), and
+    leading. Ghost preview + solid targeted-block highlight reuse
+    14.3's preview/mask rendering language. Accept commits exactly one
+    undo-able `EditSession::reflow_block` (`CommandKind::ReflowBlock`,
+    15.1's command); Reject discards, nothing written. Overflow (R76),
+    the tagged/trust-level disclosures (R72/R73), and the
+    already-edited-this-session refusal (15.1 judgment call 6) surface
+    VERBATIM via 14.3's disclosure rendering. Two-stage Esc rejects,
+    matching 14.3's convention.
+  - Pure helpers `reflow_button_enabled`/`reflow_alignment_is_override`/
+    `reflow_refusal_hint` are headless-tested; the egui wiring itself is
+    compile-and-launch-verified, consistent with this project's
+    established GUI-testing posture.
+  - **Public API surface added to `pdfce-core`** (rule-10
+    API-guidelines trail): `pub fn reflow_recognition_options() ->
+    BlockRecognitionOptions` (`#[must_use]`, WHY/trade-off doc +
+    R77/§0.3 cites); `pub fn EditableTextModel::block_at(&self, pos:
+    TextPosition) -> Option<usize>` (`#[must_use]`).
+  - **Gates (re-verified in the main tree):** `cargo fmt --all --check`
+    clean; `clippy --workspace --all-targets --all-features -D
+    warnings` clean; `cargo tree` core/render GUI-dep-free (no
+    egui/eframe/winit/wgpu/glow/accesskit); `cargo test --workspace` —
+    1198 passed, 0 failed; release GUI build succeeds and launches
+    without panic against the reflow fixture; **ZERO new dependency**;
+    Pass 14.x/15.0/15.1/`vartext` tests all unchanged.
+
+**Decisions made this session (continued):**
+- **Seven engineer judgment calls recorded** (defensible, non-blocking
+  — filed to `ROADMAP.md`'s Shipped entry for the API-guidelines
+  trail): (1) wired §7/§8 disclosure surfacing to 15.1's REAL shipped
+  types (`ReflowApplyReport`/`ReflowApplyError`, `report.disclosures`),
+  not the original decision-015 spec's hypothesized
+  `ReflowReport`/`ReflowSessionError` — the spec predates 15.1's actual
+  implementation; (2) **found and fixed a bug in the spec's own §4.3
+  override-detection snippet** while implementing it — its `else if
+  val == detected` pattern reset the override flag every frame;
+  override is instead decided on the CLICK of the clicked alignment
+  value; (3) Accept/Reject are buttons + Esc rejects, matching the
+  ALREADY-SHIPPED 14.3 `PendingEdit` button-only-Accept convention
+  rather than inventing a new keybinding; (4) `ReflowApplyError::
+  Unsupported` covers BOTH the already-edited-this-session refusal
+  (15.1 call 6) AND rotated/shared/non-contiguous blocks (15.1 call
+  3) — one variant, two triggers; core's `Display` names which
+  specific condition fired, so the GUI shows one hint without
+  duplicating the classification logic; (5) live preview is
+  recomputed every frame (pure/cheap at this block-level scale) rather
+  than cached-and-invalidated; (6) added `block_at` (a 15.0/15.1-named
+  P1 nice-to-have) as a clean, testable, `#[must_use]` accessor; (7)
+  the width drag-handle is painted with a faint fill purely for
+  discoverability — an invisible drag target is a known egui usability
+  trap.
+- **`ROADMAP.md`'s ★ Pass 15.x entry (Next up) closed out** with a
+  final amendment recording all three slices (15.0/15.1/15.2) shipped
+  and decision 015 / FF-A COMPLETE end-to-end; the entry is now
+  historical record, the same treatment the ★ Pass 14.x entry got once
+  decision 014 completed. The "In progress" section's Pass-15.2 heading
+  was removed (moved to Shipped) and replaced with a MILESTONE note
+  naming what remains open in the text-parity space now that FF-A is
+  done: FF-B (cross-block/cross-page reflow — the genuine
+  exceed-Acrobat headline), the named Pass-14.3 GUI refinements
+  (selection-replace-on-type, triple-click/drag-select, arrow/Home/End
+  caret nav), FF-D (add new text), FF-H (spacing/synthetic styles), and
+  the still-open list-authoring scope question. None of these are
+  scheduled to a Pass yet.
+
+**Findings + decisions:**
+- No new generalizable Rust/egui or PDF-domain finding this
+  continuation beyond what's already captured — the seven judgment
+  calls above (including the spec-snippet bug fix in item 2) are
+  pdfce-internal engineering trade-offs specific to this reflow-UI
+  build, not ecosystem- or domain-generalizable discoveries, so nothing
+  new was filed to `D:\dev\rag\rust\`, `D:\dev\rag\egui\`, or
+  `C:\personal_rag\pdf\` this continuation.
+
+**MILESTONE — FF-A (within-block offline reflow) is COMPLETE
+end-to-end (15.0 engine + 15.1 surgery + 15.2 UI, all shipped
+2026-08-01).** pdfce now does reviewable, undo-able within-block
+reflow: greedy re-wrap, alignment auto-detect/preserve across all four
+modes (left/center/right/justified), and working justified alignment
+(`TJ` slack distribution) — entirely offline. This reaches, and on
+justify-reliability/alignment-detection/overflow-honesty exceeds,
+Acrobat's own offline reflow (decision 015 §9's exceed-Acrobat list is
+now fully delivered, not just claimed). Combined with the already-
+shipped Pass 14.x in-place-editing family, pdfce's Acrobat
+text-handling parity is now broad and deep at the P0 level. What
+remains in the text-parity space: **FF-B** (cross-block/cross-page
+reflow — the exceed-Acrobat headline, since Acrobat's own cross-block
+reflow is cloud-gated + English-only), the named Pass-14.3 GUI
+refinements (selection-replace-on-type, triple-click/drag-select,
+arrow/Home/End caret nav), **FF-D** (add new text), **FF-H**
+(spacing/synthetic styles), and the open list-authoring scope question.
+None of FF-B/FF-D/FF-H are yet scoped to a Pass — that scoping is the
+natural next step, same protocol as FF-A (parity-reference sourcing →
+KenAgent decision → build).
+
+**Still in flight (continuation 42):**
+- FF-A is fully closed. FF-B onward is the next scoping question for
+  the text-editing/reflow line of work; no decision has been opened for
+  it yet.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation, now more pressing given
+  FF-A's completion frees the engineer's next-focus slot.
+- The R-INV-2/3/4 fixture-coverage follow-up (flagged at Pass 14.1) —
+  still not yet scheduled as a Pass.
+- The list-authoring scope question (filed continuation 36) — still no
+  operator answer.
+- The already-edited-this-session refusal (Pass 15.1 judgment call 6)
+  remains a named, disclosed first-cut limitation, not a bug — still
+  worth a fixture-coverage follow-up in a later Pass.
+- Everything remains UNCOMMITTED in git — the tree keeps growing (now
+  also includes Pass 15.2's GUI reflow sub-mode, the `block_at`
+  accessor, and the recognition-options consolidation) and is VERY
+  LARGE, compounding the recurring worktree-isolation cost on every
+  autonomous-builder dispatch.
+- The autonomous `/loop` remains ACTIVE. With FF-A complete, the next
+  focus is either the Beta (measurement/dimensioning, awaiting operator
+  go-ahead) or a new FF-B scoping pass — an operator sequencing call.
+
+**Still-open operator items (re-surfaced, ordered oldest-first —
+commit authorization escalated further given the tree's continued
+growth through Pass 15.2; no items newly added or resolved this
+continuation):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- **Commit authorization — escalating further this continuation.**
+  Everything remains UNCOMMITTED; the tree is VERY LARGE and grew again
+  this continuation (Pass 15.2's on-canvas reflow UI, the
+  `block_at` accessor, and the `reflow_recognition_options`
+  consolidation, on top of the now-COMPLETE decision-014 in-place-
+  editing family AND the now-COMPLETE decision-015 reflow family — two
+  full multi-Pass subsystems sitting uncommitted end-to-end). The
+  worktree-isolation workaround cost compounds with every additional
+  Pass; with FF-A now fully shipped, this is the largest uncommitted
+  span in the project's history to date. Remains the highest-leverage
+  unresolved item alongside the license decision.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36) — does the
+  operator want bulleted/numbered list authoring as an Acrobat-parity
+  target, and if so where in the Pass sequence? Still no operator
+  answer.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); not re-opened, listed here only for continuity of
+  the oldest-first trail, no action needed.
+
+**For next session:**
+- Get an operator decision on what comes next now that FF-A is
+  complete: the Beta (measurement/dimensioning, awaiting go-ahead) vs. a
+  new FF-B (cross-block/cross-page reflow) scoping pass vs. one of the
+  smaller named items (Pass-14.3 GUI refinements, FF-D, FF-H).
+- Re-surface commit authorization and the license decision — both
+  remain the two oldest-standing, highest-leverage unresolved operator
+  items, now more pointed than ever given the tree now holds two
+  COMPLETE multi-Pass subsystems (decision 014 + decision 015)
+  entirely uncommitted.
+- Get an operator answer on the list-authoring scope question.
+- Confirm the beta (measurement/dimensioning) sequencing now that FF-A
+  is complete and the engineer's next-focus slot is open.
+
+**Same-day continuation 43 — Pass 14.4 SHIPPED (the four Pass-14.3
+deferred GUI interactions — selection-replace-on-type, triple-click
+line-select, drag-select, full arrow/Home/End caret navigation — all
+land, plus a latent Backspace-swallow bug fixed as a side effect); the
+text-editing beta's interaction set is now COMPLETE; GUI relaunched for
+the operator; autonomous loop remains ACTIVE:**
+
+**Shipped:**
+- **Pass 14.4 — Text-edit GUI refinements (completing the four
+  Pass-14.3 deferred interactions), SHIPPED and independently
+  re-verified green in the main tree**: 4 new core caret-navigation
+  tests + 56 GUI tests pass; release GUI build launches; relaunched
+  live for the operator (pid 40764). Full record now in `ROADMAP.md`
+  Shipped (above); summary here for the session trail:
+  - **Selection-replace-on-type:** typing over a single-run selection
+    now replaces it in one step (previously insert-then-backspace);
+    Backspace/Delete delete the selection outright; stays a reviewable
+    `PendingEdit`; the font-on-edit refusal-and-disclosure gate at
+    Accept is untouched.
+  - **Triple-click → line select**, inlined over the already-shipped
+    `line_range_at` (Pass 14.3 §0.2 accessor).
+  - **Drag-select:** press sets anchor + caret; each dragged frame
+    moves the focus caret via a per-move hit-test; selection resolves
+    anchor..focus through `resolve_range`.
+  - **Arrow / Home / End caret navigation:** Left/Right cross run/line
+    boundaries; Up/Down land at the nearest x-position on the adjacent
+    line; Home/End via `line_range_at`; Shift extends the active
+    selection.
+  - All four ride the existing `CanvasTool::TextEdit` — no new tool
+    variant, no new dependency, everything a reviewable `PendingEdit`.
+  - **Modules changed:** `crates/pdfce-core/src/text_edit/model.rs`
+    (new caret-nav accessors + tests); `crates/pdfce-gui/src/canvas.rs`
+    (selection-replace pure helpers + tests);
+    `crates/pdfce-gui/src/main.rs` (gesture/nav/Delete-key/
+    keyboard-gating/selection-replace wiring).
+  - **Public API surface added to `pdfce-core`** (rule-10
+    API-guidelines trail): `EditableTextModel::{caret_x(pos) ->
+    Option<f32>, caret_on_line_nearest_x(line_index, x) ->
+    Option<TextPosition>, caret_left(pos), caret_right(pos),
+    caret_up(pos, desired_x), caret_down(pos, desired_x)}`.
+    (`pdfce-gui`'s `canvas.rs` also gained `single_run_selection_range`
+    + `selection_after_type` — GUI-crate helpers, not core API
+    surface.)
+  - **Notable fix (side effect, not a separately-scoped bug hunt):**
+    `collect_keyboard_actions` now yields Home/End/Delete/Backspace to
+    the canvas whenever a tool is active — this un-swallowed the
+    text-edit Backspace key that the global `DeleteSelection`
+    keybinding was silently eating in shipped Pass 14.3. A latent bug,
+    caught and fixed as a side effect of this Pass's keyboard-gating
+    reconciliation.
+  - **Gates (re-verified in the main tree):** `cargo fmt --all --check`
+    clean; `clippy --workspace --all-targets --all-features -D
+    warnings` clean; `cargo test --workspace` all green (708 core lib
+    tests + 56 GUI + integration suites; the 1 ignored test is
+    pre-existing, unrelated); `cargo tree` core/render GUI-dep-free
+    (GUI-core separation intact); release GUI build succeeds and
+    launches without panic, relaunched live for the operator (pid
+    40764); **ZERO new dependency**; Pass 14.x/15.x/`vartext` tests all
+    unchanged.
+
+**Decisions made this session (continued):**
+- **Five engineer judgment calls recorded** (defensible, non-blocking —
+  filed to `ROADMAP.md`'s Shipped entry for the API-guidelines trail):
+  (1) model-dependent caret navigation lives in `pdfce-core`, not
+  `pdfce-gui`, because `PageText`/`TextRun`/`ExtractedGlyph` are
+  `#[non_exhaustive]` and only constructible/headless-testable from
+  inside core — matches the Pass 14.3 §4.3 "core owns the derived
+  structure" precedent; only model-FREE string helpers stayed in
+  `canvas.rs`; (2) keyboard-gating reconciled per the Pass 14.3 §4.5
+  spec; (3) Up/Down use a per-press `desired_x` from `caret_x` — no
+  sticky goal-column across repeated presses, named as a deferred
+  nicety, not a defect; (4) arrow-nav is gated to `pending.is_none()`
+  — inside an open `PendingEdit` the caret is the draft's own cursor,
+  so model-space arrow-nav while composing is a named first-cut line
+  (typing/Backspace/Delete still work there); (5) multi-run selection
+  refusal is NOT regressed — `cross_run` still suppresses typing and
+  disables Accept, and `single_run_selection_range` returns `None` for
+  a cross-run span.
+- **`ROADMAP.md`'s "In progress" section updated**: the Pass-14.3
+  GUI-refinements deferral note is removed from "what remains open in
+  the text-parity space" (it's now discharged) and replaced with a
+  MILESTONE noting the text-editing beta's interaction set is COMPLETE.
+  What remains open, unchanged in substance: FF-B (cross-block/
+  cross-page reflow), FF-D (add new page text), FF-H (spacing/
+  synthetic styles), and the list-authoring scope question.
+
+**Findings + decisions:**
+- No new generalizable Rust/egui or PDF-domain finding this
+  continuation — the five judgment calls above are pdfce-internal
+  engineering trade-offs specific to this GUI-refinement build, not
+  ecosystem- or domain-generalizable discoveries, so nothing new was
+  filed to `D:\dev\rag\rust\`, `D:\dev\rag\egui\`, or
+  `C:\personal_rag\pdf\` this continuation.
+
+**MILESTONE — the text-editing beta's interaction set (Pass 14.0–14.4)
+is now COMPLETE.** click-to-caret, Shift-click/drag-select/triple-click
+selection, selection-replace-on-type, and full arrow/Home/End caret
+navigation are all shipped and headless-tested where the underlying
+model logic lives in core. Combined with FF-A's completion
+(continuation 42), pdfce's Acrobat text-handling parity is broad and
+deep at the P0 level across both editing AND reflow. Candidate next
+steps in the text-parity space, none yet scoped to a Pass: **FF-B**
+(cross-block/cross-page reflow — the genuine exceed-Acrobat headline,
+Acrobat's own cross-block reflow is cloud-gated + English-only),
+**FF-D** (add new page text), **FF-H** (`Tc`/`Tw`/`Tz`/`Ts` spacing +
+synthetic styles), and the still-open list-authoring scope question.
+
+**Still in flight (continuation 43):**
+- The text-editing beta's interaction set is fully closed (Pass 14.4).
+  FF-B onward is the next scoping question for the text-editing/reflow
+  line of work; no decision has been opened for it yet.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation.
+- The R-INV-2/3/4 fixture-coverage follow-up (flagged at Pass 14.1) —
+  still not yet scheduled as a Pass.
+- The list-authoring scope question (filed continuation 36) — still no
+  operator answer.
+- The already-edited-this-session refusal (Pass 15.1 judgment call 6)
+  remains a named, disclosed first-cut limitation — still worth a
+  fixture-coverage follow-up in a later Pass.
+- Everything remains UNCOMMITTED in git — the tree keeps growing (now
+  also includes Pass 14.4's caret-nav/selection-replace GUI work) and
+  is VERY LARGE, compounding the recurring worktree-isolation cost on
+  every autonomous-builder dispatch.
+- The autonomous `/loop` remains ACTIVE. With both FF-A and the
+  Pass-14.3 GUI deferrals now closed, the next focus is either the Beta
+  (measurement/dimensioning, awaiting operator go-ahead), a new FF-B
+  scoping pass, or one of the smaller named items (FF-D, FF-H,
+  list-authoring) — an operator sequencing call.
+
+**Still-open operator items (re-surfaced, ordered oldest-first —
+commit authorization escalated further given the tree's continued
+growth through Pass 14.4; no items newly added or resolved this
+continuation):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- **Commit authorization — escalating further this continuation.**
+  Everything remains UNCOMMITTED; the tree is VERY LARGE and grew again
+  this continuation (Pass 14.4's selection-replace/triple-click/
+  drag-select/caret-nav GUI work, plus the Backspace-swallow fix), on
+  top of the already-COMPLETE decision-014 in-place-editing family AND
+  the already-COMPLETE decision-015 reflow family — the tree now holds
+  TWO full multi-Pass subsystems PLUS this GUI-polish Pass, all sitting
+  uncommitted end-to-end. This is now the largest uncommitted span in
+  the project's history to date, larger again than at continuation 42.
+  Remains the highest-leverage unresolved item alongside the license
+  decision.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36) — does the
+  operator want bulleted/numbered list authoring as an Acrobat-parity
+  target, and if so where in the Pass sequence? Still no operator
+  answer.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); not re-opened, listed here only for continuity of
+  the oldest-first trail, no action needed.
+
+**For next session:**
+- Get an operator decision on what comes next now that both FF-A and
+  the Pass-14.3 GUI deferrals are complete: the Beta (measurement/
+  dimensioning, awaiting go-ahead) vs. a new FF-B (cross-block/
+  cross-page reflow) scoping pass vs. one of the smaller named items
+  (FF-D, FF-H, list-authoring).
+- Re-surface commit authorization and the license decision — both
+  remain the two oldest-standing, highest-leverage unresolved operator
+  items, now more pointed than ever given the tree holds two COMPLETE
+  multi-Pass subsystems (decision 014 + decision 015) plus this
+  GUI-polish Pass, entirely uncommitted.
+- Get an operator answer on the list-authoring scope question.
+- Confirm the beta (measurement/dimensioning) sequencing now that both
+  FF-A and the Pass-14.3 GUI deferrals are complete and the engineer's
+  next-focus slot is open.
+
+**Same-day continuation 44 — KenAgent decision 016 filed (prioritizes
+the text-parity fast-follow ladder; scopes FF-D — add NEW page text —
+as ★ Pass 16.x; FF-C and list-authoring recorded operator-gated,
+unscheduled); R78–R79 filed; decision 014 §5.3 amended; the autonomous
+`/loop` remains ACTIVE:**
+
+**Shipped:**
+- Nothing shipped this continuation — a decision-filing/roadmap-update
+  continuation, not a build. Pass 16.0 (add-new-text engine + point-
+  text insert) is now the recommended next build once this continuation's
+  filing is done.
+
+**Decisions made this session (continued):**
+- **KenAgent decision 016 ACCEPTED** — full record
+  `docs/decisions/016-ffd-add-new-page-text.md`. Two jobs: (1)
+  prioritizes the remaining decision-014 fast-follow ladder now that
+  both decision 014 (Pass 14.x, in-place editing) and decision 015
+  (Pass 15.x, FF-A reflow) are COMPLETE end-to-end — FF-D ranked #1
+  (solo-startable, maximal leverage of the shipped 14.x/15.x substrate,
+  lowest landmine profile); FF-C ranked #2 on value (lifts the
+  embedded-subset refusal wall) but **operator-gated** (rule 13
+  copyleft + rule 8 license-undecided); FF-B deferred (rarest daily
+  action, largest new subsystem); FF-H deferred (partly premature,
+  couples to a not-yet-built a11y subsystem); list-authoring
+  **operator-gated** (scope call); and (2) scopes FF-D concretely: a
+  new `BT…ET` text object appended to the page `/Contents` array
+  (§7.7.3.3, original stream byte-identical) — structurally distinct
+  from, and NEVER conflated with, the already-shipped Pass-6.2
+  FreeText annotation path (a real, sourced Acrobat naming collision
+  the parity catalog documents); default font is a bundled Standard-14
+  permissive face (§9.6.2.2, no embedding) via decision 012's
+  `GlyphSource`, which is precisely why FF-D needs no FF-C to ship;
+  routed through the SAME 14.x edit/format + 15.x reflow pipeline as
+  any other page text once added; one undo-able
+  `CommandKind::AddText`.
+- **Pass-number call: fresh ★ Pass 16.x, not 14.5–14.7.** Decision 016
+  §6 delegated the renumbering choice to the librarian. Chose a fresh
+  **Pass 16.x** ("text authoring") to keep three coherent,
+  separately-referenceable families: 14.x = in-place editing, 15.x =
+  reflow, 16.x = authoring NEW text — the same precedent set when 15.x
+  itself was assigned fresh rather than folded into 14.4–14.6
+  (continuation 39). Sliced as **16.0** (add-new-text engine +
+  point-text insert, core + CLI `text add --at`) — RECOMMENDED NEXT
+  BUILD, spec grounding for §7.7.3.3/§7.8.3/§9.4/§9.4.2/§9.6.2.2 being
+  sourced by `pdfce-spec-librarian` in parallel now — **16.1** (boxed
+  add + wrap via the already-shipped 15.x reflow engine, CLI `text add
+  --box`), and **16.2** (add-text canvas UI, DISPATCH
+  `pdfce-ui-specialist` first).
+- **Standing rules R78–R79 filed** (current ceiling was R77): **R78**
+  add-new-text-is-page-content-surgery-never-freetext (sibling of R69
+  for the add-new-content case); **R79**
+  new-text-uses-bundled-supplied-face-no-embedding-disclosed-provenance
+  (why FF-D needs no FF-C). Both added to `ROADMAP.md` Standing rules
+  in order, and referenced from the new ★ Pass 16.x Next-up entry.
+- **`docs/decisions/014-acrobat-text-editing.md` §5.3 amended** — a
+  dated forward-pointer footnote added (matching the existing 015
+  amendment's footnote style, history intact, nothing rewritten):
+  "FF-D scheduled 2026-08-01 by decision 016 → Pass 16.x; see 016."
+- **`ROADMAP.md` Backlog: FF-C and list-authoring recorded explicitly
+  operator-gated, NOT scheduled.** List-authoring's existing Backlog
+  entry (filed continuation 36) got a dated amendment footer
+  re-confirming it is still awaiting an operator "do we even want
+  this?" call (decision 016 ranked it #5, sequences after FF-D
+  regardless — no new information, just re-confirmed). A **new** FF-C
+  Backlog bullet was filed: font subsetting/glyph embedding is ranked
+  #2 by value but cannot start solo — adding a subsetter is a Cargo
+  dependency, triggering rule 13 (copyleft classification, operator
+  approval never solo) and gated by rule 8 (license undecided,
+  `LEGAL.md` §1). Both bullets are marked "AWAITING OPERATOR DECISION
+  — DO NOT SCHEDULE TO A PASS." Recommendation surfaced (decision
+  016's own): unblock FF-C in parallel with the Pass 16.x build —
+  approve a permissive-only subsetter path and, ideally, settle the
+  license — so FF-C can follow FF-D directly; the font-subsetting spec
+  dispatch already named at decision 014 stays queued meanwhile.
+- **`ROADMAP.md` "In progress" status paragraph updated** to reflect
+  FF-D's new scoped status (no longer "none of these scheduled to a
+  Pass yet") and to point at the new ★ Pass 16.x entry.
+
+**Findings + decisions:**
+- No new generalizable Rust/egui or PDF-domain finding this
+  continuation — a pure decision-filing/roadmap-bookkeeping pass, no
+  code touched, nothing ecosystem- or domain-generalizable surfaced.
+
+**Still in flight (continuation 44):**
+- Pass 16.0 (add-new-text engine + point-text insert) is the
+  recommended next build; its spec grounding (§7.7.3.3, §7.8.3, §9.4/
+  §9.4.2, §9.6.2.2) is being sourced by `pdfce-spec-librarian` in
+  parallel now, per decision 016's own dispatch instruction.
+- FF-B (cross-block/cross-page reflow) and FF-H (spacing + synthetic
+  styles + StructTree) remain named, unscoped fast-follows — no
+  decision opened for either yet.
+- FF-C and list-authoring are now explicitly recorded operator-gated
+  in `ROADMAP.md` Backlog (see above) — neither may enter a Pass
+  without an explicit operator call.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation.
+- Everything remains UNCOMMITTED in git — no code changed this
+  continuation (decision-filing only), so the uncommitted span is
+  unchanged in size from continuation 43, still the largest in the
+  project's history to date.
+- The autonomous `/loop` remains ACTIVE.
+
+**Still-open operator items (re-surfaced, ordered oldest-first — two
+NEW items added this continuation, both from decision 016 §10; nothing
+resolved):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided. **Now doubly
+  pointed:** decision 016 flags this as one of two things (alongside
+  approving a permissive-only subsetter path) that would unblock FF-C
+  to follow directly behind the now-scoped Pass 16.x (FF-D) build.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- **Commit authorization** — unchanged this continuation (no code
+  touched); still the largest uncommitted span in the project's
+  history (two COMPLETE multi-Pass subsystems — decision 014 + decision
+  015 — plus the Pass 14.4 GUI-polish work, all uncommitted). Remains
+  the highest-leverage unresolved item alongside the license decision.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36; re-confirmed
+  operator-gated by decision 016 §10 this continuation) — does the
+  operator want bulleted/numbered list authoring as an Acrobat-parity
+  target at all, and if so where in the Pass sequence? Still no
+  operator answer. Sequences after Pass 16.x (FF-D) regardless.
+- **NEW — FF-C (font subsetting/glyph embedding) license/dependency
+  gate** (filed this continuation, decision 016 §10). Ranked #2 by
+  value in the text-parity fast-follow ladder — lifts the
+  embedded-subset edit-refusal wall — but blocked on an explicit
+  operator call: approve a permissive-only subsetter dependency (rule
+  13) and, ideally, settle `LEGAL.md` §1 first. Recommendation: unblock
+  in parallel with the Pass 16.0 build so FF-C can follow FF-D
+  directly.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); not re-opened, listed here only for continuity of
+  the oldest-first trail, no action needed.
+
+**For next session:**
+- Build **Pass 16.0** (add-new-text engine + point-text insert, core +
+  CLI `text add --at`) — the recommended next build; confirm
+  `pdfce-spec-librarian`'s §7.7.3.3/§7.8.3/§9.4/§9.4.2/§9.6.2.2 grounding
+  has landed before or during the build.
+- Re-surface commit authorization and the license decision — both
+  remain the two oldest-standing, highest-leverage unresolved operator
+  items; the license decision is now doubly pointed since it also
+  gates unblocking FF-C.
+- Get the operator's FF-C unblock call (permissive-only subsetter
+  approval + ideally the license decision) so FF-C can be scoped to
+  follow Pass 16.x directly.
+- Get an operator answer on the list-authoring scope question.
+- Confirm the beta (measurement/dimensioning) sequencing whenever the
+  operator wants to revisit it — unchanged, still open.
+
+**Same-day continuation 45 — Pass 16.0 SHIPPED (add-new-text engine +
+point-text insert, core + CLI `add-text`; decision 016, FF-D slice 1 of
+3); a certification-signature-guard gap flagged and filed to Backlog,
+not actioned; 16.1 (boxed add) and 16.2 (add-text canvas UI) promoted
+to In progress in parallel; the autonomous `/loop` remains ACTIVE:**
+
+**Shipped:**
+- **Pass 16.0 — Add-new-text engine + point-text insert (core + CLI),
+  SHIPPED and independently re-verified green in the main tree**: 9
+  core `add_text` tests + 8 CLI `add_text` tests pass; a live add
+  ("Added by pdfce" at 100,700) produced exactly two new objects
+  (content_object=6, font_object=7), bundled Helvetica disclosed, and
+  round-trip reports `identical=1, raster_identical=1, reloaded=1`
+  (original page byte-untouched). Full record now in `ROADMAP.md`
+  Shipped (above); summary here for the session trail:
+  - **New engine module:** `crates/pdfce-core/src/text_edit/addtext.rs`
+    (NEW); `mod.rs` (re-exports); `fontdata/mod.rs` (added
+    `std14_base_font_name(Std14) -> &'static str`, the inverse of
+    `std14_by_base_font`, to write `/BaseFont`); `edit.rs`
+    (`CommandKind::AddText` + `EditSession::add_text`);
+    `crates/pdfce-cli/src/main.rs` (`add-text` subcommand +
+    `cmd_add_text` + `parse_at_pair`/`parse_rgb_triple`). NEW tests
+    `crates/pdfce-core/tests/add_text.rs` (9),
+    `crates/pdfce-cli/tests/add_text.rs` (8). NEW fixtures
+    `fixtures/synthetic/addtext/{plain,inherited-resources,tagged}.pdf`
+    + generator + `PROVENANCE.md`.
+  - **Three load-bearing recipes:** (1) `/Contents` single→array append
+    — the incremental update re-emits ONLY the page dict + the 2 new
+    objects, the original content stream NEVER re-emitted
+    (byte-identical, R32/R46). (2) Standard-14 Type1 font dict, NO
+    `/FontFile` (R79), `/FontDescriptor` deliberately omitted to keep
+    exactly 2 new objects. (3) Inheritance-safe `/Font` add — rebuilds
+    the page's `/Resources` INLINE from the effective (own-or-inherited)
+    resources with a merged `/Font` subdict + a collision-free
+    `/pdfceF{n}` name, never mutating the shared ancestor `/Pages`
+    dict (verified on the inherited-resources fixture).
+  - **Public API surface added to `pdfce-core`** (rule-10
+    API-guidelines trail): `text_edit::add_text`, `AddTextRequest`,
+    `AddTextReport`, `AddTextOutcome`, `AddTextError` (`thiserror`,
+    `#[non_exhaustive]`), `FontProvenance { Bundled, Supplied }`,
+    `NewTextColor { Black, Rgb }`; `edit::CommandKind::AddText`,
+    `EditSession::add_text`; `fontdata::std14_base_font_name`. All
+    doc-commented with runnable examples + ISO cites (§7.7.3.3/§8.4.2/
+    §7.8.3/§9.6.2.2/§9.4.2/§9.4.3 + R78/R79/R71/R73).
+  - **Acceptance, all tested:** original byte-identical; re-extracts as
+    an editable (14.1) and formattable (14.2) block; inheritance-safe;
+    tagged-page R73 disclosure; R71 missing-glyph refusal (core no
+    output + CLI exit 9); undo restores byte-identical; both
+    `Bundled`/`Supplied` font provenance disclosed; R59 render check
+    (notdef=0, both runs rasterize).
+  - **Gates (re-verified in the main tree):** `cargo fmt --all --check`
+    clean; `clippy --workspace --all-targets --all-features -D
+    warnings` clean (panic-free); `cargo tree -p pdfce-core`/
+    `-p pdfce-render` zero GUI deps; full workspace `cargo test` 0
+    failed (708 core unit + integration incl. the 9+8 new, plus 47
+    doctests); Pass 14.x/15.x/`vartext` tests all unchanged; **ZERO new
+    dependency** (no `Cargo.toml` touched).
+
+**Decisions made this session (continued):**
+- **Four engineer judgment calls recorded** (defensible, non-blocking —
+  filed to `ROADMAP.md`'s Shipped entry for the API-guidelines trail):
+  (1) CLI subcommand named `add-text` (flat kebab, matching shipped
+  `edit-text`/`format-text`/`reflow`), NOT decision 016's literal "text
+  add" group name — internal CLI-surface consistency won; a future
+  migration to a `text` subcommand group is a separate cosmetic pass;
+  (2) `/FontDescriptor` omitted (full `/Widths` form kept) — §9.6.2.1
+  would force it indirect for zero metric benefit, keeps the add at
+  exactly 2 new objects; (3) `/Resources` always rebuilt inline,
+  uniform across own/indirect/inherited resource dicts, referencing
+  rather than mutating/duplicating shared sub-dicts; (4) a space
+  character emits an R-INV-5 "ambiguous" disclosure (WinAnsi maps space
+  at both code 32 and code 160) — the shared 14.1 gate behaving as
+  designed, left as-is for cross-Pass consistency but flagged as mildly
+  noisy (a multi-word add can emit two near-identical space
+  disclosures) — a candidate future polish to de-dup R-INV-5 space
+  disclosures within one add.
+- **`ROADMAP.md` Backlog: NEW follow-up filed, NOT actioned —
+  certification-signature guard gap on `add_text`/
+  `EditSession::add_text`.** Unlike `add_markup` (Pass 6.x), the
+  `add_text` free function and `EditSession::add_text` both check
+  encryption and suppressed-objects guards, but neither reaches
+  `check_certification` (a private `EditSession` method the
+  free-function engine has no access to). Recorded as a gap, scope
+  named for whenever it's actioned: (1) add the guard to the
+  `add_text`/`EditSession::add_text` path mirroring `add_markup`'s
+  existing check; (2) consider exposing `check_certification` (or an
+  equivalent hook) so other free-function engines (e.g. the 15.x reflow
+  engine, if it has the same gap) can reach it. No Pass number
+  invented; not dispatched this continuation.
+- **`ROADMAP.md`'s "In progress" and ★ Pass 16.x sections updated**:
+  Pass 16.0 moved out of "recommended next build" into Shipped; **16.1
+  (boxed add + wrap via the 15.x reflow engine) promoted to In
+  progress**; **16.2 (add-text canvas UI) also now in flight** in
+  parallel, `pdfce-ui-specialist` dispatched first per the standing
+  rule for non-trivial UI changes.
+
+**Findings + decisions:**
+- No new generalizable Rust/egui or PDF-domain finding this
+  continuation — the four judgment calls above and the
+  certification-guard gap are pdfce-internal engineering findings
+  specific to this build's surgery/session-command design, not
+  ecosystem- or domain-generalizable discoveries, so nothing new was
+  filed to `D:\dev\rag\rust\`, `D:\dev\rag\egui\`, or
+  `C:\personal_rag\pdf\` this continuation.
+
+**Still in flight (continuation 45):**
+- **16.1 (boxed add + wrap via the 15.x reflow engine)** is now In
+  progress — the next slice of decision 016/FF-D.
+- **16.2 (add-text canvas UI)** is in flight in parallel;
+  `pdfce-ui-specialist` dispatch is the required first step per
+  standing rule.
+- The certification-signature-guard gap on `add_text`/
+  `EditSession::add_text` is filed to Backlog, flagged, NOT actioned —
+  awaits an explicit dispatch, no operator decision required to action
+  it (it's an engineering completeness gap, not a scope call), but not
+  yet scheduled to a Pass.
+- FF-B (cross-block/cross-page reflow) and FF-H (spacing + synthetic
+  styles + StructTree) remain named, unscoped fast-follows — unchanged.
+- FF-C and list-authoring remain explicitly operator-gated in
+  `ROADMAP.md` Backlog — unchanged, no operator answer yet.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation.
+- Everything remains UNCOMMITTED in git — the tree grew again this
+  continuation (Pass 16.0's new `addtext.rs` engine module, CLI
+  subcommand, and three new fixtures), on top of the already-COMPLETE
+  decision-014 (in-place editing) and decision-015 (reflow) subsystems
+  plus the Pass-14.4 GUI-polish work — now THREE complete/near-complete
+  subsystems' worth of code sitting uncommitted end-to-end, larger
+  again than at continuation 43.
+- The autonomous `/loop` remains ACTIVE — 16.1 (boxed-add build)
+  dispatched in parallel with 16.2 (UI design).
+
+**Still-open operator items (re-surfaced, ordered oldest-first — no
+items newly added or resolved this continuation; commit authorization
+escalated further given the tree's continued growth through Pass
+16.0):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided. Doubly pointed:
+  also gates unblocking FF-C (font subsetting) to follow Pass 16.x.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- **Commit authorization — escalating further this continuation.**
+  Everything remains UNCOMMITTED; the tree grew again (Pass 16.0's new
+  `addtext.rs` engine, `add-text` CLI subcommand, three new fixtures +
+  generator), on top of the already-COMPLETE decision-014 in-place-
+  editing family, the already-COMPLETE decision-015 reflow family, and
+  the Pass-14.4 GUI-polish work — the tree now holds essentially the
+  entire text-parity subsystem to date (in-place editing + reflow +
+  the first slice of new-text authoring), all sitting uncommitted. This
+  is now the largest uncommitted span in the project's history,
+  larger again than at continuation 43. Remains the highest-leverage
+  unresolved item alongside the license decision.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36; re-confirmed
+  operator-gated by decision 016 §10) — does the operator want
+  bulleted/numbered list authoring as an Acrobat-parity target at all,
+  and if so where in the Pass sequence? Still no operator answer;
+  sequences after Pass 16.x (FF-D) regardless.
+- **FF-C (font subsetting/glyph embedding) license/dependency gate**
+  (filed continuation 44, decision 016 §10) — ranked #2 by value in the
+  text-parity fast-follow ladder, but blocked on an explicit operator
+  call: approve a permissive-only subsetter dependency (rule 13) and,
+  ideally, settle `LEGAL.md` §1 first. Recommendation stands: unblock in
+  parallel with the Pass 16.x build so FF-C can follow FF-D directly.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); not re-opened, listed here only for continuity of
+  the oldest-first trail, no action needed.
+
+**For next session:**
+- Continue Pass 16.1 (boxed add + wrap via the 15.x reflow engine) to
+  completion, then Pass 16.2 (add-text canvas UI, via
+  `pdfce-ui-specialist`) — decision 016/FF-D end-to-end.
+- Consider dispatching the certification-signature-guard follow-up (add
+  the guard to `add_text`/`EditSession::add_text`, mirroring
+  `add_markup`) — an engineering-completeness item, not gated on an
+  operator scope call, but not yet scheduled.
+- Re-surface commit authorization and the license decision — both
+  remain the two oldest-standing, highest-leverage unresolved operator
+  items, now more pointed than ever given the tree holds essentially
+  the entire text-parity subsystem (in-place editing + reflow + the
+  first slice of new-text authoring), entirely uncommitted.
+- Get the operator's FF-C unblock call and a list-authoring scope
+  answer — both still open, unchanged.
+- Confirm the beta (measurement/dimensioning) sequencing whenever the
+  operator wants to revisit it — unchanged, still open.
+
+**Same-day continuation 46 — Pass 16.1 SHIPPED (boxed add-new-text:
+multi-line wrap/justify/overflow via the 15.x reflow engine, core +
+CLI `add-text --box`; decision 016, FF-D slice 2 of 3); Pass 16.2
+(add-text canvas UI) design SHIPPED and its build now dispatched — the
+FINAL slice of decision 016/FF-D; the autonomous `/loop` remains
+ACTIVE:**
+
+**Shipped:**
+- **Pass 16.1 — Boxed add-new-text + wrap via the 15.x reflow engine
+  (core + CLI), SHIPPED and independently re-verified green in the main
+  tree**: 16 core `add_text` tests + 13 CLI `add_text` tests pass (up
+  from 9+8 at Pass 16.0); a live boxed justified add wrapped to 2 lines
+  with the derived-layout disclosure, round-trip `identical=1,
+  raster_identical=1` (original page byte-untouched). Full record now
+  in `ROADMAP.md` Shipped (above); summary here for the session trail:
+  - **Modules changed:** CHANGED `addtext.rs` (boxed branch lives
+    entirely inside the SHARED `plan_add_text` planner — 16.0's
+    `/Contents` append, inheritance-safe `/Resources`/`/Font` merge,
+    Std-14 no-embed dict, F-refuse encode, and both call sites (free
+    `add_text` + `EditSession::add_text`) all inherited verbatim;
+    boxed session integration was FREE, no `edit.rs` change, same
+    `CommandKind::AddText`); CHANGED `reflow.rs` (`align_origin_x` +
+    `line_natural_width` hoisted to `pub(crate)` for reuse); CHANGED
+    `crates/pdfce-cli/src/main.rs` (`add-text --box/--align/--leading`).
+    Tests: +7 core, +5 CLI. Reused `fixtures/synthetic/addtext/plain.pdf`
+    (Courier monospace, hand-computable breaks; no new fixture).
+  - **Reuse, not duplication:** 15.x's `linebreak::greedy_pack` + the
+    two hoisted reflow helpers reused as-is; the only real difference
+    from a reflow is the MEASURER (a fresh box has no glyphs, so it
+    measures by the chosen face's §9.4.4 AFM `/Widths`, like
+    `vartext`, instead of provenance advances). 15.1's negative-`TJ`
+    justified-slack emission recipe reused (sign-mirror of
+    `reflow_apply::emit_justified_line`).
+  - **Public API added to `pdfce-core`** (rule-10 trail, all
+    `#[non_exhaustive]`, non-breaking): `AddTextRequest` fields
+    `wrap_box: Option<Rect>`, `alignment: BlockAlignment`, `leading:
+    Option<f64>` + builders `with_box`/`with_alignment`/`with_leading`;
+    `AddTextReport` fields `wrapped_lines`, `box_overflow_lines`,
+    `page_overflow_pt`, `alignment`; `AddTextError` variants
+    `InvalidBox(f64, f64)`, `NoWordsToWrap`.
+  - **Acceptance, all tested:** wrap-matches-hand-computed; L/C/R
+    placement correct (origin_x 72/116/160); justified right-flush +
+    last-line-unstretched; original-byte-identical; overflow emitted-
+    not-clipped per R76; undo restores original; re-recognized by the
+    14.0 model; R71 refusal; `InvalidBox`/`NoWordsToWrap` clean
+    refusals; CLI `--at`/`--box` mutual exclusion + R59 render clean.
+  - **Gates (re-verified in the main tree):** fmt/clippy clean
+    (panic-free); `cargo tree` core/render GUI-dep-free; full workspace
+    0 failures (16 core + 13 CLI `add_text`; 14.x/15.x/16.0/`vartext`
+    unchanged); R59 notdef=0; round-trip byte-verbatim; **ZERO new
+    dependency**.
+- **Pass 16.2 — Add-text canvas UI: DESIGN shipped, build dispatched.**
+  `pdfce-ui-specialist` returned its critique + change list for the
+  final decision-016/FF-D slice. Three key calls: (1) a dedicated
+  `CanvasTool::AddText` variant — not overloaded onto the existing
+  FreeText-annotation tool; (2) a REQUIRED tooltip/label disambiguating
+  "add page text" from "add FreeText annotation" at the point of
+  interaction (not just in docs — the catalog's real Acrobat
+  naming-collision finding, decision 016 §3.1, must not repeat in
+  pdfce's own UI); (3) a new pure, read-only wrap-preview accessor so
+  box-mode dragging shows live wrap feedback without mutating document
+  state ahead of commit. Build now dispatched.
+
+**Decisions made this session (continued):**
+- **Nine engineer judgment calls recorded** (defensible, non-blocking
+  — filed to `ROADMAP.md`'s Shipped entry for the API-guidelines
+  trail): (1) emission recipe C, absolute `Tm` per line, immune to
+  relative-`Td` accumulation; (2) `\n` = hard paragraph breaks, each
+  wrapped independently with its own un-justified last line, words
+  split on ASCII whitespace; (3) wrap width = full box width, left
+  origin = box `llx`, NO padding inset (unlike `vartext`'s `TEXT_PAD`);
+  (4) first baseline = `box_top − 0.75·size`, descent `0.25·size`,
+  matching the 14.0/15.x line-box convention; (5) box = `(x,y,w,h)`
+  with `(x,y)` = lower-left (PDF `Rect` convention); (6) alignment is
+  an explicit input, default `Left` — deliberately NOT 15.0's
+  auto-detect (a fresh box has no glyphs to detect from); (7) added
+  `--leading`/`with_leading`, default `1.2·size`, disclosed-derived,
+  overridable; (8) `NoWordsToWrap`/`InvalidBox` clean refusals → CLI
+  `EDIT_REFUSED`; (9) justified single-word/last/overflowing-word
+  lines left un-stretched, space width from the face's space glyph,
+  fallback `0.25·size` disclosed.
+- **`ROADMAP.md`'s In progress / ★ Pass 16.x sections updated**: Pass
+  16.1 moved out of In progress into Shipped; **16.2 (add-text canvas
+  UI) is now the SOLE remaining slice of decision 016/FF-D**, its
+  design shipped, build in progress. Decision 016/FF-D is now TWO
+  THIRDS complete end-to-end (16.0 + 16.1 shipped, 16.2 build in
+  flight).
+
+**Findings + decisions:**
+- No new generalizable Rust/egui or PDF-domain finding this
+  continuation — the nine judgment calls above are pdfce-internal
+  engineering findings specific to this build's surgery/session-command
+  design, not ecosystem- or domain-generalizable discoveries, so
+  nothing new was filed to `D:\dev\rag\rust\`, `D:\dev\rag\egui\`, or
+  `C:\personal_rag\pdf\` this continuation.
+
+**Still in flight (continuation 46):**
+- **16.2 (add-text canvas UI)** build is in progress — the design is
+  settled (dedicated `CanvasTool::AddText`, required disambiguation
+  tooltip, read-only wrap-preview accessor); this is the LAST slice of
+  decision 016/FF-D.
+- The certification-signature-guard gap on `add_text`/
+  `EditSession::add_text` remains filed to Backlog, flagged, NOT
+  actioned — unchanged from continuation 45.
+- FF-B, FF-H remain named, unscoped fast-follows — unchanged.
+- FF-C and list-authoring remain explicitly operator-gated in
+  `ROADMAP.md` Backlog — unchanged, no operator answer yet.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation.
+- Everything remains UNCOMMITTED in git — the tree grew again this
+  continuation (Pass 16.1's boxed-wrap engine extension, CLI
+  `--box/--align/--leading` flags, plus 16.2's in-flight canvas-UI
+  build), on top of the already-COMPLETE decision-014 and decision-015
+  subsystems, the Pass-14.4 GUI-polish work, and Pass 16.0 — now FOUR
+  complete/near-complete subsystems' worth of code sitting uncommitted
+  end-to-end, larger again than at continuation 45.
+- The autonomous `/loop` remains ACTIVE — 16.2 (canvas-UI build)
+  dispatched as the sole remaining decision-016/FF-D slice.
+
+**Still-open operator items (re-surfaced, ordered oldest-first — no
+items newly added or resolved this continuation; commit authorization
+escalated further given the tree's continued growth through Pass
+16.1):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided. Doubly pointed:
+  also gates unblocking FF-C (font subsetting) to follow Pass 16.x.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- **Commit authorization — escalating further this continuation.**
+  Everything remains UNCOMMITTED; the tree grew again (Pass 16.1's
+  boxed-wrap engine extension + CLI flags, plus 16.2's in-flight
+  canvas-UI build), on top of the already-COMPLETE decision-014
+  in-place-editing family, the already-COMPLETE decision-015 reflow
+  family, the Pass-14.4 GUI-polish work, and Pass 16.0 — the tree now
+  holds essentially the ENTIRE text-parity subsystem to date (in-place
+  editing + reflow + point-and-boxed new-text authoring), all sitting
+  uncommitted, with only the canvas-UI slice left to land. This is now
+  the largest uncommitted span in the project's history, larger again
+  than at continuation 45. Remains the highest-leverage unresolved item
+  alongside the license decision.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36; re-confirmed
+  operator-gated by decision 016 §10) — does the operator want
+  bulleted/numbered list authoring as an Acrobat-parity target at all,
+  and if so where in the Pass sequence? Still no operator answer;
+  sequences after Pass 16.x (FF-D) regardless.
+- **FF-C (font subsetting/glyph embedding) license/dependency gate**
+  (filed continuation 44, decision 016 §10) — ranked #2 by value in the
+  text-parity fast-follow ladder, but blocked on an explicit operator
+  call: approve a permissive-only subsetter dependency (rule 13) and,
+  ideally, settle `LEGAL.md` §1 first. Recommendation stands: unblock in
+  parallel with the Pass 16.x build so FF-C can follow FF-D directly.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); not re-opened, listed here only for continuity of
+  the oldest-first trail, no action needed.
+
+**For next session:**
+- Complete Pass 16.2 (add-text canvas UI build) — the final slice of
+  decision 016/FF-D; once shipped, decision 016 is COMPLETE end-to-end
+  (matching decisions 014 and 015's completion pattern).
+- Consider dispatching the certification-signature-guard follow-up (add
+  the guard to `add_text`/`EditSession::add_text`, mirroring
+  `add_markup`) — an engineering-completeness item, not gated on an
+  operator scope call, but not yet scheduled.
+- Re-surface commit authorization and the license decision — both
+  remain the two oldest-standing, highest-leverage unresolved operator
+  items, now more pointed than ever given the tree holds essentially
+  the entire text-parity subsystem (in-place editing + reflow + both
+  point and boxed new-text authoring), entirely uncommitted, with only
+  the canvas-UI slice remaining before decision 016 closes out.
+- Get the operator's FF-C unblock call and a list-authoring scope
+  answer — both still open, unchanged.
+- Confirm the beta (measurement/dimensioning) sequencing whenever the
+  operator wants to revisit it — unchanged, still open.
+
+**Same-day continuation 47 — Pass 16.2 SHIPPED (on-canvas Add-Text UI;
+decision 016, FF-D slice 3 of 3, FINAL SLICE) — DECISION 016 / FF-D
+COMPLETE END-TO-END; the broader Acrobat text-handling parity arc
+(decisions 014 + 015 + 016) is now COMPLETE at the P0 level; the
+autonomous `/loop` remains ACTIVE:**
+
+**Shipped:**
+- **Pass 16.2 — On-canvas Add-Text UI (gui), SHIPPED and independently
+  re-verified green in the main tree**: 18 core `add_text` tests
+  (incl. the `preview_wrap`↔`add_text` parity proof) + 59 GUI tests
+  pass; release GUI build succeeds and launches; relaunched live for
+  the operator (pid 25280) with the Add-Text tool available. Full
+  record now in `ROADMAP.md` Shipped (above); summary here for the
+  session trail:
+  - **P0 pure wrap-preview (core):** NEW
+    `pdfce_core::text_edit::preview_wrap(text, wrap_box, page_crop,
+    font: Std14, size, alignment, leading) -> Result<AddTextWrapPreview,
+    AddTextError>` — GENUINELY factored out of 16.1's boxed layout
+    (`layout_boxed` now takes explicit inputs and carries each line's
+    original text alongside its emission codes, so `add_text`'s boxed
+    path and `preview_wrap` share ONE `layout_boxed` pass — no
+    duplicated wrap/origin/overflow math). Pure/read-only, no
+    `&Document`, no mutation, no GUI dependency. CHANGED `addtext.rs` +
+    `mod.rs` (re-exports) + `fontdata/mod.rs` (`Std14::ALL`).
+  - **GUI:** `CanvasTool::AddText` — a SECOND real tool variant,
+    mutually exclusive with `CanvasTool::TextEdit` (the opposite call
+    from 15.2's reflow-sub-mode approach) — plus pure placement helpers
+    (`resolve_drag_placement`) and `run_add_text_tool` (click→point /
+    drag→box rubber-band / typing→live wrap-preview ghost / property
+    bar size+colour+font+alignment / Accept→`EditSession::add_text`
+    landing one `CommandKind::AddText` / Reject+Esc discards), a
+    toolbar button, and a keyboard chord (Ctrl+Shift+E). CHANGED
+    `canvas.rs`, `ui_text.rs`, `main.rs`.
+  - **Tooltip disambiguation (required companion, R78 bidirectional):**
+    `text_menu_tooltip()` now states the FreeText/markup tool is "a
+    removable annotation, not page content … use Add Text instead";
+    `edit_text_tool_tooltip()` names Add Text; new
+    `add_text_tool_tooltip()` is the three-sentence disambiguator —
+    fixes the LIVE tooltip collision (the shipped FreeText tooltip
+    previously read "Add a text box…").
+  - **Public API added to `pdfce-core`** (rule-10 trail, all
+    `#[non_exhaustive]`, non-breaking): `fn preview_wrap(...) ->
+    Result<AddTextWrapPreview, AddTextError>`; `struct
+    AddTextWrapPreview { lines, wrapped_lines, box_overflow_lines,
+    page_overflow_pt, alignment, disclosures }`; `struct
+    WrapPreviewLine { text, origin_x, baseline_y }`; `Std14::ALL:
+    [Std14; 14]`.
+  - **Headless-tested:**
+    `preview_wrap_lines_match_committed_boxed_add_for_identical_inputs`
+    (parses `add_text`'s ACTUAL emitted `Tm` operands, asserts equality
+    with the preview's per-line origins ±1e-4, across L/C/R/Justified,
+    two faces, explicit+derived leading, and an R76 overflow case) +
+    `preview_wrap_refuses_where_the_commit_would_refuse` (refusal
+    parity); pure GUI helpers `resolve_drag_placement` + mutual-
+    exclusion invariant tests `tool_builds_text_edit`/
+    `tool_builds_add_text` (against the ACTUAL `SelectCanvasTool`
+    dispatch). The egui wiring itself is compile-and-launch-verified,
+    per this project's established GUI-testing posture.
+  - **Gates (re-verified in the main tree):** fmt/clippy clean
+    (panic-free); `cargo tree` core/render GUI-dep-free; full workspace
+    0 failures (708 core lib + 18 core `add_text` [up from 16] + 59 GUI
+    unit, plus CLI/doctests unchanged — 14.x/15.x/16.0/16.1/`vartext`
+    all unchanged); release GUI build launches without panic; **ZERO
+    new dependency**.
+
+**Decisions made this session (continued):**
+- **Five engineer judgment calls recorded** (defensible, non-blocking —
+  filed to `ROADMAP.md`'s Shipped entry for the API-guidelines trail):
+  (1) box mode was BUILT not blocked, since 16.0+16.1 both shipped by
+  the time the `pdfce-ui-specialist` spec was implemented; (2) Enter
+  semantics split by mode — point mode plain Enter = Accept; box mode
+  plain Enter = paragraph break (`\n`), Ctrl+Enter = Accept; (3)
+  `preview_wrap` returns the EXISTING `AddTextError` (no new error type
+  invented), GUI stores/surfaces its `Display` string verbatim; (4)
+  colour surface uses `color_edit_button_srgba` →
+  `NewTextColor::Black|Rgb` only (no Gray/CMYK widget — matches core
+  Add-Text's own colour-model limit, no phantom GUI capability); (5)
+  `too_many_arguments`/`type_complexity` allow-with-reason on the
+  9-field `layout_boxed`, matching the codebase's existing convention
+  for justified, spec-driven parameter lists.
+- **`ROADMAP.md` fully updated for the FF-D-complete milestone:** Pass
+  16.2 moved to Shipped (top, reverse-chronological); the ★ Pass 16.x
+  entry (Next up) got its closing AMENDMENT — "decision 016 and FF-D
+  are COMPLETE end-to-end," now historical record same as the ★ Pass
+  15.x and ★ Pass 14.x entries before it; the 16.2 bullet updated from
+  "UI DESIGN SHIPPED, build in progress" to "SHIPPED — see Shipped
+  above," with its acceptance criteria filled in; the "In progress"
+  section's Pass-16 paragraph rewritten to "Pass 16.0, 16.1, AND 16.2
+  all shipped … decision 016 / FF-D is now COMPLETE end-to-end."
+- **NEW milestone paragraph recorded (both in the Shipped entry and in
+  "In progress"): the broader Acrobat text-handling parity arc is
+  COMPLETE at the P0 level** — decision 014 (in-place editing, Pass
+  14.0–14.4), decision 015 / FF-A (within-block reflow incl. justified,
+  Pass 15.0–15.2), and decision 016 / FF-D (add-new-text, Pass
+  16.0–16.2) are ALL shipped, on top of the earlier root-cause font fix
+  (continuation 33) and the xref-recovery work (Pass 13.x). Framed
+  explicitly as a CLEAN DECISION POINT, not open engineering work: FF-B
+  (cross-block/cross-page reflow) and FF-H (spacing/synthetic styles/
+  StructTree) are lower-priority-deferred and unscheduled; FF-C (font
+  subsetting) and list-authoring remain explicitly operator-gated. No
+  Pass number invented for any of the four.
+
+**Findings + decisions:**
+- No new generalizable Rust/egui or PDF-domain finding this
+  continuation — the five judgment calls above are pdfce-internal
+  engineering findings specific to this build's UI-wiring/API-surface
+  design, not ecosystem- or domain-generalizable discoveries, so
+  nothing new was filed to `D:\dev\rag\rust\`, `D:\dev\rag\egui\`, or
+  `C:\personal_rag\pdf\` this continuation.
+
+**Still in flight (continuation 47):**
+- **Decision 016 / FF-D is CLOSED — no remaining slices.** The
+  text-parity arc (decisions 014 + 015 + 016) is now a complete,
+  shipped P0 milestone; nothing is "in flight" within it.
+- The certification-signature-guard gap on `add_text`/
+  `EditSession::add_text` remains filed to Backlog, flagged, NOT
+  actioned — this is now the most likely next bounded engineering step
+  (no operator scope call needed to action it, unlike FF-C/
+  list-authoring).
+- FF-B, FF-H remain named, unscoped fast-follows — unchanged.
+- FF-C and list-authoring remain explicitly operator-gated in
+  `ROADMAP.md` Backlog — unchanged, no operator answer yet.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation.
+- Everything remains UNCOMMITTED in git — the tree grew again this
+  continuation (16.2's `CanvasTool::AddText` UI, `preview_wrap`, the
+  tooltip disambiguation), closing out the FOUR-subsystem span named at
+  continuation 46 (decision 014, decision 015, Pass 14.4, decision 016)
+  as now FIVE complete subsystems sitting uncommitted end-to-end:
+  in-place editing, reflow, GUI-polish, add-new-text, AND — new this
+  continuation — the fact that the entire text-parity ARC is now a
+  single completed, shippable-in-principle milestone with zero of it
+  in version control. This is the largest uncommitted span in the
+  project's history to date, larger again than at continuation 46.
+- The autonomous `/loop` remains ACTIVE.
+
+**Still-open operator items (re-surfaced, ordered oldest-first — no
+items newly added or resolved this continuation; commit authorization
+escalated further given FF-D's completion):**
+- Encryption-refusal operator sign-off — oldest owed.
+- `LEGAL.md` §1 license decision — still undecided. Doubly pointed: also
+  gates unblocking FF-C (font subsetting) now that FF-D has shipped.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5).
+- **Commit authorization — escalating further this continuation.**
+  Everything remains UNCOMMITTED; the tree now holds the ENTIRE
+  Acrobat text-handling parity arc, complete and shipped in-fiction —
+  decision 014 (in-place editing), decision 015 (reflow), Pass 14.4
+  (GUI polish), and decision 016 (add-new-text, point + boxed + canvas
+  UI) — sitting on top of a single bootstrap commit. This is the
+  largest uncommitted span in the project's history, larger again than
+  at continuation 46, and remains the highest-leverage unresolved item
+  alongside the license decision.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36; re-confirmed
+  operator-gated by decision 016 §10) — does the operator want
+  bulleted/numbered list authoring as an Acrobat-parity target at all,
+  and if so where in the Pass sequence? Still no operator answer; now
+  that FF-D has shipped, this sequences next if/when the operator says
+  yes.
+- **FF-C (font subsetting/glyph embedding) license/dependency gate**
+  (filed continuation 44, decision 016 §10) — ranked #2 by value in the
+  text-parity fast-follow ladder, now that FF-D (#1) has shipped end-to-
+  end. Blocked on an explicit operator call: approve a permissive-only
+  subsetter dependency (rule 13) and, ideally, settle `LEGAL.md` §1
+  first. Recommendation stands: unblock now, since FF-D is done.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); not re-opened, listed here only for continuity of
+  the oldest-first trail, no action needed.
+
+**For next session:**
+- The Acrobat text-handling parity arc (decisions 014 + 015 + 016) is
+  now a COMPLETE, closed P0 milestone — no further slices to build
+  within it. The likely next bounded engineering step is the
+  certification-signature-guard follow-up flagged at Pass 16.0's ship
+  (add a guard to `add_text`/`EditSession::add_text`, mirroring
+  `add_markup`'s existing check) — engineering-completeness work, not
+  gated on an operator scope call, but not yet scheduled or dispatched.
+- Get the operator's FF-C unblock call (now higher-value, since FF-D
+  has shipped and FF-C is ranked #2) and a list-authoring scope answer
+  — both still open, unchanged.
+- Re-surface commit authorization and the license decision — both
+  remain the two oldest-standing, highest-leverage unresolved operator
+  items, now maximally pointed: the tree holds the entire completed
+  text-parity arc, entirely uncommitted.
+- Confirm the beta (measurement/dimensioning) sequencing whenever the
+  operator wants to revisit it — unchanged, still open.
+
+**Same-day continuation 48 — FF-D follow-up hardening SHIPPED
+(certification-signature guard on `add_text`/`EditSession::add_text`,
+closing the Pass 16.0 flagged gap); Backlog entry RESOLVED; the
+FF-D/text-parity-arc milestone now has no known loose threads; the
+autonomous `/loop` THROTTLED to a long idle heartbeat, AWAITING
+OPERATOR STEER:**
+
+**Shipped:**
+- **FF-D follow-up hardening — certification-signature guard on
+  `add_text`/`EditSession::add_text` (a correctness hardening, NOT a
+  new Pass; closes the Backlog "FF-D follow-up" gap flagged at Pass
+  16.0's ship).** Independently re-verified green in the main tree: 15
+  CLI `add_text` tests (incl. the certified-refusal cases) pass, core
+  lib 713 pass, and a live `add-text` against the certified fixture is
+  refused with the verbatim §12.8.4 DocMDP message. Full record now in
+  `ROADMAP.md` Shipped (top of section, above the Pass 16.2 entry);
+  summary here for the session trail:
+  - Adding page content to a certified-signed PDF whose enforced
+    `/Perms /DocMDP` forbids structural changes is now REFUSED,
+    mirroring `EditSession::add_markup`'s existing guard. Previously
+    `add_text`/`EditSession::add_text` checked encryption and
+    suppressed-objects only, not certification — closing exactly the
+    gap flagged at Pass 16.0's ship.
+  - `crates/pdfce-core/src/text_edit/addtext.rs` — new
+    `AddTextError::CertificationForbidsChange { permission: u8 }`, its
+    `#[error]` message a VERBATIM copy of
+    `EditError::CertificationForbidsChange`'s (same wording, same ISO
+    32000-1 §12.8.4 `/Perms /DocMDP P=` citation — reused, not
+    reinvented, asserted by a message-parity unit test). New shared
+    `pub(crate) fn refuse_if_certification_forbids<G: ObjectGraph>(graph)`
+    reuses the SAME machinery as `EditSession::check_certification`
+    (`crate::signature::census` + `SignatureCensus::forbids_structural_change()`
+    + the `/P`-absent-defaults-to-2 rule). Wired into the free
+    `add_text` engine between the encryption and suppressed-objects
+    guards (matching `add_markup`'s
+    encryption→certification→suppressed order).
+  - `crates/pdfce-core/src/edit.rs` — `EditSession::add_text` calls the
+    same shared guard in the same position; the boxed add shares the
+    planner so it is covered automatically (tested).
+  - `crates/pdfce-cli/src/main.rs` — `cmd_add_text` maps the new
+    variant to `exit::EDIT_REFUSED`.
+  - **Free-function guard posture chosen: (a)** — `census`/
+    `forbids_structural_change` are already `pub` in `signature.rs` and
+    reachable from the free function (`Document: ObjectGraph`), so the
+    free `add_text` engine guards ITSELF via the shared helper, and
+    both entry points (GUI `EditSession::add_text`, CLI/free
+    `add_text`) call that ONE helper — every operator-reachable path is
+    covered with zero drift, no unguarded entry remains. This also
+    discharges the Backlog gap's item (2) ("expose a guard hook for
+    other free-function engines") — the shared helper itself IS that
+    hook.
+  - **Fixture** `fixtures/synthetic/addtext/certified-locked.pdf`
+    (`plain.pdf` + an enforced `/Perms /DocMDP` P=1 cert sig), added to
+    `tools/gen-addtext-fixtures.py` (byte-stable/idempotent,
+    md5-confirmed) + `PROVENANCE.md`.
+  - **Tests:** core (point/box/free-fn refused with
+    `CertificationForbidsChange { permission: 1 }`, session left
+    unmodified; uncertified doc still adds — regression guard;
+    message-parity) + CLI (point/box → `EDIT_REFUSED`, stderr cites
+    §12.8.4, no output).
+  - **Gates (re-verified main tree):** core lib 713 passed / 0 failed;
+    CLI `add_text` 15 passed; `cargo test --workspace` all green;
+    `cargo fmt --all --check` clean; `cargo clippy --workspace
+    --all-targets -D warnings` clean; `cargo tree -p pdfce-core` /
+    `-p pdfce-render` GUI-dep-free; **ZERO new dependency** (only
+    intra-crate references — no `Cargo.toml`/`Cargo.lock` touched);
+    Pass 14.x/15.x/16.x/`vartext` tests unchanged.
+
+**Decisions made this session (continued):**
+- **`ROADMAP.md` fully updated for the hardening's close-out:** a new
+  Shipped entry ("FF-D follow-up hardening…") added at the TOP of
+  Shipped (most recent); the Backlog "FF-D follow-up" bullet
+  strikethrough-marked and annotated **RESOLVED 2026-08-01** with a
+  pointer to the Shipped entry and posture (a) (matching the existing
+  strikethrough+RESOLVED/CLOSED convention used elsewhere in Backlog —
+  e.g. the i18n/cross-platform/update-mechanism entries); the ★ Pass
+  16.x entry (Next up) got a new closing AMENDMENT recording the
+  hardening and the now-clean decision point; both "In progress"
+  paragraphs that named the gap as "the most likely next bounded
+  engineering step" were updated to say it shipped and is closed.
+- **Posture (a) confirmed as the chosen (not merely proposed) shape**
+  for the guard: the free `add_text` function guards itself directly,
+  rather than `EditSession` exposing `check_certification` outward to
+  free functions or duplicating a second private check. Recorded as
+  the reusable pattern for any future free-function engine (e.g. a
+  hypothetical 15.x-reflow-adjacent engine) that needs the same
+  certification guard — reach for `signature::census` +
+  `forbids_structural_change()` directly, the same way `add_text` now
+  does, rather than inventing a new access path through `EditSession`.
+- **With this hardening, the FF-D/text-parity-arc milestone (decisions
+  014 + 015 + 016, Pass 14.0–16.2) has no known loose threads.** The
+  only remaining items in that space — FF-B, FF-H (lower-priority-
+  deferred, unscheduled) and FF-C, list-authoring (explicitly
+  operator-gated) — are all clean decision points, not dangling
+  engineering gaps. This is now recorded in `ROADMAP.md`'s "In
+  progress" milestone paragraph.
+
+**Findings + decisions:**
+- No new generalizable Rust/egui or PDF-domain finding this
+  continuation — the guard-sharing pattern (posture (a)) is a
+  pdfce-internal engineering decision about this codebase's own crate
+  boundaries (`signature.rs`'s `pub` visibility, `EditSession` vs. free
+  functions), not an ecosystem- or domain-generalizable discovery, so
+  nothing new was filed to `D:\dev\rag\rust\`, `D:\dev\rag\egui\`, or
+  `C:\personal_rag\pdf\` this continuation.
+
+**Still in flight:**
+- **Nothing is in flight within the text-parity arc.** Decision 016/
+  FF-D is complete end-to-end AND its one flagged follow-up is now
+  closed — the arc (decisions 014+015+016) is a fully shipped,
+  fully-hardened P0 milestone with no open engineering thread.
+- FF-B, FF-H remain named, unscoped fast-follows — unchanged.
+- FF-C and list-authoring remain explicitly operator-gated in
+  `ROADMAP.md` Backlog — unchanged, no operator answer yet.
+- The Beta (measurement/dimensioning) — unchanged, still awaiting
+  operator go-ahead/sequencing confirmation.
+- **The autonomous `/loop` is now THROTTLED to a long idle heartbeat,
+  AWAITING OPERATOR STEER on the next major direction** — it is not
+  spawning further feature work. With the text-parity arc's one known
+  loose thread now closed, there is no more self-evident, non-operator-
+  gated bounded engineering step queued; further progress in this
+  project's highest-value area (text parity) now requires an operator
+  call (FF-C unblock, list-authoring scope, or a new direction
+  entirely) rather than autonomous continuation.
+- Everything remains UNCOMMITTED in git — this hardening (the new
+  `AddTextError` variant, the shared `refuse_if_certification_forbids`
+  helper, the `certified-locked.pdf` fixture, and their tests) adds to,
+  rather than resolves, the largest uncommitted span named at
+  continuation 47 (the entire completed text-parity arc). The whole
+  arc PLUS this closing fix now sit on top of a single bootstrap commit
+  with zero of it in version control.
+
+**Still-open operator items (re-surfaced, oldest-first; none newly
+resolved this continuation except the FF-D follow-up gap itself, which
+is now closed and dropped from this list):**
+- Encryption-refusal operator sign-off — oldest owed, unchanged.
+- `LEGAL.md` §1 license decision — still undecided. Doubly pointed:
+  also gates unblocking FF-C (font subsetting) now that FF-D (incl.
+  this hardening) is fully shipped and closed.
+- `LEGAL.md` §2 Adobe-supplement copyright contradiction — flagged,
+  unchanged.
+- `/R 6` sourcing method — Ken's call (gates Pass 5) — unchanged.
+- **Commit authorization — escalated further this continuation.**
+  Everything remains UNCOMMITTED; the tree now holds the ENTIRE
+  Acrobat text-handling parity arc, complete, shipped, AND
+  hardening-closed in-fiction — decision 014 (in-place editing),
+  decision 015 (reflow), Pass 14.4 (GUI polish), decision 016
+  (add-new-text, point + boxed + canvas UI), and now this
+  certification-signature-guard fix — sitting on top of a single
+  bootstrap commit. This is the largest uncommitted span in the
+  project's history yet, larger again than at continuation 47, and
+  remains the highest-leverage unresolved item alongside the license
+  decision.
+- W15 — no remote/CI — unchanged.
+- Autosave / crash-recovery scratch file + true in-place Save (gated on
+  it) — still open, unchanged.
+- List-authoring scope question (filed continuation 36; re-confirmed
+  operator-gated by decision 016 §10) — does the operator want
+  bulleted/numbered list authoring as an Acrobat-parity target at all,
+  and if so where in the Pass sequence? Still no operator answer.
+- **FF-C (font subsetting/glyph embedding) license/dependency gate**
+  (filed continuation 44, decision 016 §10) — ranked #2 by value in the
+  text-parity fast-follow ladder. Blocked on an explicit operator call:
+  approve a permissive-only subsetter dependency (rule 13) and,
+  ideally, settle `LEGAL.md` §1 first. Recommendation stands: unblock
+  now, since FF-D (including this hardening) is fully done and closed.
+- Justified-alignment question — remains RESOLVED (decision 015,
+  continuation 39); not re-opened, listed here only for continuity of
+  the oldest-first trail, no action needed.
+
+**For next session:**
+- **The text-parity arc (decisions 014+015+016) is now fully shipped
+  AND fully hardened — zero known open engineering threads within it.**
+  The `/loop` is throttled to an idle heartbeat and will not spawn new
+  feature work on its own; the next move in this space is an operator
+  decision, not autonomous engineering.
+- Get the operator's FF-C unblock call and a list-authoring scope
+  answer — both still open, unchanged, now the two live decision points
+  in the text-parity space.
+- Re-surface commit authorization and the license decision — both
+  remain the two oldest-standing, highest-leverage unresolved operator
+  items, now maximally pointed: the tree holds the entire completed and
+  hardened text-parity arc, entirely uncommitted.
+- Confirm the beta (measurement/dimensioning) sequencing whenever the
+  operator wants to revisit it, OR use this idle window to give the
+  `/loop` its next major-direction steer — unchanged, still open.

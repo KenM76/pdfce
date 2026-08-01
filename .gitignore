@@ -19,6 +19,24 @@ Thumbs.db
 # here into the tracked fixtures/ tree instead of committing wholesale.
 /fixtures/external/
 
+# Generated report from the external-corpus sweep (analysis output over the
+# gitignored /fixtures/external/ tree — not source).
+/fixtures/external-report.tsv
+
+# Corpus-harness OUTPUT directories (render-parity/content-identity/etc.
+# write per-run result tables + summaries + diff PNGs here; the harness
+# SOURCE is tracked, its output is not). Covers out/, out-annots/,
+# out-cmyk/, out-gate/, out-multipage/, and any future out-* run dir.
+tools/**/out/
+tools/**/out-*/
+
+# Git worktree internals created by transient build agents — never tracked.
+/.claude/worktrees/
+
+# Stray demo/scratch artifacts written to the repo root during development.
+/demo_*.pdf
+/demo_*.png
+
 # NOTE: Cargo.lock is intentionally NOT ignored. This is an application
 # workspace (pdfce-gui, pdfce-cli binaries), not a pure library — the
 # Rust ecosystem convention is to commit the lockfile for binaries, for

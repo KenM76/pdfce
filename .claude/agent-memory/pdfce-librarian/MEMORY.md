@@ -1,0 +1,3 @@
+- [Repo stays uncommitted, recurring worktree cost](project_uncommitted_repo_worktree_risk.md) — everything in `crates/` is uncommitted; bites autonomous-builder dispatches repeatedly.
+- [SESSION_LOG continuation numbering convention](feedback_session_log_continuation_style.md) — one date header per calendar session start; further work same day is "Same-day continuation N", not a new header.
+- [`/loop` throttled, awaiting operator steer](project_loop_throttled_awaiting_steer.md) — as of continuation 48 (2026-08-01) the autonomous loop stopped spawning feature work; check current status before describing "in flight."

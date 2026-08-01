@@ -1,0 +1,32 @@
+# content-identity — the R46 content-stream identity gate (Pass 6.1).
+#
+# WHY THIS EXISTS (docs/decisions/008 §3.4, R46): Pass 6.1 introduces the
+# project's first content-stream serializer. R46 requires it to be proven
+# by an identity gate — parse → re-emit → byte-compare every content
+# stream in the loadable corpus — BEFORE it is trusted to author. This is
+# Pass 3.0's object-level identity move applied one level down, and it is
+# nearly free because content.rs already carries a per-token byte span.
+#
+# It is a separate out-of-tree tool for the same reasons tools/roundtrip
+# is (kept out of `cargo test --workspace`, out of the GUI-core `cargo
+# tree` invariant, and out of cargo-about's shipping graph). Never shipped.
+#
+# FIXTURE RULE (docs/LEGAL.md §5): reads rights-cleared corpora in place,
+# emits only aggregate counts + a per-file TSV. Never commits corpus files.
+
+[package]
+name = "content-identity"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Detach from the parent workspace (belt to the root manifest `exclude`).
+[workspace]
+
+[dependencies]
+# The crate under measurement, path-referenced so an API drift breaks the
+# build rather than silently mismeasuring.
+pdfce-core = { path = "../../crates/pdfce-core" }
+
+[profile.release]
+opt-level = 3

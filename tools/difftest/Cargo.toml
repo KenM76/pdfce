@@ -1,0 +1,52 @@
+# difftest — pdfce's out-of-tree differential test oracle.
+#
+# WHY THIS EXISTS (docs/decisions/001-oxidize-pdf-adopt-vs-build.md §7):
+# pdfce-core is built from scratch; oxidize-pdf (MIT) was audited 2026-07-30
+# and its COS parser / hybrid-xref handling judged strong enough to be worth
+# *disagreeing with deliberately*. This tool runs the same fixture PDFs
+# through both parsers and diffs the resulting object graphs. Disagreements
+# are ADVISORY, never authoritative — oxidize-pdf has documented
+# silent-corruption filter fallbacks, so every mismatch is adjudicated
+# against the PDF_Spec RAG (D:\Dev\Rag-Specialized\PDF_Spec\), never
+# resolved in the oracle's favor by default.
+#
+# WHY OUT-OF-TREE (workspace-excluded via the root manifest's `exclude`):
+# keeps `cargo test` fast; keeps `cargo tree -p pdfce-core` invariant checks
+# clean; keeps THIRD_PARTY_LICENSES.md describing the SHIPPING graph only.
+# oxidize-pdf must NEVER become a dependency (even dev-) of any workspace
+# member.
+#
+# FIXTURE RULE (docs/LEGAL.md §5): fixtures fed to this tool are
+# pdfce-authored synthetic PDFs or rights-cleared corpus files (veraPDF /
+# PDF Association) ONLY. Never a PDF from oxidize-pdf's own repository —
+# it commits unknown-provenance real-world files.
+
+[package]
+name = "difftest"
+version = "0.0.0"
+edition = "2024"
+publish = false
+# license intentionally unset — internal tool, never shipped or published
+# (same posture as the workspace, docs/LEGAL.md §1).
+
+# Detach from the parent workspace explicitly (belt to the root manifest's
+# `exclude` braces): this package is its own single-crate workspace with
+# its own Cargo.lock, so the oracle dependency tree never mingles with the
+# shipping one.
+[workspace]
+
+[dependencies]
+# THE ORACLE — pinned EXACTLY (`=`), per decision 001 §7. The audit was
+# performed against repo HEAD 5f3e8b3 / release v4.2.1 (2026-07-30); a
+# floating version would silently change what the oracle asserts. Bump
+# deliberately, re-checking release notes for parser-behavior changes, and
+# record the bump in the decision log.
+# License: MIT (verified in the 2026-07-30 audit). Permissive — allowed
+# out-of-tree per LEGAL.md §6; invisible to cargo-about by design (correct:
+# it is not part of the shipping graph).
+oxidize-pdf = "=4.2.1"
+
+# pdfce-core, path-referenced: the crate under test. Wired in now so the
+# harness fails to compile (rather than silently drifting) if pdfce-core's
+# API changes under it.
+pdfce-core = { path = "../../crates/pdfce-core" }

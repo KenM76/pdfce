@@ -1,0 +1,54 @@
+# roundtrip — pdfce's corpus-wide round-trip proof harness (Pass 3.0).
+#
+# WHY THIS EXISTS (docs/ROADMAP.md Pass 3.0, decision 007): the
+# ARCHITECTURE.md §5 round-trip/minimal-diff invariant has been project
+# doctrine since Pass 0 and PROSE the whole time. This tool turns it into
+# an executable, corpus-wide gate over every file the read stack can
+# load, so that every later editing Pass lands against a MEASURED
+# regression gate instead of a promise.
+#
+# It is deliberately a separate tool from corpus-report rather than a
+# mode of it. corpus-report's stdout/TSV shape is a stable measurement
+# contract that three shipped Passes' numbers are quoted against
+# (ROADMAP's before/after tables); bolting a second, differently-shaped
+# measurement onto it would either break that contract or bury the
+# round-trip numbers inside it. Two tools, two contracts, no coupling.
+#
+# WHY OUT-OF-TREE (workspace-excluded via the root manifest's `exclude`,
+# same pattern as tools/corpus-report and tools/difftest):
+#   (1) keeps `cargo test --workspace` fast;
+#   (2) keeps the GUI-core-separation `cargo tree` invariant checks
+#       unambiguous;
+#   (3) keeps cargo-about's THIRD_PARTY_LICENSES.md describing the
+#       SHIPPING dependency graph only.
+# This tool is never shipped.
+#
+# FIXTURE RULE (docs/LEGAL.md §5): corpus files fed to this tool are
+# rights-cleared corpora only, and are NEVER committed to the repo —
+# fixtures/external/ is gitignored scratch space. This tool reads files
+# in place and emits only aggregate counts plus a per-file TSV.
+
+[package]
+name = "roundtrip"
+version = "0.0.0"
+edition = "2024"
+publish = false
+# license intentionally unset — internal tool, never shipped or published
+# (same posture as the workspace, docs/LEGAL.md §1).
+
+# Detach from the parent workspace explicitly (belt to the root
+# manifest's `exclude` braces): this package is its own single-crate
+# workspace with its own Cargo.lock, so its dependency tree never
+# mingles with the shipping one.
+[workspace]
+
+[dependencies]
+# The crates under measurement, path-referenced so the harness fails to
+# compile (rather than silently drifting) if their APIs change under it.
+pdfce-core = { path = "../../crates/pdfce-core" }
+pdfce-render = { path = "../../crates/pdfce-render" }
+
+[profile.release]
+# The corpus is ~2,900 files and every one is saved three ways and
+# rendered twice; a debug build turns a two-minute sweep into an hour.
+opt-level = 3

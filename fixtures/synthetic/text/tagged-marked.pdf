@@ -1,0 +1,44 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 6 0 R /MarkInfo << /Marked true /Suspects true >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 218 >>
+stream
+BT /F1 18 Tf 72 700 Td (Marked content here) Tj ET
+/TagSuspect << /TagSuspect /Ordering >> BDC
+BT /F1 18 Tf 72 660 Td (Suspect region) Tj ET
+EMC
+/P << /MCID 0 >> BDC
+BT /F1 18 Tf 72 620 Td (Inside MCID zero) Tj ET
+EMC
+
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Type /StructTreeRoot /K [] >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000130 00000 n 
+0000000250 00000 n 
+0000000313 00000 n 
+0000000582 00000 n 
+0000000679 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+728
+%%EOF
