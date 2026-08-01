@@ -43,6 +43,119 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 9a — Read-only vector object/selection model + centerline derivation (decision 011 slice 2 of 5; first BUILDABLE slice atop the Pass 12.0 canvas substrate) — 2026-08-01
+
+**Second slice of decision 011's five-slice dimensioning-tool architecture
+(`12.0 → 9a → 12.M1 → 12.M2 → 9c-min`) — SHIPPED and COMMITTED as
+`e13f3e6`** (on top of `79d1c6f` MIT-license commit / `d8b3903` first
+implementation commit). Independently re-verified green in the main
+tree: full workspace `cargo test` all green — core lib **749** tests
+(cross-check + provider + fuzz all pass, including **36 new vector**
+tests); `cargo fmt --all --check` clean; `cargo clippy --workspace
+--all-targets -D warnings` clean; `cargo tree -p pdfce-core` /
+`-p pdfce-render` GUI-dep-free (invariant intact); **zero new Cargo
+dependencies**.
+
+This is the first BUILDABLE slice on top of Pass 12.0's uninhabited
+canvas substrate: a read-only decomposition of a page's content-token
+stream into selectable vector/text/image objects, point + marquee
+hit-testing, and a thin-filled-bar centerline derivation hint — the
+object/selection model that the remaining three decision-011 slices
+(12.M1 snapping, 12.M2 dimensioning UI, 9c-min basic editing) plug into.
+
+- **NEW `crates/pdfce-core/src/vector/` module** (`mod.rs`,
+  `geometry.rs`, `decompose.rs` (~1000 lines), `hit.rs`,
+  `centerline.rs`): read-only decomposition of a page's content-token
+  stream into selectable `PathObject`/`TextObject`/`ImageObject` nodes
+  in user+page space, carrying the effective graphics state and a
+  content-token `TokenRange`/`ByteSpan` editing handle (CAPTURED now,
+  not yet consumed — reserved for the 9c-min editing slice); point +
+  marquee hit-testing; thin-filled-bar centerline derivation
+  (`CENTERLINE_ASPECT_THRESHOLD = 8.0`, midline of the two short
+  edges, rotation-correct) — a confirmable dimensioning hint, never
+  auto-applied (fuzzy-never-sneaky).
+- **CHANGED** `crates/pdfce-core/src/lib.rs` (`pub mod vector`);
+  `crates/pdfce-render/src/interpret.rs` (additive
+  `trace_paths`/`TracedPath`/`TracedNode` cross-check hook — returns
+  `None` on every render/save path, so rendered/written output bytes
+  are unchanged); `crates/pdfce-gui/src/{object_provider.rs (new),
+  main.rs}` (`ObjectModelProvider: CanvasTargetProvider` + selection
+  wiring onto the Pass 12.0 canvas).
+- **Fixtures** `fixtures/synthetic/vector/{paths,curves,mixed,
+  centerline}.pdf` + generator + `PROVENANCE.md`. **Fuzz** target
+  `vector_decompose` (686k execs, 0 crashes).
+- **Agree-by-construction (Z2 mitigation).** Object geometry and the
+  renderer's actual walk share the same construction/CTM primitives,
+  and a cross-check test asserts object geometry matches the render
+  point-for-point (including a kappa-approximated circle and a
+  `cm`-rotated bar) — the render is the oracle, not a second
+  independently-reasoned geometry path.
+- **Public API added to `pdfce-core`** (rule-10 API-guidelines trail;
+  `decompose` is total — no error type, forwards the existing
+  `ContentError`): `pdfce_core::vector::{Point, Matrix, Bounds, Rgb,
+  cubic_from_v, cubic_from_y, rect_corners, Segment, Subpath,
+  PaintStyle, FillRule, TokenRange, PathObject, ImageSource,
+  ImageObject, TextObject, VectorObject, DecomposeDiagnostics,
+  PageObjects, XObjectShape, XObjectResolver, NoXObjects,
+  DocumentXObjects, decompose, decompose_page, MAX_OBJECTS, MAX_NODES,
+  MarqueeMode, FLATTEN_STEPS, hit_test_point, hit_test_rect,
+  CENTERLINE_ASPECT_THRESHOLD, CenterlineCandidate, page_candidates,
+  derive_from_path}`; render `interpret::{trace_paths, TracedPath,
+  TracedNode}`; gui `object_provider::ObjectModelProvider`.
+
+**Engineer judgment calls made this Pass (recorded, some owed follow-up):**
+1. Shared-primitives-not-forked-walk agree-by-construction (see above),
+   chosen over an independently-reasoned second geometry path, to make
+   render/object-model drift structurally impossible rather than
+   merely tested-against.
+2. **Marquee-vs-pan: canvas drag now means rubber-band marquee select
+   in no-tool selection mode; pan moved to wheel/scrollbars.** This is
+   a CHANGE to the Pass 12.0 shipped viewer's drag-to-pan default
+   (Inkscape/Illustrator convention, standing rule R61). **OWED a
+   `pdfce-ui-specialist` review at the 12.M1 stage** — see the new
+   Backlog flag below; not actioned this Pass.
+3. Marquee selection is fully-contained-by-default (a `Touched` mode
+   is available but not the default), matching the same
+   Inkscape/Illustrator convention.
+4. Text object bounding boxes are approximate (no glyph metrics
+   consulted) — bbox-selectable, not node-editable; disclosed as a
+   limit, not silently glossed over.
+5. A Form XObject `Do` decomposes to ONE opaque bounding-box object
+   (no recursion into the form's own content stream) — a scoped-down
+   fast-follow, not full nested-XObject decomposition.
+6. `XObjectResolver` is a trait (not a concrete resolver), chosen for
+   testability — `NoXObjects` and `DocumentXObjects` are the two
+   current implementations.
+7. Content-stream `n` (clip-only/no-op path-painting) operators
+   produce selectable invisible objects rather than being dropped —
+   consistent with "never silently discard operator-authored
+   content."
+8. **No `pdfce-cli` subcommand this Pass** — the model is read-only and
+   GUI-internal for now; a `vector-list` inspect subcommand is a
+   fast-follow, tracked against the 12.M2/9c-min stage per rule 11.
+9. `gs` (ExtGState) line-width is not tracked into the derived
+   geometry — a minor, documented stroke-tolerance approximation, not
+   a correctness bug for the selection/centerline use case.
+10. The GUI provider decomposes the CURRENT page only, and rebuilds
+    lazily (not eagerly across the whole document) — a scoped
+    performance choice for an interactive canvas, not a document-wide
+    cache.
+
+**Gates (re-verified in the main tree):** core lib 749 passed / 0
+failed (up from 713 at the FF-D-hardening ship, +36 new vector tests);
+cross-check + provider + fuzz all pass; `cargo fmt --all --check`
+clean; `cargo clippy --workspace --all-targets -D warnings` clean;
+`cargo tree -p pdfce-core` / `-p pdfce-render` GUI-dep-free (invariant
+intact); **zero new dependencies** (no `Cargo.toml`/`Cargo.lock`
+change). **Committed as `e13f3e6`**, on top of `79d1c6f` (MIT license
+artifacts) and `d8b3903` (first implementation commit) — still
+**local-only**, same unpushed posture as the two prior commits (push
+authorization remains a separate, not-yet-granted operator item).
+
+**With this shipped, decision 011's dependency chain is 2 of 5 done
+(`12.0 → 9a`); `12.M1` (snapping engine) is next — see "In progress"
+(below) for the updated Beta state.**
+
 ### FF-D follow-up hardening — certification-signature guard on `add_text`/`EditSession::add_text` (closes the Pass 16.0 flagged gap) — 2026-08-01
 
 **Correctness hardening, not a new Pass — CLOSES the Backlog "FF-D
@@ -3499,7 +3612,13 @@ each of those Passes shipped** and is left as-is (append-only
 history) — as of this commit, none of it is uncommitted any longer.
 Full record: `docs/SESSION_LOG.md`, same-day continuation 49
 (2026-08-01) for the commit, continuation 50 for the license decision
-and new focus.
+and new focus. **UPDATE (continuation 51):** a second logical commit,
+**`e13f3e6`**, has since landed on top of `79d1c6f` (the MIT-license
+artifacts commit) for Pass 9a — see the Pass 9a Shipped entry (above)
+for gates/content. Both `79d1c6f` and `e13f3e6` remain **local-only**,
+same not-yet-pushed posture as `d8b3903`. The engineer is now
+committing shipped work in logical per-Pass/per-decision chunks rather
+than one large tree-wide commit, going forward.
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
@@ -3624,26 +3743,36 @@ Its architecture is DECIDED and ARCHIVED at
 (five slices — **12.0 / 9a / 12.M1 / 12.M2 / 9c-min**). **Do NOT invent the
 beta's Pass IDs / slices here — decision 011 defines them.**
 
-**Current state (2026-08-01): only slice 1 of 5 is shipped.** Pass
-**12.0** (canvas-interaction substrate) shipped 2026-08-01 — see
-Shipped above — but it is explicitly **UNINHABITED** (zero
-document-mutating tools, zero dimensioning capability). The remaining
-four slices are **NOT built**: **9a** (object/selection model +
-centerline, read-only), **12.M1** (snapping engine), **12.M2**
+**Current state (2026-08-01): slices 1–2 of 5 are shipped.** Pass
+**12.0** (canvas-interaction substrate) and Pass **9a** (read-only
+vector object/selection model + centerline) have both shipped — see
+Shipped above — but the canvas is still explicitly **UNINHABITED** for
+dimensioning purposes (selection now works; zero document-mutating
+tools, zero dimensioning capability yet). The remaining three slices
+are **NOT built**: **12.M1** (snapping engine — NEXT), **12.M2**
 (dimensioning + scale/group + hybrid storage + OCG layer — the
 render-touching, R59-gated slice), and **9c-min** (basic vector
 editing: move/delete/drag-node — the R59/Pass-11-gated surgery slice).
 Nothing here is "completely functional in the GUI" yet — that is
 exactly the gap this active focus closes.
 
-**DISPATCHED NOW (2026-08-01):**
-- **`pdfce-engineer` building Pass 9a** (object/selection model +
-  centerline) — the first of the four remaining slices, per decision
-  011's own dependency order (`12.0 → 9a → 12.M1 → 12.M2`/`9c-min`).
-- **`pdfce-inkscape-librarian`** dispatched now for the 9a + 12.M1
+**IN PROGRESS NOW (2026-08-01):**
+- **`pdfce-engineer` building Pass 12.M1** (snapping engine) — the
+  next of the three remaining slices, per decision 011's own
+  dependency order (`12.0 → 9a → 12.M1 → 12.M2`/`9c-min`), promoted
+  from "dispatched" to "in progress" now that Pass 9a has shipped.
+- **`pdfce-inkscape-librarian`** dispatched for the 9a + 12.M1
   grounding (node/object selection + snap-target/priority capability
-  bucket) — decision 011 §4 names this as a parallel-now prerequisite,
-  not something to defer until 9a's build is already underway.
+  bucket) — decision 011 §4 names this as a parallel-now prerequisite;
+  9a's build consumed the selection half of that grounding, 12.M1
+  consumes the snapping half.
+- **Owed at this stage (not yet actioned):** a `pdfce-ui-specialist`
+  review of the marquee-vs-pan drag-default change made at Pass 9a's
+  ship (drag-to-marquee-select replacing drag-to-pan in no-tool
+  selection mode) — see the new Backlog flag below for the full
+  record. Slating this into the 12.M1 dispatch (rather than deferring
+  further) avoids compounding the UX change across another slice
+  before it gets reviewed.
 
 **QUEUED for the 12.M1/12.M2 stage (not yet dispatched):**
 - **`pdfce-spec-librarian`** — §12.9 (measurement), §14.5 (optional
@@ -3714,8 +3843,8 @@ without a new operator instruction.
 
 1. **Dimensioning tool → completely functional in the GUI.** ACTIVE
    NOW — see the Beta entry under "In progress" (above) for full
-   state (12.0 shipped; 9a dispatched now; 9c-min/12.M1/12.M2
-   remaining).
+   state (12.0 and 9a both shipped; 12.M1 in progress now; 12.M2/
+   9c-min remaining).
 2. **ScripTree-style icons for all GUI features.** Queued behind the
    dimensioning tool — see the new "Icon set" entry below.
 3. **Finish all text-handling.** FF-B (cross-block/cross-page reflow),
@@ -4983,6 +5112,40 @@ overrides the image dictionary; `/ColorSpace` optional,
 Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
+
+- **★ UX flag — marquee-vs-pan canvas-drag default change at Pass 9a,
+  owed a `pdfce-ui-specialist` review (filed 2026-08-01, not yet
+  actioned).** Pass 9a's shipped selection model repurposed the Pass
+  12.0 canvas's plain-drag gesture: in no-tool selection mode, drag is
+  now a rubber-band **marquee select** (fully-contained-by-default,
+  with a `Touched` mode available), and **pan moved to wheel/
+  scrollbars** — the Inkscape/Illustrator convention. This is a real
+  CHANGE from the behavior Pass 12.0 shipped (plain drag-to-pan,
+  standing rule R61's original framing), made as an engineer judgment
+  call during Pass 9a's build, not yet reviewed by
+  `pdfce-ui-specialist`. **Slated for review at the Pass 12.M1
+  dispatch** (the snapping-engine slice, currently in progress) — the
+  `pdfce-ui-specialist` is already designing the Pass 12.M2 dimension-
+  tool UX and can fold this question into that same engagement rather
+  than a separate round-trip. Do not treat the current behavior as
+  finalized UX; it is a functional placeholder pending that review.
+- **Test-hygiene — integration-test temp-path collision risk (low
+  severity, non-blocking, filed 2026-08-01).** Some integration tests
+  build temp output paths from `std::env::temp_dir()` +
+  `process::id()`; `process::id()` is only unique per OS process, not
+  per-thread, so two tests racing inside the same `cargo test`
+  process (the normal parallel-test default) can collide on the same
+  path if their other disambiguating tag/counter also matches. A build
+  agent observed one transient, non-reproducing intermittent
+  `RecoveredBaseForbidsIncremental` failure under a full parallel
+  `cargo test --workspace` run that did **not** reproduce on a clean
+  main-tree run (the Pass 9a ship's own verification run was fully
+  green: 749 core + all integration/GUI tests). **Not a product bug,
+  not blocking any ship** — recorded purely as a test-infrastructure
+  hardening item: make temp paths thread-unique (e.g. an
+  `AtomicUsize`/`AtomicU64` counter appended alongside the PID) the
+  next time this test helper is touched. No Pass number assigned; pick
+  up opportunistically.
 
 - **★ NEXT MAJOR FOCUS — Acrobat text-handling parity (Edit PDF: in-place
   text edit, paragraphs, reflow, formatting, font-on-edit)** — filed by

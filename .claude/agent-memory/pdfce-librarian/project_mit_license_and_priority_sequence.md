@@ -29,6 +29,11 @@ in one operator instruction:
       **ACTIVE**. State at the time: only Pass 12.0 (canvas substrate,
       uninhabited) shipped; decision 011's remaining slices — 9a, 12.M1,
       12.M2, 9c-min — not built. Pass 9a dispatched to build.
+      **UPDATE (continuation 51, 2026-08-01):** Pass 9a (object/
+      selection model + centerline) SHIPPED and committed (`e13f3e6`);
+      Pass 12.M1 (snapping) now in progress. 12.M2/9c-min remain. A
+      marquee-vs-pan UX flag from 9a is owed a `pdfce-ui-specialist`
+      review at the 12.M1/12.M2 stage.
    2. ScripTree-style SVG icons for all GUI features (styled after
       `D:\Dev\ScripTree\icons\*.svg`) — new, unscoped Backlog item,
       queued behind #1.

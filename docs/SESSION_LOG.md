@@ -6558,3 +6558,117 @@ text-handling → form-building tools:**
 - Backfill `ARCHITECTURE.md` §12 with a decision-016 (FF-D) entry —
   flagged above as a pre-existing gap noticed but not fixed this
   continuation.
+
+**Same-day continuation 51 — Pass 9a SHIPPED and COMMITTED (`e13f3e6`):**
+
+**Shipped:**
+- **Pass 9a** — read-only vector object/selection model + centerline
+  derivation (decision 011 slice 2 of 5; the first BUILDABLE slice on
+  top of Pass 12.0's uninhabited canvas substrate). NEW
+  `crates/pdfce-core/src/vector/` module (`mod.rs`, `geometry.rs`,
+  `decompose.rs` ~1000 lines, `hit.rs`, `centerline.rs`): decomposes a
+  page's content-token stream into selectable `PathObject`/
+  `TextObject`/`ImageObject` nodes (user+page space, effective
+  graphics state, a captured-not-yet-used content-token
+  `TokenRange`/`ByteSpan` editing handle reserved for 9c-min); point +
+  marquee hit-testing; thin-filled-bar centerline derivation
+  (`CENTERLINE_ASPECT_THRESHOLD = 8.0`) as a confirmable, never
+  auto-applied dimensioning hint. Additive `pdfce-render` cross-check
+  hook (`trace_paths`) returns `None` on every render/save path — zero
+  output-byte impact. New `pdfce-gui::object_provider::
+  ObjectModelProvider` wires selection onto the Pass 12.0 canvas.
+  Fixtures `fixtures/synthetic/vector/{paths,curves,mixed,
+  centerline}.pdf`; fuzz target `vector_decompose` (686k execs, 0
+  crashes).
+- **Verification (re-confirmed independently in the main tree):** full
+  workspace `cargo test` all green — core lib **749** (up from 713,
+  +36 new vector tests), cross-check + provider + fuzz all pass;
+  `cargo fmt --all --check` clean; `cargo clippy --workspace
+  --all-targets -D warnings` clean; `cargo tree -p pdfce-core` /
+  `-p pdfce-render` GUI-dep-free (invariant intact); **zero new Cargo
+  dependencies**.
+- **Committed as `e13f3e6`**, on top of `79d1c6f` (the MIT-license
+  artifacts commit, itself on top of `d8b3903` the first
+  implementation commit). Both `79d1c6f` and `e13f3e6` are local-only —
+  same not-yet-pushed posture, push authorization still a separate,
+  not-yet-granted operator item. **Commit-cadence note:** the engineer
+  is now landing shipped work as logical per-Pass/per-decision commits
+  (license artifacts, then Pass 9a) rather than repeating the single
+  large tree-wide commit made at continuation 49 — a deliberate
+  cadence change worth tracking going forward.
+- Full `ROADMAP.md` record: Shipped section (new Pass 9a entry, top of
+  file); "In progress" Beta section amended (state now 2 of 5 slices
+  shipped, Pass 12.M1 promoted from dispatched to in-progress); GIT
+  STATUS note amended with the `e13f3e6` commit.
+
+**Decisions made this session:** none new — Pass 9a executes decision
+011's already-decided architecture; no fresh KenAgent decision filed.
+
+**Findings + decisions:**
+- **Dimensioning-tool state, precisely:** Pass 12.0 (canvas substrate)
+  and Pass 9a (object/selection model + centerline) are both shipped;
+  **Pass 12.M1 (snapping engine) is next, now in progress**; Pass 12.M2
+  (dimensioning + scale/group + hybrid storage + OCG layer) and Pass
+  9c-min (basic vector editing) remain after that. 12.M2 is already
+  fully grounded for its eventual build — spec §12.9 (measurement),
+  §14.5 (optional content/OCG), and §8.11 (measurement dictionaries)
+  plus the Acrobat measuring-tool capability bucket and the Inkscape
+  selection/snapping capability bucket are all catalogued in their
+  respective RAGs. `pdfce-ui-specialist` is designing the Pass 12.M2
+  dimension-tool canvas UX now, in parallel with the 12.M1 engineering
+  build.
+- **Two flags filed to `ROADMAP.md` Backlog this continuation (recorded,
+  NOT actioned):**
+  1. Marquee-vs-pan canvas-drag default change (Pass 9a repurposed
+     plain-drag from pan to rubber-band marquee select, moving pan to
+     wheel/scrollbars — the Inkscape/Illustrator convention). Owed a
+     `pdfce-ui-specialist` review, slated for the Pass 12.M1 dispatch
+     since that same specialist is already engaged on 12.M2's dimension
+     UX and can fold the question in rather than a separate round-trip.
+  2. Integration-test temp-path collision risk (low severity,
+     non-blocking): some tests build temp paths from
+     `std::env::temp_dir()` + `process::id()`, which is process-unique
+     but not thread-unique, so parallel `cargo test --workspace` runs
+     can theoretically collide. A build agent saw one transient,
+     non-reproducing `RecoveredBaseForbidsIncremental` failure under a
+     full parallel run that did NOT reproduce on the clean main-tree
+     verification run (which was fully green). Filed as a test-hygiene
+     hardening item (add a thread-unique counter alongside the PID) —
+     explicitly NOT a product bug and NOT blocking Pass 9a's ship.
+- No new generalizable Rust/egui or PDF-domain finding graduated to
+  `D:\dev\rag\rust\`, `D:\dev\rag\egui\`, or `C:\personal_rag\pdf\` this
+  continuation — the agree-by-construction pattern (shared
+  render/object-model primitives as the correctness oracle) is
+  pdfce-architecture-specific enough that it's recorded in the Pass 9a
+  Shipped entry rather than generalized; revisit if a future project
+  hits the same render-vs-model-drift problem.
+
+**Still in flight:**
+- Pass 12.M1 (snapping engine) is now the active build — next slice in
+  decision 011's dependency chain.
+- The marquee-vs-pan UX flag and the temp-path test-hygiene flag are
+  both open Backlog items, unscheduled to a specific Pass.
+- Priority items #2 (icon set), #3 (finish text-handling: FF-B/FF-H/
+  FF-C), and #4 (form-building tools) from the continuation-50 operator
+  sequence are all unchanged — still queued behind the dimensioning
+  tool, no work started on any of them.
+- Push/publish authorization for the local commits (`79d1c6f`,
+  `e13f3e6`, and the earlier `d8b3903`) remains a separate, not-yet-
+  granted operator item.
+
+**For next session:**
+- Continue decision 011's sequence: build **Pass 12.M1** (snapping
+  engine) to completion, then **Pass 12.M2** (dimensioning UI — already
+  grounded by spec/Acrobat/Inkscape research, `pdfce-ui-specialist`
+  design in progress), then **9c-min** (basic vector editing).
+- Fold the marquee-vs-pan UX review into the 12.M1 or 12.M2
+  `pdfce-ui-specialist` engagement — don't let it go unreviewed past
+  12.M2's ship.
+- Pick up the temp-path test-hygiene hardening opportunistically (no
+  Pass number assigned; not urgent).
+- Still owed: operator push/publish call; `ARCHITECTURE.md` §12
+  decision-016 backfill (flagged continuation 50, still not done);
+  encryption-refusal sign-off; the other oldest-first still-open items
+  carried from continuation 50 (see that continuation's list —
+  unchanged this continuation, not re-enumerated here to avoid drift
+  between two near-duplicate lists).

@@ -117,3 +117,14 @@ don't keep trying it "just in case" later in the session — it does not
 replenish mid-session. Go straight to WebFetch on non-helpx URLs already
 known from the existing RAG corpus (prior citations, sibling files'
 Source sections) rather than burning attempts on helpx.adobe.com itself.
+
+Confirmed a ninth time (2026-08-01, extending `measure__scale_and_calibration.md`
+to try to close the static-vs-associative GAP for decision 011): `WebSearch`
+exhausted at 200/200 before the first query again; the one candidate
+helpx.adobe.com re-fetch returned `ECONNRESET`. No workaround attempted
+beyond the already-documented pattern (no known non-helpx URL existed for
+this specific fact) — recorded the question as an explicit reasoned-inference
+GAP in the RAG file rather than guessing. Nothing new here; this entry
+exists to keep the "how many times has this exact pattern recurred" count
+accurate for future sessions deciding how much time to budget for fresh
+verification attempts before falling back.

@@ -1,6 +1,6 @@
 ---
 name: project-uncommitted-repo-worktree-risk
-description: RESOLVED 2026-08-01 (commit d8b3903) — pdfce's crates/ tree is no longer uncommitted. Kept as a resolved record; see bottom of file for the resolution and what still remains open (push, gated on the license decision).
+description: RESOLVED 2026-08-01 (commit d8b3903, then 79d1c6f + e13f3e6) — pdfce's crates/ tree is no longer uncommitted, and the engineer now commits in logical per-Pass/per-decision chunks. Kept as a resolved record; see bottom of file for the resolution and what still remains open (push, gated on separate operator go-ahead).
 metadata:
   type: project
 ---
@@ -117,3 +117,15 @@ growing on its own; the next growth trigger is an operator decision
 (FF-C unblock, list-authoring, or a new steer), not autonomous
 continuation. Keep noting this "growth has paused, but nothing shrank"
 framing until either a commit happens or new autonomous work resumes.
+
+**UPDATE — continuation 51 (2026-08-01, Pass 9a shipped).** A SECOND
+logical commit, **`e13f3e6`**, landed on top of `79d1c6f` (the
+MIT-license-artifacts commit, itself on top of `d8b3903`). The engineer
+is now committing shipped work in logical per-Pass/per-decision chunks
+(license artifacts, then Pass 9a) rather than repeating the single
+large tree-wide commit from continuation 49 — note this cadence change
+in future entries rather than assuming a return to one-giant-commit
+behavior. All three commits (`d8b3903`, `79d1c6f`, `e13f3e6`) remain
+**local-only** — push/publish authorization is still a separate,
+not-yet-granted operator item, unaffected by either commit or by the
+MIT decision.
