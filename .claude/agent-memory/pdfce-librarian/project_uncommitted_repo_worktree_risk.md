@@ -129,3 +129,16 @@ behavior. All three commits (`d8b3903`, `79d1c6f`, `e13f3e6`) remain
 **local-only** — push/publish authorization is still a separate,
 not-yet-granted operator item, unaffected by either commit or by the
 MIT decision.
+
+**UPDATE — continuation 52 (Pass 12.M1) then 53 (Pass 12.M2), both
+2026-08-01.** The per-Pass commit cadence held: `19ed865` (docs) and
+`801a748` (Pass 12.M1) landed at continuation 52; `c7c1744` (Pass
+12.M2) landed at continuation 53. Current chain, six commits deep, all
+**local-only**: `d8b3903` → `79d1c6f` (MIT) → `e13f3e6` (Pass 9a) →
+`19ed865` (docs) → `801a748` (Pass 12.M1) → `c7c1744` (Pass 12.M2).
+Push/publish authorization remains the sole open gate, unchanged in
+kind since continuation 50 — only the chain depth keeps growing. When
+recording a future commit, verify the current tip with `git log
+--oneline -1` rather than trusting this memory's hash list, since it
+will keep growing across sessions and this file updates lag behind the
+actual repo.

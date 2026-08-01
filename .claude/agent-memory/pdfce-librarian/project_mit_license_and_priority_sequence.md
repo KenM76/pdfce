@@ -34,6 +34,35 @@ in one operator instruction:
       Pass 12.M1 (snapping) now in progress. 12.M2/9c-min remain. A
       marquee-vs-pan UX flag from 9a is owed a `pdfce-ui-specialist`
       review at the 12.M1/12.M2 stage.
+      **UPDATE (continuation 52, 2026-08-01):** Pass 12.M1 (snapping
+      engine + fuzzy snap indicator) SHIPPED and committed (`801a748`,
+      on top of `19ed865` docs / `e13f3e6` 9a / `79d1c6f` MIT /
+      `d8b3903` impl — 3 of 5 beta slices done). The marquee-vs-pan
+      flag is now RESOLVED (kept — dimension tools use click-A-then-
+      click-B, no conflict with marquee-drag). **Pass 12.M2**
+      (dimensioning + scale/group + hybrid storage + OCG layer) is
+      now in progress, dispatched same continuation; **9c-min**
+      remains after it as the beta's last slice.
+      **UPDATE (continuation 53, 2026-08-01):** Pass 12.M2 (dimension-
+      ing + scale/group + hybrid storage + OCG layer, the headline
+      capability) SHIPPED and committed (`c7c1744`, chain now
+      `d8b3903`/`79d1c6f`/`e13f3e6`/`19ed865`/`801a748`/`c7c1744`, six
+      deep, all local-only). Dimensions fully authorable via CLI,
+      disclosed in GUI, but on-canvas click-to-author was deliberately
+      DEFERRED to a new engineer-assigned slice, "Pass 12.M2b"
+      (on-canvas dimension authoring), now building — that's the slice
+      that actually delivers "completely functional in the GUI." 9c-min
+      still last, after 12.M2b. Also this continuation: the ScripTree
+      icon DESIGN (priority #2) is now complete
+      (docs/ui_specs/icon-set-and-toolbar.md, 27 controls, redaction
+      solid-fill exception) though its BUILD hasn't started — two
+      decisions named as operator/KenAgent-gated before that build is
+      scoped: (a) SVG-in-egui pipeline (pre-rasterize PNG, no dep, vs.
+      resvg/usvg, MPL-2.0, rule-13 sign-off needed), (b) ScripTree icon
+      provenance/licensing confirmation before bundling into MIT pdfce
+      (likely fine, Ken owns both, but must be confirmed not assumed).
+      Neither decision made yet — check current state before assuming
+      either is resolved.
    2. ScripTree-style SVG icons for all GUI features (styled after
       `D:\Dev\ScripTree\icons\*.svg`) — new, unscoped Backlog item,
       queued behind #1.
