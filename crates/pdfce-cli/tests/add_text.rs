@@ -376,7 +376,13 @@ fn bad_box_geometry_is_a_clean_refusal() {
 fn supplied_font_dir_lifts_provenance_to_supplied() {
     // Copy the in-repo Foxit CFF into a temp dir as `Helvetica.cff` so
     // --font-dir registers a `Helvetica` face (decision 012).
-    let font_dir = std::env::temp_dir().join(format!("pdfce_afd_{}", std::process::id()));
+    // Per-call-unique temp dir (pid = binary-safe, atomic `N` = thread-safe) so
+    // no two concurrent tests share this scratch dir. See `temp_path` above.
+    let font_dir = {
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("pdfce_afd_{}_{n}", std::process::id()))
+    };
     std::fs::create_dir_all(&font_dir).unwrap();
     let cff =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../pdfce-render/assets/fonts/FoxitSans.cff");

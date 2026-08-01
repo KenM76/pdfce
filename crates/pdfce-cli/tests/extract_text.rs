@@ -94,7 +94,15 @@ fn text_goes_to_stdout_and_the_result_line_to_stderr() {
 
 #[test]
 fn with_an_output_file_the_result_line_takes_stdout() {
-    let dir = std::env::temp_dir().join(format!("pdfce-extract-{}", std::process::id()));
+    // Per-call-unique temp dir: `process::id()` is binary-safe and the
+    // process-global atomic counter is thread-safe, so no two concurrent tests
+    // can collide on this scratch dir (fully-qualified `atomic` types keep the
+    // guard self-contained without adding a `use`).
+    let dir = {
+        static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        std::env::temp_dir().join(format!("pdfce-extract-{}-{n}", std::process::id()))
+    };
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("out.txt");
     let out = run("simple-winansi.pdf", &["--output", path.to_str().unwrap()]);

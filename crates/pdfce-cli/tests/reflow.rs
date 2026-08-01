@@ -23,6 +23,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 const BIN: &str = env!("CARGO_BIN_EXE_pdfce-cli");
 
@@ -35,7 +36,19 @@ fn fixture() -> PathBuf {
 /// Run `reflow` with the given extra args, writing to a unique temp output;
 /// returns the process output and the output path.
 fn run_reflow(extra: &[&str], tag: &str) -> (Output, PathBuf) {
-    let out_path = std::env::temp_dir().join(format!("pdfce_reflow_{tag}.pdf"));
+    // Globally-unique-per-call temp path: `process::id()` disambiguates across
+    // parallel test *binaries*, and the process-global atomic `N` disambiguates
+    // across parallel test *threads* within this binary. Without the counter,
+    // two calls sharing a `tag` (or a concurrent second `cargo test` run) would
+    // collide on the same path; a half-written file re-opened by another test
+    // then loads via xref RECOVERY, and the next incremental op is refused with
+    // `RecoveredBaseForbidsIncremental` — a flake that only surfaces under a
+    // full parallel `cargo test --workspace`. See the sibling `temp_path`
+    // helpers in add_text.rs / edit_text.rs / format_text.rs for the same guard.
+    static N: AtomicU32 = AtomicU32::new(0);
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    let out_path =
+        std::env::temp_dir().join(format!("pdfce_reflow_{tag}_{}_{n}.pdf", std::process::id()));
     let _ = std::fs::remove_file(&out_path);
     let mut cmd = Command::new(BIN);
     cmd.arg("reflow").arg(fixture());

@@ -209,7 +209,13 @@ fn family_coverage_failure_is_refused_with_nothing_applied() {
 fn supplied_font_dir_lifts_the_family_target_to_supplied() {
     // Copy the in-repo Foxit CFF into a temp dir as `Calibri-Bold.cff` so
     // --font-dir registers a `Calibri-Bold` face (decision 012).
-    let font_dir = std::env::temp_dir().join(format!("pdfce_fmt_fd_{}", std::process::id()));
+    // Per-call-unique temp dir (pid = binary-safe, atomic `N` = thread-safe) so
+    // no two concurrent tests share this scratch dir. See `temp_path` above.
+    let font_dir = {
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("pdfce_fmt_fd_{}_{n}", std::process::id()))
+    };
     std::fs::create_dir_all(&font_dir).unwrap();
     let cff =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../pdfce-render/assets/fonts/FoxitSans.cff");
