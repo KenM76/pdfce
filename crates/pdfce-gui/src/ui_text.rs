@@ -46,6 +46,7 @@ use std::path::Path;
 
 use pdfce_core::PdfVersion;
 use pdfce_core::edit::{CommandKind, InfoField};
+use pdfce_core::vector::SnapKind;
 
 // ---------------------------------------------------------------------------
 // Toolbar — file
@@ -2464,4 +2465,97 @@ document and what you were adding."
 /// (structural/save failures render their own `Display` verbatim above it).
 pub fn add_text_generic_hint() -> &'static str {
     "See the message above for the specific reason this text was not added."
+}
+
+// ---------------------------------------------------------------------------
+// Snapping engine — fuzzy snap indicator (Pass 12.M1)
+// ---------------------------------------------------------------------------
+//
+// The marker glyph + type label a measure tool (Pass 12.M2) shows at the
+// current snap candidate BEFORE the click commits (`docs/ui_specs/
+// pass-12.M2-dimension-tools.md` §2.2). A DISTINCT glyph/label is reserved
+// for the derived filled-quad centerline (§2.3.1), the one fuzzy inference
+// that carries an extra two-click confirm. Shape distinguishes kind so colour
+// is never the sole signal (rule 6). The glyphs are single Unicode marks
+// rendered inline; the label is the human name of the snapped geometry.
+
+/// The snap-indicator marker glyph for a candidate of `kind` — the small mark
+/// drawn AT the candidate point (Pass 12.M2 §2.2). Shape (not colour) carries
+/// the meaning (rule 6). The derived-centerline glyph is deliberately distinct
+/// from the routine centerline tick so the operator sees at a glance that that
+/// one candidate needs the extra confirm (§2.3.1).
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 indicator glyph catalog; drawn by the Pass 12.M2 measure tools' overlay (spec 2.2)"
+)]
+pub fn snap_glyph(kind: SnapKind) -> &'static str {
+    match kind {
+        SnapKind::Node => "\u{25FC}",              // ◼ filled square
+        SnapKind::Endpoint => "\u{25CF}",          // ● filled circle
+        SnapKind::Center => "\u{2295}",            // ⊕ crosshair-in-circle
+        SnapKind::Midpoint => "\u{25B2}",          // ▲ small triangle
+        SnapKind::Intersection => "\u{2715}",      // ✕ cross
+        SnapKind::DerivedCenterline => "\u{25A4}", // ▤ hatch square (distinct)
+        SnapKind::SegmentCenterline => "\u{2504}", // ┄ dashed tick
+        SnapKind::Axis => "\u{229E}",              // ⊞ grid glyph
+    }
+}
+
+/// The snap-indicator type label beside the glyph (Pass 12.M2 §2.2): the human
+/// name of the snapped geometry, so the operator sees exactly what was inferred
+/// before committing (fuzzy-never-sneaky). The derived-centerline label carries
+/// the "(unconfirmed)" qualifier the routine kinds do not (§2.3.1).
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 indicator label catalog; drawn by the Pass 12.M2 measure tools' overlay (spec 2.2)"
+)]
+pub fn snap_indicator_label(kind: SnapKind) -> &'static str {
+    match kind {
+        SnapKind::Node => "node",
+        SnapKind::Endpoint => "endpoint",
+        SnapKind::Center => "center",
+        SnapKind::Midpoint => "midpoint",
+        SnapKind::Intersection => "intersection",
+        SnapKind::DerivedCenterline => "derived centerline (unconfirmed)",
+        SnapKind::SegmentCenterline => "centerline",
+        SnapKind::Axis => "axis",
+    }
+}
+
+/// The persistent master "Snap to content" toggle label (Pass 12.M2 §2.4) —
+/// the property-bar checkbox that turns the whole snap query on/off. Default
+/// on; off, every pick is the raw pointer position.
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 master-toggle label; rendered in the Pass 12.M2 measure property bar (spec 2.4)"
+)]
+pub fn snap_toggle_label() -> &'static str {
+    "Snap to content"
+}
+
+/// Tooltip for the master snap toggle — states what it does and how to override
+/// it transiently (the Alt-hold suppression and Tab-cycle affordances,
+/// §2.4), following the catalog's "say when to use it" tooltip convention.
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 master-toggle tooltip; rendered in the Pass 12.M2 measure property bar (spec 2.4)"
+)]
+pub fn snap_toggle_tooltip() -> &'static str {
+    "Snap measurement picks to nearby nodes, endpoints, centers, midpoints and lines. \
+Hold Alt to suppress snapping for one pick; press Tab to cycle competing candidates."
+}
+
+/// The two-click-confirm disclosure shown when the current snap candidate is a
+/// DERIVED centerline (a line drawn as a filled rectangle), Pass 12.M2 §2.3.1.
+/// `aspect_ratio` is the measured long:short ratio the derivation was made on,
+/// surfaced so the operator sees how line-like the shape is before confirming.
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 derived-centerline confirm disclosure; shown by the Pass 12.M2 measure tools (spec 2.3.1)"
+)]
+pub fn snap_derived_centerline_confirm(aspect_ratio: f64) -> String {
+    format!(
+        "Centerline derived from a filled shape (long:short \u{2248} {aspect_ratio:.1}:1) — \
+click again to confirm this is a drawn line, not a rectangle."
+    )
 }

@@ -19,6 +19,13 @@
 //! 3. **Centerline derivation** ([`centerline`]) — the "line center, not
 //!    thickness" requirement: a filled thin bar's midline, offered as a
 //!    confirmable fuzzy candidate (rule 4), never auto-applied.
+//! 4. **Snapping engine** ([`snap`], Pass 12.M1) — over the same object
+//!    geometry, [`snap::snap_candidates`] computes the fixed-priority snap
+//!    targets (nodes, endpoints, circle centres, midpoints, intersections,
+//!    on-segment projections, page axes) within a zoom-invariant tolerance,
+//!    plus the H/V alignment constraint ([`snap::constrained_second_point`]).
+//!    A shared, GUI-free service consumed by the 12.M2 dimension tools and
+//!    the future 9c-min node-drag alike.
 //!
 //! ## Crate placement (GUI-core separation, binding invariant)
 //!
@@ -46,6 +53,7 @@ pub mod centerline;
 pub mod decompose;
 pub mod geometry;
 pub mod hit;
+pub mod snap;
 
 // Re-export the primary surface at `crate::vector::…` so callers do not
 // reach through the submodule paths for the everyday types.
@@ -59,3 +67,7 @@ pub use decompose::{
 };
 pub use geometry::{Bounds, Matrix, Point, Rgb, cubic_from_v, cubic_from_y, rect_corners};
 pub use hit::{FLATTEN_STEPS, MarqueeMode, hit_test_point, hit_test_rect};
+pub use snap::{
+    AxisConstraint, MAX_CANDIDATES, MAX_NEIGHBOURHOOD_SEGMENTS, SNAP_FLATTEN_STEPS, SnapCandidate,
+    SnapConfig, SnapKind, constrained_second_point, measured_length, snap_candidates,
+};

@@ -45,8 +45,9 @@
 
 use std::collections::BTreeSet;
 
-use eframe::egui::{Pos2, Rect};
+use eframe::egui::{Color32, Pos2, Rect, Shape, Stroke};
 use pdfce_core::text_edit::{GlyphRef, TextPosition};
+use pdfce_core::vector::{SnapCandidate, SnapKind};
 
 // ---------------------------------------------------------------------------
 // Tool-mode dispatch (spec §3)
@@ -606,6 +607,239 @@ pub fn selection_after_type(original: &str, lo: usize, hi: usize, typed: &str) -
     (out, lo + typed.len())
 }
 
+// ---------------------------------------------------------------------------
+// Fuzzy snap indicator — GUI-side logic + rendering primitives (Pass 12.M1)
+// ---------------------------------------------------------------------------
+//
+// The snap MATH lives in `pdfce_core::vector::snap` (GUI-free). This half is
+// the GUI's own two responsibilities the engine deliberately does NOT own
+// (`snap.rs` module docs): (1) converting a fixed SCREEN-space tolerance into
+// the page-space `SnapConfig::tolerance` via the current zoom — the
+// zoom-invariance mechanism — and gating the query on the master toggle / Alt
+// override, and (2) rendering the fuzzy indicator (a distinct marker glyph per
+// snap kind + a type label) BEFORE the pick commits.
+//
+// Everything here is pure/testable now and, like `selection_after_marquee`
+// and the `viewer` PDF-space bridges before it, is WIRED to the live measure
+// tools in Pass 12.M2 (which own the tool-mode frame the indicator draws in).
+// Building + unit-testing the logic against the announced contract now is the
+// substrate's established "design against the contract, name the asks" idiom
+// (the same way pass-14.3/16.2 built their not-yet-shipped siblings). The
+// per-frame paint call is a one-liner 12.M2 adds in the measure-tool handler:
+//   painter.extend(canvas::snap_marker_shapes(screen_at, kind, color, size));
+//   painter.text(label_at, .., ui_text::snap_indicator_label(kind), ..);
+
+/// The default screen-space snap catch radius, in egui logical points
+/// (decision 011 §2.2: "≈8–12 px"). Converted to a page-space tolerance each
+/// frame by [`screen_tolerance_to_page`] so the snap "feel" is zoom-invariant.
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 snap default; consumed by the Pass 12.M2 measure tools that own the tool-mode frame (spec 2.4)" // ui-text-exempt: clippy lint justification, never displayed
+)]
+pub const SNAP_SCREEN_TOLERANCE_PX: f32 = 10.0;
+
+/// Convert a fixed SCREEN-space pixel tolerance into a **page-space** snap
+/// tolerance for `zoom` (device px per PDF user-space unit) — the
+/// zoom-invariance mechanism (decision 011 §2.2; the page-space value
+/// `snap_candidates` takes). A constant on-screen catch radius maps to a
+/// *shrinking* page-space tolerance as the operator zooms in, so the "feel"
+/// stays constant. This is the exact `/ zoom` distance law
+/// [`crate::viewer::screen_to_page`] uses (proven zoom-invariant in `viewer`'s
+/// `screen_to_page_distance_scales_as_one_over_zoom` test). A non-finite or
+/// non-positive `zoom` yields `0.0` (snapping disabled) rather than a NaN/∞
+/// tolerance the engine would reject anyway.
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 zoom-invariance conversion; called by the Pass 12.M2 measure tools each frame (spec 2.4)" // ui-text-exempt: clippy lint justification, never displayed
+)]
+#[must_use]
+pub fn screen_tolerance_to_page(screen_px: f32, zoom: f32) -> f64 {
+    if zoom.is_finite() && zoom > 0.0 && screen_px.is_finite() && screen_px >= 0.0 {
+        f64::from(screen_px) / f64::from(zoom)
+    } else {
+        0.0
+    }
+}
+
+/// Whether a snap query should run for the current pick (ui-spec §2.4): the
+/// persistent master "Snap to content" toggle is ON **and** the transient Alt
+/// override is NOT held. With snapping disabled either way, the pick is the raw
+/// pointer position — no candidates queried, no indicator drawn.
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 master-toggle + Alt-override gate; consumed by the Pass 12.M2 measure tools (spec 2.4)" // ui-text-exempt: clippy lint justification, never displayed
+)]
+#[must_use]
+pub fn snap_query_enabled(master_on: bool, alt_held: bool) -> bool {
+    master_on && !alt_held
+}
+
+/// The Tab-cycle index after advancing over a candidate list of `len`
+/// (ui-spec §2.4), wrapping to `0` past the end. `len == 0` stays `0` (nothing
+/// to cycle). Index 0 is the engine's default pick (highest priority, nearest);
+/// Tab steps through the tied/competing candidates the engine returned.
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 Tab-cycle advance; driven by the Pass 12.M2 measure tools' key handling (spec 2.4)" // ui-text-exempt: clippy lint justification, never displayed
+)]
+#[must_use]
+pub fn next_snap_index(current: usize, len: usize) -> usize {
+    if len == 0 { 0 } else { (current + 1) % len }
+}
+
+/// The active snap candidate for a Tab-cycle index, wrapped into range
+/// (ui-spec §2.4). Returns `None` for an empty list — no candidate within
+/// tolerance, so the indicator is hidden and the pick is the raw pointer
+/// position. A stale `cycle` past the list length wraps rather than panicking
+/// (the list can shrink between frames as the pointer moves).
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 active-candidate selection; read by the Pass 12.M2 measure tools each frame (spec 2.4)" // ui-text-exempt: clippy lint justification, never displayed
+)]
+#[must_use]
+pub fn active_snap_candidate(cands: &[SnapCandidate], cycle: usize) -> Option<SnapCandidate> {
+    if cands.is_empty() {
+        None
+    } else {
+        Some(cands[cycle % cands.len()])
+    }
+}
+
+/// How many clicks confirm a pick on a candidate of `kind` (ui-spec §2.3): TWO
+/// for a derived centerline — the one fuzzy inference, where the first click
+/// only *promotes* the candidate to "proposed" and a second confirms it (a
+/// proportionate, non-modal two-click gate, never an auto-apply) — and ONE for
+/// every routine kind, a deterministic geometry fact that commits on the single
+/// pick. This is the fuzzy-never-sneaky gate (rule 4) encoded for the Pass 12.M2
+/// pick handler; it reads `SnapKind::is_derived` so the policy lives in one place.
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 two-click-confirm policy; enforced by the Pass 12.M2 measure-tool pick handler (spec 2.3)" // ui-text-exempt: clippy lint justification, never displayed
+)]
+#[must_use]
+pub fn snap_commit_clicks(kind: SnapKind) -> u8 {
+    if kind.is_derived() { 2 } else { 1 }
+}
+
+/// The egui shapes that draw the distinct marker glyph for a snap candidate of
+/// `kind` at screen position `at` (ui-spec §2.2). **Shape distinguishes the
+/// kind — colour is never the sole signal** (rule 6): a node is a filled
+/// square, an endpoint a filled circle, a center a crosshair-in-circle, a
+/// midpoint a triangle, an intersection a cross, a routine centerline a dashed
+/// tick, an axis a grid glyph, and the DERIVED centerline a **hatched square**,
+/// visually unmistakable from the routine centerline tick so the extra-confirm
+/// candidate always reads differently (§2.3.1). `size` is the marker half-extent
+/// in points; `color` tints every stroke/fill. The measure tool paints these
+/// via the live-preview overlay painter (never a re-raster) and draws the label
+/// text ([`crate::ui_text::snap_indicator_label`]) as a separate galley beside
+/// them.
+#[allow(
+    dead_code,
+    reason = "Pass 12.M1 indicator rendering primitive; painted by the Pass 12.M2 measure tools' overlay (spec 2.2)" // ui-text-exempt: clippy lint justification, never displayed
+)]
+#[must_use]
+pub fn snap_marker_shapes(at: Pos2, kind: SnapKind, color: Color32, size: f32) -> Vec<Shape> {
+    let s = size.max(1.0);
+    let stroke = Stroke::new(1.5, color);
+    let sq = |half: f32| -> Vec<Pos2> {
+        vec![
+            Pos2::new(at.x - half, at.y - half),
+            Pos2::new(at.x + half, at.y - half),
+            Pos2::new(at.x + half, at.y + half),
+            Pos2::new(at.x - half, at.y + half),
+        ]
+    };
+    match kind {
+        SnapKind::Node => {
+            // ◼ filled square.
+            vec![Shape::convex_polygon(sq(s), color, Stroke::NONE)]
+        }
+        SnapKind::Endpoint => {
+            // ● filled circle.
+            vec![Shape::circle_filled(at, s, color)]
+        }
+        SnapKind::Center => {
+            // ⊕ crosshair in a circle.
+            vec![
+                Shape::circle_stroke(at, s, stroke),
+                Shape::line_segment(
+                    [Pos2::new(at.x - s, at.y), Pos2::new(at.x + s, at.y)],
+                    stroke,
+                ),
+                Shape::line_segment(
+                    [Pos2::new(at.x, at.y - s), Pos2::new(at.x, at.y + s)],
+                    stroke,
+                ),
+            ]
+        }
+        SnapKind::Midpoint => {
+            // ▲ up-pointing triangle.
+            let tri = vec![
+                Pos2::new(at.x, at.y - s),
+                Pos2::new(at.x + s, at.y + s),
+                Pos2::new(at.x - s, at.y + s),
+            ];
+            vec![Shape::convex_polygon(tri, color, Stroke::NONE)]
+        }
+        SnapKind::Intersection => {
+            // ✕ diagonal cross.
+            vec![
+                Shape::line_segment(
+                    [Pos2::new(at.x - s, at.y - s), Pos2::new(at.x + s, at.y + s)],
+                    stroke,
+                ),
+                Shape::line_segment(
+                    [Pos2::new(at.x - s, at.y + s), Pos2::new(at.x + s, at.y - s)],
+                    stroke,
+                ),
+            ]
+        }
+        SnapKind::SegmentCenterline => {
+            // ┄ dashed tick: two short colinear dashes.
+            vec![
+                Shape::line_segment(
+                    [Pos2::new(at.x - s, at.y), Pos2::new(at.x - s * 0.25, at.y)],
+                    stroke,
+                ),
+                Shape::line_segment(
+                    [Pos2::new(at.x + s * 0.25, at.y), Pos2::new(at.x + s, at.y)],
+                    stroke,
+                ),
+            ]
+        }
+        SnapKind::DerivedCenterline => {
+            // ▤ hatched square — a square OUTLINE plus two diagonal hatch
+            // lines, deliberately distinct from the routine centerline tick so
+            // the extra-confirm candidate is unmistakable (§2.3.1).
+            vec![
+                Shape::convex_polygon(sq(s), Color32::TRANSPARENT, stroke),
+                Shape::line_segment(
+                    [Pos2::new(at.x - s, at.y + s), Pos2::new(at.x + s, at.y - s)],
+                    stroke,
+                ),
+                Shape::line_segment(
+                    [Pos2::new(at.x - s, at.y), Pos2::new(at.x, at.y - s)],
+                    stroke,
+                ),
+            ]
+        }
+        SnapKind::Axis => {
+            // ⊞ grid glyph: a square outline crossed by one H and one V line.
+            vec![
+                Shape::convex_polygon(sq(s), Color32::TRANSPARENT, stroke),
+                Shape::line_segment(
+                    [Pos2::new(at.x - s, at.y), Pos2::new(at.x + s, at.y)],
+                    stroke,
+                ),
+                Shape::line_segment(
+                    [Pos2::new(at.x, at.y - s), Pos2::new(at.x, at.y + s)],
+                    stroke,
+                ),
+            ]
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -976,5 +1210,94 @@ mod tests {
         assert!(!tool_builds_add_text(Some(CanvasTool::TextEdit)));
         assert!(!tool_builds_text_edit(None));
         assert!(!tool_builds_add_text(None));
+    }
+
+    // ---- snap indicator logic + rendering (Pass 12.M1) ----------------
+
+    #[test]
+    fn screen_tolerance_converts_inversely_with_zoom() {
+        // A fixed 10px catch radius is 10 page units at 100%, 5 at 200%, 20 at
+        // 50% — the zoom-invariance the snap "feel" depends on.
+        assert_eq!(screen_tolerance_to_page(10.0, 1.0), 10.0);
+        assert_eq!(screen_tolerance_to_page(10.0, 2.0), 5.0);
+        assert_eq!(screen_tolerance_to_page(10.0, 0.5), 20.0);
+        // Degenerate zoom disables snapping (0 tolerance, which the engine
+        // rejects) rather than yielding a NaN/inf.
+        assert_eq!(screen_tolerance_to_page(10.0, 0.0), 0.0);
+        assert_eq!(screen_tolerance_to_page(10.0, f32::NAN), 0.0);
+    }
+
+    #[test]
+    fn snap_is_enabled_only_with_master_on_and_alt_up() {
+        assert!(snap_query_enabled(true, false));
+        assert!(!snap_query_enabled(false, false)); // master toggle off
+        assert!(!snap_query_enabled(true, true)); // Alt transiently suppresses
+        assert!(!snap_query_enabled(false, true));
+    }
+
+    #[test]
+    fn tab_cycle_wraps_and_handles_empty() {
+        assert_eq!(next_snap_index(0, 3), 1);
+        assert_eq!(next_snap_index(2, 3), 0); // wraps past the end
+        assert_eq!(next_snap_index(0, 0), 0); // nothing to cycle
+        assert_eq!(next_snap_index(5, 0), 0);
+    }
+
+    #[test]
+    fn active_candidate_indexes_and_wraps() {
+        let c = |k| SnapCandidate {
+            point: pdfce_core::vector::Point::new(0.0, 0.0),
+            kind: k,
+            source_object: None,
+        };
+        let list = [c(SnapKind::Node), c(SnapKind::Midpoint)];
+        assert_eq!(
+            active_snap_candidate(&list, 0).unwrap().kind,
+            SnapKind::Node
+        );
+        assert_eq!(
+            active_snap_candidate(&list, 1).unwrap().kind,
+            SnapKind::Midpoint
+        );
+        // A stale index past the end wraps (3 % 2 == 1) rather than panicking.
+        assert_eq!(
+            active_snap_candidate(&list, 3).unwrap().kind,
+            SnapKind::Midpoint
+        );
+        assert!(active_snap_candidate(&[], 0).is_none());
+    }
+
+    #[test]
+    fn derived_centerline_needs_two_clicks_others_one() {
+        // The fuzzy-never-sneaky gate: the derived centerline confirms in two
+        // clicks; every deterministic kind commits on one.
+        assert_eq!(snap_commit_clicks(SnapKind::DerivedCenterline), 2);
+        assert_eq!(snap_commit_clicks(SnapKind::Node), 1);
+        assert_eq!(snap_commit_clicks(SnapKind::SegmentCenterline), 1);
+    }
+
+    #[test]
+    fn every_snap_kind_has_a_non_empty_marker_and_the_derived_one_is_distinct() {
+        let kinds = [
+            SnapKind::Node,
+            SnapKind::Endpoint,
+            SnapKind::Center,
+            SnapKind::Midpoint,
+            SnapKind::Intersection,
+            SnapKind::DerivedCenterline,
+            SnapKind::SegmentCenterline,
+            SnapKind::Axis,
+        ];
+        for k in kinds {
+            assert!(!snap_marker_shapes(Pos2::new(10.0, 10.0), k, Color32::RED, 4.0).is_empty());
+        }
+        // The derived centerline's glyph must not be visually confused with the
+        // routine centerline tick (§2.3.1) — here proven by a different shape
+        // composition (a hatched square vs. two dashes).
+        let derived =
+            snap_marker_shapes(Pos2::ZERO, SnapKind::DerivedCenterline, Color32::RED, 4.0);
+        let routine =
+            snap_marker_shapes(Pos2::ZERO, SnapKind::SegmentCenterline, Color32::RED, 4.0);
+        assert_ne!(derived.len(), routine.len());
     }
 }

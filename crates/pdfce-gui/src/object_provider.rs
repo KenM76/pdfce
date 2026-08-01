@@ -105,6 +105,28 @@ impl ObjectModelProvider {
         }
     }
 
+    /// The current page's decomposed vector objects (Pass 12.M1 §10 ask #4).
+    ///
+    /// The **same-crate escape hatch** the snap engine (and the future Taubin
+    /// best-fit circle) reads the already-decomposed objects through, so the
+    /// snap query reuses the ONE decomposition this provider built for
+    /// selection rather than a second `decompose_page` per frame — avoiding the
+    /// exact "two decompositions quietly diverge" Z2 pattern decision 011 warns
+    /// against (ui-spec §3.3). It does NOT widen the opaque
+    /// [`crate::canvas::CanvasTargetProvider`] trait (the substrate stays
+    /// opaque, spec §4.1); this is `pdfce-gui`-internal wiring on the CONCRETE
+    /// provider. Snapping happens in **PDF user / page space** — the same frame
+    /// `PageObjects` stores — so the caller converts the pointer with
+    /// [`Self::canvas_to_pdf`]'s public sibling (`viewer::canvas_to_pdf_space`)
+    /// or this provider's own transform before querying.
+    #[allow(
+        dead_code,
+        reason = "Pass 12.M1 accessor; the first live consumer is the Pass 12.M2 measure tools' snap query + Taubin fit (ui-spec 3.3/10)" // ui-text-exempt: clippy lint justification, never displayed
+    )]
+    pub(crate) fn page_objects(&self) -> &PageObjects {
+        &self.objects
+    }
+
     /// Map a canvas-space point into PDF user space (the object model's
     /// frame), or `None` on a degenerate page.
     fn canvas_to_pdf(&self, p: Pos2) -> Option<Point> {
@@ -265,5 +287,18 @@ mod tests {
         let p = provider(b"BT /F1 12 Tf 40 40 Td (Hi) Tj ET");
         // The show origin (40,40) is inside the inflated text bbox.
         assert!(p.hit_test(0, Pos2::new(40.0, 40.0)).is_some());
+    }
+
+    #[test]
+    fn page_objects_feeds_the_snap_engine_from_the_one_decomposition() {
+        // The §10 ask #4 accessor: the snap engine reads the provider's
+        // already-decomposed objects (no second `decompose_page`) and resolves
+        // a query in the same PDF/page space `PageObjects` stores.
+        use pdfce_core::vector::{Point, SnapConfig, SnapKind, snap_candidates};
+        let p = provider(b"10 20 m 100 20 l S");
+        let model = p.page_objects();
+        let cands = snap_candidates(Point::new(11.0, 21.0), &SnapConfig::new(5.0), model);
+        assert_eq!(cands[0].kind, SnapKind::Endpoint);
+        assert_eq!(cands[0].point, Point::new(10.0, 20.0));
     }
 }

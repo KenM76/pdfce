@@ -249,3 +249,15 @@ path = "fuzz_targets/vector_decompose.rs"
 test = false
 doc = false
 bench = false
+
+# Pass 12.M1 snapping engine: drives `snap_candidates` (incl. the
+# neighbourhood-bounded, capped intersection scan — the Z4 path) and the H/V
+# constraint math over adversarial content streams + hostile query points,
+# asserting panic-freedom, the MAX_NEIGHBOURHOOD_SEGMENTS/MAX_CANDIDATES
+# bounds, and the priority-then-distance ordering contract.
+[[bin]]
+name = "vector_snap"
+path = "fuzz_targets/vector_snap.rs"
+test = false
+doc = false
+bench = false

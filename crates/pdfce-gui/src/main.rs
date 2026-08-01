@@ -232,10 +232,7 @@ use pdfce_core::signature::{SaveMode, SignatureImpact};
 use pdfce_core::writer::SaveOptions;
 use pdfce_core::xref::XrefErrorKind;
 
-use canvas::{
-    CanvasTargetProvider, CanvasTool, EmptyTargetProvider, EscapeOutcome, GestureInterrupt,
-    TargetId,
-};
+use canvas::{CanvasTargetProvider, CanvasTool, EscapeOutcome, GestureInterrupt, TargetId};
 use object_provider::ObjectModelProvider;
 use raster::{PageTexture, ThumbnailCache};
 use viewer::{FitMode, ViewState};
@@ -1219,11 +1216,11 @@ struct OpenDoc {
     /// state only, matching `rail_expanded`/`tools_open`.
     active_tool: Option<CanvasTool>,
     /// The substrate's canvas selection set — hit-tested content targets,
-    /// in a deterministic order (`BTreeSet`, like `selected_pages`). **Always
-    /// empty this Pass**: [`Self::target_provider`] is the no-op
-    /// [`EmptyTargetProvider`], which resolves no hits, so nothing is ever
-    /// inserted (spec §4.2). Session/view state — a selection is never an
-    /// edit, exactly like `selected_pages`.
+    /// in a deterministic order (`BTreeSet`, like `selected_pages`). Populated
+    /// by [`Self::target_provider`]'s hits (Pass 9a); empty when no object
+    /// model is built (a degenerate page) or nothing is under the pointer
+    /// (spec §4.2). Session/view state — a selection is never an edit, exactly
+    /// like `selected_pages`.
     canvas_selection: BTreeSet<TargetId>,
     /// Pass 14.3 in-place text-editing tool state (§2). `Some` only while
     /// [`CanvasTool::TextEdit`] is the active tool; `None` otherwise and
@@ -1236,18 +1233,22 @@ struct OpenDoc {
     /// state — a draft is never an edit; only an accepted add is, and that goes
     /// through `session` like every other command.
     add_text: Option<AddTextState>,
-    /// The attached hit-test provider (spec §4.1). Ships as the shippable
-    /// no-op [`EmptyTargetProvider`] so the selection scaffold is fully
-    /// wired yet selects nothing; Pass 9a swaps in an adapter over
-    /// `pdfce-core`'s read-only object model. Boxed `dyn` behind an `Option`
-    /// so Pass 9a can detach/replace it without changing this field's type.
-    target_provider: Option<Box<dyn CanvasTargetProvider>>,
-    /// The page index [`Self::target_provider`] was last built for (Pass 9a).
+    /// The current page's concrete object-model provider (Pass 9a's
+    /// [`ObjectModelProvider`]), or `None` when the page could not be
+    /// decomposed (a degenerate/undecodable page — selection then finds
+    /// nothing, exactly as the old no-op `EmptyTargetProvider` did). Held as
+    /// the CONCRETE type, not a `Box<dyn CanvasTargetProvider>`, so Pass 12.M1's
+    /// snap engine (and the future Taubin fit) can read the SAME decomposition
+    /// through [`ObjectModelProvider::page_objects`] without a second
+    /// `decompose_page` per frame (ui-spec §3.3 / §10 ask #4). Selection
+    /// reaches it as a `&dyn CanvasTargetProvider` via [`Self::target_provider`].
+    object_model: Option<ObjectModelProvider>,
+    /// The page index [`Self::object_model`] was last built for (Pass 9a).
     /// The provider decomposes only the CURRENT page (module docs of
     /// `object_provider`), so it is rebuilt lazily whenever this stops
     /// matching `view.page_index` or an edit invalidates it (set to `None`
-    /// by [`Self::refresh_pages`]). `None` means "no object provider built
-    /// yet — the shippable `EmptyTargetProvider` is installed."
+    /// by [`Self::refresh_pages`]). `None` means "no object model built yet —
+    /// rebuild on the next `canvas` frame."
     provider_page: Option<usize>,
     /// The in-progress rubber-band marquee's start point, in **canvas
     /// space** (Pass 9a). `Some` only between a canvas drag's start and its
@@ -1288,10 +1289,11 @@ impl OpenDoc {
             canvas_selection: BTreeSet::new(),
             text_edit: None,
             add_text: None,
-            target_provider: Some(Box::new(EmptyTargetProvider)),
-            // Pass 9a: the real object-model provider is built lazily for
-            // the current page on the first `canvas` frame (and rebuilt on
-            // page change / edit) — `None` forces that first build.
+            // Pass 9a/12.M1: the concrete object-model provider is built lazily
+            // for the current page on the first `canvas` frame (and rebuilt on
+            // page change / edit) — `None` here (and after every edit) forces
+            // that first build; until then selection finds nothing.
+            object_model: None,
             provider_page: None,
             marquee_start: None,
         }
@@ -1410,8 +1412,8 @@ impl OpenDoc {
     /// edit invalidated it. Cheap on the steady state (a single index
     /// compare); on a rebuild it decomposes exactly one page's content.
     ///
-    /// If the page's content cannot be decoded, it installs the shippable
-    /// [`EmptyTargetProvider`] so selection simply finds nothing rather than
+    /// If the page's content cannot be decoded, [`Self::object_model`] is left
+    /// `None` so selection simply finds nothing rather than
     /// the app breaking — the same honesty posture the renderer takes on an
     /// undecodable page.
     fn ensure_object_provider(&mut self) {
@@ -1419,15 +1421,28 @@ impl OpenDoc {
         if self.provider_page == Some(page_index) {
             return;
         }
-        let built = self
+        // Build the CONCRETE provider once and keep it (not a boxed dyn): the
+        // snap engine reads its `page_objects()` and selection reaches it via
+        // `target_provider()`, so there is exactly ONE decomposition per page
+        // (ui-spec §3.3). `None` (an undecodable page) makes selection find
+        // nothing, exactly as the old no-op `EmptyTargetProvider` did.
+        self.object_model = self
             .pages
             .get(page_index)
             .and_then(|page| ObjectModelProvider::build(self.session.document(), page, page_index));
-        self.target_provider = match built {
-            Some(provider) => Some(Box::new(provider)),
-            None => Some(Box::new(EmptyTargetProvider)),
-        };
         self.provider_page = Some(page_index);
+    }
+
+    /// The current page's hit-test provider as a `&dyn CanvasTargetProvider`
+    /// (Pass 9a selection), or `None` when the page has no object model (a
+    /// degenerate page — selection then finds nothing). Derived from the
+    /// concrete [`Self::object_model`] so there is no separate boxed provider to
+    /// keep in sync — the Pass 12.M1 §10 ask #4 wiring that lets the snap engine
+    /// and selection share one decomposition.
+    fn target_provider(&self) -> Option<&dyn CanvasTargetProvider> {
+        self.object_model
+            .as_ref()
+            .map(|p| p as &dyn CanvasTargetProvider)
     }
 
     /// Drop any canvas-selection target the provider can no longer resolve
@@ -1440,7 +1455,11 @@ impl OpenDoc {
     /// no-op; the call site exists so Pass 9a's real provider gets the
     /// cleanup for free.
     fn prune_canvas_selection(&mut self) {
-        if let Some(provider) = self.target_provider.as_deref() {
+        // Borrow the CONCRETE `object_model` field (disjoint from
+        // `canvas_selection`) so the closure can hold the provider while the
+        // selection is reassigned — a `self.target_provider()` call would
+        // borrow all of `self` and conflict with the mutation.
+        if let Some(provider) = self.object_model.as_ref() {
             let page_index = self.view.page_index;
             self.canvas_selection = canvas::prune_selection(&self.canvas_selection, |target| {
                 provider.bounds(page_index, target).is_some()
@@ -5046,8 +5065,7 @@ impl PdfceApp {
                 let canvas_pos = viewer::screen_to_page(screen_pos, image_rect, extent, zoom);
                 let shift = ui.input(|i| i.modifiers.shift);
                 let hit = doc
-                    .target_provider
-                    .as_deref()
+                    .target_provider()
                     .and_then(|p| p.hit_test(doc.view.page_index, canvas_pos));
                 doc.canvas_selection =
                     canvas::selection_after_click(&doc.canvas_selection, hit, shift);
@@ -5085,8 +5103,7 @@ impl PdfceApp {
                         if image_response.drag_stopped() {
                             let shift = ui.input(|i| i.modifiers.shift);
                             let hits = doc
-                                .target_provider
-                                .as_deref()
+                                .target_provider()
                                 .map(|p| p.hit_test_rect(doc.view.page_index, canvas_rect))
                                 .unwrap_or_default();
                             doc.canvas_selection = canvas::selection_after_marquee(
@@ -5112,7 +5129,7 @@ impl PdfceApp {
             // outline is a 2px SHAPE, not a tint (rule 6): a real boundary.
             let outlines = canvas::selection_outline_bounds(
                 &doc.canvas_selection,
-                doc.target_provider.as_deref(),
+                doc.target_provider(),
                 doc.view.page_index,
             );
             if !outlines.is_empty() {
