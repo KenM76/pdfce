@@ -349,6 +349,25 @@ pub enum CommandKind {
         /// The resulting default visibility.
         visible: bool,
     },
+    /// One vector object was **moved** (Pass 9c-min, decision 011 §2.5): all
+    /// of its path-construction operands were translated by a page-space
+    /// `(dx, dy)` through content-stream surgery (the R46/§5.7 named
+    /// exception — the mirror of redaction). ONE undoable command; undo
+    /// restores the byte-identical pre-move content stream (Pass 3.1 command
+    /// log). See [`EditSession::move_object`].
+    MoveObject,
+    /// One vector object was **deleted** (Pass 9c-min, decision 011 §2.5):
+    /// its construction + painting operators were removed from the content
+    /// stream (surgery, R46/§5.7). ONE undoable command; undo restores the
+    /// byte-identical pre-delete content stream. See
+    /// [`EditSession::delete_object`].
+    DeleteObject,
+    /// One anchor **node** of a path object was dragged (Pass 9c-min,
+    /// decision 011 §2.5): exactly one coordinate pair was rewritten in an
+    /// `m`/`l`/`c`/`v`/`y` operand list (surgery, R46/§5.7). ONE undoable
+    /// command; undo restores the byte-identical pre-drag content stream.
+    /// See [`EditSession::move_node`].
+    MoveNode,
 }
 
 /// Which geometric-markup subtype [`EditSession::add_markup`] authored,
@@ -675,6 +694,39 @@ pub enum EditError {
     /// matches could be located (Pass 8).
     #[error("text could not be extracted for search-and-redact: {0}")]
     TextExtraction(String),
+    /// A basic vector edit (move / delete / drag-node, Pass 9c-min) was
+    /// refused by the surgery planner — an out-of-range object/node, a
+    /// non-path target, a singular CTM, or a malformed operator. The inner
+    /// [`crate::vector::VectorEditError`] names which.
+    #[error(transparent)]
+    VectorEdit(#[from] crate::vector::VectorEditError),
+    /// A basic vector edit could not read the page's content stream to
+    /// decompose it (Pass 9c-min) — a decode/tokenize failure identical to
+    /// the one the renderer would hit on the same page.
+    #[error("the page content could not be read for a vector edit: {0}")]
+    VectorEditContent(#[source] crate::content::ContentError),
+    /// A basic vector edit was attempted on a page whose first content
+    /// stream this session **already rewrote** (a prior vector, text, or
+    /// format edit). The 9c-min surgery decomposes the **base** page content
+    /// — its object indices and operator byte ranges are base-relative — so
+    /// it refuses cleanly rather than misindex the staged content. Save and
+    /// reopen to keep editing this page (the same honest refusal
+    /// [`EditSession::reflow_block`] makes, rule 4).
+    #[error(
+        "page {page_index}'s content was already edited this session; the vector-edit surgery is \
+         planned against the base content, so save and reopen before vector-editing this page again"
+    )]
+    VectorEditNeedsReopen {
+        /// The 0-based page index.
+        page_index: usize,
+    },
+    /// A basic vector edit named a page that has no `/Contents` stream to
+    /// edit (an empty page).
+    #[error("page {page_index} has no /Contents stream to vector-edit")]
+    VectorEditNoContents {
+        /// The 0-based page index.
+        page_index: usize,
+    },
 }
 
 /// Find every occurrence of `needle` in `hay`, returned as `(start, end)`
@@ -756,6 +808,31 @@ fn find_pattern_matches(hay: &str, pattern: &str, case_insensitive: bool) -> Vec
         }
     }
     out
+}
+
+/// Narrow a selectable [`VectorObject`](crate::vector::VectorObject) to a
+/// **path** for the move / drag-node surgeries, or name the refusal.
+///
+/// Text and image/form objects are selectable-for-delete but not
+/// path-operand editable in the 9c-min cut (decision 011 §2.1) — moving them
+/// needs `Tm`/`cm`-operand surgery, a different operator family, deferred to
+/// a fast-follow. Deletion does not go through this narrowing (it is a pure
+/// byte-span removal that works on any kind).
+fn vector_object_as_path(
+    obj: &crate::vector::VectorObject,
+    index: usize,
+) -> Result<&crate::vector::PathObject, crate::vector::VectorEditError> {
+    match obj {
+        crate::vector::VectorObject::Path(p) => Ok(p),
+        crate::vector::VectorObject::Text(_) => Err(crate::vector::VectorEditError::NotAPath {
+            index,
+            kind: "text",
+        }),
+        crate::vector::VectorObject::Image(_) => Err(crate::vector::VectorEditError::NotAPath {
+            index,
+            kind: "image",
+        }),
+    }
 }
 
 /// A decoded PDF text string, and whether the decode was exact.
@@ -1812,6 +1889,197 @@ impl EditSession {
         report.content_object = content_num;
         report.font_object = font_num;
         Ok(report)
+    }
+
+    // -- basic vector editing (Pass 9c-min, decision 011 §2.5) --------
+
+    /// **Move** the object at paint-order `object_index` on page
+    /// `page_index` by the page-space displacement `(dx, dy)`, as one
+    /// undoable command (decision 011 §2.5 operation 1).
+    ///
+    /// Content-stream surgery via [`crate::vector::plan_move`]: the object's
+    /// path-construction operands are translated (CTM-aware — the page-space
+    /// drag is mapped to the object's user space by its captured CTM's linear
+    /// inverse), and ONLY the edited content stream is re-emitted (R46/§5.7
+    /// named exception); every other object stays byte-verbatim. Lands as one
+    /// [`CommandKind::MoveObject`]; undo restores the byte-identical pre-move
+    /// stream.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::VectorEdit`] (out-of-range object, non-path target,
+    /// singular CTM, malformed operator — see
+    /// [`crate::vector::VectorEditError`]), [`EditError::PageOutOfRange`],
+    /// [`EditError::VectorEditNoContents`], [`EditError::VectorEditContent`]
+    /// (undecodable page), [`EditError::VectorEditNeedsReopen`] (this page's
+    /// content was already edited this session), [`EditError::DocumentEncrypted`],
+    /// or [`EditError::CertificationForbidsChange`]. Every refusal happens
+    /// **before** any mutation (rule 4).
+    pub fn move_object(
+        &mut self,
+        page_index: usize,
+        object_index: usize,
+        dx: f64,
+        dy: f64,
+    ) -> Result<(), EditError> {
+        self.vector_surgery(CommandKind::MoveObject, page_index, |stream, model| {
+            let count = model.objects.len();
+            let obj = model.objects.get(object_index).ok_or(
+                crate::vector::VectorEditError::ObjectOutOfRange {
+                    index: object_index,
+                    count,
+                },
+            )?;
+            let path = vector_object_as_path(obj, object_index)?;
+            Ok(crate::vector::plan_move(stream, path, dx, dy)?)
+        })
+    }
+
+    /// **Delete** the object at paint-order `object_index` on page
+    /// `page_index`, as one undoable command (decision 011 §2.5 operation
+    /// 2).
+    ///
+    /// Content-stream surgery via [`crate::vector::plan_delete`]: the
+    /// object's construction + painting operators are removed from the
+    /// content stream (R46/§5.7 named exception); every other object stays
+    /// byte-verbatim. Works on any object kind (path/text/image — it is a
+    /// pure byte-span removal). Lands as one [`CommandKind::DeleteObject`];
+    /// undo restores the byte-identical pre-delete stream.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::VectorEdit`] (out-of-range object),
+    /// [`EditError::PageOutOfRange`], [`EditError::VectorEditNoContents`],
+    /// [`EditError::VectorEditContent`], [`EditError::VectorEditNeedsReopen`],
+    /// [`EditError::DocumentEncrypted`], or
+    /// [`EditError::CertificationForbidsChange`]. Every refusal happens
+    /// before any mutation (rule 4).
+    pub fn delete_object(
+        &mut self,
+        page_index: usize,
+        object_index: usize,
+    ) -> Result<(), EditError> {
+        self.vector_surgery(CommandKind::DeleteObject, page_index, |stream, model| {
+            let count = model.objects.len();
+            let obj = model.objects.get(object_index).ok_or(
+                crate::vector::VectorEditError::ObjectOutOfRange {
+                    index: object_index,
+                    count,
+                },
+            )?;
+            Ok(crate::vector::plan_delete(stream, obj)?)
+        })
+    }
+
+    /// **Drag** the anchor node `node_index` of the path object at paint-order
+    /// `object_index` on page `page_index` to the page-space point `to`, as
+    /// one undoable command (decision 011 §2.5 operation 3).
+    ///
+    /// Content-stream surgery via [`crate::vector::plan_move_node`]: exactly
+    /// one coordinate pair (the anchor of an `m`/`l`/`c`/`v`/`y` operator) is
+    /// rewritten (the target is mapped from page space to the object's user
+    /// space by its CTM's affine inverse); adjacent Bézier control points are
+    /// left in place (handle editing is a named fast-follow). `node_index` is
+    /// into the object's anchors in **decomposition order** (the order
+    /// [`crate::vector::PathObject::page_subpaths`]'
+    /// [`Subpath::anchors`](crate::vector::Subpath::anchors) flatten to, and
+    /// the count [`crate::vector::anchor_count`] reports). Only the one edited
+    /// operator's bytes change; every other object stays byte-verbatim. Lands
+    /// as one [`CommandKind::MoveNode`]; undo restores the byte-identical
+    /// pre-drag stream.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::VectorEdit`] (out-of-range object/node, non-path target,
+    /// an `re`-rectangle corner or an implicit `h`-reopened start that cannot
+    /// be node-edited, singular CTM), [`EditError::PageOutOfRange`],
+    /// [`EditError::VectorEditNoContents`], [`EditError::VectorEditContent`],
+    /// [`EditError::VectorEditNeedsReopen`], [`EditError::DocumentEncrypted`],
+    /// or [`EditError::CertificationForbidsChange`]. Every refusal happens
+    /// before any mutation (rule 4).
+    pub fn move_node(
+        &mut self,
+        page_index: usize,
+        object_index: usize,
+        node_index: usize,
+        to: crate::vector::Point,
+    ) -> Result<(), EditError> {
+        self.vector_surgery(CommandKind::MoveNode, page_index, |stream, model| {
+            let count = model.objects.len();
+            let obj = model.objects.get(object_index).ok_or(
+                crate::vector::VectorEditError::ObjectOutOfRange {
+                    index: object_index,
+                    count,
+                },
+            )?;
+            let path = vector_object_as_path(obj, object_index)?;
+            Ok(crate::vector::plan_move_node(stream, path, node_index, to)?)
+        })
+    }
+
+    /// The shared skeleton of the three 9c-min vector edits: guard, locate
+    /// the page's first content stream, decompose the **base** content, let
+    /// `plan` produce the rewritten content bytes, then stage them as one
+    /// undoable [`text_edit_command`](Self::text_edit_command) command (the
+    /// SAME staging + minimal-diff + objstm-promotion path text edit uses, so
+    /// the writer handles the §5.7/§5.9 promotion for free and the byte
+    /// contract is inherited).
+    ///
+    /// Decomposing the **base** (not the session-current) content is what
+    /// makes `object_index` line up with a caller that decomposed the base
+    /// document (the GUI object provider, the CLI's fresh load), and it is
+    /// why a page whose content was already rewritten this session is refused
+    /// ([`EditError::VectorEditNeedsReopen`]) rather than misindexed —
+    /// exactly [`Self::reflow_block`]'s discipline.
+    fn vector_surgery(
+        &mut self,
+        kind: CommandKind,
+        page_index: usize,
+        plan: impl FnOnce(
+            &crate::content::ContentStream,
+            &crate::vector::PageObjects,
+        ) -> Result<crate::vector::PlannedEdit, EditError>,
+    ) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        // An enforced-DocMDP certification forbids editing page content
+        // (§12.8.4 Table 258) — the same guard the markup/add-text/dimension
+        // authoring paths run, so no operator-facing entry can surgically
+        // rewrite a certified page unguarded.
+        self.check_certification()?;
+
+        let pages = page_tree::pages(&self.base)?;
+        let count = pages.len();
+        let page = pages.get(page_index).ok_or(EditError::PageOutOfRange {
+            index: page_index,
+            count,
+        })?;
+        let content_id = *page
+            .contents
+            .first()
+            .ok_or(EditError::VectorEditNoContents { page_index })?;
+        if self.state.contains_key(&content_id) {
+            return Err(EditError::VectorEditNeedsReopen { page_index });
+        }
+
+        // Decompose the base content and plan the surgery; the borrow of
+        // `self.base` is scoped so it ends before the `&mut self` commit.
+        let new_content = {
+            let stream = crate::content::ContentStream::from_page(&self.base, page)
+                .map_err(EditError::VectorEditContent)?;
+            let resolver = crate::vector::DocumentXObjects {
+                doc: &self.base,
+                resources: &page.resources,
+            };
+            let model =
+                crate::vector::decompose(&stream, crate::vector::Matrix::IDENTITY, &resolver);
+            plan(&stream, &model)?.content
+        };
+
+        let command = self.text_edit_command(kind, content_id, page, new_content);
+        self.commit(command);
+        Ok(())
     }
 
     /// The page's CURRENT decoded content, tokenized: the session's own

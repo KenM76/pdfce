@@ -182,6 +182,72 @@ impl Matrix {
     pub fn determinant(self) -> f64 {
         self.a * self.d - self.b * self.c
     }
+
+    /// Transform a **direction/displacement** `v` by this matrix's linear
+    /// part only (the translation `e`/`f` is deliberately ignored): `v' =
+    /// v × L` where `L = [[a b][c d]]`, so `v'.x = a·v.x + c·v.y` and
+    /// `v'.y = b·v.x + d·v.y`.
+    ///
+    /// This is the correct transform for a **delta** (the difference of two
+    /// points): translating both endpoints of a segment by the same
+    /// world-space offset moves the segment by that offset's *linear* image,
+    /// with no additional shift from `e`/`f`. The 9c-min move operation
+    /// (decision 011 §2.5) needs exactly this: the operator's drag is a
+    /// page-space displacement, and the object's construction operands live
+    /// in user space, so the user-space displacement is
+    /// `ctm.inverse()?.map_vector(page_delta)` — the linear inverse image of
+    /// the page-space drag, never the full affine image (which would fold in
+    /// the CTM's translation and shove the object across the page).
+    #[must_use]
+    pub fn map_vector(self, v: Point) -> Point {
+        Point::new(self.a * v.x + self.c * v.y, self.b * v.x + self.d * v.y)
+    }
+
+    /// The affine inverse `M⁻¹`, or `None` when `M` is singular
+    /// (non-invertible) — a zero, non-finite, or numerically degenerate
+    /// determinant.
+    ///
+    /// The inverse of a PDF row-vector affine `p' = p·L + t` (with linear
+    /// part `L = [[a b][c d]]` and translation `t = (e, f)`) is
+    /// `p = (p' − t)·L⁻¹ = p'·L⁻¹ − t·L⁻¹`, so the inverse's linear part is
+    /// `L⁻¹ = (1/det)·[[d −b][−c a]]` and its translation is `−t·L⁻¹`. This
+    /// is what maps a **page-space** point/drag back into an object's
+    /// **user space** for the 9c-min move/drag-node surgery (decision 011
+    /// §2.5): the object's construction operands must be rewritten in the
+    /// user space the CTM maps *from*.
+    ///
+    /// Returns `None` rather than panicking on a singular CTM (the
+    /// crate-wide panic-free policy, ARCHITECTURE.md §10); the caller
+    /// surfaces it as a named refusal (`VectorEditError::DegenerateCtm`)
+    /// instead of fabricating geometry — an object drawn under a
+    /// rank-deficient CTM (scaled flat to a line) has no unambiguous
+    /// user-space pre-image for a page-space drag.
+    #[must_use]
+    pub fn inverse(self) -> Option<Self> {
+        let det = self.determinant();
+        if !det.is_finite() || det == 0.0 {
+            return None;
+        }
+        let a = self.d / det;
+        let b = -self.b / det;
+        let c = -self.c / det;
+        let d = self.a / det;
+        // Inverse translation = −t·L⁻¹, expressed in this matrix's own
+        // `map_point` convention (x = a·x' + c·y' + e).
+        let e = -(self.e * a + self.f * c);
+        let f = -(self.e * b + self.f * d);
+        let out = Self { a, b, c, d, e, f };
+        // Guard against a determinant so small the quotients overflowed to
+        // non-finite: an unusable inverse is `None`, not a silent NaN.
+        if [out.a, out.b, out.c, out.d, out.e, out.f]
+            .iter()
+            .all(|v| v.is_finite())
+        {
+            Some(out)
+        } else {
+            None
+        }
+    }
 }
 
 /// An axis-aligned bounding box in one coordinate space, or the empty box.
@@ -504,6 +570,52 @@ mod tests {
         assert_eq!(c2, Point::new(20.0, 21.0));
         assert_eq!(end, Point::new(20.0, 21.0));
         assert_eq!(c2, end);
+    }
+
+    #[test]
+    fn inverse_undoes_map_point_for_a_rotate_scale_translate() {
+        // A non-trivial affine: scale (2,3), 30° shear-ish, translate (7,-4).
+        let m = Matrix::new(2.0, 0.5, -0.5, 3.0, 7.0, -4.0);
+        let inv = m.inverse().expect("non-singular");
+        for p in [
+            Point::new(0.0, 0.0),
+            Point::new(1.0, 0.0),
+            Point::new(-3.5, 12.25),
+        ] {
+            let round = inv.map_point(m.map_point(p));
+            assert!(approx(round, p), "inverse must undo map_point: {round:?}");
+        }
+    }
+
+    #[test]
+    fn map_vector_ignores_translation_and_matches_a_delta() {
+        // A pure translation has identity linear part, so a delta is unchanged.
+        let t = Matrix::translate(100.0, -50.0);
+        assert!(approx(
+            t.map_vector(Point::new(3.0, 4.0)),
+            Point::new(3.0, 4.0)
+        ));
+        // Under a 2× scale a page-space delta of (10,10) is a user-space delta
+        // of (5,5): inverse().map_vector recovers it.
+        let m = Matrix::new(2.0, 0.0, 0.0, 2.0, 30.0, 30.0);
+        let user_delta = m.inverse().unwrap().map_vector(Point::new(10.0, 10.0));
+        assert!(approx(user_delta, Point::new(5.0, 5.0)));
+    }
+
+    #[test]
+    fn a_singular_matrix_has_no_inverse() {
+        // Rank-deficient (both rows collinear): determinant 0.
+        assert!(
+            Matrix::new(1.0, 2.0, 2.0, 4.0, 0.0, 0.0)
+                .inverse()
+                .is_none()
+        );
+        // Non-finite operands never yield an inverse.
+        assert!(
+            Matrix::new(f64::NAN, 0.0, 0.0, 1.0, 0.0, 0.0)
+                .inverse()
+                .is_none()
+        );
     }
 
     #[test]

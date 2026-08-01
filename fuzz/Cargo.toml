@@ -261,3 +261,16 @@ path = "fuzz_targets/vector_snap.rs"
 test = false
 doc = false
 bench = false
+
+# Pass 9c-min vector-edit surgery: drives the move / delete / drag-node
+# operand-rewrite planners (`vector::edit`) over adversarial content streams
+# with degenerate coords + huge operands and overrunning node indices,
+# asserting panic-freedom and that every refusal is a named `VectorEditError`
+# (decision 011 Appendix A Pass 9c-min "Fuzz over operand rewriting ... 0
+# crashes").
+[[bin]]
+name = "vector_edit"
+path = "fuzz_targets/vector_edit.rs"
+test = false
+doc = false
+bench = false

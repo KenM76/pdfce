@@ -201,6 +201,25 @@ def main() -> int:
     )
     files["centerline.pdf"] = one_page(400, centerline, "", {})
 
+    # -- edit.pdf: three isolated, easily-indexed objects (Pass 9c-min) -
+    # A single content stream whose paint-order object indices are obvious,
+    # so the 9c-min move/delete/drag-node surgery (decision 011 Appendix A)
+    # has a predictable target for its CLI + render-fidelity tests:
+    #   object 0 = a stroked line (m/l/S, two anchors),
+    #   object 1 = a filled rectangle (re/f, an `re`-corner node-refusal case),
+    #   object 2 = a stroked closed triangle (m/l/l/h/S, three anchors).
+    editable = b"\n".join(
+        [
+            b"1 w 0 0 0 RG",
+            b"50 50 m 150 150 l S",                 # object 0: stroked line
+            b"1 0 0 rg",
+            b"200 50 80 60 re f",                   # object 1: filled rectangle
+            b"0 0 1 RG",
+            b"50 200 m 150 200 l 100 280 l h S",    # object 2: stroked triangle
+        ]
+    )
+    files["edit.pdf"] = one_page(300, editable, "", {})
+
     for name, data in sorted(files.items()):
         (OUT_DIR / name).write_bytes(data)
         print(f"wrote {name} ({len(data)} bytes)")

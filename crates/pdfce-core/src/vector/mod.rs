@@ -51,6 +51,7 @@
 
 pub mod centerline;
 pub mod decompose;
+pub mod edit;
 pub mod geometry;
 pub mod hit;
 pub mod snap;
@@ -64,6 +65,9 @@ pub use decompose::{
     DecomposeDiagnostics, DocumentXObjects, FillRule, ImageObject, ImageSource, MAX_NODES,
     MAX_OBJECTS, NoXObjects, PageObjects, PaintStyle, PathObject, Segment, Subpath, TextObject,
     TokenRange, VectorObject, XObjectResolver, XObjectShape, decompose, decompose_page,
+};
+pub use edit::{
+    PlannedEdit, VectorEditError, anchor_count, plan_delete, plan_move, plan_move_node,
 };
 pub use geometry::{Bounds, Matrix, Point, Rgb, cubic_from_v, cubic_from_y, rect_corners};
 pub use hit::{FLATTEN_STEPS, MarqueeMode, hit_test_point, hit_test_rect};

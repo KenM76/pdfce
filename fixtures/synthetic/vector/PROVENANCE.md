@@ -53,6 +53,20 @@ exactly and the object model is assertable from the tokens alone.
   (rotation-correct in page space) and **none** for the square or the
   aspect-4 bar — the Z3 false-positive guard.
 
+`edit.pdf` (300×300)
+: Three isolated, **index-predictable** objects in one content stream, for
+  the **Pass 9c-min** basic-editing surgery (move / delete / drag-node,
+  decision 011 §2.5): object 0 = a stroked line (`m`/`l`/`S`, two anchors),
+  object 1 = a filled rectangle (`re`/`f` — the `re`-corner node-refusal
+  case), object 2 = a stroked closed triangle (`m`/`l`/`l`/`h`/`S`, three
+  anchors). The single, uncompressed content stream makes the "exactly one
+  changed stream" content-identity gate (R46/§5.7) directly observable, and
+  the obvious paint-order indices give the CLI (`object-move`/`object-delete`/
+  `node-move`) and the render-fidelity test (`pdfce-render/tests/
+  vector_edit_render.rs`) a stable target. Used by `pdfce-core/tests/
+  vector_edit.rs`, `pdfce-cli/tests/vector_edit.rs`, and the render-fidelity
+  test.
+
 ## Regenerating
 
 ```

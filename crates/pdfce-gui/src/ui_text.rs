@@ -2358,6 +2358,31 @@ pub fn add_text_propbar_title() -> &'static str {
     "Add Text"
 }
 
+/// Label on the Pass 9c-min Edit Objects (vector-edit) tool toggle
+/// (decision 011 §2.5). A distinct glyph from the text tools: a move-arrows
+/// motif, since the tool's headline gesture is moving/nudging drawing
+/// objects and their nodes.
+pub fn vector_edit_tool_button() -> &'static str {
+    "✥ Obj"
+}
+
+/// Tooltip on the Edit Objects tool toggle. Names the three gestures and the
+/// honesty caveat that Delete here removes a drawing object but is NOT
+/// redaction (it does not securely remove covered content — that is
+/// Redact).
+pub fn vector_edit_tool_tooltip() -> &'static str {
+    "Edit vector drawing objects on the page: click to select, drag to move the object, drag an \
+anchor to move that node, or press Delete to remove it. Each edit is undoable. NOTE: Delete removes \
+a drawing object from the page — it is NOT redaction (it does not securely remove covered content; \
+use Redact for that)."
+}
+
+/// The transient note shown after a canvas object is deleted (Pass 9c-min).
+pub fn vector_object_deleted() -> &'static str {
+    "Deleted the selected object. This is undoable, and is NOT redaction — to securely remove \
+content, use Redact instead."
+}
+
 /// The "Measure ▾" toolbar menu label (Pass 12.M2 ui-spec §1.2). A menu, not
 /// four toolbar icons, because dimensioning is used in short deliberate bursts
 /// (rule 3 — avoid primary-toolbar icon creep).

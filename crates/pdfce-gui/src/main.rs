@@ -219,6 +219,7 @@ mod measure_tool;
 mod object_provider;
 mod raster;
 mod ui_text;
+mod vector_edit_tool;
 mod viewer;
 
 use std::collections::BTreeSet;
@@ -1264,6 +1265,12 @@ struct OpenDoc {
     /// an accepted Accept is, and that goes through `session` (one undoable
     /// `EditSession::add_dimension`/`set_group_scale`), like every other tool.
     measure: Option<measure_tool::MeasureState>,
+    /// Pass 9c-min vector-edit drag state (decision 011 §2.5). `Some` only
+    /// between a `CanvasTool::VectorEdit` drag's start and its release; `None`
+    /// otherwise. Session/view state — the drag is never itself an edit; only
+    /// the release commits one undoable `EditSession::{move_object, move_node}`
+    /// command.
+    vector_drag: Option<vector_edit_tool::VectorDrag>,
     /// Whether the modeless "Dimension Groups" panel is open (ui-spec §5).
     /// Opened from the Measure ▾ menu; independent of the active tool so a
     /// scale can be set/units changed/layer toggled without drawing a line
@@ -1324,6 +1331,8 @@ impl OpenDoc {
             // Pass 12.M2b: no measure tool active, the group panel closed, a
             // fresh (metre) new-group draft. Built on measure-tool entry.
             measure: None,
+            // Pass 9c-min: no vector-edit drag in flight.
+            vector_drag: None,
             dimension_groups_open: false,
             group_new_name: String::new(),
             group_new_unit: pdfce_core::dimension::Unit::Meter,
@@ -1933,6 +1942,37 @@ impl PdfceApp {
             // signature that forbids the change, or the last page. It
             // goes through the same channel a failed save does, because
             // the operator pressed a button and is owed an answer.
+            Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
+        }
+    }
+
+    /// Delete the currently-selected canvas OBJECT (Pass 9c-min, decision 011
+    /// §2.5) — content-stream surgery through
+    /// [`EditSession::delete_object`](pdfce_core::edit::EditSession::delete_object),
+    /// one undoable command. Rebuilds the object provider and clears the
+    /// canvas selection so a stale target never lingers. A refusal (an
+    /// enforced certification, an already-edited page needing reopen) is
+    /// surfaced through the same channel a failed save uses.
+    fn delete_selected_object(&mut self) {
+        let (page_index, object_index) = {
+            let Status::Open(doc) = &self.status else {
+                return;
+            };
+            let Some(idx) = doc.canvas_selection.iter().next().map(|t| t.0 as usize) else {
+                return;
+            };
+            (doc.view.page_index, idx)
+        };
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        match doc.session.delete_object(page_index, object_index) {
+            Ok(()) => {
+                doc.canvas_selection.clear();
+                doc.vector_drag = None;
+                doc.ensure_object_provider();
+                self.edit_note = Some(ui_text::vector_object_deleted().to_owned());
+            }
             Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
         }
     }
@@ -2973,7 +3013,22 @@ impl PdfceApp {
                 return;
             }
             Action::DeleteSelection => {
-                self.delete_selection();
+                // Pass 9c-min: when the vector-edit tool is active and a canvas
+                // OBJECT is selected, Delete removes that object (surgery), not
+                // the page-rail page selection. The two selections are distinct
+                // (a page-rail selection vs. a canvas object selection), so the
+                // tool disambiguates which Delete means.
+                let delete_object = matches!(
+                    &self.status,
+                    Status::Open(doc)
+                        if doc.active_tool == Some(CanvasTool::VectorEdit)
+                            && !doc.canvas_selection.is_empty()
+                );
+                if delete_object {
+                    self.delete_selected_object();
+                } else {
+                    self.delete_selection();
+                }
                 return;
             }
             Action::RotateSelection(delta) => {
@@ -3010,6 +3065,10 @@ impl PdfceApp {
                 let default_add_text_font = self.default_add_text_font;
                 if let Status::Open(doc) = &mut self.status {
                     doc.active_tool = tool;
+                    // Pass 9c-min: a tool switch always abandons any in-flight
+                    // vector-edit drag (it is transient view state, never an
+                    // edit) — the VectorEdit tool rebuilds it on the next drag.
+                    doc.vector_drag = None;
                     // Pass 14.3/16.2: entering a tool builds ITS per-page state
                     // and tears down the OTHER tool's — the §0.1 mutual
                     // exclusion a single `active_tool` already guarantees. The
@@ -4043,6 +4102,28 @@ impl PdfceApp {
                             None
                         } else {
                             Some(CanvasTool::AddText)
+                        }));
+                    }
+                });
+
+                // Pass 9c-min Edit Objects — a bare toggle for the vector-edit
+                // tool (move / drag-node / delete). Same widget/sizing as the
+                // page-text toggles; greyed (not hidden) with no pages. The
+                // tooltip names the three gestures and the "not redaction"
+                // caveat for delete (decision 011 §2.5).
+                ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                    let active = doc.active_tool == Some(CanvasTool::VectorEdit);
+                    let response = ui
+                        .add_sized(
+                            ICON_BUTTON_SIZE,
+                            egui::Button::selectable(active, ui_text::vector_edit_tool_button()),
+                        )
+                        .on_hover_text(ui_text::vector_edit_tool_tooltip());
+                    if response.clicked() {
+                        actions.push(Action::SelectCanvasTool(if active {
+                            None
+                        } else {
+                            Some(CanvasTool::VectorEdit)
                         }));
                     }
                 });
@@ -5209,6 +5290,14 @@ impl PdfceApp {
             // suppresses the object-selection click so a measure-mode click is
             // not silently repurposed as a selection (ui-spec §1.1).
             run_measure_tool(doc, ui, &image_response, image_rect, extent, zoom);
+        } else if canvas::tool_builds_vector_edit(doc.active_tool) {
+            // Pass 9c-min (decision 011 §2.5): the object-edit tool owns the
+            // canvas — click selects, drag moves the selected object (or a
+            // grabbed node), Delete removes it, each committing one undoable
+            // `EditSession` command. It suppresses the plain object-selection
+            // marquee so a drag is unambiguously an edit gesture, not a
+            // rubber-band.
+            run_vector_edit_tool(doc, ui, &image_response, image_rect, extent, zoom);
         } else {
             if image_response.clicked()
                 && let Some(screen_pos) = image_response.interact_pointer_pos()
@@ -7576,6 +7665,212 @@ fn annotation_status(
     clippy::too_many_lines,
     reason = "one tool family = one handler; the pick/preview/propbar/status/commit phases are tightly coupled and splitting them would need shared owned scratch structs that obscure more than they clarify" // ui-text-exempt: clippy lint justification, never displayed
 )]
+/// Pass 9c-min (decision 011 §2.5): the on-canvas object-edit gesture.
+///
+/// Click selects the object under the pointer (reusing the 9a hit-test);
+/// **dragging** a selected object translates it, and dragging its anchor
+/// relocates that node (a node grab is decided by
+/// [`vector_edit_tool::classify_drag`], snapped via the 12.M1 engine), each
+/// showing a live preview before it commits on release to one undoable
+/// `EditSession::{move_object, move_node}` command. Delete is routed
+/// separately (`delete_selected_object`) from the `DeleteSelection` action.
+///
+/// GUI glue only: every geometry decision is a headless-tested
+/// `vector_edit_tool`/`canvas`/`vector` helper; the surgery is `pdfce-core`.
+///
+/// **Known compile-and-launch limitation (documented, not a defect):** the
+/// object provider is rebuilt from the base document (`session.document()`),
+/// so after one committed vector edit on a page the base-relative object
+/// indices no longer match the session-current content, and the core
+/// refuses a second same-session edit with `VectorEditNeedsReopen` (rule 4)
+/// — save and reopen to continue editing that page. The correctness of each
+/// individual edit is proven headlessly in `pdfce-core`/`pdfce-render`.
+#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+fn run_vector_edit_tool(
+    doc: &mut OpenDoc,
+    ui: &mut egui::Ui,
+    image_response: &egui::Response,
+    image_rect: egui::Rect,
+    extent: (f32, f32),
+    zoom: f32,
+) {
+    use pdfce_core::vector::{Point, SnapConfig, snap_candidates};
+
+    let page_index = doc.view.page_index;
+    if doc.pages.get(page_index).is_none() {
+        return;
+    }
+    let selected: Option<usize> = doc.canvas_selection.iter().next().map(|t| t.0 as usize);
+
+    // The gesture's outcome for this frame, decided in the read/preview block
+    // and applied after the read borrows end (so the &mut-self commit and the
+    // provider rebuild do not fight the page/object-model borrows).
+    enum Commit {
+        None,
+        Move { idx: usize, dx: f64, dy: f64 },
+        Node { idx: usize, node: usize, to: Point },
+    }
+    let mut commit = Commit::None;
+    let mut new_selection: Option<std::collections::BTreeSet<TargetId>> = None;
+    let mut new_drag: Option<Option<vector_edit_tool::VectorDrag>> = None;
+
+    {
+        let page = &doc.pages[page_index];
+        let painter = ui.painter_at(image_rect);
+        let preview_color = egui::Color32::from_rgb(210, 90, 40);
+        let snap_color = ui.visuals().selection.stroke.color;
+
+        let to_pdf = |sp: egui::Pos2| -> Option<Point> {
+            viewer::canvas_to_pdf_space(viewer::screen_to_page(sp, image_rect, extent, zoom), page)
+                .map(|p| Point::new(f64::from(p.x), f64::from(p.y)))
+        };
+        let to_screen = |pt: Point| -> Option<egui::Pos2> {
+            let p = egui::pos2(pt.x as f32, pt.y as f32);
+            viewer::pdf_space_to_canvas(p, page)
+                .map(|c| viewer::page_to_screen(c, image_rect, extent, zoom))
+        };
+
+        // Snap a page-space query to the nearest 12.M1 candidate (node drag
+        // only — a whole-object move uses the raw delta so it never snaps to
+        // the object it is dragging). The snap indicator is drawn pre-commit.
+        let objects = doc
+            .object_model
+            .as_ref()
+            .map(object_provider::ObjectModelProvider::page_objects);
+        let snap = |q: Point| -> (Point, bool) {
+            if let Some(objs) = objects {
+                let tol = canvas::screen_tolerance_to_page(canvas::SNAP_SCREEN_TOLERANCE_PX, zoom);
+                let cands = snap_candidates(q, &SnapConfig::new(tol), objs);
+                if let Some(c) = cands.first() {
+                    return (c.point, true);
+                }
+            }
+            (q, false)
+        };
+
+        // A plain/Shift click selects the object under the pointer (9a).
+        if image_response.clicked()
+            && let Some(sp) = image_response.interact_pointer_pos()
+        {
+            let canvas_pos = viewer::screen_to_page(sp, image_rect, extent, zoom);
+            let shift = ui.input(|i| i.modifiers.shift);
+            let hit = doc
+                .object_model
+                .as_ref()
+                .and_then(|p| p.hit_test(page_index, canvas_pos));
+            new_selection = Some(canvas::selection_after_click(
+                &doc.canvas_selection,
+                hit,
+                shift,
+            ));
+        }
+
+        // Drag start: classify as a node grab (near a selected object's
+        // anchor) or a whole-object move.
+        if image_response.drag_started()
+            && let Some(sp) = image_response.interact_pointer_pos()
+            && let Some(start) = to_pdf(sp)
+            && let Some(idx) = selected
+        {
+            let anchors = doc
+                .object_model
+                .as_ref()
+                .map(|p| p.object_sample_points(idx))
+                .unwrap_or_default();
+            new_drag = Some(Some(vector_edit_tool::classify_drag(idx, start, &anchors)));
+        }
+
+        // Live preview + commit-on-release for an in-flight drag.
+        if let Some(drag) = doc.vector_drag
+            && let Some(sp) = image_response.interact_pointer_pos()
+            && let Some(ptr) = to_pdf(sp)
+        {
+            if let Some(node) = drag.node {
+                // Node drag: snap the target and draw the snap marker (shown
+                // pre-commit — fuzzy-never-sneaky) plus a preview handle.
+                let (target, snapped) = snap(ptr);
+                if let Some(s) = to_screen(target) {
+                    if snapped {
+                        painter.extend(canvas::snap_marker_shapes(
+                            s,
+                            pdfce_core::vector::SnapKind::Node,
+                            snap_color,
+                            5.0,
+                        ));
+                    }
+                    painter.circle_stroke(s, 4.0, egui::Stroke::new(1.5, preview_color));
+                }
+                if image_response.drag_stopped() {
+                    commit = Commit::Node {
+                        idx: drag.object_index,
+                        node,
+                        to: target,
+                    };
+                }
+            } else {
+                // Whole-object move: preview the object's bbox offset by the
+                // raw page-space delta (no snap — a move never snaps to the
+                // object it is dragging).
+                let (dx, dy) = drag.delta(ptr);
+                if let Some(prov) = doc.object_model.as_ref()
+                    && let Some(r) = prov.bounds(page_index, TargetId(drag.object_index as u64))
+                {
+                    // The page-space delta as a screen-space vector: map the
+                    // delta and the origin through the same transform and
+                    // subtract (a pure translation + flip at this scale).
+                    let d_screen = to_screen(Point::new(dx, dy))
+                        .zip(to_screen(Point::new(0.0, 0.0)))
+                        .map(|(a, b)| a - b)
+                        .unwrap_or(egui::Vec2::ZERO);
+                    let min = viewer::page_to_screen(r.min, image_rect, extent, zoom) + d_screen;
+                    let max = viewer::page_to_screen(r.max, image_rect, extent, zoom) + d_screen;
+                    painter.rect_stroke(
+                        egui::Rect::from_two_pos(min, max),
+                        0.0,
+                        egui::Stroke::new(2.0, preview_color),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+                if image_response.drag_stopped() {
+                    commit = Commit::Move {
+                        idx: drag.object_index,
+                        dx,
+                        dy,
+                    };
+                }
+            }
+        }
+    }
+
+    // Apply the frame's outcome (no read borrows held now).
+    if let Some(sel) = new_selection {
+        doc.canvas_selection = sel;
+    }
+    if let Some(d) = new_drag {
+        doc.vector_drag = d;
+    }
+    match commit {
+        Commit::None => {
+            // A drag that released without a committable target drops its state.
+            if image_response.drag_stopped() {
+                doc.vector_drag = None;
+            }
+        }
+        Commit::Move { idx, dx, dy } => {
+            let _ = doc.session.move_object(page_index, idx, dx, dy);
+            doc.vector_drag = None;
+            doc.ensure_object_provider();
+            doc.prune_canvas_selection();
+        }
+        Commit::Node { idx, node, to } => {
+            let _ = doc.session.move_node(page_index, idx, node, to);
+            doc.vector_drag = None;
+            doc.ensure_object_provider();
+            doc.prune_canvas_selection();
+        }
+    }
+}
+
 fn run_measure_tool(
     doc: &mut OpenDoc,
     ui: &mut egui::Ui,

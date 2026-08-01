@@ -1538,6 +1538,96 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Move** a vector object (Pass 9c-min, decision 011 §2.5): translate
+    /// all of an object's path-construction operands by a page-space
+    /// `(dx, dy)` via content-stream surgery. Only the edited content stream
+    /// changes; every other object stays byte-verbatim (the R46/§5.7 named
+    /// exception). `--object` is the object's 0-based paint-order index (as
+    /// `object-list`/`dimension-list`-style tooling or a decomposition
+    /// reports it).
+    ObjectMove {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// 0-based paint-order object index on the page.
+        #[arg(long)]
+        object: usize,
+        /// Page-space x displacement, in points.
+        #[arg(long, allow_hyphen_values = true)]
+        dx: f64,
+        /// Page-space y displacement, in points.
+        #[arg(long, allow_hyphen_values = true)]
+        dy: f64,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+    /// **Delete** a vector object (Pass 9c-min, decision 011 §2.5): remove an
+    /// object's construction + painting operators from the content stream via
+    /// surgery (R46/§5.7). Works on any object kind (path/text/image). NOT
+    /// redaction — it removes a drawing object from a page, not covered
+    /// content for security.
+    ObjectDelete {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// 0-based paint-order object index on the page.
+        #[arg(long)]
+        object: usize,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+    /// **Drag a node** of a path object (Pass 9c-min, decision 011 §2.5):
+    /// rewrite ONE anchor's coordinate pair to a page-space point via surgery
+    /// (R46/§5.7). `--node` is the anchor's 0-based index in decomposition
+    /// order (start, then each segment endpoint, across subpaths). An `re`
+    /// rectangle corner and an implicit reopened-subpath start are refused —
+    /// move the whole object instead.
+    NodeMove {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// 0-based paint-order object index on the page.
+        #[arg(long)]
+        object: usize,
+        /// 0-based anchor node index (decomposition order).
+        #[arg(long)]
+        node: usize,
+        /// New anchor x, page space (points).
+        #[arg(long, allow_hyphen_values = true)]
+        x: f64,
+        /// New anchor y, page space (points).
+        #[arg(long, allow_hyphen_values = true)]
+        y: f64,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
 }
 
 /// Which dimension kind [`Command::DimensionAdd`] authors. Radius and diameter
@@ -2137,6 +2227,54 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_layer_toggle(&input, group, hide, &output, mode, verify_undo),
+        Command::ObjectMove {
+            input,
+            page,
+            object,
+            dx,
+            dy,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_object_move(&ObjectMoveArgs {
+            input: &input,
+            page,
+            object,
+            dx,
+            dy,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::ObjectDelete {
+            input,
+            page,
+            object,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_object_delete(&input, page, object, &output, mode, verify_undo),
+        Command::NodeMove {
+            input,
+            page,
+            object,
+            node,
+            x,
+            y,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_node_move(&NodeMoveArgs {
+            input: &input,
+            page,
+            object,
+            node,
+            x,
+            y,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
         Command::RotatePage {
             input,
             page,
@@ -7327,6 +7465,176 @@ objects={} appended={} out_bytes={}",
     finish_edit(input, &outcome)
 }
 
+/// Grouped arguments for `object-move` (Pass 9c-min) — a struct to keep the
+/// handler under clippy's `too_many_arguments` bar, like the other editing
+/// subcommands.
+struct ObjectMoveArgs<'a> {
+    input: &'a Path,
+    page: u32,
+    object: usize,
+    dx: f64,
+    dy: f64,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `object-move` — translate a vector object's construction operands by a
+/// page-space `(dx, dy)` via content-stream surgery (Pass 9c-min, decision
+/// 011 §2.5). Only the edited content stream changes (R46/§5.7).
+fn cmd_object_move(args: &ObjectMoveArgs<'_>) -> u8 {
+    let page_index = (args.page.max(1) - 1) as usize;
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    if let Err(err) = session.move_object(page_index, args.object, args.dx, args.dy) {
+        return report_edit_error(args.input, &err);
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "object-move {} page {} object={} dx={} dy={} mode={} -> {}; changed={} objects={} \
+appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.page,
+        args.object,
+        args.dx,
+        args.dy,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// `object-delete` — remove a vector object's construction + painting
+/// operators from the content stream via surgery (Pass 9c-min). NOT
+/// redaction (it removes a drawing object, not covered content for
+/// security).
+fn cmd_object_delete(
+    input: &Path,
+    page: u32,
+    object: usize,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let page_index = (page.max(1) - 1) as usize;
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    if let Err(err) = session.delete_object(page_index, object) {
+        return report_edit_error(input, &err);
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "object-delete {} page {page} object={object} mode={} -> {}; changed={} objects={} \
+appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
+}
+
+/// Grouped arguments for `node-move` (Pass 9c-min).
+struct NodeMoveArgs<'a> {
+    input: &'a Path,
+    page: u32,
+    object: usize,
+    node: usize,
+    x: f64,
+    y: f64,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `node-move` — rewrite one anchor's coordinate pair to a page-space point
+/// via surgery (Pass 9c-min, decision 011 §2.5). Refuses an `re` rectangle
+/// corner / implicit reopened start by name.
+fn cmd_node_move(args: &NodeMoveArgs<'_>) -> u8 {
+    use pdfce_core::vector::Point;
+    let page_index = (args.page.max(1) - 1) as usize;
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    if let Err(err) = session.move_node(
+        page_index,
+        args.object,
+        args.node,
+        Point::new(args.x, args.y),
+    ) {
+        return report_edit_error(args.input, &err);
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "node-move {} page {} object={} node={} to=({},{}) mode={} -> {}; changed={} objects={} \
+appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.page,
+        args.object,
+        args.node,
+        args.x,
+        args.y,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
 /// The file-name stem a `{stem}` placeholder and a per-source bookmark
 /// both want.
 fn stem_of(path: &Path) -> String {
@@ -7784,13 +8092,37 @@ fn cmd_rotate(
 mod tests {
     use super::*;
 
+    /// Run `f` on a worker thread with a large (16 MiB) stack.
+    ///
+    /// clap builds and validates the command tree by **recursion**
+    /// proportional to the subcommand/argument count, and this CLI's surface
+    /// (dozens of subcommands, and growing — the Pass 9c-min `object-move`/
+    /// `object-delete`/`node-move` additions among them) now needs more stack
+    /// than a default Windows test thread's ~2 MiB to run `Command::debug_assert`
+    /// and to walk `Cli::command()`. This is a scaling property of clap's
+    /// recursion, not a bug in the CLI: **production is unaffected** — the real
+    /// binary parses on the process main thread (8 MiB) and never calls
+    /// `debug_assert`. The worker keeps the full validation without shrinking
+    /// the CLI surface; a panic (a failed assertion) propagates through `join`.
+    fn on_large_stack(f: impl FnOnce() + Send + 'static) {
+        std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024)
+            .spawn(f)
+            .expect("spawn the large-stack validation thread")
+            .join()
+            .expect("the large-stack validation thread panicked");
+    }
+
     /// clap's own invariant check — catches malformed `#[command]`/`#[arg]`
     /// wiring (duplicate flags, bad defaults) at test time rather than on
-    /// first run. Recommended by clap's docs for any derive-based CLI.
+    /// first run. Recommended by clap's docs for any derive-based CLI. Run on
+    /// [`on_large_stack`] because `debug_assert` recurses over the whole tree.
     #[test]
     fn cli_definition_is_valid() {
-        use clap::CommandFactory as _;
-        Cli::command().debug_assert();
+        on_large_stack(|| {
+            use clap::CommandFactory as _;
+            Cli::command().debug_assert();
+        });
     }
 
     #[test]
@@ -7932,25 +8264,27 @@ mod tests {
         // and the only one that leaves prior revisions recoverable. A
         // default of `full` would silently destroy signatures on every
         // batch edit.
-        use clap::CommandFactory as _;
-        let cmd = Cli::command();
-        for name in ["set-info", "rotate-page"] {
-            let sub = cmd
-                .get_subcommands()
-                .find(|c| c.get_name() == name)
-                .unwrap_or_else(|| panic!("{name} subcommand is missing"));
-            let mode = sub
-                .get_arguments()
-                .find(|a| a.get_id() == "mode")
-                .unwrap_or_else(|| panic!("{name} has no --mode flag"));
-            assert_eq!(
-                mode.get_default_values()
-                    .first()
-                    .map(|v| v.to_string_lossy().into_owned()),
-                Some("incremental".to_owned()),
-                "{name}"
-            );
-        }
+        on_large_stack(|| {
+            use clap::CommandFactory as _;
+            let cmd = Cli::command();
+            for name in ["set-info", "rotate-page"] {
+                let sub = cmd
+                    .get_subcommands()
+                    .find(|c| c.get_name() == name)
+                    .unwrap_or_else(|| panic!("{name} subcommand is missing"));
+                let mode = sub
+                    .get_arguments()
+                    .find(|a| a.get_id() == "mode")
+                    .unwrap_or_else(|| panic!("{name} has no --mode flag"));
+                assert_eq!(
+                    mode.get_default_values()
+                        .first()
+                        .map(|v| v.to_string_lossy().into_owned()),
+                    Some("incremental".to_owned()),
+                    "{name}"
+                );
+            }
+        });
     }
 
     #[test]
@@ -7976,32 +8310,34 @@ mod tests {
         // NOT pdfce-core's `Set`: this subcommand's job is verification,
         // and a stamped /Producer is a byte change that would make the
         // per-object identity check fail for one object by design.
-        use clap::CommandFactory as _;
-        let cmd = Cli::command();
-        let rt = cmd
-            .get_subcommands()
-            .find(|c| c.get_name() == "round-trip")
-            .expect("round-trip subcommand is missing");
-        let producer = rt
-            .get_arguments()
-            .find(|a| a.get_id() == "producer")
-            .expect("--producer flag is missing");
-        assert_eq!(
-            producer
-                .get_default_values()
-                .first()
-                .map(|v| v.to_string_lossy().into_owned()),
-            Some("preserve".to_owned())
-        );
-        let mode = rt
-            .get_arguments()
-            .find(|a| a.get_id() == "mode")
-            .expect("--mode flag is missing");
-        assert_eq!(
-            mode.get_default_values()
-                .first()
-                .map(|v| v.to_string_lossy().into_owned()),
-            Some("incremental".to_owned())
-        );
+        on_large_stack(|| {
+            use clap::CommandFactory as _;
+            let cmd = Cli::command();
+            let rt = cmd
+                .get_subcommands()
+                .find(|c| c.get_name() == "round-trip")
+                .expect("round-trip subcommand is missing");
+            let producer = rt
+                .get_arguments()
+                .find(|a| a.get_id() == "producer")
+                .expect("--producer flag is missing");
+            assert_eq!(
+                producer
+                    .get_default_values()
+                    .first()
+                    .map(|v| v.to_string_lossy().into_owned()),
+                Some("preserve".to_owned())
+            );
+            let mode = rt
+                .get_arguments()
+                .find(|a| a.get_id() == "mode")
+                .expect("--mode flag is missing");
+            assert_eq!(
+                mode.get_default_values()
+                    .first()
+                    .map(|v| v.to_string_lossy().into_owned()),
+                Some("incremental".to_owned())
+            );
+        });
     }
 }

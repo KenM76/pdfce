@@ -117,6 +117,18 @@ pub enum CanvasTool {
     /// scale. A distinct, deliberately-entered tool (never a hidden linear
     /// sub-mode — ui-spec §1.1).
     MeasureScale,
+    /// Basic vector editing (Pass 9c-min, decision 011 §2.5): click selects
+    /// an object; **dragging** a selected object translates it (move);
+    /// dragging an anchor of the selected object relocates that node
+    /// (drag-node); **Delete** removes the selected object. The three
+    /// operations are one deliberately-entered tool because a plain click's
+    /// meaning here ("select / start an edit gesture") must not be silently
+    /// repurposed from the pan/marquee default — the same reasoning that made
+    /// `AddText` a separate tool from `TextEdit`. Each committed gesture is
+    /// one undoable `EditSession` command (`move_object`/`move_node`/
+    /// `delete_object`), snapped via the 12.M1 engine, previewed before
+    /// commit (fuzzy-never-sneaky).
+    VectorEdit,
 }
 
 impl CanvasTool {
@@ -225,6 +237,16 @@ pub fn tool_builds_add_text(tool: Option<CanvasTool>) -> bool {
 #[must_use]
 pub fn tool_builds_measure(tool: Option<CanvasTool>) -> bool {
     tool.is_some_and(CanvasTool::is_measure)
+}
+
+/// Whether entering `tool` builds the Pass 9c-min `VectorEdit` object-edit
+/// state (move / drag-node / delete). Like the other tool predicates, a
+/// headless-tested projection of `active_tool`: a vector-edit gesture and a
+/// text/measure gesture are mutually exclusive by the single-value
+/// `Option<CanvasTool>` (decision 011 §2.5, R60 one substrate).
+#[must_use]
+pub fn tool_builds_vector_edit(tool: Option<CanvasTool>) -> bool {
+    matches!(tool, Some(CanvasTool::VectorEdit))
 }
 
 /// Whether `tool` specifically builds the linear-dimension pick (ui-spec §2.1).
