@@ -3334,10 +3334,7 @@ impl PdfceApp {
     /// [`GestureInterrupt::Nothing`] and this is a no-op — the discard/commit
     /// arms exist for Pass 6.1/7 to fill, never reached today.
     fn resolve_gesture_interrupt(&mut self, incoming: Action) {
-        if matches!(
-            incoming,
-            Action::SelectCanvasTool(_) | Action::CancelToolGesture
-        ) {
+        if Self::action_preserves_gesture(incoming) {
             return;
         }
         match self.current_gesture_interrupt() {
@@ -3345,6 +3342,53 @@ impl PdfceApp {
             GestureInterrupt::Discard => self.discard_active_gesture(),
             GestureInterrupt::Commit => self.commit_active_gesture(),
         }
+    }
+
+    /// Whether `action` leaves an in-progress tool gesture (a half-picked
+    /// dimension, a half-drawn shape) UNTOUCHED.
+    ///
+    /// # Why this list exists
+    ///
+    /// The original rule was "only tool selection and explicit cancel are
+    /// safe; every other action discards the gesture." That is right in
+    /// spirit — an unrelated action should not leave a stale half-gesture
+    /// armed — but it swept in the **view controls**, and that made the
+    /// measure tools painful to use in exactly the situation they matter
+    /// most.
+    ///
+    /// Concretely: the operator picks point A of a linear dimension, then
+    /// ctrl+scrolls to zoom in so they can place point B precisely on a
+    /// drawing feature. Zooming pushes [`Action::ZoomBy`], which is not
+    /// tool selection or cancel, so point A was silently discarded — with
+    /// no message. Zooming in to place an accurate pick is the single most
+    /// natural thing to do while measuring, and it was punished.
+    ///
+    /// # The rule
+    ///
+    /// **Changing how the page is VIEWED is not an edit and must not
+    /// disturb what is being AUTHORED.** Zoom and scroll change the camera,
+    /// not the document, and every gesture pdfce holds is stored in
+    /// page/PDF space — so a zoom cannot invalidate one. Actions that change
+    /// the *subject* (page navigation, opening another document) or that
+    /// touch the document (undo, save, an edit command) still discard, since
+    /// a gesture anchored to page N is meaningless on page M.
+    ///
+    /// Page navigation is deliberately NOT on this list: `MeasureState` is
+    /// built per page, and a pick from another page would author geometry
+    /// against the wrong content.
+    fn action_preserves_gesture(action: Action) -> bool {
+        matches!(
+            action,
+            // The gesture's own controls.
+            Action::SelectCanvasTool(_)
+                | Action::CancelToolGesture
+                // Pure camera changes — same page, same document.
+                | Action::ZoomIn
+                | Action::ZoomOut
+                | Action::ZoomBy(_)
+                | Action::ZoomActualSize
+                | Action::Fit(_)
+        )
     }
 
     /// What the active tool's in-progress gesture would do if interrupted
@@ -5304,9 +5348,11 @@ impl PdfceApp {
             {
                 let canvas_pos = viewer::screen_to_page(screen_pos, image_rect, extent, zoom);
                 let shift = ui.input(|i| i.modifiers.shift);
+                let tol =
+                    canvas::screen_tolerance_to_page(canvas::SELECT_SCREEN_TOLERANCE_PX, zoom);
                 let hit = doc
                     .target_provider()
-                    .and_then(|p| p.hit_test(doc.view.page_index, canvas_pos));
+                    .and_then(|p| p.hit_test(doc.view.page_index, canvas_pos, tol));
                 doc.canvas_selection =
                     canvas::selection_after_click(&doc.canvas_selection, hit, shift);
             }
@@ -7754,10 +7800,11 @@ fn run_vector_edit_tool(
         {
             let canvas_pos = viewer::screen_to_page(sp, image_rect, extent, zoom);
             let shift = ui.input(|i| i.modifiers.shift);
+            let tol = canvas::screen_tolerance_to_page(canvas::SELECT_SCREEN_TOLERANCE_PX, zoom);
             let hit = doc
                 .object_model
                 .as_ref()
-                .and_then(|p| p.hit_test(page_index, canvas_pos));
+                .and_then(|p| p.hit_test(page_index, canvas_pos, tol));
             new_selection = Some(canvas::selection_after_click(
                 &doc.canvas_selection,
                 hit,
@@ -7999,8 +8046,10 @@ fn run_measure_tool(
                 // Toggle the clicked object into the fit set (ui-spec §3.1) —
                 // its page-space anchors feed the SAME `fit_circle_taubin`.
                 let canvas_pos = viewer::screen_to_page(sp, image_rect, extent, zoom);
+                let tol =
+                    canvas::screen_tolerance_to_page(canvas::SELECT_SCREEN_TOLERANCE_PX, zoom);
                 if let Some(provider) = doc.object_model.as_ref()
-                    && let Some(target) = provider.hit_test(page_index, canvas_pos)
+                    && let Some(target) = provider.hit_test(page_index, canvas_pos, tol)
                 {
                     let idx = target.0 as usize;
                     let samples = provider.object_sample_points(idx);
@@ -8537,6 +8586,54 @@ fn run_dimension_groups_panel(doc: &mut OpenDoc, ui: &mut egui::Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Zooming must never discard an in-progress tool gesture.
+    ///
+    /// The regression this pins: picking point A of a linear dimension and
+    /// then ctrl+scrolling to zoom in for an accurate point B silently threw
+    /// point A away, because the interrupt rule treated every action except
+    /// tool-select/cancel as a reason to discard. Zoom changes the camera,
+    /// not the document, and gestures are stored in page space — so a zoom
+    /// cannot invalidate one.
+    #[test]
+    fn view_only_actions_preserve_an_in_progress_gesture() {
+        for action in [
+            Action::ZoomIn,
+            Action::ZoomOut,
+            Action::ZoomBy(1.1),
+            Action::ZoomActualSize,
+            Action::Fit(FitMode::Page),
+            Action::Fit(FitMode::Width),
+            Action::SelectCanvasTool(None),
+            Action::CancelToolGesture,
+        ] {
+            assert!(
+                PdfceApp::action_preserves_gesture(action),
+                "{action:?} must not discard an in-progress gesture"
+            );
+        }
+    }
+
+    /// The other half of the contract: actions that change the SUBJECT or
+    /// touch the document still discard. A gesture anchored to page N is
+    /// meaningless on page M, so page navigation deliberately stays
+    /// interrupting — this test exists so a future "just allow-list
+    /// everything harmless" edit has to argue with it.
+    #[test]
+    fn subject_changing_and_document_touching_actions_still_discard() {
+        for action in [
+            Action::Undo,
+            Action::Redo,
+            Action::NextPage,
+            Action::PrevPage,
+            Action::ToggleDimensionGroups,
+        ] {
+            assert!(
+                !PdfceApp::action_preserves_gesture(action),
+                "{action:?} must discard an in-progress gesture"
+            );
+        }
+    }
 
     /// The three-way load-outcome branch is the module docs' central
     /// honesty claim, so the classifier behind it is pinned here: a

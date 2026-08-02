@@ -50,14 +50,25 @@ use pdfce_render::tiny_skia::{Point as SkPoint, Transform};
 
 use crate::canvas::{CanvasTargetProvider, TargetId};
 
-/// The canvas-space slack a click is allowed to miss an object's edge by,
-/// in canvas units. Canvas space is the page's device space at zoom 1.0,
-/// where one unit is one PDF point (the `page_device_geometry` scale-1.0
-/// map is distance-preserving — a pure rotation + Y-flip + translation), so
-/// this is also, in effect, a ~3 pt page-space tolerance. Zoom-invariant
-/// screen-pixel snapping is the snapping engine's concern (Pass 12.M1);
-/// selection uses this fixed, forgiving value.
-const SELECT_TOLERANCE: f64 = 3.0;
+/// The fallback canvas-space slack a click may miss an object's edge by,
+/// used ONLY when the caller cannot supply a live zoom (a non-finite or
+/// non-positive zoom makes [`crate::canvas::screen_tolerance_to_page`]
+/// return `0.0`, which would make selection impossible rather than merely
+/// fussy).
+///
+/// Canvas space is the page's device space at zoom 1.0, where one unit is
+/// one PDF point (the `page_device_geometry` scale-1.0 map is
+/// distance-preserving — a pure rotation + Y-flip + translation), so this is
+/// also, in effect, a ~3 pt page-space tolerance.
+///
+/// **This used to be the only tolerance**, applied at every zoom level, and
+/// that was a bug: the pointer is divided by `zoom` before it reaches
+/// [`ObjectModelProvider::hit_test`], so a constant canvas-space tolerance
+/// is a *shrinking* on-screen catch radius — 1.5 px at 50% zoom, 0.75 px at
+/// 25%. Objects were effectively unclickable whenever the operator zoomed
+/// out to see a whole drawing. The live tolerance now arrives as a
+/// parameter, derived from [`crate::canvas::SELECT_SCREEN_TOLERANCE_PX`].
+const FALLBACK_SELECT_TOLERANCE: f64 = 3.0;
 
 /// The object-model-backed target provider for one page (module docs).
 pub struct ObjectModelProvider {
@@ -216,12 +227,21 @@ impl ObjectModelProvider {
 }
 
 impl CanvasTargetProvider for ObjectModelProvider {
-    fn hit_test(&self, page_index: usize, point: Pos2) -> Option<TargetId> {
+    fn hit_test(&self, page_index: usize, point: Pos2, tolerance: f64) -> Option<TargetId> {
         if page_index != self.page_index {
             return None;
         }
         let pdf = self.canvas_to_pdf(point)?;
-        let idx = hit_test_point(&self.objects, pdf, SELECT_TOLERANCE)?;
+        // A degenerate tolerance (0.0 from a non-finite/zero zoom, or a
+        // negative value) would silently make every click a miss. Fall back
+        // to the fixed canvas-space value instead: fussy at low zoom is a
+        // far better failure than "selection is broken".
+        let tolerance = if tolerance.is_finite() && tolerance > 0.0 {
+            tolerance
+        } else {
+            FALLBACK_SELECT_TOLERANCE
+        };
+        let idx = hit_test_point(&self.objects, pdf, tolerance)?;
         Some(TargetId(idx as u64))
     }
 
@@ -268,12 +288,63 @@ mod tests {
     fn click_inside_a_filled_rectangle_returns_its_target() {
         // One filled rectangle 10..90 square; a click at its centre hits it.
         let p = provider(b"10 10 80 80 re f");
-        let hit = p.hit_test(0, Pos2::new(50.0, 50.0));
+        let hit = p.hit_test(0, Pos2::new(50.0, 50.0), 3.0);
         assert_eq!(hit, Some(TargetId(0)));
         // A click on empty canvas misses.
-        assert_eq!(p.hit_test(0, Pos2::new(200.0, 200.0)), None);
+        assert_eq!(p.hit_test(0, Pos2::new(200.0, 200.0), 3.0), None);
         // A query for a different page misses regardless.
-        assert_eq!(p.hit_test(1, Pos2::new(50.0, 50.0)), None);
+        assert_eq!(p.hit_test(1, Pos2::new(50.0, 50.0), 3.0), None);
+    }
+
+    /// The regression test for the zoom-inverted-tolerance bug: a click that
+    /// misses a hairline stroke by 4 canvas units must MISS at a tight
+    /// tolerance and HIT at a forgiving one.
+    ///
+    /// This is what makes the fix meaningful rather than cosmetic. Before it,
+    /// the tolerance was hard-coded at 3.0 canvas units at every zoom, so at
+    /// "Fit page" (~0.5x on a letter page in a typical window) the operator's
+    /// real on-screen catch radius was ~1.5 px and thin geometry could not be
+    /// clicked at all. The tolerance now arrives from the caller as
+    /// `screen_tolerance_to_page(SELECT_SCREEN_TOLERANCE_PX, zoom)`, which
+    /// GROWS in canvas units as zoom shrinks — keeping the on-screen radius
+    /// constant.
+    #[test]
+    fn selection_tolerance_is_honoured_per_query_not_baked_in() {
+        // A zero-width horizontal line at y=20; click 4 units above it.
+        let p = provider(b"10 20 m 100 20 l S");
+        let near_miss = Pos2::new(50.0, 24.0);
+
+        // Tight tolerance (the old zoomed-out effective radius): a miss.
+        assert_eq!(p.hit_test(0, near_miss, 1.5), None);
+        // Forgiving tolerance (what a zoomed-out click now supplies): a hit.
+        assert_eq!(p.hit_test(0, near_miss, 6.0), Some(TargetId(0)));
+
+        // A degenerate tolerance must NOT silently disable selection — it
+        // falls back to the fixed canvas-space value, so a click within
+        // 3.0 units still lands.
+        assert_eq!(p.hit_test(0, Pos2::new(50.0, 22.0), 0.0), Some(TargetId(0)));
+        assert_eq!(
+            p.hit_test(0, Pos2::new(50.0, 22.0), f64::NAN),
+            Some(TargetId(0))
+        );
+    }
+
+    /// The zoom-invariance law itself, end to end: the canvas-space tolerance
+    /// a click supplies scales as `1 / zoom`, so the SCREEN-space catch radius
+    /// is the same number of pixels at every zoom level.
+    #[test]
+    fn screen_tolerance_keeps_the_on_screen_catch_radius_constant() {
+        use crate::canvas::{SELECT_SCREEN_TOLERANCE_PX, screen_tolerance_to_page};
+        for zoom in [0.25_f32, 0.5, 1.0, 2.0, 4.0] {
+            let canvas_tol = screen_tolerance_to_page(SELECT_SCREEN_TOLERANCE_PX, zoom);
+            // Canvas units * zoom = screen px, by the same distance law
+            // `viewer::screen_to_page` uses.
+            let screen_px = canvas_tol * f64::from(zoom);
+            assert!(
+                (screen_px - f64::from(SELECT_SCREEN_TOLERANCE_PX)).abs() < 1e-6,
+                "zoom {zoom}: on-screen radius drifted to {screen_px} px"
+            );
+        }
     }
 
     #[test]
@@ -312,7 +383,7 @@ mod tests {
         // A text object is bbox-only but still a valid target.
         let p = provider(b"BT /F1 12 Tf 40 40 Td (Hi) Tj ET");
         // The show origin (40,40) is inside the inflated text bbox.
-        assert!(p.hit_test(0, Pos2::new(40.0, 40.0)).is_some());
+        assert!(p.hit_test(0, Pos2::new(40.0, 40.0), 3.0).is_some());
     }
 
     #[test]

@@ -399,7 +399,19 @@ pub struct TargetId(pub u64);
 pub trait CanvasTargetProvider {
     /// The topmost/nearest target at a canvas-space `point`, or `None` for a
     /// miss.
-    fn hit_test(&self, page_index: usize, point: Pos2) -> Option<TargetId>;
+    ///
+    /// `tolerance` is the canvas-space slack the click may miss an object's
+    /// edge by. It is a **parameter, not a provider constant**, because the
+    /// only honest source for it is the live zoom: the pointer has already
+    /// been divided by `zoom` on its way here
+    /// ([`crate::viewer::screen_to_page`]), so a tolerance fixed in canvas
+    /// units would shrink on screen as the operator zooms out — at "Fit
+    /// page" it collapses to under two pixels and thin geometry becomes
+    /// effectively unclickable. Callers pass
+    /// [`screen_tolerance_to_page`]`(`[`SELECT_SCREEN_TOLERANCE_PX`]`, zoom)`
+    /// so the catch radius is a constant number of SCREEN pixels at every
+    /// zoom — the same zoom-invariance law the snap engine already uses.
+    fn hit_test(&self, page_index: usize, point: Pos2, tolerance: f64) -> Option<TargetId>;
 
     /// Every target enclosed by a canvas-space marquee `rect`. Whether
     /// enclosure means fully or partially contained is the provider's call
@@ -426,7 +438,7 @@ pub trait CanvasTargetProvider {
 pub struct EmptyTargetProvider;
 
 impl CanvasTargetProvider for EmptyTargetProvider {
-    fn hit_test(&self, _page_index: usize, _point: Pos2) -> Option<TargetId> {
+    fn hit_test(&self, _page_index: usize, _point: Pos2, _tolerance: f64) -> Option<TargetId> {
         None
     }
 
@@ -713,6 +725,25 @@ pub fn selection_after_type(original: &str, lo: usize, hi: usize, typed: &str) -
     reason = "Pass 12.M1 snap default; consumed by the Pass 12.M2 measure tools that own the tool-mode frame (spec 2.4)" // ui-text-exempt: clippy lint justification, never displayed
 )]
 pub const SNAP_SCREEN_TOLERANCE_PX: f32 = 10.0;
+
+/// The screen-space catch radius for **object selection**, in egui logical
+/// points, converted to a canvas/page-space tolerance each query by
+/// [`screen_tolerance_to_page`].
+///
+/// Deliberately a sibling of [`SNAP_SCREEN_TOLERANCE_PX`] rather than the
+/// same constant: snapping and selection answer different questions and are
+/// allowed to drift apart. Selection is set slightly TIGHTER (6 px vs 10 px)
+/// because a snap that grabs a nearby vertex is a helpful correction the
+/// operator can see and cycle through, whereas a selection that grabs a
+/// neighbouring object is a silent wrong answer — the failure modes are not
+/// symmetric, so the tolerances should not be either.
+///
+/// The old behaviour this replaces was a fixed 3.0 **canvas-space** value,
+/// which is `3.0 × zoom` pixels on screen: 3 px at 100%, 1.5 px at 50%,
+/// 0.75 px at 25%. That is the bug this constant exists to close — a
+/// constant screen radius means the click target feels identical at every
+/// zoom level.
+pub const SELECT_SCREEN_TOLERANCE_PX: f32 = 6.0;
 
 /// Convert a fixed SCREEN-space pixel tolerance into a **page-space** snap
 /// tolerance for `zoom` (device px per PDF user-space unit) — the
@@ -1029,10 +1060,15 @@ mod tests {
     }
 
     impl CanvasTargetProvider for StubProvider {
-        fn hit_test(&self, _page_index: usize, point: Pos2) -> Option<TargetId> {
+        fn hit_test(&self, _page_index: usize, point: Pos2, tolerance: f64) -> Option<TargetId> {
+            // The stub honours `tolerance` by inflating its boxes, so the
+            // substrate's own tests exercise the parameter rather than
+            // ignoring it.
+            #[allow(clippy::cast_possible_truncation)]
+            let pad = tolerance.max(0.0) as f32;
             self.boxes
                 .iter()
-                .find(|(_, r)| r.contains(point))
+                .find(|(_, r)| r.expand(pad).contains(point))
                 .map(|(id, _)| *id)
         }
 
@@ -1059,7 +1095,7 @@ mod tests {
     #[test]
     fn empty_target_provider_never_hits_encloses_or_bounds() {
         let p = EmptyTargetProvider;
-        assert_eq!(p.hit_test(0, Pos2::new(5.0, 5.0)), None);
+        assert_eq!(p.hit_test(0, Pos2::new(5.0, 5.0), 6.0), None);
         assert!(p.hit_test_rect(0, r(0.0, 0.0, 100.0, 100.0)).is_empty());
         assert_eq!(p.bounds(0, TargetId(1)), None);
     }
@@ -1216,8 +1252,11 @@ mod tests {
                 (TargetId(2), r(100.0, 100.0, 10.0, 10.0)),
             ],
         };
-        assert_eq!(provider.hit_test(0, Pos2::new(5.0, 5.0)), Some(TargetId(1)));
-        assert_eq!(provider.hit_test(0, Pos2::new(50.0, 50.0)), None);
+        assert_eq!(
+            provider.hit_test(0, Pos2::new(5.0, 5.0), 0.0),
+            Some(TargetId(1))
+        );
+        assert_eq!(provider.hit_test(0, Pos2::new(50.0, 50.0), 0.0), None);
         let enclosed = provider.hit_test_rect(0, r(0.0, 0.0, 30.0, 30.0));
         assert_eq!(enclosed, vec![TargetId(1)]);
         assert_eq!(
