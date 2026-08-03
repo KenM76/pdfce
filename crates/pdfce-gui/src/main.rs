@@ -219,6 +219,7 @@ mod dock;
 mod icons;
 mod measure_tool;
 mod object_provider;
+mod object_summary;
 mod raster;
 mod ui_text;
 mod vector_edit_tool;
@@ -239,6 +240,7 @@ use pdfce_core::xref::XrefErrorKind;
 use canvas::{CanvasTargetProvider, CanvasTool, EscapeOutcome, GestureInterrupt, TargetId};
 use dock::{DockPanel, DockTree};
 use object_provider::ObjectModelProvider;
+use object_summary::{ObjectSummary, census, describe_object};
 use raster::{PageTexture, ThumbnailCache};
 use viewer::{FitMode, ViewState};
 
@@ -380,6 +382,24 @@ struct PdfceApp {
     rail_expanded: bool,
     /// Whether the status bar's diagnostics detail is expanded.
     diagnostics_expanded: bool,
+    /// Whether the status bar's **selection** explanation is expanded.
+    ///
+    /// Its own flag rather than sharing [`Self::diagnostics_expanded`]: the
+    /// two answer unrelated questions ("did this page render faithfully?" vs
+    /// "what did I just click?"), and an operator who expanded one would be
+    /// surprised to find the other opened too — a shared flag is the same
+    /// class of second-source-of-truth defect the retired `properties_open`
+    /// boolean was.
+    ///
+    /// Defaults CLOSED, and that is a deliberate layout decision rather than
+    /// a taste one: the status bar is a bottom panel, so every line it grows
+    /// takes height from the canvas — and under "Fit page" a shorter canvas
+    /// re-fits the page at a smaller zoom, so the page visibly shrinks and
+    /// jumps the instant something is selected. A one-line headline plus an
+    /// expander keeps that to the single line the readout genuinely needs,
+    /// which is also exactly what ui-spec §C.5 asked for ("the status bar
+    /// gets ONE short summary line, not the full detail").
+    selection_notes_expanded: bool,
     /// The right-hand dock's layout — which panels exist, how they are
     /// split, and which tab of each group is in front (decision 017 +
     /// Amendment A; standing rule R80).
@@ -658,6 +678,7 @@ impl Default for PdfceApp {
             status: Status::Idle,
             rail_expanded: true,
             diagnostics_expanded: false,
+            selection_notes_expanded: false,
             // The dock's default arrangement (decision 017 A.3): the object
             // tree on top, Properties and Batch Tools sharing the group
             // below it, so the tree and the properties form are visible AT
@@ -5378,7 +5399,13 @@ impl PdfceApp {
                 };
                 let target = TargetId(index as u64);
                 let selected = doc.canvas_selection.contains(&target);
-                let label = ui_text::object_row(index, object);
+                // ONE description path (`object_summary::describe_object`),
+                // shared with the status-bar selection readout and the canvas
+                // overlay's type badge. Two independently-written descriptions
+                // of the same object is the divergence pattern decision 011
+                // warns about, one layer above the decomposition it warns
+                // about it for; this is the structural answer.
+                let label = ui_text::object_row(index, &describe_object(object));
                 // R84: selected state is never colour alone. The background
                 // fill is `Button::selectable`'s; the BOLD is this project's
                 // standing second cue, and survives greyscale.
@@ -5573,6 +5600,15 @@ impl PdfceApp {
             ui.label(ui_text::diagnostics_no_document());
             return;
         };
+
+        // The selection readout sits ABOVE the render diagnostics and above
+        // the `page_texture` early-return, deliberately: it must survive a
+        // frame where the page has not rasterized yet, and it is the line the
+        // operator is looking for when they ask "what did I just click?".
+        // Its whole reason for being in the status bar rather than only in the
+        // dock is that the dock is not open by default (ui-spec §C.5).
+        selection_readout(doc, ui, &mut self.selection_notes_expanded);
+
         let Some(texture) = &doc.page_texture else {
             ui.label(ui_text::diagnostics_no_document());
             return;
@@ -8680,6 +8716,130 @@ fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
 /// the page has annotations, that fact is stated regardless, so a
 /// suppressed view is never silently empty of markup the operator forgot
 /// they hid.
+/// The status bar's **selection readout** — the line that says what is
+/// selected, and why a selection box may be sitting over apparently-empty
+/// paper (ui-spec §C.5/§C.6).
+///
+/// # Why this line exists
+///
+/// The operator's report was *"sometimes I click and get a box highlighting on
+/// the screen that doesn't seem to correspond to anything."* Three separate
+/// causes of that turned out to be real bugs and are fixed (a zoom-inverted
+/// catch radius, an object-edit tool that drew no outline at all, and a
+/// page-centring coordinate offset). What was left is the half no bug fix
+/// reaches: a selection can be entirely CORRECT and still enclose blank paper
+/// — because the object is a text bbox inflated around glyph origins, or a
+/// clip path that paints nothing, or a zero-height rule. Before this line the
+/// app had no way whatsoever to tell the operator which of those it was.
+///
+/// # Why the STATUS BAR and not only the dock
+///
+/// The dock is not open by default, and the canvas is where the confusion
+/// happens. A readout that requires first discovering a panel is not a readout
+/// for the moment the question is asked. The status bar is always on screen,
+/// is already this app's narrator channel (`status_bar_body`'s own doc
+/// comment), and — unlike the canvas raster, which remains
+/// screen-reader-illegible — is made of real text widgets. That last point is
+/// the accessibility argument as well as the discoverability one: routing the
+/// facts through text here NARROWS the practical impact of the canvas's
+/// AccessKit gap rather than widening it.
+///
+/// # Contract
+///
+/// - Nothing selected → **no line at all.** The status bar's other lines are
+///   non-suppressible disclosures about the document; this one is about a
+///   transient the operator created, and an ever-present "Selected: nothing"
+///   would be noise crowding out disclosures that matter.
+/// - Exactly one object, resolvable → **one headline line**
+///   ([`ui_text::selection_readout_single`]), which already carries the SHORT
+///   form of the leading disclosure, plus — when any disclosure applies — a
+///   collapsing expander holding ONE full sentence per applicable
+///   [`object_summary::ObjectNote`]. Those sentences are the deliverable; the
+///   expander is what keeps them from costing the canvas four lines of height
+///   every time something is selected (see
+///   [`PdfceApp::selection_notes_expanded`] for why that matters more than it
+///   sounds). An object with nothing to explain gets a plain label, never an
+///   expander that opens onto nothing.
+/// - More than one, all resolvable → a per-kind census
+///   ([`ui_text::selection_readout_multi`]). Orientation, not detail; the
+///   Objects panel's highlighted rows are where per-object detail lives.
+/// - Any target the current page model cannot resolve → the honest
+///   ([`ui_text::selection_readout_unresolved`]) line for the WHOLE selection
+///   rather than a partial census, because a census that silently omits the
+///   unresolvable ones would print a count that disagrees with the number of
+///   boxes on screen. This is a one-frame transient after an edit, before
+///   `prune_canvas_selection` runs.
+///
+/// Every description comes from `object_summary::describe_object` — the same
+/// call the Objects panel's rows and the canvas type badges make, so the three
+/// surfaces cannot drift into describing one object three ways.
+fn selection_readout(doc: &OpenDoc, ui: &mut egui::Ui, expanded: &mut bool) {
+    let selected = doc.canvas_selection.len();
+    if selected == 0 {
+        return;
+    }
+    let summaries: Vec<ObjectSummary> = doc
+        .object_model
+        .as_ref()
+        .map(|provider| {
+            let objects = &provider.page_objects().objects;
+            doc.canvas_selection
+                .iter()
+                .filter_map(|target| objects.get(usize::try_from(target.0).ok()?))
+                .map(describe_object)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if summaries.len() != selected {
+        ui.label(ui_text::selection_readout_unresolved(selected))
+            .on_hover_text(ui_text::selection_readout_tooltip());
+        return;
+    }
+    let Some([only]) = (summaries.len() == 1).then_some(summaries.as_slice()) else {
+        ui.label(ui_text::selection_readout_multi(census(
+            summaries.iter().map(|s| s.kind),
+        )))
+        .on_hover_text(ui_text::selection_readout_tooltip());
+        return;
+    };
+
+    let headline = ui_text::selection_readout_single(only);
+    if only.notes.is_empty() {
+        // Nothing needs explaining: an ordinary, visible object. A collapsing
+        // header with an empty body would be an affordance that leads nowhere,
+        // which R83 forbids as firmly as a capability with no affordance.
+        ui.label(headline)
+            .on_hover_text(ui_text::selection_readout_tooltip());
+        return;
+    }
+    // Same shape as the render-diagnostics header directly below it — a
+    // one-line summary with an expander — because it is the same kind of
+    // thing: a headline the operator always sees, and a detailed disclosure
+    // they open when the headline is not enough. Reusing that pattern rather
+    // than inventing a second one means an operator who has learned the
+    // diagnostics expander has already learned this.
+    let response = egui::CollapsingHeader::new(headline)
+        .id_salt("selection-readout")
+        .open(Some(*expanded))
+        .show(ui, |ui| {
+            // One sentence per disclosure, each its own label so it wraps as
+            // a paragraph rather than running into the line above. These are
+            // explanations, not warnings, so they take the narrator's ordinary
+            // colour: an operator who selected a clip path did nothing wrong.
+            for note in &only.notes {
+                ui.label(ui_text::object_note(*note));
+            }
+        });
+    response
+        .header_response
+        .clone()
+        .on_hover_text(ui_text::selection_readout_tooltip());
+    if response.header_response.clicked() {
+        *expanded = !*expanded;
+    }
+}
+
 fn annotation_status(
     ui: &mut eframe::egui::Ui,
     d: &pdfce_render::Diagnostics,
@@ -8855,6 +9015,29 @@ fn display_row_for_target(target: TargetId, total: usize) -> usize {
     last - index
 }
 
+/// The side of the square type-badge chip drawn at a selection's top-left
+/// corner, in egui logical points.
+///
+/// Big enough for a legible capital at the badge font size, small enough that
+/// it does not swamp the outline of a small object.
+const SELECTION_BADGE_SIZE: f32 = 15.0;
+
+/// How many selected objects may carry a type badge before badges are
+/// suppressed and only outlines are drawn.
+///
+/// Not a silent cap on information: the status-bar readout states the true
+/// selection count and its per-kind census whatever this number is, so nothing
+/// becomes unknowable. It is a legibility cap — past a few dozen objects the
+/// chips overlap into a smear that answers nothing, and each one costs a text
+/// galley per frame. The badge exists to answer "what is THIS?", a question
+/// that only has an answer while the selection is small enough to point at.
+const MAX_SELECTION_BADGES: usize = 48;
+
+/// The dash and gap lengths, in egui logical points, of the outline drawn
+/// around an object whose bounds are an APPROXIMATION rather than a
+/// measurement (today: every text object).
+const APPROXIMATE_OUTLINE_DASH: (f32, f32) = (6.0, 4.0);
+
 fn draw_selection_outlines(
     doc: &OpenDoc,
     ui: &egui::Ui,
@@ -8870,18 +9053,121 @@ fn draw_selection_outlines(
     if outlines.is_empty() {
         return;
     }
+    // The concrete provider (not the opaque trait) is what can name the
+    // objects behind the targets. Absent it — an undecodable page — the
+    // overlay still draws every box, just without a kind-specific treatment:
+    // an unlabelled box beats no box at all, which is the state that started
+    // this whole line of work.
+    let objects = doc
+        .object_model
+        .as_ref()
+        .map(|p| p.page_objects().objects.as_slice());
     let painter = ui.painter_at(image_rect);
-    let stroke = egui::Stroke::new(2.0, ui.visuals().selection.stroke.color);
-    for canvas_bounds in outlines {
+    let accent = ui.visuals().selection.stroke.color;
+    let stroke = egui::Stroke::new(2.0, accent);
+    let badges = outlines.len() <= MAX_SELECTION_BADGES;
+
+    for (target, canvas_bounds) in outlines {
         let min = viewer::page_to_screen(canvas_bounds.min, image_rect, extent, zoom);
         let max = viewer::page_to_screen(canvas_bounds.max, image_rect, extent, zoom);
-        painter.rect_stroke(
+        // The degenerate-outline fix. A zero-height rule's box strokes
+        // literally nothing without this, so a correct selection looked like
+        // a dead click. `visible_outline_rect` grows it about its own centre
+        // and the status readout states the object's true size, so the
+        // enlargement is legible AND disclosed rather than quietly wrong.
+        let rect = canvas::visible_outline_rect(
             egui::Rect::from_two_pos(min, max),
-            0.0,
-            stroke,
-            egui::StrokeKind::Inside,
+            canvas::MIN_OUTLINE_EXTENT_PX,
         );
+        let summary = objects
+            .and_then(|objs| objs.get(usize::try_from(target.0).ok()?))
+            .map(describe_object);
+
+        // Per-kind treatment, R84-compliant: the cue that distinguishes an
+        // approximate box from a measured one is the DASH PATTERN — a shape
+        // property that survives greyscale and colour-vision deficiency —
+        // never a second accent colour. A solid box claims "the object is
+        // exactly here"; a dashed box claims "the object is somewhere in
+        // here", which for a text bbox inflated around glyph origins is the
+        // literal truth and the single likeliest explanation for a box that
+        // appears to surround nothing.
+        if summary
+            .as_ref()
+            .is_some_and(ObjectSummary::bounds_are_approximate)
+        {
+            let (dash, gap) = APPROXIMATE_OUTLINE_DASH;
+            let corners = [
+                rect.left_top(),
+                rect.right_top(),
+                rect.right_bottom(),
+                rect.left_bottom(),
+                rect.left_top(),
+            ];
+            painter.extend(egui::Shape::dashed_line(&corners, stroke, dash, gap));
+        } else {
+            painter.rect_stroke(rect, 0.0, stroke, egui::StrokeKind::Inside);
+        }
+
+        if badges && let Some(summary) = &summary {
+            draw_selection_badge(&painter, image_rect, rect, accent, ui, summary);
+        }
     }
+}
+
+/// Draw the type badge at a selection outline's top-left corner (ui-spec
+/// §C.1) — a filled chip carrying a single letter naming the object kind.
+///
+/// ## Why a letter and not an icon
+///
+/// `icons::Icon` has no glyph for a path, an image or a form XObject, and its
+/// `Text` glyph names the text *tool*, not a text object — reusing it would
+/// assert an affordance that does not exist (R83). §C.1 anticipated exactly
+/// this and named a letter badge as the honest interim, with the badge's
+/// POSITION and EXISTENCE as the durable part of the design; when the icon set
+/// grows object-kind glyphs, only this function changes.
+///
+/// ## Why it is not the only cue
+///
+/// R84 forbids colour-alone state. The badge is a filled SHAPE carrying a
+/// LETTER, the outline beside it already distinguishes approximate from
+/// measured bounds by dash pattern, and the full sentence is in the status
+/// readout. The canvas raster remains screen-reader-illegible (the standing
+/// gap in `main.rs`'s accessibility notes) — which is precisely why the
+/// readout, not this badge, is the load-bearing disclosure, and why the badge
+/// is allowed to be terse.
+///
+/// The chip is clamped into `image_rect`, so an object selected at the very
+/// top-left of the page still shows its badge instead of painting it into the
+/// panel gutter where `painter_at` would clip it away.
+fn draw_selection_badge(
+    painter: &egui::Painter,
+    image_rect: egui::Rect,
+    outline: egui::Rect,
+    accent: egui::Color32,
+    ui: &egui::Ui,
+    summary: &ObjectSummary,
+) {
+    let size = egui::vec2(SELECTION_BADGE_SIZE, SELECTION_BADGE_SIZE);
+    let wanted = egui::Rect::from_min_size(outline.left_top(), size);
+    // Translate rather than intersect: a clipped chip would be a half-letter,
+    // which reads as a rendering fault rather than as a label.
+    let dx =
+        (image_rect.min.x - wanted.min.x).max(0.0) + (image_rect.max.x - wanted.max.x).min(0.0);
+    let dy =
+        (image_rect.min.y - wanted.min.y).max(0.0) + (image_rect.max.y - wanted.max.y).min(0.0);
+    let chip = wanted.translate(egui::vec2(dx, dy));
+    painter.rect_filled(chip, 3.0, accent);
+    painter.text(
+        chip.center(),
+        egui::Align2::CENTER_CENTER,
+        ui_text::object_kind_badge(summary.kind),
+        egui::FontId::proportional(SELECTION_BADGE_SIZE * 0.72),
+        // The window's own extreme background, which is near-white under a
+        // light theme and near-black under a dark one — so the letter stays
+        // legible against the accent fill in both, without this function
+        // having to know which theme is live.
+        ui.visuals().extreme_bg_color,
+    );
 }
 
 fn run_vector_edit_tool(
@@ -10103,7 +10389,7 @@ mod tests {
         assert!(objects.objects.len() >= 2, "fixture stream decomposed thin");
 
         for (index, object) in objects.objects.iter().enumerate() {
-            let row = ui_text::object_row(index, object);
+            let row = ui_text::object_row(index, &describe_object(object));
             assert!(
                 row.contains(&format!("#{index}")),
                 "row {row:?} does not carry its paint-order index"
@@ -10116,7 +10402,7 @@ mod tests {
         // The path row must name what it paints and how many nodes it has:
         // "it paints nothing" is the direct answer to "why is there a
         // selection box over blank paper?" (§C.2).
-        let path_row = ui_text::object_row(0, &objects.objects[0]);
+        let path_row = ui_text::object_row(0, &describe_object(&objects.objects[0]));
         assert!(path_row.contains("Path"), "{path_row:?}");
         assert!(path_row.contains("node"), "{path_row:?}");
     }
@@ -10147,6 +10433,151 @@ mod tests {
                 assert!(seen.insert(label), "duplicate paint label {label:?}");
             }
         }
+    }
+
+    /// Every disclosure in the catalog must be a real, distinct EXPLANATION.
+    ///
+    /// A note whose sentence was copy-pasted from its neighbour, or left as a
+    /// two-word label, would ship as a disclosure that discloses nothing —
+    /// worse than no note, because it looks like the app answered the
+    /// question. The floor asserted here: a long form that is a sentence
+    /// rather than a label, a short form for the one-line row, the two not
+    /// identical, and no duplicates in either set.
+    #[test]
+    fn every_selection_disclosure_is_a_distinct_explanation() {
+        use object_summary::ObjectNote;
+        let mut longs = BTreeSet::new();
+        let mut shorts = BTreeSet::new();
+        for note in ObjectNote::ALL {
+            let long = ui_text::object_note(note);
+            let short = ui_text::object_note_short(note);
+            assert!(
+                long.len() > 80,
+                "{note:?}'s explanation is a label, not an explanation: {long:?}"
+            );
+            assert!(!short.is_empty(), "{note:?} has no short form");
+            assert_ne!(long, short, "{note:?}'s two forms are the same string");
+            assert!(longs.insert(long), "duplicate explanation on {note:?}");
+            assert!(shorts.insert(short), "duplicate short form on {note:?}");
+        }
+    }
+
+    /// Every object kind must be nameable and badge-able, with distinct names
+    /// — a kind that shares another's name is a kind the operator cannot tell
+    /// apart, which defeats the point of the readout.
+    #[test]
+    fn every_object_kind_has_a_distinct_name_and_a_badge() {
+        use object_summary::ObjectKind;
+        let mut names = BTreeSet::new();
+        for kind in ObjectKind::ALL {
+            let name = ui_text::object_kind_label(kind);
+            let badge = ui_text::object_kind_badge(kind);
+            assert!(!name.is_empty(), "{kind:?} has no name");
+            // A badge is one or two characters — anything longer will not fit
+            // the chip drawn at a selection's corner.
+            assert!(
+                (1..=2).contains(&badge.chars().count()),
+                "{kind:?}'s badge {badge:?} will not fit the chip"
+            );
+            assert!(names.insert(name), "duplicate kind name on {kind:?}");
+        }
+    }
+
+    /// The end-to-end answer to the operator's report: selecting a text object
+    /// must produce a readout that SAYS the box is approximate and why.
+    ///
+    /// This is the case §0.2 of the ui-spec identified as the most likely real
+    /// cause of "a box highlighting that doesn't seem to correspond to
+    /// anything" — the text bbox is inflated around glyph origins, so clicking
+    /// whitespace near text selects the text and draws a box over blank paper.
+    #[test]
+    fn a_text_selection_readout_explains_its_approximate_box() {
+        use object_summary::ObjectNote;
+        use pdfce_core::content::ContentStream;
+        use pdfce_core::vector::{Matrix, NoXObjects, decompose};
+
+        let cs = ContentStream::parse(b"BT /F1 12 Tf 40 40 Td (Hi) Tj ET".to_vec()).expect("parse");
+        let objects = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+        let summary = describe_object(&objects.objects[0]);
+
+        let readout = ui_text::selection_readout_single(&summary);
+        assert!(readout.contains("Text"), "{readout:?}");
+        // The size is stated, so an operator can compare the box on screen
+        // against the number and see for themselves that they disagree.
+        assert!(readout.contains("pt at ("), "{readout:?}");
+        assert!(
+            summary.notes.contains(&ObjectNote::ApproximateTextBounds),
+            "{:?}", // ui-text-exempt: test assertion payload, never displayed
+            summary.notes
+        );
+        let note = ui_text::object_note(ObjectNote::ApproximateTextBounds);
+        assert!(note.contains("approximate"), "{note:?}");
+    }
+
+    /// The degenerate case found while observing the running app: a horizontal
+    /// rule (the only object in `dimension/linear-base.pdf`) selects correctly
+    /// and its outline rect is exactly zero high, so it strokes nothing.
+    ///
+    /// The readout must state the TRUE size — `200.0 × 0.0 pt` — even though
+    /// the outline on screen has been thickened to be visible, so the operator
+    /// is never left inferring the object's extent from a box that has been
+    /// deliberately enlarged.
+    #[test]
+    fn a_zero_height_rule_reports_its_true_size_and_explains_the_thickened_box() {
+        use object_summary::{Degeneracy, ObjectNote};
+        use pdfce_core::content::ContentStream;
+        use pdfce_core::vector::{Matrix, NoXObjects, decompose};
+
+        let cs = ContentStream::parse(b"100 200 m 300 200 l S".to_vec()).expect("parse");
+        let objects = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+        let summary = describe_object(&objects.objects[0]);
+        assert_eq!(summary.size(), Some((200.0, 0.0)));
+
+        let readout = ui_text::selection_readout_single(&summary);
+        assert!(readout.contains("200.0 × 0.0 pt"), "{readout:?}");
+        let note = ui_text::object_note(ObjectNote::DegenerateBounds(Degeneracy::HorizontalRule));
+        assert!(note.contains("zero height"), "{note:?}");
+        // And the outline the canvas would stroke for it is no longer
+        // invisible — the fix, asserted at the seam the overlay calls.
+        let grown = canvas::visible_outline_rect(
+            egui::Rect::from_min_max(egui::pos2(100.0, 200.0), egui::pos2(300.0, 200.0)),
+            canvas::MIN_OUTLINE_EXTENT_PX,
+        );
+        assert!(grown.height() >= canvas::MIN_OUTLINE_EXTENT_PX);
+    }
+
+    /// The single-source-of-truth guarantee, asserted structurally rather than
+    /// trusted: the Objects panel's row and the status-bar readout are two
+    /// renderings of ONE [`object_summary::ObjectSummary`], so the detail
+    /// clause of the row must appear verbatim inside the readout.
+    ///
+    /// This is the divergence `object_provider.rs`'s own module docs cite
+    /// decision 011 about, one layer up. If someone later re-derives either
+    /// description from the `VectorObject` instead of the summary, the two
+    /// will drift and this fails.
+    #[test]
+    fn the_objects_row_and_the_status_readout_describe_one_object_identically() {
+        use pdfce_core::content::ContentStream;
+        use pdfce_core::vector::{Matrix, NoXObjects, decompose};
+
+        let cs = ContentStream::parse(b"0 0 1 rg 2 w 10 10 80 80 re B".to_vec()).expect("parse");
+        let objects = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+        let summary = describe_object(&objects.objects[0]);
+
+        let row = ui_text::object_row(7, &summary);
+        let readout = ui_text::selection_readout_single(&summary);
+        // The shared clause: kind, paint disposition, colour, width, nodes.
+        let clause = row
+            .split_once("  ")
+            .map(|(_, rest)| rest.to_owned())
+            .expect("the row carries its index then its description");
+        assert!(
+            readout.contains(&clause),
+            "row clause {clause:?} is absent from readout {readout:?}"
+        );
+        // And the facts themselves actually made it through.
+        assert!(clause.contains("#0000FF"), "{clause:?}");
+        assert!(clause.contains("node"), "{clause:?}");
     }
 
     /// Colours are rendered as `#RRGGBB`, and out-of-range components are
@@ -10235,7 +10666,7 @@ mod tests {
         let rows: Vec<String> = (0..objects.len())
             .map(|row| {
                 let index = objects.len() - 1 - row;
-                ui_text::object_row(index, &objects[index])
+                ui_text::object_row(index, &describe_object(&objects[index]))
             })
             .collect();
         assert!(

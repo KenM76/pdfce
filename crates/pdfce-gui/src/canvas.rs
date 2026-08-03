@@ -519,19 +519,101 @@ pub fn selection_after_marquee(
 /// the overlay strokes nothing — the "paints nothing this Pass" acceptance
 /// criterion, verified by the empty-selection test below rather than by
 /// omitting the call.
+///
+/// **Each rect is paired with the [`TargetId`] it came from.** The overlay
+/// needs to know WHICH object each box belongs to, so it can pick a per-kind
+/// treatment and draw a type badge (ui-spec §C.1) — a bare `Vec<Rect>` could
+/// not be zipped back to the selection set, because the `filter_map` above
+/// drops stale targets and so breaks positional correspondence. Returning the
+/// pair is the only way to keep that association honest.
 #[must_use]
 pub fn selection_outline_bounds(
     selection: &BTreeSet<TargetId>,
     provider: Option<&dyn CanvasTargetProvider>,
     page_index: usize,
-) -> Vec<Rect> {
+) -> Vec<(TargetId, Rect)> {
     let Some(provider) = provider else {
         return Vec::new();
     };
     selection
         .iter()
-        .filter_map(|&target| provider.bounds(page_index, target))
+        .filter_map(|&target| Some((target, provider.bounds(page_index, target)?)))
         .collect()
+}
+
+/// The minimum on-screen extent, in egui logical points, that a selection
+/// outline is guaranteed to have on each axis.
+///
+/// Sized to be unmistakably visible without materially misreporting where the
+/// object is: at 6 pt a horizontal rule's outline reads as a thin band centred
+/// on the rule, and the readout states the true size (`… — 200.0 × 0.0 pt …`)
+/// so the enlargement can never be mistaken for the object's real extent.
+pub const MIN_OUTLINE_EXTENT_PX: f32 = 6.0;
+
+/// Grow a degenerate outline rect, about its own centre, until it is at least
+/// `min_extent` on both axes — **the fix for a selection that is correct and
+/// paints nothing.**
+///
+/// # The bug this closes
+///
+/// A horizontal rule (`100 200 m 300 200 l S`, which is the only object in
+/// `fixtures/synthetic/dimension/linear-base.pdf`) has the page bbox
+/// `100,200 → 300,200`: real, finite, and **exactly zero high**. It hit-tests
+/// correctly, it selects correctly, it appears in the Objects panel — and its
+/// outline rect has zero height, so `Painter::rect_stroke` with
+/// `StrokeKind::Inside` has no interior band to fill and puts **nothing** on
+/// the screen. The operator's click was right, the selection state was right,
+/// and the feedback was a blank page: exactly the "a correct action with no
+/// feedback is indistinguishable from a broken one" failure that
+/// `draw_selection_outlines`' own doc comment was written about, in a second
+/// guise.
+///
+/// # Why in SCREEN space, and why symmetric
+///
+/// Applied after the canvas→screen projection, so the guaranteed thickness is
+/// a constant number of on-screen points at every zoom — the same
+/// zoom-invariance discipline [`screen_tolerance_to_page`] applies to the
+/// catch radius. Growing symmetrically about the centre keeps the band
+/// straddling the rule rather than sitting to one side of it, so the outline
+/// still says truthfully *the object is here*.
+///
+/// # Not a silent widening
+///
+/// Rule 4 (fuzzy, never sneaky) is satisfied by disclosure, not by declining
+/// to draw: `object_summary::describe_object` emits
+/// `ObjectNote::DegenerateBounds` for exactly these objects, and the status
+/// readout says in words that the object is a rule and that its outline has
+/// been thickened on screen. The picture is legible AND the truth is stated.
+///
+/// A non-finite rect is returned unchanged — there is no meaningful centre to
+/// grow about, and a NaN box is a bug to leave visible upstream, not to repair
+/// here.
+#[must_use]
+pub fn visible_outline_rect(rect: Rect, min_extent: f32) -> Rect {
+    if !rect.min.x.is_finite()
+        || !rect.min.y.is_finite()
+        || !rect.max.x.is_finite()
+        || !rect.max.y.is_finite()
+        || !min_extent.is_finite()
+        || min_extent <= 0.0
+    {
+        return rect;
+    }
+    // `Rect::from_two_pos` normalises a rect whose corners arrived in either
+    // order — the canvas→screen projection includes a Y flip, so `min` is not
+    // guaranteed to be the smaller corner by the time it gets here.
+    let rect = Rect::from_two_pos(rect.min, rect.max);
+    let grow = |lo: f32, hi: f32| -> (f32, f32) {
+        let extent = hi - lo;
+        if extent >= min_extent {
+            return (lo, hi);
+        }
+        let pad = (min_extent - extent) / 2.0;
+        (lo - pad, hi + pad)
+    };
+    let (x0, x1) = grow(rect.min.x, rect.max.x);
+    let (y0, y1) = grow(rect.min.y, rect.max.y);
+    Rect::from_min_max(Pos2::new(x0, y0), Pos2::new(x1, y1))
 }
 
 /// The selection set with every target the provider can no longer resolve
@@ -1120,10 +1202,79 @@ mod tests {
             ],
         };
         // A selection with one live and one stale target yields exactly one
-        // rect — the stale one is silently skipped (spec §4.4 posture).
+        // rect — the stale one is silently skipped (spec §4.4 posture) — and
+        // it is PAIRED with the target it came from, which is what lets the
+        // overlay pick a per-kind treatment for it.
         let selection = ids(&[2, 99]);
         let rects = selection_outline_bounds(&selection, Some(&provider), 0);
-        assert_eq!(rects, vec![r(20.0, 20.0, 5.0, 5.0)]);
+        assert_eq!(rects, vec![(TargetId(2), r(20.0, 20.0, 5.0, 5.0))]);
+    }
+
+    /// The degenerate-outline fix: a zero-height rect (a horizontal rule)
+    /// must come back thick enough to stroke, centred on the rule.
+    #[test]
+    fn a_zero_height_outline_is_grown_symmetrically_about_the_rule() {
+        let flat = r(100.0, 200.0, 200.0, 0.0);
+        let out = visible_outline_rect(flat, 6.0);
+        assert_eq!(out.height(), 6.0);
+        // Grown about the centre: the rule's y is still the band's middle.
+        assert_eq!(out.center().y, 200.0);
+        // The non-degenerate axis is untouched.
+        assert_eq!(out.min.x, 100.0);
+        assert_eq!(out.max.x, 300.0);
+    }
+
+    #[test]
+    fn a_zero_width_outline_is_grown_symmetrically_too() {
+        let out = visible_outline_rect(r(200.0, 100.0, 0.0, 200.0), 6.0);
+        assert_eq!(out.width(), 6.0);
+        assert_eq!(out.center().x, 200.0);
+        assert_eq!(out.height(), 200.0);
+    }
+
+    /// A single-point object is degenerate on both axes at once.
+    #[test]
+    fn a_point_outline_is_grown_on_both_axes() {
+        let out = visible_outline_rect(r(50.0, 50.0, 0.0, 0.0), 6.0);
+        assert_eq!(out.width(), 6.0);
+        assert_eq!(out.height(), 6.0);
+        assert_eq!(out.center(), Pos2::new(50.0, 50.0));
+    }
+
+    /// A rect that is already big enough must come back BYTE-identical: the
+    /// outline of an ordinary object must keep reporting that object's real
+    /// extent, or every selection box would start lying by a few points.
+    #[test]
+    fn an_ordinary_outline_is_returned_unchanged() {
+        let big = r(10.0, 10.0, 80.0, 40.0);
+        assert_eq!(visible_outline_rect(big, 6.0), big);
+        // Exactly at the threshold is "already big enough", not "grow".
+        let exact = r(0.0, 0.0, 6.0, 6.0);
+        assert_eq!(visible_outline_rect(exact, 6.0), exact);
+    }
+
+    /// A rect whose corners arrived in the wrong order (the canvas→screen
+    /// projection includes a Y flip) is normalised, not turned inside out.
+    #[test]
+    fn an_inverted_outline_is_normalised_before_growing() {
+        let flipped = Rect::from_min_max(Pos2::new(300.0, 200.0), Pos2::new(100.0, 200.0));
+        let out = visible_outline_rect(flipped, 6.0);
+        assert_eq!(out.min.x, 100.0);
+        assert_eq!(out.max.x, 300.0);
+        assert_eq!(out.height(), 6.0);
+    }
+
+    /// A non-finite rect is left alone — there is no centre to grow about,
+    /// and repairing a NaN box here would hide the upstream bug that made it.
+    #[test]
+    fn a_non_finite_outline_is_left_alone() {
+        let nan = Rect::from_min_max(Pos2::new(f32::NAN, 0.0), Pos2::new(10.0, 10.0));
+        let out = visible_outline_rect(nan, 6.0);
+        assert!(out.min.x.is_nan());
+        // A degenerate minimum is refused rather than dividing by zero.
+        let flat = r(0.0, 0.0, 10.0, 0.0);
+        assert_eq!(visible_outline_rect(flat, 0.0), flat);
+        assert_eq!(visible_outline_rect(flat, f32::NAN), flat);
     }
 
     // ---- text-edit caret/selection (Pass 14.3, spec §3/§4.2/§4.4) -----

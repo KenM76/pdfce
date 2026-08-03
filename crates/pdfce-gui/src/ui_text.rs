@@ -47,9 +47,9 @@ use std::path::Path;
 use pdfce_core::PdfVersion;
 use pdfce_core::dimension::Unit;
 use pdfce_core::edit::{CommandKind, InfoField};
-use pdfce_core::vector::{
-    AxisConstraint, FillRule, ImageSource, PaintStyle, Rgb, SnapKind, VectorObject,
-};
+use pdfce_core::vector::{AxisConstraint, FillRule, PaintStyle, Rgb, SnapKind};
+
+use crate::object_summary::{Degeneracy, ObjectKind, ObjectNote, ObjectSummary, SelectionCensus};
 
 // ---------------------------------------------------------------------------
 // Toolbar — file
@@ -1508,8 +1508,77 @@ pub fn objects_dock_row_tooltip() -> &'static str {
 selection."
 }
 
-/// A path object's row (ui-spec §B.3 — the one kind the core model can
-/// already describe in full).
+/// The plain-language name of an object kind — the ONE place each kind is
+/// named, so the tree row, the status readout and the canvas badge tooltip
+/// cannot drift into calling the same thing three names.
+///
+/// The three image kinds get three different names rather than one, because
+/// they are three different answers to "what did I select?": an inline image
+/// lives in the page's own byte stream, an image XObject is a shared resource,
+/// and a form XObject is an entire nested drawing treated as one opaque
+/// object — which is itself a common explanation for "why is the selection box
+/// so much bigger than the thing I clicked?".
+pub fn object_kind_label(kind: ObjectKind) -> &'static str {
+    match kind {
+        ObjectKind::Path => "Path",
+        ObjectKind::Text => "Text",
+        ObjectKind::InlineImage => "Image (inline)",
+        ObjectKind::ImageXObject => "Image",
+        ObjectKind::FormXObject => "Form",
+    }
+}
+
+/// The one- or two-character badge drawn at the corner of a selection outline
+/// on the canvas (ui-spec §C.1).
+///
+/// A LETTER, not an icon, and that is a decision rather than a shortcut: the
+/// icon set (`icons::Icon`) has no glyph for "path", "image" or "form
+/// XObject", and its `Text` glyph names the text *tool*, not a text object —
+/// borrowing it would assert an affordance that does not exist. §C.1 names a
+/// letter badge as the honest interim and says the badge's POSITION and
+/// EXISTENCE are the durable part of the design; the glyph swaps later without
+/// redesigning anything.
+///
+/// The letter is never the only cue: it sits inside a filled chip (a shape),
+/// beside an outline whose dash pattern already distinguishes approximate from
+/// measured bounds, and the full sentence is in the status readout. R84 —
+/// never colour alone — is satisfied several times over.
+pub fn object_kind_badge(kind: ObjectKind) -> &'static str {
+    match kind {
+        ObjectKind::Path => "P",
+        ObjectKind::Text => "T",
+        ObjectKind::InlineImage | ObjectKind::ImageXObject => "I",
+        ObjectKind::FormXObject => "F",
+    }
+}
+
+/// The detail clause for one object — everything after its kind name.
+///
+/// Empty for the kinds the core model cannot describe further (ui-spec
+/// §B.3/§B.4): `TextObject` carries no string, font or size, and
+/// `ImageObject` carries no pixel dimensions or colourspace, so there is
+/// genuinely nothing more to say. Shipping an empty clause is the honest
+/// answer; inventing `Helvetica 10pt` from the spec's illustrative example
+/// would be a fabrication the operator has no way to catch.
+fn object_detail(summary: &ObjectSummary) -> String {
+    let Some(paint) = summary.paint else {
+        return String::new();
+    };
+    let mut detail = paint_style_label(paint).to_owned();
+    if let Some(colour) = summary.colour {
+        detail.push(' ');
+        detail.push_str(&rgb_hex(colour));
+    }
+    if let Some(width) = summary.line_width {
+        detail.push_str(&format!(", {width:.2} pt wide"));
+    }
+    if let Some(nodes) = summary.nodes {
+        detail.push_str(&format!(" · {nodes} node(s)"));
+    }
+    detail
+}
+
+/// One-line row text for any object — the Objects panel's row label.
 ///
 /// `index` is the object's PAINT-ORDER index, printed verbatim so it
 /// cross-references `pdfce-cli object-list`'s `index=` field and the
@@ -1517,60 +1586,201 @@ selection."
 /// object by exactly this number. Showing a display-position number instead
 /// (the list is drawn back-to-front) would produce a number that looks
 /// authoritative and addresses the wrong object.
-pub fn object_row_path(index: usize, paint: &str, colour: &str, nodes: usize) -> String {
-    format!("#{index}  Path · {paint} {colour} · {nodes} node(s)")
-}
-
-/// A text object's row.
 ///
-/// **Honest lesser detail, by necessity** (ui-spec §B.3/§B.4 #1). The core
-/// model's `TextObject` carries a bounding box and nothing else — no
-/// extracted string, no font name, no size — so the rich row the spec
-/// sketched ("Text · \"Section A-A\" · Helvetica 10pt") is not buildable
-/// today. It is better to ship a row that says what pdfce actually knows
-/// than to block the panel, and far better than a fabricated label. The
-/// "approximate" wording is not padding: the bbox is inflated around the
-/// glyph ORIGINS, so it is routinely wider and taller than the visible
-/// text — which is the single most likely explanation for a selection
-/// outline that appears to surround nothing.
-pub fn object_row_text(index: usize) -> String {
-    format!("#{index}  Text · approximate bounds, no text content captured yet")
-}
-
-/// An image or form-XObject object's row.
-pub fn object_row_image(index: usize, source: ImageSource) -> String {
-    let kind = match source {
-        ImageSource::Inline => "Image · drawn inline in the page",
-        ImageSource::XObject => "Image · a reusable image object",
-        ImageSource::Form => "Form · a nested drawing, listed as one object",
+/// Takes an [`ObjectSummary`] rather than a `VectorObject`: the classification
+/// (which colour is actually visible, how many nodes, which disclosures apply)
+/// belongs to `object_summary::describe_object`, and this function only words
+/// it. That is ui-spec §C.6's single-source-of-truth ask made structural — the
+/// row and the selection readout below are two renderings of ONE record, so a
+/// fill colour cannot be described one way here and another way there.
+///
+/// The trailing note marker is what makes a row diagnostic rather than
+/// decorative: a text row, a clip path and a hairline all look ordinary until
+/// the row says out loud that the box will not match what is on the paper.
+pub fn object_row(index: usize, summary: &ObjectSummary) -> String {
+    let kind = object_kind_label(summary.kind);
+    let detail = object_detail(summary);
+    let head = if detail.is_empty() {
+        format!("#{index}  {kind}")
+    } else {
+        format!("#{index}  {kind} · {detail}")
     };
-    format!("#{index}  {kind}")
+    match headline_note(summary) {
+        Some(note) => format!("{head} · {}", object_note_short(note)),
+        None => head,
+    }
 }
 
-/// One-line row text for any object — the single description path the panel
-/// uses, so a fill colour can never be described one way in a row and
-/// another way elsewhere (ui-spec §C.6's single-source-of-truth ask, applied
-/// now so a later selection inspector inherits it instead of forking it).
-pub fn object_row(index: usize, object: &VectorObject) -> String {
-    match object {
-        VectorObject::Path(p) => {
-            let nodes: usize = p.subpaths.iter().map(|sp| sp.anchors().count()).sum();
-            // Which colour a viewer actually sees is decided by the paint
-            // disposition: an unfilled path shows only its stroke colour, so
-            // reporting the (unused, default-black) fill colour there would
-            // be a confidently wrong answer.
-            let colour = if p.style.fill.is_some() {
-                rgb_hex(p.fill_color)
-            } else if p.style.stroke {
-                rgb_hex(p.stroke_color)
-            } else {
-                String::new()
-            };
-            object_row_path(index, paint_style_label(p.style), &colour, nodes)
-        }
-        VectorObject::Text(_) => object_row_text(index),
-        VectorObject::Image(i) => object_row_image(index, i.source),
+/// The one note worth putting on a single line beside an object's detail
+/// clause, if any.
+///
+/// `PaintsNothing` is deliberately skipped: [`paint_style_label`] already
+/// spells it out inside the detail clause, and a line reading "…paints
+/// nothing (a clip or discarded path) · 4 node(s) · paints nothing" says it
+/// twice and explains it neither time. Every other note adds a fact the
+/// detail clause does not carry. The FULL sentence for `PaintsNothing` is
+/// still shown in the expanded explanation, where it earns its space by
+/// saying the object is real, selectable and editable.
+fn headline_note(summary: &ObjectSummary) -> Option<ObjectNote> {
+    summary
+        .notes
+        .iter()
+        .copied()
+        .find(|note| !matches!(note, ObjectNote::PaintsNothing))
+}
+
+/// The SHORT form of a disclosure, for a one-line row where a full sentence
+/// would not fit (ui-spec §B.3).
+///
+/// Paired with [`object_note`]'s long form rather than replacing it: the row
+/// flags that something needs explaining, the readout explains it. Two lengths
+/// of the same fact, never two different facts.
+pub fn object_note_short(note: ObjectNote) -> &'static str {
+    match note {
+        ObjectNote::ApproximateTextBounds => "approximate bounds",
+        ObjectNote::PaintsNothing => "paints nothing",
+        ObjectNote::DegenerateBounds(Degeneracy::VerticalRule) => "zero width",
+        ObjectNote::DegenerateBounds(Degeneracy::HorizontalRule) => "zero height",
+        ObjectNote::DegenerateBounds(Degeneracy::Point) => "a single point",
+        ObjectNote::NoBounds => "no measurable bounds",
+        ObjectNote::FormNotDecomposed => "a whole nested drawing",
     }
+}
+
+/// The FULL disclosure sentence for one fact about a selection — the direct
+/// answer to the operator's *"sometimes I click and get a box highlighting on
+/// the screen that doesn't seem to correspond to anything."*
+///
+/// Every one of these is a fact `pdfce-core` already computed and never
+/// showed: `TextObject::approximate`, `PaintStyle::is_invisible`, an exact
+/// zero-extent comparison on the bbox. None of them is a guess, which is what
+/// makes surfacing them a disclosure rather than an inference the operator
+/// would have to review (rule 4, fuzzy never sneaky).
+///
+/// Each sentence says WHAT is true and WHY the operator is seeing what they
+/// are seeing, because "approximate bounds" on its own is a label, not an
+/// explanation — and an explanation is the entire deliverable here.
+pub fn object_note(note: ObjectNote) -> &'static str {
+    match note {
+        ObjectNote::ApproximateTextBounds => {
+            "The box around text is approximate: pdfce measures a text object from where each \
+run of glyphs STARTS, then pads by the largest type size it saw, so the box is normally wider \
+and taller than the ink. Clicking blank space near text can therefore select the text — the \
+selection is correct even though the box looks empty."
+        }
+        ObjectNote::PaintsNothing => {
+            "This path paints nothing at all — it is a clipping path or a shape that was built \
+and then discarded without being filled or stroked. It is a real object you can select, move \
+and delete, but there is nothing on the paper to see inside the box."
+        }
+        ObjectNote::DegenerateBounds(Degeneracy::VerticalRule) => {
+            "This object has zero width — it is a vertical rule. Its outline is widened on \
+screen so you can see it; the object itself is a line, not a box."
+        }
+        ObjectNote::DegenerateBounds(Degeneracy::HorizontalRule) => {
+            "This object has zero height — it is a horizontal rule. Its outline is thickened on \
+screen so you can see it; the object itself is a line, not a box."
+        }
+        ObjectNote::DegenerateBounds(Degeneracy::Point) => {
+            "This object is a single point — it has no width and no height. Its outline is \
+enlarged on screen so you can see where it is."
+        }
+        ObjectNote::NoBounds => {
+            "pdfce could not work out where this object is on the page, so no outline is drawn \
+for it. It is still selected, and it is still listed in the Objects panel."
+        }
+        ObjectNote::FormNotDecomposed => {
+            "This is a form XObject — a whole nested drawing that pdfce treats as ONE object. \
+The box covers the entire nested drawing, and the shapes inside it cannot be selected \
+individually yet."
+        }
+    }
+}
+
+/// The status bar's selection readout for exactly ONE selected object
+/// (ui-spec §C.5/§C.6).
+///
+/// Lives in the status bar rather than only in the dock because the dock is
+/// not open by default and the canvas is where the confusion happens: a
+/// readout the operator has to first discover a panel to reach is not a
+/// readout for the moment they are asking "what did I just click?".
+///
+/// Size and position are stated in PDF points, the same unit the Objects panel
+/// and `pdfce-cli` use, and to one decimal — enough to tell a 0.0-pt-tall rule
+/// from a 0.5-pt one, which is precisely the distinction that made a selection
+/// look like nothing at all. That number is also what keeps the canvas's
+/// deliberately-thickened outline for a degenerate object honest: the box on
+/// screen is 6 pt tall so it can be seen, and this line says the object is
+/// 0.0 pt tall, so the two can never be confused.
+///
+/// **One line, always.** The status bar is a bottom panel, so each line it
+/// grows takes height from the canvas — and under "Fit page" that re-fits the
+/// page smaller, making it visibly jump the instant something is selected.
+/// The headline therefore carries the short form of the leading disclosure and
+/// the full sentences live behind the expander (ui-spec §C.5: "the status bar
+/// gets ONE short summary line, not the full detail").
+pub fn selection_readout_single(summary: &ObjectSummary) -> String {
+    let kind = object_kind_label(summary.kind);
+    let detail = object_detail(summary);
+    let mut head = if detail.is_empty() {
+        format!("Selected: {kind}")
+    } else {
+        format!("Selected: {kind} · {detail}")
+    };
+    if let Some(note) = headline_note(summary) {
+        head.push_str(" · ");
+        head.push_str(object_note_short(note));
+    }
+    match summary.size() {
+        Some((w, h)) => format!(
+            "{head} — {w:.1} × {h:.1} pt at ({:.1}, {:.1}).",
+            summary.bounds.min.x, summary.bounds.min.y
+        ),
+        None => format!("{head}."),
+    }
+}
+
+/// The status bar's selection readout for a MULTI-object selection.
+///
+/// Orientation, not detail (ui-spec §C.6): after a marquee, the question is
+/// "did I catch what I meant?", and a per-object dump buries the answer. The
+/// Objects panel's highlighted rows are where per-object detail lives.
+pub fn selection_readout_multi(census: SelectionCensus) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if census.paths > 0 {
+        parts.push(format!("{} path(s)", census.paths));
+    }
+    if census.texts > 0 {
+        parts.push(format!("{} text object(s)", census.texts));
+    }
+    if census.images > 0 {
+        parts.push(format!("{} image(s)", census.images));
+    }
+    if census.forms > 0 {
+        parts.push(format!("{} form(s)", census.forms));
+    }
+    if parts.is_empty() {
+        return format!("Selected: {} object(s).", census.total);
+    }
+    format!("Selected: {} objects — {}.", census.total, parts.join(", "))
+}
+
+/// The status readout for a selection whose objects the current page model
+/// can no longer resolve.
+///
+/// A transient rather than an error: a `TargetId` can outlive the object it
+/// named for one frame after an edit, before `prune_canvas_selection` runs.
+/// Saying so beats silence, which would read as "the readout is broken".
+pub fn selection_readout_unresolved(count: usize) -> String {
+    format!("Selected: {count} object(s) — details are not available for this page right now.")
+}
+
+/// Tooltip on the status bar's selection readout: says where the fuller
+/// answer lives, so the readout doubles as the Objects panel's own
+/// discoverability hint.
+pub fn selection_readout_tooltip() -> &'static str {
+    "What is selected on the page right now. Open the Objects panel for the full list, and to \
+click rows to select objects you cannot see."
 }
 
 /// Plain-language name for a path's painting disposition (§8.5.3, Table 60).
