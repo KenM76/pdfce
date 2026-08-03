@@ -176,7 +176,116 @@ impl FillState {
             Self::Device { raw, .. } | Self::Other { raw } => raw.clone(),
         }
     }
+
+    /// The operator bytes that reinstate this colour as the **stroking**
+    /// colour (Pass 19.2).
+    ///
+    /// The only difference from [`Self::restore_bytes`] is the `Default`
+    /// arm, and it is a difference that matters: §8.6.8 gives the stroking
+    /// and non-stroking colours *separate* graphics-state entries with the
+    /// same initial value (black `DeviceGray 0`), and the operators that
+    /// set them are spelled in different cases — `G`/`RG`/`K`/`SC`/`SCN`
+    /// stroking, `g`/`rg`/`k`/`sc`/`scn` non-stroking. Restoring an unset
+    /// stroking colour with `0 g` would put the *fill* colour back to black
+    /// while leaving the stroking colour wherever synthetic bold left it —
+    /// a silent corruption of two parameters at once.
+    ///
+    /// The `Device`/`Other` arms re-emit their own recorded bytes, which
+    /// were already captured from an uppercase operator by the walk, so no
+    /// case conversion is performed (or possible — an `Other` restore is an
+    /// opaque `CS … SCN` sequence).
+    pub(crate) fn restore_bytes_stroking(&self) -> Vec<u8> {
+        match self {
+            Self::Default => b"0 G".to_vec(),
+            Self::Device { raw, .. } | Self::Other { raw } => raw.clone(),
+        }
+    }
 }
+
+/// The line width (§8.4.3.2 `w`) in effect at a show operator, recorded so
+/// Pass 19.2's synthetic bold can restore it (Pass 19.2).
+///
+/// ## Why this is tracked at all, and why it is not a `f64`
+///
+/// Synthetic bold emits text rendering mode 2 (fill-then-stroke) plus a
+/// line width, and §9.3.6 interprets that width **in user space** — it is
+/// the ordinary graphics-state line width, the same one a later `S` on a
+/// *path* would use. So a synthetic-bold run that does not put the width
+/// back does not merely leave stale text state: it changes the weight of
+/// every subsequent stroked path in the content stream. That is a
+/// minimal-diff violation in content pdfce never claimed to touch.
+///
+/// It is an enum rather than a bare number for the same reason
+/// [`crate::text_state::AmbientOrigin`] is: the restore must know whether
+/// the value is *provably* Table 52's initial (in which case `1 w` is
+/// correct and byte-faithful in spirit) or was set by an operator whose
+/// exact spelling should come back unchanged.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum LineWidth {
+    /// No `w` operator has run; Table 52's initial line width of **1.0** is
+    /// in force.
+    Initial,
+    /// A `w` operator set it; its raw bytes are kept for a byte-faithful
+    /// restore (`0.5000 w` comes back as `0.5000 w`, not `0.5 w`).
+    Observed {
+        /// The width operand as parsed — used to decide whether an emitted
+        /// width is a no-op, never to spell the restore.
+        value: f64,
+        /// The whole operator as written, e.g. `0.5000 w`.
+        raw: Vec<u8>,
+    },
+}
+
+impl LineWidth {
+    /// The width in force, for the no-op comparison.
+    pub(crate) const fn value(&self) -> f64 {
+        match self {
+            // §8.4.3.2 / Table 52: the initial line width is 1.0.
+            Self::Initial => 1.0,
+            Self::Observed { value, .. } => *value,
+        }
+    }
+
+    /// The operator bytes that reinstate this line width.
+    pub(crate) fn restore_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::Initial => b"1 w".to_vec(),
+            Self::Observed { raw, .. } => raw.clone(),
+        }
+    }
+}
+
+/// Multiply two PDF 3×2 matrices, `m` applied **first** (§8.3.3).
+///
+/// A PDF matrix `[a b c d e f]` denotes
+///
+/// ```text
+/// | a  b  0 |
+/// | c  d  0 |
+/// | e  f  1 |
+/// ```
+///
+/// and a point is a **row** vector multiplied on the left, so composing
+/// "apply `m`, then apply `n`" is the product `m × n` in that order. Getting
+/// the order backwards produces a transform that is right for every
+/// symmetric case (pure scale, pure translation applied to the origin) and
+/// wrong for exactly the asymmetric ones this Pass introduces — a shear, and
+/// a translation under a shear. That is why this is a named function with a
+/// test rather than six lines inlined at the two call sites.
+pub(crate) fn mat_mul(m: [f64; 6], n: [f64; 6]) -> [f64; 6] {
+    [
+        m[0] * n[0] + m[1] * n[2],
+        m[0] * n[1] + m[1] * n[3],
+        m[2] * n[0] + m[3] * n[2],
+        m[2] * n[1] + m[3] * n[3],
+        m[4] * n[0] + m[5] * n[2] + n[4],
+        m[4] * n[1] + m[5] * n[3] + n[5],
+    ]
+}
+
+/// The identity matrix — `BT`'s reset value for both `Tm` and `Tlm`
+/// (§9.4.1 Table 107).
+pub(crate) const IDENTITY: [f64; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
 
 /// How the rest of the edited line is treated after a REPLACE (surgery ref
 /// §3). The default is [`Self::Reflow`] — in-place editing intends the line
@@ -402,6 +511,37 @@ pub(crate) struct ShowData {
     /// The fill colour in effect (§8.6.8) — recorded for Pass 14.2's
     /// colour-restore; unused by Pass 14.1's REPLACE.
     pub(crate) fill_color: FillState,
+    /// The **stroking** colour in effect (§8.6.8) — recorded for Pass
+    /// 19.2's synthetic bold, which paints in text rendering mode 2 and
+    /// must therefore both *set* the stroking colour (to match the fill,
+    /// §9.3.6) and put the previous one back.
+    pub(crate) stroke_color: FillState,
+    /// The line width in effect (§8.4.3.2) — recorded for the same reason:
+    /// a stroked-text width is the ordinary user-space line width, shared
+    /// with path stroking, so it must be restored.
+    pub(crate) line_width: LineWidth,
+    /// The text matrix `Tm` in force at the **start** of this show operator
+    /// (§9.4.2), i.e. before any of its own glyphs have advanced it.
+    ///
+    /// Pass 19.2 needs this because synthetic italic is a **shear
+    /// premultiplied into `Tm`**, and a shear can only be premultiplied
+    /// into a matrix that is known. Nothing before 19.2 read the text
+    /// matrix in the authoring path at all: 14.1's relayout works in
+    /// *deltas* (add ΔA to a follower's `e`), which never requires knowing
+    /// the absolute matrix.
+    pub(crate) text_matrix: [f64; 6],
+    /// Whether [`Self::text_matrix`] is trustworthy.
+    ///
+    /// The walk advances `Tm` across each show operator by the §9.4.4
+    /// displacement of its glyphs, which requires resolving the font and
+    /// its widths. When that is not possible — an unresolvable font
+    /// resource, or a composite run this walk does not decode — the
+    /// accumulated matrix silently stops tracking reality. Rather than
+    /// publish a plausible-looking wrong matrix, the walk marks it
+    /// **unknown** and any consumer that needs an absolute position
+    /// refuses (rule 4: fuzzy, never sneaky). A `Tm`/`Td`/`TD`/`T*`
+    /// operator re-establishes the matrix absolutely and clears the flag.
+    pub(crate) matrix_known: bool,
 }
 
 impl ShowData {
@@ -430,6 +570,16 @@ pub(crate) enum Rec {
     Tm([f64; 6]),
     /// A `Td`/`TD`/`T*`/`'`/`"` — a line boundary reflow does not cross.
     Boundary,
+    /// `ET` — the end of a text object (§9.4.1).
+    ///
+    /// Recorded from Pass 19.2 onward because synthetic italic must know
+    /// **where the current text object stops**. The shear is emitted as an
+    /// injected `Tm`, and any `Tm` overwrites `Tlm` as well (§9.4.2 Table
+    /// 108), so a later `Td`/`TD`/`T*` *in the same text object* would
+    /// derive its line from pdfce's injected matrix instead of the
+    /// producer's. Past `ET` the question is moot: the next `BT` resets
+    /// both matrices to the identity (Table 107), so nothing carries over.
+    EndText,
     /// Anything else.
     Ignore,
 }
@@ -458,6 +608,20 @@ pub(crate) struct Walk<'a> {
     gs_stack: Vec<GState>,
     // marked-content stack (§14.6/§14.7) — the current /MCID is the top.
     mc_stack: Vec<Option<i64>>,
+    /// The text matrix `Tm` (§9.4.2), maintained across the whole walk.
+    ///
+    /// Unlike the six §9.3 parameters this is **not** graphics state — it
+    /// is not saved by `q` or restored by `Q` (Table 52 lists no text
+    /// matrix), and it exists only between `BT` and `ET`. So it lives on
+    /// the walk rather than inside [`GState`], and that distinction is
+    /// load-bearing: putting it in `GState` would have made a `Q` restore a
+    /// text matrix, which no conforming reader does.
+    tm: [f64; 6],
+    /// The line matrix `Tlm` (§9.4.2) — what `Td`/`TD`/`T*` translate from.
+    tlm: [f64; 6],
+    /// Whether [`Self::tm`] still reflects reality; see
+    /// [`ShowData::matrix_known`].
+    tm_known: bool,
     pub(crate) recs: Vec<OpRec>,
 }
 
@@ -493,6 +657,15 @@ struct GState {
     /// operator, so a following `sc`/`scn` can record a re-emittable
     /// `cs … scn` sequence for the `Other` case.
     last_cs: Option<Vec<u8>>,
+    /// The **stroking** colour (§8.6.8) — Pass 19.2. A separate
+    /// graphics-state entry from `fill`, set by the uppercase operators.
+    stroke: FillState,
+    /// The stroking analogue of `last_cs`: the most recent `CS`
+    /// (set-stroking-colour-space) operator's bytes.
+    last_cs_stroking: Option<Vec<u8>>,
+    /// The line width (§8.4.3.2) — Pass 19.2, for the synthetic-bold
+    /// stroke width restore.
+    line_width: LineWidth,
 }
 
 impl GState {
@@ -505,6 +678,9 @@ impl GState {
             ambient: AmbientTextState::initial(),
             fill: FillState::Default,
             last_cs: None,
+            stroke: FillState::Default,
+            last_cs_stroking: None,
+            line_width: LineWidth::Initial,
         }
     }
 }
@@ -518,6 +694,9 @@ impl<'a> Walk<'a> {
             gs: GState::initial(),
             gs_stack: Vec::new(),
             mc_stack: Vec::new(),
+            tm: IDENTITY,
+            tlm: IDENTITY,
+            tm_known: true,
             recs: Vec::new(),
         }
     }
@@ -544,6 +723,69 @@ impl<'a> Walk<'a> {
 
     fn current_mcid(&self) -> Option<i64> {
         self.mc_stack.iter().rev().find_map(|m| *m)
+    }
+
+    /// Apply §9.4.2 Table 108's next-line rule: `Tlm_new = translate(tx, ty)
+    /// × Tlm_old`, and `Tm = Tlm_new`.
+    ///
+    /// Note that the translation composes with the **line** matrix, not with
+    /// the current text matrix — which is the whole reason a `Td` after a
+    /// long run returns to the left margin instead of continuing from where
+    /// the glyphs stopped. It is also why an injected `Tm` is dangerous:
+    /// `Tm` overwrites `Tlm` too, so the *next* `Td` would translate from
+    /// pdfce's matrix rather than the producer's line origin.
+    ///
+    /// The matrix becomes known again here for the same reason it does at a
+    /// `Tm`: the new value is derived from `Tlm`, which is only ever set
+    /// absolutely (by `BT`, by `Tm`, or by a previous next-line), and never
+    /// drifts with glyph advances.
+    fn next_line(&mut self, tx: f64, ty: f64) {
+        self.tlm = mat_mul([1.0, 0.0, 0.0, 1.0, tx, ty], self.tlm);
+        self.tm = self.tlm;
+        self.tm_known = true;
+    }
+
+    /// Advance `Tm` by one show operator's total horizontal displacement
+    /// (§9.4.4), in the **unrotated text space** the displacement is defined
+    /// in: `Tm_new = translate(tx, 0) × Tm_old`.
+    ///
+    /// `tx` is the sum over the operator's elements of
+    /// `((w0 − Tj/1000)·Tfs + Tc + Tw)·Th` for each shown glyph, and
+    /// `(−Tj/1000)·Tfs·Th` for each standalone `TJ` number ("since no glyph
+    /// was painted", §9.4.3's implementation note — the `Tc`/`Tw` terms do
+    /// **not** apply to a bare adjustment, and adding them is the classic
+    /// way to make justified text drift).
+    ///
+    /// If the font could not be resolved, or the run is composite (this walk
+    /// decodes only simple fonts), the displacement is unknowable here and
+    /// the matrix is marked **unknown** rather than left silently stale.
+    fn advance_matrix(&mut self, font: Option<&ExtractFont>, elems: &[ShowElem]) {
+        let Some(font) = font.filter(|f| f.is_simple()) else {
+            self.tm_known = false;
+            return;
+        };
+        let p = self.gs.ambient.params();
+        let mut tx = 0.0;
+        for e in elems {
+            match e {
+                ShowElem::Str(bytes) => {
+                    for &code in bytes {
+                        tx += glyph_advance_with(
+                            font,
+                            code,
+                            self.gs.tf_size,
+                            p.char_spacing,
+                            p.word_spacing,
+                            p.h_scale,
+                        );
+                    }
+                }
+                ShowElem::Num(v) => {
+                    tx += (-v / 1000.0) * self.gs.tf_size * p.h_scale;
+                }
+            }
+        }
+        self.tm = mat_mul([1.0, 0.0, 0.0, 1.0, tx, 0.0], self.tm);
     }
 
     /// Build a [`FillState::Device`] from a device fill operator's numeric
@@ -624,8 +866,30 @@ impl<'a> Walk<'a> {
                 self.gs.ambient.apply_operator(name, &n, raw);
                 Rec::Ignore
             }
+            // --- text object delimiters (§9.4.1 Table 107) ---
+            //
+            // Pass 19.2. `BT` "shall initialize the text matrix Tm and the
+            // text line matrix Tlm to the identity matrix" — and NOTHING
+            // else: it does not reset text state (§9.3's retention rule),
+            // which is why the ambient ladder exists at all.
+            b"BT" => {
+                self.tm = IDENTITY;
+                self.tlm = IDENTITY;
+                self.tm_known = true;
+                Rec::Ignore
+            }
+            b"ET" => Rec::EndText,
             b"Tm" => match n.as_slice() {
-                [a, b, c, d, e, f] => Rec::Tm([*a, *b, *c, *d, *e, *f]),
+                [a, b, c, d, e, f] => {
+                    let m = [*a, *b, *c, *d, *e, *f];
+                    // "Tm shall set the text matrix AND the text line
+                    // matrix" (Table 108) — both, absolutely, which also
+                    // makes the matrix known again after any drift.
+                    self.tm = m;
+                    self.tlm = m;
+                    self.tm_known = true;
+                    Rec::Tm(m)
+                }
                 _ => Rec::Ignore,
             },
             // `TD` additionally "sets the leading parameter to -ty"
@@ -634,14 +898,76 @@ impl<'a> Walk<'a> {
             // ObservedIndirect, because re-emitting the `TD` to restore it
             // would also move the line.
             b"TD" => {
-                if let [_, ty] = n.as_slice() {
+                if let [tx, ty] = n.as_slice() {
                     self.gs
                         .ambient
                         .set_indirect(TextStateParam::Leading, -*ty, "TD");
+                    self.next_line(*tx, *ty);
                 }
                 Rec::Boundary
             }
-            b"Td" | b"T*" => Rec::Boundary,
+            b"Td" => {
+                if let [tx, ty] = n.as_slice() {
+                    self.next_line(*tx, *ty);
+                }
+                Rec::Boundary
+            }
+            // `T*` is "0 −TL Td" (Table 108). `TL` comes from the shared
+            // ambient state, which is exactly why 19.0 had to track it.
+            b"T*" => {
+                self.next_line(0.0, -self.gs.ambient.leading.value);
+                Rec::Boundary
+            }
+            // --- general graphics state (§8.4.3.2) ---
+            //
+            // Pass 19.2: the line width is not text state, but synthetic
+            // bold sets it (stroked text takes its width from here, in
+            // USER space, §9.3.6), so it must be restorable.
+            b"w" => {
+                if let Some(v) = n.first() {
+                    self.gs.line_width = LineWidth::Observed {
+                        value: *v,
+                        raw: buf.get(start..end).unwrap_or_default().to_vec(),
+                    };
+                }
+                Rec::Ignore
+            }
+            // --- STROKING colour (§8.6.8) ---
+            //
+            // The uppercase twins of the fill arms below. Text painting
+            // ignored these before Pass 19.2 because rendering mode 0 does
+            // not stroke; synthetic bold uses mode 2, which does.
+            b"G" => {
+                self.gs.stroke = Self::device_fill(DeviceSpace::Gray, &n, buf, start, end);
+                self.gs.last_cs_stroking = None;
+                Rec::Ignore
+            }
+            b"RG" => {
+                self.gs.stroke = Self::device_fill(DeviceSpace::Rgb, &n, buf, start, end);
+                self.gs.last_cs_stroking = None;
+                Rec::Ignore
+            }
+            b"K" => {
+                self.gs.stroke = Self::device_fill(DeviceSpace::Cmyk, &n, buf, start, end);
+                self.gs.last_cs_stroking = None;
+                Rec::Ignore
+            }
+            b"CS" => {
+                self.gs.last_cs_stroking = buf.get(start..end).map(<[u8]>::to_vec);
+                Rec::Ignore
+            }
+            b"SC" | b"SCN" => {
+                let mut raw = Vec::new();
+                if let Some(cs) = &self.gs.last_cs_stroking {
+                    raw.extend_from_slice(cs);
+                    raw.push(b' ');
+                }
+                if let Some(here) = buf.get(start..end) {
+                    raw.extend_from_slice(here);
+                }
+                self.gs.stroke = FillState::Other { raw };
+                Rec::Ignore
+            }
             // Fill-colour graphics state (§8.6.8). Recorded so Pass 14.2's
             // formatting surgery can classify (device vs Other) and RESTORE
             // the prior colour byte-faithfully after a wrapped edit. Only
@@ -696,13 +1022,24 @@ impl<'a> Walk<'a> {
             }
             b"Tj" => self.record_show(op, ShowOp::Tj),
             b"TJ" => self.record_show(op, ShowOp::TJ),
-            b"'" => self.record_show(op, ShowOp::Quote),
+            // `'` is "T* then Tj" (Table 109), so it moves to the next line
+            // BEFORE showing — the matrix recorded on the show must be the
+            // post-move one.
+            b"'" => {
+                self.next_line(0.0, -self.gs.ambient.leading.value);
+                self.record_show(op, ShowOp::Quote)
+            }
             b"\"" => {
                 // Table 109: `"` sets `Tw` and `Tc` before showing. Routed
                 // through the shared update rule so both are recorded with
                 // the same provenance discipline as a standalone operator.
                 let raw = buf.get(start..end).unwrap_or_default();
                 self.gs.ambient.apply_operator(name, &n, raw);
+                // `"` is `aw ac string "` ≡ set Tw/Tc, then `'` — so it too
+                // moves to the next line before showing. The leading read
+                // here is the value AFTER the Tw/Tc update, which is
+                // correct: `"` does not touch `TL`.
+                self.next_line(0.0, -self.gs.ambient.leading.value);
                 self.record_show(op, ShowOp::DoubleQuote)
             }
             _ => Rec::Ignore,
@@ -766,7 +1103,10 @@ impl<'a> Walk<'a> {
             }
         }
 
-        Rec::Show(Box::new(ShowData {
+        // Snapshot the matrices BEFORE this operator's own glyphs advance
+        // them: `text_matrix` is defined as the matrix in force at the start
+        // of the operator, which is what a shear must be premultiplied into.
+        let at_start = ShowData {
             font_name: self.gs.font_name.clone(),
             tf_size: self.gs.tf_size,
             text_state: self.gs.ambient.clone(),
@@ -776,7 +1116,13 @@ impl<'a> Walk<'a> {
             text,
             slots,
             fill_color: self.gs.fill.clone(),
-        }))
+            stroke_color: self.gs.stroke.clone(),
+            line_width: self.gs.line_width.clone(),
+            text_matrix: self.tm,
+            matrix_known: self.tm_known,
+        };
+        self.advance_matrix(font.as_ref(), &at_start.elems);
+        Rec::Show(Box::new(at_start))
     }
 }
 

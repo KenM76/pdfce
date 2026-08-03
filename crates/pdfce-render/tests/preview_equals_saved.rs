@@ -246,7 +246,7 @@ use pdfce_core::fontdata::Std14;
 use pdfce_core::page_tree::{self, Page, Rect};
 use pdfce_core::text_edit::{
     AddTextRequest, EditOptions, EditRequest, FormatOptions, FormatRequest, MetricSpec,
-    ReflowRequest, ScriptPosition,
+    ReflowRequest, ScriptPosition, StyleSynthesis,
 };
 use pdfce_core::vartext::{Quadding, TextColor};
 use pdfce_core::vector::{AxisConstraint, Point};
@@ -528,6 +528,91 @@ fn format_text_spacing_preview_equals_saved() {
     )
     .expect("format_text applies the 19.1 spacing controls");
     check("format-text-spacing", &s, 0, Visible::Yes);
+}
+
+/// `format_text` with a **free-form baseline rise** (Pass 19.2) — the
+/// deliberate exceed over Acrobat's coarse toggle.
+///
+/// Separate from the spacing case above because the operand is now the
+/// operator's own number rather than one of two pdfce-derived constants: an
+/// arbitrary `Ts` exercises the same §9.3.7 translation with a value the
+/// emitter did not choose, which is the case where a rounding or unit
+/// mismatch between the two sides would show.
+#[test]
+fn format_text_free_form_rise_preview_equals_saved() {
+    let mut s = session("textedit", "format_color.pdf");
+    s.format_text(
+        &FormatRequest::new(0, "hello").rise(MetricSpec::Absolute(4.5)),
+        &FormatOptions::default(),
+    )
+    .expect("format_text applies a free-form rise");
+    check("format-text-rise", &s, 0, Visible::Yes);
+}
+
+/// `format_text` with **synthetic bold** (Pass 19.2) — and the single most
+/// likely R85 failure in this slice.
+///
+/// Faux bold emits a *rendering mode* (`2 Tr`), a *line width* and a
+/// *stroking colour*. Every one of those is a graphics-state parameter the
+/// rasterizer must reproduce on both sides, and the fixture's text is BLUE,
+/// so §9.3.6's stroking-colour rule is under test here too: if the two sides
+/// disagreed about which colour the outline takes, the rasters would differ
+/// in exactly the pixels that make the letterform.
+///
+/// The sibling gate in `synthetic_style_render.rs` proves the rasterizer
+/// *has* these capabilities at all; this one proves that what the operator
+/// sees before saving is what the file contains.
+#[test]
+fn format_text_synthetic_bold_preview_equals_saved() {
+    let mut s = session("textedit", "format_color.pdf");
+    s.format_text(
+        &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+        &FormatOptions::default(),
+    )
+    .expect("format_text applies synthetic bold");
+    check("format-text-synthetic-bold", &s, 0, Visible::Yes);
+}
+
+/// `format_text` with **synthetic italic** (Pass 19.2) — the matrix half.
+///
+/// The shear is emitted as a pair of injected absolute `Tm` operators, which
+/// is a *positioning* rewrite rather than a state change, and it is the only
+/// thing this slice emits that the R88 restore ladder does not cover. If the
+/// rasterizer resolved either injected matrix differently from the way the
+/// saved file re-reads it, the run would sit or lean differently on screen
+/// than on disk.
+#[test]
+fn format_text_synthetic_italic_preview_equals_saved() {
+    let mut s = session("textedit", "format_color.pdf");
+    s.format_text(
+        &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Italic),
+        &FormatOptions::default(),
+    )
+    .expect("format_text applies synthetic italic");
+    check("format-text-synthetic-italic", &s, 0, Visible::Yes);
+}
+
+/// Both syntheses plus a rise, together — the combination decision 019 §3.6
+/// singles out because a shear displaces a RAISED run horizontally by
+/// `Trise · tan θ`. Three mechanisms interacting is where a preview/saved
+/// divergence is most likely to hide, so it gets its own case rather than
+/// being assumed to follow from the three above.
+#[test]
+fn format_text_synthetic_bold_italic_with_rise_preview_equals_saved() {
+    let mut s = session("textedit", "format_color.pdf");
+    s.format_text(
+        &FormatRequest::new(0, "hello")
+            .rise(MetricSpec::Absolute(5.0))
+            .synthetic(StyleSynthesis::BoldItalic),
+        &FormatOptions::default(),
+    )
+    .expect("format_text applies bold+italic+rise");
+    check(
+        "format-text-synthetic-bold-italic-rise",
+        &s,
+        0,
+        Visible::Yes,
+    );
 }
 
 /// `reflow` — re-wrapping a whole paragraph block to a new width

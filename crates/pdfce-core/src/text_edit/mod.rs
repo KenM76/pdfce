@@ -67,6 +67,7 @@ pub mod format;
 pub mod model;
 pub mod reflow;
 pub mod reflow_apply;
+pub mod synth;
 
 pub use addtext::{
     AddTextError, AddTextOutcome, AddTextReport, AddTextRequest, AddTextWrapPreview,
@@ -92,3 +93,7 @@ pub use reflow::{
     reflow_recognition_options,
 };
 pub use reflow_apply::{ReflowApplyError, ReflowApplyReport, ReflowOutcome, apply_reflow};
+pub use synth::{
+    BOLD_STROKE_RATIO, OBLIQUE_TAN, StyleSynthesis, SynthesisOffer, SynthesisPath,
+    bold_stroke_width, detect as detect_style_synthesis,
+};

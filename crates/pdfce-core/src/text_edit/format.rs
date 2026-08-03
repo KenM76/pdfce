@@ -205,12 +205,16 @@ use crate::page_tree::{self, PageTreeError};
 use crate::span::ByteSpan;
 use crate::text_edit::EditGlyphSource;
 use crate::text_edit::edit::{
-    EditError, EditRequest, FollowerDisposition, FontClass, MatchRun, OpRec, Rec, ShowData,
-    ShowElem, ShowOp, Walk, carried_codes, classify_font, compensating_tj, emit_show, emit_tm,
-    find_anchor, glyph_advance_with, is_subset_tag, match_run, resolve_font_dict, splice,
-    trust_disclosure, write_incremental,
+    EditError, EditRequest, FillState, FollowerDisposition, FontClass, MatchRun, OpRec, Rec,
+    ShowData, ShowElem, ShowOp, Walk, carried_codes, classify_font, compensating_tj, emit_show,
+    emit_tm, find_anchor, glyph_advance_with, is_subset_tag, mat_mul, match_run, resolve_font_dict,
+    splice, trust_disclosure, write_incremental,
 };
 use crate::text_edit::encoding::{InverseEncoding, RInvTrigger, Refusal};
+use crate::text_edit::synth::{
+    BOLD_STROKE_RATIO, StyleSynthesis, SynthesisOffer, SynthesisPath, bold_stroke_width,
+    matrix_scale, name_claims_bold, name_claims_italic, shear_into,
+};
 use crate::text_extract::font::ExtractFont;
 use crate::text_state::{AmbientRestoreError, AmbientTextState, TextStateParam};
 use crate::writer::content::emit_number;
@@ -575,6 +579,32 @@ pub struct FormatRequest {
     /// New baseline position — the coarse superscript/subscript toggle.
     /// `None` leaves both the run's rise and its size alone.
     pub set_script: Option<ScriptPosition>,
+    /// New **free-form** baseline rise `Ts` (§9.3.7), in the operator's own
+    /// unit (R89) — Pass 19.2's deliberate exceed over Acrobat, which
+    /// dropped free-form baseline offset when text editing was consolidated
+    /// (decision 019 §1.1/§3.2).
+    ///
+    /// [`MetricSpec::Absolute`] is the default and is written **as typed**:
+    /// a rise is in unscaled text-space units, so what the operator asked
+    /// for is what the file gets. [`MetricSpec::Relative`] opts the value
+    /// into R89's re-derivation, resolving against the run's **base** size
+    /// so a later resize moves the rise proportionally.
+    ///
+    /// Mutually exclusive with [`Self::set_script`]: both write `Ts`, and
+    /// silently letting one win would be a rule-4 failure. Requesting both
+    /// is [`FormatError::ConflictingRise`].
+    pub set_rise: Option<MetricSpec>,
+    /// Apply synthetic bold and/or italic to the run (R90) — a **fallback**
+    /// for when no real Bold/Italic face resolves, never an alternative to
+    /// one.
+    ///
+    /// Setting this is the operator's explicit, per-use acceptance of the
+    /// offer; there is no global preference and nothing is ever applied
+    /// silently (deliberately stricter than Acrobat's set-and-forget
+    /// "Enable Artificial Bold/Italic styles"). If a real face *does*
+    /// resolve on the page, the request is **refused** by name and pointed
+    /// at that face ([`FormatError::RealFaceAvailable`]).
+    pub set_synthetic: Option<StyleSynthesis>,
 }
 
 impl FormatRequest {
@@ -593,6 +623,8 @@ impl FormatRequest {
             set_char_spacing: None,
             set_h_scale: None,
             set_script: None,
+            set_rise: None,
+            set_synthetic: None,
         }
     }
 
@@ -640,6 +672,20 @@ impl FormatRequest {
         self
     }
 
+    /// Add a free-form baseline rise (`Ts`), returning `self` (Pass 19.2).
+    #[must_use]
+    pub fn rise(mut self, spec: MetricSpec) -> Self {
+        self.set_rise = Some(spec);
+        self
+    }
+
+    /// Request synthetic bold and/or italic, returning `self` (Pass 19.2).
+    #[must_use]
+    pub fn synthetic(mut self, synthesis: StyleSynthesis) -> Self {
+        self.set_synthetic = Some(synthesis);
+        self
+    }
+
     /// Whether any formatting operation was requested.
     ///
     /// `pub(crate)` rather than private because **two** entry points must
@@ -659,6 +705,14 @@ impl FormatRequest {
             && self.set_char_spacing.is_none()
             && self.set_h_scale.is_none()
             && self.set_script.is_none()
+            && self.set_rise.is_none()
+            // Spelled as a `match` rather than `is_none_or` because this
+            // predicate is `const` (one definition, two callers — see the
+            // doc comment) and `Option::is_none_or` is not yet const.
+            && match self.set_synthetic {
+                None => true,
+                Some(s) => s.is_none(),
+            }
     }
 }
 
@@ -726,8 +780,25 @@ pub struct FormatReport {
     /// the run's `Tf` size. `None` for [`ScriptPosition::Normal`], which
     /// does not resize.
     pub script_size: Option<(f64, f64)>,
-    /// `(ambient Ts, emitted Ts)` when the script toggle changed the rise.
+    /// `(ambient Ts, emitted Ts)` when the script toggle **or** the Pass
+    /// 19.2 free-form rise changed the baseline offset.
     pub rise_change: Option<(f64, f64)>,
+    /// What was synthesized, if anything (Pass 19.2, R90).
+    ///
+    /// This is the **in-session** half of P-selfevident persistence: nothing
+    /// is written into the PDF to record it. The saved bytes are
+    /// re-detectable on their own — see
+    /// [`synth::detect`](crate::text_edit::synth::detect).
+    pub synthesis: StyleSynthesis,
+    /// The user-space stroke width a synthetic bold emitted (§9.3.6), quoted
+    /// by value so the number is never hidden from the operator (rule 4).
+    pub synthetic_bold_width: Option<f64>,
+    /// The `Tm` shear term a synthetic italic emitted, and the horizontal
+    /// displacement `Trise · tan θ` it imposes on the run **because** the
+    /// run is raised — decision 019 §3.6's named `Ts` × oblique interaction.
+    /// The second element is `0.0` for a run at the baseline, which is the
+    /// usual case and the reason the interaction surprises people.
+    pub synthetic_italic: Option<(f64, f64)>,
     /// Which parameters were restored by **re-spelling** the ambient value
     /// rather than by replaying the producer's own bytes — the
     /// [`AmbientOrigin::ObservedIndirect`](crate::text_state::AmbientOrigin)
@@ -786,6 +857,41 @@ pub enum FormatError {
     /// A `--h-scale` percentage outside the range pdfce will write.
     #[error("invalid horizontal scaling: {0}")]
     BadHorizScale(String),
+    /// Both a free-form rise and a super/subscript toggle were requested.
+    /// Both write `Ts`; pdfce refuses rather than silently picking one.
+    #[error(
+        "a free-form baseline rise and a super/subscript toggle were both requested, and both \
+         set the same operator (`Ts`, §9.3.7). Ask for one of them: the toggle applies pdfce's \
+         documented script metrics (rise AND a size reduction), the free-form rise applies \
+         exactly the number given and does not resize."
+    )]
+    ConflictingRise,
+    /// Synthetic bold/italic was requested but a **real** face with that
+    /// style resolves on the page. R90 makes synthesis fallback-only, so
+    /// pdfce refuses and names the real face to use instead. Nothing was
+    /// applied.
+    #[error(
+        "synthetic {style} was requested for '{run_font}', but a REAL {style} face is available \
+         on this page as '{real_font}' (resource /{resource}). Synthesis is a fallback for when \
+         no real face resolves, never an alternative to one (rule R90) — change the run's family \
+         to '{real_font}' instead. Nothing was applied."
+    )]
+    RealFaceAvailable {
+        /// The style asked for, e.g. `bold`.
+        style: &'static str,
+        /// The run's current `/BaseFont`.
+        run_font: String,
+        /// The `/BaseFont` of the real face that resolves.
+        real_font: String,
+        /// Its `/Font` resource key.
+        resource: String,
+    },
+    /// Synthetic italic cannot be applied to this run, because the shear it
+    /// requires is a `Tm` injection and this run's context will not survive
+    /// one. Nothing was applied. See the variant payload for which of the
+    /// three named conditions fired.
+    #[error("synthetic italic cannot be applied to this run: {0}")]
+    ShearUnsupported(String),
     /// A `--set-color` model/component mismatch or out-of-range component.
     #[error("invalid colour: {0}")]
     BadColor(String),
@@ -983,6 +1089,13 @@ pub(crate) fn plan_format(
     //     them consistently rather than carrying a stale operand. ---
     let base_size = req.set_size.unwrap_or(orig_size);
 
+    // --- Pass 19.2: the free-form rise and the script toggle both write
+    //     `Ts`, so asking for both is a conflict pdfce refuses rather than
+    //     resolving silently (rule 4). Checked before anything is planned. ---
+    if req.set_rise.is_some() && req.set_script.is_some() {
+        return Err(FormatError::ConflictingRise);
+    }
+
     // --- resolve the super/subscript toggle into its two derived operands
     //     (decision 019 §3.2, R89) ---
     let script = req.set_script;
@@ -996,6 +1109,24 @@ pub(crate) fn plan_format(
     // flattens an inherited rise without a free-form control.
     let script_rise =
         script.map(|_| script_metrics.map_or(0.0, |m| derived_operand(base_size * m.rise_ratio)));
+
+    // --- Pass 19.2: the free-form rise (decision 019 §3.2's deliberate
+    //     exceed). It resolves through the SAME `MetricSpec` model as `Tc`
+    //     and against the SAME base size (R89), so a run that is later
+    //     resized moves a `Relative` rise proportionally and leaves an
+    //     `Absolute` one exactly where the operator put it.
+    //
+    //     An ABSOLUTE spec is written as typed — deliberately NOT passed
+    //     through `derived_operand`, because rounding a number a human typed
+    //     is a silent modification (see that function's own docs). Only the
+    //     RELATIVE case is pdfce's arithmetic and therefore rounded. ---
+    let free_rise = req.set_rise.map(|spec| match spec {
+        MetricSpec::Absolute(v) => v,
+        MetricSpec::Relative(_) => derived_operand(spec.resolve(base_size)),
+    });
+    // Exactly one of the two can be present (the conflict was refused
+    // above), so this is the single `Ts` operand for the whole planner.
+    let new_rise = script_rise.or(free_rise);
 
     // --- resolve `Tc` (R89: relative specs resolve against the BASE size,
     //     not the script-reduced one, so a superscript keeps the same
@@ -1130,7 +1261,7 @@ pub(crate) fn plan_format(
             &mut emitted_state,
         )?;
     }
-    if let Some(rise) = script_rise {
+    if let Some(rise) = new_rise {
         push_state_param(
             &mut set_ops,
             &mut restore_ops,
@@ -1140,6 +1271,50 @@ pub(crate) fn plan_format(
             &mut restore_narrowed,
             &mut emitted_state,
         )?;
+    }
+
+    // --- Pass 19.2: synthetic bold / italic (R90, decision 019 §3.6) ---
+    //
+    // The gate runs FIRST and is fallback-only: if a real Bold/Italic face
+    // resolves on this page, the request is refused and pointed at it. Only
+    // then is anything emitted.
+    let synthesis = req.set_synthetic.unwrap_or_default();
+    let mut synthetic_bold_width: Option<f64> = None;
+    let mut synthetic_italic: Option<(f64, f64)> = None;
+    let mut synthesis_offer: Option<SynthesisOffer> = None;
+    if !synthesis.is_none() {
+        // The face the run will actually be shown in after this edit — a
+        // family change is resolved before synthesis is considered, so
+        // "change the family AND fake bold on top" is gated against the
+        // TARGET's siblings, not the original's.
+        let effective_font = font_plan
+            .as_ref()
+            .map_or(&orig_font.base_font, |p| &p.font.base_font);
+        gate_synthesis(
+            doc,
+            page_resources(page),
+            effective_font,
+            synthesis,
+            set_font_name,
+        )?;
+        synthesis_offer = Some(SynthesisOffer {
+            synthesis,
+            base_font: effective_font.clone(),
+            path: SynthesisPath::InPlaceEdit,
+        });
+
+        if synthesis.bold() {
+            let width = plan_synthetic_bold(
+                &mut set_ops,
+                &mut restore_ops,
+                anchor,
+                emitted_size,
+                req.set_fill.as_ref(),
+                &mut restore_narrowed,
+                &mut emitted_state,
+            )?;
+            synthetic_bold_width = Some(width);
+        }
     }
 
     // --- the `Tz` × justify interaction (decision 019 §6 slice 19.1) ---
@@ -1168,6 +1343,41 @@ pub(crate) fn plan_format(
 
     // --- re-emit the anchor as pre | set | mid | restore | post ---
     let (pre, post) = split_segments(anchor, &m);
+
+    // --- Pass 19.2: synthetic italic, which is NOT a text-state change ---
+    //
+    // A shear is premultiplied into `Tm`, so unlike everything above it
+    // cannot ride R88's ladder: `Tm` is not one of the six §9.3 parameters,
+    // is not saved by `q`/`Q`, and — the trap decision 019 §3.6 names — is
+    // *propagated* by `Td`/`TD`/`T*`, which derive the next line by
+    // translating the line matrix rather than by re-stating it.
+    //
+    // pdfce therefore scopes the shear by re-emitting an **absolute `Tm`**
+    // on both sides of the run: the sheared matrix before `mid`, the
+    // original (unsheared) matrix at the run's end before `post`. That
+    // closes the propagation into `post` and into any following show
+    // operator — but it cannot close it into a following `Td`/`TD`/`T*`,
+    // because any `Tm` overwrites `Tlm` as well and that operator would
+    // then translate from pdfce's matrix instead of the producer's line
+    // origin. That case is REFUSED by name below rather than mis-positioned
+    // silently.
+    if synthesis.italic() {
+        let (tan, rise_offset) = plan_synthetic_italic(
+            &mut set_ops,
+            &mut restore_ops,
+            anchor,
+            &recs,
+            anchor_index,
+            opts.disposition,
+            &pre,
+            &orig_font,
+            orig_size,
+            a_new,
+            new_rise,
+        )?;
+        synthetic_italic = Some((tan, rise_offset));
+    }
+
     let mid = vec![ShowElem::Str(new_codes.clone())];
     let mut replacement: Vec<u8> = Vec::new();
     let push_seg = |seg: Vec<u8>, out: &mut Vec<u8>| {
@@ -1273,6 +1483,24 @@ pub(crate) fn plan_format(
             script_rise.unwrap_or(0.0),
         ));
     }
+    // --- Pass 19.2 disclosures ---
+    if let Some(spec) = req.set_rise {
+        disclosures.push(disclosure_rise(
+            spec,
+            base_size,
+            anchor.text_state.rise.value,
+            free_rise.unwrap_or(0.0),
+        ));
+    }
+    if let Some(offer) = &synthesis_offer {
+        disclosures.push(offer.disclosure());
+    }
+    if let Some(w) = synthetic_bold_width {
+        disclosures.push(disclosure_synthetic_bold(w, emitted_size));
+    }
+    if let Some((tan, offset)) = synthetic_italic {
+        disclosures.push(disclosure_synthetic_italic(tan, offset));
+    }
     if !emitted_state.is_empty() {
         disclosures.push(disclosure_state_scope(&emitted_state));
     }
@@ -1319,7 +1547,10 @@ pub(crate) fn plan_format(
             .map(|pct| (anchor.text_state.h_scale.value, pct)),
         script,
         script_size: script_metrics.map(|_| (base_size, emitted_size)),
-        rise_change: script_rise.map(|r| (anchor.text_state.rise.value, r)),
+        rise_change: new_rise.map(|r| (anchor.text_state.rise.value, r)),
+        synthesis,
+        synthetic_bold_width,
+        synthetic_italic,
         restore_narrowed,
         justify_slack_invalidated,
         advance_delta: delta,
@@ -1426,6 +1657,435 @@ fn plan_font(
         subset,
         disclosures,
     }))
+}
+
+// ===================================================================
+// Pass 19.2 — synthetic bold / italic planning (R90)
+// ===================================================================
+
+/// The family stem of a `/BaseFont` name — the part that identifies the
+/// typeface family rather than the style within it.
+///
+/// `ABCDEF+Times-BoldItalic` → `times`; `Arial,Bold` → `arial`;
+/// `Helvetica` → `helvetica`. The §9.6.4 subset tag is stripped first, then
+/// the name is cut at the first `-` or `,` (the two conventional
+/// style-separator spellings, §9.6.2.2), and lowercased so the comparison is
+/// case-insensitive.
+///
+/// This is a **heuristic on the name**, which is all `/BaseFont` offers
+/// without parsing the embedded program. It is used only to decide whether a
+/// *real* styled sibling exists on the page — i.e. only to make pdfce
+/// **refuse** a synthesis and offer something better. Being wrong in the
+/// conservative direction (failing to spot a sibling) costs a synthesis that
+/// could have been a real face; being wrong the other way costs a refusal
+/// the operator can override by naming the face directly with `--set-font`.
+/// Neither silently produces bad output, which is what makes a heuristic
+/// acceptable here at all.
+fn family_stem(base_font: &str) -> String {
+    let stem = subset_stem(base_font);
+    let cut = stem.find(['-', ',']).unwrap_or(stem.len());
+    stem.get(..cut).unwrap_or(stem).to_ascii_lowercase()
+}
+
+/// R90's gate: **refuse** synthesis when a real face with the requested
+/// style is available on this page.
+///
+/// Synthesis is a fallback, not an alternative — so before faking a weight
+/// or a slant, pdfce looks for a genuine sibling in the page's `/Font`
+/// resources: same family stem, and a `/BaseFont` that claims the style
+/// being asked for. If one is found the whole edit is refused and the
+/// operator is told the resource key and name to use instead.
+///
+/// `current_resource` is excluded from the search so that a face which
+/// *already* claims the style cannot recommend itself. (Asking for synthetic
+/// bold on `Times-Bold` is a strange request, and it is refused with that
+/// same face named — which reads correctly: the real bold is already there.)
+///
+/// # Errors
+///
+/// [`FormatError::RealFaceAvailable`], naming the resource and `/BaseFont`.
+fn gate_synthesis(
+    doc: &Document,
+    resources: &Dict,
+    run_font: &str,
+    synthesis: StyleSynthesis,
+    current_resource: &[u8],
+) -> Result<(), FormatError> {
+    let Some(fonts) = resources
+        .get(b"Font")
+        .map(|o| doc.resolve(o))
+        .and_then(Object::as_dict)
+    else {
+        // No font resources to search: nothing better exists, so the
+        // fallback is genuinely the only option. Proceed.
+        return Ok(());
+    };
+    let want = family_stem(run_font);
+    for (key, val) in fonts.iter() {
+        let Some(dict) = doc.resolve(val).as_dict() else {
+            continue;
+        };
+        let Some(base) = dict
+            .get(b"BaseFont")
+            .map(|o| doc.resolve(o))
+            .and_then(Object::as_name)
+            .map(|n| String::from_utf8_lossy(n.as_bytes()).into_owned())
+        else {
+            continue;
+        };
+        if family_stem(&base) != want {
+            continue;
+        }
+        let is_self = key.as_bytes() == current_resource;
+        let covers_bold = !synthesis.bold() || name_claims_bold(&base);
+        let covers_italic = !synthesis.italic() || name_claims_italic(&base);
+        // A real face only counts if it covers EVERY style asked for. A
+        // `Times-Bold` does not satisfy a request for synthetic *italic*.
+        if covers_bold && covers_italic && !is_self {
+            return Err(FormatError::RealFaceAvailable {
+                style: match synthesis {
+                    StyleSynthesis::Bold => "bold",
+                    StyleSynthesis::Italic => "italic",
+                    StyleSynthesis::BoldItalic => "bold italic",
+                    StyleSynthesis::None => "styled",
+                },
+                run_font: run_font.to_owned(),
+                real_font: base,
+                resource: String::from_utf8_lossy(key.as_bytes()).into_owned(),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Emit synthetic bold — text rendering mode 2 plus a stroke — and the three
+/// restores it owes, returning the user-space stroke width for the report.
+///
+/// ## The three operators, and why each needs its own restore
+///
+/// | Emitted | Category | Restored by |
+/// |---|---|---|
+/// | `2 Tr` | text state (§9.3.6) | R88's shared ladder — [`push_state_param`] |
+/// | `<w> w` | general graphics state (§8.4.3.2) | the recorded [`LineWidth`](crate::text_edit::edit) |
+/// | `<c…> RG`/`G`/`K` | colour (§8.6.8) | the recorded stroking [`FillState`] |
+///
+/// Only the first is text state. The other two are ordinary graphics state
+/// shared with **path** painting, and that is exactly why they must be put
+/// back: a synthetic-bold run that leaves `2 w` in force changes the weight
+/// of every subsequently stroked path in the content stream — content pdfce
+/// never claimed to touch (R32/R46). None of the three can be scoped with
+/// `q`/`Q`, which is not admitted inside a text object (§8.2 Table 51).
+///
+/// ## §9.3.6's two traps, both handled here
+///
+/// 1. **The stroke takes the STROKING colour**, a different graphics-state
+///    entry from the fill, whose Table 52 initial value is black. So the
+///    stroking colour is set to match whatever fill will be in force over
+///    the run — the newly requested one if the same edit changes the
+///    colour, else the run's own — and restored afterwards. Without this,
+///    red text acquires black outlines.
+/// 2. **The width is in user space, not text space.** It is derived from
+///    the rendered size scaled by the text matrix, never set as a constant;
+///    see [`bold_stroke_width`].
+///
+/// # Errors
+///
+/// [`FormatError::AmbientUnrestorable`] if the ambient `Tr` cannot be
+/// restored (R88 tier 3 — a run inside a form XObject).
+fn plan_synthetic_bold(
+    set_ops: &mut Vec<u8>,
+    restore_ops: &mut Vec<u8>,
+    anchor: &ShowData,
+    emitted_size: f64,
+    new_fill: Option<&NewFill>,
+    restore_narrowed: &mut Vec<TextStateParam>,
+    emitted_state: &mut Vec<TextStateParam>,
+) -> Result<f64, FormatError> {
+    // (1) `2 Tr` — fill then stroke (Table 106), through the shared ladder
+    //     so its restore obeys the same four rungs everything else does.
+    push_state_param(
+        set_ops,
+        restore_ops,
+        &anchor.text_state,
+        TextStateParam::RenderMode,
+        2.0,
+        restore_narrowed,
+        emitted_state,
+    )?;
+
+    // (2) the user-space stroke width (§9.3.6). The CTM is not modelled by
+    //     this authoring walk, so only the text matrix's scale is applied
+    //     here; a page-level `cm` scale is therefore not compensated. That
+    //     is disclosed rather than papered over — see
+    //     `disclosure_synthetic_bold`.
+    let width = derived_operand(bold_stroke_width(
+        emitted_size,
+        matrix_scale(anchor.text_matrix),
+        1.0,
+    ));
+    // Minimal-diff: a stream that already has exactly this line width in
+    // force gets no `w … w` pair added to it. Same guard, same reason, as
+    // `push_state_param`'s no-op skip — and it is not merely cosmetic here,
+    // because `w` is shared with path painting and every operator pdfce does
+    // not need to write is one fewer place for a restore to be wrong.
+    if (width - anchor.line_width.value()).abs() > STATE_EPS {
+        push_space(set_ops);
+        emit_number(set_ops, width);
+        set_ops.extend_from_slice(b" w");
+        push_space(restore_ops);
+        restore_ops.extend_from_slice(&anchor.line_width.restore_bytes());
+    }
+
+    // (3) the stroking colour, matched to the fill in force over the run.
+    push_space(set_ops);
+    match new_fill {
+        // The same edit is also changing the fill: match the NEW colour, in
+        // the same device space the operator chose (parity-plus — pdfce
+        // does not force DeviceRGB here either).
+        Some(nf) => push_stroke_fill(set_ops, nf),
+        // Otherwise match the run's existing fill colour.
+        None => set_ops.extend_from_slice(&stroking_form_of(&anchor.fill_color)),
+    }
+    push_space(restore_ops);
+    restore_ops.extend_from_slice(&anchor.stroke_color.restore_bytes_stroking());
+
+    Ok(width)
+}
+
+/// The **stroking** operator sequence that reproduces a recorded *fill*
+/// colour — §9.3.6's "match the stroke to the fill" requirement.
+///
+/// The three cases mirror [`FillState`] itself:
+///
+/// - `Default` — no fill operator ran, so the fill is §8.6.8's black
+///   `DeviceGray 0`; the stroking spelling of that is `0 G`.
+/// - `Device` — re-emit the **components** under the uppercase operator.
+///   The recorded raw bytes are deliberately *not* case-swapped: they are
+///   the fill's own spelling, and this is a newly authored operator rather
+///   than a restore, so a canonical spelling is correct and simpler to
+///   verify.
+/// - `Other` — a colour in a resource-named space (`/CS0 cs … scn`). Here
+///   the raw bytes **are** transformed, by uppercasing the operator tokens
+///   `cs`→`CS`, `sc`→`SC`, `scn`→`SCN`. That is safe because §8.6.8 gives
+///   the stroking operators the same operand grammar and the same
+///   `/ColorSpace` resource namespace as their non-stroking twins — the
+///   colour-space *name* is unchanged, only which of the two graphics-state
+///   entries it lands in. It is the only way to match a spot/ICC colour
+///   pdfce cannot itself decode, and the alternative (emitting nothing)
+///   would leave the outline black.
+fn stroking_form_of(fill: &FillState) -> Vec<u8> {
+    match fill {
+        FillState::Default => b"0 G".to_vec(),
+        FillState::Device { space, comps, .. } => {
+            let mut out = Vec::new();
+            for (i, c) in comps.iter().enumerate() {
+                if i > 0 {
+                    out.push(b' ');
+                }
+                emit_number(&mut out, *c);
+            }
+            out.push(b' ');
+            out.extend_from_slice(match space {
+                crate::text_edit::edit::DeviceSpace::Gray => b"G".as_slice(),
+                crate::text_edit::edit::DeviceSpace::Rgb => b"RG".as_slice(),
+                crate::text_edit::edit::DeviceSpace::Cmyk => b"K".as_slice(),
+            });
+            out
+        }
+        FillState::Other { raw } => {
+            let text = String::from_utf8_lossy(raw);
+            let swapped: Vec<String> = text
+                .split_whitespace()
+                .map(|tok| match tok {
+                    "cs" => "CS".to_owned(),
+                    "sc" => "SC".to_owned(),
+                    "scn" => "SCN".to_owned(),
+                    other => other.to_owned(),
+                })
+                .collect();
+            swapped.join(" ").into_bytes()
+        }
+    }
+}
+
+/// Append the chosen device colour under its **stroking** operator
+/// (`G`/`RG`/`K`), for the case where the same edit is also setting a new
+/// fill colour.
+fn push_stroke_fill(out: &mut Vec<u8>, nf: &NewFill) {
+    for (i, c) in nf.components.iter().enumerate() {
+        if i > 0 {
+            out.push(b' ');
+        }
+        emit_number(out, *c);
+    }
+    out.push(b' ');
+    out.extend_from_slice(match nf.model {
+        FillModel::Gray => b"G".as_slice(),
+        FillModel::Rgb => b"RG".as_slice(),
+        FillModel::Cmyk => b"K".as_slice(),
+    });
+}
+
+/// Emit synthetic italic — an oblique shear premultiplied into the run's
+/// `Tm` — bracketed by absolute `Tm` operators, returning
+/// `(tan θ, Trise · tan θ)` for the report.
+///
+/// ## Why this is the one mechanism that does NOT ride R88's ladder
+///
+/// Everything else this module emits is a §9.3 text-state parameter, and
+/// text state is scoped by restore-by-value. A `Tm` is not text state at
+/// all: §9.4.2 puts it in the *text object* state, `BT` resets it, `q`/`Q`
+/// do not touch it, and `Td`/`TD`/`T*` **derive from** it. So it needs its
+/// own scoping, and the scoping is: state the matrix absolutely on both
+/// sides of the run.
+///
+/// ```text
+///   … pre …   [Tm sheared @ mid-start]   mid   [Tm upright @ mid-end]   … post …
+/// ```
+///
+/// Both matrices are computed from the anchor's own recorded `Tm` by
+/// translating along the baseline by the §9.4.4 advance already consumed —
+/// `pre`'s advance for the first, `pre + mid` for the second. A shear does
+/// not change an advance (it leaves the matrix's `a` and `b` terms alone, so
+/// `translate(tx,0) × Tm` displaces the origin identically sheared or not),
+/// which is why the same ΔA arithmetic the rest of the planner uses is still
+/// correct here.
+///
+/// ## The three refusals, and why each is a refusal rather than a fix-up
+///
+/// 1. **The anchor's matrix is not known.** The walk stopped tracking `Tm`
+///    (an unresolvable font, or a composite run it does not decode), so
+///    there is no matrix to shear. Emitting a guessed one would move the
+///    run.
+/// 2. **A `Td`/`TD`/`T*` follows inside the same text object.** Any `Tm`
+///    pdfce injects overwrites `Tlm` too, so that operator would translate
+///    from pdfce's matrix instead of the producer's line origin and the
+///    next line would land shifted by this run's advance. Decision 019 §3.6
+///    proposes re-emitting such followers as absolute `Tm`s; pdfce instead
+///    requires them to *already* be absolute and refuses otherwise, which
+///    is the more conservative reading of the same hazard — see the
+///    engineer's note in this module's tests.
+/// 3. **[`FollowerDisposition::Pin`] was requested.** Pin consumes ΔA with a
+///    trailing compensating `TJ`, but the closing absolute `Tm` here already
+///    determines where `post` starts; the two mechanisms would compensate
+///    twice. Refused rather than silently ignoring one of them.
+///
+/// ## The `Ts` × oblique interaction (decision 019 §3.6, named test case)
+///
+/// A shear maps `x' = x + y·tanθ`. The rise is applied *before* `Tm` (it is
+/// the `f` term of the §9.4.4 text-space parameter matrix), so a raised run
+/// enters the shear at `y = Trise` and is displaced horizontally by
+/// `Trise · tan θ`. At the baseline that is zero, which is why the effect
+/// only appears on superscripts and only surprises people there. It is
+/// **reported**, not compensated: the displacement is what a genuine oblique
+/// face would also do, and silently pulling the run back left would make a
+/// synthesized italic sit differently from a real one.
+///
+/// # Errors
+///
+/// [`FormatError::ShearUnsupported`] for each of the three conditions above.
+#[allow(clippy::too_many_arguments)]
+fn plan_synthetic_italic(
+    set_ops: &mut Vec<u8>,
+    restore_ops: &mut Vec<u8>,
+    anchor: &ShowData,
+    recs: &[OpRec],
+    anchor_index: usize,
+    disposition: FollowerDisposition,
+    pre: &[ShowElem],
+    orig_font: &ExtractFont,
+    orig_size: f64,
+    mid_advance: f64,
+    rise: Option<f64>,
+) -> Result<(f64, f64), FormatError> {
+    if !anchor.matrix_known {
+        return Err(FormatError::ShearUnsupported(
+            "pdfce could not track this run's text matrix through the content stream (an \
+             unresolvable font resource, or a composite run this surgery does not decode), and a \
+             shear must be premultiplied into a KNOWN matrix — guessing one would move the run. \
+             Nothing was applied."
+                .to_owned(),
+        ));
+    }
+    if matches!(disposition, FollowerDisposition::Pin) {
+        return Err(FormatError::ShearUnsupported(
+            "synthetic italic re-states the run's text matrix absolutely on both sides of the \
+             run, which already fixes where the following text starts; combining that with \
+             --pin's compensating TJ would consume the advance delta twice. Re-run without --pin \
+             (the default reflow disposition). Nothing was applied."
+                .to_owned(),
+        ));
+    }
+    // Scan forward to the end of THIS text object. Past `ET` the next `BT`
+    // resets both matrices (§9.4.1 Table 107), so nothing carries over and
+    // the hazard stops.
+    for r in recs.iter().skip(anchor_index + 1) {
+        match &r.rec {
+            Rec::EndText => break,
+            Rec::Boundary => {
+                return Err(FormatError::ShearUnsupported(
+                    "a Td/TD/T* next-line operator follows this run inside the same text object. \
+                     Synthetic italic must inject an absolute `Tm`, and a `Tm` sets the text LINE \
+                     matrix as well (§9.4.2 Table 108) — so that operator would derive its line \
+                     from pdfce's matrix instead of the producer's line origin, and the following \
+                     line would land shifted by this run's advance. pdfce refuses rather than \
+                     mis-positioning it. Nothing was applied."
+                        .to_owned(),
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    // Where `mid` starts: the anchor's matrix advanced along the baseline by
+    // everything `pre` shows. `pre` runs at the AMBIENT state (it is outside
+    // the set/restore wrap), so it is measured at the ambient Tc/Tw/Th and
+    // the run's original size and face.
+    let mut pre_advance = 0.0;
+    for e in pre {
+        match e {
+            ShowElem::Str(bytes) => {
+                for &c in bytes {
+                    pre_advance += glyph_advance_with(
+                        orig_font,
+                        c,
+                        orig_size,
+                        anchor.tc(),
+                        anchor.tw(),
+                        anchor.th(),
+                    );
+                }
+            }
+            // §9.4.3: a bare TJ adjustment displaces by −Tj/1000 · Tfs · Th,
+            // with no Tc/Tw term "since no glyph was painted".
+            ShowElem::Num(v) => pre_advance += (-v / 1000.0) * orig_size * anchor.th(),
+        }
+    }
+
+    let tm_mid = mat_mul([1.0, 0.0, 0.0, 1.0, pre_advance, 0.0], anchor.text_matrix);
+    let tm_post = mat_mul(
+        [1.0, 0.0, 0.0, 1.0, pre_advance + mid_advance, 0.0],
+        anchor.text_matrix,
+    );
+
+    // Both injected matrices are pdfce's OWN arithmetic — a shear product
+    // and an accumulated advance — so every operand goes through
+    // `derived_operand`. Without it a `tan θ × a` term or a summed advance
+    // arrives as sixteen significant digits of `f64` noise, which bloats a
+    // stream this project is trying to keep minimal, makes the diff
+    // unreadable, and exceeds the ~5 significant digits Annex C records as
+    // PDF's traditional real precision. Nothing the operator typed is
+    // rounded here; the producer's own matrix terms survive because
+    // rounding a value already at six decimal places is the identity.
+    let round6 = |m: [f64; 6]| m.map(derived_operand);
+    push_space(set_ops);
+    set_ops.extend_from_slice(&emit_tm(round6(shear_into(tm_mid))));
+    push_space(restore_ops);
+    restore_ops.extend_from_slice(&emit_tm(round6(tm_post)));
+
+    let tan = shear_into([1.0, 0.0, 0.0, 1.0, 0.0, 0.0])[2];
+    let rise_offset = rise.unwrap_or(anchor.text_state.rise.value) * tan;
+    Ok((tan, derived_operand(rise_offset)))
 }
 
 /// Locate a family-change target resource by resource key first, then by
@@ -1786,11 +2446,81 @@ fn disclosure_script(pos: ScriptPosition, base_size: f64, emitted_size: f64, ris
         ),
         None => format!(
             "{}: the matched run's baseline was reset to Ts 0 (§9.3.7) and its size left \
-             unchanged. This is how an inherited non-zero rise is flattened for one run; a \
-             free-form numeric rise is deferred (decision 019 §3.2, slice 19.2).",
+             unchanged. This is how an inherited non-zero rise is flattened for one run; for any \
+             other baseline offset use the free-form rise control, which writes the number given \
+             and does not resize.",
             pos.label()
         ),
     }
+}
+
+/// Disclose a free-form baseline rise (Pass 19.2) — the value, its unit, its
+/// R89 mode, and the two things about `Ts` that surprise people.
+fn disclosure_rise(spec: MetricSpec, base_size: f64, ambient: f64, emitted: f64) -> String {
+    let mode = match spec {
+        MetricSpec::Absolute(_) => "ABSOLUTE — written exactly as given, in unscaled text-space \
+             units, and NOT rounded or re-derived. A later size change will leave it where it is"
+            .to_owned(),
+        MetricSpec::Relative(pm) => format!(
+            "RELATIVE — {pm} thousandths of the {base_size} pt base size, re-derived to {emitted} \
+             at emit time and re-derived again if the run is resized (R89)"
+        ),
+    };
+    format!(
+        "baseline rise: Ts {emitted} (was {ambient}). The value you supplied is {}, in {}; it is \
+         {mode}. Two properties of Ts worth knowing: it is a TRANSLATION in the text rendering \
+         matrix (§9.3.7), so it moves the run without changing its advance and without moving \
+         anything after it; and it is in unscaled text-space units, so it is NOT scaled by the \
+         font size. This control is a deliberate pdfce EXCEED — current Acrobat exposes only a \
+         coarse superscript/subscript toggle and dropped free-form baseline offset when text \
+         editing was consolidated (decision 019 §1.1/§3.2).",
+        spec.raw(),
+        spec.unit_label(),
+    )
+}
+
+/// Disclose a synthetic bold: the mechanism, the width by value, and the one
+/// case pdfce knowingly does not compensate for.
+fn disclosure_synthetic_bold(width: f64, rendered_size: f64) -> String {
+    format!(
+        "synthetic bold: the run is painted in text rendering mode 2 (fill, THEN stroke — §9.3.6 \
+         Table 106) with a stroke width of {width} and the STROKING colour set to match the \
+         run's fill. The width is derived as {BOLD_STROKE_RATIO} x the {rendered_size} pt \
+         rendered size because §9.3.6 interprets a stroked-text line width in USER space, not \
+         text space — a constant width would look right at one size and wrong at every other. \
+         All three operators (Tr, w, and the stroking colour) are RESTORED immediately after the \
+         run; the line width and stroking colour especially, because they are shared with path \
+         painting and a stale value would change the weight of later strokes. LIMIT, disclosed \
+         rather than hidden: pdfce derives the width from the text matrix only, so a page-level \
+         `cm` scale is not compensated and the outline will scale with the page. This is a \
+         FALLBACK weight, not a real Bold face: the letterforms are the regular face's, thickened."
+    )
+}
+
+/// Disclose a synthetic italic: the mechanism, the scoping, and the rise
+/// interaction — including when the interaction is inert.
+fn disclosure_synthetic_italic(tan: f64, rise_offset: f64) -> String {
+    let interaction = if rise_offset.abs() > STATE_EPS {
+        format!(
+            "Because this run is also RAISED, the shear displaces it horizontally by \
+             Trise x tan(theta) = {rise_offset} text-space units. That is not a bug and is not \
+             compensated: a real oblique face displaces a raised run the same way, and pulling it \
+             back would make pdfce's synthesis sit differently from the real thing."
+        )
+    } else {
+        "The run sits on the baseline, where a shear displaces nothing (x' = x + y·tan(theta) and \
+         y = 0), so no horizontal offset arises here. It would if the run were raised."
+            .to_owned()
+    };
+    format!(
+        "synthetic italic: an oblique shear of tan(theta) = {tan} (12 degrees) premultiplied into \
+         the run's text matrix. Unlike the spacing controls this is NOT text state, so it is not \
+         covered by the restore ladder — a Tm is not saved by q/Q and IS propagated by \
+         Td/TD/T*, which derive the next line by translating the line matrix. pdfce therefore \
+         brackets the run with two ABSOLUTE Tm operators: the sheared matrix before it, the \
+         original matrix at its end. {interaction} This is a FALLBACK slant, not a real Italic \
+         face: the letterforms are the upright face's, leaned."
+    )
 }
 
 /// Disclose the scoping mechanism itself — which operators were written and
@@ -1886,6 +2616,7 @@ fn disclosure_tagged(mcid: i64) -> String {
 )]
 mod tests {
     use super::*;
+    use crate::text_edit::synth::OBLIQUE_TAN;
 
     /// A one-page PDF with a Helvetica (WinAnsi, non-embedded) run and a
     /// device fill colour set before the run. `content` is the page content.
@@ -2785,9 +3516,741 @@ mod tests {
             FormatRequest::new(0, "hello").char_spacing(MetricSpec::Absolute(0.1)),
             FormatRequest::new(0, "hello").h_scale(90.0),
             FormatRequest::new(0, "hello").script(ScriptPosition::Superscript),
+            FormatRequest::new(0, "hello").rise(MetricSpec::Absolute(3.0)),
+            FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
         ] {
             set_format(&doc, &req, &FormatOptions::default())
-                .expect("each 19.1 control is a formatting operation on its own");
+                .expect("each 19.1/19.2 control is a formatting operation on its own");
         }
+    }
+
+    // ===============================================================
+    // Pass 19.2 — free-form `Ts` and synthetic bold/italic
+    // ===============================================================
+
+    /// A one-page PDF whose `/Font` carries BOTH a regular and a real Bold
+    /// face of the same family — the fixture the R90 fallback-only gate is
+    /// measured against.
+    fn family_pdf(content: &str) -> Vec<u8> {
+        build_pdf(
+            content,
+            &[
+                (
+                    b"F1".to_vec(),
+                    b"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>"
+                        .to_vec(),
+                ),
+                (
+                    b"F2".to_vec(),
+                    b"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold /Encoding /WinAnsiEncoding >>"
+                        .to_vec(),
+                ),
+            ],
+        )
+    }
+
+    // --- free-form `Ts` (decision 019 §3.2's deliberate exceed) ---
+
+    /// An ABSOLUTE rise is written exactly as typed. This is the R89
+    /// contract for operator-supplied numbers, and it is the reason
+    /// `derived_operand` is deliberately NOT applied to them: rounding a
+    /// number a human entered is a silent modification.
+    #[test]
+    fn a_free_form_absolute_rise_is_written_as_typed_and_restored() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (hello world) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").rise(MetricSpec::Absolute(3.25)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let text = as_text(&out.bytes);
+        assert!(text.contains("3.25 Ts"), "written as typed: {text}");
+        // The ambient rise was never set, so the restore is the Table 105
+        // default made explicit — rung 1 of the ladder.
+        assert!(
+            text.contains("0 Ts"),
+            "restored to the spec default: {text}"
+        );
+        assert_eq!(out.report.rise_change, Some((0.0, 3.25)));
+        // Rise is a Trm translation (§9.3.7): it must not move anything.
+        assert_eq!(
+            out.report.advance_delta, 0.0,
+            "a rise changes position, never advance"
+        );
+    }
+
+    /// A RELATIVE rise re-derives against the **base** size (R89), which is
+    /// the whole point of the discriminated unit model: the same request at
+    /// a different size lands at a proportionally different rise.
+    #[test]
+    fn a_relative_rise_re_derives_against_the_base_size() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        // 250 thousandths of an em at 12 pt = 3.0.
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").rise(MetricSpec::Relative(250.0)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(out.report.rise_change, Some((0.0, 3.0)));
+
+        // The SAME request, with the run resized to 24 pt in the same edit,
+        // must resolve against the NEW base size: 250‰ of 24 = 6.0.
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello")
+                .size(24.0)
+                .rise(MetricSpec::Relative(250.0)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            out.report.rise_change,
+            Some((0.0, 6.0)),
+            "a relative rise resolves against the base size in force AFTER the edit (R89)"
+        );
+    }
+
+    /// Both a free-form rise and a script toggle write `Ts`. pdfce refuses
+    /// rather than silently choosing (rule 4).
+    #[test]
+    fn a_rise_and_a_script_toggle_together_are_refused_not_silently_merged() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let err = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello")
+                .rise(MetricSpec::Absolute(3.0))
+                .script(ScriptPosition::Superscript),
+            &FormatOptions::default(),
+        )
+        .unwrap_err();
+        assert!(matches!(err, FormatError::ConflictingRise), "{err}");
+    }
+
+    /// The ambient-rise restore, on a stream that already had one. Rung 2:
+    /// the producer's own bytes come back verbatim, trailing zeros included.
+    #[test]
+    fn an_ambient_rise_is_restored_byte_faithfully_after_a_free_form_rise() {
+        let src = fill_pdf("BT /F1 12 Tf 2.50 Ts 72 700 Td (hello world) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").rise(MetricSpec::Absolute(6.0)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let appended = as_text(&out.bytes[..]);
+        assert!(appended.contains("6 Ts"), "new rise: {appended}");
+        assert!(
+            appended.matches("2.50 Ts").count() >= 2,
+            "the producer's own spelling comes back verbatim, not renormalized \
+             to `2.5 Ts`: {appended}"
+        );
+        assert_eq!(out.report.rise_change, Some((2.5, 6.0)));
+    }
+
+    // --- (a)/(b)/(c): the R90 fallback-only gate ---
+
+    /// **(a)** A real Bold face resolves on the page, so synthesis is
+    /// REFUSED and the operator is pointed at the genuine face. Synthesis is
+    /// a fallback, never an alternative to a real typeface.
+    #[test]
+    fn synthesis_is_refused_when_a_real_bold_face_resolves() {
+        let src = family_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let err = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap_err();
+        match err {
+            FormatError::RealFaceAvailable {
+                ref real_font,
+                ref resource,
+                ..
+            } => {
+                assert_eq!(real_font, "Times-Bold");
+                assert_eq!(resource, "F2");
+            }
+            other => panic!("expected the real-face refusal, got {other}"),
+        }
+        assert!(
+            err.to_string().contains("fallback"),
+            "the refusal explains WHY: {err}"
+        );
+    }
+
+    /// **(b)** No real Bold face resolves anywhere on the page, so synthesis
+    /// is available — and is applied only because it was asked for.
+    #[test]
+    fn synthesis_applies_when_no_real_face_resolves_and_only_when_asked() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(out.report.synthesis, StyleSynthesis::Bold);
+        let text = as_text(&out.bytes);
+        assert!(text.contains("2 Tr"), "fill-then-stroke mode: {text}");
+        assert!(text.contains(" w"), "a stroke width: {text}");
+        // The offer is disclosed by name, with the remedies, every time.
+        assert!(
+            out.report
+                .disclosures
+                .iter()
+                .any(|d| d.contains("SYNTHETIC STYLE") && d.contains("Helvetica")),
+            "the offer names the font: {:?}",
+            out.report.disclosures
+        );
+    }
+
+    /// **(c)** Declining is the default. The identical edit without the
+    /// synthesis request applies nothing and emits no rendering mode — there
+    /// is no global preference that could turn it on behind the operator's
+    /// back (deliberately stricter than Acrobat).
+    #[test]
+    fn declining_synthesis_applies_nothing_at_all() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").size(14.0),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(out.report.synthesis, StyleSynthesis::None);
+        assert!(out.report.synthetic_bold_width.is_none());
+        let appended = as_text(&out.bytes[..]);
+        assert!(
+            !appended.contains(" Tr"),
+            "no rendering mode is written when synthesis was not requested: {appended}"
+        );
+    }
+
+    // --- (e): §9.3.6's stroking-colour trap ---
+
+    /// **(e)** The named hazard. A faux bold on RED text must produce RED
+    /// outlines, not black ones — the stroke takes the *stroking* colour
+    /// (§9.3.6), a different graphics-state entry whose initial value is
+    /// black. And the previous stroking colour must come back afterwards.
+    #[test]
+    fn faux_bold_on_coloured_text_matches_and_restores_the_stroking_colour() {
+        let src = fill_pdf("BT /F1 12 Tf 1 0 0 rg 0 0 1 RG 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let appended = as_text(&out.bytes[..]);
+        assert!(
+            appended.contains("1 0 0 RG"),
+            "the stroking colour is matched to the RED fill, so the outline is \
+             red and not black: {appended}"
+        );
+        assert!(
+            appended.contains("0 0 1 RG"),
+            "and the page's own BLUE stroking colour is restored afterwards, so \
+             a later stroked path is unaffected: {appended}"
+        );
+    }
+
+    /// The same requirement when the edit *also* changes the fill colour:
+    /// the outline must follow the NEW colour, in the same device space.
+    #[test]
+    fn faux_bold_matches_a_newly_requested_fill_colour_in_its_own_space() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello")
+                .fill(NewFill::new(FillModel::Cmyk, vec![0.0, 1.0, 1.0, 0.0]).unwrap())
+                .synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let text = as_text(&out.bytes);
+        assert!(text.contains("0 1 1 0 k"), "the new fill: {text}");
+        assert!(
+            text.contains("0 1 1 0 K"),
+            "the stroke matches it in the SAME space (no forced DeviceRGB): {text}"
+        );
+    }
+
+    /// The line width is graphics state shared with **path** painting, so a
+    /// synthetic bold that did not restore it would change the weight of
+    /// every later stroke in the stream. The leak test for `w`.
+    #[test]
+    fn faux_bold_restores_the_line_width_it_borrowed() {
+        let src = fill_pdf("3 w BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let appended = as_text(&out.bytes[..]);
+        assert!(
+            appended.matches("3 w").count() >= 2,
+            "the page's own 3 w is restored after the run, byte-faithfully, so \
+             later path strokes keep their weight: {appended}"
+        );
+        assert!(
+            appended.contains("0.264 w"),
+            "and the synthetic width itself is 2.2% of the 12 pt size: {appended}"
+        );
+    }
+
+    /// **(f)** The width is derived in USER space from the rendered size, so
+    /// a faux bold at 10 pt and at 72 pt look like the same *weight* rather
+    /// than the same *thickness*.
+    #[test]
+    fn faux_bold_width_scales_with_the_rendered_size() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let small = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello")
+                .size(10.0)
+                .synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let large = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello")
+                .size(72.0)
+                .synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let (sw, lw) = (
+            small.report.synthetic_bold_width.unwrap(),
+            large.report.synthetic_bold_width.unwrap(),
+        );
+        assert!((sw - 0.22).abs() < 1e-9, "10 pt ⇒ 0.22, got {sw}");
+        assert!((lw - 1.584).abs() < 1e-9, "72 pt ⇒ 1.584, got {lw}");
+        assert!(
+            (lw / sw - 7.2).abs() < 1e-9,
+            "linear in the size, not a constant"
+        );
+    }
+
+    /// A super/subscript reduces the rendered size, and the stroke width
+    /// must follow the size the glyphs are actually painted at — not the
+    /// base size. Otherwise a bolded superscript is visibly over-weight.
+    #[test]
+    fn faux_bold_on_a_superscript_uses_the_reduced_rendered_size() {
+        let src = fill_pdf("BT /F1 20 Tf 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello")
+                .script(ScriptPosition::Superscript)
+                .synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        // 20 pt × 0.60 = 12 pt rendered; 12 × 0.022 = 0.264.
+        assert_eq!(out.report.script_size, Some((20.0, 12.0)));
+        assert!(
+            (out.report.synthetic_bold_width.unwrap() - 0.264).abs() < 1e-9,
+            "the width follows the REDUCED size: {:?}",
+            out.report.synthetic_bold_width
+        );
+    }
+
+    // --- synthetic italic and its three refusals ---
+
+    /// The shear is emitted as a bracketing pair of ABSOLUTE `Tm`s: the
+    /// sheared matrix before the run, the upright one at its end. That is
+    /// what stops the lean propagating into `post` and into any following
+    /// show operator.
+    #[test]
+    fn synthetic_italic_brackets_the_run_with_absolute_text_matrices() {
+        let src = fill_pdf("BT /F1 12 Tf 1 0 0 1 72 700 Tm (hello world) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Italic),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let appended = as_text(&out.bytes[..]);
+        // The run starts at the anchor's own origin (nothing precedes it in
+        // the operator), sheared.
+        assert!(
+            appended.contains("1 0 0.212557 1 72 700 Tm"),
+            "sheared matrix before the run: {appended}"
+        );
+        // …and an UPRIGHT matrix at the run's end, so " world" is not leaned.
+        assert!(
+            appended.contains(" 1 0 0 1 ") && appended.matches(" Tm").count() >= 2,
+            "an upright absolute Tm closes the shear's scope: {appended}"
+        );
+        assert_eq!(out.report.synthesis, StyleSynthesis::Italic);
+    }
+
+    /// **(g)** Decision 019 §3.6's named interaction. A shear maps
+    /// `x' = x + y·tanθ`, so a run that is also RAISED is displaced
+    /// horizontally by `Trise · tan θ` — and a run on the baseline is not
+    /// displaced at all. Both halves are asserted, because a test that only
+    /// checked the raised case would pass for an implementation that
+    /// displaced everything.
+    #[test]
+    fn a_raised_sheared_run_is_displaced_by_rise_times_tan_theta() {
+        let src = fill_pdf("BT /F1 12 Tf 1 0 0 1 72 700 Tm (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+
+        // On the baseline: no horizontal displacement.
+        let flat = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Italic),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let (tan, offset) = flat.report.synthetic_italic.unwrap();
+        assert!((tan - OBLIQUE_TAN).abs() < 1e-12);
+        assert_eq!(offset, 0.0, "a baseline run is not displaced by a shear");
+
+        // Raised 8 units: displaced by 8 × tan 12° ≈ 1.700456.
+        let raised = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello")
+                .rise(MetricSpec::Absolute(8.0))
+                .synthetic(StyleSynthesis::Italic),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let (_, offset) = raised.report.synthetic_italic.unwrap();
+        assert!(
+            (offset - 8.0 * OBLIQUE_TAN).abs() < 1e-6,
+            "expected ≈{}, got {offset}",
+            8.0 * OBLIQUE_TAN
+        );
+        assert!(
+            raised
+                .report
+                .disclosures
+                .iter()
+                .any(|d| d.contains("RAISED") && d.contains("not compensated")),
+            "the interaction is disclosed rather than silently corrected: {:?}",
+            raised.report.disclosures
+        );
+    }
+
+    /// The hazard that gets its own refusal: a `Td`/`TD`/`T*` after the run
+    /// inside the same text object. Any injected `Tm` sets the text LINE
+    /// matrix too, so that operator would translate from pdfce's matrix and
+    /// the next line would land shifted by this run's advance.
+    #[test]
+    fn synthetic_italic_refuses_when_a_next_line_operator_follows_in_the_same_text_object() {
+        let src =
+            fill_pdf("BT /F1 12 Tf 1 0 0 1 72 700 Tm (hello) Tj 0 -14 Td (second line) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let err = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Italic),
+            &FormatOptions::default(),
+        )
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(matches!(err, FormatError::ShearUnsupported(_)), "{msg}");
+        assert!(msg.contains("Td/TD/T*"), "the refusal names why: {msg}");
+        assert!(msg.contains("Nothing was applied"), "{msg}");
+    }
+
+    /// …and the same run is fine once that follower is in its OWN text
+    /// object, because `BT` resets both matrices (§9.4.1 Table 107) so
+    /// nothing pdfce injected can reach it. This is the test that keeps the
+    /// refusal above honest — without it, "refuse always" would also pass.
+    #[test]
+    fn synthetic_italic_is_allowed_when_the_next_line_is_a_separate_text_object() {
+        let src = fill_pdf(
+            "BT /F1 12 Tf 1 0 0 1 72 700 Tm (hello) Tj ET\n\
+             BT /F1 12 Tf 1 0 0 1 72 686 Tm (second line) Tj ET\n",
+        );
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Italic),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(out.report.synthesis, StyleSynthesis::Italic);
+        let appended = as_text(&out.bytes[..]);
+        assert!(
+            appended.contains("1 0 0 1 72 686 Tm"),
+            "the following text object's own matrix is untouched: {appended}"
+        );
+    }
+
+    /// Pin and the shear are two mechanisms for the same job. Refused rather
+    /// than letting them compensate twice.
+    #[test]
+    fn synthetic_italic_refuses_the_pin_disposition() {
+        let src = fill_pdf("BT /F1 12 Tf 1 0 0 1 72 700 Tm (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let err = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Italic),
+            &FormatOptions::default().with_disposition(FollowerDisposition::Pin),
+        )
+        .unwrap_err();
+        assert!(matches!(err, FormatError::ShearUnsupported(_)), "{err}");
+        assert!(err.to_string().contains("--pin"), "{err}");
+    }
+
+    /// The shear must be premultiplied into the run's ACTUAL matrix, not
+    /// assumed to be the identity. Here the producer set a 2× scaled matrix;
+    /// a naive `c = tanθ` would produce half the intended lean.
+    #[test]
+    fn the_shear_composes_with_a_non_identity_producer_matrix() {
+        let src = fill_pdf("BT /F1 12 Tf 2 0 0 2 72 700 Tm (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Italic),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        // c' = tanθ·a + c = 0.212557 × 2 = 0.425114
+        let appended = as_text(&out.bytes[..]);
+        assert!(
+            appended.contains("2 0 0.425114 2 72 700 Tm"),
+            "the shear scales with the matrix it is premultiplied into: {appended}"
+        );
+    }
+
+    // --- (d)/(h): tagging, and self-evident persistence ---
+
+    /// **(d)** A synthesized run inside a tagged sequence keeps its
+    /// `BDC …/MCID… EMC` wrapper by construction, and the staleness of the
+    /// structure tree is disclosed (R73) rather than corrupted — explicitly
+    /// unlike Acrobat's documented tag-tree defect for formatting edits.
+    #[test]
+    fn synthesis_on_a_tagged_run_preserves_the_mcid_wrapper_and_discloses_staleness() {
+        let src = fill_pdf("/P << /MCID 4 >> BDC BT /F1 12 Tf 72 700 Td (hello) Tj ET EMC\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(out.report.tagged_mcid, Some(4));
+        let appended = as_text(&out.bytes[..]);
+        assert!(
+            appended.contains("/P << /MCID 4 >> BDC") && appended.contains("EMC"),
+            "the marked-content wrapper survives verbatim: {appended}"
+        );
+        assert!(
+            out.report.disclosures.iter().any(|d| d.contains("MCID")),
+            "staleness disclosed: {:?}",
+            out.report.disclosures
+        );
+    }
+
+    /// **(h)** The whole persistence story: save, reload, and re-detect the
+    /// synthesis from the bytes — with **no private marker** having been
+    /// written into the file.
+    ///
+    /// The second half of this test is the load-bearing one. It is easy to
+    /// build a detector that works because the emitter secretly cooperated;
+    /// asserting that the appended revision contains no pdfce-specific key
+    /// is what proves the detection is genuinely from the standard bytes,
+    /// which is also why it works on other producers' files.
+    #[test]
+    fn a_synthesized_run_is_re_detected_on_reload_with_no_marker_in_the_file() {
+        let src = fill_pdf("BT /F1 12 Tf 1 0 0 1 72 700 Tm (hello) Tj ET\n");
+        let doc = Document::from_bytes(src.clone()).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::BoldItalic),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+
+        // No private marker of any kind was written.
+        let appended = as_text(&out.bytes[src.len()..]);
+        for forbidden in ["PieceInfo", "pdfce", "PDFCE", "Synth"] {
+            assert!(
+                !appended.contains(forbidden),
+                "the saved bytes must carry NO private marker; found {forbidden:?} in {appended}"
+            );
+        }
+
+        // Reload and re-derive the run's state from the file alone.
+        let reloaded = Document::from_bytes(out.bytes.clone()).unwrap();
+        let pages = crate::page_tree::pages(&reloaded).unwrap();
+        let stream = ContentStream::from_page(&reloaded.view(), &pages[0]).unwrap();
+        let mut walk = Walk::new(&reloaded, &pages[0].resources);
+        for op in stream.operations() {
+            walk.operation(&op, &stream.buf);
+        }
+        let run = walk
+            .recs
+            .iter()
+            .find_map(|r| match &r.rec {
+                Rec::Show(s) if s.text == "hello" => Some(s.clone()),
+                _ => None,
+            })
+            .expect("the synthesized run is found again on reload");
+
+        let detected = crate::text_edit::synth::detect(
+            "Helvetica",
+            run.text_state.params().render_mode,
+            run.line_width.value(),
+            run.tf_size,
+            run.text_matrix,
+        );
+        assert_eq!(
+            detected,
+            StyleSynthesis::BoldItalic,
+            "the synthesis is re-detectable from the standard bytes alone"
+        );
+    }
+
+    /// The restore leak test for synthesis, stated as the property that
+    /// matters: a run AFTER the synthesized one must be painted in the
+    /// ambient rendering mode, not in mode 2.
+    #[test]
+    fn synthesis_does_not_leak_into_the_following_run() {
+        let src = fill_pdf("BT /F1 12 Tf 1 0 0 1 72 700 Tm (hello) Tj (plain) Tj ET\n");
+        let doc = Document::from_bytes(src.clone()).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+
+        // Re-walk the saved result and ask what state the SECOND run is in.
+        let reloaded = Document::from_bytes(out.bytes).unwrap();
+        let pages = crate::page_tree::pages(&reloaded).unwrap();
+        let stream = ContentStream::from_page(&reloaded.view(), &pages[0]).unwrap();
+        let mut walk = Walk::new(&reloaded, &pages[0].resources);
+        for op in stream.operations() {
+            walk.operation(&op, &stream.buf);
+        }
+        let plain = walk
+            .recs
+            .iter()
+            .find_map(|r| match &r.rec {
+                Rec::Show(s) if s.text == "plain" => Some(s.clone()),
+                _ => None,
+            })
+            .expect("the following run survives");
+        assert_eq!(
+            plain.text_state.params().render_mode,
+            0,
+            "the following run is back in the ambient fill-only mode — the \
+             synthetic bold did not bleed past its restore"
+        );
+        assert_eq!(
+            plain.line_width.value(),
+            1.0,
+            "and the line width is back at Table 52's initial value"
+        );
+        assert_eq!(
+            crate::text_edit::synth::detect(
+                "Helvetica",
+                plain.text_state.params().render_mode,
+                plain.line_width.value(),
+                plain.tf_size,
+                plain.text_matrix,
+            ),
+            StyleSynthesis::None,
+            "and the detector agrees the following run is not synthesized"
+        );
+    }
+
+    /// The `Other`-colour-space case for the stroking match. pdfce cannot
+    /// decode an ICC/spot colour, but it can still put the *same* colour on
+    /// the stroke by re-stating the space and value through the uppercase
+    /// operators — which is the only alternative to a black outline.
+    #[test]
+    fn faux_bold_matches_an_undecodable_colour_space_by_operator_case() {
+        let src = build_pdf(
+            "/CS0 cs 0.2 0.4 0.6 scn BT /F1 12 Tf 72 700 Td (hello) Tj ET\n",
+            &[(
+                b"F1".to_vec(),
+                b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+                    .to_vec(),
+            )],
+        );
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let text = as_text(&out.bytes);
+        assert!(
+            text.contains("/CS0 CS 0.2 0.4 0.6 SCN"),
+            "the same space and value, on the STROKING side: {text}"
+        );
+    }
+
+    /// The family gate must not be fooled by a subset tag or by a comma
+    /// style separator — both are ordinary `/BaseFont` spellings (§9.6.2.2,
+    /// §9.6.4) and both would otherwise let a real Bold hide from the gate.
+    #[test]
+    fn the_real_face_gate_sees_through_subset_tags_and_comma_styles() {
+        let src = build_pdf(
+            "BT /F1 12 Tf 72 700 Td (hello) Tj ET\n",
+            &[
+                (
+                    b"F1".to_vec(),
+                    b"<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+Arial /Encoding /WinAnsiEncoding >>"
+                        .to_vec(),
+                ),
+                (
+                    b"F9".to_vec(),
+                    b"<< /Type /Font /Subtype /Type1 /BaseFont /GHIJKL+Arial,Bold /Encoding /WinAnsiEncoding >>"
+                        .to_vec(),
+                ),
+            ],
+        );
+        let doc = Document::from_bytes(src).unwrap();
+        let err = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap_err();
+        match err {
+            FormatError::RealFaceAvailable { ref real_font, .. } => {
+                assert_eq!(real_font, "GHIJKL+Arial,Bold");
+            }
+            other => panic!("expected the real-face refusal, got {other}"),
+        }
+    }
+
+    /// A `Times-Bold` on the page does NOT satisfy a request for synthetic
+    /// *italic* — the gate requires the real face to cover every style asked
+    /// for, or it is not a substitute.
+    #[test]
+    fn a_bold_sibling_does_not_satisfy_an_italic_synthesis_request() {
+        let src = family_pdf("BT /F1 12 Tf 1 0 0 1 72 700 Tm (hello) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Italic),
+            &FormatOptions::default(),
+        )
+        .expect("no real Italic resolves, so synthesis is available");
+        assert_eq!(out.report.synthesis, StyleSynthesis::Italic);
     }
 }

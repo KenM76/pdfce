@@ -1327,6 +1327,35 @@ enum Command {
         /// how an inherited non-zero rise is flattened for one run.
         #[arg(long = "no-script")]
         no_script: bool,
+        /// Free-form baseline rise `Ts` (§9.3.7) for the matched run — pdfce's
+        /// deliberate EXCEED over Acrobat, which exposes only the coarse
+        /// superscript/subscript toggle. `3.25` or `3.25pt` is ABSOLUTE
+        /// (unscaled text-space units, written exactly as typed); `280em` is
+        /// RELATIVE and means 280 THOUSANDTHS of an em, re-derived if the run
+        /// is later resized. Positive raises the baseline. A rise moves the
+        /// run WITHOUT changing its advance, so nothing after it shifts.
+        /// Conflicts with the script toggles: both write `Ts`.
+        #[arg(
+            long,
+            value_name = "V[pt|em]",
+            conflicts_with_all = ["superscript", "subscript", "no_script"]
+        )]
+        rise: Option<String>,
+        /// Apply SYNTHETIC bold: text rendering mode 2 (fill-then-stroke)
+        /// with a user-space stroke width and the stroking colour matched to
+        /// the fill (§9.3.6). This is a FALLBACK for when no real Bold face
+        /// resolves on the page — if one does, the command REFUSES and names
+        /// it, because synthesis is never an alternative to a real typeface
+        /// (R90). Nothing is ever synthesized without this flag.
+        #[arg(long = "bold-synthetic")]
+        bold_synthetic: bool,
+        /// Apply SYNTHETIC italic: a 12-degree oblique shear premultiplied
+        /// into the run's text matrix. Same fallback-only gate as
+        /// `--bold-synthetic`. REFUSED when a Td/TD/T* next-line operator
+        /// follows the run inside the same text object (the injected matrix
+        /// would displace that line), and refused with `--pin`.
+        #[arg(long = "italic-synthetic")]
+        italic_synthetic: bool,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -2239,6 +2268,9 @@ fn run() -> ExitCode {
             superscript,
             subscript,
             no_script,
+            rise,
+            bold_synthetic,
+            italic_synthetic,
             output,
             pin,
             font_dirs,
@@ -2252,6 +2284,8 @@ fn run() -> ExitCode {
             set_font: set_font.as_deref(),
             char_spacing: char_spacing.as_deref(),
             h_scale,
+            rise: rise.as_deref(),
+            synthetic: pdfce_core::text_edit::StyleSynthesis::new(bold_synthetic, italic_synthetic),
             // clap's `conflicts_with` guarantees at most one is set, so this
             // ladder cannot silently prefer one over another.
             script: if superscript {
@@ -5320,6 +5354,12 @@ struct FormatTextArgs<'a> {
     h_scale: Option<f64>,
     /// The baseline toggle, already resolved from the three exclusive flags.
     script: Option<pdfce_core::text_edit::ScriptPosition>,
+    /// `--rise` as passed, e.g. `3.25`, `3.25pt`, `280em` (Pass 19.2).
+    rise: Option<&'a str>,
+    /// The synthetic styles asked for, already folded from the two flags.
+    /// [`StyleSynthesis::None`] means none were, which is the default and
+    /// the only state in which nothing is synthesized (R90).
+    synthetic: pdfce_core::text_edit::StyleSynthesis,
     pin: bool,
     font_dirs: &'a [PathBuf],
 }
@@ -5437,6 +5477,21 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
         },
         None => None,
     };
+    // …and the rise spec, which shares `parse_char_spacing`'s grammar
+    // because it shares its unit model: both `Tc` and `Ts` are in unscaled
+    // text-space units and both are governed by R89's Absolute/Relative
+    // discrimination (§9.3 Table 105's closing note). One parser, one set of
+    // suffixes to learn, no chance of the two drifting apart.
+    let rise = match args.rise {
+        Some(spec) => match parse_char_spacing(spec) {
+            Ok(m) => Some(m),
+            Err(msg) => {
+                eprintln!("pdfce-cli: --rise: {msg}");
+                return exit::EDIT_REFUSED;
+            }
+        },
+        None => None,
+    };
 
     let source = match std::fs::read(args.input) {
         Ok(b) => b,
@@ -5477,6 +5532,15 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
     if let Some(pos) = args.script {
         req = req.script(pos);
     }
+    if let Some(spec) = rise {
+        req = req.rise(spec);
+    }
+    // Passing the request through even when it is `None` would be harmless,
+    // but doing it explicitly keeps "nothing was asked for" and "nothing was
+    // applied" the same statement (R90: never silent, never a default).
+    if !args.synthetic.is_none() {
+        req = req.synthetic(args.synthetic);
+    }
     let opts = FormatOptions::default().with_disposition(if args.pin {
         FollowerDisposition::Pin
     } else {
@@ -5498,6 +5562,9 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
                 | FormatError::PageIndex(_)
                 | FormatError::AmbientUnrestorable(_)
                 | FormatError::BadHorizScale(_)
+                | FormatError::ConflictingRise
+                | FormatError::RealFaceAvailable { .. }
+                | FormatError::ShearUnsupported(_)
                 | FormatError::Encrypted => exit::EDIT_REFUSED,
                 FormatError::Write(_) => exit::SAVE_REFUSED,
                 FormatError::Content(_) | FormatError::PageTree(_) => exit::RUNTIME_ERROR,
@@ -5551,6 +5618,26 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
         },
     );
     println!("  char_spacing={tc_str} h_scale={tz_str} script={script_str}");
+    // Pass 19.2. `rise` is printed whenever the baseline moved — by the
+    // free-form control OR by the toggle — because "where is the baseline
+    // now" is one question, not two. `synthesis` prints the mechanism's own
+    // numbers (stroke width, shear, and the Trise x tan(theta) displacement)
+    // so nothing pdfce chose is invisible to the operator (rule 4).
+    let rise_str = report
+        .rise_change
+        .map_or_else(|| "none".to_owned(), |(o, n)| format!("{o}->{n}"));
+    let synth_str = if report.synthesis.is_none() {
+        "none".to_owned()
+    } else {
+        let bold = report
+            .synthetic_bold_width
+            .map_or_else(String::new, |w| format!(" stroke_w={w}"));
+        let ital = report.synthetic_italic.map_or_else(String::new, |(t, o)| {
+            format!(" shear_tan={t} rise_offset={o}")
+        });
+        format!("{}{bold}{ital}", report.synthesis)
+    };
+    println!("  rise={rise_str} synthesis={synth_str}");
     if !report.restore_narrowed.is_empty() {
         let names: Vec<String> = report
             .restore_narrowed
