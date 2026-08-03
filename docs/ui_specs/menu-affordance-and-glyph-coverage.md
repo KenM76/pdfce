@@ -529,3 +529,56 @@ enabled icon control) — see §6.5.
   "say what's actually true" discipline rule 2/fuzzy-never-sneaky is
   built on, which is why it is filed as a fix rather than a
   nice-to-have.
+
+---
+
+## 8. Engineer verification log (added 2026-08-03)
+
+Direct observation of the running release build, via the screenshot harness
+(`tools/observe-gui.ps1`) at 3x magnification. This section records what was
+actually SEEN, as distinct from what was inferred from font coverage — §4's
+classifications were deliberately hedged, and these confirm or close them.
+
+### 8.1 CONFIRMED BROKEN — `▾` U+25BE (§4.1) — now FIXED
+
+Seen as a tofu box on all four menu buttons (`Markup`, `Text`, `Measure`,
+`Copy`) before the fix, and confirmed GONE after it: all four now draw
+`chevron-down.svg` and render correctly. Copy additionally regained its
+missing "Copy" word (§4.1's second finding). Fixed in `a1badc1`.
+
+### 8.2 CONFIRMED BROKEN — `▲` U+25B2 / `▼` U+25BC (§4.2) — NOT yet fixed
+
+§4.2 rated these "HIGH SUSPICION — same Unicode block as the confirmed bug".
+**They are broken.** With a page checked in the rail, the selection toolbar
+renders `1 page selected` followed by two rotate icons and then **two empty
+boxes** where "Move selection up" / "Move selection down" should be. Both
+controls are therefore unlabelled to a sighted operator.
+
+Note this is a *worse* failure than the menu-button case was: those at least
+carried a word beside the tofu ("Markup ▾"), whereas these buttons are
+glyph-ONLY, so a broken glyph leaves them with no visible identity at all.
+They do carry accessible names (they route through `glyph_button`), so the
+defect is visual rather than assistive.
+
+**Fix, mirroring §2.3:** `chevron-up.svg` (authored 2026-08-03, mirror of
+`chevron-down.svg`, same offset-6/arm-12 construction) and the existing
+`chevron-down.svg`, via a new `Icon::ChevronUp` and the ordinary
+`icons::image` path — these are primary controls, not subordinate disclosure
+markers, so they take the full `ICON_PTS` size rather than
+`MENU_CHEVRON_PTS`. Both call sites already funnel through `glyph_button`
+(the merge-dialog pair was migrated in `a1badc1`), so only the glyph source
+changes; the accessible names are already correct and must be preserved.
+
+### 8.3 STILL UNVERIFIED — `✓` U+2713 / `✕` U+2715 (§4.2)
+
+Not settled. The rail's page checkbox does render a tick, but that is egui's
+own `Checkbox` widget painting a vector check — not a font glyph — so it says
+nothing about U+2713. The Accept/Reject buttons that use these codepoints
+require an in-progress tool gesture to appear, and synthetic canvas input does
+not currently satisfy egui's `Response::clicked()`, so the state could not be
+reached. Remains flagged, not claimed either way.
+
+### 8.4 OBSERVED SAFE
+
+`⚠` (status-bar warning prefix) and `✓` in the "Rendered faithfully" status
+line both render correctly, consistent with §4.3's "likely safe" rating.
