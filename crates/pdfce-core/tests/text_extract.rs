@@ -514,3 +514,67 @@ fn extraction_leaves_the_document_bytes_untouched() {
     let _ = text_extract::extract_document(&doc, &ExtractOptions::default()).expect("extracts");
     assert_eq!(doc.bytes(), before.as_slice());
 }
+
+// ---------------------------------------------------------------------------
+// Pass 19.0 — the composite/CID flag published on provenance
+// ---------------------------------------------------------------------------
+
+/// §9.3.3 makes `Tw` void for multi-byte codes, and the Pass 14.1 surgery
+/// refuses composite re-encoding (R-INV-4). Both need to know whether a run
+/// is composite **before** acting; before Pass 19.0 the only way to find
+/// out from outside the crate was to attempt an edit and read the refusal.
+///
+/// The two fixtures below straddle the boundary: `identity-h-tounicode.pdf`
+/// is a Type 0 / `Identity-H` composite (2-byte codes), `simple-winansi.pdf`
+/// is a Type 1 simple font (1-byte codes).
+#[test]
+fn provenance_publishes_whether_a_run_is_composite() {
+    let opts = ExtractOptions::default().with_provenance(true);
+
+    let composite = extract_with("identity-h-tounicode.pdf", &opts);
+    let mut composite_glyphs = 0usize;
+    for page in &composite.pages {
+        for run in &page.runs {
+            for g in &run.glyphs {
+                let p = g.provenance.as_ref().expect("provenance captured");
+                assert!(
+                    p.composite,
+                    "an Identity-H run must report itself composite (§9.7.6.2)"
+                );
+                composite_glyphs += 1;
+            }
+        }
+    }
+    assert!(composite_glyphs > 0, "the fixture produced no glyphs");
+
+    let simple = extract_with("simple-winansi.pdf", &opts);
+    let mut simple_glyphs = 0usize;
+    for page in &simple.pages {
+        for run in &page.runs {
+            for g in &run.glyphs {
+                let p = g.provenance.as_ref().expect("provenance captured");
+                assert!(
+                    !p.composite,
+                    "a Type 1 WinAnsi run is a simple font (§9.6.1)"
+                );
+                simple_glyphs += 1;
+            }
+        }
+    }
+    assert!(simple_glyphs > 0, "the fixture produced no glyphs");
+}
+
+/// Provenance capture stays opt-in: with the flag off the ambient state is
+/// never built, so the default Pass 4 output is unchanged and no per-glyph
+/// cost is paid by a caller who only wants text.
+#[test]
+fn the_ambient_state_is_not_built_unless_provenance_is_requested() {
+    let text = extract("simple-winansi.pdf");
+    for page in &text.pages {
+        for run in &page.runs {
+            for g in &run.glyphs {
+                assert!(g.provenance.is_none());
+            }
+        }
+    }
+}

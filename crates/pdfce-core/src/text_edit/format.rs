@@ -607,11 +607,29 @@ pub(crate) fn plan_format(
     let a_old: f64 = m
         .old_codes
         .iter()
-        .map(|&c| glyph_advance_with(&orig_font, c, orig_size, anchor.tc, anchor.tw, anchor.th))
+        .map(|&c| {
+            glyph_advance_with(
+                &orig_font,
+                c,
+                orig_size,
+                anchor.tc(),
+                anchor.tw(),
+                anchor.th(),
+            )
+        })
         .sum();
     let a_new: f64 = new_codes
         .iter()
-        .map(|&c| glyph_advance_with(advance_font, c, new_size, anchor.tc, anchor.tw, anchor.th))
+        .map(|&c| {
+            glyph_advance_with(
+                advance_font,
+                c,
+                new_size,
+                anchor.tc(),
+                anchor.tw(),
+                anchor.th(),
+            )
+        })
         .sum();
     let delta = a_new - a_old;
 
@@ -683,7 +701,7 @@ pub(crate) fn plan_format(
                 // Append a compensating `[N] TJ` after the whole run so
                 // nothing following moves (surgery ref §2). After restore the
                 // active size is `orig_size`, so scale N by it.
-                if let Some(n) = compensating_tj(delta, orig_size, anchor.th)
+                if let Some(n) = compensating_tj(delta, orig_size, anchor.th())
                     && let Some((_, _, bytes)) = edits.first_mut()
                 {
                     bytes.push(b' ');

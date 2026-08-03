@@ -87,6 +87,7 @@ use crate::page_tree::{self, Page, PageTreeError};
 use crate::span::ByteSpan;
 use crate::text_edit::encoding::{InverseEncoding, RInvTrigger, Refusal};
 use crate::text_extract::font::ExtractFont;
+use crate::text_state::{AmbientTextState, TextStateParam};
 use crate::writer::content::{emit_literal_string, emit_number};
 use crate::writer::{DirtySet, SaveOptions, WriteError, save_incremental};
 
@@ -382,9 +383,17 @@ pub(crate) struct ShowSlot {
 pub(crate) struct ShowData {
     pub(crate) font_name: Vec<u8>,
     pub(crate) tf_size: f64,
-    pub(crate) tc: f64,
-    pub(crate) tw: f64,
-    pub(crate) th: f64,
+    /// The ambient §9.3 text state at this operator, **with each
+    /// parameter's restore provenance** (Pass 19.0).
+    ///
+    /// This replaced three bare `f64`s (`tc`/`tw`/`th`). The values are
+    /// still reachable through [`Self::tc`]/[`Self::tw`]/[`Self::th`] for
+    /// the §9.4.4 advance arithmetic, but the struct now additionally
+    /// knows how to *put each one back* — which is what a formatting
+    /// surgery that emits `Tc`/`Tz`/`Ts` for one run needs, and what R88's
+    /// three-tier ladder is expressed in. It also covers `Ts` and `Tr`,
+    /// which this walk did not track at all before.
+    pub(crate) text_state: AmbientTextState,
     pub(crate) mcid: Option<i64>,
     pub(crate) op: ShowOp,
     pub(crate) elems: Vec<ShowElem>,
@@ -393,6 +402,24 @@ pub(crate) struct ShowData {
     /// The fill colour in effect (§8.6.8) — recorded for Pass 14.2's
     /// colour-restore; unused by Pass 14.1's REPLACE.
     pub(crate) fill_color: FillState,
+}
+
+impl ShowData {
+    /// `Tc` — character spacing in effect at this operator (§9.3.2).
+    pub(crate) fn tc(&self) -> f64 {
+        self.text_state.char_spacing.value
+    }
+
+    /// `Tw` — word spacing in effect at this operator (§9.3.3).
+    pub(crate) fn tw(&self) -> f64 {
+        self.text_state.word_spacing.value
+    }
+
+    /// `Th` — horizontal scaling as a **ratio** (`Tz` ÷ 100, §9.3.4), the
+    /// form §9.4.4's displacement formula multiplies by.
+    pub(crate) fn th(&self) -> f64 {
+        self.text_state.h_scale.value / 100.0
+    }
 }
 
 /// What one operator contributes to the relayout scan.
@@ -421,21 +448,65 @@ pub(crate) struct Walk<'a> {
     doc: &'a Document,
     resources: &'a Dict,
     font_cache: HashMap<Vec<u8>, Option<ExtractFont>>,
-    // text state (§9.3)
+    /// The graphics-state subset this walk models. One struct rather than
+    /// loose fields because `q`/`Q` save and restore **all** of it at once
+    /// (§8.4.2), and a stack of loose fields is how a `Q` comes to restore
+    /// four of five things.
+    gs: GState,
+    /// The `q` save stack (§8.4.4). Bounded like the extraction walk's, so
+    /// a hostile stream of `q`s cannot grow it without limit.
+    gs_stack: Vec<GState>,
+    // marked-content stack (§14.6/§14.7) — the current /MCID is the top.
+    mc_stack: Vec<Option<i64>>,
+    pub(crate) recs: Vec<OpRec>,
+}
+
+/// The graphics state this authoring walk tracks, as `q`/`Q` see it.
+///
+/// # Pass 19.0: why this became a struct with a stack behind it
+///
+/// The walk previously kept `font_name`/`tf_size`/`tc`/`tw`/`th`/`fill`/
+/// `last_cs` as loose fields and had **no `q` or `Q` arm at all**. Every
+/// one of those is graphics state (§8.4.2, Table 52 + §9.3), so a stream
+/// that wrote
+///
+/// ```text
+/// q  1 0 0 rg  0.5 Tc  BT (a) Tj ET  Q   BT (b) Tj ET
+/// ```
+///
+/// left the model believing `(b)` was red with `0.5 Tc`, when every
+/// conforming reader discards both at the `Q`. That mis-modelled ambient
+/// is exactly what a formatting restore would have re-emitted — writing a
+/// wrong `0.5 Tc` into a stream that did not have one. The fix is
+/// structural: one struct, one stack, one place a `Q` can go wrong.
+#[derive(Debug, Clone)]
+struct GState {
+    /// The `/Fn` resource name selected by the most recent `Tf` (§9.3.1).
     font_name: Vec<u8>,
+    /// `Tfs` — the `Tf` size operand (§9.3.1).
     tf_size: f64,
-    tc: f64,
-    tw: f64,
-    th: f64,
-    // fill-colour graphics state (§8.6.8) — recorded for Pass 14.2.
+    /// The six shared §9.3 parameters, with restore provenance.
+    ambient: AmbientTextState,
+    /// The fill colour (§8.6.8) — recorded for Pass 14.2's restore.
     fill: FillState,
     /// The raw bytes of the most recent `cs` (set-fill-colour-space)
     /// operator, so a following `sc`/`scn` can record a re-emittable
     /// `cs … scn` sequence for the `Other` case.
     last_cs: Option<Vec<u8>>,
-    // marked-content stack (§14.6/§14.7) — the current /MCID is the top.
-    mc_stack: Vec<Option<i64>>,
-    pub(crate) recs: Vec<OpRec>,
+}
+
+impl GState {
+    /// The state at the start of a content stream: no font selected, and
+    /// every §9.3 parameter at its Table 105 initial value.
+    fn initial() -> Self {
+        Self {
+            font_name: Vec::new(),
+            tf_size: 0.0,
+            ambient: AmbientTextState::initial(),
+            fill: FillState::Default,
+            last_cs: None,
+        }
+    }
 }
 
 impl<'a> Walk<'a> {
@@ -444,13 +515,8 @@ impl<'a> Walk<'a> {
             doc,
             resources,
             font_cache: HashMap::new(),
-            font_name: Vec::new(),
-            tf_size: 0.0,
-            tc: 0.0,
-            tw: 0.0,
-            th: 1.0,
-            fill: FillState::Default,
-            last_cs: None,
+            gs: GState::initial(),
+            gs_stack: Vec::new(),
             mc_stack: Vec::new(),
             recs: Vec::new(),
         }
@@ -511,41 +577,71 @@ impl<'a> Walk<'a> {
         };
         let n = Self::nums(op);
         let rec = match name {
+            // --- special graphics state (§8.4.4) ---
+            //
+            // Pass 19.0. These arms did not exist, which meant text state
+            // and fill colour set inside a `q … Q` bracket leaked past the
+            // `Q` in the model. See [`GState`]'s doc comment for the
+            // worked example and why it matters to a restore.
+            b"q" => {
+                self.gs_stack.push(self.gs.clone());
+                // A hostile stream of `q`s must not grow the stack without
+                // bound; 256 is far past any real nesting and matches the
+                // extraction walk's guard.
+                if self.gs_stack.len() > 256 {
+                    self.gs_stack.remove(0);
+                }
+                Rec::Ignore
+            }
+            b"Q" => {
+                if let Some(prev) = self.gs_stack.pop() {
+                    self.gs = prev;
+                }
+                Rec::Ignore
+            }
             b"Tf" => {
                 if let Some(fname) = op.operands.iter().find_map(|t| match &t.kind {
                     ContentTokenKind::Operand(Object::Name(nm)) => Some(nm.as_bytes().to_vec()),
                     _ => None,
                 }) {
-                    self.font_name = fname;
+                    self.gs.font_name = fname;
                 }
                 if let Some(size) = n.last() {
-                    self.tf_size = *size;
+                    self.gs.tf_size = *size;
                 }
                 Rec::Ignore
             }
-            b"Tc" => {
-                if let Some(v) = n.first() {
-                    self.tc = *v;
-                }
-                Rec::Ignore
-            }
-            b"Tw" => {
-                if let Some(v) = n.first() {
-                    self.tw = *v;
-                }
-                Rec::Ignore
-            }
-            b"Tz" => {
-                if let Some(v) = n.first() {
-                    self.th = *v / 100.0;
-                }
+            // --- text state (§9.3 Table 105) ---
+            //
+            // Pass 19.0: six operators, ONE update rule, shared with the
+            // extraction and vector walks. `Ts` and `Tr` are new here —
+            // this walk tracked neither, which is why pdfce could not
+            // restore an ambient rise or rendering mode it had never
+            // observed (decision 019 §1.2). The raw operator bytes are
+            // captured for the R88 tier-2 restore.
+            b"Tc" | b"Tw" | b"Tz" | b"TL" | b"Ts" | b"Tr" => {
+                let raw = buf.get(start..end).unwrap_or_default();
+                self.gs.ambient.apply_operator(name, &n, raw);
                 Rec::Ignore
             }
             b"Tm" => match n.as_slice() {
                 [a, b, c, d, e, f] => Rec::Tm([*a, *b, *c, *d, *e, *f]),
                 _ => Rec::Ignore,
             },
-            b"Td" | b"TD" | b"T*" => Rec::Boundary,
+            // `TD` additionally "sets the leading parameter to -ty"
+            // (§9.4.2 Table 108). Tracked so the ambient `TL` this walk
+            // publishes is the value actually in force — but as
+            // ObservedIndirect, because re-emitting the `TD` to restore it
+            // would also move the line.
+            b"TD" => {
+                if let [_, ty] = n.as_slice() {
+                    self.gs
+                        .ambient
+                        .set_indirect(TextStateParam::Leading, -*ty, "TD");
+                }
+                Rec::Boundary
+            }
+            b"Td" | b"T*" => Rec::Boundary,
             // Fill-colour graphics state (§8.6.8). Recorded so Pass 14.2's
             // formatting surgery can classify (device vs Other) and RESTORE
             // the prior colour byte-faithfully after a wrapped edit. Only
@@ -554,25 +650,25 @@ impl<'a> Walk<'a> {
             // by default (§9.3.1 render mode 0). Recording these does not
             // change Pass 14.1's REPLACE output — it never reads the field.
             b"g" => {
-                self.fill = Self::device_fill(DeviceSpace::Gray, &n, buf, start, end);
-                self.last_cs = None;
+                self.gs.fill = Self::device_fill(DeviceSpace::Gray, &n, buf, start, end);
+                self.gs.last_cs = None;
                 Rec::Ignore
             }
             b"rg" => {
-                self.fill = Self::device_fill(DeviceSpace::Rgb, &n, buf, start, end);
-                self.last_cs = None;
+                self.gs.fill = Self::device_fill(DeviceSpace::Rgb, &n, buf, start, end);
+                self.gs.last_cs = None;
                 Rec::Ignore
             }
             b"k" => {
-                self.fill = Self::device_fill(DeviceSpace::Cmyk, &n, buf, start, end);
-                self.last_cs = None;
+                self.gs.fill = Self::device_fill(DeviceSpace::Cmyk, &n, buf, start, end);
+                self.gs.last_cs = None;
                 Rec::Ignore
             }
             b"cs" => {
                 // Set-fill-colour-space: remember the raw bytes so a
                 // following `sc`/`scn` records a re-emittable `cs … scn`
                 // restore sequence.
-                self.last_cs = buf.get(start..end).map(<[u8]>::to_vec);
+                self.gs.last_cs = buf.get(start..end).map(<[u8]>::to_vec);
                 Rec::Ignore
             }
             b"sc" | b"scn" => {
@@ -580,14 +676,14 @@ impl<'a> Walk<'a> {
                 // not decode it (TextColor::Other). Keep the raw operator
                 // bytes (with the preceding `cs`, if any) to restore verbatim.
                 let mut raw = Vec::new();
-                if let Some(cs) = &self.last_cs {
+                if let Some(cs) = &self.gs.last_cs {
                     raw.extend_from_slice(cs);
                     raw.push(b' ');
                 }
                 if let Some(here) = buf.get(start..end) {
                     raw.extend_from_slice(here);
                 }
-                self.fill = FillState::Other { raw };
+                self.gs.fill = FillState::Other { raw };
                 Rec::Ignore
             }
             b"BDC" | b"BMC" => {
@@ -602,10 +698,11 @@ impl<'a> Walk<'a> {
             b"TJ" => self.record_show(op, ShowOp::TJ),
             b"'" => self.record_show(op, ShowOp::Quote),
             b"\"" => {
-                if let [aw, ac] = n.as_slice() {
-                    self.tw = *aw;
-                    self.tc = *ac;
-                }
+                // Table 109: `"` sets `Tw` and `Tc` before showing. Routed
+                // through the shared update rule so both are recorded with
+                // the same provenance discipline as a standalone operator.
+                let raw = buf.get(start..end).unwrap_or_default();
+                self.gs.ambient.apply_operator(name, &n, raw);
                 self.record_show(op, ShowOp::DoubleQuote)
             }
             _ => Rec::Ignore,
@@ -615,7 +712,7 @@ impl<'a> Walk<'a> {
 
     /// Decode a show operator into text + slots under the current font.
     fn record_show(&mut self, op: &Operation<'_>, kind: ShowOp) -> Rec {
-        let font = self.font(&self.font_name.clone());
+        let font = self.font(&self.gs.font_name.clone());
         let mut elems: Vec<ShowElem> = Vec::new();
         let mut text = String::new();
         let mut slots: Vec<ShowSlot> = Vec::new();
@@ -670,17 +767,15 @@ impl<'a> Walk<'a> {
         }
 
         Rec::Show(Box::new(ShowData {
-            font_name: self.font_name.clone(),
-            tf_size: self.tf_size,
-            tc: self.tc,
-            tw: self.tw,
-            th: self.th,
+            font_name: self.gs.font_name.clone(),
+            tf_size: self.gs.tf_size,
+            text_state: self.gs.ambient.clone(),
             mcid: self.current_mcid(),
             op: kind,
             elems,
             text,
             slots,
-            fill_color: self.fill.clone(),
+            fill_color: self.gs.fill.clone(),
         }))
     }
 }
@@ -869,7 +964,7 @@ pub(crate) fn plan_edit(
 
     // --- re-emit the anchor operator ---
     let pin_num = match opts.disposition {
-        FollowerDisposition::Pin => compensating_tj(delta, anchor.tf_size, anchor.th),
+        FollowerDisposition::Pin => compensating_tj(delta, anchor.tf_size, anchor.th()),
         FollowerDisposition::Reflow => None,
     };
     let new_op_bytes = emit_edited_operator(anchor, &m, &encoded.codes, pin_num);
@@ -1172,7 +1267,7 @@ pub(crate) fn classify_font(
 /// (§9.3.3). Width `w0` comes from the SAME `/Widths`/AFM the render path
 /// uses ([`ExtractFont::width`] already scales it to text space).
 fn glyph_advance(font: &ExtractFont, code: u8, s: &ShowData) -> f64 {
-    glyph_advance_with(font, code, s.tf_size, s.tc, s.tw, s.th)
+    glyph_advance_with(font, code, s.tf_size, s.tc(), s.tw(), s.th())
 }
 
 /// The §9.4.4 advance for one code with **explicit** text-state scalars —
@@ -1612,5 +1707,126 @@ mod tests {
         // First run unchanged, second edited.
         assert!(text.contains("cat"));
         assert!(text.contains("dog"));
+    }
+
+    // -- Pass 19.0: the authoring walk's text-state model ---------------
+
+    /// Run the authoring [`Walk`] over a page's content and return the
+    /// recorded show operators, in stream order.
+    fn show_records(content: &str) -> Vec<ShowData> {
+        let src = helvetica_pdf(content);
+        let doc = Document::from_bytes(src).unwrap();
+        let pages = crate::page_tree::pages(&doc).unwrap();
+        let page = &pages[0];
+        let stream = ContentStream::from_page(&doc.view(), page).unwrap();
+        let mut walk = Walk::new(&doc, &page.resources);
+        for op in stream.operations() {
+            walk.operation(&op, &stream.buf);
+        }
+        walk.recs
+            .into_iter()
+            .filter_map(|r| match r.rec {
+                Rec::Show(s) => Some(*s),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The regression this slice exists to fix. Before Pass 19.0 the
+    /// authoring walk had **no `b"Ts"` arm and no `b"Tr"` arm**, so an
+    /// ambient rise or rendering mode was invisible to every formatting
+    /// surgery — which is why pdfce could not restore one.
+    #[test]
+    fn the_authoring_walk_tracks_rise_and_render_mode() {
+        let recs = show_records("BT /F1 12 Tf 3 Ts 2 Tr 72 700 Td (hi) Tj ET\n");
+        assert_eq!(recs.len(), 1);
+        let ts = &recs[0].text_state;
+        assert_eq!(ts.rise.value, 3.0, "Ts was not tracked");
+        assert_eq!(ts.render_mode.value, 2.0, "Tr was not tracked");
+        assert_eq!(ts.restore_bytes(TextStateParam::Rise).unwrap(), b"3 Ts");
+        assert_eq!(
+            ts.restore_bytes(TextStateParam::RenderMode).unwrap(),
+            b"2 Tr"
+        );
+    }
+
+    /// §8.4.2/§9.3: text state is graphics state, so `Q` discards whatever
+    /// was set since the matching `q`. The walk had no `q`/`Q` arms at all
+    /// before Pass 19.0, so the second run below inherited the first run's
+    /// state — and a restore built on that would have written a `3 Ts` into
+    /// a stream that did not have one.
+    #[test]
+    fn q_and_q_restore_every_text_state_parameter() {
+        let recs = show_records(
+            "q 0.5 Tc 3 Ts 2 Tr 90 Tz 1 Tw BT /F1 12 Tf 72 700 Td (in) Tj ET Q \
+             BT /F1 12 Tf 72 680 Td (out) Tj ET\n",
+        );
+        assert_eq!(recs.len(), 2);
+
+        let inside = &recs[0].text_state;
+        assert_eq!(inside.char_spacing.value, 0.5);
+        assert_eq!(inside.rise.value, 3.0);
+        assert_eq!(inside.render_mode.value, 2.0);
+        assert_eq!(inside.h_scale.value, 90.0);
+        assert_eq!(inside.word_spacing.value, 1.0);
+
+        let outside = &recs[1].text_state;
+        assert_eq!(
+            *outside,
+            AmbientTextState::initial(),
+            "everything set inside the q … Q bracket must be discarded by the Q"
+        );
+        // …and therefore restores to the Table 105 defaults, not to the
+        // bracket's values.
+        assert_eq!(
+            outside.restore_bytes(TextStateParam::Rise).unwrap(),
+            b"0 Ts"
+        );
+        assert_eq!(
+            outside.restore_bytes(TextStateParam::HorizScale).unwrap(),
+            b"100 Tz"
+        );
+    }
+
+    /// `Q` also restores the fill colour, which is likewise graphics state
+    /// (§8.6.8) and was likewise leaking past the bracket.
+    #[test]
+    fn q_and_q_restore_the_fill_colour_too() {
+        let recs = show_records(
+            "q 1 0 0 rg BT /F1 12 Tf 72 700 Td (red) Tj ET Q \
+             BT /F1 12 Tf 72 680 Td (black) Tj ET\n",
+        );
+        assert_eq!(recs.len(), 2);
+        assert!(matches!(recs[0].fill_color, FillState::Device { .. }));
+        assert_eq!(
+            recs[1].fill_color,
+            FillState::Default,
+            "the Q must put the fill colour back to the §8.6.8 default"
+        );
+    }
+
+    /// R88 tier 2, on the authoring path: the restore re-emits the operand
+    /// **as written**, so a producer's `0.5000` does not come back as
+    /// `0.5`. A renormalized number is a diff in bytes pdfce claims not to
+    /// have logically touched.
+    #[test]
+    fn the_authoring_walk_keeps_raw_operand_bytes_for_restore() {
+        let recs = show_records("BT /F1 12 Tf 0.5000 Tc 72 700 Td (hi) Tj ET\n");
+        let ts = &recs[0].text_state;
+        assert_eq!(ts.char_spacing.value, 0.5);
+        assert_eq!(
+            ts.restore_bytes(TextStateParam::CharSpacing).unwrap(),
+            b"0.5000 Tc"
+        );
+    }
+
+    /// An unbalanced `Q` must not pop state the stream never pushed, and
+    /// must not panic — §7.8.2's recovery posture, and the same guard the
+    /// extraction walk has always had.
+    #[test]
+    fn an_unbalanced_q_is_survivable() {
+        let recs = show_records("Q Q 0.5 Tc BT /F1 12 Tf 72 700 Td (hi) Tj ET\n");
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].text_state.char_spacing.value, 0.5);
     }
 }

@@ -97,6 +97,7 @@ pub mod signature;
 pub mod span;
 pub mod text_edit;
 pub mod text_extract;
+pub mod text_state;
 pub mod textstring;
 pub mod vartext;
 pub mod vector;

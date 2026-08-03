@@ -63,12 +63,14 @@
 
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::content::{ContentError, ContentStream, ContentTokenKind, Operation};
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
 use crate::page_tree::{Page, Rect};
 use crate::span::ByteSpan;
+use crate::text_state::{AmbientTextState, TextStateParam};
 use crate::textstring::decode_text_string;
 use crate::view::DocumentView;
 
@@ -197,6 +199,27 @@ impl Matrix {
 }
 
 /// §9.3's text state parameters, plus the current font.
+///
+/// # Pass 19.0: the six numeric parameters moved to the shared model
+///
+/// `Tc`/`Tw`/`Tz`/`TL`/`Ts`/`Tr` used to be six private `f32`/`i64` fields
+/// here, duplicated by two more private trackers elsewhere in the crate
+/// (see [`crate::text_state`]'s module docs for the table). They are now
+/// one [`AmbientTextState`], which additionally records **where each value
+/// came from** so a later authoring pass can restore it byte-faithfully.
+///
+/// The `Arc` is not premature: with
+/// [`ExtractOptions::capture_provenance`](super::ExtractOptions::capture_provenance)
+/// on, this state is published onto **every glyph**, and a `q` clones the
+/// whole `TextState` onto the save stack. Sharing makes both a refcount
+/// bump instead of six copies plus however many raw-operand allocations.
+///
+/// `font` and `size` deliberately stay here rather than joining the shared
+/// type — see [`crate::text_state`]'s "which parameters, and why these
+/// six": `Tfs` is narrowed to `f32` on this path because provenance
+/// publishes `f32`, and moving it to the shared `f64` model would change
+/// the precision of the §9.4.4 advance and therefore move published glyph
+/// positions.
 #[derive(Clone)]
 struct TextState {
     font: Option<Rc<ExtractFont>>,
@@ -204,19 +227,10 @@ struct TextState {
     /// `Tf` is malformed, and pdfce treats the size as 0 rather than
     /// inventing one.
     size: f32,
-    /// `Tc` — character spacing, unscaled text-space units (§9.3.2).
-    char_spacing: f32,
-    /// `Tw` — word spacing (§9.3.3). Applies **only** to single-byte
-    /// code 32, which makes it inert under `Identity-H`.
-    word_spacing: f32,
-    /// `Tz` — horizontal scaling, already divided by 100 (§9.3.4).
-    h_scale: f32,
-    /// `TL` — leading (§9.3.5).
-    leading: f32,
-    /// `Ts` — rise (§9.3.6).
-    rise: f32,
-    /// `Tr` — rendering mode (§9.3.6, Table 106).
-    render_mode: i64,
+    /// The six shared §9.3 parameters with their restore provenance.
+    /// Graphics state, so saved/restored by `q`/`Q` via this struct's
+    /// `Clone` (§8.4.2).
+    ambient: Arc<AmbientTextState>,
     /// The current *fill* colour (§8.6.8), captured for provenance only.
     /// Part of the graphics state, so it is saved/restored by `q`/`Q` via
     /// this struct's `Clone`. `None` = unset, i.e. the §8.6.8 default black.
@@ -225,17 +239,57 @@ struct TextState {
     fill_color: Option<TextColor>,
 }
 
+impl TextState {
+    /// `Tc` in the `f32` domain this walk has always computed in.
+    fn char_spacing(&self) -> f32 {
+        self.ambient.char_spacing.value as f32
+    }
+
+    /// `Tw` in the `f32` domain this walk has always computed in.
+    fn word_spacing(&self) -> f32 {
+        self.ambient.word_spacing.value as f32
+    }
+
+    /// `Th` = `Tz` ÷ 100 (§9.3.4).
+    ///
+    /// The narrowing happens **before** the division, exactly as it did
+    /// when `h_scale` was an `f32` field assigned `v / 100.0` from an
+    /// `f32` operand. `(v as f32) / 100.0f32` and `(v / 100.0f64) as f32`
+    /// are not bit-identical for every operand, and this walk's outputs
+    /// (glyph `x`/`y`/`advance`) are published `f32` — so the order is
+    /// preserved deliberately, not incidentally.
+    fn h_scale(&self) -> f32 {
+        (self.ambient.h_scale.value as f32) / 100.0
+    }
+
+    /// `TL` in the `f32` domain this walk has always computed in.
+    fn leading(&self) -> f32 {
+        self.ambient.leading.value as f32
+    }
+
+    /// `Ts` in the `f32` domain this walk has always computed in.
+    fn rise(&self) -> f32 {
+        self.ambient.rise.value as f32
+    }
+
+    /// `Tmode` (§9.3.6, Table 106).
+    fn render_mode(&self) -> i64 {
+        self.ambient.render_mode.value as i64
+    }
+
+    /// Mutable access to the shared ambient state, cloning it out of the
+    /// `Arc` only when it is actually shared (copy-on-write).
+    fn ambient_mut(&mut self) -> &mut AmbientTextState {
+        Arc::make_mut(&mut self.ambient)
+    }
+}
+
 impl Default for TextState {
     fn default() -> Self {
         Self {
             font: None,
             size: 0.0,
-            char_spacing: 0.0,
-            word_spacing: 0.0,
-            h_scale: 1.0,
-            leading: 0.0,
-            rise: 0.0,
-            render_mode: 0,
+            ambient: Arc::new(AmbientTextState::initial()),
             fill_color: None,
         }
     }
@@ -404,39 +458,20 @@ impl Walk<'_> {
             b"ET" => {}
 
             // --- text state (§9.3) ---
+            //
+            // Pass 19.0: the six single-operand parameters (`Tc`/`Tw`/`Tz`/
+            // `TL`/`Ts`/`Tr`) are no longer six hand-written arms here.
+            // They go through the ONE shared update rule
+            // (`AmbientTextState::apply_operator`), which additionally
+            // captures each operator's raw bytes so a later authoring pass
+            // can restore the ambient value byte-faithfully (R88 tier 2).
+            // `Tf` keeps its own arm: it takes a NAME plus a number and
+            // resolves a font resource, which is not a numeric parameter.
             b"Tf" => self.select_font(op, resources),
-            b"Tc" => {
-                if let [v] = nums(1)[..] {
-                    self.ts.char_spacing = v;
-                }
-            }
-            b"Tw" => {
-                if let [v] = nums(1)[..] {
-                    self.ts.word_spacing = v;
-                }
-            }
-            b"Tz" => {
-                if let [v] = nums(1)[..] {
-                    self.ts.h_scale = v / 100.0;
-                }
-            }
-            b"TL" => {
-                if let [v] = nums(1)[..] {
-                    self.ts.leading = v;
-                }
-            }
-            b"Ts" => {
-                if let [v] = nums(1)[..] {
-                    self.ts.rise = v;
-                }
-            }
-            b"Tr" => {
-                self.ts.render_mode = op
-                    .operands
-                    .last()
-                    .and_then(operand_object)
-                    .and_then(Object::as_int)
-                    .unwrap_or(0);
+            b"Tc" | b"Tw" | b"Tz" | b"TL" | b"Ts" | b"Tr" => {
+                let raw = op_bytes(op, buf).to_vec();
+                let vals = operand_numbers_f64(op, 1);
+                self.ts.ambient_mut().apply_operator(name, &vals, &raw);
             }
 
             // --- text positioning (§9.4.2) ---
@@ -448,7 +483,19 @@ impl Walk<'_> {
             b"TD" => {
                 if let [tx, ty] = nums(2)[..] {
                     // "sets the leading parameter to -ty" (Table 108).
-                    self.ts.leading = -ty;
+                    //
+                    // Recorded as ObservedIndirect, NOT as Observed: `TD`
+                    // genuinely sets `TL`, so claiming the leading is still
+                    // at its Table 105 default would be the guess R88
+                    // forbids — but this operator's bytes also move to the
+                    // next line, so re-emitting them as a "restore" would
+                    // displace every following glyph. The value is kept and
+                    // restores by re-spelling as `-ty TL`.
+                    self.ts.ambient_mut().set_indirect(
+                        TextStateParam::Leading,
+                        f64::from(-ty),
+                        "TD",
+                    );
                     self.next_line(tx, ty);
                 }
             }
@@ -460,7 +507,7 @@ impl Walk<'_> {
                 }
             }
             b"T*" => {
-                let leading = self.ts.leading;
+                let leading = self.ts.leading();
                 self.next_line(0.0, -leading);
             }
 
@@ -478,7 +525,7 @@ impl Walk<'_> {
             }
             b"'" => {
                 self.cur_op_span = op.operator.span;
-                let leading = self.ts.leading;
+                let leading = self.ts.leading();
                 self.next_line(0.0, -leading);
                 if let Some(s) = last_string(op) {
                     self.show(&s);
@@ -488,14 +535,16 @@ impl Walk<'_> {
                 // `aw ac string "` — sets word and character spacing,
                 // then behaves like `'`.
                 self.cur_op_span = op.operator.span;
-                let v = operand_numbers(op, 3);
-                if let Some(&aw) = v.first() {
-                    self.ts.word_spacing = aw;
-                }
-                if let Some(&ac) = v.get(1) {
-                    self.ts.char_spacing = ac;
-                }
-                let leading = self.ts.leading;
+                // Table 109: `"` sets BOTH `Tw` and `Tc` before showing.
+                // Routed through the shared update rule so the two
+                // parameters are recorded as observed with the same
+                // provenance discipline as a standalone `Tw`/`Tc` — see
+                // `AmbientTextState::apply_operator`'s doc comment for why
+                // the raw bytes of a `"` are not a usable restore.
+                let raw = op_bytes(op, buf).to_vec();
+                let v = operand_numbers_f64(op, 3);
+                self.ts.ambient_mut().apply_operator(name, &v, &raw);
+                let leading = self.ts.leading();
                 self.next_line(0.0, -leading);
                 if let Some(s) = last_string(op) {
                     self.show(&s);
@@ -766,7 +815,7 @@ impl Walk<'_> {
                         // the current horizontal coordinate", scaled by
                         // the font size and Tz. Applied NOW, so the next
                         // glyph is placed at the shifted origin.
-                        let tx = -(v as f32) / 1000.0 * self.ts.size * self.ts.h_scale;
+                        let tx = -(v as f32) / 1000.0 * self.ts.size * self.ts.h_scale();
                         self.tm = Matrix::translate(tx, 0.0).mul(self.tm);
                     }
                 }
@@ -806,12 +855,12 @@ impl Walk<'_> {
 
         // §9.4.4: Trm = [Tfs·Th 0 0 Tfs 0 Ts] × Tm × CTM.
         let params = Matrix {
-            a: self.ts.size * self.ts.h_scale,
+            a: self.ts.size * self.ts.h_scale(),
             b: 0.0,
             c: 0.0,
             d: self.ts.size,
             e: 0.0,
-            f: self.ts.rise,
+            f: self.ts.rise(),
         };
         let tm_ctm = self.tm.mul(self.ctm);
         let trm = params.mul(tm_ctm);
@@ -823,7 +872,7 @@ impl Walk<'_> {
         // word-break signal in modern documents (S6).
         let w0 = font.width(code);
         let tw = if word_spacing {
-            self.ts.word_spacing
+            self.ts.word_spacing()
         } else {
             0.0
         };
@@ -833,12 +882,12 @@ impl Walk<'_> {
         let tx = super::font::advance_tx(
             f64::from(w0),
             f64::from(self.ts.size),
-            f64::from(self.ts.char_spacing),
+            f64::from(self.ts.char_spacing()),
             f64::from(tw),
-            f64::from(self.ts.h_scale),
+            f64::from(self.ts.h_scale()),
         ) as f32;
 
-        let invisible = matches!(self.ts.render_mode, 3 | 7);
+        let invisible = matches!(self.ts.render_mode(), 3 | 7);
         if invisible {
             self.diagnostics.invisible_glyphs += 1;
         }
@@ -883,6 +932,22 @@ impl Walk<'_> {
                 fill_color: self.ts.fill_color,
                 text_matrix: text_matrix_at_show.to_array(),
                 ctm: self.ctm.to_array(),
+                // Pass 19.0: the ambient §9.3 state used to be tracked
+                // here and then DROPPED at exactly this line, which is why
+                // pdfce could not restore an ambient rise it never
+                // published. It now rides along — with each parameter's
+                // restore provenance, so an authoring pass can put the
+                // stream back byte-faithfully or refuse honestly.
+                // `Arc::clone` so publishing onto every glyph of a page is
+                // a refcount bump rather than six copies.
+                text_state: Arc::clone(&self.ts.ambient),
+                // §9.3.3: `Tw` is void for multi-byte codes. Published
+                // here rather than re-derived per caller, because the
+                // caller would need the resolved font to derive it and a
+                // GUI asking "is this run composite?" would otherwise have
+                // to provoke an error return to find out (R83 cannot be
+                // honoured against a capability nothing exposes).
+                composite: !font.is_simple(),
             })
         } else {
             None
@@ -1187,6 +1252,19 @@ impl Walk<'_> {
             if let Some(num) = obj_num {
                 self.stream_ref = ContentStreamRef::Form { object: num };
             }
+            // R88 tier 3 (decision 019 §3.4). The form INHERITS the
+            // invoking context's text state (§8.10.1), so every value
+            // stays in force and the advance arithmetic below is
+            // unaffected — but the operators that set those values live in
+            // the PAGE's buffer, not the form's. A later authoring pass
+            // editing a run inside this form therefore has nothing it
+            // could re-emit as a restore, and must refuse and disclose
+            // rather than guess the Table 105 default. Marking it here, at
+            // the exact moment the buffer changes, is what makes that
+            // refusal structural instead of a rule someone has to
+            // remember. Values a `Tc`/`Ts`/… INSIDE the form sets are
+            // observable in the form's own buffer and overwrite the mark.
+            self.ts.ambient_mut().enter_form(obj_num);
 
             if let Some(m) = matrix_of(doc, &stream.dict) {
                 self.ctm = m.mul(self.ctm);
@@ -1231,6 +1309,40 @@ fn operand_object(token: &crate::content::ContentToken) -> Option<&Object> {
 /// The last `count` numeric operands, in order. Returns fewer than
 /// `count` (and the caller's slice pattern then fails to match) when the
 /// operator is malformed.
+/// The operator's bytes **as written**, operands included — the raw
+/// sequence a tier-2 R88 restore re-emits (see [`crate::text_state`]).
+///
+/// Spans from the first operand's start (or the operator keyword's, for a
+/// no-operand operator) to the operator keyword's end. Whitespace and
+/// comments *between* the operands are inside the span and therefore
+/// preserved, which is the point: the restore must be the bytes the
+/// producer wrote, not a re-serialization of the parsed numbers.
+fn op_bytes<'b>(op: &Operation<'_>, buf: &'b [u8]) -> &'b [u8] {
+    let start = op
+        .operands
+        .first()
+        .map_or(op.operator.span.start, |t| t.span.start);
+    buf.get(start..op.operator.span.end()).unwrap_or_default()
+}
+
+/// The last `count` operands as `f64`, non-numeric operands filtered out.
+///
+/// The `f64` sibling of [`operand_numbers`]: the shared text-state model
+/// stores `f64` (the width the tokenizer parses at), and every consumer
+/// that needs this walk's historical `f32` precision narrows explicitly at
+/// its own point of use — see [`TextState`]'s accessors and the note there
+/// about why the narrowing order is preserved deliberately.
+fn operand_numbers_f64(op: &Operation<'_>, count: usize) -> Vec<f64> {
+    let start = op.operands.len().saturating_sub(count);
+    op.operands
+        .get(start..)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(operand_object)
+        .filter_map(Object::as_number)
+        .collect()
+}
+
 fn operand_numbers(op: &Operation<'_>, count: usize) -> Vec<f32> {
     let start = op.operands.len().saturating_sub(count);
     op.operands
@@ -1330,5 +1442,264 @@ mod tests {
         };
         assert!((m.x_scale() - 5.0).abs() < 1e-6);
         assert!((m.y_scale() - 5.0).abs() < 1e-6);
+    }
+
+    // -- Pass 19.0: ambient text state published on provenance ----------
+
+    use crate::document::Document;
+    use crate::text_state::{AmbientOrigin, TextStateParam, UnobservableAmbient};
+
+    /// A one-page PDF whose page content is `page_content` and which
+    /// carries one form XObject `/X1` (object 6) with `form_content`.
+    ///
+    /// Deliberately hand-assembled rather than pulled from
+    /// `fixtures/synthetic/`: the assertions below are about the exact
+    /// **spelling** of operands (`0.5000`, not `0.5`), and a fixture whose
+    /// bytes live in another file is a fixture whose bytes can be
+    /// reformatted by an unrelated regeneration.
+    fn pdf_with_form(page_content: &str, form_content: &str) -> Vec<u8> {
+        let font = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica \
+                     /Encoding /WinAnsiEncoding >>"
+            .to_vec();
+        let mut form = format!(
+            "<< /Type /XObject /Subtype /Form /BBox [0 0 200 200] \
+             /Resources << /Font << /F1 5 0 R >> >> /Length {} >>\nstream\n",
+            form_content.len()
+        )
+        .into_bytes();
+        form.extend_from_slice(form_content.as_bytes());
+        form.extend_from_slice(b"\nendstream");
+
+        let mut content = format!("<< /Length {} >>\nstream\n", page_content.len()).into_bytes();
+        content.extend_from_slice(page_content.as_bytes());
+        content.extend_from_slice(b"\nendstream");
+
+        let objects: Vec<(u32, Vec<u8>)> = vec![
+            (1, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+            (
+                2,
+                b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] \
+                  /Resources << /Font << /F1 5 0 R >> /XObject << /X1 6 0 R >> >> >>"
+                    .to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".to_vec(),
+            ),
+            (4, content),
+            (5, font),
+            (6, form),
+        ];
+
+        let highest = 6u32;
+        let mut out = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n".to_vec();
+        let mut offsets = std::collections::BTreeMap::new();
+        for (num, obj) in &objects {
+            offsets.insert(*num, out.len());
+            out.extend_from_slice(format!("{num} 0 obj\n").as_bytes());
+            out.extend_from_slice(obj);
+            out.extend_from_slice(b"\nendobj\n");
+        }
+        let xref_at = out.len();
+        out.extend_from_slice(format!("xref\n0 {}\n", highest + 1).as_bytes());
+        out.extend_from_slice(b"0000000000 65535 f \n");
+        for num in 1..=highest {
+            match offsets.get(&num) {
+                Some(off) => out.extend_from_slice(format!("{off:010} 00000 n \n").as_bytes()),
+                None => out.extend_from_slice(b"0000000000 65535 f \n"),
+            }
+        }
+        out.extend_from_slice(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n",
+                highest + 1
+            )
+            .as_bytes(),
+        );
+        out
+    }
+
+    /// Every glyph of the page, with provenance capture on, in order.
+    fn glyphs_with_provenance(bytes: &[u8]) -> Vec<crate::text_extract::ExtractedGlyph> {
+        let doc = Document::from_bytes(bytes.to_vec()).unwrap();
+        let pages = crate::page_tree::pages(&doc).unwrap();
+        let opts = ExtractOptions::default().with_provenance(true);
+        let page = super::super::extract_page(&doc, &pages[0], 0, &opts).unwrap();
+        page.runs
+            .into_iter()
+            .flat_map(|r| r.glyphs.into_iter())
+            .collect()
+    }
+
+    /// R88 tier 1 + tier 2, end to end through the public extraction API.
+    /// The ambient state used to be tracked here and then dropped at
+    /// provenance-construction time; the operand spelling is preserved so a
+    /// restore is byte-faithful rather than renormalized.
+    #[test]
+    fn provenance_publishes_the_ambient_state_with_raw_operand_bytes() {
+        let bytes = pdf_with_form(
+            "0.5000 Tc 3 Ts 90 Tz 2 Tr BT /F1 12 Tf 72 700 Td (hi) Tj ET\n",
+            "BT /F1 12 Tf 10 10 Td (x) Tj ET\n",
+        );
+        let glyphs = glyphs_with_provenance(&bytes);
+        let prov = glyphs[0].provenance.as_ref().expect("provenance captured");
+        let ts = &prov.text_state;
+
+        // Values.
+        let p = ts.params();
+        assert_eq!(p.char_spacing, 0.5);
+        assert_eq!(p.rise, 3.0);
+        assert_eq!(p.h_scale, 0.9, "Tz 90 ⇒ Th 0.9");
+        assert_eq!(p.render_mode, 2);
+
+        // Tier 2: restore the bytes AS WRITTEN.
+        assert_eq!(
+            ts.restore_bytes(TextStateParam::CharSpacing).unwrap(),
+            b"0.5000 Tc",
+            "a trailing-zero operand must survive verbatim"
+        );
+        assert_eq!(ts.restore_bytes(TextStateParam::Rise).unwrap(), b"3 Ts");
+        assert_eq!(
+            ts.restore_bytes(TextStateParam::HorizScale).unwrap(),
+            b"90 Tz"
+        );
+
+        // Tier 1: `TL` was never set, so it restores to the spec default.
+        assert!(matches!(ts.leading.origin, AmbientOrigin::Initial));
+        assert_eq!(ts.restore_bytes(TextStateParam::Leading).unwrap(), b"0 TL");
+
+        // This run is a simple font, so it is not composite.
+        assert!(!prov.composite);
+    }
+
+    /// R88 tier 3 — **the refuse tier**. A run inside a form XObject
+    /// inherits its text state from the invoking context (§8.10.1), so the
+    /// operator that set it is in the page's buffer, not the form's. A
+    /// restore emitted into the form would be a guess; pdfce refuses and
+    /// names the form.
+    #[test]
+    fn a_run_inside_a_form_xobject_refuses_the_restore_by_name() {
+        let bytes = pdf_with_form(
+            "0.5 Tc 3 Ts BT /F1 12 Tf 72 700 Td (hi) Tj ET\n/X1 Do\n",
+            "BT /F1 12 Tf 10 10 Td (x) Tj ET\n",
+        );
+        let glyphs = glyphs_with_provenance(&bytes);
+        // Page run: "hi" (2 glyphs). Form run: "x" (1 glyph), last.
+        let inside = glyphs
+            .last()
+            .and_then(|g| g.provenance.as_ref())
+            .expect("the form's glyph carries provenance");
+        assert_eq!(
+            inside.content_stream,
+            ContentStreamRef::Form { object: 6 },
+            "the last glyph must be the form's"
+        );
+
+        for param in [TextStateParam::CharSpacing, TextStateParam::Rise] {
+            let err = inside
+                .text_state
+                .restore_bytes(param)
+                .expect_err("an inherited value must NOT be restorable");
+            assert!(
+                matches!(
+                    err,
+                    crate::text_state::AmbientRestoreError::Unobservable {
+                        reason: UnobservableAmbient::FormXObject { object: Some(6) },
+                        ..
+                    }
+                ),
+                "{err:?}"
+            );
+            // The disclosure names the parameter and the form, and says
+            // pdfce refused rather than guessed.
+            let msg = err.to_string();
+            assert!(msg.contains("form XObject 6"), "{msg}");
+            assert!(msg.contains("refuses"), "{msg}");
+        }
+
+        // Unobservable is about RESTORABILITY, not knowledge: the inherited
+        // values are still in force and still drive the advance arithmetic.
+        assert_eq!(inside.text_state.params().char_spacing, 0.5);
+        assert_eq!(inside.text_state.params().rise, 3.0);
+
+        // A parameter nothing ever set stays restorable even inside the
+        // form — the Table 105 default holds everywhere, so emitting it is
+        // provably correct rather than a guess.
+        assert_eq!(
+            inside
+                .text_state
+                .restore_bytes(TextStateParam::HorizScale)
+                .unwrap(),
+            b"100 Tz"
+        );
+    }
+
+    /// A value set INSIDE the form is observable in the form's own buffer,
+    /// so it is restorable there — the inheritance mark is not sticky.
+    #[test]
+    fn a_value_set_inside_the_form_is_restorable_again() {
+        let bytes = pdf_with_form(
+            "0.5 Tc BT /F1 12 Tf 72 700 Td (hi) Tj ET\n/X1 Do\n",
+            "1.25 Tc BT /F1 12 Tf 10 10 Td (x) Tj ET\n",
+        );
+        let glyphs = glyphs_with_provenance(&bytes);
+        let inside = glyphs.last().and_then(|g| g.provenance.as_ref()).unwrap();
+        assert_eq!(
+            inside
+                .text_state
+                .restore_bytes(TextStateParam::CharSpacing)
+                .unwrap(),
+            b"1.25 Tc"
+        );
+    }
+
+    /// §8.10.1: a form's state changes cannot escape it. The page run that
+    /// follows the `Do` must see the page's own ambient, not the form's.
+    #[test]
+    fn form_state_does_not_escape_back_to_the_page() {
+        let bytes = pdf_with_form(
+            "0.5 Tc BT /F1 12 Tf 72 700 Td (a) Tj ET\n/X1 Do\n\
+             BT /F1 12 Tf 72 680 Td (b) Tj ET\n",
+            "9 Tc 9 Ts BT /F1 12 Tf 10 10 Td (x) Tj ET\n",
+        );
+        let glyphs = glyphs_with_provenance(&bytes);
+        let after = glyphs.last().and_then(|g| g.provenance.as_ref()).unwrap();
+        assert_eq!(after.content_stream, ContentStreamRef::Page);
+        assert_eq!(after.text_state.params().char_spacing, 0.5);
+        assert_eq!(after.text_state.params().rise, 0.0);
+        assert_eq!(
+            after
+                .text_state
+                .restore_bytes(TextStateParam::CharSpacing)
+                .unwrap(),
+            b"0.5 Tc",
+            "back on the page, the page's own operator is observable again"
+        );
+    }
+
+    /// §8.4.2: `q`/`Q` save and restore text state on the read path too.
+    #[test]
+    fn q_and_q_bracket_the_published_ambient_state() {
+        let bytes = pdf_with_form(
+            "q 0.5 Tc 3 Ts BT /F1 12 Tf 72 700 Td (a) Tj ET Q \
+             BT /F1 12 Tf 72 680 Td (b) Tj ET\n",
+            "BT /F1 12 Tf 10 10 Td (x) Tj ET\n",
+        );
+        let glyphs = glyphs_with_provenance(&bytes);
+        let inside = glyphs[0].provenance.as_ref().unwrap();
+        assert_eq!(inside.text_state.params().rise, 3.0);
+        let outside = glyphs
+            .last()
+            .and_then(|g| g.provenance.as_ref())
+            .expect("the post-Q glyph");
+        assert_eq!(outside.text_state.params().rise, 0.0);
+        assert_eq!(outside.text_state.params().char_spacing, 0.0);
+        assert_eq!(
+            outside
+                .text_state
+                .restore_bytes(TextStateParam::Rise)
+                .unwrap(),
+            b"0 Ts"
+        );
     }
 }

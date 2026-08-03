@@ -322,6 +322,18 @@ const NOMINAL_DESCENT: f32 = -0.25;
 /// internals, and is cross-checked by the render-parity gate rather than
 /// shared.
 ///
+/// **The same failure shape, one level up, is also closed (Pass 19.0).**
+/// The *arguments* to this function came from three private, independently
+/// maintained text-state trackers — `text_extract::page::TextState`,
+/// `text_edit::edit::Walk` (+ `reflow_apply::BlockTextState`) and
+/// `vector::decompose::GState` — and they had **already diverged**: the
+/// authoring one tracked neither `Ts` nor `Tr`, and none of them handled
+/// `q`/`Q`. Consolidating the formula while leaving three copies of its
+/// inputs was half the job. All three now compose
+/// [`crate::text_state`]'s single model. `pdfce-render`'s own tracker is
+/// deliberately still separate, for the same crate-boundary reason as the
+/// formula itself, and under the same render-parity cross-check.
+///
 /// `f64` throughout because two of the three callers already work in `f64`
 /// and the third (extraction) is narrowed back to `f32` at its own call
 /// site; doing the arithmetic in the wider type never loses precision the
@@ -720,8 +732,25 @@ impl ExtractFont {
     /// `/Encoding` table) rather than a composite Type 0 / CIDFont. The
     /// Pass 14.1 gate refuses composite editing (R-INV-4), so it asks this
     /// first.
+    ///
+    /// # Why this is `pub` (Pass 19.0)
+    ///
+    /// It was `pub(crate)` over a private `CodeWidth` enum, which meant the
+    /// only way for a caller outside the crate to learn whether a run was
+    /// composite was to **attempt an edit and read the refusal**. Two
+    /// behaviours downstream need the answer *before* acting: `Tw` is
+    /// spec-void for multi-byte codes (§9.3.3), and R83 ("no affordance
+    /// without the capability") requires the shell to be able to ask
+    /// whether a control would do anything before it draws one. The
+    /// answer is now also published per-run as
+    /// [`GlyphProvenance::composite`](super::GlyphProvenance::composite);
+    /// this accessor is the same fact reachable from a resolved font.
+    ///
+    /// `CodeWidth` itself stays private: it is a segmentation detail with
+    /// exactly two states, and a `bool` at the boundary is the smaller
+    /// public surface (Rust API Guidelines C-STRUCT-PRIVATE).
     #[must_use]
-    pub(crate) fn is_simple(&self) -> bool {
+    pub fn is_simple(&self) -> bool {
         matches!(self.width, CodeWidth::One)
     }
 }

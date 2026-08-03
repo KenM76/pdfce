@@ -104,6 +104,7 @@ use crate::object::{Dict, Object};
 use crate::page_tree::Page;
 use crate::span::ByteSpan;
 use crate::text_extract::{ExtractFont, LadderRung};
+use crate::text_state::TextStateParams;
 use crate::view::DocumentView;
 
 use super::geometry::{Bounds, Matrix, Point, Rgb, cubic_from_v, cubic_from_y, rect_corners};
@@ -1188,19 +1189,19 @@ struct GState {
     /// The decoder for [`Self::font_resource`], if the [`FontResolver`]
     /// could produce one.
     font: Option<Arc<ExtractFont>>,
-    leading: f64,
-    /// `Tc` — character spacing (§9.3.2, Table 105), user-space units added
-    /// to every glyph's displacement.
-    char_spacing: f64,
-    /// `Tw` — word spacing (§9.3.3). Applies **only** to the single-byte
-    /// character code 32, which is why it is inert under `Identity-H`.
-    word_spacing: f64,
-    /// `Th` — horizontal scaling, already divided by 100 (§9.3.4: the `Tz`
-    /// operand "shall be a percentage of the normal width"). Initial 1.0.
-    h_scale: f64,
-    /// `Ts` — text rise (§9.3.6), the vertical shift of the baseline used
-    /// for super/subscripts. Enters the box through `Trm`'s `f` element.
-    rise: f64,
+    /// The §9.3 Table 105 text-state parameters — `Tc`, `Tw`, `Th`, `TL`,
+    /// `Trise`, `Tmode` — held as the crate-shared
+    /// [`TextStateParams`](crate::text_state::TextStateParams) rather than
+    /// as five private fields (Pass 19.0).
+    ///
+    /// This walk is a *reading* walk: it consumes these values for one
+    /// purpose, the approximate text bounding box, and needs no restore
+    /// provenance. So it composes the values-only half of the shared
+    /// model, not [`AmbientTextState`](crate::text_state::AmbientTextState)
+    /// — a deliberate partial adoption, documented rather than silently
+    /// divergent. `h_scale` here is `Th` (the ratio), matching what the
+    /// §9.4.4 displacement formula multiplies by.
+    text: TextStateParams,
 }
 
 impl GState {
@@ -1213,13 +1214,10 @@ impl GState {
             font_size: 0.0,
             font_resource: None,
             font: None,
-            leading: 0.0,
             // Table 105 initial values: Tc = 0, Tw = 0, Tz = 100 (⇒ Th =
-            // 1.0), Ts = 0.
-            char_spacing: 0.0,
-            word_spacing: 0.0,
-            h_scale: 1.0,
-            rise: 0.0,
+            // 1.0), TL = 0, Ts = 0, Tr = 0 — stated once, in
+            // `TextStateParams::INITIAL`, instead of once per tracker.
+            text: TextStateParams::INITIAL,
         }
     }
 }
@@ -1612,7 +1610,7 @@ impl<'a> Decomposer<'a> {
             }
             b"TL" => {
                 if let &[v] = nums.as_slice() {
-                    self.gs.leading = v;
+                    self.gs.text.leading = v;
                 }
             }
             // §9.3 Table 105 text-state parameters that enter the run's
@@ -1622,23 +1620,23 @@ impl<'a> Decomposer<'a> {
             // beside the CTM rather than on the text accumulator.
             b"Tc" => {
                 if let &[v] = nums.as_slice() {
-                    self.gs.char_spacing = v;
+                    self.gs.text.char_spacing = v;
                 }
             }
             b"Tw" => {
                 if let &[v] = nums.as_slice() {
-                    self.gs.word_spacing = v;
+                    self.gs.text.word_spacing = v;
                 }
             }
             b"Tz" => {
                 if let &[v] = nums.as_slice() {
                     // §9.3.4: the operand is a PERCENTAGE.
-                    self.gs.h_scale = v / 100.0;
+                    self.gs.text.h_scale = v / 100.0;
                 }
             }
             b"Ts" => {
                 if let &[v] = nums.as_slice() {
-                    self.gs.rise = v;
+                    self.gs.text.rise = v;
                 }
             }
             b"Td" => {
@@ -1648,7 +1646,7 @@ impl<'a> Decomposer<'a> {
             }
             b"TD" => {
                 if let &[tx, ty] = nums.as_slice() {
-                    self.gs.leading = -ty;
+                    self.gs.text.leading = -ty;
                     self.text_line_offset(tx, ty);
                 }
             }
@@ -1662,7 +1660,7 @@ impl<'a> Decomposer<'a> {
                 }
             }
             b"T*" => {
-                let leading = self.gs.leading;
+                let leading = self.gs.text.leading;
                 self.text_line_offset(0.0, -leading);
             }
             b"Tj" | b"TJ" => self.show_text(operands),
@@ -1672,7 +1670,7 @@ impl<'a> Decomposer<'a> {
             // inflated by a whole em anyway, which hid a one-line error);
             // a box that now claims to be where the text is has to make it.
             b"'" => {
-                let leading = self.gs.leading;
+                let leading = self.gs.text.leading;
                 self.text_line_offset(0.0, -leading);
                 self.show_text(operands);
             }
@@ -1682,10 +1680,10 @@ impl<'a> Decomposer<'a> {
                 // graphics state afterwards (Table 109's own wording: the
                 // operator "shall set" them).
                 if let &[aw, ac] = nums.as_slice() {
-                    self.gs.word_spacing = aw;
-                    self.gs.char_spacing = ac;
+                    self.gs.text.word_spacing = aw;
+                    self.gs.text.char_spacing = ac;
                 }
-                let leading = self.gs.leading;
+                let leading = self.gs.text.leading;
                 self.text_line_offset(0.0, -leading);
                 self.show_text(operands);
             }
@@ -2034,7 +2032,7 @@ impl<'a> Decomposer<'a> {
     /// (ARCHITECTURE.md §10).
     fn tj_offset(&mut self, v: f64) {
         let tfs = self.gs.font_size;
-        let th = self.gs.h_scale;
+        let th = self.gs.text.h_scale;
         let tx = -(v / 1000.0) * tfs * th;
         if !tx.is_finite() {
             return;
@@ -2058,10 +2056,10 @@ impl<'a> Decomposer<'a> {
     fn advance_show_string(&mut self, bytes: &[u8]) {
         let ctm = self.gs.ctm;
         let tfs = self.gs.font_size;
-        let th = self.gs.h_scale;
-        let tc = self.gs.char_spacing;
-        let word_spacing = self.gs.word_spacing;
-        let rise = self.gs.rise;
+        let th = self.gs.text.h_scale;
+        let tc = self.gs.text.char_spacing;
+        let word_spacing = self.gs.text.word_spacing;
+        let rise = self.gs.text.rise;
         let font = self.gs.font.clone();
 
         let usable = font.filter(|_| {

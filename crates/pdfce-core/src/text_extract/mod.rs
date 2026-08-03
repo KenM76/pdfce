@@ -134,11 +134,13 @@ mod layout;
 mod page;
 
 use std::fmt;
+use std::sync::Arc;
 
 use crate::content::ContentError;
 use crate::document::Document;
 use crate::page_tree::{self, Page, PageTreeError, Rect};
 use crate::span::ByteSpan;
+use crate::text_state::AmbientTextState;
 use crate::view::DocumentView;
 
 pub use font::{ExtractFont, FontNote, LadderRung, Rung3Gap};
@@ -345,6 +347,51 @@ pub struct GlyphProvenance {
     /// The CTM in effect when this glyph was shown, `[a b c d e f]`
     /// (§8.3.4).
     pub ctm: [f32; 6],
+    /// The ambient §9.3 text state in force at this glyph — `Tc`, `Tw`,
+    /// `Tz`, `TL`, `Ts`, `Tr` — **with each parameter's restore
+    /// provenance** (Pass 19.0).
+    ///
+    /// # Why this is here, and what it fixes
+    ///
+    /// Before Pass 19.0 the extraction walk tracked all six of these and
+    /// then **dropped every one of them** at provenance-construction time.
+    /// The consequence was concrete rather than theoretical: an authoring
+    /// pass that re-emitted a run inside an ambient `3 Ts` (or `0.5 Tc`, or
+    /// `90 Tz`) could not restore that ambient afterwards, because it had
+    /// never observed it — and the tempting fallback, "restore the Table
+    /// 105 default", would silently *change* a value the operator never
+    /// touched.
+    ///
+    /// So this field carries not just the values but
+    /// [`AmbientOrigin`](crate::text_state::AmbientOrigin): whether each
+    /// parameter is provably at its spec default, was set by an operator
+    /// whose **raw bytes** are recorded (so `0.5000 Tc` restores as
+    /// `0.5000 Tc`, not as a renormalized `0.5 Tc`), or is inherited from
+    /// outside this content stream and therefore **not restorable at all**
+    /// — in which case a restore must refuse and disclose. That is
+    /// standing rule R88's three-tier ladder; see
+    /// [`crate::text_state`] for the full contract.
+    ///
+    /// `Arc` because one ambient state is published onto every glyph a run
+    /// produces: sharing makes that a refcount bump.
+    pub text_state: Arc<AmbientTextState>,
+    /// Whether the governing font segments its show strings into
+    /// **multi-byte** codes — i.e. a composite Type 0 / CIDFont (§9.7.6.2)
+    /// rather than a simple font (§9.6.1).
+    ///
+    /// Published as provenance because it is a *property of the run as the
+    /// file wrote it*, and because two later behaviours gate on it and
+    /// would otherwise each re-derive it:
+    ///
+    /// - **`Tw` is spec-void here.** §9.3.3: word spacing "shall not apply
+    ///   to occurrences of the byte value 32 in multiple-byte codes". A
+    ///   word-spacing operator emitted on a composite run does nothing, so
+    ///   pdfce never emits one and never offers the affordance (R91).
+    /// - **Re-encoding refuses here.** The Pass 14.1 surgery's R-INV-4
+    ///   gate declines composite runs, and before this flag existed a
+    ///   caller could only discover that by attempting the edit and
+    ///   reading the error.
+    pub composite: bool,
 }
 
 /// One glyph's contribution to a [`TextRun`], with its provenance and

@@ -130,6 +130,7 @@ use crate::page_tree::{self, Page, PageTreeError};
 use crate::span::ByteSpan;
 use crate::text_extract::font::ExtractFont;
 use crate::text_extract::{self, ContentStreamRef, ExtractError, ExtractOptions, GlyphProvenance};
+use crate::text_state::{AmbientRestoreError, AmbientTextState, TextStateParam};
 use crate::writer::content::{emit_literal_string, emit_number};
 
 use super::edit::{
@@ -391,12 +392,12 @@ pub(crate) fn plan_reflow(
     let region = locate_block_region(stream, &prov.op_spans)?;
 
     // --- text state from the stream walk (authoritative Tf/Tz/Tc/Tw) ---
-    let ts = region.text_state;
+    let ts = region.text_state.clone();
 
     // --- emit the fresh BT … ET for the reflowed lines ---
     let justified = preview.alignment.alignment.is_justified();
     let uses_justify_tj = justified && preview.lines.iter().any(|l| l.justified_slack.is_some());
-    if uses_justify_tj && (ts.tc.abs() > MTX_EPS || ts.tw.abs() > MTX_EPS) {
+    if uses_justify_tj && (ts.tc().abs() > MTX_EPS || ts.tw().abs() > MTX_EPS) {
         return Err(ReflowApplyError::Unsupported(
             "justify of a block with non-zero Tc/Tw is deferred (the slack arithmetic assumes the \
              kept spaces carry only their own w0); reflow with left/right/centre instead"
@@ -406,7 +407,12 @@ pub(crate) fn plan_reflow(
 
     // emit_scale = Tfs · Th · a · ca : converts a TJ number (thousandths) to
     // a default-user-space displacement (§9.4.4, axis-aligned).
-    let emit_scale = ts.tf_size * ts.th * prov.tm_a * prov.ctm_a;
+    let emit_scale = ts.tf_size * ts.th() * prov.tm_a * prov.ctm_a;
+
+    // Every text-state parameter the preamble sets is recorded here, so the
+    // symmetric restore before `ET` can be computed rather than remembered.
+    // See `restore_ops` for the obligation this discharges.
+    let mut emitted: Vec<(TextStateParam, f64)> = Vec::new();
 
     let mut body = Vec::new();
     body.extend_from_slice(b"BT\n");
@@ -415,20 +421,23 @@ pub(crate) fn plan_reflow(
     body.push(b' ');
     emit_number(&mut body, ts.tf_size);
     body.extend_from_slice(b" Tf\n");
-    if ts.tc.abs() > MTX_EPS {
-        emit_number(&mut body, ts.tc);
+    if ts.tc().abs() > MTX_EPS {
+        emit_number(&mut body, ts.tc());
         body.extend_from_slice(b" Tc\n");
+        emitted.push((TextStateParam::CharSpacing, ts.tc()));
     }
-    if (ts.th - 1.0).abs() > MTX_EPS {
-        emit_number(&mut body, ts.th * 100.0);
+    if (ts.th() - 1.0).abs() > MTX_EPS {
+        emit_number(&mut body, ts.th() * 100.0);
         body.extend_from_slice(b" Tz\n");
+        emitted.push((TextStateParam::HorizScale, ts.th() * 100.0));
     }
     // Word spacing: zero it under justify (so kept code-32 spaces are not
     // double-stretched, §4.1); else reproduce the block's own Tw.
-    let line_tw = if uses_justify_tj { 0.0 } else { ts.tw };
+    let line_tw = if uses_justify_tj { 0.0 } else { ts.tw() };
     if line_tw.abs() > MTX_EPS || uses_justify_tj {
         emit_number(&mut body, line_tw);
         body.extend_from_slice(b" Tw\n");
+        emitted.push((TextStateParam::WordSpacing, line_tw));
     }
 
     // Re-tokenise the block into words carrying their SOURCE codes (identical
@@ -452,6 +461,17 @@ pub(crate) fn plan_reflow(
         }
         body.push(b'\n');
     }
+    // --- close the state leak (Pass 19.0, decision 019 §3.4 / R88) ---
+    //
+    // Everything above ran INSIDE the fresh text object, and §9.3's scope
+    // rule keeps text state alive past `ET`. Restore by value, inside the
+    // text object: `q`/`Q` are not admitted in a `BT … ET` (§8.2 Table 51 /
+    // Figure 9), and splitting the object to use them would discard `Tm`
+    // (§9.4.1).
+    let restore = restore_ops(&emitted, &region.entry_state, &region.exit_state)
+        .map_err(|e| ReflowApplyError::Unsupported(e.to_string()))?;
+    let leak_closed = !restore.is_empty();
+    body.extend_from_slice(&restore);
     body.extend_from_slice(b"ET");
 
     // --- splice: replace [region.start, region.end) with the fresh body ---
@@ -481,6 +501,15 @@ pub(crate) fn plan_reflow(
          (decision 015 §3.3/R75), not a silent re-layout"
             .to_owned(),
     );
+    if leak_closed {
+        disclosures.push(
+            "reflow: the re-emitted text object sets §9.3 text-state parameters that differ from \
+             the ambient state after the block, so an explicit restore was appended inside the \
+             text object (R88 restore-by-value — q/Q are not permitted inside BT … ET, §8.2 \
+             Table 51). Text following the block is therefore unaffected."
+                .to_owned(),
+        );
+    }
     if justified_lines > 0 {
         disclosures.push(format!(
             "reflow: {justified_lines} full line(s) were JUSTIFIED — inter-word slack distributed \
@@ -790,32 +819,97 @@ fn font_is_embedded(font_dict: &Dict, doc: &Document) -> bool {
 // Content-stream region location (BT … ET text objects)
 // ===================================================================
 
-/// Text state captured at the block's show operators (from the stream walk —
-/// authoritative for `Tf`/`Tz`/`Tc`/`Tw`, which provenance does not all
-/// carry).
-#[derive(Clone, Copy)]
+/// Text state captured at the block's show operators (from the stream
+/// walk).
+///
+/// # Pass 19.0
+///
+/// This used to carry three bare `f64`s and a doc comment conceding it
+/// existed because "provenance does not all carry" `Tz`/`Tc`/`Tw`. It now
+/// carries the crate-shared [`AmbientTextState`] — the same type
+/// provenance publishes — so the concession is retired: the walk and the
+/// provenance agree by construction rather than by coincidence. `tf_size`
+/// stays a bare field for the reason given in [`crate::text_state`]'s
+/// module docs (`Tfs` is not part of the shared model).
+#[derive(Clone)]
 struct BlockTextState {
     tf_size: f64,
-    tc: f64,
-    tw: f64,
-    th: f64,
+    ambient: AmbientTextState,
 }
 
-/// The byte region to replace, plus the block's text state.
+impl BlockTextState {
+    /// `Tc` (§9.3.2).
+    fn tc(&self) -> f64 {
+        self.ambient.char_spacing.value
+    }
+
+    /// `Tw` (§9.3.3).
+    fn tw(&self) -> f64 {
+        self.ambient.word_spacing.value
+    }
+
+    /// `Th` = `Tz` ÷ 100 (§9.3.4).
+    fn th(&self) -> f64 {
+        self.ambient.h_scale.value / 100.0
+    }
+}
+
+/// The byte region to replace, plus the three text states the surgery
+/// needs to keep the stream honest.
+///
+/// # Why three states and not one (Pass 19.0)
+///
+/// The fresh `BT … ET` this module emits replaces `[start, end)` wholesale,
+/// so the text state it must *reproduce* and the text state it must *leave
+/// behind* are not the same thing:
+///
+/// - [`Self::text_state`] — the state at the block's own show operators.
+///   This is what the preamble re-emits so the reflowed lines look like the
+///   originals.
+/// - [`Self::entry_state`] — the state immediately **before** `start`. This
+///   is what remains in force for any parameter the preamble does *not*
+///   emit, because the operators inside the replaced region are gone.
+/// - [`Self::exit_state`] — the state immediately **after** `end`, i.e.
+///   what a following operator saw before the reflow. This is the
+///   obligation: whatever the new body leaves in force must equal this, or
+///   the reflow has silently changed content it did not touch (R32/R46).
+///
+/// Before Pass 19.0 only the first existed, and the body terminated at `ET`
+/// with **no restore and no `q`/`Q`** — a live state-leak surface, benign
+/// only because the justify gate above refuses a non-zero `Tc`/`Tw` and the
+/// non-justify path happens to re-emit values equal to the ambient. The
+/// difference of these three states is now computed and closed explicitly
+/// (see `restore_ops`), with the gate left exactly where it was.
 struct BlockRegion {
     /// Start byte of the first block text object's `BT`.
     start: usize,
     /// End byte of the last block text object's `ET`.
     end: usize,
     text_state: BlockTextState,
+    /// Ambient §9.3 state immediately before [`Self::start`].
+    entry_state: AmbientTextState,
+    /// Ambient §9.3 state immediately after [`Self::end`] — the state the
+    /// re-emitted body must leave in force.
+    exit_state: AmbientTextState,
 }
 
-/// One text object (`BT … ET`) seen in the walk, with its byte bounds and
-/// the show-operator spans it contains.
+/// One text object (`BT … ET`) seen in the walk, with its byte bounds, the
+/// show-operator spans it contains, and the ambient §9.3 text state at each
+/// of its two boundaries.
+///
+/// The two ambient snapshots are what let [`BlockRegion`] report an
+/// `entry_state` and an `exit_state` (Pass 19.0): the region's bounds are
+/// not known until after the walk, so the states at every candidate
+/// boundary have to be captured as the walk passes them.
 struct TextObj {
     bt_start: usize,
     et_end: usize,
     show_spans: Vec<ByteSpan>,
+    /// Ambient text state immediately before this object's `BT`. (`BT`
+    /// resets only `Tm`/`Tlm`, Table 107 — never text state.)
+    ambient_at_bt: AmbientTextState,
+    /// Ambient text state immediately after this object's `ET`.
+    ambient_at_et: AmbientTextState,
 }
 
 /// Walk the content stream, collect its text objects, and compute the byte
@@ -834,10 +928,15 @@ fn locate_block_region(
 
     // Track text state across the whole stream so the value in effect at the
     // block's show operators is captured (Tf/Tz/Tc/Tw persist across BT/ET).
+    //
+    // Pass 19.0: through the ONE shared update rule, which additionally
+    // covers `Ts`/`TL`/`Tr` (untracked here before) and `q`/`Q` (which this
+    // walk ignored entirely, so state set inside a bracket leaked past the
+    // `Q`), and which records each operator's raw bytes so a restore can be
+    // byte-faithful.
     let mut tf_size = 0.0_f64;
-    let mut tc = 0.0_f64;
-    let mut tw = 0.0_f64;
-    let mut th = 1.0_f64;
+    let mut ambient = AmbientTextState::initial();
+    let mut ambient_stack: Vec<AmbientTextState> = Vec::new();
     let mut block_ts: Option<BlockTextState> = None;
 
     let mut objs: Vec<TextObj> = Vec::new();
@@ -848,34 +947,35 @@ fn locate_block_region(
             continue;
         };
         match name {
+            b"q" => {
+                ambient_stack.push(ambient.clone());
+                if ambient_stack.len() > 256 {
+                    ambient_stack.remove(0);
+                }
+            }
+            b"Q" => {
+                if let Some(prev) = ambient_stack.pop() {
+                    ambient = prev;
+                }
+            }
             b"Tf" => {
                 if let Some(size) = last_number(&op) {
                     tf_size = size;
                 }
             }
-            b"Tc" => {
-                if let Some(v) = first_number(&op) {
-                    tc = v;
-                }
+            b"Tc" | b"Tw" | b"Tz" | b"TL" | b"Ts" | b"Tr" | b"\"" => {
+                let (s, e) = text_op_span(&op);
+                let raw = stream.buf.get(s..e).unwrap_or_default();
+                ambient.apply_operator(name, &operand_numbers(&op), raw);
             }
-            b"Tw" => {
-                if let Some(v) = first_number(&op) {
-                    tw = v;
-                }
-            }
-            b"Tz" => {
-                if let Some(v) = first_number(&op) {
-                    th = v / 100.0;
-                }
-            }
-            b"\"" => {
-                // `aw ac string "` sets Tw, Tc before showing.
-                let nums = operand_numbers(&op);
-                if let Some(&aw) = nums.first() {
-                    tw = aw;
-                }
-                if let Some(&ac) = nums.get(1) {
-                    tc = ac;
+            // `TD` also sets `TL` (§9.4.2 Table 108). Tracked so the
+            // region's entry/exit states report the leading actually in
+            // force — a block whose own `TD` is deleted by the reflow
+            // leaves a DIFFERENT leading behind, and `restore_ops` can only
+            // see that if the walk saw it.
+            b"TD" => {
+                if let [_, ty] = operand_numbers(&op).as_slice() {
+                    ambient.set_indirect(TextStateParam::Leading, -*ty, "TD");
                 }
             }
             b"BT" => {
@@ -883,11 +983,14 @@ fn locate_block_region(
                     bt_start: op.operator.span.start,
                     et_end: op.operator.span.end(),
                     show_spans: Vec::new(),
+                    ambient_at_bt: ambient.clone(),
+                    ambient_at_et: ambient.clone(),
                 });
             }
             b"ET" => {
                 if let Some(mut obj) = cur.take() {
                     obj.et_end = op.operator.span.end();
+                    obj.ambient_at_et = ambient.clone();
                     objs.push(obj);
                 }
             }
@@ -896,9 +999,7 @@ fn locate_block_region(
                 if is_block(span) && block_ts.is_none() {
                     block_ts = Some(BlockTextState {
                         tf_size,
-                        tc,
-                        tw,
-                        th,
+                        ambient: ambient.clone(),
                     });
                 }
                 match cur.as_mut() {
@@ -963,27 +1064,120 @@ fn locate_block_region(
     };
     let start = objs.get(fi).map(|o| o.bt_start).unwrap_or(0);
     let end = objs.get(la).map(|o| o.et_end).unwrap_or(start);
+    // The ambient state at the two region boundaries. Falling back to the
+    // END-of-stream state (rather than to the Table 105 initial state) when
+    // the object is somehow missing keeps the restore honest: it is the
+    // value actually in force, not an assumption that nothing was ever set.
+    let entry_state = objs
+        .get(fi)
+        .map_or_else(|| ambient.clone(), |o| o.ambient_at_bt.clone());
+    let exit_state = objs
+        .get(la)
+        .map_or_else(|| ambient.clone(), |o| o.ambient_at_et.clone());
     let text_state = block_ts.unwrap_or(BlockTextState {
         tf_size,
-        tc,
-        tw,
-        th,
+        ambient: ambient.clone(),
     });
     Ok(BlockRegion {
         start,
         end,
         text_state,
+        entry_state,
+        exit_state,
     })
+}
+
+/// The operator bytes that put the §9.3 text state back the way the
+/// reflowed region left it — the symmetric half of the preamble.
+///
+/// # The obligation (decision 019 §3.4, standing rule R88)
+///
+/// A reflow replaces `[region.start, region.end)` with a fresh
+/// `BT … ET`. Text state is graphics state and **survives `ET`** (§9.3's
+/// scope rule: "retained across text objects in a single content stream"),
+/// so whatever the new body leaves in force is what the *next* operator in
+/// the stream sees. If that differs from what the next operator saw before
+/// the reflow, pdfce has silently changed content it did not logically
+/// touch — a direct R32/R46 minimal-diff violation, and exactly the
+/// rule-4 failure mode this project exists not to commit.
+///
+/// # The arithmetic
+///
+/// For each of the six modelled parameters, the value in force after the
+/// new body is:
+///
+/// ```text
+/// after(p) = emitted(p)          if the preamble emitted p
+///          = entry.get(p).value  otherwise   (the operators that used to
+///                                             set it were inside the
+///                                             replaced region, and are gone)
+/// ```
+///
+/// and the obligation is `after(p) == exit.get(p).value` for every `p`.
+/// Where it does not hold, the restore emits `exit`'s bytes for that
+/// parameter — the R88 ladder: the spec default when the parameter was
+/// provably never set, the **observed raw operand bytes** when it was (so
+/// `0.5000 Tc` goes back as `0.5000 Tc`), and a refusal when the value is
+/// unobservable.
+///
+/// # Why this usually emits nothing, and why that is the point
+///
+/// Under the justify gate above (`|Tc| ≤ ε` and `|Tw| ≤ ε` whenever `TJ`
+/// slack is used) and the non-justify path's habit of re-emitting values
+/// **equal** to the ambient, `after(p) == exit(p)` already holds for every
+/// parameter on every fixture in the corpus — which is precisely why the
+/// missing restore was benign rather than a shipped bug. It is written now,
+/// while it is a no-op, so that the slice which relaxes the gate (19.1) is
+/// relaxing a gate rather than opening a hole. An empty return is the
+/// correct, expected result today; the value of the function is that it
+/// stops being empty the moment the emitted state and the ambient state
+/// diverge, without anyone having to remember to add it.
+///
+/// # Errors
+///
+/// [`AmbientRestoreError`] when a restore is required but the ambient value
+/// is [`AmbientOrigin::Unobservable`](crate::text_state::AmbientOrigin) —
+/// refuse and disclose, never guess the Table 105 default.
+fn restore_ops(
+    emitted: &[(TextStateParam, f64)],
+    entry: &AmbientTextState,
+    exit: &AmbientTextState,
+) -> Result<Vec<u8>, AmbientRestoreError> {
+    let mut out = Vec::new();
+    for param in TextStateParam::ALL {
+        let after = emitted
+            .iter()
+            .find(|(p, _)| *p == param)
+            .map_or_else(|| entry.get(param).value, |(_, v)| *v);
+        let wanted = exit.get(param).value;
+        // Bit-for-bit comparison, deliberately. An epsilon here would let a
+        // tiny-but-real divergence through silently, and the whole point of
+        // this function is that a divergence is never silent. The values
+        // being compared are both `f64`s that travelled the same parse
+        // path, so an exact match is the normal case rather than a lucky
+        // one.
+        if after == wanted {
+            continue;
+        }
+        out.extend_from_slice(&exit.restore_bytes(param)?);
+        out.push(b'\n');
+    }
+    Ok(out)
+}
+
+/// The byte span of a text-state operator including its operands — the raw
+/// sequence an R88 tier-2 restore re-emits (see [`crate::text_state`]).
+fn text_op_span(op: &Operation<'_>) -> (usize, usize) {
+    let start = op
+        .operands
+        .first()
+        .map_or(op.operator.span.start, |t| t.span.start);
+    (start, op.operator.span.end())
 }
 
 /// The last numeric operand of an operation (`Tf`'s size).
 fn last_number(op: &Operation<'_>) -> Option<f64> {
     operand_numbers(op).last().copied()
-}
-
-/// The first numeric operand of an operation.
-fn first_number(op: &Operation<'_>) -> Option<f64> {
-    operand_numbers(op).first().copied()
 }
 
 /// Every numeric operand of an operation, in order.
@@ -1404,5 +1598,136 @@ mod tests {
             matches!(err, ReflowApplyError::Unsupported(m) if m.contains("rotated")),
             "rotated text refused by name"
         );
+    }
+
+    // -- Pass 19.0: the ET state leak, closed --------------------------
+
+    /// The text state left in force by the whole content stream, walked
+    /// with the same shared rule the surgery uses.
+    ///
+    /// This is the *observable* form of "nothing bled past `ET`": if the
+    /// re-emitted body leaks, the state at end of stream changes, and every
+    /// operator after the block sees a different world.
+    fn end_of_stream_state(bytes: &[u8]) -> AmbientTextState {
+        let doc = load(bytes);
+        let pages = page_tree::pages(&doc).unwrap();
+        let stream = ContentStream::from_page(&doc.view(), &pages[0]).unwrap();
+        let mut ambient = AmbientTextState::initial();
+        let mut stack: Vec<AmbientTextState> = Vec::new();
+        for op in stream.operations() {
+            let Some(name) = op.operator_name(&stream.buf) else {
+                continue;
+            };
+            match name {
+                b"q" => stack.push(ambient.clone()),
+                b"Q" => {
+                    if let Some(prev) = stack.pop() {
+                        ambient = prev;
+                    }
+                }
+                _ => {
+                    let (s, e) = text_op_span(&op);
+                    let raw = stream.buf.get(s..e).unwrap_or_default();
+                    ambient.apply_operator(name, &operand_numbers(&op), raw);
+                }
+            }
+        }
+        ambient
+    }
+
+    /// The acceptance test named in decision 019 §19.0: reflow a block that
+    /// is followed by unrelated text in the same stream, and prove the
+    /// following text's state is untouched.
+    ///
+    /// Note this passes *today* — the leak was latent, masked by the
+    /// justify gate (which is deliberately left in place by this slice).
+    /// The test is a tripwire: it fails the moment a later slice relaxes
+    /// the gate without the restore, which is exactly the sequence
+    /// decision 019 §3.4 exists to prevent.
+    #[test]
+    fn reflow_leaves_the_following_text_state_unchanged() {
+        let src = build_pdf(
+            "0.75 Tc 95 Tz\n\
+             BT /F1 10 Tf 72 740 Td (alpha beta) Tj ET\n\
+             BT /F1 10 Tf 72 726 Td (gamma delta) Tj ET\n\
+             BT /F1 10 Tf 72 660 Td (unrelated tail) Tj ET\n",
+            &[courier()],
+            &[],
+        );
+        let before = end_of_stream_state(&src);
+        let doc = load(&src);
+        let out = apply_reflow(&doc, 0, 0, &ReflowRequest::new().with_wrap_width(400.0)).unwrap();
+        let after = end_of_stream_state(&out.bytes);
+        assert_eq!(
+            before.params(),
+            after.params(),
+            "the reflowed text object leaked text state past its ET"
+        );
+    }
+
+    /// `restore_ops` is the mechanism; drive it directly with an emitted
+    /// state that DIVERGES from the ambient, which the justify gate makes
+    /// unreachable through `apply_reflow` today. Tiers 1 and 2 both.
+    #[test]
+    fn restore_ops_emits_the_ambient_when_the_preamble_diverges() {
+        let mut entry = AmbientTextState::initial();
+        entry.apply_operator(b"Tc", &[0.25], b"0.2500 Tc");
+        let exit = entry.clone();
+
+        // The preamble emitted `0 Tc` (as the justify path would) over an
+        // ambient of 0.25 — a real divergence.
+        let ops = restore_ops(&[(TextStateParam::CharSpacing, 0.0)], &entry, &exit).unwrap();
+        assert_eq!(
+            ops, b"0.2500 Tc\n",
+            "tier 2: restore the observed operand bytes, not a renormalized 0.25"
+        );
+
+        // A parameter the preamble did NOT emit, whose ambient before the
+        // region differs from the ambient after it (the region itself set
+        // it, and the region is being replaced): the restore must reinstate
+        // the AFTER value, here the never-set spec default.
+        let mut exit_unset = AmbientTextState::initial();
+        exit_unset.apply_operator(b"Ts", &[0.0], b"0 Ts");
+        let mut entry_set = AmbientTextState::initial();
+        entry_set.apply_operator(b"Ts", &[4.0], b"4 Ts");
+        let ops = restore_ops(&[], &entry_set, &exit_unset).unwrap();
+        assert_eq!(ops, b"0 Ts\n");
+    }
+
+    /// The no-op case, asserted rather than assumed: when the emitted state
+    /// already equals the ambient (every fixture in the corpus today), the
+    /// restore is empty and the output bytes are unchanged. This is what
+    /// keeps Pass 19.0 a correctness slice with no output movement.
+    #[test]
+    fn restore_ops_emits_nothing_when_nothing_diverges() {
+        let mut ts = AmbientTextState::initial();
+        ts.apply_operator(b"Tc", &[0.75], b"0.75 Tc");
+        ts.apply_operator(b"Tz", &[95.0], b"95 Tz");
+        let ops = restore_ops(
+            &[
+                (TextStateParam::CharSpacing, 0.75),
+                (TextStateParam::HorizScale, 95.0),
+            ],
+            &ts,
+            &ts,
+        )
+        .unwrap();
+        assert!(ops.is_empty(), "got {:?}", String::from_utf8_lossy(&ops));
+    }
+
+    /// R88 tier 3 propagates: an unobservable ambient makes the restore a
+    /// **refusal**, never a guessed default.
+    #[test]
+    fn restore_ops_refuses_an_unobservable_ambient() {
+        let mut entry = AmbientTextState::initial();
+        entry.apply_operator(b"Tc", &[0.25], b"0.25 Tc");
+        let mut exit = entry.clone();
+        exit.enter_form(Some(9));
+
+        let err = restore_ops(&[(TextStateParam::CharSpacing, 0.0)], &entry, &exit)
+            .expect_err("an inherited ambient cannot be restored");
+        let msg = err.to_string();
+        assert!(msg.contains("character spacing"), "{msg}");
+        assert!(msg.contains("refuses"), "{msg}");
     }
 }
