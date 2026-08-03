@@ -43,6 +43,28 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 19.3 — GUI: the spacing/style property surface, AND a project-wide correctness fix — the shipped Edit-Text property bar had never applied a single edit (decision 019, closes the FF-H formatting-slice family) — 2026-08-03, committed `74052d3`
+
+**★★★★ HEADLINE FINDING — every property-bar "Apply" in the shipped GUI, from Pass 14.3 through Pass 19.2, failed silently with `NoMatch` before reaching the surgery.** `GlyphProvenance::operator_span` publishes the span of the operator token ALONE (`Tj`, e.g. `37..39`); the authoring walk's `OpRec` records the OPERAND-INCLUSIVE extent (`(hello) Tj`, `23..39`). `find_anchor`'s pinned-request path compared the two for EXACT EQUALITY. The GUI pins every formatting request from provenance, so **every Pass 14.3/15.x/19.1/19.2 property-bar Apply on an ordinary one-`Tj` page refused** with "text to format was not found in an editable run on the page" — confirmed live in the running application before the fix. **It survived because two doc comments, on both the publisher and the consumer, independently asserted the two conventions already agreed** — `EditRequest::pinned_span`'s "matches the same span" and `page.rs:518`'s "the surgery locates the operator by exactly this span" (both present before the fix, both corrected after) — so nothing prompted a check. It was found only because this Pass stopped discarding failed pin queries with `.ok()`; rendering them as visible errors is what exposed a bug that had survived two prior GUI-observation rounds unnoticed.
+
+Fix, in `pin_names_operator`: accept EITHER convention — `pin.end() == r.end && pin.start >= r.start` — since two operations sharing one content stream cannot share an end offset. Neither publisher's span semantics changed; both wrong doc comments were corrected in place. Two new regression tests, one of which proves the pin still DISCRIMINATES (a near-miss span is still refused) — the fix traded a false refusal for a correct match, not for the strictly worse failure of silently editing the wrong run. **Engineer-verified by mutation:** reverting `pin_names_operator` to the shipped exact-equality behavior makes `a_pin_taken_from_provenance_locates_the_same_operator` FAIL; restoring it passes. The defect was proven, not inferred.
+
+**Third instance this project of a confident, wrong doc comment being the reason nobody looked** — after decision 018's `refresh_pages` ("the base revision has not changed," true through Pass 3.1, false since Pass 6.1) and the `.gitattributes` ordering incident (the file's own `*.pdf binary` rule was silently overridden by a catch-all placed below it). Recorded as new standing rule **R93** (below) — the pattern is now load-bearing evidence of a project-wide failure mode, not a one-off worth noting only in an individual Pass entry.
+
+**The slice itself.** Option-B wrapper in `pdfce-core`: `StyleOutcome`, `StyleResolution`, `probe_synthesis`, `preview_style_resolution` — read-only, side-effect-free, and calls `gate_synthesis` up to three times rather than re-deriving anything, so the preview cannot say something the commit path would not do (a byte-equality test proves a commit made after previewing is identical to one made without previewing first). Exposed as an `EditSession` method — reads session-current content, not a free function over a bare `Document`. GUI: `MetricUnit`, `BaselineChoice`, `AmbientSnapshot`, 11 new `TextEditState` fields, five `FormatOp` variants, a `CollapsingHeader` property tree, five refusal hints, ~45 new `ui_text.rs` entries.
+
+**Design answers, per `pdfce-ui-specialist`'s `docs/ui_specs/pass-19.3-text-formatting-surface.md` (committed `e883e26`).** Placement answered by PRECEDENT — the TextEdit tool already has a floating tool-scoped property bar, and AddText and Measure independently converged on the identical pattern. Mutual exclusion is structural twice over: one four-way selector with a single live member, plus the free-rise field HIDDEN rather than disabled (R83 — a greyed spinner is still an affordance); `FormatOp` has no way to *spell* both at once. Absolute vs. relative is labelled by behavior (`scales with size (‰)` / `fixed (pt)`); switching RE-DERIVES from ambient so the displayed number always means what its visible unit says. Word spacing: no control at all, a greyed value plus a composite-aware reason (pending-census for simple fonts, the permanent §9.3.3 void for composites). **The ui-spec's own §3 and §3.1 contradicted each other on unit-switching behavior** (re-derive from ambient vs. convert the typed value) — the builder followed §3.1, since re-deriving from ambient would silently discard what the operator had just typed; recorded as a spec-document self-contradiction found and resolved, not a design choice made freely. `StyleResolution` had to be a per-axis verdict, not a single one, to model the mixed real-bold/synthetic-italic case. `preview_style_resolution` cannot model a PENDING family change without re-running font re-encoding every frame — documented as a named limit on the function itself. **The spec also documents a design reversal with its reasoning kept in the written record**: the specialist first assumed the synthesis offer needed a declinable-confirmation widget, then found by reading `gate_synthesis` that the shipped refusal strip already IS an honest, non-modal, declinable offer — and left the abandoned assumption in the spec rather than silently deleting it. Rule 11 (CLI parity) does not apply here — the CLI shipped with 19.1/19.2 — stated explicitly so the omission reads as reasoned, not missed.
+
+**Gates.** `cargo test --workspace` 1708 → 1722, 0 failed; fmt/clippy clean; `tools/check-ui-strings.sh` exit 0; `cargo tree -p pdfce-core -p pdfce-render` clean (no GUI dependency); zero new Cargo dependencies; **R85 20/20** (preview-equals-saved). **R86 observed**, against a purpose-built non-default fixture (a default-valued document would make a correctly-seeded panel indistinguishable from a blindly-seeded one — generated in scratch, never committed): ambient seeded as `Now: 31.2‰ of size (0.7500 pt)` / `Now: 92.0%` / `Now: raised 2.5000 pt`, none defaulted; synthesis pre-resolution naming the real Bold resource before submission; the mixed-case refusal explaining which axis has a real face and what two-step path to take; R84's bold-on-selected pairing rendering correctly.
+
+**Owed, not built:** partial-axis synthesis (a real face for the covered axis plus synthesis for the uncovered one); `Ctrl+B`/`Ctrl+I` accelerators; a persistent "synthesized" badge.
+
+**Correction to the builder's own report, engineer-verified by observation.** The builder had reported that both `ⓘ` and `⚠` render as tofu. **`⚠` (U+26A0) does NOT** — captured at 4× magnification as a proper warning-triangle glyph, consistent with an earlier 3× observation; the two codepoints were conflated in the original report. `ⓘ` (U+24D8, CIRCLED LATIN SMALL LETTER I — used 12×, the single most-used symbol in `ui_text.rs`, Enclosed Alphanumerics block, not emoji-recommended) is PLAUSIBLY tofu but remains UNVERIFIED — no reachable UI state displayed it this session. Filed accordingly: a font-coverage pass should target U+24D8 specifically, not `⚠`. Usage tally for the record: U+24D8 ×12, U+26A0 ×10, U+2715 ×4, U+2714/U+2716/U+2713 ×3 each.
+
+**Carry forward, unchanged:** operator questions (g)–(k); no GUI redaction-apply flow (R85-uncoverable by design, not an oracle gap); `✓`/`✕` (U+2713/U+2715) glyph verification still owed; status-bar/fit-zoom feedback loop; letter badges pending real icons; `egui_kittest` harness gap. Branch still `pass-8-redaction`, now spanning Passes 9–19.3. Fresh-checkout integrity re-verified this session at 49 commits (1708 tests green, fixtures byte-identical) — the `.gitattributes` ordering fix (above) is holding under accumulation. Backup bundle `pdfce-20260803-1400.bundle` now two commits stale.
+
+**RAG escalation.** The pinned-span-convention defect generalizes beyond PDF/pdfce — filed to `D:\dev\rag\rust\` (see this session's RAG-escalation note in `SESSION_LOG.md`), not `personal_rag/pdf`: the lesson is about byte-span-provenance API design for ANY editor that publishes spans for later re-location, not about PDF-domain producer behavior.
+
 ### Pass 19.2 — Free-form `Ts` + synthetic bold/italic, the deliberate exceed (decision 019, extends the Pass 19.1 formatting slice) — 2026-08-03, committed `ebe35d8`
 
 **New `crates/pdfce-core/src/text_edit/synth.rs` — one shared policy type.**
@@ -5822,6 +5844,49 @@ and
 `D:\dev\rag\rust\prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`
 — both indexed in their subject's `index.md` this same continuation.
 
+**UPDATE (continuation 66, real date 2026-08-03) — Pass 19.3 SHIPPED
+(`74052d3`), closing the FF-H formatting-slice family down to the
+conditional Pass 19.4. Only Pass 19.4 (`Tw`, gated behind the census)
+remains open in the decision-019 family.** Three engineer-reported
+hashes this continuation, verified by `git cat-file -t`: `25b2d0e`
+(docs: "file Pass 19.2 and decision-019 Amendment C" — touching
+ROADMAP/SESSION_LOG/ARCHITECTURE plus the decision-019 record.
+**CONFIRMED by the engineer, 2026-08-03.** The librarian had inferred
+this from the established per-continuation pattern and correctly
+flagged it as unconfirmed rather than asserting it; the inference was
+right. Worth recording that the flag was raised at all — applying R87
+to your OWN inference, not only to figures handed to you, is the
+harder half of the rule), `e883e26`
+(docs: the Pass 19.3 UI spec,
+`docs/ui_specs/pass-19.3-text-formatting-surface.md`), `74052d3` (Pass
+19.3 SHIPPED — see its own Shipped entry, top of Shipped, for the full
+build record). **Headline: the shipped Edit-Text property bar had never
+successfully applied a single edit** — `find_anchor`'s pinned-span
+match used exact equality against a span convention (`GlyphProvenance::
+operator_span`, operator-token-only) that never matched what the
+authoring walk's `OpRec` actually published (operand-inclusive) — every
+property-bar Apply since Pass 14.3 refused with `NoMatch`, masked by
+two independently-wrong doc comments asserting the conventions agreed.
+Fixed in the same commit (`pin_names_operator` now accepts either
+convention), engineer-verified by mutation (revert → regression test
+fails; restore → passes). Third instance this project of a confident,
+wrong doc comment being the reason nobody looked (after decision 018's
+`refresh_pages` comment and the `.gitattributes` ordering incident) —
+recorded as new standing rule **R93** (Standing rules, below; ceiling
+was R92). Branch `pass-8-redaction`, **51 commits**
+(`git rev-list --count HEAD`), all still local-only, no git remote
+configured. **RAG escalation this continuation, filed to
+`D:\dev\rag\rust\` (a deliberate deviation from the engineer's
+suggested `personal_rag/pdf` location — see the Pass 19.3 Shipped
+entry's own RAG-escalation note for the reasoning: the lesson
+generalizes to any editor publishing byte spans for later re-location,
+not to PDF-domain producer behavior specifically):**
+`D:\dev\rag\rust\byte_span_convention_must_live_in_the_type_not_matching_doc_comments.md`
+and a companion methodology finding,
+`D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`
+(the three-instance "confident wrong comment" pattern) — both indexed
+in `D:\dev\rag\rust\index.md` this same continuation.
+
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
 text as real page content) is now COMPLETE end-to-end.** 16.0
@@ -6376,7 +6441,7 @@ default stands: docked-only, its own Backlog entry, still unanswered.
 §10 Q1 (the `egui_tiles`-vs-hand-rolled question this note originally
 tracked) is ANSWERED and BUILT — see Pass 18.1 above.
 
-### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendments A/B/C, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 SHIPPED 2026-08-03, Pass 19.2 SHIPPED 2026-08-03 (`ebe35d8`), Pass 19.3 IN DESIGN)
+### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendments A/B/C, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 SHIPPED 2026-08-03, Pass 19.2 SHIPPED 2026-08-03 (`ebe35d8`), Pass 19.3 SHIPPED 2026-08-03 (`74052d3`) — ONLY Pass 19.4 (`Tw`, conditional) remains)
 
 **Decision 019 ACCEPTED via the KenAgent protocol.** Full record:
 `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`. Filed
@@ -6525,10 +6590,16 @@ existing `FormatText`/`AddText` one-command-per-accepted-edit path):**
   existing. Full account in the Pass 19.2 Shipped entry and
   `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`
   Amendment C.
-- **19.3 — GUI: the spacing/style property surface. IN DESIGN.**
-  `pdfce-ui-specialist` is writing
-  `docs/ui_specs/pass-19.3-text-formatting-surface.md`, dispatched per
-  the standing Feature-fidelity/UI-design discipline.
+- **19.3 — GUI: the spacing/style property surface. SHIPPED 2026-08-03,
+  committed `74052d3`** — see the Pass 19.3 Shipped entry (top of
+  Shipped) for the full build record, including the design record
+  (`docs/ui_specs/pass-19.3-text-formatting-surface.md`, committed
+  `e883e26`) and the ★★★★ headline correctness finding this slice
+  surfaced: `find_anchor`'s pinned-span match had used exact equality
+  against a span convention no published provenance actually used, so
+  every property-bar Apply shipped since Pass 14.3 had silently
+  refused. Fixed in the same commit; see the Shipped entry and new
+  standing rule R93.
 - **19.4 — `Tw` (CONDITIONAL — do not start without the census
   result).** Gated per Q1/R91's decision bands.
 
@@ -9911,6 +9982,32 @@ blocking Pass 19.0's in-progress build:**
   `D:\dev\rag\rust\non_exhaustive_no_effect_defining_crate_wildcard_free_match.md`
   (keep in-crate matches wildcard-free so a new variant is a compile
   error at every decision point, never a silent `_`-arm fallback).
+- **R93 — A code comment asserting a behavior is not evidence the
+  behavior holds, even when two independent comments on both ends of a
+  contract agree (methodology; no decision number; librarian-assigned;
+  2026-08-03, Pass 19.3).** Third occurrence of this exact failure shape
+  in this project: (1) decision 018's `refresh_pages` doc comment —
+  "the document is not reloaded, because the base revision ... has not
+  changed" — was true through Pass 3.1 and silently false from Pass 6.1
+  onward, and every editing Pass shipped between them relied on it
+  without re-checking; (2) the `.gitattributes` ordering incident — the
+  file's own `*.pdf binary` rule LOOKED like it protected fixtures, and
+  was silently overridden by a catch-all `* text=auto` placed below it;
+  (3) Pass 19.3's pinned-span defect (see its Shipped entry, above) —
+  `EditRequest::pinned_span`'s "matches the same span" and `page.rs`'s
+  "the surgery locates the operator by exactly this span" independently
+  asserted the SAME wrong claim, so cross-referencing the two doc
+  comments against each other caught nothing; agreement between two
+  confident assertions is not corroboration when both are unverified
+  against the actual data. **The generalizable rule:** a doc comment
+  describing a cross-module contract (two conventions match, a cache is
+  still valid, a rule fires before a later one) is a claim, not a
+  guarantee, and needs the same standard of evidence R86 already
+  requires for "done" — observed or tested, not merely asserted and
+  left unchallenged because the assertion sounded authoritative. Prefer
+  encoding the contract in the type system (see R92's same-shaped
+  precedent) or a round-trip test over a prose promise on either side of
+  a producer/consumer boundary.
 
 ## Update protocol
 

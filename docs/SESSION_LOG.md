@@ -8986,3 +8986,141 @@ as a new file only, untouched by this filing.**
   — the shared type exists but has no request surface in `addtext.rs`)
   should be scoped as part of 19.3 or deferred to its own follow-on —
   not yet decided either way.
+
+**Same-day continuation 66 (real date 2026-08-03) — Pass 19.3 SHIPPED
+(`74052d3`, GUI spacing/style property surface), closing the FF-H
+formatting-slice family down to the conditional Pass 19.4. Headline: a
+project-wide correctness defect had disabled every property-bar Apply
+in the shipped GUI since Pass 14.3, found and fixed in the same
+commit. New standing rule R93. Branch `pass-8-redaction`, 51 commits,
+all still local-only.**
+
+**Shipped:**
+- **`74052d3` — Pass 19.3 SHIPPED.** GUI slice: Option-B wrapper
+  (`StyleOutcome`/`StyleResolution`/`probe_synthesis`/
+  `preview_style_resolution` in `pdfce-core`, read-only and
+  side-effect-free — `preview_style_resolution` calls `gate_synthesis`
+  up to three times rather than re-deriving, byte-equality tested
+  against a non-previewed commit); `pdfce-gui`: `MetricUnit`/
+  `BaselineChoice`/`AmbientSnapshot`, 11 new `TextEditState` fields,
+  five `FormatOp` variants, a `CollapsingHeader` property tree, five
+  refusal hints, ~45 new `ui_text.rs` entries. Design record:
+  `docs/ui_specs/pass-19.3-text-formatting-surface.md`, committed
+  `e883e26` (`pdfce-ui-specialist`). `cargo test --workspace`
+  1708 → 1722, 0 failed; fmt/clippy clean; `check-ui-strings.sh` exit
+  0; `cargo tree` clean; zero new dependencies; **R85 20/20**; **R86
+  observed** against a purpose-built non-default fixture (ambient
+  seeded `31.2‰`/`0.7500 pt`, `92.0%`, `raised 2.5000 pt`, none
+  defaulted; synthesis pre-resolution naming the real Bold resource;
+  mixed-case refusal explaining the two-step path; R84 bold-on-selected
+  pairing rendering correctly). Full record: the Pass 19.3 Shipped
+  entry, top of `ROADMAP.md` Shipped.
+
+**★★★★ HEADLINE FINDING this continuation — every property-bar
+"Apply" in the shipped GUI, Pass 14.3 through Pass 19.2, had silently
+refused every edit.** `GlyphProvenance::operator_span` publishes the
+span of the operator token ALONE (`Tj`); `text_edit::edit`'s `OpRec`
+records the OPERAND-INCLUSIVE extent of the same operation. `find_anchor`'s
+pinned-request path (`pin_names_operator`) compared the two for EXACT
+EQUALITY — since the GUI always pins from published provenance and the
+authoring walk always records the wider span, the two never matched.
+Confirmed live in the running application before the fix ("text to
+format was not found in an editable run on the page"). **Survived
+because two doc comments, on both the publisher and the consumer,
+independently asserted the conventions already agreed** —
+`EditRequest::pinned_span`'s "matches the same span," `text_edit/
+page.rs`'s "the surgery locates the operator by exactly this span" —
+both corrected in place. Found only because this Pass stopped
+discarding failed pin queries with `.ok()`. Fix: `pin_names_operator`
+now accepts either convention (`pin.end() == r.end && pin.start >=
+r.start`); a regression test proves the relaxed match still
+DISCRIMINATES a near-miss span. **Engineer-verified by mutation:**
+reverting to exact-equality matching fails a purpose-built regression
+test; restoring the fix passes it.
+
+**Decisions made this session:**
+- **Decision 019 Amendment D filed** (`ARCHITECTURE.md` §12, new entry
+  this filing) — records the pinned-span defect as a live-defect
+  finding this slice exposed, not a decision-019 design question (same
+  framing as Amendment A's `q`/`Q`-arm finding). §5.11 gets a matching
+  Pass 19.3 paragraph.
+- **New standing rule R93** (`ROADMAP.md`) — a code comment asserting a
+  cross-module contract holds is a claim, not evidence, even when two
+  independent comments on both ends of the contract agree with each
+  other. Third occurrence of this exact failure shape in this project:
+  decision 018's `refresh_pages` comment (true through Pass 3.1,
+  silently false from Pass 6.1), the `.gitattributes` ordering incident
+  (the file's own `binary` rule silently overridden by a catch-all
+  below it), and this continuation's pinned-span defect. Ceiling was
+  R92.
+
+**Findings + decisions (empirical):**
+- **Correction to the builder's own report, engineer-verified by
+  observation.** The builder had reported both `ⓘ` and `⚠` render as
+  tofu. **`⚠` (U+26A0) does NOT** — captured at 4× magnification as a
+  proper warning-triangle glyph, consistent with an earlier 3×
+  observation; the two codepoints were conflated. `ⓘ` (U+24D8, used
+  12×, the most-used symbol in `ui_text.rs`, Enclosed Alphanumerics,
+  not emoji-recommended) is PLAUSIBLY tofu but remains UNVERIFIED — no
+  reachable UI state displayed it this session. A future font-coverage
+  pass should target U+24D8 specifically, not `⚠`. Usage tally: U+24D8
+  ×12, U+26A0 ×10, U+2715 ×4, U+2714/U+2716/U+2713 ×3 each.
+- Fresh-checkout integrity re-verified this session at 49 commits (1708
+  tests green, fixtures byte-identical) — the `.gitattributes` ordering
+  fix (`b73604d`) is holding under accumulation.
+
+**RAG escalations this continuation — filed to `D:\dev\rag\rust\`, a
+deliberate deviation from personal_rag/pdf (see the Pass 19.3 Shipped
+entry's own RAG-escalation note: the lesson generalizes to any editor
+publishing byte spans for later re-location, not to PDF-domain
+producer-divergence behavior — a librarian judgment call under the
+agent's explicit discretion to route findings):**
+- `D:\dev\rag\rust\byte_span_convention_must_live_in_the_type_not_matching_doc_comments.md`
+  — the pinned-span defect above, generalized: encode a published
+  span's inclusion convention in the type, or relax the consuming
+  matcher structurally with a near-miss discrimination test and a
+  mutation-tested fix, never trust matching prose on both ends.
+- `D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`
+  — the three-instance "confident wrong comment" pattern above,
+  generalized as a methodology finding: two independent comments
+  agreeing with each other is not corroboration when neither was
+  checked against the actual data.
+- Both indexed in `D:\dev\rag\rust\index.md` this same continuation.
+
+**Still in flight:**
+- Pass 19.4 (`Tw`, conditional on the census) — not started; the only
+  remaining slice in the decision-019 family.
+- Carried, unchanged: no GUI redaction-apply flow (R85-uncoverable by
+  design); `✓`/`✕` (U+2713/U+2715) glyph verification still owed;
+  status-bar/fit-zoom feedback loop; letter badges pending real icons;
+  `egui_kittest` harness gap; Open operator questions (g)–(k); the `Tw`
+  census middle-band judgement call; FF-C's rule-13 dependency
+  classification; the FF-I StructTree cut; list-authoring scope call;
+  the kerning parity gap.
+- Branch still named `pass-8-redaction`, now spanning Passes 9–19.3 —
+  worth a rename whenever a push is authorized.
+- No git remote configured; backup bundle
+  (`D:\Dev\pdfce-backups\pdfce-20260803-1400.bundle`) now two commits
+  stale (predates `e883e26`, `74052d3`) and not regenerated this
+  continuation.
+- **Unresolved bookkeeping note:** the third engineer-reported hash
+  this continuation, `25b2d0e`, was not independently described in the
+  handoff this filing was built from — filed here as the presumed
+  continuation-65 librarian-filing docs commit (matching the
+  established per-continuation pattern), NOT asserted as engineer-
+  confirmed fact. Flag for confirmation at next contact — see R87.
+
+**For next session:**
+- Flag to the operator at next contact, all carried forward: (1) the
+  Open operator questions (g)–(k); (2) push/publish call still
+  ungranted, chain now 51 commits, still no remote; (3)
+  branch-rename-on-push still pending; (4) the GUI still has no
+  redaction-apply flow; (5) R86 (headless-vs-observed "done"
+  definition) still unanswered; (6) the kerning parity gap unscoped;
+  (7) **NEW — the FF-H formatting family is now feature-complete except
+  the conditional `Tw` census (Pass 19.4)**; (8) **NEW — confirm what
+  `25b2d0e` actually is**, per the bookkeeping note above.
+- Regenerate the backup bundle to cover this continuation's commits
+  (51 total).
+- Confirm the `ⓘ` (U+24D8) tofu suspicion by reaching a UI state that
+  displays it, before scoping a font-coverage fix.

@@ -997,6 +997,49 @@ Pass** (slice 19.3, the property surface, is a separate
 `pdfce-ui-specialist` dispatch) — verified via the CLI oracle and a new
 R85 case, exercising the same `EditSession` path the GUI will use.
 
+**Pass 19.3 SHIPPED (2026-08-03, `74052d3`) — the GUI property surface
+is now built, AND a defect that had silently disabled every property-
+bar Apply since Pass 14.3 is fixed.** GUI slice: Option-B wrapper
+(`StyleOutcome`/`StyleResolution`/`probe_synthesis`/
+`preview_style_resolution` in `pdfce-core`, read-only and side-effect-
+free — `preview_style_resolution` calls `gate_synthesis` up to three
+times rather than re-deriving, proven byte-equal to a non-previewed
+commit) plus the `pdfce-gui` property tree (`MetricUnit`/
+`BaselineChoice`/`AmbientSnapshot`, 11 new `TextEditState` fields, five
+`FormatOp` variants). **The headline finding is a data-contract defect
+predating this decision entirely, exposed only because this slice
+stopped discarding failed anchor lookups with `.ok()`.**
+`GlyphProvenance::operator_span` (§9.4, published by the extraction
+walk) names the span of the operator token ALONE; `text_edit::edit`'s
+`OpRec` (the authoring walk's own record) names the OPERAND-INCLUSIVE
+extent of the same operation. `find_anchor`'s pinned-request path
+(`pin_names_operator`) compared the two spans for EXACT EQUALITY —
+since the GUI always pins from published provenance, and the authoring
+walk always records the wider span, **the two never matched, and every
+GUI-issued `format-text`/`edit-text` Apply since Pass 14.3 refused
+with `NoMatch` before reaching the surgery**, invisible in the running
+application until this slice made the failure visible instead of
+swallowing it. **Fix:** `pin_names_operator` now accepts either
+convention — `pin.end() == r.end && pin.start >= r.start` — since two
+operations in one content stream cannot share an end offset; a
+regression test proves the relaxed match still DISCRIMINATES a
+near-miss span (does not degrade into false-positive editing of the
+wrong run). **Verified by mutation:** reverting to exact-equality
+matching makes a new regression test fail; restoring the fix makes it
+pass. Both doc comments that had independently asserted the two
+conventions already agreed (`EditRequest::pinned_span`'s "matches the
+same span," `text_edit/page.rs`'s "the surgery locates the operator by
+exactly this span") are corrected in place — this is the architectural
+fact this section previously stated incorrectly, now fixed at the
+source. `cargo test --workspace` 1708 → 1722, 0 failed; `cargo tree`
+re-verified clean; zero new Cargo dependencies. Full record: the Pass
+19.3 Shipped entry, `ROADMAP.md` (top of Shipped), and the new standing
+rule R93 (methodology: a code comment asserting a cross-module contract
+is a claim, not evidence, even when two independent comments on both
+ends of the contract agree — third occurrence of this failure shape in
+this project, after decision 018's `refresh_pages` comment and the
+`.gitattributes` ordering incident).
+
 Full design, the four-case font-on-edit matrix, the fast-follow ladder
 (FF-A offline reflow ladder through FF-H spacing/synthetic-styles — FF-A/
 FF-B boundary amended by decision 015, FF-H re-scoped by decision 019,
@@ -4339,3 +4382,48 @@ with a forward pointer.
   as a general methodology finding (see the RAG-escalation note in
   `SESSION_LOG.md`). No `pdfce-core`/`pdfce-render` GUI-dependency
   change; `cargo tree` re-verified clean; zero new Cargo dependencies.
+- **2026-08-03 (same-day, Amendment D to decision 019) — Pass 19.3
+  SHIPPED (`74052d3`); the GUI property surface, AND a project-wide
+  data-contract defect that had silently disabled every property-bar
+  Apply since Pass 14.3. Full record: the Pass 19.3 Shipped entry,
+  `ROADMAP.md` (top of Shipped), and §5.11's new Pass 19.3 paragraph,
+  above.** Not a decision-019 design question — a live defect the
+  slice exposed, in the same spirit as Amendment A's `q`/`Q`-arm
+  finding: `GlyphProvenance::operator_span` (extraction walk) and
+  `text_edit::edit::OpRec` (authoring walk) publish two DIFFERENT
+  conventions for "the span of this operation" — operator-token-only
+  vs. operand-inclusive — and `find_anchor`'s pinned-request matcher
+  required exact equality between them. Since the GUI always pins from
+  published provenance and the authoring walk always records the wider
+  span, the two spans never matched: every GUI-issued formatting/edit
+  request since Pass 14.3 refused with `NoMatch` before reaching the
+  surgery, invisible in the running application because the failure was
+  discarded with `.ok()` rather than surfaced. Fixed by relaxing
+  `pin_names_operator` to accept either convention
+  (`pin.end() == r.end && pin.start >= r.start` — two operations sharing
+  one content stream cannot share an end offset), verified by mutation
+  (revert the relaxation → a new regression test fails; restore it →
+  passes) and by a second regression test proving the relaxed matcher
+  still discriminates a near-miss span rather than degrading into
+  false-positive misattribution. **Two doc comments, on both the
+  publisher and the consumer side of the contract, had independently
+  asserted the conventions already agreed** — `EditRequest::
+  pinned_span`'s "matches the same span" and `text_edit/page.rs`'s "the
+  surgery locates the operator by exactly this span" — both corrected
+  in place. **New standing rule R93** (`ROADMAP.md`, ceiling was R92):
+  a code comment asserting a cross-module contract holds is a claim,
+  not evidence, even when two independent comments on both ends of the
+  contract agree with each other — third occurrence of this exact
+  failure shape in this project, after decision 018's `refresh_pages`
+  "the base revision has not changed" comment (true through Pass 3.1,
+  silently false from Pass 6.1) and the `.gitattributes` ordering
+  incident (the file's own `*.pdf binary` rule silently overridden by a
+  catch-all placed below it). No `pdfce-core`/`pdfce-render`
+  GUI-dependency change; `cargo tree` re-verified clean; zero new Cargo
+  dependencies; `cargo test --workspace` 1708 → 1722, 0 failed.
+  **RAG escalation filed to `D:\dev\rag\rust\`, not `personal_rag/pdf`**
+  (a deliberate librarian judgment call, deviating from the suggested
+  location — the lesson generalizes to any editor publishing byte spans
+  for later re-location, not to PDF-domain producer-divergence
+  behavior): `byte_span_convention_must_live_in_the_type_not_matching_doc_comments.md`
+  and `trust_but_verify_doc_comments_are_not_evidence.md`.
