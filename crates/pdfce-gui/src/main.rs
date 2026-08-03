@@ -221,6 +221,7 @@ mod measure_tool;
 mod object_provider;
 mod object_summary;
 mod raster;
+mod redact_apply;
 mod ui_text;
 mod vector_edit_tool;
 mod viewer;
@@ -506,6 +507,31 @@ struct PdfceApp {
     /// destructive to whatever the operator had copied previously, so an
     /// operator who backs out must not have already lost it.
     pending_copy: Option<PendingCopy>,
+    /// A redaction apply waiting on the operator's answer (Pass 8.1,
+    /// ui-spec §4).
+    ///
+    /// `Some` means the Apply report is on screen and **nothing has been
+    /// written to disk** — the same before-not-after posture as
+    /// `pending_save`/`pending_copy`, with one sharper edge and one softer
+    /// one:
+    ///
+    /// * sharper — unlike those two, the operation this confirms has no
+    ///   cheap reversal once its bytes land. There is no undo for a file
+    ///   whose content is gone.
+    /// * softer — the removal has ALREADY happened, in memory, before this
+    ///   is ever `Some` (see [`redact_apply::prepare_redaction_apply`]). That
+    ///   is what lets the report state measurements instead of predictions,
+    ///   and it is why cancelling costs nothing: the bytes are simply
+    ///   dropped, and the open document was never touched.
+    pending_redaction_apply: Option<PendingRedactionApply>,
+    /// The literal-text query in the redaction panel's Find-&-mark box.
+    ///
+    /// Application state rather than per-document state, matching
+    /// `markup_color`'s precedent: it is a control's contents, not a
+    /// property of the file. Cleared on Open with the rest of the narrator
+    /// state, because a query typed against the previous document is stale
+    /// narration about the wrong file.
+    redact_search_query: String,
     /// The narrator line describing the most recent edit — a delete's
     /// dangling-reference disclosure, a reorder's page count.
     ///
@@ -611,6 +637,73 @@ struct PendingCopy {
     outcome: CopyTextOutcome,
     /// The text that will reach the clipboard on confirm.
     text: String,
+}
+
+/// A redaction apply the operator has been asked to confirm (Pass 8.1,
+/// ui-spec §4).
+///
+/// Carries the FINISHED bytes rather than a plan to compute them on
+/// confirm. Same reasoning as [`PendingSave`] and [`PendingCopy`] — the
+/// question the operator answered was about *this* result — but load-bearing
+/// here in a way it is not for those two: the report the operator reads
+/// (§4.3) is generated from an apply that has already run, so every figure
+/// in it is a measurement of the exact bytes that will be written, not a
+/// forecast of bytes that will be produced later from a document that may
+/// have changed in between.
+///
+/// The two acknowledgement flags are separate on purpose (§4.4/§4.5). One is
+/// the ordinary "I understand what applying means"; the other appears ONLY
+/// when the report names something pdfce could not remove, and exists so a
+/// partial redaction can never be accepted by the same single click that
+/// accepts a complete one.
+struct PendingRedactionApply {
+    /// The completed, verified, unwritten redaction.
+    prepared: redact_apply::PreparedRedaction,
+    /// Whether the operator has ticked the mandatory acknowledgement.
+    acknowledged: bool,
+    /// Whether the operator has ticked the EXTRA acknowledgement that the
+    /// report's named residuals will not be removed. Meaningless — and
+    /// never shown — when the report has no residual section.
+    acknowledged_residuals: bool,
+}
+
+impl PendingRedactionApply {
+    /// Every residual line the report must show, in the order it shows
+    /// them: carriers core could not scrub, byte-level survivors the
+    /// absence proof found outside page content, and objects promoted out
+    /// of a compressed container by the materialisation.
+    ///
+    /// Built here rather than in the drawing code so that "does this apply
+    /// have residuals?" — the question that gates the extra checkbox and
+    /// picks the post-apply wording — is answered by ONE expression rather
+    /// than by three conditions that could drift apart. A residual that the
+    /// gate counts but the report does not print (or the reverse) would be
+    /// precisely the "partial redaction mistaken for a complete one" failure
+    /// §4.4 exists to prevent.
+    fn residual_lines(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        for carrier in &self.prepared.report.carriers {
+            if carrier.action == pdfce_core::redact::CarrierAction::DisclosedNotScrubbed {
+                lines.push(ui_text::redact_apply_residual_carrier_line(carrier.carrier));
+            }
+        }
+        for text in &self.prepared.verification.raw_byte_residuals {
+            lines.push(ui_text::redact_apply_raw_residual_line(text));
+        }
+        if !self.prepared.promoted_by_materialisation.is_empty() {
+            lines.push(ui_text::redact_apply_promotion_line(
+                self.prepared.promoted_by_materialisation.len(),
+            ));
+        }
+        lines
+    }
+
+    /// Whether the confirm button may be enabled: the ordinary
+    /// acknowledgement always, PLUS the residual acknowledgement whenever
+    /// there is a residual section to acknowledge.
+    fn ready_to_confirm(&self) -> bool {
+        self.acknowledged && (self.residual_lines().is_empty() || self.acknowledged_residuals)
+    }
 }
 
 /// What the last Copy-text produced, for the status bar.
@@ -722,6 +815,8 @@ impl Default for PdfceApp {
             // the summary says there is something to read.
             copy_detail_expanded: false,
             pending_copy: None,
+            pending_redaction_apply: None,
+            redact_search_query: String::new(),
             edit_note: None,
             recovery_note: None,
             // Pass 6.1: a visible red pen and a 2-point stroke — sensible
@@ -2122,6 +2217,33 @@ enum Action {
     ConfirmPendingCopy,
     /// Abandon a copy the operator declined.
     CancelPendingCopy,
+    /// Bring the redaction review panel to the front of the dock, or — if
+    /// it is already the panel on screen — close the dock. The same
+    /// toggle semantics as [`Action::ToggleProperties`], for the same
+    /// reason: a control that opens a surface should also put it away.
+    ToggleRedactPanel,
+    /// Mark the whole of the current page for redaction (Pass 8.1,
+    /// ui-spec §2.4). One `EditSession::add_redaction`; Undo reverses it.
+    /// **Marks nothing about content** — it authors a reviewable
+    /// annotation and removes nothing.
+    MarkWholePageForRedaction,
+    /// Run the redaction panel's literal-text search and author one mark
+    /// per match (ui-spec §2.5). A reviewable batch, never a removal —
+    /// rule 4 applied to a bulk-authored mark.
+    SearchAndMarkForRedaction,
+    /// Take one `/Redact` mark off the document before it is ever applied
+    /// (ui-spec §3.2's ✕). Reversible like any edit; changes no content.
+    RemoveRedactionMark(pdfce_core::object::ObjId),
+    /// Run the whole apply in memory and open the report modal. **Writes
+    /// nothing** — see [`PendingRedactionApply`].
+    BeginRedactionApply,
+    /// Write the prepared redaction to a path the operator picks. The one
+    /// irreversible action in this application.
+    ConfirmRedactionApply,
+    /// Throw away a prepared redaction the operator declined. Costs
+    /// nothing: the bytes are dropped and the open document was never
+    /// touched.
+    CancelRedactionApply,
 }
 
 impl Action {
@@ -2176,10 +2298,14 @@ impl PdfceApp {
         // here prevents its buffer (typed against the old document) from
         // authoring onto the new one.
         //
-        // Deliberately NOT reset: `pending_save` / `pending_copy` — the
-        // `apply()` gate blocks `Action::Open` while either is set, so a
-        // new document can never load with one of those outstanding.
+        // Deliberately NOT reset: `pending_save` / `pending_copy` /
+        // `pending_redaction_apply` — the `apply()` gate blocks
+        // `Action::Open` while any of them is set, so a new document can
+        // never load with one of those outstanding.
         self.save_result = None;
+        // Pass 8.1: a query typed against the previous document is stale
+        // narration about the wrong file, exactly like `copy_result` below.
+        self.redact_search_query.clear();
         self.edit_note = None;
         self.recovery_note = None;
         self.copy_result = None;
@@ -2295,6 +2421,20 @@ impl PdfceApp {
     /// (§12.8.1 NOTE 1) and makes the previous revision recoverable. A
     /// full-rewrite option belongs with the optimization feature that
     /// gives it a reason to exist, not on the primary Save control.
+    ///
+    /// ## The pending-redaction-marks disclosure (Pass 8.1, ui-spec §3.4)
+    ///
+    /// A successful save of a document that still carries `/Redact` marks
+    /// emits an EXTRA narrator line, in addition to — never instead of —
+    /// the ordinary save confirmation. The save really did succeed; what
+    /// the operator also needs to know is what it did *not* do.
+    ///
+    /// This is the direct structural answer to the most-cited real-world
+    /// redaction failure: a marked-but-never-applied file saved and shared
+    /// as if finished. The status bar already discloses pending marks
+    /// continuously; this fires at the exact moment the misunderstanding
+    /// becomes consequential, which is when the operator produces a file to
+    /// hand someone.
     fn save_dialog(&mut self) {
         let Status::Open(doc) = &self.status else {
             return;
@@ -2334,7 +2474,14 @@ impl PdfceApp {
             },
             Err(message) => SaveOutcome::Failed(message),
         };
+        // Read the census from the SESSION graph, so a mark made this
+        // session — the one most likely to be forgotten — is counted.
+        let pending_marks = pdfce_core::redact::count_redaction_marks(&doc.session.graph());
+        let saved = matches!(outcome, SaveOutcome::Saved { .. });
         self.save_result = Some(outcome);
+        if saved && pending_marks > 0 {
+            self.edit_note = Some(ui_text::redact_save_kept_pending_marks(pending_marks));
+        }
     }
 
     /// Commit the properties panel's draft as **one** undoable edit.
@@ -3159,6 +3306,574 @@ impl PdfceApp {
             });
     }
 
+    // -- Pass 8.1: redaction review & apply (ui-spec §3/§4) --------------
+
+    /// Bring `panel` to the front of the dock, or close the dock if it is
+    /// already the panel on screen. Returns `true` when the panel is now on
+    /// screen (so a caller can seed whatever state that panel displays).
+    ///
+    /// "Already showing" means BOTH that the dock is open and that `panel`
+    /// is the front tab of its group — the two halves of "is it on screen?".
+    /// Asking the tree rather than a flag of our own is what stops a toolbar
+    /// toggle from ever disagreeing with what the operator can see, which is
+    /// exactly the failure the retired `properties_open` boolean was capable
+    /// of (decision 017 §8.3).
+    ///
+    /// Extracted at Pass 8.1 because Redact is the second control with this
+    /// behaviour and two copies of a "toggle means show-or-hide, and hide
+    /// means only if it is the one you are looking at" rule is how the two
+    /// come to differ.
+    fn toggle_dock_panel(&mut self, panel: DockPanel) -> bool {
+        if self.tools_open && dock::panel_is_active(&self.dock, panel) {
+            self.tools_open = false;
+            return false;
+        }
+        self.tools_open = true;
+        // A `false` here means the panel is not mounted at all — possible
+        // once panes can be closed, and cheap to survive: fall back to the
+        // default layout rather than opening a dock that does not contain
+        // what was asked for. Fail-soft, the same posture decision 017 §7
+        // binds the future layout-restore path to.
+        if !dock::activate(&mut self.dock, panel) {
+            self.dock = dock::default_tree();
+            dock::activate(&mut self.dock, panel);
+        }
+        true
+    }
+
+    /// The redaction review panel (ui-spec §3) — the dock pane that answers
+    /// "what is marked in this document, and how do I finish or undo it?".
+    ///
+    /// ## Everything here is rebuilt from the document, every frame
+    ///
+    /// The mark list is [`pdfce_core::redact::redaction_marks`] over
+    /// `session.graph()` — the same walk the status-bar census uses — and
+    /// nothing about it is cached between frames. That is deliberate and it
+    /// is the panel's most important property: a cached list could disagree
+    /// with the document after an undo, a page delete, or a mark authored by
+    /// some other path, and a review surface that lists a mark which is not
+    /// there (or omits one that is) is worse than no review surface at all.
+    /// It costs one dictionary walk per frame, which is the same order as
+    /// the disclosure already in the status bar.
+    ///
+    /// ## Why `session.graph()` and not `session.document()`
+    ///
+    /// The base revision cannot contain a mark the operator made this
+    /// session, which is precisely the set of marks a review panel exists to
+    /// show. This is the Pass 17.1 / decision 018 §8 lesson applied at
+    /// authoring time rather than re-learned.
+    fn redact_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        ui.heading(ui_text::dock_panel_redact_label());
+        ui.label(ui_text::redact_panel_intro());
+        ui.separator();
+
+        let Status::Open(doc) = &self.status else {
+            ui.label(ui_text::redact_panel_no_document_hint());
+            return;
+        };
+        let has_pages = !doc.pages.is_empty();
+        let marks = pdfce_core::redact::redaction_marks(&doc.session.graph());
+
+        // -- authoring entry points --
+        //
+        // R83 (no affordance without the capability): both are disabled,
+        // not hidden, when the document has no pages — a control that
+        // vanishes teaches nothing, while a disabled one with a tooltip
+        // teaches what would enable it.
+        ui.add_enabled_ui(has_pages, |ui| {
+            if ui
+                .button(ui_text::redact_mark_whole_page_button())
+                .on_hover_text(ui_text::redact_mark_whole_page_tooltip())
+                .clicked()
+            {
+                actions.push(Action::MarkWholePageForRedaction);
+            }
+            ui.horizontal(|ui| {
+                ui.text_edit_singleline(&mut self.redact_search_query);
+                // The button is dead while the box is empty rather than
+                // silently no-oping on click — the same R83 reading.
+                ui.add_enabled_ui(!self.redact_search_query.trim().is_empty(), |ui| {
+                    if ui.button(ui_text::redact_search_button()).clicked() {
+                        actions.push(Action::SearchAndMarkForRedaction);
+                    }
+                });
+            });
+            ui.label(
+                egui::RichText::new(ui_text::redact_search_hint())
+                    .small()
+                    .weak(),
+            );
+        });
+
+        ui.separator();
+
+        // -- state, then action, then detail --
+        //
+        // The count line is warn-coloured whenever it is non-zero, paired
+        // with the ⚠ glyph the status bar already uses (R84: the state is
+        // never carried by colour alone). "There are marks" is a warning,
+        // not a statistic: it means content the operator may believe is
+        // gone is still in the file.
+        let count_label = ui_text::redact_marks_count_label(marks.len());
+        if marks.is_empty() {
+            ui.label(count_label);
+        } else {
+            ui.colored_label(ui.visuals().warn_fg_color, count_label);
+        }
+
+        // **The Apply button sits ABOVE the mark list, not below it — a
+        // deliberate reversal of the ui-spec's §3.2 order, forced by
+        // observing the real window (R86).**
+        //
+        // The spec put the list first, in its own `max_height(240.0)`
+        // `ScrollArea`, and the Apply button after it. In the dock as it
+        // actually ships, this pane's height comes from the vertical split
+        // and is roughly 250 pt — so on a document with three marks, that
+        // layout pushed "Review & Apply Redactions…" off the bottom of the
+        // pane, leaving only a scrollbar to suggest anything followed.
+        //
+        // That is not a cosmetic loss. The failure this whole Pass exists to
+        // prevent is an operator concluding that MARKING is redacting; a
+        // panel that shows marks and hides the way to finish them is an
+        // active push toward exactly that conclusion. State → action →
+        // detail keeps the way out visible at every pane height.
+        //
+        // Nothing about safety is traded for it: the button opens the report
+        // modal, which IS the review, and which cannot be confirmed without
+        // reading past two gates. Clicking it before scrolling the list
+        // costs an operator nothing but a cancel.
+        ui.separator();
+        let can_apply = !marks.is_empty();
+        ui.add_enabled_ui(can_apply, |ui| {
+            if ui
+                .button(ui_text::redact_review_apply_button())
+                .on_hover_text(ui_text::redact_review_apply_tooltip(can_apply))
+                .clicked()
+            {
+                actions.push(Action::BeginRedactionApply);
+            }
+        });
+        ui.separator();
+
+        // The rows flow into the pane's OWN scroll area rather than a nested
+        // one of their own — the second half of the same observation. Two
+        // nested scroll contexts in a 250 pt pane means the operator's wheel
+        // sometimes moves the list and sometimes moves the panel, depending
+        // on where the pointer is, for no benefit at this size.
+        for mark in &marks {
+            ui.horizontal(|ui| {
+                let size = mark.rect.map(|[llx, lly, urx, ury]| (urx - llx, ury - lly));
+                // A plain button, not a `selectable_label`: a row is
+                // a navigation command, and rendering it as a
+                // selection control would imply a selected state the
+                // panel does not have.
+                if ui
+                    .button(ui_text::redact_mark_row_label(mark.page_index + 1, size))
+                    .on_hover_text(ui_text::redact_mark_row_tooltip())
+                    .clicked()
+                {
+                    actions.push(Action::GoToPage(mark.page_index));
+                }
+                // A worded button, not the ui-spec's `✕` glyph.
+                // `docs/ui_specs/menu-affordance-and-glyph-coverage.md`
+                // records what a decorative Unicode glyph costs in this
+                // app: U+25BE was in none of egui's default font chain
+                // and shipped as a tofu box on every menu button. A bare
+                // `✕` risks the same, and an icon-only control that
+                // renders as a box in a list of destructive-looking rows
+                // is worse here than anywhere else. The word also
+                // announces itself.
+                if ui
+                    .button(ui_text::redact_mark_remove_button())
+                    .on_hover_text(ui_text::redact_mark_remove_tooltip())
+                    .clicked()
+                {
+                    actions.push(Action::RemoveRedactionMark(mark.annot_id));
+                }
+            });
+        }
+    }
+
+    /// Mark the whole of the current page (ui-spec §2.4).
+    ///
+    /// No confirmation, deliberately — §2.1's governing rule. Marking is
+    /// non-destructive and fully reversible right up to Apply, and a
+    /// confirmation on a reversible action is how operators learn to dismiss
+    /// confirmations, which would then also be how they dismiss the one in
+    /// §4 that matters.
+    ///
+    /// It DOES get a narrator line, because marking an entire page takes one
+    /// click and is easy to do without noticing. Disclosure without a gate
+    /// is the correct weight for a reversible surprise.
+    fn mark_whole_page_for_redaction(&mut self) {
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        let Some(page) = doc.pages.get(doc.view.page_index) else {
+            return;
+        };
+        let page_index = doc.view.page_index;
+        // The page's own visible box — the region an operator means by "this
+        // whole page", not the MediaBox, which on a cropped page covers area
+        // the operator cannot see and did not ask about.
+        let rect = page.crop_box;
+        let spec = pdfce_core::annot_author::RedactSpec {
+            quads: vec![pdfce_core::annot_author::Quad::from_rect(rect)],
+            fill: None,
+            overlay_text: None,
+            quadding: pdfce_core::vartext::Quadding::Left,
+        };
+        match doc.session.add_redaction(page_index, &spec) {
+            Ok(_) => {
+                doc.refresh_pages();
+                self.edit_note = Some(ui_text::redact_whole_page_marked(page_index + 1));
+            }
+            Err(err) => {
+                self.save_result = Some(SaveOutcome::Failed(ui_text::redact_mark_failed(
+                    &err.to_string(),
+                )));
+            }
+        }
+    }
+
+    /// Author one mark per literal-text match (ui-spec §2.5).
+    ///
+    /// Rule 4 at full force: this produces a **reviewable batch of proposed
+    /// marks**, never a removal. Every match lands in the same list as a
+    /// hand-authored mark and is individually removable before Apply — which
+    /// is what [`pdfce_core::edit::EditSession::delete_redaction_mark`] was
+    /// added for.
+    ///
+    /// A zero-match result gets its own narrator line rather than silence.
+    /// The distinction that line draws — "no matches in the text pdfce can
+    /// extract" versus "nothing sensitive is there" — is the named
+    /// scanned-document failure mode: an operator who reads a silent no-op
+    /// as the second of those ships an un-redacted scan.
+    fn search_and_mark_for_redaction(&mut self) {
+        let query = self.redact_search_query.trim().to_owned();
+        if query.is_empty() {
+            return;
+        }
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        // Case-insensitive: an operator searching for a name wants every
+        // casing of it marked, and over-marking is the safe direction of
+        // error for a feature whose failure mode is leaving content behind.
+        match doc.session.mark_redactions_by_search(&query, true) {
+            Ok(created) if created.is_empty() => {
+                self.edit_note = Some(ui_text::redact_search_no_matches(&query));
+            }
+            Ok(created) => {
+                doc.refresh_pages();
+                self.edit_note = Some(ui_text::redact_search_marked(created.len(), &query));
+            }
+            Err(err) => {
+                self.save_result = Some(SaveOutcome::Failed(ui_text::redact_mark_failed(
+                    &err.to_string(),
+                )));
+            }
+        }
+    }
+
+    /// Take one mark off before it is ever applied (ui-spec §3.2's ✕).
+    ///
+    /// No confirmation, for §2.1's reason and one more: removing a mark
+    /// removes nothing from the document, so there is nothing to protect.
+    /// The narrator line says so explicitly, because "remove" in a redaction
+    /// panel could otherwise be read as "un-redact".
+    fn remove_redaction_mark(&mut self, annot_id: pdfce_core::object::ObjId) {
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        // Resolve the page BEFORE the removal, so the narrator line can name
+        // it — afterwards the mark is gone and there is nothing to ask.
+        let page_number = pdfce_core::redact::redaction_marks(&doc.session.graph())
+            .iter()
+            .find(|m| m.annot_id == annot_id)
+            .map_or(0, |m| m.page_index + 1);
+        match doc.session.delete_redaction_mark(annot_id) {
+            Ok(()) => {
+                doc.refresh_pages();
+                self.edit_note = Some(ui_text::redact_mark_removed(page_number));
+            }
+            Err(err) => {
+                self.save_result = Some(SaveOutcome::Failed(ui_text::redact_mark_remove_failed(
+                    &err.to_string(),
+                )));
+            }
+        }
+    }
+
+    /// Run the apply in memory and open the report (ui-spec §4.2).
+    ///
+    /// **Nothing is written here.** The whole removal — both forced full
+    /// rewrites and the absence proof — happens inside
+    /// [`redact_apply::prepare_redaction_apply`], and its result is parked in
+    /// `pending_redaction_apply` for the operator to read. That ordering is
+    /// what makes the report honest: it describes bytes that exist, so its
+    /// numbers are measurements rather than a forecast, and there is no
+    /// window in which the document could change between the report and the
+    /// write.
+    ///
+    /// A refusal never opens the modal. It goes to the same `save_result`
+    /// channel every other refusal in this codebase uses, because a refusal
+    /// is an answer to what the operator asked for, not a new question — and
+    /// putting it in a dialog would make the operator dismiss something
+    /// before they could read it twice.
+    fn begin_redaction_apply(&mut self) {
+        let Status::Open(doc) = &self.status else {
+            return;
+        };
+        match redact_apply::prepare_redaction_apply(&doc.session) {
+            Ok(prepared) => {
+                self.pending_redaction_apply = Some(PendingRedactionApply {
+                    prepared,
+                    acknowledged: false,
+                    acknowledged_residuals: false,
+                });
+            }
+            Err(refusal) => {
+                self.save_result = Some(SaveOutcome::Failed(
+                    ui_text::redact_apply_refusal_message(&refusal),
+                ));
+            }
+        }
+    }
+
+    /// Write the prepared redaction to a path the operator picks (ui-spec
+    /// §4.6) — **the one irreversible action in this application**.
+    ///
+    /// Four properties, each load-bearing:
+    ///
+    /// 1. **Save-as, never save-over.** The dialog is pre-filled with
+    ///    `suggested_redaction_name` — `"{stem} (redacted).pdf"` — and never
+    ///    with the open file's own name. Overwriting the source would
+    ///    destroy the only remaining copy of the content the operator is
+    ///    removing, on the operation least able to survive a mistake.
+    /// 2. **It does not go through `save_dialog`.** Conflating the two save
+    ///    paths is how one silently inherits the other's defaults, and
+    ///    `save_dialog`'s default is *incremental* — the exact mode a
+    ///    redaction must never use. Keeping them separate means there is no
+    ///    parameter anywhere that could make an apply write incrementally.
+    /// 3. **The open document is not modified.** The session still holds its
+    ///    marks; the redacted document is a new file. So there is nothing to
+    ///    undo, which is why the wording corrects the operator's learned
+    ///    Undo expectation instead of relying on it.
+    /// 4. **Atomic write** (standing UX rule 5), same `write_atomic` as
+    ///    every other save: a crash mid-write cannot leave a truncated file
+    ///    at the destination.
+    ///
+    /// The post-apply line is durable and picks its wording from whether the
+    /// report had residuals, per §5.1 — an operator who acknowledged a
+    /// residual and then closed the modal is still owed a standing record of
+    /// what remains.
+    fn confirm_redaction_apply(&mut self) {
+        let Some(pending) = self.pending_redaction_apply.take() else {
+            return;
+        };
+        let Status::Open(doc) = &self.status else {
+            return;
+        };
+        let suggested = ui_text::suggested_redaction_name(&doc.path);
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter(ui_text::open_dialog_filter_label(), &["pdf"])
+            .set_file_name(suggested)
+            .save_file()
+        else {
+            // Cancelled at the file dialog: nothing was written, and the
+            // prepared bytes are dropped. The marks are all still on the
+            // document, so the operator can start over losing nothing.
+            return;
+        };
+
+        let residuals = pending.residual_lines().len();
+        let regions = pending.prepared.report.marks_applied;
+        let pages = pending.prepared.report.pages_redacted;
+        match write_atomic(&path, &pending.prepared.bytes) {
+            Ok(()) => {
+                self.save_result = None;
+                self.edit_note = Some(if residuals == 0 {
+                    ui_text::redact_apply_succeeded_clean(&path, regions, pages)
+                } else {
+                    ui_text::redact_apply_succeeded_residual(&path, regions, residuals)
+                });
+            }
+            Err(err) => {
+                self.save_result = Some(SaveOutcome::Failed(err.to_string()));
+            }
+        }
+    }
+
+    /// The Apply report — pdfce's **third** confirmation-dialog convention,
+    /// adopted deliberately rather than by drift (ui-spec §4.1).
+    ///
+    /// The existing convention is a fixed 520 pt, non-resizable, centred
+    /// window with a short body (`signature_confirmation`,
+    /// `copy_confirmation`). It does not fit here, and the mismatch is
+    /// structural rather than aesthetic: this dialog's body is a **report**
+    /// whose length varies with the document and the mark count, and
+    /// squeezing a variable-length report into a fixed short box would bury
+    /// the one thing the operator is supposed to read. So this window is
+    /// **resizable**, larger by default, and scrolls its body.
+    ///
+    /// **The inconsistency is the point.** A destructive, irreversible action
+    /// should not wear the same clothes as the two reversible questions the
+    /// operator has already learned to click through; looking different is
+    /// part of how it stops being reflexive.
+    ///
+    /// ## Two things this window deliberately does NOT have
+    ///
+    /// * **No default-button binding, so Enter cannot confirm.** egui does
+    ///   not bind Enter to a focused `Button` (activation is Space or
+    ///   Enter on the *focused* widget only, and nothing here takes focus on
+    ///   open), and nothing in this method adds one. An operator reading a
+    ///   long report and pressing Enter out of habit must not commit the
+    ///   most destructive action in the application.
+    /// * **No keyboard shortcut anywhere, to open OR to confirm.** A
+    ///   deliberate asymmetry with every other destructive action in pdfce
+    ///   (Delete has the Delete key, rotate has `[`/`]`) — those are
+    ///   reversible before save; this is not, ever. The heaviest action in
+    ///   the app gets zero frictionless paths, and says so on screen
+    ///   (`redact_apply_no_shortcut_note`) rather than leaving its absence
+    ///   to be noticed.
+    fn redaction_apply_confirmation(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        let Some(pending) = &mut self.pending_redaction_apply else {
+            return;
+        };
+        let report = &pending.prepared.report;
+        let verification = &pending.prepared.verification;
+        // Computed BEFORE the closure so the residual gate and the residual
+        // section read the same list (see `residual_lines`' docs).
+        let residuals = pending.residual_lines();
+        // Read BEFORE the checkboxes are drawn, so the confirm button
+        // reflects last frame's acknowledgement state. That one-frame lag is
+        // a feature, not an oversight to "fix": it makes it impossible for
+        // the tick that enables the button and the click that presses it to
+        // land in the same frame, so a fast double-click on the checkbox
+        // cannot spill onto a control that was disabled when the gesture
+        // started. egui repaints on input, so the operator sees the button
+        // enable immediately.
+        let ready = pending.ready_to_confirm();
+
+        egui::Window::new(ui_text::redact_apply_title())
+            .collapsible(false)
+            // The one deliberate deviation from the other two dialogs'
+            // `.resizable(false)`: the body is a variable-length report.
+            .resizable(true)
+            .default_size([760.0, 560.0])
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.heading(ui_text::redact_apply_report_heading());
+                // Warn-coloured AND first in the body: the permanence
+                // statement is not fine print, and it is what the operator
+                // must have read before anything below it makes sense.
+                ui.colored_label(
+                    ui.visuals().warn_fg_color,
+                    ui_text::redact_apply_permanence_statement(),
+                );
+                ui.separator();
+
+                egui::ScrollArea::vertical()
+                    .id_salt("redact-apply-report")
+                    .max_height(320.0)
+                    .show(ui, |ui| {
+                        ui.strong(ui_text::redact_apply_will_remove_heading());
+                        ui.label(ui_text::redact_apply_removal_summary(
+                            report.marks_applied,
+                            report.pages_redacted,
+                            report.glyphs_removed,
+                            report.content_streams_rewritten,
+                        ));
+                        // Each of these is shown only when it happened.
+                        // A report padded with "0 annotations removed" lines
+                        // is a report whose real lines get skimmed past.
+                        if report.annotations_removed > 0 {
+                            ui.label(ui_text::redact_apply_annotations_removed(
+                                report.annotations_removed,
+                            ));
+                        }
+                        if report.info_strings_scrubbed > 0 {
+                            ui.label(ui_text::redact_apply_info_scrubbed(
+                                report.info_strings_scrubbed,
+                            ));
+                        }
+                        if report.containers_decomposed > 0 {
+                            ui.label(ui_text::redact_apply_containers_decomposed(
+                                report.containers_decomposed,
+                                report.objects_promoted,
+                            ));
+                        }
+                        ui.label(ui_text::redact_apply_single_revision_note());
+
+                        // The verification result. The affirmative form is
+                        // the ONLY place this UI is allowed to say
+                        // "verified", and it is licensed by an absence proof
+                        // that actually ran over these bytes.
+                        if verification.is_clean() && verification.strings_checked > 0 {
+                            ui.label(ui_text::redact_apply_verified_line(
+                                verification.strings_checked,
+                            ));
+                        }
+                        if verification.strings_too_short_for_raw_check > 0 {
+                            ui.label(ui_text::redact_apply_verification_limit_line(
+                                verification.strings_too_short_for_raw_check,
+                            ));
+                        }
+
+                        // -- the refusal section (§4.4) --
+                        if !residuals.is_empty() {
+                            ui.separator();
+                            ui.colored_label(
+                                ui.visuals().warn_fg_color,
+                                ui_text::redact_apply_refused_heading(),
+                            );
+                            for line in &residuals {
+                                ui.colored_label(ui.visuals().warn_fg_color, line);
+                            }
+                        }
+
+                        ui.separator();
+                        ui.label(ui_text::redact_apply_scope_reminder());
+                    });
+
+                ui.separator();
+                // The extra acknowledgement exists ONLY when there is
+                // something to acknowledge. Showing it always would make it
+                // a box operators tick without reading, which is the same as
+                // not having it.
+                if !residuals.is_empty() {
+                    ui.checkbox(
+                        &mut pending.acknowledged_residuals,
+                        ui_text::redact_apply_refusal_acknowledgement_checkbox(),
+                    );
+                }
+                ui.checkbox(
+                    &mut pending.acknowledged,
+                    ui_text::redact_apply_confirm_checkbox(),
+                );
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button(ui_text::redact_apply_cancel_button()).clicked() {
+                        actions.push(Action::CancelRedactionApply);
+                    }
+                    // R83: the confirm button is disabled until every
+                    // required acknowledgement is ticked — the affordance
+                    // appears exactly when the capability does.
+                    ui.add_enabled_ui(ready, |ui| {
+                        if ui.button(ui_text::redact_apply_confirm_button()).clicked() {
+                            actions.push(Action::ConfirmRedactionApply);
+                        }
+                    });
+                });
+                ui.label(
+                    egui::RichText::new(ui_text::redact_apply_no_shortcut_note())
+                        .small()
+                        .weak(),
+                );
+            });
+    }
+
     /// The right-hand Tools dock.
     ///
     /// The one secondary surface Pass 3.2 adds, and the pattern every
@@ -3523,6 +4238,22 @@ impl PdfceApp {
         {
             return;
         }
+        // Pass 8.1 — the THIRD independent pending state, added to the same
+        // gate rather than getting one of its own. The collision this
+        // closes is the one already documented above (two centre-anchored
+        // windows rendering on top of each other, only the later one
+        // clickable), and it is strictly worse here: the window that would
+        // be hidden is the confirmation for the only irreversible operation
+        // in the application. An operator must never be able to answer a
+        // destructive question they cannot see.
+        if self.pending_redaction_apply.is_some()
+            && !matches!(
+                action,
+                Action::ConfirmRedactionApply | Action::CancelRedactionApply
+            )
+        {
+            return;
+        }
         // Pass 12.0 substrate: the ONE enforcement point for a tool's
         // in-progress gesture (spec §3.3). Any action that is not itself
         // part of continuing/cancelling/committing the gesture consults the
@@ -3561,22 +4292,9 @@ impl PdfceApp {
                 // ever disagreeing with what the operator can see, which is
                 // exactly the failure the retired `properties_open` boolean
                 // was capable of.
-                if self.tools_open && dock::panel_is_active(&self.dock, DockPanel::Properties) {
-                    self.tools_open = false;
-                    return;
-                }
-                self.tools_open = true;
-                // A `false` here means the panel is not mounted at all —
-                // impossible today (nothing can close a pane) but cheap to
-                // survive: fall back to the default layout rather than
-                // opening a dock that does not contain what was asked for.
-                // Fail-soft, the same posture §7 binds the future
-                // layout-restore path to.
-                if !dock::activate(&mut self.dock, DockPanel::Properties) {
-                    self.dock = dock::default_tree();
-                    dock::activate(&mut self.dock, DockPanel::Properties);
-                }
-                if let Status::Open(doc) = &mut self.status {
+                if self.toggle_dock_panel(DockPanel::Properties)
+                    && let Status::Open(doc) = &mut self.status
+                {
                     doc.seed_properties_draft();
                 }
                 return;
@@ -3788,6 +4506,43 @@ impl PdfceApp {
                 self.commit_merge();
                 return;
             }
+            // -- Pass 8.1 redaction (ui-spec §3/§4) ---------------------
+            //
+            // All seven are handled here, above the open-document guard,
+            // because every one of them needs `&mut self` rather than
+            // `&mut OpenDoc`: they write the app-level narrator channels
+            // (`edit_note`, `save_result`) and the app-level pending state.
+            Action::ToggleRedactPanel => {
+                self.toggle_dock_panel(DockPanel::Redact);
+                return;
+            }
+            Action::MarkWholePageForRedaction => {
+                self.mark_whole_page_for_redaction();
+                return;
+            }
+            Action::SearchAndMarkForRedaction => {
+                self.search_and_mark_for_redaction();
+                return;
+            }
+            Action::RemoveRedactionMark(id) => {
+                self.remove_redaction_mark(id);
+                return;
+            }
+            Action::BeginRedactionApply => {
+                self.begin_redaction_apply();
+                return;
+            }
+            Action::ConfirmRedactionApply => {
+                self.confirm_redaction_apply();
+                return;
+            }
+            Action::CancelRedactionApply => {
+                // Costs nothing: the prepared bytes are dropped and the open
+                // document was never touched, so the marks are all still
+                // there to review again.
+                self.pending_redaction_apply = None;
+                return;
+            }
             _ => {}
         }
         let Status::Open(doc) = &mut self.status else {
@@ -3833,6 +4588,13 @@ impl PdfceApp {
             | Action::CopyText(_)
             | Action::ConfirmPendingCopy
             | Action::CancelPendingCopy
+            | Action::ToggleRedactPanel
+            | Action::MarkWholePageForRedaction
+            | Action::SearchAndMarkForRedaction
+            | Action::RemoveRedactionMark(_)
+            | Action::BeginRedactionApply
+            | Action::ConfirmRedactionApply
+            | Action::CancelRedactionApply
             | Action::CommitMerge => unreachable!(),
             // Editing. `rotate_page_by` composes with the page's
             // *effective* rotation — which may be inherited from an
@@ -4187,6 +4949,13 @@ impl eframe::App for PdfceApp {
         // treatment, because a clipboard write is destructive to
         // whatever the operator had copied before.
         self.copy_confirmation(&ctx, &mut actions);
+        // Pass 8.1: the redaction Apply report — the third and heaviest
+        // blocking question, drawn with the other two so it too paints over
+        // every panel. Its "blocking" comes from the `apply()` gate, not
+        // from paint order (see that function's docs); the ordering here
+        // only decides what is on top if two ever coexist, which the gate
+        // makes impossible.
+        self.redaction_apply_confirmation(&ctx, &mut actions);
         // The Pass 6.2 text-entry popup: a small non-blocking window that
         // collects the text before authoring.
         self.text_entry_popup(&ctx, &mut actions);
@@ -5145,6 +5914,53 @@ impl PdfceApp {
                     .response
                     .on_hover_text(ui_text::measure_menu_tooltip());
                 });
+
+                // Pass 8.1 redaction (ui-spec §3.1) — the entry point to the
+                // dock's Redact panel.
+                //
+                // ## Placement, and how it reconciles two rules that pull
+                // opposite ways
+                //
+                // Standing rule 3 names redaction as an example of what
+                // should stay OFF the primary toolbar (progressive
+                // disclosure). Rule 7 wants destructive actions
+                // DISCOVERABLE — and a security feature that is too well
+                // hidden fails its own purpose in a specific, documented
+                // way: an operator who cannot find how to redact improvises
+                // with the Highlight tool, which is the overlay-only
+                // false-redaction failure this whole feature exists to
+                // prevent.
+                //
+                // One icon+label control at the END of the edit group is the
+                // minimum weight that satisfies both: present, but not a new
+                // group and not a menu. The edit group is its correct home —
+                // it acts on the open document's own bytes, which is the
+                // group's organising question, and the Properties toggle
+                // above it already establishes that a panel toggle belongs
+                // here when the panel is about the open document.
+                //
+                // The ui-spec argued for an UNGROUPED control instead. That
+                // argument was against putting Redact in the Tools dock's
+                // "files outside the one you have open" list, and it is
+                // honoured — Redact is its own dock panel, not a Batch-Tools
+                // row. What it did not anticipate is that the dock became a
+                // general panel host with per-panel tabs, which removes the
+                // framing collision the ungrouped placement was avoiding.
+                //
+                // Selected state is DERIVED from the dock (dock open AND
+                // Redact the front tab), never a boolean of our own, so the
+                // toggle cannot disagree with what is on screen.
+                if Self::icon_text_toggle(
+                    ui,
+                    icons::Icon::Redact,
+                    self.tools_open && dock::panel_is_active(&self.dock, DockPanel::Redact),
+                    ui_text::redact_button(),
+                    ui_text::redact_tooltip(),
+                )
+                .clicked()
+                {
+                    actions.push(Action::ToggleRedactPanel);
+                }
                 ui.separator();
 
                 // Group: history. Disabled rather than hidden, because
@@ -5412,6 +6228,9 @@ impl PdfceApp {
             DockPanel::BatchTools => egui::ScrollArea::vertical()
                 .id_salt("dock-batch-tools")
                 .show(ui, |ui| self.tools_dock(ui, actions)),
+            DockPanel::Redact => egui::ScrollArea::vertical()
+                .id_salt("dock-redact")
+                .show(ui, |ui| self.redact_panel(ui, actions)),
         };
     }
 

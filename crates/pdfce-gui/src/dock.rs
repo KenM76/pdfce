@@ -179,6 +179,26 @@ pub enum DockPanel {
     /// container an operator calls "the Tools dock" is a real collision they
     /// trip on.
     BatchTools,
+    /// The redaction review surface (Pass 8.1, `docs/ui_specs/pass-8-
+    /// redaction.md` §3): the live list of `/Redact` marks on the OPEN
+    /// document, the authoring entry points, and the way to the Apply
+    /// report.
+    ///
+    /// **A dock panel, not the ui-spec's own `SidePanel::right`.** §3.1 was
+    /// written before decision 017 existed and reasoned its way to a
+    /// dedicated side panel because the Tools dock's intro sentence ("These
+    /// tools work with files outside the one you have open") would have been
+    /// falsified by a surface that acts on the open document. That reasoning
+    /// still holds — and the dock it was reasoning about no longer exists in
+    /// that form. Today the dock is a general panel host with per-panel tabs
+    /// and per-panel tooltips, `tools_dock_intro` belongs to
+    /// [`Self::BatchTools`] alone, and R80 states the opposite requirement:
+    /// **no panel is reachable only outside the dock.** So the spec's
+    /// conclusion (Redact is not a Batch-Tools row) is honoured exactly,
+    /// while its mechanism (a second right-hand `SidePanel` competing with
+    /// the dock for width) is not — it would be the float-OR-dock dual mode
+    /// decision 017 A.4 #2 deliberately retired.
+    Redact,
 }
 
 impl DockPanel {
@@ -201,7 +221,12 @@ impl DockPanel {
         dead_code,
         reason = "the panel enumeration; swept by this module's tests today, and the list any future panel-picker or fail-soft remount must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 3] = [Self::Objects, Self::Properties, Self::BatchTools];
+    pub const ALL: [Self; 4] = [
+        Self::Objects,
+        Self::Properties,
+        Self::BatchTools,
+        Self::Redact,
+    ];
 
     /// The panel's tab label (decision 002 R1: through the catalog).
     pub fn label(self) -> &'static str {
@@ -209,6 +234,7 @@ impl DockPanel {
             Self::Objects => ui_text::dock_panel_objects_label(),
             Self::Properties => ui_text::dock_panel_properties_label(),
             Self::BatchTools => ui_text::dock_panel_batch_tools_label(),
+            Self::Redact => ui_text::dock_panel_redact_label(),
         }
     }
 
@@ -220,6 +246,7 @@ impl DockPanel {
             Self::Objects => ui_text::dock_panel_objects_tooltip(),
             Self::Properties => ui_text::dock_panel_properties_tooltip(),
             Self::BatchTools => ui_text::dock_panel_batch_tools_tooltip(),
+            Self::Redact => ui_text::dock_panel_redact_tooltip(),
         }
     }
 }
@@ -228,9 +255,26 @@ impl DockPanel {
 ///
 /// ```text
 /// vertical
-/// ├── tabs [ Objects ]                    ← the layer tree, on top
+/// ├── tabs [ Objects | Redact ]           ← the layer tree, on top
 /// └── tabs [ Properties | Batch Tools ]   ← visible AT THE SAME TIME
 /// ```
+///
+/// ## Where Redact sits, and why not in the lower group (Pass 8.1)
+///
+/// A.3's narrow-column mitigation is an invariant, not a preference: **no
+/// default tab group holds more than two labels**, because `egui_tiles`
+/// 0.16.0 answers an overflowing tab bar by *hiding* tabs behind scroll
+/// arrows. Adding [`DockPanel::Redact`] to the lower group would have made
+/// it three and put a security surface behind a scroll arrow at ordinary
+/// dock widths.
+///
+/// It joins the upper group instead, **second**, so `Objects` remains the
+/// front tab and the A.3 requirement (tree above, properties below,
+/// simultaneously) is untouched. The cost is that opening Redact covers the
+/// object tree — which is the right thing to trade: reviewing redaction
+/// marks is a page-and-canvas activity, and the pane it displaces is the one
+/// an operator is not reading while they do it. Properties, which they might
+/// be, stays visible throughout.
 ///
 /// **The vertical split is the requirement, not a stylistic default.** A.3:
 /// select an object in the tree above, edit its properties below, without
@@ -254,8 +298,9 @@ pub fn default_tree() -> DockTree {
     let objects = tiles.insert_pane(DockPanel::Objects);
     let properties = tiles.insert_pane(DockPanel::Properties);
     let batch = tiles.insert_pane(DockPanel::BatchTools);
+    let redact = tiles.insert_pane(DockPanel::Redact);
 
-    let upper = tiles.insert_tab_tile(vec![objects]);
+    let upper = tiles.insert_tab_tile(vec![objects, redact]);
     let lower = tiles.insert_tab_tile(vec![properties, batch]);
     let root = tiles.insert_vertical_tile(vec![upper, lower]);
 
@@ -473,6 +518,49 @@ mod tests {
         // above it — that is the whole point of the vertical split.
         assert!(panel_is_active(&tree, DockPanel::Objects));
         assert!(!panel_is_active(&tree, DockPanel::Properties));
+    }
+
+    /// The redaction panel starts behind the object tree and must come
+    /// forward on request WITHOUT costing the operator the properties form
+    /// below it — the vertical split's whole purpose, asserted for the
+    /// panel that was added to the upper group rather than the lower one
+    /// (Pass 8.1, see [`default_tree`]'s placement note).
+    #[test]
+    fn the_redaction_panel_comes_forward_without_collapsing_the_split() {
+        let mut tree = default_tree();
+        assert!(!panel_is_active(&tree, DockPanel::Redact));
+        assert!(activate(&mut tree, DockPanel::Redact));
+        assert!(panel_is_active(&tree, DockPanel::Redact));
+        assert!(
+            !panel_is_active(&tree, DockPanel::Objects),
+            "Redact shares the upper group with Objects, so it displaces it"
+        );
+        assert!(
+            panel_is_active(&tree, DockPanel::Properties),
+            "opening Redact must not cost the operator the properties form"
+        );
+    }
+
+    /// A.3's narrow-column mitigation, asserted rather than remembered: no
+    /// DEFAULT tab group may hold more than two panes.
+    ///
+    /// `egui_tiles` 0.16.0 answers an overflowing tab bar by hiding tabs
+    /// behind scroll arrows, so a third label in a group is a panel an
+    /// operator can lose at ordinary dock widths. This is the test that
+    /// stops the next panel from being dropped into whichever group looked
+    /// convenient.
+    #[test]
+    fn no_default_tab_group_holds_more_than_two_panes() {
+        let tree = default_tree();
+        for (id, tile) in tree.tiles.iter() {
+            if let Tile::Container(egui_tiles::Container::Tabs(tabs)) = tile {
+                assert!(
+                    tabs.children.len() <= 2,
+                    "tab group {id:?} holds {} panes; A.3 caps a default group at 2",
+                    tabs.children.len()
+                );
+            }
+        }
     }
 
     /// Activating a panel that is not mounted is a `false` answer, never a

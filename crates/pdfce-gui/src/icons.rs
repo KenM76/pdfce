@@ -319,18 +319,19 @@ pub enum Icon {
     /// Font folders… (Tools dock, §2 #27) — the same folder art as
     /// [`Icon::Open`], per ui-spec §3.5.
     FontFolders,
-    /// Redaction (§8.1). **Reserved, not yet wired to a control** — the
-    /// redaction canvas tool has no GUI surface yet. The asset ships now
-    /// so the icon language is settled before the feature lands, and
-    /// because it is the one intentionally solid-FILLED glyph in an
-    /// otherwise all-outline set, it is also the pipeline's only coverage
-    /// of the fill path.
+    /// Redaction (§8.1) — **wired at Pass 8.1** to the toolbar control that
+    /// opens the dock's redaction review panel.
     ///
-    /// `dead_code` is allowed on this ONE variant, not on the enum: it is
-    /// the only member with no call site yet, and silencing it enum-wide
-    /// would also silence the useful signal that a *wired* icon has been
-    /// orphaned by a refactor.
-    #[allow(dead_code)]
+    /// It is the one intentionally solid-FILLED glyph in an otherwise
+    /// all-outline set, which is also why it is the pipeline's only coverage
+    /// of the fill path (see `redaction_is_the_only_filled_icon`). The fill
+    /// is not decoration: every other tool in this app draws or measures,
+    /// and this one obliterates, so its glyph reads as a solid bar rather
+    /// than an outline of one.
+    ///
+    /// The `#[allow(dead_code)]` this variant carried while it was reserved
+    /// is now removed — it has a call site, and leaving the attribute would
+    /// suppress the signal if a future refactor orphaned it.
     Redact,
 }
 

@@ -288,6 +288,23 @@ pub enum CommandKind {
         /// How many fields were flattened.
         count: usize,
     },
+    /// One `/Redact` **mark** was removed from a page before it was ever
+    /// applied (Pass 8.1 review surface, R52).
+    ///
+    /// Deliberately its own kind rather than a generic "delete annotation":
+    /// the operator-facing meaning is *"I decided not to redact that after
+    /// all"*, and an Undo control that says so is a different sentence from
+    /// one that says "delete annotation". It is also the narrowest possible
+    /// command — [`EditSession::delete_redaction_mark`] refuses any
+    /// annotation that is not a `/Redact` — so this kind cannot be
+    /// repurposed later into a general annotation delete without the
+    /// compiler pointing at every reader.
+    ///
+    /// **Removing a mark removes nothing from the document's content.** The
+    /// mark was never applied; the covered content was always still there.
+    /// This command is the *reverse of marking*, not a reverse of redacting
+    /// (which has none — see [`crate::redact::apply_redactions`]).
+    DeleteRedactionMark,
     /// One in-place page-text REPLACE edit (Pass 14.3 §0.2): the page's
     /// content stream object (+ any collapsed extra content streams) was
     /// rewritten by the 14.1 advance-preserving surgery, recorded as ONE
@@ -596,6 +613,19 @@ pub enum EditError {
     AnnotsNotAnArray {
         /// The offending page object.
         page: ObjId,
+    },
+    /// [`EditSession::delete_redaction_mark`] was given an object that is
+    /// not a `/Redact` annotation listed on some page's `/Annots`.
+    ///
+    /// Refused by name rather than "removing whatever that id is": the
+    /// review surface addresses marks by object id, and a stale id (a mark
+    /// already removed, an id from an undone command) must produce a
+    /// refusal the operator can read, never the silent deletion of some
+    /// unrelated annotation that happened to inherit the number.
+    #[error("object {id} is not an unapplied /Redact mark on any page of this document")]
+    NotARedactionMark {
+        /// The object that was asked for.
+        id: ObjId,
     },
     /// A form-fill edit named a field the document's `/AcroForm` does not
     /// contain (or the document has no `/AcroForm` at all). Refused by name
@@ -3153,6 +3183,127 @@ impl EditSession {
             trailer: None,
         });
         Ok(annot_id)
+    }
+
+    /// Remove ONE unapplied `/Redact` mark from the document, as a single
+    /// undoable command (Pass 8.1 — the review surface's reject half).
+    ///
+    /// # Why this exists, and why it is scoped this narrowly
+    ///
+    /// [`Self::mark_redactions_by_search`] authors marks in **bulk**: one
+    /// click can produce forty. Rule 4 (fuzzy, never sneaky) says an
+    /// algorithmically-produced batch must be *reviewable* — which means the
+    /// operator can reject an individual member of it, not merely undo the
+    /// whole batch. Undo alone cannot do that: it is a stack, so rejecting
+    /// the 3rd of 40 marks would mean undoing 38 good ones. This is the
+    /// per-mark reject that makes the batch genuinely reviewable.
+    ///
+    /// It is deliberately **not** a general `delete_annotation`. The guard
+    /// below refuses anything whose `/Subtype` is not `/Redact`, so this
+    /// command cannot become the back door through which a UI deletes an
+    /// operator's highlights or a form's widgets without those features
+    /// designing their own deletion semantics (dangling `/AcroForm`
+    /// `/Fields`, `/Popup` companions, `/IRT` reply chains — none of which
+    /// a redaction mark has).
+    ///
+    /// # What it changes
+    ///
+    /// 1. the annotation reference is dropped from its page's `/Annots`
+    ///    (via the same [`Self::remove_from_annots`] helper flattening uses,
+    ///    so the inline-array / shared-indirect-array / copy-on-write cases
+    ///    are handled once, not twice);
+    /// 2. the annotation dictionary and its `/AP` `/N` appearance stream are
+    ///    marked deleted — the `/AP` too, because a redaction mark's
+    ///    appearance stream is authored by
+    ///    [`Self::add_redaction`] solely for that mark and is referenced by
+    ///    nothing else, so leaving it would orphan a stream in every
+    ///    subsequent save.
+    ///
+    /// **It changes nothing about the page's content.** A mark that was
+    /// never applied never removed anything, so removing the mark restores
+    /// no content — there is nothing to restore. This is the exact
+    /// asymmetry the redaction feature turns on, and the reason this method
+    /// is safe to offer with no confirmation while
+    /// [`crate::redact::apply_redactions`] is not.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::NotARedactionMark`] if `annot_id` is not a `/Redact`
+    /// annotation listed on a page (including a stale id from an already-
+    /// removed mark); [`EditError::DocumentEncrypted`];
+    /// [`EditError::CertificationForbidsChange`];
+    /// [`EditError::PageTree`]. Every refusal happens before any mutation.
+    pub fn delete_redaction_mark(&mut self, annot_id: ObjId) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        // Locate the mark by walking the SESSION's own page list and
+        // annotations — never the base document — so a mark authored this
+        // session is findable. `crate::redact::redaction_marks` is the one
+        // definition of "what is a /Redact mark", reused rather than
+        // re-derived, which is what keeps the review list, the status-bar
+        // census and this deletion agreeing about the same set of objects.
+        let marks = crate::redact::redaction_marks(&self.graph());
+        let mark = marks
+            .iter()
+            .find(|m| m.annot_id == annot_id)
+            .ok_or(EditError::NotARedactionMark { id: annot_id })?;
+        let slots = self.page_slots()?;
+        let page_id = slots
+            .get(mark.page_index)
+            .ok_or(EditError::NotARedactionMark { id: annot_id })?
+            .id;
+
+        // The mark's own appearance stream, if it has one. Resolved before
+        // any mutation; a mark with no /AP simply contributes nothing.
+        let ap_id = self
+            .value(annot_id)
+            .and_then(Object::as_dict)
+            .and_then(|d| d.get(b"AP").cloned())
+            .map(|ap| self.graph().resolve(&ap).clone())
+            .and_then(|ap| {
+                ap.as_dict()
+                    .and_then(|d| d.get(b"N").and_then(Object::as_reference))
+            });
+
+        let Some(Object::Dict(page_dict)) = self.value(page_id) else {
+            return Err(EditError::NotADictionary {
+                id: page_id,
+                key: "Annots",
+            });
+        };
+        let mut updated = page_dict.clone();
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        // `remove_from_annots` returns `Some(write)` when `/Annots` is an
+        // indirect array (the patch lands on THAT object, and the page dict
+        // is untouched) and `None` when it is inline (the patch is already
+        // composed into `updated`). Writing the page dict in the indirect
+        // case would be a no-op write that inflates the dirty set.
+        match self.remove_from_annots(&mut updated, &[annot_id])? {
+            Some(shared) => objects.push(shared),
+            None => objects.push(self.page_write(page_id, updated)),
+        }
+
+        let mut removals: Vec<Removal> = Vec::new();
+        for id in std::iter::once(annot_id).chain(ap_id) {
+            if self.base.get(id).is_some() || self.state.contains_key(&id) {
+                removals.push(Removal {
+                    id,
+                    was_deleted: self.deleted.contains(&id),
+                    is_deleted: true,
+                });
+            }
+        }
+
+        self.commit(Command {
+            kind: CommandKind::DeleteRedactionMark,
+            objects,
+            removals,
+            trailer: None,
+        });
+        Ok(())
     }
 
     /// Mark every occurrence of `query` in the document's extracted text

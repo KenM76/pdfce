@@ -50,6 +50,7 @@ use pdfce_core::edit::{CommandKind, InfoField};
 use pdfce_core::vector::{AxisConstraint, FillRule, PaintStyle, Rgb, SnapKind, TextBoundsBasis};
 
 use crate::object_summary::{Degeneracy, ObjectKind, ObjectNote, ObjectSummary, SelectionCensus};
+use crate::redact_apply::RedactApplyRefusal;
 
 // ---------------------------------------------------------------------------
 // Toolbar — file
@@ -2309,6 +2310,11 @@ pub fn command_label(kind: CommandKind) -> String {
             lines_before,
             lines_after,
         } => format!("reflow block ({lines_before}->{lines_after} lines)"),
+        // Pass 8.1: worded as the reverse of MARKING, never as the reverse
+        // of redacting — an Undo tooltip reading "undo redaction" would
+        // imply removed content can come back, which is the one thing this
+        // feature must never suggest.
+        CommandKind::DeleteRedactionMark => "remove a redaction mark".to_owned(),
         // Pass 12.M2 dimensioning commands.
         CommandKind::AddDimension => "add dimension".to_owned(),
         CommandKind::SetGroupScale { members } => {
@@ -4058,5 +4064,502 @@ pub fn snap_derived_centerline_confirm(aspect_ratio: f64) -> String {
     format!(
         "Centerline derived from a filled shape (long:short \u{2248} {aspect_ratio:.1}:1) — \
 click again to confirm this is a drawn line, not a rectangle."
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Redaction — review & apply (Pass 8.1, ui-spec §3/§4)
+// ---------------------------------------------------------------------------
+//
+// The wording rules here are stricter than anywhere else in this catalog,
+// because this is the one feature where a comfortable sentence is a security
+// defect. Three of them, taken from the ui-spec's §5.1 "never-claim-what-
+// isn't-true" contract and binding on anyone editing these strings:
+//
+//   1. Never say "removed" without qualification when anything was left.
+//      A residual is named in the SAME sentence as the success, never in a
+//      footnote the operator can miss.
+//   2. Never say "verified" unless a verification step actually ran. One
+//      does now (`redact_apply::prepare_redaction_apply` greps the finished
+//      bytes), so the word is earned — but `redact_apply_verified_line` is
+//      the only place it may appear, and only from a clean
+//      `AbsenceVerification`.
+//   3. Never put the word "Undo" near a post-apply state. Every OTHER edit
+//      in pdfce teaches the operator that undo is available until save; this
+//      is the one moment that learned expectation is wrong, so the copy
+//      corrects it on screen instead of leaving it to be assumed.
+
+/// Toolbar label for the redaction control (icon + text, edit group).
+pub fn redact_button() -> &'static str {
+    "Redact"
+}
+
+/// Tooltip on the toolbar redaction control. Names the consequence, not the
+/// action — the discoverability checklist's rule for any control that leads
+/// to a destructive operation.
+pub fn redact_tooltip() -> &'static str {
+    "Review the redaction marks in this document and permanently remove what they cover. \
+Marking is reversible; applying is not."
+}
+
+/// Dock tab label for the redaction review panel.
+pub fn dock_panel_redact_label() -> &'static str {
+    "Redact"
+}
+
+/// Dock tab tooltip — says WHEN to reach for the panel (decision 017 §8.6),
+/// and doubles as the tab's AccessKit name.
+pub fn dock_panel_redact_tooltip() -> &'static str {
+    "Open when you need to see every region marked for redaction in this document, remove a \
+mark you did not mean, or permanently remove the marked content."
+}
+
+/// Panel intro line. States the whole two-phase model in one sentence,
+/// because an operator who believes marking IS redacting is the single
+/// most-cited real-world redaction failure.
+pub fn redact_panel_intro() -> &'static str {
+    "Mark content, then apply to permanently remove it. Marking is reversible and changes \
+nothing in the file; applying rewrites the whole document into a new file and cannot be undone."
+}
+
+/// Shown in the redaction panel when no document is open. A panel that just
+/// goes blank is indistinguishable from a broken one.
+pub fn redact_panel_no_document_hint() -> &'static str {
+    "Open a PDF to mark regions for redaction."
+}
+
+/// Header of the marks-review list. `0` is a distinct sentence rather than
+/// "0 marks", because "no marks" is a state an operator reads as an answer
+/// while "0 pending redaction mark(s)" is one they read as a counter.
+pub fn redact_marks_count_label(count: usize) -> String {
+    if count == 0 {
+        "No redaction marks in this document. Nothing is marked, and nothing has been removed."
+            .to_owned()
+    } else {
+        format!(
+            "{count} pending redaction mark(s) — the content underneath them is STILL IN THIS \
+FILE until you apply."
+        )
+    }
+}
+
+/// One row in the marks-review list: which page, and how big the marked
+/// region is. The size is shown because two marks on one page are otherwise
+/// indistinguishable in a list, and "which one is the one I mis-drew?" is
+/// the question the list exists to answer.
+pub fn redact_mark_row_label(page_number: usize, size: Option<(f64, f64)>) -> String {
+    match size {
+        Some((w, h)) => format!("Page {page_number} — region {w:.0} × {h:.0} pt"),
+        None => format!("Page {page_number} — region (no stored size)"),
+    }
+}
+
+/// Tooltip on a marks-list row. Says what clicking it does; the row is a
+/// navigation control, not a selection.
+pub fn redact_mark_row_tooltip() -> &'static str {
+    "Go to this page so you can see what the mark covers."
+}
+
+/// Label of a marks-list row's remove button. A word rather than the
+/// ui-spec's `✕`: see `docs/ui_specs/menu-affordance-and-glyph-coverage.md`
+/// for what a decorative Unicode glyph outside egui's default font chain
+/// costs (U+25BE shipped as a tofu box on every menu button in this app).
+pub fn redact_mark_remove_button() -> &'static str {
+    "Remove"
+}
+
+/// Tooltip on a row's remove button. The second half is the whole point:
+/// removing a MARK is not undoing a redaction, because no redaction happened.
+pub fn redact_mark_remove_tooltip() -> &'static str {
+    "Remove this mark. It was never applied, so nothing in the document changes and nothing \
+is recovered — the content it covers was there all along."
+}
+
+/// Status-bar note after removing a mark.
+pub fn redact_mark_removed(page_number: usize) -> String {
+    format!(
+        "Removed a redaction mark from page {page_number}. Nothing was applied, so nothing in \
+the document changed. Use Undo to put the mark back."
+    )
+}
+
+/// Status-bar note when removing a mark was refused. `reason` is
+/// `pdfce-core`'s own diagnostic.
+pub fn redact_mark_remove_failed(reason: &str) -> String {
+    format!("Could not remove that redaction mark: {reason}")
+}
+
+/// Button that marks the whole current page.
+pub fn redact_mark_whole_page_button() -> &'static str {
+    "Mark whole page"
+}
+
+/// Tooltip for whole-page marking. Names the reversibility explicitly, since
+/// marking an entire page in one click is easy to do by accident.
+pub fn redact_mark_whole_page_tooltip() -> &'static str {
+    "Mark this entire page for redaction. Nothing is removed until you apply, and you can \
+take the mark off again from the list below or with Undo."
+}
+
+/// Status-bar note after whole-page marking (ui-spec §2.4). The second
+/// sentence is mandatory: a one-click whole-page mark is exactly the kind of
+/// change an operator can make without noticing.
+pub fn redact_whole_page_marked(page_number: usize) -> String {
+    format!(
+        "Marked the whole of page {page_number} for redaction. Nothing has been removed yet — \
+review the mark below, then apply."
+    )
+}
+
+/// Button that runs a literal-text search and marks every hit.
+pub fn redact_search_button() -> &'static str {
+    "Find & mark"
+}
+
+/// Hint under the search box.
+///
+/// The OCR caveat is mandatory, not decorative (ui-spec §2.5): a silent
+/// zero-match result on a scanned page is a named real-world failure mode,
+/// because an operator reads "0 matches" as "nothing sensitive here" rather
+/// than "nothing SEARCHABLE here". Same disclosure shape as
+/// `copy_text_no_extractable_text` already carries for text extraction.
+pub fn redact_search_hint() -> &'static str {
+    "Finds this exact text on every page and adds a mark over each match, for you to review \
+before applying. It can only find text pdfce can extract — on a scanned page with no text \
+layer it will find nothing, which is not the same as there being nothing sensitive there."
+}
+
+/// Status-bar note after a search-and-mark that found matches.
+pub fn redact_search_marked(count: usize, query: &str) -> String {
+    format!(
+        "Marked {count} match(es) of \u{201c}{query}\u{201d} for redaction. Nothing has been \
+removed yet — review each mark below, take off any you did not want, then apply."
+    )
+}
+
+/// Status-bar note after a search-and-mark that found nothing. Never a
+/// silent no-op, and never phrased as "nothing to redact".
+pub fn redact_search_no_matches(query: &str) -> String {
+    format!(
+        "No matches for \u{201c}{query}\u{201d} in the text pdfce can extract. If this document \
+is a scan with no text layer, this search cannot find anything on it — mark the region by \
+hand instead."
+    )
+}
+
+/// Status-bar note when marking (by search or whole-page) was refused.
+pub fn redact_mark_failed(reason: &str) -> String {
+    format!("Could not add a redaction mark: {reason}")
+}
+
+/// The button that opens the Apply report. The label promises a REPORT, not
+/// an apply, because the click that opens it must not feel like the click
+/// that commits.
+pub fn redact_review_apply_button() -> &'static str {
+    "Review & Apply Redactions…"
+}
+
+/// Tooltip on the Review & Apply button, in both its states (R83: the
+/// disabled form explains what would enable it, rather than leaving a dead
+/// control unexplained).
+pub fn redact_review_apply_tooltip(can_apply: bool) -> &'static str {
+    if can_apply {
+        "Opens a report of exactly what will be permanently removed, and of anything pdfce \
+could not remove. Nothing is written until you confirm there."
+    } else {
+        "Mark at least one region first — there is nothing to apply."
+    }
+}
+
+// -- the Apply report modal (ui-spec §4) ------------------------------------
+
+/// Title bar of the Apply report window.
+pub fn redact_apply_title() -> &'static str {
+    "Apply redactions — permanent removal"
+}
+
+/// Heading above the report body.
+pub fn redact_apply_report_heading() -> &'static str {
+    "What applying will do"
+}
+
+/// The permanence statement — the first thing in the modal body, never
+/// abbreviated, never softened.
+///
+/// **Deviates from ui-spec §4.3's wording, deliberately.** That wording
+/// assumed apply mutates the open document; it does not — apply writes a NEW
+/// file and leaves the open document exactly as it is (see `redact_apply`'s
+/// module docs). "Cannot be undone once you save this" would then describe a
+/// save that never happens. This makes the same point about the same risk,
+/// accurately.
+pub fn redact_apply_permanence_statement() -> &'static str {
+    "Applying writes a NEW file with the marked content permanently removed. It is a full \
+rewrite, not an edit: nothing in that file can bring the removed content back — not Undo, not \
+a previous revision, not any recovery tool. The document you have open is left exactly as it \
+is now, marks and all."
+}
+
+/// Heading for the affirmative half of the report.
+pub fn redact_apply_will_remove_heading() -> &'static str {
+    "Will be permanently removed:"
+}
+
+/// The removal summary line — the measured centrepiece of the report.
+///
+/// These are measurements, not predictions:
+/// `redact_apply::prepare_redaction_apply` performs the whole removal in
+/// memory before this modal opens, so every number here describes what
+/// actually happened to the bytes that will be written on confirm.
+pub fn redact_apply_removal_summary(
+    regions: u64,
+    pages: usize,
+    glyphs: u64,
+    streams: u64,
+) -> String {
+    format!(
+        "{regions} marked region(s) across {pages} page(s): {glyphs} character(s) deleted from \
+{streams} page content stream(s), and the marks themselves removed."
+    )
+}
+
+/// Extra removal line for the annotation objects the apply deletes.
+///
+/// **Worded as a TOTAL, not as an overlap count** — an accuracy fix made
+/// after reading this line on a running build (R86). `pdfce-core`'s
+/// `annotations_removed` counts the redaction marks themselves *plus* any
+/// annotation that overlapped a marked region, and the two are not reported
+/// separately. An earlier draft attributed the whole figure to overlaps,
+/// which on the fixture read as "3 annotations overlapping a marked region
+/// will also be removed" when in fact all three were the marks. Overstating
+/// collateral damage is a smaller sin than understating it, and still a lie:
+/// this is the one feature whose entire value is that its report can be
+/// believed.
+///
+/// The overlap fact is still disclosed, because an operator whose highlight
+/// silently vanished is owed the reason before it happens rather than after.
+pub fn redact_apply_annotations_removed(count: u64) -> String {
+    format!(
+        "{count} annotation object(s) will be removed in total: the redaction marks themselves, \
+plus any annotation that overlapped a marked region — an annotation sitting over redacted \
+content can carry a copy of it in its own appearance or text."
+    )
+}
+
+/// Removal line for document-information strings that duplicated the
+/// redacted text.
+pub fn redact_apply_info_scrubbed(count: u64) -> String {
+    format!(
+        "{count} document-information entr(y/ies) contained the redacted text and will be \
+scrubbed of it."
+    )
+}
+
+/// Removal line for object-stream containers taken apart so no removed
+/// object survives compressed inside one (ISO 32000-1 §7.5.7).
+pub fn redact_apply_containers_decomposed(containers: u64, promoted: u64) -> String {
+    format!(
+        "{containers} compressed object container(s) will be taken apart ({promoted} object(s) \
+moved out of them), so no removed object can survive inside one."
+    )
+}
+
+/// The line stating that prior revisions do not survive — R35 in operator
+/// language rather than as a save-mode detail.
+pub fn redact_apply_single_revision_note() -> &'static str {
+    "The new file will be a single revision. Any earlier revision of this document — which \
+would still hold the un-redacted content — is not carried into it."
+}
+
+/// The verification line, shown only when the absence proof came back clean.
+/// This is the ONE place the word "verified" is permitted (see this
+/// section's header).
+pub fn redact_apply_verified_line(strings_checked: usize) -> String {
+    format!(
+        "Verified: pdfce searched the finished file for all {strings_checked} distinct piece(s) \
+of removed text and found none of them — not in the page content, not in any other stream, \
+not in the raw bytes."
+    )
+}
+
+/// The verification line's honest companion when some removed strings were
+/// too short for a whole-file byte search to mean anything.
+pub fn redact_apply_verification_limit_line(too_short: usize) -> String {
+    format!(
+        "{too_short} removed piece(s) were too short (under 4 characters) for a whole-file byte \
+search to say anything useful, so those were checked against the decoded page content only."
+    )
+}
+
+/// Heading for the refusal section — the part that makes the feature honest.
+pub fn redact_apply_refused_heading() -> &'static str {
+    "⚠  pdfce could NOT remove the following — read this before continuing:"
+}
+
+/// One residual line for a carrier core detected but could not scrub.
+pub fn redact_apply_residual_carrier_line(carrier: &str) -> String {
+    format!(
+        "⚠  {carrier}: present in this document, and pdfce cannot scrub it in this build. \
+Whatever it holds will still be in the saved file — check it by hand."
+    )
+}
+
+/// One residual line for a removed string that still occurs somewhere in the
+/// raw output bytes while occurring in no decoded stream.
+///
+/// Worded so it claims exactly what pdfce knows and nothing more: the byte
+/// run is there; whether it is a real leftover copy or an unrelated
+/// coincidence is not something pdfce can decide.
+pub fn redact_apply_raw_residual_line(text: &str) -> String {
+    format!(
+        "⚠  The removed text \u{201c}{text}\u{201d} no longer appears in any page content, but \
+that same byte sequence still occurs somewhere in the saved file. It may be an unrelated \
+coincidence, or a copy in a carrier pdfce does not recognise — pdfce cannot tell which, so it \
+is reported rather than claimed removed."
+    )
+}
+
+/// One residual line when materialising the operator's unsaved edits had to
+/// promote objects out of an object stream (R38 / decision 007 W3).
+pub fn redact_apply_promotion_line(count: usize) -> String {
+    format!(
+        "⚠  {count} object(s) had to be moved out of a compressed container in order to write \
+your unsaved edits, and the container keeps its own copy of their previous value. Page \
+content is never stored that way, so this cannot hold redacted text — but it is a leftover of \
+your edits and is reported rather than passed over."
+    )
+}
+
+/// The extra acknowledgement that appears ONLY when the report has a refusal
+/// section. Distinct from the ordinary confirmation checkbox: a partial
+/// redaction must never be mistaken for a complete one.
+pub fn redact_apply_refusal_acknowledgement_checkbox() -> &'static str {
+    "I have read the items above, I understand they will NOT be removed, and I still want to \
+apply the redactions that can be completed."
+}
+
+/// The scope reminder — what redaction does not touch. Named so an operator
+/// does not read "redacted" as "sanitised".
+pub fn redact_apply_scope_reminder() -> &'static str {
+    "This removes what your marks cover. It does not sweep the document for unrelated hidden \
+data: metadata history, embedded files, scripts or hidden layers that no mark touches are not \
+part of this operation."
+}
+
+/// The mandatory confirmation checkbox. Its wording targets the exact
+/// misunderstanding this feature exists to prevent.
+pub fn redact_apply_confirm_checkbox() -> &'static str {
+    "I understand this permanently removes the underlying content, not just the visible marks."
+}
+
+/// The confirm button. **The label IS the consequence** — never "OK", never
+/// "Yes", never "Apply" alone (ui-spec §4.5).
+pub fn redact_apply_confirm_button() -> &'static str {
+    "Permanently Remove & Save As…"
+}
+
+/// The cancel button. Phrased as a deferral rather than a refusal, because
+/// cancelling here loses nothing — the marks survive.
+pub fn redact_apply_cancel_button() -> &'static str {
+    "Don't apply yet"
+}
+
+/// The no-shortcut disclosure, shown in the modal footer (ui-spec §4.5).
+///
+/// Visible text rather than an omission an operator has to notice: pdfce
+/// binds Delete, `[`/`]` and Ctrl+Z to destructive-but-reversible actions
+/// everywhere else, so the ABSENCE of a chord on the one irreversible action
+/// is a deliberate asymmetry worth stating.
+pub fn redact_apply_no_shortcut_note() -> &'static str {
+    "There is deliberately no keyboard shortcut for this button. It is the one action in pdfce \
+that cannot be undone, so it takes a deliberate click."
+}
+
+/// Pre-filled file name for the redacted output. Same family as
+/// [`suggested_save_name`]; never the original file's own name, so a
+/// confirmed apply cannot overwrite the document that still holds the
+/// content.
+pub fn suggested_redaction_name(path: &Path) -> String {
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "document".to_owned());
+    format!("{stem} (redacted).pdf")
+}
+
+// -- post-apply, and refusals (ui-spec §5.2) --------------------------------
+
+/// Durable status-bar line after a clean apply.
+///
+/// "Verified" is earned here — the absence proof ran on these exact bytes.
+/// The last clause corrects the learned Undo expectation rather than leaving
+/// it to be assumed.
+pub fn redact_apply_succeeded_clean(path: &Path, regions: u64, pages: usize) -> String {
+    format!(
+        "✔  Redacted and saved to {} — {regions} region(s) across {pages} page(s) removed, and \
+verified absent from the saved file. That file cannot be un-redacted; the document you still \
+have open is unchanged.",
+        file_name(path)
+    )
+}
+
+/// Durable status-bar line after an apply that proceeded past acknowledged
+/// residuals.
+///
+/// Never shortened, never omitted, and never allowed to borrow the clean
+/// form's wording: an operator who acknowledged a residual in a modal and
+/// then closed it is still owed a standing record of what remains.
+pub fn redact_apply_succeeded_residual(path: &Path, regions: u64, residuals: usize) -> String {
+    format!(
+        "⚠  Redacted and saved to {} — {regions} region(s) removed, but {residuals} item(s) \
+could NOT be removed and are still in that file. Do not treat it as fully redacted; see the \
+report you acknowledged for what and why.",
+        file_name(path)
+    )
+}
+
+/// Message for a refusal that happened before anything was written.
+///
+/// Takes the refusal by reference and maps it here, so the wording for the
+/// single most important refusal in the application lives in the catalog
+/// with every other string rather than being assembled at the call site.
+pub fn redact_apply_refusal_message(refusal: &RedactApplyRefusal) -> String {
+    match refusal {
+        RedactApplyRefusal::NothingToApply => {
+            "Nothing to apply — this document has no redaction marks.".to_owned()
+        }
+        RedactApplyRefusal::FullRewriteUnavailable { reason } => format!(
+            "Redaction refused — this document cannot be rewritten in full, and nothing was \
+written. Applying a redaction requires rewriting the entire file as one revision: an \
+incremental save would leave the un-redacted content sitting in the file's previous revision, \
+where anyone could recover it, so pdfce will not fall back to one. The writer's reason: \
+{reason}"
+        ),
+        RedactApplyRefusal::MaterialisedDocumentUnreadable { reason } => format!(
+            "Redaction refused — pdfce rewrote your unsaved edits but could not read the result \
+back, so it could not apply the redactions to them. Nothing was written. This is a fault in \
+pdfce, not in your document. The parser's reason: {reason}"
+        ),
+        RedactApplyRefusal::CoreRefused { reason } => {
+            format!("Redaction refused, and nothing was written: {reason}")
+        }
+        RedactApplyRefusal::VerificationFailed { survivors } => format!(
+            "Redaction refused — pdfce applied the removal, then searched the finished file and \
+found {} piece(s) of the supposedly-removed text still in it. Nothing was written. Do not use \
+any file produced from this document until this is investigated.",
+            survivors.len()
+        ),
+    }
+}
+
+/// Status-bar note appended to an ordinary Save while redaction marks are
+/// still pending (ui-spec §3.4's second half).
+///
+/// Fires in ADDITION to the normal save confirmation, never instead of it:
+/// the save genuinely succeeded, and the operator also needs to know what it
+/// did not do.
+pub fn redact_save_kept_pending_marks(count: usize) -> String {
+    format!(
+        "That save kept {count} pending redaction mark(s) in the file — the marked content is \
+still there. Marking does not remove anything; nothing is removed until you apply."
     )
 }

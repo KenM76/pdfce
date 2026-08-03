@@ -1762,6 +1762,119 @@ fn contains_subslice(hay: &[u8], needle: &[u8]) -> bool {
     hay.windows(needle.len()).any(|w| w == needle)
 }
 
+/// One `/Redact` mark located in a document, as the review surfaces need
+/// it: which page carries it, which object it is, and where it sits.
+///
+/// A **display projection of an actual annotation**, produced fresh by
+/// [`redaction_marks`] on every call — never a cached list a UI keeps and
+/// patches incrementally. That is the same discipline
+/// [`count_redaction_marks`] already enforces for the count, and it exists
+/// for the same reason: a review list that can drift from the document is a
+/// review list that can tell an operator a mark was deleted when it was not,
+/// on the one feature where a wrong answer is a leak.
+///
+/// `rect` is the annotation's `/Rect` **as stored**, normalised to
+/// `[llx, lly, urx, ury]` (Table 166 permits either diagonal), or `None`
+/// when the annotation carries no usable `/Rect`. It is display information
+/// only — the geometry apply actually removes comes from `/QuadPoints` when
+/// present (see [`apply_redactions`]), so this must never be used to decide
+/// *what* gets removed, only to describe a mark to a human.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RedactionMark {
+    /// 0-based index into the document's flattened page list.
+    pub page_index: usize,
+    /// The annotation object itself — the stable identity a review surface
+    /// addresses a single mark by (a row's remove button, a jump-to click).
+    pub annot_id: ObjId,
+    /// `[llx, lly, urx, ury]` in default user space, or `None` when the
+    /// annotation has no usable `/Rect`.
+    pub rect: Option<[f64; 4]>,
+}
+
+/// Enumerate every `/Redact` mark in the document, in page order then
+/// `/Annots` order.
+///
+/// The list form of [`count_redaction_marks`], which now delegates to it so
+/// the two can never disagree about what a mark is — a count that says "3"
+/// beside a list that shows 2 rows is a defect an operator has no way to
+/// resolve, and the cheapest fix is to make it structurally impossible.
+///
+/// Generic over [`ObjectGraph`] for exactly the reason
+/// [`count_redaction_marks`] is (see its docs): the GUI must pass
+/// `&session.graph()` so a mark authored **this session** — the one most
+/// likely to be forgotten — is enumerated, while `&Document` callers keep
+/// compiling unchanged.
+///
+/// Returns an empty vector rather than an error when the page tree cannot
+/// be walked: a review surface that cannot list marks must show "no marks
+/// found", and the loud disclosure of a broken page tree is owed by the
+/// document-open path, not by a census.
+#[must_use]
+pub fn redaction_marks<G: ObjectGraph + ?Sized>(graph: &G) -> Vec<RedactionMark> {
+    let mut found = Vec::new();
+    let Ok(pages) = page_tree::pages_in(graph) else {
+        return found;
+    };
+    for (page_index, page) in pages.iter().enumerate() {
+        let Some(dict) = graph.value(page.id).and_then(Object::as_dict) else {
+            continue;
+        };
+        let Some(annots) = dict
+            .get(b"Annots")
+            .map(|o| graph.resolve(o))
+            .and_then(Object::as_array)
+        else {
+            continue;
+        };
+        for entry in annots {
+            let Some(annot_id) = entry.as_reference() else {
+                continue;
+            };
+            let Some(ad) = graph.value(annot_id).and_then(Object::as_dict) else {
+                continue;
+            };
+            if ad
+                .get(b"Subtype")
+                .and_then(Object::as_name)
+                .is_none_or(|n| n.as_bytes() != b"Redact")
+            {
+                continue;
+            }
+            found.push(RedactionMark {
+                page_index,
+                annot_id,
+                rect: annot_rect(graph, ad),
+            });
+        }
+    }
+    found
+}
+
+/// Read an annotation's `/Rect` into a normalised `[llx, lly, urx, ury]`.
+///
+/// Table 166 allows the two corners in either order, so the min/max
+/// normalisation is required, not defensive: an unnormalised rect would
+/// render as a negative-size region in a review row.
+fn annot_rect<G: ObjectGraph + ?Sized>(graph: &G, annot: &Dict) -> Option<[f64; 4]> {
+    let arr = annot
+        .get(b"Rect")
+        .map(|o| graph.resolve(o))
+        .and_then(Object::as_array)?;
+    if arr.len() < 4 {
+        return None;
+    }
+    let mut v = [0.0_f64; 4];
+    for (slot, obj) in v.iter_mut().zip(arr.iter()) {
+        *slot = graph.resolve(obj).as_number()?;
+    }
+    Some([
+        v[0].min(v[2]),
+        v[1].min(v[3]),
+        v[0].max(v[2]),
+        v[1].max(v[3]),
+    ])
+}
+
 /// Count the `/Redact` marks currently present in a document — the census
 /// the GUI status bar uses to disclose UNAPPLIED redactions (computed from
 /// the graph itself, never a session counter, so it survives save/reload
@@ -1788,36 +1901,16 @@ fn contains_subslice(hay: &[u8], needle: &[u8]) -> bool {
 /// A mark applied and then undone is correctly *not* counted: the session
 /// overlay holds the base value again, and this walks values, never a
 /// history.
+///
+/// Delegates to [`redaction_marks`] (Pass 8.1). The count and the list a
+/// review surface shows are therefore the SAME walk, not two walks that
+/// agree by inspection — a status bar reading "3 unapplied marks" beside a
+/// panel listing 2 rows would leave an operator with no way to tell which
+/// number to believe on the one feature where believing the wrong one leaks
+/// content.
 #[must_use]
 pub fn count_redaction_marks<G: ObjectGraph + ?Sized>(graph: &G) -> usize {
-    let mut n = 0;
-    let Ok(pages) = page_tree::pages_in(graph) else {
-        return 0;
-    };
-    for page in &pages {
-        let Some(dict) = graph.value(page.id).and_then(Object::as_dict) else {
-            continue;
-        };
-        let Some(annots) = dict
-            .get(b"Annots")
-            .map(|o| graph.resolve(o))
-            .and_then(Object::as_array)
-        else {
-            continue;
-        };
-        for entry in annots {
-            if let Some(aid) = entry.as_reference()
-                && let Some(ad) = graph.value(aid).and_then(Object::as_dict)
-                && ad
-                    .get(b"Subtype")
-                    .and_then(Object::as_name)
-                    .is_some_and(|n| n.as_bytes() == b"Redact")
-            {
-                n += 1;
-            }
-        }
-    }
-    n
+    redaction_marks(graph).len()
 }
 
 #[cfg(test)]
@@ -1975,6 +2068,104 @@ mod tests {
             0,
             "an undone mark is not a pending mark — the census walks values, not a counter"
         );
+    }
+
+    // -- the mark census and per-mark removal (Pass 8.1) -----------------
+
+    /// [`redaction_marks`] must locate a mark on the right page and report a
+    /// usable rect, because the GUI's review list addresses marks by object
+    /// id and navigates by the page index this reports. A wrong page index
+    /// would send an operator to review a mark that is somewhere else.
+    #[test]
+    fn the_census_locates_each_mark_with_its_page_and_rect() {
+        let marked = mark_and_save(&redactable_pdf());
+        let doc = Document::from_bytes(marked).unwrap();
+        let marks = redaction_marks(&doc);
+        assert_eq!(marks.len(), 1);
+        let mark = marks[0];
+        assert_eq!(mark.page_index, 0);
+        let [llx, lly, urx, ury] = mark.rect.expect("a search mark carries a /Rect");
+        assert!(
+            urx > llx && ury > lly,
+            "the rect must be normalised to a positive-size box: {:?}",
+            mark.rect
+        );
+        assert_eq!(marks.len(), count_redaction_marks(&doc));
+    }
+
+    /// A mark can be taken off BEFORE apply, as one undoable command — the
+    /// per-mark reject that makes a bulk search-and-mark genuinely
+    /// reviewable (rule 4). Three properties, all of which matter:
+    ///
+    /// 1. the mark disappears from the census;
+    /// 2. undo puts it back (so an accidental reject costs nothing);
+    /// 3. the page's CONTENT is unchanged in both directions — removing a
+    ///    mark is the reverse of marking, never a reverse of redacting, and
+    ///    a build that quietly touched content here would be doing something
+    ///    nobody asked for on the most sensitive path in the app.
+    #[test]
+    fn a_mark_can_be_rejected_before_apply_and_the_content_is_untouched() {
+        let marked = mark_and_save(&redactable_pdf());
+        let doc = Document::from_bytes(marked).unwrap();
+        let content_before = all_decoded_content(&doc);
+        let mut session = EditSession::new(doc);
+
+        let id = redaction_marks(&session.graph())[0].annot_id;
+        session.delete_redaction_mark(id).expect("the mark exists");
+        assert_eq!(
+            count_redaction_marks(&session.graph()),
+            0,
+            "a rejected mark must leave the census"
+        );
+
+        // The page content is byte-identical: no redaction happened.
+        let after = {
+            let view = session.view();
+            let pages = page_tree::pages_in(view.graph()).unwrap();
+            let mut out = Vec::new();
+            for page in &pages {
+                if let Ok(cs) = ContentStream::from_page(&view, page) {
+                    out.extend_from_slice(&cs.buf);
+                }
+            }
+            out
+        };
+        assert_eq!(
+            content_before, after,
+            "removing a MARK must not change page content — nothing was ever applied"
+        );
+        assert!(
+            contains(&after, b"SECRET"),
+            "the covered text was always there and must still be"
+        );
+
+        session.undo().expect("one undoable command");
+        assert_eq!(
+            count_redaction_marks(&session.graph()),
+            1,
+            "undo must put a rejected mark back"
+        );
+    }
+
+    /// A stale or wrong object id is refused **by name**, never treated as
+    /// "delete whatever that is". The review list addresses marks by id, and
+    /// an id can go stale (a mark already removed, an id from an undone
+    /// command) — silently deleting some unrelated annotation that inherited
+    /// the number is the failure this refusal exists to prevent.
+    #[test]
+    fn deleting_a_non_mark_is_refused_by_name() {
+        let doc = Document::from_bytes(redactable_pdf()).unwrap();
+        let mut session = EditSession::new(doc);
+        // Object 3 is the page dictionary — a real object, not a mark.
+        let err = session
+            .delete_redaction_mark(ObjId::new(3, 0))
+            .expect_err("a page is not a redaction mark");
+        assert!(
+            matches!(err, crate::edit::EditError::NotARedactionMark { .. }),
+            "expected a named refusal, got {err:?}"
+        );
+        // And nothing was mutated by the attempt.
+        assert!(!session.is_modified());
     }
 
     // -- THE HEADLINE GATE: absence proof --------------------------------
