@@ -1,3 +1,33 @@
+# ORDERING IS LOAD-BEARING — read before editing this file.
+#
+# git applies the LAST matching pattern for a given attribute, so the
+# catch-all `* text=auto` MUST come first and every specific override MUST
+# follow it. It used to sit in the middle of this file, below the `*.pdf
+# binary` rule, which meant the catch-all silently WON for .pdf: `git
+# check-attr text -- foo.pdf` reported `text: auto`, not `unset`.
+#
+# The damage that caused (found 2026-08-02, in a fresh worktree):
+#   - On checkout with core.autocrlf=true, 69 binary fixtures were
+#     CRLF-inflated. A PDF's cross-reference table stores ABSOLUTE BYTE
+#     OFFSETS, so every offset past the first rewrite pointed at the wrong
+#     byte and the file failed to parse.
+#   - Worse, four fixtures were damaged IN THE INDEX ITSELF, because git
+#     stripped their CRs at `git add` time rather than at checkout:
+#     hello.pdf (703 bytes committed vs 709 true), minimal.pdf (331 vs 335),
+#     xref-eol/entry-crlf.pdf (551 vs 556), xref-eol/struct-crlf.pdf
+#     (551 vs 563). Those last two exist SPECIFICALLY to test CRLF handling
+#     in cross-reference sections (ISO 32000-1 §7.5.4 requires exactly
+#     20-byte xref entries) — normalization turned six entries into 19
+#     bytes, so the very bytes under test were the bytes destroyed.
+#
+# Neither state worked: the index form failed with BadEntry, the smudged
+# form with NotAnXrefSection. The main development tree only kept passing
+# because it still held the original on-disk bytes and had never been
+# re-checked-out.
+#
+# So: catch-all first, specific rules after. Do not reorder.
+* text=auto
+
 # Force LF for anything that must run as a script or gets parsed
 # line-sensitively, regardless of the checkout platform's autocrlf
 # setting — a CRLF-mangled shebang script fails to run.
@@ -25,10 +55,6 @@
 *.jpeg binary
 *.p12 binary
 *.pfx binary
-
-# Everything else: let git decide based on content (default safe
-# autocrlf-aware behavior).
-* text=auto
 
 # Font binaries (decision 004 §10 item 4): bundled/fixture font files
 # must never pass through EOL normalization — same rationale as the
