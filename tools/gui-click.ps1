@@ -86,6 +86,10 @@ param(
     [Parameter(Mandatory = $true)]
     [string[]] $Clicks,
     [string]   $ProcessName = 'pdfce-gui',
+    # NOTE: deliberately NOT named $Pid — that is a PowerShell AUTOMATIC
+    # variable holding the CURRENT process id, and shadowing it in a param
+    # block is both an error and a genuinely confusing one to diagnose.
+    [int]      $ProcessId   = 0,
     [int]      $DelayMs     = 400,
     [switch]   $MoveOnly,
     [ValidateSet('Shift', 'Ctrl', 'Alt')]
@@ -123,9 +127,24 @@ public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPt
 $MOUSEEVENTF_LEFTDOWN = 0x0002
 $MOUSEEVENTF_LEFTUP   = 0x0004
 
-$proc = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue |
-        Where-Object { $_.MainWindowHandle -ne 0 } |
-        Select-Object -First 1
+$candidates = @(Get-Process -Name $ProcessName -ErrorAction SilentlyContinue |
+        Where-Object { $_.MainWindowHandle -ne 0 })
+
+# Disambiguate BEFORE acting. Taking the first match by name was a real hazard:
+# a build agent verifying its own binary found a second instance running from
+# the shared checkout, and had to kill it — because a click aimed at "the
+# pdfce-gui window" could equally have hit the other one. Pass -ProcessId to
+# name exactly which, or close the extras.
+if ($ProcessId -gt 0) {
+    $proc = $candidates | Where-Object { $_.Id -eq $ProcessId } | Select-Object -First 1
+    if (-not $proc) {
+        throw "No '$ProcessName' process with id $ProcessId and a visible main window. Running ids: $(($candidates | ForEach-Object { $_.Id }) -join ', ')"
+    }
+} elseif ($candidates.Count -gt 1) {
+    throw "AMBIGUOUS TARGET: $($candidates.Count) '$ProcessName' processes have a visible window (ids: $(($candidates | ForEach-Object { $_.Id }) -join ', ')). Refusing to guess which one to click — pass -ProcessId <id>, or close the others."
+} else {
+    $proc = $candidates | Select-Object -First 1
+}
 if (-not $proc) { throw "No running '$ProcessName' window to click." }
 
 [void][PdfceInput.Win32]::SetForegroundWindow($proc.MainWindowHandle)
