@@ -37,16 +37,28 @@
 //! - Data is exactly `/Length` bytes from the byte after that EOL.
 //! - After the data: optional EOL, then `endstream`, then `endobj`.
 //!   Anything else is a `/Length` inconsistency (§7.3.8.2 "an error") —
-//!   fail-clean, no scan-for-`endstream` guessing in Pass 1 (recovery
-//!   heuristics are a later, corpus-driven, deliberate addition; see
-//!   `C:\personal_rag\pdf\`).
+//!   fail-clean under the default [`StreamLengthPolicy::Strict`].
+//!
+//! ## The one strictness knob: `/Length` vs `endstream`
+//!
+//! The corpus-driven recovery heuristic the point above used to defer is
+//! now here, as an explicit, opt-in [`StreamLengthPolicy`] rather than a
+//! hidden default. Under [`StreamLengthPolicy::RecoverFromEndstream`] an
+//! unusable `/Length` causes the data extent to be re-derived by scanning
+//! for the `endstream` keyword — §7.3.8.2's own definition of `/Length` is
+//! written in terms of that keyword, so it is the other half of the same
+//! normative statement, not a guess. Only [`crate::recover`] and the
+//! recovered branch of [`crate::document::Document::from_bytes`] select it;
+//! the clean load path is byte-for-byte unchanged, which is what keeps the
+//! round-trip invariant (`ARCHITECTURE.md` §5) safe. Every repair is
+//! counted ([`Parser::stream_lengths_recovered`]) and disclosed.
 //!
 //! ## Guards (ARCHITECTURE.md §10 — pdfce policy, not spec)
 //!
 //! [`MAX_NESTING_DEPTH`] bounds recursion (the spec bounds nothing
 //! here; a `[[[[…` bomb must not overflow the stack).
 
-use crate::lexer::{LexError, Lexer, Token, TokenKind};
+use crate::lexer::{LexError, Lexer, Token, TokenKind, is_regular};
 use crate::object::{Dict, IndirectObject, Name, ObjId, Object, Provenance, Stream};
 use crate::span::ByteSpan;
 
@@ -147,6 +159,52 @@ impl From<LexError> for ParseError {
 /// signature clarity.
 pub type LengthResolver<'r> = &'r mut dyn FnMut(ObjId) -> Option<i64>;
 
+/// How a stream whose `/Length` disagrees with the file should be handled.
+///
+/// This is the one deliberate strictness knob on the parser, and it exists
+/// because §7.3.8.2's own definition of `/Length` is phrased in terms of
+/// the `endstream` keyword: the value "shall be the number of bytes from
+/// the beginning of the line following the keyword `stream` to the last
+/// byte just before the keyword `endstream`". When the stored number and
+/// the keyword disagree, the file contains **two** statements of the same
+/// fact and one of them is wrong. Which one a reader believes is a policy
+/// choice, not a spec choice — so pdfce makes it an explicit parameter
+/// rather than a hidden default.
+///
+/// **The default is and must stay [`StreamLengthPolicy::Strict`]**: on a
+/// cleanly-loading file the stored `/Length` is authoritative, a
+/// disagreement is real damage the operator should hear about (§7.3.8.2
+/// calls it "an error"), and silently re-deriving extents would put a
+/// guessed span into the writer's byte-identical re-emission path and
+/// break the round-trip/minimal-diff invariant (`ARCHITECTURE.md` §5).
+///
+/// [`StreamLengthPolicy::RecoverFromEndstream`] is reachable **only** from
+/// the rebuild-by-scan recovery path ([`crate::recover`] and the recovered
+/// branch of [`crate::document::Document::from_bytes`]), where the file's
+/// cross-reference machinery has already been proven unparseable, no
+/// byte-identical re-emission is on the table (a recovered document
+/// refuses incremental save and always normalizes), and refusing an object
+/// costs the operator the whole document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum StreamLengthPolicy {
+    /// Believe `/Length`. A disagreement with `endstream` is
+    /// [`ParseErrorKind::StreamExtentMismatch`]; a missing/invalid
+    /// `/Length` is [`ParseErrorKind::BadStreamLength`]. The default, and
+    /// the only policy the clean load path ever uses.
+    #[default]
+    Strict,
+    /// Believe `endstream`. When (and only when) the stored `/Length`
+    /// cannot be used — absent, non-integer, unresolvable, past the end of
+    /// the buffer, or simply not landing on `endstream` — re-derive the
+    /// data extent by scanning forward from the start of the data for the
+    /// `endstream` keyword, then backing off the one end-of-line marker
+    /// §7.3.8.1 says "should" precede it. Every such repair is counted in
+    /// [`Parser::stream_lengths_recovered`] so it can be disclosed (R20,
+    /// fuzzy-never-sneaky) rather than silently absorbed.
+    RecoverFromEndstream,
+}
+
 /// Recursive-descent parser over a byte buffer.
 ///
 /// Create positioned at an offset ([`Parser::at`]) and call one of the
@@ -159,6 +217,12 @@ pub struct Parser<'a> {
     lexer: Lexer<'a>,
     /// Peeked-but-unconsumed tokens, oldest first (max 2 in practice).
     peeked: Vec<Token>,
+    /// Strictness for the `/Length`-vs-`endstream` disagreement. Strict
+    /// unless a caller opted in via [`Parser::with_stream_length_policy`].
+    stream_length_policy: StreamLengthPolicy,
+    /// How many streams this parser re-derived an extent for. Only ever
+    /// non-zero under [`StreamLengthPolicy::RecoverFromEndstream`].
+    stream_lengths_recovered: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -169,7 +233,31 @@ impl<'a> Parser<'a> {
             buf,
             lexer: Lexer::at(buf, pos),
             peeked: Vec::new(),
+            stream_length_policy: StreamLengthPolicy::Strict,
+            stream_lengths_recovered: 0,
         }
+    }
+
+    /// Set the `/Length`-disagreement policy (builder form).
+    ///
+    /// See [`StreamLengthPolicy`] for why the non-default value is
+    /// restricted to the recovery path.
+    #[must_use]
+    pub const fn with_stream_length_policy(mut self, policy: StreamLengthPolicy) -> Self {
+        self.stream_length_policy = policy;
+        self
+    }
+
+    /// How many stream extents this parser re-derived from `endstream`
+    /// because the stored `/Length` was unusable.
+    ///
+    /// Always `0` under [`StreamLengthPolicy::Strict`] (that policy errors
+    /// instead of repairing), so a non-zero value is proof that the file
+    /// disagreed with itself. Callers propagate it into the counted
+    /// disclosure a front end shows the operator.
+    #[must_use]
+    pub const fn stream_lengths_recovered(&self) -> usize {
+        self.stream_lengths_recovered
     }
 
     /// Current absolute offset for diagnostics: the start of the oldest
@@ -455,6 +543,7 @@ impl<'a> Parser<'a> {
                     ParseErrorKind::StreamWithoutDict,
                 ));
             };
+            let before = self.stream_lengths_recovered;
             let stream = self.parse_stream_tail(dict, &term, resolve_length)?;
             let end_tok = self.expect_any()?;
             if !self.is_keyword(&end_tok, b"endobj") {
@@ -463,12 +552,23 @@ impl<'a> Parser<'a> {
                     ParseErrorKind::MissingEndobj,
                 ));
             }
+            let span = ByteSpan::from_range(num_tok.span.start..end_tok.span.end());
+            // If this object's extent had to be re-derived, its source
+            // bytes now contradict its parsed value: the bytes still carry
+            // the old `/Length` while the value carries the recovered one.
+            // Mark the provenance so the writer re-serializes rather than
+            // copying the contradiction into a saved file (which would
+            // produce a document pdfce could not reload). See
+            // `Provenance::RecoveredFile`.
+            let provenance = if self.stream_lengths_recovered > before {
+                Provenance::RecoveredFile(span)
+            } else {
+                Provenance::File(span)
+            };
             return Ok(IndirectObject {
                 id,
                 value: Object::Stream(stream),
-                provenance: Provenance::File(ByteSpan::from_range(
-                    num_tok.span.start..end_tok.span.end(),
-                )),
+                provenance,
             });
         }
         Err(ParseError::new(
@@ -505,32 +605,34 @@ impl<'a> Parser<'a> {
         };
 
         // /Length: required, integer, non-negative; possibly indirect.
-        let length = match dict.get(b"Length") {
-            Some(Object::Integer(v)) => *v,
-            Some(Object::Reference(id)) => resolve_length(*id).ok_or(ParseError::new(
-                stream_kw.span.start,
-                ParseErrorKind::BadStreamLength,
-            ))?,
-            _ => {
-                return Err(ParseError::new(
-                    stream_kw.span.start,
-                    ParseErrorKind::BadStreamLength,
-                ));
+        // Under RecoverFromEndstream an unusable /Length is not fatal — it
+        // simply means the keyword is the only surviving statement of the
+        // extent, so fall straight through to the scan.
+        let stored_length: Option<usize> = match dict.get(b"Length") {
+            Some(Object::Integer(v)) => usize::try_from(*v).ok(),
+            Some(Object::Reference(id)) => {
+                resolve_length(*id).and_then(|v| usize::try_from(v).ok())
             }
+            _ => None,
         };
-        let Ok(length) = usize::try_from(length) else {
-            return Err(ParseError::new(
-                stream_kw.span.start,
-                ParseErrorKind::BadStreamLength,
-            ));
+        let length = match stored_length {
+            Some(length) => length,
+            None => {
+                return self.recover_stream_extent(
+                    dict,
+                    data_start,
+                    ParseError::new(stream_kw.span.start, ParseErrorKind::BadStreamLength),
+                );
+            }
         };
 
         let data_end = data_start.saturating_add(length);
         if data_end > self.buf.len() {
-            return Err(ParseError::new(
+            return self.recover_stream_extent(
+                dict,
                 data_start,
-                ParseErrorKind::StreamExtentMismatch,
-            ));
+                ParseError::new(data_start, ParseErrorKind::StreamExtentMismatch),
+            );
         }
 
         // After the data: optional EOL ("should", not counted in
@@ -545,10 +647,11 @@ impl<'a> Parser<'a> {
             _ => e,
         })?;
         if !self.is_keyword(&end_tok, b"endstream") {
-            return Err(ParseError::new(
-                end_tok.span.start,
-                ParseErrorKind::StreamExtentMismatch,
-            ));
+            return self.recover_stream_extent(
+                dict,
+                data_start,
+                ParseError::new(end_tok.span.start, ParseErrorKind::StreamExtentMismatch),
+            );
         }
 
         Ok(Stream {
@@ -556,6 +659,146 @@ impl<'a> Parser<'a> {
             data_span: ByteSpan::from_range(data_start..data_end),
         })
     }
+
+    /// The `/Length`-disagreement fork: under [`StreamLengthPolicy::Strict`]
+    /// re-raise `strict_err` unchanged; under
+    /// [`StreamLengthPolicy::RecoverFromEndstream`] re-derive the data
+    /// extent from the `endstream` keyword.
+    ///
+    /// ## Why the keyword is a legitimate authority here
+    ///
+    /// §7.3.8.2 Table 5 defines `/Length` *as* "the number of bytes from
+    /// the beginning of the line following the keyword `stream` to the last
+    /// byte just before the keyword `endstream`". The keyword is therefore
+    /// not a heuristic landmark invented by this function — it is the other
+    /// half of the spec's own definition. When the two halves disagree, the
+    /// keyword is the one that is still physically present in the bytes,
+    /// which is why every mature reader (qpdf, pdfium, poppler, pdf.js)
+    /// prefers it during damage recovery.
+    ///
+    /// ## Why the scan starts at `data_start`, not at the stored end
+    ///
+    /// The stored length can be wrong in either direction. Too short (the
+    /// dominant real-world case: a file whose `/Length` values were
+    /// computed for LF line endings and then converted to CRLF, so every
+    /// stream grew by one byte per line) leaves `endstream` *after* the
+    /// stored end; too long leaves it *before*. Scanning forward from the
+    /// first data byte finds the first terminator in both directions, so a
+    /// single rule covers both. The cost is that a stream whose binary data
+    /// happens to contain the literal bytes `endstream` is truncated at
+    /// that point — acceptable only because this path is unreachable except
+    /// on a file whose cross-reference machinery has already failed, where
+    /// the alternative outcome is not "correct data" but "no document".
+    ///
+    /// ## The EOL back-off
+    ///
+    /// §7.3.8.1 says an EOL marker "should" precede `endstream` and is not
+    /// counted in `/Length`. One such marker (`\r\n`, `\n`, or a lone `\r`)
+    /// is therefore removed from the end of the derived span. Exactly one —
+    /// removing more would eat real data from a stream that legitimately
+    /// ends in blank lines.
+    ///
+    /// ## `/Length` is rewritten to match
+    ///
+    /// The returned [`Stream`]'s dictionary carries the **derived** length,
+    /// not the file's stale one, so the dictionary and the data span never
+    /// disagree. See the inline commentary at the rewrite for why this is a
+    /// correctness requirement rather than tidiness.
+    ///
+    /// # Errors
+    ///
+    /// `strict_err` verbatim under `Strict`; the same error under
+    /// `RecoverFromEndstream` when no `endstream` keyword follows the data
+    /// at all (nothing to recover *from*, so the refusal stands — recovery
+    /// never invents an extent out of nothing).
+    fn recover_stream_extent(
+        &mut self,
+        dict: Dict,
+        data_start: usize,
+        strict_err: ParseError,
+    ) -> Result<Stream, ParseError> {
+        if self.stream_length_policy != StreamLengthPolicy::RecoverFromEndstream {
+            return Err(strict_err);
+        }
+        let Some(kw_at) = find_keyword(self.buf, data_start, b"endstream") else {
+            return Err(strict_err);
+        };
+        // Back off exactly one EOL marker (§7.3.8.1: "should" be there, and
+        // it is not part of the data).
+        let mut data_end = kw_at;
+        if data_end > data_start && self.buf.get(data_end - 1) == Some(&b'\n') {
+            data_end -= 1;
+        }
+        if data_end > data_start && self.buf.get(data_end - 1) == Some(&b'\r') {
+            data_end -= 1;
+        }
+
+        // Resume token scanning at the keyword so the caller's `endobj`
+        // expectation is evaluated exactly as on the clean path.
+        self.lexer = Lexer::at(self.buf, kw_at);
+        self.peeked.clear();
+        let end_tok = self.expect_any()?;
+        if !self.is_keyword(&end_tok, b"endstream") {
+            return Err(strict_err);
+        }
+
+        // Rewrite `/Length` to the extent actually found.
+        //
+        // This is not cosmetic — it is required for correctness, and the
+        // round-trip harness is what proves it. `Stream` carries the
+        // dictionary and the data span as two statements of one fact, and
+        // the rest of the crate reads them independently: the filter layer
+        // decodes `data_span`, while the writer re-emits `dict` verbatim.
+        // Leaving the stale number in the dictionary next to a repaired
+        // span would make pdfce *emit* the very inconsistency it just
+        // recovered from — a saved file whose `/Length` under-runs its own
+        // data, i.e. a file pdfce itself would then refuse to reload.
+        //
+        // §5.6's "never normalize" is not in tension here: it governs clean
+        // passthrough, and this branch is unreachable except on a document
+        // whose cross-reference machinery already failed, which always
+        // saves as a full rewrite. Correcting a provably-wrong length is
+        // the only way such a rewrite can be a valid PDF at all.
+        //
+        // If `/Length` was an indirect reference (§7.3.10 EXAMPLE 3), it is
+        // replaced by a direct integer and the length object is simply left
+        // unreferenced — harmless, and more honest than updating a separate
+        // object the writer may not re-emit.
+        let mut dict = dict;
+        dict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(data_end - data_start).unwrap_or(0)),
+        );
+
+        self.stream_lengths_recovered += 1;
+        Ok(Stream {
+            dict,
+            data_span: ByteSpan::from_range(data_start..data_end),
+        })
+    }
+}
+
+/// First occurrence of `needle` in `buf` at or after `from` that stands as
+/// its own token — i.e. the byte after it is not a regular character, so
+/// `endstreamx` never matches.
+///
+/// The byte *before* is deliberately NOT constrained: a stream whose
+/// declared length was too long, or whose final EOL is missing, can put
+/// `endstream` flush against the last data byte, and refusing that shape
+/// would defeat the recovery this helper exists for.
+fn find_keyword(buf: &[u8], from: usize, needle: &[u8]) -> Option<usize> {
+    let hay = buf.get(from..)?;
+    let n = needle.len();
+    let mut base = 0usize;
+    while let Some(rel) = hay.get(base..)?.windows(n).position(|w| w == needle) {
+        let at = base + rel;
+        let after_ok = !hay.get(at + n).is_some_and(|&b| is_regular(b));
+        if after_ok {
+            return Some(from + at);
+        }
+        base = at + 1;
+    }
+    None
 }
 
 #[cfg(test)]
@@ -760,8 +1003,8 @@ mod tests {
 
     #[test]
     fn stream_wrong_length_is_extent_mismatch() {
-        // §7.3.8.2: inconsistent extent "is an error" — no silent
-        // endstream scanning in Pass 1.
+        // §7.3.8.2: inconsistent extent "is an error" under the DEFAULT
+        // Strict policy — no silent endstream scanning on the clean path.
         let buf: &[u8] = b"5 0 obj << /Length 3 >>\nstream\nsome data\nendstream endobj";
         let e = Parser::at(buf, 0)
             .parse_indirect_object(&mut no_lengths)
@@ -776,6 +1019,118 @@ mod tests {
             .parse_indirect_object(&mut no_lengths)
             .unwrap_err();
         assert_eq!(e.kind, ParseErrorKind::BadStreamLength);
+    }
+
+    // ---- StreamLengthPolicy::RecoverFromEndstream (recovery path only) ----
+
+    /// A `/Length` that is too SHORT — the dominant real-world shape (a
+    /// file whose lengths were computed for LF endings and then converted
+    /// to CRLF) — re-derives from `endstream` and is counted.
+    #[test]
+    fn recovering_policy_repairs_a_short_length() {
+        let buf: &[u8] = b"5 0 obj << /Length 3 >>\nstream\nsome data\nendstream endobj";
+        let mut p =
+            Parser::at(buf, 0).with_stream_length_policy(StreamLengthPolicy::RecoverFromEndstream);
+        let io = p.parse_indirect_object(&mut no_lengths).unwrap();
+        let Object::Stream(s) = &io.value else {
+            panic!("not a stream");
+        };
+        // The EOL before `endstream` is backed off (§7.3.8.1), so the data
+        // is exactly the payload — not `"some data\n"`.
+        assert_eq!(s.data_span.slice(buf).unwrap(), b"some data");
+        assert_eq!(p.stream_lengths_recovered(), 1);
+        // The dictionary must agree with the span, or the writer would
+        // re-emit the inconsistency it just recovered from.
+        assert_eq!(s.dict.get(b"Length"), Some(&Object::Integer(9)));
+    }
+
+    /// The dictionary/span agreement holds for an INDIRECT `/Length` too:
+    /// the reference is replaced by the derived direct integer.
+    #[test]
+    fn recovering_policy_replaces_an_indirect_length_with_the_derived_one() {
+        let buf: &[u8] = b"5 0 obj << /Length 8 0 R >>\nstream\nsome data\nendstream endobj";
+        // Object 8 resolves to a wrong (too short) value.
+        let mut resolve = |id: ObjId| -> Option<i64> { (id.num == 8).then_some(3) };
+        let mut p =
+            Parser::at(buf, 0).with_stream_length_policy(StreamLengthPolicy::RecoverFromEndstream);
+        let io = p.parse_indirect_object(&mut resolve).unwrap();
+        let Object::Stream(s) = &io.value else {
+            panic!("not a stream");
+        };
+        assert_eq!(s.data_span.slice(buf).unwrap(), b"some data");
+        assert_eq!(s.dict.get(b"Length"), Some(&Object::Integer(9)));
+        assert_eq!(p.stream_lengths_recovered(), 1);
+    }
+
+    /// A `/Length` that is too LONG is repaired by the same rule: the scan
+    /// starts at the first data byte, so it finds the terminator whichever
+    /// side of the stored end it lies on.
+    #[test]
+    fn recovering_policy_repairs_a_long_length() {
+        let buf: &[u8] = b"5 0 obj << /Length 400 >>\nstream\nabc\nendstream endobj";
+        let mut p =
+            Parser::at(buf, 0).with_stream_length_policy(StreamLengthPolicy::RecoverFromEndstream);
+        let io = p.parse_indirect_object(&mut no_lengths).unwrap();
+        let Object::Stream(s) = &io.value else {
+            panic!("not a stream");
+        };
+        assert_eq!(s.data_span.slice(buf).unwrap(), b"abc");
+        assert_eq!(p.stream_lengths_recovered(), 1);
+    }
+
+    /// A missing `/Length` is also recoverable — `endstream` is then the
+    /// only surviving statement of the extent.
+    #[test]
+    fn recovering_policy_repairs_a_missing_length() {
+        let buf: &[u8] = b"5 0 obj << >>\nstream\nxx\nendstream endobj";
+        let mut p =
+            Parser::at(buf, 0).with_stream_length_policy(StreamLengthPolicy::RecoverFromEndstream);
+        let io = p.parse_indirect_object(&mut no_lengths).unwrap();
+        let Object::Stream(s) = &io.value else {
+            panic!("not a stream");
+        };
+        assert_eq!(s.data_span.slice(buf).unwrap(), b"xx");
+        assert_eq!(p.stream_lengths_recovered(), 1);
+    }
+
+    /// A CORRECT `/Length` is left completely alone under the recovering
+    /// policy: no scan, no repair, counter stays 0. This is what makes the
+    /// policy safe to apply to a whole recovered file rather than only to
+    /// the objects already known to be broken.
+    #[test]
+    fn recovering_policy_does_not_touch_a_correct_length() {
+        let buf: &[u8] = b"5 0 obj << /Length 9 >>\nstream\nsome data\nendstream endobj";
+        let mut p =
+            Parser::at(buf, 0).with_stream_length_policy(StreamLengthPolicy::RecoverFromEndstream);
+        let io = p.parse_indirect_object(&mut no_lengths).unwrap();
+        let Object::Stream(s) = &io.value else {
+            panic!("not a stream");
+        };
+        assert_eq!(s.data_span.slice(buf).unwrap(), b"some data");
+        assert_eq!(
+            p.stream_lengths_recovered(),
+            0,
+            "a file that agrees with itself is never 'repaired'"
+        );
+    }
+
+    /// With NO `endstream` anywhere there is nothing to recover from, so
+    /// the strict refusal stands — recovery never invents an extent.
+    #[test]
+    fn recovering_policy_still_refuses_when_there_is_no_endstream() {
+        let buf: &[u8] = b"5 0 obj << /Length 3 >>\nstream\nsome data\nendobj";
+        let e = Parser::at(buf, 0)
+            .with_stream_length_policy(StreamLengthPolicy::RecoverFromEndstream)
+            .parse_indirect_object(&mut no_lengths)
+            .unwrap_err();
+        assert_eq!(e.kind, ParseErrorKind::StreamExtentMismatch);
+    }
+
+    /// The default is Strict — the policy must be opted into explicitly,
+    /// so no clean-path caller can acquire it by accident.
+    #[test]
+    fn default_policy_is_strict() {
+        assert_eq!(StreamLengthPolicy::default(), StreamLengthPolicy::Strict);
     }
 
     #[test]

@@ -352,6 +352,14 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // and position.
             "supplied",
             "supplied_registered",
+            // Appended by the /Contents-degradation slice: `/Contents`
+            // entries this page named that are not present in the file, so
+            // their marks are missing from the raster (ISO 32000-1 §7.3.10
+            // makes such a reference the null object; Table 30 makes an
+            // absent /Contents an empty page — the document opens, but the
+            // page is incomplete and says so). Appended at the END, same
+            // contract — every key above keeps its meaning and position.
+            "contents_unresolved",
         ],
         "metrics key order is part of the stable contract"
     );

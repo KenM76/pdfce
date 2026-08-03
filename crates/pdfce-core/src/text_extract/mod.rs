@@ -615,6 +615,19 @@ pub struct TextDiagnostics {
     pub form_depth_overflows: u64,
     /// Content streams that could not be tokenized at all.
     pub pages_unreadable: u64,
+    /// `Contents` entries across the extracted pages that named an object
+    /// the file does not contain, and so contributed no text (mirrors
+    /// [`crate::page_tree::Page::contents_unresolved`], summed).
+    ///
+    /// The twin of [`TextDiagnostics::pages_unreadable`] one step earlier
+    /// in the pipeline: that counter means "a stream was there and could
+    /// not be tokenized", this one means "a stream the page asked for was
+    /// not there at all". §7.3.10 makes a reference to a missing object the
+    /// null object and Table 30 makes an absent `Contents` an empty page,
+    /// so the extraction legitimately continues — but an operator reading
+    /// `chars=0` deserves to know the difference between a page that holds
+    /// no text and a page whose text went missing with its stream.
+    pub contents_unresolved: u64,
     /// Distinct fonts for which advance widths had to be estimated (no
     /// `/Widths`, not a standard-14 face; the real metrics live in the
     /// font program, which `pdfce-core` cannot read — R21). Affects
@@ -656,6 +669,7 @@ impl TextDiagnostics {
         self.forms_executed += other.forms_executed;
         self.form_depth_overflows += other.form_depth_overflows;
         self.pages_unreadable += other.pages_unreadable;
+        self.contents_unresolved += other.contents_unresolved;
         self.fonts_with_estimated_widths += other.fonts_with_estimated_widths;
         for note in &other.notes {
             self.note(note.clone());
@@ -1044,6 +1058,22 @@ pub fn extract_page_view(
 ) -> Result<PageText, ExtractError> {
     let (items, mut diagnostics) = page::walk_page(doc, page, options)?;
     document_facts(doc, &mut diagnostics);
+    // A `/Contents` element that named a missing object contributed no
+    // bytes to `walk_page`, so nothing downstream can observe it. Carry the
+    // page's own count in here, and say so in the notes — an operator who
+    // sees no text on a page needs to be able to tell "this page is blank"
+    // from "this page's content stream is not in the file" (§7.3.10 +
+    // Table 30 make the omission legal, not invisible).
+    diagnostics.contents_unresolved += page.contents_unresolved as u64;
+    if page.contents_unresolved > 0 {
+        diagnostics.note(format!(
+            "text: page {} names {} content stream(s) that are not present in the file — \
+             that content is missing from this extraction (ISO 32000-1 \u{a7}7.3.10: a reference \
+             to an absent object is the null object; Table 30: absent /Contents = empty page)",
+            page_index + 1,
+            page.contents_unresolved
+        ));
+    }
     let runs = layout::assemble(items, options, &mut diagnostics);
     Ok(PageText {
         page_index,

@@ -19,6 +19,28 @@ headers or refuse it cleanly.
 | `duplicate-superseded.pdf` | object 3 defined twice, no `startxref` | `StartxrefNotFound` | OPENS; last-valid-wins picks `/Note (SECOND)` |
 | `offset-start.pdf` | >1 KiB leading junk before `%PDF-` | header probe `MissingHeader` | OPENS via header-independent recovery; `offset_start` = true |
 | `unrecoverable-no-catalog.pdf` | objects but no `/Type /Catalog`, no `trailer`, no `startxref` | `StartxrefNotFound` | REFUSES clean (`RecoverError::NoCatalog`) |
+| `crlf-shifted-lengths.pdf` | whole-file LF→CRLF conversion of a valid file: offsets shift AND every `/Length` goes stale | `NotAnXrefSection` | OPENS; all 4 objects recovered; `stream_lengths_recovered` = 1; text extractable |
+| `dangling-contents.pdf` | **xref is VALID**; page's `/Contents 4 0 R` names an object the table marks free | none — loads on the strict path | one page, `contents` empty, `contents_unresolved` = 1 |
+| `dangling-contents-array.pdf` | **xref is VALID**; `/Contents [4 0 R 5 0 R 6 0 R]` with object 5 free | none — loads on the strict path | `contents` = `[4 0 R, 6 0 R]` in order, `contents_unresolved` = 1 |
+
+The last three cover the `/Contents` failure class a 4,012-file corpus
+census surfaced (341 files, 8.5%, unopenable with "page /Contents is
+neither a stream nor an array of streams"):
+
+- `crlf-shifted-lengths.pdf` is the **cause** side. In 337 of the 341 the
+  missing content stream's `N G obj` header was physically present in the
+  file and had been dropped by recovery's confirmation step, because a
+  `/Length` measured on the LF form no longer reaches `endstream` after
+  CRLF conversion. Its content stream carries deliberate internal
+  newlines — with single-line content the `/Length` survives conversion
+  unchanged and the fixture would not exercise the defect.
+- The two `dangling-contents*` files are the **consequence** side, and
+  they are deliberately **not** xref-damaged. They must load on the clean
+  strict path, so they are the only fixtures here that can prove
+  `ARCHITECTURE.md` §5 still holds for a document that opens via a
+  degraded `/Contents` — a *recovered* document refuses incremental save
+  by name, so the recovery fixtures cannot test byte-identical save at
+  all.
 
 `offset-shifted-startxref.pdf` reproduces the canonical real-world case:
 `qpdf/add-contents.pdf` stores `startxref 685` while byte 685 lands inside

@@ -201,6 +201,113 @@ fn offset_start_recovers_header_independent() {
     assert_full_rewrite_only("offset-start.pdf", &doc);
 }
 
+/// The LF→CRLF conversion shape — the cause behind 337 of the 341
+/// corpus files that were unopenable with `BadContents`.
+///
+/// Both halves of the damage are asserted: the object count proves the
+/// content stream was NOT dropped by confirmation (it was, before the
+/// `StreamLengthPolicy::RecoverFromEndstream` fix, leaving 3 of 4), and
+/// `stream_lengths_recovered` proves the repair is counted for disclosure
+/// rather than applied silently. Extracting the text proves the recovered
+/// extent is the real payload and not a truncation — a file that "opens"
+/// as a blank page would satisfy every structural assertion above and
+/// still be a non-fix.
+#[test]
+fn crlf_shifted_lengths_recovers_the_content_stream() {
+    let doc = assert_recovers("crlf-shifted-lengths.pdf");
+    let r = doc.recovery().unwrap();
+    assert_eq!(r.reason, RecoveryReason::NotAnXrefSection);
+    assert_eq!(
+        r.file_level_objects, 4,
+        "the content stream must survive confirmation despite its stale /Length"
+    );
+    assert_eq!(
+        r.stream_lengths_recovered, 1,
+        "the one re-derived extent is counted, not silently absorbed"
+    );
+    assert_eq!(doc.object_count(), 4);
+
+    // The page resolves to a real content stream, and that stream holds
+    // the real text.
+    let pages = pdfce_core::page_tree::pages(&doc).expect("page tree");
+    assert_eq!(pages.len(), 1);
+    assert_eq!(pages[0].contents.len(), 1);
+    assert_eq!(
+        pages[0].contents_unresolved, 0,
+        "nothing degraded — the object was genuinely recovered"
+    );
+    let text = pdfce_core::text_extract::extract_document(
+        &doc,
+        &pdfce_core::text_extract::ExtractOptions::default(),
+    )
+    .expect("extract");
+    assert!(
+        text.plain_text().contains("crlf shifted lengths"),
+        "recovered stream must carry the real content, got {:?}",
+        text.plain_text()
+    );
+
+    assert_full_rewrite_only("crlf-shifted-lengths.pdf", &doc);
+}
+
+/// A dangling single `/Contents` reference on a file whose cross-reference
+/// table is VALID: it loads on the strict path (no recovery), yields an
+/// empty page, discloses the omission, and — the §5 point — still saves
+/// byte-identically, because degrading a `/Contents` element changes
+/// nothing about the bytes pdfce is holding.
+#[test]
+fn dangling_contents_degrades_on_the_strict_path_and_round_trips() {
+    let source = fixture("dangling-contents.pdf");
+    let doc = Document::from_bytes(source.clone()).expect("must load");
+    assert!(
+        doc.recovery().is_none(),
+        "this fixture's xref is valid — it must NOT take the recovery path"
+    );
+
+    let pages = pdfce_core::page_tree::pages(&doc).expect("a dangling /Contents is not fatal");
+    assert_eq!(pages.len(), 1);
+    assert!(
+        pages[0].contents.is_empty(),
+        "Table 30: absent /Contents = an empty page"
+    );
+    assert_eq!(
+        pages[0].contents_unresolved, 1,
+        "the omission is disclosed, so an empty page is distinguishable from a blank one"
+    );
+
+    // ARCHITECTURE.md §5: nothing was touched, so an empty-dirty-set
+    // incremental save must reproduce the source bytes exactly.
+    let (bytes, _report) =
+        save_incremental(&doc, &DirtySet::empty(), &SaveOptions::identity()).expect("save");
+    assert_eq!(
+        bytes, source,
+        "a document that opens via a degraded /Contents must still round-trip byte-identically"
+    );
+}
+
+/// The array form: the dangling element is dropped, the two real streams
+/// survive **in order**, and the count discloses the one omission.
+#[test]
+fn dangling_contents_array_keeps_the_surviving_streams_in_order() {
+    let source = fixture("dangling-contents-array.pdf");
+    let doc = Document::from_bytes(source.clone()).expect("must load");
+    assert!(doc.recovery().is_none());
+
+    let pages = pdfce_core::page_tree::pages(&doc).expect("must walk");
+    assert_eq!(pages.len(), 1);
+    let nums: Vec<u32> = pages[0].contents.iter().map(|id| id.num).collect();
+    assert_eq!(
+        nums,
+        vec![4, 6],
+        "surviving elements keep their order — Table 30 concatenates them"
+    );
+    assert_eq!(pages[0].contents_unresolved, 1);
+
+    let (bytes, _report) =
+        save_incremental(&doc, &DirtySet::empty(), &SaveOptions::identity()).expect("save");
+    assert_eq!(bytes, source, "\u{a7}5 holds for the array form too");
+}
+
 #[test]
 fn unrecoverable_no_catalog_refuses_clean() {
     let err = Document::from_bytes(fixture("unrecoverable-no-catalog.pdf")).unwrap_err();

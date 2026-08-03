@@ -63,6 +63,7 @@
 //! | dirty entry | base object | what is written | counted as |
 //! |---|---|---|---|
 //! | re-emission | `Provenance::File` | its source bytes, verbatim | `objects_verbatim` |
+//! | re-emission | `Provenance::RecoveredFile` | re-serialized from values | `objects_reserialized` (no promotion) |
 //! | re-emission | `Provenance::ObjectStream` | re-serialized from values | `objects_reserialized` + **promotion** |
 //! | replacement | `Provenance::File` | the new value, serialized | `objects_reserialized` |
 //! | replacement | `Provenance::ObjectStream` | the new value, serialized | `objects_reserialized` + **promotion** |
@@ -118,6 +119,17 @@
 //! content, and PDF syntax is non-canonical enough that re-serializing
 //! would change bytes on every second object (`crate::span`'s module
 //! docs work the three cases).
+//!
+//! The **one** file-level exception is `Provenance::RecoveredFile`, and it
+//! is not a weakening of the rule but a precondition of it: those bytes
+//! contradict the value pdfce parsed from them (a stream whose extent
+//! recovery re-derived from `endstream`, leaving the old `/Length` in the
+//! source text). Copying them verbatim would emit a stream whose declared
+//! length does not match its data — a file pdfce would refuse to reload,
+//! i.e. "save then reopen" would lose the operator's document. §5 promises
+//! byte identity for content pdfce did not touch; pdfce *did* touch this
+//! object's length, deliberately and disclosed, which is exactly the
+//! condition under which §5 does not bind.
 //!
 //! ### Object streams survive a full rewrite intact
 //!
@@ -342,6 +354,10 @@ pub fn save_incremental(
                 let io = doc.get(id).ok_or(WriteError::UnknownDirtyObject { id })?;
                 match emit_object(&mut out, io, base)? {
                     Emission::Verbatim => verbatim += 1,
+                    // Re-serialized because its recovered extent
+                    // contradicts its source bytes. NOT a promotion —
+                    // the object was and stays file-level.
+                    Emission::RecoveredReserialized => reserialized += 1,
                     Emission::Promoted => {
                         reserialized += 1;
                         promoted.push(id);
@@ -680,6 +696,8 @@ pub fn save_full(
                         let io = doc.get(id).ok_or(WriteError::MissingObject { num })?;
                         match emit_object(&mut out, io, base)? {
                             Emission::Verbatim => verbatim += 1,
+                            // See the matching arm in `save_incremental`.
+                            Emission::RecoveredReserialized => reserialized += 1,
                             Emission::Promoted => {
                                 reserialized += 1;
                                 promoted.push(id);
@@ -902,6 +920,14 @@ enum Emission {
     /// out of it (R38). The variant is named for the consequence rather
     /// than the mechanism because the consequence is what gets reported.
     Promoted,
+    /// Rebuilt from the value tree because the object's file-level bytes,
+    /// though present, contradict its parsed value
+    /// ([`Provenance::RecoveredFile`] — a stream whose extent recovery
+    /// re-derived from `endstream`). Distinct from [`Emission::Promoted`]
+    /// because nothing was promoted out of an object stream: the object
+    /// was and remains file-level, so it must not appear in
+    /// [`SaveReport::promoted`]. Counted as re-serialized.
+    RecoveredReserialized,
 }
 
 /// Replace `ID[1]` with a fresh changing identifier (§14.4).
@@ -964,6 +990,17 @@ fn emit_object(
             // last byte of `endobj`, by the Provenance::File contract.
             out.push(b'\n');
             Ok(Emission::Verbatim)
+        }
+        // The bytes exist but contradict the value (a recovered stream
+        // extent), so copying them would emit a file whose `/Length`
+        // under- or over-runs its own data — one pdfce would then refuse
+        // to reload. Re-serializing regenerates `/Length` from the actual
+        // data (`serialize`'s "always recomputed, never trusted"), which
+        // is the only way a recovered document's full rewrite can be a
+        // valid PDF.
+        Provenance::RecoveredFile(_) => {
+            serialize::write_indirect(out, io.id, &io.value, source, &IdentityEncoder);
+            Ok(Emission::RecoveredReserialized)
         }
         // R38: promote-to-uncompressed. Reached in Pass 3.0 only via
         // an explicit identity re-emission of a compressed object; a

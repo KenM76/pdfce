@@ -90,7 +90,7 @@
 //!               unsupported_type3=<a> unsupported_noncmap=<b> \
 //!               unsupported_vertical=<c> unsupported_composite_not_embedded=<d> \
 //!               unsupported_unknown_subtype=<e> unsupported_unusable_program=<f> \
-//!               supplied=<g> supplied_registered=<h>
+//!               supplied=<g> supplied_registered=<h> contents_unresolved=<i>
 //! ```
 //!
 //! `render-page`'s line is deliberately split by the first `"; "` into a
@@ -124,6 +124,7 @@
 //! | `deferred` | `deferred_ops` | "were there operators pdfce knows but hasn't implemented?" |
 //! | `images` | `images_rendered` | "how many sampled images were painted?" |
 //! | `images_unsupported` | `images_unsupported` | "how many images are simply MISSING from the raster?" |
+//! | `contents_unresolved` | `contents_streams_unresolved` | "how many of this page's `/Contents` streams are not in the file at all, so their marks are MISSING from the raster?" (§7.3.10 + Table 30 — legal, but the page is incomplete) |
 //! | `forms` | `forms_rendered` | "how many form XObjects were executed?" |
 //! | `images_codec_unsupported` | `images_codec_unsupported` | "how many images need a codec this build doesn't have?" |
 //! | `codec_features` | `codec_feature_unsupported` (summed) | "how many images need a codec *variant* this build doesn't have?" |
@@ -2633,7 +2634,8 @@ fn disclose_recovery(file: &Path, report: &pdfce_core::recover::RecoveryReport) 
     eprintln!(
         "pdfce-cli: {}: opened via cross-reference recovery (rebuild-by-scan): \
          reason={:?}, file-level-objects={}, from-object-streams={}, \
-         last-wins-collisions={}, trailer={:?}, offset-start={}",
+         last-wins-collisions={}, trailer={:?}, offset-start={}, \
+         stream-lengths-recovered={}",
         file.display(),
         report.reason,
         report.file_level_objects,
@@ -2641,12 +2643,23 @@ fn disclose_recovery(file: &Path, report: &pdfce_core::recover::RecoveryReport) 
         report.last_wins_collisions,
         report.trailer_source,
         report.offset_start,
+        report.stream_lengths_recovered,
     );
     eprintln!(
         "pdfce-cli: {}: NOTE: the cross-reference table was rebuilt in memory; \
          saving will rewrite (normalize) the file, and incremental save is refused.",
         file.display()
     );
+    if report.stream_lengths_recovered > 0 {
+        eprintln!(
+            "pdfce-cli: {}: NOTE: {} stream(s) had a /Length that did not agree with their \
+             endstream keyword; their byte extents were re-derived from the keyword \
+             (ISO 32000-1 \u{a7}7.3.8.2 defines /Length in terms of endstream). Those extents \
+             are pdfce's reading of the file, not the file's own claim.",
+            file.display(),
+            report.stream_lengths_recovered
+        );
+    }
 }
 
 /// Upper bound on a single supplied font file, in bytes (pdfce policy,
@@ -2940,7 +2953,8 @@ annots={} annots_painted={} annots_no_ap={} annots_hidden={} \
 annots_state_missing={} annots_widget={} annots_degenerate={} need_appearances={} \
 unsupported_type3={} unsupported_noncmap={} unsupported_vertical={} \
 unsupported_composite_not_embedded={} unsupported_unknown_subtype={} \
-unsupported_unusable_program={} supplied={} supplied_registered={}",
+unsupported_unusable_program={} supplied={} supplied_registered={} \
+contents_unresolved={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -2984,6 +2998,10 @@ unsupported_unusable_program={} supplied={} supplied_registered={}",
         // registrations the `--font-dir` walk added (0 without the flag).
         d.glyphs_supplied,
         supplied_registered,
+        // Appended after every pre-existing key: `/Contents` entries this
+        // page named that are not in the file, so their marks are simply
+        // absent from the raster (§7.3.10 + Table 30).
+        d.contents_streams_unresolved,
     );
     report_diagnostics(d);
 
@@ -3066,6 +3084,14 @@ first distinct names: {}",
             d.unknown_ops,
             d.deferred_ops,
             d.sample_ops.join(", ")
+        );
+    }
+    if d.contents_streams_unresolved > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} /Contents entr(y/ies) on this page name an object that is NOT \
+in the file; that content is MISSING from the raster (ISO 32000-1 \u{a7}7.3.10: a reference to an \
+absent object is the null object; Table 30: absent /Contents = an empty page)",
+            d.contents_streams_unresolved
         );
     }
     if d.images_unsupported > 0 {
@@ -4131,6 +4157,12 @@ fn full_rewrite_is_per_object_verbatim(
     use pdfce_core::object::Provenance;
 
     for io in before.objects() {
+        // Only `Provenance::File` promises verbatim re-emission. A
+        // compressed object has no file-level bytes, and a
+        // `Provenance::RecoveredFile` object has bytes that CONTRADICT its
+        // parsed value (a recovered stream extent), so the writer
+        // deliberately re-serializes it — asserting byte identity for
+        // either would be asserting the opposite of the contract.
         let Provenance::File(span) = io.provenance else {
             continue;
         };
@@ -6170,7 +6202,8 @@ via_tounicode={} via_encoding={} via_cid={} via_extension={} failed={} \
 sourced_pct={:.1} spaces_derived={} lines_derived={} \
 actual_text={} artifacts={} reversed={} identity_no_tounicode={} \
 ucs2_missing={} predefined_cmaps_missing={} tagged={} suspects={} \
-struct_tree={} forms={} rtl_runs={} invisible={} unreadable_pages={}",
+struct_tree={} forms={} rtl_runs={} invisible={} unreadable_pages={} \
+contents_unresolved={}",
         input.display(),
         extracted.pages.len(),
         extracted.plain_text().chars().count(),
@@ -6196,6 +6229,12 @@ struct_tree={} forms={} rtl_runs={} invisible={} unreadable_pages={}",
         d.rtl_runs,
         d.invisible_glyphs,
         d.pages_unreadable,
+        // Appended after every pre-existing key (the stable-line
+        // contract's append-never-reorder rule): content streams the
+        // pages named but the file does not contain, so their text is
+        // missing from this extraction rather than absent from the
+        // document.
+        d.contents_unresolved,
     );
     if output.is_some() || json {
         // stdout is free (the payload went to a file), or the payload is

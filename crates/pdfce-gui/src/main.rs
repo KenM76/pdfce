@@ -2198,9 +2198,26 @@ impl PdfceApp {
         // overlay.
         self.recovery_note = if let Status::Open(doc) = &self.status {
             doc.session.document().recovery().map(|r| {
+                // The stream-length clause is appended only when it
+                // applies. It is a DIFFERENT claim from the rebuild — the
+                // rebuild recovers where objects are, this recovers how
+                // long they are — and it carries a residual doubt the
+                // rebuild does not: a re-derived extent is pdfce's reading
+                // of the bytes rather than the file's own statement, so
+                // the operator is told rather than left to assume the
+                // content is verbatim (R20, fuzzy-never-sneaky).
+                let lengths = if r.stream_lengths_recovered > 0 {
+                    format!(
+                        " {} stream(s) also disagreed with their own recorded length, so their \
+                         extent was re-read from the file's endstream markers.",
+                        r.stream_lengths_recovered
+                    )
+                } else {
+                    String::new()
+                };
                 format!(
                     "This document had a damaged cross-reference table and was \
-                     rebuilt in memory ({} object(s) recovered). Saving will \
+                     rebuilt in memory ({} object(s) recovered).{lengths} Saving will \
                      rewrite (normalize) the file; incremental save is refused.",
                     r.file_level_objects + r.objstm_objects
                 )
@@ -5884,10 +5901,17 @@ impl PdfceApp {
         // "pdfce did not draw something" into one headline number; the
         // expander separates them again. A summary line with five
         // numbers in it is a summary nobody reads.
+        // `contents_streams_unresolved` joins the headline for the same
+        // reason `images_unsupported` does: it is a thing pdfce did not
+        // draw. It is arguably the most important member of the set — the
+        // others leave a page that is missing an element, this one can
+        // leave a page that is missing EVERYTHING — so it must never be
+        // the one counter that only shows up when the expander is opened.
         let unsupported = d.fonts_unsupported
             + d.deferred_ops
             + d.unknown_ops
             + d.images_unsupported
+            + d.contents_streams_unresolved
             + d.xobject_depth_overflows;
         // decision 012 / R62: a supplied glyph is still a SUBSTITUTE, not
         // the document's own program, so a page rendered from supplied
@@ -5921,6 +5945,14 @@ impl PdfceApp {
                 return;
             }
             ui.label(ui_text::diagnostics_detail_heading());
+            // First in the detail list, ahead of every font/image line: if
+            // a page's content stream is missing from the file, that fact
+            // explains the page better than anything below it can.
+            if d.contents_streams_unresolved > 0 {
+                ui.label(ui_text::diagnostics_contents_unresolved(
+                    d.contents_streams_unresolved,
+                ));
+            }
             if d.glyphs_substituted > 0 {
                 ui.label(ui_text::diagnostics_substituted_fonts(
                     d.glyphs_substituted,

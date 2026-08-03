@@ -175,6 +175,20 @@ const MAX_SAMPLES: usize = 12;
 /// the raster is).
 #[derive(Debug, Default, Clone)]
 pub struct Diagnostics {
+    /// `Contents` entries on this page that named an object the file does
+    /// not contain, and so contributed no content stream to the raster
+    /// (mirrors [`pdfce_core::page_tree::Page::contents_unresolved`]).
+    ///
+    /// This is the one diagnostic here that is decided **before**
+    /// interpretation starts — it is a property of the page dictionary,
+    /// not of any operator — so it is copied in by the render entry point
+    /// rather than accumulated by the interpreter. It belongs in this
+    /// struct anyway, because from the operator's side it is the same kind
+    /// of fact as an unsupported image: the raster is *incomplete*, not
+    /// *wrong*, and a page that comes out emptier than expected has a
+    /// named reason (§7.3.10 + Table 30 — a dangling reference is the null
+    /// object, and an absent `Contents` is an empty page).
+    pub contents_streams_unresolved: usize,
     /// Operators recognized but not yet implemented (XObjects,
     /// shading, marked content, Type 3 glyph procedures, and `Tr`'s
     /// clipping modes 4–7), with occurrence counts folded into one

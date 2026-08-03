@@ -85,7 +85,7 @@ use std::path::Path;
 use crate::linearization::{self, Linearization};
 use crate::object::{Dict, IndirectObject, ObjId, Object, Provenance};
 use crate::objstm::{ObjStmError, ObjectStream};
-use crate::parser::{ParseError, Parser};
+use crate::parser::{ParseError, Parser, StreamLengthPolicy};
 use crate::recover::{self, RecoveryReport};
 use crate::view::DocumentView;
 use crate::xref::{self, SectionShape, XrefEntry, XrefError, XrefErrorKind, XrefTable};
@@ -329,16 +329,25 @@ impl Document {
         suppressed_by_size: usize,
         recovery: Option<RecoveryReport>,
     ) -> Result<Self, DocError> {
-        // Phase 1. Eagerly parse every file-level in-use object, strict.
-        // Free entries resolve to null, not to bytes; type-2 entries wait
-        // for phase 2 (module docs).
+        // Phase 1. Eagerly parse every file-level in-use object. Strict on
+        // the clean path; on the recovery path the SAME `/Length`-vs-
+        // `endstream` leniency `crate::recover`'s confirmation step used
+        // must apply here too, or an object recovery accepted would be
+        // rejected on re-parse and cost the whole document (the exact
+        // failure this policy exists to close). Free entries resolve to
+        // null, not to bytes; type-2 entries wait for phase 2 (module docs).
+        let length_policy = if recovery.is_some() {
+            StreamLengthPolicy::RecoverFromEndstream
+        } else {
+            StreamLengthPolicy::Strict
+        };
         let mut objects: HashMap<ObjId, IndirectObject> = HashMap::new();
         let mut compressed: Vec<(u32, u32, u32)> = Vec::new();
         for (num, entry) in table.iter() {
             match entry {
                 XrefEntry::InUse { offset, generation } => {
                     let id = ObjId::new(num, generation);
-                    let io = parse_object_at(&buf, &table, offset)
+                    let (io, _recovered) = parse_object_at(&buf, &table, offset, length_policy)
                         .map_err(|source| DocError::BadObject { id, offset, source })?;
                     if io.id != id {
                         return Err(DocError::ObjectIdMismatch {
@@ -863,11 +872,24 @@ impl Document {
 /// reuse the exact same object-parse + indirect-`/Length` resolution the
 /// normal loader uses (rule 13: no new tokenizer) when confirming scanned
 /// `N G obj` candidates.
+///
+/// `policy` selects the `/Length`-vs-`endstream` strictness
+/// ([`StreamLengthPolicy`]). It is [`StreamLengthPolicy::Strict`] on every
+/// clean-load call site and [`StreamLengthPolicy::RecoverFromEndstream`]
+/// only under rebuild-by-scan recovery. Returns the parsed object together
+/// with the number of stream extents that had to be re-derived (always `0`
+/// under `Strict`), so the caller can fold it into the counted disclosure.
+///
+/// Note the nested `resolve_length` parse stays **strict** regardless: a
+/// `/Length` object is a plain integer (§7.3.10 EXAMPLE 3), never a stream,
+/// so the policy has nothing to act on there and holding it strict keeps
+/// the nested parse from recursing into extent recovery.
 pub(crate) fn parse_object_at(
     buf: &[u8],
     table: &XrefTable,
     offset: u64,
-) -> Result<IndirectObject, ParseError> {
+    policy: StreamLengthPolicy,
+) -> Result<(IndirectObject, usize), ParseError> {
     let offset = usize::try_from(offset).unwrap_or(usize::MAX);
     let mut resolve_length = |id: ObjId| -> Option<i64> {
         let XrefEntry::InUse {
@@ -887,7 +909,9 @@ pub(crate) fn parse_object_at(
         (io.id == id).then_some(())?;
         io.value.as_int()
     };
-    Parser::at(buf, offset).parse_indirect_object(&mut resolve_length)
+    let mut parser = Parser::at(buf, offset).with_stream_length_policy(policy);
+    let io = parser.parse_indirect_object(&mut resolve_length)?;
+    Ok((io, parser.stream_lengths_recovered()))
 }
 
 /// Parse a catalog `/Version` name (`1.7`, `2.0`) into a version pair.

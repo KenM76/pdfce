@@ -477,6 +477,32 @@ pub enum Provenance {
     /// the last byte of `endobj` — so an untouched object re-emits (or,
     /// in incremental save, retains) exactly its source bytes.
     File(ByteSpan),
+    /// Defined at file level at this span, but the retained bytes are
+    /// **internally inconsistent** and therefore must NOT be re-emitted
+    /// verbatim — the parsed value is authoritative, not the source bytes.
+    ///
+    /// Set in exactly one situation: cross-reference recovery re-derived a
+    /// stream's extent from its `endstream` keyword because the stored
+    /// `/Length` was unusable
+    /// ([`StreamLengthPolicy::RecoverFromEndstream`](crate::parser::StreamLengthPolicy::RecoverFromEndstream)).
+    /// The span's bytes then say one length while the parsed
+    /// [`Stream::data_span`] says another, and copying them through would
+    /// make pdfce *write out* the very inconsistency it just recovered
+    /// from — producing a file pdfce itself would refuse to reload. The
+    /// writer re-serializes instead, which regenerates `/Length` from the
+    /// actual data (`writer::serialize`'s "`/Length` is always recomputed,
+    /// never trusted").
+    ///
+    /// This is a third state rather than a flag on
+    /// [`File`](Provenance::File) for the same reason
+    /// [`ObjectStream`](Provenance::ObjectStream) is: it forces every save
+    /// path to decide **consciously** what it means, instead of leaving a
+    /// "span that happens to be untrustworthy" the writer cannot detect.
+    /// [`file_span`](Provenance::file_span) still returns the span — the
+    /// bytes are genuinely there, and a consumer that wants to *show* the
+    /// definition's location (the CLI's object listing) is still right to
+    /// ask. Only *re-emission* is affected.
+    RecoveredFile(ByteSpan),
     /// Compressed inside an object stream (§7.5.7); reached through a
     /// type-2 cross-reference entry (§7.5.8.3 Table 18). There is no
     /// file-level span — see the type docs.
@@ -499,16 +525,39 @@ impl Provenance {
     #[must_use]
     pub const fn file_span(self) -> Option<ByteSpan> {
         match self {
-            Self::File(span) => Some(span),
+            // `RecoveredFile` answers `Some` deliberately: its bytes DO
+            // exist at that span. What is untrustworthy is re-emitting
+            // them, which is [`Provenance::is_verbatim_safe`]'s question,
+            // not this one.
+            Self::File(span) | Self::RecoveredFile(span) => Some(span),
             Self::ObjectStream { .. } => None,
         }
+    }
+
+    /// Whether this object's retained bytes may be copied through to a
+    /// saved file **verbatim**.
+    ///
+    /// True only for [`File`](Provenance::File). A
+    /// [`RecoveredFile`](Provenance::RecoveredFile) object has bytes but
+    /// they contradict the parsed value, and an
+    /// [`ObjectStream`](Provenance::ObjectStream) object has no file-level
+    /// bytes at all — both must be re-serialized from values.
+    ///
+    /// Exists so the writer asks the question it actually means. Testing
+    /// `file_span().is_some()` would silently start copying
+    /// self-contradictory bytes the day the third variant appeared, which
+    /// is precisely the "span that happens to be wrong" failure mode this
+    /// enum was designed to make impossible.
+    #[must_use]
+    pub const fn is_verbatim_safe(self) -> bool {
+        matches!(self, Self::File(_))
     }
 
     /// The containing object stream, or `None` for a file-level object.
     #[must_use]
     pub const fn container(self) -> Option<ObjId> {
         match self {
-            Self::File(_) => None,
+            Self::File(_) | Self::RecoveredFile(_) => None,
             Self::ObjectStream { container, .. } => Some(container),
         }
     }
@@ -550,6 +599,39 @@ impl IndirectObject {
 )]
 mod tests {
     use super::*;
+
+    /// The three provenance states answer the two questions independently:
+    /// "are there file-level bytes?" and "may they be copied verbatim?".
+    ///
+    /// `RecoveredFile` is the case that makes the distinction necessary —
+    /// it is the only state that answers YES to the first and NO to the
+    /// second. A consumer that conflated them (testing
+    /// `file_span().is_some()` to decide re-emission) would copy
+    /// self-contradictory bytes into a saved file.
+    #[test]
+    fn provenance_separates_having_bytes_from_trusting_them() {
+        let span = ByteSpan::from_range(0..10);
+        let file = Provenance::File(span);
+        let recovered = Provenance::RecoveredFile(span);
+        let compressed = Provenance::ObjectStream {
+            container: ObjId::new(7, 0),
+            index: 2,
+        };
+
+        assert_eq!(file.file_span(), Some(span));
+        assert_eq!(recovered.file_span(), Some(span));
+        assert_eq!(compressed.file_span(), None);
+
+        assert!(file.is_verbatim_safe());
+        assert!(!recovered.is_verbatim_safe());
+        assert!(!compressed.is_verbatim_safe());
+
+        // Only a compressed object names a container; a recovered object
+        // is still file-level.
+        assert_eq!(file.container(), None);
+        assert_eq!(recovered.container(), None);
+        assert_eq!(compressed.container(), Some(ObjId::new(7, 0)));
+    }
 
     #[test]
     fn dict_null_value_collapses_to_absent() {

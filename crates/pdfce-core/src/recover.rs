@@ -46,6 +46,26 @@
 //! incremental updates append, so a later definition supersedes an
 //! earlier one). Each becomes a synthetic [`XrefEntry::InUse`].
 //!
+//! Confirmation runs under [`StreamLengthPolicy::RecoverFromEndstream`],
+//! **not** under the parser's default strictness. That one word is what
+//! makes the scan's object count match the file's real object count on
+//! damaged input. A `/Length` that does not land on `endstream` is
+//! §7.3.8.2 "an error" on the clean path, but here it is the single most
+//! common surviving symptom of the very damage that broke the
+//! cross-reference table in the first place: the dominant real-world shape
+//! is a file whose `/Length` values were computed with LF line endings and
+//! which was later converted to CRLF, growing every stream by one byte per
+//! line and shifting every stored offset (which is *why* `startxref` no
+//! longer points at `xref`). Confirming strictly would silently drop
+//! exactly the content streams the page tree then demands, turning a
+//! recoverable file into an unopenable one. Repairs are counted into
+//! [`RecoveryReport::stream_lengths_recovered`] and disclosed.
+//!
+//! The same policy must be used by [`crate::document`]'s re-parse of the
+//! recovered table — an object accepted here and rejected there would fail
+//! the whole load — which is why the policy is a parameter of
+//! [`parse_object_at`] rather than a local choice.
+//!
 //! **Phase 2 — object streams.** *After* phase 1 (the same forced order as
 //! [`crate::document`]'s normal two-phase load), every confirmed
 //! `/Type /ObjStm` container is decoded and its `/N` pair table read; each
@@ -104,7 +124,7 @@ use crate::document::parse_object_at;
 use crate::lexer::{is_delimiter, is_regular, is_whitespace};
 use crate::object::{Dict, Name, ObjId, Object};
 use crate::objstm::ObjectStream;
-use crate::parser::Parser;
+use crate::parser::{Parser, StreamLengthPolicy};
 use crate::xref::{MAX_XREF_ENTRIES, XrefEntry, XrefErrorKind, XrefTable};
 
 /// Why the strict load failed, carried into the [`RecoveryReport`] so the
@@ -190,6 +210,19 @@ pub struct RecoveryReport {
     /// definitions (how many times a number had more than one valid
     /// definition).
     pub last_wins_collisions: usize,
+    /// Recovered objects whose stream extent had to be re-derived from the
+    /// `endstream` keyword because the stored `/Length` was unusable
+    /// (absent, unresolvable, or simply not landing on `endstream` —
+    /// §7.3.8.2 defines `/Length` in terms of that keyword, so the two are
+    /// halves of one statement and this counts how often they disagreed).
+    ///
+    /// Counted over the objects actually **kept**, not over every candidate
+    /// examined, so the number matches what the loaded document contains.
+    /// A non-zero value means some stream's byte extent is pdfce's reading
+    /// of the file rather than the file's own claim — the operator is told
+    /// (R20) because the two can differ, most visibly for a stream whose
+    /// binary data happens to contain the bytes `endstream`.
+    pub stream_lengths_recovered: usize,
     /// Where the recovered trailer's keys came from.
     pub trailer_source: TrailerSource,
     /// Whether the `%PDF-` marker was not at byte 0 (offset-start /
@@ -293,6 +326,11 @@ struct Confirmed {
     id: ObjId,
     offset: usize,
     value: Object,
+    /// Stream extents re-derived from `endstream` while parsing THIS
+    /// object (0 or 1 in practice — one object holds at most one stream).
+    /// Carried per-object so the report can sum over the objects actually
+    /// kept, rather than over superseded duplicates the document never sees.
+    lengths_recovered: usize,
 }
 
 /// Reconstruct a cross-reference table + trailer from a full-buffer scan.
@@ -346,6 +384,9 @@ pub fn recover(buf: &[u8], reason: RecoveryReason) -> Result<RecoveredXref, Reco
 
     let version = detect_version(buf);
     let offset_start = find_bytes(buf, 0, b"%PDF-") != Some(0);
+    // Sum over the objects actually KEPT (superseded duplicates are not in
+    // the loaded document, so counting them would overstate the repair).
+    let stream_lengths_recovered = confirmed.values().map(|c| c.lengths_recovered).sum();
 
     Ok(RecoveredXref {
         table: XrefTable::from_entries(entries),
@@ -359,6 +400,7 @@ pub fn recover(buf: &[u8], reason: RecoveryReason) -> Result<RecoveredXref, Reco
             last_wins_collisions,
             trailer_source,
             offset_start,
+            stream_lengths_recovered,
         },
     })
 }
@@ -480,8 +522,24 @@ fn confirm_candidates(
     let mut confirmed: HashMap<u32, Confirmed> = HashMap::new();
     let mut collisions = 0usize;
     for c in candidates {
-        let io = match parse_object_at(buf, &length_table, c.offset as u64) {
-            Ok(io) => io,
+        // RecoverFromEndstream, and ONLY here (plus the matching re-parse in
+        // `document::assemble`): this is the single highest-yield leniency
+        // in the whole recovery path. A corpus census over 4,012 real PDFs
+        // found 341 files unopenable with "page /Contents is neither a
+        // stream nor an array of streams"; in 337 of them the missing
+        // content stream's `N G obj` header was physically present and had
+        // been dropped **here**, overwhelmingly because the file's
+        // `/Length` values were computed for LF line endings and the file
+        // was later converted to CRLF, so every stream is one byte per line
+        // longer than it claims. Confirming such an object under the strict
+        // policy discards a perfectly readable content stream.
+        let (io, lengths_recovered) = match parse_object_at(
+            buf,
+            &length_table,
+            c.offset as u64,
+            StreamLengthPolicy::RecoverFromEndstream,
+        ) {
+            Ok(pair) => pair,
             Err(_) => continue, // false positive / unparseable — drop
         };
         if io.id != c.id {
@@ -496,6 +554,7 @@ fn confirm_candidates(
                     id: c.id,
                     offset: c.offset,
                     value: io.value,
+                    lengths_recovered,
                 },
             )
             .is_some()
@@ -865,6 +924,7 @@ fn is_object_stream(value: &Object) -> bool {
 )]
 mod tests {
     use super::*;
+    use crate::graph::ObjectGraph as _;
 
     /// The trigger gate: encryption is a named capability gap (no recovery);
     /// every unparseable-xref kind recovers.
@@ -948,6 +1008,66 @@ mod tests {
         let buf = b"%PDF-1.7\n1 0 obj\n<< /Type /Pages /Count 0 /Kids [] >>\nendobj\n";
         let err = recover(buf, RecoveryReason::StartxrefNotFound).unwrap_err();
         assert_eq!(err, RecoverError::NoCatalog);
+    }
+
+    /// The corpus's dominant damage shape, in miniature: a classic file
+    /// whose `/Length` values were computed for LF line endings and which
+    /// was then converted to CRLF. Every stream is now one byte per line
+    /// longer than it claims, and every stored offset is stale — which is
+    /// why `startxref` no longer lands on `xref` and recovery fires.
+    ///
+    /// Before the `StreamLengthPolicy::RecoverFromEndstream` confirmation,
+    /// object 4 failed to parse and was silently dropped, so the scan
+    /// reported one object fewer than the file contains and the page's
+    /// `/Contents` resolved to null. This asserts the object is now KEPT,
+    /// with the right bytes, and that the repair is disclosed.
+    #[test]
+    fn recover_keeps_streams_whose_length_predates_crlf_conversion() {
+        // Written LF-first, then converted — exactly how the real files
+        // were damaged — so the /Length values are honestly stale rather
+        // than hand-picked to make the test pass.
+        let lf = "%PDF-1.4\n\
+                  1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+                  2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 \
+                  /MediaBox [0 0 10 10] /Resources << >> >>\nendobj\n\
+                  3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>\nendobj\n\
+                  4 0 obj\n<< /Length 14 >>\nstream\nBT\n(hi) Tj\nET\nendstream\nendobj\n\
+                  trailer\n<< /Root 1 0 R /Size 5 >>\nstartxref\n9\n%%EOF\n";
+        // `/Length 14` is what the LF form measures: "BT\n(hi) Tj\nET\n".
+        // (13 would also be legal — §7.3.8.1's trailing EOL is optional in
+        // the count — and either value parses strictly BEFORE conversion,
+        // which is the point: the file was VALID until the line endings
+        // changed underneath it.)
+        assert_eq!("BT\n(hi) Tj\nET\n".len(), 14);
+        let buf = lf.replace('\n', "\r\n").into_bytes();
+
+        let rec = recover(&buf, RecoveryReason::NotAnXrefSection).expect("recovery");
+        assert_eq!(
+            rec.report.file_level_objects, 4,
+            "all four objects survive confirmation — the stream is no longer dropped"
+        );
+        assert_eq!(
+            rec.report.stream_lengths_recovered, 1,
+            "the one repaired extent is counted for disclosure"
+        );
+
+        // And the recovered stream holds the real content, not a truncation.
+        let doc = crate::document::Document::from_bytes(buf).expect("load");
+        let pages = crate::page_tree::pages(&doc).expect("page tree");
+        assert_eq!(pages.len(), 1);
+        assert_eq!(pages[0].contents.len(), 1, "the content stream is present");
+        assert_eq!(
+            pages[0].contents_unresolved, 0,
+            "nothing had to be degraded — the object was actually recovered"
+        );
+        let Some(Object::Stream(s)) = doc.value(pages[0].contents[0]) else {
+            panic!("content stream missing");
+        };
+        assert_eq!(
+            s.data_span.slice(doc.bytes()).unwrap(),
+            b"BT\r\n(hi) Tj\r\nET",
+            "the extent is re-derived to the real CRLF payload, EOL backed off"
+        );
     }
 
     /// A recovered `/Encrypt` trailer refuses post-rebuild (the §7.6

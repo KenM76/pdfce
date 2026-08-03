@@ -250,8 +250,145 @@ def fx_unrecoverable_no_catalog():
     return bytes(buf)
 
 
+def fx_crlf_shifted_lengths():
+    """A file that was VALID with LF line endings and then converted to CRLF.
+
+    This is the single most common real-world shape behind the "page
+    /Contents is neither a stream nor an array of streams" failure: a
+    corpus census over 4,012 files found 341 unopenable that way, and in
+    337 the content stream's `N G obj` header was physically present but
+    had been dropped by recovery's confirmation step.
+
+    Converting LF→CRLF damages the file twice over, and BOTH halves matter:
+
+    1. Every stored byte offset shifts forward by one per preceding line,
+       so `startxref` no longer lands on `xref` — strict classification
+       fails with `NotAnXrefSection` and recovery fires. (Necessary, but
+       on its own this fixture would be a duplicate of
+       `offset-shifted-startxref.pdf`.)
+    2. Every `/Length` was measured on the LF form, so a stream containing
+       N internal line breaks is now N bytes LONGER than it claims. The
+       declared extent lands mid-data, `endstream` is not where `/Length`
+       points, and under strict parsing the whole object is dropped as a
+       false positive — taking the page's only content stream with it.
+
+    The content stream therefore carries deliberate internal newlines: with
+    single-line content the `/Length` would survive conversion untouched
+    and the fixture would not exercise point 2 at all.
+
+    Expected: OPENS, all four objects recovered,
+    `RecoveryReport::stream_lengths_recovered == 1`, and the page's text is
+    extractable.
+    """
+    content = b"BT\n/F1 12 Tf\n72 720 Td\n(crlf shifted lengths) Tj\nET"
+    objs = one_page_objects()
+    # `/Length` is correct for the LF form and stale after conversion.
+    objs[4] = b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content)
+    buf, off = emit_bodies(objs)
+    size = max(objs) + 1
+    xref_at = len(buf)
+    buf += classic_xref(off, size)
+    buf += classic_trailer(size)
+    buf += b"startxref\n%d\n%%%%EOF\n" % xref_at
+    # The damage itself: a whole-file LF→CRLF conversion, exactly as a
+    # text-mode transfer or a naive line-ending normalizer would do it.
+    # (The binary-comment bytes \xe2\xe3\xcf\xd3 contain no 0x0A, so this
+    # cannot corrupt them.)
+    return bytes(buf).replace(b"\n", b"\r\n")
+
+
+def fx_dangling_contents():
+    """A file with a PERFECTLY VALID cross-reference table whose page names
+    a `/Contents` object that does not exist.
+
+    Deliberately NOT damaged in its xref: this fixture must load on the
+    clean, strict path with no recovery at all. That is what makes it the
+    round-trip control for the degradation — a document that opens only
+    because a dangling `/Contents` degraded must still satisfy
+    `ARCHITECTURE.md` §5, and it can only prove that on the path where
+    byte-identical incremental save is actually attempted (a *recovered*
+    document refuses incremental save by name, so the recovery fixtures
+    cannot test this).
+
+    Object 4 is present in the table as a FREE entry — the well-formed way
+    to say "this object number names nothing" (§7.5.4). Resolving `4 0 R`
+    therefore yields the null object (§7.3.10), and Table 30's "if this
+    entry is absent, the page shall be empty" makes the page empty rather
+    than the document invalid.
+
+    Expected: OPENS on the strict path, one page, `contents` empty,
+    `contents_unresolved == 1`, and save byte-identical.
+    """
+    objs = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        2: b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        3: (
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << >> /Contents 4 0 R >>"
+        ),
+    }
+    buf, off = emit_bodies(objs)
+    size = 5  # 0..4 — object 4 is declared and FREE
+    xref_at = len(buf)
+    x = bytearray(b"xref\n0 %d\n" % size)
+    x += b"0000000000 65535 f \n"  # free-list head
+    for num in (1, 2, 3):
+        x += b"%010d 00000 n \n" % off[num]
+    x += b"0000000000 65535 f \n"  # object 4: free — the dangling target
+    buf += x
+    buf += classic_trailer(size)
+    buf += b"startxref\n%d\n%%%%EOF\n" % xref_at
+    return bytes(buf)
+
+
+def fx_dangling_contents_array():
+    """As `fx_dangling_contents`, but `/Contents` is an ARRAY whose middle
+    element is the dangling one, flanked by two real streams.
+
+    Proves the surviving elements still concatenate in order rather than
+    the array being condemned wholesale — Table 30 divides a content
+    stream only at lexical-token boundaries, so dropping one element
+    leaves a shorter but syntactically intact stream. The two live streams
+    are written so the result is only valid if BOTH are kept and in order
+    (`q` … `Q` must balance).
+
+    Expected: OPENS on the strict path, `contents == [4 0 R, 6 0 R]`,
+    `contents_unresolved == 1`.
+    """
+    first = b"q 1 0 0 RG 10 10 m 100 100 l S"
+    third = b"0 0 1 RG 10 100 m 100 10 l S Q"
+    objs = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        2: b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        3: (
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << >> /Contents [4 0 R 5 0 R 6 0 R] >>"
+        ),
+        4: b"<< /Length %d >>\nstream\n%s\nendstream" % (len(first), first),
+        6: b"<< /Length %d >>\nstream\n%s\nendstream" % (len(third), third),
+    }
+    buf, off = emit_bodies(objs)
+    size = 7
+    xref_at = len(buf)
+    x = bytearray(b"xref\n0 %d\n" % size)
+    x += b"0000000000 65535 f \n"
+    for num in range(1, size):
+        if num in off:
+            x += b"%010d 00000 n \n" % off[num]
+        else:
+            # Object 5 is declared FREE: the dangling middle element.
+            x += b"0000000000 65535 f \n"
+    buf += x
+    buf += classic_trailer(size)
+    buf += b"startxref\n%d\n%%%%EOF\n" % xref_at
+    return bytes(buf)
+
+
 FIXTURES = {
     "offset-shifted-startxref.pdf": fx_offset_shifted_startxref,
+    "crlf-shifted-lengths.pdf": fx_crlf_shifted_lengths,
+    "dangling-contents.pdf": fx_dangling_contents,
+    "dangling-contents-array.pdf": fx_dangling_contents_array,
     "no-startxref.pdf": fx_no_startxref,
     "startxref-out-of-range.pdf": fx_startxref_out_of_range,
     "xref-stream-corrupt.pdf": fx_xref_stream_corrupt,

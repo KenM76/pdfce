@@ -790,6 +790,7 @@ mod tests {
             crop_box: PageRect::from_corners(0.0, 0.0, w, h),
             rotate,
             contents: Vec::new(),
+            contents_unresolved: 0,
         }
     }
 

@@ -120,6 +120,31 @@ pub struct Page {
     /// per §7.3.8.1, so these are always resolvable ids). Empty =
     /// an empty page (absent `Contents` is NOT an error).
     pub contents: Vec<ObjId>,
+    /// How many `Contents` entries named an object that is **not in the
+    /// file**, and therefore contribute nothing to this page.
+    ///
+    /// §7.3.10: "An indirect reference to an undefined object is not an
+    /// error; it shall be treated as a reference to the null object."
+    /// Table 30 then makes the consequence explicit for this key —
+    /// `Contents` is optional, and "if this entry is absent, the page
+    /// shall be empty". A dangling element is therefore a page that is
+    /// *incomplete*, not a document that is *invalid*, and refusing the
+    /// whole document over one would violate the §10 fail-clean posture
+    /// (a damaged part must not cost the operator the whole file).
+    ///
+    /// Non-zero means content the page asked for could not be drawn or
+    /// extracted. It is counted rather than silently swallowed because
+    /// "fuzzy, never sneaky" applies to omissions as much as to
+    /// suggestions: a silently-empty page is indistinguishable from a
+    /// genuinely blank one, and the operator would have no way to tell
+    /// that text they expected is missing.
+    ///
+    /// Note what this does **not** cover: an entry of the wrong *type* —
+    /// a number, a dictionary, an array element that is not a reference —
+    /// is a genuine structural error and still yields
+    /// [`PageTreeError::BadContents`]. Only "the reference resolves to
+    /// null" degrades.
+    pub contents_unresolved: usize,
 }
 
 /// Page-tree structural errors.
@@ -153,7 +178,19 @@ pub enum PageTreeError {
     /// `Rotate` was not an integer multiple of 90 (Table 30 "shall").
     #[error("page /Rotate value {0} is not a multiple of 90")]
     BadRotate(i64),
-    /// `Contents` was neither a stream reference nor an array of them.
+    /// `Contents` held a value of the wrong **type** — something that is
+    /// neither a stream reference, an array of them, nor null.
+    ///
+    /// Deliberately narrower than it looks: an element that resolves to
+    /// **null** (a dangling reference to an object the file does not
+    /// contain) is NOT this error. §7.3.10 defines such a reference to be
+    /// the null object and Table 30 makes an absent `Contents` an empty
+    /// page, so that case degrades — the element contributes nothing and
+    /// the omission is counted in [`Page::contents_unresolved`]. This
+    /// variant is reserved for values with no spec-sanctioned reading (a
+    /// number, a name, a dictionary, a non-reference array element), which
+    /// are real structural defects and must not be laundered into a silent
+    /// blank page.
     #[error("page /Contents is neither a stream nor an array of streams")]
     BadContents,
 }
@@ -579,17 +616,40 @@ fn resolve_page<G: ObjectGraph + ?Sized>(
 
     // Contents: absent = empty page; single stream ref; or array of
     // stream refs (streams are always indirect, §7.3.8.1).
-    let contents = match page.get(b"Contents") {
-        None => Vec::new(),
-        Some(Object::Reference(r)) => {
-            match doc.resolve(page.get(b"Contents").unwrap_or(&Object::Null)) {
-                Object::Stream(_) => vec![*r],
-                // A reference to an ARRAY of streams is also legal
-                // (substitutability, §7.3.10) — recurse into the array.
-                Object::Array(items) => contents_from_array(doc, items)?,
-                _ => return Err(PageTreeError::BadContents),
-            }
-        }
+    //
+    // The two failure modes are deliberately NOT treated alike:
+    //
+    //   * A reference that resolves to **null** — because the object is
+    //     absent from the file, or because the file explicitly wrote
+    //     `null` — is not an error at all. §7.3.10 makes a reference to an
+    //     undefined object *be* the null object, and §7.3.9 makes a null
+    //     value equivalent to omitting the entry; Table 30 then says an
+    //     absent `Contents` means an empty page. So it degrades: that
+    //     element contributes nothing, the rest of the page still loads,
+    //     and the omission is COUNTED into `contents_unresolved` for
+    //     disclosure.
+    //   * A value of the wrong **type** — a number, a name, a dictionary,
+    //     a direct non-reference array element — is a genuine structural
+    //     error with no spec-sanctioned reading, and still fails the page
+    //     with `BadContents`. Degrading these too would convert a real
+    //     defect into a silent blank page, which is precisely the outcome
+    //     "fuzzy, never sneaky" forbids.
+    let (contents, contents_unresolved) = match page.get(b"Contents") {
+        None => (Vec::new(), 0),
+        // A direct `null` value: §7.3.9 "equivalent to omitting the entry",
+        // so this is a well-formed empty page, not a degradation — nothing
+        // is missing, so nothing is counted.
+        Some(Object::Null) => (Vec::new(), 0),
+        Some(entry @ Object::Reference(r)) => match doc.resolve(entry) {
+            Object::Stream(_) => (vec![*r], 0),
+            // A reference to an ARRAY of streams is also legal
+            // (substitutability, §7.3.10) — recurse into the array.
+            Object::Array(items) => contents_from_array(doc, items)?,
+            // §7.3.10 + Table 30: the whole `Contents` value is the null
+            // object, which reads as absent — an empty page, disclosed.
+            Object::Null => (Vec::new(), 1),
+            _ => return Err(PageTreeError::BadContents),
+        },
         Some(Object::Array(items)) => contents_from_array(doc, items)?,
         Some(_) => return Err(PageTreeError::BadContents),
     };
@@ -601,25 +661,48 @@ fn resolve_page<G: ObjectGraph + ?Sized>(
         crop_box,
         rotate,
         contents,
+        contents_unresolved,
     })
 }
 
-/// Collect the stream ids of a `Contents` array (each element must be
-/// an indirect reference to a stream).
+/// Collect the stream ids of a `Contents` array, degrading unresolvable
+/// elements and rejecting wrong-typed ones.
+///
+/// Returns the ids that resolved to real streams, in order, plus the count
+/// of elements that resolved to null (§7.3.10) and so contribute nothing.
+/// The surviving elements still concatenate in order — Table 30's "the
+/// division between streams may occur only at the boundaries between
+/// lexical tokens" means a dropped element leaves a *shorter* content
+/// stream, never a syntactically broken one.
+///
+/// # Errors
+///
+/// [`PageTreeError::BadContents`] if an element is not an indirect
+/// reference at all, or resolves to something other than a stream or null
+/// — a type error, which stays an error (see the caller's commentary).
 fn contents_from_array<G: ObjectGraph + ?Sized>(
     doc: &G,
     items: &[Object],
-) -> Result<Vec<ObjId>, PageTreeError> {
-    items
-        .iter()
-        .map(|item| {
-            let id = item.as_reference().ok_or(PageTreeError::BadContents)?;
-            match doc.resolve(item) {
-                Object::Stream(_) => Ok(id),
-                _ => Err(PageTreeError::BadContents),
-            }
-        })
-        .collect()
+) -> Result<(Vec<ObjId>, usize), PageTreeError> {
+    let mut ids = Vec::with_capacity(items.len());
+    let mut unresolved = 0usize;
+    for item in items {
+        match (item.as_reference(), doc.resolve(item)) {
+            (Some(id), Object::Stream(_)) => ids.push(id),
+            // A reference whose target is missing from the file: §7.3.10
+            // says this IS the null object, not an error. Count and skip.
+            (Some(_), Object::Null) => unresolved += 1,
+            // A DIRECT null element (`[ 4 0 R null 6 0 R ]`): §7.3.9 makes
+            // it equivalent to an omitted value. Nothing is missing from
+            // the file, so it is skipped WITHOUT counting — the count is
+            // reserved for content that should have been there and wasn't.
+            (None, Object::Null) => {}
+            // Anything else — a number, a dict, a nested array, a
+            // reference to a non-stream — is a type error.
+            _ => return Err(PageTreeError::BadContents),
+        }
+    }
+    Ok((ids, unresolved))
 }
 
 /// Parse (and resolve) a rectangle attribute: an array of four
@@ -865,6 +948,150 @@ mod tests {
         assert_eq!(pages[0].contents, vec![ObjId::new(6, 0)]);
         assert_eq!(pages[1].contents, vec![ObjId::new(6, 0), ObjId::new(7, 0)]);
         assert!(pages[2].contents.is_empty(), "absent Contents = empty page");
+        // Nothing degraded here: every named stream was present.
+        assert!(pages.iter().all(|p| p.contents_unresolved == 0));
+    }
+
+    /// A **dangling element** in a `/Contents` array degrades: the element
+    /// contributes nothing, the surviving streams still load in order, and
+    /// the omission is disclosed via `contents_unresolved`.
+    ///
+    /// §7.3.10: "An indirect reference to an undefined object ... shall be
+    /// treated as a reference to the null object." Object 7 is never
+    /// defined, so `[6 0 R 7 0 R 8 0 R]` is `[stream, null, stream]` and
+    /// the page's content is the concatenation of the two real streams.
+    /// Before this fix the whole DOCUMENT was unopenable for this shape.
+    #[test]
+    fn contents_array_with_dangling_element_degrades_and_is_disclosed() {
+        let doc = build_pdf(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (
+                2,
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 \
+                 /MediaBox [0 0 10 10] /Resources << >> >>",
+            ),
+            // Object 7 is deliberately never defined.
+            (
+                3,
+                "<< /Type /Page /Parent 2 0 R /Contents [6 0 R 7 0 R 8 0 R] >>",
+            ),
+            (6, "<< /Length 2 >>\nstream\nq \nendstream"),
+            (8, "<< /Length 2 >>\nstream\nQ \nendstream"),
+        ]);
+        let pages = pages(&doc).expect("a dangling element must not fail the document");
+        assert_eq!(pages.len(), 1);
+        assert_eq!(
+            pages[0].contents,
+            vec![ObjId::new(6, 0), ObjId::new(8, 0)],
+            "the streams that DO exist still load, in order"
+        );
+        assert_eq!(
+            pages[0].contents_unresolved, 1,
+            "the omission is counted, not swallowed"
+        );
+    }
+
+    /// An **entirely unresolvable** `/Contents` (a single reference to an
+    /// object the file does not contain) yields an empty page, disclosed —
+    /// not a failed load.
+    ///
+    /// This is the dominant real-world shape: of 341 corpus files that
+    /// failed with `BadContents`, ~300 were this single-reference form.
+    /// §7.3.10 makes the value the null object; Table 30 then says
+    /// "`Contents` ... if this entry is absent, the page shall be empty".
+    #[test]
+    fn contents_entirely_unresolvable_is_an_empty_page_disclosed() {
+        let doc = build_pdf(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (
+                2,
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 \
+                 /MediaBox [0 0 10 10] /Resources << >> >>",
+            ),
+            // Object 9 is never defined anywhere in the file.
+            (3, "<< /Type /Page /Parent 2 0 R /Contents 9 0 R >>"),
+        ]);
+        let pages = pages(&doc).expect("an unresolvable /Contents must not fail the document");
+        assert_eq!(pages.len(), 1);
+        assert!(pages[0].contents.is_empty(), "empty page, per Table 30");
+        assert_eq!(
+            pages[0].contents_unresolved, 1,
+            "an empty page from a MISSING stream is disclosed, unlike a genuinely blank one"
+        );
+    }
+
+    /// A **wrong-typed** `/Contents` is still a hard error. This is the
+    /// blast-radius guard: degrading a dangling reference must not also
+    /// launder a value that has no spec-sanctioned reading into a silent
+    /// blank page.
+    #[test]
+    fn contents_of_the_wrong_type_is_still_an_error() {
+        // A direct integer — no reading under any clause.
+        let numeric = build_pdf(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (
+                2,
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 \
+                 /MediaBox [0 0 10 10] /Resources << >> >>",
+            ),
+            (3, "<< /Type /Page /Parent 2 0 R /Contents 42 >>"),
+        ]);
+        assert_eq!(pages(&numeric).unwrap_err(), PageTreeError::BadContents);
+
+        // A reference to a plain DICTIONARY (an object that exists, but is
+        // not a stream): present, wrong type — distinct from absent.
+        let dict_target = build_pdf(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (
+                2,
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 \
+                 /MediaBox [0 0 10 10] /Resources << >> >>",
+            ),
+            (3, "<< /Type /Page /Parent 2 0 R /Contents 6 0 R >>"),
+            (6, "<< /NotAStream true >>"),
+        ]);
+        assert_eq!(pages(&dict_target).unwrap_err(), PageTreeError::BadContents);
+
+        // A wrong-typed ELEMENT inside an otherwise fine array: one bad
+        // element still condemns the page (it is not an omission).
+        let bad_element = build_pdf(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (
+                2,
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 \
+                 /MediaBox [0 0 10 10] /Resources << >> >>",
+            ),
+            (3, "<< /Type /Page /Parent 2 0 R /Contents [6 0 R 42] >>"),
+            (6, "<< /Length 2 >>\nstream\nq \nendstream"),
+        ]);
+        assert_eq!(pages(&bad_element).unwrap_err(), PageTreeError::BadContents);
+    }
+
+    /// An EXPLICIT `null` is equivalent to omitting the entry (§7.3.9), so
+    /// it is a well-formed empty page and is NOT counted as a degradation
+    /// — nothing is missing from the file. Distinguishing this from a
+    /// dangling reference is what keeps `contents_unresolved` meaningful.
+    #[test]
+    fn explicit_null_contents_is_absent_not_a_degradation() {
+        let doc = build_pdf(&[
+            (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+            (
+                2,
+                "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 \
+                 /MediaBox [0 0 10 10] /Resources << >> >>",
+            ),
+            (3, "<< /Type /Page /Parent 2 0 R /Contents null >>"),
+            (4, "<< /Type /Page /Parent 2 0 R /Contents [6 0 R null] >>"),
+            (6, "<< /Length 2 >>\nstream\nq \nendstream"),
+        ]);
+        let pages = pages(&doc).unwrap();
+        assert!(pages[0].contents.is_empty());
+        assert_eq!(
+            pages[0].contents_unresolved, 0,
+            "an explicit null is an omitted entry, not missing content"
+        );
+        assert_eq!(pages[1].contents, vec![ObjId::new(6, 0)]);
+        assert_eq!(pages[1].contents_unresolved, 0);
     }
 
     #[test]

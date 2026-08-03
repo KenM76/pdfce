@@ -803,6 +803,32 @@ shadings — were skipped. Operators involved: {names}."
     )
 }
 
+/// Detail line for `/Contents` streams the page names but the file does
+/// not contain.
+///
+/// The wording carries three things deliberately. **What is missing** —
+/// not a decoding failure but an absence: the bytes were never in the
+/// file. **Why the document still opened** — this is legal (ISO 32000-1
+/// §7.3.10 makes a reference to an absent object the null object, and
+/// Table 30 makes an absent `/Contents` an empty page), so an operator who
+/// expected a hard error is not left thinking pdfce swallowed a defect.
+/// **What it means for them** — the page may be blank or partial, and no
+/// amount of re-rendering or font-supplying will change that, because
+/// nothing pdfce can do reconstructs bytes the file never had.
+///
+/// Phrased without jargon where possible ("part of this page's content is
+/// missing from the file"), with the clause citation kept for the operator
+/// who wants to check the claim.
+pub fn diagnostics_contents_unresolved(count: usize) -> String {
+    format!(
+        "Part of this page's content is missing from the file: {count} content stream(s) the \
+page refers to are not present in the document, so whatever they drew — possibly all of the \
+page — cannot be shown. This is not a pdfce limitation and re-rendering will not help; the \
+data is not there. The document still opens because the PDF standard treats a reference to a \
+missing object as empty rather than as an error (ISO 32000-1 \u{a7}7.3.10, Table 30)."
+    )
+}
+
 /// Detail line for images pdfce could not decode at all.
 ///
 /// Same "missing, not approximated" framing as

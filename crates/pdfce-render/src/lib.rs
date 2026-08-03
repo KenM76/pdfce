@@ -228,6 +228,13 @@ pub fn render_page_with_view(
         initial,
         &mut pixmap,
     );
+    // Carry the page-level omission into the render diagnostics. The
+    // interpreter cannot observe it — the streams it never received leave
+    // no trace in the operator stream — so the count is copied from the
+    // page here, where the two facts meet. Without this the raster of a
+    // page with a dangling `/Contents` would be silently blank, which is
+    // exactly the "sneaky" outcome the project forbids.
+    diagnostics.contents_streams_unresolved = page.contents_unresolved;
 
     // Pass 6.0: survey the page's annotations (ISO 32000-1 §12.5;
     // docs/decisions/008) and paint their appearances OVER the page content
