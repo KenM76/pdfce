@@ -1663,10 +1663,13 @@ pub fn object_note_short(note: ObjectNote) -> &'static str {
 pub fn object_note(note: ObjectNote) -> &'static str {
     match note {
         ObjectNote::ApproximateTextBounds => {
-            "The box around text is approximate: pdfce measures a text object from where each \
-run of glyphs STARTS, then pads by the largest type size it saw, so the box is normally wider \
-and taller than the ink. Clicking blank space near text can therefore select the text — the \
-selection is correct even though the box looks empty."
+            "The box around text is approximate, and it can sit in the wrong place: pdfce \
+measures a text object only from where each run of glyphs STARTS, then pads that point by the \
+largest type size it saw — so the box is roughly a square centred on the run's start, not a \
+box around the ink. It therefore reaches into blank paper before the text, and usually stops \
+short of the end of a long run. Two consequences, in opposite directions: clicking blank space \
+near text can select the text, AND clicking directly on visible glyphs can MISS it. If a click \
+on the letters does not select them, try clicking nearer the start of the line."
         }
         ObjectNote::PaintsNothing => {
             "This path paints nothing at all — it is a clipping path or a shape that was built \
