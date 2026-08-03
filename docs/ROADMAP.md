@@ -5887,6 +5887,191 @@ and a companion methodology finding,
 (the three-instance "confident wrong comment" pattern) — both indexed
 in `D:\dev\rag\rust\index.md` this same continuation.
 
+**UPDATE (continuation 67, real date 2026-08-03) — the `Tw` census
+(Pass 19.4's gating measurement) has been RUN: BUILD band cleared
+(91.6% of show operators / 97.4% of glyphs across 4,012 real PDFs),
+but Pass 19.4 itself has NOT started — the engineer paused to fix a
+newly-found pdfce defect first.** New out-of-workspace crate
+`tools/tw-census` (zero new Cargo dependencies, added to the root
+`exclude` list per the established `tools/font-parity`/
+`tools/render-parity` convention); two commits, `359d486` and
+`5387699`, both verified by `git cat-file -t`. Branch
+`pass-8-redaction`, **54 commits** (`git rev-list --count HEAD`),
+still no git remote.
+
+**Method** (load-bearing — the number is meaningless without it): unit
+of measurement is the **show operator**, keyed by
+`(ContentStreamRef, ByteSpan)` from `GlyphProvenance` — the literal
+unit decision 019 §3.3 names, deliberately NOT pdfce's `TextRun`
+(which splits on geometry/marked-content and would over-report). Keys
+pooled per page (a form XObject invoked twice counts once).
+Deterministic (sorted path order); the one aggregating `HashMap` is
+summed over exhaustively, never sampled — the exact bug class
+`D:\dev\rag\rust\hashmap_iteration_order_drifts_between_runs_of_same_binary.md`
+warns about. Two full runs produced byte-identical aggregates.
+**Ground-truth calibration is a TEST**, not a spot-check — a
+known-simple and a known-composite fixture must classify correctly or
+the corpus number is meaningless.
+
+Denominators stated exactly, excluding 627 files that would not load
+and 2,172 that loaded with zero show operators: **text-bearing
+denominator = 1,224 documents / 23,144 show operators / 620,858 shown
+character codes.**
+
+| denominator | loose (simple font) | strict (simple AND contains code 32) |
+|---|---|---|
+| by document (n=1,224) | 86.7% | 43.9% |
+| **by show operator (n=23,144)** | **91.6%** | 36.9% |
+| by glyph (n=620,858) | **97.4%** | 55.7% |
+| median per-document glyph share | 100.0% | 0.0% |
+
+Sub-corpus (loose, by run): pdf20examples 100% · qpdf 99.6% · pdfbox
+89.2% · veraPDF 87.6% · pdfium 42.1% (sole outlier, smallest sample,
+30 text-bearing docs). Font mix across the 1,224 docs: all-simple 994
+(81.2%) · all-composite 163 (13.3%) · mixed 67 (5.5%). Operator
+prevalence: `Tc` 19.6% · **`Tw` 10.9%** · `Tz` 1.2% · `TL` 17.6% · `Ts`
+0.1% · `Tr` 7.1%.
+
+**VERDICT (R91's decision bands): 91.6% → BUILD (≥60%). Slice 19.4 is
+cleared to build**, not marginal — every loose denominator clears 60%,
+the median document is 100% simple, and the figure survives the most
+adversarial robustness check at 87.3% (removing the four
+most-glyph-heavy files).
+
+**The finding that matters more than the verdict: decision 019's
+premise 2 is NOT SUPPORTED by this corpus.** The decision partly
+justified withholding `Tw` on producers now defaulting to
+Type0/Identity-H even for pure-Latin text, "a large and growing
+share" — but **81.2% of text-bearing documents contain no composite
+run at all.** The census can prove the "large" half wrong; it
+**cannot test "growing" at all** — Isartor dates to 2008, qpdf's qtest
+files are older, and answering the modern-producer-defaults question
+needs a corpus of recently-produced documents (Word/LibreOffice/Chrome
+print-to-PDF) that `fixtures/external/` does not contain. **Record
+both halves**, not just the falsified one. Corpus-bias caveat, also
+load-bearing: this corpus is PDF-tooling test suites (72% veraPDF,
+2,053/2,896 loadable files have no text at all) deliberately full of
+edge cases, not a random sample of documents an operator would edit;
+`pdfbox`'s corpus (real user-submitted bug attachments) is the closest
+thing here to real documents and is the MOST favourable to `Tw` (95.9%
+loose / 89.7% strict by glyph) — the blended figure UNDER-states it,
+strengthening rather than weakening the BUILD reading.
+
+**The strict metric is flagged untrustworthy, not acted on.** It lands
+in the escalate band but moves 12 points on the removal of four files
+(the top file alone is 18.6% of all glyphs, top 10 are 62%; the three
+biggest veraPDF contributors are implementation-limit conformance
+probes showing 32k–65k glyphs with ZERO code-32). It is also
+asymmetric — an equivalent "has a space" test cannot be applied to
+composite runs, since in an Identity-H subset the space is a CID
+rather than code 32 (corpus-wide composite code-32 occurrences total
+73). Reported as context; **the decision's band is written against
+the loose metric, not this one** — Open operator question (g), below,
+is closed as moot for this same reason.
+
+**Chain-completeness correction (engineer, 2026-08-03).** The audit that
+runs before each of these filings is committed found `fb97abb` — the
+continuation-66 filing commit, which recorded Pass 19.3 and standing
+rule R93 — absent from every hash reference in `docs/`. Added here.
+This is the **second** time the missing commit has been a *filing*
+commit rather than a code one (`7274fdd`, itself the fix for a
+fabricated hash, was the first), which points at a specific blind spot
+rather than bad luck: a continuation records the commits it is filing
+ABOUT, and the commit that lands the filing itself has no later entry
+to mention it. The audit catches it precisely because it compares
+against `git rev-list` rather than against the previous entry.
+
+**Other honest limits recorded:** `/ActualText`-carried text has no
+glyph provenance and is invisible to the census — cross-checked
+against the independent text-extraction harness at 99.6% agreement on
+the text/no-text predicate over 2,892 files, all 11 disagreements
+being `/ActualText`/Unicode-CMap conformance probes. Five show
+operators had glyphs disagreeing about the composite flag (2 pdfbox, 3
+veraPDF) — impossible in principle (one `Tf` governs one show
+operator), immaterial to the aggregate, unchased. The "text-free"
+bucket conflates genuinely blank pages with content streams that fail
+to decode; the tool cannot separate them. **A defect the builder found
+and fixed in its own tool, disclosed rather than hidden**: the TSV
+header and the failure-row shape were written separately and
+disagreed by one tab (all 627 failure rows had 29 fields against a
+30-field header); aggregates were unaffected (computed in memory, not
+re-parsed from the TSV), and both shapes now derive from one list with
+an assertion and two tests — filed as an instance of R92's
+duplicated-definition pattern.
+
+**THE MORE VALUABLE FIND — a pdfce defect, engineer-verified: 341
+corpus files (8.5%) are unopenable** with *"page /Contents is neither
+a stream nor an array of streams"* (226 qpdf, 114 pdfium). Hand-
+verified: `fixtures/external/qpdf/qpdf/qtest/qpdf/add-contents.pdf` is
+a LEGAL file — `/Contents` is `[ 4 0 R 5 0 R 6 0 R ]`, objects `1 0
+obj`–`8 0 obj` are all present, objects 4/5/6 are intact streams with
+real text (`(Baked) Tj`, `(Mashed) Tj`) — and pdfce refuses the whole
+document, CLI and GUI alike. Two separable problems: (1) rebuild-by-
+scan recovery reports `file-level-objects=7` on a file containing 8,
+so a `/Contents` element resolves to Null; (2) a single unresolvable
+element condemns the ENTIRE document, when ISO 32000-1 §7.3.10 makes a
+dangling reference the null object and Table 30 makes `/Contents`
+optional ("if this entry is absent, the page shall be empty") — a
+fail-clean violation, a damaged part costing the whole file. **A
+builder is fixing both now** — instructed to keep the two problems
+separate, disclose rather than silently swallow, distinguish "resolved
+to null" (degrade the one element) from "genuinely wrong type" (still
+an error), and prove newly-opening files have REAL CONTENT rather than
+opening as blank pages. **The engineer prioritized this fix above
+building slice 19.4** — a control reaching 91% of text matters less
+than 341 real files that cannot be opened at all. See the new "★
+pdfce defect" entry below for the tracked item.
+
+**RAG escalations filed this continuation:**
+`C:\personal_rag\pdf\lesson_20260803_tw_reachability_census_show_operator_91pct.md`
+(the reachability finding, with the vintage/corpus-bias caveats
+prominent) and
+`D:\dev\rag\rust\state_every_denominator_a_census_could_report.md`
+(methodology: this census's three denominators — document/operator/
+glyph — differ by 11 points; a single headline figure would have been
+actionable-looking and wrong) — both indexed in their subject's
+`index.md` this same continuation.
+
+### ★ pdfce defect — a single unresolvable `/Contents` array element condemns the WHOLE document (found 2026-08-03 via the `Tw` census corpus sweep; fix IN PROGRESS)
+
+**341 corpus files (8.5% of the 4,012-file sweep) are unopenable** with
+"page /Contents is neither a stream nor an array of streams" (226
+qpdf, 114 pdfium sub-corpora). Hand-verified NOT a corrupt-file false
+rejection: `fixtures/external/qpdf/qpdf/qtest/qpdf/add-contents.pdf`
+is legal per ISO 32000-1 — `/Contents [ 4 0 R 5 0 R 6 0 R ]`, all
+eight objects present, three of them intact text-bearing content
+streams.
+
+**Two separable root causes (do not conflate when fixing):**
+1. Pass 13b's rebuild-by-scan recovery undercounts — reports
+   `file-level-objects=7` on an 8-object file — so one `/Contents`
+   array element resolves to Null instead of its real stream.
+2. Independent of (1): a SINGLE unresolvable `/Contents` element
+   currently condemns the ENTIRE document. ISO 32000-1 §7.3.10 makes a
+   dangling indirect reference the null object; Table 30 makes
+   `/Contents` itself optional ("if this entry is absent, the page
+   shall be empty"). Refusing the whole file on one bad array element
+   is a fail-clean violation (`ARCHITECTURE.md` §5.10's "reviewable
+   fact, never a silent repair" framing) — the correct behavior is to
+   degrade the one page's content, disclosed, not refuse the document.
+
+**Status: a builder is fixing both now.** Explicit instructions: keep
+the two problems separate (don't let one fix silently paper over the
+other); disclose rather than silently swallow a degraded page;
+distinguish "resolved to null" (degrade that one `/Contents` element)
+from "genuinely wrong type" (a `/Contents` resolving to, say, a
+`/Type /Font` dict is a different failure mode and should still
+refuse or flag, not silently degrade); and prove newly-opening files
+render REAL CONTENT, not blank pages (a fix that merely stops erroring
+while producing empty output would be a worse, silent failure).
+
+**Why this took priority over Pass 19.4** (engineer's own call,
+recorded so it doesn't read as scope drift): a control reaching 91% of
+text-bearing documents matters less than 341 real files — leaning
+qpdf/pdfium, closer to organic malformed-in-the-wild files than
+veraPDF's deliberately-adversarial conformance probes — that cannot be
+opened by pdfce at all.
+
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
 text as real page content) is now COMPLETE end-to-end.** 16.0
@@ -6441,7 +6626,7 @@ default stands: docked-only, its own Backlog entry, still unanswered.
 §10 Q1 (the `egui_tiles`-vs-hand-rolled question this note originally
 tracked) is ANSWERED and BUILT — see Pass 18.1 above.
 
-### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendments A/B/C, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 SHIPPED 2026-08-03, Pass 19.2 SHIPPED 2026-08-03 (`ebe35d8`), Pass 19.3 SHIPPED 2026-08-03 (`74052d3`) — ONLY Pass 19.4 (`Tw`, conditional) remains)
+### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendments A/B/C/E, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 SHIPPED 2026-08-03, Pass 19.2 SHIPPED 2026-08-03 (`ebe35d8`), Pass 19.3 SHIPPED 2026-08-03 (`74052d3`) — Pass 19.4 (`Tw`) CENSUS RUN 2026-08-03, BUILD band cleared (Amendment E), but NOT STARTED — sequenced behind a higher-priority pdfce defect fix)
 
 **Decision 019 ACCEPTED via the KenAgent protocol.** Full record:
 `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`. Filed
@@ -6600,8 +6785,15 @@ existing `FormatText`/`AddText` one-command-per-accepted-edit path):**
   every property-bar Apply shipped since Pass 14.3 had silently
   refused. Fixed in the same commit; see the Shipped entry and new
   standing rule R93.
-- **19.4 — `Tw` (CONDITIONAL — do not start without the census
-  result).** Gated per Q1/R91's decision bands.
+- **19.4 — `Tw` direct-authoring control (core + CLI + GUI). CENSUS RUN
+  2026-08-03, BUILD band cleared** (91.6% of show operators / 97.4% of
+  glyphs, n=4,012 real PDFs, 1,224 text-bearing) — see the
+  continuation-67 In-progress entry (above) and decision 019 Amendment
+  E for the full method, numbers, sub-corpus breakdown, and the
+  falsified-§3.2-reason-2 finding. **NOT YET STARTED** — blocked behind
+  a higher-priority pdfce defect fix (341 corpus files unopenable,
+  found via this same census sweep — see the ★ pdfce defect In-progress
+  entry, above), not behind the census any longer.
 
 **Standing rules R88–R91 added** (see Standing rules, below) — the
 ceiling was R87. **R92 added 2026-08-03** (decision 019 Amendment B,
@@ -8938,12 +9130,22 @@ nothing gets forgotten, not as a commitment to build in this order.
 **New this session (2026-08-03, decision 019) — five items, none
 blocking Pass 19.0's in-progress build:**
 - **(g) The `Tw` census middle band (25–60%) — is a control that works
-  on roughly half of documents worth permanent surface area?** R91/★
-  Pass 19.x's decision bands resolve the top and bottom of the range
-  mechanically (≥60% build, ≤25% close); the middle band is a product
-  judgement, not a technical one, and decision 019 deliberately does not
-  pre-answer it. **No default stated** — surfaced now so the census
-  result (Pass 19.4, once run) has a place to land instead of stalling.
+  on roughly half of documents worth permanent surface area? — CLOSED
+  AS MOOT this continuation (continuation 67, 2026-08-03).** The census
+  ran (`tools/tw-census`) and the loose-metric result (91.6% of show
+  operators, 97.4% of glyphs), which is what R91/★ Pass 19.x's decision
+  bands are written against, landed cleanly in the ≥60% BUILD band —
+  the middle-band product judgement this item asked about never became
+  live. The question is not answered, it never had to be. **Kept for
+  context, not as a live question:** a strict variant (simple font AND
+  contains code 32) does land in the 25–60% escalate band, but is
+  flagged fragile (a 12-point swing on removing four outlier files) and
+  is explicitly NOT what the decision's bands are written against —
+  see decision 019 Amendment E §E.6 and the continuation-67 In-progress
+  entry for the full reasoning. If the operator ever wants the strict
+  reading revisited as its own question, it would need to be re-opened
+  explicitly; it is not implicitly live by virtue of this item's
+  original framing.
 - **(h) FF-C's rule-13 dependency classification.** The MIT license
   decision (2026-08-01) lifted rule 8's gate on FF-C (font subsetting/
   embedding) outright, but it did **not** pre-approve any specific

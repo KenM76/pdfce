@@ -222,3 +222,21 @@ kind since continuation 50. As always, verify tip with `git log
 --oneline -1` before trusting this hash list — do not assume this
 memory's chain is current without checking, especially across a
 calendar-day boundary.
+
+**UPDATE — continuation 63 through 67 (2026-08-03).** Pass 19.0/19.1/
+19.2/19.3 all shipped, plus the `Tw` census (`tools/tw-census`,
+commits `359d486`/`5387699`, both verified by `git cat-file -t`) and
+decision 019 Amendments B/C/D/E filed. **Branch total now 54 commits**
+(`git rev-list --count HEAD`, continuation-67 filing), still all
+local-only, still no git remote configured. Per-commit hash chain no
+longer tracked exhaustively in this file past continuation 62 — the
+list was becoming a maintenance burden of its own (a stale hash list
+is worse than no hash list); **verify the current count with `git
+rev-list --count HEAD` and the tip with `git log --oneline -1` every
+time**, treating any specific number in this file as a point-in-time
+snapshot, not a running total to trust. Push/publish authorization
+remains the sole open gate, unchanged in kind since continuation 50.
+A newly-found, in-progress item as of continuation 67: 341 corpus
+files are unopenable on a `/Contents`-resolves-to-Null defect (fail-
+clean violation) — a builder is fixing it; once it ships it will be
+the next commit(s) to fold into this chain.

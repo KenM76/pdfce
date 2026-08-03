@@ -1,6 +1,6 @@
 ---
 name: project-mit-license-and-priority-sequence
-description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling → forms. Pass-17-gate CLEARED 2026-08-03 (continuation 58); item #3's FF-H decided as decision 019/★ Pass 19.x (2026-08-03, continuation 62, Pass 19.0 IN PROGRESS) — FF-B/FF-C/item #4 (forms) still undispatched.
+description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling → forms. Pass-17-gate CLEARED 2026-08-03; FF-H (decision 019/★ Pass 19.x) SHIPPED through 19.3, Pass 19.4 (`Tw`) CENSUS-CLEARED-BUILD but sequenced behind an in-progress pdfce document-loading defect fix (continuation 67) — FF-B/FF-C/item #4 (forms) still undispatched.
 metadata:
   type: project
 ---
@@ -198,3 +198,35 @@ distinct from `Tc`). Item #4 (forms) remains untouched and still queued
 behind #3. Commit chain: two docs commits this session, `67f49bb`
 (ui-spec historical marking) → `743e463` (decision 019 record), chain
 now **39 commits**, still local-only, still no git remote configured.
+
+**UPDATE — 2026-08-03, SESSION_LOG continuation 63–66: Pass 19.0
+through 19.3 ALL SHIPPED — FF-H's formatting-slice family is complete
+except the conditional `Tw` slice.** `Tc`/`Tz`/super-subscript (19.1),
+free-form `Ts` + synthetic bold/italic (19.2), and the GUI property
+surface (19.3) all shipped 2026-08-03. Pass 19.3 also fixed a
+project-wide defect: every property-bar Apply in the shipped GUI had
+silently refused since Pass 14.3 (span-convention mismatch,
+`pin_names_operator`) — new standing rule R93. Decision 019 grew
+Amendments A/B/C/D along the way (design corrections + the pinned-span
+defect record). Branch at 51 commits by continuation 66.
+
+**UPDATE — 2026-08-03, SESSION_LOG continuation 67: the `Tw` census
+(Pass 19.4's gate) has been RUN — BUILD band cleared (91.6% of show
+operators / 97.4% of glyphs) — but Pass 19.4 has NOT started.** New
+tool `tools/tw-census`. Decision 019 §3.2's own "large and growing"
+composite-font-default premise is FALSIFIED on this corpus (81.2% of
+text-bearing docs have no composite run at all); filed as decision 019
+Amendment E. **The census sweep also found a real pdfce defect: 341
+corpus files (8.5%) refuse to open at all** on a `/Contents` array
+element resolving to Null (a fail-clean violation — a single bad
+array element should degrade that page, not condemn the whole
+document; hand-verified as a legal file wrongly refused). **The
+engineer prioritized fixing this defect above starting Pass 19.4** — a
+control reaching 91% of text matters less than 341 unopenable real
+files. Open operator question (g) (the 25–60% middle band) is CLOSED
+AS MOOT — the loose metric, which the decision bands are written
+against, landed cleanly in BUILD, so the middle-band judgement call
+never became live. Branch at 54 commits, still no remote. **Next
+concrete step, once the defect fix ships: dispatch Pass 19.4** per
+Amendment E's cleared verdict — this is still item #3 of the
+four-item sequence; item #4 (forms) remains undispatched behind it.

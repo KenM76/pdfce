@@ -1040,6 +1040,49 @@ ends of the contract agree — third occurrence of this failure shape in
 this project, after decision 018's `refresh_pages` comment and the
 `.gitattributes` ordering incident).
 
+**The `Tw` census (decision 019 §3.3, gating slice 19.4) has been RUN
+(2026-08-03) — Amendment E.** New out-of-workspace crate
+`tools/tw-census` measured reachability, keyed by show operator
+(`GlyphProvenance`'s `(ContentStreamRef, ByteSpan)`), over the Pass-11
+render-fidelity corpus (4,012 files; 1,224 text-bearing after excluding
+627 unloadable + 2,172 zero-show-operator files): **91.6% of show
+operators / 97.4% of shown glyphs are on a simple (non-composite)
+font** — the BUILD band (≥60%), not marginal. Slice 19.4 is cleared to
+build but has **not started**; the engineer prioritized a real
+document-loading defect this same census sweep found (see below).
+**§3.2 reason 2 — that Type0/Identity-H composite embedding is "a
+large and growing share" of documents, which would make a `Tw` control
+inert on most files — is FALSIFIED on this corpus**: 81.2% of
+text-bearing documents contain no composite run at all. The "growing"
+half of that claim is untestable on this corpus (its files are older
+PDF-tooling test suites, not a sample of recently-produced documents).
+Full numeric record, sub-corpus breakdown, and both caveats (corpus
+vintage; corpus composition — PDF-tooling test suites, not organic
+documents): `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`
+Amendment E; `ROADMAP.md`'s continuation-67 In-progress entry.
+
+**Same sweep found a pdfce document-loading defect, engineer-verified,
+now being fixed:** 341 corpus files (8.5%) refuse to open at all with
+"page /Contents is neither a stream nor an array of streams." Hand-
+verified NOT a correct rejection — `fixtures/external/qpdf/qpdf/qtest/
+qpdf/add-contents.pdf` is a legal file per ISO 32000-1 (`/Contents [ 4
+0 R 5 0 R 6 0 R ]`, all eight objects present, three intact
+text-bearing content streams) that pdfce refuses outright. Two
+separable causes: (1) Pass 13b's rebuild-by-scan recovery undercounts
+objects on this file (reports 7 where 8 exist), so one `/Contents`
+array element resolves to Null; (2) independent of (1), a single
+unresolvable `/Contents` element currently condemns the WHOLE
+document, when §7.3.10 makes a dangling reference the null object and
+Table 30 makes `/Contents` itself optional. This is a fail-clean
+violation — see §5.10's "reviewable fact, never a silent repair"
+framing, the same posture this defect violates for one bad array
+element costing an entire otherwise-good file. **Fix in progress** —
+see `ROADMAP.md`'s "★ pdfce defect" In-progress entry for the full
+diagnosis and the fix instructions (keep the recovery-undercount and
+the whole-document-refusal fixes separable; distinguish "resolved to
+null" from "genuinely wrong type"; prove newly-opening files render
+real content, not blank pages).
+
 Full design, the four-case font-on-edit matrix, the fast-follow ladder
 (FF-A offline reflow ladder through FF-H spacing/synthetic-styles — FF-A/
 FF-B boundary amended by decision 015, FF-H re-scoped by decision 019,
@@ -4427,3 +4470,42 @@ with a forward pointer.
   for later re-location, not to PDF-domain producer-divergence
   behavior): `byte_span_convention_must_live_in_the_type_not_matching_doc_comments.md`
   and `trust_but_verify_doc_comments_are_not_evidence.md`.
+- **2026-08-03 (same-day, Amendment E to decision 019) — the §3.3 `Tw`
+  census has been RUN; slice 19.4's BUILD/close/escalate gate is
+  resolved (BUILD), and one of the decision's own supporting arguments
+  is shown wrong by the result.** New out-of-workspace crate
+  `tools/tw-census` (zero new Cargo dependencies, root `exclude`-list
+  convention; commits `359d486`/`5387699`, verified `git cat-file -t`)
+  measured reachability keyed by show operator
+  (`GlyphProvenance`'s `(ContentStreamRef, ByteSpan)` — §3.3's own named
+  unit) over the Pass-11 corpus: 1,224 text-bearing documents / 23,144
+  show operators / 620,858 glyphs, after excluding 627 unloadable and
+  2,172 zero-show-operator files. **Result: 91.6% of show operators /
+  97.4% of glyphs are on a simple font — the ≥60% BUILD band, not
+  marginal** (weakest denominator 86.7% by-document; survives removing
+  the four most-glyph-heavy files at 87.3%). **§3.2 reason 2 falsified
+  on this corpus:** 81.2% of text-bearing documents contain no
+  composite run at all, contradicting the "large and growing share"
+  claim that partly justified withholding `Tw`; the "growing" half is
+  separately recorded as untestable on this corpus (PDF-tooling test
+  suites, not a sample of recently-produced documents — vintage as old
+  as Isartor 2008). A strict variant (simple AND contains code 32)
+  lands in the 25–60% escalate band but is flagged fragile (12-point
+  swing on removing four files) and asymmetric (composite runs cannot
+  carry code 32 in an Identity-H subset) — reported as context, not
+  acted on; the decision's bands are written against, and satisfied by,
+  the loose metric. **Slice 19.4 is cleared to build but has NOT
+  started**: this same corpus sweep found an independent pdfce defect
+  (341 corpus files, 8.5%, refuse to open at all on a `/Contents`
+  array element that resolves to Null — a fail-clean violation, since
+  §7.3.10/Table 30 make a dangling `/Contents` element degradable, not
+  document-fatal) that the engineer prioritized fixing first — see
+  §5.11's new paragraph and `ROADMAP.md`'s "★ pdfce defect" In-progress
+  entry. Full record: `docs/decisions/019-ffh-spacing-scaling-
+  synthetic-styles.md` Amendment E. **RAG escalations:**
+  `C:\personal_rag\pdf\lesson_20260803_tw_reachability_census_show_operator_91pct.md`
+  (the reachability finding, vintage/corpus-bias caveats prominent) and
+  `D:\dev\rag\rust\state_every_denominator_a_census_could_report.md`
+  (methodology: this census's three denominators differ by 11 points —
+  document/operator/glyph — a single headline figure would have been
+  actionable-looking and wrong).

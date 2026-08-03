@@ -1510,3 +1510,169 @@ operation (synthetic bold specifically) sets them. See the corresponding
 `ROADMAP.md` Standing Rules update and the `ARCHITECTURE.md` §5.11/§12
 entries filed alongside this amendment.
 
+---
+
+# AMENDMENT E — 2026-08-03 — the §3.3 census has been RUN: reachability
+88.7%/91.6%/97.4% (doc/operator/glyph), BUILD band cleared; §3.2 reason 2
+("large and growing" composite-default share) is FALSIFIED on this
+corpus, and the "growing" half is UNTESTABLE on it
+
+**Filed by:** `pdfce-librarian`, on the engineer's report, after new
+out-of-workspace crate `tools/tw-census` (zero new Cargo dependencies,
+root `exclude`-list convention) ran the census this decision specified
+in §3.3. Commits `359d486`/`5387699`, both verified by `git cat-file
+-t`. Same posture as Amendments A–C: this amendment resolves an open
+question the decision text deliberately left to measurement, not a
+correction of an error — but one of the decision's own supporting
+arguments (§3.2 reason 2) is shown wrong by the result, and that must
+be recorded plainly rather than only the census's operative verdict.
+
+## E.1 Method — restated because the number is meaningless without it
+
+Unit of measurement is the **show operator**, keyed by
+`(ContentStreamRef, ByteSpan)` from `GlyphProvenance` — the literal
+unit named in this file's own §3.3, deliberately NOT pdfce's
+`TextRun` (which splits on geometry/marked-content and would
+over-report). Keys are pooled per page, so a Form XObject invoked
+twice counts once. The scan is deterministic (sorted path order) and
+the one aggregating `HashMap` is summed over exhaustively, never
+sampled. Two independent full runs produced byte-identical aggregates.
+**Ground-truth calibration is a TEST, not a spot-check** — a
+known-simple and a known-composite fixture must classify correctly or
+the corpus figure is meaningless; both do.
+
+Denominators are stated exactly and exclude 627 corpus files that
+would not load at all and 2,172 that loaded with zero show operators.
+**Text-bearing denominator: 1,224 documents / 23,144 show operators /
+620,858 shown character codes**, drawn from the Pass-11 render-fidelity
+corpus (4,012 files total) this decision's §3.3 specified.
+
+## E.2 The numbers — §3.3's reachability question (a)
+
+| denominator | loose (simple font) | strict (simple AND contains code 32) |
+|---|---|---|
+| by document (n=1,224) | 86.7% | 43.9% |
+| **by show operator (n=23,144)** | **91.6%** | 36.9% |
+| by glyph (n=620,858) | **97.4%** | 55.7% |
+| median per-document glyph share | 100.0% | 0.0% |
+
+Sub-corpus breakdown (loose, by run): pdf20examples 100% · qpdf
+99.6% · pdfbox 89.2% · veraPDF 87.6% · pdfium 42.1% (sole outlier,
+smallest sample — 30 text-bearing documents). Document font mix
+across all 1,224 text-bearing documents: all-simple 994 (81.2%) ·
+all-composite 163 (13.3%) · **mixed 67 (5.5%)**.
+
+## E.3 The numbers — §3.3's prevalence question (b)
+
+Operator prevalence across the 1,224 text-bearing documents: `Tc`
+19.6% · **`Tw` 10.9%** · `Tz` 1.2% · `TL` 17.6% · `Ts` 0.1% · `Tr`
+7.1%.
+
+## E.4 Verdict — §3.3's decision bands, applied
+
+**91.6% (by show operator, the loose metric) → the BUILD band (≥60%).
+Slice 19.4 is cleared to build.** Not a marginal reading: every loose
+denominator clears 60%, the weakest being by-document at 86.7%; the
+median document is 100% simple; and the figure survives the most
+adversarial robustness check applied to it (removing the four
+most-glyph-heavy files still leaves 87.3%). **Pass 19.4 itself has
+NOT started** — see the `ROADMAP.md` "★ pdfce defect" In-progress
+entry filed alongside this amendment: the engineer found a real
+document-loading defect via this same corpus sweep and prioritized
+fixing it first. The census clearing the BUILD band is unaffected by
+that sequencing decision; it is a statement about what the numbers
+say, not about what gets built first.
+
+## E.5 §3.2 reason 2 is FALSIFIED on this corpus — the "growing" half is UNTESTABLE on it
+
+§3.2 reason 2 (above, "Its availability is determined by a property
+the operator cannot see and did not choose") partly justified
+withholding `Tw` on producers defaulting to Type0/Identity-H
+composites "even for pure-Latin text... a large and **growing**
+share." **81.2% of text-bearing documents in this corpus contain no
+composite run at all.** The "large" half of that claim does not hold
+here.
+
+**The "growing" half cannot be evaluated by this corpus at all, in
+either direction.** This corpus is drawn from PDF-tooling conformance
+and regression test suites (veraPDF, qpdf's qtest, pdfbox's
+user-submitted bug attachments, pdfium's test corpus, pdf20examples) —
+Isartor dates to 2008, qpdf's qtest files are older still. Testing a
+claim about *modern* producer defaults needs a corpus of
+recently-produced documents (Word/LibreOffice/Chrome print-to-PDF
+output) that `fixtures/external/` does not contain and this census did
+not sample. **Record both halves**: the "large" premise is falsified
+here; the "growing" premise is simply untested, not confirmed or
+denied.
+
+**Corpus-composition caveat, also load-bearing:** these are PDF-tooling
+test suites deliberately full of edge cases and malformed files, not a
+random sample of documents an operator would actually edit — 72% of
+the text-bearing set is veraPDF, and 2,053 of veraPDF's 2,896 loadable
+files have no text at all. `pdfbox`'s sub-corpus (real user-submitted
+bug-report attachments) is the closest thing here to organic real-world
+documents, and it is the **most** favourable to `Tw` reachability
+(95.9% loose / 89.7% strict by glyph) of any sub-corpus with a
+meaningful sample size — meaning the blended, veraPDF-heavy figure
+above UNDER-states reachability if anything, which strengthens rather
+than weakens the BUILD reading in E.4.
+
+## E.6 The strict metric is flagged untrustworthy, not acted on
+
+The strict variant (simple AND contains code 32) lands in the escalate
+band (25–60%) at the operator level, but it is fragile: it moves 12
+points on the removal of four files (the single largest contributor is
+18.6% of all glyphs in the corpus; the top ten are 62%; the three
+largest veraPDF contributors are implementation-limit conformance
+probes carrying 32k–65k glyphs with ZERO code-32 occurrences). It is
+also structurally asymmetric — an equivalent "has a space" test cannot
+be applied to composite runs, because in an Identity-H subset the space
+is a CID, not code 32 (corpus-wide, composite-run code-32 occurrences
+total 73). **Reported here as context. §3.3's decision bands are
+written against, and satisfied by, the loose metric — this amendment
+does not open the strict metric's escalate-band position as a live
+question.** (See `ROADMAP.md`'s Open operator questions item (g),
+closed as moot for this same reason.)
+
+## E.7 Other honest limits, recorded rather than smoothed over
+
+- **`/ActualText` blind spot:** text arriving via `/ActualText` carries
+  no glyph provenance and is invisible to this census. Cross-checked
+  against the independently-written text-extraction harness: **99.6%
+  agreement on the text/no-text predicate over 2,892 files**, all 11
+  disagreements being `/ActualText`/Unicode-CMap conformance probes —
+  the blind spot is real but small and its shape is known.
+- **Five show operators had glyphs disagreeing about the composite
+  flag** (2 pdfbox, 3 veraPDF) — impossible in principle, since one
+  `Tf` governs one show operator. Immaterial to the aggregate; an
+  unchased anomaly, recorded rather than silently dropped.
+- The "text-free" bucket (2,172 files) mixes genuinely blank pages
+  with content streams that deliberately fail to decode; the tool
+  cannot currently separate the two.
+- **A defect the builder found and fixed in its own tool, disclosed
+  rather than hidden:** the TSV header and the failure-row shape were
+  written by two separate code paths that disagreed by one tab field
+  (all 627 failure rows had 29 fields against a 30-field header).
+  Aggregates were never affected — computed in memory, not re-parsed
+  from the TSV — and the TSV was regenerated. Both shapes now derive
+  from one shared list with an assertion and two tests. Filed as a new
+  instance of R92's duplicated-definition pattern (a hand-duplicated
+  shape drifts silently the moment one copy changes).
+
+## E.8 What this amendment changes and does not change
+
+**Changes:** §3.3's reachability/prevalence questions are now answered
+with numbers, not left open; §3.2 reason 2 is corrected from an
+unmeasured hypothesis to a partly-falsified, partly-untestable claim;
+slice 19.4 moves from "conditional, ungated numbers" to "cleared to
+build, sequenced behind a higher-priority defect fix." **Does not
+change:** §3.3's decision bands themselves (still ≥60% build / ≤25%
+close / 25–60% escalate); reasons 1 and 3 of §3.2 (the `TJ`-does-it-
+better argument and the "don't build on an unmeasured premise"
+methodology point), neither of which this census bears on; the
+composite-run structural void (§9.3.3) itself, which is untouched by
+any corpus finding. Full numeric record, sub-corpus table, and the
+pdfce document-loading defect this same sweep found: `ROADMAP.md`'s
+continuation-67 In-progress entry and the "★ pdfce defect" entry
+alongside it; `ARCHITECTURE.md` §5.11/§12.
+

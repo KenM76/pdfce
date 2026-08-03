@@ -9124,3 +9124,157 @@ agent's explicit discretion to route findings):**
   (51 total).
 - Confirm the `ⓘ` (U+24D8) tofu suspicion by reaching a UI state that
   displays it, before scoping a font-coverage fix.
+
+**Same-day continuation 67 (real date 2026-08-03) — the `Tw` census
+(Pass 19.4's gating measurement, decision 019 §3.3) has been RUN:
+BUILD band cleared (91.6% of show operators / 97.4% of glyphs, n=4,012
+real PDFs), but Pass 19.4 itself has NOT started. The engineer
+prioritized fixing a newly-found pdfce defect instead — 341 corpus
+files (8.5%) refuse to open at all on a `/Contents` array element that
+resolves to Null, a fail-clean violation, hand-verified as a legal
+file wrongly refused. Branch `pass-8-redaction`, 54 commits, all still
+local-only.**
+
+**Shipped (measurement, not a Pass):**
+- **`359d486`/`5387699` — the `Tw` corpus census, `tools/tw-census`.**
+  New out-of-workspace crate (zero new Cargo dependencies, root
+  `exclude`-list convention), both commits verified by `git cat-file
+  -t`. Unit of measurement: the show operator, keyed by
+  `(ContentStreamRef, ByteSpan)` from `GlyphProvenance` — decision
+  019 §3.3's own named unit, deliberately not pdfce's `TextRun`. Keys
+  pooled per page; deterministic sort order; the aggregating `HashMap`
+  summed over exhaustively, never sampled; two full runs produced
+  byte-identical aggregates. Ground-truth calibration built as a TEST
+  (known-simple/known-composite fixtures must classify correctly), not
+  a spot-check.
+
+**Findings + decisions (empirical):**
+- **The numbers.** Denominators exclude 627 unloadable files and 2,172
+  zero-show-operator files: text-bearing denominator = 1,224 documents
+  / 23,144 show operators / 620,858 shown character codes.
+
+  | denominator | loose (simple font) | strict (simple AND code 32) |
+  |---|---|---|
+  | by document (n=1,224) | 86.7% | 43.9% |
+  | by show operator (n=23,144) | **91.6%** | 36.9% |
+  | by glyph (n=620,858) | **97.4%** | 55.7% |
+  | median per-document glyph share | 100.0% | 0.0% |
+
+  Sub-corpus (loose): pdf20examples 100% · qpdf 99.6% · pdfbox 89.2% ·
+  veraPDF 87.6% · pdfium 42.1% (smallest sample, 30 docs). Font mix:
+  all-simple 994 (81.2%) · all-composite 163 (13.3%) · mixed 67 (5.5%).
+  Operator prevalence: `Tc` 19.6% · `Tw` 10.9% · `Tz` 1.2% · `TL` 17.6%
+  · `Ts` 0.1% · `Tr` 7.1%.
+- **VERDICT: 91.6% → R91's BUILD band (≥60%).** Not marginal — every
+  loose denominator clears 60%, the median document is 100% simple,
+  survives removing the four most-glyph-heavy files at 87.3%.
+- **★★★ Decision 019's §3.2 reason 2 is FALSIFIED on this corpus.** The
+  decision partly justified withholding `Tw` on producers defaulting
+  to Type0/Identity-H composites "even for pure-Latin text... a large
+  and growing share" — but 81.2% of text-bearing documents contain no
+  composite run at all. The "growing" half is separately recorded as
+  UNTESTABLE on this corpus (PDF-tooling test suites as old as Isartor
+  2008, not a sample of recently-produced documents). Corpus-bias
+  caveat: 72% of the text-bearing set is veraPDF (2,053/2,896 loadable
+  veraPDF files have no text at all); `pdfbox`'s sub-corpus (real
+  user-submitted bug attachments) is closest to organic documents here
+  and is the MOST favourable to `Tw` (95.9% loose by glyph) — the
+  blended figure under-states reachability if anything.
+- **The strict metric is flagged untrustworthy, not acted on.** Lands
+  in the 25–60% escalate band but moves 12 points on removing four
+  files (top file = 18.6% of all glyphs; three biggest veraPDF
+  contributors are implementation-limit probes with 32k–65k glyphs and
+  zero code-32); also structurally asymmetric (composite runs carry
+  space as a CID, not code 32 — corpus-wide composite code-32 total is
+  73). The decision's bands are written against, and satisfied by, the
+  loose metric only.
+- Other honest limits: `/ActualText` blind spot (99.6% agreement with
+  the independent text-extraction harness over 2,892 files, all 11
+  disagreements being `/ActualText`/Unicode-CMap probes); 5 show
+  operators disagreeing about the composite flag (impossible in
+  principle, unchased); text-free bucket conflates blank pages with
+  undecodable streams; a TSV header/failure-row shape mismatch the
+  builder found and fixed in its own tool mid-run (R92 instance),
+  disclosed rather than hidden.
+- **★★★★ THE MORE VALUABLE FIND — a pdfce defect, engineer-verified:
+  341 corpus files (8.5%) are unopenable** with "page /Contents is
+  neither a stream nor an array of streams." Hand-verified NOT a
+  correct rejection: `fixtures/external/qpdf/qpdf/qtest/qpdf/
+  add-contents.pdf` is legal — `/Contents [ 4 0 R 5 0 R 6 0 R ]`, all
+  eight objects present, three intact text-bearing streams — and
+  pdfce refuses the whole document. Two separable causes: (1) Pass
+  13b's rebuild-by-scan recovery undercounts objects on this file
+  (reports 7 where 8 exist), so a `/Contents` element resolves to
+  Null; (2) independent of (1), a single unresolvable element condemns
+  the ENTIRE document, when §7.3.10 makes a dangling reference the
+  null object and Table 30 makes `/Contents` optional. A fail-clean
+  violation. **A builder is fixing both now**, instructed to keep the
+  two causes separate, disclose rather than silently degrade, and
+  prove newly-opening files render real content, not blank pages.
+
+**Decisions made this session:**
+- **Decision 019 Amendment E filed**
+  (`docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`,
+  `ARCHITECTURE.md` §5.11/§12) — records the census result, the BUILD
+  verdict, and the §3.2-reason-2 falsification. Does not change §3.3's
+  decision bands themselves, nor §3.2 reasons 1/3, nor the §9.3.3
+  composite-run structural void.
+- **Engineer prioritization call, recorded so it doesn't read as scope
+  drift:** the newly-found `/Contents`-defect fix (341 real files
+  unopenable) was prioritized above starting Pass 19.4 (a control
+  reaching 91% of text-bearing documents), on the reasoning that a
+  document-loading defect outranks a formatting-control build.
+- **Open operator question (g) closed as moot**, not answered — the
+  25–60% middle-band judgement call it asked about never became live,
+  since the loose metric (what the decision bands are written against)
+  landed in BUILD, not the middle band. The strict metric's
+  escalate-band position is kept as recorded context, not reopened as
+  a live question.
+
+**RAG escalations this continuation:**
+- `C:\personal_rag\pdf\lesson_20260803_tw_reachability_census_show_operator_91pct.md`
+  — the reachability finding (91.6%/97.4%), with the corpus-vintage
+  and corpus-composition caveats kept prominent (this measures what a
+  PDF-tooling test-suite corpus looks like circa 2008–2024, not
+  "modern producer defaults").
+- `D:\dev\rag\rust\state_every_denominator_a_census_could_report.md`
+  — methodology: this census's three natural denominators (document/
+  operator/glyph) differ by 11 points on the identical measurement; a
+  single headline figure would have been actionable-looking and wrong
+  in whichever direction was omitted.
+- Both indexed in their subject's `index.md` this same continuation.
+
+**Still in flight:**
+- The `/Contents`-defect fix (above) — in progress, a builder is
+  working it now; not yet shipped.
+- Pass 19.4 (`Tw` direct-authoring control) — cleared to build by the
+  census, but sequenced behind the defect fix above; not started.
+- Carried, unchanged: no GUI redaction-apply flow (R85-uncoverable by
+  design); `✓`/`✕` (U+2713/U+2715) glyph verification still owed;
+  `ⓘ` (U+24D8) tofu suspicion still unconfirmed; status-bar/fit-zoom
+  feedback loop; letter badges pending real icons; `egui_kittest`
+  harness gap; Open operator questions (h)–(k); FF-C's rule-13
+  dependency classification; the FF-I StructTree cut; list-authoring
+  scope call; the kerning parity gap.
+- Branch still named `pass-8-redaction`, now spanning Passes 9–19.3
+  plus the unshipped 19.4/defect-fix work — worth a rename whenever a
+  push is authorized.
+- No git remote configured; the backup bundle
+  (`D:\Dev\pdfce-backups\pdfce-20260803-1400.bundle`) is now several
+  commits stale and not regenerated this continuation.
+
+**For next session:**
+- Flag to the operator at next contact, carried forward: (1) push/
+  publish call still ungranted, chain now 54 commits, still no remote;
+  (2) branch-rename-on-push still pending; (3) the GUI still has no
+  redaction-apply flow; (4) R86 (headless-vs-observed "done"
+  definition) still unanswered; (5) the kerning parity gap unscoped;
+  (6) Open operator questions (h)–(k) unanswered; (7) **NEW —** the
+  `/Contents`-defect fix, once shipped, should get its own Shipped
+  entry with the acceptance proof (files opening with real content,
+  not blank pages) before Pass 19.4 starts.
+- Once the defect fix ships, dispatch Pass 19.4 (`Tw`) per decision
+  019 Amendment E's cleared BUILD verdict — the R83-gated,
+  simple-font-only control with the refuse-and-disclose engine gate
+  R91 already specifies.
+- Regenerate the backup bundle to cover this continuation's commits.
