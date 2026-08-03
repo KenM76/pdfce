@@ -1061,27 +1061,77 @@ vintage; corpus composition — PDF-tooling test suites, not organic
 documents): `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`
 Amendment E; `ROADMAP.md`'s continuation-67 In-progress entry.
 
-**Same sweep found a pdfce document-loading defect, engineer-verified,
-now being fixed:** 341 corpus files (8.5%) refuse to open at all with
-"page /Contents is neither a stream nor an array of streams." Hand-
-verified NOT a correct rejection — `fixtures/external/qpdf/qpdf/qtest/
-qpdf/add-contents.pdf` is a legal file per ISO 32000-1 (`/Contents [ 4
-0 R 5 0 R 6 0 R ]`, all eight objects present, three intact
-text-bearing content streams) that pdfce refuses outright. Two
-separable causes: (1) Pass 13b's rebuild-by-scan recovery undercounts
-objects on this file (reports 7 where 8 exist), so one `/Contents`
-array element resolves to Null; (2) independent of (1), a single
-unresolvable `/Contents` element currently condemns the WHOLE
-document, when §7.3.10 makes a dangling reference the null object and
-Table 30 makes `/Contents` itself optional. This is a fail-clean
-violation — see §5.10's "reviewable fact, never a silent repair"
-framing, the same posture this defect violates for one bad array
-element costing an entire otherwise-good file. **Fix in progress** —
-see `ROADMAP.md`'s "★ pdfce defect" In-progress entry for the full
-diagnosis and the fix instructions (keep the recovery-undercount and
-the whole-document-refusal fixes separable; distinguish "resolved to
-null" from "genuinely wrong type"; prove newly-opening files render
-real content, not blank pages).
+**Same sweep found a pdfce document-loading defect, engineer-verified —
+FIXED 2026-08-03, committed `409a6b5`:** 341 corpus files (8.5%)
+refused to open at all with "page /Contents is neither a stream nor an
+array of streams." Hand-verified NOT a correct rejection —
+`fixtures/external/qpdf/qpdf/qtest/qpdf/add-contents.pdf` is a legal
+file per ISO 32000-1 (`/Contents [ 4 0 R 5 0 R 6 0 R ]`, all eight
+objects present, three intact text-bearing content streams) that pdfce
+refused outright. **The originally-filed diagnosis was wrong in
+mechanism**, not just incomplete: Pass 13b's rebuild-by-scan recovery
+does not undercount objects — the scan correctly proposes all 8
+headers, but object 5 was dropped at the strict-confirmation step with
+"endstream not found where /Length points." The real cause:
+`add-contents.pdf` is an **LF file converted to CRLF**, so every
+`/Length` (measured on the LF form) is now short by one byte per
+internal line, and the declared extent lands mid-content — the same
+CRLF shift that broke `startxref`/`xref` in the first place (why
+recovery engaged at all) also silently ate the content stream
+recovery existed to save. One damage event, two symptoms.
+
+**Two fixes, kept deliberately separate (both new, both opt-in/scoped
+rather than changing default strict parsing):**
+1. **`StreamLengthPolicy`** (`Strict` default, unchanged;
+   `RecoverFromEndstream` re-derives a stream's extent from the
+   `endstream` keyword — reachable only from existing recovery paths).
+   This is not a heuristic: §7.3.8.2 *defines* `/Length` as the byte
+   count "to the last byte just before the keyword `endstream`," so
+   deriving the extent from the keyword reads the same normative
+   sentence from its other end.
+2. **Per-element `/Contents` degradation.** A `/Contents` array
+   reference resolving to null contributes nothing and is dropped
+   (§7.3.10's dangling-reference-is-null-object rule + Table 30's
+   `/Contents`-is-optional rule — degrade the one element, not the
+   document); a genuine *type* error (a non-reference array element,
+   or a reference resolving to the wrong object type) is still
+   `BadContents`, unchanged. A direct `null` (not an unresolved
+   reference) is treated as absent per §7.3.9 and deliberately excluded
+   from the `contents_unresolved` disclosure count, which is reserved
+   for content that should have been present and was not. Counted and
+   surfaced, never silent: `RecoveryReport.stream_lengths_recovered`
+   (CLI + GUI recovery banner) and `Page.contents_unresolved` →
+   `render::Diagnostics.contents_streams_unresolved` /
+   `TextDiagnostics.contents_unresolved` (CLI stable line, GUI
+   "unsupported items" detail list).
+
+**The round-trip gate caught a bug in the fix itself.** The first
+repair attempt corrected the recovered object's byte span but left its
+stale `/Length` untouched; because the writer copies `Provenance::File`
+objects verbatim, `save_full` produced a file pdfce itself could not
+reload — a self-inflicted §5.10 round-trip violation, caught by the
+gate that contract exists to enforce. Resolved by adding a third
+`Provenance::RecoveredFile` variant to the already-`#[non_exhaustive]`
+`Provenance` enum, meaning "bytes exist but no longer agree with the
+value" — objects in this state are always re-serialized (recomputing
+`/Length`) rather than copied verbatim. §5.10 is not weakened: the
+mutation is deliberate, disclosed via the existing `RecoveryReport`
+channel, and both existing verbatim-passthrough call sites already
+excluded non-`File` provenance via `let-else`, so both were correct by
+construction against the new variant. **Generalized as standing rule
+R94** (`ROADMAP.md`, Standing rules): a repair that mutates a value
+must invalidate any "these-bytes-are-verbatim" provenance attached to
+it, or a downstream verbatim-copy path re-emits stale bytes beside a
+corrected value. **R95** states the per-element `/Contents`-degrade
+rule as binding (extends the R67 forced-full-rewrite-on-recovery
+family with a read-side sibling: dangling optional/array-valued
+content degrades in place, it never condemns the whole document).
+
+**Result:** 289 of the 341 files now open with real content (verified
+independently by re-running `tools/tw-census`: text-bearing documents
+1,224 → 1,513, page-tree load failures 497 → 163, `BadContents` 341 →
+1, zero regressions). Full numbers, sub-corpus breakdown, and gates:
+`ROADMAP.md`'s `/Contents`-defect-fix Shipped entry (top of Shipped).
 
 Full design, the four-case font-on-edit matrix, the fast-follow ladder
 (FF-A offline reflow ladder through FF-H spacing/synthetic-styles — FF-A/
@@ -4509,3 +4559,45 @@ with a forward pointer.
   (methodology: this census's three denominators differ by 11 points —
   document/operator/glyph — a single headline figure would have been
   actionable-looking and wrong).
+- **2026-08-03 (same-day, decision-013 addendum, no new decision
+  number) — the `/Contents`-defect fix: `StreamLengthPolicy` +
+  `Provenance::RecoveredFile`, closing the pdfce defect Amendment E
+  found.** Extends decision 013 (xref recovery, §5.10/R67) with a
+  read-side sibling and a write-side correctness fix, both landed the
+  same continuation, committed `409a6b5`. **(a) Corrected mechanism:**
+  the defect Amendment E reported (rebuild-by-scan undercounting
+  objects) was wrong — the scan is correct; the failure was at
+  strict-confirmation, root-caused to `add-contents.pdf` being an
+  LF-to-CRLF-converted file that invalidated every `/Length` in the
+  same damage event that broke `startxref`. **(b) `StreamLengthPolicy`**
+  (`Strict` default unchanged; `RecoverFromEndstream`, reachable only
+  from recovery paths, re-derives a stream's extent from the
+  `endstream` keyword per §7.3.8.2's own definition of `/Length`).
+  **(c) Per-element `/Contents` degradation**, not whole-document
+  refusal, for a dangling array reference (§7.3.10 + Table 30) —
+  counted via `Page.contents_unresolved`/`RecoveryReport.
+  stream_lengths_recovered`, disclosed in CLI + GUI, never silent.
+  **(d) `Provenance::RecoveredFile`** — a third variant on the
+  `#[non_exhaustive]` `Provenance` enum for "bytes exist but no longer
+  agree with the value," forcing re-serialization instead of the
+  verbatim-copy fast path `Provenance::File` objects otherwise take.
+  Added because the round-trip gate (§5.10) caught the first repair
+  attempt producing a file pdfce itself could not reload — it had
+  corrected the byte span but left the stale `/Length` for the writer
+  to copy verbatim beside it. §5.10's contract is not weakened: the
+  mutation is deliberate and disclosed through the existing
+  `RecoveryReport` channel, and both pre-existing verbatim-passthrough
+  sites already excluded non-`File` provenance via `let-else`, so both
+  were correct by construction against the new variant without
+  modification. **New standing rules R94–R95** (`ROADMAP.md`): R94
+  generalizes (d) — a repair that mutates a value must invalidate any
+  verbatim-bytes provenance attached to it; R95 states (c) as binding,
+  a read-side sibling of R67's forced-full-rewrite family. **Result:**
+  289 of 341 previously-unopenable corpus files now open with real
+  content (independently re-measured: `BadContents` 341 → 1, zero
+  regressions, raster oracle 174 → 178 compared/all identical). Full
+  numbers and gates: `ROADMAP.md`'s `/Contents`-defect-fix Shipped
+  entry (top of Shipped). **RAG escalations:**
+  `C:\personal_rag\pdf\lesson_20260803_crlf_conversion_invalidates_every_length.md`
+  and
+  `D:\dev\rag\rust\repair_that_mutates_a_value_must_invalidate_verbatim_provenance.md`.

@@ -9278,3 +9278,137 @@ local-only.**
   simple-font-only control with the refuse-and-disclose engine gate
   R91 already specifies.
 - Regenerate the backup bundle to cover this continuation's commits.
+
+## Same-day continuation 68 (real date 2026-08-03) — the `/Contents`
+defect from last continuation is FIXED (`409a6b5`): 289 previously-
+unopenable documents now read. Pass 19.4 (`Tw`) is now IN PROGRESS —
+a builder started it this continuation, concurrent with this filing.
+Branch `pass-8-redaction`, 56 commits, still no remote.
+
+**Shipped:**
+- `/Contents`-defect fix (no Pass ID — correctness fix), committed
+  `409a6b5`. `BadContents` 341 → 1; text-bearing documents 1,224 →
+  1,513; page-tree load failures 497 → 163; strict-path parse
+  failures unchanged at 130 (confirms the fix did not loosen normal
+  parsing). Zero regressions. See the new Shipped entry (top of
+  `ROADMAP.md`) for the full numeric record and gates.
+
+**Decisions made this session:**
+- Chain-completeness correction filed same-continuation, committed
+  `0395177`: `fb97abb` (the continuation-66 filing commit) had gone
+  unreferenced in `docs/`, the SECOND time a missing commit was
+  itself a filing commit rather than a code one. Standing rule R87
+  amended (not a new rule) to record the structural shape of this
+  blind spot: a continuation records the commits it's filing ABOUT,
+  and the commit that lands the filing has no later entry to mention
+  it — the audit catches it only because it compares against `git
+  rev-list`, never against the previous entry's own total.
+- Two new standing rules filed: **R94** (a repair that mutates a
+  value must invalidate any verbatim-bytes provenance attached to
+  it — generalizes the `Provenance::RecoveredFile` fix) and **R95**
+  (a dangling reference inside an optional array-valued page entry
+  degrades that one element, never the whole document — states the
+  `/Contents`-degradation fix as binding, a read-side sibling of R67's
+  forced-full-rewrite family).
+- `ARCHITECTURE.md` §12 gained a decision-013 addendum entry (no new
+  decision number) recording the corrected mechanism,
+  `StreamLengthPolicy`, `Provenance::RecoveredFile`, and the round-
+  trip-gate-catches-itself finding; §5's decision-019/FF-H body text
+  updated from "fix in progress" to the resolved account.
+
+**Findings + decisions (empirical):**
+- **The diagnosis filed last continuation was wrong in MECHANISM, not
+  just incomplete.** Rebuild-by-scan recovery does not undercount
+  objects — the scan correctly proposes all 8 headers on
+  `add-contents.pdf`; object 5 was dropped at strict-confirmation
+  ("endstream not found where /Length points"). Real cause:
+  `add-contents.pdf` is an LF file converted to CRLF after being
+  written, so every `/Length` (measured on the LF form) is short by
+  one byte per internal line, landing the declared extent
+  mid-content — the SAME damage event that broke `startxref`/`xref`
+  (why recovery engaged in the first place). One damage event, two
+  symptoms; recovering from the first (xref) does not automatically
+  reach the second (`/Length`) unless extents are explicitly
+  re-derived from the `endstream` keyword.
+- **The inferred SHAPE was also wrong.** Last continuation described
+  an array of dangling references; ~300 of the 341 are actually a
+  single indirect `/Contents N 0 R` resolving to null, only ~41 are
+  the array form. Classified per element this continuation: 340
+  `StreamExtentMismatch`, 12 `BadStreamLength`, 3 lexical, 2 missing
+  `endobj`, 4 genuinely absent, 1 resolving to a dictionary — 337 of
+  341 had the missing object's header physically present, dropped
+  only at confirmation.
+- **Two fixes kept deliberately separate:** `StreamLengthPolicy`
+  (`Strict` default unchanged; `RecoverFromEndstream` re-derives
+  extent from `endstream` per §7.3.8.2's own definition of `/Length`
+  — normative, not heuristic, reachable only from recovery paths) and
+  per-element `/Contents` degradation (a null-resolving reference
+  degrades per §7.3.10/Table 30; a genuine type error is still
+  `BadContents`, unchanged; a direct `null` is excluded from the
+  disclosure count per §7.3.9).
+- **★★★★ The round-trip gate caught a bug in the fix itself.** The
+  first repair attempt corrected the recovered object's byte span but
+  left its stale `/Length` untouched — because the writer copies
+  `Provenance::File` objects verbatim, `save_full` produced a file
+  pdfce itself could not reload. Fixed with a third
+  `Provenance::RecoveredFile` variant forcing re-serialization
+  instead of verbatim copy; both pre-existing verbatim-passthrough
+  sites were already correct by construction (`let-else` skipping
+  non-`File` provenance) and needed only comment updates.
+- Round-trip verified non-vacuously (pre-change harness from a real
+  `git archive HEAD`, confirmed `StreamLengthPolicy`-free, distinct
+  binary hash from post-fix); every §5 metric identical; raster
+  oracle 174 → 178 compared, all identical; `xref-recover/` alone
+  0/0 → 4/4.
+- Gates: `cargo test --workspace` 1722 → 1738, 0 failed; fmt/clippy
+  clean; `check-ui-strings.sh` exit 0; `cargo tree` clean; zero new
+  Cargo dependencies. New fixtures `xref-recover/{crlf-shifted-
+  lengths,dangling-contents,dangling-contents-array}.pdf`; 7 existing
+  fixtures regenerate byte-identically.
+- Two follow-ups flagged, not built: 9 `load-failed` files hit
+  `StreamExtentMismatch` on the strict (default) path, untouched
+  correctly — a `--repair` opt-in could reach them; +5 page-tree
+  cycle failures newly exposed by `BadContents` no longer masking
+  them are pre-existing defects, not new breakage.
+
+**RAG escalations this continuation:**
+- `C:\personal_rag\pdf\lesson_20260803_crlf_conversion_invalidates_every_length.md`
+  — the CRLF/`/Length` finding, with the normative-not-heuristic
+  §7.3.8.2 reasoning and the two-symptoms-one-cause framing kept
+  prominent.
+- `D:\dev\rag\rust\repair_that_mutates_a_value_must_invalidate_verbatim_provenance.md`
+  — the general shape of the round-trip-gate-catches-itself bug, for
+  any system pairing a "these bytes are original" fast path with a
+  repair mechanism that can mutate the value.
+- Both indexed in their subject's `index.md` this same continuation;
+  master `personal_rag/index.md` also updated.
+
+**Still in flight:**
+- Pass 19.4 (`Tw` direct-authoring control) — the blocking defect is
+  fixed; a builder started the slice this continuation, concurrent
+  with this filing. Not yet shipped.
+- Carried, unchanged: no GUI redaction-apply flow (R85-uncoverable by
+  design); `✓`/`✕` (U+2713/U+2715) glyph verification still owed;
+  `ⓘ` (U+24D8) tofu suspicion still unconfirmed; status-bar/fit-zoom
+  feedback loop; letter badges pending real icons; `egui_kittest`
+  harness gap; Open operator questions (h)–(k); FF-C's rule-13
+  dependency classification; the FF-I StructTree cut; list-authoring
+  scope call; the kerning parity gap.
+- Branch still named `pass-8-redaction`, now spanning Passes 9–19.3
+  plus the shipped defect fix and the in-progress 19.4 — worth a
+  rename whenever a push is authorized.
+- No git remote configured; the backup bundle is stale and not
+  regenerated this continuation.
+
+**For next session:**
+- Flag to the operator at next contact, carried forward: (1) push/
+  publish call still ungranted, chain now 56 commits, still no
+  remote; (2) branch-rename-on-push still pending; (3) the GUI still
+  has no redaction-apply flow; (4) R86 still unanswered; (5) the
+  kerning parity gap unscoped; (6) Open operator questions (h)–(k)
+  unanswered; (7) the `/Contents`-defect fix is now SHIPPED — the
+  item flagged last continuation is closed.
+- When Pass 19.4 ships, dispatch the librarian to move it to Shipped
+  and confirm the ★ Pass 19.x umbrella entry is fully retired (all
+  five slices 19.0–19.4 complete).
+- Regenerate the backup bundle to cover this continuation's commits.

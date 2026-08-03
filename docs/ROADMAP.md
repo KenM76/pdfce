@@ -43,6 +43,163 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `/Contents`-defect fix — a dangling `/Contents` array element no longer condemns the whole document; 289 previously-unopenable documents now read (no Pass ID — a correctness fix, per the ★ pdfce defect In-progress entry's own framing, RESOLVED) — 2026-08-03, committed `409a6b5`
+
+**289 previously-unopenable documents now read**, engineer-verified by
+independently re-running `tools/tw-census` over the same 4,023-file
+corpus:
+
+| | before | after |
+|---|---|---|
+| text-bearing documents | 1,224 | **1,513** |
+| page-tree load failures | 497 | **163** |
+| parse failures (strict path) | 130 | **130** (untouched — confirms the fix did not loosen normal parsing) |
+
+`BadContents` went **341 → 1**. Zero regressions — no file that opened
+before now fails. The 341 resolved as: 289 measured (above), 45
+no-text, 6 a *different* pre-existing page-tree defect that
+`BadContents` had been masking (5 cycles, 1 missing `/Resources`), 1
+still correctly `BadContents`. Newly-opening files carry 32,729 glyphs
+between them, none zero-glyph. `fixtures/external/qpdf/qpdf/qtest/
+qpdf/add-contents.pdf` — the file hand-verified last continuation as
+legal-but-refused — now extracts `Baked / Potato / Mashed`.
+
+**The diagnosis filed last continuation was WRONG IN MECHANISM, not
+just incomplete — recording the correction, not merely the fix.** The
+prior filing reported that rebuild-by-scan recovery *misses an
+object*. It does not: the scan correctly proposes all 8 `N G obj`
+headers; object 5 is dropped at the **confirmation** step, which
+parses each candidate strictly and fails with "endstream not found
+where `/Length` points." The real cause: `add-contents.pdf` is an
+**LF file that was converted to CRLF**. Every `/Length` was measured
+on the LF form, so each stream is now one byte longer per internal
+line than declared, and the declared extent lands mid-content. **One
+damage event, two symptoms** — the same CRLF shift is why `startxref`
+misses `xref` in the first place (the reason recovery engages at all),
+and the second symptom silently ate the content stream that the
+first symptom's recovery existed to save. No off-by-one, no
+terminator bug: the scan was correct, the strictness applied to its
+output was not.
+
+**The inferred SHAPE was also wrong.** Last continuation described an
+array of references; ~300 of the 341 are actually a **single**
+indirect `/Contents N 0 R` resolving to null, and only ~41 are the
+array form. Per dangling element, classified this continuation rather
+than generalized from the one hand-verified file: 340
+`StreamExtentMismatch`, 12 `BadStreamLength`, 3 lexical, 2 missing
+`endobj`, 4 genuinely absent, 1 resolving to a dictionary. **337 of 341
+had the missing object's header physically present**, dropped only at
+confirmation — the scan itself was never the problem.
+
+**Two fixes, kept deliberately separate:**
+1. **`StreamLengthPolicy`** — an explicit opt-in parser policy.
+   `Strict` (default) is unchanged. `RecoverFromEndstream` re-derives
+   a stream's extent from the `endstream` keyword — **not a
+   heuristic landmark**: ISO 32000-1 §7.3.8.2 *defines* `/Length` as
+   the byte count "to the last byte just before the keyword
+   `endstream`," so the keyword is the other half of the same
+   normative statement. Reachable only from the existing recovery
+   paths; both must agree, or an object one path accepts the other
+   would reject.
+2. **`/Contents` degradation, per element.** A reference resolving to
+   null contributes nothing (§7.3.10 dangling-reference rule + Table
+   30's "if absent, the page shall be empty" — degrade that one
+   element, not the document). A *type* error (a number, a dict, a
+   non-reference array element) is still `BadContents` — unchanged. A
+   *direct* `null` (not an unresolved reference) is treated as absent
+   per §7.3.9 and deliberately **not counted** in the
+   `contents_unresolved` tally, which is reserved for content that
+   should have been present and was not.
+
+**Disclosure — counted, through existing channels, never silent.**
+`RecoveryReport.stream_lengths_recovered` → CLI
+`stream-lengths-recovered=N` + note, GUI recovery banner.
+`Page.contents_unresolved` → `render::Diagnostics.
+contents_streams_unresolved` (CLI `contents_unresolved=N` on the
+stable output line, joins the GUI "unsupported items" headline and
+leads its detail list) and `TextDiagnostics.contents_unresolved`.
+
+**★★★★ THE ROUND-TRIP GATE CAUGHT A BUG IN THE FIX ITSELF.** The first
+attempt repaired the recovered object's `data_span` but left its
+**stale `/Length` beside it unmodified**. Because the writer re-emits
+`Provenance::File` objects verbatim, `save_full` produced a file
+**pdfce itself could not reload** — a self-inflicted violation of
+§5.10's own round-trip contract, caught by the gate that contract
+exists to enforce, before it left the worktree. Resolved with a third
+`Provenance::RecoveredFile` variant on the already-`#[non_exhaustive]`
+`Provenance` enum, meaning "bytes exist but contradict the value" —
+the serializer re-serializes those objects and always recomputes
+`/Length`, rather than copying stale bytes forward. **§5.10 is not
+weakened by this**: pdfce genuinely did touch that object's length,
+deliberately, and it is disclosed via the same `RecoveryReport`
+channel as every other recovery action. The two existing sites that
+assert verbatim-passthrough already skipped non-`File` provenance via
+`let-else`, so both were correct by construction against the new
+variant; their comments now say so explicitly rather than leaving it
+implicit.
+
+Round-trip verified **non-vacuously** — the pre-change harness was
+built from `git archive HEAD` (pre-fix), confirmed to contain zero
+occurrences of `StreamLengthPolicy`, and produced a binary with a
+different hash from the post-fix build. Every §5 round-trip metric is
+identical pre/post change; the raster oracle went **174 → 178
+compared, all identical**. On `xref-recover/` alone: pre-change
+compares **0/0** rasters (nothing in that fixture set loaded far
+enough to compare), post-change **4/4**.
+
+**Gates:** `cargo test --workspace` **1722 → 1738, 0 failed**; fmt/
+clippy clean; `tools/check-ui-strings.sh` exit 0; `cargo tree -p
+pdfce-core -p pdfce-render` clean (no GUI dependency); **zero new
+Cargo dependencies** (`Cargo.lock` and every manifest untouched). New
+fixtures `xref-recover/{crlf-shifted-lengths,dangling-contents,
+dangling-contents-array}.pdf`, generator + `PROVENANCE` updated; the 7
+pre-existing fixtures in that set regenerate byte-identically.
+
+**Two follow-ups flagged, not built:** 9 `load-failed` corpus files
+hit `StreamExtentMismatch` on the **strict** (default) parse path and
+are correctly untouched by this fix — a `--repair` opt-in flag could
+reach them, not scoped here. The +5 page-tree cycle failures uncovered
+by `BadContents` no longer masking them are **pre-existing defects
+newly exposed**, not new breakage introduced by this fix.
+
+**Chain-completeness correction filed the same continuation, committed
+`0395177`:** the audit that runs before each of these filings is
+committed found `fb97abb` (the continuation-66 filing commit,
+recording Pass 19.3 and standing rule R93) referenced nowhere in
+`docs/`. This is the **second** time the missing commit has been a
+*filing* commit rather than a code one (`7274fdd` was the first, per
+R87's own note) — a structural blind spot, not bad luck: a
+continuation records the commits it is filing ABOUT, and the commit
+that lands the filing has no later entry to mention it. The audit
+catches it only because it compares against `git rev-list`, not
+against the previous entry. **Standing rule R87 amended** with this
+finding — see Standing rules, below.
+
+**New standing rules R94–R95 added** (see Standing rules, below): R94
+generalizes the `Provenance::RecoveredFile` fix (a repair that mutates
+a value must invalidate any "these bytes are verbatim" assertion
+attached to it, or a downstream verbatim-copy path re-emits stale
+bytes beside a corrected value); R95 states the `/Contents`
+per-element-degrade rule as binding, not merely this fix's rationale.
+
+**Branch `pass-8-redaction`, 56 commits** (`git rev-list --count
+HEAD`), hashes `0395177`/`409a6b5` engineer-verified via `git cat-file
+-t` per R87; still no git remote configured.
+
+**RAG escalations this continuation:**
+`C:\personal_rag\pdf\lesson_20260803_crlf_conversion_invalidates_every_length.md`
+— a CRLF-converted PDF invalidates every `/Length` in one damage
+event, producing two independent symptoms (broken `startxref` AND
+overrunning stream extents), where recovering from the first still
+leaves the second silently eating content; the remedy is normative,
+not heuristic (§7.3.8.2 defines `/Length` in terms of the `endstream`
+keyword). And
+`D:\dev\rag\rust\repair_that_mutates_a_value_must_invalidate_verbatim_provenance.md`
+— the general shape of the round-trip-gate-catches-itself bug, for any
+system carrying a "these bytes are original, copy them verbatim" flag
+alongside a value a repair path can mutate. Both indexed in their
+subject's `index.md` this same continuation.
+
 ### Pass 19.3 — GUI: the spacing/style property surface, AND a project-wide correctness fix — the shipped Edit-Text property bar had never applied a single edit (decision 019, closes the FF-H formatting-slice family) — 2026-08-03, committed `74052d3`
 
 **★★★★ HEADLINE FINDING — every property-bar "Apply" in the shipped GUI, from Pass 14.3 through Pass 19.2, failed silently with `NoMatch` before reaching the surgery.** `GlyphProvenance::operator_span` publishes the span of the operator token ALONE (`Tj`, e.g. `37..39`); the authoring walk's `OpRec` records the OPERAND-INCLUSIVE extent (`(hello) Tj`, `23..39`). `find_anchor`'s pinned-request path compared the two for EXACT EQUALITY. The GUI pins every formatting request from provenance, so **every Pass 14.3/15.x/19.1/19.2 property-bar Apply on an ordinary one-`Tj` page refused** with "text to format was not found in an editable run on the page" — confirmed live in the running application before the fix. **It survived because two doc comments, on both the publisher and the consumer, independently asserted the two conventions already agreed** — `EditRequest::pinned_span`'s "matches the same span" and `page.rs:518`'s "the surgery locates the operator by exactly this span" (both present before the fix, both corrected after) — so nothing prompted a check. It was found only because this Pass stopped discarding failed pin queries with `.ok()`; rendering them as visible errors is what exposed a bug that had survived two prior GUI-observation rounds unnoticed.
@@ -6032,45 +6189,28 @@ glyph — differ by 11 points; a single headline figure would have been
 actionable-looking and wrong) — both indexed in their subject's
 `index.md` this same continuation.
 
-### ★ pdfce defect — a single unresolvable `/Contents` array element condemns the WHOLE document (found 2026-08-03 via the `Tw` census corpus sweep; fix IN PROGRESS)
+### ★ pdfce defect — a single unresolvable `/Contents` array element condemns the WHOLE document (found 2026-08-03 via the `Tw` census corpus sweep; **FIXED 2026-08-03, committed `409a6b5` — see the new Shipped entry at the top of Shipped for the full diagnosis, numbers, and gates**)
 
-**341 corpus files (8.5% of the 4,012-file sweep) are unopenable** with
-"page /Contents is neither a stream nor an array of streams" (226
-qpdf, 114 pdfium sub-corpora). Hand-verified NOT a corrupt-file false
-rejection: `fixtures/external/qpdf/qpdf/qtest/qpdf/add-contents.pdf`
-is legal per ISO 32000-1 — `/Contents [ 4 0 R 5 0 R 6 0 R ]`, all
-eight objects present, three of them intact text-bearing content
-streams.
-
-**Two separable root causes (do not conflate when fixing):**
-1. Pass 13b's rebuild-by-scan recovery undercounts — reports
-   `file-level-objects=7` on an 8-object file — so one `/Contents`
-   array element resolves to Null instead of its real stream.
-2. Independent of (1): a SINGLE unresolvable `/Contents` element
-   currently condemns the ENTIRE document. ISO 32000-1 §7.3.10 makes a
-   dangling indirect reference the null object; Table 30 makes
-   `/Contents` itself optional ("if this entry is absent, the page
-   shall be empty"). Refusing the whole file on one bad array element
-   is a fail-clean violation (`ARCHITECTURE.md` §5.10's "reviewable
-   fact, never a silent repair" framing) — the correct behavior is to
-   degrade the one page's content, disclosed, not refuse the document.
-
-**Status: a builder is fixing both now.** Explicit instructions: keep
-the two problems separate (don't let one fix silently paper over the
-other); disclose rather than silently swallow a degraded page;
-distinguish "resolved to null" (degrade that one `/Contents` element)
-from "genuinely wrong type" (a `/Contents` resolving to, say, a
-`/Type /Font` dict is a different failure mode and should still
-refuse or flag, not silently degrade); and prove newly-opening files
-render REAL CONTENT, not blank pages (a fix that merely stops erroring
-while producing empty output would be a worse, silent failure).
+**RESOLVED. 289 previously-unopenable documents now read** (`BadContents`
+341 → 1, zero regressions). The diagnosis originally filed here
+(rebuild-by-scan *missing* an object) was **wrong in mechanism** — the
+real cause was an LF-to-CRLF-converted file invalidating every
+`/Length` in the stream, dropped only at strict-confirmation, not at
+the scan. See the Shipped entry for the corrected mechanism, the two
+kept-separate fixes (`StreamLengthPolicy` + per-element `/Contents`
+degradation), the round-trip-gate-caught-its-own-bug finding
+(`Provenance::RecoveredFile`), and new standing rules R94–R95. This
+paragraph is retained as the historical record of what was believed at
+the time the fix was dispatched — the "why this took priority" reasoning
+below held and does not need correcting.
 
 **Why this took priority over Pass 19.4** (engineer's own call,
 recorded so it doesn't read as scope drift): a control reaching 91% of
 text-bearing documents matters less than 341 real files — leaning
 qpdf/pdfium, closer to organic malformed-in-the-wild files than
 veraPDF's deliberately-adversarial conformance probes — that cannot be
-opened by pdfce at all.
+opened by pdfce at all. **Now that the fix has shipped, Pass 19.4 is
+IN PROGRESS** — see the ★ Pass 19.x entry under Next up.
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
@@ -6626,7 +6766,7 @@ default stands: docked-only, its own Backlog entry, still unanswered.
 §10 Q1 (the `egui_tiles`-vs-hand-rolled question this note originally
 tracked) is ANSWERED and BUILT — see Pass 18.1 above.
 
-### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendments A/B/C/E, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 SHIPPED 2026-08-03, Pass 19.2 SHIPPED 2026-08-03 (`ebe35d8`), Pass 19.3 SHIPPED 2026-08-03 (`74052d3`) — Pass 19.4 (`Tw`) CENSUS RUN 2026-08-03, BUILD band cleared (Amendment E), but NOT STARTED — sequenced behind a higher-priority pdfce defect fix)
+### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendments A/B/C/E, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 SHIPPED 2026-08-03, Pass 19.2 SHIPPED 2026-08-03 (`ebe35d8`), Pass 19.3 SHIPPED 2026-08-03 (`74052d3`) — Pass 19.4 (`Tw`) CENSUS RUN 2026-08-03, BUILD band cleared (Amendment E); the blocking `/Contents` defect FIXED 2026-08-03 (`409a6b5`, see Shipped) — Pass 19.4 now IN PROGRESS)
 
 **Decision 019 ACCEPTED via the KenAgent protocol.** Full record:
 `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`. Filed
@@ -6790,10 +6930,11 @@ existing `FormatText`/`AddText` one-command-per-accepted-edit path):**
   glyphs, n=4,012 real PDFs, 1,224 text-bearing) — see the
   continuation-67 In-progress entry (above) and decision 019 Amendment
   E for the full method, numbers, sub-corpus breakdown, and the
-  falsified-§3.2-reason-2 finding. **NOT YET STARTED** — blocked behind
-  a higher-priority pdfce defect fix (341 corpus files unopenable,
-  found via this same census sweep — see the ★ pdfce defect In-progress
-  entry, above), not behind the census any longer.
+  falsified-§3.2-reason-2 finding. **The blocking pdfce defect (341
+  corpus files unopenable, found via this same census sweep) is FIXED**
+  — see the new `/Contents`-defect-fix Shipped entry (top of Shipped,
+  committed `409a6b5`) and the retired ★ pdfce defect In-progress entry
+  (above). **IN PROGRESS** — a builder is on this slice now.
 
 **Standing rules R88–R91 added** (see Standing rules, below) — the
 ceiling was R87. **R92 added 2026-08-03** (decision 019 Amendment B,
@@ -10056,6 +10197,22 @@ blocking Pass 19.0's in-progress build:**
   is produced by the engineer running `git rev-list`/`git cat-file -t`/
   `cargo test --workspace` directly, not recalled or re-derived from a
   prior summary, and is spot-checked once filed.
+  **AMENDED 2026-08-03 (continuation 68) — a structural blind spot in
+  the audit itself, not just another instance of the same slip.** A
+  continuation's own filing commit has now gone missing from every hash
+  reference in `docs/` **twice, and both times the missing commit was
+  itself a *filing* commit** (`fb97abb`, the continuation-66 filing,
+  found missing at continuation 67; `7274fdd` was the first, above).
+  The pattern is structural, not coincidental: a continuation records
+  the commits it is filing ABOUT, and the commit that lands the filing
+  itself has no later entry to mention it — there is no natural point
+  in the process where a filing commit gets to cite itself. The audit
+  catches it only because it compares against `git rev-list --count
+  HEAD`, not against the previous entry's own listed total. **No new
+  numbered rule filed for this** — it is R87's own mechanism (verify
+  against `git`, never against memory of what was last written) working
+  as designed on its own blind spot; recorded as an amendment so the
+  discipline reads as one rule, not two.
 - **R88 — Direct text-state formatting is scoped by explicit
   restore-by-value, never by `q`/`Q`, never by normalization (decision
   019, 2026-08-03; wording CORRECTED 2026-08-03 by decision 019
@@ -10210,6 +10367,39 @@ blocking Pass 19.0's in-progress build:**
   encoding the contract in the type system (see R92's same-shaped
   precedent) or a round-trip test over a prose promise on either side of
   a producer/consumer boundary.
+- **R94 — A repair that mutates a value must invalidate any
+  "these-bytes-are-verbatim" provenance attached to it (methodology;
+  no decision number; librarian-assigned; 2026-08-03, `/Contents`-
+  defect fix, committed `409a6b5`).** A writer that copies
+  `Provenance::File` objects verbatim as a fast path assumes the
+  stored bytes and the object's current value never disagree. A repair
+  that fixes the *value* (here, a recovered stream's true extent) but
+  leaves that assumption in place produces a file where the emitted
+  bytes contradict the corrected value — round-trip-broken by the fix
+  itself, self-inflicted. The `Provenance::RecoveredFile` variant
+  fixes this instance by giving "value was mutated by a repair"
+  its own provenance state, forcing re-serialization instead of
+  verbatim copy. General form: any system carrying an
+  original-bytes-are-authoritative fast path needs a companion state
+  for "we know better than the original bytes now," or a later repair
+  silently reintroduces the exact defect it was written to fix.
+- **R95 — A dangling reference inside an optional, array-valued page
+  entry degrades that one element; it never condemns the whole
+  document (decision 013 / R67 family, extended; 2026-08-03,
+  `/Contents`-defect fix, committed `409a6b5`).** ISO 32000-1 §7.3.10
+  makes an indirect reference to a nonexistent object the null object,
+  not an error; Table 30 makes `/Contents` itself optional ("if this
+  entry is absent, the page shall be empty"). A single unresolvable
+  `/Contents` array element therefore has an exact, spec-defined
+  degraded reading (drop that element, keep the rest) — refusing the
+  entire document over one bad element is a fail-clean violation
+  (`ARCHITECTURE.md` §5.10's "reviewable fact, never a silent repair"
+  framing), not conservatism. The degradation is counted
+  (`Page.contents_unresolved`) and surfaced (CLI `contents_unresolved=N`,
+  GUI "unsupported items" detail list) — never silent. Binding only for
+  entries the spec itself marks optional/array-valued with a defined
+  null-element reading; a reference resolving to a *wrong type*
+  (§7.3.10's other failure mode) is unchanged and still an error.
 
 ## Update protocol
 
