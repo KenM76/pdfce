@@ -8305,3 +8305,180 @@ pdfce-core`/`-p pdfce-render` GUI-dep-free; zero new Cargo dependencies.
   latent decompose-walk bugs and the four-basis bbox design are
   pdfce-internal, and the CID-descriptor-omission finding is PDF-domain,
   not Rust/egui).
+
+**Same-day continuation 62 (real date 2026-08-03) — Decision 019 filed
+(FF-H re-scope: `Tc`/`Tz` + free-form `Ts` + synthetic bold/italic ship,
+`Tw` evidence-gated by census, minimal StructTree/`/ActualText` CUT and
+re-filed as FF-I); ui-spec §0.2/§B.3 marked historical, closing the
+last open Pass-18.x/decision-017 reconciliation item.** Two commits,
+hashes engineer-verified via `git cat-file -t` (R87): `67f49bb` (ui-spec
+historical marking, on top of `1b38e34`, continuation-61 HEAD) →
+`743e463` (decision 019's record, `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`).
+Branch `pass-8-redaction`, chain now **39 commits**, still no git remote
+configured. Backup bundle: `D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle`
+(unchanged this continuation — no new build artifact to re-verify
+against; this was a docs/decision-filing continuation, not a code
+ship). **This continuation is pure librarian filing** — no `cargo test`/
+`cargo fmt`/`cargo clippy`/`cargo tree` gates apply (no `pdfce-core`/
+`pdfce-render`/`pdfce-gui`/`pdfce-cli` source changed); Pass 19.0 itself
+(the code consolidation this decision names as its first slice) is
+**IN PROGRESS**, being built by a separate dispatch concurrently with
+this filing, not yet shipped.
+
+**Shipped:**
+- Nothing code-shipped this continuation. This is a decision-filing/
+  roadmap-bookkeeping continuation, same pattern as continuation 44
+  (decision 016) — Pass 19.0 (text-state consolidation + ambient
+  publication) is the first concrete build against this decision and is
+  IN PROGRESS, not SHIPPED, as of this entry.
+
+**Decisions made this session:**
+- **Decision 019 ACCEPTED (KenAgent protocol).** Full record:
+  `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`. Amends
+  decision 014 §5.3 (FF-H's original four-operator bundle) and decision
+  016 §2 (FF-H's "defer" ranking — superseded by the operator's
+  priority-#3 directive; §2's own StructTree-is-premature reasoning is
+  upheld and acted on, not overturned).
+- **The parity premise for `Tw`/free-form `Ts` collapsed before any code
+  was written.** Acrobat-parity research
+  (`D:\Dev\Rag-Specialized\Acrobat_Features\text_edit__spacing_and_scaling_controls.md`,
+  sourced to Dov Isaacs, former Adobe Principal Scientist) establishes
+  Acrobat itself dropped word spacing and free-form baseline offset when
+  text editing consolidated into the single Edit Text & Images tool;
+  retained: "adding, deleting, bold, italic, font size, leading,
+  kerning, and horizontal scaling." FF-H's own name lists four
+  operators; parity covers two.
+- **Q1 — the operators SPLIT on font-model universality vs. marginal
+  cost, not parity-vs-exceed.** Free-form `Ts` SHIPS as a deliberate
+  exceed (superscript/subscript is a parity must-have and forces the
+  mechanism regardless; works identically on every font model, no void
+  case). `Tw` does NOT ship as a direct authoring control in the core
+  slices — its job already belongs to the 15.1 reflow layer's `TJ`
+  design (decision 015 rejected `Tw` there for exactly the properties
+  that make it a poor control); any future promotion is gated behind a
+  corpus census with explicit bands (≥60% build / ≤25% close / 25–60%
+  escalate to the operator — R91).
+- **Q2 — synthetic bold/italic: one shared policy for in-place-edit
+  (14.x) and add-text (16.x); only the remedy-offer ORDER differs, and
+  that's disclosed, not designed asymmetry.** Mechanism: `Tr 2`
+  (stroke+fill, stroking colour matched to fill, stroke width
+  user-space-derived via `Tfs × |Tm| × |CTM|` — both real bugs if
+  missed, §9.3.6) + `Tm` shear for oblique; **double-strike explicitly
+  rejected** (doubles glyph count, breaks the byte↔glyph correspondence
+  provenance depends on). Self-evident emission, no private marker
+  (R90).
+- **Q3 — build order FF-H → FF-C → FF-B, decided on Pass 19.0 being a
+  shared correctness prerequisite the other two inherit, not on FF-H's
+  own value** (judged the least of the three). Pass 18.6's `GState`
+  tracker is explicitly NOT groundwork for this decision (~5% credit at
+  most) — it's a private *reading*-path walk, not callable from any
+  authoring path; its real contribution is being the THIRD private
+  ambient-state tracker, which makes the Pass 19.0 consolidation
+  argument unarguable rather than merely tidy.
+- **StructTree/`/ActualText` CUT from FF-H entirely, re-filed as its own
+  ungated Backlog item, FF-I** — a partial structure-tree writer judged
+  worse than none. No Pass number assigned.
+- **New standing rules R88–R91** (ceiling was R87): R88
+  restore-by-value scoping (q/Q illegal inside `BT…ET`, §8.2 Table
+  51/Figure 9); R89 store-ratios-derive-at-emit (`Tc`/`Ts` are unscaled
+  text-space units per §9.3, not rescaled by `Tfs`); R90 synthesis is
+  per-use/declinable/fallback-only/self-evident; R91 `Tw` is
+  font-model-capability-gated, composite inter-word distribution is
+  `TJ`-only.
+- **`ROADMAP.md` edited:** Backlog's "ui-spec §B.4/§C follow-ons" item 1
+  marked RESOLVED (commit `67f49bb`) — §0.2/§B.3 were corrected earlier
+  the same day to describe the em-box geometry accurately, then Pass
+  18.6 replaced that geometry, so the corrected text became an accurate
+  description of behavior that no longer exists; `67f49bb` marks it
+  historical (before/after bboxes both kept) rather than deleting it.
+  New ★ Pass 19.x entry under Next up (slices 19.0–19.4, 19.0 marked IN
+  PROGRESS). New Backlog entry "FF-I — minimal StructTree/`/ActualText`
+  update," no Pass number. ★★★ Operator priority sequence item 3 gets a
+  dated amendment pointing at the new scoping. Standing rules R88–R91
+  added. Five new items filed to Open operator questions (g)–(k): the
+  `Tw` census middle band; FF-C's rule-13 dependency classification
+  (MIT lifted rule 8, did not pre-approve any crate); the FF-I
+  StructTree cut (Ken may have counted it inside "finish off all the
+  text handling stuff"); list-authoring re-surfaced (still unanswered,
+  unchanged); kerning — a parity gap this decision found but did not
+  scope (Isaacs lists kerning among Acrobat's retained controls; pdfce
+  has no kerning surface distinct from `Tc`). Commit-chain count in the
+  carried push/publish item updated 30 → 39 (engineer-verified, R87).
+- **`ARCHITECTURE.md` edited:** §5.11 gets a new forward-pointer
+  paragraph (same convention as decision 015's FF-A pointer) recording
+  the two binding architectural facts (`q`/`Q` illegal inside `BT…ET`;
+  `Tc`/`Ts` unscaled-by-`Tfs`) and the three-private-trackers finding.
+  §12 gets the dated decision-019 entry.
+
+**Findings + decisions (empirical):**
+- **Three code-audit findings, independently engineer-verified in the
+  main tree before filing (not assumed from the decision record alone):**
+  (1) `reflow_apply.rs` emits `Tc`/`Tz`/`Tw` in its preamble and
+  terminates at `ET` with no restore and no `q`/`Q` — a live, currently
+  masked state leak, benign only because the justify gate refuses
+  whenever `|tc| > ε || |tw| > ε`, which is exactly the gate Pass 19.1
+  would want to relax; (2) `Ts`/`Tr` are tracked nowhere in the
+  authoring path (`text_edit::edit::Walk` has no `b"Ts"`/`b"Tr"` arm)
+  while the read path tracks both and drops them at
+  provenance-construction time; (3) ambient spacing state is tracked
+  three times privately (`text_extract::page::TextState`,
+  `text_edit::edit::Walk`/`reflow_apply::BlockTextState`,
+  `vector::decompose::GState`) and published zero times —
+  `text_extract::font::advance_tx`'s own doc comment already concedes
+  "three copies that agree today." All three are project-internal
+  (pdfce's own code structure), not escalated to any RAG.
+- **A removal during a UI consolidation is strong evidence about the
+  consolidation and weak evidence about the feature on its own — worth
+  recording as reasoning method, not just this decision's conclusion.**
+  For `Tw` specifically a SECOND, independent signal points the same
+  way (structurally void for 2-byte composite/CID runs, §9.3.3, and its
+  one honest job already collapsed into 15.1's `TJ` design) — no such
+  second signal exists for `Ts`, which is why the two operators split
+  despite Acrobat dropping both.
+- **`q`/`Q` scoping inside a text object is spec-ILLEGAL** (§8.2 Table
+  51/Figure 9), not merely an inferior choice — this rules out the
+  "wrap the formatted run in its own `q…Q`" design outright, not just
+  as a style preference. Spec-governed fact, already citeable directly
+  from the ISO text; not escalated as a personal_rag/pdf finding (that
+  tier is for empirical real-world-PDF divergence, not spec text
+  itself) and not a `pdfce-spec-librarian` dispatch needed (the citation
+  is already precise and uncontested).
+
+**Still in flight:**
+- **Pass 19.0** (text-state consolidation + ambient publication) — IN
+  PROGRESS, a builder is on it now, concurrently with this filing.
+  19.1–19.4 not started.
+- **Five new Open operator questions (g)–(k)** — see above; none block
+  Pass 19.0's build.
+- Carried, unchanged from continuation 61: `-Pid` on the observation
+  scripts; no GUI redaction-apply flow; `✓`/`✕` glyph verification;
+  status-bar/`Fit page`-zoom feedback loop (standing hazard); letter
+  badges pending real icons; `egui_kittest` harness gap.
+- Branch still named `pass-8-redaction` though it now spans Passes
+  9–19.0 — worth a rename whenever a push is authorized (unchanged
+  flag, now more pointed at 39 commits).
+- No git remote configured; backup bundle
+  (`D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle`) remains the only
+  off-session copy.
+
+**For next session:**
+- Continue Pass 19.0 (consolidation) to completion, then dispatch 19.1
+  (`Tc`+`Tz`+super/subscript, the Acrobat-parity slice) — per ★ Pass
+  19.x's Q3 ordering, FF-H finishes before FF-C or FF-B start.
+- Before 19.2 (free-form `Ts` + synthesis) starts, run the named
+  prerequisite check: confirm `pdfce-render` actually honours `Tr 2`
+  and a sheared `Tm`, or R85 (preview-equals-saved) breaks the moment
+  that slice ships a feature the canvas can't paint.
+- Dispatch `pdfce-ui-specialist` before 19.3 (the GUI property surface).
+- Flag to the operator at next contact, all carried or newly filed:
+  (1) the five new Open operator questions (g)–(k), above; (2) push/
+  publish call still ungranted, chain now 39 commits, still no remote;
+  (3) branch-rename-on-push still pending; (4) the GUI still has no
+  redaction-apply flow; (5) R86 (headless-vs-observed "done" definition)
+  still unanswered.
+- No `D:\dev\rag\rust\`/`D:\dev\rag\egui\`/`C:\personal_rag\pdf\`
+  findings filed this continuation — everything surfaced (the three
+  code-audit findings, the `q`/`Q` illegality, the removal-as-evidence
+  reasoning) is either pdfce-internal, already-spec-citeable, or already
+  housed in the Acrobat-parity RAG (`pdfce-acrobat-librarian`'s
+  territory, not re-filed here).

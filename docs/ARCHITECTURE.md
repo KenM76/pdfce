@@ -855,12 +855,48 @@ beside — never a replacement for — the default single-line relayout
 described above (R75). Full design: `docs/decisions/015-ffa-within-block-offline-reflow.md`;
 decision-log entry below.
 
+**Forward pointer — FF-H (direct text-state formatting) re-scoped and
+sliced by decision 019 (2026-08-03), a shared prerequisite for FF-C and
+FF-B, not a peer extension of this section's surgery model.** FF-H's
+own emission mechanism reuses this section's `set_ops`/`restore_ops`
+pattern (Pass 14.2's `format.rs`) directly — `Tc`/`Tz`/`Ts` slot into
+the existing `pre | set_ops | mid | restore_ops | post` splice with no
+structural change. Two new architectural facts this decision
+establishes, both binding on any future text-state-emitting code in
+`pdfce-core`: (1) **`q`/`Q` are illegal inside `BT…ET`** (ISO 32000-1
+§8.2 Table 51/Figure 9) — ambient text-state restoration after a
+formatted run is therefore always **restore-by-value**, resolved by the
+same three-tier ladder `TextColor::restore_bytes` already established
+for fill colour (spec default when provably unset → observed raw
+operand bytes when set → refuse-and-disclose when unobservable), never
+by scoping (R88); (2) **`Tc`/`Ts` are unscaled text-space quantities
+(§9.3) and are not rescaled by `Tfs`** — pdfce's model stores them as a
+discriminated `Absolute | Relative` quantity so a font-size change
+cannot silently mis-scale a stored rise or tracking value (R89). A
+third finding is a code-hygiene one rather than a spec fact: ambient
+`Tc`/`Tw`/`Tz`/`Ts` state was independently tracked three times in
+three different modules (`text_extract::page::TextState`,
+`text_edit::edit::Walk`/`reflow_apply::BlockTextState`,
+`vector::decompose::GState`) with zero shared publication — Pass 19.0
+consolidates these into one tracker and publishes `Ts`/`Tr` through
+`GlyphProvenance` for the first time. `Tw` itself is explicitly **not**
+promoted to a direct authoring control by this decision — its
+inter-word-distribution job stays with 15.1's `TJ`-based reflow design,
+and any future promotion is gated behind a corpus census (R91), never
+built speculatively. Synthetic bold/italic (Tr 2 + `Tm` shear, R90) is
+new authoring surface, not a data-model change, and does not warrant
+its own subsection here. Full design: `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`;
+decision-log entry below; Pass slicing (19.0 consolidation → 19.1
+`Tc`/`Tz`/super-subscript → 19.2 `Ts`/synthesis → 19.3 GUI → 19.4 `Tw`
+conditional) in `ROADMAP.md`'s ★ Pass 19.x entry.
+
 Full design, the four-case font-on-edit matrix, the fast-follow ladder
 (FF-A offline reflow ladder through FF-H spacing/synthetic-styles — FF-A/
-FF-B boundary amended by decision 015, see below), and the six standing
-rules (R69–R74) are in `docs/decisions/014-acrobat-text-editing.md`; Pass
-slicing (14.0 read-only model → 14.1 edit+relayout+font-gate → 14.2
-formatting → 14.3 canvas UI) and its Shipped records are in `ROADMAP.md`.
+FF-B boundary amended by decision 015, FF-H re-scoped by decision 019,
+see below), and the six standing rules (R69–R74) are in
+`docs/decisions/014-acrobat-text-editing.md`; Pass slicing (14.0
+read-only model → 14.1 edit+relayout+font-gate → 14.2 formatting → 14.3
+canvas UI) and its Shipped records are in `ROADMAP.md`.
 
 ## 6. Packaging: single-folder portable
 
@@ -3960,3 +3996,64 @@ with a forward pointer.
   affected by this entry — recorded here per this file's practice of
   logging any decision-shaped finding the project produces, not only
   ones that touch shipped code.
+- **2026-08-03 — Decision 019: FF-H re-scoped to direct text-state
+  formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw`
+  evidence-gated, StructTree/`/ActualText` CUT and re-filed as FF-I.
+  Amends decision 014 §5.3 (FF-H's original bundle) and decision 016 §2
+  (FF-H's "defer" verdict, superseded by the operator's priority-#3
+  directive; §2's underlying reasoning about StructTree is upheld and
+  acted on, not overturned). Full record:
+  `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`.**
+  The premise changed before any code was written: Acrobat-parity
+  research (`D:\Dev\Rag-Specialized\Acrobat_Features\text_edit__spacing_and_scaling_controls.md`,
+  sourced to Dov Isaacs, former Adobe Principal Scientist) establishes
+  Acrobat itself dropped `Tw` and free-form baseline offset when text
+  editing consolidated into the single Edit Text & Images tool — FF-H's
+  own name lists four operators, parity covers two. Three architectural
+  facts, all binding on future `pdfce-core` text-state work (see §5.11's
+  new forward-pointer paragraph, above, for the body-section update this
+  entry requires):
+  1. **`q`/`Q` are illegal inside `BT…ET`** (§8.2 Table 51/Figure 9), so
+     ambient text-state restoration is always restore-by-value via the
+     `TextColor::restore_bytes` three-tier ladder (spec default →
+     observed raw bytes → refuse-and-disclose), never `q`/`Q` scoping —
+     new standing rule R88.
+  2. **`Tc`/`Ts` are unscaled text-space quantities (§9.3), not scaled
+     by `Tfs`** — stored as `Absolute | Relative` so a font-size change
+     cannot silently mis-scale a stored rise/tracking value — R89.
+  3. **Ambient `Tc`/`Tw`/`Tz`/`Ts` state was tracked three times,
+     privately, with zero shared publication** (`text_extract::page::TextState`,
+     `text_edit::edit::Walk`/`reflow_apply::BlockTextState`,
+     `vector::decompose::GState`) — Pass 19.0 (IN PROGRESS) consolidates
+     these and publishes `Ts`/`Tr` through `GlyphProvenance` for the
+     first time (today dropped at provenance-construction time). Pass
+     18.6's own `GState` tracker (a reading-path hit-test aid) is
+     explicitly NOT groundwork for this consolidation — it is the THIRD
+     private tracker, which is what makes the consolidation case
+     unarguable, not a head start on building it.
+  **Decision, not merely a fact:** `Tw` does NOT become a direct
+  authoring control — its inter-word-distribution job stays with
+  decision 015's `TJ`-based reflow design, and any future promotion is
+  gated behind a corpus census with explicit decision bands (R91: ≥60%
+  build, ≤25% close, 25–60% escalate to the operator). Free-form `Ts`
+  DOES ship, as a deliberate exceed rather than a parity feature — the
+  emission/restore/tracking/test mechanism is forced anyway by
+  superscript/subscript (a genuine parity requirement), so withholding
+  the raw number would mean building the mechanism and hiding it, and
+  it works identically on every font model with no void case (R89
+  covers its ratio-storage requirement). Synthetic bold/italic (`Tr 2`
+  stroke+fill with a user-space-derived, fill-matched stroke, plus a
+  `Tm` shear for oblique, never double-strike) is one shared policy for
+  both the in-place-edit (14.x) and add-text (16.x) paths — R90.
+  StructTree/`/ActualText` is CUT from FF-H entirely (a partial
+  structure-tree writer judged worse than none) and re-filed as its own
+  ungated Backlog item, FF-I, with no Pass number assigned. Build order
+  is FF-H → FF-C → FF-B, decided on Pass 19.0 being a shared correctness
+  prerequisite the other two inherit, not on FF-H's own value (judged
+  lowest of the three). Zero new Cargo dependencies; no license/rule-13
+  question arises for this decision itself (a future FF-C dependency
+  pick still needs its own rule-13 check — flagged to the operator, see
+  `ROADMAP.md` Open operator questions item (h)). New standing rules
+  R88–R91 (ceiling was R87); Pass family: `ROADMAP.md`'s ★ Pass 19.x
+  (19.0 consolidation IN PROGRESS → 19.1 `Tc`/`Tz`/super-subscript → 19.2
+  `Ts`/synthesis → 19.3 GUI → 19.4 `Tw` conditional).

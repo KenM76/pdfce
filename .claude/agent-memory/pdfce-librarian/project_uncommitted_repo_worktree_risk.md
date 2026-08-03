@@ -197,3 +197,28 @@ class). **Chain now 28 commits deep, all still local-only:** `d8b3903`
 authorization remains the sole open gate, unchanged in kind, still not
 granted. Verify tip with `git log --oneline -1` before trusting this
 hash list.
+
+**UPDATE — continuation 59 (2026-08-03, Pass 18.4 + `ui-strings` gate
+fix) through continuation 62 (2026-08-03, decision 019 filed).**
+Continuation 59 added `be62e48` (Pass 18.4) → `a5d1d18` (`ui-strings`
+gate fix), chain 30 deep. Continuation 60 added FOUR more: `25b4783`
+(docs: commit-chain self-correction) → `d296666` (fix: Pass 18.4
+disclosure text) → `9998a6b` (Pass 18.5) → `6a6a48f` (observation-
+harness client-rect fix), chain 35 deep on the implementation side / 36
+on the branch total. Continuation 61 added `1b38e34` (Pass 18.6 —
+text-bbox geometry fix, the fourth and last named cause of "can't click
+on objects"), branch total 37. Continuation 62 (this update, pure
+docs/decision-filing, no code) added TWO more, both engineer-verified
+via `git cat-file -t` per R87: `67f49bb` (ui-spec §0.2/§B.3 marked
+historical) → `743e463` (decision 019's record,
+`docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`). **Branch
+total now 39 commits, still all local-only, still no git remote
+configured at all.** Backup bundle refreshed at continuation 61:
+`D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle` (supersedes the
+earlier same-day `...20260803.bundle`); unchanged at continuation 62
+(no new build artifact to re-verify against — a docs-only session).
+Push/publish authorization remains the sole open gate, unchanged in
+kind since continuation 50. As always, verify tip with `git log
+--oneline -1` before trusting this hash list — do not assume this
+memory's chain is current without checking, especially across a
+calendar-day boundary.

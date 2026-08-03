@@ -1,6 +1,6 @@
 ---
 name: project-mit-license-and-priority-sequence
-description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling → forms. Pass-17-gate CLEARED 2026-08-03 (continuation 58) — items #3/#4 now the live dispatch target.
+description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling → forms. Pass-17-gate CLEARED 2026-08-03 (continuation 58); item #3's FF-H decided as decision 019/★ Pass 19.x (2026-08-03, continuation 62, Pass 19.0 IN PROGRESS) — FF-B/FF-C/item #4 (forms) still undispatched.
 metadata:
   type: project
 ---
@@ -168,3 +168,33 @@ priority sequence + ★★★★★ REORDERING entries for current status before
 assuming either the plain four-item order or the Pass-17-gate framing
 from continuation 56 still describes what's next — it doesn't; the gate
 is gone and items #3/#4 are the live dispatch target.
+
+**UPDATE — 2026-08-03, SESSION_LOG continuation 62: item #3 (finish
+text-handling) now has a concrete scoping for FF-H specifically —
+decision 019, filed as `ROADMAP.md`'s ★ Pass 19.x.** FF-H (the third of
+the three named text-parity fast-follows, alongside FF-B/FF-C) is
+DECIDED: `Tc`/`Tz` + super/subscript ship as parity, free-form `Ts` +
+synthetic bold/italic ship as a deliberate exceed, `Tw` is
+evidence-gated behind a corpus census (not a direct control unless
+≥60% of sampled documents show it in use), and the minimal
+StructTree/`/ActualText` piece named in FF-H's original bundle is CUT
+entirely and re-filed as a separate, ungated Backlog item (FF-I) — a
+scoping call worth flagging to Ken since he may have counted it inside
+"finish off all the text handling stuff." Build order established:
+**FF-H → FF-C → FF-B** (not on FF-H's own value — judged the least of
+the three — but because Pass 19.0, FF-H's first slice, is a shared
+text-state-tracking correctness prerequisite both FF-C and FF-B
+inherit). **Pass 19.0 (text-state consolidation) is IN PROGRESS as of
+this update**, being built by a separate dispatch. Five new open
+questions filed for the operator (`ROADMAP.md` Open operator questions
+(g)–(k)): the `Tw` census middle band, FF-C's rule-13 dependency
+classification (the MIT decision lifted rule 8, it did NOT pre-approve
+any specific crate — don't conflate the two when FF-C's turn comes),
+the FF-I StructTree cut, list-authoring (re-surfaced, still
+unanswered), and a newly-found parity gap this decision did NOT scope —
+kerning (Acrobat retains it per the same Dov-Isaacs source that
+established `Tw`/`Ts` were dropped; pdfce has no kerning surface
+distinct from `Tc`). Item #4 (forms) remains untouched and still queued
+behind #3. Commit chain: two docs commits this session, `67f49bb`
+(ui-spec historical marking) → `743e463` (decision 019 record), chain
+now **39 commits**, still local-only, still no git remote configured.

@@ -5663,6 +5663,17 @@ without a new operator instruction.
    in-place-text-edit authoring engines APPLYING these parameters when
    writing new content. Same four operator names, two unrelated code
    paths — FF-H's own scope is UNCHANGED and NOT advanced by Pass 18.6.
+   **AMENDMENT (2026-08-03, decision 019) — item 3 now has a concrete
+   scoping for FF-H.** FF-H is DECIDED and sliced as ★ Pass 19.x (above):
+   `Tc`/`Tz` + super/subscript ship as parity, free-form `Ts` + synthetic
+   bold/italic ship as a deliberate exceed, `Tw` is evidence-gated
+   (corpus census), and the minimal StructTree/`/ActualText` piece is
+   CUT from FF-H entirely (re-filed as FF-I, Backlog). Build order is
+   FF-H → FF-C → FF-B (★ Pass 19.x's Q3) — FF-B and FF-C remain
+   unscheduled/gated exactly as before, unchanged by this amendment
+   beyond the ordering call. Pass 19.0 (correctness consolidation) is
+   IN PROGRESS. Full record:
+   `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`.
 4. **Form-building tools, after — "if that makes sense."** Queued
    behind items 1–3. This is form field CREATION/authoring (adding new
    AcroForm fields to a document), distinct from the already-shipped
@@ -5893,6 +5904,144 @@ OS-window undocking (§10 Q2) is explicitly NOT granted by `egui_tiles`
 default stands: docked-only, its own Backlog entry, still unanswered.
 §10 Q1 (the `egui_tiles`-vs-hand-rolled question this note originally
 tracked) is ANSWERED and BUILT — see Pass 18.1 above.
+
+### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019, DECIDED 2026-08-03; Pass 19.0 IN PROGRESS)
+
+**Decision 019 ACCEPTED via the KenAgent protocol.** Full record:
+`docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`. Filed
+against the ★★★ operator priority sequence's item 3 ("finish off all
+the text handling stuff") — the third fast-follow decision this
+directive has produced, after decisions 014/015/016.
+
+**The parity premise for two of FF-H's four named operators collapsed
+before any code was written.**
+`D:\Dev\Rag-Specialized\Acrobat_Features\text_edit__spacing_and_scaling_controls.md`
+(sourced to Dov Isaacs, former Adobe Principal Scientist, Adobe
+Community 2019-01-03/04) establishes that Acrobat itself dropped word
+spacing (`Tw`) and free-form baseline offset when text editing was
+consolidated into the single Edit Text & Images tool; Isaacs' own
+retained list is "adding, deleting, bold, italic, font size, leading,
+kerning, and horizontal scaling." FF-H's name lists four operators
+(`Tc`/`Tw`/`Tz`/`Ts`); **parity covers only two** (`Tc`, `Tz`, plus the
+coarse superscript/subscript toggle Acrobat exposes as a hack on top of
+`Ts`). A removal during a UI consolidation is strong evidence about the
+consolidation and weak evidence about the feature on its own — but for
+`Tw` a SECOND, independent signal points the same way (§9.3.3 makes it
+structurally void for 2-byte composite/CID runs, and its one honest job
+already collapsed into the 15.1 reflow layer's `TJ`-based design). No
+such second signal exists for `Ts`.
+
+**Q1 — the two operators SPLIT, on font-model universality vs. marginal
+cost given what parity already forces, not the parity-vs-exceed axis
+originally assumed:**
+- **Free-form `Ts` SHIPS as a deliberate exceed.** Superscript/subscript
+  is a parity must-have and `Ts` is the only PDF-native baseline
+  mechanism — the emission/restore/tracking/test path is forced
+  regardless of whether the raw number is exposed, so withholding it
+  means building the mechanism and hiding it. Works identically on
+  every font model — no void case, no refusal class.
+- **`Tw` does NOT ship as a direct authoring control in the core
+  slices.** Its one honest job (inter-word distribution) already
+  belongs to the 15.1 reflow layer, which deliberately chose `TJ` over
+  `Tw` for exactly the properties that make `Tw` a poor *control*
+  (decision 015); re-adding it reintroduces what that decision rejected
+  and gives the operator two dials that both look like "space between
+  words," interacting multiplicatively through `Th`. Engine-first
+  (read/track/publish/preserve/display-read-only, Pass 19.0); whether
+  it ever becomes a direct control is gated behind a **corpus census
+  with explicit decision bands** (≥60% of sampled real-world documents
+  → build; ≤25% → close the item; 25–60% → escalate to the operator —
+  see Open operator questions, below).
+
+**Q2 — synthetic bold/italic: one shared policy across in-place edit
+(14.x) and add-text (16.x); the asymmetry is emergent, not designed
+in.** Add-Text defaults to a bundled Standard-14 whose family has real
+Bold/Italic faces, so the synthesis gate rarely opens there — the
+remedy-offer ORDER differs (Add-Text offers a real face first;
+in-place editing offers synthesis first) but the gate, the mechanism,
+and the disclosure are identical. Mechanism is `Tr 2` (stroke+fill) +
+`Tm` shear, **rejecting double-strike** (doubles glyph count, breaks
+the byte↔glyph correspondence provenance depends on). Two §9.3.6
+correctness traps a naive implementation would hit, both bugs if
+missed: stroking must use the STROKING colour matched to the fill
+(otherwise coloured text acquires a black outline); stroked line width
+is in USER space and must be derived from `Tfs × |Tm| × |CTM|`, never a
+device-space constant. Two hazards beyond the original brief: a `Tm`
+shear is **not** text state, so it survives `Td`/`TD`/`T*` into every
+later line; shear composed with `Ts` displaces a raised run by
+`Trise × tan θ`. Persistence is self-evident emission with no private
+marker — the same bytes that make pdfce's own synthesis detectable on
+reload also let it recognize other producers' faux styles.
+
+**Q3 — build order FF-H → FF-C → FF-B.** Not on value — FF-H is judged
+the least valuable of the three named fast-follows — but because Pass
+19.0 (below) is a shared correctness prerequisite both FF-C and FF-B
+inherit. **Pass 18.6's `Tc`/`Tw`/`Tz`/`Ts` tracking
+(`vector::decompose::GState`) is explicitly NOT groundwork for this
+decision, worth roughly 5%:** it is a private *reading*-path walk
+feeding an approximate hit-test bbox, not callable from any authoring
+path; its real contribution is being the THIRD private ambient-state
+tracker in the codebase, which is what makes the Pass 19.0
+consolidation argument unarguable rather than merely tidy. See the
+★★★ Operator priority sequence entry's namesake-collision note (above)
+— unchanged and unaffected by this decision.
+
+**CUT from FF-H, re-filed as its own Backlog item (FF-I):** the minimal
+StructTree/`/ActualText` update named in decision 014 §5.3's original
+FF-H bundle is removed entirely — a *partial* structure-tree writer is
+judged worse than none. Decision 016 §2 had already reached this
+conclusion on the merits (ranked FF-H's StructTree piece "premature,"
+deferred it); decision 019 acts on that finding by cutting it rather
+than carrying it forward unbuilt. See the new "FF-I — minimal
+StructTree/ActualText update" Backlog entry, below.
+
+**Slices (Pass 19.x; no new `CommandKind` — every slice rides the
+existing `FormatText`/`AddText` one-command-per-accepted-edit path):**
+- **19.0 — Text-state consolidation + ambient publication (core + CLI;
+  CORRECTNESS ONLY, no new operator surface). IN PROGRESS — a builder
+  is on it now.** Consolidates the three private ambient-spacing
+  trackers (`text_extract::page::TextState`,
+  `text_edit::edit::Walk`/`reflow_apply::BlockTextState`,
+  `vector::decompose::GState`) and publishes `Ts`/`Tr` through
+  `GlyphProvenance` for the first time — today dropped at
+  provenance-construction time (`text_edit::edit::Walk` has no `b"Ts"`
+  or `b"Tr"` arm at all, so pdfce cannot yet restore an ambient rise it
+  never observed). Also fixes a **live, currently-masked state leak**
+  in `reflow_apply.rs`: its preamble emits `Tc`/`Tz`/`Tw` before
+  `BT…ET` with no restore and no `q`/`Q` (illegal there regardless —
+  §8.2 Table 51/Figure 9), benign today only because the justify gate
+  refuses whenever `|tc| > ε || |tw| > ε` — exactly the gate 19.1 would
+  want to relax.
+- **19.1 — `Tc` + `Tz` + superscript/subscript authoring (core + CLI).
+  The Acrobat-parity slice.** `MetricSpec::{Absolute, Relative}` per
+  R89. Includes a `Tz` × justify disclosure: `Th` rescales every `TJ`
+  numeric adjustment, so a horizontal-scale edit on justified text
+  needs its own disclosed interaction, not a silent double-application.
+- **19.2 — Free-form `Ts` + synthetic bold/italic (core + CLI). The
+  deliberate exceed.** `StyleSynthesis` provenance enum; R90's gate
+  wired behind the same coverage check Pass 14.2 already uses for
+  family/style changes. **Prerequisite check before this slice starts:**
+  confirm `pdfce-render` actually honours `Tr 2` and a sheared `Tm` — if
+  it doesn't, R85 (preview-equals-saved) breaks the moment this slice
+  ships a feature the canvas can't paint.
+- **19.3 — GUI: the spacing/style property surface.** Dispatch
+  `pdfce-ui-specialist` first, per the standing Feature-fidelity/
+  UI-design discipline.
+- **19.4 — `Tw` (CONDITIONAL — do not start without the census
+  result).** Gated per Q1/R91's decision bands.
+
+**Standing rules R88–R91 added** (see Standing rules, below) — the
+ceiling was R87.
+
+**Open items for the operator** — see Open operator questions, below:
+the `Tw` census middle-band judgement call; FF-C's rule-13 dependency
+classification (MIT lifted rule 8, it did NOT pre-approve any crate);
+the FF-I StructTree cut (a scoping call Ken may have counted inside
+"finish off all the text handling stuff"); list-authoring (re-surfaced,
+still unanswered); and a newly-found parity gap this decision did NOT
+scope — **kerning**: Isaacs lists kerning among Acrobat's retained
+text-editing controls, and pdfce currently has no kerning surface
+distinct from `Tc`.
 
 ### Dimension-tool bug-fix cluster — Pass 12.M2c (Backlog, code-trace found 2026-08-02, distinct from Pass 18.x)
 
@@ -7395,6 +7544,19 @@ nothing gets forgotten, not as a commitment to build in this order.
     present tense, even though the same file's own §E already carries
     the correct one — needs a `pdfce-ui-specialist` pass to reconcile the
     two, not a builder task.
+    **RESOLVED 2026-08-03 (commit `67f49bb`).** §0.2/§B.3 were corrected
+    earlier the same day to describe the em-box geometry accurately;
+    Pass 18.6 then replaced that geometry, so the corrected sections
+    became accurate descriptions of behavior that no longer exists —
+    a second-order staleness, not the original bug. `67f49bb` marks
+    §0.2/§B.3 **historical** (before/after bboxes both recorded,
+    `bbox=16,136,44,164` → `bbox=30,147.102,70.46,160.052`) rather than
+    deleting them: the em-box geometry is *why* four separate defects
+    reached the operator as a single "can't click on objects" report,
+    and the analysis that untangled it is what found the other three
+    (Pass 18.0 tolerance, Obj-tool outline, coordinate-offset). This
+    item is now fully closed — no `pdfce-ui-specialist` work remains
+    owed on it.
   - **Item 2 (status-bar/`Fit page`-zoom feedback loop): unchanged,
     still a standing hazard**, not scheduled as its own Pass — see the
     original item 2 text above and the escalated RAG finding.
@@ -8111,6 +8273,25 @@ nothing gets forgotten, not as a commitment to build in this order.
   core lib 713 passed, CLI `add_text` 15 passed, fmt/clippy clean,
   `cargo tree` GUI-dep-free, zero new dependency.
 
+- **FF-I — minimal StructTree/`/ActualText` update on tagged-page text
+  edits. Filed 2026-08-03 by decision 019 §3.7, CUT from FF-H's
+  original bundle (decision 014 §5.3) rather than carried forward
+  unbuilt.** Decision 016 §2 had already found FF-H's StructTree piece
+  "premature"; decision 019 acts on that finding rather than merely
+  repeating it. Rationale for the cut: a *partial* structure-tree
+  writer (one that updates `/ActualText`/MCID linkage for the specific
+  edits FF-H's own operators touch, but not the general case of a
+  content-stream surgery moving marked-content boundaries) is judged
+  worse than none — a document that looks tagged-and-consistent but
+  silently drifts out of sync with its own structure tree is a harder
+  failure to detect than one that visibly discloses "structure not
+  updated" (the existing R73 posture, which pdfce already ships).
+  **No Pass number assigned.** Scope, when actually picked up: a real
+  StructTree writer needs its own decision record — this entry exists
+  so the gap isn't silently dropped, not to pre-scope the eventual
+  Pass. See the ★ Pass 19.x entry (Next up) for the full context this
+  cut sits inside.
+
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
 **RESOLVED this session (continuation 56) — no longer open:**
@@ -8177,23 +8358,65 @@ nothing gets forgotten, not as a commitment to build in this order.
   is sufficient. Recorded as a fact for the operator to weigh, not a
   renewed recommendation beyond the one already on record.
 
+**New this session (2026-08-03, decision 019) — five items, none
+blocking Pass 19.0's in-progress build:**
+- **(g) The `Tw` census middle band (25–60%) — is a control that works
+  on roughly half of documents worth permanent surface area?** R91/★
+  Pass 19.x's decision bands resolve the top and bottom of the range
+  mechanically (≥60% build, ≤25% close); the middle band is a product
+  judgement, not a technical one, and decision 019 deliberately does not
+  pre-answer it. **No default stated** — surfaced now so the census
+  result (Pass 19.4, once run) has a place to land instead of stalling.
+- **(h) FF-C's rule-13 dependency classification.** The MIT license
+  decision (2026-08-01) lifted rule 8's gate on FF-C (font subsetting/
+  embedding) outright, but it did **not** pre-approve any specific
+  crate — rule 13 (copyleft always flagged, never decided solo) still
+  applies to whichever font-subsetting/embedding crate is actually
+  chosen when FF-C is scoped. "MIT decided" is not "any dependency is
+  fine"; don't let the two get conflated when FF-C's turn comes (Q3 of
+  ★ Pass 19.x: FF-H → FF-C → FF-B).
+- **(i) Cutting the minimal StructTree/`/ActualText` update out of FF-H
+  (now filed separately as Backlog's FF-I).** A scoping call decision
+  019 made on its own authority (§3.7, building on decision 016 §2's
+  "premature" finding) — but it changes the shape of what "finish off
+  all the text handling stuff" delivers, since the original FF-H bundle
+  named it explicitly. Ken may have counted it inside that directive;
+  flagging so the cut isn't discovered only after the fact.
+- **(j) List-authoring — re-surfaced, still unanswered.** Unchanged in
+  substance from the carried item below; called out here specifically
+  because decision 019 touches adjacent territory (text authoring
+  scope) without resolving this one — re-surfaced so it is not silently
+  assumed either way by proximity.
+- **(k) Kerning — a parity gap decision 019 found but did not scope.**
+  Dov Isaacs' retained-controls list (the same source establishing
+  Acrobat dropped `Tw`/free-form `Ts`, §1.1 of decision 019) names
+  kerning among Acrobat's *retained* text-editing controls, alongside
+  `Tc` (character spacing) — and pdfce currently has **no kerning
+  surface distinct from `Tc`.** Whether kerning is a separate operator
+  affordance (pair-kerning adjustment) or is considered subsumed by
+  uniform `Tc` tracking is an open scope question, not answered by
+  decision 019 or ★ Pass 19.x's slicing.
+
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
   not-yet-granted authorization (see "In progress" GIT STATUS above).
   **Now more precise (continuation 59, 2026-08-03): there is no git
-  remote configured at all** — the 30-commit chain exists solely on
-  this machine. A verified backup bundle exists as a stopgap
-  (`D:\Dev\pdfce-backups\pdfce-20260803.bundle`), not a substitute for
+  remote configured at all** — the commit chain exists solely on this
+  machine (30 commits at continuation 59; **39 commits as of this
+  session**, engineer-verified). A verified backup bundle exists as a
+  stopgap (`D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle`,
+  superseding the earlier `...20260803.bundle`), not a substitute for
   an actual push decision. Also flag: the branch is still named
-  `pass-8-redaction` though it now carries Passes 9 through 18.4 — worth
-  renaming whenever a push is authorized.
+  `pass-8-redaction` though it now carries Passes 9 through 19.0 —
+  worth renaming whenever a push is authorized.
 - Encryption (Pass 5 / decision 007)'s `/R 6` sourcing method and the
   `LEGAL.md` §2 Adobe-supplement contradiction — both still gate its
   scoping when it activates.
 - `LEGAL.md` §2 itself — still open (see LEGAL.md).
 - List-authoring scope call — still explicitly unresolved; do not fold
   into "text-handling" (priority #3) without a further, explicit
-  operator answer naming it specifically.
+  operator answer naming it specifically. **Re-surfaced, not resolved,
+  by decision 019 — see item (j) above.**
 
 ## Standing rules
 
@@ -9034,6 +9257,67 @@ nothing gets forgotten, not as a commitment to build in this order.
   is produced by the engineer running `git rev-list`/`git cat-file -t`/
   `cargo test --workspace` directly, not recalled or re-derived from a
   prior summary, and is spot-checked once filed.
+- **R88 — Direct text-state formatting is scoped by explicit
+  restore-by-value, never by `q`/`Q`, never by normalization (decision
+  019, 2026-08-03).** Any `Tc`/`Tw`/`Tz`/`Ts`/`Tr` pdfce emits to affect
+  one run is followed by an explicit restore of the resolved ambient
+  value, emitted **inside the same text object** — `q`/`Q` are "Special
+  graphics state" operators and are **not permitted inside `BT…ET`**
+  (ISO 32000-1 §8.2 Table 51/Figure 9), and splitting the text object to
+  use them would discard `Tm` (§9.4.1). The ambient value is resolved by
+  the three-tier ladder already established for fill colour
+  (`TextColor::restore_bytes`, Pass 14.2): spec default when provably
+  unset → observed raw operand bytes when set in the stream →
+  **refuse-and-disclose when unobservable** (multi-stream `/Contents`,
+  Form-XObject-inherited state, unparseable prefix). A guessed default
+  restore is never emitted. New text authored inside a balanced
+  `q … BT … ET … Q` envelope (the `addtext.rs` path, Pass 16.x) is
+  exempt: `Q` performs the restore.
+- **R89 — Size-relative typographic quantities are stored as ratios and
+  derived at emit time (decision 019, 2026-08-03).** `Tc` and `Ts` are
+  in *unscaled text space units* and are **not** scaled by `Tfs` (§9.3)
+  — a naive implementation that stores an absolute rise/tracking value
+  silently mis-scales it on a font-size change (a 10 pt superscript
+  resized to 20 pt keeps its absolute rise and lands wrong). pdfce's
+  model stores these as a discriminated `Absolute | Relative` quantity;
+  superscript/subscript are always `Relative`, and the absolute operand
+  is re-derived whenever `Tfs` changes.
+- **R90 — Synthetic bold/italic is per-use, declinable, fallback-only,
+  and self-evident (decision 019, 2026-08-03).** Offered only when no
+  real Bold/Italic resource resolves (the same coverage check that
+  gates a real family/style change, Pass 14.2); never a global
+  preference — a named, declinable, per-application choice on every use
+  (deliberately stricter than Acrobat's set-and-forget "Enable
+  Artificial Bold/Italic Styles" preference). Emitted by spec-native
+  means only: text rendering mode 2 (`Tr 2`, stroke+fill) with a
+  **user-space-derived** stroke width and the stroking colour matched
+  to the fill (§9.3.6 — both are real bugs if missed: composite mode
+  without a matched stroke colour puts a black outline on coloured
+  text; a device-space-constant stroke width ignores
+  `Tfs × |Tm| × |CTM|`), and a `Tm` shear for oblique — **never
+  double-strike** (doubles glyph count, breaks the byte↔glyph
+  correspondence provenance depends on). The result is re-detectable by
+  byte inspection on reload — recorded in-session as `StyleSynthesis`
+  provenance, **never written into the PDF as a private marker.** One
+  shared policy across both the in-place-edit (14.x) and add-text
+  (16.x) paths; only the *order* the real-face remedy is offered in
+  differs, and that difference is disclosed. A `Tm` shear is **not**
+  text state and is **not** covered by R88 — it propagates through
+  `Td`/`TD`/`T*` into every later line, and a shear composed with `Ts`
+  displaces a raised run by `Trise × tan θ` — both are hazards beyond
+  the original brief, not hypothetical edge cases.
+- **R91 — `Tw` is capability-gated by font model, and inter-word
+  distribution on composite runs is `TJ`-only (decision 019,
+  2026-08-03).** Word spacing applies only to single-byte code 32
+  (§9.3.3) and is structurally void for 2-byte composite/CID runs.
+  pdfce never emits `Tw` on a composite run and never presents a
+  word-spacing affordance for one (R83). Slack/inter-word distribution
+  for composite runs uses `TJ` numeric adjustments — the decision-015
+  path — never `Tw`. Whether `Tw` ships as a direct control AT ALL for
+  simple-font runs is gated behind a corpus census with explicit
+  decision bands (≥60% of sampled real-world documents → build; ≤25% →
+  close the item; 25–60% → escalate to the operator) — see the ★ Pass
+  19.x entry (Next up) and Open operator questions.
 
 ## Update protocol
 
