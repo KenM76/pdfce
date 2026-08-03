@@ -6282,23 +6282,56 @@ impl PdfceApp {
             .id_salt("page-canvas")
             .scroll_source(scroll_source)
             .show(ui, |ui| {
-                ui.centered_and_justified(|ui| {
-                    if let Some(texture) = texture {
-                        ui.add(
-                            egui::Image::from_texture(&texture)
-                                .fit_to_exact_size(display_size)
-                                .sense(canvas_sense),
-                        )
-                    } else {
-                        // First frame after an open: the texture is made
-                        // at the end of this frame. Reserve the page's
-                        // space (same sense) so nothing jumps when it
-                        // arrives — and so the substrate's canonical canvas
-                        // response exists even before the first raster.
-                        ui.allocate_exact_size(display_size, canvas_sense).1
-                    }
-                })
-                .inner
+                // Centre the page MANUALLY rather than with
+                // `ui.centered_and_justified`, because that helper returns the
+                // JUSTIFIED CONTAINER rect — the whole available area — while
+                // drawing the image centred inside it. Taking that rect as
+                // `image_rect` made every page↔screen mapping wrong by the
+                // centring margin whenever the page was smaller than the
+                // viewport.
+                //
+                // The symptom was severe and specific: at "Fit page" on a page
+                // narrower/shorter than the canvas, selection outlines drew
+                // offset from the object they outlined (~105 px on one
+                // measured case — exactly the vertical margin), and clicking
+                // directly ON a visible object MISSED it. At high zoom, where
+                // the page exceeds the viewport and the margin is zero, the
+                // same click landed perfectly. That is the giveaway: the error
+                // scaled with the margin, not with the zoom.
+                //
+                // Worst of all, it is worst at exactly the zoom an operator
+                // uses to see a whole page. This is a THIRD distinct cause of
+                // the operator's 2026-08-02 "I don't seem to be able to click
+                // on objects", after the zoom-inverted select tolerance
+                // (`SELECT_SCREEN_TOLERANCE_PX`) and the object-edit tool
+                // drawing no selection outline at all.
+                //
+                // So: reserve `max(page, viewport)` so the ScrollArea still
+                // scrolls when the page is larger AND there is a margin to
+                // centre within when it is smaller, then place the image at an
+                // explicit centred rect. `Ui::put`/`allocate_rect` return a
+                // Response whose `.rect` IS that rect, so `image_rect` is the
+                // page's true drawn rect by construction rather than by
+                // coincidence.
+                let avail = ui.available_size();
+                let outer = egui::vec2(display_size.x.max(avail.x), display_size.y.max(avail.y));
+                let (outer_rect, _) = ui.allocate_exact_size(outer, egui::Sense::hover());
+                let page_rect = egui::Rect::from_center_size(outer_rect.center(), display_size);
+                if let Some(texture) = texture {
+                    ui.put(
+                        page_rect,
+                        egui::Image::from_texture(&texture)
+                            .fit_to_exact_size(display_size)
+                            .sense(canvas_sense),
+                    )
+                } else {
+                    // First frame after an open: the texture is made at the
+                    // end of this frame. Reserve the page's space (same rect,
+                    // same sense) so nothing jumps when it arrives — and so
+                    // the substrate's canonical canvas response exists even
+                    // before the first raster.
+                    ui.allocate_rect(page_rect, canvas_sense)
+                }
             })
             .inner;
 
