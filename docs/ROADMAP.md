@@ -43,6 +43,175 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 18.3 — ScripTree-style SVG icon set + toolbar overflow wrapping (icon-set entry RESOLVED, operator priority #2) — 2026-08-02, committed `c59b0c4`
+
+**Closes the long-queued ★ Icon set Next-up entry (design complete
+2026-08-01, build unblocked 2026-08-02 once Pass 17.x's tiny-skia
+pipeline decision landed) and Pass 18.3 of the ★ Pass 18.x family
+(Measure ▾ affordance fix, ui-spec §D — see below).** Docs commit
+`f9bb560` landed first this session (continuation-56 filing + decision
+017 Amendment A + a `pass-17-dock-and-layer-tree.md` status notice +
+the `tools/roundtrip` HashMap-sampling determinism fix — see the
+commit-chain update below and the ARCHITECTURE §12 continuation-57
+entry); Pass 18.3 is the feature commit that followed it.
+
+**Pipeline — new `crates/pdfce-gui/src/icons.rs` (~2000 lines, ~55%
+doc comment), zero new Cargo dependencies, `Cargo.lock` byte-identical.**
+SVG-path `d`-attribute → `tiny-skia` → egui-texture, reached via
+`pdfce_render::tiny_skia` (already a pdfce dependency) — the tiny-skia
+path chosen at Pass 17.x/continuation-56 over the original
+pre-rasterize-to-PNG plan, which could not execute on this machine (no
+Inkscape/ImageMagick, `cairosvg` libcairo load failure). Supports
+`<path>`/`<rect>`/`<circle>`, full path-data command grammar
+(`M m L l H h V v C c S s Q q T t A a Z z`), elliptical arcs converted
+to cubic Béziers per SVG 1.1 §F.6.5/§F.6.6. **Refuses** unknown
+elements, unknown path commands, malformed numbers, and bad arc flags
+rather than silently drawing a wrong glyph — same refuse-not-guess
+discipline as the PDF parser. Mask-plus-tint rendering per
+`docs/ui_specs/icon-set-and-toolbar.md` §6: one white-on-transparent
+raster per icon, tinted at draw time (tint is deliberately NOT part of
+the cache key, so the same raster serves every color state). Cache
+keyed `(icon, physical px, weight)`, with physical px derived from
+`pixels_per_point()` so icons stay crisp under HiDPI scaling.
+
+**Gotcha with a pinned regression test:** SVG arc-command flags must be
+lexed as single CHARACTERS, not via the general number lexer —
+ScripTree's own `link.svg` is written `a6 6 0 008 8`, where a naive
+number-grabber reads `008` as the single number `8` and silently
+misparses the whole arc. Filed generalizably to
+`D:\dev\rag\egui\svg_arc_flag_single_char_lexing_not_number.md`.
+
+**New `crates/pdfce-gui/assets/icons/`** — 35 SVGs + `PROVENANCE.md`
+recording the confirmation Ken gave 2026-08-01 (continuation 54).
+**8 copied verbatim from ScripTree** (the `folder` icon is reused for
+both the Open and Font-folder controls per ui-spec §3.5 — document,
+edit, tool, ruler, link, scissors, upload), **2 derived** (zoom-in/
+zoom-out reuse icon-search's circle+handle shape), **25 authored new**
+in the same 48×48 viewBox / `stroke="currentColor"` / stroke-width
+2.5 / round-cap-join contract the ScripTree originals use. `redact.svg`
+remains the ONE deliberately solid-filled glyph in an otherwise
+all-outline set (ui-spec §8.1's rule-based exception — an outline-only
+icon would understate that redaction irreversibly removes content, not
+just masks it), with a test asserting it stays the only solid icon so
+a future "style cleanup" pass cannot quietly outline it away.
+
+**`main.rs` / `ui_text.rs`:** `icon_button` now takes an `Icon`;
+`glyph_button`/`icon_toggle`/`icon_text_toggle`/`icon_text`/
+`selected_icon_ring` all now share ONE `labeled_icon_button` body, so
+the AccessKit accessible-name-override logic exists in exactly one
+place instead of five near-duplicates. Emoji/glyph prefixes stripped
+from 7 `ui_text.rs` labels; 11 now-surfaceless glyph-only functions
+deleted, each with a block comment recording what was removed and why
+(audit trail for "why did this function disappear").
+
+**Toolbar overflow — solved by WRAPPING, not an overflow menu, decision
+recorded in-code.** An overflow ("...") menu needs to know what didn't
+fit BEFORE layout runs, which in egui's immediate-mode model means
+either a frame of visible lag on every resize, or a hard-coded control
+priority list that silently rots as future Passes add toolbar controls
+— and even done perfectly, it still hides controls behind an extra
+click, which is itself a discoverability regression (this is part of
+why the operator originally couldn't find the dimensioning tool's
+scale-entry controls — see the ENGINEER-VERIFIED OBSERVATION below).
+Wrapping is the only option where **nothing is ever hidden**, so
+standing rule R83 ("no affordance without the capability" / "never
+unreachable without a visible cue") holds structurally rather than by
+convention. **A second, self-inflicted bug found by running the app
+and fixed in the same commit:** plain wrapping hands each widget only
+the width remaining on its current line, so at 640pt window width the
+`Measure` button's label rendered ONE CHARACTER PER LINE as a tall
+column — inflating the toolbar's height and pushing the History and
+utility control groups off the bottom of the panel, which is WORSE
+than the clipping it was meant to replace. Fixed with `wrap_mode =
+Extend` on the toolbar row so egui takes the wrap decision at control
+boundaries, not mid-label.
+
+**Pass 18.3 proper — Measure ▾ affordance fix (ui-spec §D), shipped as
+part of the same commit.** The dimensioning tool was already confirmed
+functional end-to-end (see the Pass 12.M2c Backlog cluster and the
+Pass 17.0 diagnosis); this closes the *discoverability* gap: a real
+icon (`icon-ruler.svg`) now reaches the Measure ▾ control per the
+icon-set mapping, resolving the sequencing note left open in the ★
+Pass 18.x Next-up entry.
+
+**Gates (engineer re-ran ALL of these in the main tree, not just the
+autonomous builder's worktree):** `cargo test --workspace` **1504
+passed, 0 failed** (up from 1474 baseline; `pdfce-gui`'s own bin-test
+count went 94 → 124, no test was removed to get there); `cargo fmt
+--all --check` clean; `cargo clippy --workspace --all-targets -D
+warnings` clean; `cargo tree -p pdfce-core` / `-p pdfce-render`
+verified free of `egui`/`eframe`/`winit`/`wgpu`/`glow`/`accesskit`
+(GUI-core separation invariant intact); **zero new Cargo dependencies**
+(icon rendering rides the tiny-skia dependency pdfce already had).
+
+**ENGINEER-VERIFIED OBSERVATION (standing rule R86 satisfied at the
+toolbar level, first time by direct observation rather than headless
+proof alone).** A screenshot of the running release build at the
+default 1116pt window width shows the toolbar wrapped to two rows
+with **all 27 controls visible and reachable, each with an icon**.
+Before this change, at the same window width the toolbar was CLIPPED
+after `□ Aa` and `Obj`, with `Measure ▾`, `Tools`, and print entirely
+off-screen and **no affordance indicating anything was missing** —
+which is part of why the operator originally reported the
+dimensioning tool "didn't seem to have a way to actually set the
+dimensions": the scale-entry control was never rendered on screen at
+all, not merely hard to notice.
+
+**UI-spec defects found during the build (recorded so the spec gets
+corrected, not silently deviated from — `docs/ui_specs/
+icon-set-and-toolbar.md` is `pdfce-ui-specialist`'s document, flagged
+here for its next pass, not edited by the engineer or librarian):**
+1. §4.1's icon-size guidance is internally self-contradictory — 18–20px
+   inside a 28×24pt button with egui's `(4,1)` `button_padding` leaves
+   ~1pt of padding, not the "few px of padding on every side" the same
+   sentence asks for. Built at 16pt instead (`icons::ICON_PTS`), with
+   the deviation recorded in both the code and `PROVENANCE.md` §5.
+2. §1.2's heading claims "two files that do not match the contract —
+   flagged, not silently used," but its own body calls the variance
+   "trivial, immaterial." Direct inspection of every reused ScripTree
+   source found no file that actually deviates from the contract —
+   nothing was excluded on §1.2's account; the heading appears to
+   overstate what the body found.
+3. §2 predates the toolbar's Pass 9c-min "Obj" vector-edit toggle,
+   which shipped after the icon spec and had no icon mapping.
+   `edit-objects.svg` was authored in-contract rather than leaving one
+   toolbar control on a bare glyph forever — recorded as a deviation
+   from, not an execution of, §2's original mapping.
+4. §3 assigns no icon to the object rail's ▲/▼ reorder arrows; left as
+   plain glyphs routed through `glyph_button` so their accessible names
+   are unaffected either way.
+5. An autonomous builder working in a worktree branched BEFORE `f9bb560`
+   reported that `docs/decisions/017` and standing rule R84 "do not
+   exist." They DO exist in the main tree — the worktree simply
+   predated the commit that added them (see
+   `D:\dev\rag\rust\autonomous_builder_worktree_isolation_uncommitted_substrate.md`,
+   a recurring pattern on this project). No action needed beyond noting
+   it; the icon build's substance was implemented from ui-spec §5.3
+   regardless of the stale worktree's confusion.
+
+**Open defect DISPATCHED, not yet fixed — filed here so it isn't
+lost:** the down-caret glyph `▾` (U+25BE) has NO glyph in egui's
+bundled fonts and renders as a tofu box on the `Markup □`, `Text □`,
+`Measure □`, and Copy's `⧉ □` controls. **Pre-existing, not a
+regression** — confirmed by stashing this Pass's change and rebuilding
+the baseline, which shows the same tofu box. `pdfce-ui-specialist` has
+been dispatched to adjudicate the fix and to audit `ui_text.rs` for
+other unrenderable codepoints project-wide; it will produce
+`docs/ui_specs/menu-affordance-and-glyph-coverage.md`. Track as an open
+item until that spec lands and is built.
+
+**RAG filings this session (both ecosystem-wide, `D:\dev\rag\egui\`):**
+`eframe_blank_until_first_input_reactive_repaint.md` (eframe presents
+nothing until it receives real input — a screenshot harness must drive
+a synthetic input event first, or it photographs an unpresented frame
+and false-alarms a broken UI; cost the builder several diagnostic
+cycles and the engineer one wasted black-screenshot capture) and
+`svg_arc_flag_single_char_lexing_not_number.md` (see the gotcha above).
+A third finding — `HashMap` iteration order drifting between separate
+runs of the same binary, root cause of the `tools/roundtrip` R38
+census-drift bug fixed in `f9bb560` — was filed to
+`D:\dev\rag\rust\hashmap_iteration_order_drifts_between_runs_of_same_binary.md`.
+
 ### `.gitattributes` ordering fix — CRLF corruption of binary PDF fixtures (repo-integrity fix) — 2026-08-02, committed `b73604d`
 
 **Not a feature Pass — a repo-integrity incident found and fixed this
@@ -4274,7 +4443,12 @@ harness, the selection-outline fix, Pass 18.2, and the `.gitattributes`
 repo-integrity fix — see Shipped above, newest first). The remaining
 Pass 17.1/17.2 and Pass 18.1/18.3 work is not yet built — see Next up.
 See `SESSION_LOG.md`'s 2026-08-02 entry (continuation 56) for the full
-session record.
+session record. **UPDATE (continuation 57, same day): Pass 18.3 has
+since SHIPPED** (`c59b0c4`, ScripTree-style SVG icon set + toolbar
+overflow wrapping — see the Pass 18.3 Shipped entry, top of Shipped),
+alongside decision 017 AMENDMENT A (`egui_tiles` adopted — see
+`ARCHITECTURE.md` §12) and a docs-plus-fix commit `f9bb560`. **Pass
+17.1/17.2 and Pass 18.1 remain unbuilt** — see Next up.
 
 
 ONLY.** The operator authorized "commit all work"; the engineer
@@ -4340,7 +4514,21 @@ outline feedback, second cause of the click-tracking complaint) →
 `c7c1744` → `6150e1a` → `7c93cc3` → `2abbd75` → `dd3a8b8` → `76485b5` →
 `0569373` → `9a68d6f` → `3a56b55` → `f2d5fae` → `c998521` → `dae0139` →
 `b73604d`**. All 18 remain **local-only**; push authorization is still
-a separate, not-yet-granted operator item.
+a separate, not-yet-granted operator item. **UPDATE (2026-08-02, this
+session, continuation 57):** two more commits landed —
+**`f9bb560`** (docs: continuation-56 librarian filing + decision 017
+AMENDMENT A + a status notice atop `docs/ui_specs/
+pass-17-dock-and-layer-tree.md` + a `tools/roundtrip` determinism fix,
+sorting `ObjId`s by key before truncating the R38 promotion-object
+sample so it no longer drifts between runs of the same binary — see
+`D:\dev\rag\rust\hashmap_iteration_order_drifts_between_runs_of_same_binary.md`)
+→ **`c59b0c4`** (Pass 18.3, ScripTree-style SVG icon set + toolbar
+overflow wrapping — see Shipped above, top of Shipped). Full chain, 20
+commits: **`d8b3903` → `79d1c6f` → `e13f3e6` → `19ed865` → `801a748` →
+`c7c1744` → `6150e1a` → `7c93cc3` → `2abbd75` → `dd3a8b8` → `76485b5` →
+`0569373` → `9a68d6f` → `3a56b55` → `f2d5fae` → `c998521` → `dae0139`
+→ `b73604d` → `f9bb560` → `c59b0c4`**. All 20 remain **local-only**;
+push authorization is still a separate, not-yet-granted operator item.
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
@@ -4510,9 +4698,12 @@ headless oracle) remain. Decision 017's Pass 18.0 (zoom tolerance,
 committed `9a68d6f`) and **Pass 18.2** (`object-list` CLI, committed
 `dae0139`) are SHIPPED; a related fix (selection-outline feedback for
 the Obj tool, `c998521`) also shipped this session — see Shipped above.
-**Pass 18.1** (tabbed/panel shell + Objects tree + Properties panel)
-and **Pass 18.3** (Measure ▾ affordance fix) remain unbuilt — see the ★
-Pass 17.x / ★ Pass 18.x entries under Next up for what's left.
+**UPDATE (continuation 57): Pass 18.3** (Measure ▾ affordance fix +
+icon set + toolbar wrapping) has since SHIPPED (`c59b0c4`) — see the
+Pass 18.3 Shipped entry (top of Shipped). **Pass 18.1** (tabbed/panel
+shell + Objects tree + Properties panel, now built atop `egui_tiles`
+per decision 017 Amendment A) remains unbuilt — see the ★ Pass 17.x /
+★ Pass 18.x entries under Next up for what's left.
 - **Marquee-vs-pan UX flag (owed since Pass 9a) — RESOLVED, KEPT, no
   further action.** `pdfce-ui-specialist` reviewed it during the
   12.M1 dispatch and found no conflict with dimension-picking (which
@@ -4605,9 +4796,12 @@ without a new operator instruction.
    canvas, disclosed in GUI). **9c-min** (basic vector editing, a
    distinct capability) is the only decision-011 slice remaining and
    is now IN PROGRESS.
-2. **ScripTree-style icons for all GUI features.** Design COMPLETE,
-   both gated decisions RESOLVED (2026-08-01) — BUILD still queued
-   behind 9c-min, not yet dispatched — see the "Icon set" entry below.
+2. **ScripTree-style icons for all GUI features.** **SHIPPED
+   2026-08-02** (`c59b0c4`, Pass 18.3) — see the Pass 18.3 Shipped
+   entry (top of Shipped) and the "Icon set" entry below (now carrying
+   a SHIPPED banner). Shipped AHEAD of the ★★★★★ REORDERING's stated
+   gate (Pass 17.1/17.2 still unbuilt) — see that entry's "DEVIATION
+   RECORDED" note.
 3. **Finish all text-handling.** FF-B (cross-block/cross-page reflow),
    FF-H (`Tc`/`Tw`/`Tz`/`Ts` spacing + synthetic styles + minimal
    StructTree update), and FF-C (font subsetting/glyph embedding — its
@@ -4641,6 +4835,26 @@ is **Pass 17.1** (finish the `session.document()` audit) and **Pass
 17.2** (CLI parity + headless preview-equals-saved oracle), both still
 open. Do not start the icon build, text-handling fast-follows, or
 form-building until 17.1/17.2 are also shipped.
+
+**DEVIATION RECORDED (continuation 57, 2026-08-02) — this directive was
+NOT observed for the icon build.** Pass 18.3 (ScripTree-style icon set
++ toolbar overflow wrapping + Measure ▾ affordance fix) SHIPPED
+(`c59b0c4`) this session, WITHOUT waiting for Pass 17.1/17.2, which
+remain unbuilt as of this entry. Flagged here explicitly, not silently
+folded in, per the same "don't let a contradiction stand unrecorded"
+discipline this file uses for its own decision history. The engineer's
+rationale (from the commit sequence, not a re-litigated operator
+answer): Pass 18.3 was scoped and dispatched together with Pass 18.0/
+18.2's discoverability fixes for the SAME operator complaint ("I don't
+seem to be able to click on objects" / the dimensioning tool "didn't
+seem to have a way to set dimensions"), and the toolbar-wrapping fix in
+particular was a direct, verified fix for that complaint (see the Pass
+18.3 Shipped entry's ENGINEER-VERIFIED OBSERVATION). Whether this
+justifies stepping ahead of the confirmed sequence is a judgment call
+the operator has not yet been asked to bless — **flag to the operator
+at next contact**, do not treat it as retroactively authorized. Pass
+17.1/17.2 remain the gating items for text-handling fast-follows (#3)
+and form-building (#4), which have NOT been started.
 
 ### ★ Pass 17.x — Live-edit rendering: the canvas renders the edited document (decision 018, DECIDED 2026-08-02, SLICE 17.0 SHIPPED)
 
@@ -4719,7 +4933,7 @@ work — **RESOLVED this session (continuation 56): confirmed yes** — see
 the ★★★★★ reordering entry above (now CONFIRMED, not merely proposed)
 and Open operator questions item (f), now marked resolved.
 
-### ★ Pass 18.x — Tabbed dock, layer/object tree, selection legibility, Measure ▾ affordance fix (decision 017 + `docs/ui_specs/pass-17-dock-and-layer-tree.md`, DECIDED/SPECCED 2026-08-02, slices 18.0/18.2 SHIPPED)
+### ★ Pass 18.x — Tabbed dock, layer/object tree, selection legibility, Measure ▾ affordance fix (decision 017 + Amendment A + `docs/ui_specs/pass-17-dock-and-layer-tree.md`, DECIDED/SPECCED 2026-08-02, slices 18.0/18.2/18.3 SHIPPED)
 
 **Pass-number note (same pattern as decision 014's Pass 13→14
 renumber — see that entry above, "PASS-NUMBER RENUMBER"):** the UI
@@ -4740,23 +4954,34 @@ archived record uses for its own superseded "13.x" self-reference.
   the same complaint together with it.
 - **Pass 18.1 — tabbed/panel dock shell + Objects tree + Properties
   selection panel + canvas selection feedback.** **DESIGN CONFLICT
-  FLAGGED, not yet resolved — read both records before building:** the
-  ui-spec's §A designs a **horizontal 3-tab strip** (`Tools` |
-  `Objects` | `Properties`); decision 017 — authored LATER the same
-  session, after a `pdfce-ui-specialist` review of the ui-spec's own
-  draft — **rejects horizontal tab bars** for this mount point (the
-  dock is `default_size(320.0)`; ten text labels don't fit a 320pt-wide
-  horizontal strip) and chooses a **two-compartment vertical row list**
-  instead (upper: Properties/Comments/Bookmarks; lower: Layers/OCGs/
-  batch Tools). **Decision 017 §3 is the binding shell design; ui-spec
-  §A.1–A.5 (the specific tab-strip widget) is SUPERSEDED for the shell
-  only.** The ui-spec's §B (object/layer tree — node model, paint-order
-  presentation, row content, bidirectional selection sync,
-  virtualization), §C (canvas selection feedback — type badges,
-  invisible-object/text-approximation disclosure, Properties-tab
-  detail), and §D (Measure ▾ affordance fix) are **unaffected** and
-  remain the binding design regardless of which shell they're hosted
-  in. **MUST-ship-together, per ui-spec §A.2:** the existing
+  RESOLVED 2026-08-02 (continuation 57) by decision 017 AMENDMENT A —
+  read the amendment before building, not §3/§8 alone.** Superseded
+  history, for context: the ui-spec's §A originally designed a
+  **horizontal 3-tab strip**; decision 017 then rejected that for a
+  **hand-rolled two-compartment vertical row list** (320pt dock too
+  narrow for horizontal tabs). **Both of those are now themselves
+  superseded** — the operator answered decision 017 §10 Q1 (does the
+  panel system own only the dock, or eventually the whole
+  content area, VS Code/Blender-style) with *"Use egui_tiles… has the
+  flexibal docking that works as well as inkscape's,"* firing the §6.1
+  trigger. **Binding shell mechanism is now `egui_tiles` 0.16.0**
+  (`ARCHITECTURE.md` §12 continuation-57 entry; full text in
+  `docs/decisions/017-tabbed-dockable-panel-system.md`'s "AMENDMENT A"
+  section) — one new Cargo dependency, MIT OR Apache-2.0, already
+  vetted, `THIRD_PARTY_LICENSES.md` regen owed via `cargo-about` when
+  it actually lands in `Cargo.toml` (not yet — Pass 18.1 is still
+  unbuilt). **What does NOT change:** the underlying simultaneity
+  requirement (Layers and Properties visible together, Inkscape-parity
+  workflow) — under `egui_tiles` it becomes a vertical split pane
+  instead of two fixed compartments; ship the DEFAULT layout with that
+  split already in place. `enum DockPanel` + one `panel_body(...)`
+  dispatcher (decision 017 §8.1) survives verbatim as the `egui_tiles`
+  pane payload — keep it extensible (`Document(DocId)` variant must
+  stay a non-breaking addition). The ui-spec's §B (object/layer tree),
+  §C (canvas selection feedback), and §D (Measure ▾ affordance fix —
+  **SHIPPED**, see Pass 18.3 below) are **unaffected by any of this**
+  and remain the binding design regardless of shell mechanism.
+  **MUST-ship-together, per ui-spec §A.2:** the existing
   `properties_window` (document `/Info` fields) renames to "Document
   Properties" in the SAME slice that adds the new selection-scoped
   Properties surface — shipping the rename later recreates the exact
@@ -4767,7 +4992,10 @@ archived record uses for its own superseded "13.x" self-reference.
   to be the "box that doesn't correspond to anything" culprit); extend
   `ImageObject` with pixel width/height (P1, lower urgency). Both are
   additions to already-GUI-free data the decomposition already
-  computes.
+  computes. **`docs/ui_specs/pass-17-dock-and-layer-tree.md`'s §A is
+  now superseded TWICE OVER** (decision 017, then Amendment A) and
+  carries a status notice to that effect (added `f9bb560`) — do not
+  build it as written.
 - **Pass 18.2 — `object-list` CLI subcommand. SHIPPED 2026-08-02,
   committed `dae0139` — see Shipped above.** Closed the gap found this
   session: `object-move`'s own help text told operators to get object
@@ -4776,26 +5004,30 @@ archived record uses for its own superseded "13.x" self-reference.
   scope, used to produce the diagnosis in the Pass 17.0 Shipped entry.
   Serves as the Objects tree's headless companion (rule 11, CLI
   parity) for the still-unbuilt Pass 18.1.
-- **Pass 18.3 — Measure ▾ affordance fix (ui-spec §D).** The
-  dimensioning tool is confirmed FUNCTIONAL end-to-end by reading
-  `run_measure_tool`/`scale_entry_widget` in full — this is a
-  discoverability fix, not a capability gap. Binding change: when a
-  dimension is drawn on a group with no scale set, add a real "Set
-  Scale…" button beside the existing `NO_SCALE_DISCLOSURE` plain-label
-  text (`main.rs:8182-8184`, confirmed today it is bare `ui.label` with
-  no next-action affordance) — reuse the in-progress reference line's
-  drawn length when feasible, else fall back to opening the Group
-  Manager's scale-entry form pre-selected on the current group. Icon
-  assignment (`icon-ruler.svg`) is tracked in the Icon-set entry, not
-  here — sequencing note only, this Pass ships functional either way.
+- **Pass 18.3 — Measure ▾ affordance fix (ui-spec §D) + ScripTree-style
+  icon set + toolbar overflow wrapping. SHIPPED 2026-08-02, committed
+  `c59b0c4` — see Shipped above (top of Shipped).** The dimensioning
+  tool was already confirmed FUNCTIONAL end-to-end (`run_measure_tool`/
+  `scale_entry_widget`) — this was a discoverability fix, not a
+  capability gap, and shipped bundled with the icon-set build (the two
+  were sequenced together because the Measure ▾ icon assignment was
+  tracked in the icon-set entry). A real `icon-ruler.svg`-style
+  affordance now reaches the Measure ▾ control; the toolbar itself now
+  wraps (not an overflow menu — see Shipped entry for the rationale)
+  so every control including Measure ▾ stays visible and reachable at
+  any window width, closing the discoverability half of the operator's
+  original dimensioning-tool complaint (the capability half was already
+  closed).
 
 **Not v1, explicitly flagged for the operator, not built (ui-spec §A.6
-/ decision 017 §10 Q1–Q3):** drag-to-reorder panels; undock-to-floating-
-OS-window; whether "like any other modern program" means "has tabs"
-(satisfied) or "supports full panel rearrangement" (materially larger,
-possibly a new `egui_tiles` dependency — pre-vetted and pre-approved
-behind a named trigger, decision 017 §6). See the open-questions list
-below.
+/ decision 017 §10 Q2–Q3):** drag-to-reorder panels and undock-to-
+floating-OS-window are `egui_tiles` native capabilities once Pass 18.1
+lands, but multi-monitor OS-window undocking (§10 Q2) is explicitly
+NOT granted by adopting `egui_tiles` (no `Surface::Window` equivalent,
+rerun-io/egui_tiles issue #30) — default stands: docked-only, its own
+Backlog entry. §10 Q1 (the `egui_tiles`-vs-hand-rolled question this
+note originally tracked) is now ANSWERED — see Pass 18.1 above and the
+open-questions list below.
 
 ### Dimension-tool bug-fix cluster — Pass 12.M2c (Backlog, code-trace found 2026-08-02, distinct from Pass 18.x)
 
@@ -4823,7 +5055,21 @@ Not yet scoped into a build plan — flagged here so it isn't lost, per
 the same "name it even if not building it yet" discipline as every
 other Backlog bucket in this file.
 
-### ★ Icon set — ScripTree-style SVG icons for all GUI features (operator priority #2, set 2026-08-01)
+### ★ Icon set — ScripTree-style SVG icons for all GUI features (operator priority #2, set 2026-08-01, SHIPPED 2026-08-02)
+
+**SHIPPED 2026-08-02 (SESSION_LOG continuation 57), committed `c59b0c4`
+as Pass 18.3 — see the Pass 18.3 Shipped entry (top of Shipped) for
+full content/gates/gotchas.** This entry's history below (design
+completion, the two gated-decision amendments, the pipeline switch) is
+retained as the audit trail for how the build got scoped and unblocked
+— nothing below needs re-reading to pick up new work, but it explains
+WHY the shipped build looks the way it does (tiny-skia pipeline, not
+pre-rasterized PNG; 8 verbatim + 2 derived + 25 new SVGs; the
+redaction-icon style exception). **One item flagged during the build,
+not yet resolved:** `▾` (U+25BE) has no glyph in egui's bundled fonts
+and tofu-boxes on 4 controls — pre-existing, not introduced by this
+Pass; `pdfce-ui-specialist` dispatched, see the Pass 18.3 Shipped
+entry's "Open defect DISPATCHED" paragraph.
 
 **AMENDED 2026-08-01 (SESSION_LOG continuation 54) — BOTH gated decisions
 RESOLVED by the operator; the icon BUILD is now UNBLOCKED (still queued
@@ -4915,11 +5161,13 @@ plan above is superseded, retained for history only.
 (2) **Sequencing CONFIRMED — Pass 17 before new feature work**, per the
 same operator answer. Open operator question (f) is now closed; the
 ★★★★★ reordering entry (above) is CONFIRMED, not merely proposed.
-**Consequence: the icon BUILD still does not start yet** — not because
-either question is open (both are answered), but because Pass 17.1/17.2
-(the remainder of the now-confirmed-first Pass 17.x) are not yet built.
-The icon build is next in the queue once 17.1/17.2 ship, using the
-tiny-skia SVG-path pipeline.
+**SHIPPED 2026-08-02 (continuation 57), ahead of Pass 17.1/17.2** — see
+the SHIPPED banner at the top of this entry and the Pass 18.3 Shipped
+entry (top of Shipped) for what actually landed. (Historical note,
+retained: at the time this paragraph was written, the plan was to wait
+for Pass 17.1/17.2 before starting the icon build; in practice it
+shipped as part of the same Pass 18.3 commit as the Measure ▾
+affordance fix, with Pass 17.1/17.2 still unbuilt — see Next up.)
 
 Ken wants pdfce's GUI toolbar/tool icons styled after
 `D:\Dev\ScripTree\icons\*.svg` — the existing coherent SVG icon set
@@ -4946,8 +5194,10 @@ drop.
 - ~~Format/pipeline question, unresolved...~~ **RESOLVED 2026-08-01
   (continuation 54) — see gated decision (a) above; pre-rasterize to
   PNG chosen, `resvg`/`usvg` rejected.**
-- **Queued behind 9c-min** (the last remaining decision-011 slice) — do
-  not let this displace 9c-min in the dispatch order.
+- ~~Queued behind 9c-min...~~ **MOOT — 9c-min shipped 2026-08-01
+  (`76485b5`), and the icon build itself has since SHIPPED 2026-08-02
+  (`c59b0c4`, Pass 18.3) — see the SHIPPED banner at the top of this
+  entry.**
 
 ### ★ NEXT MAJOR FOCUS — Pass 14.x: Acrobat text-handling parity (decision 014, DECIDED 2026-07-31)
 
@@ -6868,23 +7118,34 @@ nothing gets forgotten, not as a commitment to build in this order.
   operator priority sequence (icons, text-handling, forms). The
   ★★★★★ entry above is now a confirmed reordering, not a proposal.
 
+**RESOLVED this session (continuation 57) — no longer open:**
+- **(b) Decision 017 Q1 — RESOLVED, ANSWERED wide.** The operator chose
+  the VS Code/Blender whole-content-area model: *"Use egui_tiles…
+  has the flexibal docking that works as well as inkscape's."* This
+  fires the §6.1 trigger — `egui_tiles` 0.16.0 is ADOPTED as decision
+  017 AMENDMENT A (`ARCHITECTURE.md` §12 continuation-57 entry;
+  `docs/decisions/017-tabbed-dockable-panel-system.md`'s "AMENDMENT A"
+  section). Superseded: the hand-rolled two-compartment vertical list
+  (§3/§8.2) and the ui-spec's original §A horizontal-strip design (both
+  are now superseded shell mechanisms, not the binding one). Survives:
+  the simultaneity requirement itself (Layers+Properties together),
+  now realized as an `egui_tiles` vertical split rather than two fixed
+  compartments. See the ★ Pass 18.x entry's Pass 18.1 bullet.
+
 **Still open, new this session:**
-- **(b) Decision 017 Q1 — does the panel system own only the
-  right-hand dock, or eventually the whole content area (canvas
-  included)?** This is the `egui_tiles` adoption trigger (decision 017
-  §6.1) — narrow model keeps the hand-rolled vertical list; wide model
-  (VS Code/Blender-style) makes `egui_tiles`' horizontal tab bars
-  correct and pre-approved for immediate adoption. **Default: build
-  narrow, keep `DockPanel` extensible** (a non-breaking
-  `Document(DocId)` variant stays cheap to add later).
 - **(c) Decision 017 Q2 — should panels undock into separate OS
   windows (multi-monitor)?** Needs egui's multi-viewport machinery;
   interacts with crash-safe autosave and the (not-yet-built)
   persistence schema. **Default: no, docked-only** — its own Backlog
   entry if ever wanted.
-- **(d) Decision 017 Q3 — confirm the two-compartment assignment**
-  (upper = Properties/Comments/Bookmarks; lower = Layers/OCGs/batch
-  Tools). **Default: ship the proposed split.**
+- **(d) Decision 017 Q3 — confirm the panel-pairing assignment**
+  (originally proposed as two fixed compartments: upper =
+  Properties/Comments/Bookmarks; lower = Layers/OCGs/batch Tools —
+  now, per Amendment A (b), realized as an `egui_tiles` DEFAULT layout
+  with the same pairing rather than a fixed compartment boundary; the
+  operator can drag to rearrange once built, lowering the stakes of
+  this default). **Default: ship the proposed split as the initial
+  `egui_tiles` layout.**
 - **(e) Decision 018 — bless the operator-visible definition of done**
   (provisionally R86: a Pass that adds/changes operator-facing behavior
   does not ship until observed working in the running application, not

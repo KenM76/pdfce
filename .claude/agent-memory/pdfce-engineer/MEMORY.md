@@ -11,4 +11,5 @@
 - [Decision 012 supplied fonts](project_decision012_supplied_fonts.md) — first cut shipped (render/CLI/GUI); R61–R65 collide with existing R61 (renumber before filing); GlyphSource migration; skrifa face-name API
 - [Decision 013 Pass B xref recovery](project_decision013_pass_b_xref_recovery.md) — rebuild-by-scan shipped; 566/1109 real-world converted, 0 regressions; standing-rule ~R62 flag; gen-65536 recover-anyway deviation flagged
 - [Engineer does the observing](feedback_engineer_does_the_observing.md) — Ken won't beta-test; verify operator-facing behavior in the running app yourself, never stall waiting on him
+- [Librarian needs exact hashes](feedback_librarian_needs_exact_hashes.md) — doc agents have no shell; paste real commit hashes, never placeholders or "see git log"
 - [Pass 17 live-edit rendering](project_pass17_live_edit_rendering.md) — GUI rendered base revision not edit overlay, hiding 14 Passes of editing work; decisions 017 (egui_tiles adopted) + 018 (fix)

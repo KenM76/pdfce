@@ -2062,7 +2062,14 @@ with a forward pointer.
     `egui::Window`, and decision 017 retires the Properties floating
     form entirely, replacing this convention with R80/R81's
     two-compartment dock. Dimension Groups is named there as the
-    remaining floating-window holdout for a follow-up migration.)*
+    remaining floating-window holdout for a follow-up migration.
+    **FURTHER AMENDED same day, continuation 57 — decision 017
+    AMENDMENT A:** the "two-compartment dock" MECHANISM above is itself
+    superseded by `egui_tiles` containers (the §6.1 trigger fired,
+    operator chose the whole-content-area/Inkscape-flexible-docking
+    model); the underlying SIMULTANEITY requirement R80/R81 encode
+    does not lapse — it becomes a vertical split pane instead of two
+    fixed compartments. See the continuation-57 §12 entry below.)*
     (2) **The toolbar is CAPPED at its 6 groups + the Tools
     toggle.** Any future feature fits an existing group, becomes a
     rail-contextual control, or becomes a Tools-dock entry; no 7th
@@ -3506,3 +3513,87 @@ with a forward pointer.
   pdfce-render` GUI-dep-free; roundtrip corpus 4,023 files unchanged;
   raster oracle 6566/6566; zero new Cargo dependencies. Full record:
   `ROADMAP.md`'s Pass 17.0 Shipped entry (top of Shipped).
+- **2026-08-02 (same-day continuation 57) — Decision 017 AMENDMENT A:
+  the §6.1 trigger FIRED — `egui_tiles` 0.16.0 is ADOPTED, superseding
+  §3/§8's hand-rolled two-compartment vertical row list AS A MECHANISM
+  (the requirement it served does NOT lapse).** Asked §10 Q1 (does the
+  panel system own only the right-hand dock, or eventually the whole
+  content area, VS Code/Blender-style), the operator answered: *"Use
+  egui_tiles. You're building something to compete with Acrobat and is
+  open source, and has the flexibal docking that works as well as
+  inkscape's."* That is the primary trigger fired in the widest
+  direction available (whole-content-area ownership, flexible docking
+  as the explicit bar, not merely "more than one panel"). Per §6.1's own
+  instruction, this is filed as a dated amendment to decision 017, NOT a
+  new decision record — full text at the end of
+  `docs/decisions/017-tabbed-dockable-panel-system.md` ("AMENDMENT A").
+  **What changes:** `egui_tiles` 0.16.0 becomes a real dependency (one
+  new package; MIT OR Apache-2.0, permissive — `LEGAL.md` §6.2 step 3
+  applies, proceed-and-log, no operator flag needed; all transitives
+  already present at satisfying versions; wasm32-clean; exact MSRV
+  1.92/egui 0.35.0 match). §6.2's vetting stands and is NOT redone;
+  re-verify only version-specific facts (MSRV, license, transitive set)
+  against whatever `egui_tiles` release is current when Pass 18.1 is
+  actually built, since `main` has already bumped `rust-version` toward
+  1.95 for a future release — pin to the last release that doesn't
+  exceed pdfce's own MSRV if so. `THIRD_PARTY_LICENSES.md` regeneration
+  via `cargo-about` is owed when this dependency actually lands in
+  `Cargo.toml` (rule 13 / `LEGAL.md` §6.3) — NOT yet, since Pass 18.1 is
+  still unbuilt as of this entry. **What is superseded:** §3's vertical
+  single-column two-compartment row list as the PICKING MECHANISM, and
+  §8.2's "two hand-rolled compartments" implementation step — both
+  replaced by `egui_tiles` containers (a vertical split pane, Layers
+  above Properties by default). **What survives unchanged:** the
+  underlying requirement §3 was solving — Layers and Properties (or any
+  two dock panels) must be visible SIMULTANEOUSLY, because pdfce is also
+  an Inkscape-parity vector editor where selecting in a layer tree and
+  editing properties without losing sight of the tree is a core
+  workflow (Passes 9/12.M2 already put that pairing in play). Under
+  `egui_tiles` this becomes a vertical split container instead of two
+  fixed compartments — same requirement, different mechanism, and the
+  default layout must ship with that split already in place (do not
+  make an operator discover they must drag a panel out to see both).
+  `enum DockPanel` + one `panel_body(...)` dispatcher (§8.1) SURVIVES
+  VERBATIM as originally designed — it becomes the `egui_tiles` pane
+  payload; keep it extensible (a `Document(DocId)` payload variant must
+  stay a non-breaking addition, now expected rather than hypothetical
+  under the wide-content-area model). §5's PERMANENT rejection of
+  `egui_dock` is unaffected — independent of this trigger, still stands
+  on its own accessibility/dependency-hygiene grounds. **AccessKit
+  caution carried forward:** `egui_dock`'s tab bars are Tab-focusable
+  but unnamed to AccessKit (§5); `egui_tiles` 0.16.0 had the identical
+  gap at its release tag but has since fixed it on `main` — the Pass
+  that actually adopts the dependency must verify which side of that
+  fix the pinned release falls on and supply names via
+  `Behavior::tab_ui` if not. **Persistence unchanged:** session-only,
+  disclosed, per §7/R82 — do not enable `egui_tiles`' `serde` feature or
+  eframe's `persistence` feature yet; when R15 lands, `Tree<Pane>`'s
+  own Serialize/Deserialize under fail-soft rules (missing/corrupt →
+  default layout, never an error dialog or lost session) is the
+  intended mechanism. **Two engine gotchas recorded for whoever builds
+  Pass 18.1** (both already in the decision record, restated here so
+  §12 alone is a sufficient audit trail): `Tree<Pane>` derives only
+  `Clone, PartialEq` — NOT `Default`, so `std::mem::take` will not
+  compile, use `std::mem::replace(&mut self.dock, Tree::empty("swap"))`;
+  and `SimplificationOptions::default()`'s `prune_single_child_tabs:
+  true` + `all_panes_must_have_tabs: false` makes the tab bar vanish
+  when only one panel is open — override
+  `all_panes_must_have_tabs: true`. **Still open, NOT answered by this
+  amendment:** §10 Q2 (undock into separate OS windows/multi-monitor) —
+  `egui_tiles` has no `Surface::Window` equivalent (rerun-io/egui_tiles
+  issue #30); default stands, docked-only, own Backlog entry.
+  **Consequence for `docs/ui_specs/pass-17-dock-and-layer-tree.md`:**
+  its §A (horizontal tab-strip dock shell) is now superseded TWICE OVER
+  — once by decision 017's original two-compartment design, again by
+  this amendment's `egui_tiles` containers — and must not be built as
+  written; its §B (object/layer tree), §C (canvas selection feedback),
+  and §D (Measure ▾ affordance fix) are unaffected and remain the
+  binding design for those parts regardless of shell mechanism. A
+  status notice to this effect was added to the top of that ui-spec
+  file itself (commit `f9bb560`). **Not yet built:** Pass 18.1 (the
+  tabbed/panel shell + Objects tree + Properties selection panel) is
+  still unbuilt as of this entry — this amendment changes WHAT it will
+  be built with, not whether it has shipped. Full record: `docs/
+  decisions/017-tabbed-dockable-panel-system.md` ("AMENDMENT A"
+  section, filed by `pdfce-engineer` per §6.1's own instruction);
+  `ROADMAP.md` ★ Pass 18.x entry.
