@@ -7875,3 +7875,153 @@ classified and attributed.
   not_child_rect.md`, `egui_035_no_tab_tablist_widgettype.md`), one in
   `D:\dev\rag\rust\` (`crate_default_features_can_silently_contradict_
   project_policy.md`); both index files updated.
+
+**Same-day continuation 59 (real date 2026-08-03) — Pass 18.4 SHIPPED
+(selection legibility, ui-spec §C, closing most of the deviation flagged
+at Pass 18.1's ship), and the `ui-strings` CI gate — found red at
+baseline on 140 hits, hiding a real R1 violation — FIXED and moved to a
+local script.** Branch `pass-8-redaction`; two commits landed on top of
+`869d891` (continuation-58 HEAD): `be62e48` (Pass 18.4, selection
+legibility) → `a5d1d18` (fix: `ui-strings` gate + relocation to
+`tools/check-ui-strings.sh`). Chain now 30 commits, still all
+local-only, still no git remote configured at all. Workspace: `cargo
+test --workspace` 1538 → 1559 passed, 0 failed; `cargo fmt --check` /
+`cargo clippy --workspace --all-targets -D warnings` clean; `cargo tree
+-p pdfce-core`/`-p pdfce-render` GUI-dep-free; zero new Cargo
+dependencies this continuation.
+
+**Shipped:**
+- **Pass 18.4** — selection legibility (ui-spec §C), committed
+  `be62e48`. New `object_summary.rs` fact-record module
+  (`describe_object(&VectorObject) -> ObjectSummary`, prose-free, no
+  strings at all) shared verbatim by the Objects tree row and the canvas
+  status readout — a test pins the two never disagreeing. Per-kind
+  selection-outline treatment (solid/dashed, letter badge `P`/`T`/`I`/`F`,
+  degenerate-rect inflation via `visible_outline_rect` +
+  `MIN_OUTLINE_EXTENT_PX` in screen space). New one-line-plus-
+  `CollapsingHeader` status readout. Full record: `ROADMAP.md` Shipped
+  (top).
+- **`ui-strings` CI gate fix** — committed `a5d1d18`. Was red at
+  baseline on 140 hits (not enforcing decision 002 R1 at all); fixed a
+  real violation it was hiding (three Measure sub-tool names as bare
+  literals) and two false-positive classes (test-assertion prose,
+  `Display`-impl diagnostic text); relocated to
+  `tools/check-ui-strings.sh`, a character-level scanner replacing the
+  old whole-line regex (which mis-parsed adjacent string literals as one
+  spanning literal). Full record: `ROADMAP.md` Shipped (top).
+
+**Decisions made this session:**
+- **Pass-ID collision resolved by filing, not by editing history.** The
+  `be62e48` commit's own message says "Pass 18.2: selection legibility,"
+  but Pass 18.2 was already taken (the `object-list` CLI subcommand,
+  `dae0139`, 2026-08-02). Per the hard rule that Pass IDs are stable and
+  never reused, this session's feature is filed in `ROADMAP.md` as
+  **Pass 18.4** (next free slot in the 18.x family) — the commit message
+  itself is left as committed (git history isn't rewritten for this);
+  the roadmap entry is the canonical Pass-ID record going forward.
+- **`ROADMAP.md` Standing rules amended (not rewritten):** a dated note
+  on the Rust Style Guide / API Guidelines rule records that `ui-strings`
+  enforcement now runs locally via `tools/check-ui-strings.sh`, not CI
+  alone. **`ARCHITECTURE.md` §12's decision-002 entry gets the matching
+  dated addendum** so the body text and the decision log stay in sync,
+  per the librarian's own "both need to change together" discipline.
+- **Backlog "ui-spec §B.4/§C follow-ons" entry split by outcome, not
+  deleted.** §C's full selection-legibility asks are now marked SHIPPED
+  (Pass 18.4); §B.4's `pdfce-core` additions (`TextObject` string/font
+  preview, `ImageObject` pixel dimensions) remain owed and stay open,
+  now with three newly-surfaced sub-items (ui-spec text-bbox correction,
+  the status-bar/fit-zoom hazard, the `hit_test_point_all` core API).
+
+**Findings + decisions (empirical):**
+- **A lint/gate that is red at baseline enforces NOTHING and can hide a
+  real violation inside its own noise.** 140 baseline hits broke down as
+  125 test-assertion messages, 14 `Display`-impl diagnostic text, 3 a
+  detector-regex bug, and 1 genuine violation (three Measure sub-tool
+  names). Two of the three genuine-violation literals (`"Linear"`,
+  `"Radius/Diameter"`) would not even have been caught by a
+  baseline-clean version of the SAME regex, since it only flags literals
+  containing whitespace — moved anyway because the rule is about
+  operator-visible text living in one place, not about detector
+  coverage. **Corollary, stated as a standing methodology lesson:
+  verify a gate by making it fail on purpose, not only by making it
+  pass** — the first planted-failure test was silently swallowed because
+  it landed after `#[cfg(test)]`, where the checker truncates; a green
+  result on that first attempt would have meant "the check is broken,"
+  not "the code is clean." Escalated to `D:\dev\rag\rust\`.
+- **The regex `"[^"]*[[:space:]][^"]*"` does not match Rust string
+  literals — it spans from one literal's CLOSING quote to the NEXT
+  literal's OPENING quote.** `"svg" | "?xml"` parsed as one literal
+  containing `" | "`. Character-scanning with quote-open/close state is
+  the correct approach for detecting whitespace-bearing Rust string
+  literals; a regex written against a whole line cannot distinguish
+  literal boundaries from literal contents. Escalated to
+  `D:\dev\rag\rust\`.
+- **A dynamic bottom panel's height change can retrigger a `Fit page`
+  zoom recompute, invalidating click coordinates between frames.**
+  First observed as a real UI bug during Pass 18.4 (a growing status
+  readout shrank the canvas, which re-fit the page smaller, three times
+  in a row as lines accumulated) — generalizes to any egui app combining
+  a dynamic bottom/side panel with a fit-to-viewport zoom mode, not
+  specific to pdfce's status bar. Escalated to `D:\dev\rag\egui\`.
+- **The ui-spec's own model of pdfce's text-bbox approximation is
+  backwards.** `docs/ui_specs/pass-17-dock-and-layer-tree.md` §0.2/§B.3
+  describe it as "wider and taller than the ink"; empirically (confirmed
+  against `fixtures/synthetic/vector/mixed.pdf`) it is inflated from
+  glyph ORIGINS by the largest `Tf` size, giving a box narrower than and
+  offset from the actual glyph ink — clicking directly on visible text
+  can miss the hit region. This is project-internal UI-spec accuracy
+  (not a generalizable Rust/egui/PDF-domain fact), so it is NOT escalated
+  to any RAG — filed to `ROADMAP.md` Backlog for a `pdfce-ui-specialist`
+  re-dispatch to correct the spec text. It is a FOURTH named contributing
+  cause of the operator's original "can't click objects" complaint.
+- **`icons::Icon` cannot supply object-kind badges** — no glyph exists
+  for path/image/form-XObject, and `Icon::Text` already denotes the text
+  TOOL, not "this object is text." Reusing it for a badge would assert
+  an affordance that doesn't exist (R83). Letter badges are the honest
+  interim, not a placeholder to feel bad about — project-internal, not
+  escalated.
+
+**Still in flight:**
+- §B.4's core `pdfce-core` additions (`TextObject` string/font-name/size
+  preview, `ImageObject` pixel width/height) — filed, not built.
+- `hit_test_point_all` core API for Alt+click cycling through
+  overlapping objects — filed, not built.
+- ui-spec §0.2/§B.3 text-bbox-model correction — needs a
+  `pdfce-ui-specialist` re-dispatch, not yet done.
+- No GUI redaction-apply flow (carried, unchanged from continuation 58).
+- `✓`/`✕` glyph verification (carried, unchanged from continuation 58).
+- Pass 12.M2c (dimension-tool bug-fix cluster) — still filed, not
+  scoped.
+- Open operator questions (c) (multi-monitor undock) and (e) (R86
+  standing-rule blessing) remain unanswered.
+- The ★★★ operator priority sequence's items #3 (text-handling: FF-B,
+  FF-H, FF-C) and #4 (form-building) remain the next concrete dispatch —
+  unchanged from continuation 58, nothing this continuation blocks or
+  advances them.
+
+**For next session:**
+- Items #3 (text-handling fast-follows) and #4 (form-building) from the
+  operator's continuation-50 priority sequence are still the recommended
+  next dispatch, unless the operator gives a new steer (the ui-spec
+  text-bbox correction and the §B.4 core additions are both small,
+  high-value fast-follow candidates surfaced this continuation).
+- Flag to the operator at next contact, all carried or newly precise:
+  (1) the icon build shipped ahead of the Pass-17-first sequencing at
+  continuation 57 (carried, unresolved flag); (2) the GUI has no
+  redaction-apply flow at all (carried); (3) R86 remains unanswered
+  (carried); (4) **there is no git remote configured at all** — the
+  30-commit chain exists solely on this machine, a verified backup
+  bundle (`D:\Dev\pdfce-backups\pdfce-20260803.bundle`) exists as a
+  stopgap only; (5) the branch is still named `pass-8-redaction` though
+  it now spans Passes 9–18.4 — worth a rename whenever a push is
+  authorized.
+- Carried, unchanged: push/publish call; encryption `/R 6` +
+  `LEGAL.md` §2; list-authoring scope.
+- Two new cross-project RAG findings filed this continuation — one in
+  `D:\dev\rag\rust\` covering BOTH the red-at-baseline-gate lesson and
+  the regex-literal-span bug as two separate files
+  (`ci_gate_red_at_baseline_enforces_nothing.md`,
+  `regex_whitespace_literal_detector_spans_across_adjacent_rust_string_literals.md`),
+  one in `D:\dev\rag\egui\`
+  (`bottom_panel_height_change_retriggers_fit_to_viewport_zoom.md`); all
+  three index files updated.

@@ -1319,7 +1319,17 @@ with a forward pointer.
     English-only; no locale detection, no i18n crate. Enforced by a
     new `ui-strings` CI job (whitespace-bearing string literals in
     `pdfce-gui` outside `ui_text.rs` fail the build unless
-    `// ui-text-exempt: <reason>`).
+    `// ui-text-exempt: <reason>`). **UPDATE (2026-08-03, continuation
+    59):** this job was found red at baseline on 140 hits — i.e. not
+    actually enforcing R1 — and was hiding a real violation (three
+    Measure sub-tool names as bare literals in `main.rs`). Fixed and
+    relocated to `tools/check-ui-strings.sh` (runnable locally, not only
+    in CI), rewritten as a character-level quote-tracking scanner
+    instead of a whole-line regex (the regex had been mis-parsing
+    `"svg" | "?xml"`-style adjacent literals as one literal spanning
+    both). See `ROADMAP.md`'s `ui-strings` CI gate Shipped entry
+    (2026-08-03) for the full account, including the "verify a gate by
+    making it fail" methodology finding.
   - **Eight standing rules R1–R8** added to `ROADMAP.md`'s Standing
     rules — the discipline (no sentence assembly, no English-width
     layout, formatting helpers, no i18n dep without a §9 trigger,

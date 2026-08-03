@@ -43,6 +43,184 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### `ui-strings` CI gate — was RED AT BASELINE (140 hits) and hiding a real R1 violation; FIXED and moved to a local script — 2026-08-03, committed `a5d1d18`
+
+**The job enforcing decision 002 R1 (single string catalog, `ui_text.rs`)
+had been red at baseline on 140 hits for some unknown prior span — the
+rule was not actually being enforced.** A gate that cannot pass trains
+everyone who sees it red to ignore it; this is worse than having no gate
+at all, because it looks like coverage that doesn't exist.
+
+**It was concealing a genuine violation.** The Measure sub-tool names
+`"Linear"` / `"Radius/Diameter"` / `"Set Scale"` are drawn directly on
+the toolbar and lived as bare string literals in `main.rs` — a real R1
+breach. Moved into `ui_text.rs` as `measure_tool_name_linear` /
+`_measure_tool_name_circular` / `_measure_tool_name_scale`. Two of the
+three would **not** have been caught even by a gate that was green at
+baseline (the whitespace-literal heuristic only flags literals
+containing a space character, and `"Linear"` has none) — they were
+moved anyway because the rule is about operator-visible text living in
+one place, not about what a regex can see.
+
+**Breakdown of the 140 baseline hits:** 125 were test-assertion
+messages (prose, but read only by whoever is debugging a failing test,
+never rendered to an operator); 14 were an `impl Display` writing an
+error's own description (`pdfce-core`/`pdfce-render` diagnostic text —
+different audience and lifecycle than GUI chrome, R4's domain not R1's);
+3 were the **detector regex itself misreading Rust** (see the RAG
+finding below — `"svg" | "?xml"` was parsed as one literal spanning
+`" | "`); 1 was a genuine stderr diagnostic, now explicitly exempted
+with its reasoning recorded inline.
+
+**The rule moved out of the inline CI grep into `tools/check-ui-strings.sh`**
+so it can be run locally before pushing, not only discovered by CI after
+the fact. Every exclusion category is justified in the script's own
+header, and the character scanner tracks which quotes open/close a
+literal rather than matching a regex against a whole line. Exemptions
+(`// ui-text-exempt: <reason>`) may now sit in the comment block ABOVE
+the offending line, not only trailing it, because a real reason
+sometimes doesn't fit past column 100.
+
+**Verified by making the gate FAIL on purpose, not only by making it
+pass.** That check immediately exposed a second limit, now recorded in
+the script itself: the first planted violation was appended to
+end-of-file — i.e. after `#[cfg(test)]`, where the checker truncates —
+so the gate stayed green and briefly looked like a check that could
+only ever pass. Re-planting the violation above the test module caught
+it correctly. **This is the standing methodology lesson, escalated to
+`D:\dev\rag\rust\` below: verify any gate by making it fail, never only
+by making it pass.**
+
+Gates: the script itself is the gate (no separate Pass test-count
+change); `cargo fmt --check` / `cargo clippy --workspace --all-targets
+-D warnings` clean; `tools/check-ui-strings.sh` clean against the
+current tree (0 hits after the fix, all 140 baseline hits accounted
+for above); no new Cargo dependency.
+
+### Pass 18.4 — Selection legibility (ui-spec §C, closing the deviation flagged at Pass 18.1's ship) — 2026-08-03, committed `be62e48`
+
+**Pass-number note (flag, per hard rule "Pass IDs are stable, never
+reused"):** the shipped commit's own message says "Pass 18.2:
+selection legibility" — that collides with the ALREADY-SHIPPED Pass
+18.2 (`object-list` CLI subcommand + headless hit-test query,
+committed `dae0139`, 2026-08-02 — see that Shipped entry above). This
+is a naming slip in the commit message, not a real reuse of the ID:
+the feature this entry describes is the "ui-spec §B.4/§C follow-ons"
+Backlog item filed at Pass 18.1's ship (2026-08-03, no Pass number
+assigned at filing time). **Filed here as Pass 18.4** — the next free
+slot in the 18.x family — so the ledger stays unambiguous; the commit
+message itself is not rewritten (history stays as committed), but the
+roadmap entry is the canonical Pass-ID record per the Update protocol.
+
+Delivers the P1 half of the Backlog item filed at Pass 18.1's ship:
+(1) `crates/pdfce-gui/src/object_summary.rs`'s `describe_object(&VectorObject)
+-> ObjectSummary` — a **prose-free fact record** (kind, paint style,
+visible colour, node count, line width, bounds, disclosure notes) with
+no strings in it at all, so decision 002/R1 is satisfied structurally
+(nothing here can leak an untranslated literal, because there is no
+literal to leak) and the module is headlessly unit-testable without a
+running GUI. `ObjectKind` is deliberately finer-grained than
+`VectorObject` — inline image / image XObject / form XObject are three
+different answers to "what did I select?", not one "image" bucket.
+`ObjectNote` carries five disclosable facts: `ApproximateTextBounds`,
+`PaintsNothing`, `DegenerateBounds(VerticalRule|HorizontalRule|Point)`,
+`NoBounds`, `FormNotDecomposed`.
+
+(2) **This is now the ONE source of truth shared by the Objects tree
+row and the canvas status readout** — a test asserts the tree row's
+detail clause appears verbatim inside the status readout, making the
+"these two must never disagree" guarantee structural rather than a
+convention two future edits could silently drift apart on (the exact
+divergence pattern `object_provider.rs`'s own doc comment cites
+decision 011 warning about).
+
+(3) `canvas.rs`'s `selection_outline_bounds` now returns
+`Vec<(TargetId, Rect)>` instead of a bare `Vec<Rect>` — the overlay
+cannot choose a per-kind treatment (solid vs. dashed outline, badge
+letter) from a bare rect list because `filter_map` breaks positional
+correspondence between objects and rects. New `visible_outline_rect` +
+`MIN_OUTLINE_EXTENT_PX = 6.0`, applied in SCREEN space (zoom-invariant,
+symmetric about the rect's centre, non-finite values passed through
+unmodified) so a degenerate (zero-height/zero-width/point) selection
+still paints a visible, inflated box instead of nothing.
+
+(4) `main.rs`: solid outline for a measured bounds, **dashed** outline
+for an approximate one (a SHAPE cue, never colour alone — R84);
+degenerate rects get the inflation above; a corner chip carries a
+`P`/`T`/`I`/`F` letter badge (Path/Text/Image/Form). New
+`selection_readout` in `status_bar_body`, placed ABOVE the
+`page_texture` early-return so the readout survives a pre-raster frame
+and doesn't flash away on the very frame it would be most useful.
+
+**ENGINEER-VERIFIED ON SCREEN (R86, not merely headless):** clicking
+blank paper immediately left of the word "Vector" in
+`fixtures/synthetic/vector/mixed.pdf` selects the text object and shows
+a dashed box over mostly-empty paper, a `T` badge, and the status line
+`Selected: Text · approximate bounds — 28.0 × 28.0 pt at (16.0, 136.0).`
+**This is the operator's original "a box highlighting on the screen
+that doesn't seem to correspond to anything" complaint, now explained
+rather than merely fixed** — the box IS on the right object, it's just
+that the text bbox approximation undershoots the glyph ink (see
+Finding 1 below).
+
+**Three findings this Pass, all escalated below:**
+
+1. **The `docs/ui_specs/pass-17-dock-and-layer-tree.md` ui-spec's own
+   model of the text-bbox approximation is WRONG and needs correcting
+   by `pdfce-ui-specialist`.** §0.2 and §B.3 both describe the
+   approximation as "wider and taller than the ink." Empirically, for
+   `mixed.pdf`'s text object, the bbox is inflated from the glyph
+   ORIGINS by the largest `Tf` size in the run, giving `bbox=16,136,44,164`
+   (28×28 pt) — while the rendered glyphs actually run ~40 pt wide,
+   starting further right than the box's left edge. **The box is
+   narrower than the glyphs and offset from them, not merely oversized**
+   — so clicking directly ON visible text can MISS the hit region
+   entirely. This is a FOURTH contributing cause of the operator's
+   "can't click on objects" report (alongside Pass 18.0's zoom-inverted
+   tolerance, `c998521`'s missing selection outline, and `3f6f5ae`'s
+   centring-margin coordinate offset) — filed to Backlog below, needs a
+   `pdfce-ui-specialist` re-dispatch to correct the spec text, not a
+   RAG finding (this is project-internal documentation accuracy, not a
+   generalizable ecosystem or PDF-domain fact).
+2. **A status-bar height change retriggers `Fit page` zoom — a
+   pre-existing egui feedback loop, not new to this Pass.** The first
+   cut of the status readout put full explanation sentences inline.
+   Because the status bar is a bottom panel, every line it grows
+   shrinks the canvas viewport, and under `Fit page` zoom mode that
+   re-fits the page smaller on the very next frame: the page visibly
+   jumped and shrank (230% → 224% → 215%) as lines accumulated across
+   frames, which ALSO invalidated the click coordinates the operator
+   had just used, since the page moved between the click frame and the
+   next render. Fixed here with a one-line headline plus a
+   `CollapsingHeader` for detail — but **the loop itself is
+   pre-existing and applies to any future status-bar content growth**
+   (save notes, edit disclosures, warnings). Filed as a standing hazard
+   to Backlog below, not a Pass-18.4-specific bug, and escalated to
+   `D:\dev\rag\egui\` below since it generalizes to any egui app
+   combining a dynamic bottom panel with a fit-to-viewport zoom mode.
+3. **`icons::Icon` (the Pass 18.3 drawn-vector icon set) cannot supply
+   object-kind badges.** No glyph exists for path/image/form XObject,
+   and `Icon::Text` already denotes the TEXT TOOL, not "this is a text
+   object." Reusing it for the badge would assert an affordance that
+   doesn't exist (R83). Letter badges (`P`/`T`/`I`/`F`) are the honest
+   interim choice, not a placeholder to feel bad about.
+
+**Deferred and explicitly owed, not built:** Alt+click cycling through
+overlapping objects. `pdfce_core::vector::hit::hit_test_point` is
+`objects.iter().enumerate().rev().find(...)` — topmost-only, no
+all-hits query exists anywhere in `pdfce-core`. `hit_test_rect`
+answers a different question (bbox enclosure, no tolerance, no
+nearest-first ordering) and can't substitute. Needs a new core API,
+tentatively `hit_test_point_all -> Vec<usize>` (nearest/topmost-first
+ordering) — filed to Backlog below as an owed core API, not
+half-built.
+
+Gates: `cargo test --workspace` 1538 → 1559 passed, 0 failed; `cargo fmt
+--check` / `cargo clippy --workspace --all-targets -D warnings` clean;
+`cargo tree -p pdfce-core` / `-p pdfce-render` free of egui/eframe/
+winit/wgpu/glow/egui_tiles (GUI-core separation intact); zero new Cargo
+dependencies.
+
 ### Menu-affordance & glyph-coverage audit — tofu-glyph class CLOSED (pdfce-ui-specialist audit + engineer fixes) — 2026-08-03, committed `85a6cac` / `a1badc1` / `eeadbcb` / `869d891`
 
 **Closes the open defect flagged at continuation 57's Pass 18.3 entry**
@@ -4882,6 +5060,43 @@ Shipped) for full content. Full chain, 28 commits: **`d8b3903` →
 `c59b0c4` → `85a6cac` → `437a6f7` → `a1badc1` → `d15c360` → `eeadbcb` →
 `f963895` → `3f6f5ae` → `869d891`**. All 28 remain **local-only**; push
 authorization is still a separate, not-yet-granted operator item.
+**UPDATE (continuation 59, same real date 2026-08-03):** two more
+commits landed on top of `869d891` — **`be62e48`** (Pass 18.4, selection
+legibility / ui-spec §C — see its own Shipped entry above; note that
+entry's own "Pass-number note" flag: its commit message says "Pass
+18.2", but that ID was already taken by the object-list CLI Pass) →
+**`a5d1d18`** (the `ui-strings` CI gate was red at baseline on 140 hits
+and was hiding a real R1 violation — fixed and moved to
+`tools/check-ui-strings.sh`, see its own Shipped entry above). Full
+chain, 31 commits from the first implementation commit: **`d8b3903` →
+`79d1c6f` → `e13f3e6` → `19ed865` → `801a748` → `c7c1744` → `6150e1a` →
+`7c93cc3` → `2abbd75` → `dd3a8b8` → `76485b5` → `0569373` → `9a68d6f` →
+`3a56b55` → `f2d5fae` → `c998521` → `dae0139` → `b73604d` → `f9bb560` →
+`c59b0c4` → `7274fdd` → `85a6cac` → `437a6f7` → `a1badc1` → `d15c360` →
+`eeadbcb` → `f963895` → `3f6f5ae` → `869d891` → `be62e48` → `a5d1d18`**.
+Plus `67967b2` (the bootstrap commit, which predates `d8b3903`) for a
+branch total of **32**. All of them remain **local-only**; push
+authorization is still a separate, not-yet-granted operator item.
+
+**Correction, 2026-08-03 (engineer):** this chain previously listed 30
+hashes and claimed 30. It was missing exactly one — **`7274fdd`, the
+commit that corrected a fabricated hash in the Pass 18.3 filing**. The
+record of repairing a record-keeping error was itself dropped from the
+record, which is a tidy demonstration of why the chain is now verified
+against `git rev-list` rather than assembled by hand. The counts also
+conflated "commits in the chain" with "commits on the branch"; both are
+stated explicitly above.
+**Repository risk, now more precise than prior entries stated it:**
+there is NO git remote configured at all (`git remote -v` empty, no
+upstream) — the project's entire history exists solely on this
+machine, 32 commits deep. A verified full-history backup bundle was
+created as a decision-free stopgap:
+`D:\Dev\pdfce-backups\pdfce-20260803.bundle` (3.4 MB; `git bundle
+verify` reports a complete history). Also flag for the operator: the
+working branch is still named `pass-8-redaction` but now carries
+Passes 9 through 18.4, the full icon set, the `egui_tiles` dock shell,
+and three independent click-tracking root-cause fixes — worth a rename
+whenever a push is authorized.
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
@@ -5281,7 +5496,7 @@ recommendation on how the operator should weigh it). (b) sequence Pass
 and the sequence has since fully discharged (continuation 58) — see the
 ★★★★★ reordering entry above.
 
-### ★ Pass 18.x — Tabbed dock, layer/object tree, selection legibility, Measure ▾ affordance fix (decision 017 + Amendment A + `docs/ui_specs/pass-17-dock-and-layer-tree.md`, ALL 4 numbered slices 18.0/18.1/18.2/18.3 SHIPPED 2026-08-03 — ui-spec §B.4/§C follow-ons still OPEN, see Backlog)
+### ★ Pass 18.x — Tabbed dock, layer/object tree, selection legibility, Measure ▾ affordance fix (decision 017 + Amendment A + `docs/ui_specs/pass-17-dock-and-layer-tree.md`, ALL 5 numbered slices 18.0/18.1/18.2/18.3/18.4 SHIPPED 2026-08-03 — ui-spec §B.4 core-data-model asks + the text-bbox-model correction still OPEN, see Backlog)
 
 **Pass-number note (same pattern as decision 014's Pass 13→14
 renumber — see that entry above, "PASS-NUMBER RENUMBER"):** the UI
@@ -5324,7 +5539,29 @@ archived record uses for its own superseded "13.x" self-reference.
   this Pass. Consolidated as an explicit Backlog follow-on below
   ("ui-spec §B.4/§C follow-ons") rather than left to be rediscovered —
   do not assume this Pass closed §B/§C in full just because it shipped
-  the dock shell and object tree.
+  the dock shell and object tree. **UPDATE — Pass 18.4 (below) has since
+  delivered §C's full selection-legibility asks** (type badge, invisible/
+  approximate-hit disclosure, status readout) **end-to-end. §B.4's core
+  additions to `pdfce-core` (`TextObject` string/font preview,
+  `ImageObject` pixel dimensions) remain undelivered** — see the Backlog
+  entry (amended) for what's still owed.
+- **Pass 18.4 — Selection legibility (ui-spec §C). SHIPPED 2026-08-03,
+  committed `be62e48` — see the Pass 18.4 Shipped entry (above) for the
+  full build record, including its own "Pass-number note" flag (the
+  commit message calls itself "Pass 18.2," an ID already taken — this
+  roadmap entry is the canonical record, filed as 18.4).** Delivers a
+  new `object_summary.rs` fact-record module shared verbatim by the
+  Objects tree row and the canvas status readout (structurally
+  guaranteed not to disagree, by a test), a per-kind selection-outline
+  treatment (solid vs. dashed, letter badge, degenerate-rect inflation),
+  and a one-line-plus-`CollapsingHeader` status readout. **Engineer-
+  verified on screen (R86):** the operator's original "box that doesn't
+  correspond to anything" complaint reproduces as a real, now-explained
+  case — an approximate text bbox that is narrower than and offset from
+  the glyph ink it describes (see the Backlog entry's ui-spec-correction
+  item). Deferred, not built: Alt+click cycling through overlapping
+  objects (needs a new `pdfce-core` `hit_test_point_all` API — see
+  Backlog).
 - **Pass 18.2 — `object-list` CLI subcommand. SHIPPED 2026-08-02,
   committed `dae0139` — see Shipped above.** Closed the gap found this
   session: `object-move`'s own help text told operators to get object
@@ -6765,27 +7002,62 @@ nothing gets forgotten, not as a commitment to build in this order.
   glyph, so observing it proves nothing about this specific class. Not
   assumed clean by extrapolation from the rest of the glyph-coverage
   audit — needs its own direct-observation check.
-- **ui-spec §B.4/§C follow-ons — core data-model additions + full
-  selection-legibility asks (filed 2026-08-03, deviation flagged at
-  Pass 18.1's ship, not silently dropped).** Pass 18.1 shipped the
-  `egui_tiles` dock shell and object/layer tree but did NOT deliver:
-  (1) **§B.4 core additions to `pdfce-core`** (zero GUI dependency
-  added) — extend `TextObject` with a short extracted-string preview +
-  resolved font-name/size (P1, high value: Text is the object kind most
-  likely to be the "box that doesn't correspond to anything" an
-  operator reported); extend `ImageObject` with pixel width/height (P1,
-  lower urgency). (2) **§C's full selection-legibility asks** — a type
-  badge on the selection outline, disclosure when a selection is
-  invisible/approximate-hit (e.g. a fully-transparent or off-canvas
-  object), a status readout for the current selection. (3) **A
-  newly-found case, not in the original §C list:** a zero-height path
-  object (e.g. a horizontal rule) selects correctly (hit-testing works)
-  but its selection outline is a zero-height rect that paints nothing
-  visible — an operator can select such an object and get no visual
-  confirmation at all that anything happened. Also still owed from
-  §A.2: the `properties_window` → "Document Properties" rename in the
-  same slice as the new selection-scoped Properties surface (both now
-  exist; confirm the rename actually landed before closing this item).
+- **ui-spec §B.4 follow-on — core data-model additions (filed
+  2026-08-03, deviation flagged at Pass 18.1's ship; §C's half of this
+  entry SHIPPED 2026-08-03 as Pass 18.4, see amendment below).** Pass
+  18.1 shipped the `egui_tiles` dock shell and object/layer tree but did
+  NOT deliver **§B.4's core additions to `pdfce-core`** (zero GUI
+  dependency added) — extend `TextObject` with a short extracted-string
+  preview + resolved font-name/size (P1, high value: Text is the object
+  kind most likely to be the "box that doesn't correspond to anything"
+  an operator reported, and Pass 18.4 confirmed exactly this case is
+  live in `mixed.pdf`); extend `ImageObject` with pixel width/height
+  (P1, lower urgency). Still not built as of Pass 18.4's ship. Also
+  still owed from §A.2: the `properties_window` → "Document Properties"
+  rename in the same slice as the new selection-scoped Properties
+  surface (both now exist; confirm the rename actually landed before
+  closing this item).
+  **AMENDED 2026-08-03 (Pass 18.4 ship) — §C's full selection-legibility
+  asks are now SHIPPED, not open.** Pass 18.4 (`be62e48`, its own
+  Shipped entry above) delivered the type badge (`P`/`T`/`I`/`F` letter
+  badge, since `icons::Icon` has no glyphs for these kinds and
+  `Icon::Text` already denotes the text TOOL), invisible/approximate-hit
+  disclosure (dashed vs. solid outline, `ObjectNote` variants), the
+  status readout, AND the newly-found zero-height-path case (now
+  handled by `visible_outline_rect` + `MIN_OUTLINE_EXTENT_PX` inflation
+  in screen space). **Three new items surfaced by Pass 18.4, not in the
+  original §B.4/§C list, still open:**
+  1. **The ui-spec's own text-bbox model (§0.2, §B.3) needs correcting
+     by `pdfce-ui-specialist`** — it currently claims the approximation
+     is "wider and taller than the ink"; empirically (confirmed against
+     `mixed.pdf`) it is narrower than and offset from the glyph ink,
+     inflated from glyph ORIGINS by the largest `Tf` size rather than
+     from the ink extent. This is a FOURTH contributing cause of "can't
+     click on objects," alongside Pass 18.0's zoom-inverted tolerance,
+     `c998521`'s missing outline, and `3f6f5ae`'s centring-margin
+     coordinate offset. Needs a `pdfce-ui-specialist` re-dispatch to
+     correct the spec text; the underlying `pdfce-core` bbox-computation
+     behavior itself is not necessarily wrong, just under-disclosed and
+     mis-described.
+  2. **Status-bar-height / `Fit page`-zoom feedback loop (standing
+     hazard, not a Pass 18.4-specific bug).** A bottom-panel height
+     change (e.g. the new selection readout growing across frames)
+     shrinks the canvas viewport, which under `Fit page` re-fits the
+     page smaller on the next frame, which invalidates click coordinates
+     the operator just used. Pass 18.4 worked around it locally (a
+     one-line headline + `CollapsingHeader` instead of inline sentences)
+     but the underlying loop is generic to any egui app combining a
+     dynamic bottom panel with a fit-to-viewport zoom mode — applies to
+     ANY future status-bar content growth (save notes, edit disclosures,
+     warnings), not just this Pass. Escalated to
+     `D:\dev\rag\egui\bottom_panel_height_change_retriggers_fit_to_viewport_zoom.md`.
+  3. **Owed core API: `hit_test_point_all` (Alt+click cycling through
+     overlapping objects).** `pdfce_core::vector::hit::hit_test_point` is
+     topmost-only (`objects.iter().enumerate().rev().find(...)`);
+     `hit_test_rect` answers a different question (bbox enclosure, no
+     tolerance, no nearest-first ordering) and can't substitute. Needs a
+     new `pdfce-core` API returning all hits, nearest/topmost-first
+     ordered, before Alt+click cycling can be built — not started.
 
 - **`egui_kittest`-based headless canvas-gesture testing harness (filed
   2026-08-02, no Pass number assigned).** Found while building the GUI
@@ -7554,6 +7826,13 @@ nothing gets forgotten, not as a commitment to build in this order.
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
   not-yet-granted authorization (see "In progress" GIT STATUS above).
+  **Now more precise (continuation 59, 2026-08-03): there is no git
+  remote configured at all** — the 30-commit chain exists solely on
+  this machine. A verified backup bundle exists as a stopgap
+  (`D:\Dev\pdfce-backups\pdfce-20260803.bundle`), not a substitute for
+  an actual push decision. Also flag: the branch is still named
+  `pass-8-redaction` though it now carries Passes 9 through 18.4 — worth
+  renaming whenever a push is authorized.
 - Encryption (Pass 5 / decision 007)'s `/R 6` sourcing method and the
   `LEGAL.md` §2 Adobe-supplement contradiction — both still gate its
   scoping when it activates.
@@ -7593,6 +7872,12 @@ nothing gets forgotten, not as a commitment to build in this order.
   `pub` item added to `pdfce-core` checked against
   `D:\dev\rag\rust\rust-style-guide-and-api-guidelines.md`. See
   `ARCHITECTURE.md` §8.
+  **AMENDED 2026-08-03 (continuation 59):** the decision-002 R1 `ui-strings`
+  enforcement (see below) runs locally as `tools/check-ui-strings.sh`,
+  not only as a CI job — it had been red at baseline on 140 hits (see
+  the `ui-strings` CI gate Shipped entry above) before this continuation
+  fixed it; run it locally before pushing, don't rely on CI alone to
+  surface a violation.
 - **Every feature Pass considers both `pdfce-gui` and `pdfce-cli`.**
   Not every feature needs a CLI subcommand on day one, but the default
   is to ship both together — see the "CLI batch operations" backlog
