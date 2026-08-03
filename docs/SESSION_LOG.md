@@ -7702,3 +7702,176 @@ all local-only.
 - Three new cross-project RAG findings filed this continuation — two in
   `D:\dev\rag\egui\`, one in `D:\dev\rag\rust\`; both index files
   updated.
+
+**Same-day continuation 58 (real date 2026-08-03) — Pass 17.1 + Pass
+17.2 SHIPPED (decision 018 COMPLETE end-to-end, and the oracle they
+built found real silent data loss on its first run), Pass 18.1 SHIPPED
+(`egui_tiles` dock + object/layer tree, decision 017 Amendment A now
+actually BUILT), the menu-affordance/glyph-coverage tofu class CLOSED,
+and a THIRD independent root cause of "can't click objects" found and
+fixed.** Branch `pass-8-redaction`; eight commits landed on top of
+`c59b0c4` (continuation-57 HEAD): `85a6cac` (docs: `pdfce-ui-specialist`'s
+menu-affordance-and-glyph-coverage audit) → `437a6f7` (Pass 17.1 + Pass
+17.2) → `a1badc1` (fix: real chevron + "opens a menu" accessible name
+for menu-affordance buttons) → `d15c360` (tools: `observe-gui.ps1`
+refuses a uniform blank/black capture) → `eeadbcb` (docs: glyph fix
+verified by observation, second tofu pair found) → `f963895` (Pass
+18.1, `egui_tiles` dock + object/layer tree) → `3f6f5ae` (fix: canvas
+hit-testing offset by the page-centring margin) → `869d891` (fix:
+chevrons for the reorder arrows, closing the glyph class). Chain now 28
+commits, still all local-only. Workspace: 1538 tests passing (1504 →
+1521 → 1538 across the three shipped units this continuation), 0
+failed; `cargo fmt --check` clean; `cargo clippy --workspace
+--all-targets -D warnings` clean; `cargo tree -p pdfce-core`/`-p
+pdfce-render`/`-p pdfce-cli` GUI-dep-free; exactly one new Cargo
+dependency (`egui_tiles`, `default-features = false`), licence-
+classified and attributed.
+
+**Shipped:**
+- **Pass 17.1 + Pass 17.2** — `session.document()` audit finishes + R85
+  preview-equals-saved oracle harness, committed `437a6f7`. Decision 018
+  (live-edit rendering) is now COMPLETE end-to-end (Pass 17.0 + 17.1 +
+  17.2 all shipped). Full record: `ROADMAP.md` Shipped (top).
+- **Pass 18.1** — `egui_tiles` dock shell + object/layer tree panel,
+  committed `f963895`. Decision 017 Amendment A is now actually BUILT,
+  not merely adopted-in-principle. All four numbered Pass 18.x
+  engineering slices (18.0/18.1/18.2/18.3) are now shipped. Full record:
+  `ROADMAP.md` Shipped (top).
+- **Canvas hit-testing coordinate-mapping fix** — committed `3f6f5ae`.
+  Third, independent root cause of "can't click objects" (the first two
+  were Pass 18.0's zoom-inverted tolerance and the missing selection-
+  outline draw, `c998521`).
+- **Menu-affordance & glyph-coverage: tofu class CLOSED** — committed
+  `85a6cac`/`a1badc1`/`eeadbcb`/`869d891`. `glyph_button` deleted — pdfce
+  has no text-glyph buttons left anywhere.
+- **GUI observation-harness hardening** — committed `d15c360`. Refuses a
+  uniform (all-one-colour) capture; third guard of its kind added to
+  `tools/observe-gui.ps1`.
+
+**Decisions made this session:**
+- **`ARCHITECTURE.md` §11.1 gets a new architectural rule, §12 gets two
+  new dated entries.** §11.1: at most one `ObjectWrite` per object id
+  per command — a second whole-dict write to an id already written
+  earlier in the same command REPLACES rather than merges (root cause of
+  the `flatten_fields` bug below). §12: one entry closing out decision
+  018 (Pass 17.1/17.2, the three bugs the oracle found), one entry
+  confirming decision 017 Amendment A's actual build (Pass 18.1) plus a
+  correction to the continuation-57 vetting (see Findings below).
+- **★★★★★ REORDERING entry (`ROADMAP.md` Next up) marked GATE CLEARED.**
+  Pass 17.1/17.2 shipping means the "do not start icon build/text-
+  handling/forms until Pass 17 finishes" condition is now genuinely
+  satisfied, not merely deviated around (the icon build had already
+  shipped ahead of it at continuation 57 — that deviation stays recorded
+  as history, not retracted, but nothing about it blocks anything going
+  forward). Items #3 (text-handling fast-follows) and #4 (form-building)
+  from the ★★★ operator priority sequence are now genuinely unblocked.
+- **★ Pass 17.x entry retired** (all 3 slices shipped, decision 018
+  complete) — condensed to a short pointer-and-summary entry rather than
+  the full original build plan, per the same retirement convention
+  already used for Pass 16.x. **★ Pass 18.x entry updated in place, NOT
+  retired** — Pass 18.1 marked SHIPPED, but the ui-spec's §B.4 (core
+  data-model additions) and §C (full selection-legibility asks) were
+  flagged as a DEVIATION from that bullet's own "binding asks" framing:
+  NOT delivered as part of Pass 18.1, now a consolidated Backlog entry
+  ("ui-spec §B.4/§C follow-ons").
+- **R85 (`ROADMAP.md` Standing rules) amended, not rewritten:** a dated
+  note records that `redact-apply` is STRUCTURALLY uncoverable by the
+  oracle (applying redaction consumes a `Document` and emits a file
+  directly, it is not an `EditSession` operation — no live-session
+  left-hand side exists to compare against). The original rule text
+  (which listed `redact-apply` in its coverage) is left as-is per
+  append-only discipline; the amendment records the gap.
+
+**Findings + decisions (empirical):**
+- **Headline finding: the R85 oracle found real, silent data loss on
+  its FIRST run.** `flatten_fields` issued three whole-dictionary
+  `ObjectWrite`s to the SAME page object in one command (`/Contents`,
+  `/Resources /XObject`, `/Annots`), each cloned from the pre-command
+  state. Nothing commits mid-command, so they overwrote rather than
+  composed and `/Annots` won: flatten deleted the fields, created the
+  burn stream and appearance XObjects, and left the page referencing
+  NEITHER. **Every flattened form silently lost its visible values**,
+  while `fields_flattened`/`widgets_burned`/`pages_touched` all reported
+  correctly. Every existing flatten test passed throughout because none
+  rendered the result. Reproduced independently against the pre-fix
+  binary: value ABSENT pre-fix, PRESENT post-fix. Two more silent-wrong-
+  answer bugs from the same audit: `author_text_matches` extracted from
+  BASE page indices then fed `add_redaction`, which resolves through
+  SESSION `page_slots` — after any delete/reorder a search redaction
+  would silently mark the wrong page with plausible geometry; and
+  `extract_selection` paired a session graph with base bytes, so a
+  stream authored this session copied out empty. `redact-apply` is
+  structurally uncoverable by R85 — applying is not an `EditSession`
+  operation. Consistently, the GUI has no apply flow at all
+  (mark-and-disclose only; apply is CLI-only) — filed as a real Backlog
+  gap.
+- **A THIRD root cause of "I don't seem to be able to click on
+  objects."** `canvas()` allocated the page image inside
+  `ui.centered_and_justified(...)` and used `image_response.rect` as the
+  page↔screen mapping origin — that helper returns the JUSTIFIED
+  CONTAINER rect while drawing the image CENTRED inside it, so every
+  hit-test was wrong by the centring margin whenever the page was
+  smaller than the viewport. Worst at the zoom used to see a whole page
+  — the most common working zoom. **Correction to the record, stated
+  explicitly:** after the selection-outline fix (`c998521`), the
+  engineer attributed still-failing synthetic canvas clicks to the
+  harness not satisfying `Response::clicked()` — that reasoning, while
+  the underlying RAG finding remains true in isolation, was NOT the
+  actual explanation for the failures being diagnosed at the time; the
+  harness was fine, the app was mapping coordinates incorrectly. Net:
+  the operator's single sentence had THREE independent, now all-fixed,
+  causes, not one and not two.
+- **Pass 18.1 build:** `egui_tiles` 0.16.0 added to `pdfce-gui` only
+  with `default-features = false` — the crate's DEFAULT features include
+  `serde`, which the continuation-57 vetting did not separately flag,
+  and leaving defaults on would have silently contradicted that entry's
+  own "don't enable serde yet" instruction. AccessKit tab-naming gap
+  confirmed on the UNFIXED side (zero `widget_info`/`accesskit` hits in
+  the pinned release); egui 0.35's `WidgetType` has no `Tab`/`TabList`
+  member at all, a gap that cannot be closed downstream short of an
+  upstream egui change.
+- **Glyph coverage:** root cause of the `▾`/`▲`/`▼` tofu was pdfce
+  setting no custom fonts — egui's default Proportional chain covers
+  none of them. Milestone: `glyph_button` removed (no callers) — pdfce
+  now has NO text-glyph buttons anywhere. `✓`/`✕` on three tools'
+  Accept/Reject buttons remain unverified (needs an in-progress tool
+  gesture the harness hasn't yet driven).
+- **Harness hardening:** `observe-gui.ps1` now refuses a uniform (all-
+  one-colour) capture, after three distinct causes (sleeping monitor,
+  eframe's blank-until-first-input idle state, a mid-flight window
+  animation) each independently produced one this session.
+
+**Still in flight:**
+- No GUI redaction-apply flow (see Findings above) — filed to Backlog,
+  not yet scoped into a Pass.
+- `✓`/`✕` glyph verification — filed to Backlog.
+- ui-spec §B.4/§C follow-ons (`TextObject`/`ImageObject` core additions;
+  full selection-legibility asks; the newly-found zero-height-path
+  case) — consolidated into one new Backlog entry.
+- Pass 12.M2c (dimension-tool bug-fix cluster, 6 named bugs) — still
+  filed, not scoped.
+- Open operator questions (c) (decision 017 Q2, multi-monitor undock)
+  and (e) (R86 standing-rule blessing) remain unanswered.
+
+**For next session:**
+- Pass 17.1/17.2/18.1 are all now shipped — decision 018 is complete and
+  decision 017's numbered engineering slices are complete; the ★★★
+  operator priority sequence's items #3 (text-handling: FF-B, FF-H,
+  FF-C) and #4 (form-building) are now genuinely unblocked and are the
+  next concrete dispatch, per the operator's continuation-50 sequence,
+  unless the operator gives a new steer (e.g. the redaction-apply GUI
+  gap, or the ui-spec §B.4/§C follow-ons, both newly surfaced this
+  continuation).
+- Flag to the operator at next contact: (1) the icon build shipped ahead
+  of the Pass-17-first sequencing at continuation 57 (carried,
+  unresolved flag); (2) the GUI has no redaction-apply flow at all,
+  newly surfaced; (3) R86 (item (e)) remains unanswered and is now
+  arguably strengthened as a candidate by this session's own findings
+  (R85 and R86 are complementary, not substitutes).
+- Carried, unchanged: push/publish call; encryption `/R 6` +
+  `LEGAL.md` §2; list-authoring scope.
+- Three new cross-project RAG findings filed this continuation — two in
+  `D:\dev\rag\egui\` (`centered_and_justified_returns_container_rect_
+  not_child_rect.md`, `egui_035_no_tab_tablist_widgettype.md`), one in
+  `D:\dev\rag\rust\` (`crate_default_features_can_silently_contradict_
+  project_policy.md`); both index files updated.

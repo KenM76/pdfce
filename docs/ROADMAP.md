@@ -43,6 +43,312 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Menu-affordance & glyph-coverage audit — tofu-glyph class CLOSED (pdfce-ui-specialist audit + engineer fixes) — 2026-08-03, committed `85a6cac` / `a1badc1` / `eeadbcb` / `869d891`
+
+**Closes the open defect flagged at continuation 57's Pass 18.3 entry**
+(`▾` U+25BE tofu on 4 menu-affordance controls) and, in the course of
+verifying the fix by direct observation, finds and closes a SECOND tofu
+pair the original audit's four-controls list missed.
+
+- `85a6cac` — `pdfce-ui-specialist` delivers `docs/ui_specs/
+  menu-affordance-and-glyph-coverage.md`, dispatched at continuation 57
+  to adjudicate the `▾` tofu on `Markup □`/`Text □`/`Measure □`/Copy's
+  `⧉ □` and to sweep `ui_text.rs` project-wide for other unrenderable
+  codepoints. **Root cause:** pdfce sets no custom fonts; egui's default
+  Proportional font chain (Ubuntu-Light → NotoEmoji → emoji-icon-font)
+  covers none of `▾`/`▲`/`▼`.
+- `a1badc1` — engineer implements the audit's fix: menu-affordance
+  controls now draw a real drawn CHEVRON (vector, same tinted-mask style
+  as the Pass-18.3 icon set, not a font glyph) instead of `▾`, AND carry
+  an AccessKit accessible name of the form "{label}, opens a menu." The
+  audit's finding driving the SECOND half of this fix: egui's
+  `WidgetType` has no menu/has-popup role and `menu_button` sets no
+  `WidgetInfo` at all, so "opens a menu" only ever reaches assistive
+  tech as literal text — deleting the tofu glyph WITHOUT adding that
+  text would have made the control LESS accessible than the bug (a tofu
+  box at least carries a Unicode character name some screen readers
+  speak). Both cues are applied through one wrapper so they cannot drift
+  apart in a future edit.
+- `d15c360` — see the harness-hardening entry below; built because
+  visually verifying the chevron fix needed a screenshot the harness
+  could be trusted not to falsely bless as evidence.
+- `eeadbcb` — engineer VERIFIES the `a1badc1` fix by direct observation
+  of the running build (not headless-only) and, doing so, finds a
+  SECOND tofu pair the original four-controls audit list missed: `▲`/`▼`
+  (U+25B2/U+25BC) on the thumbnail rail's page-reorder controls and the
+  Combine-files dialog's reorder buttons — GLYPH-ONLY controls (no
+  accompanying text label at all), so before this fix they had NO
+  visible identity whatsoever, a strictly worse case than the tofu-next-
+  to-a-label controls the original audit named.
+- `f963895` interleaves chronologically with this thread (Pass 18.1, own
+  Shipped entry below) but is unrelated to it.
+- `869d891` — engineer draws real chevrons for the rail and Combine-
+  files reorder arrows, closing the second pair. Also fixed in the same
+  commit: `copy_text_button()` returned the bare glyph with no "Copy"
+  word in its accessible name at all; a tooltip on a sibling control
+  cited U+FFFC where its own sibling control and `pdfce-core` both use
+  U+FFFD (the standard REPLACEMENT CHARACTER) — corrected to U+FFFD for
+  consistency; the Combine-files reorder buttons had never been migrated
+  onto the shared accessible-name wrapper used everywhere else and now
+  are.
+
+**Milestone: `glyph_button` (the helper that rendered raw Unicode
+glyphs as button faces) is deleted — it has no remaining callers.**
+pdfce now has **no text-glyph buttons anywhere**; every icon-only
+control is a drawn vector icon (`icons.rs`, Pass 18.3) whose appearance
+does not depend on whether the host font stack happens to contain an
+unverified codepoint.
+
+**Explicitly NOT verified, not claimed fixed:** `✓`/`✕` (U+2713/U+2715)
+on three tools' Accept/Reject buttons remain unverified — reaching them
+requires an in-progress tool gesture the observation harness hasn't yet
+driven. The rail checkbox's own tick is egui's vector-drawn `Checkbox`,
+not a font glyph, so observing it proves nothing about this class.
+Filed as an explicit Backlog follow-up (see below) rather than silently
+assumed clean by extrapolation from the rest of the audit.
+
+Gates: rolled into the Pass 17.1/17.2 and Pass 18.1 test counts (below);
+fmt/clippy clean throughout; no standalone Pass number assigned (these
+are `pdfce-ui-specialist`-directed fixes, not a numbered feature Pass).
+
+### Canvas hit-testing coordinate-mapping fix — the THIRD root cause of "can't click objects" — 2026-08-03, committed `3f6f5ae`
+
+`canvas()` allocated the page image inside `ui.centered_and_justified
+(...)` and used `image_response.rect` as the page↔screen mapping origin
+for every `screen_to_page`/`page_to_screen` call. `centered_and_justified`
+returns the JUSTIFIED CONTAINER rect while drawing the child image
+CENTRED inside it — so whenever the rendered page was smaller than the
+viewport (any zoom short of "fills the window"), every hit-test and
+every selection-outline draw was offset by the centring margin.
+Selection outlines drew roughly 105px away from the object they marked;
+a click directly ON a visible object missed. **The error scaled with
+the centring margin, not the zoom** — it vanished at high zoom (margin
+→ 0) and was worst at exactly the zoom an operator would use to see a
+whole page, the single most common working zoom level. Fixed by
+reserving `max(page_size, viewport_size)` and placing the image at an
+explicit centred rect via `Ui::put`/`allocate_exact_size`, so the same
+rect used to draw is the same rect used for coordinate mapping.
+
+**Correction to the record, stated explicitly rather than silently
+absorbed, per this file's own discipline:** after the selection-outline
+fix (`c998521`, continuation 56), the engineer attributed still-failing
+synthetic canvas clicks in the observation harness to egui's
+`Response::clicked()` not being satisfiable by OS-level synthetic input
+(filed continuation 56 as `D:\dev\rag\egui\
+synthetic_os_pointer_input_not_response_clicked.md`). **That RAG finding
+remains true in isolation, but it was not the actual explanation for the
+specific failures being diagnosed at the time** — the harness was fine;
+the app was mapping coordinates incorrectly, and the harness was
+correctly reporting no-hit because there genuinely was no hit at the
+coordinates it clicked. The earlier reasoning missed a bigger tell:
+toolbar clicks worked (no coordinate mapping involved) and canvas clicks
+did not (coordinate-mapped) — read at the time as an egui synthetic-
+input subtlety, when the simpler and ultimately correct explanation was
+that only the mapped path was broken. The `object-list --hit` CLI query
+proving core hit-testing geometrically correct (Pass 18.0/18.2) was true
+and simultaneously misleading: the underlying geometry math was right,
+but the screen coordinates fed into the screen→page conversion ahead of
+that math were wrong. **Net: the operator's original single-sentence
+complaint had THREE independent, now all-fixed, causes** — the
+zoom-inverted selection tolerance (Pass 18.0, `9a68d6f`), the missing
+selection-outline draw in the Obj tool (`c998521`), and this centring-
+margin coordinate bug (`3f6f5ae`) — not one, and not two.
+
+Filed to `D:\dev\rag\egui\
+centered_and_justified_returns_container_rect_not_child_rect.md`. Gates:
+rolled into Pass 18.1's test count (below); fmt/clippy clean.
+
+### Pass 17.1 + Pass 17.2 — `session.document()` audit finishes + R85 preview-equals-saved oracle harness (decision 018, slices 2/3 of 3 — decision 018 now COMPLETE) — 2026-08-03, committed `437a6f7`
+
+**Pass 17.1** finished the `session.document()` audit named at Pass
+17.0's ship: `count_redaction_marks` (`main.rs:4606`), `need_appearances`
+(`main.rs:4598`), and `page_font_entries` (`main.rs:6078`) were all
+reading the base revision instead of `session.view()`; all three fixed.
+The remaining named-for-triage sites (`main.rs:1377/2300/2391/4953`)
+triaged individually; `main.rs:1779` `recovery()` and `:4491` `version()`
+confirmed as legitimate base reads, left alone.
+
+**Pass 17.2** built the R85 preview-equals-saved oracle as a `tools/`
+harness (no new public CLI surface — rule 11's CLI parity is satisfied
+trivially, since the CLI's one-shot parse→edit→save model never renders
+an unsaved session, so there is no CLI behavior change to expose). It
+renders a live `EditSession`'s current view and compares it pixel-for-
+pixel against the raster of the same session saved-then-reloaded,
+reusing the Pass 11 raster oracle. Covers **11 of the 12** named R85
+operations (`add-text`, `annotate`, `dimension-add`, `object-move`,
+`object-delete`, `node-move`, `edit-text`, `format-text`, `reflow`,
+`flatten`, `fill-field`); `redact-apply` is **structurally**
+uncoverable, not merely unimplemented — applying redaction is not an
+`EditSession` operation, it consumes a `Document` and emits a file
+directly, so "preview equals saved" has no live-session left-hand side
+to compare against for that one operation (full architectural framing:
+`ARCHITECTURE.md` §12's continuation-58 decision-018 entry).
+
+**On its very first run, the oracle found real, silent data loss — the
+headline finding of this session.** `flatten_fields` issued THREE
+whole-dictionary `ObjectWrite`s to the SAME page object within one
+command (`/Contents`, `/Resources /XObject`, `/Annots`), each cloned
+from the pre-command page state. `EditSession` applies a command's
+writes in sequence against that pre-command state and nothing commits
+mid-command, so the three writes OVERWROTE rather than composed, and
+`/Annots` (written last) won: flatten created the burn-in appearance
+stream and the new page content, then discarded both by re-writing the
+page dict back to its pre-flatten `/Contents`/`/Resources` with only the
+`/Annots` deletion applied. **Every flattened form silently lost its
+visible burned-in field values**, while `fields_flattened`/
+`widgets_burned`/`pages_touched` all still reported correct counts — the
+operation reported success and was wrong. Every existing flatten test
+passed throughout the feature's life (Pass 7.1 onward) because none of
+them rendered the result; they all asserted on the returned counters and
+the AcroForm structure, never on the rendered page. Reproduced
+independently against the pre-fix binary: identical command, burned
+value ABSENT from the rendered page pre-fix, PRESENT post-fix. See
+`ARCHITECTURE.md` §11.1's continuation-58 addendum for the general
+architectural rule this establishes (at most one `ObjectWrite` per
+object id per command) — other multi-write commands are owed the same
+audit, not yet performed exhaustively.
+
+Two further silent-wrong-answer bugs, found by the same audit sweep,
+distinct in KIND from the `ObjectWrite`-overwrite bug above:
+- **Search-redaction resolved against the wrong page after any
+  delete/reorder.** `author_text_matches` extracted match geometry
+  using BASE page indices, then fed that geometry straight to
+  `add_redaction`, which resolves page numbers through SESSION
+  `page_slots`. After any page delete/reorder earlier in the same
+  session, a search-driven redaction mark silently lands on the WRONG
+  page, with fully plausible-looking geometry — nothing about the
+  result looks wrong on inspection. Fixed.
+- **Content authored this session could be extracted as empty.**
+  `extract_selection` paired a SESSION object graph with BASE bytes. A
+  stream authored during the current session has no corresponding bytes
+  in `base`, so extraction silently returned empty content instead of
+  erroring or reading the session's own staged bytes. Fixed.
+
+**Consequence for the GUI, worth naming as a real feature gap, not
+merely an oracle-coverage gap:** there is currently **no GUI flow for
+redaction apply at all** — mark-and-disclose only; applying redaction
+(the operation that actually removes content) is CLI-only,
+`pdfce-cli redact-apply`. This predates this session but is newly
+notable for being exactly the one operation R85 cannot cover. Filed to
+Backlog below.
+
+Gates: `cargo test --workspace` **1521 passed, 0 failed** (from
+continuation-57's 1504 baseline); `cargo fmt --all --check` clean;
+`cargo clippy --workspace --all-targets -D warnings` clean; `cargo tree
+-p pdfce-core`/`-p pdfce-render`/`-p pdfce-cli` free of egui/eframe/
+winit/wgpu/glow (GUI-core separation intact); zero new Cargo
+dependencies. **Decision 018 (live-edit rendering) is now COMPLETE
+end-to-end** — Pass 17.0 (canvas renders the edited view), 17.1 (every
+remaining base-read site triaged and fixed), and 17.2 (the oracle that
+proves it, 11/12 operations) have all shipped. Full architecture:
+`docs/decisions/018-edited-state-is-what-the-canvas-renders.md`;
+`ARCHITECTURE.md` §12 continuation-58 entry.
+
+### Pass 18.1 — `egui_tiles` dock shell + object/layer tree panel (decision 017 Amendment A, BUILT) — 2026-08-03, committed `f963895`
+
+Builds the shell decided at decision 017 Amendment A (continuation 57):
+`egui_tiles` 0.16.0, `pdfce-gui`-only, **`default-features = false`**
+(see `ARCHITECTURE.md` §12's continuation-58 entry for why that flag
+mattered — the crate's default features include `serde`, unmentioned in
+the original vetting table, and would have silently contradicted the
+continuation-57 instruction not to enable it yet). Exactly **1** new
+package; `Cargo.lock` +13 lines; MIT OR Apache-2.0; `THIRD_PARTY_
+LICENSES.md` regenerated via `cargo-about 0.9.1` (generated, not
+hand-edited, per rule 13); `cargo tree -p pdfce-core`/`-p pdfce-render`/
+`-p pdfce-cli` verified clean.
+
+New `crates/pdfce-gui/src/dock.rs` (~510 lines): `enum DockPanel` + ONE
+`panel_body` dispatcher (R80) survives verbatim from the original
+decision as the `egui_tiles` pane payload. Default layout ships Objects
+ABOVE Properties as a vertical split, BOTH simultaneously visible —
+pinned by a unit test asserting both panels are present in
+`active_tiles()` so a future "fold these into one tab group" regression
+fails loudly instead of silently reintroducing the exact simultaneity
+gap the operator originally complained about. Both engine gotchas
+pre-paid at continuation 57 were real and handled as predicted:
+`Tree<Pane>` derives `Clone, PartialEq` but not `Default` (used
+`std::mem::replace`, not `std::mem::take`); `SimplificationOptions::
+default()` needed `all_panes_must_have_tabs: true` overridden, or the
+tab bar vanishes when only one pane is open. `properties_open` (a
+second source of truth for panel visibility) is deleted;
+`properties_window()` is retired — no more float-or-dock dual mode, per
+R80/R81. New `Action::ResetPanelLayout`. Dock default width 320 →
+380pt. Inner "Tools" row renamed **"Batch Tools"** to disambiguate from
+the new Tools dock generally.
+
+**Mandatory bugfix, caught before ship, not after:** `open_path()` did
+not invalidate `properties_draft` (the in-progress edit buffer for the
+Document Properties form). For a now-persistently-mounted panel — which
+the dock makes Properties, for the first time, since it no longer needs
+to be opened/closed to appear — the failure mode would have been an
+operator opening a NEW document, seeing a stale (or EMPTY) metadata form
+left over from the PREVIOUS document, and clicking Apply, silently
+overwriting the new document's real `/Info` dictionary with leftover or
+blank values. Fixed with two regression tests covering both the
+stale-value and the empty-value cases.
+
+Object tree: flat list, paint order, front-most object first,
+`ScrollArea::show_rows` virtualized (no item-count cap). Bidirectional
+selection sync (tree click ↔ canvas click) reuses
+`canvas::selection_after_click` verbatim rather than reimplementing
+selection logic a second time. **Pinned against drift from the canvas
+itself:** a regression test asserts the object tree agrees with the
+`pdfce-cli object-list` oracle (Pass 18.2) — same indices, same object
+kinds — so this diagnostic/navigation surface cannot silently diverge
+from what the canvas actually hit-tests.
+
+**Accessibility, recorded honestly rather than left implicit:**
+`egui_tiles` 0.16.0 falls on the UNFIXED side of the AccessKit
+tab-naming gap continuation-57 flagged as still-open (zero
+`widget_info`/`accesskit` hits in the pinned release's source) — tab
+names are supplied via `Behavior::on_tab_button` rather than by forking
+`tab_ui`. **A gap that cannot be closed downstream at all:** egui 0.35's
+`WidgetType` enum has no `Tab`/`TabList` member, so a tab announces with
+a correct name and correct selected state as a `SelectableLabel`, but
+the correct semantic ROLE is unavailable short of an upstream egui
+change. Filed to `D:\dev\rag\egui\egui_035_no_tab_tablist_widgettype.md`.
+
+**Deliberately NOT done, and said so in code:** the dock still starts
+CLOSED by default. The original justification for that default —
+Properties being pdfce's sole legacy floating exception, per the now-
+superseded R80/R81 framing — is now false, but flipping a startup
+default is a product call left to the operator, not taken unilaterally.
+
+**Deviation from the ui-spec §B.4/§C "binding asks" named in this
+family's own Next-up entry — flagged, not silently dropped:** the
+ui-spec's §B.4 core additions (`TextObject` extracted-string preview +
+resolved font-name/size; `ImageObject` pixel width/height) and §C's full
+selection-legibility asks (type badge, invisible/approximate-hit
+disclosure, status readout) were **NOT** delivered as part of this
+Pass, despite §B.4 being framed as a "binding core ask" in the original
+entry. See Backlog below ("ui-spec §B.4/§C follow-ons") for the
+consolidated remaining scope, including a newly-found case (a
+zero-height path/horizontal-rule object selects correctly but its
+outline is a zero-height rect that paints nothing visible).
+
+Gates: `cargo test --workspace` **1538 passed, 0 failed** (from 1521);
+fmt/clippy clean; `cargo tree` invariant intact; exactly one new
+dependency, license-classified and attributed. Full architecture:
+`ARCHITECTURE.md` §12 continuation-58 entry; `docs/decisions/
+017-tabbed-dockable-panel-system.md` ("AMENDMENT A").
+
+### GUI observation-harness hardening — refuse a uniform (blank/black) capture — 2026-08-03, committed `d15c360`
+
+`tools/observe-gui.ps1` now refuses to return a capture whose pixels are
+ALL the same colour, after three distinct real causes each
+independently produced one during this session's diagnostic work: a
+sleeping monitor (solid black), eframe not yet having presented a frame
+(solid white — eframe repaints only on receiving real input, per
+`eframe_blank_until_first_input_reactive_repaint.md`, filed
+continuation 57), and a window-animation frame caught mid-flight. Under
+proposed standing rule R86 ("observed working in the running
+application"), an image containing no evidence at all is exactly what a
+hurried check would wrongly accept as evidence — this is the THIRD
+guard of its kind added to this harness, after "refuse when the target
+window isn't foreground" and "refuse to click outside the target
+window's bounds." Gates: rolled into the counts above; no dedicated Rust
+test suite (this is a PowerShell tool).
+
 ### Pass 18.3 — ScripTree-style SVG icon set + toolbar overflow wrapping (icon-set entry RESOLVED, operator priority #2) — 2026-08-02, committed `c59b0c4`
 
 **Closes the long-queued ★ Icon set Next-up entry (design complete
@@ -4450,6 +4756,35 @@ alongside decision 017 AMENDMENT A (`egui_tiles` adopted — see
 `ARCHITECTURE.md` §12) and a docs-plus-fix commit `f9bb560`. **Pass
 17.1/17.2 and Pass 18.1 remain unbuilt** — see Next up.
 
+**UPDATE (continuation 58, same-day, real date 2026-08-03) — Pass
+17.1, Pass 17.2, AND Pass 18.1 have ALL now SHIPPED; decision 018 is
+COMPLETE end-to-end; the ★★★★★ REORDERING gate below is now genuinely
+CLEARED, not merely deviated around.** Eight more commits landed on top
+of `c59b0c4` (continuation-57 HEAD) — see the commit-chain UPDATE
+paragraph below for the full list. **The R85 preview-equals-saved
+oracle (Pass 17.2) found real, silent data loss on its FIRST run** — see
+the Pass 17.1/17.2 Shipped entry (top of Shipped) for the full account:
+`flatten_fields` silently discarded every burned-in form value it wrote
+(a multi-`ObjectWrite`-per-object-id overwrite bug, now a named
+architectural rule at `ARCHITECTURE.md` §11.1); search-redaction could
+mark the wrong page after a delete/reorder; session-authored content
+could extract as empty. A third, independent root cause of "can't click
+objects" was also found and fixed this continuation — a coordinate-
+mapping bug in `canvas()`'s use of `ui.centered_and_justified` (see the
+Canvas hit-testing Shipped entry) — bringing that operator complaint's
+total explained-and-fixed cause count to three. Pass 18.1 shipped the
+`egui_tiles` dock + object/layer tree (see its own Shipped entry). The
+menu-affordance/glyph-coverage tofu class (flagged open at continuation
+57) is also now fully closed. **Remaining open items, none of them
+gating the next dispatch:** the GUI has no redaction-apply flow at all
+(R85-uncoverable by design, not oracle gap — see the Pass 17.1/17.2
+entry); `✓`/`✕` glyph verification on three tools' Accept/Reject
+buttons; ui-spec §B.4/§C follow-ons (TextObject/ImageObject core
+additions, full selection-legibility asks, a newly-found zero-height-
+path selection-outline case) — all filed to Backlog below. See
+`SESSION_LOG.md`'s 2026-08-02 entry, same-day continuation 58, for the
+full session record.
+
 
 ONLY.** The operator authorized "commit all work"; the engineer
 committed the entire working tree as **`d8b3903`** on branch
@@ -4529,6 +4864,24 @@ commits: **`d8b3903` → `79d1c6f` → `e13f3e6` → `19ed865` → `801a748` →
 `0569373` → `9a68d6f` → `3a56b55` → `f2d5fae` → `c998521` → `dae0139`
 → `b73604d` → `f9bb560` → `c59b0c4`**. All 20 remain **local-only**;
 push authorization is still a separate, not-yet-granted operator item.
+**UPDATE (continuation 58, real date 2026-08-03):** eight more commits
+landed — `85a6cac` (docs: `pdfce-ui-specialist`'s menu-affordance-and-
+glyph-coverage audit) → `437a6f7` (Pass 17.1 + Pass 17.2) → `a1badc1`
+(fix: real chevron + "opens a menu" accessible name for menu-affordance
+buttons) → `d15c360` (tools: `observe-gui.ps1` refuses a uniform blank/
+black capture) → `eeadbcb` (docs: glyph-fix verified by observation,
+second tofu pair found on the rail/Combine-files reorder arrows) →
+`f963895` (Pass 18.1, `egui_tiles` dock + object/layer tree) →
+`3f6f5ae` (fix: canvas hit-testing was offset by the page-centring
+margin) → `869d891` (fix: chevrons for the reorder arrows, closing the
+glyph-tofu class). See the five new Shipped entries above (top of
+Shipped) for full content. Full chain, 28 commits: **`d8b3903` →
+`79d1c6f` → `e13f3e6` → `19ed865` → `801a748` → `c7c1744` → `6150e1a` →
+`7c93cc3` → `2abbd75` → `dd3a8b8` → `76485b5` → `0569373` → `9a68d6f` →
+`3a56b55` → `f2d5fae` → `c998521` → `dae0139` → `b73604d` → `f9bb560` →
+`c59b0c4` → `85a6cac` → `437a6f7` → `a1badc1` → `d15c360` → `eeadbcb` →
+`f963895` → `3f6f5ae` → `869d891`**. All 28 remain **local-only**; push
+authorization is still a separate, not-yet-granted operator item.
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
@@ -4704,6 +5057,23 @@ Pass 18.3 Shipped entry (top of Shipped). **Pass 18.1** (tabbed/panel
 shell + Objects tree + Properties panel, now built atop `egui_tiles`
 per decision 017 Amendment A) remains unbuilt — see the ★ Pass 17.x /
 ★ Pass 18.x entries under Next up for what's left.
+**UPDATE (continuation 58, real date 2026-08-03): both threads are now
+FULLY SHIPPED.** Decision 018's **Pass 17.1** (finished the
+`session.document()` audit; found and fixed two further silent-
+correctness bugs plus a third, distinct `ObjectWrite`-overwrite bug in
+`flatten_fields`) and **Pass 17.2** (R85 preview-equals-saved oracle,
+11/12 operations) both SHIPPED `437a6f7` — **decision 018 is COMPLETE
+end-to-end.** Decision 017's **Pass 18.1** (the `egui_tiles` dock shell
++ object/layer tree) SHIPPED `f963895` — **all four numbered Pass 18.x
+engineering slices (18.0/18.1/18.2/18.3) are now shipped**, though the
+ui-spec's §B.4 (core data-model additions) and §C (full selection-
+legibility asks) were NOT fully delivered as part of 18.1 and remain
+open follow-on work (see Backlog: "ui-spec §B.4/§C follow-ons"). A
+third, independent root cause of "can't click objects" (a canvas
+coordinate-mapping bug) was also found and fixed this continuation. See
+the five new Shipped entries (top of Shipped) for full content; the ★
+Pass 17.x entry below is now retired (fully shipped) and the ★ Pass
+18.x entry below is updated in place.
 - **Marquee-vs-pan UX flag (owed since Pass 9a) — RESOLVED, KEPT, no
   further action.** `pdfce-ui-specialist` reviewed it during the
   12.M1 dispatch and found no conflict with dimension-picking (which
@@ -4800,8 +5170,12 @@ without a new operator instruction.
    2026-08-02** (`c59b0c4`, Pass 18.3) — see the Pass 18.3 Shipped
    entry (top of Shipped) and the "Icon set" entry below (now carrying
    a SHIPPED banner). Shipped AHEAD of the ★★★★★ REORDERING's stated
-   gate (Pass 17.1/17.2 still unbuilt) — see that entry's "DEVIATION
-   RECORDED" note.
+   gate (Pass 17.1/17.2 still unbuilt at the time) — see that entry's
+   "DEVIATION RECORDED" note. **Pass 17.1/17.2 have since shipped
+   2026-08-03 (continuation 58)** — the gate this deviation stepped
+   ahead of is now satisfied retroactively; the deviation itself stays
+   recorded as history (not retracted), but nothing about it needs
+   operator resolution to unblock items 3/4 below any longer.
 3. **Finish all text-handling.** FF-B (cross-block/cross-page reflow),
    FF-H (`Tc`/`Tw`/`Tz`/`Ts` spacing + synthetic styles + minimal
    StructTree update), and FF-C (font subsetting/glyph embedding — its
@@ -4821,7 +5195,21 @@ without a new operator instruction.
    against whatever's shipped by the time items 1–3 are done, don't
    treat it as an unconditional commitment.
 
-### ★★★★★ REORDERING — CONFIRMED by the operator 2026-08-02 (continuation 56), now supersedes the ★★★ priority sequence below until Pass 17 finishes
+### ★★★★★ REORDERING — CONFIRMED by the operator 2026-08-02 (continuation 56), now supersedes the ★★★ priority sequence below until Pass 17 finishes — GATE CLEARED 2026-08-03 (continuation 58)
+
+**GATE CLEARED (continuation 58, 2026-08-03) — Pass 17.1 AND Pass 17.2
+have both SHIPPED (`437a6f7`); decision 018 is COMPLETE end-to-end.**
+This entry's stated condition ("do not start the icon build,
+text-handling fast-follows, or form-building until 17.1/17.2 are also
+shipped") is now genuinely satisfied — not merely deviated around. The
+icon build (item #2) already shipped ahead of this gate (see the
+DEVIATION RECORDED note below, kept as history, not retracted); items
+#3 (text-handling fast-follows) and #4 (form-building) were never
+started and are now unblocked for real, no further operator sign-off
+needed on this specific gate. See the Pass 17.1/17.2 Shipped entry (top
+of Shipped) for what those two slices found and fixed — including real,
+previously-silent data loss in `flatten_fields` — before treating "the
+gate is clear" as "nothing more to check" for related work.
 
 **RESOLVED — was "proposed, awaiting operator answer" earlier this
 session; the operator confirmed it this session** (see "Operator
@@ -4856,84 +5244,44 @@ at next contact**, do not treat it as retroactively authorized. Pass
 17.1/17.2 remain the gating items for text-handling fast-follows (#3)
 and form-building (#4), which have NOT been started.
 
-### ★ Pass 17.x — Live-edit rendering: the canvas renders the edited document (decision 018, DECIDED 2026-08-02, SLICE 17.0 SHIPPED)
+### ★ Pass 17.x — Live-edit rendering: the canvas renders the edited document (decision 018 — RETIRED, all 3 slices SHIPPED, decision 018 COMPLETE 2026-08-03)
 
-Full architecture: `docs/decisions/018-edited-state-is-what-the-canvas-renders.md`.
-Fixes the ★★★★ HEADLINE FINDING above. Three librarian-assigned slices,
-matching the decision record's own "Pass 17.0/17.1/17.2" naming (no
-renumbering needed — Pass 17 was unclaimed before this decision):
+**All three librarian-assigned slices are now SHIPPED — this entry is
+retired; nothing here is still to build.** Full architecture:
+`docs/decisions/018-edited-state-is-what-the-canvas-renders.md`.
 
-- **Pass 17.0 — "the canvas renders the edited document." SHIPPED
-  2026-08-02, committed `3a56b55` — see the Pass 17.0 Shipped entry
-  (top of Shipped above) for the full build record, including two
-  deviations from this plan found during implementation
-  (`image_codec::decode_image` also needed generalizing;
-  `DocumentView::bytes()` had to become `Option<&[u8]>`, not `&[u8]`,
-  because a `Split` view has no single contiguous buffer) and the
-  confirmed-real §10 hazard-2 bug (three canvas commit sites bypassing
-  `refresh_pages`, fixed in the same Pass).** Original plan, retained
-  for history: promote `pdfce_core::pageops::assemble::DocumentView` to
-  a top-level `pdfce_core::view` (re-exported from `pageops`); add
-  `StreamSource { Contiguous | Split { base, staged } }` (zero-copy
-  dispatch on a `ByteSpan`, provably non-straddling by construction —
-  owed an explicit test); `impl ObjectGraph for DocumentView`
-  (delegating — this is what keeps 45 of `pdfce-render`'s 50
-  `Document`-surface call sites compiling unchanged); add
-  `EditSession::view()` / `Document::view()`; generalize
-  `ContentStream::from_page` (audit its 14 callers) and
-  `pdfce_core::vector::decompose_page` over `&DocumentView`. In
-  `pdfce-render`: 27 params `&Document` → `&DocumentView`, fix the 5
-  `bytes()` call sites; **keep `render_page`/`render_page_with`
-  (`&Document`) as thin wrappers** so
-  `pdfce-cli`/`tools/roundtrip`/`tools/font-parity` stay untouched. In
-  `pdfce-gui`: two call-site changes (`main.rs:1555`, `:1473`) plus
-  correcting the two stale doc comments (`refresh_pages`, and
-  `main.rs:7684`). **Snapping is free** — the snap engine already reads
-  `page_objects()` off the same `ObjectModelProvider`, so raster,
-  object model, hit-test, and snapping all become edit-aware from the
-  SAME parameter-type change; consistency is structural, not
-  discipline-maintained. **Gates — ALL MET:** `cargo tree -p pdfce-core`
-  / `-p pdfce-render` clean of egui/eframe/winit/wgpu/glow; fmt/clippy
-  clean; the new integration test `edited_view_is_what_renders.rs` (the
-  preview-equals-saved oracle's first concrete instance, R85, now in
-  force); `tools/roundtrip` corpus sweep (4,023 files) unchanged and
-  green, raster oracle 6566/6566 — proving the read-path change
-  perturbed no writer behavior. **Full R85 coverage of every listed
-  operation** (`add-text`, `annotate`, `dimension-add`, `object-move`,
-  `object-delete`, `node-move`, `edit-text`, `format-text`, `reflow`,
-  `flatten`, `fill-field`, `redact-apply`) is Pass 17.2's headless-oracle
-  harness, not yet built — Pass 17.0 proves the mechanism, 17.2
-  generalizes the proof to every operation.
-- **Pass 17.1 — finish the `session.document()` audit. NOT YET BUILT.**
-  Triage every
-  remaining call site by intent. **Confirmed live bug, not
-  hypothetical:** `main.rs:4606`'s `count_redaction_marks` reads the
-  base, so **redaction marks added this session are not counted in the
-  GUI** — a second, independent instance of the same read-path class as
-  the headline finding, on the destructive-operation path. Also:
-  `main.rs:4598` `need_appearances` (stale), `main.rs:6078`
-  `page_font_entries` (font list stale after a font-changing format
-  edit), `main.rs:1377/2300/2391/4953` (triage individually).
-  **Legitimate base reads, leave alone:** `main.rs:1779` `recovery()`,
-  `:4491` `version()`. Thumbnails need a read fix, not a new cache key —
-  `refresh_pages` already clears the cache wholesale.
-- **Pass 17.2 — CLI parity + headless oracle harness.** No observable
-  CLI change (rule 11 — the wrappers preserve every signature and the
-  CLI's one-shot parse→edit→save model never renders an unsaved
-  session); enables a headless way to render a live `EditSession` for
-  the preview-equals-saved oracle. Prefer a `tools/` harness or
-  hidden test-only subcommand over widening the public CLI surface.
+- **Pass 17.0** — "the canvas renders the edited document." SHIPPED
+  2026-08-02, `3a56b55`. See the Pass 17.0 Shipped entry for the full
+  build record (two implementation deviations, the confirmed-real §10
+  hazard-2 bug fixed in the same Pass).
+- **Pass 17.1** — finished the `session.document()` audit. SHIPPED
+  2026-08-03, `437a6f7`. Fixed three remaining base-read sites
+  (`count_redaction_marks`, `need_appearances`, `page_font_entries`)
+  plus two further silent-correctness bugs of a different kind (search-
+  redaction resolving through the wrong page index; session-authored
+  content extracting as empty) — see the Pass 17.1/17.2 Shipped entry
+  (top of Shipped) for the full account.
+- **Pass 17.2** — R85 preview-equals-saved oracle harness. SHIPPED
+  2026-08-03, `437a6f7` (same commit as 17.1). Covers 11/12 named R85
+  operations; `redact-apply` is structurally uncoverable (see the
+  Shipped entry). **Found real, silent data loss on its first run** — a
+  multi-`ObjectWrite`-per-object-id overwrite bug in `flatten_fields`
+  that silently discarded every burned-in form value — now a named
+  architectural rule (`ARCHITECTURE.md` §11.1).
 
 **Two operator decisions this Pass was gated on (decision 018 §11):**
 (a) adopt the operator-visible definition of done (provisionally R86)
-as a standing rule — engineer recommends yes; **still PENDING, not
-answered this session — see Open operator questions item (e), R86
-remains proposed-not-in-force.** (b) sequence Pass 17 before new feature
-work — **RESOLVED this session (continuation 56): confirmed yes** — see
-the ★★★★★ reordering entry above (now CONFIRMED, not merely proposed)
-and Open operator questions item (f), now marked resolved.
+as a standing rule — **still PENDING, not answered — see Open operator
+questions item (e); R86 remains proposed-not-in-force**, and is now
+arguably strengthened by this session's own findings (R85's headless
+oracle caught bugs R86-style manual observation might also have caught,
+which cuts both ways as an argument — record the fact, not a
+recommendation on how the operator should weigh it). (b) sequence Pass
+17 before new feature work — RESOLVED (continuation 56): confirmed yes,
+and the sequence has since fully discharged (continuation 58) — see the
+★★★★★ reordering entry above.
 
-### ★ Pass 18.x — Tabbed dock, layer/object tree, selection legibility, Measure ▾ affordance fix (decision 017 + Amendment A + `docs/ui_specs/pass-17-dock-and-layer-tree.md`, DECIDED/SPECCED 2026-08-02, slices 18.0/18.2/18.3 SHIPPED)
+### ★ Pass 18.x — Tabbed dock, layer/object tree, selection legibility, Measure ▾ affordance fix (decision 017 + Amendment A + `docs/ui_specs/pass-17-dock-and-layer-tree.md`, ALL 4 numbered slices 18.0/18.1/18.2/18.3 SHIPPED 2026-08-03 — ui-spec §B.4/§C follow-ons still OPEN, see Backlog)
 
 **Pass-number note (same pattern as decision 014's Pass 13→14
 renumber — see that entry above, "PASS-NUMBER RENUMBER"):** the UI
@@ -4953,49 +5301,30 @@ archived record uses for its own superseded "13.x" self-reference.
   (`c998521`, Shipped above), not part of this slice's scope but closing
   the same complaint together with it.
 - **Pass 18.1 — tabbed/panel dock shell + Objects tree + Properties
-  selection panel + canvas selection feedback.** **DESIGN CONFLICT
-  RESOLVED 2026-08-02 (continuation 57) by decision 017 AMENDMENT A —
-  read the amendment before building, not §3/§8 alone.** Superseded
-  history, for context: the ui-spec's §A originally designed a
-  **horizontal 3-tab strip**; decision 017 then rejected that for a
-  **hand-rolled two-compartment vertical row list** (320pt dock too
-  narrow for horizontal tabs). **Both of those are now themselves
-  superseded** — the operator answered decision 017 §10 Q1 (does the
-  panel system own only the dock, or eventually the whole
-  content area, VS Code/Blender-style) with *"Use egui_tiles… has the
-  flexibal docking that works as well as inkscape's,"* firing the §6.1
-  trigger. **Binding shell mechanism is now `egui_tiles` 0.16.0**
-  (`ARCHITECTURE.md` §12 continuation-57 entry; full text in
-  `docs/decisions/017-tabbed-dockable-panel-system.md`'s "AMENDMENT A"
-  section) — one new Cargo dependency, MIT OR Apache-2.0, already
-  vetted, `THIRD_PARTY_LICENSES.md` regen owed via `cargo-about` when
-  it actually lands in `Cargo.toml` (not yet — Pass 18.1 is still
-  unbuilt). **What does NOT change:** the underlying simultaneity
-  requirement (Layers and Properties visible together, Inkscape-parity
-  workflow) — under `egui_tiles` it becomes a vertical split pane
-  instead of two fixed compartments; ship the DEFAULT layout with that
-  split already in place. `enum DockPanel` + one `panel_body(...)`
+  selection panel + canvas selection feedback. SHIPPED 2026-08-03,
+  committed `f963895` — see the Pass 18.1 Shipped entry (top of
+  Shipped) for the full build record.** Built on `egui_tiles` 0.16.0
+  per decision 017 AMENDMENT A (superseding both the ui-spec's original
+  §A horizontal-tab-strip design AND decision 017's own hand-rolled
+  two-compartment design — see `ARCHITECTURE.md` §12 continuation-57
+  entry for that history). `enum DockPanel` + one `panel_body(...)`
   dispatcher (decision 017 §8.1) survives verbatim as the `egui_tiles`
-  pane payload — keep it extensible (`Document(DocId)` variant must
-  stay a non-breaking addition). The ui-spec's §B (object/layer tree),
-  §C (canvas selection feedback), and §D (Measure ▾ affordance fix —
-  **SHIPPED**, see Pass 18.3 below) are **unaffected by any of this**
-  and remain the binding design regardless of shell mechanism.
-  **MUST-ship-together, per ui-spec §A.2:** the existing
-  `properties_window` (document `/Info` fields) renames to "Document
-  Properties" in the SAME slice that adds the new selection-scoped
-  Properties surface — shipping the rename later recreates the exact
-  naming collision the spec calls out as a must-fix. **Binding core
-  asks (ui-spec §B.4, pdfce-core, zero GUI dependency added):** extend
-  `TextObject` with a short extracted-string preview + resolved
-  font-name/size (P1, high value — Text is the object kind most likely
-  to be the "box that doesn't correspond to anything" culprit); extend
-  `ImageObject` with pixel width/height (P1, lower urgency). Both are
-  additions to already-GUI-free data the decomposition already
-  computes. **`docs/ui_specs/pass-17-dock-and-layer-tree.md`'s §A is
-  now superseded TWICE OVER** (decision 017, then Amendment A) and
-  carries a status notice to that effect (added `f9bb560`) — do not
-  build it as written.
+  pane payload; the underlying simultaneity requirement (Layers/Objects
+  and Properties visible together) ships as the DEFAULT vertical-split
+  layout. The ui-spec's §D (Measure ▾ affordance fix) shipped separately
+  as Pass 18.3 (below).
+  **DEVIATION FROM THIS BULLET'S OWN "BINDING" FRAMING, flagged not
+  silently dropped:** the ui-spec's §A.2 must-ship-together rename
+  (`properties_window` → "Document Properties" in the same slice) and
+  §B.4's "binding core asks" (`TextObject` extracted-string preview +
+  resolved font-name/size; `ImageObject` pixel width/height, both
+  zero-GUI-dependency additions to `pdfce-core`) plus §C's full
+  selection-legibility asks (type badge, invisible/approximate-hit
+  disclosure, status readout) were **NOT** all delivered as part of
+  this Pass. Consolidated as an explicit Backlog follow-on below
+  ("ui-spec §B.4/§C follow-ons") rather than left to be rediscovered —
+  do not assume this Pass closed §B/§C in full just because it shipped
+  the dock shell and object tree.
 - **Pass 18.2 — `object-list` CLI subcommand. SHIPPED 2026-08-02,
   committed `dae0139` — see Shipped above.** Closed the gap found this
   session: `object-move`'s own help text told operators to get object
@@ -5003,7 +5332,9 @@ archived record uses for its own superseded "13.x" self-reference.
   `--hit`/`--tolerance` headless hit-test query beyond the original
   scope, used to produce the diagnosis in the Pass 17.0 Shipped entry.
   Serves as the Objects tree's headless companion (rule 11, CLI
-  parity) for the still-unbuilt Pass 18.1.
+  parity) for Pass 18.1 (now shipped, above) — the Pass 18.1 Shipped
+  entry's object-tree regression test pins agreement against this
+  command directly.
 - **Pass 18.3 — Measure ▾ affordance fix (ui-spec §D) + ScripTree-style
   icon set + toolbar overflow wrapping. SHIPPED 2026-08-02, committed
   `c59b0c4` — see Shipped above (top of Shipped).** The dimensioning
@@ -5019,15 +5350,14 @@ archived record uses for its own superseded "13.x" self-reference.
   original dimensioning-tool complaint (the capability half was already
   closed).
 
-**Not v1, explicitly flagged for the operator, not built (ui-spec §A.6
-/ decision 017 §10 Q2–Q3):** drag-to-reorder panels and undock-to-
-floating-OS-window are `egui_tiles` native capabilities once Pass 18.1
-lands, but multi-monitor OS-window undocking (§10 Q2) is explicitly
-NOT granted by adopting `egui_tiles` (no `Surface::Window` equivalent,
-rerun-io/egui_tiles issue #30) — default stands: docked-only, its own
-Backlog entry. §10 Q1 (the `egui_tiles`-vs-hand-rolled question this
-note originally tracked) is now ANSWERED — see Pass 18.1 above and the
-open-questions list below.
+**Not v1, explicitly flagged for the operator (ui-spec §A.6 / decision
+017 §10 Q2–Q3):** drag-to-reorder panels is an `egui_tiles` native
+capability, now available since Pass 18.1 shipped; multi-monitor
+OS-window undocking (§10 Q2) is explicitly NOT granted by `egui_tiles`
+(no `Surface::Window` equivalent, rerun-io/egui_tiles issue #30) —
+default stands: docked-only, its own Backlog entry, still unanswered.
+§10 Q1 (the `egui_tiles`-vs-hand-rolled question this note originally
+tracked) is ANSWERED and BUILT — see Pass 18.1 above.
 
 ### Dimension-tool bug-fix cluster — Pass 12.M2c (Backlog, code-trace found 2026-08-02, distinct from Pass 18.x)
 
@@ -5065,11 +5395,15 @@ retained as the audit trail for how the build got scoped and unblocked
 — nothing below needs re-reading to pick up new work, but it explains
 WHY the shipped build looks the way it does (tiny-skia pipeline, not
 pre-rasterized PNG; 8 verbatim + 2 derived + 25 new SVGs; the
-redaction-icon style exception). **One item flagged during the build,
-not yet resolved:** `▾` (U+25BE) has no glyph in egui's bundled fonts
-and tofu-boxes on 4 controls — pre-existing, not introduced by this
-Pass; `pdfce-ui-specialist` dispatched, see the Pass 18.3 Shipped
-entry's "Open defect DISPATCHED" paragraph.
+redaction-icon style exception). **Item flagged during the build is now
+RESOLVED (2026-08-03):** `▾` (U+25BE) had no glyph in egui's bundled
+fonts and tofu-boxed on 4 controls, pre-existing, not introduced by this
+Pass — `pdfce-ui-specialist` audited and the engineer fixed the whole
+class, including a second tofu pair (`▲`/`▼` on the rail/Combine-files
+reorder arrows) the original audit missed; see the "Menu-affordance &
+glyph-coverage audit" Shipped entry (top of Shipped). `glyph_button` is
+now deleted — pdfce has no text-glyph buttons left anywhere. `✓`/`✕` on
+three tools' Accept/Reject buttons remain unverified — see Backlog.
 
 **AMENDED 2026-08-01 (SESSION_LOG continuation 54) — BOTH gated decisions
 RESOLVED by the operator; the icon BUILD is now UNBLOCKED (still queued
@@ -6407,6 +6741,52 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **GUI has no redaction-apply flow at all (filed 2026-08-03, Pass
+  17.1/17.2, no Pass number assigned).** The GUI can mark redactions and
+  disclose the marks, but cannot APPLY a redaction (the operation that
+  actually removes covered content) — applying is CLI-only,
+  `pdfce-cli redact-apply`. Predates this session but newly notable
+  because it's the one R85 operation the new preview-equals-saved oracle
+  cannot cover for a structural reason, not an implementation gap:
+  applying redaction consumes a `Document` and emits a file directly,
+  it is not an `EditSession` operation, so there is no live-session
+  state for a GUI "preview then apply" flow to render in the first
+  place — any GUI apply flow would need its own design (a distinct
+  confirm/apply modal, most likely, not a live-preview surface). See
+  the Pass 17.1/17.2 Shipped entry and `ARCHITECTURE.md` §12's
+  continuation-58 decision-018 entry for the full architectural framing.
+- **`✓`/`✕` glyph verification still owed (filed 2026-08-03, sibling of
+  the now-closed menu-affordance/glyph-coverage class).** `✓`/`✕`
+  (U+2713/U+2715) on three tools' Accept/Reject buttons were never
+  confirmed rendered/not-tofu by direct observation — reaching them
+  needs an in-progress tool gesture the observation harness hasn't yet
+  driven (dimension authoring, add-text, or reflow mid-flow). The rail
+  checkbox's own tick mark is egui's vector-drawn `Checkbox`, not a font
+  glyph, so observing it proves nothing about this specific class. Not
+  assumed clean by extrapolation from the rest of the glyph-coverage
+  audit — needs its own direct-observation check.
+- **ui-spec §B.4/§C follow-ons — core data-model additions + full
+  selection-legibility asks (filed 2026-08-03, deviation flagged at
+  Pass 18.1's ship, not silently dropped).** Pass 18.1 shipped the
+  `egui_tiles` dock shell and object/layer tree but did NOT deliver:
+  (1) **§B.4 core additions to `pdfce-core`** (zero GUI dependency
+  added) — extend `TextObject` with a short extracted-string preview +
+  resolved font-name/size (P1, high value: Text is the object kind most
+  likely to be the "box that doesn't correspond to anything" an
+  operator reported); extend `ImageObject` with pixel width/height (P1,
+  lower urgency). (2) **§C's full selection-legibility asks** — a type
+  badge on the selection outline, disclosure when a selection is
+  invisible/approximate-hit (e.g. a fully-transparent or off-canvas
+  object), a status readout for the current selection. (3) **A
+  newly-found case, not in the original §C list:** a zero-height path
+  object (e.g. a horizontal rule) selects correctly (hit-testing works)
+  but its selection outline is a zero-height rect that paints nothing
+  visible — an operator can select such an object and get no visual
+  confirmation at all that anything happened. Also still owed from
+  §A.2: the `properties_window` → "Document Properties" rename in the
+  same slice as the new selection-scoped Properties surface (both now
+  exist; confirm the rename actually landed before closing this item).
+
 - **`egui_kittest`-based headless canvas-gesture testing harness (filed
   2026-08-02, no Pass number assigned).** Found while building the GUI
   observation harness (`tools/observe-gui.ps1`/`gui-click.ps1`, Shipped
@@ -7111,8 +7491,12 @@ nothing gets forgotten, not as a commitment to build in this order.
 - **(a) Icon SVG pipeline switch — RESOLVED, tiny-skia SVG-path-`d`
   parser CONFIRMED** (no new Cargo dependency, crisp at any DPI/zoom;
   the pre-rasterize-to-PNG plan is superseded, retained for history in
-  the "★ Icon set" entry above). Icon BUILD still doesn't start yet, but
-  only because it's now correctly queued behind Pass 17.1/17.2 per (f).
+  the "★ Icon set" entry above). **UPDATE:** the icon BUILD has since
+  SHIPPED (Pass 18.3, continuation 57) — ahead of the Pass-17.1/17.2
+  gate at the time (see the ★★★★★ REORDERING entry's "DEVIATION
+  RECORDED" note), and that gate has itself since cleared for real
+  (continuation 58) — nothing about this item remains open in any
+  direction.
 - **(f) Decision 018 / ★★★★★ reordering — RESOLVED, CONFIRMED yes.**
   Pass 17.x (live-edit rendering) lands before the rest of the ★★★
   operator priority sequence (icons, text-handling, forms). The
@@ -7157,6 +7541,15 @@ nothing gets forgotten, not as a commitment to build in this order.
   sequencing question (f), a related but distinct question, without
   addressing this one). R86 remains PROPOSED, not in force.
   (Item (f), the sequencing question, is now RESOLVED — see above.)
+  **Still unanswered as of continuation 58 (2026-08-03).** Worth noting
+  for whenever the operator does weigh in: this session's R85 oracle
+  (a headless mechanism, not R86's "observed in the running app"
+  mechanism) is what caught the `flatten_fields` silent-data-loss bug,
+  the wrong-page search-redaction bug, and the empty-extraction bug —
+  R85 and R86 are complementary, not substitutes, and this session is
+  evidence for BOTH being worth having, not an argument that R85 alone
+  is sufficient. Recorded as a fact for the operator to weigh, not a
+  renewed recommendation beyond the one already on record.
 
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
@@ -7962,6 +8355,19 @@ nothing gets forgotten, not as a commitment to build in this order.
   deletion); its absence is exactly what let the ★★★★ HEADLINE FINDING
   survive fourteen editing Passes unnoticed — every one of them proved
   *saved* output correct, none proved *displayed* output correct.
+  **AMENDMENT (2026-08-03, Pass 17.2, continuation 58) — `redact-apply`
+  is STRUCTURALLY uncoverable by this rule, not merely unimplemented.**
+  The oracle built to satisfy this rule (`tools/` harness, Pass 17.2)
+  covers the other 11 operations listed above; `redact-apply` consumes
+  a `Document` and emits a file directly rather than operating on a
+  live `EditSession`, so "preview equals saved" has no live-session
+  left-hand side to compare against for that one operation. The
+  operation listing above is left as originally written (append-only
+  discipline) with this amendment recording the gap rather than
+  editing the list silently — see the Pass 17.1/17.2 Shipped entry and
+  `ARCHITECTURE.md` §12's continuation-58 decision-018 entry for the
+  full account, and the "GUI has no redaction-apply flow at all"
+  Backlog entry for the resulting product-gap consequence.
 - **R86 — A Pass does not ship until observed working in the running
   application (decision 018, 2026-08-02; librarian-assigned number;
   OPERATOR SIGN-OFF PENDING — see Open operator questions above, item

@@ -4819,9 +4819,13 @@ impl PdfceApp {
                 // so the active tool is never hidden by the closed menu.
                 ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
                     let active_name = match doc.active_tool {
-                        Some(CanvasTool::MeasureLinear) => Some("Linear"),
-                        Some(CanvasTool::MeasureCircular) => Some("Radius/Diameter"),
-                        Some(CanvasTool::MeasureScale) => Some("Set Scale"),
+                        Some(CanvasTool::MeasureLinear) => {
+                            Some(ui_text::measure_tool_name_linear())
+                        }
+                        Some(CanvasTool::MeasureCircular) => {
+                            Some(ui_text::measure_tool_name_circular())
+                        }
+                        Some(CanvasTool::MeasureScale) => Some(ui_text::measure_tool_name_scale()),
                         _ => None,
                     };
                     let label = match active_name {

@@ -1517,6 +1517,12 @@ impl IconCache {
             Ok(art) => art.rasterize(px, weight),
             Err(err) => {
                 eprintln!(
+                    // ui-text-exempt: stderr diagnostic, never rendered in the GUI. An icon is a
+                    // compile-time `include_str!` asset, so this fires only when a DEVELOPER has
+                    // committed a malformed SVG — it is a build-time defect report addressed to
+                    // whoever broke the asset, not operator copy. The operator-visible consequence
+                    // is the blank 1x1 image below, which is deliberately silent: pdfce never
+                    // invents a look for something it could not draw.
                     "pdfce: icon asset '{}' failed to parse ({err}); drawing nothing",
                     icon.name()
                 );

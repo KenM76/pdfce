@@ -1048,6 +1048,29 @@ promise.
   than keeping it unbounded — large documents with long editing
   sessions shouldn't accumulate unbounded command-object memory.
   Acrobat itself bounds undo; matching that expectation is fine.
+- **CORRECTION (2026-08-03, Pass 17.1) — at most one `ObjectWrite` per
+  object id per command.** The command model above assumes a command's
+  writes compose; in practice `EditSession` applies a command's
+  `ObjectWrite`s in sequence against the PRE-command state, and nothing
+  commits mid-command — so a SECOND whole-dictionary `ObjectWrite` to an
+  object id already written earlier in the SAME command **replaces**
+  the first rather than merging with it. Found via `flatten_fields`,
+  which issued three whole-dictionary writes to the SAME page object in
+  one command (`/Contents`, `/Resources /XObject`, `/Annots`), each
+  cloned from the identical pre-command page dict; the `/Annots` write
+  landed last and silently discarded the `/Contents`/`/Resources`
+  changes, so every flattened form lost its burned-in visible values
+  while still reporting correct counters (`fields_flattened`/
+  `widgets_burned`/`pages_touched`). No existing test caught this
+  because none rendered the result — R85 (`ROADMAP.md` Standing rules)
+  closed exactly this class of gap. **Binding rule going forward:** a
+  command that needs to touch the same object's `/Contents`,
+  `/Resources`, AND `/Annots` (or any other combination) in one step
+  must accumulate ONE merged dictionary write per id, never issue N
+  separate whole-dict writes to the same id within a command. Other
+  multi-write commands are owed the same audit — not yet performed
+  exhaustively as of this entry. Full record: `ROADMAP.md`'s Pass
+  17.1/17.2 Shipped entry.
 
 ### 11.2 Redaction is the deliberate exception, and only after save
 
@@ -2069,7 +2092,9 @@ with a forward pointer.
     operator chose the whole-content-area/Inkscape-flexible-docking
     model); the underlying SIMULTANEITY requirement R80/R81 encode
     does not lapse — it becomes a vertical split pane instead of two
-    fixed compartments. See the continuation-57 §12 entry below.)*
+    fixed compartments. See the continuation-57 §12 entry below. Pass
+    18.1, which builds this, SHIPPED 2026-08-03 — see the
+    continuation-58 §12 entry below.)*
     (2) **The toolbar is CAPPED at its 6 groups + the Tools
     toggle.** Any future feature fits an existing group, becomes a
     rail-contextual control, or becomes a Tools-dock entry; no 7th
@@ -3597,3 +3622,128 @@ with a forward pointer.
   decisions/017-tabbed-dockable-panel-system.md` ("AMENDMENT A"
   section, filed by `pdfce-engineer` per §6.1's own instruction);
   `ROADMAP.md` ★ Pass 18.x entry.
+- **2026-08-03 (same-day continuation 58) — Decision 018 follow-up:
+  Pass 17.1 SHIPPED (`437a6f7`), finishing the `session.document()`
+  audit and confirming the read-path bug class had more instances than
+  the two named at Pass 17.0's ship.** `count_redaction_marks`
+  (`main.rs:4606`), `need_appearances` (`main.rs:4598`), and
+  `page_font_entries` (`main.rs:6078`) were all reading the base
+  revision instead of `session.view()`; all three fixed, all now
+  edit-aware. Two further bugs found by the same audit sweep, distinct
+  in KIND from the read-path class (not "reading the wrong revision,"
+  but "resolving through the wrong index space" and "pairing the wrong
+  bytes with the wrong graph"):
+  1. **Search-redaction resolved against the wrong page after any
+     delete/reorder.** `author_text_matches` extracted match geometry
+     using BASE page indices, then fed that geometry straight to
+     `add_redaction`, which resolves page numbers through SESSION
+     `page_slots`. After any page delete/reorder earlier in the same
+     session, a search-driven redaction mark silently lands on the
+     WRONG page, with fully plausible-looking geometry — nothing about
+     the result looks wrong on inspection. Fixed.
+  2. **Content authored this session could be extracted as empty.**
+     `extract_selection` paired a SESSION object graph with BASE bytes.
+     A stream authored during the current session has no corresponding
+     bytes in `base`, so extraction silently returned empty content
+     instead of erroring or reading the session's own staged bytes.
+     Fixed.
+  See §11.1's addendum above for a THIRD, structurally distinct bug (the
+  `flatten_fields` multi-`ObjectWrite`-per-id overwrite) found by the
+  same effort — all three were found by the SAME oracle, on its FIRST
+  run, none of them hypothetical or anticipated by the original
+  decision-018 design.
+  **Pass 17.2 SHIPPED the same commit** — the R85 preview-equals-saved
+  oracle, built as a `tools/` harness (no new public CLI surface, per
+  rule 11), now covers 11 of the 12 named R85 operations. **`redact-
+  apply` is the one operation R85 cannot cover, structurally, not by
+  omission or oversight:** applying redaction is not an `EditSession`
+  operation — it consumes a `Document` and emits a file directly (§11.2
+  — redaction stops being an in-memory, undo-able command at exactly
+  the point a save actually happens), so "preview equals saved" has no
+  live-session left-hand side to compare against for that one
+  operation. R85's own text (`ROADMAP.md` Standing rules) lists
+  `redact-apply` in its operation coverage; that listing is now known
+  to be aspirational for that one entry, not achieved, and is a
+  structural fact about the redaction design rather than a gap in the
+  oracle's implementation. **Consequence worth naming architecturally:
+  there is currently no GUI flow for redaction apply at all** —
+  mark-and-disclose only; applying is CLI-only
+  (`pdfce-cli redact-apply`). Filed as a real product/feature gap to
+  `ROADMAP.md` Backlog, not merely an oracle-coverage note. Gates:
+  workspace 1521 tests passing (from the continuation-57 baseline of
+  1504), 0 failed; fmt/clippy clean; `cargo tree -p pdfce-core`/`-p
+  pdfce-render`/`-p pdfce-cli` GUI-dep-free; zero new Cargo
+  dependencies. **Decision 018 (live-edit rendering) is now COMPLETE
+  end-to-end** — Pass 17.0 (canvas renders the edited view), 17.1
+  (every remaining base-read site triaged and fixed), and 17.2 (the
+  oracle that proves it, 11/12 operations) have all shipped. Full
+  record: `ROADMAP.md`'s Pass 17.1/17.2 Shipped entry;
+  `docs/decisions/018-edited-state-is-what-the-canvas-renders.md`.
+- **2026-08-03 (same-day continuation 58) — Decision 017 Amendment A,
+  BUILD CONFIRMATION: Pass 18.1 SHIPPED (`f963895`), `egui_tiles`
+  0.16.0 actually lands in `Cargo.toml`, `pdfce-gui` only, WITH
+  `default-features = false`.** **CORRECTION to the continuation-57
+  entry's vetting:** that entry instructed *"do not enable `egui_tiles`'
+  `serde` feature ... yet,"* but did not separately record that `serde`
+  is ON BY DEFAULT for this crate — §6.2's vetting table recorded
+  license/MSRV/transitive-set facts but no default-feature-set check.
+  Had Pass 18.1 added the dependency with default features left on (the
+  common case when a developer doesn't think to check), the
+  continuation-57 instruction would have been silently violated by
+  omission, not intent. **General rule filed to
+  `D:\dev\rag\rust\crate_default_features_can_silently_contradict_project_policy.md`:**
+  check `default-features` explicitly against project policy as its own
+  checklist item, not an emergent property of the license/MSRV/
+  package-count checks. Exactly **1** new package (`egui_tiles` itself;
+  all transitives already present at satisfying versions, as
+  predicted); MIT OR Apache-2.0; `THIRD_PARTY_LICENSES.md` regenerated
+  via `cargo-about 0.9.1` (generated, not hand-edited, per rule 13);
+  `cargo tree -p pdfce-core`/`-p pdfce-render`/`-p pdfce-cli` verified
+  clean. **AccessKit gap resolved in the WORSE direction than
+  continuation-57 left open:** that entry noted 0.16.0 had the tab-
+  naming gap AT ITS RELEASE TAG but had since been fixed on `main`, and
+  asked whoever builds Pass 18.1 to check which side of that fix the
+  pinned release falls on. It falls on the UNFIXED side — zero
+  `widget_info`/`accesskit` hits in the pinned release's source. Names
+  are supplied via `Behavior::on_tab_button` (the continuation-57 note's
+  `Behavior::tab_ui` reference was slightly off — `on_tab_button` is the
+  actual hook used) rather than a fork. **A further gap that cannot be
+  closed downstream at all, regardless of `egui_tiles` version:** egui
+  0.35's `WidgetType` enum has no `Tab`/`TabList` member, so a tab can
+  be given the correct accessible name and selected state but not the
+  correct semantic ROLE short of an upstream egui change — filed to
+  `D:\dev\rag\egui\egui_035_no_tab_tablist_widgettype.md`. New
+  `crates/pdfce-gui/src/dock.rs` (~510 lines): `enum DockPanel` + one
+  `panel_body` dispatcher (§8.1) survives verbatim as the `egui_tiles`
+  pane payload; default layout ships Objects ABOVE Properties as a
+  vertical split, BOTH simultaneously visible per the amendment's own
+  requirement, pinned by a unit test asserting both panels are present
+  in `active_tiles()`. `properties_open` (a second source of truth for
+  panel visibility) is deleted; `properties_window()` is retired — no
+  more float-or-dock dual mode, per R80/R81. Both engine gotchas
+  recorded at continuation-57 were real and handled as predicted:
+  `Tree<Pane>` derives `Clone, PartialEq` but not `Default`
+  (`std::mem::replace`, not `std::mem::take`); `SimplificationOptions::
+  default()` needed `all_panes_must_have_tabs: true` overridden or the
+  tab bar vanishes with one pane open. **Mandatory bugfix caught before
+  ship:** `open_path()` did not invalidate `properties_draft`; for a
+  now-persistently-mounted Properties panel (it no longer needs opening
+  to appear), the failure mode would have been an operator opening a
+  NEW document, seeing a stale or EMPTY metadata form left over from the
+  PREVIOUS document, and clicking Apply — silently overwriting the new
+  document's real `/Info` with leftover or blank values. Fixed with two
+  regression tests. Object tree reuses `canvas::selection_after_click`
+  verbatim for bidirectional sync and is pinned against
+  `pdfce-cli object-list` (Pass 18.2) by a same-indices/same-kinds
+  regression test. **Deliberately NOT done, and said so in code:** the
+  dock still starts CLOSED by default; the original justification for
+  that default (Properties as the sole legacy floating exception, R81)
+  is now false, but flipping a startup default is a product call left
+  to the operator, not taken unilaterally. §10 Q2 (multi-monitor
+  undock) remains unanswered and unbuilt — `egui_tiles` grants no
+  `Surface::Window` equivalent (unchanged from the continuation-57
+  entry). Gates: workspace 1538 tests passing (from 1521), 0 failed;
+  fmt/clippy clean; `cargo tree` invariant intact; exactly one new
+  dependency, license-classified and attributed. Full record:
+  `ROADMAP.md`'s Pass 18.1 Shipped entry;
+  `docs/decisions/017-tabbed-dockable-panel-system.md` ("AMENDMENT A").

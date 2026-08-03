@@ -159,30 +159,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Decision 002 rule R1 (docs/decisions/002-i18n-timing.md §6.2):
-      # every user-facing string in pdfce-gui lives in ui_text.rs. The
-      # heuristic: a string literal containing whitespace, outside
-      # ui_text.rs, on a non-comment line, is human prose that escaped
-      # the catalog — single-token literals (egui Ids, file extensions,
-      # cfg values, "pdfce") pass. Escape hatch: a trailing
-      # `// ui-text-exempt: <reason>` on the offending line.
-      # Known limitation (accepted, 002 §6.2): catches literals, not
-      # helper functions assembling prose — that residue is caught by
-      # review plus the single-file catalog making drift obvious.
-      - name: grep for stray UI string literals (fail on prose outside ui_text.rs)
-        run: |
-          set -e
-          hits=$(grep -rnE '"[^"]*[[:space:]][^"]*"' crates/pdfce-gui/src \
-            --include='*.rs' \
-            | grep -v '/ui_text\.rs:' \
-            | grep -vE '^[^:]*:[0-9]+:[[:space:]]*//' \
-            | grep -v 'ui-text-exempt:' \
-            || true)
-          if [ -n "$hits" ]; then
-            echo "$hits"
-            echo "::error::user-facing string literal outside ui_text.rs — move it into the catalog (decision 002 R1) or add '// ui-text-exempt: <reason>'"
-            exit 1
-          fi
+      # Decision 002 rule R1: every operator-visible string in pdfce-gui
+      # lives in ui_text.rs. The rule now lives in tools/check-ui-strings.sh
+      # so it can be RUN LOCALLY before pushing — see that script's header
+      # for the exclusions and the reasoning behind each.
+      #
+      # This job was previously an inline grep that FAILED AT BASELINE on 140
+      # hits, and had for some time. A gate that cannot pass enforces nothing
+      # and teaches everyone who sees it red to ignore it — and in this case
+      # the noise was concealing a genuine violation (the Measure sub-tool
+      # names, drawn on the toolbar, living as bare literals in main.rs).
+      # 125 of the 140 were test assertion messages; three of the remainder
+      # were the regex misreading Rust, matching from one literal's closing
+      # quote to the next literal's opening quote.
+      - name: check that operator-visible strings live in ui_text.rs
+        run: bash tools/check-ui-strings.sh
 
   cross-check:
     name: cross-target compile check (macOS / wasm32)

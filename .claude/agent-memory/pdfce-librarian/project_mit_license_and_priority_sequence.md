@@ -1,6 +1,6 @@
 ---
 name: project-mit-license-and-priority-sequence
-description: pdfce's OSS license is DECIDED (MIT, 2026-08-01) and the operator set a four-item work-priority sequence the same continuation — dimensioning tool (active) → GUI icons → finish text-handling → form-building tools.
+description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling → forms. Pass-17-gate CLEARED 2026-08-03 (continuation 58) — items #3/#4 now the live dispatch target.
 metadata:
   type: project
 ---
@@ -143,3 +143,28 @@ starting the icon build. Check `ROADMAP.md`'s ★★★★★ reordering entry
 RESOLVED) before assuming the plain four-item order from continuation
 50 is still the immediate dispatch order — it isn't, until 17.1/17.2
 ship.
+
+**UPDATE — 2026-08-03, SESSION_LOG continuation 58 (real date; header
+stays "2026-08-02" per [[feedback-session-log-continuation-style]]):
+Pass 17.1, Pass 17.2, AND Pass 18.1 have all now SHIPPED — the
+Pass-17-gate this file's last update said to wait for is now CLEARED
+for real.** Decision 018 (live-edit rendering) is COMPLETE end-to-end
+(`437a6f7`); decision 017's four numbered engineering slices
+(18.0/18.1/18.2/18.3) are ALL shipped (`f963895` for 18.1). Items #3
+(finish text-handling: FF-B/FF-H/FF-C) and #4 (form-building) from THIS
+memory's four-item sequence are now genuinely unblocked and are the
+next concrete dispatch per the operator's continuation-50 order, absent
+a new steer — the icon build (#2) already shipped early at continuation
+57, so all of items #1–#3's prerequisites are now satisfied and only #3
+itself (and then #4) remain undispatched. **Two new items surfaced this
+continuation that may compete for priority attention, not yet weighed
+against the four-item order by the operator:** the GUI has NO
+redaction-apply flow at all (found to be a structural R85-oracle gap,
+not an oversight — see `ROADMAP.md` Backlog); and ui-spec §B.4/§C
+follow-ons (`TextObject`/`ImageObject` core additions, full selection-
+legibility asks) were flagged as a deviation from Pass 18.1's own
+stated scope, also filed to Backlog. Check `ROADMAP.md`'s ★★★ operator
+priority sequence + ★★★★★ REORDERING entries for current status before
+assuming either the plain four-item order or the Pass-17-gate framing
+from continuation 56 still describes what's next — it doesn't; the gate
+is gone and items #3/#4 are the live dispatch target.

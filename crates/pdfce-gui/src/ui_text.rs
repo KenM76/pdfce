@@ -2853,6 +2853,34 @@ pub fn measure_menu_button() -> &'static str {
     "Measure"
 }
 
+/// The active-tool names substituted into [`measure_menu_active_label`].
+///
+/// These are OPERATOR-VISIBLE strings — they appear on the toolbar as
+/// "Measure: Linear" — and they previously lived as bare literals in
+/// `main.rs`'s tool-name match. That is a decision 002 / R1 violation, and it
+/// is instructive that it survived: the CI gate meant to catch exactly this
+/// was failing at baseline on 140 unrelated hits, so nobody could see the one
+/// real finding in the noise. A gate that cannot pass guards nothing.
+///
+/// Note "Linear" and "Radius/Diameter" would NOT have been caught even by a
+/// green gate — its heuristic only flags literals containing whitespace, and
+/// those two have none. They are moved here anyway, because the rule is
+/// "operator-visible strings live in the catalog", not "strings the grep can
+/// see live in the catalog".
+pub fn measure_tool_name_linear() -> &'static str {
+    "Linear"
+}
+
+/// See [`measure_tool_name_linear`].
+pub fn measure_tool_name_circular() -> &'static str {
+    "Radius/Diameter"
+}
+
+/// See [`measure_tool_name_linear`].
+pub fn measure_tool_name_scale() -> &'static str {
+    "Set Scale"
+}
+
 /// Appended to a menu button's ACCESSIBLE NAME (not its visible label) so a
 /// screen-reader user learns the control opens a menu rather than performing
 /// an action: "Markup, opens a menu".
