@@ -3046,18 +3046,18 @@ impl PdfceApp {
         let mut swap: Option<(usize, usize)> = None;
         for (index, path) in self.merge_inputs.iter().enumerate() {
             ui.horizontal(|ui| {
-                // Routed through `glyph_button` — the SAME accessible-name
+                // Routed through `icon_button` — the SAME accessible-name
                 // wrapper the page rail's identical up/down pair uses. These
                 // two call sites were the ones that never migrated: a bare
                 // `Button::new` on a triangle glyph announces the glyph (or
                 // nothing) rather than "Move file up", which is precisely the
-                // gap `glyph_button`'s own doc comment cites this very pair as
+                // gap the removed `glyph_button`'s doc comment cited this pair as
                 // its reason for existing.
                 if ui
                     .add_enabled_ui(index > 0, |ui| {
-                        Self::glyph_button(
+                        Self::icon_button(
                             ui,
-                            ui_text::move_selection_up_button(),
+                            icons::Icon::ChevronUp,
                             ui_text::merge_move_up_tooltip(),
                         )
                     })
@@ -3068,9 +3068,9 @@ impl PdfceApp {
                 }
                 if ui
                     .add_enabled_ui(index + 1 < self.merge_inputs.len(), |ui| {
-                        Self::glyph_button(
+                        Self::icon_button(
                             ui,
-                            ui_text::move_selection_down_button(),
+                            icons::Icon::ChevronDown,
                             ui_text::merge_move_down_tooltip(),
                         )
                     })
@@ -4142,20 +4142,21 @@ impl PdfceApp {
         Self::labeled_icon_button(ui, egui::Button::new(image), tooltip)
     }
 
-    /// The same wrapper for the handful of icon-only controls that have
-    /// no assigned SVG yet (the rail's keyboard reorder arrows) and so
-    /// still draw a bare Unicode glyph.
-    ///
-    /// This is deliberately a second *entry point* into
-    /// [`Self::labeled_icon_button`], not a second implementation: the
-    /// accessible-name fix (P1-6) exists in exactly one place, so a
-    /// control drawn either way announces itself identically. The
-    /// ui-spec §4.1 requirement is "do not build a parallel path", and a
-    /// shared body with two constructors honours that; duplicating the
-    /// `WidgetInfo::labeled` call would not.
-    fn glyph_button(ui: &mut egui::Ui, glyph: &str, tooltip: impl Into<String>) -> egui::Response {
-        Self::labeled_icon_button(ui, egui::Button::new(glyph), tooltip)
-    }
+    // REMOVED 2026-08-03: `glyph_button`.
+    //
+    // It existed for "the handful of icon-only controls that have no assigned
+    // SVG yet and so still draw a bare Unicode glyph" — in practice just the
+    // page-rail and Combine-files reorder arrows. Those now draw real chevron
+    // icons, because observation showed their U+25B2/U+25BC glyphs rendered as
+    // empty boxes in egui's default font chain.
+    //
+    // With them converted, pdfce has NO text-glyph buttons left, so clippy
+    // correctly flagged this as dead. That is a meaningful milestone rather
+    // than a cleanup detail: every icon-only control in the app is now a drawn
+    // icon whose appearance does not depend on the host font stack having a
+    // codepoint nobody verified. The accessible-name guarantee is unaffected —
+    // `icon_button` was always the sibling entry point into the same
+    // `labeled_icon_button` body, which is where `WidgetInfo::labeled` lives.
 
     /// Size an icon-only button to [`ICON_BUTTON_SIZE`], attach its
     /// tooltip, and override its accessible name with that same tooltip
@@ -5869,22 +5870,27 @@ impl PdfceApp {
                 // Still bare Unicode glyphs: the ui-spec's icon mapping
                 // covers the toolbar and the Tools dock, and assigns
                 // nothing to the rail's reorder arrows. Rather than
-                // invent art the spec has not reviewed, these keep their
-                // ▲/▼ glyphs and go through [`Self::glyph_button`] — the
-                // SAME accessible-name wrapper the icon buttons use, so
-                // nothing about them regresses.
-                if Self::glyph_button(
+                // These were the LAST two text-glyph controls. They kept
+                // their U+25B2/U+25BC triangles when the icon set shipped
+                // because no icon had been drawn for them — and observation
+                // on 2026-08-03 showed those glyphs render as EMPTY BOXES in
+                // egui's default font chain, exactly like the menu `▾` did.
+                // Being glyph-only, that left them with no visible identity
+                // at all. Now real chevrons; the accessible names are
+                // unchanged because both entry points always shared
+                // the same wrapper.
+                if Self::icon_button(
                     ui,
-                    ui_text::move_selection_up_button(),
+                    icons::Icon::ChevronUp,
                     ui_text::move_selection_up_tooltip(),
                 )
                 .clicked()
                 {
                     actions.push(Action::MoveSelection(-1));
                 }
-                if Self::glyph_button(
+                if Self::icon_button(
                     ui,
-                    ui_text::move_selection_down_button(),
+                    icons::Icon::ChevronDown,
                     ui_text::move_selection_down_tooltip(),
                 )
                 .clicked()

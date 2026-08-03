@@ -244,6 +244,12 @@ pub enum Icon {
     ChevronLeft,
     /// Next page (§2 #6).
     ChevronRight,
+    /// "Move selection up" in the page rail and the Combine-files list,
+    /// drawn instead of the text glyph `▲` (U+25B2) — VERIFIED tofu in the
+    /// running build 2026-08-03, same Geometric Shapes block as `▾`. Those
+    /// buttons are glyph-ONLY, so a missing glyph left them with no visible
+    /// identity at all.
+    ChevronUp,
     /// Menu-disclosure marker on a dropdown button, drawn instead of the
     /// text glyph `▾` (U+25BE) — which is absent from every font in egui's
     /// default Proportional chain and rendered as a tofu box on four
@@ -346,6 +352,7 @@ impl Icon {
         Icon::ChevronLeft,
         Icon::ChevronRight,
         Icon::ChevronDown,
+        Icon::ChevronUp,
         Icon::ZoomOut,
         Icon::ZoomIn,
         Icon::FitPage,
@@ -394,6 +401,7 @@ impl Icon {
             Icon::ChevronLeft => include_str!("../assets/icons/chevron-left.svg"),
             Icon::ChevronRight => include_str!("../assets/icons/chevron-right.svg"),
             Icon::ChevronDown => include_str!("../assets/icons/chevron-down.svg"),
+            Icon::ChevronUp => include_str!("../assets/icons/chevron-up.svg"),
             Icon::ZoomOut => include_str!("../assets/icons/zoom-out.svg"),
             Icon::ZoomIn => include_str!("../assets/icons/zoom-in.svg"),
             Icon::FitPage => include_str!("../assets/icons/fit-page.svg"),
@@ -441,6 +449,7 @@ impl Icon {
             Icon::ChevronLeft => "chevron-left",
             Icon::ChevronRight => "chevron-right",
             Icon::ChevronDown => "chevron-down",
+            Icon::ChevronUp => "chevron-up",
             Icon::ZoomOut => "zoom-out",
             Icon::ZoomIn => "zoom-in",
             Icon::FitPage => "fit-page",

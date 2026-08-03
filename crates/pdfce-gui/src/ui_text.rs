@@ -1278,15 +1278,25 @@ pub fn move_selection_down_tooltip() -> &'static str {
 the whole move."
 }
 
-/// Label of the move-up control.
-pub fn move_selection_up_button() -> &'static str {
-    "▲"
-}
-
-/// Label of the move-down control.
-pub fn move_selection_down_button() -> &'static str {
-    "▼"
-}
+// REMOVED 2026-08-03: `move_selection_up_button()` / `move_selection_down_button()`.
+//
+// They returned the bare text glyphs U+25B2 / U+25BC as the visible labels of
+// the page-rail and Combine-files reorder controls. Observation of the running
+// build showed both render as EMPTY BOXES in egui's default Proportional font
+// chain (Ubuntu-Light -> NotoEmoji -> emoji-icon-font), the same gap that broke
+// the menu buttons' U+25BE. Because these controls are glyph-ONLY, the missing
+// glyph left them with no visible identity whatsoever.
+//
+// They now draw `Icon::ChevronUp` / `Icon::ChevronDown` through the icon
+// pipeline, so no STRING is displayed and there is nothing for `ui_text` to
+// own. Their tooltips — which are also their accessible names — remain here as
+// `move_selection_up_tooltip()` / `move_selection_down_tooltip()` and
+// `merge_move_up_tooltip()` / `merge_move_down_tooltip()`, so nothing about
+// what a screen reader announces changed.
+//
+// Recorded rather than silently deleted, per the same convention Pass 18.3
+// used when the icon set retired eleven glyph accessors. See
+// docs/ui_specs/menu-affordance-and-glyph-coverage.md §8.2.
 
 /// Status-bar line after a reorder.
 pub fn reorder_succeeded(count: usize) -> String {
