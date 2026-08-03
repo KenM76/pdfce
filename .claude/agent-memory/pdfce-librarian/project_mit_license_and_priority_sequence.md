@@ -114,3 +114,32 @@ a fresh operator instruction to reorder. See also
 [[project-loop-throttled-awaiting-steer]] (the steer this sequence
 represents) and [[project-uncommitted-repo-worktree-risk]] (the
 license-vs-push distinction this decision sharpened).
+
+**UPDATE — 2026-08-02, SESSION_LOG continuation 55 then 56: priority
+#1 (dimensioning) is now COMPLETE, and the operator has since INSERTED
+a new item ahead of #2 (icons).** Continuation 55: `9c-min` shipped
+(`76485b5`) — all six of decision 011's beta slices done, priority #1
+fully met, not just "substantially met." Same continuation: subagent
+budget (200) EXHAUSTED — no further work delegable to builder/
+librarian/spec agents; remaining work (icons, text-handling, forms)
+would need to happen directly in-context or the operator raises
+`CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`. **Continuation 56 (new
+calendar-day session): a GUI usability report from the operator
+("can't click objects," no docking, dimensioning tool "didn't seem to
+have a way to set dimensions") led to decisions 017/018 and a new Pass
+17.x (live-edit rendering) — the engineer proposed sequencing Pass 17.x
+BEFORE the rest of the four-item list (icons/text/forms), and the
+operator CONFIRMED that reordering the same continuation, along with
+confirming the icon SVG pipeline (tiny-skia SVG-path parser, no new
+dependency — NOT the previously-recorded pre-rasterize-to-PNG plan,
+which turned out non-executable on this machine).** Net effect: the
+four-item list from continuation 50 is still the operator's standing
+priority order for icons→text→forms, but **Pass 17.x (not itself one
+of the original four items) now sits ahead of all three remaining
+items**, confirmed rather than assumed. Pass 17.0 (of 17.0/17.1/17.2)
+shipped same continuation (`3a56b55`); 17.1/17.2 remain and gate
+starting the icon build. Check `ROADMAP.md`'s ★★★★★ reordering entry
+(now CONFIRMED, not proposed) and Open operator questions (a)/(f) (both
+RESOLVED) before assuming the plain four-item order from continuation
+50 is still the immediate dispatch order — it isn't, until 17.1/17.2
+ship.

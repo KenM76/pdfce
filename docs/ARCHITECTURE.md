@@ -235,6 +235,21 @@ engineer integrates the full design text here at Pass 1.
 - `Document::render_page(index, dpi) -> Pixmap` (in `pdfce-render`,
   takes a `&Document`).
 
+**IMPLEMENTED (2026-08-02, Pass 17.0, commit `3a56b55` — was a forward
+pointer, now current reality):** `render_page`/`render_page_with` stay
+`&Document`-taking thin wrappers (unchanged signatures), but
+`pdfce-render`'s real internal surface is generalized to accept
+`&pdfce_core::view::DocumentView` (a promoted, top-level home for the
+former `pageops::assemble::DocumentView`) so it can render either a
+plain `Document` or a live `EditSession` overlay — this is what the
+canvas now actually renders (`self.session.view()`, not
+`self.session.document()`). Full design, including the `StreamSource`
+byte-source abstraction (`Contiguous | Split { base, staged }`) and the
+two implementation deviations found while building it
+(`image_codec::decode_image` generalization; `DocumentView::bytes()` is
+`Option<&[u8]>`, not `&[u8]`): §12 entries "2026-08-02 — Decision 018"
+and its same-day continuation-56 follow-up, below.
+
 ## 5. Round-trip / non-destructive-editing invariant
 
 Analogous to the tail-bytes / lazy-round-trip discipline the user's
@@ -2041,6 +2056,13 @@ with a forward pointer.
     in this dock's tool list, never new floating windows;
     Properties (Pass 3.1) stays the single legacy floating
     exception, never to be joined by a second.
+    *(Superseded in part 2026-08-02 — see the dated §12 entry filed
+    that day. This claim is now FALSE on two counts: Pass 12.M2's
+    Dimension Groups panel already shipped as a second floating
+    `egui::Window`, and decision 017 retires the Properties floating
+    form entirely, replacing this convention with R80/R81's
+    two-compartment dock. Dimension Groups is named there as the
+    remaining floating-window holdout for a follow-up migration.)*
     (2) **The toolbar is CAPPED at its 6 groups + the Tools
     toggle.** Any future feature fits an existing group, becomes a
     rail-contextual control, or becomes a Tools-dock entry; no 7th
@@ -3312,3 +3334,175 @@ with a forward pointer.
   existing local commit (`d8b3903`) or publishing a release still
   requires its own, separate operator go-ahead — not implied by this
   decision. Full record: `docs/LEGAL.md` §1/§6.1/§7.
+- **2026-08-02 — Decision 018: the canvas renders the edited document
+  (`pdfce_core::view::DocumentView` + `StreamSource` generalize
+  `pdfce-render` over `ObjectGraph`).** Root-caused an operator
+  usability report ("I don't seem to be able to click on objects," "the
+  dimensioning tool didn't seem to have a way to actually set the
+  dimensions") to a single shared read-path defect, not fourteen broken
+  features: `pdfce-gui`'s `OpenDoc::rasterize_current` and
+  `ensure_object_provider` both read `session.document()` — the BASE
+  revision — so raster, hit-test, selection, snapping, annotation
+  survey, and OCG-visibility all see only base geometry, while every
+  editing feature shipped Pass 3.1–16.2 writes into `EditSession`'s
+  in-memory overlay. **Decision:** promote the existing
+  `pdfce_core::pageops::assemble::DocumentView` (already `{ graph: &dyn
+  ObjectGraph, bytes: &[u8], version }`) to a top-level
+  `pdfce_core::view` module; add `StreamSource { Contiguous(&[u8]) |
+  Split { base: &[u8], staged: &[u8] } }` for zero-copy dispatch of a
+  `ByteSpan` against either a plain buffer or an `EditSession`'s
+  base+staging pair (spans provably never straddle the boundary, by
+  construction of `stage_bytes`'s offset scheme); `impl ObjectGraph for
+  DocumentView`. Measured, not assumed: `pdfce-render`'s entire
+  `Document`-typed surface is 3 methods across 50 call sites, of which
+  45 compile unchanged once the parameter type widens (`doc.resolve`/
+  `doc.resolved` are already on `ObjectGraph`; only `doc.bytes()`'s 5
+  sites need `StreamSource`). `pdfce_core::vector::decompose_page` and
+  `ContentStream::from_page` generalize the same way, which is why
+  hit-testing and the Pass 12.M1 snap engine become edit-aware from the
+  identical change (they already share one `ObjectModelProvider`
+  decomposition per page — no second path to diverge). **Rejected:**
+  (b) re-serialize-then-reparse after each edit — not on performance,
+  but because it routes VIEWING through the WRITER, so the viewer
+  inherits every refusal the writer is contractually obliged to make
+  (R67 refuses incremental save on a recovered document; §5.6 refuses a
+  full-rewrite fallback on a hybrid file) — a recovered-and-hybrid
+  document could display NOTHING, and a viewer must never be less
+  capable than the parser (Pass 13b exists precisely to make such files
+  openable at all). (c) GUI-side overlay compositing — cannot represent
+  content-stream surgery (most of what shipped: `edit-text`, `reflow`,
+  `object-move`/`-delete`, `node-move`, `redact-apply`), cannot fix the
+  hit-test half at all, and would create a second appearance-painting
+  path inside `pdfce-gui` that must agree with `pdfce-render`
+  pixel-for-pixel — the "two decompositions quietly diverge" pattern
+  `object_provider.rs`'s own doc comment already cites decision 011
+  warning against, and it would erode §3's GUI-core separation in
+  spirit. **Invariant impact:** §3 (GUI-core separation) — none;
+  `DocumentView` moves between `pdfce-core` modules, no crate gains a
+  dependency, the standing `cargo tree` gate is unaffected — the actual
+  separation risk in this decision space was option (c), which was
+  rejected. §5 (round-trip/minimal-diff) — none from the change itself
+  (pure read path, cannot perturb saved bytes), but two hazards are
+  named in the type's own doc comment so they can't be introduced
+  later: `DocumentView` must never become the writer's input (the
+  writer's source of truth stays `&Document` + `DirtySet`); and `Page`
+  is a commit-time snapshot that must stay one (audit that every
+  session-commit path funnels through `refresh_pages`, canvas vector
+  edits and text-edit Accept in particular). Sliced as **Pass 17.0**
+  (the core+render generalization + the two-line `pdfce-gui` fix)
+  **17.1** (finish the audit of remaining `session.document()` call
+  sites — confirmed live bug: `main.rs:4606`'s `count_redaction_marks`
+  undercounts marks added in the current session) **17.2** (CLI parity
+  + a headless preview-equals-saved oracle harness). **Proposed
+  standing rules R85 (preview-equals-saved — headless oracle,
+  reusing the Pass 11 raster oracle, now in force per `ROADMAP.md`
+  Standing rules) and R86 (a Pass does not ship until observed working
+  in the running application — PROPOSED, pending explicit operator
+  sign-off, not yet binding).** Full record: `docs/decisions/
+  018-edited-state-is-what-the-canvas-renders.md`; `ROADMAP.md` ★★★★
+  HEADLINE FINDING note and ★ Pass 17.x entry; §4 above (forward
+  pointer). Not yet built as of this entry.
+- **2026-08-02 — Decision 017: two-compartment vertical panel list for
+  the right-hand dock; `egui_dock` rejected permanently, `egui_tiles`
+  pre-vetted and pre-approved behind a named trigger; supersedes
+  continuation-19's "Properties is the single legacy floating
+  exception."** Answers the operator's ask for tabbed/dockable panels
+  plus a clickable layer/object tree. **Decision:** hand-roll a
+  two-compartment (upper: Properties/Comments/Bookmarks; lower:
+  Layers/OCGs/batch Tools) vertical row list inside the existing
+  `egui::Panel::right("tools")` — no new Cargo dependency. **This
+  record reverses an initial recommendation to adopt `egui_tiles`
+  immediately**, kept rather than erased because the reasoning that
+  produced the reversal is the reasoning that will govern a future
+  re-adoption: a `pdfce-ui-specialist` review found `egui_tiles` draws
+  **horizontal** tab bars only, and the dock is `default_size(320.0)`
+  — ten text labels do not fit a 320pt-wide horizontal strip (they
+  truncate, wrap, or scroll-hide, reproducing Acrobat's own worst
+  ribbon-overload habit sideways); vertical scales by adding rows at
+  zero horizontal cost and is already the pattern `tools_dock()` uses
+  internally. **`egui_dock` 0.20.1 rejected permanently** (closes
+  `PRIOR_ART.md`'s open 0.19.1-vs-0.20.1 version-gap question): binary
+  splits only (no n-ary column/grid, and pdfce is heading to 10+
+  panels); zero accessibility instrumentation repo-wide (0 hits for
+  `widget_info`/`accesskit`/`keyboard`; its tab-bar `Sense` sets
+  egui's `FOCUSABLE` bit, so tabs are keyboard-reachable and
+  **unnamed** to AccessKit — the worst case); depends on `paste`,
+  which carries RUSTSEC-2024-0436 (unmaintained); slower egui-tracking
+  cadence and thinner bus factor than `egui_tiles`. **`egui_tiles`
+  0.16.0 fully vetted and PRE-APPROVED** behind one named trigger (Ken
+  answers decision 017 §10 Q1 with the VS Code/Blender whole-content-
+  area model — MIT OR Apache-2.0, 1 new package, all transitive deps
+  already present at satisfying versions, wasm32-clean, exact MSRV/egui
+  match) — if the trigger fires, adopt without a new decision record,
+  just a dated amendment to `docs/decisions/017-...md`. **Persistence:**
+  session-only this Pass, explicitly disclosed (same posture decision
+  012 set for the font-folders setting) — do NOT enable eframe's
+  `persistence` feature (writes to a platform app-data directory,
+  contradicting §6's single-folder-portable posture and the new R15/R82
+  pairing). **Correction to §12 continuation-19:** "Properties stays
+  the single legacy floating exception, never to be joined by a second"
+  is now FALSE on two counts — Pass 12.M2's Dimension Groups panel
+  already shipped as a second floating `egui::Window`
+  (`docs/ui_specs/pass-12.M2-dimension-tools.md` §5.1), and this
+  decision retires the Properties floating form entirely, folding its
+  body into the new dock's upper compartment. **Dimension Groups is
+  named here as the remaining floating-window holdout**, owed a
+  follow-up migration into the same dock so it does not quietly become
+  the new "one legacy exception" (see the inline forward-pointer added
+  to the continuation-19 entry, above). Sliced as **Pass 18.1**
+  (tabbed/panel shell + Objects tree + Properties selection panel +
+  canvas selection feedback, bundling the mandatory
+  `properties_window` → "Document Properties" rename in the same
+  slice) **18.2** (`object-list` CLI subcommand) **18.3** (Measure ▾
+  affordance fix). Pass 18.0 (an unrelated but adjacent zoom-invariant
+  selection-tolerance + gesture-preservation bug-fix, root-caused by
+  the same UI-usability review) already shipped, uncommitted — see
+  `ROADMAP.md` Shipped. **New standing rules R80 (dock is a
+  two-compartment host reached through one `panel_body` dispatcher),
+  R81 (floating windows are transient-only — the continuation-19
+  supersession), R82 (panel layout rides R15, never eframe Storage),
+  R83 (no affordance without the capability), R84 (selected state is
+  never colour alone)** — all in force, `ROADMAP.md` Standing rules.
+  Full record: `docs/decisions/017-tabbed-dockable-panel-system.md`;
+  `ROADMAP.md` ★ Pass 18.x entry. Not yet built (except 18.0) as of
+  this entry. **CORRECTION (2026-08-02, same-day continuation 56):**
+  Pass 18.0 is committed (`9a68d6f`), not uncommitted as stated above —
+  see the follow-up entry below. Pass 18.2 has also since shipped
+  (`dae0139`); 18.1 and 18.3 remain unbuilt.
+- **2026-08-02 (same-day continuation 56) — Decision 018 implementation
+  update: Pass 17.0 SHIPPED (`3a56b55`), two deviations from the plan
+  recorded above.** Confirms the decision-018 entry above was built
+  largely as designed, with two deviations discovered during
+  implementation (neither invalidates the decision; both are additive
+  corrections to its plan, recorded here rather than silently folded
+  in, per the "decisions get dated entries, not silent edits" rule this
+  §12 itself follows):
+  1. **`image_codec::decode_image` also threads a `&Document` parameter**
+     and needed the same delegating-wrapper generalization as
+     `pdfce-render`'s other `Document`-typed call sites. The original
+     decision's "3 methods / 50 call sites" measurement did not separately
+     enumerate this path; it is functionally identical to the other 45
+     unchanged-signature call sites (delegates through `ObjectGraph`),
+     just discovered mid-build rather than during the original audit.
+  2. **`DocumentView::bytes() -> Option<&[u8]>`, not `&[u8]` as the
+     original design implied.** A `Split { base, staged }` view has no
+     single contiguous buffer to hand back; returning either half under
+     a non-`Option` `&[u8]` signature would silently return a
+     PLAUSIBLE-LOOKING but WRONG slice (base-only or staged-only, with
+     no compiler signal that the caller needs to handle the split case).
+     `Option` forces every caller to acknowledge the split case exists.
+  Additionally, **decision 018 §10 hazard 2 was CONFIRMED REAL** by the
+  Pass 17.0 build's own commit-site audit (not merely a named risk any
+  longer): `Commit::Move`, `Commit::Node`, and `delete_selected_object`
+  were all performing genuine content-stream surgery while calling
+  `ensure_object_provider` instead of going through `refresh_pages` —
+  the provider therefore never rebuilt and stale `page_texture` was
+  never dropped, invisible before Pass 17.0 (the canvas drew the base
+  regardless of provider staleness) but would have made Pass 17.0 LOOK
+  broken on the canvas specifically had it shipped unfixed. Fixed in the
+  same Pass. **§4/§5 forward-pointer notes above are now updated to
+  reflect implemented (not merely planned) status.** Gates: workspace
+  1474 tests passing/0 failed; `cargo tree -p pdfce-core`/`-p
+  pdfce-render` GUI-dep-free; roundtrip corpus 4,023 files unchanged;
+  raster oracle 6566/6566; zero new Cargo dependencies. Full record:
+  `ROADMAP.md`'s Pass 17.0 Shipped entry (top of Shipped).

@@ -153,3 +153,27 @@ GUI milestone (see `project_mit_license_and_priority_sequence.md`'s
 continuation-54 update) — same "completed-milestone-sized" framing as
 continuation 47's text-parity-arc note applies here too. Still verify
 tip with `git log --oneline -1` before trusting any hash list here.
+
+**UPDATE — continuation 55 (2026-08-01, Pass 9c-min shipped) then
+continuation 56 (2026-08-02).** Continuation 55 added `2abbd75` (test
+hygiene), `dd3a8b8` (docs backfill), `76485b5` (Pass 9c-min — closes
+decision 011's beta entirely) and a docs commit `0569373`. Continuation
+56 (a NEW calendar-day session per `feedback_session_log_continuation_style`)
+added SIX more: `9a68d6f` (Pass 18.0 — note: this was WRONGLY recorded
+as "uncommitted" in the librarian's own continuation-56-opening filing;
+corrected same continuation once the engineer clarified it was in fact
+committed — a real instance of the "verify current git state, don't
+trust the last filing" discipline this file exists to enforce),
+`3a56b55` (Pass 17.0, live-edit rendering), `f2d5fae` (GUI observation
+harness), `c998521` (selection-outline fix), `dae0139` (Pass 18.2
+`object-list` CLI), `b73604d` (`.gitattributes` repo-integrity fix).
+**Chain now 18 commits deep, all still local-only:** `d8b3903` →
+`79d1c6f` → `e13f3e6` → `19ed865` → `801a748` → `c7c1744` → `6150e1a`
+→ `7c93cc3` → `2abbd75` → `dd3a8b8` → `76485b5` → `0569373` →
+`9a68d6f` → `3a56b55` → `f2d5fae` → `c998521` → `dae0139` → `b73604d`.
+Push/publish authorization is STILL the sole open gate — confirmed
+still not granted as of continuation 56 despite the operator answering
+two other open questions (icon pipeline, Pass-17-sequencing) the same
+continuation; don't infer push authorization from unrelated operator
+answers. As always, verify tip with `git log --oneline -1` before
+trusting this hash list — it will keep growing across sessions.

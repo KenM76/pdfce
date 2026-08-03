@@ -532,11 +532,24 @@ fn measure_bytes(bytes: Vec<u8>, mutate: bool) -> Outcome {
     let before = render_first_page(&doc);
 
     // --- mode 2: append-identity -------------------------------------
-    let ids: Vec<ObjId> = doc
-        .objects()
-        .map(|io| io.id)
-        .take(MAX_APPEND_OBJECTS)
-        .collect();
+    // SORT BEFORE TAKE. `Document::objects()` iterates a `HashMap`'s values,
+    // so its order varies run to run; taking the first `MAX_APPEND_OBJECTS`
+    // without sorting samples a DIFFERENT subset of the file each time.
+    //
+    // That made this harness nondeterministic in a way that quietly undermined
+    // its purpose: two consecutive runs of the SAME binary produced different
+    // R38 promotion censuses, so the census could not be used to attribute a
+    // change to a code edit. It was noticed while diffing a baseline against a
+    // Pass 17.0 build — the only line that differed between the two reports was
+    // this census, and it also differed between two runs of the baseline alone.
+    // A corpus gate whose output moves on its own trains its readers to
+    // discount real differences.
+    //
+    // Sorting by `ObjId` makes the sample deterministic and gives it a defined
+    // meaning (the lowest-numbered objects) rather than an arbitrary one.
+    let mut ids: Vec<ObjId> = doc.objects().map(|io| io.id).collect();
+    ids.sort_unstable();
+    ids.truncate(MAX_APPEND_OBJECTS);
     if !ids.is_empty() {
         match save_incremental(&doc, &DirtySet::identity_reemission(ids), &opts) {
             Ok((out, report)) => {

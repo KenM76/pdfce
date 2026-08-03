@@ -44,3 +44,26 @@ still holds. Whether the `/loop` itself formally reactivated or the
 engineer is working this sequence interactively wasn't recorded in
 continuation 50 — verify current mode before describing it either way
 in a future session.
+
+**UPDATE — continuation 55 (2026-08-01): subagent budget (200)
+EXHAUSTED.** No further work delegable to builder/librarian/spec
+subagents this session; remaining work must happen directly in-context
+or the operator raises `CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION`. This is
+a DIFFERENT reason for reduced dispatch than the "awaiting steer"
+throttle this file otherwise tracks — don't conflate the two if a
+future session asks "why isn't the loop dispatching."
+
+**UPDATE — continuation 56 (2026-08-02, new calendar-day session,
+"fresh subagent budget" per the session's own opening note).** This
+whole continuation was OPERATOR-INTERACTIVE, not autonomous-loop: it
+opened with a verbatim operator usability complaint (can't click
+objects, no docking, dimensioning tool unclear), not a self-selected
+backlog item. The engineer is actively working WITH the operator
+in real time (GUI screenshots requested, live troubleshooting), a
+different posture from both "loop grinding a queue" (continuations
+34-47) and "throttled, idle, awaiting steer" (48-49). Do not describe
+current mode as either of those without re-checking the latest
+continuation's own framing — this project's dispatch mode has now
+changed shape at least three times (loop → throttled → interactive)
+and each transition was noted explicitly in the session log, so grep
+for the most recent one rather than assuming continuity.

@@ -7241,3 +7241,315 @@ subagent limit was reached, so the librarian filing is done directly).**
 - **Still owed (operator):** how to proceed past the agent limit;
   push/publish call; encryption-refusal sign-off; `LEGAL.md` §2; `/R 6`;
   list-authoring scope.
+
+## 2026-08-02 — GUI usability triage: the headline live-edit-rendering finding, decisions 017/018, Pass 18.0 shipped
+
+Branch `pass-8-redaction`, HEAD `0569373` at session start (continues
+directly from 2026-08-01 continuation 55 — a new calendar day, fresh
+subagent budget). All work this session is **uncommitted** — no commit
+has been made or requested.
+
+**Operator report that started this session, verbatim:** "there's a lot
+of work to be done to get the gui functional. The commands along the
+top still don't have icons. If I click the one to edit objcts, I don't
+seem to be able to click on objects. Sometimes I click and get a box
+highlighting on the screen that doesn't seem to correspond to anything.
+The Tools dock should be able to have other tools docked in tabs as
+well, like any other modern program would. I'd like to have a layer
+tree there for the document that I can also click on to select
+objects. at least that way we can troublshoot better what I am clicking
+on in the GUI area. The dimensioning tool didn't seem to have a way to
+actually set the dimensions. Maybe the underlying work is functional,
+but I can't tell with the current state of the GUI."
+
+**Shipped:**
+- **Pass 18.0** — zoom-invariant selection tolerance + gesture-
+  preserving zoom (uncommitted). Direct fix for "I don't seem to be
+  able to click on objects." Full record: `ROADMAP.md` Shipped (top).
+
+**Decisions made this session:**
+- **★★★★ HEADLINE FINDING — the GUI never renders unsaved edits.** ONE
+  shared read-path bug (`OpenDoc::rasterize_current` /
+  `ensure_object_provider` in `pdfce-gui/src/main.rs` both read
+  `session.document()`, the BASE revision — `edit.rs:962`'s own doc
+  comment says so), not fourteen broken features. Every editing feature
+  from Pass 3.1 through Pass 16.2 writes to `EditSession`'s in-memory
+  overlay and is invisible/unclickable in the running GUI as a result.
+  `refresh_pages`'s doc comment ("the document is not reloaded, because
+  the base revision ... has not changed") was TRUE through Pass 3.1 and
+  FALSE since Pass 6.1 — a stale comment, not a stale cache-invalidation
+  mechanism (the cache-clearing itself was already correct). Reframes
+  project status: every Pass 3.1–16.2 met its stated gates and shipped
+  a feature the operator could not see — a GATE defect ("done" never
+  required "observed in the running app"), not an engineering defect.
+  Full record: `docs/decisions/018-edited-state-is-what-the-canvas-
+  renders.md`; `ROADMAP.md`'s ★★★★ HEADLINE FINDING note (top of "In
+  progress") and ★ Pass 17.x entry (Next up).
+- **Decision 018 — generalize `pdfce-render` + `decompose_page` over
+  `ObjectGraph`/`DocumentView`, extended with a new `StreamSource`
+  (contiguous-vs-split byte source).** Measured: `pdfce-render`'s
+  entire `Document` surface is 3 methods / 50 call sites, 45 of which
+  compile unchanged. Rejected re-serialize+re-parse (routes VIEWING
+  through the WRITER — recovered/hybrid documents could display
+  NOTHING, since the writer refuses them; a viewer must never be less
+  capable than the parser). Rejected GUI-side compositing (can't
+  represent content-stream surgery — most of what shipped; recreates
+  the Z2 two-decompositions-diverge pattern). Sliced as Pass 17.0
+  (core+render generalization + the 2-line GUI fix)/17.1 (finish the
+  `session.document()` audit — confirmed a second live instance,
+  `main.rs:4606`, redaction marks added this session not counted in the
+  GUI)/17.2 (CLI parity + headless preview-equals-saved oracle). Not
+  yet built. Full record: `docs/decisions/018-...md`; `ROADMAP.md` ★
+  Pass 17.x.
+- **Decision 017 — hand-roll a two-compartment vertical panel row list
+  in the existing right-hand dock; no docking dependency.** Answers the
+  operator's tabbed-dock/layer-tree ask. `egui_dock` REJECTED
+  PERMANENTLY (binary splits only; zero accessibility instrumentation
+  repo-wide — 0 hits for `widget_info`/`accesskit`/`keyboard`; depends
+  on `paste`, which carries RUSTSEC-2024-0436; this also closes
+  `PRIOR_ART.md`'s open 0.19.1-vs-0.20.1 egui_dock version gap at
+  0.20.1). `egui_tiles` 0.16.0 fully vetted (MIT OR Apache-2.0, 1 new
+  package, wasm-clean, exact MSRV/egui match) and PRE-APPROVED behind
+  one named trigger (Ken answers escalation Q1 with the VS Code/Blender
+  whole-content-area model). **This record reverses its own initial
+  recommendation** after a `pdfce-ui-specialist` review surfaced that
+  the dock is 320pt wide and `egui_tiles` draws horizontal tab bars
+  only — a rejection on FIT, not on dependency hygiene. Sliced as Pass
+  18.1 (tabbed/panel shell + Objects tree + Properties selection
+  panel + selection feedback) / 18.2 (`object-list` CLI subcommand,
+  new gap found this session) / 18.3 (Measure ▾ affordance fix — a
+  "Set Scale…" button beside the existing dead-end disclosure label).
+  Pass 18.0 (the tolerance/gesture fix) shipped standalone, above. Full
+  record: `docs/decisions/017-tabbed-dockable-panel-system.md`;
+  `ROADMAP.md` ★ Pass 18.x.
+- **Design conflict flagged, not resolved:** `docs/ui_specs/
+  pass-17-dock-and-layer-tree.md` §A (authored earlier the same session)
+  designs a horizontal 3-tab strip; decision 017 (authored later, after
+  UI-specialist review) rejects that shell design and replaces it with
+  the two-compartment vertical list. §A.1–A.5 (the tab-strip widget)
+  is SUPERSEDED for the shell; §B (object tree)/§C (selection
+  feedback)/§D (Measure ▾ fix) are unaffected. Recorded in `ROADMAP.md`'s
+  Pass 18.1 entry so a future session builds decision 017's shell, not
+  the superseded ui-spec §A design.
+- **Pass-number renumbering (recorded, do not lose):** the ui-spec's
+  own filename claims "pass-17"; decision 018 also claims "Pass 17" for
+  live-edit rendering (drafted independently, same session). Decision
+  018 keeps Pass 17 (it was first to a real decision record); the
+  ui-spec/decision-017 family is renumbered to **Pass 18.x**. Same
+  renumber pattern as decision 014's Pass 13→14 move.
+- **Standing-rule numbering collision resolved.** Both decision 017 and
+  018 were drafted concurrently against "highest existing rule is R79"
+  and both initially proposed starting at R80. Decision 018 self-
+  corrected before filing (provisionally R85/R86, explicitly avoiding
+  017's R80–R84). Librarian ratifies both ranges as final, non-
+  colliding, in `ROADMAP.md` Standing rules: **R80–R84 (decision 017)**
+  — dock host, floating-is-transient-only (supersedes `ARCHITECTURE.md`
+  §12 continuation-19's "single legacy floating exception" — see the
+  §12 entry filed this session), layout rides R15, no-affordance-
+  without-capability, selected-state-never-colour-alone. **R85–R86
+  (decision 018)** — preview-equals-saved (in force); operator-visible
+  definition of done (**PROPOSED, not yet in force — pending operator
+  sign-off**, recorded now so the number is reserved).
+- **`ARCHITECTURE.md` §12 filed:** two new dated entries (decision 018's
+  live-edit-rendering architecture; decision 017's panel system,
+  including the correction to continuation-19's now-false "Properties
+  is the single legacy floating exception" claim — Pass 12.M2's
+  Dimension Groups panel already breached it as a second floating
+  window, named as the remaining floating-window holdout for a
+  follow-up migration into the new dock).
+
+**Findings + decisions (empirical):**
+- **Zoom-inverted selection tolerance is a units bug, not a
+  hit-testing correctness bug.** `object_provider.rs`'s
+  `SELECT_TOLERANCE = 3.0` was fixed in CANVAS space while the pointer
+  reaching it had already been divided by `zoom` — so the on-screen
+  catch radius was `3.0 × zoom` px, meaning zooming OUT (exactly what
+  an operator does to see a whole page before clicking something on
+  it) made clicking HARDER, the inverse of every other viewer. The fix
+  vector already existed in the codebase (the Pass 12.M1 snap engine's
+  `screen_tolerance_to_page`) and needed reuse, not invention. Filed to
+  `D:\dev\rag\egui\` (see below) as a generalizable immediate-mode-canvas
+  gotcha.
+- **Root cause of "a box that doesn't correspond to anything":**
+  `TextObject`'s bounding box is deliberately origin-inflated and
+  approximate (`decompose.rs`, `approximate: bool` always `true`) with
+  zero UI surfacing of that fact today — combined with the tolerance
+  bug, the most likely explanation is the operator hit a text object's
+  inflated whitespace margin and the app never said so. Confirmed by
+  code-reading, not yet fixed (ui-spec §C.2 names the fix: an
+  explicit disclosure sentence, buildable with zero core changes).
+- **The dimensioning tool is confirmed functional, not broken.**
+  Reading `run_measure_tool`/`scale_entry_widget` in full: the `Measure
+  ▾` menu, two-point pick/live-preview, and the full scale-entry
+  sub-panel are all already implemented and close to spec. The
+  operator's complaint is a discoverability/dead-end-affordance gap
+  (no icon; a disclosure label with no next-action button), not a
+  missing feature — ui-spec §D / Pass 18.3 names the fix.
+- **`object-list` CLI subcommand does not exist**, despite
+  `object-move`'s own help text telling operators to get indices from
+  it. Filed as Pass 18.2.
+- **Icon pipeline blocker:** the recorded pre-rasterize-to-PNG plan
+  (SESSION_LOG continuation 54) is not executable on this machine (no
+  Inkscape, no ImageMagick, `cairosvg` libcairo load failure). Engineer
+  proposed an alternative needing no new dependency (SVG-path-`d`
+  parser feeding the already-present `tiny-skia`) — awaiting operator
+  answer, not recorded as decided.
+
+**Still in flight:**
+- Pass 17.x (live-edit rendering) — decided, not built. Engineer
+  recommends it lands before any further item in the ★★★ operator
+  priority sequence; **awaiting operator sign-off** on that
+  reordering.
+- Pass 18.1–18.3 (dock/tree/selection-feedback/Measure-affordance) —
+  decided/specced, not built.
+- Pass 12.M2c (dimension-tool bug-fix cluster: 6 named bugs, file:line
+  cited) — filed, not scoped into a build plan.
+- Icon-set BUILD — design complete, both original gated decisions
+  resolved, but now blocked on the pipeline-executability question
+  above and re-queued behind whatever sequencing answer resolves the
+  Pass-17-first proposal.
+
+**For next session:**
+- Six new/updated open questions recorded in `ROADMAP.md`'s "Open
+  operator questions" section (icon pipeline switch; decision 017 Q1/
+  Q2/Q3; decision 018's proposed rule R86; decision 018's proposed
+  Pass-17-first reordering) plus the carried prior list (push/publish;
+  encryption `/R 6` + `LEGAL.md` §2; list-authoring scope). Read that
+  section first.
+- If the operator answers the Pass-17-first sequencing question, Pass
+  17.0 is the concrete next build (per decision 018 §8's own slice
+  plan); if not answered, the existing ★★★ sequence (icons → text-
+  handling → forms) stays authoritative and Pass 17.x queues behind it
+  — but note the icon build is independently blocked on question (a)
+  regardless.
+- Two `D:\dev\rag\egui\` findings filed this session (zoom-inverted
+  screen/page-space tolerance pattern; immediate-mode render-path
+  divergence from a separate edit-overlay/mutation path) — see that
+  RAG's index for the general-purpose lesson, distinct from this
+  project's own decision-018 record of the same bug.
+
+**Same-day continuation 56 — Pass 17.0 SHIPPED (live-edit rendering,
+decision 018), Pass 18.0/18.2 confirmed committed, operator answered
+both open sequencing/pipeline questions, four more Passes/fixes
+shipped, repo-integrity incident found and fixed.** Branch
+`pass-8-redaction`; five new commits landed this continuation on top of
+`0569373` (session-start HEAD): `9a68d6f` (Pass 18.0, already recorded
+last continuation but INCORRECTLY as uncommitted — corrected below),
+`3a56b55` (Pass 17.0), `f2d5fae` (GUI observation harness), `c998521`
+(selection-outline feedback fix), `dae0139` (Pass 18.2 `object-list`
+CLI), `b73604d` (`.gitattributes` repo-integrity fix). Workspace: 1474
+tests passing, 0 failed; `cargo fmt --check` clean; `cargo clippy
+--workspace --all-targets -D warnings` clean; `cargo tree -p
+pdfce-core`/`-p pdfce-render` GUI-dep-free; zero new Cargo dependencies
+across all six.
+
+**Shipped:**
+- **Pass 17.0** — live-edit rendering (decision 018), committed
+  `3a56b55`. `DocumentView` promoted to `pdfce_core::view`;
+  `StreamSource { Contiguous | Split }`; `impl ObjectGraph for
+  DocumentView` kept 45/50 `pdfce-render` call sites unchanged; canvas
+  now reads `self.session.view()`, not `self.session.document()`.
+  Roundtrip corpus 4,023 files unchanged, raster oracle 6566/6566. Full
+  record: `ROADMAP.md` Shipped (top).
+- **GUI observation harness** — `tools/observe-gui.ps1` +
+  `tools/gui-click.ps1`, committed `f2d5fae`. Foreground-window
+  verification on both; found the canvas-click limitation recorded
+  below.
+- **Selection-outline feedback fix** — committed `c998521`. Second,
+  independent root cause of "can't click objects": the Obj tool armed
+  selection/delete/drag but drew no visual feedback at all.
+- **Pass 18.2** — `object-list` CLI subcommand + `--hit`/`--tolerance`
+  hit-test query, committed `dae0139`. Closes the gap where
+  `object-move`'s own help text pointed at a command that didn't exist.
+- **`.gitattributes` ordering fix** — repo-integrity incident, committed
+  `b73604d`. See Findings below.
+
+**Corrections to prior filing (this continuation):**
+- Pass 18.0 was recorded last continuation as "uncommitted" — it is
+  committed, `9a68d6f`, same as everything else this session.
+
+**Decisions made this session:**
+- **Operator answered two of the six open questions filed last
+  continuation, both "yes":** (a) icon SVG pipeline — use the
+  tiny-skia SVG-path-`d` parser (no new Cargo dependency), NOT the
+  pre-rasterize-to-PNG plan (confirmed non-executable on this machine);
+  (f) sequence Pass 17.x before the rest of the ★★★ operator priority
+  sequence (icons, text-handling, forms). Both recorded as RESOLVED in
+  `ROADMAP.md`'s Open operator questions section; the ★★★★★ reordering
+  entry is now a confirmed reordering, not a proposal. **Consequence:**
+  icon build still doesn't start yet — not blocked on either open
+  question any longer, just correctly queued behind Pass 17.1/17.2.
+  Item (e) (R86 bless-as-standing-rule) and decision 017 Q1/Q2/Q3
+  (items b/c/d) remain unanswered.
+- **`ARCHITECTURE.md` §12 updated:** a continuation-56 follow-up entry
+  to the decision-018 record, documenting Pass 17.0 as shipped and its
+  two implementation deviations (`image_codec::decode_image` needed the
+  same generalization; `DocumentView::bytes()` is `Option<&[u8]>`, not
+  `&[u8]`, because a `Split` view has no single buffer) plus
+  confirming decision 018 §10 hazard 2 as a real, fixed bug (three
+  canvas commit sites bypassing `refresh_pages`). §4's forward-pointer
+  note updated from "planned" to "implemented."
+
+**Findings + decisions (empirical):**
+- **The operator's "can't click objects" complaint had THREE
+  contributing causes, all now fixed, not one:** the zoom-inverted
+  tolerance (Pass 18.0), the missing selection-outline feedback
+  (`c998521`), and the base-vs-edited read path (Pass 17.0). Headless
+  proof via the new `object-list --hit --tolerance` CLI query on
+  `fixtures/synthetic/dimension/linear-base.pdf` (a zero-height-bbox
+  degenerate case): hit-testing succeeds at tolerance 0 (the stroke's
+  own half-width is the hittable band) and correctly misses at 3pt off
+  with tolerance 0.5 — **core hit-testing was never buggy.**
+- **`.gitattributes` last-match-wins pattern ordering corrupted 4
+  fixtures in the git index itself** (not just on checkout) — CR bytes
+  stripped at `git add` time because `* text=auto` sat below `*.pdf
+  binary` in the file and, being the last match, won. Two of the four
+  damaged files were the ISO 32000-1 §7.5.4 CRLF-xref-entry test
+  fixtures, so the exact bytes under test were the bytes destroyed.
+  Diagnosed with `git check-attr text -- <path>`; fixed by reordering +
+  `git add --renormalize .`; verified with a fresh `git worktree add`
+  (the long-lived main tree stayed green throughout because it never
+  re-checked-out the damaged blobs — a false negative that would have
+  bitten the next fresh clone). Filed to `D:\dev\rag\rust\
+  gitattributes_last_match_wins_ordering_corrupts_index.md`.
+- **Synthetic OS-level pointer input does not satisfy egui's
+  `Response::clicked()` on canvas/custom-`Sense` widgets**, even though
+  it partially activates simple controls (toolbar hover/pressed
+  styling). Ruled out timing as the cause (25ms–140ms holds,
+  with/without pre-motion, all failed). `egui_kittest` is the supported
+  programmatic-interaction path — already referenced in decision 017's
+  accessibility analysis; this is the concrete evidence for why OS-level
+  automation can't substitute for it. Filed to `D:\dev\rag\egui\
+  synthetic_os_pointer_input_not_response_clicked.md`; new Backlog entry
+  filed in `ROADMAP.md` recommending an `egui_kittest`-based canvas-
+  gesture testing harness as the follow-up.
+
+**Still in flight:**
+- Pass 17.1 (finish the `session.document()` audit — confirmed live bug
+  at `main.rs:4606`, redaction marks added this session undercounted in
+  the GUI) and Pass 17.2 (CLI parity + headless preview-equals-saved
+  oracle harness covering all twelve R85 operations) — both not yet
+  built. Per the operator's confirmed reordering, these gate the icon
+  build, text-handling fast-follows, and form-building.
+- Pass 18.1 (tabbed/panel dock shell + Objects tree + Properties
+  selection panel) and Pass 18.3 (Measure ▾ affordance fix) — decided/
+  specced, not built.
+- Pass 12.M2c (dimension-tool bug-fix cluster, 6 named bugs) — filed,
+  not scoped.
+- Icon-set BUILD — both original gates AND both newly-discovered gates
+  (pipeline executability, sequencing) are now resolved; queued behind
+  Pass 17.1/17.2, ready to start the moment they ship.
+
+**For next session:**
+- Concrete next build: **Pass 17.1** (finish the `session.document()`
+  audit), then **Pass 17.2** (headless preview-equals-saved oracle) —
+  the operator-confirmed sequencing makes this the unambiguous next
+  step, no further sequencing question to resolve first.
+- Still open: Open operator questions (e) (R86 standing-rule blessing)
+  and (b)/(c)/(d) (decision 017 Q1/Q2/Q3) — read `ROADMAP.md`'s Open
+  operator questions section.
+- Carried, unchanged: push/publish call; encryption `/R 6` +
+  `LEGAL.md` §2; list-authoring scope.
+- Two new cross-project RAG findings filed this continuation (see
+  Findings above) — `D:\dev\rag\rust\` and `D:\dev\rag\egui\` index
+  files both updated.
