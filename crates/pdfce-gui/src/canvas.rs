@@ -411,7 +411,30 @@ pub trait CanvasTargetProvider {
     /// [`screen_tolerance_to_page`]`(`[`SELECT_SCREEN_TOLERANCE_PX`]`, zoom)`
     /// so the catch radius is a constant number of SCREEN pixels at every
     /// zoom — the same zoom-invariance law the snap engine already uses.
-    fn hit_test(&self, page_index: usize, point: Pos2, tolerance: f64) -> Option<TargetId>;
+    ///
+    /// **A provided method, not a required one.** It is defined as the head
+    /// of [`Self::hit_test_all`], which is what makes "the first click and
+    /// the cycling clicks agree about what is under the pointer" a
+    /// structural property rather than a convention two implementations have
+    /// to keep. An implementor supplies only the all-hits query.
+    fn hit_test(&self, page_index: usize, point: Pos2, tolerance: f64) -> Option<TargetId> {
+        self.hit_test_all(page_index, point, tolerance)
+            .first()
+            .copied()
+    }
+
+    /// **Every** target at a canvas-space `point` within `tolerance`,
+    /// **topmost/front-most first**.
+    ///
+    /// The required half of the point query (see [`Self::hit_test`] for why
+    /// the topmost one is derived from this rather than the reverse), and
+    /// the input to click-through cycling: an object entirely covered by
+    /// another can only ever be selected by stepping past the cover, and
+    /// with a topmost-only query no click can do that. ui-spec
+    /// `pass-17-dock-and-layer-tree.md` §C.3.
+    ///
+    /// Empty for a miss and for a query on another page.
+    fn hit_test_all(&self, page_index: usize, point: Pos2, tolerance: f64) -> Vec<TargetId>;
 
     /// Every target enclosed by a canvas-space marquee `rect`. Whether
     /// enclosure means fully or partially contained is the provider's call
@@ -438,8 +461,8 @@ pub trait CanvasTargetProvider {
 pub struct EmptyTargetProvider;
 
 impl CanvasTargetProvider for EmptyTargetProvider {
-    fn hit_test(&self, _page_index: usize, _point: Pos2, _tolerance: f64) -> Option<TargetId> {
-        None
+    fn hit_test_all(&self, _page_index: usize, _point: Pos2, _tolerance: f64) -> Vec<TargetId> {
+        Vec::new()
     }
 
     fn hit_test_rect(&self, _page_index: usize, _rect: Rect) -> Vec<TargetId> {
@@ -478,6 +501,180 @@ pub fn selection_after_click(
         }
         (true, None) => current.clone(),
     }
+}
+
+/// How far, in canvas units, the pointer may drift between two clicks and
+/// still count as "the same point" for click-through cycling.
+///
+/// **A cycle that never resets is a trap**, and so is one that resets on a
+/// one-pixel tremor. This is the tolerance between those failures: a mouse
+/// held still while double-clicking wanders a pixel or two, so 4.0 absorbs
+/// hand shake; a deliberate move to a different object is far larger than
+/// that, and lands the operator back at "select the topmost thing here",
+/// which is what an unmodified click has always done.
+///
+/// Canvas units rather than screen pixels: the recorded point is canvas
+/// space, so comparing there costs no zoom bookkeeping. The consequence —
+/// the on-screen slack grows as the operator zooms in — is the *safe*
+/// direction, because zoomed in, the pointer covers less document per pixel
+/// and two clicks a pixel apart are even more obviously meant to be the
+/// same point.
+pub const CYCLE_SAME_POINT_CANVAS: f32 = 4.0;
+
+/// Where a click-through cycle currently stands (ui-spec §C.3).
+///
+/// One click at one point can mean two different things — *select what is
+/// here* and *select what is UNDER what is here* — and the difference is
+/// history, so it has to be state. This is the whole of that state.
+///
+/// ## What resets it, and why each reset exists
+///
+/// A cycle that outlives its context is worse than no cycle: the operator
+/// clicks expecting the topmost object and gets the third one down, with no
+/// way to tell why. So a cycle is *derived-live*, checked on every use by
+/// [`Self::continues`], and stale state simply stops applying:
+///
+/// | Reset trigger | Why |
+/// |---|---|
+/// | The pointer moved more than [`CYCLE_SAME_POINT_CANVAS`] | A different point is a different question. |
+/// | The page changed | `TargetId`s are per-page indices; the same number means a different object. |
+/// | The selection is no longer exactly the object this cycle produced | Something else selected — a tree row, a marquee, Escape, an edit's prune. The operator's mental "current object" moved, so the cycle's position is meaningless. |
+/// | The hit list no longer contains that object | The document changed under it. |
+///
+/// The tool changing needs no rule of its own: every tool switch either
+/// clears the selection or leaves it, and in the second case the operator
+/// clicking the same point with a different tool active is still asking
+/// about the same stack — the cycle staying live is the friendly answer.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ClickCycle {
+    /// The page the cycle is anchored to.
+    pub page_index: usize,
+    /// The canvas-space point the cycle is anchored to.
+    pub point: Pos2,
+    /// 0-based position in the front-to-back hit list that the LAST click
+    /// resolved to.
+    pub ordinal: usize,
+    /// How many objects were under the pointer at that click — the `3` in
+    /// "2 of 3 at this point".
+    pub total: usize,
+    /// The target that click selected. The cycle only continues while this
+    /// is still exactly the selection (table above).
+    pub produced: TargetId,
+}
+
+impl ClickCycle {
+    /// Whether this cycle still applies to a click at `point` on
+    /// `page_index` with `current` selected.
+    #[must_use]
+    pub fn continues(self, page_index: usize, point: Pos2, current: &BTreeSet<TargetId>) -> bool {
+        self.page_index == page_index
+            && self.point.distance(point) <= CYCLE_SAME_POINT_CANVAS
+            && current.len() == 1
+            && current.contains(&self.produced)
+    }
+
+    /// The 1-based position for display ("**2** of 3 at this point").
+    #[must_use]
+    pub fn position(self) -> usize {
+        self.ordinal.saturating_add(1)
+    }
+
+    /// Whether this cycle is the live description of `current` on
+    /// `page_index` — the guard the status readout applies before printing
+    /// "n of m at this point" beside a selection.
+    ///
+    /// Deliberately NOT position-dependent: the readout describes the
+    /// selection, and the selection does not move when the pointer does. A
+    /// cycle whose object is still the one selected still truthfully says
+    /// how many objects were stacked where that selection came from.
+    #[must_use]
+    pub fn describes(self, page_index: usize, current: &BTreeSet<TargetId>) -> bool {
+        self.page_index == page_index && current.len() == 1 && current.contains(&self.produced)
+    }
+}
+
+/// Resolve a canvas click into a new selection **and** the cycle state that
+/// click leaves behind (ui-spec §C.3).
+///
+/// The one place click-through cycling is decided, shared by every canvas
+/// click path so a plain-selection click and an object-edit-tool click
+/// cannot cycle differently. Pure — no egui, no provider — so every branch
+/// below is unit-testable with fabricated hit lists.
+///
+/// `hits` is the provider's front-to-back list at the point
+/// ([`CanvasTargetProvider::hit_test_all`]).
+///
+/// ## The rules
+///
+/// - **Miss** (empty `hits`): exactly [`selection_after_click`]'s miss —
+///   plain click clears, `Shift`+click leaves the selection alone — and the
+///   cycle is dropped. There is no stack here to step through.
+/// - **`Shift`+click**: toggles the TOPMOST hit, unchanged from before, and
+///   drops the cycle. Additive selection and cycling are different
+///   questions, and a `Shift` that both added an object and advanced a
+///   hidden cursor would be unpredictable.
+/// - **`Alt`+click** (`alt`): steps the cycle. The starting position is the
+///   next one after wherever the selection currently sits:
+///   - a live cycle (see [`ClickCycle::continues`]) advances from its own
+///     ordinal, wrapping at the end back to the topmost;
+///   - otherwise, if the current selection is exactly one object that IS in
+///     the hit list, the step starts from *there* — so the natural gesture
+///     "click to select, then Alt+click to go deeper" works without the
+///     first click having been an Alt+click;
+///   - otherwise it starts at the topmost, i.e. an Alt+click into a stack
+///     with nothing selected behaves like a plain click.
+/// - **Plain click**: selects the topmost hit — completely unchanged
+///   behaviour — but RECORDS the cycle at ordinal 0. That record is what
+///   lets the status readout disclose "1 of 3 at this point" on an ordinary
+///   click, which is how the operator learns there is anything to cycle
+///   through at all (rule 4: the capability is disclosed, not hidden behind
+///   a modifier nobody discovers).
+#[must_use]
+pub fn selection_and_cycle_after_click(
+    hits: &[TargetId],
+    current: &BTreeSet<TargetId>,
+    cycle: Option<ClickCycle>,
+    page_index: usize,
+    point: Pos2,
+    shift: bool,
+    alt: bool,
+) -> (BTreeSet<TargetId>, Option<ClickCycle>) {
+    let Some(&topmost) = hits.first() else {
+        return (selection_after_click(current, None, shift), None);
+    };
+    if shift {
+        return (selection_after_click(current, Some(topmost), shift), None);
+    }
+
+    let ordinal = if alt {
+        let from = cycle
+            .filter(|c| c.continues(page_index, point, current))
+            .map(|c| c.ordinal)
+            .or_else(|| {
+                // No live cycle: start from wherever the current selection
+                // sits in this stack, if it sits in it at all.
+                (current.len() == 1)
+                    .then(|| hits.iter().position(|t| current.contains(t)))
+                    .flatten()
+            });
+        // `from` is where we ARE; the step goes to the next one, wrapping.
+        // With nowhere to step from, an Alt+click is a plain click.
+        from.map_or(0, |i| (i + 1) % hits.len())
+    } else {
+        0
+    };
+
+    let target = hits.get(ordinal).copied().unwrap_or(topmost);
+    (
+        selection_after_click(current, Some(target), false),
+        Some(ClickCycle {
+            page_index,
+            point,
+            ordinal,
+            total: hits.len(),
+            produced: target,
+        }),
+    )
 }
 
 /// The selection set after a **marquee** enclosed `hits` (spec §4.2).
@@ -1142,7 +1339,10 @@ mod tests {
     }
 
     impl CanvasTargetProvider for StubProvider {
-        fn hit_test(&self, _page_index: usize, point: Pos2, tolerance: f64) -> Option<TargetId> {
+        // Only the all-hits query is implemented: `hit_test` is the trait's
+        // provided method over it, which is exactly the guarantee under
+        // test — a provider cannot make the two disagree.
+        fn hit_test_all(&self, _page_index: usize, point: Pos2, tolerance: f64) -> Vec<TargetId> {
             // The stub honours `tolerance` by inflating its boxes, so the
             // substrate's own tests exercise the parameter rather than
             // ignoring it.
@@ -1150,8 +1350,9 @@ mod tests {
             let pad = tolerance.max(0.0) as f32;
             self.boxes
                 .iter()
-                .find(|(_, r)| r.expand(pad).contains(point))
+                .filter(|(_, r)| r.expand(pad).contains(point))
                 .map(|(id, _)| *id)
+                .collect()
         }
 
         fn hit_test_rect(&self, _page_index: usize, rect: Rect) -> Vec<TargetId> {
@@ -1180,6 +1381,206 @@ mod tests {
         assert_eq!(p.hit_test(0, Pos2::new(5.0, 5.0), 6.0), None);
         assert!(p.hit_test_rect(0, r(0.0, 0.0, 100.0, 100.0)).is_empty());
         assert_eq!(p.bounds(0, TargetId(1)), None);
+    }
+
+    // ---- click-through cycling (ui-spec §C.3) --------------------------
+
+    /// The stack every cycling test clicks into: three overlapping objects,
+    /// front-most first, exactly as a provider reports them.
+    fn stack() -> Vec<TargetId> {
+        vec![TargetId(7), TargetId(4), TargetId(2)]
+    }
+
+    const P: Pos2 = Pos2::new(50.0, 50.0);
+
+    /// One click, no modifiers: unchanged behaviour — the topmost object —
+    /// and a recorded cycle so the readout can DISCLOSE that two more
+    /// objects are underneath. A capability nobody can tell exists is not a
+    /// capability (rule 4).
+    #[test]
+    fn a_plain_click_selects_the_topmost_and_records_the_stack() {
+        let (sel, cycle) =
+            selection_and_cycle_after_click(&stack(), &BTreeSet::new(), None, 0, P, false, false);
+        assert_eq!(sel, ids(&[7]));
+        let cycle = cycle.expect("a plain click into a stack records it");
+        assert_eq!(cycle.ordinal, 0);
+        assert_eq!(cycle.position(), 1); // "1 of 3"
+        assert_eq!(cycle.total, 3);
+        assert_eq!(cycle.produced, TargetId(7));
+    }
+
+    /// Repeated Alt+clicks at the same point walk DOWN the stack and wrap —
+    /// the whole point of the feature: without it, `TargetId(4)` and
+    /// `TargetId(2)` are unselectable by any click at this point.
+    #[test]
+    fn repeated_alt_clicks_step_through_the_stack_and_wrap() {
+        let hits = stack();
+        let mut sel = BTreeSet::new();
+        let mut cycle = None;
+        let mut seen = Vec::new();
+        for _ in 0..5 {
+            let (next_sel, next_cycle) =
+                selection_and_cycle_after_click(&hits, &sel, cycle, 0, P, false, true);
+            sel = next_sel;
+            cycle = next_cycle;
+            seen.push(sel.iter().next().copied().expect("one object selected"));
+        }
+        // First Alt+click with nothing selected behaves as a plain click
+        // (topmost); then it walks and wraps.
+        assert_eq!(
+            seen,
+            vec![
+                TargetId(7),
+                TargetId(4),
+                TargetId(2),
+                TargetId(7),
+                TargetId(4),
+            ]
+        );
+        assert_eq!(cycle.map(ClickCycle::position), Some(2));
+    }
+
+    /// The natural gesture: plain-click to select, THEN Alt+click to go
+    /// deeper. The Alt+click must not restart at the top just because the
+    /// first click was not itself an Alt+click.
+    #[test]
+    fn alt_click_continues_from_whatever_is_already_selected() {
+        let hits = stack();
+        // Selection arrived from somewhere else entirely (a tree row click),
+        // so there is no cycle at all — only a selection.
+        let selected = ids(&[4]);
+        let (sel, cycle) =
+            selection_and_cycle_after_click(&hits, &selected, None, 0, P, false, true);
+        assert_eq!(
+            sel,
+            ids(&[2]),
+            "steps past the selected object, not to the top"
+        );
+        assert_eq!(cycle.map(ClickCycle::position), Some(3));
+    }
+
+    /// Moving the pointer resets the cycle — a cycle that never resets is a
+    /// trap, because the operator's next click at a NEW place would silently
+    /// select the third object down.
+    #[test]
+    fn moving_the_pointer_beyond_the_threshold_restarts_the_cycle() {
+        let hits = stack();
+        let (sel, cycle) =
+            selection_and_cycle_after_click(&hits, &BTreeSet::new(), None, 0, P, false, true);
+        let cycle = cycle.expect("a cycle");
+        assert_eq!(sel, ids(&[7]));
+
+        // A hand tremor within the threshold still counts as the same point.
+        let jitter = Pos2::new(P.x + CYCLE_SAME_POINT_CANVAS - 0.5, P.y);
+        assert!(cycle.continues(0, jitter, &sel));
+
+        // A real move does not — and the resulting Alt+click starts over at
+        // the topmost, exactly as an unmodified click would.
+        let elsewhere = Pos2::new(P.x + CYCLE_SAME_POINT_CANVAS * 10.0, P.y);
+        assert!(!cycle.continues(0, elsewhere, &sel));
+        let (moved, _) =
+            selection_and_cycle_after_click(&hits, &sel, Some(cycle), 0, elsewhere, false, true);
+        // `sel` is TargetId(7) = position 0 in the stack, so the step from
+        // "where the selection sits" goes to 1 — NOT to the stale ordinal.
+        assert_eq!(moved, ids(&[4]));
+    }
+
+    /// A page change resets the cycle: a `TargetId` is a per-page index, so
+    /// the same number is a different object on another page.
+    #[test]
+    fn a_page_change_resets_the_cycle() {
+        let (sel, cycle) =
+            selection_and_cycle_after_click(&stack(), &BTreeSet::new(), None, 0, P, false, true);
+        let cycle = cycle.expect("a cycle");
+        assert!(cycle.continues(0, P, &sel));
+        assert!(!cycle.continues(1, P, &sel));
+        assert!(!cycle.describes(1, &sel));
+    }
+
+    /// A selection change from anywhere else (a tree row, a marquee, an
+    /// edit's prune) invalidates the cycle's position, so the readout stops
+    /// claiming to describe it.
+    #[test]
+    fn a_selection_change_from_elsewhere_invalidates_the_cycle() {
+        let (_, cycle) =
+            selection_and_cycle_after_click(&stack(), &BTreeSet::new(), None, 0, P, false, true);
+        let cycle = cycle.expect("a cycle");
+        // Something else selected a different object…
+        assert!(!cycle.continues(0, P, &ids(&[4])));
+        assert!(!cycle.describes(0, &ids(&[4])));
+        // …or added to the selection (a multi-selection is not this cycle's
+        // object, so "2 of 3" would be a lie about which one).
+        assert!(!cycle.describes(0, &ids(&[7, 4])));
+        // …or cleared it.
+        assert!(!cycle.describes(0, &BTreeSet::new()));
+    }
+
+    /// Shift keeps its additive meaning and never cycles: two different
+    /// questions, and a modifier that answered both would be unpredictable.
+    /// A miss keeps its clearing meaning and drops the cycle.
+    #[test]
+    fn shift_still_toggles_and_a_miss_still_clears() {
+        let hits = stack();
+        let (sel, cycle) =
+            selection_and_cycle_after_click(&hits, &ids(&[2]), None, 0, P, true, false);
+        assert_eq!(
+            sel,
+            ids(&[2, 7]),
+            "Shift adds the topmost, never a deeper one"
+        );
+        assert_eq!(cycle, None);
+
+        // Alt is ignored under Shift for the same reason.
+        let (sel, _) = selection_and_cycle_after_click(&hits, &ids(&[2]), None, 0, P, true, true);
+        assert_eq!(sel, ids(&[2, 7]));
+
+        // A miss: plain clears, Shift leaves alone, neither leaves a cycle.
+        let (cleared, cycle) =
+            selection_and_cycle_after_click(&[], &ids(&[7]), None, 0, P, false, true);
+        assert!(cleared.is_empty());
+        assert_eq!(cycle, None);
+        let (kept, _) = selection_and_cycle_after_click(&[], &ids(&[7]), None, 0, P, true, false);
+        assert_eq!(kept, ids(&[7]));
+    }
+
+    /// A single object under the pointer is not a stack: cycling it is a
+    /// no-op that keeps selecting the same thing, and the readout has
+    /// nothing to disclose (`total == 1`).
+    #[test]
+    fn cycling_a_single_hit_is_a_stable_no_op() {
+        let hits = vec![TargetId(9)];
+        let (sel, cycle) =
+            selection_and_cycle_after_click(&hits, &ids(&[9]), None, 0, P, false, true);
+        assert_eq!(sel, ids(&[9]));
+        let cycle = cycle.expect("a cycle");
+        assert_eq!(cycle.total, 1);
+        assert_eq!(cycle.position(), 1);
+    }
+
+    /// The trait's provided `hit_test` IS the head of `hit_test_all` — the
+    /// invariant `pdfce_core::vector::hit` guarantees in page space, carried
+    /// through the provider seam so a first click and a cycling click can
+    /// never disagree about what is under the pointer.
+    #[test]
+    fn the_providers_topmost_query_is_the_head_of_its_all_hits_query() {
+        let provider = StubProvider {
+            boxes: vec![
+                (TargetId(1), r(0.0, 0.0, 100.0, 100.0)),
+                (TargetId(2), r(20.0, 20.0, 30.0, 30.0)),
+            ],
+        };
+        for x in [-5.0_f32, 0.0, 25.0, 60.0, 99.0, 200.0] {
+            for y in [-5.0_f32, 0.0, 25.0, 60.0, 99.0, 200.0] {
+                for tol in [0.0_f64, 3.0, 20.0] {
+                    let p = Pos2::new(x, y);
+                    assert_eq!(
+                        provider.hit_test(0, p, tol),
+                        provider.hit_test_all(0, p, tol).first().copied(),
+                        "{p:?} at tolerance {tol}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

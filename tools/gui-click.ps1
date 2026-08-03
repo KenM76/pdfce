@@ -55,6 +55,24 @@
     the pointer somewhere harmless before a screenshot, so a hover highlight or
     tooltip does not contaminate the observation.
 
+.PARAMETER Modifiers
+    Modifier keys to HOLD DOWN for the whole click sequence: any of Shift,
+    Ctrl, Alt. Added because several canvas gestures are only reachable with a
+    modifier — Shift+click toggles selection membership, and Alt+click steps
+    click-through cycling to the next object under the pointer — and R86 says
+    those behaviors do not ship until they have been observed in the running
+    app. Without this the modifier paths could only ever be tested headlessly,
+    which is exactly the gap the harness exists to close.
+
+    The keys are pressed before the first point and released in a `finally`, so
+    an exception mid-sequence (a refused out-of-window point, a foreground
+    steal) cannot leave Alt latched down across the operator's desktop — a
+    stuck modifier is a far nastier side effect than a failed observation.
+
+    Uses `keybd_event` for the same reason the clicks use `mouse_event`: it
+    injects at the OS layer winit reads, so `egui::Modifiers` sees the real
+    state rather than a synthesized message the event loop may ignore.
+
 .EXAMPLE
     pwsh -File tools/gui-click.ps1 -Clicks "1235,45"
     # click the Measure menu
@@ -69,7 +87,9 @@ param(
     [string[]] $Clicks,
     [string]   $ProcessName = 'pdfce-gui',
     [int]      $DelayMs     = 400,
-    [switch]   $MoveOnly
+    [switch]   $MoveOnly,
+    [ValidateSet('Shift', 'Ctrl', 'Alt')]
+    [string[]] $Modifiers   = @()
 )
 
 Set-StrictMode -Version Latest
@@ -94,6 +114,9 @@ public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwDat
 
 [DllImport("user32.dll")]
 public static extern IntPtr GetForegroundWindow();
+
+[DllImport("user32.dll")]
+public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 '@
 }
 
@@ -128,33 +151,54 @@ if (-not [PdfceInput.Win32]::GetWindowRect($proc.MainWindowHandle, [ref] $rect))
     throw "GetWindowRect failed for '$ProcessName'."
 }
 
-foreach ($c in $Clicks) {
-    $parts = $c -split ','
-    if ($parts.Count -ne 2) { throw "Bad point '$c' — expected 'X,Y'." }
-    $x = [int]$parts[0].Trim()
-    $y = [int]$parts[1].Trim()
+# Virtual-key codes for the held modifiers, and the KEYEVENTF_KEYUP flag.
+$VK = @{ Shift = 0x10; Ctrl = 0x11; Alt = 0x12 }
+$KEYEVENTF_KEYUP = 0x0002
 
-    $sx = $rect.Left + $x
-    $sy = $rect.Top  + $y
+$held = @($Modifiers | Select-Object -Unique)
+foreach ($m in $held) {
+    [PdfceInput.Win32]::keybd_event([byte]$VK[$m], 0, 0, [UIntPtr]::Zero)
+}
+Start-Sleep -Milliseconds 80
 
-    # Guard against clicking outside the target window: a click that lands on
-    # another application is not merely a failed observation, it is an action
-    # taken on something the operator did not intend.
-    if ($sx -lt $rect.Left -or $sx -gt $rect.Right -or $sy -lt $rect.Top -or $sy -gt $rect.Bottom) {
-        throw "Point ($x,$y) resolves to ($sx,$sy), outside the '$ProcessName' window rect [$($rect.Left),$($rect.Top) .. $($rect.Right),$($rect.Bottom)]. Refusing to click outside the target window."
+try {
+    foreach ($c in $Clicks) {
+        $parts = $c -split ','
+        if ($parts.Count -ne 2) { throw "Bad point '$c' — expected 'X,Y'." }
+        $x = [int]$parts[0].Trim()
+        $y = [int]$parts[1].Trim()
+
+        $sx = $rect.Left + $x
+        $sy = $rect.Top  + $y
+
+        # Guard against clicking outside the target window: a click that lands
+        # on another application is not merely a failed observation, it is an
+        # action taken on something the operator did not intend.
+        if ($sx -lt $rect.Left -or $sx -gt $rect.Right -or $sy -lt $rect.Top -or $sy -gt $rect.Bottom) {
+            throw "Point ($x,$y) resolves to ($sx,$sy), outside the '$ProcessName' window rect [$($rect.Left),$($rect.Top) .. $($rect.Right),$($rect.Bottom)]. Refusing to click outside the target window."
+        }
+
+        [void][PdfceInput.Win32]::SetCursorPos($sx, $sy)
+        Start-Sleep -Milliseconds 120
+
+        $with = if ($held.Count -gt 0) { " with $($held -join '+')" } else { "" }
+        if (-not $MoveOnly) {
+            [PdfceInput.Win32]::mouse_event($MOUSEEVENTF_LEFTDOWN, 0, 0, 0, [UIntPtr]::Zero)
+            Start-Sleep -Milliseconds 60
+            [PdfceInput.Win32]::mouse_event($MOUSEEVENTF_LEFTUP,   0, 0, 0, [UIntPtr]::Zero)
+            Write-Output "clicked window($x,$y) -> screen($sx,$sy)$with"
+        } else {
+            Write-Output "moved to window($x,$y) -> screen($sx,$sy)$with"
+        }
+
+        Start-Sleep -Milliseconds $DelayMs
     }
-
-    [void][PdfceInput.Win32]::SetCursorPos($sx, $sy)
-    Start-Sleep -Milliseconds 120
-
-    if (-not $MoveOnly) {
-        [PdfceInput.Win32]::mouse_event($MOUSEEVENTF_LEFTDOWN, 0, 0, 0, [UIntPtr]::Zero)
-        Start-Sleep -Milliseconds 60
-        [PdfceInput.Win32]::mouse_event($MOUSEEVENTF_LEFTUP,   0, 0, 0, [UIntPtr]::Zero)
-        Write-Output "clicked window($x,$y) -> screen($sx,$sy)"
-    } else {
-        Write-Output "moved to window($x,$y) -> screen($sx,$sy)"
+}
+finally {
+    # ALWAYS release, even on a refusal above: a modifier left latched down
+    # affects every subsequent keystroke on the machine, which is a far worse
+    # side effect than the failed observation that caused it.
+    foreach ($m in $held) {
+        [PdfceInput.Win32]::keybd_event([byte]$VK[$m], 0, $KEYEVENTF_KEYUP, [UIntPtr]::Zero)
     }
-
-    Start-Sleep -Milliseconds $DelayMs
 }

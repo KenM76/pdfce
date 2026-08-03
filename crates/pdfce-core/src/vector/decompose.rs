@@ -30,10 +30,48 @@
 //!
 //! **Text objects** (`BT`…`ET`) and **image objects** (`Do` on an image
 //! XObject, an inline `BI`/`ID`/`EI`, or a form `Do`) are decomposed as
-//! **selectable-for-move/delete** objects carrying **bbox + token range
-//! only** — not node-editable in the beta (dimensioning cares about path
-//! geometry). A text object's bbox is a documented **approximation** (see
-//! [`TextObject`]).
+//! **selectable-for-move/delete** objects — not node-editable in the beta
+//! (dimensioning cares about path geometry) — carrying their bbox, their
+//! token range, and the small **identifying detail** a human needs to tell
+//! one from another: a text object's shown string and font
+//! ([`TextPreview`], [`TextFont`]), an image object's pixel dimensions
+//! ([`ImageObject::pixel_size`]). A text object's bbox is a documented
+//! **approximation** (see [`TextObject`]).
+//!
+//! ## Identifying detail, and the two rules it obeys
+//!
+//! ui-spec `pass-17-dock-and-layer-tree.md` §B.4 asks for exactly this: an
+//! object list that can only say `Text` three times is not a troubleshooting
+//! tool. Two rules bind how it is produced:
+//!
+//! 1. **One decoder, never two.** Show-operator strings are decoded through
+//!    [`crate::text_extract::ExtractFont`] — the same §9.10.2 ladder
+//!    `extract-text` climbs — reached through the [`FontResolver`] seam.
+//!    A second, simpler decoder here would disagree with `extract-text` on
+//!    exactly the fonts that are hard, which is the decision 011 §Z2
+//!    divergence shape one layer up from geometry.
+//! 2. **Never invent a value that cannot be justified.** When the ladder
+//!    recovers nothing for a text object, the preview is
+//!    [`TextPreview::Undecodable`], **not** a string of mojibake; when the
+//!    caller supplied no font resolver at all, it is
+//!    [`TextPreview::Unavailable`], which is a different fact and says so.
+//!    Rule 4 (fuzzy, never sneaky) applied where the operator is least able
+//!    to catch a fabrication.
+//!
+//! ### Bounded memory (the 50k-object page)
+//!
+//! [`PageObjects`] now carries owned `String`s, so the cost is capped **at
+//! decomposition**, not at display: a preview is cut at
+//! [`MAX_TEXT_PREVIEW_CHARS`] characters and the decode loop *stops there*
+//! (a 10 kB show string is not decoded and then thrown away), and font
+//! names are cut at [`MAX_FONT_NAME_BYTES`]. Worst case per text object is
+//! therefore ~256 B of preview (64 chars × 4 bytes for astral code points)
+//! plus two ≤64 B names plus their `String` headers — under ~450 B. A
+//! hostile page of 50,000 text objects costs ≈22 MB of preview at the
+//! absolute worst and ≈5 MB for realistic Latin text, against the
+//! [`MAX_OBJECTS`] ceiling of 1,000,000 objects that already bounds the
+//! object list itself. Truncation is **disclosed**
+//! ([`TextPreview::Decoded::truncated`]), never silent.
 //!
 //! ## Agreement with the renderer (the Z2 risk, decision 011)
 //!
@@ -56,11 +94,16 @@
 //! "fuzzy, never sneaky" posture the renderer takes. A fuzz target
 //! (`fuzz/fuzz_targets/vector_decompose.rs`) drives exactly these shapes.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use crate::content::{ContentStream, ContentToken, ContentTokenKind};
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
 use crate::page_tree::Page;
 use crate::span::ByteSpan;
+use crate::text_extract::{ExtractFont, LadderRung};
 use crate::view::DocumentView;
 
 use super::geometry::{Bounds, Matrix, Point, Rgb, cubic_from_v, cubic_from_y, rect_corners};
@@ -78,6 +121,34 @@ pub const MAX_OBJECTS: usize = 1_000_000;
 /// operators are counted-and-dropped (the object still terminates and is
 /// emitted with the nodes it has).
 pub const MAX_NODES: usize = 4_000_000;
+
+/// How many decoded characters of a text object's shown string
+/// [`TextPreview::Decoded`] retains.
+///
+/// A *preview*, not the text: the consumer is a one-line object row and a
+/// one-line status readout, both of which elide well before this. The
+/// number is set here rather than at display time because it is the
+/// **memory bound** (module docs' "Bounded memory") — a page of 50,000 text
+/// objects must not be able to make the object model larger than the file
+/// it came from. Callers that want a page's actual text call
+/// [`crate::text_extract::extract_page`], which is the pipeline for that
+/// question and streams rather than retaining.
+///
+/// 64 is chosen to comfortably contain a caption, a dimension label or a
+/// short heading — the strings that make a row identifiable — while a
+/// paragraph-sized run is cut and **says** it was cut.
+pub const MAX_TEXT_PREVIEW_CHARS: usize = 64;
+
+/// Byte ceiling on a retained font name ([`TextFont::resource`] and
+/// [`TextFont::base_font`]).
+///
+/// A `/BaseFont` is a PDF name, and §7.3.5 caps a name at 127 bytes in
+/// practice; a hostile file can nevertheless carry a long one on every one
+/// of a page's text objects. Cutting at 64 bytes keeps the per-object cost
+/// bounded without touching any real font name (`ABCDEF+Helvetica-BoldOblique`
+/// is 28). Truncation is on a UTF-8 character boundary, so the result is
+/// always valid text.
+pub const MAX_FONT_NAME_BYTES: usize = 64;
 
 /// One segment of a subpath, in the coordinate space of its [`Subpath`]
 /// (user space as stored; page space after [`PathObject::page_subpaths`]).
@@ -297,13 +368,133 @@ pub struct ImageObject {
     pub page_bbox: Bounds,
     /// Where the object came from.
     pub source: ImageSource,
+    /// The image's size in **samples** — `(width, height)` from the image
+    /// dictionary's `/Width` and `/Height` (ISO 32000-1 §8.9.5, Table 89:
+    /// both **required** integers, "width/height … in samples"), or the
+    /// inline image's normalized `/W`/`/H` (§8.9.7, Table 93).
+    ///
+    /// **This is a sample count, not a size on the page.** §8.9.5's own
+    /// note is blunt about it: an image occupies the user-space unit square
+    /// under the CTM, so its printed size comes from the CTM and has no
+    /// fixed relationship to these numbers. `640×480` in a row answers
+    /// "which image is this?" (and, against [`page_bbox`](Self::page_bbox),
+    /// "at what effective resolution is it placed?"); it never answers "how
+    /// big is it on the paper".
+    ///
+    /// `None` for a form XObject (§8.10 — a form has no samples, it has a
+    /// `/BBox`), and for a malformed image whose `/Width`/`/Height` are
+    /// absent, non-integer, negative or larger than `u32`. A missing value
+    /// is reported as missing rather than guessed at from the CTM, which
+    /// would be a fabricated number the operator could not check.
+    pub pixel_size: Option<(u32, u32)>,
     /// The defining-operator token range.
     pub tokens: TokenRange,
     /// The equivalent byte span.
     pub bytes: ByteSpan,
 }
 
-/// A text object (`BT`…`ET`) — selectable-for-move/delete, bbox only.
+/// The font in effect at a text object's first show operator.
+///
+/// Captured at the FIRST `Tj`/`TJ`/`'`/`"` rather than at `ET`, because a
+/// text object that switches font mid-run should be identified by the font
+/// its visible run *starts* in — the same run [`TextPreview`] previews. A
+/// text object that never shows anything has no font (there is no
+/// operand to report), and one that shows without a preceding `Tf` has an
+/// empty [`resource`](Self::resource) recorded as `None` rather than as `""`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextFont {
+    /// The `/Tf` **resource name** as written in the content stream (`F1`,
+    /// `TT2`), decoded from the name's bytes with invalid UTF-8 replaced,
+    /// and cut at [`MAX_FONT_NAME_BYTES`].
+    ///
+    /// This is the key into the page's `/Font` resource dictionary — the
+    /// handle a future edit needs — not a typeface name. Prefer
+    /// [`base_font`](Self::base_font) when showing a human which typeface
+    /// they are looking at.
+    pub resource: String,
+    /// `/BaseFont` from the resolved font dictionary (§9.6.2.1 Table 111 /
+    /// §9.7.4 Table 120), subset tag included (`ABCDEF+Helvetica`), cut at
+    /// [`MAX_FONT_NAME_BYTES`].
+    ///
+    /// `None` when no [`FontResolver`] was supplied, or the name is not in
+    /// the resource dictionary, or the font dictionary carries no
+    /// `/BaseFont`. Never synthesised from the resource name — `F1` is not
+    /// evidence of any typeface.
+    pub base_font: Option<String>,
+    /// The **`Tf` size operand** in effect (§9.3.1, Table 105 `Tfs`).
+    ///
+    /// A *text-space* quantity, reported exactly as the file states it and
+    /// **not** scaled by the text matrix or the CTM. A file that writes
+    /// `/F1 1 Tf` and then `12 0 0 12 x y Tm` renders 12 pt type and is
+    /// reported here as `1` — which is what the file says. Folding the
+    /// matrices in would produce a confident number that disagrees with the
+    /// operand an operator would find in the content stream, and pdfce has
+    /// no glyph metrics with which to defend a measured alternative
+    /// (see [`TextObject`]'s bbox note for the same limitation).
+    pub size: f64,
+}
+
+/// What a text object's shown string decoded to — or, honestly, why it did
+/// not (module docs' rule 2).
+///
+/// Four distinguishable answers, because "no text" has four genuinely
+/// different causes and collapsing them into `Option<String>` would tell the
+/// operator that the file is empty when in fact pdfce declined to guess.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TextPreview {
+    /// Strings were shown, but **no decoder was in scope**, so no decoding
+    /// was attempted: either the caller supplied no [`FontResolver`] (what
+    /// plain [`decompose`] does), or the `Tf` name did not resolve to a font
+    /// in the page's `/Font` resources.
+    ///
+    /// A property of the LOOKUP, never of the document's text. The
+    /// distinction from [`TextPreview::Empty`] matters: one says pdfce did
+    /// not look, the other says there was nothing to find.
+    Unavailable,
+    /// Decoding ran and produced characters.
+    Decoded {
+        /// The decoded characters, at most [`MAX_TEXT_PREVIEW_CHARS`] of
+        /// them.
+        ///
+        /// Sourced characters only: the codes are mapped through the
+        /// §9.10.2 ladder and concatenated **verbatim**, with none of
+        /// `text_extract`'s derived inter-word spacing or line breaking
+        /// (§14.8.2.5 S2/S3/S5 — a content stream carries no word or line
+        /// signal, and inventing one in a row label would be a guess the
+        /// operator cannot review). A `TJ` array's kerning offsets are
+        /// therefore invisible here, exactly as
+        /// [`ExtractedText::sourced_text`](crate::text_extract::ExtractedText::sourced_text)
+        /// treats them.
+        text: String,
+        /// Whether the shown string ran past [`MAX_TEXT_PREVIEW_CHARS`] and
+        /// was cut. Disclosed so a display can mark the elision rather than
+        /// silently present a prefix as the whole string.
+        truncated: bool,
+        /// Whether **some** codes in the decoded prefix defeated the ladder
+        /// and were emitted as U+FFFD (`LadderRung::Failed`).
+        ///
+        /// The replacement characters are left in `text` — that is
+        /// `text_extract`'s own disclosed policy for an unmappable code —
+        /// and this flag is what lets a consumer say so in words instead of
+        /// leaving the operator to interpret a row full of `�`.
+        lossy: bool,
+    },
+    /// Codes were shown and **not one of them** could be mapped to a
+    /// character: every code reached §9.10.2's failure clause ("there is no
+    /// way to determine what the character code represents"), the canonical
+    /// case being `Identity-H` with no `/ToUnicode`.
+    ///
+    /// A distinct variant rather than `Decoded { text: "���" }` because the
+    /// honest answer is *"this text cannot be read"*, and a row of
+    /// replacement characters looks instead like a pdfce bug.
+    Undecodable,
+    /// The text object showed no strings at all — a `BT`/`ET` that only
+    /// positioned, or whose show operands were not strings.
+    Empty,
+}
+
+/// A text object (`BT`…`ET`) — selectable-for-move/delete, with an
+/// identifying preview.
 ///
 /// **The bbox is a deliberate approximation.** `pdfce-core` has no glyph
 /// metrics (font programs and widths live behind the `pdfce-render`
@@ -315,12 +506,23 @@ pub struct ImageObject {
 /// the inflation. [`TextObject::approximate`] is always `true` to disclose
 /// this (fuzzy, never sneaky); an exact text bbox is a fast-follow once the
 /// dimensioning subsystem needs to snap to glyph geometry.
-#[derive(Debug, Clone, Copy, PartialEq)]
+///
+/// **The preview and font are identity, not content.** They exist so an
+/// object row can say `Text · "Section A-A" · Helvetica 10` instead of
+/// `Text` three times over (ui-spec §B.4 #1); they are capped, they carry no
+/// positions, and they are not a text-extraction result. Anything that needs
+/// the page's actual text — with provenance, derived spacing and reading
+/// order — calls [`crate::text_extract::extract_page`].
+#[derive(Debug, Clone, PartialEq)]
 pub struct TextObject {
     /// Page-space approximate bounds (module docs).
     pub page_bbox: Bounds,
     /// Always `true` — the bbox is an origin-derived approximation.
     pub approximate: bool,
+    /// What the object's shown strings decoded to (or why they did not).
+    pub preview: TextPreview,
+    /// The font in effect at the first show operator, if there was one.
+    pub font: Option<TextFont>,
     /// The `BT`→`ET` token range.
     pub tokens: TokenRange,
     /// The equivalent byte span.
@@ -442,7 +644,12 @@ impl PageObjects {
 pub enum XObjectShape {
     /// An image XObject (§8.9): bounded by the user-space unit square under
     /// the current CTM.
-    Image,
+    Image {
+        /// `(/Width, /Height)` in samples (§8.9.5, Table 89), or `None` if
+        /// the dictionary does not carry a usable pair — see
+        /// [`ImageObject::pixel_size`], which this becomes.
+        pixel_size: Option<(u32, u32)>,
+    },
     /// A form XObject (§8.10): bounded by its `/BBox` (in form space) under
     /// `matrix × ctm`.
     Form {
@@ -519,7 +726,9 @@ impl XObjectResolver for DocumentXObjects<'_> {
             .and_then(Object::as_name)
             .map(|n| n.as_bytes());
         match subtype {
-            Some(b"Image") => Some(XObjectShape::Image),
+            Some(b"Image") => Some(XObjectShape::Image {
+                pixel_size: dict_pixel_size(self.view, &stream.dict),
+            }),
             Some(b"Form") => Some(XObjectShape::Form {
                 bbox: dict_rect(self.view, &stream.dict, b"BBox").unwrap_or(Bounds::EMPTY),
                 matrix: dict_matrix(self.view, &stream.dict).unwrap_or(Matrix::IDENTITY),
@@ -528,7 +737,9 @@ impl XObjectResolver for DocumentXObjects<'_> {
             // the renderer's Width+Height ⇒ image, BBox ⇒ form heuristic.
             _ => {
                 if stream.dict.contains_key(b"Width") && stream.dict.contains_key(b"Height") {
-                    Some(XObjectShape::Image)
+                    Some(XObjectShape::Image {
+                        pixel_size: dict_pixel_size(self.view, &stream.dict),
+                    })
                 } else if stream.dict.contains_key(b"BBox") {
                     Some(XObjectShape::Form {
                         bbox: dict_rect(self.view, &stream.dict, b"BBox").unwrap_or(Bounds::EMPTY),
@@ -557,12 +768,163 @@ fn dict_rect(view: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Option<Bounds>
     })
 }
 
+/// Read an image dictionary's `(/Width, /Height)` sample counts (§8.9.5,
+/// Table 89 — both **required** integers), resolving indirect entries
+/// through `view`.
+///
+/// `None` unless BOTH are present, integral and fit `u32`. Deliberately
+/// strict, and deliberately all-or-nothing:
+///
+/// - A real entry is an integer. A `/Width 640.5` is malformed, and
+///   rounding it would report a sample count no decoder would agree with.
+/// - `/Width` and `/Height` are, in §8.9.5's own words about the resource
+///   ceiling, attacker-controlled integers. A negative or `> u32::MAX`
+///   value cannot be a sample count; reporting `Some` for it would put a
+///   nonsense number in front of the operator.
+/// - Reporting one axis without the other (`640×?`) is less useful than
+///   reporting neither and saying so.
+fn dict_pixel_size(view: &DocumentView<'_>, dict: &Dict) -> Option<(u32, u32)> {
+    let read =
+        |key: &[u8]| -> Option<u32> { u32::try_from(view.resolve(dict.get(key)?).as_int()?).ok() };
+    Some((read(b"Width")?, read(b"Height")?))
+}
+
+/// The same read for an **inline** image's parameter dictionary (§8.9.7).
+///
+/// A separate function only because inline-image parameters are direct
+/// objects (§8.9.7: the dictionary sits between `BI` and `ID` in the
+/// content stream, so it has nowhere to hold an indirect reference), which
+/// means there is no [`DocumentView`] to resolve through — and the
+/// decomposition of an inline image must work without a document at all
+/// (the [`NoXObjects`] / fuzz path). [`crate::content`] has already
+/// normalized the Table 93 abbreviations `/W` and `/H` to `/Width` and
+/// `/Height`, so this reads the same two keys as [`dict_pixel_size`].
+fn inline_pixel_size(params: &Dict) -> Option<(u32, u32)> {
+    let read = |key: &[u8]| -> Option<u32> { u32::try_from(params.get(key)?.as_int()?).ok() };
+    Some((read(b"Width")?, read(b"Height")?))
+}
+
 /// Read a six-number `/Matrix` entry (Table 95) as a [`Matrix`].
 fn dict_matrix(view: &DocumentView<'_>, dict: &Dict) -> Option<Matrix> {
     let items = view.resolve(dict.get(b"Matrix")?).as_array()?;
     let n: Vec<f64> = items.iter().filter_map(Object::as_number).collect();
     let [a, b, c, d, e, f] = <[f64; 6]>::try_from(n).ok()?;
     Some(Matrix::new(a, b, c, d, e, f))
+}
+
+// ---------------------------------------------------------------------------
+// Font classification seam (the ONE decoder, reached without a Document)
+// ---------------------------------------------------------------------------
+
+/// The seam the decomposition uses to turn a `Tf` resource name into a
+/// decoder for that font's show strings.
+///
+/// The exact twin of [`XObjectResolver`], and split out for the same three
+/// reasons: the walk stays drivable with no [`DocumentView`] at all (unit
+/// tests, the fuzz target), the *policy* of which revision a font is looked
+/// up in belongs to the caller (decision 018 — a session view sees a font
+/// added this session, a base view does not), and a caller that does not
+/// care about text detail pays nothing.
+///
+/// The returned value is a [`crate::text_extract::ExtractFont`] — the
+/// §9.10.2 ladder `extract-text` climbs — and **not** a bespoke encoding
+/// table, so the object row and `extract-text` cannot disagree about what a
+/// byte means (module docs' rule 1).
+///
+/// [`Arc`] rather than a borrow: one font resource is typically named by
+/// many text objects on a page, and resolving a `/ToUnicode` CMap per
+/// `Tf` would turn a linear walk quadratic. Implementations are expected to
+/// cache — [`DocumentFonts`] does.
+pub trait FontResolver {
+    /// Resolve the font named `name` in the current resource dictionary,
+    /// or `None` if it cannot be resolved (absent `/Font` dictionary, name
+    /// not present, entry not a dictionary).
+    fn resolve(&self, name: &[u8]) -> Option<Arc<ExtractFont>>;
+}
+
+/// A resolver that resolves nothing — the default, and what plain
+/// [`decompose`] passes.
+///
+/// Every text object it produces carries [`TextPreview::Unavailable`],
+/// which says *"no decoding was attempted"* rather than *"this object has
+/// no text"*. The distinction is the whole point of having a named unit
+/// struct here instead of an `Option`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NoFonts;
+
+impl FontResolver for NoFonts {
+    fn resolve(&self, _name: &[u8]) -> Option<Arc<ExtractFont>> {
+        None
+    }
+}
+
+/// The production font resolver: resolves a `Tf` name against a page's
+/// `/Font` resource subdictionary (§7.8.3 Table 33, §9.6.2.1) in a
+/// [`DocumentView`], memoizing each resolution.
+///
+/// ## Why the cache is not optional
+///
+/// [`ExtractFont::resolve`] parses a `/ToUnicode` CMap stream and builds a
+/// 256-entry encoding table. A page that sets `/F1 10 Tf` inside every one
+/// of a thousand `BT`/`ET` blocks — which is what a word processor emits —
+/// would pay that a thousand times. The cache turns the walk back into one
+/// resolution per distinct font resource per page.
+///
+/// [`RefCell`] because [`FontResolver::resolve`] takes `&self` (the walk
+/// holds the resolver immutably, exactly as it holds
+/// [`DocumentXObjects`]). The borrow is taken and released inside the
+/// method with no reentrancy — `ExtractFont::resolve` cannot call back into
+/// this — so it cannot panic. The consequence is that `DocumentFonts` is
+/// not `Sync`; the decomposition is single-threaded per page and nothing
+/// shares one across threads.
+pub struct DocumentFonts<'a> {
+    /// The document view fonts are resolved against (decision 018: pass a
+    /// session view to see a font added this session, a base view for a
+    /// one-shot CLI read).
+    pub view: &'a DocumentView<'a>,
+    /// The resource dictionary the `Tf` name is looked up in.
+    pub resources: &'a Dict,
+    /// Memoized resolutions, including negative ones (a name that is not in
+    /// the dictionary must not be re-looked-up on every `Tf`).
+    cache: RefCell<HashMap<Vec<u8>, Option<Arc<ExtractFont>>>>,
+}
+
+impl<'a> DocumentFonts<'a> {
+    /// Build a resolver over `view`'s `resources`.
+    #[must_use]
+    pub fn new(view: &'a DocumentView<'a>, resources: &'a Dict) -> Self {
+        Self {
+            view,
+            resources,
+            cache: RefCell::new(HashMap::new()),
+        }
+    }
+
+    /// The uncached lookup: `/Font` → `name` → a font dictionary →
+    /// [`ExtractFont::resolve`].
+    fn lookup(&self, name: &[u8]) -> Option<Arc<ExtractFont>> {
+        let font_dict = self
+            .resources
+            .get(b"Font")
+            .map(|o| self.view.resolve(o))
+            .and_then(Object::as_dict)?
+            .get(name)?;
+        let dict = self.view.resolve(font_dict).as_dict()?;
+        Some(Arc::new(ExtractFont::resolve(self.view, dict)))
+    }
+}
+
+impl FontResolver for DocumentFonts<'_> {
+    fn resolve(&self, name: &[u8]) -> Option<Arc<ExtractFont>> {
+        if let Some(hit) = self.cache.borrow().get(name) {
+            return hit.clone();
+        }
+        let resolved = self.lookup(name);
+        self.cache
+            .borrow_mut()
+            .insert(name.to_vec(), resolved.clone());
+        resolved
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -618,27 +980,85 @@ pub fn decompose_page(
     initial: Matrix,
 ) -> Result<PageObjects, crate::content::ContentError> {
     let content = ContentStream::from_page(view, page)?;
-    let resolver = DocumentXObjects {
+    let xobjects = DocumentXObjects {
         view,
         resources: &page.resources,
     };
-    Ok(decompose(&content, initial, &resolver))
+    // A page decomposition always resolves fonts: this is the entry point
+    // the GUI provider and the CLI both call, and both surface the text
+    // preview. The `NoFonts` path exists for callers that have no document
+    // (unit tests, the fuzz target) and for `decompose`'s stable signature,
+    // not as a cheaper mode a real caller should choose — `DocumentFonts`
+    // memoizes, so the cost is one resolution per distinct font resource.
+    let fonts = DocumentFonts::new(view, &page.resources);
+    Ok(decompose_with_fonts(&content, initial, &xobjects, &fonts))
 }
 
 /// Decompose an already-tokenized content stream, with an explicit
-/// XObject resolver and initial CTM.
+/// XObject resolver and initial CTM, and **no font resolution**.
 ///
-/// This is the walk's true entry point: [`decompose_page`] is the
-/// [`DocumentView`]-backed convenience over it, and unit tests / the fuzz
-/// target call this directly with [`NoXObjects`] (or a stub) over a
-/// [`ContentStream::parse`] result — no document at all required.
+/// Geometry-only: every text object comes back with
+/// [`TextPreview::Unavailable`] and no [`TextFont`]. That is the right
+/// answer for every caller that indexes objects for *editing* — `edit.rs`'s
+/// surgery planner, the snap engine, the fuzz targets — none of which needs
+/// to know what a string says, and all of which would otherwise pay for a
+/// `/ToUnicode` parse per font.
+///
+/// Callers that display objects to a human want
+/// [`decompose_with_fonts`] (or [`decompose_page`], which supplies both
+/// resolvers for a page). This function's signature is deliberately
+/// unchanged from before text previews existed, so every geometry caller
+/// stayed a no-diff.
 #[must_use]
 pub fn decompose(
     content: &ContentStream,
     initial: Matrix,
     xobjects: &dyn XObjectResolver,
 ) -> PageObjects {
-    let mut d = Decomposer::new(content, initial, xobjects);
+    decompose_with_fonts(content, initial, xobjects, &NoFonts)
+}
+
+/// Decompose an already-tokenized content stream with **both** resolvers —
+/// the walk's true entry point.
+///
+/// `xobjects` classifies `Do` names (§8.8) so an image/form object gets a
+/// bbox and its sample count; `fonts` resolves `Tf` names (§9.6.2.1) so a
+/// text object gets its decoded preview and typeface. Either may be the
+/// inert [`NoXObjects`]/[`NoFonts`]; the walk's geometry is identical
+/// either way, which is what makes the byte-inertness claim (R46) and the
+/// renderer cross-check independent of whether a caller asked for text
+/// detail.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::content::ContentStream;
+/// use pdfce_core::vector::{
+///     Matrix, NoFonts, NoXObjects, TextPreview, VectorObject, decompose_with_fonts,
+/// };
+///
+/// // With no font resolver the text object is honest about WHY it has no
+/// // preview: nothing was attempted, as opposed to nothing being there.
+/// let cs = ContentStream::parse(b"BT /F1 12 Tf 10 10 Td (Hi) Tj ET".to_vec())?;
+/// let model = decompose_with_fonts(&cs, Matrix::IDENTITY, &NoXObjects, &NoFonts);
+/// let VectorObject::Text(text) = &model.objects[0] else { panic!("a text object") };
+/// assert_eq!(text.preview, TextPreview::Unavailable);
+/// // The `Tf` operands are read straight from the stream, so the resource
+/// // name and size are known even with no document behind them.
+/// let font = text.font.as_ref().expect("a /Tf was in effect");
+/// assert_eq!(font.resource, "F1");
+/// assert_eq!(font.size, 12.0);
+/// assert_eq!(font.base_font, None); // no resolver, so no typeface claim
+/// # Ok::<(), pdfce_core::content::ContentError>(())
+/// ```
+#[must_use]
+pub fn decompose_with_fonts(
+    content: &ContentStream,
+    initial: Matrix,
+    xobjects: &dyn XObjectResolver,
+    fonts: &dyn FontResolver,
+) -> PageObjects {
+    let mut d = Decomposer::new(content, initial, xobjects, fonts);
     d.run();
     PageObjects {
         objects: d.objects,
@@ -653,16 +1073,27 @@ pub fn decompose(
 
 /// The Pass 9a subset of the graphics state the object model tracks — the
 /// CTM (the only geometry-load-bearing part), the stroke geometry width,
-/// the device colours, and the two text-state parameters the approximate
-/// text bbox needs. Saved/restored by `q`/`Q` (§8.4.2), like the
-/// renderer's [`crate::content`]-driven state.
-#[derive(Debug, Clone, Copy)]
+/// the device colours, and the text-state parameters the approximate text
+/// bbox and the text preview need. Saved/restored by `q`/`Q` (§8.4.2), like
+/// the renderer's [`crate::content`]-driven state.
+///
+/// `Clone` rather than `Copy` since the resolved font joined it: the font
+/// IS part of the text state and therefore part of the graphics state
+/// (§9.3), so `q`/`Q` must save and restore it, and an [`Arc`] clone on a
+/// `q` is one refcount bump.
+#[derive(Debug, Clone)]
 struct GState {
     ctm: Matrix,
     line_width: f64,
     fill_color: Rgb,
     stroke_color: Rgb,
+    /// The `Tf` size operand (§9.3.1 `Tfs`), text space, unscaled.
     font_size: f64,
+    /// The `Tf` resource name, verbatim from the content stream.
+    font_resource: Option<Vec<u8>>,
+    /// The decoder for [`Self::font_resource`], if the [`FontResolver`]
+    /// could produce one.
+    font: Option<Arc<ExtractFont>>,
     leading: f64,
 }
 
@@ -674,6 +1105,8 @@ impl GState {
             fill_color: Rgb::BLACK,
             stroke_color: Rgb::BLACK,
             font_size: 0.0,
+            font_resource: None,
+            font: None,
             leading: 0.0,
         }
     }
@@ -691,18 +1124,84 @@ struct PathAccum {
     token_start: usize,
 }
 
-/// The in-progress text object (`BT`…`ET`).
+/// The in-progress text object (`BT`…`ET`), including the preview
+/// accumulator.
 struct TextAccum {
     token_start: usize,
     origins: Bounds,
     max_font_size: f64,
     text_matrix: Matrix,
     line_matrix: Matrix,
+    /// Decoded characters so far, never longer than
+    /// [`MAX_TEXT_PREVIEW_CHARS`] characters.
+    preview: String,
+    /// Character count of `preview` (tracked rather than recounted, since
+    /// `String::chars().count()` is O(n) and this is checked per code).
+    preview_chars: usize,
+    /// Whether decoding stopped at the cap with codes still to come.
+    truncated: bool,
+    /// Codes in the decoded prefix that the §9.10.2 ladder mapped.
+    decoded_codes: usize,
+    /// Codes in the decoded prefix that reached the ladder's failure clause.
+    failed_codes: usize,
+    /// Whether any show operator carried a string operand at all — the
+    /// difference between [`TextPreview::Empty`] and a decode result.
+    showed_any: bool,
+    /// Whether at least one of those strings was decoded through a resolved
+    /// font. False means no decoder was in scope (no resolver, or a `Tf`
+    /// naming a font the resource dictionary does not hold), which is
+    /// [`TextPreview::Unavailable`] — a fact about the LOOKUP, not about the
+    /// document's text.
+    decode_attempted: bool,
+    /// The font at the FIRST show operator ([`TextFont`]'s own rationale).
+    font: Option<TextFont>,
+}
+
+impl TextAccum {
+    fn new(token_start: usize) -> Self {
+        Self {
+            token_start,
+            origins: Bounds::EMPTY,
+            max_font_size: 0.0,
+            text_matrix: Matrix::IDENTITY,
+            line_matrix: Matrix::IDENTITY,
+            preview: String::new(),
+            preview_chars: 0,
+            truncated: false,
+            decoded_codes: 0,
+            failed_codes: 0,
+            showed_any: false,
+            decode_attempted: false,
+            font: None,
+        }
+    }
+
+    /// Fold the accumulator into the disclosed [`TextPreview`] (the four
+    /// cases the enum documents).
+    fn finish(self) -> (TextPreview, Option<TextFont>) {
+        let preview = if !self.showed_any {
+            TextPreview::Empty
+        } else if !self.decode_attempted {
+            // A show operator ran, but no decoder was in scope. Saying
+            // "empty" here would blame the document for a failed lookup.
+            TextPreview::Unavailable
+        } else if self.decoded_codes == 0 && self.failed_codes > 0 {
+            TextPreview::Undecodable
+        } else {
+            TextPreview::Decoded {
+                text: self.preview,
+                truncated: self.truncated,
+                lossy: self.failed_codes > 0,
+            }
+        };
+        (preview, self.font)
+    }
 }
 
 struct Decomposer<'a> {
     content: &'a ContentStream,
     xobjects: &'a dyn XObjectResolver,
+    fonts: &'a dyn FontResolver,
     stack: Vec<GState>,
     gs: GState,
     path: Option<PathAccum>,
@@ -713,10 +1212,16 @@ struct Decomposer<'a> {
 }
 
 impl<'a> Decomposer<'a> {
-    fn new(content: &'a ContentStream, initial: Matrix, xobjects: &'a dyn XObjectResolver) -> Self {
+    fn new(
+        content: &'a ContentStream,
+        initial: Matrix,
+        xobjects: &'a dyn XObjectResolver,
+        fonts: &'a dyn FontResolver,
+    ) -> Self {
         Self {
             content,
             xobjects,
+            fonts,
             stack: Vec::new(),
             gs: GState::initial(initial),
             path: None,
@@ -758,12 +1263,16 @@ impl<'a> Decomposer<'a> {
         first: usize,
         op_index: usize,
     ) {
-        // The one non-operator "operation": a complete inline image.
-        if let ContentTokenKind::InlineImage { .. } = &operator.kind {
+        // The one non-operator "operation": a complete inline image. Its
+        // parameter dictionary travels WITH the token (§8.9.7), so its
+        // sample count is read here and needs no resolver.
+        if let ContentTokenKind::InlineImage { params, .. } = &operator.kind {
+            let pixel_size = inline_pixel_size(params);
             self.emit_image(
                 ImageSource::Inline,
                 self.gs.ctm,
                 unit_square(),
+                pixel_size,
                 first,
                 op_index,
             );
@@ -775,7 +1284,7 @@ impl<'a> Decomposer<'a> {
         let nums = operand_nums(operands);
         match name {
             // ---- graphics state (Table 57) ----
-            b"q" => self.stack.push(self.gs),
+            b"q" => self.stack.push(self.gs.clone()),
             b"Q" => match self.stack.pop() {
                 Some(prev) => self.gs = prev,
                 None => self.diag.unbalanced_q += 1,
@@ -921,21 +1430,25 @@ impl<'a> Decomposer<'a> {
             // ---- text objects (Table 107) ----
             b"BT" => {
                 self.discard_path(); // defensive: a path open across BT is malformed
-                self.text = Some(TextAccum {
-                    token_start: op_index,
-                    origins: Bounds::EMPTY,
-                    max_font_size: 0.0,
-                    text_matrix: Matrix::IDENTITY,
-                    line_matrix: Matrix::IDENTITY,
-                });
+                self.text = Some(TextAccum::new(op_index));
             }
             b"ET" => self.end_text(op_index),
 
-            // ---- text state / positioning the bbox approximation needs ----
+            // ---- text state / positioning the bbox + preview need ----
             b"Tf" => {
-                // `Tf name size`: the number operand is the size.
+                // `Tf name size` (§9.3.1): the name operand selects the font
+                // resource, the number operand is the size. Both are part of
+                // the graphics state, so both survive to the next `BT`.
                 if let Some(size) = nums.last().copied() {
                     self.gs.font_size = size;
+                }
+                if let Some(resource) = last_name(operands) {
+                    // Resolve eagerly rather than at the first show operator:
+                    // `DocumentFonts` memoizes, so a repeated `Tf` is a hash
+                    // lookup, and doing it here keeps the show path (which
+                    // runs per string) free of resolution logic.
+                    self.gs.font = self.fonts.resolve(&resource);
+                    self.gs.font_resource = Some(resource);
                 }
             }
             b"TL" => {
@@ -967,7 +1480,7 @@ impl<'a> Decomposer<'a> {
                 let leading = self.gs.leading;
                 self.text_line_offset(0.0, -leading);
             }
-            b"Tj" | b"TJ" | b"'" | b"\"" => self.record_text_origin(),
+            b"Tj" | b"TJ" | b"'" | b"\"" => self.show_text(operands),
 
             // ---- external objects (§8.8) ----
             b"Do" => self.do_xobject(operands, first, op_index),
@@ -1180,17 +1693,117 @@ impl<'a> Decomposer<'a> {
         }
     }
 
-    /// Record a text-showing origin: the pen position (text-space origin
-    /// mapped through the text matrix and the CTM) plus the current font
-    /// size, for the approximate bbox.
-    fn record_text_origin(&mut self) {
+    /// Handle one text-showing operator (`Tj`/`TJ`/`'`/`"`): record the pen
+    /// origin for the approximate bbox, capture the font on the first one,
+    /// and decode the operand strings into the preview.
+    ///
+    /// The origin bookkeeping is exactly what this used to do and is
+    /// unchanged — the bbox geometry (and therefore hit-testing, and
+    /// therefore every existing test and fixture expectation) does not move
+    /// because a preview was added.
+    fn show_text(&mut self, operands: &[ContentToken]) {
+        // Snapshot the graphics-state reads before borrowing `self.text`
+        // mutably; `Arc::clone` is a refcount bump, not a font copy.
         let ctm = self.gs.ctm;
         let font_size = self.gs.font_size;
-        if let Some(t) = self.text.as_mut() {
-            let origin = ctm.map_point(t.text_matrix.map_point(Point::new(0.0, 0.0)));
-            t.origins = t.origins.union_point(origin);
-            if font_size > t.max_font_size {
-                t.max_font_size = font_size;
+        let font = self.gs.font.clone();
+        let resource = self.gs.font_resource.clone();
+
+        let Some(t) = self.text.as_mut() else {
+            return; // a show operator outside BT/ET — malformed, ignored
+        };
+
+        let origin = ctm.map_point(t.text_matrix.map_point(Point::new(0.0, 0.0)));
+        t.origins = t.origins.union_point(origin);
+        if font_size > t.max_font_size {
+            t.max_font_size = font_size;
+        }
+
+        // The font of the FIRST show operator identifies the object
+        // (`TextFont`'s own docs). A `Tf`-less show has no font to name.
+        if t.font.is_none()
+            && let Some(resource) = resource
+        {
+            t.font = Some(TextFont {
+                resource: truncate_name(&String::from_utf8_lossy(&resource)),
+                base_font: font
+                    .as_ref()
+                    .map(|f| truncate_name(&f.base_font))
+                    .filter(|b| !b.is_empty()),
+                size: font_size,
+            });
+        }
+
+        // §9.4.3 Table 109: `Tj`/`'` take one string; `"` takes `aw ac
+        // string`; `TJ` takes an array of strings interleaved with numeric
+        // offsets. Every STRING operand in the run is shown text and every
+        // number is positioning, so walking the operands and taking the
+        // strings covers all four operators without a per-operator branch —
+        // and tolerates a malformed run (a `Tj` with two strings) by
+        // showing both, which is what a lenient reader would render.
+        for token in operands {
+            let ContentTokenKind::Operand(object) = &token.kind else {
+                continue;
+            };
+            match object {
+                Object::String(bytes) => self.decode_show_string(bytes),
+                Object::Array(items) => {
+                    for item in items {
+                        if let Object::String(bytes) = item {
+                            self.decode_show_string(bytes);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Decode one show string's bytes into the in-progress preview through
+    /// the §9.10.2 ladder, stopping at [`MAX_TEXT_PREVIEW_CHARS`].
+    ///
+    /// **Stops decoding, not just appending.** The cap is a work bound as
+    /// well as a memory bound: a hostile page can carry a megabyte of show
+    /// strings per text object, and mapping every code through a
+    /// `/ToUnicode` CMap only to discard the result would be an easy
+    /// amplification (ARCHITECTURE.md §10). The consequence — that
+    /// [`TextPreview::Decoded::lossy`] describes the decoded PREFIX rather
+    /// than the whole string — is documented on the field.
+    fn decode_show_string(&mut self, bytes: &[u8]) {
+        let font = self.gs.font.clone();
+        let Some(t) = self.text.as_mut() else {
+            return;
+        };
+        if !bytes.is_empty() {
+            t.showed_any = true;
+        }
+        let Some(font) = font else {
+            return; // no decoder in scope → TextPreview::Unavailable
+        };
+        if !bytes.is_empty() {
+            t.decode_attempted = true;
+        }
+        for code in font.codes(bytes) {
+            if t.preview_chars >= MAX_TEXT_PREVIEW_CHARS {
+                t.truncated = true;
+                return;
+            }
+            let (text, rung) = font.to_unicode(code.value);
+            if rung == LadderRung::Failed {
+                t.failed_codes += 1;
+            } else {
+                t.decoded_codes += 1;
+            }
+            for ch in text.chars() {
+                if t.preview_chars >= MAX_TEXT_PREVIEW_CHARS {
+                    // One code can map to several characters (§9.10.3), so
+                    // the cap can be reached mid-code; the rest of THIS
+                    // code's characters are elided too, and disclosed.
+                    t.truncated = true;
+                    return;
+                }
+                t.preview.push(ch);
+                t.preview_chars += 1;
             }
         }
     }
@@ -1211,12 +1824,16 @@ impl<'a> Decomposer<'a> {
         let margin = (t.max_font_size).max(1.0);
         let page_bbox = t.origins.inflate(margin);
         let bytes = self.span_of(t.token_start, op_index);
+        let token_start = t.token_start;
+        let (preview, font) = t.finish();
         self.diag.text += 1;
         self.objects.push(VectorObject::Text(TextObject {
             page_bbox,
             approximate: true,
+            preview,
+            font,
             tokens: TokenRange {
-                start: t.token_start,
+                start: token_start,
                 end: op_index + 1,
             },
             bytes,
@@ -1231,11 +1848,12 @@ impl<'a> Decomposer<'a> {
             return;
         };
         match self.xobjects.classify(&name) {
-            Some(XObjectShape::Image) => {
+            Some(XObjectShape::Image { pixel_size }) => {
                 self.emit_image(
                     ImageSource::XObject,
                     self.gs.ctm,
                     unit_square(),
+                    pixel_size,
                     first,
                     op_index,
                 );
@@ -1243,7 +1861,8 @@ impl<'a> Decomposer<'a> {
             Some(XObjectShape::Form { bbox, matrix }) => {
                 let ctm = matrix.post_concat(self.gs.ctm);
                 let corners = bounds_corners(bbox);
-                self.emit_image(ImageSource::Form, ctm, corners, first, op_index);
+                // A form has no samples (§8.10) — `None`, not `Some((0, 0))`.
+                self.emit_image(ImageSource::Form, ctm, corners, None, first, op_index);
             }
             None => self.diag.unresolved_xobject += 1,
         }
@@ -1251,12 +1870,14 @@ impl<'a> Decomposer<'a> {
 
     /// Emit an image/form object: `local_corners` are the four corners in
     /// the object's own space (unit square, or a form `/BBox`), mapped to
-    /// page space by `ctm`.
+    /// page space by `ctm`; `pixel_size` is the sample count for an image
+    /// and `None` for a form.
     fn emit_image(
         &mut self,
         source: ImageSource,
         ctm: Matrix,
         local_corners: [Point; 4],
+        pixel_size: Option<(u32, u32)>,
         first: usize,
         op_index: usize,
     ) {
@@ -1276,6 +1897,7 @@ impl<'a> Decomposer<'a> {
             ctm,
             page_bbox,
             source,
+            pixel_size,
             tokens: TokenRange {
                 start: first,
                 end: op_index + 1,
@@ -1330,6 +1952,24 @@ fn operand_nums(operands: &[ContentToken]) -> Vec<f64> {
             _ => None,
         })
         .collect()
+}
+
+/// Cut a name at [`MAX_FONT_NAME_BYTES`], on a UTF-8 character boundary.
+///
+/// `floor_char_boundary` is not stable, so the boundary is found by
+/// scanning back from the limit — at most three bytes, since a UTF-8
+/// sequence is at most four. Returning a byte-sliced `String` without this
+/// would panic on a multi-byte name, which is precisely the adversarial
+/// input a hostile `/BaseFont` would carry.
+fn truncate_name(name: &str) -> String {
+    if name.len() <= MAX_FONT_NAME_BYTES {
+        return name.to_owned();
+    }
+    let mut end = MAX_FONT_NAME_BYTES;
+    while end > 0 && !name.is_char_boundary(end) {
+        end -= 1;
+    }
+    name.get(..end).unwrap_or_default().to_owned()
 }
 
 /// The last name operand of an operation (`Do`'s XObject name), taken from
@@ -1429,10 +2069,121 @@ fn subpath_is_quad(sp: &Subpath) -> bool {
 )]
 mod tests {
     use super::*;
+    use crate::PdfVersion;
+    use crate::object::{Name, ObjId};
+    use std::collections::BTreeMap;
 
     fn model(src: &[u8]) -> PageObjects {
         let cs = ContentStream::parse(src.to_vec()).unwrap();
         decompose(&cs, Matrix::IDENTITY, &NoXObjects)
+    }
+
+    // -- the font-resolution test rig ---------------------------------------
+    //
+    // A hand-built `ObjectGraph` (the same shape `view.rs`'s own tests use)
+    // so the DECODING path is exercised without dragging a parsed file into
+    // a unit test. Two font resources, chosen to be the two ends of the
+    // §9.10.2 ladder:
+    //
+    //   /F1           Helvetica, a standard-14 simple font — rung 2 via the
+    //                 AGL, so ASCII decodes exactly.
+    //   /Undecodable  Type0 / Identity-H with an Adobe-Identity-0 descendant
+    //                 and NO /ToUnicode — §9.10.2 excludes Identity-H from
+    //                 rung 3's first disjunct by name and the descendant
+    //                 satisfies neither half of the second, so every code
+    //                 reaches the failure clause. Structurally the same case
+    //                 `fixtures/synthetic/text/identity-h-no-tounicode.pdf`
+    //                 pins for extraction.
+
+    struct TestGraph {
+        objects: BTreeMap<ObjId, Object>,
+        trailer: Dict,
+    }
+
+    impl ObjectGraph for TestGraph {
+        fn value(&self, id: ObjId) -> Option<&Object> {
+            self.objects.get(&id)
+        }
+        fn trailer_entry(&self, key: &[u8]) -> Option<&Object> {
+            self.trailer.get(key)
+        }
+    }
+
+    fn dict(entries: &[(&[u8], Object)]) -> Dict {
+        let mut d = Dict::new();
+        for (k, v) in entries {
+            d.insert(Name::from(*k), v.clone());
+        }
+        d
+    }
+
+    fn name(v: &[u8]) -> Object {
+        Object::Name(Name::from(v))
+    }
+
+    /// A `/Font` resource dictionary holding the two fonts above.
+    fn font_resources() -> Dict {
+        let helvetica = dict(&[
+            (b"Type", name(b"Font")),
+            (b"Subtype", name(b"Type1")),
+            (b"BaseFont", name(b"Helvetica")),
+        ]);
+        let descendant = dict(&[
+            (b"Type", name(b"Font")),
+            (b"Subtype", name(b"CIDFontType2")),
+            (b"BaseFont", name(b"NoUnicode")),
+            (
+                b"CIDSystemInfo",
+                Object::Dict(dict(&[
+                    (b"Registry", Object::String(b"Adobe".to_vec())),
+                    (b"Ordering", Object::String(b"Identity".to_vec())),
+                    (b"Supplement", Object::Integer(0)),
+                ])),
+            ),
+        ]);
+        let undecodable = dict(&[
+            (b"Type", name(b"Font")),
+            (b"Subtype", name(b"Type0")),
+            (b"BaseFont", name(b"NoUnicode")),
+            (b"Encoding", name(b"Identity-H")),
+            (
+                b"DescendantFonts",
+                Object::Array(vec![Object::Dict(descendant)]),
+            ),
+        ]);
+        let fonts = dict(&[
+            (b"F1", Object::Dict(helvetica.clone())),
+            (b"F2", Object::Dict(helvetica)),
+            (b"Undecodable", Object::Dict(undecodable)),
+        ]);
+        dict(&[(b"Font", Object::Dict(fonts))])
+    }
+
+    fn test_graph() -> TestGraph {
+        TestGraph {
+            objects: BTreeMap::new(),
+            trailer: Dict::new(),
+        }
+    }
+
+    /// Decompose `src` with a real [`DocumentFonts`] over [`font_resources`].
+    fn model_with_fonts(src: &[u8]) -> PageObjects {
+        let graph = test_graph();
+        let view = DocumentView::new(&graph, b"", PdfVersion { major: 1, minor: 7 });
+        let resources = font_resources();
+        let fonts = DocumentFonts::new(&view, &resources);
+        let cs = ContentStream::parse(src.to_vec()).unwrap();
+        decompose_with_fonts(&cs, Matrix::IDENTITY, &NoXObjects, &fonts)
+    }
+
+    fn texts(m: &PageObjects) -> Vec<&TextObject> {
+        m.objects
+            .iter()
+            .filter_map(|o| match o {
+                VectorObject::Text(t) => Some(t),
+                _ => None,
+            })
+            .collect()
     }
 
     fn paths(m: &PageObjects) -> Vec<&PathObject> {
@@ -1574,18 +2325,140 @@ mod tests {
     #[test]
     fn text_object_is_bbox_and_range_only_and_flagged_approximate() {
         let m = model(b"BT /F1 12 Tf 72 700 Td (Hi) Tj ET");
-        let texts: Vec<_> = m
-            .objects
-            .iter()
-            .filter_map(|o| match o {
-                VectorObject::Text(t) => Some(t),
-                _ => None,
-            })
-            .collect();
+        let texts = texts(&m);
         assert_eq!(texts.len(), 1);
         assert!(texts[0].approximate);
         // origin (72,700) inflated by the 12 pt font size
         assert!(texts[0].page_bbox.contains(Point::new(72.0, 700.0)));
+    }
+
+    /// The `Tf` operands are read from the STREAM, so the resource name and
+    /// size are known even with no document behind the walk — but no
+    /// typeface is claimed and no decoding is attempted, and the preview
+    /// says which of those it is.
+    #[test]
+    fn without_a_font_resolver_the_preview_is_unavailable_not_empty() {
+        let m = model(b"BT /F1 12 Tf 72 700 Td (Hi) Tj ET");
+        let t = texts(&m).remove(0);
+        assert_eq!(t.preview, TextPreview::Unavailable);
+        let font = t.font.as_ref().expect("the /Tf is in the stream");
+        assert_eq!(font.resource, "F1");
+        assert_eq!(font.size, 12.0);
+        // No resolver ⇒ no /BaseFont claim. `F1` is not evidence of a
+        // typeface and must never be presented as one.
+        assert_eq!(font.base_font, None);
+    }
+
+    /// A `BT`/`ET` that positions but never shows a string is `Empty` — a
+    /// different fact from "pdfce did not look", and the two must not
+    /// collapse.
+    #[test]
+    fn a_text_object_that_shows_nothing_is_empty_not_unavailable() {
+        // A `Tj` with an empty string still records an origin (so the
+        // object exists) but shows no codes.
+        let m = model(b"BT /F1 12 Tf 72 700 Td () Tj ET");
+        let t = texts(&m).remove(0);
+        assert_eq!(t.preview, TextPreview::Empty);
+    }
+
+    /// With a resolver in scope the shown string decodes through the SAME
+    /// §9.10.2 ladder `extract-text` climbs, for `Tj`, `TJ`, `'` and `"`
+    /// alike — every string operand in the run is shown text.
+    #[test]
+    fn show_operators_decode_through_the_extract_font_ladder() {
+        // `TJ`'s kerning numbers are positioning, not text: they contribute
+        // nothing to the preview (no derived spaces — see TextPreview).
+        let m = model_with_fonts(b"BT /F1 12 Tf 10 10 Td [(He) -120 (llo)] TJ ( there) Tj ET");
+        let t = texts(&m).remove(0);
+        match &t.preview {
+            TextPreview::Decoded {
+                text,
+                truncated,
+                lossy,
+            } => {
+                assert_eq!(text, "Hello there");
+                assert!(!truncated);
+                assert!(!lossy);
+            }
+            other => panic!("expected a decoded preview, got {other:?}"),
+        }
+        assert_eq!(
+            t.font.as_ref().and_then(|f| f.base_font.clone()),
+            Some("Helvetica".to_owned())
+        );
+    }
+
+    /// A font whose encoding defeats the ladder must report
+    /// `Undecodable` — never a row of replacement characters, which reads
+    /// as a pdfce bug rather than as an honest "this cannot be read".
+    #[test]
+    fn a_font_whose_encoding_defeats_decoding_reports_undecodable() {
+        // `Identity-H` with no `/ToUnicode` and an `Adobe-Identity-0`
+        // descendant satisfies neither disjunct of §9.10.2's rung 3, so
+        // every code reaches the failure clause (the same property
+        // `fixtures/synthetic/text/identity-h-no-tounicode.pdf` pins for
+        // extraction).
+        let m = model_with_fonts(b"BT /Undecodable 12 Tf 10 10 Td <00480049> Tj ET");
+        let t = texts(&m).remove(0);
+        assert_eq!(t.preview, TextPreview::Undecodable);
+        // The font is still named — knowing WHICH font cannot be read is
+        // most of the value of the disclosure.
+        assert_eq!(
+            t.font.as_ref().and_then(|f| f.base_font.clone()),
+            Some("NoUnicode".to_owned())
+        );
+    }
+
+    /// The memory bound, asserted rather than trusted: a long string is cut
+    /// at `MAX_TEXT_PREVIEW_CHARS` and SAYS it was cut.
+    #[test]
+    fn a_long_string_is_truncated_at_the_documented_cap_and_discloses_it() {
+        let long = "A".repeat(MAX_TEXT_PREVIEW_CHARS * 4);
+        let src = format!("BT /F1 12 Tf 10 10 Td ({long}) Tj ET");
+        let m = model_with_fonts(src.as_bytes());
+        let t = texts(&m).remove(0);
+        match &t.preview {
+            TextPreview::Decoded {
+                text, truncated, ..
+            } => {
+                assert_eq!(text.chars().count(), MAX_TEXT_PREVIEW_CHARS);
+                assert!(truncated, "a cut preview must disclose the cut");
+            }
+            other => panic!("expected a decoded preview, got {other:?}"),
+        }
+    }
+
+    /// The font is the one in effect at the FIRST show operator, not the
+    /// last — the object is identified by the run it starts with, which is
+    /// the run the preview previews.
+    #[test]
+    fn the_captured_font_is_the_one_at_the_first_show_operator() {
+        let m = model_with_fonts(b"BT /F1 12 Tf 10 10 Td (a) Tj /F2 30 Tf (b) Tj ET");
+        let t = texts(&m).remove(0);
+        let font = t.font.as_ref().expect("a font");
+        assert_eq!(font.resource, "F1");
+        assert_eq!(font.size, 12.0);
+    }
+
+    /// `q`/`Q` save and restore the font, because the font is part of the
+    /// text state and therefore part of the graphics state (§9.3).
+    #[test]
+    fn q_q_restores_the_font_resource() {
+        let m = model_with_fonts(
+            b"/F2 30 Tf q /F1 12 Tf BT 10 10 Td (a) Tj ET Q BT 20 20 Td (b) Tj ET",
+        );
+        let ts = texts(&m);
+        assert_eq!(ts.len(), 2);
+        assert_eq!(
+            ts[0].font.as_ref().map(|f| f.resource.clone()),
+            Some("F1".to_owned())
+        );
+        // After `Q` the outer `/F2 30 Tf` is in effect again.
+        assert_eq!(
+            ts[1].font.as_ref().map(|f| f.resource.clone()),
+            Some("F2".to_owned())
+        );
+        assert_eq!(ts[1].font.as_ref().map(|f| f.size), Some(30.0));
     }
 
     #[test]
@@ -1604,6 +2477,30 @@ mod tests {
         assert_eq!(imgs[0].source, ImageSource::Inline);
         assert_eq!(imgs[0].page_bbox.min, Point::new(10.0, 20.0));
         assert_eq!(imgs[0].page_bbox.max, Point::new(110.0, 70.0));
+        // §8.9.7 Table 93: `/W`/`/H` are normalized to `/Width`/`/Height` by
+        // the tokenizer, so the sample count is read with no resolver at all.
+        assert_eq!(imgs[0].pixel_size, Some((1, 1)));
+    }
+
+    /// The sample count is `None`, not a guess, when the dictionary does not
+    /// carry a usable `/Width`+`/Height` pair (§8.9.5 Table 89 requires
+    /// both, as integers).
+    #[test]
+    fn a_malformed_inline_image_reports_no_pixel_size() {
+        // `/H` absent: an unfiltered inline image with no computable length
+        // still tokenizes (the scan finds `EI`), and the object is emitted
+        // with an honest `None` rather than half a size.
+        let m = model(b"100 0 0 50 10 20 cm BI /W 4 /CS /G /BPC 8 ID \x00 EI");
+        let imgs: Vec<_> = m
+            .objects
+            .iter()
+            .filter_map(|o| match o {
+                VectorObject::Image(i) => Some(i),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(imgs.len(), 1);
+        assert_eq!(imgs[0].pixel_size, None);
     }
 
     #[test]
@@ -1612,7 +2509,9 @@ mod tests {
         impl XObjectResolver for Stub {
             fn classify(&self, name: &[u8]) -> Option<XObjectShape> {
                 match name {
-                    b"Im0" => Some(XObjectShape::Image),
+                    b"Im0" => Some(XObjectShape::Image {
+                        pixel_size: Some((640, 480)),
+                    }),
                     b"Fm0" => Some(XObjectShape::Form {
                         bbox: Bounds {
                             min: Point::new(0.0, 0.0),
@@ -1636,8 +2535,12 @@ mod tests {
             .collect();
         assert_eq!(imgs.len(), 2);
         assert_eq!(imgs[0].source, ImageSource::XObject);
+        // §8.9.5 Table 89's sample count travels with the classification.
+        assert_eq!(imgs[0].pixel_size, Some((640, 480)));
         assert_eq!(imgs[1].source, ImageSource::Form);
         assert_eq!(imgs[1].page_bbox.max, Point::new(9.0, 7.0)); // (4,2)+(5,5)
+        // A form has no samples (§8.10) — never `Some((0, 0))`.
+        assert_eq!(imgs[1].pixel_size, None);
         assert_eq!(m.diagnostics.unresolved_xobject, 1); // /Zz
     }
 

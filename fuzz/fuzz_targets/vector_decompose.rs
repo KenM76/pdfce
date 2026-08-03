@@ -55,7 +55,12 @@ impl XObjectResolver for FuzzResolver {
                 matrix: Matrix::new(1.0, 0.0, 0.0, 1.0, s, -s),
             })
         } else {
-            Some(XObjectShape::Image)
+            // The sample count is derived from the name too, so the
+            // `/Width`/`/Height` carrying path sees both `Some` and `None`
+            // (§8.9.5 Table 89 requires both; a resolver may legitimately
+            // fail to produce either).
+            let pixel_size = (first % 4 == 0).then(|| (u32::from(first), u32::from(first) + 1));
+            Some(XObjectShape::Image { pixel_size })
         }
     }
 }

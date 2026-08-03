@@ -32,16 +32,28 @@
 //! unit-testable without an egui frame: the tests below assert on enum
 //! variants and numbers, never on wording that a copy edit would break.
 //!
-//! ## What it can and cannot say (an honest ceiling, ui-spec §B.3/§B.4)
+//! ## What it can and cannot say (ui-spec §B.3/§B.4)
 //!
-//! `TextObject` carries a bbox, an `approximate` flag and token/byte spans —
-//! **no string, no font name, no size**. `ImageObject` carries a source kind
-//! and a bbox — **no pixel dimensions, no colourspace**. So the spec's
-//! illustrative `Text · "Section A-A" · Helvetica 10pt` row is not buildable,
-//! and this module does not pretend otherwise: it reports what the core model
-//! knows and [`ObjectNote`] discloses the gaps in words. Fabricating the
-//! missing detail would break rule 4 (fuzzy, never sneaky) in the one place
-//! the operator is least able to catch it.
+//! §B.4's two binding core asks are now met, so the spec's illustrative rows
+//! ARE buildable: `pdfce_core::vector::TextObject` carries a decoded
+//! [`TextPreview`] and a [`TextFont`], and `ImageObject` carries
+//! `pixel_size`. This module surfaces them — and surfaces their absence just
+//! as loudly, because the interesting cases are the ones where a value is
+//! missing:
+//!
+//! | Core says | This module reports | Why not something friendlier |
+//! |---|---|---|
+//! | `TextPreview::Decoded { lossy: false, .. }` | [`ObjectSummary::text`] = the string | — |
+//! | `TextPreview::Decoded { lossy: true, .. }` | the string **plus** [`ObjectNote::TextPartlyUndecodable`] | The `�`s in the row are real; a note is what turns them from "pdfce is broken" into "this font's encoding is incomplete". |
+//! | `TextPreview::Undecodable` | `text = None` **plus** [`ObjectNote::TextUndecodable`] | A row of replacement characters looks like a defect. The honest answer is *"this text cannot be read, here is why"*. |
+//! | `TextPreview::Unavailable` | `text = None`, no note | Nothing was attempted (no font resolver — the headless/unit-test path). The GUI always resolves fonts, so an operator never sees this state; disclosing it would be noise about a code path they are not on. |
+//! | `TextPreview::Empty` | `text = None`, no note | The object really does show nothing. |
+//! | `font: None` | [`ObjectSummary::font`] = `None` | No `Tf` was in effect. Never invented. |
+//! | `pixel_size: None` | [`ObjectSummary::pixels`] = `None` | A form XObject has no samples; a malformed image's `/Width`/`/Height` are unusable. Deriving a number from the bbox would state a resolution the file does not have. |
+//!
+//! The one thing still not said is a text object's **exact** extent — the
+//! bbox remains the origin-hull approximation
+//! ([`ObjectNote::ApproximateTextBounds`], on every text object).
 //!
 //! ## [`ObjectNote`] — the point of the whole module
 //!
@@ -67,7 +79,9 @@
 //! rather than a guess to make. The readout states the object's own colour
 //! verbatim instead and lets the operator draw the conclusion.
 
-use pdfce_core::vector::{Bounds, ImageSource, PaintStyle, Rgb, VectorObject};
+use pdfce_core::vector::{
+    Bounds, ImageSource, PaintStyle, Rgb, TextFont, TextPreview, VectorObject,
+};
 
 /// Which kind of thing a selection is.
 ///
@@ -132,6 +146,21 @@ pub enum ObjectNote {
     NoBounds,
     /// A form XObject: one opaque object covering a whole nested drawing.
     FormNotDecomposed,
+    /// Not one character of the object's text could be recovered: every
+    /// character code reached ISO 32000-1 §9.10.2's failure clause.
+    ///
+    /// A *document* fact, not a pdfce limitation — the clause itself
+    /// concedes that for such a font "there is no way to determine what the
+    /// character code represents". Disclosed rather than shown as `���`,
+    /// which would read as a defect in the reader.
+    TextUndecodable,
+    /// Some — not all — of the object's characters could not be recovered,
+    /// so the shown string contains U+FFFD replacements.
+    ///
+    /// Distinct from [`ObjectNote::TextUndecodable`] because the operator's
+    /// question is different: here there IS a readable string and the
+    /// question is why part of it is `�`.
+    TextPartlyUndecodable,
 }
 
 impl ObjectNote {
@@ -147,7 +176,7 @@ impl ObjectNote {
         dead_code,
         reason = "the note catalog; swept by the string tests today, and the list any future notes-legend or filter must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 9] = [
         Self::ApproximateTextBounds,
         Self::PaintsNothing,
         Self::DegenerateBounds(Degeneracy::VerticalRule),
@@ -155,6 +184,8 @@ impl ObjectNote {
         Self::DegenerateBounds(Degeneracy::Point),
         Self::NoBounds,
         Self::FormNotDecomposed,
+        Self::TextUndecodable,
+        Self::TextPartlyUndecodable,
     ];
 }
 
@@ -195,6 +226,29 @@ pub struct ObjectSummary {
     pub nodes: Option<usize>,
     /// Stroke width in user-space units at paint time — stroked paths only.
     pub line_width: Option<f64>,
+    /// The object's decoded text preview — text objects only, and only when
+    /// something was actually recovered (module docs' table).
+    ///
+    /// Already capped at `pdfce_core::vector::MAX_TEXT_PREVIEW_CHARS` by the
+    /// decomposition, which is the MEMORY bound; a display applies its own,
+    /// shorter, LINE-LENGTH bound on top (see `ui_text::object_detail`).
+    /// Two caps because they answer two different questions, and collapsing
+    /// them would tie a row's width to the object model's storage budget.
+    pub text: Option<String>,
+    /// Whether [`Self::text`] is a prefix of a longer string. A display
+    /// marks the elision rather than presenting a prefix as the whole.
+    pub text_truncated: bool,
+    /// The font in effect at the object's first show operator — text
+    /// objects only, `None` when no `Tf` was in effect.
+    pub font: Option<TextFont>,
+    /// The image's `(width, height)` in **samples** — image objects with a
+    /// usable `/Width`+`/Height` only (ISO 32000-1 §8.9.5, Table 89).
+    ///
+    /// A sample count, not a size on the page: an image occupies the unit
+    /// square under the CTM, so [`Self::bounds`] is where it is and this is
+    /// what it is made of. Both are shown, and the pair is what lets an
+    /// operator judge effective resolution.
+    pub pixels: Option<(u32, u32)>,
     /// The object's page-space bounding box, verbatim from the model.
     pub bounds: Bounds,
     /// Every applicable disclosure, most-explanatory first (module docs).
@@ -259,23 +313,50 @@ pub fn describe_object(object: &VectorObject) -> ObjectSummary {
                 colour: visible_colour(p.style, p.fill_color, p.stroke_color),
                 nodes: Some(nodes),
                 line_width: p.style.stroke.then_some(p.line_width),
+                text: None,
+                text_truncated: false,
+                font: None,
+                pixels: None,
                 bounds,
                 notes,
             }
         }
         VectorObject::Text(t) => {
+            // The decode disclosures come BEFORE the approximation one is
+            // inserted at the head, so the final order is: approximation
+            // first (it explains the box, which is what the operator is
+            // looking at), then why the string reads as it does.
+            if let Some(note) = decode_note(&t.preview) {
+                notes.push(note);
+            }
             if t.approximate {
                 // Insert FIRST: for text this is the whole explanation, and a
                 // degenerate text bbox (possible for an empty `BT`/`ET`) is
                 // the lesser fact.
                 notes.insert(0, ObjectNote::ApproximateTextBounds);
             }
+            let (text, text_truncated) = match &t.preview {
+                // An all-U+FFFD string is withheld: `ObjectNote::
+                // TextUndecodable` says the same thing in words, and a row
+                // of replacement characters reads as a pdfce defect rather
+                // than as a property of the file (module docs' table).
+                TextPreview::Decoded {
+                    text, truncated, ..
+                } => (Some(text.clone()), *truncated),
+                TextPreview::Undecodable | TextPreview::Unavailable | TextPreview::Empty => {
+                    (None, false)
+                }
+            };
             ObjectSummary {
                 kind: ObjectKind::Text,
                 paint: None,
                 colour: None,
                 nodes: None,
                 line_width: None,
+                text,
+                text_truncated,
+                font: t.font.clone(),
+                pixels: None,
                 bounds,
                 notes,
             }
@@ -295,10 +376,33 @@ pub fn describe_object(object: &VectorObject) -> ObjectSummary {
                 colour: None,
                 nodes: None,
                 line_width: None,
+                text: None,
+                text_truncated: false,
+                font: None,
+                pixels: i.pixel_size,
                 bounds,
                 notes,
             }
         }
+    }
+}
+
+/// The disclosure, if any, a text preview's decoding outcome earns.
+///
+/// `Unavailable` earns none on purpose: it means no font resolver was
+/// supplied, which only happens on the headless/unit-test path
+/// (`decompose` rather than `decompose_page`). The GUI always resolves
+/// fonts, so a note about it would be a sentence describing a code path the
+/// operator is never on — noise, and noise in a disclosure surface teaches
+/// people to stop reading it. `Empty` earns none because "this text object
+/// shows nothing" is not a failure to explain.
+fn decode_note(preview: &TextPreview) -> Option<ObjectNote> {
+    match preview {
+        TextPreview::Undecodable => Some(ObjectNote::TextUndecodable),
+        TextPreview::Decoded { lossy: true, .. } => Some(ObjectNote::TextPartlyUndecodable),
+        TextPreview::Decoded { lossy: false, .. }
+        | TextPreview::Unavailable
+        | TextPreview::Empty => None,
     }
 }
 
@@ -401,6 +505,111 @@ mod tests {
         let mut all = describe_all(src);
         assert_eq!(all.len(), 1, "{all:?}"); // ui-text-exempt: test assertion payload, never displayed
         all.remove(0)
+    }
+
+    /// Describe every object on a FIXTURE's first page, through
+    /// `decompose_page` — i.e. with real font and XObject resolvers, which
+    /// is the path the GUI is actually on.
+    ///
+    /// [`describe_all`] above uses the resolver-free `decompose`, which is
+    /// the right seam for the geometry cases (no file needed) but reports
+    /// `TextPreview::Unavailable` for every text object by construction. The
+    /// text-preview and pixel-size cases can only be honest against a real
+    /// document, so they use this.
+    fn describe_fixture(rel: &str) -> Vec<ObjectSummary> {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/synthetic")
+            .join(rel);
+        let doc = pdfce_core::document::Document::load(&path).expect("the fixture loads");
+        let pages = pdfce_core::page_tree::pages(&doc).expect("a page tree");
+        let model = pdfce_core::vector::decompose_page(&doc.view(), &pages[0], Matrix::IDENTITY)
+            .expect("the page decomposes");
+        model.objects.iter().map(describe_object).collect()
+    }
+
+    /// §B.4 #1, end to end: a text object now carries the string it shows
+    /// and the typeface that shows it, decoded through `text_extract`'s
+    /// §9.10.2 ladder rather than a second decoder written here.
+    #[test]
+    fn a_text_object_reports_its_string_and_its_font() {
+        let objects = describe_fixture("text/simple-winansi.pdf");
+        let text = objects
+            .iter()
+            .find(|s| s.kind == ObjectKind::Text)
+            .expect("the fixture has a text object");
+        // SOURCED characters only, verbatim: the fixture's `TJ` opens the
+        // gap between "Hello" and "world" with a -2000 kerning offset and NO
+        // space glyph, and its second line is a `Td` with no line marker —
+        // §14.8.2.5 S3/S5, neither of which the file states. `text_extract`
+        // DERIVES both for `plain_text` and omits both for `sourced_text`;
+        // a preview is the latter, because a row label is not the place to
+        // present a reader's guess as the document's content.
+        assert_eq!(text.text.as_deref(), Some("HelloworldSecond line"));
+        assert!(!text.text_truncated);
+        let font = text.font.as_ref().expect("a font was in effect");
+        assert_eq!(font.base_font.as_deref(), Some("Helvetica"));
+        assert_eq!(font.size, 24.0);
+        // A decodable string earns no decode disclosure — only the
+        // ever-present approximate-bounds one.
+        assert_eq!(text.notes, vec![ObjectNote::ApproximateTextBounds]);
+    }
+
+    /// The honest-failure case: a font whose encoding defeats decoding
+    /// yields NO string and a note saying why — never a row of `�`, which
+    /// would read as a pdfce defect rather than as a property of the file.
+    #[test]
+    fn text_that_cannot_be_decoded_is_disclosed_not_mojibake() {
+        let objects = describe_fixture("text/identity-h-no-tounicode.pdf");
+        let text = objects
+            .iter()
+            .find(|s| s.kind == ObjectKind::Text)
+            .expect("the fixture has a text object");
+        assert_eq!(text.text, None, "no string may be fabricated or mangled");
+        assert!(
+            text.notes.contains(&ObjectNote::TextUndecodable),
+            "{:?}", // ui-text-exempt: test assertion payload
+            text.notes
+        );
+        // The FONT is still named: knowing which font cannot be read is
+        // most of the value of the disclosure.
+        assert!(text.font.is_some());
+    }
+
+    /// §B.4 #2: an image reports its sample count from `/Width`/`/Height`
+    /// (§8.9.5 Table 89) — and a form XObject reports none, because a form
+    /// has no samples.
+    #[test]
+    fn an_image_reports_its_pixel_dimensions() {
+        let objects = describe_fixture("vector/mixed.pdf");
+        let image = objects
+            .iter()
+            .find(|s| s.kind == ObjectKind::ImageXObject)
+            .expect("the fixture has an image XObject");
+        // The fixture's image is 2×2 DeviceGray (its PROVENANCE entry).
+        assert_eq!(image.pixels, Some((2, 2)));
+        // The sample count is NOT the size on the page: the image is placed
+        // by the CTM, so the two numbers differ and both are reported.
+        assert_ne!(
+            image.size().map(|(w, h)| (w as u32, h as u32)),
+            image.pixels,
+            "a 2x2 image placed at 2x2 pt would make this test prove nothing"
+        );
+    }
+
+    /// Nothing is invented for the kinds that carry no such fact: a path has
+    /// no string or pixel size, and a text object with no `Tf` has no font.
+    #[test]
+    fn no_kind_gains_a_detail_it_does_not_have() {
+        let path = only(b"0 0 1 rg 10 10 80 80 re f");
+        assert_eq!(path.text, None);
+        assert_eq!(path.font, None);
+        assert_eq!(path.pixels, None);
+
+        // A show operator with no preceding `Tf`: an object, but no font to
+        // name and therefore none named.
+        let text = only(b"BT 40 40 Td (Hi) Tj ET");
+        assert_eq!(text.kind, ObjectKind::Text);
+        assert_eq!(text.font, None);
     }
 
     #[test]

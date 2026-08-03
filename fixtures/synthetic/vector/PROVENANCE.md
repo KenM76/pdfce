@@ -67,6 +67,22 @@ exactly and the object model is assertable from the tokens alone.
   vector_edit.rs`, `pdfce-cli/tests/vector_edit.rs`, and the render-fidelity
   test.
 
+`overlap.pdf` (300×300)
+: Three **concentric filled squares**, painted outermost first — object 0 =
+  20,20..280,280, object 1 = 70,70..230,230, object 2 = 120,120..180,180.
+  The click-through / all-hits fixture (ui-spec `pass-17-dock-and-layer-
+  tree.md` §C.3): at the page centre all three are under the pointer, and a
+  topmost-only `hit_test_point` can only ever return object 2 — objects 1
+  and 0 are **unreachable by any click** without
+  `pdfce_core::vector::hit_test_point_all`, which is precisely the gap that
+  query exists to close. The nesting also gives stacks of three (150,150),
+  two (85,85) and one (35,35), so a hit list's LENGTH is a real answer about
+  the geometry rather than a constant an implementation could fake by
+  returning every object on the page. Distinct fill colours (blue / amber /
+  green) so a rendered check, and a human, can see which square a cycle step
+  landed on. Used by `pdfce-cli/tests/object_list.rs` and
+  `pdfce-core/tests/vector_model.rs`.
+
 ## Regenerating
 
 ```

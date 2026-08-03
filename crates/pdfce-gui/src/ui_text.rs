@@ -1552,30 +1552,123 @@ pub fn object_kind_badge(kind: ObjectKind) -> &'static str {
     }
 }
 
+/// How many characters of a text object's string a one-line row shows
+/// before eliding.
+///
+/// **A second, shorter cap than the core model's**
+/// `pdfce_core::vector::MAX_TEXT_PREVIEW_CHARS` (64), and deliberately so:
+/// that one is a memory budget for a page of 50,000 objects, this one is a
+/// line-length budget for a 320 pt dock. Tying the row width to the storage
+/// cap would mean a future memory decision silently re-typesetting the
+/// panel. 32 characters is enough to recognise a caption or a dimension
+/// label — which is the row's whole job — inside a row that also carries an
+/// index, a kind and a font.
+const ROW_TEXT_CHARS: usize = 32;
+
 /// The detail clause for one object — everything after its kind name.
 ///
-/// Empty for the kinds the core model cannot describe further (ui-spec
-/// §B.3/§B.4): `TextObject` carries no string, font or size, and
-/// `ImageObject` carries no pixel dimensions or colourspace, so there is
-/// genuinely nothing more to say. Shipping an empty clause is the honest
-/// answer; inventing `Helvetica 10pt` from the spec's illustrative example
-/// would be a fabrication the operator has no way to catch.
+/// Built from whatever the summary actually carries, in a fixed order, so
+/// the same object always reads the same way:
+///
+/// | Kind | Clause |
+/// |---|---|
+/// | Path | `stroked #1A73E8, 0.50 pt wide · 4 node(s)` |
+/// | Text | `"Section A-A" · Helvetica 10 pt` |
+/// | Image | `640 × 480 px` |
+///
+/// Every part is omitted when the fact is absent rather than filled with a
+/// placeholder: a text object with no `Tf` shows only its string, an image
+/// with unusable `/Width`/`/Height` shows no pixel clause, and an object
+/// with nothing to add gets an empty clause and just its kind name. ui-spec
+/// §B.4's two core asks are what made the Text and Image rows possible;
+/// before them this function could only ever return `""` for both, and
+/// inventing `Helvetica 10pt` from the spec's illustrative example would
+/// have been a fabrication the operator had no way to catch.
 fn object_detail(summary: &ObjectSummary) -> String {
-    let Some(paint) = summary.paint else {
-        return String::new();
-    };
-    let mut detail = paint_style_label(paint).to_owned();
-    if let Some(colour) = summary.colour {
-        detail.push(' ');
-        detail.push_str(&rgb_hex(colour));
+    let mut parts: Vec<String> = Vec::new();
+
+    if let Some(paint) = summary.paint {
+        let mut detail = paint_style_label(paint).to_owned();
+        if let Some(colour) = summary.colour {
+            detail.push(' ');
+            detail.push_str(&rgb_hex(colour));
+        }
+        if let Some(width) = summary.line_width {
+            detail.push_str(&format!(", {width:.2} pt wide"));
+        }
+        if let Some(nodes) = summary.nodes {
+            detail.push_str(&format!(" · {nodes} node(s)"));
+        }
+        parts.push(detail);
     }
-    if let Some(width) = summary.line_width {
-        detail.push_str(&format!(", {width:.2} pt wide"));
+
+    if let Some(text) = summary.text.as_deref() {
+        parts.push(quoted_text_preview(text, summary.text_truncated));
     }
-    if let Some(nodes) = summary.nodes {
-        detail.push_str(&format!(" · {nodes} node(s)"));
+    if let Some(font) = summary.font.as_ref() {
+        parts.push(font_label(font));
     }
-    detail
+    if let Some((w, h)) = summary.pixels {
+        // "px" rather than "pt": these are SAMPLES (§8.9.5 Table 89), and
+        // the size clause a few words later in the readout is in points. The
+        // two numbers describe different things and must not look alike.
+        parts.push(format!("{w} × {h} px"));
+    }
+
+    parts.join(" · ")
+}
+
+/// A text preview as a quoted, elided, control-character-free row fragment.
+///
+/// Three things happen here, each for a stated reason:
+///
+/// 1. **Quoted**, so an empty or space-only string is visible as a string
+///    rather than as a gap in the row.
+/// 2. **Elided at [`ROW_TEXT_CHARS`]** with a `…`, and the ellipsis is also
+///    appended when the CORE model already truncated (`truncated`), so a
+///    long string never presents its prefix as the whole.
+/// 3. **Control characters replaced** with `·`. A `\n` or a `\t` inside a
+///    show string would otherwise break the row's layout or, worse, silently
+///    vanish — and an invisible character in a label is exactly the kind of
+///    thing that makes an operator distrust the panel.
+fn quoted_text_preview(text: &str, truncated: bool) -> String {
+    let cleaned: String = text
+        .chars()
+        .map(|c| if c.is_control() { '·' } else { c })
+        .collect();
+    let mut shown: String = cleaned.chars().take(ROW_TEXT_CHARS).collect();
+    let elided = truncated || cleaned.chars().count() > ROW_TEXT_CHARS;
+    if elided {
+        shown.push('…');
+    }
+    format!("\"{shown}\"")
+}
+
+/// A font as a row fragment: the typeface if the file names one, else the
+/// resource name, then the size.
+///
+/// `/BaseFont` is preferred over the `Tf` resource name because `F1` names
+/// nothing an operator can recognise — but the resource name is shown when
+/// that is all there is, rather than dropping the font entirely, since
+/// "which resource" is still the handle for a later edit.
+///
+/// The size is the `Tf` operand, **as the file states it** — see
+/// `pdfce_core::vector::TextFont::size`, which documents why it is not
+/// scaled by a `Tm`/`cm`. It is written `10 pt` rather than `10.00 pt`
+/// because a type size is conventionally a whole number and the trailing
+/// zeros would read as a precision this value does not claim.
+fn font_label(font: &pdfce_core::vector::TextFont) -> String {
+    let name = font
+        .base_font
+        .as_deref()
+        .filter(|n| !n.is_empty())
+        .unwrap_or(&font.resource);
+    let size = font.size;
+    if size.is_finite() && (size.fract().abs() < 1e-9) {
+        format!("{name} {size:.0} pt")
+    } else {
+        format!("{name} {size:.2} pt")
+    }
 }
 
 /// One-line row text for any object — the Objects panel's row label.
@@ -1644,6 +1737,8 @@ pub fn object_note_short(note: ObjectNote) -> &'static str {
         ObjectNote::DegenerateBounds(Degeneracy::Point) => "a single point",
         ObjectNote::NoBounds => "no measurable bounds",
         ObjectNote::FormNotDecomposed => "a whole nested drawing",
+        ObjectNote::TextUndecodable => "text cannot be read",
+        ObjectNote::TextPartlyUndecodable => "some characters cannot be read",
     }
 }
 
@@ -1697,7 +1792,43 @@ for it. It is still selected, and it is still listed in the Objects panel."
 The box covers the entire nested drawing, and the shapes inside it cannot be selected \
 individually yet."
         }
+        ObjectNote::TextUndecodable => {
+            "pdfce cannot read this text. The font gives no way to work out which characters its \
+codes stand for — it carries no /ToUnicode table and uses an encoding that is only meaningful \
+inside the font itself. The text still displays and prints correctly; it simply cannot be \
+turned back into letters. Rather than show a row of question marks, pdfce says so."
+        }
+        ObjectNote::TextPartlyUndecodable => {
+            "Some characters in this text could not be read, and are shown as \u{fffd}. Their font \
+gives no mapping for those particular codes, so pdfce has no way to tell what they stand for. \
+The characters around them are correct, and everything still displays and prints as it should."
+        }
     }
+}
+
+/// The status readout's disclosure that more than one object sits under the
+/// point that produced this selection — "**2 of 3 at this point**".
+///
+/// ## Why this exists at all (rule 4, fuzzy never sneaky)
+///
+/// Click-through cycling makes one gesture ambiguous: a second click at the
+/// same place now selects a DIFFERENT object than the first. Without a
+/// readout saying so, an operator whose click cycled cannot tell that from a
+/// mis-hit — which is precisely the *"I click and get a box that doesn't
+/// seem to correspond to anything"* confusion the whole selection-legibility
+/// work exists to end. Stating the position and the total turns a surprise
+/// into a mechanism.
+///
+/// It also disclose the capability. A plain click records its stack too, so
+/// an operator who has never heard of Alt+click still sees "1 of 3 at this
+/// point" and learns that (a) there is something underneath and (b) there is
+/// a way to reach it. A modifier nobody discovers is not a feature.
+///
+/// **Returns `None` for a lone object**, because "1 of 1 at this point" is
+/// noise on a line that is already dense — and the status bar is one line by
+/// design (see [`selection_readout_single`]).
+pub fn hit_cycle_clause(position: usize, total: usize) -> Option<String> {
+    (total > 1).then(|| format!("{position} of {total} at this point — Alt+click for the next"))
 }
 
 /// The status bar's selection readout for exactly ONE selected object
@@ -1722,7 +1853,12 @@ individually yet."
 /// The headline therefore carries the short form of the leading disclosure and
 /// the full sentences live behind the expander (ui-spec §C.5: "the status bar
 /// gets ONE short summary line, not the full detail").
-pub fn selection_readout_single(summary: &ObjectSummary) -> String {
+/// `cycle` is `Some((position, total))` when the selection came from a click
+/// into a stack of overlapping objects — see [`hit_cycle_clause`], which
+/// explains why disclosing it is not optional. `None` when the selection
+/// came from anywhere else (a tree row, a marquee) or the click's stack is
+/// no longer the live description of what is selected.
+pub fn selection_readout_single(summary: &ObjectSummary, cycle: Option<(usize, usize)>) -> String {
     let kind = object_kind_label(summary.kind);
     let detail = object_detail(summary);
     let mut head = if detail.is_empty() {
@@ -1734,13 +1870,22 @@ pub fn selection_readout_single(summary: &ObjectSummary) -> String {
         head.push_str(" · ");
         head.push_str(object_note_short(note));
     }
-    match summary.size() {
+    let mut line = match summary.size() {
         Some((w, h)) => format!(
             "{head} — {w:.1} × {h:.1} pt at ({:.1}, {:.1}).",
             summary.bounds.min.x, summary.bounds.min.y
         ),
         None => format!("{head}."),
+    };
+    // Appended LAST, after the full stop, so it reads as a second, separate
+    // statement about the click rather than as another property of the
+    // object — which is what it is.
+    if let Some(clause) = cycle.and_then(|(position, total)| hit_cycle_clause(position, total)) {
+        line.push(' ');
+        line.push_str(&clause);
+        line.push('.');
     }
+    line
 }
 
 /// The status bar's selection readout for a MULTI-object selection.

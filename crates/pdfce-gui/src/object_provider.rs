@@ -41,8 +41,8 @@
 use eframe::egui::{Pos2, Rect};
 use pdfce_core::page_tree::Page;
 use pdfce_core::vector::{
-    Bounds, MarqueeMode, Matrix, PageObjects, Point, VectorObject, decompose_page, hit_test_point,
-    hit_test_rect,
+    Bounds, MarqueeMode, Matrix, PageObjects, Point, VectorObject, decompose_page,
+    hit_test_point_all, hit_test_rect,
 };
 use pdfce_core::view::DocumentView;
 use pdfce_render::page_device_geometry;
@@ -237,11 +237,21 @@ impl ObjectModelProvider {
 }
 
 impl CanvasTargetProvider for ObjectModelProvider {
-    fn hit_test(&self, page_index: usize, point: Pos2, tolerance: f64) -> Option<TargetId> {
+    /// Every object under the pointer, front-most first — the required
+    /// point query (`canvas::CanvasTargetProvider::hit_test`, the topmost
+    /// one, is the trait's provided method over this, so the two cannot
+    /// disagree; see that method's docs).
+    ///
+    /// A thin adapter, as the module docs promise: convert canvas space to
+    /// PDF user space, resolve the tolerance, and hand both to
+    /// [`pdfce_core::vector::hit_test_point_all`], which owns the geometry.
+    fn hit_test_all(&self, page_index: usize, point: Pos2, tolerance: f64) -> Vec<TargetId> {
         if page_index != self.page_index {
-            return None;
+            return Vec::new();
         }
-        let pdf = self.canvas_to_pdf(point)?;
+        let Some(pdf) = self.canvas_to_pdf(point) else {
+            return Vec::new();
+        };
         // A degenerate tolerance (0.0 from a non-finite/zero zoom, or a
         // negative value) would silently make every click a miss. Fall back
         // to the fixed canvas-space value instead: fussy at low zoom is a
@@ -251,8 +261,10 @@ impl CanvasTargetProvider for ObjectModelProvider {
         } else {
             FALLBACK_SELECT_TOLERANCE
         };
-        let idx = hit_test_point(&self.objects, pdf, tolerance)?;
-        Some(TargetId(idx as u64))
+        hit_test_point_all(&self.objects, pdf, tolerance)
+            .into_iter()
+            .map(|i| TargetId(i as u64))
+            .collect()
     }
 
     fn hit_test_rect(&self, page_index: usize, rect: Rect) -> Vec<TargetId> {
@@ -394,6 +406,38 @@ mod tests {
         let p = provider(b"BT /F1 12 Tf 40 40 Td (Hi) Tj ET");
         // The show origin (40,40) is inside the inflated text bbox.
         assert!(p.hit_test(0, Pos2::new(40.0, 40.0), 3.0).is_some());
+    }
+
+    /// Overlapping objects are all reported, front-most first, in CANVAS
+    /// space — the input click-through cycling steps through. Without this
+    /// the covered rectangle here is unselectable by any click.
+    #[test]
+    fn overlapping_objects_are_all_reported_front_most_first() {
+        // A small filled rectangle painted first, then a big one over it.
+        let p = provider(b"40 40 20 20 re f 0 0 100 100 re f");
+        let hits = p.hit_test_all(0, Pos2::new(50.0, 50.0), 3.0);
+        assert_eq!(hits, vec![TargetId(1), TargetId(0)]);
+        // The topmost query is exactly that list's head.
+        assert_eq!(p.hit_test(0, Pos2::new(50.0, 50.0), 3.0), Some(TargetId(1)));
+        // Only the cover is under a point outside the covered object.
+        assert_eq!(
+            p.hit_test_all(0, Pos2::new(5.0, 5.0), 3.0),
+            vec![TargetId(1)]
+        );
+        // A miss is an empty list, and a wrong page is too.
+        assert!(p.hit_test_all(0, Pos2::new(500.0, 500.0), 3.0).is_empty());
+        assert!(p.hit_test_all(1, Pos2::new(50.0, 50.0), 3.0).is_empty());
+    }
+
+    /// The tolerance fallback applies to the all-hits query as well: a
+    /// degenerate tolerance must not silently make cycling find nothing
+    /// when plain selection would still have found something.
+    #[test]
+    fn a_degenerate_tolerance_falls_back_for_the_all_hits_query_too() {
+        let p = provider(b"10 20 m 100 20 l S");
+        let near = Pos2::new(50.0, 22.0);
+        assert_eq!(p.hit_test_all(0, near, 0.0), vec![TargetId(0)]);
+        assert_eq!(p.hit_test_all(0, near, f64::NAN), vec![TargetId(0)]);
     }
 
     #[test]

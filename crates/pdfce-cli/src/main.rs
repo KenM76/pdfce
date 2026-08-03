@@ -1564,6 +1564,13 @@ enum Command {
     /// would read off a screen ruler is NOT the number to pass here. Use the
     /// `bbox=` values this subcommand prints.
     ///
+    /// `--all-hits` adds one `hit-candidate …` line per object under the
+    /// point, front-most first — the same list the GUI's Alt+click cycling
+    /// steps through, from the same
+    /// `pdfce_core::vector::hit_test_point_all`. Without it the `hit …`
+    /// line names only the winner, which cannot answer "why did my click
+    /// select THAT?" when two objects overlap.
+    ///
     /// A `--hit` MISS is a valid answer, not an error: the exit code stays 0
     /// and the `hit …` line reports `index=none`. Scripts branch on that
     /// field, not on the exit status.
@@ -1575,6 +1582,10 @@ enum Command {
     /// Example — ask what a click at (200, 200) would select:
     ///
     ///     pdfce-cli object-list drawing.pdf --page 1 --hit 200,200
+    ///
+    /// Example — ask what ELSE is under that point, in cycling order:
+    ///
+    ///     pdfce-cli object-list drawing.pdf --page 1 --hit 200,200 --all-hits
     ///
     /// Example — move whatever object index 2 turned out to be:
     ///
@@ -1589,6 +1600,13 @@ enum Command {
         /// as `X,Y` in PDF user space (points).
         #[arg(long, value_name = "X,Y", allow_hyphen_values = true)]
         hit: Option<String>,
+        /// List EVERY object under `--hit`, front-most first, as
+        /// `hit-candidate …` lines with an `ordinal=` field — the order the
+        /// GUI's Alt+click click-through cycling visits them in. The `hit …`
+        /// line is still printed and still names the topmost. Ignored
+        /// without `--hit`.
+        #[arg(long)]
+        all_hits: bool,
         /// Page-space slack, in points, a `--hit` point may miss an object's
         /// edge by and still select it. Default 3.0 — the GUI's
         /// `FALLBACK_SELECT_TOLERANCE`, i.e. the catch radius a click gets at
@@ -2294,8 +2312,15 @@ fn run() -> ExitCode {
             input,
             page,
             hit,
+            all_hits,
             tolerance,
-        } => cmd_object_list(&input, page, hit.as_deref(), tolerance),
+        } => cmd_object_list(ObjectListArgs {
+            input: &input,
+            page_number: page,
+            hit: hit.as_deref(),
+            all_hits,
+            tolerance,
+        }),
         Command::ObjectMove {
             input,
             page,
@@ -7603,6 +7628,101 @@ fn bbox_token(b: pdfce_core::vector::Bounds) -> String {
     }
 }
 
+/// Quote a decoded string as a single `key="…"` token, so a value
+/// containing spaces cannot be mistaken for the next field.
+///
+/// Every other field on an `object …` line is `key=value` with no quoting,
+/// because every other value is a number or a fixed token. A text preview is
+/// neither: it can contain spaces, quotes, backslashes, newlines and
+/// arbitrary Unicode. The escaping is therefore stated exactly, so a script
+/// can reverse it without guessing:
+///
+/// - `\` → `\\`, `"` → `\"` (the two characters that would otherwise break
+///   the token's own delimiters);
+/// - any character below U+0020, plus U+007F → `\xNN` with two lowercase hex
+///   digits (a literal newline inside a line-oriented format is not
+///   recoverable at all, and an invisible control character in a value a
+///   human reads is worse than an escape they can see);
+/// - everything else passes through as UTF-8, including non-ASCII text —
+///   the CLI's output is UTF-8 and mangling `é` into an escape would make
+///   the common non-English case unreadable for no safety gain.
+fn quoted_token(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('"');
+    for ch in text.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => {
+                out.push_str(&format!("\\x{:02x}", c as u32));
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// A text object's `text=` field: a quoted preview, or one of two bare
+/// tokens that mean genuinely different things.
+///
+/// `none` and `undecodable` are unquoted, which is what makes them
+/// unambiguous against a quoted string — a document really could contain the
+/// literal text `undecodable`, and it would print as `text="undecodable"`.
+///
+/// The three answers, from
+/// [`TextPreview`](pdfce_core::vector::TextPreview):
+///
+/// | Field | Meaning |
+/// |---|---|
+/// | `text="…"` | Decoded. `lossy=1` on the same line if some codes still failed and are shown as U+FFFD. |
+/// | `text=undecodable` | Codes were shown and **not one** could be mapped — ISO 32000-1 §9.10.2's failure clause for every code (the `Identity-H`-without-`/ToUnicode` case). A document fact, not a pdfce limitation. |
+/// | `text=none` | Nothing was shown, or no font resolver was in scope. |
+fn text_preview_fields(preview: &pdfce_core::vector::TextPreview) -> String {
+    use pdfce_core::vector::TextPreview;
+    match preview {
+        TextPreview::Decoded {
+            text,
+            truncated,
+            lossy,
+        } => format!(
+            "text={} truncated={} lossy={}",
+            quoted_token(text),
+            u32::from(*truncated),
+            u32::from(*lossy),
+        ),
+        TextPreview::Undecodable => "text=undecodable truncated=0 lossy=1".to_owned(),
+        TextPreview::Unavailable | TextPreview::Empty => "text=none truncated=0 lossy=0".to_owned(),
+    }
+}
+
+/// A text object's `font=`/`size=` fields.
+///
+/// `font=` is the **typeface** (`/BaseFont`, §9.6.2.1 Table 111) when the
+/// font dictionary resolves, since that is what identifies the object to a
+/// human; `resource=` always carries the `Tf` name (`F1`), which is the
+/// handle a script or a later edit needs. Both, because they answer
+/// different questions and neither substitutes for the other.
+///
+/// `size=` is the `Tf` size **operand as the file states it** — a text-space
+/// quantity, not scaled by `Tm`/`cm`. See
+/// [`TextFont::size`](pdfce_core::vector::TextFont::size) for why folding
+/// the matrices in would be a confident number that disagrees with the
+/// content stream.
+fn font_fields(font: Option<&pdfce_core::vector::TextFont>) -> String {
+    match font {
+        None => "font=none resource=none size=none".to_owned(),
+        Some(f) => format!(
+            "font={} resource={} size={}",
+            f.base_font
+                .as_deref()
+                .map_or_else(|| "none".to_owned(), quoted_token),
+            quoted_token(&f.resource),
+            f.size,
+        ),
+    }
+}
+
 /// One `object …` line's kind + kind-specific detail fields, for the object
 /// at paint-order `index`.
 ///
@@ -7637,7 +7757,20 @@ fn object_detail(obj: &pdfce_core::vector::VectorObject) -> (&'static str, Strin
         // positioning operators rather than measured from glyph metrics —
         // worth surfacing, because it is the reason a click that looks
         // inside a glyph can miss (or a click beside it can hit).
-        VectorObject::Text(t) => ("text", format!("approximate={}", u32::from(t.approximate))),
+        //
+        // The `text=`/`font=`/`resource=`/`size=` fields are the CLI half of
+        // ui-spec §B.4 #1 (rule 11): the GUI's object row and this line
+        // describe one object from one `decompose_page` walk, so a script
+        // and an operator looking at the same file read the same facts.
+        VectorObject::Text(t) => (
+            "text",
+            format!(
+                "approximate={} {} {}",
+                u32::from(t.approximate),
+                font_fields(t.font.as_ref()),
+                text_preview_fields(&t.preview),
+            ),
+        ),
         VectorObject::Image(i) => {
             let kind = match i.source {
                 ImageSource::Form => "form",
@@ -7648,7 +7781,15 @@ fn object_detail(obj: &pdfce_core::vector::VectorObject) -> (&'static str, Strin
                 ImageSource::XObject => "xobject",
                 ImageSource::Form => "form",
             };
-            (kind, format!("source={source}"))
+            // `pixels=WxH` is the SAMPLE count from `/Width`/`/Height`
+            // (§8.9.5 Table 89) — not a size on the page, which is what
+            // `bbox=` on the same line already gives. The pair is what lets
+            // a script compute effective placed resolution. `none` for a
+            // form XObject (no samples) and for a malformed image.
+            let pixels = i
+                .pixel_size
+                .map_or_else(|| "none".to_owned(), |(w, h)| format!("{w}x{h}"));
+            (kind, format!("source={source} pixels={pixels}"))
         }
     }
 }
@@ -7666,6 +7807,16 @@ fn parse_hit_point(s: &str) -> Option<pdfce_core::vector::Point> {
     (x.is_finite() && y.is_finite()).then(|| pdfce_core::vector::Point::new(x, y))
 }
 
+/// Grouped arguments for `object-list` — a struct to keep the handler under
+/// clippy's `too_many_arguments` bar, like the editing subcommands.
+struct ObjectListArgs<'a> {
+    input: &'a Path,
+    page_number: u32,
+    hit: Option<&'a str>,
+    all_hits: bool,
+    tolerance: f64,
+}
+
 /// `object-list` — inventory one page's vector objects in paint order, and
 /// optionally answer a headless hit-test query (read-only).
 ///
@@ -7674,6 +7825,11 @@ fn parse_hit_point(s: &str) -> Option<pdfce_core::vector::Point> {
 /// - Emits one `object page=… index=… kind=… bbox=… …` line per object, in
 ///   paint order (index 0 painted first, so the LAST line is topmost).
 /// - Emits a `hit …` line iff `--hit` was supplied.
+/// - Emits one `hit-candidate page=… ordinal=… index=… kind=…` line per
+///   object under the point, front-most first (`ordinal=0` IS the `hit`
+///   line's object), iff `--hit` **and** `--all-hits` were supplied. The
+///   prefix is `hit-candidate`, deliberately not `hit`, so a script already
+///   matching `^hit ` keeps matching exactly one line.
 /// - Emits an `object-list …` summary line last.
 /// - Exit `SUCCESS` (0) on a readable page — including when the page has no
 ///   objects, and including when `--hit` MISSES. A miss is a valid answer,
@@ -7693,8 +7849,24 @@ fn parse_hit_point(s: &str) -> Option<pdfce_core::vector::Point> {
 /// oracle* for GUI selection: if `--hit` reports an index headlessly and a
 /// click at the corresponding screen position does not select, the defect is
 /// in the GUI's input/coordinate path, not in core's geometry.
-fn cmd_object_list(input: &Path, page_number: u32, hit: Option<&str>, tolerance: f64) -> u8 {
-    use pdfce_core::vector::{Matrix, decompose_page, hit_test_point};
+///
+/// `--all-hits` extends that oracle role to the one GUI behaviour a topmost
+/// query cannot explain: click-through cycling. It calls
+/// [`pdfce_core::vector::hit_test_point_all`], which is the same function
+/// the GUI provider's `hit_test_all` calls and whose head is, by
+/// construction, `hit_test_point`'s answer — so `ordinal=0` always names the
+/// same object as the `hit` line, and the rest of the list is exactly what
+/// repeated Alt+clicks walk through.
+fn cmd_object_list(args: ObjectListArgs<'_>) -> u8 {
+    use pdfce_core::vector::{Matrix, decompose_page, hit_test_point_all};
+
+    let ObjectListArgs {
+        input,
+        page_number,
+        hit,
+        all_hits,
+        tolerance,
+    } = args;
 
     // Validate the query operands BEFORE loading the document: a typo
     // should fail immediately and identically whether or not the file
@@ -7793,22 +7965,50 @@ numbered 1..={})",
             );
             return exit::RUNTIME_ERROR;
         }
-        let found = hit_test_point(&model, point, tolerance);
-        let (index, kind) = match found {
-            Some(i) => (
-                i.to_string(),
-                model
-                    .objects
-                    .get(i)
-                    .map_or("none", |obj| object_detail(obj).0)
-                    .to_owned(),
-            ),
+        // ONE query answers both lines. `hit_test_point` is defined as this
+        // list's head (see `pdfce_core::vector::hit`), so calling it as well
+        // would be a second scan that could only ever agree — and a second
+        // scan that CAN disagree is exactly the divergence decision 011 §Z2
+        // names. `candidates=` on the `hit` line is therefore always
+        // consistent with the `hit-candidate` lines below it.
+        let candidates = hit_test_point_all(&model, point, tolerance);
+        let kind_of = |i: usize| -> String {
+            model
+                .objects
+                .get(i)
+                .map_or("none", |obj| object_detail(obj).0)
+                .to_owned()
+        };
+        let (index, kind) = match candidates.first() {
+            Some(&i) => (i.to_string(), kind_of(i)),
             None => ("none".to_owned(), "none".to_owned()),
         };
         println!(
-            "hit page={page_number} at={},{} tolerance={tolerance} index={index} kind={kind}",
-            point.x, point.y,
+            "hit page={page_number} at={},{} tolerance={tolerance} index={index} kind={kind} \
+candidates={}",
+            point.x,
+            point.y,
+            candidates.len(),
         );
+        if all_hits {
+            // Front-most first: `ordinal=0` is the object the `hit` line
+            // names and the object a plain click selects; each higher
+            // ordinal is one more Alt+click down the stack, wrapping back to
+            // 0 after the last.
+            for (ordinal, &i) in candidates.iter().enumerate() {
+                println!(
+                    "hit-candidate page={page_number} at={},{} ordinal={ordinal} index={i} \
+kind={} bbox={}",
+                    point.x,
+                    point.y,
+                    kind_of(i),
+                    model
+                        .objects
+                        .get(i)
+                        .map_or_else(|| "none".to_owned(), |o| bbox_token(o.page_bbox())),
+                );
+            }
+        }
     }
 
     let d = &model.diagnostics;

@@ -407,3 +407,194 @@ fn a_malformed_hit_operand_is_refused() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// `--all-hits` — the click-through-cycling oracle (ui-spec §C.3, rule 11)
+// ---------------------------------------------------------------------------
+
+/// Every `hit-candidate …` line, in output order.
+fn candidate_lines(out: &Output) -> Vec<String> {
+    stdout(out)
+        .lines()
+        .filter(|l| l.starts_with("hit-candidate "))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// **The headline behaviour.** On `overlap.pdf`'s three concentric squares,
+/// a click at the centre is inside all three — and only the innermost is
+/// reachable through the topmost query. `--all-hits` reports the whole
+/// stack, front-most first, which is exactly the order the GUI's repeated
+/// Alt+clicks visit.
+///
+/// This is the CLI's half of rule 11 for the all-hits query: without it the
+/// CLI could not reproduce, and therefore could not diagnose, the GUI's
+/// cycling.
+#[test]
+fn all_hits_lists_every_object_under_the_point_front_most_first() {
+    let f = fixture("vector/overlap.pdf");
+    let out = run(
+        "object-list",
+        &[f.to_str().unwrap(), "--hit", "150,150", "--all-hits"],
+    );
+    assert!(out.status.success(), "{}", stderr(&out));
+
+    let candidates = candidate_lines(&out);
+    assert_eq!(candidates.len(), 3, "{}", stdout(&out));
+    // Front-most first: object 2 (innermost, painted last), then 1, then 0.
+    for (ordinal, index) in [(0, 2), (1, 1), (2, 0)] {
+        assert!(
+            candidates[ordinal].contains(&format!("ordinal={ordinal} index={index}")),
+            "candidate {ordinal}: {}",
+            candidates[ordinal]
+        );
+    }
+
+    // The `hit` line still names the topmost — unchanged behaviour — and
+    // agrees with `ordinal=0` by construction (one query answers both).
+    let hit = hit_line(&out);
+    assert!(hit.contains("index=2"), "{hit}");
+    assert!(hit.contains("candidates=3"), "{hit}");
+}
+
+/// The list is about what is UNDER THE POINT, not about what is on the page:
+/// a click nearer the edge sees a shorter stack, and a click outside every
+/// square sees none.
+#[test]
+fn the_candidate_list_shrinks_as_the_point_leaves_each_square() {
+    let f = fixture("vector/overlap.pdf");
+    // (85,85): inside objects 0 and 1, outside 2.
+    let two = run(
+        "object-list",
+        &[f.to_str().unwrap(), "--hit", "85,85", "--all-hits"],
+    );
+    let candidates = candidate_lines(&two);
+    assert_eq!(candidates.len(), 2, "{}", stdout(&two));
+    assert!(candidates[0].contains("index=1"), "{}", candidates[0]);
+    assert!(candidates[1].contains("index=0"), "{}", candidates[1]);
+    assert!(hit_line(&two).contains("candidates=2"));
+
+    // (35,35): inside the outermost only.
+    let one = run(
+        "object-list",
+        &[f.to_str().unwrap(), "--hit", "35,35", "--all-hits"],
+    );
+    assert_eq!(candidate_lines(&one).len(), 1, "{}", stdout(&one));
+    assert!(hit_line(&one).contains("index=0"), "{}", hit_line(&one));
+
+    // Off every square: a miss is a valid answer, exit 0, no candidate
+    // lines, and `index=none` on the `hit` line.
+    let none = run(
+        "object-list",
+        &[f.to_str().unwrap(), "--hit", "295,295", "--all-hits"],
+    );
+    assert!(none.status.success(), "{}", stderr(&none));
+    assert!(candidate_lines(&none).is_empty(), "{}", stdout(&none));
+    assert!(
+        hit_line(&none).contains("index=none"),
+        "{}",
+        hit_line(&none)
+    );
+    assert!(
+        hit_line(&none).contains("candidates=0"),
+        "{}",
+        hit_line(&none)
+    );
+}
+
+/// `--all-hits` without `--hit` is a no-op, and the `hit-candidate` prefix
+/// never collides with the `hit ` line a script may already be matching.
+#[test]
+fn all_hits_without_a_hit_query_prints_nothing_extra() {
+    let f = fixture("vector/overlap.pdf");
+    let out = run("object-list", &[f.to_str().unwrap(), "--all-hits"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert!(candidate_lines(&out).is_empty(), "{}", stdout(&out));
+    assert!(
+        !stdout(&out).lines().any(|l| l.starts_with("hit ")),
+        "{}",
+        stdout(&out)
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Richer object rows (ui-spec §B.4, rule 11)
+// ---------------------------------------------------------------------------
+
+/// §B.4 #1 in the CLI: a text row now carries the decoded string and the
+/// typeface, so a script and the GUI's Objects panel read the same facts
+/// about the same object.
+///
+/// The string is `HelloworldSecond line` and NOT `Hello world` on two lines:
+/// the fixture opens its word gap with a `TJ` kerning offset and no space
+/// glyph, and starts its second line with a bare `Td` — §14.8.2.5 S3/S5,
+/// neither of which the file states. A preview reports the SOURCED
+/// characters, the way `ExtractedText::sourced_text` does; deriving spacing
+/// here would present a reader's guess as the document's content.
+#[test]
+fn a_text_row_carries_its_decoded_string_and_font() {
+    let f = fixture("text/simple-winansi.pdf");
+    let out = run("object-list", &[f.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(text.contains(r#"font="Helvetica""#), "{text}");
+    assert!(text.contains(r#"resource="F1""#), "{text}");
+    assert!(text.contains("size=24"), "{text}");
+    assert!(text.contains(r#"text="HelloworldSecond line""#), "{text}");
+    assert!(text.contains("truncated=0 lossy=0"), "{text}");
+}
+
+/// **The honesty case.** A font whose encoding defeats §9.10.2's ladder must
+/// report `text=undecodable` — a bare token, distinguishable from any quoted
+/// string a document could contain — and never a row of U+FFFD dressed up as
+/// extracted text. A test that ever sees real characters out of this fixture
+/// has found a fabrication.
+#[test]
+fn text_that_cannot_be_decoded_says_so_rather_than_emitting_mojibake() {
+    let f = fixture("text/identity-h-no-tounicode.pdf");
+    let out = run("object-list", &[f.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(text.contains("text=undecodable"), "{text}");
+    assert!(text.contains("lossy=1"), "{text}");
+    assert!(
+        !text.contains('\u{fffd}'),
+        "no replacement characters may reach the output: {text}"
+    );
+    // The FONT is still named — knowing which font cannot be read is most
+    // of the value of the disclosure.
+    assert!(text.contains(r#"font="ABCDEF+TestCID""#), "{text}");
+}
+
+/// §B.4 #2 in the CLI: an image row carries its `/Width`×`/Height` sample
+/// count (§8.9.5 Table 89), distinct from the `bbox=` size on the same line.
+#[test]
+fn an_image_row_carries_its_pixel_dimensions_distinct_from_its_bbox() {
+    let f = fixture("vector/mixed.pdf");
+    let out = run("object-list", &[f.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let image = stdout(&out)
+        .lines()
+        .find(|l| l.contains("kind=image"))
+        .expect("the fixture has an image object")
+        .to_owned();
+    // 2x2 DeviceGray samples, placed into a 60x40 pt box by the CTM. The
+    // two numbers are different things and both are on the line.
+    assert!(image.contains("pixels=2x2"), "{image}");
+    assert!(image.contains("bbox=30,250,90,290"), "{image}");
+}
+
+/// A path row gains nothing it does not have: no `text=`, no `pixels=`. The
+/// per-kind fields stay per-kind, so a script can key on `kind=` and know
+/// exactly which fields to expect.
+#[test]
+fn a_path_row_gains_no_text_or_pixel_fields() {
+    let f = fixture("vector/edit.pdf");
+    let out = run("object-list", &[f.to_str().unwrap()]);
+    let text = stdout(&out);
+    for line in text.lines().filter(|l| l.contains("kind=path")) {
+        assert!(!line.contains("text="), "{line}");
+        assert!(!line.contains("pixels="), "{line}");
+        assert!(!line.contains("font="), "{line}");
+    }
+}

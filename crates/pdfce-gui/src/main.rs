@@ -1327,6 +1327,21 @@ struct OpenDoc {
     /// (spec §4.2). Session/view state — a selection is never an edit, exactly
     /// like `selected_pages`.
     canvas_selection: BTreeSet<TargetId>,
+    /// Where click-through cycling stands (ui-spec §C.3,
+    /// [`canvas::ClickCycle`]).
+    ///
+    /// Set by every canvas selection click — including a plain one, which
+    /// records ordinal 0 so the status readout can DISCLOSE that other
+    /// objects sit under the pointer. Read by
+    /// [`selection_readout`] and by the next click.
+    ///
+    /// Session/view state, and *derived-live*: it is never trusted on its
+    /// own, only when [`canvas::ClickCycle::describes`]/`continues` say it
+    /// still matches the page and the selection. That is what makes a stale
+    /// cycle harmless rather than a trap — and it is why the only place this
+    /// is explicitly cleared is `prune_canvas_selection`, where an EDIT may
+    /// have kept the same `TargetId` while changing which object it names.
+    click_cycle: Option<canvas::ClickCycle>,
     /// Pass 14.3 in-place text-editing tool state (§2). `Some` only while
     /// [`CanvasTool::TextEdit`] is the active tool; `None` otherwise and
     /// between pages. Session/view state — a caret is never an edit; only an
@@ -1437,6 +1452,7 @@ impl OpenDoc {
             // acceptance criterion.
             active_tool: None,
             canvas_selection: BTreeSet::new(),
+            click_cycle: None,
             text_edit: None,
             add_text: None,
             // Pass 9a/12.M1: the concrete object-model provider is built lazily
@@ -1665,6 +1681,14 @@ impl OpenDoc {
     /// no-op; the call site exists so Pass 9a's real provider gets the
     /// cleanup for free.
     fn prune_canvas_selection(&mut self) {
+        // A click cycle cannot survive an edit or a page change. Its
+        // liveness checks compare `TargetId`s, and after a content rewrite
+        // the SAME index can name a different object — so "2 of 3 at this
+        // point" would describe a stack that no longer exists, which is the
+        // one thing a disclosure must never do. Dropped unconditionally
+        // here: this runs from `refresh_pages`, which every edit, undo and
+        // redo already funnels through.
+        self.click_cycle = None;
         // Borrow the CONCRETE `object_model` field (disjoint from
         // `canvas_selection`) so the closure can hold the provider while the
         // selection is reassigned — a `self.target_provider()` call would
@@ -6436,14 +6460,29 @@ impl PdfceApp {
                 && let Some(screen_pos) = image_response.interact_pointer_pos()
             {
                 let canvas_pos = viewer::screen_to_page(screen_pos, image_rect, extent, zoom);
-                let shift = ui.input(|i| i.modifiers.shift);
+                let (shift, alt) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
                 let tol =
                     canvas::screen_tolerance_to_page(canvas::SELECT_SCREEN_TOLERANCE_PX, zoom);
-                let hit = doc
+                // The ALL-hits query, always — even for a plain click, whose
+                // outcome is unchanged (the head of the list). The extra
+                // information is what the readout discloses as "1 of 3 at
+                // this point", which is how the operator finds out there is
+                // anything underneath to Alt+click to (ui-spec §C.3).
+                let hits = doc
                     .target_provider()
-                    .and_then(|p| p.hit_test(doc.view.page_index, canvas_pos, tol));
-                doc.canvas_selection =
-                    canvas::selection_after_click(&doc.canvas_selection, hit, shift);
+                    .map(|p| p.hit_test_all(doc.view.page_index, canvas_pos, tol))
+                    .unwrap_or_default();
+                let (selection, cycle) = canvas::selection_and_cycle_after_click(
+                    &hits,
+                    &doc.canvas_selection,
+                    doc.click_cycle,
+                    doc.view.page_index,
+                    canvas_pos,
+                    shift,
+                    alt,
+                );
+                doc.canvas_selection = selection;
+                doc.click_cycle = cycle;
             }
 
             // §4.2 marquee — Pass 9a's rubber-band selection. A drag on the
@@ -8808,7 +8847,16 @@ fn selection_readout(doc: &OpenDoc, ui: &mut egui::Ui, expanded: &mut bool) {
         return;
     };
 
-    let headline = ui_text::selection_readout_single(only);
+    // The click-through disclosure (ui-spec §C.3 / rule 4): "2 of 3 at this
+    // point". Guarded by `describes` so it is shown only while the recorded
+    // cycle is still the live explanation of what is selected — after a tree
+    // click, a marquee or an edit it is not, and a stale "2 of 3" would be
+    // worse than none.
+    let cycle = doc
+        .click_cycle
+        .filter(|c| c.describes(doc.view.page_index, &doc.canvas_selection))
+        .map(|c| (c.position(), c.total));
+    let headline = ui_text::selection_readout_single(only, cycle);
     if only.notes.is_empty() {
         // Nothing needs explaining: an ordinary, visible object. A collapsing
         // header with an empty body would be an affordance that leads nowhere,
@@ -9200,6 +9248,7 @@ fn run_vector_edit_tool(
     }
     let mut commit = Commit::None;
     let mut new_selection: Option<std::collections::BTreeSet<TargetId>> = None;
+    let mut new_cycle: Option<Option<canvas::ClickCycle>> = None;
     let mut new_drag: Option<Option<vector_edit_tool::VectorDrag>> = None;
 
     {
@@ -9236,22 +9285,32 @@ fn run_vector_edit_tool(
             (q, false)
         };
 
-        // A plain/Shift click selects the object under the pointer (9a).
+        // A plain/Shift/Alt click selects the object under the pointer (9a),
+        // through the SAME resolver the plain-selection path uses — a second
+        // cycling rule for the object-edit tool would be a divergence the
+        // operator would experience as the tool "cycling differently".
         if image_response.clicked()
             && let Some(sp) = image_response.interact_pointer_pos()
         {
             let canvas_pos = viewer::screen_to_page(sp, image_rect, extent, zoom);
-            let shift = ui.input(|i| i.modifiers.shift);
+            let (shift, alt) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
             let tol = canvas::screen_tolerance_to_page(canvas::SELECT_SCREEN_TOLERANCE_PX, zoom);
-            let hit = doc
+            let hits = doc
                 .object_model
                 .as_ref()
-                .and_then(|p| p.hit_test(page_index, canvas_pos, tol));
-            new_selection = Some(canvas::selection_after_click(
+                .map(|p| p.hit_test_all(page_index, canvas_pos, tol))
+                .unwrap_or_default();
+            let (selection, cycle) = canvas::selection_and_cycle_after_click(
+                &hits,
                 &doc.canvas_selection,
-                hit,
+                doc.click_cycle,
+                page_index,
+                canvas_pos,
                 shift,
-            ));
+                alt,
+            );
+            new_selection = Some(selection);
+            new_cycle = Some(cycle);
         }
 
         // Drag start: classify as a node grab (near a selected object's
@@ -9334,6 +9393,9 @@ fn run_vector_edit_tool(
     // Apply the frame's outcome (no read borrows held now).
     if let Some(sel) = new_selection {
         doc.canvas_selection = sel;
+    }
+    if let Some(cycle) = new_cycle {
+        doc.click_cycle = cycle;
     }
     if let Some(d) = new_drag {
         doc.vector_drag = d;
@@ -10504,7 +10566,7 @@ mod tests {
         let objects = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
         let summary = describe_object(&objects.objects[0]);
 
-        let readout = ui_text::selection_readout_single(&summary);
+        let readout = ui_text::selection_readout_single(&summary, None);
         assert!(readout.contains("Text"), "{readout:?}");
         // The size is stated, so an operator can compare the box on screen
         // against the number and see for themselves that they disagree.
@@ -10537,7 +10599,7 @@ mod tests {
         let summary = describe_object(&objects.objects[0]);
         assert_eq!(summary.size(), Some((200.0, 0.0)));
 
-        let readout = ui_text::selection_readout_single(&summary);
+        let readout = ui_text::selection_readout_single(&summary, None);
         assert!(readout.contains("200.0 × 0.0 pt"), "{readout:?}");
         let note = ui_text::object_note(ObjectNote::DegenerateBounds(Degeneracy::HorizontalRule));
         assert!(note.contains("zero height"), "{note:?}");
@@ -10569,7 +10631,7 @@ mod tests {
         let summary = describe_object(&objects.objects[0]);
 
         let row = ui_text::object_row(7, &summary);
-        let readout = ui_text::selection_readout_single(&summary);
+        let readout = ui_text::selection_readout_single(&summary, None);
         // The shared clause: kind, paint disposition, colour, width, nodes.
         let clause = row
             .split_once("  ")
@@ -10582,6 +10644,123 @@ mod tests {
         // And the facts themselves actually made it through.
         assert!(clause.contains("#0000FF"), "{clause:?}");
         assert!(clause.contains("node"), "{clause:?}");
+    }
+
+    /// **ui-spec §B.3's illustrative rows, now actually buildable.** The
+    /// spec's own examples were `Text · "Section A-A" · Helvetica 10pt` and
+    /// `Image · 640×480`, and §B.4 recorded both as owed core work because
+    /// neither was buildable from the model as it stood. This asserts the
+    /// debt is paid at the surface the operator reads — and, just as
+    /// importantly, that it is paid with the FILE's values rather than the
+    /// spec's illustrative ones.
+    #[test]
+    fn the_text_and_image_rows_now_carry_the_detail_the_ui_spec_asked_for() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("vector/mixed.pdf"));
+        let Status::Open(doc) = &mut app.status else {
+            panic!("the fixture did not open");
+        };
+        doc.ensure_object_provider();
+        let objects = &doc
+            .object_model
+            .as_ref()
+            .expect("the fixture page decomposes")
+            .page_objects()
+            .objects;
+
+        let rows: Vec<String> = objects
+            .iter()
+            .enumerate()
+            .map(|(index, object)| ui_text::object_row(index, &describe_object(object)))
+            .collect();
+
+        // Row 1 is the text object: its string and its typeface, both from
+        // the file. Before §B.4's core work this row could only say "Text".
+        assert!(rows[1].contains("Text"), "{rows:?}");
+        assert!(
+            rows[1].contains('"'),
+            "the text row carries no quoted string: {rows:?}"
+        );
+        assert!(
+            rows[1].contains("Helvetica"),
+            "the text row does not name its typeface: {rows:?}"
+        );
+        assert!(rows[1].contains("pt"), "{rows:?}");
+
+        // Row 2 is the image XObject: its sample count (§8.9.5 Table 89).
+        // The fixture's image is 2x2 DeviceGray.
+        assert!(rows[2].contains("Image"), "{rows:?}");
+        assert!(
+            rows[2].contains("2 × 2 px"),
+            "the image row does not carry its pixel dimensions: {rows:?}"
+        );
+    }
+
+    /// The single-source-of-truth guarantee, extended to the NEW detail: a
+    /// text row's string/font clause must appear verbatim in the status
+    /// readout, exactly as the path clause already does. Two renderings of
+    /// one `ObjectSummary`, never two descriptions.
+    #[test]
+    fn the_text_row_detail_also_appears_verbatim_in_the_readout() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("vector/mixed.pdf"));
+        let Status::Open(doc) = &mut app.status else {
+            panic!("the fixture did not open");
+        };
+        doc.ensure_object_provider();
+        let objects = &doc
+            .object_model
+            .as_ref()
+            .expect("decomposes")
+            .page_objects()
+            .objects;
+        let summary = describe_object(&objects[1]);
+        assert_eq!(summary.kind, object_summary::ObjectKind::Text);
+
+        let row = ui_text::object_row(1, &summary);
+        let readout = ui_text::selection_readout_single(&summary, None);
+        let clause = row
+            .split_once("  ")
+            .map(|(_, rest)| rest.to_owned())
+            .expect("the row carries its index then its description");
+        assert!(
+            readout.contains(&clause),
+            "row clause {clause:?} is absent from readout {readout:?}"
+        );
+    }
+
+    /// **The cycling disclosure (ui-spec §C.3, rule 4).** A click into a
+    /// stack of overlapping objects must SAY that it was a stack, so a
+    /// repeat click that cycled is distinguishable from a mis-hit — which is
+    /// the exact confusion this whole line of work exists to end.
+    ///
+    /// Also pins the negative: a lone object gets no "1 of 1" noise on a
+    /// status bar that is one line by design.
+    #[test]
+    fn the_readout_discloses_that_a_click_landed_in_a_stack() {
+        use pdfce_core::content::ContentStream;
+        use pdfce_core::vector::{Matrix, NoXObjects, decompose};
+
+        let cs =
+            ContentStream::parse(b"40 40 20 20 re f 0 0 100 100 re f".to_vec()).expect("parse");
+        let objects = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+        let summary = describe_object(&objects.objects[1]);
+
+        // A plain click into a 3-deep stack reports where it landed…
+        let readout = ui_text::selection_readout_single(&summary, Some((1, 2)));
+        assert!(readout.contains("1 of 2"), "{readout:?}");
+        // …and names the gesture that reaches the rest, because a modifier
+        // nobody discovers is not a feature.
+        assert!(readout.contains("Alt+click"), "{readout:?}");
+
+        // A cycled click says which one it is now on.
+        let cycled = ui_text::selection_readout_single(&summary, Some((2, 2)));
+        assert!(cycled.contains("2 of 2"), "{cycled:?}");
+
+        // A lone object: nothing to disclose, nothing added.
+        let lone = ui_text::selection_readout_single(&summary, Some((1, 1)));
+        assert_eq!(lone, ui_text::selection_readout_single(&summary, None));
+        assert_eq!(ui_text::hit_cycle_clause(1, 1), None);
     }
 
     /// Colours are rendered as `#RRGGBB`, and out-of-range components are

@@ -25,12 +25,40 @@
 //!   (inflated by `tolerance`). These carry no editable node geometry, so
 //!   a bbox test is the whole of it.
 //!
-//! ## Topmost wins
+//! ## Topmost wins — and the ones underneath
 //!
-//! [`super::PageObjects::objects`] is in paint order, so
-//! [`hit_test_point`] scans back-to-front and returns the **last-painted**
-//! (topmost) object at the point — the selection convention every editor
-//! uses.
+//! [`super::PageObjects::objects`] is in paint order, so the scan runs
+//! back-to-front and the **last-painted** (topmost) object at the point
+//! wins — the selection convention every editor uses.
+//!
+//! Two queries share that one scan:
+//!
+//! - [`hit_test_point`] — the topmost hit, or `None`.
+//! - [`hit_test_point_all`] — **every** hit, topmost first.
+//!
+//! They are not two implementations that happen to agree: both are thin
+//! wrappers over the single private [`hits_front_to_back`] iterator, so
+//! `hit_test_point(..) == hit_test_point_all(..).first().copied()` holds by
+//! construction rather than by discipline. That matters because a GUI that
+//! cycles through overlapping objects (Alt+click) resolves the FIRST click
+//! with one query and every subsequent click with the other: if the two
+//! disagreed about what counts as a hit, the first Alt+click would select
+//! one object and the second would start cycling a list that does not
+//! contain it. Decision 011 §Z2 names exactly this "two implementations of
+//! one idea quietly diverge" shape as the recurring failure of this
+//! subsystem; sharing the iterator is the structural answer to it, and
+//! `hit_test_point_agrees_with_the_head_of_hit_test_point_all` pins it.
+//!
+//! ### Why an all-hits query has to exist at all
+//!
+//! With only a topmost query, an object **behind** another is unreachable:
+//! there is no click that can ever select it, because every click at every
+//! point inside the overlap resolves to the same winner. `hit_test_rect`
+//! does not substitute — it tests bbox enclosure/intersection, applies no
+//! tolerance, and returns paint order rather than front-to-back — so it
+//! answers a different question with a different geometry. ui-spec
+//! `pass-17-dock-and-layer-tree.md` §C.3 names the sibling query as a
+//! binding ask for that reason.
 //!
 //! ## Bézier handling
 //!
@@ -59,24 +87,89 @@ pub enum MarqueeMode {
     Touched,
 }
 
+/// Every object hit by `point`, **topmost (front-most) first** — the ONE
+/// scan both public point queries are built from (module docs).
+///
+/// Private, and deliberately an iterator rather than a `Vec`: it lets
+/// [`hit_test_point`] answer with `.next()` and allocate nothing on the
+/// click path, while [`hit_test_point_all`] collects the same sequence. A
+/// non-finite query point yields an empty iterator (a `NaN` pointer is a
+/// miss, never a panic — ARCHITECTURE.md §10).
+fn hits_front_to_back<'a>(
+    model: &'a PageObjects,
+    point: Point,
+    tolerance: f64,
+) -> impl Iterator<Item = usize> + 'a {
+    let finite = point.is_finite();
+    model
+        .objects
+        .iter()
+        .enumerate()
+        .rev()
+        .filter(move |(_, obj)| finite && object_hit(obj, point, tolerance))
+        .map(|(i, _)| i)
+}
+
 /// Test a page-space `point` against a page's objects and return the
 /// **topmost** (last-painted) object's index, or `None` for a miss.
 ///
 /// `tolerance` is a page-space slack (the GUI converts a few screen pixels
 /// into page units and passes it here), widening every object's hittable
 /// region so a click near — not dead-on — an edge still selects.
+///
+/// Exactly `hit_test_point_all(model, point, tolerance).first().copied()`,
+/// by construction — see the module docs' "Topmost wins" section for why
+/// that identity is load-bearing rather than incidental.
 #[must_use]
 pub fn hit_test_point(model: &PageObjects, point: Point, tolerance: f64) -> Option<usize> {
-    if !point.is_finite() {
-        return None;
-    }
-    model
-        .objects
-        .iter()
-        .enumerate()
-        .rev()
-        .find(|(_, obj)| object_hit(obj, point, tolerance))
-        .map(|(i, _)| i)
+    hits_front_to_back(model, point, tolerance).next()
+}
+
+/// **Every** object a page-space `point` hits within `tolerance`,
+/// **topmost/front-most first** (reverse paint order).
+///
+/// The all-hits sibling of [`hit_test_point`], whose result is exactly this
+/// list's head. It exists so a GUI can offer *click-through cycling*:
+/// repeated clicks at one point step down the returned list, which is the
+/// only way an object completely covered by another can ever be selected
+/// (ui-spec `pass-17-dock-and-layer-tree.md` §C.3).
+///
+/// The hit predicate is the same per-kind rule [`hit_test_point`] uses —
+/// fill-interior under the object's winding rule, stroke proximity within
+/// half the CTM-scaled line width, bbox for text/image/form — because both
+/// functions filter the one [`hits_front_to_back`] scan. **Empty** for a
+/// miss and for a non-finite point; never `None`-vs-empty ambiguity.
+///
+/// ## Cost
+///
+/// One linear pass over the page's objects with the same per-object work
+/// [`hit_test_point`] does, plus a `Vec` whose length is the number of
+/// objects genuinely under the pointer (typically 1–3; bounded above by
+/// [`super::MAX_OBJECTS`] in the pathological case of a page whose objects
+/// all cover the same point). Callers on a hot path that only need the
+/// winner should keep calling [`hit_test_point`], which allocates nothing.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::content::ContentStream;
+/// use pdfce_core::vector::{Matrix, NoXObjects, Point, decompose, hit_test_point,
+///                          hit_test_point_all};
+///
+/// // Two overlapping filled rectangles; the second painted is on top.
+/// let cs = ContentStream::parse(b"0 0 60 60 re f 20 20 60 60 re f".to_vec())?;
+/// let model = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+///
+/// let at = Point::new(40.0, 40.0); // inside both
+/// let all = hit_test_point_all(&model, at, 0.5);
+/// assert_eq!(all, vec![1, 0]); // topmost first
+/// // …and the topmost query is exactly the head of that list.
+/// assert_eq!(hit_test_point(&model, at, 0.5), all.first().copied());
+/// # Ok::<(), pdfce_core::content::ContentError>(())
+/// ```
+#[must_use]
+pub fn hit_test_point_all(model: &PageObjects, point: Point, tolerance: f64) -> Vec<usize> {
+    hits_front_to_back(model, point, tolerance).collect()
 }
 
 /// The indices of every object selected by a page-space marquee `rect`,
@@ -405,5 +498,86 @@ mod tests {
     fn non_finite_query_point_is_a_miss_not_a_panic() {
         let m = model(b"0 0 100 100 re f");
         assert_eq!(hit_test_point(&m, Point::new(f64::NAN, 0.0), 1.0), None);
+        assert!(hit_test_point_all(&m, Point::new(f64::NAN, 0.0), 1.0).is_empty());
+        assert!(hit_test_point_all(&m, Point::new(0.0, f64::INFINITY), 1.0).is_empty());
+    }
+
+    /// The all-hits query returns EVERY object under the point, front-most
+    /// first — the ordering a GUI's click-through cycling steps down.
+    ///
+    /// Three stacked rectangles rather than two, because two cannot tell a
+    /// correct front-to-back ordering apart from a merely reversed one.
+    #[test]
+    fn all_hits_are_returned_front_most_first() {
+        // Three concentric-ish filled rectangles, painted 0 then 1 then 2.
+        let m = model(b"0 0 100 100 re f 10 10 80 80 re f 20 20 60 60 re f");
+        // Dead centre: inside all three. Topmost (last painted) leads.
+        assert_eq!(
+            hit_test_point_all(&m, Point::new(50.0, 50.0), 0.5),
+            vec![2, 1, 0]
+        );
+        // Inside the outer two only.
+        assert_eq!(
+            hit_test_point_all(&m, Point::new(15.0, 15.0), 0.5),
+            vec![1, 0]
+        );
+        // Inside the outermost only.
+        assert_eq!(hit_test_point_all(&m, Point::new(5.0, 5.0), 0.5), vec![0]);
+        // Outside everything: empty, not a one-element "nearest" fallback.
+        assert!(hit_test_point_all(&m, Point::new(500.0, 500.0), 0.5).is_empty());
+    }
+
+    /// **The invariant that makes cycling safe.** The topmost query must be
+    /// exactly the head of the all-hits list, at every point and every
+    /// tolerance — otherwise a first click and a cycling click would
+    /// disagree about which objects are even candidates (module docs).
+    ///
+    /// Swept over a mixed page (paths of both fill rules, a stroke-only
+    /// path, an `n` path, text) and a grid of points and tolerances, rather
+    /// than asserted at one hand-picked point, because the divergence this
+    /// guards against would most likely appear in exactly one kind's
+    /// predicate.
+    #[test]
+    fn hit_test_point_agrees_with_the_head_of_hit_test_point_all() {
+        let m = model(
+            b"0 0 100 100 re f 40 40 20 20 re f* 10 90 m 90 90 l S \
+              20 20 m 80 20 l n BT /F1 12 Tf 30 50 Td (Hi) Tj ET",
+        );
+        for tolerance in [0.0_f64, 0.5, 3.0, 25.0] {
+            for x in (-10..=110).step_by(7) {
+                for y in (-10..=110).step_by(7) {
+                    let p = Point::new(f64::from(x), f64::from(y));
+                    let all = hit_test_point_all(&m, p, tolerance);
+                    assert_eq!(
+                        hit_test_point(&m, p, tolerance),
+                        all.first().copied(),
+                        "point {p:?} tolerance {tolerance} disagreed: all = {all:?}"
+                    );
+                    // And the list is strictly descending (front-to-back),
+                    // never merely "contains the right set".
+                    assert!(
+                        all.windows(2).all(|w| w[0] > w[1]),
+                        "{all:?} is not front-most first"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Cycling must be able to reach an object *completely* covered by
+    /// another — the case a topmost-only query makes permanently
+    /// unselectable, which is the whole reason this query was added.
+    #[test]
+    fn a_fully_covered_object_is_reachable_only_through_the_all_hits_query() {
+        // A small rectangle entirely inside a larger one painted after it.
+        let m = model(b"40 40 20 20 re f 0 0 100 100 re f");
+        let inside = Point::new(50.0, 50.0);
+        // Every click resolves to the cover; the covered object is
+        // unreachable through the topmost query at ANY tolerance.
+        for tolerance in [0.0_f64, 1.0, 10.0] {
+            assert_eq!(hit_test_point(&m, inside, tolerance), Some(1));
+        }
+        // The all-hits query reaches it as the second step of the cycle.
+        assert_eq!(hit_test_point_all(&m, inside, 0.5), vec![1, 0]);
     }
 }

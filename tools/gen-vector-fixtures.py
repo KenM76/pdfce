@@ -56,6 +56,15 @@ WHAT IT WRITES
     aspect-4 bar. The centerline derivation must offer a candidate for
     each thin bar (rotation-correct) and NONE for the square or the
     aspect-4 bar (Z3 false-positive guard).
+
+``overlap.pdf``  (300x300)
+    Three CONCENTRIC filled squares, painted outermost first. The
+    click-through / all-hits fixture: at the centre all three are under
+    the pointer, and only the innermost is reachable by a topmost-only
+    hit test, so `hit_test_point_all` (and the GUI's Alt+click cycling)
+    is the only way objects 1 and 0 can ever be selected there. Points
+    further out give stacks of two and of one, so a hit list's LENGTH is
+    a real answer about geometry rather than a constant.
 """
 
 from pathlib import Path
@@ -219,6 +228,34 @@ def main() -> int:
         ]
     )
     files["edit.pdf"] = one_page(300, editable, "", {})
+
+    # -- overlap.pdf: three CONCENTRIC filled squares (click-through) ---
+    # The fixture for `hit_test_point_all` / the GUI's Alt+click cycling.
+    # Each square is painted strictly INSIDE the previous one, so:
+    #
+    #   * a click at the centre (150,150) is inside all three, and the
+    #     front-most (index 2) is the only one a topmost-only query can
+    #     ever return — objects 1 and 0 are unreachable without an
+    #     all-hits query, which is the whole reason that query exists;
+    #   * a click at (35,35) is inside object 0 ONLY, so the list length
+    #     is a real answer about the geometry rather than a constant;
+    #   * a click at (85,85) is inside objects 0 and 1 but not 2, giving a
+    #     partial stack that catches an implementation that returns
+    #     "everything on the page" instead of "everything under the point".
+    #
+    # Distinct fill colours so a rendered check (and a human looking at the
+    # page) can tell which one a cycle step landed on.
+    overlap = b"\n".join(
+        [
+            b"0.2 0.4 0.9 rg",
+            b"20 20 260 260 re f",                  # object 0: outermost
+            b"0.9 0.6 0.2 rg",
+            b"70 70 160 160 re f",                  # object 1: middle
+            b"0.2 0.7 0.3 rg",
+            b"120 120 60 60 re f",                  # object 2: innermost/top
+        ]
+    )
+    files["overlap.pdf"] = one_page(300, overlap, "", {})
 
     for name, data in sorted(files.items()):
         (OUT_DIR / name).write_bytes(data)

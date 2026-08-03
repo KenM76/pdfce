@@ -21,8 +21,8 @@
 use pdfce_core::document::Document;
 use pdfce_core::page_tree::{Page, pages};
 use pdfce_core::vector::{
-    Bounds, MarqueeMode, Matrix, PageObjects, Point, VectorObject, decompose_page, hit_test_point,
-    hit_test_rect, page_candidates,
+    Bounds, MarqueeMode, Matrix, PageObjects, Point, TextPreview, VectorObject, decompose_page,
+    hit_test_point, hit_test_point_all, hit_test_rect, page_candidates,
 };
 
 fn fixture(name: &str) -> Document {
@@ -164,6 +164,106 @@ fn mixed_fixture_has_a_path_a_text_and_an_image_object_bbox_selectable() {
     assert!(text.approximate);
     // Its bbox covers the (30,150) show origin.
     assert!(text.page_bbox.contains(Point::new(30.0, 150.0)));
+
+    // ui-spec §B.4 #1, through the real `decompose_page` path (which
+    // supplies a `DocumentFonts` resolver): the object carries the string it
+    // shows and the typeface that shows it, decoded through
+    // `text_extract`'s §9.10.2 ladder rather than a decoder written twice.
+    assert_eq!(
+        text.preview,
+        TextPreview::Decoded {
+            text: "Vector".to_owned(),
+            truncated: false,
+            lossy: false,
+        }
+    );
+    let font = text.font.as_ref().expect("a /Tf was in effect");
+    assert_eq!(font.resource, "F1");
+    assert_eq!(font.base_font.as_deref(), Some("Helvetica"));
+    assert_eq!(font.size, 14.0);
+
+    // ui-spec §B.4 #2: the image's SAMPLE count (§8.9.5 Table 89), which is
+    // a different thing from its 60x40 pt placement — both are carried, and
+    // the pair is what answers "at what effective resolution is this
+    // placed?".
+    let image = m
+        .objects
+        .iter()
+        .find_map(|o| match o {
+            VectorObject::Image(i) => Some(i),
+            _ => None,
+        })
+        .expect("an image object");
+    assert_eq!(image.pixel_size, Some((2, 2)));
+    assert_eq!(image.page_bbox.max.x - image.page_bbox.min.x, 60.0);
+}
+
+/// **The all-hits query over a real file** — three concentric filled
+/// squares, so the front-to-back list is genuine overlap rather than a
+/// tolerance artefact.
+///
+/// The load-bearing assertion is the LAST one: objects 1 and 0 are
+/// unreachable through `hit_test_point` at any tolerance, because object 2
+/// covers the point. Without `hit_test_point_all` there is no click that can
+/// ever select them, which is the gap ui-spec §C.3 named.
+#[test]
+fn overlap_fixture_reports_every_object_under_the_point_front_most_first() {
+    let doc = fixture("overlap.pdf");
+    let (m, _page) = model(&doc);
+    assert_eq!(count(&m), (3, 0, 0));
+
+    // Centre: inside all three, front-most (last-painted) first.
+    let centre = Point::new(150.0, 150.0);
+    assert_eq!(hit_test_point_all(&m, centre, 1.0), vec![2, 1, 0]);
+    // Between the outer two squares' edges: a two-deep stack.
+    assert_eq!(
+        hit_test_point_all(&m, Point::new(85.0, 85.0), 1.0),
+        vec![1, 0]
+    );
+    // Inside the outermost only.
+    assert_eq!(hit_test_point_all(&m, Point::new(35.0, 35.0), 1.0), vec![0]);
+
+    // The topmost query is exactly the head, and — the point of the whole
+    // feature — it is the ONLY answer it can give, at every tolerance.
+    for tolerance in [0.0_f64, 1.0, 5.0, 50.0] {
+        assert_eq!(hit_test_point(&m, centre, tolerance), Some(2));
+        assert_eq!(
+            hit_test_point(&m, centre, tolerance),
+            hit_test_point_all(&m, centre, tolerance).first().copied()
+        );
+    }
+}
+
+/// A text object whose font defeats §9.10.2's ladder must come back
+/// `Undecodable`, never as a decoded string of replacement characters.
+///
+/// Uses `text/identity-h-no-tounicode.pdf`, the corpus's designated honesty
+/// metric: its PROVENANCE entry states that "a test that ever sees real text
+/// come out of this file has found a fabrication". This is the object
+/// model's version of that guard.
+#[test]
+fn a_font_whose_encoding_defeats_decoding_yields_no_preview_text() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/synthetic/text/identity-h-no-tounicode.pdf");
+    let doc =
+        Document::from_bytes(std::fs::read(&path).expect("fixture file")).expect("fixture parses");
+    let (m, _page) = model(&doc);
+
+    let text = m
+        .objects
+        .iter()
+        .find_map(|o| match o {
+            VectorObject::Text(t) => Some(t),
+            _ => None,
+        })
+        .expect("a text object");
+    assert_eq!(text.preview, TextPreview::Undecodable);
+    // The font is still identified — which font cannot be read is most of
+    // the value of the disclosure.
+    assert_eq!(
+        text.font.as_ref().and_then(|f| f.base_font.as_deref()),
+        Some("ABCDEF+TestCID")
+    );
 }
 
 #[test]
