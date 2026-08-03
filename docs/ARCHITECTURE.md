@@ -1133,6 +1133,59 @@ independently by re-running `tools/tw-census`: text-bearing documents
 1, zero regressions). Full numbers, sub-corpus breakdown, and gates:
 `ROADMAP.md`'s `/Contents`-defect-fix Shipped entry (top of Shipped).
 
+**Pass 19.4 SHIPPED (2026-08-03, `a1638f4`) — `Tw` direct-authoring
+control now built; decision 019 / FF-H is COMPLETE end-to-end (all five
+slices 19.0–19.4 shipped).** Rides the existing `push_state_param`
+four-rung ladder and `pre | set_ops | mid | restore_ops | post` splice —
+no new authoring path. `FormatRequest::set_word_spacing` shares the same
+`MetricSpec::{Absolute, Relative}` model `Tc` uses (Pass 19.1), resolved
+against the BASE font size per Amendment B item B.3; `FormatError::
+WordSpacingComposite`; `FormatReport::word_spacing_change` +
+`word_spacing_affected_codes`. `Tw` enters the §9.4.4 advance via
+`eff_tw` and joins the existing justify-invalidation trigger set
+(`disclosure_justify_invalidated`, Pass 19.1's mechanism, not a second
+path). CLI `--word-spacing V[pt|em]`, generalizing `parse_char_spacing`
+into `parse_text_metric` so `Tc`/`Tw`/`Ts` share one grammar and one
+error voice. GUI row live for simple-font runs; the composite strip
+stays the existing read-only R83 presentation.
+
+**Amendment F filed** (three findings this slice's build surfaced,
+none anticipated by the original decision or Amendments A–E — full
+account in `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`
+Amendment F): (1) **the composite refusal (R91) was UNREACHABLE as
+originally implemented** — `match_run` filters every composite run to
+`NoMatch` (its decoded text is always empty) before the font-aware gate
+ever runs, so R91 would have shipped as referenced, documented, never-
+executed dead code; fixed by hoisting font resolution above `match_run`,
+verified by a test proving the gate now fires AND a second test proving
+the OTHER three controls stay live on the same composite run (a
+specific capability gate, not a blanket composite refusal). Generalized
+as `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`.
+(2) **A named limit:** the fixed refusal is reachable via the pinned-span
+path but not via CLI `--find` (composite-run text search finds nothing,
+so the CLI reports "not found in an editable run," a less specific
+message than the decision describes) — closing this needs composite
+decoding in the authoring walk, FF-E's scope, not this slice's. (3)
+**`Tw` is multiplied by `Th`** (§9.4.4, same basis as `Tc`) — the
+decision names this only as a reason `Tw` is an awkward control, never
+as something needing disclosure; the word-spacing disclosure now quotes
+the effective delivered value whenever `Th ≠ 1`. Filed to
+`C:\personal_rag\pdf\lesson_20260803_word_spacing_multiplied_by_horizontal_scaling.md`.
+Also recorded, not a correction: `Some(0)` affected-spaces is emitted
+and disclosed as a real answer (a `Tw` set on a code-32-free run is
+genuine, legitimate state), and Amendment A.1's fourth restore rung
+needed no change to correctly handle `"` setting `Tw`/`Tc` as a
+side-effect of showing text — its first concrete, load-bearing test.
+`cargo test --workspace` 1738 → 1756, 0 failed; zero new Cargo
+dependencies; round-trip proven non-vacuous by two binaries differing in
+both MD5 and size. Full record: `ROADMAP.md`'s Pass 19.4 Shipped entry
+(top of Shipped).
+
+**MILESTONE — decision 019 / FF-H is COMPLETE end-to-end.** This closes
+item #3 ("finish off all the text handling stuff") of the operator's
+four-item priority sequence as far as FF-H's own scope goes (FF-C and
+FF-B remain unscheduled, per this decision's own Q3 build order).
+
 Full design, the four-case font-on-edit matrix, the fast-follow ladder
 (FF-A offline reflow ladder through FF-H spacing/synthetic-styles — FF-A/
 FF-B boundary amended by decision 015, FF-H re-scoped by decision 019,
@@ -4601,3 +4654,53 @@ with a forward pointer.
   `C:\personal_rag\pdf\lesson_20260803_crlf_conversion_invalidates_every_length.md`
   and
   `D:\dev\rag\rust\repair_that_mutates_a_value_must_invalidate_verbatim_provenance.md`.
+- **2026-08-03 (same-day, Amendment F to decision 019) — Pass 19.4
+  (`Tw` direct-authoring control) SHIPPED, `a1638f4`; decision 019 /
+  FF-H is COMPLETE end-to-end (all five slices 19.0–19.4 shipped).**
+  Rides the existing `push_state_param` restore ladder and
+  `pre|set_ops|mid|restore_ops|post` splice, no new authoring path;
+  `MetricSpec::{Absolute,Relative}` shared with `Tc` (Pass 19.1),
+  resolved against BASE size per Amendment B item B.3; CLI
+  `--word-spacing V[pt|em]` via a generalized `parse_text_metric`
+  (was `parse_char_spacing`). **Three findings, none anticipated by the
+  original decision or Amendments A–E:** (1) **R91 (the composite
+  structural-void refusal) was UNREACHABLE as originally implemented**
+  — `match_run` decodes a candidate run's text and filters every
+  composite run to `NoMatch` (composite `ShowData::text` is always
+  empty) BEFORE the font-aware refusal gate runs, so R91 would have
+  shipped as code that is referenced in three documents and never once
+  executes. Fixed by hoisting font resolution above `match_run`;
+  verified by a test proving the gate now fires plus a second test
+  (`the_composite_gate_fires_only_for_word_spacing`) proving the OTHER
+  three controls (`Tc`/`Tz`/superscript-subscript) stay live on the
+  same composite run — a specific capability gate, not an accidental
+  blanket composite refusal. **(2) A named limit:** the fixed refusal
+  is reachable through the pinned-span path (GUI, core tests) but NOT
+  through CLI `--find` — composite-run text search finds nothing, so
+  `--find` reports "not found in an editable run," a less specific
+  message than the decision describes; closing this needs composite
+  decoding in the authoring walk, FF-E's scope. **(3) `Tw` is
+  multiplied by `Th`** (§9.4.4, same basis as `Tc`) — the decision
+  names this only as a reason `Tw` is awkward to expose as a control,
+  never as something needing disclosure; the word-spacing disclosure
+  now quotes the effective delivered value whenever `Th ≠ 1`. Also
+  recorded (not a defect): `Some(0)` affected spaces is emitted and
+  disclosed as a genuine answer rather than suppressed as a no-op; and
+  Amendment A.1's fourth restore rung needed no code change to
+  correctly handle `"` setting `Tw`/`Tc` as a side effect of showing
+  text — its first concrete, load-bearing test, worth recording as a
+  design choice that held rather than only recording corrections.
+  `cargo test --workspace` 1738 → 1756, 0 failed; fmt/clippy clean;
+  `cargo tree` clean; zero new Cargo dependencies; R85 21/21;
+  round-trip proven non-vacuous by two binaries differing in both MD5
+  and size (3,396,096 vs 3,394,048 bytes). Full record: `ROADMAP.md`'s
+  Pass 19.4 Shipped entry (top of Shipped); `ARCHITECTURE.md` §5.11.
+  **MILESTONE:** closes item #3 ("finish off all the text handling
+  stuff") of the operator's four-item priority sequence as far as
+  FF-H's own scope goes — FF-C and FF-B remain unscheduled, per this
+  decision's own Q3 build order (FF-H → FF-C → FF-B), unaffected by
+  this milestone beyond clearing FF-H's own slot. **RAG escalations:**
+  `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`
+  (finding 1, the unreachable-gate methodology) and
+  `C:\personal_rag\pdf\lesson_20260803_word_spacing_multiplied_by_horizontal_scaling.md`
+  (finding 3, the `Tw`×`Th` coupling).

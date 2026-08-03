@@ -9412,3 +9412,120 @@ Branch `pass-8-redaction`, 56 commits, still no remote.
   and confirm the ★ Pass 19.x umbrella entry is fully retired (all
   five slices 19.0–19.4 complete).
 - Regenerate the backup bundle to cover this continuation's commits.
+
+## Same-day continuation 69 (real date 2026-08-03) — Pass 19.4 (`Tw`)
+SHIPPED (`a1638f4`): **decision 019 / FF-H is COMPLETE end-to-end, all
+five slices 19.0–19.4 shipped.** Hashes verified with `git cat-file -t`:
+`77bc58e`, `a1638f4`. Branch `pass-8-redaction`, 58 commits, still no
+remote. Engineer has since dispatched the GUI redaction-apply flow
+(Backlog → In progress) as the next active work, concurrent with this
+filing.
+
+**Shipped:**
+- Pass 19.4 — `Tw` (word spacing) direct-authoring control (core + CLI
+  + GUI), committed `a1638f4`. Rides the existing `push_state_param`
+  restore ladder + `pre|set|mid|restore|post` splice, no new authoring
+  path; `MetricSpec` shared with `Tc`; CLI `--word-spacing V[pt|em]`
+  via generalized `parse_text_metric`. Gates: `cargo test --workspace`
+  1738 → 1756, 0 failed; fmt/clippy clean; `check-ui-strings.sh` exit
+  0; `cargo tree` clean; zero new Cargo dependencies; R85 21/21;
+  round-trip proven non-vacuous by two binaries differing in both MD5
+  and size (3,396,096 vs 3,394,048 bytes). Full record: `ROADMAP.md`'s
+  Pass 19.4 Shipped entry (top of Shipped).
+
+**Decisions made this session:**
+- Decision 019 **Amendment F** filed (`docs/decisions/
+  019-ffh-spacing-scaling-synthetic-styles.md`), recording three
+  findings Pass 19.4's build surfaced that neither the original
+  decision nor Amendments A–E anticipated (full detail in Findings,
+  below). `ARCHITECTURE.md` §5.11 gained a new Pass-19.4 paragraph + a
+  MILESTONE note; §12 gained the matching dated decision-log entry.
+  `ROADMAP.md`'s ★ Pass 19.x entry retitled COMPLETE/RETIRED; standing
+  rule R91 gained a dated amendment footer; new standing rule **R96**
+  filed (methodology: a guard clause behind a filter the guarded case
+  cannot pass is dead code that looks live). Ceiling is now R96.
+
+**Findings + decisions (empirical):**
+- **★★★★ THE SHARPEST FINDING — a standing rule that would have
+  compiled, read correctly, and NEVER FIRED.** R91's composite-run
+  refusal was unreachable as `plan_format` was ordered: `Walk::
+  record_show` does not decode a composite run's string, so
+  `ShowData::text` is empty for every composite run, so `match_run`
+  returns `NoMatch` before the font-aware gate can ever speak. Left
+  alone, R91 would have shipped as code referenced in three documents
+  and never once executed. Fixed by hoisting font resolution above
+  `match_run`; verified by two tests — one proving the gate now fires,
+  a second (`the_composite_gate_fires_only_for_word_spacing`) proving
+  the OTHER three controls stay live on the same composite run, so
+  this is a specific capability gate, not a blanket composite refusal.
+  Neither decision 019 nor Amendments A–E anticipated this.
+- **A named limit, recorded not papered over:** the fixed refusal is
+  reachable through the pinned-span path (GUI, core tests) but NOT
+  through CLI `--find` — composite-run text search finds nothing, so
+  the CLI returns "not found in an editable run," a less specific
+  refusal than the decision describes. Closing it needs composite
+  decoding in the authoring walk (FF-E's scope).
+- **`Tw` is multiplied by `Th`** (§9.4.4, same basis as `Tc`) —
+  `--word-spacing 2 --h-scale 50` delivers a 1-unit gap, not 2.
+  Decision 019 names this only as a reason `Tw` is awkward to expose,
+  never as something needing disclosure; the disclosure now quotes the
+  effective delivered value whenever `Th ≠ 1`.
+- Two findings recorded as confirmations, not corrections: `Some(0)`
+  affected spaces is emitted and disclosed as a real answer rather than
+  suppressed as a no-op; and Amendment A.1's fourth restore rung needed
+  no code change to correctly handle `"` setting `Tw`/`Tc` as a side
+  effect of showing text — its first concrete, load-bearing test.
+- Amendment E's falsification (§3.2 reason 2, the "large and growing"
+  composite-default premise) held under implementation — nothing added
+  this slice asserts a trend in composite adoption either direction.
+- **R86 observed with `-ProcessId`** on a purpose-built simple+
+  Type0/Identity-H fixture: live case dragged `Tw` to 57.0‰, applied,
+  canvas visibly widened gaps, strip showed `Tw 0 -> 0.912`; refused
+  case collapsed to grey read-only with the §9.3.3 explanation, no
+  spinner/toggle/Apply (R83). The capture guard fired twice on uniform
+  frames and the builder sent real clicks until it passed rather than
+  defeating it.
+
+**RAG escalations this continuation:**
+- `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`
+  — the unreachable-gate methodology finding (indexed in
+  `D:\dev\rag\rust\index.md`).
+- `C:\personal_rag\pdf\lesson_20260803_word_spacing_multiplied_by_horizontal_scaling.md`
+  — the `Tw`×`Th` coupling finding (indexed in both
+  `C:\personal_rag\pdf\index.md` and the master `C:\personal_rag\index.md`).
+
+**Still in flight:**
+- **GUI redaction-apply flow — PROMOTED TO IN PROGRESS this
+  continuation**, a builder started it concurrent with this filing.
+  Engineer sequencing call (flagged, not a correction): dispatched
+  ahead of item #4 (form-building) in the ★★★ operator priority
+  sequence, on the grounds that a half-shipped security feature
+  outranks starting a new feature family — see the new "GUI
+  redaction-apply flow" In-progress entry and new Open operator
+  question (l) in `ROADMAP.md`.
+- Carried, unchanged: `✓`/`✕` glyph verification still owed; `ⓘ`
+  tofu suspicion unconfirmed; status-bar/fit-zoom feedback loop; letter
+  badges pending real icons; `egui_kittest` harness gap; Open operator
+  questions (h)–(k) (FF-C rule-13, FF-I StructTree cut, list-authoring,
+  kerning) unanswered; FF-C and FF-B remain unscheduled per decision
+  019's own Q3 build order.
+- Branch still named `pass-8-redaction`, now spanning Passes 9–19.4
+  plus the shipped defect fix and the in-progress redaction-apply
+  flow — worth a rename whenever a push is authorized.
+- No git remote configured; the backup bundle is stale and not
+  regenerated this continuation.
+
+**For next session:**
+- Flag to the operator at next contact, carried forward: (1) push/
+  publish call still ungranted, chain now 58 commits, still no remote;
+  (2) branch-rename-on-push still pending; (3) the GUI redaction-apply
+  flow is now IN PROGRESS (was: no flow at all); (4) R86 still
+  unanswered; (5) the kerning parity gap unscoped; (6) Open operator
+  questions (h)–(l) unanswered ((l) is new — the redaction-apply
+  sequencing call); (7) FF-H is DONE — decision 019 is COMPLETE, the
+  operator's priority-#3 item is done as far as FF-H's own scope goes
+  (FF-C/FF-B remain).
+- When the GUI redaction-apply flow ships, dispatch the librarian to
+  move it to Shipped with a Pass ID (engineer assigns) and update the
+  Backlog entry.
+- Regenerate the backup bundle to cover this continuation's commits.

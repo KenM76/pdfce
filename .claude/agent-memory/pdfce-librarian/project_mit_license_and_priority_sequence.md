@@ -1,6 +1,6 @@
 ---
 name: project-mit-license-and-priority-sequence
-description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling → forms. Pass-17-gate CLEARED 2026-08-03; FF-H (decision 019/★ Pass 19.x) SHIPPED through 19.3, Pass 19.4 (`Tw`) CENSUS-CLEARED-BUILD but sequenced behind an in-progress pdfce document-loading defect fix (continuation 67) — FF-B/FF-C/item #4 (forms) still undispatched.
+description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling (item #3 PARTIAL: FF-H DONE, FF-C/FF-B open) → forms (item #4, still undispatched). Decision 019/★ Pass 19.x COMPLETE (all 5 slices, 2026-08-03, `a1638f4`) — Amendment F filed (R91 unreachable-gate fix, R96 new). Engineer now dispatching GUI redaction-apply flow (not one of the 4 items) ahead of item #4 — flagged sequencing call, Open operator question (l).
 metadata:
   type: project
 ---
@@ -230,3 +230,34 @@ never became live. Branch at 54 commits, still no remote. **Next
 concrete step, once the defect fix ships: dispatch Pass 19.4** per
 Amendment E's cleared verdict — this is still item #3 of the
 four-item sequence; item #4 (forms) remains undispatched behind it.
+(Continuation 68, same real date: the `/Contents` defect fix SHIPPED,
+`409a6b5`, 289 files recovered — Pass 19.4 then started.)
+
+**UPDATE — 2026-08-03, SESSION_LOG continuation 69: Pass 19.4 (`Tw`)
+SHIPPED (`a1638f4`) — decision 019 / FF-H is COMPLETE end-to-end, all
+five slices 19.0–19.4 shipped. Item #3 of the four-item sequence is
+DONE as far as FF-H's own scope goes** (FF-C and FF-B remain
+unscheduled, per decision 019's own Q3 build order FF-H → FF-C → FF-B —
+do not read "item #3 done" as "all text-handling done"). **Decision 019
+Amendment F filed**, recording three findings the build surfaced: (1)
+the composite-run refusal (R91) was UNREACHABLE as originally
+implemented — a `match_run` text-decode/filter stage silently consumed
+every composite run before the font-aware gate could run, so R91 would
+have shipped as referenced-but-never-executed dead code; fixed, new
+standing rule R96 filed on the general shape (a guard clause behind an
+unreachable filter). (2) A named limit: the fix is reachable via the
+GUI's pinned-span path but not via CLI `--find` on composite runs
+(closing needs FF-E). (3) `Tw` is multiplied by `Th` (§9.4.4) — the
+disclosure now quotes the effective value. **The engineer's next
+dispatch, same continuation, is the GUI redaction-apply flow** (Backlog
+→ In progress, no Pass ID yet) — a sequencing call flagged for the
+operator (jumped ahead of item #4/forms on security-completeness
+grounds, not itself required by any standing instruction; new Open
+operator question (l)). Branch `pass-8-redaction`, 58 commits
+(`77bc58e`/`a1638f4` verified via `git cat-file -t`), still no remote.
+Check `ROADMAP.md`'s ★★★ priority sequence item 3 and the new "GUI
+redaction-apply flow" In-progress entry before assuming the
+continuation-67/68 framing ("item #3 next, item #4 undispatched") still
+describes current dispatch — FF-H's slot in item #3 is now closed and a
+NEW item (redaction-apply, not itself one of the four) is what's
+actively building.

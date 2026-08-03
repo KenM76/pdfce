@@ -1676,3 +1676,151 @@ pdfce document-loading defect this same sweep found: `ROADMAP.md`'s
 continuation-67 In-progress entry and the "★ pdfce defect" entry
 alongside it; `ARCHITECTURE.md` §5.11/§12.
 
+---
+
+# AMENDMENT F — 2026-08-03 — Pass 19.4 (`Tw`) SHIPPED (`a1638f4`);
+decision 019 / FF-H is COMPLETE end-to-end; three findings this slice's
+build surfaced that neither the original decision nor Amendments A–E
+anticipated
+
+**Filed by:** `pdfce-librarian`, on the engineer's report. Same posture
+as Amendments A–E: each item below is a place where BUILDING the slice
+surfaced a fact the decision text (including Amendments A–E) did not
+anticipate, not a retraction of anything already recorded — where this
+amendment and the record above differ, **this amendment is the current
+truth.**
+
+## F.1 The composite refusal was unreachable as `plan_format` was ordered — R91 would have shipped as dead code
+
+R91 (§9.3.3's composite/CID structural void for `Tw`) was implemented as
+a font-aware refusal gate inside `plan_format`'s match arm. It never
+fired, on any input, because `match_run` — the stage immediately before
+it — decodes a candidate run's text via `ShowData::text` and matches the
+edit request against that decoded string BEFORE the font-aware gate runs.
+`Walk::record_show` does not decode a composite run's string at all (2-byte
+CID codes need a `/ToUnicode`/embedded-CID lookup the walk was not
+performing for this purpose), so `ShowData::text` is empty for every
+composite run, and `match_run` returns `NoMatch` on every one of them —
+before the font-aware refusal gate can ever be reached. Left as originally
+built, R91 would have existed in code, been referenced in three documents
+(this decision file, `ARCHITECTURE.md` §5.11, `ROADMAP.md`'s standing
+rule text), and never once executed: an untestable branch claiming to
+honour a standing rule.
+
+**Fix:** hoist font resolution above `match_run` so the font-aware gate
+can speak even when the text-decode/match stage would otherwise
+short-circuit on empty decoded text.
+
+**Verification, to the same bar as Amendment C's mutation-testing
+standard:** two tests, not one. `the composite gate now fires` proves the
+refusal is reachable at all (previously impossible on any input). A
+second, `the_composite_gate_fires_only_for_word_spacing`, proves the
+OTHER three formatting controls (`Tc`, `Tz`, superscript/subscript) stay
+live on the exact same composite run — establishing this is a specific
+capability gate for `Tw` alone, not an accidental blanket refusal for
+composite runs generally, which would have been a different and worse
+bug hiding behind the same fix.
+
+**Filed to `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`**
+as a generalizable methodology finding: a guard clause's position in a
+pipeline matters as much as its logic; before trusting a refusal gate
+exists, trace whether an earlier stage can silently consume the exact
+input class the gate is meant to catch.
+
+## F.2 A named limit: the refusal is reachable through the pinned-span path but not through `--find`
+
+The R91 refusal fires correctly through the pinned-span path (the GUI's
+`format-text`, and this slice's own core tests). It does **not** fire
+through `pdfce-cli format-text --find`: searching for literal text inside
+a composite run finds nothing (the CLI's `--find` matching goes through
+the same undecoded-composite-text path §F.1 describes), so the command
+returns *"text to format ... was not found in an editable run on the
+page"* — not a silent no-op, not a false success, but a **less specific
+refusal than the decision describes** (the operator sees a not-found
+message, not a §9.3.3 composite-structural-void explanation). Closing
+this gap needs composite-run text decoding in the authoring walk itself,
+which is FF-E's scope (cross-block/structural authoring correctness), not
+this slice's. **Recorded as a named limit, not silently left as an
+apparent full closure of R91.**
+
+## F.3 The `Th` coupling needed a disclosure the decision never asked for
+
+§9.4.4's glyph-displacement formula multiplies `Tw` by `Th` on the same
+basis as `Tc` — `--word-spacing 2 --h-scale 50` delivers a 1-unit gap,
+not 2. Decision 019 §3.1 mentions this multiplicative interaction only as
+one of the reasons `Tw` is an awkward *control* to expose, never as
+something needing its own disclosure once `Tw` ships as a control. The
+word-spacing disclosure now quotes the EFFECTIVE delivered figure
+whenever `Th ≠ 1` (100%), alongside the raw entered value, so the
+operator sees both "what you set" and "what it actually does" — the same
+fuzzy-never-sneaky posture applied elsewhere in this decision (Amendment
+B's `Tz`×justify disclosure correction is the adjacent, mechanism-distinct
+sibling of this finding: that one is `Th` rescaling `TJ` slack outside a
+splice wrap, this one is `Th` rescaling `Tw` directly inside §9.4.4's own
+formula). Filed to
+`C:\personal_rag\pdf\lesson_20260803_word_spacing_multiplied_by_horizontal_scaling.md`.
+
+## F.4 `Some(0)` affected spaces is a real answer, and is stated as one
+
+A `Tw` set on a run containing zero code-32 occurrences is genuine,
+legitimate state with no visible effect — pdfce emits it, restores it on
+exit from the formatted run, and discloses `0` affected spaces explicitly,
+rather than suppressing the operation as if it were a no-op. This is a
+deliberate choice, not an oversight: this is the one slice in the whole
+decision whose entire point is that `Tw`'s effect is conditional on
+content the operator does not directly see (§9.3.3), so silently
+swallowing the zero-effect case would hide exactly the fact the control
+exists to make legible.
+
+## F.5 Amendment A.1's fourth rung: `Tw` is its concrete headline, and the rung needed no change
+
+Amendment A's restore ladder (R88, item A.1's fourth rung — "available and
+POISONOUS," see
+`C:\personal_rag\pdf\lesson_20260803_quote_operator_side_effect_poisons_raw_byte_restore.md`)
+was written in the abstract, against `TD`/`"` as the motivating operators.
+`Tw` is the concrete case where replaying a producer's own raw bytes for
+restore actually repaints text: `"` sets `Tw` AND `Tc` while showing a
+string (§9.4.3 Tables 108/109), so blindly replaying its bytes as a
+spacing-only restore would re-execute the show. A new regression test,
+`word_spacing_rung_three_indirect_ambient_is_respelled_not_replayed`,
+asserts `(lead) "` appears **exactly once** in the appended revision (not
+twice, which would mean the byte-replay path double-showed the text).
+**The rung itself required no code change to handle this case correctly**
+— worth recording explicitly that the abstract design held under its
+first concrete, load-bearing test, rather than only recording amendments
+that correct something.
+
+## F.6 Amendment E's falsification held under implementation; the "growing" caveat was honoured
+
+Nothing added while building Pass 19.4 — CLI help text, GUI disclosure
+copy, or this file — asserts a trend in composite-font adoption in either
+direction. Amendment E E.5 recorded that its corpus could falsify the
+"large" half of §3.2 reason 2 but could not test the "growing" half
+either way; Pass 19.4's implementation and user-facing text were checked
+against that caveat and do not overstate it.
+
+## F.7 Gates
+
+`cargo test --workspace` 1738 → 1756, 0 failed; fmt/clippy clean;
+`check-ui-strings.sh` exit 0; `cargo tree` clean; **zero new Cargo
+dependencies**; R85 (preview-equals-saved oracle) 21/21; the pre-existing
+`reflow_apply` justify tripwire (Pass 19.0) still passes and that file was
+untouched by this slice. The 1738 baseline was **measured, not quoted**
+— built from a `git archive HEAD` export and run, not assumed from the
+previous filing's number. Round-trip proven non-vacuous by two binaries
+differing in both MD5 **and size** (3,396,096 vs 3,394,048 bytes), with
+identical decoded output.
+
+## F.8 Milestone — decision 019 / FF-H is COMPLETE end-to-end
+
+All five slices (19.0 consolidation → 19.1 `Tc`/`Tz`/super-subscript →
+19.2 free-form `Ts`/synthetic bold-italic → 19.3 GUI property surface →
+19.4 `Tw`) are shipped. This closes item #3 ("finish off all the text
+handling stuff") of the operator's four-item priority sequence
+(`ROADMAP.md`'s ★★★ entry) as far as FF-H's own scope goes — FF-C (font
+subsetting/embedding) and FF-B (cross-block/cross-page reflow) remain
+unscheduled, per this decision's own Q3 build order (FF-H → FF-C → FF-B),
+unaffected by this milestone beyond clearing FF-H's own slot. Full record,
+numbers, and the three findings above: `ROADMAP.md`'s Pass 19.4 Shipped
+entry (top of Shipped); `ARCHITECTURE.md` §5.11/§12.
+

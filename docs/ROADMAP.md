@@ -43,6 +43,119 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 19.4 — `Tw` (word spacing) direct-authoring control (core + CLI + GUI; decision 019, closes FF-H — **decision 019 / FF-H COMPLETE end-to-end, all five slices 19.0–19.4 shipped**) — 2026-08-03, committed `a1638f4`
+
+**MILESTONE: decision 019 / FF-H is COMPLETE, and with it the operator's
+priority-#3 item ("finish off all the text handling stuff") is DONE as
+far as FF-H's own scope goes** — FF-C (font subsetting/embedding) and
+FF-B (cross-block/cross-page reflow) remain unscheduled, per this
+decision's own Q3 build order (FF-H → FF-C → FF-B), unaffected by this
+milestone beyond clearing FF-H's own slot. See the ★★★ Operator priority
+sequence entry (Next up) for the updated status.
+
+`Tw` rides the existing `push_state_param` four-rung restore ladder and
+the `pre | set_ops | mid | restore_ops | post` splice — no new authoring
+path. `FormatRequest::set_word_spacing` shares `Tc`'s
+`MetricSpec::{Absolute, Relative}` model, resolved against the BASE
+font size per Amendment B item B.3. `FormatError::WordSpacingComposite`.
+`FormatReport::word_spacing_change` + `word_spacing_affected_codes`.
+`Tw` enters the §9.4.4 advance via `eff_tw` and joins the existing
+justify-invalidation trigger set (Pass 19.1's
+`disclosure_justify_invalidated`, not a second path). CLI
+`--word-spacing V[pt|em]`; `parse_char_spacing` generalized into
+`parse_text_metric` so `Tc`/`Tw`/`Ts` share one grammar and one error
+voice. GUI row live for simple-font runs; the composite strip stays the
+existing read-only R83 presentation.
+
+**Gates:** `cargo test --workspace` 1738 → 1756, 0 failed; fmt/clippy
+clean; `check-ui-strings.sh` exit 0; `cargo tree` clean; **zero new
+Cargo dependencies**; R85 (preview-equals-saved oracle) 21/21; the
+pre-existing `reflow_apply` justify tripwire (Pass 19.0) still passes,
+and that file was untouched by this slice. The 1738 baseline was
+**measured, not quoted** — built from a `git archive HEAD` export and
+run, not assumed from the previous filing. Round-trip proven
+non-vacuous by two binaries differing in both MD5 **and size**
+(3,396,096 vs 3,394,048 bytes), with identical decoded output.
+
+**★★★★ THE SHARPEST FINDING — a standing rule that would have compiled,
+read correctly, and NEVER FIRED.** The composite-run refusal (R91,
+§9.3.3's structural void for `Tw` on 2-byte CID runs) was **unreachable
+as `plan_format` was originally ordered.** `Walk::record_show` does not
+decode a composite run's string, so `ShowData::text` is empty for every
+composite run, so `match_run` returns `NoMatch` on every composite run
+**before any font-aware gate can speak.** Left alone, R91 would have
+existed in code, been referenced in three documents (this decision's
+text, `ARCHITECTURE.md` §5.11, and `ROADMAP.md`'s own R91 wording), and
+never once executed — an untestable branch claiming to honour a
+standing rule. **Fixed by hoisting font resolution above `match_run`.**
+Two new tests prove it: one proves the gate now fires, a second
+(`the_composite_gate_fires_only_for_word_spacing`) proves the OTHER
+three controls stay live on the same composite run — establishing this
+is a specific capability gate, not "composite disables the whole
+panel." **Neither decision 019 nor Amendments A–E anticipated this** —
+§3.3 and R91 both described the gate as if the composite run were
+addressable. Filed as decision 019 **Amendment F**; generalized to
+`D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`
+(a guard clause placed after a filter the guarded case cannot pass is
+dead code that looks live — detect it by writing the test that asserts
+the guard FIRES, not merely that the happy path works, the same
+"prove it by making it fail" discipline as Pass 19.2's mutation
+testing).
+
+**A named limit that came with it, recorded not papered over.** The
+fixed R91 refusal is reachable through the **pinned-span** path (the
+GUI's, and the core tests') but **not** through CLI `--find`:
+searching for text inside a composite run finds nothing, so
+`format-text --find` returns *"text to format … was not found in an
+editable run on the page"* — not a silent no-op, not a false success,
+but a **less specific refusal than the decision describes.** Closing
+it needs composite decoding in the authoring walk (FF-E's scope, not
+this slice's). Recorded as a named limit in decision 019 Amendment F.
+
+**Three more findings, all filed to Amendment F:**
+- **Amendment A.1's fourth restore rung was written for `TD`/`"` in the
+  abstract; `Tw` is its concrete headline.** `"` sets `Tw` AND `Tc`
+  while showing a string (§9.4.3 Tables 108/109), so `Tw` is the
+  parameter where replaying a producer's own bytes for restore
+  actually repaints text. A new test,
+  `word_spacing_rung_three_indirect_ambient_is_respelled_not_replayed`,
+  asserts `(lead) "` appears exactly once in the appended revision.
+  **The rung needed no code change to handle this correctly — worth
+  recording that the abstract design was right**, not only recording
+  amendments that correct something.
+- **The `Th` coupling needed a disclosure the decision never asked
+  for.** §9.4.4 multiplies `Tw` by `Th` on the same basis as `Tc`, so
+  `--word-spacing 2 --h-scale 50` delivers a **1-unit** gap, not 2.
+  Decision 019 mentions the multiplicative interaction only as a
+  *reason `Tw` is awkward to expose as a control*, never as something
+  needing disclosure. The disclosure now quotes the effective
+  delivered figure whenever `Th ≠ 1`. Filed to
+  `C:\personal_rag\pdf\lesson_20260803_word_spacing_multiplied_by_horizontal_scaling.md`.
+- **`Some(0)` affected spaces is a real answer, stated as one.** A
+  `Tw` set on a space-free run is genuine state with no visible
+  effect; pdfce emits it, restores it, and discloses `0` explicitly —
+  rather than suppressing the operation as a no-op, which would be a
+  silent no-op in the one slice whose entire point is that `Tw`'s
+  effect is conditional on content the operator does not directly see.
+- **Amendment E's falsification held under implementation, and the
+  "growing" caveat was honoured.** Nothing in code, GUI disclosure
+  copy, or CLI help text added this slice asserts a trend in composite
+  adoption in either direction — checked against Amendment E's own
+  caveat that the "growing" half of §3.2 reason 2 is untestable on its
+  corpus.
+
+**R86 (operator-visible-definition-of-done) observed with `-ProcessId`**
+on a purpose-built fixture carrying one simple and one Type0/Identity-H
+run. Live case: property strip read *"Now: 0.0‰ of size (0.0000 pt) —
+the PDF default, never set on this run,"* dragged to 57.0‰, applied;
+the canvas visibly widened the gaps, and the strip carried `Tw 0 ->
+0.912` and *"It applies to ALL 3 spaces inside the formatted run."*
+Refused case: the row collapsed to grey read-only with the §9.3.3
+explanation — no spinner, no unit toggle, no Apply (R83). The capture
+guard fired twice on uniform frames during this observation and the
+builder sent real clicks until it passed rather than defeating the
+guard.
+
 ### `/Contents`-defect fix — a dangling `/Contents` array element no longer condemns the whole document; 289 previously-unopenable documents now read (no Pass ID — a correctness fix, per the ★ pdfce defect In-progress entry's own framing, RESOLVED) — 2026-08-03, committed `409a6b5`
 
 **289 previously-unopenable documents now read**, engineer-verified by
@@ -5581,6 +5694,41 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 
 ## In progress
 
+### GUI redaction-apply flow (Backlog item promoted to In progress 2026-08-03; no Pass ID assigned yet — a builder is on this now)
+
+**Promoted from Backlog the same continuation decision 019/FF-H
+completed (Pass 19.4, `a1638f4`).** The GUI can mark redactions and
+disclose the mark count (the status bar already warns *"⚠ N UNAPPLIED
+redaction mark(s) — this document is NOT redacted"*), but has never had
+a way to actually APPLY a redaction — the operation that removes
+covered content — from the running application; applying is CLI-only
+(`pdfce-cli redact-apply`). `grep -c "apply_redactions\|RedactApply"
+crates/pdfce-gui/src/main.rs` returns **0**. The app tells the operator
+their document is not redacted and gives them no way to make it so.
+`docs/ui_specs/pass-8-redaction.md` §§3–4 specified this GUI flow fully
+(including §4.1's deliberately-heavier confirmation convention — this
+is the one operation in the app where an extra-heavy confirm step is
+the honest design, not friction) and it was never built. Filed as a
+Backlog item at Pass 17.1/17.2's ship (2026-08-03) with the structural
+note that applying redaction consumes a `Document` and emits a file
+directly — it is not an `EditSession` operation, so there is no live
+session state for a preview-then-apply surface to render; any GUI apply
+flow needs its own design (a distinct confirm/apply modal, most likely,
+not a live-preview surface).
+
+**Engineer sequencing call, flagged for operator awareness — not itself
+a blocking question.** The engineer dispatched this work AHEAD of item
+#4 (form-building tools) in the operator's ★★★ four-item priority
+sequence, on the grounds that completing a half-shipped **security**
+feature (redaction — the app currently claims a document "is NOT
+redacted" with no in-app remedy) outranks starting a new feature family
+form-building represents. This is a sequencing judgment call made
+without a fresh, explicit operator instruction to reorder — recorded
+here, and as new Open operator question (l), so it doesn't read as
+silent scope drift if the operator would have preferred item #4 dispatched
+next per the standing order. See the Backlog entry (below, now marked
+PROMOTED) for the full prior framing.
+
 ### ★★★★ HEADLINE FINDING (2026-08-02) — THE GUI NEVER RENDERS UNSAVED EDITS. READ THIS BEFORE TRUSTING ANY "the operator can't verify feature X" report.
 
 Ken ran the GUI and reported it felt non-functional: can't click objects,
@@ -6209,8 +6357,13 @@ recorded so it doesn't read as scope drift): a control reaching 91% of
 text-bearing documents matters less than 341 real files — leaning
 qpdf/pdfium, closer to organic malformed-in-the-wild files than
 veraPDF's deliberately-adversarial conformance probes — that cannot be
-opened by pdfce at all. **Now that the fix has shipped, Pass 19.4 is
-IN PROGRESS** — see the ★ Pass 19.x entry under Next up.
+opened by pdfce at all. **UPDATE (2026-08-03): Pass 19.4 has since
+SHIPPED** (`a1638f4`) — see the Pass 19.4 Shipped entry (top of
+Shipped) and the now-retired ★ Pass 19.x entry under Next up. This
+whole In-progress entry (the `/Contents` defect and its sequencing
+rationale) is fully historical as of this update — nothing from this
+thread remains open. **What IS in progress now: the GUI redaction-apply
+flow** — see its own new In-progress entry, below.
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
@@ -6515,6 +6668,15 @@ without a new operator instruction.
    directive does not resolve it; do not fold list-authoring into
    "text-handling" without a further, explicit operator answer to that
    specific question.
+   **UPDATE (2026-08-03) — FF-H is now DONE.** Pass 19.4 (`Tw`) SHIPPED
+   (`a1638f4`), closing decision 019 / FF-H end-to-end (all five slices
+   19.0–19.4) — see the Pass 19.4 Shipped entry (top of Shipped) and the
+   ★ Pass 19.x entry below. **Item 3 is therefore PARTIALLY DONE, not
+   fully DONE**: FF-H's own scope is complete; FF-C and FF-C's rule-13
+   dependency-classification gate (Open operator question (h)) and FF-B
+   remain unscheduled, per decision 019's own Q3 build order (FF-H → FF-C
+   → FF-B) — do not treat "text-handling" as closed until those two ship
+   or are explicitly deferred by the operator.
    **Namesake-collision note, not to be mistaken for progress on FF-H
    (added 2026-08-03, Pass 18.6):** Pass 18.6 added `Tc`/`Tw`/`Tz`/`Ts`
    tracking to `pdfce-core`'s vector-DECOMPOSE walk's `GState`
@@ -6766,7 +6928,7 @@ default stands: docked-only, its own Backlog entry, still unanswered.
 §10 Q1 (the `egui_tiles`-vs-hand-rolled question this note originally
 tracked) is ANSWERED and BUILT — see Pass 18.1 above.
 
-### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendments A/B/C/E, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 SHIPPED 2026-08-03, Pass 19.2 SHIPPED 2026-08-03 (`ebe35d8`), Pass 19.3 SHIPPED 2026-08-03 (`74052d3`) — Pass 19.4 (`Tw`) CENSUS RUN 2026-08-03, BUILD band cleared (Amendment E); the blocking `/Contents` defect FIXED 2026-08-03 (`409a6b5`, see Shipped) — Pass 19.4 now IN PROGRESS)
+### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic + `Tw`), decision 019 + Amendments A–F — **COMPLETE 2026-08-03, ALL FIVE SLICES SHIPPED (19.0 `38fffad`, 19.1 `603b051`, 19.2 `ebe35d8`, 19.3 `74052d3`, 19.4 `a1638f4`) — decision 019 / FF-H RETIRED, no further work on this entry**
 
 **Decision 019 ACCEPTED via the KenAgent protocol.** Full record:
 `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`. Filed
@@ -6925,16 +7087,28 @@ existing `FormatText`/`AddText` one-command-per-accepted-edit path):**
   every property-bar Apply shipped since Pass 14.3 had silently
   refused. Fixed in the same commit; see the Shipped entry and new
   standing rule R93.
-- **19.4 — `Tw` direct-authoring control (core + CLI + GUI). CENSUS RUN
-  2026-08-03, BUILD band cleared** (91.6% of show operators / 97.4% of
-  glyphs, n=4,012 real PDFs, 1,224 text-bearing) — see the
-  continuation-67 In-progress entry (above) and decision 019 Amendment
-  E for the full method, numbers, sub-corpus breakdown, and the
-  falsified-§3.2-reason-2 finding. **The blocking pdfce defect (341
-  corpus files unopenable, found via this same census sweep) is FIXED**
-  — see the new `/Contents`-defect-fix Shipped entry (top of Shipped,
-  committed `409a6b5`) and the retired ★ pdfce defect In-progress entry
-  (above). **IN PROGRESS** — a builder is on this slice now.
+- **19.4 — `Tw` direct-authoring control (core + CLI + GUI). SHIPPED
+  2026-08-03, committed `a1638f4`** — see the Pass 19.4 Shipped entry
+  (top of Shipped) for the full build record, including the
+  unreachable-composite-gate finding (decision 019 Amendment F), the
+  named `--find` limit, and the `Tw`×`Th` disclosure addition. Census
+  method/numbers (91.6% of show operators / 97.4% of glyphs, n=4,012
+  real PDFs, 1,224 text-bearing) remain recorded in decision 019
+  Amendment E. The blocking `/Contents` defect (341 corpus files, found
+  via this same census sweep) was fixed first, committed `409a6b5` —
+  see the `/Contents`-defect-fix Shipped entry.
+
+**MILESTONE — decision 019 / FF-H is COMPLETE end-to-end, and with it
+the operator's priority-#3 item ("finish off all the text handling
+stuff") is DONE as far as FF-H's own scope goes.** All five slices
+(19.0 consolidation → 19.1 `Tc`/`Tz`/super-subscript → 19.2 free-form
+`Ts`/synthetic bold-italic → 19.3 GUI property surface → 19.4 `Tw`)
+shipped 2026-08-03. **This entry is now RETIRED — no further Pass 19.x
+work is scheduled.** FF-C (font subsetting/embedding) and FF-B
+(cross-block/cross-page reflow) remain unscheduled, per this decision's
+own Q3 build order (FF-H → FF-C → FF-B); see the ★★★ Operator priority
+sequence entry's item-3 update (above) and the "GUI redaction-apply
+flow" In-progress entry (below) for what the engineer dispatched next.
 
 **Standing rules R88–R91 added** (see Standing rules, below) — the
 ceiling was R87. **R92 added 2026-08-03** (decision 019 Amendment B,
@@ -6943,18 +7117,23 @@ methodology: hand-duplicated no-op/arm-list predicates drift silently
 decision 019 Amendment C (Pass 19.2) — R88 gains the shared-graphics-
 state restore obligation (stroking colour + line width); R90 gains the
 narrower absolute-`Tm`-for-followers refusal, the disclosed bold-width
-limit, and the two named unhandled-conflict refusals. No new rule
-number; ceiling remains **R92**.
+limit, and the two named unhandled-conflict refusals. **R96 added
+2026-08-03** (decision 019 Amendment F, methodology: a guard clause
+behind a filter the guarded case cannot pass is dead code that looks
+live — see Standing rules, below). Ceiling is now **R96**.
 
 **Open items for the operator** — see Open operator questions, below:
-the `Tw` census middle-band judgement call; FF-C's rule-13 dependency
-classification (MIT lifted rule 8, it did NOT pre-approve any crate);
-the FF-I StructTree cut (a scoping call Ken may have counted inside
-"finish off all the text handling stuff"); list-authoring (re-surfaced,
-still unanswered); and a newly-found parity gap this decision did NOT
-scope — **kerning**: Isaacs lists kerning among Acrobat's retained
-text-editing controls, and pdfce currently has no kerning surface
-distinct from `Tc`.
+FF-C's rule-13 dependency classification (MIT lifted rule 8, it did NOT
+pre-approve any crate); the FF-I StructTree cut (a scoping call Ken may
+have counted inside "finish off all the text handling stuff");
+list-authoring (re-surfaced, still unanswered); a newly-found parity
+gap this decision did NOT scope — **kerning**: Isaacs lists kerning
+among Acrobat's retained text-editing controls, and pdfce currently has
+no kerning surface distinct from `Tc`; and the named Pass 19.4 `--find`
+limit on composite runs (Amendment F, not itself a blocking question,
+recorded for awareness — closing it is FF-E's scope). The `Tw` census
+middle-band judgement call (former item (g)) is CLOSED AS MOOT, see
+Open operator questions.
 
 ### Dimension-tool bug-fix cluster — Pass 12.M2c (Backlog, code-trace found 2026-08-02, distinct from Pass 18.x)
 
@@ -8339,7 +8518,11 @@ real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
 - **GUI has no redaction-apply flow at all (filed 2026-08-03, Pass
-  17.1/17.2, no Pass number assigned).** The GUI can mark redactions and
+  17.1/17.2, no Pass number assigned). PROMOTED TO IN PROGRESS
+  2026-08-03** — see the new "GUI redaction-apply flow" entry under
+  *In progress* (above) for current status and the engineer-sequencing
+  flag (dispatched ahead of item #4/forms in the ★★★ priority sequence).
+  Original framing retained below. The GUI can mark redactions and
   disclose the marks, but cannot APPLY a redaction (the operation that
   actually removes covered content) — applying is CLI-only,
   `pdfce-cli redact-apply`. Predates this session but newly notable
@@ -9316,6 +9499,21 @@ blocking Pass 19.0's in-progress build:**
   affordance (pair-kerning adjustment) or is considered subsumed by
   uniform `Tc` tracking is an open scope question, not answered by
   decision 019 or ★ Pass 19.x's slicing.
+
+**New this session (2026-08-03, Pass 19.4 ship) — one item, a
+sequencing flag rather than a blocking question:**
+- **(l) Engineer sequencing call: GUI redaction-apply flow dispatched
+  ahead of item #4 (forms) in the ★★★ operator priority sequence.**
+  With decision 019/FF-H complete, the engineer chose to dispatch the
+  GUI redaction-apply flow (Backlog → In progress, no Pass ID yet) next,
+  ahead of form-building tools, on the grounds that completing a
+  half-shipped **security** feature (the GUI currently tells the
+  operator their document "is NOT redacted" with no in-app remedy)
+  outranks starting a new feature family. This is a scope-sequencing
+  judgment call, not itself required by any standing rule or prior
+  operator instruction — flagged so it isn't discovered only after
+  redaction-apply ships. **Default: no objection assumed** unless the
+  operator explicitly wants item #4 dispatched first instead.
 
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
@@ -10317,7 +10515,15 @@ blocking Pass 19.0's in-progress build:**
   simple-font runs is gated behind a corpus census with explicit
   decision bands (≥60% of sampled real-world documents → build; ≤25% →
   close the item; 25–60% → escalate to the operator) — see the ★ Pass
-  19.x entry (Next up) and Open operator questions.
+  19.x entry (Next up) and Open operator questions. **AMENDED 2026-08-03
+  by decision 019 Amendment F (Pass 19.4, `a1638f4`):** the composite-run
+  refusal this rule states was implemented but UNREACHABLE until this
+  Pass — `match_run` filtered every composite run to `NoMatch` before
+  the refusal gate could run, since composite runs are never decoded to
+  text. Fixed by hoisting font resolution above `match_run`; see R96 and
+  the Pass 19.4 Shipped entry. The rule's substance (word spacing is
+  structurally void for composite runs) is unchanged — only the
+  implementation's reachability was defective.
 - **R92 — A predicate that hand-duplicates the shape of a data
   structure it inspects drifts silently the moment the structure gains
   a field or case (methodology; no decision number; librarian-assigned;
@@ -10400,6 +10606,24 @@ blocking Pass 19.0's in-progress build:**
   entries the spec itself marks optional/array-valued with a defined
   null-element reading; a reference resolving to a *wrong type*
   (§7.3.10's other failure mode) is unchanged and still an error.
+- **R96 — A guard clause placed after a filter the guarded case cannot
+  pass is dead code that looks live (methodology; no decision number;
+  librarian-assigned; 2026-08-03, decision 019 Amendment F, Pass
+  19.4).** A refusal/validation gate's position in a pipeline matters as
+  much as its logic: R91's composite-run refusal was correctly written,
+  correctly wired, and structurally unreachable, because the text-decode/
+  match stage immediately before it (`match_run`, reading
+  `ShowData::text`) silently filtered out every composite run to
+  `NoMatch` before the font-aware gate could ever run — composite runs
+  are never decoded to text by that walk. Detection requires writing the
+  test that asserts the GATE fires (not merely that the happy path or
+  even the refusal outcome occurs) — the same "prove it by making it
+  fail" discipline R92/R93 and Pass 19.2's mutation testing already
+  established, applied here to reachability rather than correctness.
+  Before trusting any refusal/validation gate exists, trace every stage
+  that runs before it and ask whether the input class the gate is meant
+  to catch can even survive to reach it. See
+  `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`.
 
 ## Update protocol
 
