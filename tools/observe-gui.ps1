@@ -163,6 +163,38 @@ $bitmap   = New-Object System.Drawing.Bitmap($width, $height)
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
 try {
     $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+
+    # REFUSE A UNIFORM FRAME. A capture that is entirely one colour is not a
+    # picture of the UI — it is a picture of nothing, and it is indistinguishable
+    # from a real screenshot until someone looks closely.
+    #
+    # Three distinct causes have all produced one in this project:
+    #   * the monitor slept          -> solid black
+    #   * eframe had not yet presented a frame (it repaints reactively, only on
+    #     input) -> solid white client area
+    #   * a maximize/restore animation was mid-flight when the capture ran
+    #
+    # In every case the honest answer is "no observation was made". Returning
+    # the file anyway invites exactly the error this harness exists to prevent:
+    # certifying a Pass as observed-working (standing rule R86) on the strength
+    # of an image containing no evidence. Sampling a sparse grid is enough --
+    # any real UI has a toolbar, text or a page edge somewhere in it.
+    $distinct = @{}
+    $stepX = [Math]::Max(1, [int]($width  / 24))
+    $stepY = [Math]::Max(1, [int]($height / 24))
+    for ($x = 0; $x -lt $width; $x += $stepX) {
+        for ($y = 0; $y -lt $height; $y += $stepY) {
+            $c = $bitmap.GetPixel($x, $y)
+            $distinct["$($c.R),$($c.G),$($c.B)"] = $true
+            if ($distinct.Count -gt 3) { break }
+        }
+        if ($distinct.Count -gt 3) { break }
+    }
+    if ($distinct.Count -le 1) {
+        $only = ($distinct.Keys | Select-Object -First 1)
+        throw "REFUSING TO RETURN A BLANK CAPTURE: every sampled pixel of '$ProcessName' is ($only). That is not a screenshot of the UI — the display is likely asleep, or eframe has not presented a frame yet (it repaints only on input; send a real mouse move or click first), or a window animation was mid-flight. No observation was made."
+    }
+
     $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
 }
 finally {
