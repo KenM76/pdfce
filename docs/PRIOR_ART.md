@@ -142,7 +142,7 @@ of which is a Rust-native engine.
 | `ttf-parser` | MIT OR Apache-2.0 (crates.io) / Apache-2.0 (repo field — discrepancy unresolved) | **DO NOT ADOPT (read path)** — verdict flipped 2026-07-30, decision 004 §3.2/§5.2 | The anticipated re-verify happened: aged another 8 months with no commit (last 2025-11-22, no release since 2024-11-29) and grew a queue of unmerged SECURITY-flavored PRs (COLRv1 paint-graph recursion cap, glyf/gvar composite visit cap, CFF2 BLEND empty-stack guard, avar i16 overflow — four filed 2026-07-20, unlanded). Exactly the hardening class pdfce's §10 threat model needs landed, not pending. No bare-Type1 support either. |
 | `rustybuzz` | MIT | superseded by `harfrust` for any future AUTHORING shaping (decision 004 R17: the RENDER path never shapes) | Pure-Rust HarfBuzz port, pinned to ttf-parser, same staleness (0.20.1, 2024-11-12). Note epaint 0.35 itself moved to `harfrust`. |
 | `allsorts` (Yeslogic) | **Apache-2.0 ONLY (no MIT arm)** | write-side fallback only (decision 001 §6.2), REJECTED for the read path (decision 004 §3.2) | Parser+shaper+**subsetter** from Prince. Actively maintained, but: 23 direct deps incl. `libc`/`ouroboros`/`brotli-decompressor`, no `no_std` (jeopardizes the wasm32 invariant, R11), no crate-level unsafe forbid, no bare-Type1 outline path. Decision 004 §9 flags this evidence into the eventual write-side scoping. |
-| `subsetter` (Typst) | MIT OR Apache-2.0 | adopt | Purpose-built PDF-embedding subsetter for TrueType/CFF, minimal deps — what Typst itself uses. Leanest option for the write-side embedding/subsetting need. |
+| `subsetter` (Typst) | MIT OR Apache-2.0 (**verified live at 0.2.6, 2026-08-03**) | **ADOPT (write path) — rule-13 classification COMPLETE, see "FF-C dependency classification" below** | Purpose-built PDF-embedding subsetter for TrueType/CFF, minimal deps — what Typst itself uses. Leanest option for the write-side embedding/subsetting need. **The 2026-08-03 re-verification found something better than "still permissive": `subsetter 0.2.6` depends on `skrifa 0.42.1`, `read-fonts 0.39.2`, `font-types 0.11.3` — bit-for-bit the versions pdfce already pins through epaint 0.35 — so it unifies with the read path instead of forking it.** Net cost to pdfce's graph is **2 packages**: `subsetter` itself and `write-fonts 0.48.1`. Everything else it wants is already present. |
 | `fontdue` | MIT OR Apache-2.0 OR Zlib | reference-only | Rasterizer only, no shaping (maintainer has publicly declined to add it). |
 | `read-fonts`/`skrifa`/`write-fonts` (Google "fontations") | MIT OR Apache-2.0 | **ADOPT (read path)** — decision 004 §4.1, R21: the single font-program parser in pdfce-render | Most actively maintained font stack, corporate-backed, `#![forbid(unsafe_code)]`, no_std/wasm-clean. THE finding (004 §3.1): `skrifa` re-exports read-fonts as `skrifa::raw`, whose public `ps` module parses bare PostScript **Type 1** (PFB/PFA/eexec/lenIV, verified at source) and bare **CFF** with charstring-to-outline evaluation — all four PDF FontFile cases via one dependency, already in Cargo.lock via epaint 0.35 (zero new packages; pin 0.42 to epaint's resolution, `cargo tree --duplicates` guard). hayro and krilla independently converged on the same stack. |
 | `postscript` crate | Apache-2.0 OR MIT | **REJECT** — verdict resolved 2026-07-30 (decision 004 §3.2) | The prototype check happened by source inspection: it is a TOKENIZER — its type2 module exposes Program/Operator/Operations and no path/segment/pen types. It does not evaluate charstrings to outlines. |
@@ -158,6 +158,87 @@ PFA hex eexec, raw binary eexec, lenIV all handled; verified at source
 in read-fonts 0.39.2). The custom-implementation budget line is
 released. One trap: input must begin with `%!PS-AdobeFont`/`%!FontType`
 — normalize leading whitespace first (see `C:\personal_rag\pdf\`).**
+
+#### FF-C dependency classification (rule 13) — COMPLETE, 2026-08-03
+
+`ROADMAP.md` carries FF-C (font subsetting / glyph embedding) as
+**operator-gated**, blocked on "Cargo-dependency copyleft/license
+gate". The gate has now been worked rather than waited on, and it
+**clears without an operator decision**. Recorded here so the next
+session does not re-open it.
+
+Resolved graph for `subsetter 0.2.6`, taken from `cargo metadata` on a
+scratch crate (not by reading crates.io pages, and not from memory):
+
+| Fact | Result |
+|---|---|
+| `subsetter` licence | `MIT OR Apache-2.0` |
+| Every crate in its transitive graph | permissive — 14× `MIT OR Apache-2.0`, 4× `Apache-2.0 OR MIT`, 2× `Zlib OR Apache-2.0 OR MIT`, 1× `(MIT OR Apache-2.0) AND Unicode-3.0` |
+| Copyleft (GPL/LGPL/AGPL/MPL) anywhere in the graph | **none** |
+| Packages genuinely NEW to pdfce's workspace | **2** — `subsetter 0.2.6`, `write-fonts 0.48.1` |
+| Version skew against the existing read path | **none** — see below |
+
+Under `LEGAL.md` §6.2 that is step 3, *proceed and log*: permissive
+dependencies are not flagged to the operator, only copyleft ones are.
+The same disposition `egui_tiles` got. **The remaining `CLAUDE.md`
+open item on FF-C is therefore about scope and sequencing, not
+licensing — do not keep describing it as a licence gate.**
+
+The `(MIT OR Apache-2.0) AND Unicode-3.0` entry is `unicode-ident`,
+and it is **already in pdfce's graph today** (via `syn`/`proc-macro2`),
+so it adds no attribution obligation that `cargo-about` is not already
+picking up. Worth naming only because `AND` — unlike `OR` — means both
+terms apply, so it is the one row in the table that cannot be
+satisfied by picking the friendlier arm.
+
+**The version-unification finding is the load-bearing one, and it is
+not a licence fact at all.** `pdfce-render`'s `Cargo.toml` already
+documents its `skrifa = "0.42"` pin as load-bearing because it must
+match what `epaint 0.35` resolves. Adding a write-side font crate is
+exactly where that pin could have been broken:
+
+- `write-fonts 0.51.0` (what a bare `cargo add write-fonts` selects
+  today) wants `read-fonts 0.42.1` / `font-types 0.12.2`. Taking it
+  would put **two incompatible copies of the font parser** in the
+  graph — and because subsetting means *read the embedded font, emit a
+  reduced one*, pdfce would be parsing with one version and writing
+  with another, across precisely the seam where a mismatch bites.
+- `write-fonts 0.48.x` is the version that resolves to `read-fonts
+  0.39.2` / `font-types 0.11.3`, matching what is already present.
+- `subsetter 0.2.6` **already depends on 0.48.1**, so adopting it
+  gets the correct pin by construction rather than by pdfce guessing
+  a version and hoping. Verified: a probe graph containing both
+  `subsetter` and `skrifa 0.42` resolves to a **single** `read-fonts
+  0.39.2` and a **single** `font-types 0.11.3`.
+
+The version map, so nobody has to re-derive it:
+
+| `write-fonts` | resolves `read-fonts` | `font-types` |
+|---|---|---|
+| 0.51.0 | 0.42.1 | 0.12.2 |
+| 0.50.0 | 0.41.0 | 0.12.2 |
+| **0.48.x** | **0.39.2** | **0.11.3** ← matches pdfce/epaint |
+| 0.46.0 | 0.38.0 | 0.11.3 |
+| 0.44.0 | 0.36.0 | 0.10.1 |
+
+**Scope honesty — `write-fonts` does not subset.** Its own description
+is "Writing font files": it is a table compiler (`FontBuilder`, the
+`tables::*` writers). The glyph-closure and table-rebuilding logic
+that constitutes actual subsetting is `subsetter`'s, or would have to
+be pdfce's. Do not read "adopt `write-fonts`" as "subsetting is a
+solved dependency" — the two crates are the emitter and the algorithm
+respectively.
+
+**TRAP — `klippa` on crates.io is NOT the fontations subsetter.**
+Google's fontations project contains a subsetter named `klippa`, and
+searching for it is a natural move when scoping this work. The crate
+published as `klippa` on crates.io (0.2.6, MIT,
+`github.com/alamminsalo/klippa`) is an unrelated **geometry clipper**
+— "Geometry clipper using rectangular window" — which pulls `geo-types`
+and `approx`. Adding it would compile cleanly, contribute nothing to
+font work, and be very hard to spot later in a dependency list that
+already contains geometry crates. The fontations subsetter is not
+published on crates.io under that name.
 
 **Bundled standard-14 shapes (decision 004 §4.2):** the Foxit base-14
 CFF set from pdfium's `core/fxge/fontdata/chromefontdata/` —
@@ -305,6 +386,17 @@ decision log).
 - `rsa` crate: RUSTSEC-2023-0071 advisory resolution status.
 - ONLYOFFICE Desktop Editors: license terms for the desktop-editor
   component specifically — not investigated.
+
+**Closed 2026-08-03:** `subsetter`'s licence and dependency graph were
+a standing assumption from the 2026-07-30 research pass and are now
+verified live at 0.2.6 via `cargo metadata` — see "FF-C dependency
+classification" under Fonts. Note what re-checking bought beyond
+confirming the licence: the version-unification constraint, which no
+amount of reading crates.io pages would have surfaced, because it is a
+property of *this* workspace's resolved graph rather than of any crate
+on its own. Two more rows in this section (`cbc`/`md-5` versions,
+`clap` patch digit) are the same shape of question and could be closed
+the same way, in minutes, whenever they next matter.
 
 ## Decision log
 
