@@ -5657,9 +5657,10 @@ slice record and decision 019 Amendment A (`1a2e265`). **Decision 019
 Amendment B is filed as part of THIS librarian pass** (three
 corrections found while building 19.1 — mechanism fix, citation-flag
 closure, R89 base-size clarification — plus new standing rule R92) and
-is **not yet committed** as of this filing; it will land in whatever
-commit captures this session's `ROADMAP.md`/`ARCHITECTURE.md`/decision-
-019-doc edits, expected to be commit 46 on this branch.
+**committed as `450a44b`** (engineer backfill, 2026-08-03 — the
+filing correctly recorded the hash as pending rather than predicting
+one, which is R87 working as intended: the librarian has no shell and
+must not invent a hash it cannot verify).
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
