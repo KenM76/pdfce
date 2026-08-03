@@ -334,7 +334,7 @@ pub fn properties_tooltip() -> &'static str {
 
 /// Label of the toolbar's markup-authoring menu button.
 pub fn markup_menu_button() -> &'static str {
-    "Markup ▾"
+    "Markup"
 }
 
 /// Tooltip on the markup menu button.
@@ -384,7 +384,7 @@ pub fn markup_added(label: &str) -> String {
 
 /// Label of the toolbar's text-annotation menu button.
 pub fn text_menu_button() -> &'static str {
-    "Text ▾"
+    "Text"
 }
 
 /// Tooltip on the text menu button.
@@ -1655,7 +1655,7 @@ pub fn info_field_lossy_marker() -> &'static str {
 
 /// Tooltip on a properties field that decoded lossily.
 pub fn info_field_lossy_tooltip() -> &'static str {
-    "Some bytes in this field have no certain meaning and are shown as ￼. If you \
+    "Some bytes in this field have no certain meaning and are shown as �. If you \
 apply the panel without editing this box, pdfce leaves the stored value alone \
 rather than writing back the guess."
 }
@@ -1763,7 +1763,7 @@ pub fn insert_cli_command() -> &'static str {
 /// copied *something* without saying which would be exactly the guess
 /// this feature exists not to make.
 pub fn copy_text_button() -> &'static str {
-    "▾"
+    "Copy"
 }
 
 /// Tooltip for the Copy-text toolbar button.
@@ -2310,13 +2310,13 @@ pub fn add_text_tool_button() -> &'static str {
 
 /// Tooltip on the Add-Page-Text tool toggle (§1.2). Three sentences, each doing
 /// one job: what it does, what it is NOT (the R78 disambiguator, naming the
-/// competing Text ▾ control by its own visible label), and where the third
+/// competing Text control by its own visible label), and where the third
 /// related-but-different tool (Edit Text) lives.
 pub fn add_text_tool_tooltip() -> &'static str {
     "Add brand-new text to the page itself — a label, caption, or note that becomes real, \
 permanent page content, exactly like the text already here (Ctrl+Shift+E). This is NOT the same \
-as Text ▾ → Text box (a removable annotation) — for a comment or sticky note instead, use \
-Text ▾. To fix text that's already on the page, use Edit Text (Ctrl+E)."
+as Text → Text box (a removable annotation) — for a comment or sticky note instead, use \
+Text. To fix text that's already on the page, use Edit Text (Ctrl+E)."
 }
 
 /// Title of the Add-Text tool's floating property bar (§3.3/§5.2).
@@ -2349,27 +2349,58 @@ pub fn vector_object_deleted() -> &'static str {
 content, use Redact instead."
 }
 
-/// The "Measure ▾" toolbar menu label (Pass 12.M2 ui-spec §1.2). A menu, not
+/// The "Measure" toolbar menu label (Pass 12.M2 ui-spec §1.2). A menu, not
 /// four toolbar icons, because dimensioning is used in short deliberate bursts
 /// (rule 3 — avoid primary-toolbar icon creep).
 pub fn measure_menu_button() -> &'static str {
-    "Measure ▾"
+    "Measure"
+}
+
+/// Appended to a menu button's ACCESSIBLE NAME (not its visible label) so a
+/// screen-reader user learns the control opens a menu rather than performing
+/// an action: "Markup, opens a menu".
+///
+/// # Why this string has to exist
+///
+/// egui's `WidgetType` has no menu/has-popup role, and `Ui::menu_button` sets
+/// no `WidgetInfo` override, so "this opens a menu" cannot reach assistive
+/// technology structurally — only as literal text.
+///
+/// Sighted users used to get that meaning from a `▾` appended to the label.
+/// That glyph (U+25BE) is in none of the fonts in egui's default Proportional
+/// chain, so it rendered as a tofu box; it is now drawn as a real chevron icon
+/// instead (`icons::menu_chevron`). But an image is decorative and announces
+/// nothing — so simply deleting the glyph and drawing a picture would have
+/// made the control *less* accessible than the bug it fixed, since a tofu box
+/// at least carries a Unicode name some readers speak aloud.
+///
+/// The visible cue and the announced cue are therefore supplied separately and
+/// deliberately: the chevron for the eye, this suffix for the ear. See
+/// `docs/ui_specs/menu-affordance-and-glyph-coverage.md` §3.
+pub fn menu_button_accessible_suffix() -> &'static str {
+    "opens a menu"
+}
+
+/// A menu button's full accessible name: its visible label plus
+/// [`menu_button_accessible_suffix`].
+pub fn menu_button_accessible_name(label: &str) -> String {
+    format!("{label}, {}", menu_button_accessible_suffix())
 }
 
 /// The Measure menu's dynamic-label prefix shown when a measure tool is active
 /// (ui-spec §1.2): "Measure: Linear ▾" etc., so the active tool is never hidden
 /// by the menu's closed state.
 pub fn measure_menu_active_label(tool_name: &str) -> String {
-    format!("Measure: {tool_name} ▾")
+    format!("Measure: {tool_name}")
 }
 
 /// Tooltip on the Measure menu (§1.2 / §7.1) — states what it does and when to
-/// reach for it versus the annotation-authoring Markup ▾ menu.
+/// reach for it versus the annotation-authoring Markup menu.
 pub fn measure_menu_tooltip() -> &'static str {
     "Add scaled measurement dimensions — linear distances, radius/diameter from a best-fit \
 circle, and per-group scale calibration. Dimensions are additive annotations on their own \
 toggleable layer; the value updates when you change the group's scale. This is measurement, \
-not drawing — for shapes and callouts use Markup ▾."
+not drawing — for shapes and callouts use Markup."
 }
 
 /// The Measure menu's Linear-Dimension row (§1.2).

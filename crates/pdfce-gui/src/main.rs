@@ -2943,22 +2943,35 @@ impl PdfceApp {
         let mut swap: Option<(usize, usize)> = None;
         for (index, path) in self.merge_inputs.iter().enumerate() {
             ui.horizontal(|ui| {
+                // Routed through `glyph_button` — the SAME accessible-name
+                // wrapper the page rail's identical up/down pair uses. These
+                // two call sites were the ones that never migrated: a bare
+                // `Button::new` on a triangle glyph announces the glyph (or
+                // nothing) rather than "Move file up", which is precisely the
+                // gap `glyph_button`'s own doc comment cites this very pair as
+                // its reason for existing.
                 if ui
-                    .add_enabled(
-                        index > 0,
-                        egui::Button::new(ui_text::move_selection_up_button()),
-                    )
-                    .on_hover_text(ui_text::merge_move_up_tooltip())
+                    .add_enabled_ui(index > 0, |ui| {
+                        Self::glyph_button(
+                            ui,
+                            ui_text::move_selection_up_button(),
+                            ui_text::merge_move_up_tooltip(),
+                        )
+                    })
+                    .inner
                     .clicked()
                 {
                     swap = Some((index, index - 1));
                 }
                 if ui
-                    .add_enabled(
-                        index + 1 < self.merge_inputs.len(),
-                        egui::Button::new(ui_text::move_selection_down_button()),
-                    )
-                    .on_hover_text(ui_text::merge_move_down_tooltip())
+                    .add_enabled_ui(index + 1 < self.merge_inputs.len(), |ui| {
+                        Self::glyph_button(
+                            ui,
+                            ui_text::move_selection_down_button(),
+                            ui_text::merge_move_down_tooltip(),
+                        )
+                    })
+                    .inner
                     .clicked()
                 {
                     swap = Some((index, index + 1));
@@ -4031,6 +4044,70 @@ impl PdfceApp {
         response
     }
 
+    /// A toolbar **menu** button: leading icon, label, and a trailing
+    /// disclosure chevron — with an accessible name that says it opens a menu.
+    ///
+    /// # Why this wrapper exists
+    ///
+    /// The visible cue and the announced cue have to be supplied *separately*,
+    /// and neither is automatic:
+    ///
+    /// - **Visible.** The affordance used to be a `▾` appended to the label.
+    ///   U+25BE is in none of the fonts in egui's default Proportional chain
+    ///   (Ubuntu-Light → NotoEmoji → emoji-icon-font), so it rendered as a tofu
+    ///   box on every menu button pdfce shipped. It is now
+    ///   [`icons::menu_chevron`], a real drawn glyph.
+    /// - **Announced.** egui's [`egui::WidgetType`] has no menu/has-popup role
+    ///   and `Ui::menu_button` sets no `WidgetInfo`, so "opens a menu" can only
+    ///   reach assistive technology as literal text. An image announces
+    ///   nothing, so replacing the glyph with a picture *alone* would have made
+    ///   these controls LESS accessible than the bug did — a tofu box at least
+    ///   carries a Unicode name some readers speak.
+    ///
+    /// Routing every menu button through one function is what stops those two
+    /// halves drifting apart: you cannot add the chevron here and forget the
+    /// name. Same reasoning as [`Self::labeled_icon_button`], which is the
+    /// sibling wrapper for icon-only controls.
+    ///
+    /// See `docs/ui_specs/menu-affordance-and-glyph-coverage.md`.
+    fn menu_button_labeled<R>(
+        ui: &mut egui::Ui,
+        icon: icons::Icon,
+        label: String,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> egui::InnerResponse<Option<R>> {
+        let image = icons::image(ui, icon);
+        let rich = egui::RichText::new(label.clone());
+        Self::menu_button_atoms(ui, image, rich, &label, add_contents)
+    }
+
+    /// [`Self::menu_button_labeled`] for a menu button whose icon and label
+    /// carry their own **state styling** — currently the Measure menu, whose
+    /// glyph goes bold and whose label changes while a sub-tool is active, so
+    /// the active state is announced by weight as well as by colour (the
+    /// standing "never colour alone" rule).
+    ///
+    /// Split out rather than folded in because the caller must be able to pass
+    /// an already-styled image and `RichText`, while the ACCESSIBLE name must
+    /// still be built from the plain text — a screen reader should hear
+    /// "Measure: Linear, opens a menu", not markup.
+    fn menu_button_atoms<R>(
+        ui: &mut egui::Ui,
+        icon: egui::Image<'static>,
+        label: egui::RichText,
+        plain_label: &str,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> egui::InnerResponse<Option<R>> {
+        let atoms = (icon, label, icons::menu_chevron(ui));
+        let enabled = ui.is_enabled();
+        let name = ui_text::menu_button_accessible_name(plain_label);
+        let inner = ui.menu_button(atoms, add_contents);
+        inner.response.widget_info(move || {
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, name.clone())
+        });
+        inner
+    }
+
     /// An icon-only **toggle** (a `Button::selectable`), carrying three
     /// simultaneous selected-state cues.
     ///
@@ -4410,38 +4487,39 @@ impl PdfceApp {
                 // this minimal affordance authors a default-placed shape on
                 // the current page through the same command path.
                 ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    let button = (
-                        icons::image(ui, icons::Icon::Markup),
-                        egui::RichText::new(ui_text::markup_menu_button()),
-                    );
-                    ui.menu_button(button, |ui| {
-                        ui.label(ui_text::markup_menu_hint());
-                        // The current pen colour: changing it is not an
-                        // edit (ui-spec §1.1), only authoring is.
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::markup_color_label());
-                            ui.color_edit_button_srgba(&mut self.markup_color);
-                        });
-                        ui.separator();
-                        for kind in [
-                            GuiMarkupKind::Square,
-                            GuiMarkupKind::Circle,
-                            GuiMarkupKind::Line,
-                            GuiMarkupKind::Highlight,
-                        ] {
-                            // Icon + text, never icon alone: a menu row is
-                            // read, not scanned, so the words stay the
-                            // primary label and the glyph is a recognition
-                            // aid beside them (ui-spec §3.3).
-                            let row = (
-                                icons::image(ui, kind.icon()),
-                                egui::RichText::new(kind.label()),
-                            );
-                            if ui.add(egui::Button::new(row)).clicked() {
-                                actions.push(Action::AddMarkupShape(kind));
+                    Self::menu_button_labeled(
+                        ui,
+                        icons::Icon::Markup,
+                        ui_text::markup_menu_button().to_owned(),
+                        |ui| {
+                            ui.label(ui_text::markup_menu_hint());
+                            // The current pen colour: changing it is not an
+                            // edit (ui-spec §1.1), only authoring is.
+                            ui.horizontal(|ui| {
+                                ui.label(ui_text::markup_color_label());
+                                ui.color_edit_button_srgba(&mut self.markup_color);
+                            });
+                            ui.separator();
+                            for kind in [
+                                GuiMarkupKind::Square,
+                                GuiMarkupKind::Circle,
+                                GuiMarkupKind::Line,
+                                GuiMarkupKind::Highlight,
+                            ] {
+                                // Icon + text, never icon alone: a menu row is
+                                // read, not scanned, so the words stay the
+                                // primary label and the glyph is a recognition
+                                // aid beside them (ui-spec §3.3).
+                                let row = (
+                                    icons::image(ui, kind.icon()),
+                                    egui::RichText::new(kind.label()),
+                                );
+                                if ui.add(egui::Button::new(row)).clicked() {
+                                    actions.push(Action::AddMarkupShape(kind));
+                                }
                             }
-                        }
-                    })
+                        },
+                    )
                     .response
                     .on_hover_text(ui_text::markup_menu_tooltip());
                 });
@@ -4452,38 +4530,39 @@ impl PdfceApp {
                 // confirm (see the popup below). A full canvas text editor
                 // is the named follow-up slice.
                 ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    let button = (
-                        icons::image(ui, icons::Icon::Text),
-                        egui::RichText::new(ui_text::text_menu_button()),
-                    );
-                    ui.menu_button(button, |ui| {
-                        ui.label(ui_text::text_menu_hint());
-                        // P1-3b: surface the same pen-colour control the
-                        // Markup menu has, plus an honest note that it
-                        // applies to the text box only — a FreeText box
-                        // authored without ever opening Markup otherwise
-                        // takes an unexplained default colour, and sticky
-                        // notes/stamps deliberately ignore it.
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::markup_color_label());
-                            ui.color_edit_button_srgba(&mut self.markup_color);
-                        });
-                        ui.label(ui_text::text_menu_color_note());
-                        ui.separator();
-                        for kind in [
-                            GuiTextKind::FreeText,
-                            GuiTextKind::Sticky,
-                            GuiTextKind::Stamp,
-                        ] {
-                            let row = (
-                                icons::image(ui, kind.icon()),
-                                egui::RichText::new(kind.label()),
-                            );
-                            if ui.add(egui::Button::new(row)).clicked() {
-                                actions.push(Action::OpenTextEntry(kind));
+                    Self::menu_button_labeled(
+                        ui,
+                        icons::Icon::Text,
+                        ui_text::text_menu_button().to_owned(),
+                        |ui| {
+                            ui.label(ui_text::text_menu_hint());
+                            // P1-3b: surface the same pen-colour control the
+                            // Markup menu has, plus an honest note that it
+                            // applies to the text box only — a FreeText box
+                            // authored without ever opening Markup otherwise
+                            // takes an unexplained default colour, and sticky
+                            // notes/stamps deliberately ignore it.
+                            ui.horizontal(|ui| {
+                                ui.label(ui_text::markup_color_label());
+                                ui.color_edit_button_srgba(&mut self.markup_color);
+                            });
+                            ui.label(ui_text::text_menu_color_note());
+                            ui.separator();
+                            for kind in [
+                                GuiTextKind::FreeText,
+                                GuiTextKind::Sticky,
+                                GuiTextKind::Stamp,
+                            ] {
+                                let row = (
+                                    icons::image(ui, kind.icon()),
+                                    egui::RichText::new(kind.label()),
+                                );
+                                if ui.add(egui::Button::new(row)).clicked() {
+                                    actions.push(Action::OpenTextEntry(kind));
+                                }
                             }
-                        }
-                    })
+                        },
+                    )
                     .response
                     .on_hover_text(ui_text::text_menu_tooltip());
                 });
@@ -4587,48 +4666,50 @@ impl PdfceApp {
                     // carried by weight as well as by the dynamic label —
                     // the same "never colour alone" discipline the
                     // icon-only toggles get, applied to a menu.
-                    let button = (
+                    Self::menu_button_atoms(
+                        ui,
                         icons::toggle_image(ui, icons::Icon::Measure, active_name.is_some()),
                         Self::toggle_label(active_name.is_some(), &label),
-                    );
-                    ui.menu_button(button, |ui| {
-                        let mut row = |ui: &mut egui::Ui, tool: CanvasTool, text: &str| {
-                            let is_active = doc.active_tool == Some(tool);
-                            if ui.selectable_label(is_active, text).clicked() {
-                                actions.push(Action::SelectCanvasTool(if is_active {
-                                    None
-                                } else {
-                                    Some(tool)
-                                }));
+                        &label,
+                        |ui| {
+                            let mut row = |ui: &mut egui::Ui, tool: CanvasTool, text: &str| {
+                                let is_active = doc.active_tool == Some(tool);
+                                if ui.selectable_label(is_active, text).clicked() {
+                                    actions.push(Action::SelectCanvasTool(if is_active {
+                                        None
+                                    } else {
+                                        Some(tool)
+                                    }));
+                                    ui.close();
+                                }
+                            };
+                            row(
+                                ui,
+                                CanvasTool::MeasureLinear,
+                                ui_text::measure_linear_menu_item(),
+                            );
+                            row(
+                                ui,
+                                CanvasTool::MeasureCircular,
+                                ui_text::measure_circular_menu_item(),
+                            );
+                            row(
+                                ui,
+                                CanvasTool::MeasureScale,
+                                ui_text::measure_set_scale_menu_item(),
+                            );
+                            ui.separator();
+                            // "Manage Dimension Groups…" — opens the §5 modeless
+                            // window; does NOT change active_tool (ui-spec §1.2).
+                            if ui
+                                .button(ui_text::measure_manage_groups_menu_item())
+                                .clicked()
+                            {
+                                actions.push(Action::ToggleDimensionGroups);
                                 ui.close();
                             }
-                        };
-                        row(
-                            ui,
-                            CanvasTool::MeasureLinear,
-                            ui_text::measure_linear_menu_item(),
-                        );
-                        row(
-                            ui,
-                            CanvasTool::MeasureCircular,
-                            ui_text::measure_circular_menu_item(),
-                        );
-                        row(
-                            ui,
-                            CanvasTool::MeasureScale,
-                            ui_text::measure_set_scale_menu_item(),
-                        );
-                        ui.separator();
-                        // "Manage Dimension Groups…" — opens the §5 modeless
-                        // window; does NOT change active_tool (ui-spec §1.2).
-                        if ui
-                            .button(ui_text::measure_manage_groups_menu_item())
-                            .clicked()
-                        {
-                            actions.push(Action::ToggleDimensionGroups);
-                            ui.close();
-                        }
-                    })
+                        },
+                    )
                     .response
                     .on_hover_text(ui_text::measure_menu_tooltip());
                 });
@@ -4688,28 +4769,29 @@ impl PdfceApp {
             // silently picked one would be exactly the guess this
             // feature exists not to make.
             if self.status_is_open() {
-                let button = (
-                    icons::image(ui, icons::Icon::Copy),
-                    egui::RichText::new(ui_text::copy_text_button()),
-                );
-                ui.menu_button(button, |ui| {
-                    if ui
-                        .button(ui_text::copy_page_text_menu_item())
-                        .on_hover_text(ui_text::copy_page_text_tooltip())
-                        .clicked()
-                    {
-                        actions.push(Action::CopyText(CopyScope::Page));
-                        ui.close();
-                    }
-                    if ui
-                        .button(ui_text::copy_document_text_menu_item())
-                        .on_hover_text(ui_text::copy_document_text_tooltip())
-                        .clicked()
-                    {
-                        actions.push(Action::CopyText(CopyScope::Document));
-                        ui.close();
-                    }
-                })
+                Self::menu_button_labeled(
+                    ui,
+                    icons::Icon::Copy,
+                    ui_text::copy_text_button().to_owned(),
+                    |ui| {
+                        if ui
+                            .button(ui_text::copy_page_text_menu_item())
+                            .on_hover_text(ui_text::copy_page_text_tooltip())
+                            .clicked()
+                        {
+                            actions.push(Action::CopyText(CopyScope::Page));
+                            ui.close();
+                        }
+                        if ui
+                            .button(ui_text::copy_document_text_menu_item())
+                            .on_hover_text(ui_text::copy_document_text_tooltip())
+                            .clicked()
+                        {
+                            actions.push(Action::CopyText(CopyScope::Document));
+                            ui.close();
+                        }
+                    },
+                )
                 .response
                 .on_hover_text(ui_text::copy_text_tooltip());
             }
