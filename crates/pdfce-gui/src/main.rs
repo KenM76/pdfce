@@ -215,6 +215,7 @@
 #![forbid(unsafe_code)]
 
 mod canvas;
+mod icons;
 mod measure_tool;
 mod object_provider;
 mod raster;
@@ -794,6 +795,21 @@ impl GuiMarkupKind {
             Self::Highlight => ui_text::markup_highlight_item(),
         }
     }
+
+    /// The menu-row glyph (ui-spec §3.3).
+    ///
+    /// Kept beside [`Self::label`] rather than in the toolbar so the row's
+    /// two halves cannot drift apart — adding a fifth markup kind is a
+    /// non-exhaustive-match error in BOTH, which is exactly the reminder
+    /// a new kind needs.
+    fn icon(self) -> icons::Icon {
+        match self {
+            Self::Square => icons::Icon::ShapeRect,
+            Self::Circle => icons::Icon::ShapeEllipse,
+            Self::Line => icons::Icon::ShapeArrow,
+            Self::Highlight => icons::Icon::ShapeHighlight,
+        }
+    }
 }
 
 /// Which text-bearing annotation the toolbar's "Text" menu authors
@@ -817,6 +833,16 @@ impl GuiTextKind {
             Self::FreeText => ui_text::text_freetext_item(),
             Self::Sticky => ui_text::text_sticky_item(),
             Self::Stamp => ui_text::text_stamp_item(),
+        }
+    }
+
+    /// The menu-row glyph (ui-spec §3.3; Stamp shares §3.4's rubber-stamp
+    /// silhouette with the future Bates-numbering feature).
+    fn icon(self) -> icons::Icon {
+        match self {
+            Self::FreeText => icons::Icon::TextFreeText,
+            Self::Sticky => icons::Icon::TextSticky,
+            Self::Stamp => icons::Icon::Stamp,
         }
     }
 }
@@ -2687,14 +2713,35 @@ impl PdfceApp {
         ui.label(ui_text::tools_dock_intro());
         ui.separator();
 
-        for (tool, label) in [
-            (Tool::Merge, ui_text::tool_merge_label()),
-            (Tool::Split, ui_text::tool_split_label()),
-            (Tool::Insert, ui_text::tool_insert_pages_label()),
-            (Tool::FontFolders, ui_text::tool_font_folders_label()),
+        // Icon + text rows (ui-spec §2 #24–27). Icons here are pure
+        // recognition aids: the dock is read top-to-bottom, so the text
+        // stays the label and a repeated glyph (Open and Font folders
+        // share the folder art, §3.5) degrades gracefully — unlike two
+        // icon-only toolbar buttons, which would have no such fallback.
+        for (tool, label, icon) in [
+            (
+                Tool::Merge,
+                ui_text::tool_merge_label(),
+                icons::Icon::Combine,
+            ),
+            (Tool::Split, ui_text::tool_split_label(), icons::Icon::Split),
+            (
+                Tool::Insert,
+                ui_text::tool_insert_pages_label(),
+                icons::Icon::InsertPages,
+            ),
+            (
+                Tool::FontFolders,
+                ui_text::tool_font_folders_label(),
+                icons::Icon::FontFolders,
+            ),
         ] {
             let open = self.tools_selected == Some(tool);
-            if ui.selectable_label(open, label).clicked() {
+            let row = (
+                icons::toggle_image(ui, icon, open),
+                Self::toggle_label(open, label),
+            );
+            if ui.add(egui::Button::selectable(open, row)).clicked() {
                 self.tools_selected = if open { None } else { Some(tool) };
             }
         }
@@ -3864,16 +3911,148 @@ impl PdfceApp {
     /// "Rotate page clockwise" instead of "↻". The name reuses the
     /// tooltip verbatim, and the widget's enabled state is captured from
     /// the current `ui` so a disabled control announces as disabled.
-    fn icon_button(ui: &mut egui::Ui, glyph: &str, tooltip: impl Into<String>) -> egui::Response {
+    fn icon_button(
+        ui: &mut egui::Ui,
+        icon: icons::Icon,
+        tooltip: impl Into<String>,
+    ) -> egui::Response {
+        let image = icons::image(ui, icon);
+        Self::labeled_icon_button(ui, egui::Button::new(image), tooltip)
+    }
+
+    /// The same wrapper for the handful of icon-only controls that have
+    /// no assigned SVG yet (the rail's keyboard reorder arrows) and so
+    /// still draw a bare Unicode glyph.
+    ///
+    /// This is deliberately a second *entry point* into
+    /// [`Self::labeled_icon_button`], not a second implementation: the
+    /// accessible-name fix (P1-6) exists in exactly one place, so a
+    /// control drawn either way announces itself identically. The
+    /// ui-spec §4.1 requirement is "do not build a parallel path", and a
+    /// shared body with two constructors honours that; duplicating the
+    /// `WidgetInfo::labeled` call would not.
+    fn glyph_button(ui: &mut egui::Ui, glyph: &str, tooltip: impl Into<String>) -> egui::Response {
+        Self::labeled_icon_button(ui, egui::Button::new(glyph), tooltip)
+    }
+
+    /// Size an icon-only button to [`ICON_BUTTON_SIZE`], attach its
+    /// tooltip, and override its accessible name with that same tooltip
+    /// text (P1-6).
+    ///
+    /// egui derives a widget's accessible name from its visible label.
+    /// For a bare-glyph button that meant a screen reader announced "↻";
+    /// for an IMAGE button it would announce nothing at all, which is
+    /// strictly worse — so this override is more load-bearing after the
+    /// icon swap than before it, and is why every icon-only control must
+    /// come through here rather than calling `ui.add_sized` directly.
+    fn labeled_icon_button(
+        ui: &mut egui::Ui,
+        button: egui::Button<'_>,
+        tooltip: impl Into<String>,
+    ) -> egui::Response {
         let name = tooltip.into();
         let enabled = ui.is_enabled();
         let response = ui
-            .add_sized(ICON_BUTTON_SIZE, egui::Button::new(glyph))
+            .add_sized(ICON_BUTTON_SIZE, button)
             .on_hover_text(name.clone());
         response.widget_info(move || {
             egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, name.clone())
         });
         response
+    }
+
+    /// An icon-only **toggle** (a `Button::selectable`), carrying three
+    /// simultaneous selected-state cues.
+    ///
+    /// Standing rule: a selected state is never colour alone (project
+    /// rule 6 / P1-1; ui-spec §5.3 names this as the one place an icon
+    /// swap can silently regress an existing guarantee). A text toggle
+    /// satisfies it by going **bold** — [`Self::toggle_label`] — but an
+    /// icon-only toggle has no text to embolden. So when selected it
+    /// gets:
+    ///
+    /// 1. egui's own selected background fill (colour — the cue that is
+    ///    *not* sufficient on its own),
+    /// 2. a heavier glyph ([`icons::IconWeight::Bold`], a **weight** cue),
+    /// 3. an explicit outline ring ([`Self::selected_icon_ring`], a
+    ///    **shape** cue).
+    ///
+    /// Two of the three survive being viewed in greyscale or by an
+    /// operator with a colour-vision deficiency, which is the point.
+    fn icon_toggle(
+        ui: &mut egui::Ui,
+        icon: icons::Icon,
+        selected: bool,
+        tooltip: &str,
+    ) -> egui::Response {
+        let image = icons::toggle_image(ui, icon, selected);
+        let response = ui
+            .add_sized(ICON_BUTTON_SIZE, egui::Button::selectable(selected, image))
+            .on_hover_text(tooltip.to_owned());
+        if selected {
+            Self::selected_icon_ring(ui, response.rect);
+        }
+        let name = tooltip.to_owned();
+        response.widget_info(move || {
+            egui::WidgetInfo::selected(
+                egui::WidgetType::SelectableLabel,
+                true,
+                selected,
+                name.clone(),
+            )
+        });
+        response
+    }
+
+    /// An icon **plus text** toggle — Edit Text ("Aa"), Add Text ("Aa"),
+    /// Edit Objects ("Obj").
+    ///
+    /// Lower risk than [`Self::icon_toggle`] because the text half of the
+    /// label survives the icon swap untouched, so
+    /// [`Self::toggle_label`]'s bolding still supplies a non-colour cue
+    /// exactly as it did before (ui-spec §5.3: "no change needed"). The
+    /// glyph is emboldened too, so the icon and its label agree rather
+    /// than the icon looking inert beside bold text.
+    fn icon_text_toggle(
+        ui: &mut egui::Ui,
+        icon: icons::Icon,
+        selected: bool,
+        text: &str,
+        tooltip: &str,
+    ) -> egui::Response {
+        let image = icons::toggle_image(ui, icon, selected);
+        ui.add(egui::Button::selectable(
+            selected,
+            (image, Self::toggle_label(selected, text)),
+        ))
+        .on_hover_text(tooltip.to_owned())
+    }
+
+    /// A plain (non-toggle) icon **plus text** button — Open, Save,
+    /// Tools, and the three ▾ menu buttons.
+    ///
+    /// No accessible-name override is needed or wanted here: the visible
+    /// text IS the name, and egui derives it correctly. Overriding it
+    /// would be the same mistake in the opposite direction.
+    fn icon_text(ui: &egui::Ui, icon: icons::Icon, text: &str) -> egui::Button<'static> {
+        egui::Button::new((icons::image(ui, icon), egui::RichText::new(text.to_owned())))
+    }
+
+    /// Paint the selected-state outline ring described in
+    /// [`Self::icon_toggle`].
+    ///
+    /// Drawn `Inside` the widget rect and inset by 1 pt so it reads as a
+    /// frame around the control rather than as the control's own border
+    /// growing — and so it cannot bleed into the neighbouring button and
+    /// look like a rendering bug at tight toolbar spacing.
+    fn selected_icon_ring(ui: &egui::Ui, rect: egui::Rect) {
+        let visuals = ui.visuals();
+        ui.painter().rect_stroke(
+            rect.shrink(1.0),
+            visuals.widgets.active.corner_radius,
+            egui::Stroke::new(1.5, visuals.selection.stroke.color),
+            egui::StrokeKind::Inside,
+        );
     }
 
     /// Style a toolbar toggle's label so its active state carries a
@@ -3889,11 +4068,102 @@ impl PdfceApp {
     // -- toolbar ----------------------------------------------------
 
     /// The top toolbar: separated groups, per the module docs.
+    ///
+    /// # Overflow: the row WRAPS, and that is a deliberate choice
+    ///
+    /// This row used to be a plain `ui.horizontal`, which in egui means
+    /// "lay everything out left to right and let whatever does not fit
+    /// fall off the end". At the default 1100 pt launch width with a
+    /// document open, the row ended at Add Text and the Edit Objects,
+    /// Measure ▾, Copy ▾, Tools and Shortcuts controls were **entirely
+    /// off screen with nothing on screen indicating they existed** —
+    /// observed on a running build, not theorised. That is a real defect
+    /// and a standing-rule violation (no silent truncation): an operator
+    /// hunting for the dimensioning tool was told, in effect, that pdfce
+    /// does not have one.
+    ///
+    /// Switching every control to a ~16 pt icon shrinks the row by
+    /// several hundred points and hides the symptom, but does not fix
+    /// the bug — a narrow enough window still overflows, and a future
+    /// Pass adding two more tools would reintroduce it silently. So the
+    /// row now **wraps** onto as many lines as it needs.
+    ///
+    /// The three candidates and why wrapping won:
+    ///
+    /// * **Overflow menu (a `»` chevron revealing the clipped tail).**
+    ///   The conventional answer, and the one that reads best on a wide
+    ///   window. Rejected because it needs to know which controls did not
+    ///   fit *before* laying them out, and in an immediate-mode GUI that
+    ///   means either measuring a frame late (the menu's contents lag the
+    ///   window by one frame while resizing) or hard-coding a "these are
+    ///   the low-priority ones" list that silently rots as Passes add
+    ///   controls. It also still hides controls behind a second click.
+    /// * **Horizontal scroll with an indicator.** Keeps one line, but a
+    ///   scroll affordance is a weak cue — it is exactly the "there might
+    ///   be more" signal operators miss — and it makes reaching a control
+    ///   a gesture rather than a click.
+    /// * **Wrapping (chosen).** The only option under which *no control
+    ///   is ever hidden at all*, so the "never unreachable without a
+    ///   visible cue that more exist" requirement is satisfied
+    ///   structurally rather than by an affordance the operator has to
+    ///   notice. The cost is that the toolbar grows taller on a narrow
+    ///   window, which is honest, visible, and immediately reversible by
+    ///   widening the window. Group separators survive wrapping, so the
+    ///   grouping the module docs describe is still legible on two lines.
+    ///
+    /// The status summary keeps its right-hand pin: the row is a
+    /// right-to-left layout containing the summary and then a nested
+    /// wrapping left-to-right layout holding every control. Without the
+    /// nesting the summary would join the wrap flow and drift leftward
+    /// as controls were added, which is the exact drift the original
+    /// right-alignment comment was written to prevent.
     fn toolbar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let summary = self.status_summary();
         ui.horizontal(|ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(summary);
+                ui.with_layout(
+                    egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true),
+                    |ui| self.toolbar_controls(ui, actions),
+                );
+            });
+        });
+    }
+
+    /// Every toolbar control, in group order, laid into the wrapping row
+    /// [`Self::toolbar`] builds.
+    ///
+    /// Split out from [`Self::toolbar`] purely so the layout scaffolding
+    /// and the control list can each be read without the other; the
+    /// grouping, ordering and `ui.separator()` convention are unchanged
+    /// from before the icon swap (the ui-spec explicitly does not
+    /// reorder or regroup anything — it only assigns an image to each
+    /// existing control).
+    fn toolbar_controls(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        // Never let a control's OWN label wrap.
+        //
+        // Without this, a wrapping row hands each widget only the width
+        // left on the current line, and egui's default `Wrap` mode makes
+        // the widget honour it — so at ~640 pt the "Measure ▾" button
+        // rendered its label one character per line, as a tall vertical
+        // column that inflated the whole toolbar and pushed the History
+        // and utility groups out of the panel. Observed on a running
+        // build; it is the wrap fix's own failure mode and would have
+        // been a worse defect than the clipping it replaced.
+        //
+        // `Extend` makes every widget report its full natural width, so
+        // the wrap decision is taken at the CONTROL boundary — the whole
+        // button moves to the next line, intact — which is the only
+        // sensible unit to break a toolbar on.
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+        {
             // Group: file.
             if ui
-                .button(ui_text::open_button())
+                .add(Self::icon_text(
+                    ui,
+                    icons::Icon::Open,
+                    ui_text::open_button(),
+                ))
                 .on_hover_text(ui_text::open_tooltip())
                 .clicked()
             {
@@ -3904,7 +4174,11 @@ impl PdfceApp {
             // nothing to discover about saving with no document.
             if matches!(self.status, Status::Open(_))
                 && ui
-                    .button(ui_text::save_button())
+                    .add(Self::icon_text(
+                        ui,
+                        icons::Icon::Save,
+                        ui_text::save_button(),
+                    ))
                     .on_hover_text(ui_text::save_tooltip())
                     .clicked()
             {
@@ -3915,12 +4189,7 @@ impl PdfceApp {
             // Group: view (rail toggle, annotation-visibility). These
             // govern what is on screen rather than the document, per the
             // placement taxonomy (view-state → toolbar view group).
-            if Self::icon_button(
-                ui,
-                ui_text::rail_toggle_button(),
-                ui_text::rail_toggle_tooltip(),
-            )
-            .clicked()
+            if Self::icon_button(ui, icons::Icon::Sidebar, ui_text::rail_toggle_tooltip()).clicked()
             {
                 actions.push(Action::ToggleRail);
             }
@@ -3928,13 +4197,15 @@ impl PdfceApp {
             // rather than a plain button: on a lightly-annotated page,
             // flipping it can produce no visible canvas change, so the
             // control must itself carry and announce its on/off state
-            // (the ui-specialist's Rule-6 note) — the highlight, the bold
-            // active label (P1-1) and a state-stating tooltip are the
-            // non-colour cues. Wrapped in `add_sized` so it honours the
-            // same click-target minimum as every other icon-only control
-            // (P0-6), and given an explicit accessible name (P1-6) since
-            // its visible label is a single glyph. Shown only with a
-            // document open: unlike the rail, it acts on the current
+            // (the ui-specialist's Rule-6 note) — the highlight, the
+            // state-stating tooltip and, since the icon swap left no text
+            // to embolden (P1-1), the bold glyph + outline ring
+            // [`Self::icon_toggle`] adds are the non-colour cues. It
+            // honours the same click-target minimum as every other
+            // icon-only control (P0-6) and carries an explicit accessible
+            // name (P1-6), which matters MORE after the swap: an image
+            // button publishes no usable name of its own. Shown only with
+            // a document open: unlike the rail, it acts on the current
             // page's canvas.
             if let Status::Open(doc) = &self.status {
                 let visible = doc.annotations_visible;
@@ -3943,24 +4214,7 @@ impl PdfceApp {
                 } else {
                     ui_text::annotations_toggle_tooltip_hidden()
                 };
-                let response = ui
-                    .add_sized(
-                        ICON_BUTTON_SIZE,
-                        egui::Button::selectable(
-                            visible,
-                            Self::toggle_label(visible, ui_text::annotations_toggle_button()),
-                        ),
-                    )
-                    .on_hover_text(tooltip);
-                response.widget_info(|| {
-                    egui::WidgetInfo::selected(
-                        egui::WidgetType::SelectableLabel,
-                        true,
-                        visible,
-                        tooltip,
-                    )
-                });
-                if response.clicked() {
+                if Self::icon_toggle(ui, icons::Icon::Comment, visible, tooltip).clicked() {
                     actions.push(Action::ToggleAnnotations);
                 }
             }
@@ -3975,12 +4229,8 @@ impl PdfceApp {
                 let current = doc.view.page_index + 1;
 
                 ui.add_enabled_ui(doc.view.page_index > 0, |ui| {
-                    if Self::icon_button(
-                        ui,
-                        ui_text::prev_page_button(),
-                        ui_text::prev_page_tooltip(),
-                    )
-                    .clicked()
+                    if Self::icon_button(ui, icons::Icon::ChevronLeft, ui_text::prev_page_tooltip())
+                        .clicked()
                     {
                         actions.push(Action::PrevPage);
                     }
@@ -3989,7 +4239,7 @@ impl PdfceApp {
                 ui.add_enabled_ui(current < count, |ui| {
                     if Self::icon_button(
                         ui,
-                        ui_text::next_page_button(),
+                        icons::Icon::ChevronRight,
                         ui_text::next_page_tooltip(),
                     )
                     .clicked()
@@ -3999,14 +4249,13 @@ impl PdfceApp {
                 });
                 ui.separator();
 
-                if Self::icon_button(ui, ui_text::zoom_out_button(), ui_text::zoom_out_tooltip())
+                if Self::icon_button(ui, icons::Icon::ZoomOut, ui_text::zoom_out_tooltip())
                     .clicked()
                 {
                     actions.push(Action::ZoomOut);
                 }
                 ui.label(ui_text::zoom_percent_label(doc.view.zoom_percent()));
-                if Self::icon_button(ui, ui_text::zoom_in_button(), ui_text::zoom_in_tooltip())
-                    .clicked()
+                if Self::icon_button(ui, icons::Icon::ZoomIn, ui_text::zoom_in_tooltip()).clicked()
                 {
                     actions.push(Action::ZoomIn);
                 }
@@ -4014,27 +4263,36 @@ impl PdfceApp {
                 // modes: the operator can see at a glance whether the
                 // view is currently *being kept* fitted or is pinned.
                 let fit_page = doc.view.fit == FitMode::Page;
-                if ui
-                    .selectable_label(
-                        fit_page,
-                        Self::toggle_label(fit_page, ui_text::fit_page_button()),
-                    )
-                    .on_hover_text(ui_text::fit_page_tooltip())
-                    .clicked()
+                if Self::icon_text_toggle(
+                    ui,
+                    icons::Icon::FitPage,
+                    fit_page,
+                    ui_text::fit_page_button(),
+                    ui_text::fit_page_tooltip(),
+                )
+                .clicked()
                 {
                     actions.push(Action::Fit(FitMode::Page));
                 }
                 let fit_width = doc.view.fit == FitMode::Width;
-                if ui
-                    .selectable_label(
-                        fit_width,
-                        Self::toggle_label(fit_width, ui_text::fit_width_button()),
-                    )
-                    .on_hover_text(ui_text::fit_width_tooltip())
-                    .clicked()
+                if Self::icon_text_toggle(
+                    ui,
+                    icons::Icon::FitWidth,
+                    fit_width,
+                    ui_text::fit_width_button(),
+                    ui_text::fit_width_tooltip(),
+                )
+                .clicked()
                 {
                     actions.push(Action::Fit(FitMode::Width));
                 }
+                // Deliberately the ONE un-iconified control (ui-spec
+                // §3.2): "100%" read at a glance already says "I am at
+                // exactly true size", and every candidate glyph (a
+                // magnifier with a "1" badge, a "1:1" pictograph) adds a
+                // decode step a bare percentage does not need. Iconifying
+                // it to satisfy "icons for all features" would be worse,
+                // not better, so it stays plain text.
                 if ui
                     .button(ui_text::zoom_100_button())
                     .on_hover_text(ui_text::zoom_100_tooltip())
@@ -4051,32 +4309,25 @@ impl PdfceApp {
                 // make "does this button change my file?" unanswerable
                 // at a glance.
                 ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    if Self::icon_button(
-                        ui,
-                        ui_text::rotate_left_button(),
-                        ui_text::rotate_left_tooltip(),
-                    )
-                    .clicked()
+                    if Self::icon_button(ui, icons::Icon::RotateCcw, ui_text::rotate_left_tooltip())
+                        .clicked()
                     {
                         actions.push(Action::RotateLeft);
                     }
-                    if Self::icon_button(
-                        ui,
-                        ui_text::rotate_right_button(),
-                        ui_text::rotate_right_tooltip(),
-                    )
-                    .clicked()
+                    if Self::icon_button(ui, icons::Icon::RotateCw, ui_text::rotate_right_tooltip())
+                        .clicked()
                     {
                         actions.push(Action::RotateRight);
                     }
                 });
-                if ui
-                    .selectable_label(
-                        self.properties_open,
-                        Self::toggle_label(self.properties_open, ui_text::properties_button()),
-                    )
-                    .on_hover_text(ui_text::properties_tooltip())
-                    .clicked()
+                if Self::icon_text_toggle(
+                    ui,
+                    icons::Icon::Properties,
+                    self.properties_open,
+                    ui_text::properties_button(),
+                    ui_text::properties_tooltip(),
+                )
+                .clicked()
                 {
                     actions.push(Action::ToggleProperties);
                 }
@@ -4089,7 +4340,11 @@ impl PdfceApp {
                 // this minimal affordance authors a default-placed shape on
                 // the current page through the same command path.
                 ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    ui.menu_button(ui_text::markup_menu_button(), |ui| {
+                    let button = (
+                        icons::image(ui, icons::Icon::Markup),
+                        egui::RichText::new(ui_text::markup_menu_button()),
+                    );
+                    ui.menu_button(button, |ui| {
                         ui.label(ui_text::markup_menu_hint());
                         // The current pen colour: changing it is not an
                         // edit (ui-spec §1.1), only authoring is.
@@ -4104,7 +4359,15 @@ impl PdfceApp {
                             GuiMarkupKind::Line,
                             GuiMarkupKind::Highlight,
                         ] {
-                            if ui.button(kind.label()).clicked() {
+                            // Icon + text, never icon alone: a menu row is
+                            // read, not scanned, so the words stay the
+                            // primary label and the glyph is a recognition
+                            // aid beside them (ui-spec §3.3).
+                            let row = (
+                                icons::image(ui, kind.icon()),
+                                egui::RichText::new(kind.label()),
+                            );
+                            if ui.add(egui::Button::new(row)).clicked() {
                                 actions.push(Action::AddMarkupShape(kind));
                             }
                         }
@@ -4119,7 +4382,11 @@ impl PdfceApp {
                 // confirm (see the popup below). A full canvas text editor
                 // is the named follow-up slice.
                 ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    ui.menu_button(ui_text::text_menu_button(), |ui| {
+                    let button = (
+                        icons::image(ui, icons::Icon::Text),
+                        egui::RichText::new(ui_text::text_menu_button()),
+                    );
+                    ui.menu_button(button, |ui| {
                         ui.label(ui_text::text_menu_hint());
                         // P1-3b: surface the same pen-colour control the
                         // Markup menu has, plus an honest note that it
@@ -4138,7 +4405,11 @@ impl PdfceApp {
                             GuiTextKind::Sticky,
                             GuiTextKind::Stamp,
                         ] {
-                            if ui.button(kind.label()).clicked() {
+                            let row = (
+                                icons::image(ui, kind.icon()),
+                                egui::RichText::new(kind.label()),
+                            );
+                            if ui.add(egui::Button::new(row)).clicked() {
                                 actions.push(Action::OpenTextEntry(kind));
                             }
                         }
@@ -4158,12 +4429,13 @@ impl PdfceApp {
                 // required disambiguator from Markup/Text.
                 ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
                     let active = doc.active_tool == Some(CanvasTool::TextEdit);
-                    let response = ui
-                        .add_sized(
-                            ICON_BUTTON_SIZE,
-                            egui::Button::selectable(active, ui_text::edit_text_tool_button()),
-                        )
-                        .on_hover_text(ui_text::edit_text_tool_tooltip());
+                    let response = Self::icon_text_toggle(
+                        ui,
+                        icons::Icon::EditText,
+                        active,
+                        ui_text::edit_text_tool_button(),
+                        ui_text::edit_text_tool_tooltip(),
+                    );
                     if response.clicked() {
                         actions.push(Action::SelectCanvasTool(if active {
                             None
@@ -4183,12 +4455,13 @@ impl PdfceApp {
                 // naming the competing Text ▾ and Edit Text controls (§1.1/§10).
                 ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
                     let active = doc.active_tool == Some(CanvasTool::AddText);
-                    let response = ui
-                        .add_sized(
-                            ICON_BUTTON_SIZE,
-                            egui::Button::selectable(active, ui_text::add_text_tool_button()),
-                        )
-                        .on_hover_text(ui_text::add_text_tool_tooltip());
+                    let response = Self::icon_text_toggle(
+                        ui,
+                        icons::Icon::AddText,
+                        active,
+                        ui_text::add_text_tool_button(),
+                        ui_text::add_text_tool_tooltip(),
+                    );
                     if response.clicked() {
                         actions.push(Action::SelectCanvasTool(if active {
                             None
@@ -4205,12 +4478,13 @@ impl PdfceApp {
                 // caveat for delete (decision 011 §2.5).
                 ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
                     let active = doc.active_tool == Some(CanvasTool::VectorEdit);
-                    let response = ui
-                        .add_sized(
-                            ICON_BUTTON_SIZE,
-                            egui::Button::selectable(active, ui_text::vector_edit_tool_button()),
-                        )
-                        .on_hover_text(ui_text::vector_edit_tool_tooltip());
+                    let response = Self::icon_text_toggle(
+                        ui,
+                        icons::Icon::EditObjects,
+                        active,
+                        ui_text::vector_edit_tool_button(),
+                        ui_text::vector_edit_tool_tooltip(),
+                    );
                     if response.clicked() {
                         actions.push(Action::SelectCanvasTool(if active {
                             None
@@ -4238,7 +4512,16 @@ impl PdfceApp {
                         Some(name) => ui_text::measure_menu_active_label(name),
                         None => ui_text::measure_menu_button().to_owned(),
                     };
-                    ui.menu_button(label, |ui| {
+                    // The menu BUTTON's glyph goes bold whenever any
+                    // measure sub-tool is active, so the active state is
+                    // carried by weight as well as by the dynamic label —
+                    // the same "never colour alone" discipline the
+                    // icon-only toggles get, applied to a menu.
+                    let button = (
+                        icons::toggle_image(ui, icons::Icon::Measure, active_name.is_some()),
+                        Self::toggle_label(active_name.is_some(), &label),
+                    );
+                    ui.menu_button(button, |ui| {
                         let mut row = |ui: &mut egui::Ui, tool: CanvasTool, text: &str| {
                             let is_active = doc.active_tool == Some(tool);
                             if ui.selectable_label(is_active, text).clicked() {
@@ -4292,7 +4575,7 @@ impl PdfceApp {
                 ui.add_enabled_ui(doc.session.can_undo(), |ui| {
                     if Self::icon_button(
                         ui,
-                        ui_text::undo_button(),
+                        icons::Icon::Undo,
                         ui_text::undo_tooltip_for(doc.session.undo_kind()),
                     )
                     .clicked()
@@ -4303,7 +4586,7 @@ impl PdfceApp {
                 ui.add_enabled_ui(doc.session.can_redo(), |ui| {
                     if Self::icon_button(
                         ui,
-                        ui_text::redo_button(),
+                        icons::Icon::Redo,
                         ui_text::redo_tooltip_for(doc.session.redo_kind()),
                     )
                     .clicked()
@@ -4335,7 +4618,11 @@ impl PdfceApp {
             // silently picked one would be exactly the guess this
             // feature exists not to make.
             if self.status_is_open() {
-                ui.menu_button(ui_text::copy_text_button(), |ui| {
+                let button = (
+                    icons::image(ui, icons::Icon::Copy),
+                    egui::RichText::new(ui_text::copy_text_button()),
+                );
+                ui.menu_button(button, |ui| {
                     if ui
                         .button(ui_text::copy_page_text_menu_item())
                         .on_hover_text(ui_text::copy_page_text_tooltip())
@@ -4362,7 +4649,11 @@ impl PdfceApp {
             // or in the dock this opens (file-scoped). The toolbar is
             // capped at its existing six groups plus this.
             if ui
-                .add_sized(ICON_BUTTON_SIZE, egui::Button::new(ui_text::tools_button()))
+                .add(Self::icon_text(
+                    ui,
+                    icons::Icon::Tools,
+                    ui_text::tools_button(),
+                ))
                 .on_hover_text(ui_text::tools_tooltip())
                 .clicked()
             {
@@ -4373,24 +4664,15 @@ impl PdfceApp {
             // document-scoped tool, so it sits beside Tools rather than in
             // any group. Shown always (its content is document-independent
             // — the chords work the same with or without a file open).
-            if Self::icon_button(
-                ui,
-                ui_text::shortcuts_button(),
-                ui_text::shortcuts_tooltip(),
-            )
-            .clicked()
+            if Self::icon_button(ui, icons::Icon::Keyboard, ui_text::shortcuts_tooltip()).clicked()
             {
                 self.shortcuts_open = !self.shortcuts_open;
             }
-
-            // Right-aligned so the summary stays pinned to the row's far
-            // edge instead of drifting rightward (and eventually
-            // crowding/wrapping) as future Passes append tool groups to
-            // the left-to-right sequence above.
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(self.status_summary());
-            });
-        });
+            // The status summary is NOT emitted here — it is pinned to
+            // the row's right edge by [`Self::toolbar`]'s outer
+            // right-to-left layout, so that it cannot join the wrap flow
+            // and drift leftward as future Passes append tool groups.
+        }
     }
 
     // -- document properties -----------------------------------------
@@ -4923,9 +5205,13 @@ impl PdfceApp {
         if selected_count > 0 {
             ui.label(ui_text::selection_bar_summary(selected_count));
             ui.horizontal_wrapped(|ui| {
+                // Same icons as the toolbar's single-page rotate, because
+                // it is the same operation over a wider scope; the
+                // tooltip (which names the page count) is what carries
+                // the difference.
                 if Self::icon_button(
                     ui,
-                    ui_text::rotate_left_button(),
+                    icons::Icon::RotateCcw,
                     ui_text::batch_rotate_left_tooltip(selected_count),
                 )
                 .clicked()
@@ -4934,7 +5220,7 @@ impl PdfceApp {
                 }
                 if Self::icon_button(
                     ui,
-                    ui_text::rotate_right_button(),
+                    icons::Icon::RotateCw,
                     ui_text::batch_rotate_right_tooltip(selected_count),
                 )
                 .clicked()
@@ -4945,7 +5231,14 @@ impl PdfceApp {
                 // not reachable from a keyboard and egui's assistive-
                 // technology support is a known gap, so these are the
                 // compensating control, not a convenience.
-                if Self::icon_button(
+                // Still bare Unicode glyphs: the ui-spec's icon mapping
+                // covers the toolbar and the Tools dock, and assigns
+                // nothing to the rail's reorder arrows. Rather than
+                // invent art the spec has not reviewed, these keep their
+                // ▲/▼ glyphs and go through [`Self::glyph_button`] — the
+                // SAME accessible-name wrapper the icon buttons use, so
+                // nothing about them regresses.
+                if Self::glyph_button(
                     ui,
                     ui_text::move_selection_up_button(),
                     ui_text::move_selection_up_tooltip(),
@@ -4954,7 +5247,7 @@ impl PdfceApp {
                 {
                     actions.push(Action::MoveSelection(-1));
                 }
-                if Self::icon_button(
+                if Self::glyph_button(
                     ui,
                     ui_text::move_selection_down_button(),
                     ui_text::move_selection_down_tooltip(),

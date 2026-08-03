@@ -54,8 +54,14 @@ use pdfce_core::vector::{AxisConstraint, SnapKind};
 // ---------------------------------------------------------------------------
 
 /// Label of the toolbar's file-open button.
+///
+/// Words only. The emoji prefix this used to carry
+/// ("📂") was replaced by a real SVG icon
+/// ([`crate::icons::Icon::Open`]) drawn beside the label. R1 is
+/// unaffected — the user-visible string still lives here; only the
+/// glyph moved out of it, into the asset tree.
 pub fn open_button() -> &'static str {
-    "📂  Open…"
+    "Open…"
 }
 
 /// Tooltip on the file-open button.
@@ -152,7 +158,7 @@ pub fn window_title_open(path: &Path, modified: bool) -> String {
 /// button labelled "Save" that opens a save-as dialog is a small lie
 /// that trains operators to distrust the label.
 pub fn save_button() -> &'static str {
-    "💾  Save a copy…"
+    "Save a copy…"
 }
 
 /// Tooltip on the save button. Names the shortcut, the fact that a new
@@ -211,21 +217,23 @@ pub fn save_failed(message: &str) -> String {
 // Toolbar — page navigation
 // ---------------------------------------------------------------------------
 
-/// Glyph on the "previous page" button.
-pub fn prev_page_button() -> &'static str {
-    "◀"
-}
+// NOTE (icon Pass): the bare-glyph label functions that used to live in
+// this module — `prev_page_button` ("◀"), `next_page_button`,
+// `zoom_out_button`, `zoom_in_button`, `rotate_left_button`,
+// `rotate_right_button`, `undo_button`, `redo_button`,
+// `rail_toggle_button`, `annotations_toggle_button` and
+// `shortcuts_button` — were REMOVED, not merely unused. Those controls
+// are now icon-only ([`crate::icons::Icon`]), so those strings had no
+// user-visible surface left; keeping them would have implied a fallback
+// that does not exist. R1 is untouched: every string a user can still
+// SEE, including every tooltip below (which is also the accessible name
+// an icon-only control publishes), is still defined here.
 
 /// Tooltip on the "previous page" button. Names the keyboard shortcut,
 /// because an icon-only control that never reveals its shortcut trains
 /// nobody.
 pub fn prev_page_tooltip() -> &'static str {
     "Go to the previous page (PageUp; Home for the first page)"
-}
-
-/// Glyph on the "next page" button.
-pub fn next_page_button() -> &'static str {
-    "▶"
 }
 
 /// Tooltip on the "next page" button.
@@ -243,19 +251,9 @@ pub fn page_nav_label(current: usize, total: usize) -> String {
 // Toolbar — zoom
 // ---------------------------------------------------------------------------
 
-/// Glyph on the "zoom out" button.
-pub fn zoom_out_button() -> &'static str {
-    "−"
-}
-
 /// Tooltip on the "zoom out" button.
 pub fn zoom_out_tooltip() -> &'static str {
     "Zoom out (Ctrl+Minus, or Ctrl+scroll wheel)"
-}
-
-/// Glyph on the "zoom in" button.
-pub fn zoom_in_button() -> &'static str {
-    "+"
 }
 
 /// Tooltip on the "zoom in" button.
@@ -304,11 +302,6 @@ pub fn zoom_percent_label(percent: u32) -> String {
 // Toolbar — editing (Pass 3.1)
 // ---------------------------------------------------------------------------
 
-/// Glyph on the "rotate the current page counter-clockwise" button.
-pub fn rotate_left_button() -> &'static str {
-    "↺"
-}
-
 /// Tooltip on the rotate-left button.
 ///
 /// Says *page*, and says *saved with the document*, because the same
@@ -319,11 +312,6 @@ pub fn rotate_left_button() -> &'static str {
 pub fn rotate_left_tooltip() -> &'static str {
     "Turn this page 90° counter-clockwise. This changes the document, not just the view, and \
 is saved with it — use Undo to reverse it."
-}
-
-/// Glyph on the "rotate the current page clockwise" button.
-pub fn rotate_right_button() -> &'static str {
-    "↻"
 }
 
 /// Tooltip on the rotate-right button.
@@ -467,16 +455,6 @@ pub fn text_add_failed(reason: &str) -> String {
     format!("Could not add the text: {reason}")
 }
 
-/// Glyph on the undo button.
-pub fn undo_button() -> &'static str {
-    "↶"
-}
-
-/// Glyph on the redo button.
-pub fn redo_button() -> &'static str {
-    "↷"
-}
-
 // ---------------------------------------------------------------------------
 // Document-properties panel (ISO 32000-1 §14.3.3)
 // ---------------------------------------------------------------------------
@@ -566,11 +544,6 @@ in the file. Applying a field you have edited replaces its stored value with wha
 // Thumbnail rail
 // ---------------------------------------------------------------------------
 
-/// Label of the toolbar button that shows/hides the thumbnail rail.
-pub fn rail_toggle_button() -> &'static str {
-    "▤"
-}
-
 /// Tooltip on the thumbnail-rail toggle.
 pub fn rail_toggle_tooltip() -> &'static str {
     "Show or hide the page thumbnail rail"
@@ -579,12 +552,6 @@ pub fn rail_toggle_tooltip() -> &'static str {
 // ---------------------------------------------------------------------------
 // Annotation-visibility toggle (Pass 6.0, ISO 32000-1 §12.5)
 // ---------------------------------------------------------------------------
-
-/// Label of the toolbar toggle that shows/hides annotation appearances.
-/// A comment/speech-balloon glyph — annotations are markup and comments.
-pub fn annotations_toggle_button() -> &'static str {
-    "🗩"
-}
 
 /// Tooltip when annotations are currently SHOWN. States the current state
 /// (not just the action), because on a lightly-annotated page toggling it
@@ -1104,7 +1071,7 @@ pub fn join_names(names: &[String]) -> String {
 /// Label of the toolbar's Tools-dock toggle — the single control the
 /// whole of Pass 3.2 adds to the toolbar.
 pub fn tools_button() -> &'static str {
-    "🧰  Tools"
+    "Tools"
 }
 
 /// Tooltip on the Tools toggle. Names what is inside, because a toggle
@@ -1796,7 +1763,7 @@ pub fn insert_cli_command() -> &'static str {
 /// copied *something* without saying which would be exactly the guess
 /// this feature exists not to make.
 pub fn copy_text_button() -> &'static str {
-    "📋 ▾"
+    "▾"
 }
 
 /// Tooltip for the Copy-text toolbar button.
@@ -1954,13 +1921,6 @@ pub fn copy_text_unreliable_cancel_button() -> &'static str {
 // Keyboard-shortcuts reference (P1-2)
 // ---------------------------------------------------------------------------
 
-/// Label of the toolbar's keyboard-shortcuts button. A keyboard glyph —
-/// an ungrouped utility control beside Tools (a disclosure surface, not
-/// an edit or a document-scoped tool).
-pub fn shortcuts_button() -> &'static str {
-    "⌨"
-}
-
 /// Tooltip on the keyboard-shortcuts button.
 pub fn shortcuts_tooltip() -> &'static str {
     "Show every keyboard shortcut"
@@ -2003,10 +1963,16 @@ pub fn shortcuts_reference() -> &'static str {
 // (docs/ui_specs/pass-14.3-text-edit-ui.md §1, §4.4, §6–§9, §11)
 // ---------------------------------------------------------------------------
 
-/// Toolbar toggle for the in-place text-edit tool (§1.1). A real glyph, not a
-/// colour-only signal (rule 6).
+/// Toolbar toggle for the in-place text-edit tool (§1.1).
+///
+/// The "Aa" text suffix only; the pencil is now an SVG icon
+/// ([`crate::icons::Icon::EditText`]) drawn beside it. The text is
+/// deliberately KEPT rather than dropped for an icon-only button: it is
+/// what goes **bold** while the tool is active, so the selected state
+/// still never rests on colour alone (rule 6) — exactly as it did before
+/// the icon swap.
 pub fn edit_text_tool_button() -> &'static str {
-    "✎ Aa"
+    "Aa"
 }
 
 /// Tooltip on the text-edit tool toggle. The second sentence disambiguates
@@ -2339,7 +2305,7 @@ pub fn reflow_generic_hint() -> &'static str {
 /// page's actual text) with a `+` prefix (the DIFFERENT operation: add vs.
 /// modify), never the pencil, never a colour variant (rule 6).
 pub fn add_text_tool_button() -> &'static str {
-    "+ Aa"
+    "Aa"
 }
 
 /// Tooltip on the Add-Page-Text tool toggle (§1.2). Three sentences, each doing
@@ -2363,7 +2329,7 @@ pub fn add_text_propbar_title() -> &'static str {
 /// motif, since the tool's headline gesture is moving/nudging drawing
 /// objects and their nodes.
 pub fn vector_edit_tool_button() -> &'static str {
-    "✥ Obj"
+    "Obj"
 }
 
 /// Tooltip on the Edit Objects tool toggle. Names the three gestures and the
