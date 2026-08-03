@@ -203,8 +203,32 @@ lookup needs, cut it. This is a standing instruction from the user
   Ghostscript) is now categorically **off the table** as a dependency — an
   MIT project cannot link GPL/AGPL (`LEGAL.md` §6.1). Publishing/pushing is
   now unblocked by the license but still awaits an explicit operator go-ahead.
-- XFA scope — verify Adobe's current XFA support/deprecation status
-  before committing engineering time to it (see `ROADMAP.md` backlog).
+- XFA scope — **NARROWED 2026-08-03, still open; do not treat as
+  closed.** The original item read "verify Adobe's current XFA
+  support/deprecation status before committing engineering time to
+  it." Three things have since happened, and this bullet is kept
+  accurate rather than retired because retiring it is Ken's call
+  (`ROADMAP.md` Open operator question **(p)**), not the engineer's:
+  - **Demand is measured** (decision 008 census): `/XFA` in 2 of 2,500
+    organic files (0.08%) and 4 of 2,914 conformance files. Negligible.
+  - **Both authoring branches are now decided** (decision 020): dynamic
+    XFA is `out_of_scope` — as of Acrobat 8.1+ it carries no AcroForm
+    at all, so there is no Acrobat behaviour to match. Static-XFA
+    *hybrid* field creation is **refused by name**, decided from
+    pdfce's own capability boundary rather than from Acrobat's: pdfce
+    can write the AcroForm half of a hybrid but not the XFA half, and a
+    one-sided add would make an XFA-aware viewer and a plain viewer
+    show different field counts for the same document.
+  - **What is still genuinely unverified**: Acrobat's exact
+    version-level deprecation date (only third-party approximate
+    timing found, no Adobe-primary source).
+  Net: the verification is **no longer a prerequisite for form
+  *authoring*** — both branches were decided without needing it. It
+  would still be a prerequisite for any XFA **read/fill** work.
+  Decision 020 recommends re-scoping the item to exactly that; whether
+  to accept that narrowing, or retire the item outright, is question
+  (p) for Ken. See `ROADMAP.md`'s XFA backlog entry for the full
+  amendment chain.
 - OCR engine binding — not yet decided. `PRIOR_ART.md` notes KillerPDF
   bundles Tesseract natively as a working precedent; OCRmyPDF's
   "sandwich" text-layer approach is the behavioral reference.
