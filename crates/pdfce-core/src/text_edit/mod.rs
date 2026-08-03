@@ -81,7 +81,7 @@ pub use encoding::{CharEncoding, EncodeResult, InverseEncoding, RInvTrigger, Ref
 pub use format::{
     FillModel, FontSelector, FormatError, FormatOptions, FormatOutcome, FormatReport,
     FormatRequest, MetricSpec, NewFill, SUBSCRIPT, SUPERSCRIPT, ScriptMetrics, ScriptPosition,
-    set_format,
+    StyleOutcome, StyleResolution, set_format,
 };
 pub use model::{
     Block, BlockDiagnostics, BlockKind, BlockRecognitionOptions, EditableTextModel, GlyphRef, Line,

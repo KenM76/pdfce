@@ -514,9 +514,21 @@ impl Walk<'_> {
             // --- text showing (§9.4.3, Table 109) ---
             // Each show operator records its own byte span (in the current
             // stream buffer) so every glyph it produces can be attributed
-            // back to it for provenance (decision 014 Pass 14.1's surgery
-            // locates the operator by exactly this span). Inert when
-            // provenance capture is off — the field is simply never read.
+            // back to it for provenance. Inert when provenance capture is
+            // off — the field is simply never read.
+            //
+            // CORRECTION (Pass 19.3, found by observing the running GUI):
+            // this used to claim "Pass 14.1's surgery locates the operator by
+            // EXACTLY this span". It does not, and could not: the span
+            // recorded here is `op.operator.span`, the operator TOKEN alone
+            // (`Tj`), while the authoring walk's `op_span` records the
+            // operand-inclusive extent (`(hello) Tj`). The surgery's pinned
+            // path compared for equality against the latter, so every request
+            // pinned from this field failed to locate anything at all. The
+            // comparison now accepts either convention — see
+            // `text_edit::edit::pin_names_operator`. Do NOT "fix" this by
+            // widening the span published here: it is a consumer-facing
+            // field, it correctly names the operator, and the CLI prints it.
             b"Tj" => {
                 self.cur_op_span = op.operator.span;
                 if let Some(s) = last_string(op) {

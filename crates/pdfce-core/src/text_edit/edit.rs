@@ -320,8 +320,17 @@ pub struct EditRequest {
     pub find: String,
     /// The replacement text (re-encoded into the run's font).
     pub replace: String,
-    /// When set, only consider the show operator whose byte span in the
-    /// decoded content buffer equals this — the provenance-pinned path.
+    /// When set, only consider the show operator that this byte span in the
+    /// decoded content buffer NAMES — the provenance-pinned path.
+    ///
+    /// "Names", not "equals": two spans identify the same operator here, and
+    /// both are accepted (see [`pin_names_operator`]). A span covering the
+    /// operator token alone (`Tj`) is what
+    /// [`GlyphProvenance::operator_span`](crate::text_extract::GlyphProvenance::operator_span)
+    /// publishes; a span covering the operands too (`(hello) Tj`) is what this
+    /// module's own walk records. Requiring exact equality against the second
+    /// form silently broke every provenance-pinned request — fixed in Pass
+    /// 19.3, with the history in `pin_names_operator`'s documentation.
     pub pinned_span: Option<ByteSpan>,
 }
 
@@ -1404,7 +1413,7 @@ pub(crate) fn find_anchor(recs: &[OpRec], req: &EditRequest) -> Result<usize, Ed
     for (i, r) in recs.iter().enumerate() {
         let Rec::Show(s) = &r.rec else { continue };
         if let Some(pin) = req.pinned_span {
-            if r.start == pin.start && r.end == pin.start + pin.len {
+            if pin_names_operator(r, pin) {
                 return Ok(i);
             }
             continue;
@@ -1414,6 +1423,55 @@ pub(crate) fn find_anchor(recs: &[OpRec], req: &EditRequest) -> Result<usize, Ed
         }
     }
     Err(EditError::NoMatch(req.find.clone()))
+}
+
+/// Whether `pin` names the operation `r` — under **either** of the two byte-
+/// span conventions this codebase publishes for "the show operator".
+///
+/// # The defect this function exists to close (found Pass 19.3, live)
+///
+/// There are two conventions, they disagree, and until this was written the
+/// pinned path silently required the one that no caller actually produces:
+///
+/// | Producer | Span of `(hello) Tj` at offset 23 |
+/// |---|---|
+/// | [`op_span`] — this module's own walk, recorded into [`OpRec`] | `23..39` (first operand → operator end) |
+/// | [`GlyphProvenance::operator_span`](crate::text_extract::GlyphProvenance::operator_span) — the extraction walk (`page.rs`, `self.cur_op_span = op.operator.span`) | `37..39` (the `Tj` token alone) |
+///
+/// The old test for equality against the FIRST form meant that every request
+/// pinned from provenance — which is every request the GUI's Edit Text tool
+/// builds, since it pins from `model.provenance(...).operator_span` — failed
+/// with [`EditError::NoMatch`] before it ever reached the surgery. Observed
+/// in the running application: the shipped property bar's "Apply size"
+/// refused with *"text to format (…) was not found in an editable run on the
+/// page"* on a perfectly ordinary one-`Tj` page. Two doc comments asserted
+/// the opposite — `EditRequest::pinned_span`'s "this surgery … matches the
+/// same span", and `page.rs`'s "the surgery locates the operator by exactly
+/// this span" — which is presumably why it went unnoticed: the claim was
+/// written down, so it was believed.
+///
+/// # Why accept both rather than pick one
+///
+/// The two spans are not rival encodings of the same idea; each is correct
+/// for its own reader. Extraction publishes the operator *token* because that
+/// is what identifies the operator to a consumer that never re-tokenizes the
+/// operands. The authoring walk records the operand-inclusive extent because
+/// that is the byte range it is about to splice. Forcing either side to adopt
+/// the other's convention would change a published field's meaning (and, for
+/// provenance, one that is already in operator-visible CLI output) to fix a
+/// comparison — so the comparison is what gets fixed.
+///
+/// # The rule, and why it cannot alias the wrong operator
+///
+/// A pin names `r` when it **ends where `r` ends** and **starts at or after
+/// `r` starts**. Both conventions satisfy that for the operator they mean.
+/// Nothing else can: two distinct operations in one stream have distinct end
+/// offsets (an operator token is at least one byte and they do not overlap),
+/// so `pin.end() == r.end` already identifies the operation uniquely; the
+/// start bound is kept as a cheap sanity check that the pin lies inside the
+/// operation rather than reaching back over an earlier one.
+fn pin_names_operator(r: &OpRec, pin: ByteSpan) -> bool {
+    pin.end() == r.end && pin.start >= r.start
 }
 
 /// A resolved match within one show operator.
@@ -2053,6 +2111,49 @@ mod tests {
         // First run unchanged, second edited.
         assert!(text.contains("cat"));
         assert!(text.contains("dog"));
+    }
+
+    /// **The Pass-19.3 regression fixture.** A pin taken from
+    /// `GlyphProvenance::operator_span` — the operator TOKEN alone, which is
+    /// what every GUI request carries — must locate the same operator as the
+    /// operand-inclusive span the test above uses.
+    ///
+    /// Before `pin_names_operator`, this returned `NoMatch`, which meant the
+    /// shipped Edit Text property bar could not apply anything at all. The
+    /// test pins the SECOND of two identical runs, so "it accidentally found
+    /// the right one" is not a way to pass.
+    #[test]
+    fn a_pin_taken_from_provenance_locates_the_same_operator() {
+        let content = "BT /F1 12 Tf 72 700 Td (cat) Tj 72 680 Td (cat) Tj ET\n";
+        let src = helvetica_pdf(content);
+        let doc = Document::from_bytes(src).unwrap();
+
+        // Exactly what the extraction walk publishes: `op.operator.span`.
+        let tj = content.rfind("Tj").unwrap();
+        let mut req = EditRequest::find_replace(0, "cat", "dog");
+        req.pinned_span = Some(ByteSpan::new(tj, "Tj".len()));
+
+        let out = edit_text(&doc, &req, &EditOptions::default()).unwrap();
+        let text = extract_first_page_text(&out.bytes);
+        assert!(text.contains("cat"), "the FIRST run is untouched: {text}");
+        assert!(text.contains("dog"), "the SECOND run was edited: {text}");
+    }
+
+    /// …and the pin still discriminates. A span that ends inside a different
+    /// operator must not silently match a neighbour — otherwise the fix would
+    /// have traded a refusal for the far worse failure of editing the wrong
+    /// run.
+    #[test]
+    fn a_pin_that_names_no_operator_still_refuses() {
+        let content = "BT /F1 12 Tf 72 700 Td (cat) Tj 72 680 Td (cat) Tj ET\n";
+        let src = helvetica_pdf(content);
+        let doc = Document::from_bytes(src).unwrap();
+        let mut req = EditRequest::find_replace(0, "cat", "dog");
+        // Ends one byte short of the first `Tj`, so it names nothing.
+        let tj = content.find("Tj").unwrap();
+        req.pinned_span = Some(ByteSpan::new(tj, 1));
+        let err = edit_text(&doc, &req, &EditOptions::default()).unwrap_err();
+        assert!(matches!(err, EditError::NoMatch(_)), "{err}");
     }
 
     // -- Pass 19.0: the authoring walk's text-state model ---------------

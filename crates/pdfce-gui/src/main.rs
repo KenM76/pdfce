@@ -994,11 +994,187 @@ struct TextEditState {
     prop_components: [f64; 4],
     /// The font resource key/base-font the family ComboBox selected, if any.
     prop_font: Option<String>,
+    // -- Pass 19.3: the spacing/style rows (decision 019 §6 slice 19.3) --
+    /// `Tc`, the operator's typed number, in whichever unit
+    /// [`Self::prop_tc_unit`] names.
+    prop_char_spacing: f64,
+    /// Which [`MetricSpec`](pdfce_core::text_edit::MetricSpec) variant
+    /// [`Self::prop_char_spacing`] is expressed in. Defaults to
+    /// [`MetricUnit::Relative`] per decision 019 §3.2's GUI-default call
+    /// (tracking is a typographic ‰-of-em quantity).
+    prop_tc_unit: MetricUnit,
+    /// `Tz` as a percentage (100 = normal). No unit choice — `Tz` is a
+    /// dimensionless percentage (§9.3.4), so there is nothing to be relative
+    /// to.
+    prop_h_scale: f64,
+    /// The baseline control's live selection. This is the whole of the
+    /// mutual exclusion between the script toggle and the free-form rise:
+    /// they are ONE control with one live member, not two controls that
+    /// could both be armed.
+    prop_baseline: BaselineChoice,
+    /// The free-form rise, meaningful only when [`Self::prop_baseline`] is
+    /// [`BaselineChoice::Custom`].
+    prop_rise: f64,
+    /// Which unit [`Self::prop_rise`] is expressed in. Defaults to
+    /// [`MetricUnit::Absolute`] per decision 019 §3.2 — "what the operator
+    /// typed is what they get" for a baseline nudge.
+    prop_rise_unit: MetricUnit,
+    /// Synthetic-bold checkbox. Independent of [`Self::prop_baseline`]:
+    /// weight/slant and script position are unrelated axes.
+    prop_bold: bool,
+    /// Synthetic-italic checkbox.
+    prop_italic: bool,
+    /// The run [`Self::prop_char_spacing`]/`prop_h_scale`/`prop_baseline`/
+    /// `prop_rise` were last seeded from, so a caret move onto a DIFFERENT
+    /// run re-seeds them and a caret move within the same run does not stomp
+    /// what the operator is mid-way through typing.
+    props_seeded_for: Option<usize>,
+    /// The caret run's ambient §9.3 text state, refreshed every frame from
+    /// provenance — the source of every "Now:" caption.
+    ///
+    /// This exists because the pre-19.3 property bar seeded from a FIXED
+    /// default and never re-seeded. That is survivable for Size/Colour/Font,
+    /// where the operator can simply look at the glyphs, and it is not
+    /// survivable for `Tc`/`Tz`/`Ts`: a tracking of 0.24 is invisible at
+    /// reading zoom, so a panel that displayed `0` while the run carried
+    /// `0.24` would be stating something false about the document.
+    prop_ambient: Option<AmbientSnapshot>,
+    /// The last `preview_style_resolution` answer, and the state it was
+    /// computed for — so the core query runs on a real state change rather
+    /// than on every frame (it walks the page's `/Font` resources).
+    ///
+    /// A `Result`, not an `Option`: a query that cannot answer must SAY so.
+    /// Swallowing the error would make "pdfce could not work out what this
+    /// would do" look identical to "there is nothing to say", and the
+    /// operator would then click Apply with no warning at all — which is the
+    /// exact silence rule 4 exists to forbid.
+    style_preview: Option<Result<pdfce_core::text_edit::StyleResolution, String>>,
+    /// Cache key for [`Self::style_preview`]: `(run, bold, italic)`.
+    style_preview_key: Option<(usize, bool, bool)>,
     /// The most recent property-bar (format) refusal `Display` text, kept
     /// visible in the strip until the next successful format/edit or tool
     /// exit (§8.2). Edit refusals live on [`PendingEdit::last_refusal`]; this
     /// is for a format apply, which has no `PendingEdit`.
     last_refusal: Option<String>,
+}
+
+/// Which [`MetricSpec`](pdfce_core::text_edit::MetricSpec) variant a numeric
+/// spacing/rise field is currently expressed in — the GUI-local mirror of
+/// core's discriminated unit model (R89).
+///
+/// A plain enum rather than a live `MetricSpec` because the field carries a
+/// number the operator is still editing; reconstructing a `MetricSpec` every
+/// frame just to read its discriminant back out would be noise.
+///
+/// The two variants are **genuinely different behaviours**, not two spellings
+/// of one number: under a later size change, a `Relative` quantity moves with
+/// the text and an `Absolute` one stays put. The UI therefore labels them by
+/// that behaviour ("scales with size" / "fixed"), not by their PDF names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MetricUnit {
+    /// Unscaled text-space units, written exactly as typed.
+    Absolute,
+    /// Thousandths of an em, re-resolved against the run's size at emit time.
+    Relative,
+}
+
+/// The baseline control's four mutually exclusive positions.
+///
+/// [`Self::Custom`] is a GUI-only state, not a
+/// [`ScriptPosition`](pdfce_core::text_edit::ScriptPosition) variant: it
+/// means "show the free numeric rise field instead of a fixed script
+/// position". Because exactly one of the four is selected at any time, and
+/// because the single Apply button builds `.script(…)` OR `.rise(…)` from
+/// that selection, `FormatError::ConflictingRise` is unreachable from this
+/// panel by construction rather than by a runtime check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BaselineChoice {
+    /// `Ts` 0, no size reduction — how an inherited rise is flattened.
+    Normal,
+    /// pdfce's documented superscript metrics.
+    Superscript,
+    /// pdfce's documented subscript metrics.
+    Subscript,
+    /// A free-form numeric rise (Pass 19.2's deliberate exceed over Acrobat).
+    Custom,
+}
+
+/// The caret run's ambient §9.3 text state, flattened to the four numbers the
+/// property bar shows plus the two facts it gates on.
+///
+/// Read from [`GlyphProvenance`](pdfce_core::text_extract::GlyphProvenance)
+/// — SOURCED from the file, never guessed. `Tw` is carried even though there
+/// is no word-spacing control, because R83 says the absence of the control
+/// must be *explained* rather than left as a mystery, and explaining it means
+/// showing the value that is actually in force.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct AmbientSnapshot {
+    /// `Tc` operand, unscaled text-space units.
+    char_spacing: f64,
+    /// `Tz` operand, a percentage (100 = normal).
+    h_scale: f64,
+    /// `Ts` operand, unscaled text-space units.
+    rise: f64,
+    /// `Tw` operand, unscaled text-space units.
+    word_spacing: f64,
+    /// The governing `Tf` size operand — the base every `Relative` quantity
+    /// resolves against (R89, as amended by decision 019 Amendment B.3).
+    font_size: f64,
+    /// Whether the run's font segments show strings into multi-byte codes.
+    /// `Tw` is spec-void for those (§9.3.3), which is a different reason for
+    /// its absence than "pending a census" and gets different wording.
+    composite: bool,
+    /// Whether `Tc` is provably still at its Table 105 default on this run.
+    tc_at_default: bool,
+    /// Whether `Tz` is provably still at its Table 105 default.
+    tz_at_default: bool,
+    /// Whether `Ts` is provably still at its Table 105 default.
+    rise_at_default: bool,
+}
+
+impl AmbientSnapshot {
+    /// Flatten one glyph's provenance into the snapshot.
+    ///
+    /// `tf_size` is the `Tf` operand rather than the glyph's effective size:
+    /// R89 resolves ratios against the size the surgery re-emits, and the
+    /// effective size folds in the matrices' scale, which the emitted operand
+    /// does not.
+    fn from_provenance(p: &pdfce_core::text_extract::GlyphProvenance) -> Self {
+        use pdfce_core::text_state::AmbientOrigin;
+        let ts = &p.text_state;
+        let is_default = |o: &AmbientOrigin| matches!(o, AmbientOrigin::Initial);
+        Self {
+            char_spacing: ts.char_spacing.value,
+            h_scale: ts.h_scale.value,
+            rise: ts.rise.value,
+            word_spacing: ts.word_spacing.value,
+            font_size: f64::from(p.tf_size),
+            composite: p.composite,
+            tc_at_default: is_default(&ts.char_spacing.origin),
+            tz_at_default: is_default(&ts.h_scale.origin),
+            rise_at_default: is_default(&ts.rise.origin),
+        }
+    }
+
+    /// An unscaled text-space quantity expressed in thousandths of the em.
+    ///
+    /// Guards a zero/absent font size rather than producing an infinity: a
+    /// malformed run with no `Tf` must not make the caption unreadable.
+    fn per_mille(self, absolute: f64) -> f64 {
+        if self.font_size.abs() < f64::EPSILON {
+            0.0
+        } else {
+            absolute * 1000.0 / self.font_size
+        }
+    }
+
+    /// The inverse of [`Self::per_mille`] — a ‰ quantity as its operand.
+    ///
+    /// Deliberately not named `from_per_mille`: a `from_*` method that takes
+    /// `self` reads as a constructor and is not one.
+    fn per_mille_to_operand(self, per_mille: f64) -> f64 {
+        per_mille * self.font_size / 1000.0
+    }
 }
 
 /// An in-progress, operator-composed text edit that the live preview draws
@@ -1543,6 +1719,23 @@ impl OpenDoc {
                 prop_model: pdfce_core::text_edit::FillModel::Rgb,
                 prop_components: [0.0, 0.0, 0.0, 0.0],
                 prop_font: None,
+                // Pass 19.3: these are placeholders only. Every one of them
+                // is re-seeded from the caret run's own ambient state before
+                // the panel is drawn (`seed_spacing_props`), because a fixed
+                // default shown beside a run that carries something else is
+                // the panel stating a falsehood about the document.
+                prop_char_spacing: 0.0,
+                prop_tc_unit: MetricUnit::Relative,
+                prop_h_scale: 100.0,
+                prop_baseline: BaselineChoice::Normal,
+                prop_rise: 0.0,
+                prop_rise_unit: MetricUnit::Absolute,
+                prop_bold: false,
+                prop_italic: false,
+                props_seeded_for: None,
+                prop_ambient: None,
+                style_preview: None,
+                style_preview_key: None,
                 last_refusal: None,
             }),
             _ => None,
@@ -6782,6 +6975,14 @@ fn format_refusal_hint(err: &pdfce_core::text_edit::FormatError) -> &'static str
         FormatError::CoverageFailure(_) => ui_text::format_coverage_hint(),
         FormatError::TargetFontMissing(_) => ui_text::format_target_missing_hint(),
         FormatError::Refused(_) => ui_text::r_inv_encoding_hint(),
+        // Pass 19.3: one short "what would lift it" hint per refusal the new
+        // rows can provoke, joined to core's verbatim `Display` text by
+        // `refusal_with_hint` — the pattern the R-INV hints already establish.
+        FormatError::ConflictingRise => ui_text::conflicting_rise_hint(),
+        FormatError::RealFaceAvailable { .. } => ui_text::real_face_available_hint(),
+        FormatError::ShearUnsupported(_) => ui_text::shear_unsupported_hint(),
+        FormatError::AmbientUnrestorable(_) => ui_text::ambient_unrestorable_hint(),
+        FormatError::BadHorizScale(_) => ui_text::bad_h_scale_hint(),
         _ => ui_text::edit_generic_hint(),
     }
 }
@@ -6812,7 +7013,8 @@ fn run_text_edit_tool(
     use pdfce_core::text_edit::{
         AlignmentSource, BlockAlignment, BlockRecognitionOptions, EditOptions, EditRequest,
         EditableTextModel, FillModel, FontSelector, FormatOptions, FormatRequest, GlyphRef,
-        NewFill, ReflowEngine, ReflowRequest, TextPosition, reflow_recognition_options,
+        MetricSpec, NewFill, ReflowEngine, ReflowRequest, ScriptPosition, StyleResolution,
+        StyleSynthesis, TextPosition, reflow_recognition_options,
     };
 
     let page_index = doc.view.page_index;
@@ -7237,6 +7439,16 @@ fn run_text_edit_tool(
     let mut apply_size: Option<f64> = None;
     let mut apply_fill: Option<NewFill> = None;
     let mut apply_font: Option<String> = None;
+    // Pass 19.3 property-bar intents — one per Apply button, same shape.
+    let mut apply_char_spacing: Option<MetricSpec> = None;
+    let mut apply_h_scale: Option<f64> = None;
+    let mut apply_script: Option<ScriptPosition> = None;
+    let mut apply_rise: Option<MetricSpec> = None;
+    let mut apply_synthetic: Option<StyleSynthesis> = None;
+    // A locally-refused Apply (the mixed real-face/synthesis case), routed
+    // into the SAME refusal strip as every core refusal rather than into a
+    // second disclosure surface.
+    let mut local_refusal: Option<String> = None;
     // Pass 15.2 reflow intents, resolved after the property-bar/status closures.
     let mut enter_reflow = false;
     let mut do_accept_reflow = false;
@@ -7260,7 +7472,52 @@ fn run_text_edit_tool(
         .map(|page| page_font_entries(&doc.session.graph(), page, font_env))
         .unwrap_or_default();
 
+    // Pass 19.3 §1.1 "Option B": what WOULD a synthetic-style request resolve
+    // to for the caret's run — a real face, or synthesis?
+    //
+    // Computed here, before the `&mut text_edit` borrow, because it needs
+    // `doc.session` (an immutable read of a DIFFERENT field) and the two
+    // borrows cannot overlap. It is a genuinely read-only core query
+    // (`EditSession::preview_style_resolution`), so ordering it before the
+    // mutation phase costs nothing.
+    //
+    // IMMEDIATE-MODE COST CONTROL (ui-spec §6.4): the query walks the page's
+    // `/Font` resources, so it must NOT run every frame. It runs only when
+    // `(run, bold, italic)` differs from what the cached answer was computed
+    // for — which, since ticking a checkbox happens during the draw, makes
+    // the caption at most one repaint late. The draw requests that repaint
+    // explicitly rather than waiting for the caret blink to trigger one.
+    type StylePreviewRefresh = (Option<Result<StyleResolution, String>>, (usize, bool, bool));
+    let style_preview_refresh: Option<StylePreviewRefresh> = doc
+        .text_edit
+        .as_ref()
+        .and_then(|s| {
+            // The click has not been applied to `state` yet this frame, so
+            // use the caret the click produced where there was one.
+            let caret = click_result.map_or(s.caret, |(c, _)| c)?;
+            let key = (caret.run, s.prop_bold, s.prop_italic);
+            (s.style_preview_key != Some(key)).then_some((s, key))
+        })
+        .map(|(s, key)| {
+            let want = StyleSynthesis::new(s.prop_bold, s.prop_italic);
+            if want.is_none() {
+                // Nothing ticked: no core call at all, and the cache key is
+                // still recorded so this branch is taken once, not per frame.
+                return (None, key);
+            }
+            let resolved = caret_run_text.as_ref().map(|(_, text)| {
+                doc.session
+                    .preview_style_resolution(page_index, text, pinned_span, want)
+                    .map_err(|e| e.to_string())
+            });
+            (resolved, key)
+        });
+
     if let Some(state) = doc.text_edit.as_mut() {
+        if let Some((resolved, key)) = style_preview_refresh {
+            state.style_preview = resolved;
+            state.style_preview_key = Some(key);
+        }
         // The click resolves AFTER render: an in-progress pending edit is this
         // tool's discardable GestureInterrupt (§6.2) — a click discards it.
         if let Some((c, a)) = click_result {
@@ -7372,6 +7629,12 @@ fn run_text_edit_tool(
                 state.anchor = new_anchor;
             }
         }
+
+        // Pass 19.3: refresh the caret run's ambient text state and, on a move
+        // to a different run, re-seed the spacing/baseline fields from it.
+        // Placed AFTER the click and the arrow navigation have both landed, so
+        // the panel always describes the caret the operator can see.
+        seed_spacing_props(state);
 
         // Property bar (§7): a floating top panel, appearing with the tool.
         egui::Area::new(egui::Id::new("pdfce-text-edit-propbar"))
@@ -7508,6 +7771,286 @@ fn run_text_edit_tool(
                                 apply_font = state.prop_font.clone();
                             }
                         });
+                        // ---- Pass 19.3: the spacing & style rows ----
+                        //
+                        // Collapsed by default, for the same reason Pass 18.4's
+                        // status readout put its detail behind one: Size/Colour/
+                        // Font are always relevant, these are occasionally
+                        // relevant, and permanently growing the panel for the
+                        // occasional ones is the ribbon-overload failure mode.
+                        // `CollapsingHeader`'s open state is egui `Id`-keyed and
+                        // persists across frames with no state of ours.
+                        egui::CollapsingHeader::new(ui_text::format_spacing_section_title())
+                            .id_salt("pdfce-te-spacing")
+                            .show(ui, |ui| {
+                                // The caret run's ambient state (Copy), read once.
+                                // `None` means "no provenance for this run", which
+                                // is said out loud rather than shown as a zero.
+                                let amb = state.prop_ambient;
+
+                                // -- Row 1: character spacing (Tc) --
+                                ui.label(ui_text::format_char_spacing_label())
+                                    .on_hover_text(ui_text::format_char_spacing_tooltip());
+                                ui.label(match amb {
+                                    Some(a) => {
+                                        let mut c = ui_text::format_ambient_caption(
+                                            &ui_text::format_ambient_char_spacing_value(
+                                                a.per_mille(a.char_spacing),
+                                                a.char_spacing,
+                                            ),
+                                        );
+                                        if a.tc_at_default {
+                                            c.push_str(ui_text::format_ambient_default_suffix());
+                                        }
+                                        c
+                                    }
+                                    None => no_ambient_caption(state.caret.is_some()).to_owned(),
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.add(
+                                        egui::DragValue::new(&mut state.prop_char_spacing)
+                                            .speed(0.05),
+                                    );
+                                    // Switching the unit RE-DERIVES the number so
+                                    // it keeps meaning what its visible unit says
+                                    // — it never silently reinterprets the digits
+                                    // already in the box under a new meaning.
+                                    if let Some(unit) = unit_toggle(ui, state.prop_tc_unit)
+                                        && unit != state.prop_tc_unit
+                                    {
+                                        if let Some(a) = amb {
+                                            state.prop_char_spacing = match unit {
+                                                MetricUnit::Absolute => {
+                                                    a.per_mille_to_operand(state.prop_char_spacing)
+                                                }
+                                                MetricUnit::Relative => {
+                                                    a.per_mille(state.prop_char_spacing)
+                                                }
+                                            };
+                                        }
+                                        state.prop_tc_unit = unit;
+                                    }
+                                    if ui.button(ui_text::format_apply_char_spacing()).clicked() {
+                                        apply_char_spacing = Some(metric_spec(
+                                            state.prop_tc_unit,
+                                            state.prop_char_spacing,
+                                        ));
+                                    }
+                                });
+
+                                // -- Row 2: horizontal scaling (Tz) --
+                                ui.label(ui_text::format_h_scale_label())
+                                    .on_hover_text(ui_text::format_h_scale_tooltip());
+                                ui.label(match amb {
+                                    Some(a) => {
+                                        let mut c = ui_text::format_ambient_caption(
+                                            &ui_text::format_ambient_h_scale_value(a.h_scale),
+                                        );
+                                        if a.tz_at_default {
+                                            c.push_str(ui_text::format_ambient_default_suffix());
+                                        }
+                                        c
+                                    }
+                                    None => no_ambient_caption(state.caret.is_some()).to_owned(),
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.add(
+                                        egui::DragValue::new(&mut state.prop_h_scale)
+                                            .range(1.0..=1000.0)
+                                            .speed(0.5)
+                                            .suffix(ui_text::percent_suffix()),
+                                    );
+                                    if ui.button(ui_text::format_apply_h_scale()).clicked() {
+                                        apply_h_scale = Some(state.prop_h_scale);
+                                    }
+                                });
+
+                                // -- Row 3: baseline — ONE control, four
+                                // positions, exactly one live. This is where the
+                                // super/subscript-vs-free-rise mutual exclusion
+                                // lives: both write `Ts`, and core refuses a
+                                // request carrying both (`ConflictingRise`), so
+                                // the UI is built so that request cannot be
+                                // spelled rather than catching it at runtime.
+                                ui.label(ui_text::format_baseline_label())
+                                    .on_hover_text(ui_text::format_baseline_tooltip());
+                                ui.label(match amb {
+                                    Some(a) if a.rise.abs() < f64::EPSILON => {
+                                        let mut c = ui_text::format_ambient_caption(
+                                            ui_text::format_ambient_baseline_normal(),
+                                        );
+                                        if a.rise_at_default {
+                                            c.push_str(ui_text::format_ambient_default_suffix());
+                                        }
+                                        c
+                                    }
+                                    Some(a) => ui_text::format_ambient_caption(
+                                        &ui_text::format_ambient_baseline_value(
+                                            a.rise,
+                                            a.per_mille(a.rise),
+                                        ),
+                                    ),
+                                    None => no_ambient_caption(state.caret.is_some()).to_owned(),
+                                });
+                                ui.horizontal(|ui| {
+                                    for (choice, label) in [
+                                        (BaselineChoice::Normal, ui_text::format_baseline_normal()),
+                                        (
+                                            BaselineChoice::Superscript,
+                                            ui_text::format_baseline_superscript(),
+                                        ),
+                                        (
+                                            BaselineChoice::Subscript,
+                                            ui_text::format_baseline_subscript(),
+                                        ),
+                                        (BaselineChoice::Custom, ui_text::format_baseline_custom()),
+                                    ] {
+                                        let sel = state.prop_baseline == choice;
+                                        // R84: NOT a bare `selectable_value` —
+                                        // egui's only built-in selected signal is
+                                        // a background fill, i.e. colour alone.
+                                        // Pairing with `toggle_label` makes the
+                                        // live option BOLD as well.
+                                        if ui
+                                            .selectable_label(
+                                                sel,
+                                                PdfceApp::toggle_label(sel, label),
+                                            )
+                                            .clicked()
+                                        {
+                                            state.prop_baseline = choice;
+                                        }
+                                    }
+                                });
+                                // The free-form field is HIDDEN, not disabled,
+                                // for the other three positions: there is no
+                                // capability to combine a script position with a
+                                // custom rise, so R83 says draw no control that
+                                // implies there is.
+                                if state.prop_baseline == BaselineChoice::Custom {
+                                    ui.horizontal(|ui| {
+                                        ui.label(ui_text::format_rise_label());
+                                        ui.add(
+                                            egui::DragValue::new(&mut state.prop_rise).speed(0.1),
+                                        );
+                                        if let Some(unit) = unit_toggle(ui, state.prop_rise_unit)
+                                            && unit != state.prop_rise_unit
+                                        {
+                                            if let Some(a) = amb {
+                                                state.prop_rise = match unit {
+                                                    MetricUnit::Absolute => {
+                                                        a.per_mille_to_operand(state.prop_rise)
+                                                    }
+                                                    MetricUnit::Relative => {
+                                                        a.per_mille(state.prop_rise)
+                                                    }
+                                                };
+                                            }
+                                            state.prop_rise_unit = unit;
+                                        }
+                                    });
+                                }
+                                if ui.button(ui_text::format_apply_baseline()).clicked() {
+                                    // EITHER a script position OR a free rise —
+                                    // never both, by construction.
+                                    match state.prop_baseline {
+                                        BaselineChoice::Normal => {
+                                            apply_script = Some(ScriptPosition::Normal);
+                                        }
+                                        BaselineChoice::Superscript => {
+                                            apply_script = Some(ScriptPosition::Superscript);
+                                        }
+                                        BaselineChoice::Subscript => {
+                                            apply_script = Some(ScriptPosition::Subscript);
+                                        }
+                                        BaselineChoice::Custom => {
+                                            apply_rise = Some(metric_spec(
+                                                state.prop_rise_unit,
+                                                state.prop_rise,
+                                            ));
+                                        }
+                                    }
+                                }
+
+                                // -- Row 4: synthetic bold / italic (R90) --
+                                ui.label(ui_text::format_style_label())
+                                    .on_hover_text(ui_text::format_style_tooltip());
+                                ui.horizontal(|ui| {
+                                    ui.checkbox(&mut state.prop_bold, ui_text::format_style_bold());
+                                    ui.checkbox(
+                                        &mut state.prop_italic,
+                                        ui_text::format_style_italic(),
+                                    );
+                                });
+                                // The pre-Apply resolution, from the core query
+                                // computed at the top of this frame. When the
+                                // checkboxes just changed, the cached answer is
+                                // for the previous combination — so ask for one
+                                // more frame rather than showing a stale caption.
+                                let key_now = state
+                                    .caret
+                                    .map(|c| (c.run, state.prop_bold, state.prop_italic));
+                                let fresh = key_now.is_some() && state.style_preview_key == key_now;
+                                let row = if fresh {
+                                    match state.style_preview.as_ref() {
+                                        Some(Ok(res)) => style_row_text(res),
+                                        // The query could not answer. Say so,
+                                        // in the same ✖ shape as any refusal,
+                                        // rather than rendering nothing and
+                                        // letting Apply look unremarkable.
+                                        Some(Err(e)) => {
+                                            Some((ui_text::refusal_line(e), Some(e.clone())))
+                                        }
+                                        None => None,
+                                    }
+                                } else {
+                                    ui.ctx().request_repaint();
+                                    None
+                                };
+                                if let Some((caption, _)) = row.as_ref() {
+                                    ui.label(caption);
+                                }
+                                if ui.button(ui_text::format_apply_style()).clicked() {
+                                    let want =
+                                        StyleSynthesis::new(state.prop_bold, state.prop_italic);
+                                    match row.as_ref().and_then(|(_, r)| r.clone()) {
+                                        // A combination pdfce refuses locally
+                                        // (a real face exists for one axis but
+                                        // not the other). Refuse BY NAME instead
+                                        // of submitting something core would
+                                        // accept but that would discard a real
+                                        // face the operator can have.
+                                        Some(refusal) => local_refusal = Some(refusal),
+                                        None if !want.is_none() => {
+                                            apply_synthetic = Some(want);
+                                        }
+                                        None => {}
+                                    }
+                                }
+                                // -- Row 5: word spacing — a DISCLOSURE, not a
+                                // control. Rendered as plain (greyed) text, never
+                                // as a disabled widget: R83 says do not draw an
+                                // affordance for a capability that is not there,
+                                // and a greyed-out spinner is still an affordance.
+                                // But showing an inert value with no reason given
+                                // invites "this looks broken", so the reason is
+                                // stated, and it differs by font model.
+                                ui.separator();
+                                ui.label(ui_text::format_word_spacing_label());
+                                if let Some(a) = amb {
+                                    ui.colored_label(
+                                        ui.visuals().weak_text_color(),
+                                        ui_text::format_word_spacing_readonly(a.word_spacing),
+                                    );
+                                    ui.label(if a.composite {
+                                        ui_text::format_word_spacing_explanation_composite()
+                                    } else {
+                                        ui_text::format_word_spacing_explanation_pending_census()
+                                    });
+                                } else {
+                                    ui.label(no_ambient_caption(state.caret.is_some()));
+                                }
+                            });
                         // §1.3 reflow entry button (grey-not-hidden) — targets the
                         // caret's block; §3 divergence caption when a target
                         // resolves (fuzzy-never-sneaky about the two recognitions).
@@ -7724,6 +8267,15 @@ fn run_text_edit_tool(
     }
 
     // ---- Phase C: the session mutation (one undo-able command) ----
+    // Pass 19.3: a refusal pdfce decided WITHOUT calling core (the mixed
+    // real-face/synthesis request) lands in the same strip as every core
+    // refusal — one disclosure surface, not two.
+    if let Some(msg) = local_refusal
+        && let Some(state) = doc.text_edit.as_mut()
+    {
+        state.last_refusal = Some(msg);
+        return;
+    }
     if do_reject && let Some(state) = doc.text_edit.as_mut() {
         state.pending = None;
         return;
@@ -7822,14 +8374,32 @@ fn run_text_edit_tool(
             FormatOp::Size(pt) => r.size(pt),
             FormatOp::Fill(f) => r.fill(f),
             FormatOp::Font(sel) => r.font(FontSelector::new(&sel)),
+            FormatOp::CharSpacing(spec) => r.char_spacing(spec),
+            FormatOp::HScale(pct) => r.h_scale(pct),
+            FormatOp::Script(pos) => r.script(pos),
+            FormatOp::Rise(spec) => r.rise(spec),
+            FormatOp::Synthetic(s) => r.synthetic(s),
         })
     };
+    // One Apply per frame — the operator clicked one button. The order below
+    // is the panel's own top-to-bottom order and is never reached with two
+    // intents set, because two buttons cannot be clicked in one frame.
     let chosen = if let Some(pt) = apply_size {
         Some(FormatOp::Size(pt))
     } else if let Some(f) = apply_fill {
         Some(FormatOp::Fill(f))
+    } else if let Some(sel) = apply_font {
+        Some(FormatOp::Font(sel))
+    } else if let Some(spec) = apply_char_spacing {
+        Some(FormatOp::CharSpacing(spec))
+    } else if let Some(pct) = apply_h_scale {
+        Some(FormatOp::HScale(pct))
+    } else if let Some(pos) = apply_script {
+        Some(FormatOp::Script(pos))
+    } else if let Some(spec) = apply_rise {
+        Some(FormatOp::Rise(spec))
     } else {
-        apply_font.map(FormatOp::Font)
+        apply_synthetic.map(FormatOp::Synthetic)
     };
     if let Some(op) = chosen
         && let Some(req) = format_req(op)
@@ -7839,7 +8409,20 @@ fn run_text_edit_tool(
                 doc.refresh_pages();
                 doc.build_text_edit_state();
                 if let Some(state) = doc.text_edit.as_mut() {
+                    // Core's own sentences, verbatim (§8.1) — plus, when a
+                    // justified line's slack was invalidated, one GUI sentence
+                    // pointing at the Reflow control that is already three
+                    // rows below in this same panel. Core says WHY (and names
+                    // the width delta, per decision 019 Amendment B.1); the
+                    // GUI adds only WHAT TO DO, which is the half core cannot
+                    // know because it does not know a panel is open.
+                    let justify = report.justify_slack_invalidated;
                     state.last_disclosures = report.disclosures;
+                    if justify {
+                        state
+                            .last_disclosures
+                            .push(ui_text::format_justify_invalidated_hint().to_owned());
+                    }
                 }
             }
             Err(err) => {
@@ -8533,10 +9116,285 @@ fn run_add_text_tool(
 
 /// A single property-bar format operation, chosen in phase B and applied in
 /// phase C (only one per frame — the operator clicked one Apply).
+///
+/// One variant per Apply button, deliberately: the panel keeps the shipped
+/// one-control-family-per-commit granularity, so each accepted change is one
+/// undo step and one disclosure set. Note that [`Self::Script`] and
+/// [`Self::Rise`] are separate variants — that is the type-level half of the
+/// baseline control's mutual exclusion (§9.3.7: both write `Ts`, and asking
+/// for both is `FormatError::ConflictingRise`). There is no way to spell
+/// "both" here.
 enum FormatOp {
     Size(f64),
     Fill(pdfce_core::text_edit::NewFill),
     Font(String),
+    /// `Tc`, in whichever unit the operator's toggle named.
+    CharSpacing(pdfce_core::text_edit::MetricSpec),
+    /// `Tz`, percent.
+    HScale(f64),
+    /// The coarse super/subscript toggle (or `Normal`, which flattens).
+    Script(pdfce_core::text_edit::ScriptPosition),
+    /// A free-form `Ts`.
+    Rise(pdfce_core::text_edit::MetricSpec),
+    /// Synthetic bold and/or italic (R90).
+    Synthetic(pdfce_core::text_edit::StyleSynthesis),
+}
+
+/// The caption for a row that has no ambient value to show — and the reason
+/// it has none, which is not always the same reason.
+///
+/// With no caret there is simply nothing selected yet (the ordinary state at
+/// tool entry, and again immediately after an accepted change, which rebuilds
+/// the page model and clears the caret). With a caret but no provenance,
+/// pdfce genuinely could not read the run's state. Reporting the first as the
+/// second would claim a limitation pdfce does not have.
+fn no_ambient_caption(has_caret: bool) -> &'static str {
+    if has_caret {
+        ui_text::format_ambient_unknown()
+    } else {
+        ui_text::format_ambient_no_caret()
+    }
+}
+
+/// Draw the two-way absolute/relative unit selector and report the operator's
+/// pick.
+///
+/// # Why this is not a `selectable_value` pair
+///
+/// Standing rule R84: a selection's state is never carried by colour alone.
+/// egui's `selectable_value` signals "selected" with a background fill and
+/// nothing else, which fails that outright for anyone who cannot separate the
+/// fill from the surround. Pairing `selectable_label` with
+/// [`PdfceApp::toggle_label`] adds **weight** — the live option is bold — so
+/// there are two independent cues.
+///
+/// Two rows in this same panel (the reflow alignment picker, the colour-model
+/// picker) still use the bare form. They predate R84 and are grandfathered;
+/// R84 explicitly binds new selection surfaces, which is what this is.
+///
+/// Returns the clicked unit, or `None` if neither was clicked this frame.
+fn unit_toggle(ui: &mut egui::Ui, current: MetricUnit) -> Option<MetricUnit> {
+    let mut picked = None;
+    for (unit, label, tip) in [
+        (
+            MetricUnit::Relative,
+            ui_text::format_unit_relative(),
+            ui_text::format_unit_relative_tooltip(),
+        ),
+        (
+            MetricUnit::Absolute,
+            ui_text::format_unit_absolute(),
+            ui_text::format_unit_absolute_tooltip(),
+        ),
+    ] {
+        let sel = current == unit;
+        if ui
+            .selectable_label(sel, PdfceApp::toggle_label(sel, label))
+            .on_hover_text(tip)
+            .clicked()
+        {
+            picked = Some(unit);
+        }
+    }
+    picked
+}
+
+/// Build the core `MetricSpec` the operator's unit choice names.
+///
+/// The single place the GUI's unit tag becomes core's discriminated one, so
+/// the mapping cannot drift between the two call sites (tracking and rise).
+fn metric_spec(unit: MetricUnit, value: f64) -> pdfce_core::text_edit::MetricSpec {
+    use pdfce_core::text_edit::MetricSpec;
+    match unit {
+        MetricUnit::Absolute => MetricSpec::Absolute(value),
+        MetricUnit::Relative => MetricSpec::Relative(value),
+    }
+}
+
+/// Turn the core's read-only [`StyleResolution`] into the pair of strings the
+/// style row needs: the live caption shown **before** Apply, and — when the
+/// combination is one pdfce refuses locally — the refusal to record if the
+/// operator clicks Apply anyway.
+///
+/// # Why the refusal is built here and not in `pdfce-core`
+///
+/// The *decision* is core's: `StyleResolution::is_mixed()` and the per-axis
+/// probes come from `gate_synthesis` itself, so no matching rule is
+/// re-derived in the GUI (R74). What is local is only the **policy** of not
+/// submitting a request core would accept — pdfce's core will happily
+/// synthesize both axes, which is exactly the behaviour that would silently
+/// pass over an available real face. Declining to ask is a UI choice; knowing
+/// there is something to decline is not.
+///
+/// Returns `None` when nothing is ticked (no caption, no refusal).
+fn style_row_text(
+    res: &pdfce_core::text_edit::StyleResolution,
+) -> Option<(String, Option<String>)> {
+    use pdfce_core::text_edit::{StyleOutcome, StyleSynthesis};
+    let combined = res.combined.as_ref()?;
+    // The PLAIN style name, not `StyleSynthesis::label()` — that one reads
+    // "synthetic bold", which would produce "a real synthetic bold face".
+    let style = match res.want {
+        StyleSynthesis::Bold => ui_text::format_style_bold(),
+        StyleSynthesis::Italic => ui_text::format_style_italic(),
+        _ => ui_text::format_style_bold_italic(),
+    };
+    // A real face covering the WHOLE request: core refuses, and the caption
+    // says so plainly rather than promising a font switch pdfce will not do.
+    if let StyleOutcome::RealFaceResolves {
+        real_font,
+        resource,
+    } = combined
+    {
+        return Some((
+            ui_text::format_style_preview_real_face(style, real_font, resource),
+            None,
+        ));
+    }
+    // No single face covers the request. Two sub-cases, and the difference
+    // matters to the operator's next action.
+    let bold_real = match res.bold_axis.as_ref() {
+        Some(StyleOutcome::RealFaceResolves {
+            real_font,
+            resource,
+        }) => Some((real_font.as_str(), resource.as_str())),
+        _ => None,
+    };
+    let italic_real = match res.italic_axis.as_ref() {
+        Some(StyleOutcome::RealFaceResolves {
+            real_font,
+            resource,
+        }) => Some((real_font.as_str(), resource.as_str())),
+        _ => None,
+    };
+    match (bold_real, italic_real) {
+        (Some((bf, br)), Some((itf, itr))) => Some((
+            ui_text::format_style_preview_both_real(bf, br, itf, itr),
+            Some(ui_text::format_style_both_real_refusal(bf, br, itf, itr)),
+        )),
+        (Some((f, r)), None) => Some((
+            ui_text::format_style_preview_mixed(
+                ui_text::format_style_bold(),
+                f,
+                r,
+                ui_text::format_style_italic(),
+            ),
+            Some(ui_text::format_style_mixed_refusal(
+                ui_text::format_style_bold(),
+                f,
+                r,
+                ui_text::format_style_italic(),
+            )),
+        )),
+        (None, Some((f, r))) => Some((
+            ui_text::format_style_preview_mixed(
+                ui_text::format_style_italic(),
+                f,
+                r,
+                ui_text::format_style_bold(),
+            ),
+            Some(ui_text::format_style_mixed_refusal(
+                ui_text::format_style_italic(),
+                f,
+                r,
+                ui_text::format_style_bold(),
+            )),
+        )),
+        // The ordinary case: nothing real anywhere, so synthesis is the
+        // genuine fallback it is meant to be.
+        (None, None) => Some((ui_text::format_style_preview_synthesize(style), None)),
+    }
+}
+
+/// Refresh the caret run's ambient snapshot, and re-seed the spacing/style
+/// fields whenever the caret has landed on a **different** run.
+///
+/// # Why this exists at all (the gap this Pass closes)
+///
+/// `TextEditState::prop_size`/`prop_model`/`prop_font` are seeded once, to a
+/// fixed default, and never re-seeded when the caret moves. For those three
+/// that is tolerable — the operator can see that the glyphs are 12 pt, are
+/// that colour, are that face — so the panel can get away with meaning "what
+/// to apply next" rather than "what is true now".
+///
+/// **That tolerance does not transfer to `Tc`/`Tz`/`Ts`.** A `Tc` of 0.24 is
+/// invisible at reading zoom; a `Tz` of 95% is barely perceptible; a small
+/// `Ts` is subtle by design. A panel seeded from a blind default would show
+/// `0` beside a run carrying `0.24`, i.e. it would state something false
+/// about the document, and an operator who then clicked Apply would silently
+/// stomp a value they were never shown. That is a rule-4 failure specific to
+/// this control family.
+///
+/// # Why it keys on the RUN and not on the caret
+///
+/// Ambient text state is a property of the run, so a caret moving within one
+/// run must NOT re-seed — that would fight an operator part-way through
+/// typing a number. Moving to a new run re-seeds, because the panel is now
+/// describing something else.
+///
+/// # Ordering note (immediate mode)
+///
+/// Called in phase B **after** the click/arrow navigation has been applied,
+/// so the snapshot always describes the caret the operator can see rather
+/// than the one phase A rendered. A caret that carries no provenance (a
+/// derived-whitespace run, or an extraction without provenance capture)
+/// clears the snapshot rather than leaving a stale one on screen.
+fn seed_spacing_props(state: &mut TextEditState) {
+    let Some(caret) = state.caret else {
+        state.prop_ambient = None;
+        state.props_seeded_for = None;
+        return;
+    };
+    let ambient = state
+        .page_text
+        .runs
+        .get(caret.run)
+        .and_then(|r| r.glyphs.first())
+        .and_then(|g| g.provenance.as_ref())
+        .map(AmbientSnapshot::from_provenance);
+    state.prop_ambient = ambient;
+
+    let Some(a) = ambient else {
+        // No provenance to seed from. Leave the fields alone and clear the
+        // key so the next run WITH provenance re-seeds; the captions render
+        // as "unknown" rather than as a confident zero.
+        state.props_seeded_for = None;
+        return;
+    };
+    if state.props_seeded_for == Some(caret.run) {
+        return;
+    }
+    state.props_seeded_for = Some(caret.run);
+
+    state.prop_char_spacing = match state.prop_tc_unit {
+        MetricUnit::Absolute => a.char_spacing,
+        MetricUnit::Relative => a.per_mille(a.char_spacing),
+    };
+    state.prop_h_scale = a.h_scale;
+    // A non-zero ambient rise seeds the CUSTOM position and its number, not a
+    // guessed superscript. pdfce cannot tell "the producer applied a
+    // superscript" from "the producer applied a rise of 4.08" — the bytes are
+    // the same — so it shows the number it can prove instead of inferring an
+    // intent it cannot.
+    if a.rise.abs() < f64::EPSILON {
+        state.prop_baseline = BaselineChoice::Normal;
+        state.prop_rise = 0.0;
+    } else {
+        state.prop_baseline = BaselineChoice::Custom;
+        state.prop_rise = match state.prop_rise_unit {
+            MetricUnit::Absolute => a.rise,
+            MetricUnit::Relative => a.per_mille(a.rise),
+        };
+    }
+    // The style checkboxes are a REQUEST, not a reading of the run, so they
+    // reset to "asking for nothing" on a new run rather than claiming to
+    // report the run's weight. (Detecting an existing synthesis is
+    // `synth::detect`'s job and a separate, unbuilt badge — §9 of the
+    // ui-spec, P1.)
+    state.prop_bold = false;
+    state.prop_italic = false;
+    state.style_preview = None;
+    state.style_preview_key = None;
 }
 
 /// Insert typed text `t` into the pending edit, creating the `PendingEdit`
@@ -10118,6 +10976,158 @@ fn run_dimension_groups_panel(doc: &mut OpenDoc, ui: &mut egui::Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- Pass 19.3: the spacing & style property surface ----
+
+    /// The GUI's unit tag maps onto core's discriminated one and nowhere
+    /// else. If these two ever disagreed, a "scales with size" number would
+    /// be written into the file as an absolute operand — silently wrong, and
+    /// invisible until the run was resized.
+    #[test]
+    fn the_unit_toggle_maps_onto_the_core_metric_spec() {
+        use pdfce_core::text_edit::MetricSpec;
+        assert_eq!(
+            metric_spec(MetricUnit::Absolute, 0.24),
+            MetricSpec::Absolute(0.24)
+        );
+        assert_eq!(
+            metric_spec(MetricUnit::Relative, 20.0),
+            MetricSpec::Relative(20.0)
+        );
+    }
+
+    fn snapshot(font_size: f64) -> AmbientSnapshot {
+        AmbientSnapshot {
+            char_spacing: 0.0,
+            h_scale: 100.0,
+            rise: 0.0,
+            word_spacing: 0.0,
+            font_size,
+            composite: false,
+            tc_at_default: true,
+            tz_at_default: true,
+            rise_at_default: true,
+        }
+    }
+
+    /// Switching the unit must RE-DERIVE the number, never reinterpret the
+    /// digits already in the box. 20‰ at 12 pt is 0.24 text-space units — the
+    /// same physical spacing, spelled two ways — and the round trip must not
+    /// drift, or repeated toggling would walk the value.
+    #[test]
+    fn switching_units_preserves_the_physical_quantity() {
+        let a = snapshot(12.0);
+        assert!((a.per_mille_to_operand(20.0) - 0.24).abs() < 1e-12);
+        assert!((a.per_mille(0.24) - 20.0).abs() < 1e-9);
+        // …and it is the same relationship core's own resolver applies.
+        assert!(
+            (pdfce_core::text_edit::MetricSpec::Relative(20.0).resolve(12.0) - 0.24).abs() < 1e-12
+        );
+    }
+
+    /// A run with no `Tf` size must not make the caption an infinity or a
+    /// NaN. It shows zero, which is wrong-but-harmless, rather than rendering
+    /// garbage into the panel.
+    #[test]
+    fn a_zero_font_size_does_not_produce_an_infinite_caption() {
+        let a = snapshot(0.0);
+        assert_eq!(a.per_mille(0.24), 0.0);
+    }
+
+    /// Load a fixture, wrap it in a session, and ask the read-only query.
+    fn preview_on_fixture(
+        name: &str,
+        find: &str,
+        want: pdfce_core::text_edit::StyleSynthesis,
+    ) -> pdfce_core::text_edit::StyleResolution {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/synthetic/textedit")
+            .join(name);
+        let bytes = std::fs::read(path).expect("fixture");
+        let doc = pdfce_core::document::Document::from_bytes(bytes).expect("parse");
+        let session = pdfce_core::edit::EditSession::new(doc);
+        session
+            .preview_style_resolution(0, find, None, want)
+            .expect("preview")
+    }
+
+    /// The ordinary case: the page has no Times-Italic, so the caption tells
+    /// the operator — BEFORE they click — that Apply will synthesize, and
+    /// there is no local refusal.
+    #[test]
+    fn the_style_caption_announces_synthesis_before_the_click() {
+        use pdfce_core::text_edit::StyleSynthesis;
+        let res = preview_on_fixture("format_family.pdf", "hello world", StyleSynthesis::Italic);
+        let (caption, refusal) = style_row_text(&res).expect("a style was requested");
+        assert!(refusal.is_none(), "nothing to refuse: {caption}");
+        assert!(caption.contains("synthesize"), "{caption}");
+        assert!(caption.contains("Italic"), "{caption}");
+    }
+
+    /// The real-face case: `format_family.pdf` carries a real `Times-Bold`
+    /// beside its `Times-Roman` run, so the caption must name that face AND
+    /// say the Apply will be refused — it must NOT promise a font switch,
+    /// because pdfce does not perform one.
+    #[test]
+    fn the_style_caption_names_the_real_face_and_does_not_promise_a_switch() {
+        use pdfce_core::text_edit::StyleSynthesis;
+        let res = preview_on_fixture("format_family.pdf", "hello world", StyleSynthesis::Bold);
+        let (caption, refusal) = style_row_text(&res).expect("a style was requested");
+        assert!(refusal.is_none(), "core refuses this one, not the GUI");
+        assert!(caption.contains("Times-Bold"), "{caption}");
+        assert!(caption.contains("REFUSED"), "{caption}");
+        assert!(
+            caption.contains("Font control"),
+            "it points at the control that DOES switch fonts: {caption}"
+        );
+    }
+
+    /// **The mixed case.** The page has a real `Times-Bold` but no
+    /// `Times-Italic`. Core's gate is all-or-nothing, so submitting
+    /// Bold+Italic would synthesize BOTH and quietly pass over the real Bold.
+    /// The panel refuses it by name instead, says which axis has the real
+    /// face and which does not, and gives the two-step route that works.
+    #[test]
+    fn a_mixed_bold_italic_request_is_refused_by_name_with_both_axes_named() {
+        use pdfce_core::text_edit::StyleSynthesis;
+        let res = preview_on_fixture(
+            "format_family.pdf",
+            "hello world",
+            StyleSynthesis::BoldItalic,
+        );
+        assert!(res.is_mixed(), "the fixture is the mixed shape");
+        let (caption, refusal) = style_row_text(&res).expect("a style was requested");
+        let refusal = refusal.expect("the GUI refuses this one locally");
+
+        for text in [&caption, &refusal] {
+            assert!(text.contains("Bold"), "the covered axis is named: {text}");
+            assert!(
+                text.contains("Italic"),
+                "the uncovered axis is named: {text}"
+            );
+            assert!(
+                text.contains("Times-Bold"),
+                "the real face is named: {text}"
+            );
+        }
+        assert!(
+            caption.contains("Font control"),
+            "the working route is offered: {caption}"
+        );
+        assert!(
+            refusal.contains("Nothing was applied"),
+            "the refusal states the outcome, like every core refusal: {refusal}"
+        );
+    }
+
+    /// Nothing ticked, nothing said. The style row must not editorialize when
+    /// the operator has not asked for anything.
+    #[test]
+    fn no_style_request_produces_no_caption() {
+        use pdfce_core::text_edit::StyleSynthesis;
+        let res = preview_on_fixture("format_family.pdf", "hello world", StyleSynthesis::None);
+        assert!(style_row_text(&res).is_none());
+    }
 
     /// Zooming must never discard an in-progress tool gesture.
     ///

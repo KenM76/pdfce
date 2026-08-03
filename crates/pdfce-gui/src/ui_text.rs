@@ -2700,6 +2700,429 @@ pub fn format_apply_font() -> &'static str {
     "Apply font"
 }
 
+// ===================================================================
+// Pass 19.3 — the spacing & style property surface (decision 019 §6
+// slice 19.3; ui-spec `docs/ui_specs/pass-19.3-text-formatting-surface.md`)
+// ===================================================================
+//
+// Wording rules applied throughout this section, so a later edit does not
+// quietly break them:
+//
+// 1. **No bare PDF operator names in operator-visible text.** `Tc`, `Tz`,
+//    `Ts`, `Tw` appear only as parenthetical asides beside a plain-English
+//    name, matching the existing "Size (pt):" convention. An operator should
+//    never need to know the PDF imaging model to use a control.
+// 2. **Units are named by their BEHAVIOUR, not by their spelling.** The
+//    absolute/relative distinction is real — it changes what happens under a
+//    later resize — so the toggle says "scales with size" / "fixed", and the
+//    ‰/pt spelling rides along in parentheses. Hiding the distinction would
+//    be a lie; surfacing it as "Absolute | Relative" would be noise.
+// 3. **Nothing here promises a mechanism the code does not have.** In
+//    particular the real-face caption says Apply will be REFUSED and points
+//    at the font control; it does NOT say pdfce will switch fonts, because
+//    pdfce will not.
+
+/// Header of the collapsed-by-default section holding the five spacing/style
+/// rows. Collapsed because these are occasionally-relevant controls beside
+/// three always-relevant ones, and permanently growing the panel for them is
+/// the Acrobat-ribbon failure mode.
+pub fn format_spacing_section_title() -> &'static str {
+    "Spacing & style"
+}
+
+/// Label for the character-spacing row. "Tracking" is the typographic name an
+/// operator is far more likely to recognize than `Tc`.
+pub fn format_char_spacing_label() -> &'static str {
+    "Character spacing (tracking):"
+}
+
+/// Apply button for the character-spacing row.
+pub fn format_apply_char_spacing() -> &'static str {
+    "Apply spacing"
+}
+
+/// Tooltip for the character-spacing row — WHEN to reach for it, not what it
+/// is.
+pub fn format_char_spacing_tooltip() -> &'static str {
+    "Adds or removes space between every letter of this run — for nudging a \
+     producer's slightly-too-tight or too-loose tracking. Positive widens, \
+     negative tightens."
+}
+
+/// Label for the horizontal-scaling row.
+pub fn format_h_scale_label() -> &'static str {
+    "Horizontal scale:"
+}
+
+/// Apply button for the horizontal-scaling row.
+pub fn format_apply_h_scale() -> &'static str {
+    "Apply scale"
+}
+
+/// Tooltip for the horizontal-scaling row.
+pub fn format_h_scale_tooltip() -> &'static str {
+    "Stretches or squeezes the glyphs themselves, as a percentage of their \
+     normal width — for matching a squeezed look a producer used, or fixing \
+     one they used by mistake. 100% is normal."
+}
+
+/// Label for the baseline row (the one control covering superscript,
+/// subscript and a free-form rise).
+pub fn format_baseline_label() -> &'static str {
+    "Baseline:"
+}
+
+/// Apply button for the baseline row.
+pub fn format_apply_baseline() -> &'static str {
+    "Apply baseline"
+}
+
+/// Tooltip for the baseline row.
+pub fn format_baseline_tooltip() -> &'static str {
+    "Moves this run up or down relative to the line it sits on. Superscript \
+     and Subscript also reduce the size; Custom moves it by an exact amount \
+     and does not resize — for footnote markers, maths and chemistry, or \
+     aligning to a scanned baseline."
+}
+
+/// Baseline position: on the line, no size change.
+pub fn format_baseline_normal() -> &'static str {
+    "Normal"
+}
+
+/// Baseline position: pdfce's documented superscript metrics.
+pub fn format_baseline_superscript() -> &'static str {
+    "Superscript"
+}
+
+/// Baseline position: pdfce's documented subscript metrics.
+pub fn format_baseline_subscript() -> &'static str {
+    "Subscript"
+}
+
+/// Baseline position: reveal the free-form numeric rise field. The ellipsis
+/// is the established "this reveals more UI" signal.
+pub fn format_baseline_custom() -> &'static str {
+    "Custom…"
+}
+
+/// Label preceding the free-form rise field, shown only when Custom is the
+/// live baseline position.
+pub fn format_rise_label() -> &'static str {
+    "Move by:"
+}
+
+/// The "scales with size" unit choice.
+///
+/// Named for the behaviour rather than for `MetricSpec::Relative`, because
+/// the behaviour is the whole reason the choice exists: a ‰-of-em quantity
+/// tracks a later size change, an absolute one does not.
+pub fn format_unit_relative() -> &'static str {
+    "scales with size (‰)"
+}
+
+/// The "fixed" unit choice.
+pub fn format_unit_absolute() -> &'static str {
+    "fixed (pt)"
+}
+
+/// Tooltip on the "scales with size" unit choice.
+pub fn format_unit_relative_tooltip() -> &'static str {
+    "The number is thousandths of the font size, so if this text is resized \
+     later the spacing grows or shrinks with it and keeps looking the same."
+}
+
+/// The `%` suffix on the horizontal-scale spinner. In the catalog because it
+/// is rendered to the operator, short as it is.
+pub fn percent_suffix() -> &'static str {
+    "%"
+}
+
+/// Tooltip on the "fixed" unit choice.
+pub fn format_unit_absolute_tooltip() -> &'static str {
+    "The number is written into the file exactly as typed, in text-space \
+     units (points at the usual 1:1 text matrix), so if this text is resized \
+     later the spacing stays as it is and the proportions change."
+}
+
+/// The "what is true right now" caption shown beside a spacing/baseline row.
+///
+/// Deliberately the same ⓘ-prefixed shape as the reflow rows' own
+/// detected/overridden captions three rows above in this same panel — one
+/// established convention applied to a second control family, not a new one.
+pub fn format_ambient_caption(value_text: &str) -> String {
+    format!("ⓘ Now: {value_text}")
+}
+
+/// Appended to a caption when the value is provably still the PDF default —
+/// i.e. nothing in the page ever set it. Distinguishes "the file says 100%"
+/// from "nobody said anything, so it is 100%".
+pub fn format_ambient_default_suffix() -> &'static str {
+    " — the PDF default, never set on this run"
+}
+
+/// Caption body for a character-spacing value, quoted in BOTH units so the
+/// operator can read the row whichever unit the toggle is on.
+pub fn format_ambient_char_spacing_value(per_mille: f64, absolute: f64) -> String {
+    format!("{per_mille:.1}‰ of size ({absolute:.4} pt)")
+}
+
+/// Caption body for a horizontal-scale value.
+pub fn format_ambient_h_scale_value(percent: f64) -> String {
+    format!("{percent:.1}%")
+}
+
+/// Caption body for a baseline sitting on the line.
+pub fn format_ambient_baseline_normal() -> &'static str {
+    "on the line (no rise)"
+}
+
+/// Caption body for a raised or lowered baseline. Says "raised"/"lowered" as
+/// well as the signed number, so the sign convention never has to be guessed.
+pub fn format_ambient_baseline_value(rise: f64, per_mille: f64) -> String {
+    let direction = if rise >= 0.0 { "raised" } else { "lowered" };
+    format!(
+        "{direction} {abs:.4} pt ({per_mille:.1}‰ of size)",
+        abs = rise.abs()
+    )
+}
+
+/// Caption used when the caret's run carries no provenance, so pdfce cannot
+/// state what is in force. Says so rather than showing a confident zero.
+pub fn format_ambient_unknown() -> &'static str {
+    "ⓘ Now: pdfce cannot read this run's spacing state (no provenance for it)"
+}
+
+/// Caption used when there is no caret at all — including immediately after
+/// an accepted change, which rebuilds the page model and clears it.
+///
+/// Deliberately NOT the same string as [`format_ambient_unknown`]: "you have
+/// not told me which text you mean" and "I looked and could not tell" are
+/// different facts, and collapsing them would report a limitation pdfce does
+/// not have.
+pub fn format_ambient_no_caret() -> &'static str {
+    "ⓘ Click into text on the page to see and change its spacing."
+}
+
+/// Label for the READ-ONLY word-spacing row.
+pub fn format_word_spacing_label() -> &'static str {
+    "Word spacing:"
+}
+
+/// The word-spacing value, marked read-only in TEXT as well as by being
+/// greyed — colour and weight are never the sole signal (R84).
+pub fn format_word_spacing_readonly(value: f64) -> String {
+    format!("{value:.4} pt (read-only)")
+}
+
+/// Why there is no word-spacing control on a SIMPLE-font run.
+///
+/// Shown rather than omitted because a value with no control and no reason
+/// invites "this looks broken"; the absence is a decision, and a decision
+/// that is explained is not a defect.
+pub fn format_word_spacing_explanation_pending_census() -> &'static str {
+    "pdfce does not offer a word-spacing control yet — the value above is \
+     preserved and shown, not editable, pending a survey of how often it can \
+     actually apply. To change the gaps between words, reflow the paragraph \
+     with the control below."
+}
+
+/// Why there is no word-spacing control on a COMPOSITE-font run — a
+/// different, permanent reason from the census one.
+pub fn format_word_spacing_explanation_composite() -> &'static str {
+    "This run uses a multi-byte (composite) font, and word spacing is void \
+     for multi-byte character codes per ISO 32000-1 §9.3.3 — it could never \
+     take effect here, editable or not."
+}
+
+/// Label preceding the Bold/Italic checkboxes.
+pub fn format_style_label() -> &'static str {
+    "Style:"
+}
+
+/// The synthetic-bold checkbox.
+pub fn format_style_bold() -> &'static str {
+    "Bold"
+}
+
+/// The synthetic-italic checkbox.
+pub fn format_style_italic() -> &'static str {
+    "Italic"
+}
+
+/// Both style axes at once, for a caption that names the combination.
+pub fn format_style_bold_italic() -> &'static str {
+    "Bold Italic"
+}
+
+/// Apply button for the style row.
+pub fn format_apply_style() -> &'static str {
+    "Apply style"
+}
+
+/// Tooltip for the style row — names the fallback-only policy up front, since
+/// that policy is the surprising part.
+pub fn format_style_tooltip() -> &'static str {
+    "Fakes a bold or italic look for this run. pdfce only does this when the \
+     page has no real Bold/Italic face for the family — if one exists, it \
+     says so and points you at it instead."
+}
+
+/// Pre-Apply caption: no real face resolves, so Apply would synthesize.
+///
+/// Built from the core query's answer, never hand-authored per call site, so
+/// its wording cannot drift from what Apply will actually do.
+pub fn format_style_preview_synthesize(style: &str) -> String {
+    format!(
+        "ⓘ No real {style} face for this family is on the page — Apply will \
+         synthesize a faux {style}, disclosed by name in the strip below, \
+         never silently."
+    )
+}
+
+/// Pre-Apply caption: a real face resolves, so Apply will be REFUSED.
+///
+/// Note carefully what this does NOT say. It does not say pdfce will switch
+/// to that font — pdfce will not; the core refuses and the operator goes and
+/// uses the Font control themselves. Copy that reassured the operator about a
+/// mechanism the code lacks would be exactly the class of defect this project
+/// has had to correct after shipping before.
+pub fn format_style_preview_real_face(style: &str, real_font: &str, resource: &str) -> String {
+    format!(
+        "ⓘ A real {style} face is on this page as '{real_font}' (resource \
+         /{resource}) — Apply will be REFUSED, because pdfce fakes a style \
+         only when no real one exists. Use the Font control above to switch \
+         to it."
+    )
+}
+
+/// Pre-Apply caption for the MIXED case: one axis has a real face and the
+/// other does not.
+///
+/// pdfce refuses this by name rather than synthesizing both, because
+/// synthesizing both would silently pass over a real face that is sitting
+/// right there, and synthesizing only the missing axis on top of a real face
+/// for the other is a capability pdfce does not have yet. Saying so, and
+/// giving the two-step route that does work, is the honest position.
+pub fn format_style_preview_mixed(
+    real_style: &str,
+    real_font: &str,
+    resource: &str,
+    missing_style: &str,
+) -> String {
+    format!(
+        "⚠ Mixed request. This page HAS a real {real_style} face — \
+         '{real_font}' (resource /{resource}) — but no real {missing_style} \
+         one. pdfce will not fake both, because that would quietly throw away \
+         the real {real_style}; and faking only the {missing_style} on top of \
+         a real {real_style} is something pdfce cannot do yet. Do it in two \
+         steps instead: switch this run to '{real_font}' with the Font \
+         control above, then ask for {missing_style} on its own."
+    )
+}
+
+/// Pre-Apply caption for the rarer mixed shape: BOTH axes have a real face,
+/// but in two different resources, so no single face covers the combination.
+/// Same refusal, two named remedies instead of one.
+pub fn format_style_preview_both_real(
+    bold_font: &str,
+    bold_resource: &str,
+    italic_font: &str,
+    italic_resource: &str,
+) -> String {
+    format!(
+        "⚠ Mixed request. This page has a real Bold face — '{bold_font}' \
+         (resource /{bold_resource}) — AND a real Italic face — \
+         '{italic_font}' (resource /{italic_resource}) — but no single face \
+         that is both. pdfce will not fake a style when real ones exist. Pick \
+         one of them with the Font control above."
+    )
+}
+
+/// The refusal recorded when Apply is clicked anyway on the both-real shape.
+pub fn format_style_both_real_refusal(
+    bold_font: &str,
+    bold_resource: &str,
+    italic_font: &str,
+    italic_resource: &str,
+) -> String {
+    format!(
+        "synthetic bold italic was requested, but this page has a real Bold \
+         face ('{bold_font}', resource /{bold_resource}) and a real Italic \
+         face ('{italic_font}', resource /{italic_resource}) — just not one \
+         face that is both. pdfce refuses to synthesize over available real \
+         faces. Nothing was applied."
+    )
+}
+
+/// The refusal recorded when Apply is clicked anyway on a mixed request. The
+/// caption already said this; the strip repeats it so the refusal is where
+/// every other refusal in this tool is, rather than only in a caption the
+/// operator may have scrolled past.
+pub fn format_style_mixed_refusal(
+    real_style: &str,
+    real_font: &str,
+    resource: &str,
+    missing_style: &str,
+) -> String {
+    format!(
+        "synthetic {real_style} + {missing_style} was requested, but a REAL \
+         {real_style} face is available on this page as '{real_font}' \
+         (resource /{resource}) while no real {missing_style} face is. pdfce \
+         refuses the combination rather than synthesizing both and discarding \
+         an available real face. Nothing was applied."
+    )
+}
+
+/// Hint appended to a `ConflictingRise` refusal.
+///
+/// Phrased as a should-never-happen because the baseline row makes the
+/// combination structurally unreachable: exactly one of Normal / Superscript
+/// / Subscript / Custom is live, and the Apply builds one request from it. If
+/// this ever fires, the mutual-exclusion wiring is broken — and saying so is
+/// more useful than advice that implies it is a routine outcome.
+pub fn conflicting_rise_hint() -> &'static str {
+    "this panel is built so that combination cannot be asked for — please \
+     report it as a bug if you are seeing it."
+}
+
+/// Hint appended to a `RealFaceAvailable` refusal.
+pub fn real_face_available_hint() -> &'static str {
+    "use the Font control in this panel to switch to the named face, or leave \
+     this run's style as it is."
+}
+
+/// Hint appended to a `ShearUnsupported` refusal.
+pub fn shear_unsupported_hint() -> &'static str {
+    "the message above gives the specific reason; switching to a real Italic \
+     face with the Font control may still work even though faking one does \
+     not."
+}
+
+/// Hint appended to an `AmbientUnrestorable` refusal.
+pub fn ambient_unrestorable_hint() -> &'static str {
+    "pdfce will not set a value it cannot put back afterwards, because that \
+     would change text it never touched. Editing this run's spacing needs the \
+     state it inherits to be visible in the same content stream."
+}
+
+/// Hint appended to a `BadHorizScale` refusal.
+pub fn bad_h_scale_hint() -> &'static str {
+    "enter a horizontal scale between 1% and 1000%."
+}
+
+/// Appended to the disclosure strip when a spacing/scaling/baseline change
+/// invalidated a justified line's slack.
+///
+/// The core disclosure already explains WHY (and names the width delta, not a
+/// `TJ` rescale — the mechanism decision 019 originally got wrong). This adds
+/// only WHAT TO DO ABOUT IT, and points at a control that is already three
+/// rows below in the same panel rather than at a new mechanism.
+pub fn format_justify_invalidated_hint() -> &'static str {
+    "ⓘ Use the \"Reflow paragraph…\" control in this panel to recompute this \
+     paragraph's justified spacing for its new width."
+}
+
 /// The trust-level tag for an embedded run font, in the family ComboBox (§7).
 pub fn font_trust_embedded() -> &'static str {
     "embedded"

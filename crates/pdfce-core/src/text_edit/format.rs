@@ -1758,6 +1758,265 @@ fn gate_synthesis(
     Ok(())
 }
 
+// ===================================================================
+// Pass 19.3 — the read-only pre-resolution query (ui-spec §1.1 Option B)
+// ===================================================================
+
+/// What [`gate_synthesis`] would decide for one style axis (or for a whole
+/// combination), asked **without** submitting anything.
+///
+/// Deliberately the two outcomes the gate itself has, and nothing more: the
+/// gate either finds a real face covering everything asked for (so a
+/// `set_synthetic` would be refused) or it does not (so a `set_synthetic`
+/// would apply). Inventing a third state here would let a preview promise
+/// something the commit path cannot honour.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum StyleOutcome {
+    /// A real face covering everything asked for resolves on this page.
+    /// Submitting `set_synthetic(…)` right now would be **refused** with
+    /// [`FormatError::RealFaceAvailable`] naming exactly these two strings.
+    ///
+    /// Note what this does **not** promise: pdfce will not switch to that
+    /// face on the operator's behalf. The commit path refuses and points at
+    /// it; changing the family is a separate, explicit act through the font
+    /// control. Copy that implies otherwise misstates the mechanism.
+    RealFaceResolves {
+        /// The `/BaseFont` of the real face that resolves.
+        real_font: String,
+        /// Its `/Font` resource key on this page (no leading slash).
+        resource: String,
+    },
+    /// No real face covers everything asked for, so submitting
+    /// `set_synthetic(…)` right now would **apply** the synthesis.
+    WouldSynthesize,
+}
+
+impl StyleOutcome {
+    /// Whether a real face resolves — i.e. whether the gate would refuse.
+    ///
+    /// Named so callers do not have to pattern-match a `#[non_exhaustive]`
+    /// enum just to ask a yes/no question.
+    #[must_use]
+    pub const fn is_real_face(&self) -> bool {
+        matches!(self, Self::RealFaceResolves { .. })
+    }
+}
+
+/// A **read-only** preview of what a [`StyleSynthesis`] request would do to
+/// one run — computed without mutating anything and without duplicating the
+/// gate.
+///
+/// # Why this exists (decision 019 §6 slice 19.3; ui-spec §1.1 "Option B")
+///
+/// Before this type, [`gate_synthesis`] was the *entire* mechanism deciding
+/// whether a synthesis request succeeded, it was private, and nothing in the
+/// public API answered "if I asked for Bold right now, would a real face
+/// resolve or would pdfce synthesize?" ahead of actually submitting a
+/// [`FormatRequest`]. A caller could therefore only learn the answer *after*
+/// acting — the wrong side of rule 4 for a change that alters how the
+/// operator's document renders. R90's own word for synthesis is
+/// "declinable", and declining sensibly means knowing what is on offer
+/// before the click, not after it.
+///
+/// # Why it carries per-axis probes and not one verdict
+///
+/// [`gate_synthesis`] is **all-or-nothing per combined request**: a candidate
+/// face counts only if it covers *every* style asked for. So a page holding a
+/// real `Arial-Bold` but no `Arial-BoldItalic` answers a Bold+Italic request
+/// with "no real face — synthesize both", silently passing over an available
+/// real Bold. That is shipped Pass 19.2 behaviour and this type does not
+/// change it; what it does is make the situation **visible**, by carrying the
+/// per-axis probes alongside the combined one so a caller can recognise the
+/// mixed case ([`Self::is_mixed`]) and refuse it by name instead of walking
+/// into it.
+///
+/// Composing a real-face family change for the covered axis with synthesis
+/// for the uncovered one is a genuine, unscoped fast-follow (ui-spec §1.1's
+/// "genuine wrinkle", §8 item 11) — deliberately **not** built here.
+///
+/// # Invariant (R74)
+///
+/// Every field is derived by calling [`gate_synthesis`] itself. No matching
+/// rule ([`family_stem`], [`name_claims_bold`], [`name_claims_italic`]) is
+/// re-derived here or — critically — in `pdfce-gui`: a GUI that
+/// re-implemented the gate would lose it in the WASM fork and would drift
+/// from the commit path the first time the heuristic changed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct StyleResolution {
+    /// The combination that was asked about.
+    pub want: StyleSynthesis,
+    /// The run's own `/BaseFont`, for the caller's message.
+    pub run_font: String,
+    /// What the gate would decide for [`Self::want`] **as a whole** — i.e.
+    /// exactly what `set_synthetic(want)` would do. `None` when `want` is
+    /// [`StyleSynthesis::None`] (nothing was asked about).
+    pub combined: Option<StyleOutcome>,
+    /// The bold axis probed **alone**. `Some` only when `want.bold()`.
+    pub bold_axis: Option<StyleOutcome>,
+    /// The italic axis probed **alone**. `Some` only when `want.italic()`.
+    pub italic_axis: Option<StyleOutcome>,
+}
+
+impl StyleResolution {
+    /// The request mixes an axis that **has** a real face with one that does
+    /// not — or has two real faces in different resources with no single one
+    /// covering both.
+    ///
+    /// This is the case the all-or-nothing gate cannot answer honestly:
+    /// synthesizing both discards a real face that exists, and synthesizing
+    /// only the uncovered axis is work nobody has specified. A caller seeing
+    /// `true` should **refuse and disclose**, naming which axis has the real
+    /// face, rather than submit.
+    #[must_use]
+    pub fn is_mixed(&self) -> bool {
+        // Only meaningful when the COMBINED probe says "would synthesize": if
+        // one face covers everything, there is nothing mixed about it.
+        if !matches!(self.combined, Some(StyleOutcome::WouldSynthesize)) {
+            return false;
+        }
+        self.bold_axis
+            .as_ref()
+            .is_some_and(StyleOutcome::is_real_face)
+            || self
+                .italic_axis
+                .as_ref()
+                .is_some_and(StyleOutcome::is_real_face)
+    }
+}
+
+/// Run [`gate_synthesis`] for one probe and translate its refusal into a
+/// [`StyleOutcome`], leaving every other error a real error.
+///
+/// The whole point of routing *through* the gate rather than around it: the
+/// preview cannot say something the commit path would not do, because it asks
+/// the commit path's own function.
+fn probe_synthesis(
+    doc: &Document,
+    resources: &Dict,
+    run_font: &str,
+    synthesis: StyleSynthesis,
+    current_resource: &[u8],
+) -> Result<StyleOutcome, FormatError> {
+    match gate_synthesis(doc, resources, run_font, synthesis, current_resource) {
+        Ok(()) => Ok(StyleOutcome::WouldSynthesize),
+        Err(FormatError::RealFaceAvailable {
+            real_font,
+            resource,
+            ..
+        }) => Ok(StyleOutcome::RealFaceResolves {
+            real_font,
+            resource,
+        }),
+        Err(other) => Err(other),
+    }
+}
+
+/// Preview what `want` would resolve to for the run located by `find` /
+/// `pinned_span` on `page`, **without mutating anything**.
+///
+/// Side-effect-free by construction: it walks the already-decoded content
+/// stream, locates the anchor exactly as [`plan_format`] does, resolves the
+/// run's own font, then asks [`gate_synthesis`] up to three times. It writes
+/// nothing, plans nothing, and touches no session state.
+///
+/// # What it deliberately does NOT model
+///
+/// A *pending* family change. The preview answers for the run **as it is
+/// now**, because the property surface applies one control family per commit:
+/// a font change is its own accepted edit, after which the caller rebuilds
+/// its model and this query answers against the new face. Threading an
+/// un-applied `set_font` through here would mean re-running [`plan_font`]'s
+/// re-encoding work every frame to answer a question the operator has not
+/// asked yet.
+///
+/// # Errors
+///
+/// The same location/resolution failures [`plan_format`] reports — no match,
+/// an unsupported anchor, an unresolvable font resource, a content-parse
+/// failure. [`FormatError::RealFaceAvailable`] is **never** returned: that
+/// outcome is the point of the query and comes back as
+/// [`StyleOutcome::RealFaceResolves`].
+pub(crate) fn preview_style_resolution(
+    doc: &Document,
+    page: &crate::page_tree::Page,
+    stream: &ContentStream,
+    find: &str,
+    pinned_span: Option<ByteSpan>,
+    want: StyleSynthesis,
+) -> Result<StyleResolution, FormatError> {
+    let mut walk = Walk::new(doc, &page.resources);
+    for op in stream.operations() {
+        walk.operation(&op, &stream.buf);
+    }
+    let recs = walk.recs;
+
+    // `find_anchor` matches within THESE recs, which are already this page's,
+    // so the page index carried here is never read. Spelled 0 rather than
+    // threaded through, so no caller can mistake it for a selector.
+    let locate = EditRequest {
+        page_index: 0,
+        find: find.to_owned(),
+        replace: String::new(),
+        pinned_span,
+    };
+    let anchor_index = find_anchor(&recs, &locate).map_err(FormatError::from_edit)?;
+    let anchor = match recs.get(anchor_index) {
+        Some(OpRec {
+            rec: Rec::Show(s), ..
+        }) => s,
+        _ => return Err(FormatError::NoMatch(find.to_owned())),
+    };
+
+    let orig_dict =
+        resolve_font_dict(doc, &page.resources, &anchor.font_name).ok_or_else(|| {
+            FormatError::Unsupported(
+            "the run's font resource is unresolvable (outlined/vector art has no font to format)"
+                .to_owned(),
+        )
+        })?;
+    let run_font = ExtractFont::resolve(&doc.view(), orig_dict).base_font;
+    let resources = page_resources(page);
+    let current = anchor.font_name.as_slice();
+
+    let combined = if want.is_none() {
+        None
+    } else {
+        Some(probe_synthesis(doc, resources, &run_font, want, current)?)
+    };
+    let bold_axis = if want.bold() {
+        Some(probe_synthesis(
+            doc,
+            resources,
+            &run_font,
+            StyleSynthesis::Bold,
+            current,
+        )?)
+    } else {
+        None
+    };
+    let italic_axis = if want.italic() {
+        Some(probe_synthesis(
+            doc,
+            resources,
+            &run_font,
+            StyleSynthesis::Italic,
+            current,
+        )?)
+    } else {
+        None
+    };
+
+    Ok(StyleResolution {
+        want,
+        run_font,
+        combined,
+        bold_axis,
+        italic_axis,
+    })
+}
+
 /// Emit synthetic bold — text rendering mode 2 plus a stroke — and the three
 /// restores it owes, returning the user-space stroke width for the report.
 ///
@@ -3993,6 +4252,145 @@ mod tests {
             appended.contains("1 0 0 1 72 686 Tm"),
             "the following text object's own matrix is untouched: {appended}"
         );
+    }
+
+    // --- Pass 19.3: the read-only pre-resolution query (Option B) ---
+
+    /// Resolve a preview against a `&Document`, mirroring what
+    /// `EditSession::preview_style_resolution` does for the session path.
+    fn preview(doc: &Document, find: &str, want: StyleSynthesis) -> StyleResolution {
+        let pages = page_tree::pages(doc).unwrap();
+        let page = pages.first().unwrap();
+        let stream = ContentStream::from_page(&doc.view(), page).unwrap();
+        preview_style_resolution(doc, page, &stream, find, None, want).unwrap()
+    }
+
+    /// The preview's whole reason to exist: the operator learns which of the
+    /// two outcomes they are heading for BEFORE clicking, and the answer is
+    /// the gate's own, not a re-derivation of it.
+    #[test]
+    fn the_preview_reports_would_synthesize_when_no_real_face_resolves() {
+        // Helvetica alone on the page — no Helvetica-Bold sibling.
+        let doc = Document::from_bytes(fill_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n")).unwrap();
+        let res = preview(&doc, "hello", StyleSynthesis::Bold);
+        assert_eq!(res.run_font, "Helvetica");
+        assert_eq!(res.combined, Some(StyleOutcome::WouldSynthesize));
+        assert_eq!(res.bold_axis, Some(StyleOutcome::WouldSynthesize));
+        assert_eq!(res.italic_axis, None, "an unasked axis is not probed");
+        assert!(!res.is_mixed());
+    }
+
+    /// …and the mirror case names the same resource and `/BaseFont` the
+    /// commit path's refusal would name. If these two ever disagreed the
+    /// preview would be lying, which is why the query calls `gate_synthesis`
+    /// rather than re-implementing the family/name matching (R74).
+    #[test]
+    fn the_preview_names_the_same_real_face_the_refusal_would() {
+        let doc =
+            Document::from_bytes(family_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n")).unwrap();
+        let res = preview(&doc, "hello", StyleSynthesis::Bold);
+        assert_eq!(
+            res.combined,
+            Some(StyleOutcome::RealFaceResolves {
+                real_font: "Times-Bold".to_owned(),
+                resource: "F2".to_owned(),
+            })
+        );
+        assert!(!res.is_mixed(), "a single face covers everything asked for");
+
+        // The same request, actually submitted, refuses with those strings.
+        let err = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap_err();
+        match err {
+            FormatError::RealFaceAvailable {
+                ref real_font,
+                ref resource,
+                ..
+            } => {
+                assert_eq!(real_font, "Times-Bold");
+                assert_eq!(resource, "F2");
+            }
+            other => panic!("expected the real-face refusal, got {other}"),
+        }
+    }
+
+    /// **The mixed case the all-or-nothing gate cannot express.** The page
+    /// has a real `Times-Bold` but no `Times-Italic` and no
+    /// `Times-BoldItalic`. Asking for both:
+    ///
+    /// - the COMBINED probe says "would synthesize" — because no single face
+    ///   covers both — so a naive caller would synthesize BOTH and silently
+    ///   pass over a real Bold that is sitting right there;
+    /// - the per-axis probes expose that, and `is_mixed()` is the predicate a
+    ///   caller uses to refuse and disclose instead.
+    #[test]
+    fn the_preview_exposes_a_mixed_bold_italic_request() {
+        let doc =
+            Document::from_bytes(family_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n")).unwrap();
+        let res = preview(&doc, "hello", StyleSynthesis::BoldItalic);
+        assert_eq!(
+            res.combined,
+            Some(StyleOutcome::WouldSynthesize),
+            "no single face covers Bold AND Italic — this is the trap"
+        );
+        assert!(
+            res.bold_axis
+                .as_ref()
+                .is_some_and(StyleOutcome::is_real_face),
+            "a real Bold exists on its own: {:?}",
+            res.bold_axis
+        );
+        assert_eq!(
+            res.italic_axis,
+            Some(StyleOutcome::WouldSynthesize),
+            "no real Italic exists"
+        );
+        assert!(
+            res.is_mixed(),
+            "the caller must be able to recognise this without re-deriving the gate"
+        );
+    }
+
+    /// Asking about nothing answers nothing — no probe is run, so the query
+    /// costs nothing on the frames where no style is ticked.
+    #[test]
+    fn the_preview_probes_nothing_when_no_style_is_requested() {
+        let doc = Document::from_bytes(fill_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n")).unwrap();
+        let res = preview(&doc, "hello", StyleSynthesis::None);
+        assert_eq!(res.combined, None);
+        assert_eq!(res.bold_axis, None);
+        assert_eq!(res.italic_axis, None);
+        assert!(!res.is_mixed());
+    }
+
+    /// Read-only means read-only: the query must not disturb the document it
+    /// was asked about, so a commit made afterwards is byte-identical to one
+    /// made without the query.
+    #[test]
+    fn the_preview_has_no_side_effects_on_the_document() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src.clone()).unwrap();
+        let without = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+
+        let doc2 = Document::from_bytes(src).unwrap();
+        let _ = preview(&doc2, "hello", StyleSynthesis::BoldItalic);
+        let _ = preview(&doc2, "hello", StyleSynthesis::Bold);
+        let with = set_format(
+            &doc2,
+            &FormatRequest::new(0, "hello").synthetic(StyleSynthesis::Bold),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(without.bytes, with.bytes);
     }
 
     /// Pin and the shear are two mechanisms for the same job. Refused rather

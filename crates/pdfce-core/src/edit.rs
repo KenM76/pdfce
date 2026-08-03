@@ -1783,6 +1783,59 @@ impl EditSession {
         Ok(plan.report)
     }
 
+    /// Ask what a synthetic bold/italic request **would** do to one run,
+    /// without doing it (Pass 19.3, ui-spec §1.1 "Option B").
+    ///
+    /// `&self`, and side-effect-free: it reads the session-current content
+    /// for the page, locates the same anchor [`Self::format_text`] would, and
+    /// runs the R90 gate as a query. Nothing is planned, staged, committed or
+    /// cached. Calling it a hundred times changes nothing.
+    ///
+    /// # Why a session method and not a free function over `Document`
+    ///
+    /// The answer must be about the page **as the operator is looking at it**,
+    /// which after any accepted edit is the session's staged content, not the
+    /// base document's (the same trap `build_text_edit_state` documents on the
+    /// GUI side: a query answered against `session.document()` describes a
+    /// page that no longer exists). Reusing `current_page_content` is what
+    /// makes the preview and the subsequent commit agree.
+    ///
+    /// # Errors
+    ///
+    /// [`FormatError::Encrypted`](crate::text_edit::FormatError::Encrypted),
+    /// a bad page index, a page with no `/Contents`, a content-parse failure,
+    /// or the location failures the planner reports (no match, unsupported
+    /// anchor, unresolvable font resource).
+    /// [`RealFaceAvailable`](crate::text_edit::FormatError::RealFaceAvailable)
+    /// is never returned — it is the *answer*, delivered as
+    /// [`StyleOutcome::RealFaceResolves`](crate::text_edit::StyleOutcome::RealFaceResolves).
+    pub fn preview_style_resolution(
+        &self,
+        page_index: usize,
+        find: &str,
+        pinned_span: Option<crate::span::ByteSpan>,
+        want: crate::text_edit::StyleSynthesis,
+    ) -> Result<crate::text_edit::StyleResolution, crate::text_edit::FormatError> {
+        use crate::text_edit::FormatError as FmtError;
+        use crate::text_edit::format::preview_style_resolution;
+
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(FmtError::Encrypted);
+        }
+        let pages = page_tree::pages(&self.base)?;
+        let page = pages
+            .get(page_index)
+            .ok_or(FmtError::PageIndex(page_index))?;
+        let content_id = *page
+            .contents
+            .first()
+            .ok_or_else(|| FmtError::Unsupported("the page has no /Contents to edit".to_owned()))?;
+        let stream = self
+            .current_page_content(content_id, page)
+            .map_err(FmtError::Content)?;
+        preview_style_resolution(&self.base, page, &stream, find, pinned_span, want)
+    }
+
     /// Apply one within-block reflow (Pass 15.1) as a single undo-able
     /// command — the session-integrated sibling of the free-function
     /// [`apply_reflow`](crate::text_edit::apply_reflow), reusing the shared
