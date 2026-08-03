@@ -1274,8 +1274,28 @@ enum Command {
     /// - `--superscript` / `--subscript` / `--no-script` set the baseline via
     ///   `Ts` (§9.3.7) plus a reduced `Tf` size. The size and rise ratios are
     ///   pdfce's OWN documented defaults, NOT a parity claim (Acrobat's are
-    ///   undocumented), and are printed by value in the report. A free-form
-    ///   numeric rise is deferred (decision 019 §3.2).
+    ///   undocumented), and are printed by value in the report.
+    ///
+    /// Pass 19.4 completes the family with word spacing, which behaves
+    /// differently from every flag above in two ways worth knowing BEFORE
+    /// reaching for it:
+    ///
+    /// - `--word-spacing V` sets word spacing `Tw` (§9.3.3), same
+    ///   `pt`/`em` unit grammar as `--char-spacing`. It applies to EVERY
+    ///   occurrence of the single-byte character code 32 in the matched run —
+    ///   leading spaces, trailing spaces and both halves of a doubled space
+    ///   included. PDF has no per-gap word spacing; per-gap control is what
+    ///   `TJ` numeric adjustments do, which is why `reflow --align justified`
+    ///   distributes slack as `TJ` and not as `Tw`. The report prints how many
+    ///   spaces were affected, including zero.
+    /// - It is REFUSED, by name and with nothing applied, on a COMPOSITE
+    ///   (Type 0 / CIDFont) run: §9.3.3 states word spacing "shall not apply
+    ///   to occurrences of the byte value 32 in multiple-byte codes", so a
+    ///   `Tw` there would be written into the file and do nothing. Use
+    ///   `reflow` to redistribute inter-word space on a composite run.
+    /// - `Tw` is multiplied by horizontal scaling (§9.4.4), so under a
+    ///   `--h-scale 50` the visible gap is half the number given; the
+    ///   disclosure quotes the effective value.
     ///
     /// If the run's ambient value for a parameter cannot be restored — it was
     /// inherited from outside the edited content stream — the edit is REFUSED
@@ -1314,6 +1334,16 @@ enum Command {
         /// not 20 ems — and is re-derived if the run is later resized.
         #[arg(long = "char-spacing", value_name = "V[pt|em]")]
         char_spacing: Option<String>,
+        /// Word spacing `Tw` (§9.3.3) for the matched run — the final FF-H
+        /// control. Same unit grammar as `--char-spacing`: `2` or `2pt` is
+        /// ABSOLUTE (unscaled text-space units); `200em` is RELATIVE and
+        /// means 200 THOUSANDTHS of an em, re-derived if the run is later
+        /// resized. Applies to EVERY single-byte code 32 in the run —
+        /// leading, trailing and doubled spaces included; there is no
+        /// per-gap word spacing in PDF. REFUSED by name on a composite
+        /// (Type 0 / CIDFont) run, where §9.3.3 makes it void.
+        #[arg(long = "word-spacing", value_name = "V[pt|em]")]
+        word_spacing: Option<String>,
         /// Horizontal scaling `Tz` (§9.3.4) for the matched run, as a
         /// percentage of normal glyph width. 100 is normal; must be > 0.
         #[arg(long = "h-scale", value_name = "PCT")]
@@ -2265,6 +2295,7 @@ fn run() -> ExitCode {
             set_color,
             set_font,
             char_spacing,
+            word_spacing,
             h_scale,
             superscript,
             subscript,
@@ -2284,6 +2315,7 @@ fn run() -> ExitCode {
             set_color: set_color.as_deref(),
             set_font: set_font.as_deref(),
             char_spacing: char_spacing.as_deref(),
+            word_spacing: word_spacing.as_deref(),
             h_scale,
             rise: rise.as_deref(),
             synthetic: pdfce_core::text_edit::StyleSynthesis::new(bold_synthetic, italic_synthetic),
@@ -5382,6 +5414,8 @@ struct FormatTextArgs<'a> {
     set_font: Option<&'a str>,
     /// `--char-spacing` as passed, e.g. `0.5`, `0.5pt`, `20em`.
     char_spacing: Option<&'a str>,
+    /// `--word-spacing` as passed, e.g. `2`, `2pt`, `200em` (Pass 19.4).
+    word_spacing: Option<&'a str>,
     /// `--h-scale` percentage (100 = normal).
     h_scale: Option<f64>,
     /// The baseline toggle, already resolved from the three exclusive flags.
@@ -5396,8 +5430,17 @@ struct FormatTextArgs<'a> {
     font_dirs: &'a [PathBuf],
 }
 
-/// Parse a `--char-spacing` argument into a [`MetricSpec`]
+/// Parse a text-space metric argument into a [`MetricSpec`]
 /// (`0.5` / `0.5pt` → absolute; `20em` → 20 thousandths of an em).
+///
+/// `flag` is the option's own spelling (`--char-spacing`, `--word-spacing`,
+/// `--rise`), used only so the error message names the flag the operator
+/// actually typed instead of whichever one happened to be implemented
+/// first. It is a parameter rather than three near-copies of this function
+/// precisely because the grammar must not drift between the flags: `Tc`,
+/// `Tw` and `Ts` are all in unscaled text-space units (§9.3 Table 105's
+/// closing note) and all governed by R89's Absolute/Relative discrimination,
+/// so there is exactly one set of suffixes to learn.
 ///
 /// The `em` suffix means **‰ of an em**, not ems — the typographic tracking
 /// convention, and the same unit space `TJ`'s own adjustments live in
@@ -5408,7 +5451,7 @@ struct FormatTextArgs<'a> {
 ///
 /// Returns a human-readable error string (surfaced on stderr) rather than
 /// panicking, exactly as [`parse_set_color`] does.
-fn parse_char_spacing(spec: &str) -> Result<pdfce_core::text_edit::MetricSpec, String> {
+fn parse_text_metric(flag: &str, spec: &str) -> Result<pdfce_core::text_edit::MetricSpec, String> {
     use pdfce_core::text_edit::MetricSpec;
     let raw = spec.trim();
     let (number, relative) = match raw {
@@ -5418,13 +5461,13 @@ fn parse_char_spacing(spec: &str) -> Result<pdfce_core::text_edit::MetricSpec, S
     };
     let value: f64 = number.trim().parse().map_err(|_| {
         format!(
-            "--char-spacing {spec:?}: expected a number optionally suffixed `pt` (absolute, \
+            "{flag} {spec:?}: expected a number optionally suffixed `pt` (absolute, \
              unscaled text-space units) or `em` (RELATIVE — thousandths of an em, the tracking \
              unit; `20em` is 20/1000 em, NOT 20 ems)"
         )
     })?;
     if !value.is_finite() {
-        return Err(format!("--char-spacing {spec:?}: not a finite number"));
+        return Err(format!("{flag} {spec:?}: not a finite number"));
     }
     Ok(if relative {
         MetricSpec::Relative(value)
@@ -5499,30 +5542,33 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
     };
     // Likewise the character-spacing spec — a bad unit suffix must fail
     // before the input file is even opened.
-    let char_spacing = match args.char_spacing {
-        Some(spec) => match parse_char_spacing(spec) {
-            Ok(m) => Some(m),
+    // …and the three text-space metric specs, which share ONE parser
+    // because they share one unit model: `Tc`, `Tw` and `Ts` are all in
+    // unscaled text-space units and all governed by R89's
+    // Absolute/Relative discrimination (§9.3 Table 105's closing note).
+    // One parser, one set of suffixes to learn, no chance of three
+    // spellings drifting apart.
+    let metric = |flag: &str, spec: Option<&str>| match spec {
+        Some(s) => match parse_text_metric(flag, s) {
+            Ok(m) => Ok(Some(m)),
             Err(msg) => {
                 eprintln!("pdfce-cli: {msg}");
-                return exit::EDIT_REFUSED;
+                Err(exit::EDIT_REFUSED)
             }
         },
-        None => None,
+        None => Ok(None),
     };
-    // …and the rise spec, which shares `parse_char_spacing`'s grammar
-    // because it shares its unit model: both `Tc` and `Ts` are in unscaled
-    // text-space units and both are governed by R89's Absolute/Relative
-    // discrimination (§9.3 Table 105's closing note). One parser, one set of
-    // suffixes to learn, no chance of the two drifting apart.
-    let rise = match args.rise {
-        Some(spec) => match parse_char_spacing(spec) {
-            Ok(m) => Some(m),
-            Err(msg) => {
-                eprintln!("pdfce-cli: --rise: {msg}");
-                return exit::EDIT_REFUSED;
-            }
-        },
-        None => None,
+    let char_spacing = match metric("--char-spacing", args.char_spacing) {
+        Ok(v) => v,
+        Err(code) => return code,
+    };
+    let word_spacing = match metric("--word-spacing", args.word_spacing) {
+        Ok(v) => v,
+        Err(code) => return code,
+    };
+    let rise = match metric("--rise", args.rise) {
+        Ok(v) => v,
+        Err(code) => return code,
     };
 
     let source = match std::fs::read(args.input) {
@@ -5557,6 +5603,9 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
     }
     if let Some(spec) = char_spacing {
         req = req.char_spacing(spec);
+    }
+    if let Some(spec) = word_spacing {
+        req = req.word_spacing(spec);
     }
     if let Some(pct) = args.h_scale {
         req = req.h_scale(pct);
@@ -5594,6 +5643,7 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
                 | FormatError::PageIndex(_)
                 | FormatError::AmbientUnrestorable(_)
                 | FormatError::BadHorizScale(_)
+                | FormatError::WordSpacingComposite { .. }
                 | FormatError::ConflictingRise
                 | FormatError::RealFaceAvailable { .. }
                 | FormatError::ShearUnsupported(_)
@@ -5649,7 +5699,21 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
             format!("{}(Ts={rise} Tf={size})", p.label())
         },
     );
-    println!("  char_spacing={tc_str} h_scale={tz_str} script={script_str}");
+    // Pass 19.4. `word_spacing` prints `ambient->emitted` like its siblings
+    // AND the number of code-32s it reaches, because "how many spaces did
+    // that touch" is the single question the control's §9.3.3 scope makes
+    // load-bearing — a script that widened one gap and moved four is a
+    // silent surprise otherwise. A count of 0 prints as 0.
+    let tw_str = report.word_spacing_change.map_or_else(
+        || "none".to_owned(),
+        |(o, n)| {
+            let spaces = report
+                .word_spacing_affected_codes
+                .map_or_else(String::new, |c| format!(" spaces={c}"));
+            format!("{o}->{n}{spaces}")
+        },
+    );
+    println!("  char_spacing={tc_str} word_spacing={tw_str} h_scale={tz_str} script={script_str}");
     // Pass 19.2. `rise` is printed whenever the baseline moved — by the
     // free-form control OR by the toggle — because "where is the baseline
     // now" is one question, not two. `synthesis` prints the mechanism's own

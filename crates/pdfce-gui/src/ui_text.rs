@@ -2930,35 +2930,59 @@ pub fn format_ambient_no_caret() -> &'static str {
     "ⓘ Click into text on the page to see and change its spacing."
 }
 
-/// Label for the READ-ONLY word-spacing row.
+/// Label for the word-spacing row.
+///
+/// Live on a simple-font run since Pass 19.4 (the decision-019 §3.3 census
+/// cleared its BUILD band); still a read-only disclosure on a composite one,
+/// where §9.3.3 makes the operator void.
 pub fn format_word_spacing_label() -> &'static str {
     "Word spacing:"
 }
 
-/// The word-spacing value, marked read-only in TEXT as well as by being
-/// greyed — colour and weight are never the sole signal (R84).
+/// Tooltip on the word-spacing row.
+///
+/// States the scope property up front rather than burying it in the
+/// post-Apply disclosure: `Tw` reaches every space in the run, and an
+/// operator who expects to widen one gap should learn that BEFORE clicking,
+/// not from the report afterwards.
+pub fn format_word_spacing_tooltip() -> &'static str {
+    "Widens or narrows EVERY space in the selected text — leading, trailing \
+     and doubled spaces included. PDF has no per-gap word spacing; to change \
+     one gap, or to re-justify a line, use Reflow paragraph below. Word \
+     spacing is also multiplied by horizontal scaling."
+}
+
+/// The Apply button for the word-spacing row.
+pub fn format_apply_word_spacing() -> &'static str {
+    "Apply word spacing"
+}
+
+/// Caption body for a word-spacing value, quoted in BOTH units like its
+/// character-spacing sibling so the row reads correctly whichever unit the
+/// toggle is on.
+pub fn format_ambient_word_spacing_value(per_mille: f64, absolute: f64) -> String {
+    format!("{per_mille:.1}‰ of size ({absolute:.4} pt)")
+}
+
+/// The word-spacing value on a COMPOSITE run, marked read-only in TEXT as
+/// well as by being greyed — colour and weight are never the sole signal
+/// (R84).
 pub fn format_word_spacing_readonly(value: f64) -> String {
     format!("{value:.4} pt (read-only)")
 }
 
-/// Why there is no word-spacing control on a SIMPLE-font run.
+/// Why there is no word-spacing control on a COMPOSITE-font run.
 ///
-/// Shown rather than omitted because a value with no control and no reason
-/// invites "this looks broken"; the absence is a decision, and a decision
-/// that is explained is not a defect.
-pub fn format_word_spacing_explanation_pending_census() -> &'static str {
-    "pdfce does not offer a word-spacing control yet — the value above is \
-     preserved and shown, not editable, pending a survey of how often it can \
-     actually apply. To change the gaps between words, reflow the paragraph \
-     with the control below."
-}
-
-/// Why there is no word-spacing control on a COMPOSITE-font run — a
-/// different, permanent reason from the census one.
+/// Unchanged in wording from the pre-19.4 panel, deliberately: this reason
+/// was never the census one and never went away. §9.3.3 makes `Tw` void for
+/// multi-byte codes permanently, so the control is absent here for a reason
+/// no amount of measurement could change — and the core refuses the request
+/// by name if one is somehow submitted (R91).
 pub fn format_word_spacing_explanation_composite() -> &'static str {
     "This run uses a multi-byte (composite) font, and word spacing is void \
      for multi-byte character codes per ISO 32000-1 §9.3.3 — it could never \
-     take effect here, editable or not."
+     take effect here, editable or not. To change the gaps between words \
+     here, reflow the paragraph with the control below."
 }
 
 /// Label preceding the Bold/Italic checkboxes.
@@ -3135,6 +3159,17 @@ pub fn ambient_unrestorable_hint() -> &'static str {
 /// Hint appended to a `BadHorizScale` refusal.
 pub fn bad_h_scale_hint() -> &'static str {
     "enter a horizontal scale between 1% and 1000%."
+}
+
+/// Next step after core refuses word spacing on a composite run (R91).
+///
+/// Points at the mechanism that DOES work there — `TJ` distribution via
+/// reflow — rather than only restating the prohibition, so the refusal is a
+/// redirection instead of a dead end.
+pub fn word_spacing_composite_hint() -> &'static str {
+    "use \"Reflow paragraph…\" in this panel to redistribute inter-word \
+     space; that works on multi-byte fonts because it adjusts each gap \
+     individually instead of setting word spacing."
 }
 
 /// Appended to the disclosure strip when a spacing/scaling/baseline change

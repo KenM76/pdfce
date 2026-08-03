@@ -549,6 +549,35 @@ fn format_text_free_form_rise_preview_equals_saved() {
     check("format-text-rise", &s, 0, Visible::Yes);
 }
 
+/// `format-text` with **word spacing** (`Tw`, Pass 19.4) — the last member
+/// of the FF-H family, and a genuinely different renderer path from the
+/// three cases above.
+///
+/// `Tc` widens every glyph's advance; `Tw` widens **only** the ones whose
+/// code is the single-byte 32 (§9.3.3). That conditional is implemented
+/// twice — once in `pdfce-core`'s authoring advance
+/// (`glyph_advance_with`, which zeroes the `Tw` term for any code ≠ 32)
+/// and once in `pdfce-render`'s own text state
+/// (`TextState::advance_for`'s `apply_word_spacing`, fed by a
+/// `word_spacing_applies: b == 32` decision in the code walker). Two
+/// independent implementations of one spec rule is exactly the shape that
+/// drifts, and the failure it would produce — the preview and the saved
+/// file disagreeing about where the words after a space sit — is the
+/// canonical "it looked right until I saved it" bug.
+///
+/// The fixture's run is `hello world`, so there IS a code 32 to exercise;
+/// a space-free run would pass this test vacuously.
+#[test]
+fn format_text_word_spacing_preview_equals_saved() {
+    let mut s = session("textedit", "format_color.pdf");
+    s.format_text(
+        &FormatRequest::new(0, "hello world").word_spacing(MetricSpec::Absolute(6.0)),
+        &FormatOptions::default(),
+    )
+    .expect("format_text applies word spacing");
+    check("format-text-word-spacing", &s, 0, Visible::Yes);
+}
+
 /// `format_text` with **synthetic bold** (Pass 19.2) — and the single most
 /// likely R85 failure in this slice.
 ///

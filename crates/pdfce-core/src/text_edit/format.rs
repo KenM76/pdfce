@@ -1,16 +1,16 @@
-//! # In-place text FORMATTING surgery (Pass 14.2, extended by Pass 19.1)
+//! # In-place text FORMATTING surgery (Pass 14.2, extended by Pass 19.1–19.4)
 //!
 //! This module changes the **size**, **fill colour**, **font-family/style**,
-//! **character spacing**, **horizontal scaling** and **baseline position**
-//! of text already on a page — in place, minimal-diff — by reusing Pass
-//! 14.1's advance-preserving content-stream surgery
+//! **character spacing**, **horizontal scaling**, **baseline position** and
+//! **word spacing** of text already on a page — in place, minimal-diff — by
+//! reusing Pass 14.1's advance-preserving content-stream surgery
 //! (`crate::text_edit::edit`) with different operators changed. It is the
 //! third slice of decision 014's Acrobat-text-editing family
 //! (`docs/decisions/014-acrobat-text-editing.md` §3 "Formatting", §5.2's
-//! "13.2"; R32/R34/R47/R69/R70/R72) plus decision 019's slice 19.1
-//! (R88/R89).
+//! "13.2"; R32/R34/R47/R69/R70/R72) plus decision 019's slices 19.1–19.4
+//! (R88/R89/R90/R91).
 //!
-//! ## The six operations, and what each rewrites
+//! ## The seven operations, and what each rewrites
 //!
 //! | Op | Operator changed | Advance affected? | Font gate? |
 //! |---|---|---|---|
@@ -20,26 +20,59 @@
 //! | **character spacing** (19.1) | `Tc` (§9.3.2) | yes — `Tc` is a term of §9.4.4 | no |
 //! | **horizontal scaling** (19.1) | `Tz` (§9.3.4) | yes — `Th` multiplies the whole displacement | no |
 //! | **super/subscript** (19.1) | `Ts` (§9.3.7) + `Tf` size | yes, via the size reduction only | no |
+//! | **word spacing** (19.4) | `Tw` (§9.3.3) | yes — but only through code-32 glyphs | **YES — simple fonts only (R91)** |
 //!
-//! ## Pass 19.1: the parity controls, and what is deliberately absent
+//! ## Pass 19.1/19.2: the parity controls and the deliberate exceed
 //!
 //! Decision 019 §3.1 established from a named Adobe source that current
 //! Acrobat retains exactly **character spacing, horizontal scaling and a
-//! coarse superscript/subscript toggle** in this family. Those three are
-//! what this slice ships. Two neighbours are deliberately NOT here:
+//! coarse superscript/subscript toggle** in this family. 19.2 added the
+//! deliberate exceed — free-form numeric `Ts` plus synthetic bold/italic.
+//! This slice emits `Ts` at the two **fixed, derived** values of the
+//! super/subscript toggle *and* at an operator-supplied number.
 //!
-//! - **`Tw` (word spacing)** is engine-only — read, tracked, restored,
-//!   preserved byte-verbatim, and never emitted by an authoring control. It
-//!   is structurally void for 2-byte composite codes (§9.3.3: word spacing
-//!   "shall NOT apply to occurrences of the byte value 32 in multiple-byte
-//!   codes"), and its honest use case — inter-word slack — already belongs
-//!   to the reflow layer, which chose `TJ` over `Tw` for exactly the
-//!   reasons that make `Tw` a poor dial (decision 015 §3.1). Whether a
-//!   control is ever built is gated on a corpus census (decision 019 §3.3).
-//! - **Free-form numeric `Ts`** is slice 19.2's deliberate exceed. This
-//!   slice emits `Ts` only at the two **fixed, derived** values of the
-//!   super/subscript toggle, so the emission and restore machinery is
-//!   proven before an operator can type an arbitrary rise into it.
+//! ## Pass 19.4: `Tw`, and why it is the one control with a capability gate
+//!
+//! Decision 019 §3.3 deliberately withheld a word-spacing control behind a
+//! **corpus census**, on the hypothesis that composite (Type0/Identity-H)
+//! embedding had made `Tw` inert on most real documents. That census has
+//! now been run (decision 019 Amendment E): over the 4,012-file corpus,
+//! `Tw` is reachable on **91.6% of show operators** and 97.4% of glyphs,
+//! and **81.2% of text-bearing documents contain no composite run at all**
+//! — which clears §3.3's pre-declared BUILD band (≥60%) and *falsifies*
+//! the "large … share" half of the composite-default premise on that
+//! corpus. (The "growing" half remains untested: the corpus is drawn from
+//! tooling conformance suites that predate modern producers, so nothing
+//! here supports a claim about a trend in either direction.)
+//!
+//! What the census did **not** change is the spec (§9.3.3): word spacing
+//! "shall be applied to every occurrence of the single-byte character code
+//! 32 … It shall not apply to occurrences of the byte value 32 in
+//! multiple-byte codes." So `Tw` is **structurally void for composite
+//! runs**, and standing rule **R91** makes that a refusal, not a no-op:
+//! [`plan_format`] refuses a word-spacing request on a composite run
+//! **by name** ([`FormatError::WordSpacingComposite`]) before anything is
+//! planned. Emitting a `Tw` there would write an operator that provably
+//! does nothing while the report claimed it had been applied — the exact
+//! silent-failure shape rule 4 exists to forbid.
+//!
+//! ### Three things about `Tw` an operator must be told, and is
+//!
+//! 1. **It hits EVERY code-32 in the run** — leading, trailing and doubled
+//!    spaces included. There is no per-gap control; that is `TJ`'s job, and
+//!    it is exactly why decision 015 §3.1 chose `TJ` over `Tw` for
+//!    justification slack. [`disclosure_word_spacing`] states this
+//!    verbatim, because an operator reaching for "the gap between these two
+//!    words" will otherwise be surprised.
+//! 2. **It multiplies with `Th`** (§9.3.4/§9.4.4:
+//!    `tx = ((w0 − Tj/1000)·Tfs + Tc + Tw)·Th`), so a `Tw` set under a
+//!    `50 Tz` context delivers half the visible gap the number suggests.
+//! 3. **It invalidates a justified line's slack**, exactly as `Tz` does and
+//!    for the same reason (the run's rendered width moved by ΔA while the
+//!    `TJ` slack numbers stayed put). It reuses 19.1's
+//!    disclose-and-offer-re-justify path —
+//!    [`disclosure_justify_invalidated`] — rather than inventing a second
+//!    one.
 //!
 //! ### Superscript/subscript is TWO operators, not one
 //!
@@ -573,6 +606,35 @@ pub struct FormatRequest {
     /// New character spacing `Tc` (§9.3.2), in the operator's own unit
     /// (R89). `None` leaves the run at its ambient `Tc`.
     pub set_char_spacing: Option<MetricSpec>,
+    /// New **word** spacing `Tw` (§9.3.3), in the operator's own unit
+    /// (R89) — Pass 19.4, the final FF-H control.
+    ///
+    /// # The capability gate that makes this different from every sibling
+    ///
+    /// `Tw` is the only member of this family that is **spec-void for some
+    /// runs**. §9.3.3: word spacing "shall be applied to every occurrence
+    /// of the single-byte character code 32 in a string when using a
+    /// simple font or a composite font that defines code 32 as a
+    /// single-byte code. It shall not apply to occurrences of the byte
+    /// value 32 in multiple-byte codes." A `Tw` emitted over a 2-byte
+    /// composite run therefore changes nothing at all.
+    ///
+    /// pdfce does not emit it there and does not pretend to: a
+    /// word-spacing request against a composite run is
+    /// [`FormatError::WordSpacingComposite`], refused **by name** with
+    /// nothing applied (standing rule **R91**). That is deliberately
+    /// louder than a silent no-op — a control that appears to work and
+    /// does nothing is the failure mode rule 4 exists to forbid.
+    ///
+    /// # What it affects, which is more than most operators expect
+    ///
+    /// **Every** code-32 in the formatted run: leading spaces, trailing
+    /// spaces, and both halves of a doubled space. `Tw` has no notion of
+    /// "the gap between these two words" — per-gap control is `TJ`'s, and
+    /// that is precisely why decision 015 §3.1 chose `TJ` over `Tw` for
+    /// justification slack. It also multiplies with `Th` (§9.4.4), so its
+    /// visible effect is scaled by any horizontal scaling in force.
+    pub set_word_spacing: Option<MetricSpec>,
     /// New horizontal scaling `Tz` as a **percentage** of normal width
     /// (§9.3.4; 100 = normal). `None` leaves the run at its ambient `Tz`.
     pub set_h_scale: Option<f64>,
@@ -621,6 +683,7 @@ impl FormatRequest {
             set_fill: None,
             set_font: None,
             set_char_spacing: None,
+            set_word_spacing: None,
             set_h_scale: None,
             set_script: None,
             set_rise: None,
@@ -653,6 +716,16 @@ impl FormatRequest {
     #[must_use]
     pub fn char_spacing(mut self, spec: MetricSpec) -> Self {
         self.set_char_spacing = Some(spec);
+        self
+    }
+
+    /// Add a word-spacing (`Tw`) change, returning `self` (Pass 19.4).
+    ///
+    /// Refused on a composite run — see [`Self::set_word_spacing`] for the
+    /// §9.3.3 reason and R91.
+    #[must_use]
+    pub fn word_spacing(mut self, spec: MetricSpec) -> Self {
+        self.set_word_spacing = Some(spec);
         self
     }
 
@@ -703,6 +776,7 @@ impl FormatRequest {
             && self.set_fill.is_none()
             && self.set_font.is_none()
             && self.set_char_spacing.is_none()
+            && self.set_word_spacing.is_none()
             && self.set_h_scale.is_none()
             && self.set_script.is_none()
             && self.set_rise.is_none()
@@ -771,6 +845,25 @@ pub struct FormatReport {
     /// therefore nothing was emitted — the operator asked, so the report
     /// answers.
     pub char_spacing_change: Option<(f64, f64)>,
+    /// `(ambient operand, emitted operand)` for `Tw` when word spacing was
+    /// requested (Pass 19.4). Present even when the two are equal and
+    /// nothing was therefore emitted — same contract as
+    /// [`Self::char_spacing_change`]: the operator asked, so the report
+    /// answers.
+    ///
+    /// Never `Some` on a composite run: that request is refused outright
+    /// (R91, [`FormatError::WordSpacingComposite`]) and no report exists.
+    pub word_spacing_change: Option<(f64, f64)>,
+    /// How many single-byte code-32 occurrences the emitted `Tw` actually
+    /// applies to inside the formatted run (§9.3.3) — quoted so the
+    /// "it hits EVERY space, not the one you meant" property is a number
+    /// the operator can see rather than a sentence they might skim.
+    ///
+    /// **`Some(0)` is a real and important answer**: a run with no spaces
+    /// takes a `Tw` that changes nothing visible. pdfce still emits and
+    /// restores it (the operator asked for a state change and gets exactly
+    /// that), and says so. `None` when no word spacing was requested.
+    pub word_spacing_affected_codes: Option<usize>,
     /// `(ambient operand, emitted operand)` for `Tz` (percentages) when
     /// horizontal scaling was requested.
     pub h_scale_change: Option<(f64, f64)>,
@@ -845,7 +938,8 @@ pub enum FormatError {
     /// spacing / scaling / script flag absent).
     #[error(
         "no formatting operation was requested (need one of size, colour, font, character \
-         spacing, horizontal scaling, or super/subscript)"
+         spacing, word spacing, horizontal scaling, super/subscript, baseline rise, or a \
+         synthetic style)"
     )]
     NoOp,
     /// A text-state operator would have to be emitted for this run, but its
@@ -857,6 +951,29 @@ pub enum FormatError {
     /// A `--h-scale` percentage outside the range pdfce will write.
     #[error("invalid horizontal scaling: {0}")]
     BadHorizScale(String),
+    /// Word spacing was requested for a run shown in a **composite**
+    /// (Type 0 / CIDFont) font, where `Tw` is spec-void. Nothing was
+    /// applied. Standing rule **R91**.
+    ///
+    /// This is a refusal rather than a silent skip on purpose. `Tw` over a
+    /// 2-byte run is not "a change with no visible effect" — it is an
+    /// operator the spec says shall not be applied at all, so writing one
+    /// would add bytes to the file, claim success in the report, and
+    /// change nothing. Refusing by name, and naming the font that caused
+    /// it, is the only outcome that leaves the operator knowing what
+    /// happened (rule 4).
+    #[error(
+        "word spacing (Tw) cannot be applied to this run: '{base_font}' is a COMPOSITE (Type 0 / \
+         CIDFont) font, whose show strings use multi-byte codes. ISO 32000-1 §9.3.3 applies word \
+         spacing only to the SINGLE-BYTE character code 32 and states it \"shall not apply to \
+         occurrences of the byte value 32 in multiple-byte codes\" — so a Tw here would be written \
+         into the file and do nothing. Nothing was applied (rule R91). To change inter-word \
+         spacing on a composite run, distribute it as TJ adjustments instead: reflow the paragraph."
+    )]
+    WordSpacingComposite {
+        /// The run's `/BaseFont`, so the refusal names the actual font.
+        base_font: String,
+    },
     /// Both a free-form rise and a super/subscript toggle were requested.
     /// Both write `Ts`; pdfce refuses rather than silently picking one.
     #[error(
@@ -1064,11 +1181,22 @@ pub(crate) fn plan_format(
         ));
     }
 
-    // --- map the find text to a contiguous code range in one element ---
-    let m = match_run(anchor, &req.find).map_err(FormatError::from_edit)?;
-
     // --- resolve the run's OWN font (needed for A_old, and for size/colour
     //     the effective face) ---
+    //
+    // ORDERING NOTE (Pass 19.4, deliberate): this block sits BEFORE
+    // `match_run`, where it used to sit after. The reason is the R91 gate
+    // immediately below it. `Walk::record_show` does not decode a composite
+    // run's string into text at all (`edit.rs`: "A composite font is not
+    // decoded"), so `ShowData::text` is EMPTY for one — and `match_run`,
+    // which searches that text, therefore fails with `NoMatch` on every
+    // composite run before any font-aware gate could speak. Leaving the
+    // order alone would have made the word-spacing refusal literally
+    // unreachable, i.e. an untestable branch claiming to honour R91.
+    //
+    // The precedence change this introduces is small and strictly better:
+    // a run whose font resource does not resolve now reports THAT rather
+    // than "text not found" when the find text also misses.
     let orig_dict =
         resolve_font_dict(doc, &page.resources, &anchor.font_name).ok_or_else(|| {
             FormatError::Unsupported(
@@ -1079,6 +1207,34 @@ pub(crate) fn plan_format(
     // `&doc.view()` (Pass 17.1) — base-relative planner, see `edit.rs`.
     let orig_font = ExtractFont::resolve(&doc.view(), orig_dict);
     let orig_size = anchor.tf_size;
+
+    // --- R91: the `Tw` capability gate (Pass 19.4) ---
+    //
+    // §9.3.3 applies word spacing "to every occurrence of the single-byte
+    // character code 32" and states it "shall not apply to occurrences of
+    // the byte value 32 in multiple-byte codes". A composite run segments
+    // its show strings into 2-byte codes (§9.7.6.2), so a `Tw` emitted for
+    // one is inert by construction.
+    //
+    // Refused BY NAME, before anything is planned, and never silently
+    // skipped: a skip would leave the report saying word spacing was
+    // applied while the file's rendering was unchanged. The composite
+    // predicate is `ExtractFont::is_simple` — the SAME call the extraction
+    // walk uses to publish `GlyphProvenance::composite` (`page.rs`), so the
+    // gate the GUI draws from provenance and the gate core enforces here
+    // cannot disagree (R74: no capability rule re-derived in the shell).
+    //
+    // Gating on the run's OWN font rather than a family-change target is
+    // correct and sufficient: `classify_font` already refuses a composite
+    // TARGET (R-INV-4), so a surviving family change is simple→simple.
+    if req.set_word_spacing.is_some() && !orig_font.is_simple() {
+        return Err(FormatError::WordSpacingComposite {
+            base_font: orig_font.base_font.clone(),
+        });
+    }
+
+    // --- map the find text to a contiguous code range in one element ---
+    let m = match_run(anchor, &req.find).map_err(FormatError::from_edit)?;
 
     // --- resolve the family-change target, if any, and re-encode the run ---
     let font_plan = plan_font(doc, page_resources(page), &recs, req)?;
@@ -1139,6 +1295,19 @@ pub(crate) fn plan_format(
         MetricSpec::Relative(_) => derived_operand(spec.resolve(base_size)),
     });
 
+    // --- resolve `Tw` (Pass 19.4) ---
+    //
+    // Identical unit model to `Tc`, and deliberately so: both are in
+    // unscaled text-space units (§9.3, Table 105's closing note), both are
+    // therefore R89 `MetricSpec` quantities, and both resolve against the
+    // BASE size (Amendment B.3) so a script reduction does not shrink the
+    // spaces relative to the text they sit between. One model, one parser,
+    // one set of suffixes for an operator to learn.
+    let new_tw = req.set_word_spacing.map(|spec| match spec {
+        MetricSpec::Absolute(v) => v,
+        MetricSpec::Relative(_) => derived_operand(spec.resolve(base_size)),
+    });
+
     // --- validate `Tz` before anything is planned ---
     if let Some(pct) = req.set_h_scale {
         if !pct.is_finite() {
@@ -1175,12 +1344,17 @@ pub(crate) fn plan_format(
     // mis-positions everything after it, because ΔA is what the follower
     // relayout is driven by.
     //
-    // `Tw` is unchanged by this slice (decision 019 §3.3 keeps word spacing
-    // engine-only) but is still multiplied by the NEW `Th`, exactly as
-    // §9.3.4 requires ("It shall also affect the spacing parameters `Tc`
-    // and `Tw`"). `Ts` deliberately does not appear: rise is a `Trm`
-    // translation (§9.3.7) and changes position, not advance.
+    // Pass 19.4 makes `Tw` a THIRD term that can move: it is in the same
+    // §9.4.4 sum, and §9.3.4 multiplies it by `Th` alongside `Tc` ("It
+    // shall also affect the spacing parameters `Tc` and `Tw`"). Unlike
+    // `Tc` it only reaches code-32 glyphs — `glyph_advance_with` applies
+    // the §9.3.3 single-byte-32 rule itself, so the delta over a run with
+    // no spaces is legitimately zero even though a `Tw` was emitted.
+    //
+    // `Ts` deliberately does not appear: rise is a `Trm` translation
+    // (§9.3.7) and changes position, not advance.
     let eff_tc = new_tc.unwrap_or_else(|| anchor.tc());
+    let eff_tw = new_tw.unwrap_or_else(|| anchor.tw());
     let eff_th = req
         .set_h_scale
         .map_or_else(|| anchor.th(), |pct| pct / 100.0);
@@ -1200,9 +1374,16 @@ pub(crate) fn plan_format(
         .sum();
     let a_new: f64 = new_codes
         .iter()
-        .map(|&c| glyph_advance_with(advance_font, c, emitted_size, eff_tc, anchor.tw(), eff_th))
+        .map(|&c| glyph_advance_with(advance_font, c, emitted_size, eff_tc, eff_tw, eff_th))
         .sum();
     let delta = a_new - a_old;
+
+    // How many code-32s the emitted `Tw` will actually reach inside the
+    // formatted run (§9.3.3). Counted on the codes that will BE SHOWN
+    // (post-re-encode), because that is the string `Tw` operates on.
+    // Reported by value — a `Some(0)` is the honest answer for a run with
+    // no spaces, not a reason to suppress the operation.
+    let tw_affected = new_tw.map(|_| new_codes.iter().filter(|&&c| c == 0x20).count());
 
     // --- build the state-set / state-restore operator sequences ---
     let size_changed = req.set_size.is_some();
@@ -1246,6 +1427,22 @@ pub(crate) fn plan_format(
             &anchor.text_state,
             TextStateParam::CharSpacing,
             tc,
+            &mut restore_narrowed,
+            &mut emitted_state,
+        )?;
+    }
+    // `Tw` rides the identical ladder — including the `ObservedIndirect`
+    // rung, which `Tw` is the *headline* case for: the `"` operator sets
+    // `Tw` (and `Tc`) **while showing a string** (§9.4.3 Table 109), so a
+    // restore that replayed the producer's `"` bytes would repaint the
+    // text. Amendment A.1 added the rung for exactly this operator.
+    if let Some(tw) = new_tw {
+        push_state_param(
+            &mut set_ops,
+            &mut restore_ops,
+            &anchor.text_state,
+            TextStateParam::WordSpacing,
+            tw,
             &mut restore_narrowed,
             &mut emitted_state,
         )?;
@@ -1337,9 +1534,19 @@ pub(crate) fn plan_format(
         .elems
         .iter()
         .any(|e| matches!(e, ShowElem::Num(n) if n.abs() > STATE_EPS));
+    // Pass 19.4 adds `Tw` to the trigger set, and it belongs there for the
+    // same reason `Tc` does — it is a term of the §9.4.4 advance, so it
+    // moves the run's width. This is REUSE of 19.1's path, deliberately
+    // not a second one: decision 015 §3.1 already established that `Tw`
+    // and justification slack are two mechanisms competing for the same
+    // inter-word space, and an operator who changes one must be told the
+    // other is now stale.
     let justify_slack_invalidated = run_carries_tj_slack
         && delta != 0.0
-        && (req.set_h_scale.is_some() || req.set_char_spacing.is_some() || script.is_some());
+        && (req.set_h_scale.is_some()
+            || req.set_char_spacing.is_some()
+            || req.set_word_spacing.is_some()
+            || script.is_some());
 
     // --- re-emit the anchor as pre | set | mid | restore | post ---
     let (pre, post) = split_segments(anchor, &m);
@@ -1472,6 +1679,16 @@ pub(crate) fn plan_format(
             eff_tc,
         ));
     }
+    if let Some(spec) = req.set_word_spacing {
+        disclosures.push(disclosure_word_spacing(
+            spec,
+            base_size,
+            anchor.text_state.word_spacing.value,
+            eff_tw,
+            tw_affected.unwrap_or(0),
+            eff_th,
+        ));
+    }
     if let Some(pct) = req.set_h_scale {
         disclosures.push(disclosure_h_scale(anchor.text_state.h_scale.value, pct));
     }
@@ -1514,6 +1731,7 @@ pub(crate) fn plan_format(
         disclosures.push(disclosure_justify_invalidated(
             req.set_h_scale.is_some(),
             req.set_char_spacing.is_some() || script.is_some(),
+            req.set_word_spacing.is_some(),
             delta,
         ));
     }
@@ -1542,6 +1760,8 @@ pub(crate) fn plan_format(
             .as_ref()
             .map(|p| (orig_font.base_font.clone(), p.font.base_font.clone())),
         char_spacing_change: new_tc.map(|tc| (anchor.text_state.char_spacing.value, tc)),
+        word_spacing_change: new_tw.map(|tw| (anchor.text_state.word_spacing.value, tw)),
+        word_spacing_affected_codes: tw_affected,
         h_scale_change: req
             .set_h_scale
             .map(|pct| (anchor.text_state.h_scale.value, pct)),
@@ -2669,6 +2889,88 @@ fn disclosure_char_spacing(spec: MetricSpec, base_size: f64, ambient: f64, emitt
     )
 }
 
+/// Disclose a word-spacing change — and say the three surprising things
+/// about `Tw` out loud, because every one of them is a thing an operator
+/// would otherwise discover by being wrong about it (Pass 19.4, R91).
+///
+/// ## Why this disclosure is longer than its siblings
+///
+/// `Tc` and `Tz` do what their names suggest. `Tw` does not, in three
+/// separate ways, and the project's own decision record predicted each:
+///
+/// 1. **Scope.** Decision 015 §3.1 rejected `Tw` as the justification
+///    mechanism partly because it "hits **every** code-32, including
+///    leading, trailing and doubled spaces". An operator reaching for this
+///    control almost always means "the gap between *these two* words", and
+///    that is not what they are about to get. Said first, plainly.
+/// 2. **Count.** The number of spaces actually affected is quoted, which
+///    turns the point above from a caveat into a fact about *their* run.
+///    A count of zero is stated as such rather than hidden: a `Tw` on a
+///    space-free run is a real state change with no visible effect, and
+///    pretending otherwise in either direction would be a lie.
+/// 3. **`Th` coupling.** §9.4.4's `tx = ((w0 − Tj/1000)·Tfs + Tc + Tw)·Th`
+///    multiplies `Tw` by the horizontal scaling in force, so under a
+///    `50 Tz` the visible gap is half the operand. The effective figure is
+///    quoted whenever `Th` is not 1, because a silently-halved number is
+///    the sort of thing that gets reported as a rendering bug.
+///
+/// It also states the composite exclusion even on the simple-font path it
+/// is reached from: an operator whose next run is composite meets the
+/// refusal cold otherwise.
+fn disclosure_word_spacing(
+    spec: MetricSpec,
+    base_size: f64,
+    ambient: f64,
+    emitted: f64,
+    affected: usize,
+    th: f64,
+) -> String {
+    let derivation = match spec {
+        MetricSpec::Absolute(_) => String::from(
+            "an ABSOLUTE value, written as typed at every font size (R89 MetricSpec::Absolute)",
+        ),
+        MetricSpec::Relative(per_mille) => format!(
+            "a RELATIVE value: {per_mille} thousandths of the run's {base_size} pt base size \
+             re-derives to {emitted} unscaled text-space units. Tw is NOT scaled by the font size \
+             (§9.3, Table 105), so storing the ratio rather than the operand is what keeps a later \
+             resize correct (R89)"
+        ),
+    };
+    let scope = match affected {
+        0 => String::from(
+            "This run contains NO single-byte code 32, so the change is real state but has no \
+             visible effect here — the operator was emitted and restored exactly as asked, and \
+             this sentence is the honest answer rather than a silent no-op",
+        ),
+        1 => String::from("It applies to the 1 space inside the formatted run"),
+        n => format!("It applies to ALL {n} spaces inside the formatted run"),
+    };
+    let scaling = if (th - 1.0).abs() > STATE_EPS {
+        format!(
+            " Horizontal scaling is in force at Th = {th}, and §9.4.4 multiplies Tw by it \
+             (tx = ((w0 - Tj/1000)*Tfs + Tc + Tw)*Th), so the VISIBLE extra gap is {} text-space \
+             units, not {emitted}.",
+            derived_operand(emitted * th)
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        "word spacing: Tw {ambient} -> {emitted} for the matched run only (§9.3.3, unscaled \
+         text-space units). You supplied {} in {} — {derivation}. SCOPE, stated because it is not \
+         what most operators expect: Tw applies to EVERY occurrence of the single-byte character \
+         code 32 in the run — leading spaces, trailing spaces and both halves of a doubled space \
+         included. There is no per-gap word spacing in PDF; per-gap control is what TJ numeric \
+         adjustments do, which is why pdfce's own justification distributes slack as TJ and not as \
+         Tw (decision 015 §3.1). {scope}.{scaling} Tw also enters the §9.4.4 advance, so the run's \
+         width changed and the rest of the line was relaid out. Finally: Tw is void for COMPOSITE \
+         (multi-byte) runs per §9.3.3, where pdfce refuses the request by name rather than writing \
+         an operator that would do nothing (R91).",
+        spec.raw(),
+        spec.unit_label()
+    )
+}
+
 /// Disclose a horizontal-scaling change and the two things §9.3.4 says it
 /// does that an operator may not expect (it reshapes glyphs, and it scales
 /// the spacing parameters as well).
@@ -2837,11 +3139,31 @@ fn disclosure_restore_narrowed(narrowed: &[TextStateParam], ambient: &AmbientTex
 /// ambient `Th` and are not rescaled. What actually breaks the justification
 /// is that the edited run's own width moved by ΔA while the slack numbers
 /// stayed put.
-fn disclosure_justify_invalidated(h_scale: bool, spacing: bool, delta: f64) -> String {
-    let cause = match (h_scale, spacing) {
-        (true, true) => "horizontal scaling and the spacing/size change",
-        (true, false) => "horizontal scaling",
+fn disclosure_justify_invalidated(
+    h_scale: bool,
+    spacing: bool,
+    word_spacing: bool,
+    delta: f64,
+) -> String {
+    let cause = match (h_scale, spacing, word_spacing) {
+        (true, _, true) => "horizontal scaling and the word-spacing change",
+        (true, true, false) => "horizontal scaling and the spacing/size change",
+        (true, false, false) => "horizontal scaling",
+        (false, _, true) => "the word-spacing change",
         _ => "the spacing/size change",
+    };
+    // A `Tw` edit on a justified line is the sharpest case in this family
+    // and gets one extra sentence, because the two mechanisms are direct
+    // rivals for the same physical space (decision 015 §3.1). Without it
+    // the operator is told the line broke but not that they now have two
+    // things distributing inter-word space.
+    let rivalry = if word_spacing {
+        " NOTE, specific to word spacing: TJ slack and Tw are two DIFFERENT mechanisms both \
+         widening the gaps between words, and they add. The slack numbers on this line were \
+         computed by pdfce's justifier on the assumption that Tw was whatever it was before; \
+         they are now competing with your Tw over the same space."
+    } else {
+        ""
     };
     format!(
         "JUSTIFY invalidated (disclosed, with a remedy — never silently left wrong): this run's \
@@ -2851,8 +3173,8 @@ fn disclosure_justify_invalidated(h_scale: bool, spacing: bool, delta: f64) -> S
          computed against the OLD width no longer fills the measure and the line's right edge \
          will not align. The surviving TJ numbers were NOT rescaled: they sit outside the \
          restored state wrap and still run at the ambient Tz (§9.3.4 would rescale them only \
-         inside it). REMEDY: re-justify the paragraph — `pdfce-cli reflow --page N --block K \
-         --align justified` — which recomputes the slack against the new widths."
+         inside it).{rivalry} REMEDY: re-justify the paragraph — `pdfce-cli reflow --page N \
+         --block K --align justified` — which recomputes the slack against the new widths."
     )
 }
 
@@ -4650,5 +4972,495 @@ mod tests {
         )
         .expect("no real Italic resolves, so synthesis is available");
         assert_eq!(out.report.synthesis, StyleSynthesis::Italic);
+    }
+
+    // ===============================================================
+    // Pass 19.4 — word spacing (`Tw`), the final FF-H control
+    // ===============================================================
+
+    /// A one-page PDF whose `/F1` is a **composite** Type 0 / Identity-H
+    /// font — the fixture R91's refusal is measured against.
+    ///
+    /// Written with a DIRECT `/DescendantFonts` array so it needs no extra
+    /// indirect objects and the shared [`build_pdf`] helper still applies.
+    /// `ExtractFont::resolve` reads `/Encoding /Identity-H` and classifies
+    /// the codespace as 2-byte (§9.7.5.2), which is exactly the property
+    /// under test — nothing here depends on the descendant's glyph data.
+    fn composite_pdf(content: &str) -> Vec<u8> {
+        build_pdf(
+            content,
+            &[(
+                b"F1".to_vec(),
+                b"<< /Type /Font /Subtype /Type0 /BaseFont /ABCDEF+NotoSans \
+                   /Encoding /Identity-H /DescendantFonts [<< /Type /Font \
+                   /Subtype /CIDFontType2 /BaseFont /ABCDEF+NotoSans \
+                   /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> \
+                   /DW 1000 >>] >>"
+                    .to_vec(),
+            )],
+        )
+    }
+
+    /// The byte span of the LAST `Tj`/`TJ` operator token in `content` —
+    /// the `GlyphProvenance::operator_span` convention
+    /// (`pin_names_operator` accepts it), used to pin a run whose text this
+    /// module's own walk cannot decode.
+    fn tj_token_span(content: &str, op: &str) -> ByteSpan {
+        let at = content
+            .rfind(op)
+            .expect("the content contains the operator");
+        // `ByteSpan::new` takes (start, LENGTH), not (start, end).
+        ByteSpan::new(at, op.len())
+    }
+
+    /// The headline: `Tw` is emitted for the matched run and RESTORED after
+    /// it, so nothing following changes — the same leak gate `Tc`/`Tz`
+    /// already pass, applied to the last member of the family.
+    #[test]
+    fn word_spacing_is_emitted_and_restored_around_the_run() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (a b) Tj 0 -14 Td (follower c d) Tj ET\n");
+        let doc = Document::from_bytes(src.clone()).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "a b").word_spacing(MetricSpec::Absolute(2.5)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+
+        let appended = as_text(&out.bytes[src.len()..]);
+        assert!(appended.contains("2.5 Tw"), "set emitted: {appended}");
+        assert!(
+            appended.contains("0 Tw"),
+            "spec-default restore emitted (rung 1): {appended}"
+        );
+        assert_eq!(out.report.word_spacing_change, Some((0.0, 2.5)));
+        // Two spaces in "follower c d" must be untouched: a reader walking
+        // the SAVED file sees the ambient back at the Table 105 default.
+        let after = ambient_after_reload(&out.bytes, "follower");
+        assert_eq!(after.word_spacing.value, 0.0, "Tw leaked past the run");
+        // …and the edited run itself really is at the new value.
+        assert_eq!(
+            ambient_after_reload(&out.bytes, "a b").word_spacing.value,
+            2.5
+        );
+    }
+
+    /// R89, `Tw` edition: `Absolute` is written exactly as typed at any
+    /// size; `Relative` is thousandths of the em, re-derived against the
+    /// run's BASE size (Amendment B.3) so a resize keeps its meaning.
+    #[test]
+    fn word_spacing_honours_both_units() {
+        // Absolute: the same operand at two different sizes.
+        for size in [12.0_f64, 30.0] {
+            let src = fill_pdf(&format!("BT /F1 {size} Tf 72 700 Td (a b) Tj ET\n"));
+            let doc = Document::from_bytes(src).unwrap();
+            let out = set_format(
+                &doc,
+                &FormatRequest::new(0, "a b").word_spacing(MetricSpec::Absolute(1.75)),
+                &FormatOptions::default(),
+            )
+            .unwrap();
+            assert_eq!(
+                out.report.word_spacing_change,
+                Some((0.0, 1.75)),
+                "an absolute Tw is written as typed at {size} pt"
+            );
+        }
+        // Relative: 200 per-mille of the em scales with the size.
+        for (size, expected) in [(12.0_f64, 2.4_f64), (30.0, 6.0)] {
+            let src = fill_pdf(&format!("BT /F1 {size} Tf 72 700 Td (a b) Tj ET\n"));
+            let doc = Document::from_bytes(src).unwrap();
+            let out = set_format(
+                &doc,
+                &FormatRequest::new(0, "a b").word_spacing(MetricSpec::Relative(200.0)),
+                &FormatOptions::default(),
+            )
+            .unwrap();
+            let (_, emitted) = out.report.word_spacing_change.unwrap();
+            assert!(
+                (emitted - expected).abs() < 1e-12,
+                "200 per-mille at {size} pt should be {expected}, got {emitted}"
+            );
+        }
+    }
+
+    /// **R91.** A composite (Type 0 / CIDFont) run refuses a word-spacing
+    /// request BY NAME, with nothing applied — never a silent no-op, and
+    /// never a `Tw` written into a file where §9.3.3 says it cannot apply.
+    ///
+    /// Pinned by `operator_span` rather than located by find text on
+    /// purpose: `Walk::record_show` does not decode a composite run's
+    /// string, so its `ShowData::text` is empty and a find-text lookup
+    /// could never reach the anchor. Pinning is also exactly how the GUI
+    /// addresses a run, so this is the path an operator's click takes.
+    #[test]
+    fn word_spacing_on_a_composite_run_is_refused_by_name() {
+        let content = "BT /F1 12 Tf 72 700 Td <00410020004200430044> Tj ET\n";
+        let src = composite_pdf(content);
+        let doc = Document::from_bytes(src).unwrap();
+
+        let mut req = FormatRequest::new(0, "irrelevant").word_spacing(MetricSpec::Absolute(2.0));
+        req.pinned_span = Some(tj_token_span(content, "Tj"));
+        let err = set_format(&doc, &req, &FormatOptions::default()).unwrap_err();
+
+        match err {
+            FormatError::WordSpacingComposite { ref base_font } => {
+                assert!(
+                    base_font.contains("NotoSans"),
+                    "the refusal names the font: {base_font}"
+                );
+                let msg = err.to_string();
+                assert!(msg.contains("§9.3.3"), "cite the clause: {msg}");
+                assert!(
+                    msg.contains("Nothing was applied"),
+                    "say nothing happened: {msg}"
+                );
+                assert!(
+                    msg.contains("TJ"),
+                    "point at the mechanism that DOES work there: {msg}"
+                );
+            }
+            other => panic!("expected the R91 composite refusal, got {other:?}"),
+        }
+    }
+
+    /// The other half of the R91 gate: it fires **only** for word spacing.
+    /// A composite run with some other formatting request must not acquire
+    /// a word-spacing refusal it never asked for.
+    #[test]
+    fn the_composite_gate_fires_only_for_word_spacing() {
+        let content = "BT /F1 12 Tf 72 700 Td <00410020004200430044> Tj ET\n";
+        let src = composite_pdf(content);
+        let doc = Document::from_bytes(src).unwrap();
+
+        let mut req = FormatRequest::new(0, "irrelevant").char_spacing(MetricSpec::Absolute(0.5));
+        req.pinned_span = Some(tj_token_span(content, "Tj"));
+        let err = set_format(&doc, &req, &FormatOptions::default()).unwrap_err();
+        assert!(
+            !matches!(err, FormatError::WordSpacingComposite { .. }),
+            "a Tc request must not be refused as a Tw one: {err:?}"
+        );
+    }
+
+    /// Rung 2 of R88's ladder for `Tw`: an ambient set by its own `Tw`
+    /// operator restores that operator's RAW BYTES, so a `1.500 Tw` does
+    /// not come back renormalized as `1.5 Tw` (a diff in an operand pdfce
+    /// did not logically change — R32/R46).
+    #[test]
+    fn word_spacing_rung_two_restores_the_raw_operand_bytes() {
+        let src = fill_pdf("BT /F1 12 Tf 1.500 Tw 72 700 Td (a b) Tj (tail c) Tj ET\n");
+        let doc = Document::from_bytes(src.clone()).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "a b").word_spacing(MetricSpec::Absolute(4.0)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let appended = as_text(&out.bytes[src.len()..]);
+        assert!(appended.contains("4 Tw"), "set emitted: {appended}");
+        assert!(
+            appended.contains("1.500 Tw"),
+            "the trailing-zero spelling must survive the restore verbatim: {appended}"
+        );
+        assert!(out.report.restore_narrowed.is_empty());
+        assert_eq!(
+            ambient_after_reload(&out.bytes, "tail").word_spacing.value,
+            1.5
+        );
+    }
+
+    /// **Rung 3 (`ObservedIndirect`) — the rung `Tw` is the headline case
+    /// for.** `"` sets `Tw` *and* `Tc` **while showing a string** (§9.4.3
+    /// Table 109), so replaying its bytes as a restore would repaint the
+    /// text. The value is re-spelled as `2 Tw`, the narrowing is disclosed,
+    /// and the shown string appears exactly once in the appended revision.
+    #[test]
+    fn word_spacing_rung_three_indirect_ambient_is_respelled_not_replayed() {
+        let src = fill_pdf("BT /F1 12 Tf 14 TL 72 700 Td 2 0.25 (lead) \" (a b) Tj ET\n");
+        let doc = Document::from_bytes(src.clone()).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "a b").word_spacing(MetricSpec::Absolute(5.0)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+
+        assert!(
+            out.report
+                .restore_narrowed
+                .contains(&TextStateParam::WordSpacing),
+            "an ObservedIndirect Tw restore must be reported as narrowed: {:?}",
+            out.report.restore_narrowed
+        );
+        let appended = as_text(&out.bytes[src.len()..]);
+        assert!(appended.contains("5 Tw"), "set emitted: {appended}");
+        assert!(
+            appended.contains("2 Tw"),
+            "the `\"` operand must come back RE-SPELLED as its own operator: {appended}"
+        );
+        // The trap Amendment A.1 exists for: replaying the `"` bytes would
+        // have painted "lead" a SECOND time.
+        assert_eq!(
+            appended.matches("(lead) \"").count(),
+            1,
+            "the show string must not be repainted by the restore: {appended}"
+        );
+        assert!(
+            out.report
+                .disclosures
+                .iter()
+                .any(|d| d.contains("restore NARROWING")),
+            "the re-spelling must be disclosed, not silent"
+        );
+        // A reader of the SAVED file agrees the ambient came back.
+        assert_eq!(
+            ambient_after_reload(&out.bytes, "a b").word_spacing.value,
+            5.0
+        );
+    }
+
+    /// Rung 4: an ambient `Tw` inherited through a form XObject is
+    /// unrestorable, so the whole edit refuses rather than guessing `0 Tw`.
+    /// Exercised at the ladder's application point for the same reason the
+    /// 19.1 twin is — `text_edit::edit::Walk` never descends into a form,
+    /// so the tier is not reachable end-to-end today.
+    #[test]
+    fn word_spacing_rung_four_form_xobject_ambient_refuses() {
+        let mut ambient = AmbientTextState::initial();
+        ambient.apply_operator(b"Tw", &[1.25], b"1.25 Tw");
+        ambient.enter_form(Some(9));
+
+        let mut set_ops = Vec::new();
+        let mut restore_ops = Vec::new();
+        let mut narrowed = Vec::new();
+        let mut emitted = Vec::new();
+        let err = push_state_param(
+            &mut set_ops,
+            &mut restore_ops,
+            &ambient,
+            TextStateParam::WordSpacing,
+            3.0,
+            &mut narrowed,
+            &mut emitted,
+        )
+        .unwrap_err();
+        match err {
+            FormatError::AmbientUnrestorable(inner) => {
+                let msg = inner.to_string();
+                assert!(msg.contains("word spacing"), "{msg}");
+                assert!(msg.contains("form XObject 9"), "{msg}");
+            }
+            other => panic!("expected an unrestorable-ambient refusal, got {other:?}"),
+        }
+        assert!(
+            set_ops.is_empty() && restore_ops.is_empty() && emitted.is_empty(),
+            "a refusal must leave NOTHING partially applied (rule 4)"
+        );
+    }
+
+    /// A `Tw` change on a justified line reuses 19.1's disclose-and-offer
+    /// path — and names the rivalry, because `Tw` and `TJ` slack are two
+    /// mechanisms competing for the same inter-word space (decision 015
+    /// §3.1).
+    #[test]
+    fn word_spacing_on_a_justified_line_discloses_and_offers_re_justify() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td [(a b) -220 (wide) -220 (world)] TJ ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "a b").word_spacing(MetricSpec::Absolute(3.0)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+
+        assert!(out.report.justify_slack_invalidated);
+        let d = out
+            .report
+            .disclosures
+            .iter()
+            .find(|d| d.contains("JUSTIFY invalidated"))
+            .expect("the justify interaction must be disclosed");
+        assert!(
+            d.contains("word-spacing change"),
+            "the cause must be named as word spacing: {d}"
+        );
+        assert!(
+            d.contains("competing"),
+            "the Tw-vs-TJ rivalry must be stated: {d}"
+        );
+        assert!(
+            d.contains("--align justified"),
+            "the remedy must be actionable: {d}"
+        );
+    }
+
+    /// The scope property that surprises people, asserted rather than only
+    /// documented: `Tw` reaches EVERY code-32 in the run, and the report
+    /// says how many. A run with none reports `Some(0)` — a real answer,
+    /// not a suppressed operation.
+    #[test]
+    fn the_report_counts_every_space_the_word_spacing_reaches() {
+        // Leading, doubled and trailing spaces — all four are code 32 and
+        // all four are affected.
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td ( a  b ) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, " a  b ").word_spacing(MetricSpec::Absolute(2.0)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(out.report.word_spacing_affected_codes, Some(4));
+        let d = out
+            .report
+            .disclosures
+            .iter()
+            .find(|d| d.starts_with("word spacing:"))
+            .expect("word spacing is disclosed");
+        assert!(
+            d.contains("ALL 4 spaces"),
+            "the count must be quoted by value: {d}"
+        );
+        assert!(
+            d.contains("leading spaces, trailing spaces and both halves of a doubled space"),
+            "the scope must be stated plainly: {d}"
+        );
+
+        // A space-free run: the operator IS emitted (state was asked for),
+        // the count is zero, and the disclosure says so rather than
+        // implying something happened.
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+        let doc = Document::from_bytes(src.clone()).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "hello").word_spacing(MetricSpec::Absolute(2.0)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(out.report.word_spacing_affected_codes, Some(0));
+        assert_eq!(out.report.advance_delta, 0.0, "no code 32 ⇒ no ΔA (§9.3.3)");
+        let appended = as_text(&out.bytes[src.len()..]);
+        assert!(appended.contains("2 Tw"), "still emitted: {appended}");
+        assert!(
+            out.report
+                .disclosures
+                .iter()
+                .any(|d| d.contains("no visible effect here")),
+            "a zero count must be said out loud"
+        );
+    }
+
+    /// `Tw` is a term of §9.4.4, so it moves ΔA — but only through code-32
+    /// glyphs, and it is multiplied by `Th`. Both halves asserted, because
+    /// both are places the advance would silently drift if the emitted
+    /// value were not fed into `A_new`.
+    #[test]
+    fn word_spacing_enters_the_advance_delta_and_scales_with_th() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (a b) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let plain = set_format(
+            &doc,
+            &FormatRequest::new(0, "a b").word_spacing(MetricSpec::Absolute(2.0)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        // One space, Th = 1 ⇒ ΔA is exactly the operand.
+        assert!((plain.report.advance_delta - 2.0).abs() < 1e-9);
+
+        // The same Tw under a 50% horizontal scale delivers half of it —
+        // §9.3.4: Th "shall also affect the spacing parameters Tc and Tw".
+        let scaled = set_format(
+            &doc,
+            &FormatRequest::new(0, "a b")
+                .word_spacing(MetricSpec::Absolute(2.0))
+                .h_scale(50.0),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let d = scaled
+            .report
+            .disclosures
+            .iter()
+            .find(|d| d.starts_with("word spacing:"))
+            .expect("word spacing is disclosed");
+        assert!(
+            d.contains("VISIBLE extra gap is 1"),
+            "the Th-scaled effective gap must be quoted: {d}"
+        );
+    }
+
+    /// Minimal diff: a `Tw` already in force emits neither a set nor a
+    /// restore, and the request is still reported.
+    #[test]
+    fn a_word_spacing_already_in_force_emits_no_operator() {
+        let src = fill_pdf("BT /F1 12 Tf 3 Tw 72 700 Td (a b) Tj ET\n");
+        let doc = Document::from_bytes(src.clone()).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "a b").word_spacing(MetricSpec::Absolute(3.0)),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+        let appended = as_text(&out.bytes[src.len()..]);
+        assert_eq!(
+            appended.matches(" Tw").count(),
+            1,
+            "only the producer's own re-emitted `3 Tw` should be present: {appended}"
+        );
+        assert_eq!(out.report.word_spacing_change, Some((3.0, 3.0)));
+        assert_eq!(out.report.advance_delta, 0.0);
+    }
+
+    /// `Tw` composes with the rest of the family through one save/reload:
+    /// every control lands on the edited run and none of them survives past
+    /// it.
+    #[test]
+    fn word_spacing_composes_with_the_other_controls_and_round_trips() {
+        let src =
+            fill_pdf("BT /F1 12 Tf 0.25 Tc 1 Tw 110 Tz 72 700 Td (x y) Tj (a b) Tj (p q) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        let out = set_format(
+            &doc,
+            &FormatRequest::new(0, "a b")
+                .char_spacing(MetricSpec::Absolute(0.75))
+                .word_spacing(MetricSpec::Absolute(4.5))
+                .h_scale(85.0),
+            &FormatOptions::default(),
+        )
+        .unwrap();
+
+        let edited = ambient_after_reload(&out.bytes, "a b");
+        assert_eq!(edited.char_spacing.value, 0.75);
+        assert_eq!(edited.word_spacing.value, 4.5);
+        assert_eq!(edited.h_scale.value, 85.0);
+
+        for neighbour in ["x y", "p q"] {
+            let ts = ambient_after_reload(&out.bytes, neighbour);
+            assert_eq!(ts.char_spacing.value, 0.25, "{neighbour}: Tc not restored");
+            assert_eq!(ts.word_spacing.value, 1.0, "{neighbour}: Tw not restored");
+            assert_eq!(ts.h_scale.value, 110.0, "{neighbour}: Tz not restored");
+        }
+    }
+
+    /// Word spacing on its own is a real formatting operation (not a
+    /// no-op), and its absence still leaves an empty request empty.
+    #[test]
+    fn word_spacing_alone_counts_as_a_formatting_operation() {
+        let src = fill_pdf("BT /F1 12 Tf 72 700 Td (a b) Tj ET\n");
+        let doc = Document::from_bytes(src).unwrap();
+        set_format(
+            &doc,
+            &FormatRequest::new(0, "a b").word_spacing(MetricSpec::Absolute(1.0)),
+            &FormatOptions::default(),
+        )
+        .expect("word spacing alone is a formatting operation");
+        assert!(matches!(
+            set_format(
+                &doc,
+                &FormatRequest::new(0, "a b"),
+                &FormatOptions::default()
+            ),
+            Err(FormatError::NoOp)
+        ));
     }
 }

@@ -1003,6 +1003,21 @@ struct TextEditState {
     /// [`MetricUnit::Relative`] per decision 019 §3.2's GUI-default call
     /// (tracking is a typographic ‰-of-em quantity).
     prop_tc_unit: MetricUnit,
+    /// `Tw`, the operator's typed number, in whichever unit
+    /// [`Self::prop_tw_unit`] names (Pass 19.4).
+    ///
+    /// Meaningful only on a **simple**-font run: the row renders as a
+    /// read-only disclosure on a composite one, where §9.3.3 makes `Tw`
+    /// void. That gate is R83 (no affordance without the capability) and it
+    /// reads the published `GlyphProvenance::composite` flag rather than
+    /// re-deriving anything — see [`AmbientSnapshot::composite`].
+    prop_word_spacing: f64,
+    /// Which unit [`Self::prop_word_spacing`] is expressed in. Defaults to
+    /// [`MetricUnit::Relative`], matching the character-spacing row: word
+    /// spacing is the same kind of typographic quantity (unscaled
+    /// text-space units, R89), and a ‰-of-em space keeps its proportion
+    /// through a later resize.
+    prop_tw_unit: MetricUnit,
     /// `Tz` as a percentage (100 = normal). No unit choice — `Tz` is a
     /// dimensionless percentage (§9.3.4), so there is nothing to be relative
     /// to.
@@ -1024,10 +1039,11 @@ struct TextEditState {
     prop_bold: bool,
     /// Synthetic-italic checkbox.
     prop_italic: bool,
-    /// The run [`Self::prop_char_spacing`]/`prop_h_scale`/`prop_baseline`/
-    /// `prop_rise` were last seeded from, so a caret move onto a DIFFERENT
-    /// run re-seeds them and a caret move within the same run does not stomp
-    /// what the operator is mid-way through typing.
+    /// The run [`Self::prop_char_spacing`]/`prop_word_spacing`/
+    /// `prop_h_scale`/`prop_baseline`/`prop_rise` were last seeded from, so
+    /// a caret move onto a DIFFERENT run re-seeds them and a caret move
+    /// within the same run does not stomp what the operator is mid-way
+    /// through typing.
     props_seeded_for: Option<usize>,
     /// The caret run's ambient §9.3 text state, refreshed every frame from
     /// provenance — the source of every "Now:" caption.
@@ -1100,13 +1116,19 @@ enum BaselineChoice {
 }
 
 /// The caret run's ambient §9.3 text state, flattened to the four numbers the
-/// property bar shows plus the two facts it gates on.
+/// property bar shows plus the facts it gates on.
 ///
 /// Read from [`GlyphProvenance`](pdfce_core::text_extract::GlyphProvenance)
-/// — SOURCED from the file, never guessed. `Tw` is carried even though there
-/// is no word-spacing control, because R83 says the absence of the control
-/// must be *explained* rather than left as a mystery, and explaining it means
-/// showing the value that is actually in force.
+/// — SOURCED from the file, never guessed.
+///
+/// [`Self::composite`] is the one field that changes the panel's *shape*
+/// rather than its numbers: since Pass 19.4 the word-spacing row is a live
+/// control on a simple-font run and a read-only disclosure on a composite
+/// one, because §9.3.3 makes `Tw` void for multi-byte codes. The flag is
+/// consumed, never derived — it arrives already computed on provenance, from
+/// the same `ExtractFont::is_simple` answer `pdfce-core`'s own R91 refusal
+/// uses, so the affordance the shell draws and the request the core accepts
+/// cannot drift apart (R74).
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct AmbientSnapshot {
     /// `Tc` operand, unscaled text-space units.
@@ -1121,11 +1143,13 @@ struct AmbientSnapshot {
     /// resolves against (R89, as amended by decision 019 Amendment B.3).
     font_size: f64,
     /// Whether the run's font segments show strings into multi-byte codes.
-    /// `Tw` is spec-void for those (§9.3.3), which is a different reason for
-    /// its absence than "pending a census" and gets different wording.
+    /// `Tw` is spec-void for those (§9.3.3), so this is what decides
+    /// whether the word-spacing row draws a control at all (R83).
     composite: bool,
     /// Whether `Tc` is provably still at its Table 105 default on this run.
     tc_at_default: bool,
+    /// Whether `Tw` is provably still at its Table 105 default.
+    tw_at_default: bool,
     /// Whether `Tz` is provably still at its Table 105 default.
     tz_at_default: bool,
     /// Whether `Ts` is provably still at its Table 105 default.
@@ -1151,6 +1175,7 @@ impl AmbientSnapshot {
             font_size: f64::from(p.tf_size),
             composite: p.composite,
             tc_at_default: is_default(&ts.char_spacing.origin),
+            tw_at_default: is_default(&ts.word_spacing.origin),
             tz_at_default: is_default(&ts.h_scale.origin),
             rise_at_default: is_default(&ts.rise.origin),
         }
@@ -1726,6 +1751,8 @@ impl OpenDoc {
                 // the panel stating a falsehood about the document.
                 prop_char_spacing: 0.0,
                 prop_tc_unit: MetricUnit::Relative,
+                prop_word_spacing: 0.0,
+                prop_tw_unit: MetricUnit::Relative,
                 prop_h_scale: 100.0,
                 prop_baseline: BaselineChoice::Normal,
                 prop_rise: 0.0,
@@ -7015,6 +7042,12 @@ fn format_refusal_hint(err: &pdfce_core::text_edit::FormatError) -> &'static str
         FormatError::ShearUnsupported(_) => ui_text::shear_unsupported_hint(),
         FormatError::AmbientUnrestorable(_) => ui_text::ambient_unrestorable_hint(),
         FormatError::BadHorizScale(_) => ui_text::bad_h_scale_hint(),
+        // Pass 19.4. The panel does not draw an Apply button for word
+        // spacing on a composite run (R83), so this refusal should be
+        // unreachable from the GUI — a hint is provided anyway, because
+        // "unreachable" is a claim about today's panel and a refusal with
+        // no next step is a dead end whichever path produced it.
+        FormatError::WordSpacingComposite { .. } => ui_text::word_spacing_composite_hint(),
         _ => ui_text::edit_generic_hint(),
     }
 }
@@ -7473,6 +7506,7 @@ fn run_text_edit_tool(
     let mut apply_font: Option<String> = None;
     // Pass 19.3 property-bar intents — one per Apply button, same shape.
     let mut apply_char_spacing: Option<MetricSpec> = None;
+    let mut apply_word_spacing: Option<MetricSpec> = None;
     let mut apply_h_scale: Option<f64> = None;
     let mut apply_script: Option<ScriptPosition> = None;
     let mut apply_rise: Option<MetricSpec> = None;
@@ -8059,28 +8093,88 @@ fn run_text_edit_tool(
                                         None => {}
                                     }
                                 }
-                                // -- Row 5: word spacing — a DISCLOSURE, not a
-                                // control. Rendered as plain (greyed) text, never
-                                // as a disabled widget: R83 says do not draw an
-                                // affordance for a capability that is not there,
-                                // and a greyed-out spinner is still an affordance.
-                                // But showing an inert value with no reason given
-                                // invites "this looks broken", so the reason is
-                                // stated, and it differs by font model.
+                                // -- Row 5: word spacing (Tw) — LIVE on a simple
+                                // font, a read-only disclosure on a composite one
+                                // (Pass 19.4).
+                                //
+                                // This is the one row in the panel whose SHAPE
+                                // depends on the run, and R83 is why: §9.3.3 makes
+                                // Tw void for multi-byte codes, so on a composite
+                                // run there is no capability and therefore no
+                                // affordance — not even a greyed-out spinner,
+                                // which is still an affordance. The value is shown
+                                // either way (an inert number with no explanation
+                                // invites "this looks broken") and the reason is
+                                // stated by name.
+                                //
+                                // The gate reads `AmbientSnapshot::composite`,
+                                // which comes straight from
+                                // `GlyphProvenance::composite` — the SAME
+                                // `ExtractFont::is_simple` answer core's own R91
+                                // refusal uses. Nothing about font models is
+                                // re-derived here (R74), so the affordance the GUI
+                                // draws and the request core accepts cannot
+                                // disagree.
                                 ui.separator();
-                                ui.label(ui_text::format_word_spacing_label());
-                                if let Some(a) = amb {
-                                    ui.colored_label(
-                                        ui.visuals().weak_text_color(),
-                                        ui_text::format_word_spacing_readonly(a.word_spacing),
-                                    );
-                                    ui.label(if a.composite {
-                                        ui_text::format_word_spacing_explanation_composite()
-                                    } else {
-                                        ui_text::format_word_spacing_explanation_pending_census()
-                                    });
-                                } else {
-                                    ui.label(no_ambient_caption(state.caret.is_some()));
+                                ui.label(ui_text::format_word_spacing_label())
+                                    .on_hover_text(ui_text::format_word_spacing_tooltip());
+                                match amb {
+                                    None => {
+                                        ui.label(no_ambient_caption(state.caret.is_some()));
+                                    }
+                                    Some(a) if a.composite => {
+                                        ui.colored_label(
+                                            ui.visuals().weak_text_color(),
+                                            ui_text::format_word_spacing_readonly(a.word_spacing),
+                                        );
+                                        ui.label(
+                                            ui_text::format_word_spacing_explanation_composite(),
+                                        );
+                                    }
+                                    Some(a) => {
+                                        let mut c = ui_text::format_ambient_caption(
+                                            &ui_text::format_ambient_word_spacing_value(
+                                                a.per_mille(a.word_spacing),
+                                                a.word_spacing,
+                                            ),
+                                        );
+                                        if a.tw_at_default {
+                                            c.push_str(ui_text::format_ambient_default_suffix());
+                                        }
+                                        ui.label(c);
+                                        ui.horizontal(|ui| {
+                                            ui.add(
+                                                egui::DragValue::new(&mut state.prop_word_spacing)
+                                                    .speed(0.5),
+                                            );
+                                            // Same re-derive-on-unit-switch rule as
+                                            // the tracking row: the digits in the
+                                            // box keep meaning what their visible
+                                            // unit says.
+                                            if let Some(unit) = unit_toggle(ui, state.prop_tw_unit)
+                                                && unit != state.prop_tw_unit
+                                            {
+                                                state.prop_word_spacing = match unit {
+                                                    MetricUnit::Absolute => a.per_mille_to_operand(
+                                                        state.prop_word_spacing,
+                                                    ),
+                                                    MetricUnit::Relative => {
+                                                        a.per_mille(state.prop_word_spacing)
+                                                    }
+                                                };
+                                                state.prop_tw_unit = unit;
+                                            }
+                                            if ui
+                                                .button(ui_text::format_apply_word_spacing())
+                                                .clicked()
+                                            {
+                                                apply_word_spacing = Some(metric_spec(
+                                                    state.prop_tw_unit,
+                                                    state.prop_word_spacing,
+                                                ));
+                                            }
+                                        });
+                                    }
                                 }
                             });
                         // §1.3 reflow entry button (grey-not-hidden) — targets the
@@ -8407,6 +8501,7 @@ fn run_text_edit_tool(
             FormatOp::Fill(f) => r.fill(f),
             FormatOp::Font(sel) => r.font(FontSelector::new(&sel)),
             FormatOp::CharSpacing(spec) => r.char_spacing(spec),
+            FormatOp::WordSpacing(spec) => r.word_spacing(spec),
             FormatOp::HScale(pct) => r.h_scale(pct),
             FormatOp::Script(pos) => r.script(pos),
             FormatOp::Rise(spec) => r.rise(spec),
@@ -8424,6 +8519,8 @@ fn run_text_edit_tool(
         Some(FormatOp::Font(sel))
     } else if let Some(spec) = apply_char_spacing {
         Some(FormatOp::CharSpacing(spec))
+    } else if let Some(spec) = apply_word_spacing {
+        Some(FormatOp::WordSpacing(spec))
     } else if let Some(pct) = apply_h_scale {
         Some(FormatOp::HScale(pct))
     } else if let Some(pos) = apply_script {
@@ -9162,6 +9259,10 @@ enum FormatOp {
     Font(String),
     /// `Tc`, in whichever unit the operator's toggle named.
     CharSpacing(pdfce_core::text_edit::MetricSpec),
+    /// `Tw`, in whichever unit the operator's toggle named (Pass 19.4).
+    /// Only ever built on a simple-font run — the row draws no Apply button
+    /// on a composite one (R83), and core refuses one anyway (R91).
+    WordSpacing(pdfce_core::text_edit::MetricSpec),
     /// `Tz`, percent.
     HScale(f64),
     /// The coarse super/subscript toggle (or `Normal`, which flattens).
@@ -9401,6 +9502,15 @@ fn seed_spacing_props(state: &mut TextEditState) {
     state.prop_char_spacing = match state.prop_tc_unit {
         MetricUnit::Absolute => a.char_spacing,
         MetricUnit::Relative => a.per_mille(a.char_spacing),
+    };
+    // Pass 19.4: seeded from the file's own ambient `Tw` on EVERY run,
+    // including a composite one whose row is read-only. The value is what
+    // is in force either way, and a panel that showed 0 beside a run
+    // carrying 2 would be stating a falsehood about the document — which
+    // is the whole reason `prop_ambient` exists.
+    state.prop_word_spacing = match state.prop_tw_unit {
+        MetricUnit::Absolute => a.word_spacing,
+        MetricUnit::Relative => a.per_mille(a.word_spacing),
     };
     state.prop_h_scale = a.h_scale;
     // A non-zero ambient rise seeds the CUSTOM position and its number, not a
@@ -11037,6 +11147,7 @@ mod tests {
             font_size,
             composite: false,
             tc_at_default: true,
+            tw_at_default: true,
             tz_at_default: true,
             rise_at_default: true,
         }
@@ -12008,5 +12119,97 @@ mod tests {
         app.dock = dock::default_tree();
         assert!(dock::panel_is_active(&app.dock, DockPanel::Objects));
         assert!(dock::panel_is_active(&app.dock, DockPanel::Properties));
+    }
+
+    // ---- Pass 19.4: the word-spacing row ----
+
+    /// The R83 gate the word-spacing row's SHAPE depends on comes from
+    /// provenance, not from anything the shell works out for itself.
+    ///
+    /// This is the R74 assertion for this slice: if the GUI ever grew its
+    /// own notion of "is this run composite", the panel could offer a
+    /// control on a run core would refuse — or, worse, withhold one on a run
+    /// where `Tw` works. Asserting the flag arrives from
+    /// `GlyphProvenance::composite` keeps the two answers the same answer.
+    #[test]
+    fn the_word_spacing_gate_reads_the_published_composite_flag() {
+        use pdfce_core::text_extract::{ExtractOptions, extract_page};
+
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/synthetic/textedit/format_color.pdf");
+        let bytes = std::fs::read(path).expect("fixture");
+        let doc = pdfce_core::document::Document::from_bytes(bytes).expect("parse");
+        let pages = pdfce_core::page_tree::pages(&doc).expect("page tree");
+        let page = pages.first().expect("one page");
+        let page_text = extract_page(
+            &doc,
+            page,
+            0,
+            &ExtractOptions::default().with_provenance(true),
+        )
+        .expect("extract");
+        let prov = page_text
+            .runs
+            .first()
+            .and_then(|r| r.glyphs.first())
+            .and_then(|g| g.provenance.as_ref())
+            .expect("provenance is captured");
+
+        let a = AmbientSnapshot::from_provenance(prov);
+        assert_eq!(
+            a.composite, prov.composite,
+            "the snapshot must CARRY the published flag, not recompute one"
+        );
+        assert!(
+            !a.composite,
+            "this fixture's /Calibri is a simple font, so the row is live here"
+        );
+    }
+
+    /// The word-spacing field's unit switch preserves the physical quantity,
+    /// exactly as the tracking field's does — the two rows share
+    /// `per_mille`/`per_mille_to_operand` rather than each carrying their
+    /// own conversion, and this pins that they agree with core's resolver.
+    #[test]
+    fn the_word_spacing_unit_switch_preserves_the_quantity() {
+        let a = snapshot(12.0);
+        // 200‰ of a 12 pt em is 2.4 unscaled text-space units.
+        assert!((a.per_mille_to_operand(200.0) - 2.4).abs() < 1e-12);
+        assert!((a.per_mille(2.4) - 200.0).abs() < 1e-9);
+        assert!(
+            (pdfce_core::text_edit::MetricSpec::Relative(200.0).resolve(12.0) - 2.4).abs() < 1e-12
+        );
+    }
+
+    /// The GUI's word-spacing intent reaches core as a word-spacing request
+    /// and not as some neighbouring one. Cheap, and it is the exact class of
+    /// mistake a five-arm `match` invites.
+    #[test]
+    fn the_word_spacing_op_builds_a_word_spacing_request() {
+        use pdfce_core::text_edit::{FormatRequest, MetricSpec};
+        let r = FormatRequest::new(0, "a b").word_spacing(MetricSpec::Relative(200.0));
+        assert_eq!(r.set_word_spacing, Some(MetricSpec::Relative(200.0)));
+        assert!(
+            r.set_char_spacing.is_none(),
+            "word spacing must not land in the tracking field"
+        );
+    }
+
+    /// Every refusal gets a next step (§7.3's rule), including the one the
+    /// panel is built not to be able to provoke — and this one's next step
+    /// must point at reflow, the mechanism that actually works on a
+    /// composite run.
+    #[test]
+    fn the_composite_word_spacing_refusal_offers_reflow_as_the_next_step() {
+        let err = pdfce_core::text_edit::FormatError::WordSpacingComposite {
+            base_font: "ABCDEF+NotoSans".to_owned(),
+        };
+        let hint = format_refusal_hint(&err);
+        assert!(hint.contains("Reflow"), "the remedy is named: {hint}");
+        assert_ne!(
+            hint,
+            ui_text::edit_generic_hint(),
+            "this refusal must not fall through to the generic hint"
+        );
     }
 }
