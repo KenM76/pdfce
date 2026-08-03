@@ -1392,3 +1392,121 @@ faithful and side-effect-free → re-spell where known but side-effect-bearing
 three-rung wording" note. No further edit needed there; recorded here so the
 item is closed rather than silently dropped.
 
+---
+
+# AMENDMENT C — 2026-08-03 — six corrections from building slice 19.2
+
+**Filed by:** `pdfce-librarian`, on the engineer's report, after slice 19.2
+shipped (`ebe35d8`). Same posture as Amendments A and B: each item below is a
+place where the decision as written was wrong, incomplete, or narrower than
+its own prose implied, found by implementing §19.2. Where this amendment and
+the record above (including Amendments A and B) differ, **this amendment
+wins.**
+
+## C.1 §3.6 names the wrong restore set for stroking colour and line width
+
+§3.6's mechanism section treats the stroking colour and the derived stroke
+line width purely as things the synthetic-bold path must **set correctly**
+(match the fill colour; derive from `Tfs × |Tm| × |CTM|`). It never names
+either as something that must be **restored**. But both are ordinary
+graphics state, **shared with path painting** — not scoped to text the way
+`Tc`/`Tw`/`Tz`/`Ts`/`Tr` are. A synthetic-bold run that leaves `0.264 w` and
+a substituted stroking colour in force changes the weight and colour of
+every later stroked *path* on the page, not just later text. **Two restore
+obligations §3.6 omits entirely; the builder added two new trackers to
+`Walk` to close them** (line width and stroking colour, alongside the
+existing `Tc`/`Tw`/`Tz`/`Ts`/`Tr` restore set). R88's restore ladder is
+amended to cover these two shared-graphics-state parameters explicitly, not
+only the six text-state parameters it was originally scoped to.
+
+## C.2 §3.6's "followers must be re-emitted with an absolute `Tm`" is narrower in practice than written
+
+§3.6 (and Appendix A's `mechanism_italic`) states the fix for the `Tm`-shear
+propagation hazard as "the follower must be re-emitted with an absolute
+`Tm`." **The builder deliberately did NOT convert a producer's own relative
+`Td`/`T*` into an absolute `Tm`** — doing so would rewrite the producer's own
+line-positioning structure, which exceeds minimal-diff (R32/R46) and, worse,
+cascades: an absolute `Tm` substituted for one `Td` would still leave the
+*next* `Td` relative to a rewritten baseline, forcing the rewrite to
+propagate indefinitely. **pdfce instead requires that the follower already
+be positioned by an absolute `Tm`, and refuses (by name, disclosed) when it
+is not** — narrower than what the decision text describes, and deliberate.
+A twin acceptance test proves the refusal is not "refuse unconditionally":
+the same synthetic-italic run succeeds when the next line begins its own
+independent `BT…ET` block (no propagation hazard exists across a fresh text
+object, since `BT` does not inherit the prior object's `Tlm`/`Tm`).
+
+## C.3 §3.6's bold-width formula ships two of its three factors — disclosed, not dropped
+
+§3.6/Appendix A state the stroke width as derived from `Tfs × |Tm scale| ×
+|CTM scale|`. **The authoring walk models the first two factors and not the
+third** — it has no model of a page-level `cm` (current transformation
+matrix set outside the text object, e.g. by a page-content wrapper or a
+Form XObject invocation), so a stroke synthesized inside a scaled `cm`
+context is not compensated for that scale. This is **disclosed verbatim in
+the builder's report text** ("LIMIT, disclosed rather than hidden"), the
+same posture R73/rule-4 already require elsewhere in this project, not a
+silent gap found later. Filed as a named limit, not fixed in this slice —
+closing it needs `cm`-tracking in the authoring walk, out of scope here.
+
+## C.4 Neither the decision nor Amendment A anticipated that synthetic italic needs text-matrix tracking in the authoring walk at all
+
+Amendment A.3 carefully scoped the shared `TextStateParams` hoist to
+"exactly the six single-operand text-state parameters" and excluded `Tf`/
+`Tfs` for the narrow-then-widen bit-identity reason given there. **It said
+nothing about `Tm`/`Tlm`, because nothing in the decision as written, nor in
+Amendment A, anticipated that synthetic italic (§3.6's `M-shear-tm`) needs
+the authoring walk to track the text matrix at all** — C.2's absolute-`Tm`
+refusal gate cannot be evaluated without knowing whether the follower's
+positioning operator is already absolute. `text_edit::edit::Walk` had **no**
+`Tm`/`Tlm` tracking before this slice. Pass 19.2 built it: `BT`-reset
+semantics, `Td`/`TD`/`T*` next-line derivation, per-show-operator §9.4.4
+advance accumulation, and a `matrix_known` honesty flag (so the walk
+reports "I don't know" rather than guessing when a matrix-affecting
+operator it does not model appears first). A new `Rec::EndText` variant
+records the `BT…ET` boundary the reset semantics depend on.
+
+## C.5 Two conflicts the decision never names, both refused rather than silently merged
+
+Neither the decision text nor Amendments A/B anticipated two interactions
+that only exist once **two** Pass-19.x mechanisms compose on the same run:
+
+1. **Free-form rise (19.2) vs. the superscript/subscript toggle (19.1) —
+   both write `Ts`.** A request that asks for both at once is refused by
+   name rather than silently letting one win; there is no principled
+   "the toggle wins" or "the free-form value wins" default that does not
+   silently discard the operator's other stated intent.
+2. **Synthetic italic (19.2) vs. `--pin` (a 19.1-adjacent follower-
+   positioning mode).** The closing absolute `Tm` (C.2) and `--pin`'s own
+   compensating `TJ` adjustment would each attempt to consume the same
+   positional delta — applying both double-consumes it, silently
+   mispositioning the follower by the second mechanism's correction on
+   top of the first's. Refused by name rather than composed.
+
+Both refusals are disclosed, not silent failures; both are named
+acceptance tests in the shipped slice.
+
+## C.6 Add-Text synthesis is not wired — flagged as not delivered, not implied
+
+§3.6's Q2 policy states synthesis is shared identically across Add-Text
+(16.x) and in-place edit (14.x), differing only in remedy order. **The
+shared `pdfce-core` type (`StyleSynthesis`, the gate, the wording) is built
+and `SynthesisPath::AddText` is implemented and tested** — but
+`addtext.rs` has **no bold/italic request surface at all**, so the offer
+cannot currently be reached from that path. This matches the decision's own
+prediction that the gate "will rarely even open here" (R79 defaults Add-Text
+to a bundled Standard-14 face, whose family has real Bold/Italic variants)
+— but "rarely opens" is not "cannot be reached," and wiring it needs new
+request/CLI surface beyond simply extending `format-text`. **Recorded as
+not delivered, explicitly, rather than left to be assumed shipped because
+the underlying type exists.**
+
+---
+
+**Standing-rule consequence of this amendment:** R88 (the restore ladder)
+is extended to name stroking colour and line width as members of the
+restore set alongside the six text-state parameters, when a formatting
+operation (synthetic bold specifically) sets them. See the corresponding
+`ROADMAP.md` Standing Rules update and the `ARCHITECTURE.md` §5.11/§12
+entries filed alongside this amendment.
+

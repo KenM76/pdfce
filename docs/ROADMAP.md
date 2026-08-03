@@ -43,6 +43,131 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 19.2 — Free-form `Ts` + synthetic bold/italic, the deliberate exceed (decision 019, extends the Pass 19.1 formatting slice) — 2026-08-03, committed `ebe35d8`
+
+**New `crates/pdfce-core/src/text_edit/synth.rs` — one shared policy type.**
+`StyleSynthesis` (provenance/decision type), `SynthesisPath` (the *only*
+asymmetry between Add-Text and in-place edit is remedy *order*, per decision
+019 §3.6), `SynthesisOffer` (one wording, both paths), `OBLIQUE_TAN`/
+`BOLD_STROKE_RATIO` constants, `shear_into` (a genuine matrix
+premultiplication — its test uses a pre-rotated matrix, where a naive
+`tm[2] = tan` overwrite loses the lean entirely), `matrix_scale`
+(determinant-based, so a shear does not perturb the derived bold stroke
+width), and `detect`, the reload-time re-detector (pdfce's own synthesis and
+other producers'). CLI gained `--rise`, `--bold-synthetic`,
+`--italic-synthetic` (rule 11, CLI parity, shipped in-Pass).
+
+**Gates:** `cargo test --workspace` 1663 → 1708, 0 failed; fmt/clippy clean;
+`bash tools/check-ui-strings.sh` exit 0; `cargo tree -p pdfce-core`/`-p
+pdfce-render` GUI-dep-free; **zero new Cargo dependencies**; **R85
+(preview-equals-saved) 20/20** (four new cases: rise, synthetic bold,
+synthetic italic, bold+italic+rise combined); roundtrip byte-identical over
+`fixtures/synthetic`, proven **non-vacuous** by `md5sum`-distinct harness
+binaries built from a genuine `git archive` export of the base commit
+(`49d285ad…` vs. `9ccb6e0c…`, differing sizes — not a repeat of the Pass
+19.0 vacuous-stash mistake).
+
+**THE RENDER-HONOURS-MODE-2/SHEARED-`Tm` PREREQUISITE WAS CONFIRMED BY
+MUTATION TESTING, not by inspection — this is the standard the by-reading
+check should have met.** New `crates/pdfce-render/tests/
+synthetic_style_render.rs` builds PDFs, rasterizes through the shipped
+`render_page`, and interrogates pixels. All 5 tests passed on the first run
+— so the builder then **deliberately broke the renderer three separate ways
+and re-ran** to prove the pass was not vacuous: dropping mode 2 from
+`strokes()` failed 2 tests; building `Tm` with `c = 0.0` (i.e. no shear)
+failed 2; zeroing the rise failed 1. With the renderer intact, the tests
+additionally established real facts about pdfce's own rendering, not just
+that it compiles: `2 Tr` + `2 w` paints strictly more ink than a plain fill,
+with **more than 20 of the new pixels OUTSIDE the filled glyph silhouette**
+(a true outline, not merely a darker fill); `1 0 0 RG` on black-filled text
+produces genuinely red pixels, proving §9.3.6's stroking-colour rule is
+**both implemented and load-bearing** (the "coloured text acquires black
+outlines" hazard named in decision 019 §3.6 is real, not hypothetical, and
+is closed); a sheared `Tm` moves the glyph TOP rightward by more than 3 px
+while the baseline row moves less than half that amount, with the vertical
+ink band unchanged (a shear, not a translation).
+
+**ENGINEER-VERIFIED emitted content stream** (blue text, bold + italic +
+rise-5 combined):
+
+```
+BT /F1 12 Tf 0 0 1 rg 72 700 Td 5 Ts 2 Tr 0.264 w 0 0 1 RG 1 0 0.212557 1 72 700 Tm (hello) Tj 0 Ts 0 Tr 1 w 0 G 1 0 0 1 102 700 Tm ( world) Tj ET
+```
+
+Stroking colour matches the blue fill and restores to `0 G`; stroke width
+`0.264` = 2.2% × 12 pt, restoring to Table 52's default `1 w`; the shear
+sits in the `Tm` matrix's `c` term, bracketed by absolute `Tm`s on both
+sides so it cannot reach the following run; no `q`/`Q` appears inside
+`BT…ET` (would be illegal — §8.2 Table 51/Figure 9).
+
+**SIX CORRECTIONS TO DECISION 019 — decision 019 Amendment C filed** (full
+record `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`
+Amendment C; `ARCHITECTURE.md` §5.11/§12 updated to match; standing rules
+R88/R90 amended, below):
+
+1. **§3.6 named the WRONG restore set.** Stroking colour and stroke line
+   width are graphics state **shared with path painting** — a synthetic-
+   bold run leaving `0.264 w` in force changes the weight of every later
+   stroked *path* on the page. §3.6 treated both only as things to *set*
+   correctly, never as things to *restore*. Two restore obligations the
+   decision omitted; both now tracked by two new `Walk` trackers alongside
+   the existing six text-state parameters.
+2. **§3.6's "followers must be re-emitted with an absolute `Tm`" is
+   narrower in practice than written — deliberately.** The builder did
+   **not** convert a producer's own `Td`/`T*` into an absolute `Tm`
+   (that rewrites the producer's own line structure past minimal-diff and
+   cascades). pdfce instead **requires** the follower already be absolute
+   and **refuses, disclosed, otherwise** — a twin test proves the refusal
+   is not unconditional (the same run succeeds once the next line opens
+   its own independent `BT…ET`).
+3. **§3.6's bold-width formula (`Tfs × |Tm| × |CTM|`) ships two of its
+   three factors.** The authoring walk models `Tfs` and `Tm` scale but has
+   no `cm` model, so a page-level CTM scale is not compensated. **Disclosed
+   verbatim in the builder's report text** ("LIMIT, disclosed rather than
+   hidden"), not silently dropped.
+4. **Neither the decision nor Amendment A anticipated that synthetic
+   italic needs `Tm`/`Tlm` tracking in the authoring walk at all.**
+   Amendment A.3 carefully excluded `Tf`/`Tfs` from the shared text-state
+   hoist and said nothing about `Tm` — but item 2's refusal gate cannot be
+   evaluated without knowing whether a follower is already absolute. The
+   walk had no matrix tracking; 19.2 built it (`BT` reset, `Td`/`TD`/`T*`
+   derivation, §9.4.4 advance accumulation, a `matrix_known` honesty flag,
+   a new `Rec::EndText` variant).
+5. **Two conflicts the decision never names, both refused rather than
+   silently merged:** free-form rise vs. the superscript/subscript toggle
+   (both write `Ts`); synthetic italic vs. `--pin` (the closing absolute
+   `Tm` and `--pin`'s compensating `TJ` adjustment would each consume the
+   same positional delta twice).
+6. **Add-Text synthesis is NOT wired.** The shared type, gate, and wording
+   exist in `pdfce-core` with `SynthesisPath::AddText` implemented and
+   tested, but `addtext.rs` has no bold/italic request surface, so the
+   offer cannot currently be reached from that path. The decision predicts
+   the gate "will rarely even open here" (R79 defaults Add-Text to a
+   bundled Standard-14 face with real Bolds), but "rarely opens" is not
+   "cannot be reached." **Flagged as not delivered, explicitly.**
+
+**ARCHITECTURE §5.11's "exactly one definition" claim is narrowed
+accordingly.** It is true of the six §9.3 text-state parameters
+specifically — the `Tm` matrix, the stroke line width, and the stroking
+colour are tracked separately and deliberately, not folded into
+`TextStateParams`.
+
+**R86, stated plainly.** No GUI code was added and the builder made no
+on-screen claim — the GUI surface is slice 19.3. Verification was the CLI
+oracle plus R85. **Slice 19.3 is now IN DESIGN** — `pdfce-ui-specialist` is
+writing `docs/ui_specs/pass-19.3-text-formatting-surface.md` concurrently
+with this filing.
+
+**RAG escalations this Pass:**
+`C:\personal_rag\pdf\lesson_20260803_mode2_faux_bold_re_detectable_by_stroke_ratio.md`
+(mode-2 faux bold is re-detectable across producers from `Tr` + stroke-ratio
++ `/BaseFont` alone; the false-positive guard is that a deliberate outline
+display style strokes at 5–10% of size versus a synthesized ~2%) and
+`D:\dev\rag\rust\prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`
+(the mutation-testing method above, generalized — pairs with the existing
+`git_stash_on_clean_tree_makes_before_after_comparison_vacuous.md` finding;
+both are about verifying a green result was actually earned).
+
 ### Pass 19.1 — `Tc`/`Tz`/super-subscript direct text-state authoring, the Acrobat-parity slice (decision 019, extends the Pass 19.0 consolidation) — 2026-08-03, committed `603b051`
 
 **Extends `format.rs`'s existing `pre | set_ops | mid | restore_ops |
@@ -5651,16 +5776,51 @@ is a point-in-time action, not a standing guarantee).
 **Pass 19.0 shipped 2026-08-03 (`38fffad`) — see Shipped above; no
 longer listed here. Pass 19.1 (`Tc`/`Tz`/super-subscript authoring)
 SHIPPED 2026-08-03 (`603b051`) — see Shipped above; no longer listed
-here. Pass 19.2 (free-form `Ts` + synthetic bold/italic) is now IN
-PROGRESS** — see the ★ Pass 19.x entry under Next up for the full
-slice record and decision 019 Amendment A (`1a2e265`). **Decision 019
-Amendment B is filed as part of THIS librarian pass** (three
-corrections found while building 19.1 — mechanism fix, citation-flag
-closure, R89 base-size clarification — plus new standing rule R92) and
-**committed as `450a44b`** (engineer backfill, 2026-08-03 — the
-filing correctly recorded the hash as pending rather than predicting
-one, which is R87 working as intended: the librarian has no shell and
-must not invent a hash it cannot verify).
+here. Pass 19.2 (free-form `Ts` + synthetic bold/italic) SHIPPED
+2026-08-03 (`ebe35d8`)** — see the Pass 19.2 Shipped entry (top of
+Shipped) for the full slice record, and decision 019 Amendment A
+(`1a2e265`). **Decision 019 Amendment B was filed as part of the
+continuation-64 librarian pass** (three corrections found while
+building 19.1 — mechanism fix, citation-flag closure, R89 base-size
+clarification — plus new standing rule R92) and **committed as
+`450a44b`** (engineer backfill, 2026-08-03 — the filing correctly
+recorded the hash as pending rather than predicting one, which is R87
+working as intended: the librarian has no shell and must not invent a
+hash it cannot verify).
+
+**UPDATE (continuation 65, real date 2026-08-03) — Pass 19.2 SHIPPED
+and decision 019 Amendment C filed as part of THIS librarian pass.**
+Amendment C records six corrections found while building 19.2: the
+wrong restore set named for stroking colour/line width (they leak into
+later stroked *paths*, not just text, if left unrestored); a narrower-
+than-written absolute-`Tm`-required-for-followers refusal (deliberately
+not converting a producer's `Td`/`T*` to absolute, to avoid a minimal-
+diff-violating cascade); a disclosed two-of-three-factor bold-width
+formula (no `cm` model in the authoring walk); unanticipated `Tm`/`Tlm`
+tracking needed in the authoring walk (neither the original decision
+nor Amendment A foresaw this); two named conflicts refused rather than
+silently merged (rise vs. superscript/subscript toggle; synthetic
+italic vs. `--pin`); and Add-Text synthesis flagged as **not wired**
+despite the shared `StyleSynthesis` type and gate existing and being
+tested. Full account: the Pass 19.2 Shipped entry (top of Shipped),
+`docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md` Amendment
+C, and `ARCHITECTURE.md` §5.11/§12. **R88 and R90 amended** (no new
+rule number; ceiling remains R92). **Engineer-reported hashes this
+continuation, verified by `git cat-file -t`:** `450a44b` (Amendment
+B's own filing commit — its hash was correctly recorded as pending at
+continuation 64 rather than predicted, and is now confirmed rather
+than backfilled-and-guessed), `ebe35d8` (Pass 19.2), `8664912` (a
+docs commit recording the `450a44b` confirmation). Branch
+`pass-8-redaction`, **48 commits** (`git rev-list --count HEAD`),
+all still local-only, no git remote configured. **Slice 19.3 is now IN
+DESIGN** — a `pdfce-ui-specialist` dispatch is concurrently writing
+`docs/ui_specs/pass-19.3-text-formatting-surface.md` as a new file
+only, not touching any file this librarian pass edits.
+**RAG escalations filed this continuation:**
+`C:\personal_rag\pdf\lesson_20260803_mode2_faux_bold_re_detectable_by_stroke_ratio.md`
+and
+`D:\dev\rag\rust\prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`
+— both indexed in their subject's `index.md` this same continuation.
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
@@ -6216,7 +6376,7 @@ default stands: docked-only, its own Backlog entry, still unanswered.
 §10 Q1 (the `egui_tiles`-vs-hand-rolled question this note originally
 tracked) is ANSWERED and BUILT — see Pass 18.1 above.
 
-### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendments A/B, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 SHIPPED 2026-08-03, Pass 19.2 IN PROGRESS)
+### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendments A/B/C, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 SHIPPED 2026-08-03, Pass 19.2 SHIPPED 2026-08-03 (`ebe35d8`), Pass 19.3 IN DESIGN)
 
 **Decision 019 ACCEPTED via the KenAgent protocol.** Full record:
 `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`. Filed
@@ -6344,30 +6504,43 @@ existing `FormatText`/`AddText` one-command-per-accepted-edit path):**
   Acrobat parity claim (Acrobat's own values are an unsourced gap in
   the parity catalog); every emitted value is disclosed by number.
 - **19.2 — Free-form `Ts` + synthetic bold/italic (core + CLI). The
-  deliberate exceed. IN PROGRESS** (2026-08-03, a builder is on it).
-  `StyleSynthesis` provenance enum; R90's gate wired behind the same
-  coverage check Pass 14.2 already uses for family/style changes.
-  **Prerequisite check before this slice starts:** confirm
-  `pdfce-render` actually honours `Tr 2` and a sheared `Tm` — if it
-  doesn't, R85 (preview-equals-saved) breaks the moment this slice
-  ships a feature the canvas can't paint. **Status as of this
-  filing:** appears satisfied BY INSPECTION, not yet confirmed
-  empirically — `interpret.rs:1446-1457` fills then strokes with
-  `stroke_color`/`stroke_params()` per Table 106 set at
-  `text.rs:304-313`, and `Tm` is applied as a full six-component
-  `Transform::from_row` at `interpret.rs:1134-1138`. The builder is
-  confirming with a rendered fixture before relying on it — do not
-  treat this bullet as the confirmation itself.
-- **19.3 — GUI: the spacing/style property surface.** Dispatch
-  `pdfce-ui-specialist` first, per the standing Feature-fidelity/
-  UI-design discipline.
+  deliberate exceed. SHIPPED 2026-08-03, committed `ebe35d8`** — see
+  the Pass 19.2 Shipped entry (top of Shipped) for the full build
+  record. `StyleSynthesis`/`SynthesisPath`/`SynthesisOffer` in new
+  `text_edit/synth.rs`; R90's gate wired behind the same coverage check
+  Pass 14.2 already uses for family/style changes. **The render-
+  honours-`Tr 2`-and-sheared-`Tm` prerequisite was confirmed by
+  MUTATION TESTING** (build the fixture-rendering tests, confirm they
+  pass, then deliberately break the renderer three ways and confirm
+  each mutation fails exactly the tests it should) — not merely by the
+  by-inspection check this filing originally recorded, which is now
+  superseded as a verification standard (see decision 019 Amendment C).
+  **Amendment C filed** — six corrections found while building this
+  slice, including a wrong restore-set omission (stroking colour/line
+  width leak into later stroked paths), a narrower-than-written
+  absolute-`Tm`-for-followers refusal gate, a disclosed two-of-three-
+  factor bold-width formula, unanticipated `Tm`/`Tlm` authoring-walk
+  tracking, two named conflicts refused rather than merged, and
+  Add-Text synthesis flagged as not wired despite the shared type
+  existing. Full account in the Pass 19.2 Shipped entry and
+  `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`
+  Amendment C.
+- **19.3 — GUI: the spacing/style property surface. IN DESIGN.**
+  `pdfce-ui-specialist` is writing
+  `docs/ui_specs/pass-19.3-text-formatting-surface.md`, dispatched per
+  the standing Feature-fidelity/UI-design discipline.
 - **19.4 — `Tw` (CONDITIONAL — do not start without the census
   result).** Gated per Q1/R91's decision bands.
 
 **Standing rules R88–R91 added** (see Standing rules, below) — the
 ceiling was R87. **R92 added 2026-08-03** (decision 019 Amendment B,
 methodology: hand-duplicated no-op/arm-list predicates drift silently
-— see Standing rules, below).
+— see Standing rules, below). **R88 and R90 AMENDED 2026-08-03** by
+decision 019 Amendment C (Pass 19.2) — R88 gains the shared-graphics-
+state restore obligation (stroking colour + line width); R90 gains the
+narrower absolute-`Tm`-for-followers refusal, the disclosed bold-width
+limit, and the two named unhandled-conflict refusals. No new rule
+number; ceiling remains **R92**.
 
 **Open items for the operator** — see Open operator questions, below:
 the `Tw` census middle-band judgement call; FF-C's rule-13 dependency
@@ -9634,6 +9807,15 @@ blocking Pass 19.0's in-progress build:**
   Amendment A item 2). A guessed default restore is never emitted. New
   text authored inside a balanced `q … BT … ET … Q` envelope (the
   `addtext.rs` path, Pass 16.x) is exempt: `Q` performs the restore.
+  **Restore set EXTENDED 2026-08-03 by decision 019 Amendment C / Pass
+  19.2 (`ebe35d8`):** synthetic bold's stroking colour and derived
+  stroke line width are **ordinary graphics state shared with path
+  painting**, not text state — §3.6 originally described them only as
+  values to *set* correctly and never named them as values to
+  *restore*. Left unrestored, a synthetic-bold run's stroke settings
+  leak into every later stroked *path* on the page, not only later
+  text. Both are now tracked and restored by the same ladder, alongside
+  the six text-state parameters.
 - **R89 — Size-relative typographic quantities are stored as ratios and
   derived at emit time (decision 019, 2026-08-03).** `Tc` and `Ts` are
   in *unscaled text space units* and are **not** scaled by `Tfs` (§9.3)
@@ -9666,7 +9848,34 @@ blocking Pass 19.0's in-progress build:**
   text state and is **not** covered by R88 — it propagates through
   `Td`/`TD`/`T*` into every later line, and a shear composed with `Ts`
   displaces a raised run by `Trise × tan θ` — both are hazards beyond
-  the original brief, not hypothetical edge cases.
+  the original brief, not hypothetical edge cases. **AMENDED 2026-08-03
+  by decision 019 Amendment C / Pass 19.2 (`ebe35d8`):** the fix for
+  the `Tm`-shear-propagation hazard is narrower than originally
+  written — pdfce does **not** convert a producer's own `Td`/`T*` into
+  an absolute `Tm` (that would rewrite the producer's own line
+  structure past minimal-diff, R32/R46, and cascade to every later
+  relative move); it instead **requires** the follower already be
+  positioned by an absolute `Tm` and **refuses, disclosed, otherwise**
+  — verified non-vacuous by a twin test where the same run succeeds
+  once the next line opens its own `BT…ET`. This refusal gate needs
+  `Tm`/`Tlm` tracking in the authoring walk, which neither the original
+  decision nor Amendment A anticipated (Amendment A.3 scoped the shared
+  hoist to the six text-state parameters only) — Pass 19.2 added it to
+  `text_edit::edit::Walk` (`BT` reset, `Td`/`TD`/`T*` derivation,
+  §9.4.4 advance accumulation, a `matrix_known` honesty flag, a new
+  `Rec::EndText` variant). The bold-width formula
+  (`Tfs × |Tm| × |CTM|`) ships **two of its three factors** — no
+  page-level `cm` model exists in the authoring walk, so a stroke
+  synthesized inside a scaled `cm` context is not compensated; this is
+  a **named, disclosed limit**, not a silent gap. Two conflicts are
+  refused by name rather than silently merged: free-form rise vs. the
+  superscript/subscript toggle (both write `Ts`), and synthetic italic
+  vs. a `--pin` follower-positioning mode (the closing absolute `Tm`
+  and `--pin`'s compensating `TJ` adjustment would each consume the
+  same positional delta). **Add-Text synthesis is not yet wired**: the
+  shared type and `SynthesisPath::AddText` exist and are tested, but
+  `addtext.rs` has no bold/italic request surface to reach them from —
+  flagged as undelivered, not implied shipped by the type's existence.
 - **R91 — `Tw` is capability-gated by font model, and inter-word
   distribution on composite runs is `TJ`-only (decision 019,
   2026-08-03).** Word spacing applies only to single-byte code 32

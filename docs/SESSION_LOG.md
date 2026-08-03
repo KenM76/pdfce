@@ -8810,3 +8810,179 @@ separate builder dispatch.**
   THIRD filing-integrity issue the R87 audit habit has caught in this
   project. Keep raising discrepancies rather than silently reconciling
   them — the habit is earning its keep.
+
+**Same-day continuation 65 (real date 2026-08-03) — Pass 19.2 SHIPPED
+(`ebe35d8`, free-form `Ts` + synthetic bold/italic, the FF-H deliberate
+exceed); decision 019 Amendment C filed (six corrections found while
+building this slice); Amendment B's previously-pending hash confirmed
+as `450a44b` and folded into the record by `8664912`. Branch
+`pass-8-redaction`, **48 commits** (`git rev-list --count HEAD`), all
+three hashes this filing engineer-verified via `git cat-file -t`, still
+no git remote configured. Pass 19.3 (the GUI spacing/style property
+surface) is now IN DESIGN — a `pdfce-ui-specialist` dispatch is
+concurrently writing `docs/ui_specs/pass-19.3-text-formatting-surface.md`
+as a new file only, untouched by this filing.**
+
+**Shipped:**
+- **`ebe35d8` — Pass 19.2 SHIPPED.** New
+  `crates/pdfce-core/src/text_edit/synth.rs`: `StyleSynthesis`
+  (shared policy type across Add-Text and in-place edit), `SynthesisPath`
+  (remedy *order* is the only asymmetry between the two paths),
+  `SynthesisOffer`, `OBLIQUE_TAN`/`BOLD_STROKE_RATIO`, `shear_into` (a
+  true matrix premultiplication — tested against a pre-rotated matrix,
+  where a naive single-component overwrite loses the lean entirely),
+  `matrix_scale` (determinant-based, so a shear doesn't perturb the
+  derived bold stroke width), and `detect` (reload-time re-detection,
+  pdfce's own synthesis and other producers'). CLI: `--rise`,
+  `--bold-synthetic`, `--italic-synthetic`. `cargo test --workspace`
+  1663 → 1708, 0 failed; fmt/clippy clean; `check-ui-strings.sh` exit
+  0; `cargo tree` clean; zero new dependencies; **R85 20/20** (4 new
+  cases: rise, synthetic bold, synthetic italic, bold+italic+rise);
+  roundtrip byte-identical over `fixtures/synthetic`, non-vacuity
+  proved by `md5sum`-distinct harness binaries built from a `git
+  archive` export of the base commit. Full record: the Pass 19.2
+  Shipped entry, top of `ROADMAP.md` Shipped, including the
+  engineer-verified emitted content stream (blue bold+italic+rise-5
+  text: stroking colour matched to fill and restored to `0 G`, stroke
+  width `0.264` = 2.2%×12pt restoring to `1 w`, the shear bracketed by
+  absolute `Tm`s so it cannot reach the following run, no `q`/`Q`
+  inside `BT…ET`).
+
+**Decisions made this session:**
+- **Decision 019 Amendment C filed** — six corrections found while
+  building Pass 19.2, recorded in
+  `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`
+  Amendment C, `ARCHITECTURE.md` §5.11/§12, and `ROADMAP.md`'s ★ Pass
+  19.x entry + new Pass 19.2 Shipped entry + Standing Rules (R88/R90
+  amended, no new rule number, ceiling stays R92):
+  1. **§3.6 named the WRONG restore set.** Stroking colour and stroke
+     line width are graphics state **shared with path painting**, not
+     scoped text state — left unrestored, a synthetic-bold run's stroke
+     settings leak into every later stroked *path* on the page, not
+     just later text. Two restore obligations the decision omitted;
+     now covered by two new `Walk` trackers.
+  2. **§3.6's "re-emit followers with an absolute `Tm`" is narrower in
+     practice, deliberately.** The builder did NOT convert a producer's
+     own `Td`/`T*` into an absolute `Tm` (that rewrites the producer's
+     own line structure past minimal-diff and cascades to every later
+     relative move); pdfce instead REQUIRES the follower already be
+     absolute and REFUSES, disclosed, otherwise — a twin test proves
+     the refusal is not unconditional (the same run succeeds once the
+     next line opens its own `BT…ET`).
+  3. **The bold-width formula (`Tfs × |Tm| × |CTM|`) ships two of its
+     three factors.** No `cm` (page-level CTM) model exists in the
+     authoring walk, so a stroke synthesized inside a scaled `cm`
+     context isn't compensated. **Disclosed verbatim in the builder's
+     own report text** ("LIMIT, disclosed rather than hidden"), not
+     found later as a silent gap.
+  4. **Neither the decision nor Amendment A anticipated that synthetic
+     italic needs `Tm`/`Tlm` tracking in the authoring walk at all.**
+     Amendment A.3 scoped the shared text-state hoist to six parameters
+     and excluded `Tf`/`Tfs`, saying nothing about `Tm` — but item 2's
+     refusal gate can't be evaluated without knowing whether a follower
+     is already absolute. Pass 19.2 built `Tm`/`Tlm` tracking into
+     `text_edit::edit::Walk` (`BT` reset, `Td`/`TD`/`T*` derivation,
+     §9.4.4 advance accumulation, a `matrix_known` honesty flag, a new
+     `Rec::EndText` variant).
+  5. **Two conflicts the decision never names, both refused rather
+     than silently merged:** free-form rise vs. the superscript/
+     subscript toggle (both write `Ts`); synthetic italic vs. `--pin`
+     (the closing absolute `Tm` and `--pin`'s compensating `TJ`
+     adjustment would each consume the same positional delta twice).
+  6. **Add-Text synthesis is NOT wired — flagged as not delivered.**
+     The shared type, gate, and wording exist and
+     `SynthesisPath::AddText` is implemented and tested, but
+     `addtext.rs` has no bold/italic request surface to reach it from.
+     Matches the decision's own prediction the gate "will rarely even
+     open here" (R79's Standard-14 default has real Bolds) but "rarely
+     opens" is not "cannot be reached."
+- **`ARCHITECTURE.md` §5.11's "exactly one definition" claim narrowed.**
+  It is true of the six §9.3 text-state parameters specifically — the
+  `Tm` matrix, stroke line width, and stroking colour are tracked
+  separately and deliberately, not folded into `TextStateParams`.
+
+**Findings + decisions (empirical):**
+- **Verification-method finding, the headline one this continuation:**
+  the render-honours-`Tr 2`-and-sheared-`Tm` prerequisite was confirmed
+  by **mutation testing**, not by the by-inspection check the prior
+  filing had recorded as sufficient. A new
+  `crates/pdfce-render/tests/synthetic_style_render.rs` built fixtures,
+  passed all 5 tests on first run, then the builder deliberately broke
+  the renderer three separate ways and re-ran: dropping mode 2 from
+  `strokes()` failed 2 tests; building `Tm` with `c = 0.0` failed 2;
+  zeroing the rise failed 1 — each mutation failing exactly the tests
+  it should, proving the suite's failure surface maps correctly onto
+  the three mechanisms it claims to cover. With the renderer intact,
+  the tests also established real facts: `2 Tr` + `2 w` paints strictly
+  more ink than a plain fill with >20 of the new pixels OUTSIDE the
+  filled silhouette (a true outline); `1 0 0 RG` on black-filled text
+  produces genuinely red pixels (proving §9.3.6's stroking-colour rule
+  is both implemented and load-bearing, not merely present); a sheared
+  `Tm` moves the glyph TOP rightward by >3 px while the baseline row
+  moves less than half that. Escalated as a general methodology finding
+  (see RAG escalations, below) — this is the standard a by-inspection
+  prerequisite check should itself have met.
+- **Mode-2 faux bold is re-detectable across producers**, not just
+  pdfce's own output, from `Tr` + stroke-width-to-size ratio +
+  non-Bold `/BaseFont` alone — the false-positive guard is that a
+  deliberate outline display style strokes at 5-10% of size (meant to
+  be visually obvious) versus pdfce's synthesized ~2.2% (meant to be
+  imperceptible as an effect).
+
+**RAG escalations this continuation:**
+- `D:\dev\rag\rust\prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`
+  — the mutation-testing methodology above, generalized: a passing
+  "renderer honours feature X" test suite isn't proven non-vacuous
+  until you break X and watch it fail on exactly the tests that
+  exercise it. Pairs with the existing `git_stash`-vacuous-comparison
+  finding (both are "a green result isn't evidence until it's gone red
+  for a controlled reason").
+- `C:\personal_rag\pdf\lesson_20260803_mode2_faux_bold_re_detectable_by_stroke_ratio.md`
+  — the mode-2 faux bold re-detection finding above.
+- Both indexed in their subject's `index.md` this same continuation.
+  Also backfilled this continuation: the Pass 19.1-era
+  `lesson_20260803_tz_th_rescales_tj_adjustments_not_slack_outside_wrap.md`
+  had a subject-index entry but was missing from the master
+  `C:\personal_rag\index.md` — added now, flagged so future index
+  checks know it was a gap closed retroactively, not a new finding.
+
+**Still in flight:**
+- **Pass 19.3** (GUI: the spacing/style property surface) — IN DESIGN.
+  `pdfce-ui-specialist` is concurrently writing
+  `docs/ui_specs/pass-19.3-text-formatting-surface.md` as a new file
+  only. Pass 19.4 (`Tw`, conditional on the census) not started.
+- Carried, unchanged: no GUI redaction-apply flow; `✓`/`✕` glyph
+  verification; status-bar/`Fit page`-zoom feedback loop (standing
+  hazard); letter badges pending real icons; `egui_kittest` harness
+  gap; the Open operator questions (g)–(k) from continuation 62; the
+  Tw census middle-band judgement call; FF-C's rule-13 dependency
+  classification; the FF-I StructTree cut; list-authoring scope call;
+  the newly-found kerning parity gap (Isaacs lists it among Acrobat's
+  retained controls; pdfce has no kerning surface distinct from `Tc`).
+- Branch still named `pass-8-redaction`, now spanning Passes 9–19.2 —
+  worth a rename whenever a push is authorized.
+- No git remote configured; the backup bundle
+  (`D:\Dev\pdfce-backups\pdfce-20260803-1145.bundle`) is now THREE
+  commits stale (predates `450a44b`, `ebe35d8`, `8664912`) and has not
+  been regenerated this continuation.
+
+**For next session:**
+- Once `docs/ui_specs/pass-19.3-text-formatting-surface.md` lands,
+  build Pass 19.3 (the GUI property surface) per its spec, applying the
+  R83 capability-gating discipline (consume 19.0's published composite
+  flag; never reimplement the capability query in `pdfce-gui`, or the
+  WASM fork loses it — R74).
+- Regenerate the backup bundle to cover this continuation's three
+  commits (48 total).
+- Flag to the operator at next contact, all carried forward: (1) the
+  Open operator questions (g)–(k); (2) push/publish call still
+  ungranted, chain now 48 commits, still no remote; (3)
+  branch-rename-on-push still pending; (4) the GUI still has no
+  redaction-apply flow; (5) R86 (headless-vs-observed "done"
+  definition) still unanswered; (6) the newly-found kerning parity gap
+  is unscoped and may or may not fall inside the operator's "finish off
+  all the text handling stuff" intent.
+- Consider whether Add-Text synthesis (decision 019 Amendment C item 6
+  — the shared type exists but has no request surface in `addtext.rs`)
+  should be scoped as part of 19.3 or deferred to its own follow-on —
+  not yet decided either way.

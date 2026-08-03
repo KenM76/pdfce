@@ -882,6 +882,27 @@ three different modules (`text_extract::page::TextState`,
 `text_edit::edit::Walk`/`reflow_apply::BlockTextState`,
 `vector::decompose::GState`) with zero shared publication.
 
+**Narrowed by decision 019 Amendment C (Pass 19.2, `ebe35d8`):** the
+"one shared consolidation" claim above is specifically about **the six
+§9.3 text-state parameters** (`Tc`/`Tw`/`Tz`/`TL`/`Ts`/`Tr`) that R88's
+ladder covers. Synthetic bold (§3.6/R90) introduced two more tracked
+quantities — stroke line width and stroking colour — that are
+**ordinary graphics state shared with path painting, not text state**,
+and are tracked and restored separately from the `TextStateParams`
+model rather than folded into it; a synthetic-bold run's stroke
+settings would otherwise leak into later stroked *paths* on the page,
+not just later text. Pass 19.2 also added `Tm`/`Tlm` tracking to
+`text_edit::edit::Walk` (`BT` reset, `Td`/`TD`/`T*` derivation,
+§9.4.4 advance accumulation, a `matrix_known` honesty flag, and a new
+`Rec::EndText` variant) — needed for the absolute-`Tm`-required-for-
+followers refusal gate (see below), and not anticipated by the
+original decision text or by Amendment A's `Tf`/`Tfs` exclusion. So:
+exactly one definition of the six text-state parameters in
+`pdfce-core`, plus two separately-tracked shared-graphics-state
+parameters, plus a separately-tracked text matrix — three distinct
+things, not one, and the distinction is deliberate rather than an
+oversight.
+
 **Pass 19.0 SHIPPED (2026-08-03, `38fffad`) — this consolidation is now
 built, not merely planned.** New `pdfce-core/src/text_state.rs` in two
 layers: `TextStateParam`/`TextStateParams` (parameter identity +
@@ -938,6 +959,43 @@ cannot drift again. Second occurrence of the same bug shape as Amendment
 A.4's missing `q`/`Q` arms (a hand-maintained check mirroring a
 structure's shape, rather than derived from it) — see `ROADMAP.md`'s new
 standing rule R92.
+
+**Pass 19.2 SHIPPED (2026-08-03, `ebe35d8`) — free-form `Ts` and
+synthetic bold/italic now built.** New
+`crates/pdfce-core/src/text_edit/synth.rs`: `StyleSynthesis` (the shared
+policy type used by both `format.rs` in-place edit and `addtext.rs`
+Add-Text), `SynthesisPath` (the *only* asymmetry between the two paths
+is remedy *order*, per decision 019 §3.6), `SynthesisOffer`,
+`OBLIQUE_TAN`/`BOLD_STROKE_RATIO` constants, `shear_into` (a true
+matrix premultiplication, not a naive single-component overwrite —
+tested against a pre-rotated matrix, where overwriting just the shear
+component loses the lean entirely), `matrix_scale` (determinant-based,
+so a shear does not perturb the derived bold stroke width), and
+`detect` (reload-time re-detection of synthetic styles by byte
+inspection, pdfce's own and other producers'). CLI: `--rise`,
+`--bold-synthetic`, `--italic-synthetic`. The render-honours-`Tr
+2`-and-sheared-`Tm` prerequisite named in the decision was confirmed
+**empirically, by mutation testing** — a new
+`crates/pdfce-render/tests/synthetic_style_render.rs` rasterizes built
+fixtures and interrogates pixels, then deliberately breaks the renderer
+three separate ways (drop mode-2 stroking, zero the `Tm` shear
+component, zero the rise) and re-runs to confirm each mutation fails
+exactly the tests it should — the standard the original by-inspection
+prerequisite check should have met (see the decision-log entry for the
+general methodology finding). **Decision 019 Amendment C filed**
+(six corrections found while building this slice — the wrong restore
+set named for stroking colour/line width, a narrower-than-written
+absolute-`Tm`-required-for-followers refusal, a disclosed two-of-three-
+factor bold-width formula, unanticipated `Tm`/`Tlm` tracking needed in
+the authoring walk, two named unhandled conflicts refused by name
+(rise-vs-toggle, synthetic-italic-vs-`--pin`), and Add-Text synthesis
+flagged as not wired despite the shared type existing) — see the
+decision-log entry immediately below for the full account, and
+`docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md` Amendment
+C for the complete record. **No GUI code and no GUI verification this
+Pass** (slice 19.3, the property surface, is a separate
+`pdfce-ui-specialist` dispatch) — verified via the CLI oracle and a new
+R85 case, exercising the same `EditSession` path the GUI will use.
 
 Full design, the four-case font-on-edit matrix, the fast-follow ladder
 (FF-A offline reflow ladder through FF-H spacing/synthetic-styles — FF-A/
@@ -4219,3 +4277,65 @@ with a forward pointer.
   unaffected). Fixed by replacing the hand-list with `req.is_empty()`.
   General rule: derive such predicates from the structure itself, never
   hand-maintain a mirror of it.
+- **2026-08-03 (same-day, Amendment C to decision 019) — Pass 19.2
+  SHIPPED (`ebe35d8`); free-form `Ts` + synthetic bold/italic. Six
+  corrections found while building this slice. Full record:
+  `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`
+  Amendment C.**
+  1. **§3.6 named the wrong restore set.** Stroking colour and the
+     derived stroke line width are ordinary graphics state **shared
+     with path painting**, not text state scoped to `Tc`/`Tw`/`Tz`/
+     `Ts`/`Tr` — §3.6 described both only as things to *set* correctly
+     and never as things to *restore*, so a synthetic-bold run would
+     leak its stroke settings into every later stroked *path* on the
+     page. Two restore obligations added; R88's ladder is amended to
+     cover them alongside the six text-state parameters.
+  2. **§3.6's "re-emit followers with an absolute `Tm`" is narrower in
+     practice.** The builder deliberately did **not** convert a
+     producer's own `Td`/`T*` into an absolute `Tm` — doing so rewrites
+     the producer's own line structure (exceeding R32/R46 minimal-diff)
+     and cascades to every subsequent relative move. pdfce instead
+     **requires** the follower already be absolute and **refuses,
+     disclosed, otherwise** — a twin test proves the refusal is not
+     unconditional (the same run succeeds when the next line opens its
+     own `BT…ET`).
+  3. **The bold-width formula ships two of its three factors,
+     disclosed rather than dropped.** §3.6 specifies `Tfs × |Tm scale|
+     × |CTM scale|`; the authoring walk models the first two and has
+     no `cm` model, so a page-level CTM scale is not compensated. Named
+     as a LIMIT in the builder's own report text, per rule 4/R73, not
+     found later as a silent gap.
+  4. **Neither the decision nor Amendment A anticipated that synthetic
+     italic needs text-matrix tracking in the authoring walk at all.**
+     Amendment A.3 scoped the shared hoist to the six text-state
+     parameters and said nothing about `Tm`/`Tlm` — but item 2's
+     refusal gate cannot be evaluated without knowing whether a
+     follower is already absolute. Pass 19.2 built `Tm`/`Tlm` tracking
+     into `text_edit::edit::Walk` (`BT` reset, `Td`/`TD`/`T*`
+     derivation, §9.4.4 advance accumulation, a `matrix_known` honesty
+     flag) plus a new `Rec::EndText` variant.
+  5. **Two unnamed conflicts, both refused by name rather than silently
+     merged:** free-form rise (19.2) vs. the superscript/subscript
+     toggle (19.1) — both write `Ts`; and synthetic italic vs. a
+     `--pin` follower-positioning mode — the closing absolute `Tm` and
+     `--pin`'s compensating `TJ` adjustment would each consume the same
+     positional delta, double-consuming it if composed.
+  6. **Add-Text synthesis is flagged as NOT wired, not implied
+     shipped.** The shared `StyleSynthesis` type, gate, and wording
+     exist and `SynthesisPath::AddText` is implemented and tested, but
+     `addtext.rs` has no bold/italic request surface, so the offer is
+     currently unreachable from that path — matching the decision's own
+     prediction that the gate "will rarely even open here" (R79's
+     Standard-14 default has real Bolds) but distinct from "cannot be
+     reached." Wiring it needs new request/CLI surface, not scoped here.
+  **Verification-method finding, itself worth recording:** the render-
+  honours-mode-2/sheared-`Tm` prerequisite (named in the original
+  decision) was confirmed **by mutation testing, not by inspection** —
+  a new `pdfce-render` test suite rasterizes fixtures, passes, then
+  deliberately breaks the renderer three ways (drop mode-2 stroking,
+  zero the `Tm` shear component, zero the rise) and re-runs to confirm
+  each mutation fails exactly the tests it should. This is the standard
+  a by-inspection prerequisite check should itself have met; escalated
+  as a general methodology finding (see the RAG-escalation note in
+  `SESSION_LOG.md`). No `pdfce-core`/`pdfce-render` GUI-dependency
+  change; `cargo tree` re-verified clean; zero new Cargo dependencies.
