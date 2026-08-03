@@ -589,7 +589,8 @@ pub(crate) fn plan_format(
                 .to_owned(),
         )
         })?;
-    let orig_font = ExtractFont::resolve(doc, orig_dict);
+    // `&doc.view()` (Pass 17.1) — base-relative planner, see `edit.rs`.
+    let orig_font = ExtractFont::resolve(&doc.view(), orig_dict);
     let orig_size = anchor.tf_size;
 
     // --- resolve the family-change target, if any, and re-encode the run ---
@@ -796,7 +797,7 @@ fn plan_font(
     // Locate an existing font resource by key, then by /BaseFont.
     let (resource, target_dict) = resolve_target_resource(doc, resources, &sel.selector)
         .ok_or_else(|| FormatError::TargetFontMissing(sel.selector.clone()))?;
-    let target = ExtractFont::resolve(doc, target_dict);
+    let target = ExtractFont::resolve(&doc.view(), target_dict);
 
     // Font-level refuse triggers (composite / symbolic-no-encoding /
     // /ToUnicode-only) — reuse 14.1's classifier verbatim.

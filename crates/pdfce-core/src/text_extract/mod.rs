@@ -139,6 +139,7 @@ use crate::content::ContentError;
 use crate::document::Document;
 use crate::page_tree::{self, Page, PageTreeError, Rect};
 use crate::span::ByteSpan;
+use crate::view::DocumentView;
 
 pub use font::{ExtractFont, FontNote, LadderRung, Rung3Gap};
 
@@ -939,6 +940,61 @@ pub fn extract_page(
     page_index: usize,
     options: &ExtractOptions,
 ) -> Result<PageText, ExtractError> {
+    extract_page_view(&doc.view(), page, page_index, options)
+}
+
+/// [`extract_page`] over an explicit [`DocumentView`] — i.e. over **a
+/// revision the caller names**, rather than over a loaded file.
+///
+/// # Why this twin exists (Pass 17.1, decision 018 §8)
+///
+/// Text extraction feeds two very different consumers, and until this Pass
+/// both got the same answer whether it was right for them or not:
+///
+/// - **"What does this FILE say?"** — the CLI's `extract-text`, the
+///   redaction search census, `reflow_apply`'s planner. These want the file
+///   as loaded, and keep calling the `&Document` form above, which is now a
+///   one-line wrapper over this.
+/// - **"What does the page IN FRONT OF ME say?"** — the GUI's in-place
+///   text-edit model and Copy Text. Passing `session.document()` gave these
+///   the base revision, so after one accepted edit the editing tool's own
+///   model still described the text as it was BEFORE that edit: caret and
+///   selection offsets computed against text the page no longer contains,
+///   used to build the *next* `EditRequest`. That is not merely stale
+///   display — it is a stale model feeding a mutation.
+///
+/// The split is deliberate rather than a blanket switch to the session: a
+/// silent change to what a *search* matches mid-edit is its own surprise,
+/// so the revision is now the caller's explicit choice, made once, at the
+/// call site, with a comment saying which it wants and why.
+///
+/// # Errors
+///
+/// As [`extract_page`].
+///
+/// # Examples
+///
+/// ```no_run
+/// use pdfce_core::document::Document;
+/// use pdfce_core::edit::EditSession;
+/// use pdfce_core::{page_tree, text_extract};
+///
+/// let doc = Document::load(std::path::Path::new("in.pdf"))?;
+/// let session = EditSession::new(doc);
+/// // The page as the operator currently has it, unsaved edits included.
+/// let view = session.view();
+/// let pages = page_tree::pages_in(&view)?;
+/// let options = text_extract::ExtractOptions::default();
+/// let page = text_extract::extract_page_view(&view, &pages[0], 0, &options)?;
+/// println!("{}", page.plain_text());
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+pub fn extract_page_view(
+    doc: &DocumentView<'_>,
+    page: &Page,
+    page_index: usize,
+    options: &ExtractOptions,
+) -> Result<PageText, ExtractError> {
     let (items, mut diagnostics) = page::walk_page(doc, page, options)?;
     document_facts(doc, &mut diagnostics);
     let runs = layout::assemble(items, options, &mut diagnostics);
@@ -964,14 +1020,33 @@ pub fn extract_document(
     doc: &Document,
     options: &ExtractOptions,
 ) -> Result<ExtractedText, ExtractError> {
-    let pages = page_tree::pages(doc)?;
+    extract_document_view(&doc.view(), options)
+}
+
+/// [`extract_document`] over an explicit [`DocumentView`].
+///
+/// See [`extract_page_view`] for why the revision is the caller's choice.
+/// Note the page LIST comes from the same view, so a page this session
+/// deleted is genuinely absent from the output and a page it inserted is
+/// genuinely present — which is the difference between "the document" and
+/// "the file", and the reason this cannot be emulated by looping the
+/// `&Document` form over base page indices.
+///
+/// # Errors
+///
+/// As [`extract_document`].
+pub fn extract_document_view(
+    doc: &DocumentView<'_>,
+    options: &ExtractOptions,
+) -> Result<ExtractedText, ExtractError> {
+    let pages = page_tree::pages_in(doc)?;
     let mut out = ExtractedText {
         pages: Vec::with_capacity(pages.len()),
         diagnostics: TextDiagnostics::default(),
         include_artifacts: options.include_artifacts,
     };
     for (index, page) in pages.iter().enumerate() {
-        let page_text = match extract_page(doc, page, index, options) {
+        let page_text = match extract_page_view(doc, page, index, options) {
             Ok(t) => t,
             Err(_) => {
                 let mut diagnostics = TextDiagnostics {
@@ -1010,7 +1085,25 @@ pub fn extract_pages(
     indices: &[usize],
     options: &ExtractOptions,
 ) -> Result<ExtractedText, ExtractError> {
-    let pages = page_tree::pages(doc)?;
+    extract_pages_view(&doc.view(), indices, options)
+}
+
+/// [`extract_pages`] over an explicit [`DocumentView`].
+///
+/// See [`extract_page_view`] for why the revision is the caller's choice.
+/// `indices` index the view's OWN page list, so under a session view they
+/// mean "the operator's page 3", not "the file's page 3" — the same
+/// convention `EditSession::pages` established.
+///
+/// # Errors
+///
+/// As [`extract_pages`].
+pub fn extract_pages_view(
+    doc: &DocumentView<'_>,
+    indices: &[usize],
+    options: &ExtractOptions,
+) -> Result<ExtractedText, ExtractError> {
+    let pages = page_tree::pages_in(doc)?;
     let mut out = ExtractedText {
         pages: Vec::with_capacity(indices.len()),
         diagnostics: TextDiagnostics::default(),
@@ -1021,7 +1114,7 @@ pub fn extract_pages(
             index,
             count: pages.len(),
         })?;
-        let page_text = extract_page(doc, page, index, options).unwrap_or_else(|_| {
+        let page_text = extract_page_view(doc, page, index, options).unwrap_or_else(|_| {
             let mut diagnostics = TextDiagnostics {
                 pages_unreadable: 1,
                 ..TextDiagnostics::default()
@@ -1049,10 +1142,18 @@ pub fn extract_pages(
 /// order) hold **only** for a Tagged PDF. In an untagged document every
 /// one of them is pdfce's problem, which is exactly what the emitted
 /// note says.
-fn document_facts(doc: &Document, diagnostics: &mut TextDiagnostics) {
+fn document_facts(doc: &DocumentView<'_>, diagnostics: &mut TextDiagnostics) {
+    use crate::graph::ObjectGraph;
     use crate::object::Object;
 
-    let Ok(catalog) = doc.catalog() else {
+    // `catalog_dict()` (the `ObjectGraph` provided method) rather than
+    // `Document::catalog()` (Pass 17.1): the same trailer→`/Root` walk, but
+    // available on any graph, so a session view answers with the SESSION's
+    // catalog. That matters here — an edit can set `/MarkInfo` or attach a
+    // `/StructTreeRoot`, and this function's whole job is to report whether
+    // the extraction it accompanies was sourced or derived. `Option` rather
+    // than `Result` costs nothing: both arms already mean "say nothing".
+    let Some(catalog) = doc.catalog_dict() else {
         return;
     };
     diagnostics.struct_tree_present = catalog.get(b"StructTreeRoot").is_some();

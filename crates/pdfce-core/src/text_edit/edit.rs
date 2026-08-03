@@ -814,7 +814,10 @@ pub(crate) fn plan_edit(
         resolve_font_dict(doc, &page.resources, &anchor.font_name).ok_or_else(|| {
             EditError::Unsupported("the run's font resource is unresolvable".to_owned())
         })?;
-    let font = ExtractFont::resolve(doc, font_dict);
+    // `&doc.view()` (Pass 17.1) — see `ExtractFont::resolve`. The text-edit
+    // planner is base-relative by contract (`EditSession::edit_text` plans
+    // against the base and splices the result), so the base view is correct.
+    let font = ExtractFont::resolve(&doc.view(), font_dict);
     let class = classify_font(doc, font_dict, &font)?;
 
     // --- build the inverse map and encode the replacement (R-INV-1/5/6/7/8) ---
@@ -1434,7 +1437,7 @@ pub(crate) fn resolve_font_dict<'a>(
 
 /// Resolve a `/Font /<name>` resource to an [`ExtractFont`].
 fn resolve_font(doc: &Document, resources: &Dict, name: &[u8]) -> Option<ExtractFont> {
-    resolve_font_dict(doc, resources, name).map(|d| ExtractFont::resolve(doc, d))
+    resolve_font_dict(doc, resources, name).map(|d| ExtractFont::resolve(&doc.view(), d))
 }
 
 /// Whether a `/BaseFont` name carries a §9.6.4 subset tag (`ABCDEF+…`):

@@ -1400,8 +1400,27 @@ impl OpenDoc {
         use pdfce_core::text_extract::{self, ExtractOptions};
         let page_index = self.view.page_index;
         let options = ExtractOptions::default().with_provenance(true);
-        let base = self.session.document();
-        self.text_edit = match text_extract::extract_pages(base, &[page_index], &options) {
+        // SESSION READ (Pass 17.1 audit, decision 018 §8's "triage
+        // individually" row). This is the most consequential of the audit's
+        // reads, because the model it builds does not merely *display* — it
+        // is the input to the NEXT mutation.
+        //
+        // `EditSession::edit_text` splices the SESSION-current content
+        // stream (`current_page_content`), so edits accumulate. Rebuilding
+        // this model from `session.document()` therefore re-extracted the
+        // text as it was before ANY of this session's edits: after one
+        // accepted change, the caret, the selection and every run offset
+        // described a page that no longer existed, and the next
+        // `EditRequest` built from them targeted text that had already been
+        // replaced. Stale display would have been bad enough; a stale model
+        // feeding a mutation is worse.
+        //
+        // `session.view()` — the full view rather than `graph()` — because
+        // extraction walks CONTENT STREAM bytes, including any this session
+        // authored into the R45 staging buffer, and only the view's
+        // `StreamSource::Split` can resolve those spans.
+        let view = self.session.view();
+        self.text_edit = match text_extract::extract_pages_view(&view, &[page_index], &options) {
             Ok(mut extracted) if !extracted.pages.is_empty() => Some(TextEditState {
                 page_index,
                 page_text: extracted.pages.remove(0),
@@ -1839,6 +1858,19 @@ impl PdfceApp {
         // full RecoveryReport counts live on the Document for a richer
         // future surface (a pdfce-ui-specialist follow-up); this honest
         // one-liner ships now.
+        //
+        // BASE READ ON PURPOSE (Pass 17.1 audit, decision 018 §8 —
+        // "legitimately base reads — leave alone"). Do not "fix" this to
+        // `session.view()`. Recovery is a property of the FILE AS PARSED:
+        // "the bytes on disk had a damaged cross-reference table and were
+        // rebuilt in memory." No edit can make that true, and no edit can
+        // make it false — the operator cannot un-damage the file they
+        // opened by typing in it. A session-aware answer here would be
+        // either identical (`SessionGraph` has no recovery of its own) or,
+        // worse, a claim that the damage went away. The sentence it
+        // produces is also about saving ("incremental save is refused"),
+        // which is governed by the base's provenance (R67), not by the
+        // overlay.
         self.recovery_note = if let Status::Open(doc) = &self.status {
             doc.session.document().recovery().map(|r| {
                 format!(
@@ -2367,12 +2399,32 @@ impl PdfceApp {
             return; // cancelled — nothing written, nothing changes
         };
 
-        // The graph, not the base document: extracting "page 2" must mean
-        // page 2 as the operator currently sees it, unsaved deletes and
-        // reorders included.
-        let graph = doc.session.graph();
-        let base = doc.session.document();
-        let view = pdfce_core::pageops::DocumentView::new(&graph, base.bytes(), base.version());
+        // SESSION READ, and a HALF-FIX COMPLETED (Pass 17.1 audit).
+        //
+        // Extracting "page 2" must mean page 2 as the operator currently
+        // sees it — unsaved deletes and reorders included — so this already
+        // used `session.graph()` rather than the base document. But it then
+        // paired that session graph with `base.bytes()` as the byte source,
+        // and that pairing is exactly the hazard `DocumentView::new`'s own
+        // doc comment warns about: a stream this session AUTHORED (a
+        // dimension or markup appearance, a spliced content stream) carries
+        // an R45 span starting at `base.len()`, which cannot be sliced out
+        // of the base buffer at all. Such a stream would have been copied as
+        // EMPTY into the extracted file — a silent content loss, visible
+        // only by opening the output.
+        //
+        // `session.view()` is the same graph plus the correct
+        // `StreamSource::Split` byte source, which resolves base spans and
+        // staged spans alike. It is the constructor
+        // `EditSession::view`/`DocumentView::new` both point callers at.
+        //
+        // NOTE this is a `pageops` copier, NOT the incremental writer, so it
+        // does not run against decision 018 §10 hazard 1 (`DocumentView`
+        // must never be the WRITER's input). `pageops::assemble` reads
+        // through `view.slice(...)` and builds a brand-new document; the
+        // minimal-diff writer's source of truth remains `&Document` +
+        // `DirtySet::combined_source`, untouched here.
+        let view = doc.session.view();
         let signed = doc.session.signature_census().any();
 
         let outcome = match pdfce_core::pageops::extract(&view, &selection) {
@@ -2435,18 +2487,30 @@ impl PdfceApp {
     /// Extract text for `scope` and either put it on the clipboard or
     /// ask first.
     ///
-    /// ## Why extraction reads the BASE document, not the edit overlay
+    /// ## Why extraction reads the SESSION, not the base document
     ///
-    /// [`EditSession::document`] is the document as loaded, before this
-    /// session's unsaved edits. That is correct for every edit this Pass
-    /// of pdfce can make: `/Info` metadata is not page content, and
-    /// `/Rotate` changes how a page is *displayed* without touching a
-    /// single byte of its content stream, so neither can change which
-    /// characters a page contains. The moment an editing Pass can alter
-    /// page content, this has to move to the overlay-aware
-    /// [`pdfce_core::graph::ObjectGraph`] path — recorded here rather
-    /// than left as a silent assumption, because the failure mode would
-    /// be copying stale text with nothing on screen to suggest it.
+    /// It used to read the base, and said so, with an explicit expiry
+    /// date attached:
+    ///
+    /// > *"[`EditSession::document`] is the document as loaded, before this
+    /// > session's unsaved edits. That is correct for every edit this Pass
+    /// > of pdfce can make … The moment an editing Pass can alter page
+    /// > content, this has to move to the overlay-aware `ObjectGraph`
+    /// > path — recorded here rather than left as a silent assumption,
+    /// > because the failure mode would be copying stale text with nothing
+    /// > on screen to suggest it."*
+    ///
+    /// That moment arrived several Passes ago and the note was not acted
+    /// on: Pass 14.1's `edit_text`, Pass 14.2's `format_text`, Pass 15.2's
+    /// `reflow_block`, Pass 16.0's `add_text` and Pass 8's `redact-apply`
+    /// all rewrite page content. Pass 17.1 (decision 018 §8) discharges it.
+    /// Copy Text now extracts from `session.view()`, so Ctrl+C copies the
+    /// words the operator can see — including a correction they just typed,
+    /// and *excluding* one they just deleted.
+    ///
+    /// The predicted failure mode was exactly right, and is worth keeping
+    /// on the record: the bug was invisible, because a stale copy looks
+    /// like a successful copy. Nothing on screen would have suggested it.
     ///
     /// ## Why the question is asked before the clipboard is written
     ///
@@ -2462,12 +2526,18 @@ impl PdfceApp {
             return;
         };
         let options = ExtractOptions::default();
-        let base = doc.session.document();
+        // SESSION READ (Pass 17.1 audit) — see this method's doc comment.
+        // `view()` rather than `graph()`: extraction reads content-stream
+        // bytes, and a stream this session authored lives in the R45
+        // staging buffer that only the view's `StreamSource` can resolve.
+        let view = doc.session.view();
         let page_number = doc.view.page_index + 1;
 
         let extracted = match scope {
-            CopyScope::Page => text_extract::extract_pages(base, &[doc.view.page_index], &options),
-            CopyScope::Document => text_extract::extract_document(base, &options),
+            CopyScope::Page => {
+                text_extract::extract_pages_view(&view, &[doc.view.page_index], &options)
+            }
+            CopyScope::Document => text_extract::extract_document_view(&view, &options),
         };
         let Ok(extracted) = extracted else {
             // The page tree will not walk. Nothing is on the clipboard
@@ -4857,6 +4927,25 @@ impl PdfceApp {
     /// One-line document status for the toolbar. All text comes from
     /// [`ui_text`] (decision 002 R1 — this fn only selects which catalog
     /// entry applies).
+    ///
+    /// # BASE READ ON PURPOSE (Pass 17.1 audit, decision 018 §8)
+    ///
+    /// `session.document().version()` is one of the two sites decision 018
+    /// marks *"legitimately base reads — leave alone."* Do not change it to
+    /// `session.view()`. The header version is a fact about **the file as
+    /// loaded** (§7.5.2's `%PDF-n.m` header and the catalog's `/Version`
+    /// override), and no edit in this session can raise it —
+    /// `EditSession::view()`'s own doc comment records that it simply
+    /// forwards the base's version, *"and if one ever can, this is the line
+    /// that has to learn about it."* Routing this through the view would
+    /// therefore change nothing today and quietly become a lie the day a
+    /// version-raising edit exists, because it would report the base's
+    /// version under a session-shaped name.
+    ///
+    /// The other two facts on this line are already session-aware and must
+    /// stay so: `doc.pages.len()` comes from `EditSession::pages()` (the
+    /// overlay walk, so a deleted page really disappears from the count) and
+    /// `is_modified()` is the unsaved-changes flag.
     fn status_summary(&self) -> String {
         match &self.status {
             Status::Idle => ui_text::status_idle().to_owned(),
@@ -4969,7 +5058,19 @@ impl PdfceApp {
         // Document-scoped /NeedAppearances disclosure (R51) — computed
         // from the current document each frame (a cheap catalog lookup),
         // since it is not part of the per-page render diagnostics.
-        let need_appearances = pdfce_core::annot::need_appearances(doc.session.document());
+        //
+        // SESSION READ (Pass 17.1 audit, decision 018 §8). This used to
+        // pass `session.document()` — the base revision — so the flag
+        // described the file as it was OPENED. That is wrong for a
+        // disclosure the operator reads as "the state of the document in
+        // front of me": form-field work in this session can set (or, on
+        // undo, unset) `/AcroForm /NeedAppearances`, and a stale banner
+        // either warns about a condition that is gone or stays silent
+        // about one just created. `session.graph()` is the base with this
+        // session's overlay applied — a plain dictionary lookup, no
+        // stream bytes involved, which is why the graph suffices and the
+        // heavier `view()` is not needed here.
+        let need_appearances = pdfce_core::annot::need_appearances(&doc.session.graph());
 
         // Pass 8 (R52 / ui-spec §GUI, the ONE non-negotiable redaction GUI
         // item): a PERSISTENT disclosure of UNAPPLIED /Redact marks,
@@ -4977,7 +5078,19 @@ impl PdfceApp {
         // session counter — so a marked-but-not-applied document can never be
         // mistaken for a redacted one (the #1 real-world redaction failure:
         // saving a marked file believing the content is gone).
-        let pending_redactions = pdfce_core::redact::count_redaction_marks(doc.session.document());
+        //
+        // SESSION READ (Pass 17.1 audit) — the CONFIRMED bug decision 018
+        // §8 names. Passing `session.document()` counted only marks that
+        // were already in the file when it was opened, so a `/Redact` mark
+        // placed THIS session — precisely the one an operator is most
+        // likely to place and then forget to apply — was not disclosed at
+        // all. Note this is still "computed from the document's own
+        // annotations, never a session counter": `session.graph()` is a
+        // census of annotation objects, not a tally the edit paths
+        // increment, so it remains immune to a miscount and still survives
+        // save/reload unchanged. A mark added and then undone counts zero,
+        // because the overlay holds the base value again.
+        let pending_redactions = pdfce_core::redact::count_redaction_marks(&doc.session.graph());
         if pending_redactions > 0 {
             ui.colored_label(
                 ui.visuals().warn_fg_color,
@@ -5333,24 +5446,43 @@ impl PdfceApp {
                                     if budget > 0 {
                                         if doc.thumbnails.is_pending(index) {
                                             budget -= 1;
-                                            // STILL A BASE READ, unchanged
-                                            // behaviour: `.document().view()`
-                                            // is `session.document()` wearing
-                                            // the new parameter type. The
-                                            // rail therefore continues to
-                                            // show the file as opened.
-                                            // Switching it to
-                                            // `session.view()` is Pass 17.1's
-                                            // `session.document()` audit
-                                            // (decision 018 §8 — "thumbnails
-                                            // need a read fix, not a key";
-                                            // `refresh_pages` already clears
-                                            // the cache wholesale, so no
-                                            // generation key is required
-                                            // when it happens).
+                                            // SESSION READ (Pass 17.1 audit,
+                                            // decision 018 §8 — "thumbnails
+                                            // need a read fix, not a key").
+                                            // Until this Pass the rail built
+                                            // from `session.document().view()`
+                                            // — the base revision wearing the
+                                            // new parameter type — so the page
+                                            // rail showed the file AS OPENED
+                                            // while the canvas beside it showed
+                                            // the file as EDITED. Two pictures
+                                            // of the same page, disagreeing, is
+                                            // worse than the original defect:
+                                            // it invites the operator to trust
+                                            // the wrong one.
+                                            //
+                                            // No generation/cache key is needed
+                                            // to make this correct.
+                                            // `refresh_pages` already resets
+                                            // `ThumbnailCache` wholesale on
+                                            // every edit, undo and redo, so a
+                                            // stale picture cannot survive a
+                                            // commit; only the READ was wrong.
+                                            // (Cost: a full rail re-render per
+                                            // edit, which is what already
+                                            // happened — the pictures were
+                                            // simply rebuilt identical.)
+                                            //
+                                            // `session.view()`, not
+                                            // `.graph()`: a thumbnail is a
+                                            // raster, so it needs the stream
+                                            // BYTES of authored appearance
+                                            // streams too, which only the
+                                            // R45 `StreamSource::Split` form
+                                            // can resolve.
                                             doc.thumbnails.build(
                                                 &ctx,
-                                                &doc.session.document().view(),
+                                                &doc.session.view(),
                                                 page,
                                                 index,
                                                 pixels_per_point,
@@ -5911,8 +6043,32 @@ fn caret_pdf_segment(
 /// with the SAME Embedded/Bundled/Supplied vocabulary as the disclosure strip,
 /// computed through the ONE shared classifier
 /// [`FontEnvironment::classify_nonembedded`](pdfce_render::FontEnvironment::classify_nonembedded).
-fn page_font_entries(
-    base: &pdfce_core::document::Document,
+///
+/// # SESSION READ (Pass 17.1 audit, decision 018 §8)
+///
+/// The parameter used to be `&Document` and its one caller passed
+/// `session.document()` — the base revision. That made the family list
+/// **stale after any edit that adds a font resource to the page**, which is
+/// not a hypothetical: `EditSession::format_text`'s font-family change and
+/// `EditSession::add_text` both add a font dictionary to the page's
+/// `/Resources /Font` (Pass 16.0 / R79). The operator would change a run to
+/// a new family, see it correctly on the canvas after Pass 17.0, and then
+/// find that same family missing from the ComboBox that just applied it —
+/// the list disagreeing with the page it describes.
+///
+/// It is now generic over [`ObjectGraph`](pdfce_core::graph::ObjectGraph) so
+/// the caller can pass `&session.graph()`. Generic rather than
+/// `&DocumentView` for the same reason as
+/// [`pdfce_core::redact::count_redaction_marks`]: this reads font
+/// **dictionaries** only and never touches a stream's bytes, so an object
+/// graph is exactly the capability it needs and nothing more.
+///
+/// Note `page.resources` itself is the `refresh_pages` snapshot (decision
+/// 018 §10 hazard 2). That is consistent, not a second staleness: every
+/// commit path funnels through `refresh_pages`, so the snapshot and the
+/// graph describe the same revision.
+fn page_font_entries<G: pdfce_core::graph::ObjectGraph + ?Sized>(
+    base: &G,
     page: &Page,
     font_env: &pdfce_render::FontEnvironment,
 ) -> Vec<(String, String)> {
@@ -6448,12 +6604,18 @@ fn run_text_edit_tool(
     // captured here (disjoint from the `&mut text_edit` borrow below).
     let reflow_page_crop = doc.pages.get(page_index).map(|page| page.crop_box);
 
-    // Font list for the property bar (needs the base document + page; disjoint
+    // Font list for the property bar (needs the object graph + page; disjoint
     // from the `&mut text_edit` borrow below since they are separate fields).
+    //
+    // SESSION READ (Pass 17.1 audit): `session.graph()`, not
+    // `session.document()`. A font-family format edit and `add_text` both add
+    // a font dict to the page's `/Resources /Font`; reading the base made the
+    // ComboBox omit the very family the operator had just applied. See
+    // `page_font_entries`' own doc comment.
     let font_entries = doc
         .pages
         .get(page_index)
-        .map(|page| page_font_entries(doc.session.document(), page, font_env))
+        .map(|page| page_font_entries(&doc.session.graph(), page, font_env))
         .unwrap_or_default();
 
     if let Some(state) = doc.text_edit.as_mut() {

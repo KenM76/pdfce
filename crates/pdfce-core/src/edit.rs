@@ -3146,8 +3146,31 @@ impl EditSession {
 
     /// Shared engine for search/pattern redaction: extract the document's
     /// text, run `matcher` over each glyph run, turn each match's glyph
-    /// geometry into a `/Redact` mark. The document borrow is released
+    /// geometry into a `/Redact` mark. The view borrow is released
     /// before any mark is authored.
+    ///
+    /// # SESSION READ, and why it has to be (Pass 17.1, decision 018 §8)
+    ///
+    /// This extracted from `self.document()` — the BASE revision — until
+    /// Pass 17.1, and the page-index mismatch that created was a genuine
+    /// mis-targeting hazard, not just staleness:
+    ///
+    /// - the page indices in `extracted.pages` were **base** page indices;
+    /// - [`Self::add_redaction`], immediately below, resolves its
+    ///   `page_index` through [`Self::page_slots`] — the **session** page
+    ///   list.
+    ///
+    /// Those two agree only while the session has not deleted, inserted or
+    /// reordered a page. After `delete_pages` or `reorder_pages`, a search
+    /// redaction would have placed its mark on a **different page than the
+    /// one holding the matched text** — silently, with correct-looking
+    /// geometry, on the operation whose entire purpose is removing content
+    /// the operator must not leak. Reading `self.view()` puts both sides in
+    /// the same page-index space by construction.
+    ///
+    /// It also makes the search itself honest: text the operator typed this
+    /// session is findable, and text they deleted is not offered for
+    /// redaction.
     fn author_text_matches<F>(&mut self, matcher: F) -> Result<Vec<ObjId>, EditError>
     where
         F: Fn(&str) -> Vec<(usize, usize)>,
@@ -3157,8 +3180,9 @@ impl EditSession {
         use crate::text_extract::{self, ExtractOptions, TextOrigin};
         use crate::vartext::Quadding;
 
-        let extracted = text_extract::extract_document(self.document(), &ExtractOptions::default())
-            .map_err(|e| EditError::TextExtraction(e.to_string()))?;
+        let extracted =
+            text_extract::extract_document_view(&self.view(), &ExtractOptions::default())
+                .map_err(|e| EditError::TextExtraction(e.to_string()))?;
 
         let mut matches: Vec<(usize, Quad)> = Vec::new();
         for page in &extracted.pages {
@@ -4332,14 +4356,81 @@ impl EditSession {
                     data_span: span,
                 })),
             });
-            objects.push(self.append_page_content(*page_id, overlay_id)?);
-            objects.push(self.add_page_xobjects(*page_id, &pf.xobjects, &slots)?);
+            // ONE page-dict write carrying ALL THREE page-dict mutations.
+            //
+            // ## Why this is one write and not three (Pass 17.2 bug fix)
+            //
+            // Flatten changes three entries of the same page dictionary:
+            // `/Contents` (append the burn stream), `/Resources /XObject`
+            // (name the appearance forms it invokes) and `/Annots` (drop the
+            // widgets it replaced). Until Pass 17.2 those were three separate
+            // [`ObjectWrite`]s for the same `page_id`, each built by cloning
+            // the page dict as it stood **before** the command — none of them
+            // could see the others, because nothing is committed until the
+            // whole command is. Applying them in order therefore did not
+            // compose; it **overwrote**, and the last write (`/Annots`) won.
+            //
+            // The result was silent visual data loss on every flatten: the
+            // fields and widgets were deleted as designed, the burn stream
+            // and the appearance XObjects were created as designed — and the
+            // page referenced neither, so the flattened appearance rendered
+            // as nothing at all. Every existing flatten test asserted the
+            // outcome COUNTS (`fields_flattened`, `widgets_burned`,
+            // `pages_touched`), which were all correct, and no test rendered
+            // the result. Found by the R85 preview-equals-saved oracle
+            // (`crates/pdfce-render/tests/preview_equals_saved.rs`), whose
+            // `flatten` case asserts what an operator assumes without being
+            // told: that flattening does not change how the page looks.
+            //
+            // The rule this encodes: **at most one `ObjectWrite` per object
+            // id per command.** A second write to an id already in the batch
+            // is not an edit to the first — it is a replacement of it.
+            let Some(Object::Dict(page_dict)) = self.value(*page_id) else {
+                return Err(EditError::NotADictionary {
+                    id: *page_id,
+                    key: "Contents",
+                });
+            };
+            let mut updated = page_dict.clone();
+            self.append_page_content(&mut updated, overlay_id);
+            self.add_page_xobjects(&mut updated, *page_id, &pf.xobjects, &slots);
+            // The /Annots removal composes into the SAME dict when the array
+            // is inline; when `/Annots` is an indirect array shared with
+            // other pages it is a different object, so it returns its own
+            // write (which cannot collide with this one).
+            if let Some(widget_ids) = widget_removals.get(page_id)
+                && let Some(shared) = self.remove_from_annots(&mut updated, widget_ids)?
+            {
+                objects.push(shared);
+            }
+            objects.push(ObjectWrite {
+                id: *page_id,
+                before: self.state.get(page_id).cloned(),
+                after: Some(Object::Dict(updated)),
+            });
         }
 
-        // Remove flattened widgets from each page's /Annots.
+        // Any page that had widgets to un-list but no burn of its own (no
+        // appearance to burn, so `per_page` has no entry for it) still needs
+        // its /Annots pruned. Handled separately because the loop above owns
+        // the page-dict write for every page it touched.
         for (page_id, widget_ids) in &widget_removals {
-            if let Some(w) = self.remove_from_annots(*page_id, widget_ids, &slots)? {
-                objects.push(w);
+            if per_page.contains_key(page_id) {
+                continue; // already composed into that page's single write
+            }
+            let Some(Object::Dict(page_dict)) = self.value(*page_id) else {
+                continue;
+            };
+            let mut updated = page_dict.clone();
+            let shared = self.remove_from_annots(&mut updated, widget_ids)?;
+            if let Some(shared) = shared {
+                objects.push(shared);
+            } else {
+                objects.push(ObjectWrite {
+                    id: *page_id,
+                    before: self.state.get(page_id).cloned(),
+                    after: Some(Object::Dict(updated)),
+                });
             }
         }
 
@@ -4452,22 +4543,23 @@ impl EditSession {
     }
 
     /// Append a content-stream reference to a page's `/Contents` (§7.8.2),
-    /// producing the page-dict write. `/Contents` becomes an array
-    /// `[…existing, overlay]`; the existing content stream object(s) are
-    /// untouched (byte-verbatim).
-    fn append_page_content(
-        &self,
-        page_id: ObjId,
-        overlay_id: ObjId,
-    ) -> Result<ObjectWrite, EditError> {
-        let Some(Object::Dict(page)) = self.value(page_id) else {
-            return Err(EditError::NotADictionary {
-                id: page_id,
-                key: "Contents",
-            });
-        };
-        let mut updated = page.clone();
-        let new_contents = match page.get(b"Contents").cloned() {
+    /// **mutating the caller's page dictionary in place**. `/Contents`
+    /// becomes an array `[…existing, overlay]`; the existing content stream
+    /// object(s) are untouched (byte-verbatim).
+    ///
+    /// # Why this mutates rather than returning an [`ObjectWrite`]
+    ///
+    /// It used to return a complete page-dict write of its own, and so did
+    /// its two siblings ([`Self::add_page_xobjects`],
+    /// [`Self::remove_from_annots`]) — three whole-dictionary replacements
+    /// of the same object in one command, each computed from the same
+    /// pre-command state, so the last silently discarded the other two. See
+    /// the fix note at the [`Self::flatten_fields`] call site for the
+    /// resulting defect. Taking `&mut Dict` makes the three **compose** and
+    /// makes it structurally impossible to reintroduce: there is nothing
+    /// left to overwrite.
+    fn append_page_content(&self, updated: &mut Dict, overlay_id: ObjId) {
+        let new_contents = match updated.get(b"Contents").cloned() {
             None => Object::Array(vec![Object::Reference(overlay_id)]),
             Some(Object::Reference(r)) => {
                 Object::Array(vec![Object::Reference(r), Object::Reference(overlay_id)])
@@ -4482,32 +4574,34 @@ impl EditSession {
             Some(_) => Object::Array(vec![Object::Reference(overlay_id)]),
         };
         updated.insert(Name::from(b"Contents"), new_contents);
-        Ok(ObjectWrite {
-            id: page_id,
-            before: self.state.get(&page_id).cloned(),
-            after: Some(Object::Dict(updated)),
-        })
     }
 
     /// Add form-XObject resources to a page's `/Resources` `/XObject`
-    /// sub-dictionary, materializing inherited `/Resources` onto the page if
-    /// needed (so the addition never shadows the page's real resources).
+    /// sub-dictionary, **mutating the caller's page dictionary in place**,
+    /// materializing inherited `/Resources` onto the page if needed (so the
+    /// addition never shadows the page's real resources).
+    ///
+    /// Mutates rather than returning an [`ObjectWrite`] for the reason given
+    /// on [`Self::append_page_content`]. Note it reads the *page's* existing
+    /// resources from `updated` when they are already there, falling back to
+    /// the §7.7.3.4 inherited lookup — so it composes correctly whether or
+    /// not a sibling mutation ran first.
     fn add_page_xobjects(
         &self,
+        updated: &mut Dict,
         page_id: ObjId,
         xobjects: &[(Vec<u8>, ObjId)],
         slots: &[PageSlot],
-    ) -> Result<ObjectWrite, EditError> {
-        let Some(Object::Dict(page)) = self.value(page_id) else {
-            return Err(EditError::NotADictionary {
-                id: page_id,
-                key: "Resources",
-            });
-        };
-        let mut updated = page.clone();
-        // The page's own /Resources, or a materialized copy of the inherited
-        // one (never a fresh empty dict, which would hide inherited fonts).
-        let mut resources = self.effective_resources(page_id, slots);
+    ) {
+        // The page's own /Resources (possibly already materialized by an
+        // earlier mutation in this same command), or a materialized copy of
+        // the inherited one — never a fresh empty dict, which would hide
+        // inherited fonts.
+        let mut resources = updated
+            .get(b"Resources")
+            .and_then(Object::as_dict)
+            .cloned()
+            .unwrap_or_else(|| self.effective_resources(page_id, slots));
         let mut xobj = resources
             .get(b"XObject")
             .and_then(Object::as_dict)
@@ -4518,11 +4612,6 @@ impl EditSession {
         }
         resources.insert(Name::from(b"XObject"), Object::Dict(xobj));
         updated.insert(Name::from(b"Resources"), Object::Dict(resources));
-        Ok(ObjectWrite {
-            id: page_id,
-            before: self.state.get(&page_id).cloned(),
-            after: Some(Object::Dict(updated)),
-        })
     }
 
     /// The `/Resources` in effect for a page (§7.7.3.4): the page's own, or
@@ -4546,31 +4635,34 @@ impl EditSession {
         Dict::new()
     }
 
-    /// Remove annotation references from a page's `/Annots`, producing the
-    /// page-dict (or shared-array) write, or `None` if nothing changed.
+    /// Remove annotation references from a page's `/Annots`.
+    ///
+    /// Two shapes, and they land in different places — which is why this one
+    /// both mutates and returns:
+    ///
+    /// - **inline array** (`/Annots [ … ]`): the pruned array is written into
+    ///   the caller's `updated` page dict, composing with the sibling
+    ///   mutations (see [`Self::append_page_content`]); returns `None`.
+    /// - **indirect array** (`/Annots 12 0 R`): the array is its *own*
+    ///   object, possibly shared, so pruning it is a separate
+    ///   [`ObjectWrite`] on that object's id — which cannot collide with the
+    ///   page-dict write — and the page dict is left alone.
+    ///
+    /// `Ok(None)` also covers "nothing to do" (no `/Annots`, or a malformed
+    /// one): the caller still writes its page dict, which is harmless.
     fn remove_from_annots(
         &self,
-        page_id: ObjId,
+        updated: &mut Dict,
         remove: &[ObjId],
-        _slots: &[PageSlot],
     ) -> Result<Option<ObjectWrite>, EditError> {
-        let Some(Object::Dict(page)) = self.value(page_id) else {
-            return Ok(None);
-        };
-        let page = page.clone();
-        match page.get(b"Annots").cloned() {
+        match updated.get(b"Annots").cloned() {
             Some(Object::Array(arr)) => {
                 let kept: Vec<Object> = arr
                     .into_iter()
                     .filter(|o| o.as_reference().is_none_or(|id| !remove.contains(&id)))
                     .collect();
-                let mut updated = page.clone();
                 updated.insert(Name::from(b"Annots"), Object::Array(kept));
-                Ok(Some(ObjectWrite {
-                    id: page_id,
-                    before: self.state.get(&page_id).cloned(),
-                    after: Some(Object::Dict(updated)),
-                }))
+                Ok(None)
             }
             Some(Object::Reference(array_id)) => {
                 let entries = self

@@ -65,11 +65,12 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::content::{ContentError, ContentStream, ContentTokenKind, Operation};
-use crate::document::Document;
+use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
 use crate::page_tree::{Page, Rect};
 use crate::span::ByteSpan;
 use crate::textstring::decode_text_string;
+use crate::view::DocumentView;
 
 use super::font::{ExtractFont, FontNote, LadderRung, Rung3Gap};
 use super::{
@@ -256,7 +257,7 @@ struct MarkedLevel {
 
 /// The whole walk state.
 struct Walk<'a> {
-    doc: &'a Document,
+    doc: &'a DocumentView<'a>,
     options: &'a ExtractOptions,
     items: Vec<Item>,
     diagnostics: TextDiagnostics,
@@ -299,17 +300,28 @@ struct Walk<'a> {
 }
 
 /// Walk one page and return its raw items plus diagnostics.
+///
+/// # Pass 17.1: the caller now chooses the revision
+///
+/// This used to take `&Document` and open with a comment reading *"BASE
+/// READ … making it session-aware is a separate, deliberate change … NOT
+/// part of Pass 17.0."* That change is this Pass. The walk now takes a
+/// [`DocumentView`], so **the caller** decides whether the text being
+/// extracted is the file as loaded (`document.view()` — the CLI, search,
+/// the redaction census) or the file as the operator currently has it
+/// (`session.view()` — the in-place text-edit tool and Copy Text).
+///
+/// Nothing about the walk itself changed: every `doc.resolve(…)` here is
+/// the identical [`ObjectGraph`](crate::graph::ObjectGraph) method it
+/// already called, and the one place that needed stream BYTES (the form
+/// XObject payload) now asks the view for them so an R45-staged span
+/// resolves instead of falling off the end of the base buffer.
 pub(super) fn walk_page(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     page: &Page,
     options: &ExtractOptions,
 ) -> Result<(Vec<Item>, TextDiagnostics), ContentError> {
-    // BASE READ (decision 018 caller audit): text extraction runs over a
-    // loaded `&Document` for search, copy and the CLI's `extract-text`.
-    // Making it session-aware is a separate, deliberate change (it would
-    // alter what a GUI search matches mid-edit) and is NOT part of Pass
-    // 17.0.
-    let stream = ContentStream::from_page(&doc.view(), page)?;
+    let stream = ContentStream::from_page(doc, page)?;
     let mut walk = Walk {
         doc,
         options,
@@ -1137,9 +1149,14 @@ impl Walk<'_> {
             .cloned()
             .unwrap_or_else(|| resources.clone());
 
-        let content = stream
-            .data_span
-            .slice(doc.bytes())
+        // `view.slice(span)`, not `span.slice(view.bytes)` (Pass 17.1): a
+        // form XObject the SESSION authored carries an R45 span starting
+        // past the end of the base buffer, and only the view's
+        // `StreamSource` knows which of its two halves such a span indexes.
+        // The `None` arm is unchanged in meaning — an unresolvable or
+        // undecodable form is skipped, not fatal.
+        let content = doc
+            .slice(stream.data_span)
             .and_then(|raw| crate::filters::decode_stream(&stream.dict, raw).ok())
             .and_then(|decoded| ContentStream::parse(decoded).ok());
 
@@ -1235,7 +1252,7 @@ fn last_string(op: &Operation<'_>) -> Option<Vec<u8>> {
 }
 
 /// Table 330's `/Type`, or `Unspecified` for the generic form.
-fn artifact_kind(doc: &Document, props: Option<&Dict>) -> ArtifactKind {
+fn artifact_kind(doc: &DocumentView<'_>, props: Option<&Dict>) -> ArtifactKind {
     let Some(props) = props else {
         return ArtifactKind::Unspecified;
     };
@@ -1252,7 +1269,7 @@ fn artifact_kind(doc: &Document, props: Option<&Dict>) -> ArtifactKind {
 }
 
 /// A form XObject's `/Matrix` (Table 95; default identity).
-fn matrix_of(doc: &Document, dict: &Dict) -> Option<Matrix> {
+fn matrix_of(doc: &DocumentView<'_>, dict: &Dict) -> Option<Matrix> {
     let items = doc.resolve(dict.get(b"Matrix")?).as_array()?;
     let v: Vec<f32> = items
         .iter()

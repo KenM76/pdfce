@@ -85,6 +85,7 @@ use std::collections::BTreeSet;
 
 use crate::content::{ContentStream, ContentTokenKind};
 use crate::document::Document;
+use crate::graph::ObjectGraph;
 use crate::object::{Dict, Name, ObjId, Object, Stream};
 use crate::page_tree::{self, PageTreeError, Rect};
 use crate::span::ByteSpan;
@@ -467,7 +468,11 @@ impl<'a> Surgeon<'a> {
             .get(name)
             .map(|o| self.doc.resolve(o))
             .and_then(Object::as_dict)?;
-        Some(ExtractFont::resolve(self.doc, font_dict))
+        // `&self.doc.view()` (Pass 17.1): `ExtractFont::resolve` now takes a
+        // read VIEW because it may need a `/ToUnicode` stream's bytes. This
+        // census deliberately reads the loaded document, so the contiguous
+        // base view is the right one and behaviour is unchanged.
+        Some(ExtractFont::resolve(&self.doc.view(), font_dict))
     }
 
     /// Is a named XObject an image (or a form) whose unit-square placement
@@ -1756,32 +1761,50 @@ fn contains_subslice(hay: &[u8], needle: &[u8]) -> bool {
 
 /// Count the `/Redact` marks currently present in a document — the census
 /// the GUI status bar uses to disclose UNAPPLIED redactions (computed from
-/// the document itself, never a session counter, so it survives
-/// save/reload and cannot lie about a marked-but-not-applied file).
+/// the graph itself, never a session counter, so it survives save/reload
+/// and cannot lie about a marked-but-not-applied file).
+///
+/// # Why this is generic over [`ObjectGraph`] (Pass 17.1)
+///
+/// It used to take `&Document`, and the GUI's only caller passed
+/// `session.document()` — the BASE revision. The consequence was the
+/// precise failure this disclosure exists to prevent, wearing the
+/// disclosure's own face: **a `/Redact` mark the operator placed during
+/// this session was not counted**, so the very banner whose job is to say
+/// "this document has marks you have not applied yet" stayed silent about
+/// the marks most likely to be forgotten — the ones just made. Decision
+/// 018 §8 names this the confirmed bug of the Pass 17.1 audit.
+///
+/// Generic rather than `&DocumentView` because the census reads **only**
+/// dictionaries (`/Annots` → `/Subtype`); it never touches stream bytes,
+/// so it needs an object graph and nothing else. That keeps every existing
+/// caller (`pdfce-cli`, the redaction tests) compiling unchanged — a
+/// `&Document` *is* an `ObjectGraph` — while the GUI can now pass
+/// `&session.graph()` and get the truth.
+///
+/// A mark applied and then undone is correctly *not* counted: the session
+/// overlay holds the base value again, and this walks values, never a
+/// history.
 #[must_use]
-pub fn count_redaction_marks(doc: &Document) -> usize {
+pub fn count_redaction_marks<G: ObjectGraph + ?Sized>(graph: &G) -> usize {
     let mut n = 0;
-    let Ok(pages) = page_tree::pages(doc) else {
+    let Ok(pages) = page_tree::pages_in(graph) else {
         return 0;
     };
     for page in &pages {
-        let Some(dict) = doc
-            .get(page.id)
-            .map(|io| &io.value)
-            .and_then(Object::as_dict)
-        else {
+        let Some(dict) = graph.value(page.id).and_then(Object::as_dict) else {
             continue;
         };
         let Some(annots) = dict
             .get(b"Annots")
-            .map(|o| doc.resolve(o))
+            .map(|o| graph.resolve(o))
             .and_then(Object::as_array)
         else {
             continue;
         };
         for entry in annots {
             if let Some(aid) = entry.as_reference()
-                && let Some(ad) = doc.get(aid).map(|io| &io.value).and_then(Object::as_dict)
+                && let Some(ad) = graph.value(aid).and_then(Object::as_dict)
                 && ad
                     .get(b"Subtype")
                     .and_then(Object::as_name)
@@ -1884,6 +1907,71 @@ mod tests {
             .to_incremental_bytes(&SaveOptions::identity())
             .unwrap();
         bytes
+    }
+
+    /// Pass 17.1 regression gate: a mark added THIS SESSION is counted.
+    ///
+    /// This is the confirmed bug of decision 018 §8's `session.document()`
+    /// audit, and it is the nastiest shape a bug can take — the disclosure
+    /// whose entire job is to say *"this document has redaction marks you
+    /// have not applied yet"* was blind to exactly the marks most likely to
+    /// be forgotten: the ones just made. `count_redaction_marks` took a
+    /// `&Document`, and the GUI's only caller handed it
+    /// `session.document()`, the base revision, which by construction cannot
+    /// carry an unsaved mark.
+    ///
+    /// The test pins all three states, because only the contrast makes the
+    /// fix meaningful:
+    ///
+    /// 1. the BASE still counts 0 (the file on disk really has no mark);
+    /// 2. the SESSION graph counts 1 (what the operator must be told);
+    /// 3. after undo the session counts 0 again — proving the census walks
+    ///    object VALUES rather than a counter that edits increment, which is
+    ///    the property that lets it survive save/reload and refuse to lie.
+    #[test]
+    fn a_mark_added_this_session_is_counted_over_the_session_graph() {
+        use crate::annot_author::{Quad, RedactSpec};
+        use crate::vartext::Quadding;
+
+        let doc = Document::from_bytes(redactable_pdf()).unwrap();
+        let mut session = EditSession::new(doc);
+        assert_eq!(
+            count_redaction_marks(session.document()),
+            0,
+            "the fixture starts with no marks"
+        );
+
+        session
+            .add_redaction(
+                0,
+                &RedactSpec {
+                    quads: vec![Quad::from_rect(Rect::from_corners(
+                        20.0, 90.0, 120.0, 130.0,
+                    ))],
+                    fill: None,
+                    overlay_text: None,
+                    quadding: Quadding::Left,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            count_redaction_marks(&session.graph()),
+            1,
+            "a /Redact mark added this session MUST be disclosed — this is the Pass 17.1 bug"
+        );
+        assert_eq!(
+            count_redaction_marks(session.document()),
+            0,
+            "the base revision is unchanged until the document is saved"
+        );
+
+        session.undo().expect("the mark is one undoable command");
+        assert_eq!(
+            count_redaction_marks(&session.graph()),
+            0,
+            "an undone mark is not a pending mark — the census walks values, not a counter"
+        );
     }
 
     // -- THE HEADLINE GATE: absence proof --------------------------------

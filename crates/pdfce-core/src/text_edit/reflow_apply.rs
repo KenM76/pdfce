@@ -382,7 +382,8 @@ pub(crate) fn plan_reflow(
         resolve_font_dict(doc, &page.resources, &prov.font_resource).ok_or_else(|| {
             ReflowApplyError::Unsupported("the block's font resource is unresolvable".to_owned())
         })?;
-    let font = ExtractFont::resolve(doc, font_dict);
+    // `&doc.view()` (Pass 17.1) — base-relative planner, see `edit.rs`.
+    let font = ExtractFont::resolve(&doc.view(), font_dict);
     refuse_if_composite(font_dict, &font, doc)?;
     let embedded = font_is_embedded(font_dict, doc);
 

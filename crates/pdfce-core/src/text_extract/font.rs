@@ -80,10 +80,11 @@
 //! predicted might be unreachable without font-program access, and it
 //! is: it is unreachable, it is named, and it is counted.**
 
-use crate::document::Document;
 use crate::filters;
 use crate::fontdata::{self, BaseEncoding, Std14};
+use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
+use crate::view::DocumentView;
 
 use super::cmap::ToUnicodeCMap;
 
@@ -270,7 +271,7 @@ impl ExtractFont {
     /// (which §9.7.5.2 forbids for `Identity-H`, and which rendering
     /// must refuse) still has a `/ToUnicode` that maps its codes. Every
     /// degradation becomes a [`FontNote`], never a dropped font.
-    pub fn resolve(doc: &Document, font_dict: &Dict) -> Self {
+    pub fn resolve(doc: &DocumentView<'_>, font_dict: &Dict) -> Self {
         let mut notes = Vec::new();
         let subtype = name_of(doc, font_dict, b"Subtype").unwrap_or_default();
         let base_font = name_of(doc, font_dict, b"BaseFont").unwrap_or_default();
@@ -292,7 +293,7 @@ impl ExtractFont {
 
     /// §9.6 simple font (and Type 3, which extracts the same way).
     fn resolve_simple(
-        doc: &Document,
+        doc: &DocumentView<'_>,
         font_dict: &Dict,
         base_font: String,
         to_unicode: Option<ToUnicodeCMap>,
@@ -338,7 +339,7 @@ impl ExtractFont {
 
     /// §9.7 composite font.
     fn resolve_composite(
-        doc: &Document,
+        doc: &DocumentView<'_>,
         font_dict: &Dict,
         base_font: String,
         to_unicode: Option<ToUnicodeCMap>,
@@ -608,7 +609,7 @@ pub(crate) struct Code {
 /// font has Unicode information pdfce could not read" is exactly the
 /// difference an operator needs to act on.
 fn load_to_unicode(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     font_dict: &Dict,
     notes: &mut Vec<FontNote>,
 ) -> Option<ToUnicodeCMap> {
@@ -618,7 +619,11 @@ fn load_to_unicode(
         notes.push(FontNote::ToUnicodeUnusable);
         return None;
     };
-    let Some(raw) = stream.data_span.slice(doc.bytes()) else {
+    // `view.slice(span)` (Pass 17.1): a `/ToUnicode` CMap this session
+    // authored lives in the R45 staging buffer, whose spans start past the
+    // end of the base file. `None` keeps its existing meaning — an
+    // unresolvable stream is an unusable CMap, counted, never fatal.
+    let Some(raw) = doc.slice(stream.data_span) else {
         notes.push(FontNote::ToUnicodeUnusable);
         return None;
     };
@@ -644,7 +649,7 @@ fn load_to_unicode(
 /// Returns `(table, precondition_holds)`. The table is built even when
 /// the precondition fails — see the module docs' deviation 2.
 fn resolve_encoding(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     font_dict: &Dict,
     std14: Option<Std14>,
     is_type3: bool,
@@ -771,7 +776,7 @@ fn resolve_encoding(
 /// §9.6.2.1 simple-font widths: `/FirstChar` + `/Widths`, else the
 /// standard-14 AFM tables, else `/MissingWidth`.
 fn simple_widths(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     font_dict: &Dict,
     names: &[Option<String>; 256],
     std14: Option<Std14>,
@@ -850,7 +855,7 @@ fn simple_widths(
 /// `c [w1 w2 …]` (consecutive CIDs from `c`) and `c_first c_last w` (a
 /// range at one width). Both are flattened to `(first, last, width)`
 /// triples in file order; the ranges themselves are never expanded.
-fn composite_widths(doc: &Document, descendant: &Dict) -> Widths {
+fn composite_widths(doc: &DocumentView<'_>, descendant: &Dict) -> Widths {
     let default = doc
         .resolve(descendant.get(b"DW").unwrap_or(&Object::Null))
         .as_number()
@@ -910,7 +915,7 @@ fn composite_widths(doc: &Document, descendant: &Dict) -> Widths {
 /// its `/Widths` are in that space rather than the 1000/em space. The
 /// `a` element is the horizontal scale; the Table 112 conventional value
 /// is `[0.001 0 0 0.001 0 0]`, which reproduces the ordinary scale.
-fn type3_width_scale(doc: &Document, font_dict: &Dict) -> f32 {
+fn type3_width_scale(doc: &DocumentView<'_>, font_dict: &Dict) -> f32 {
     doc.resolve(font_dict.get(b"FontMatrix").unwrap_or(&Object::Null))
         .as_array()
         .and_then(<[Object]>::first)
@@ -929,11 +934,12 @@ fn type3_width_scale(doc: &Document, font_dict: &Dict) -> f32 {
 /// `begincodespacerange` syntax — this is the one place where an
 /// embedded `Encoding` CMap and a `ToUnicode` CMap genuinely share
 /// grammar (§9.7.5 defines the format both subset).
-fn embedded_cmap_width(doc: &Document, font_dict: &Dict) -> Option<CodeWidth> {
+fn embedded_cmap_width(doc: &DocumentView<'_>, font_dict: &Dict) -> Option<CodeWidth> {
     let Object::Stream(stream) = doc.resolve(font_dict.get(b"Encoding")?) else {
         return None;
     };
-    let raw = stream.data_span.slice(doc.bytes())?;
+    // `view.slice(span)` (Pass 17.1) — see `load_to_unicode` above.
+    let raw = doc.slice(stream.data_span)?;
     let decoded = filters::decode_stream(&stream.dict, raw).ok()?;
     let cmap = ToUnicodeCMap::parse(&decoded);
     match cmap.codespace_widths().first().copied()? {
@@ -943,7 +949,7 @@ fn embedded_cmap_width(doc: &Document, font_dict: &Dict) -> Option<CodeWidth> {
 }
 
 /// A resolved name entry as a `String`.
-fn name_of(doc: &Document, dict: &Dict, key: &[u8]) -> Option<String> {
+fn name_of(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Option<String> {
     let name = doc.resolve(dict.get(key)?).as_name()?;
     Some(String::from_utf8_lossy(name.as_bytes()).into_owned())
 }
@@ -951,7 +957,7 @@ fn name_of(doc: &Document, dict: &Dict, key: &[u8]) -> Option<String> {
 /// A resolved string entry as a `String`. `/Registry` and `/Ordering`
 /// are declared as ASCII strings (Table 116), so a lossy decode is
 /// exact in practice and honest when it is not.
-fn string_of(doc: &Document, dict: &Dict, key: &[u8]) -> String {
+fn string_of(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> String {
     match dict.get(key).map(|o| doc.resolve(o)) {
         Some(Object::String(bytes)) => String::from_utf8_lossy(bytes).into_owned(),
         Some(Object::Name(n)) => String::from_utf8_lossy(n.as_bytes()).into_owned(),
