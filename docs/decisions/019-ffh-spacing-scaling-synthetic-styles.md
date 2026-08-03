@@ -1307,3 +1307,88 @@ Not a 19.x prerequisite — a bug in already-shipped code, fixed in 19.0 with tw
 tests. Recorded because the audit that missed it was otherwise the strongest
 part of the decision, and "the audit was thorough" is exactly the belief that
 lets the next gap through.
+
+---
+
+# AMENDMENT B — 2026-08-03 — three corrections from building slice 19.1
+
+**Filed by:** `pdfce-librarian`, on the engineer's report, after slice 19.1
+shipped (`603b051`). Same posture as Amendment A: each item below is a place
+where the decision as written was wrong, ambiguous, or (in B.2's case)
+already-correct-but-worth-confirming, found by implementing §19.1. Where this
+amendment and the record above (including Amendment A) differ, **this
+amendment wins.**
+
+## B.1 The `Tz` × justify disclosure named the wrong mechanism
+
+§19.1's scope note (Appendix A JSON, `slices[1].scope`) and the parallel prose
+in §3.1's options table both describe the interaction as: "`Th` rescales every
+`TJ` numeric adjustment (§9.3.4), so a `Tz` change invalidates a justified
+line's slack." **The rescale premise is true in isolation and wrong as an
+account of pdfce's own architecture.**
+
+`Th` genuinely does multiply every `TJ` numeric adjustment per §9.3.4 — that
+much is accurate. But the `TJ` adjustments that carry a 15.1-justified line's
+distributed slack live in `format.rs`'s `pre`/`post` splice segments, OUTSIDE
+the `set_ops`/`restore_ops` wrap that scopes a `Tz` edit to its formatted run.
+They therefore execute at the run's UNCHANGED ambient `Th`, not the edited
+run's new one. Nothing about the pre-existing slack numbers is rescaled by
+the edit at all.
+
+**The conclusion survives; the cause does not.** What actually invalidates
+the justified line is the formatted run's changed rendered WIDTH (`ΔA`, per
+the §9.4.4 `tx` advance formula) — slack computed against the run's ORIGINAL
+width is now wrong for its NEW width, regardless of whether any `TJ` number
+was itself rescaled. Same practical consequence (re-justify needed),
+different mechanism.
+
+**Both the decision text and `ROADMAP.md`'s ★ Pass 19.x §19.1 slice bullet
+are corrected** to name the width delta (ΔA) as the cause, not a `TJ`-
+adjustment rescale — see the librarian's Pass 19.1 Shipped entry and the ★
+Pass 19.x entry. Filed as a general finding (any editor coupling
+horizontal-scale formatting to justification slack through an assumed-shared
+mechanism should verify which mechanism is actually live in its own
+splice/wrap boundaries):
+`C:\personal_rag\pdf\lesson_20260803_tz_th_rescales_tj_adjustments_not_slack_outside_wrap.md`.
+
+## B.2 The `Ts`/rise spec citation — verified correct in this document, the error was code-only
+
+The engineer's report flagged "decision 019 §1.3.6 and `text_state.rs` both
+cite `Ts` as §9.3.6" (text rendering mode, per `iso32000__s__9.3.md`) where
+the correct clause for text rise is §9.3.7. **On inspection, this document
+does not contain that error.** §1.3 item 6 ("`Trise` enters the text
+rendering matrix as a translation") carries no spec-clause citation in its
+own text — the "(§1.3.6)" seen at §3.2 is an internal cross-reference to item
+6 of this document's own §1.3 numbering, not an ISO clause number, and every
+literal ISO citation for text rise already in this document (§12 References:
+"§9.3.7 rise") is correct. **No edit made to this document for B.2** — the
+actual citation error was confined to `pdfce-core/src/text_state.rs` (three
+comment citations), already fixed by the engineer in the same slice. Recorded
+here only so the flag is closed with an explanation rather than silently
+dropped.
+
+## B.3 R89's "Tfs" is the BASE size — left ambiguous, now stated
+
+§3.2's "Units — U-discriminated" section states superscript/subscript ratios
+are "re-derived whenever `Tfs` changes" without specifying which `Tfs`: the
+size in effect for the run BEFORE any format request that also changes size,
+or some other resolved value if size and superscript/subscript are edited in
+the same operation. The implementation had to choose and chose the **BASE**
+size — the `Tf` size operand in effect for the run at the point of
+formatting, i.e. the size the operator is setting the run TO if a size change
+is part of the same request, not a pre-existing or intermediate value. **R89
+is amended to state this explicitly:** ratios in `MetricSpec::Relative`
+resolve against the base (post-edit, if the same request also changes size)
+font size, not any other candidate value.
+
+## Standing-rule text status (R88 four-rung wording)
+
+The engineer's fourth flagged item — "R88's wording still needs Amendment
+A's four-rung form in the `ROADMAP.md` standing-rules text" — was checked and
+found **already satisfied**: `ROADMAP.md`'s Standing Rules section already
+states the corrected four-rung ladder verbatim (restore from raw bytes where
+faithful and side-effect-free → re-spell where known but side-effect-bearing
+→ refuse where unobservable), carrying the "corrected from the original
+three-rung wording" note. No further edit needed there; recorded here so the
+item is closed rather than silently dropped.
+

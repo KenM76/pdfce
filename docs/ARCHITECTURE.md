@@ -910,6 +910,35 @@ consolidation SHIPPED → 19.1 `Tc`/`Tz`/super-subscript IN PROGRESS →
 19.2 `Ts`/synthesis → 19.3 GUI → 19.4 `Tw` conditional) in
 `ROADMAP.md`'s ★ Pass 19.x entry.
 
+**Pass 19.1 SHIPPED (2026-08-03, `603b051`) — `Tc`/`Tz`/superscript/
+subscript authoring now built, not merely planned.** Rides the existing
+`pre | set_ops | mid | restore_ops | post` splice with no structural
+change; new `MetricSpec`/`ScriptPosition`/`ScriptMetrics` types,
+`push_state_param` (the R88 ladder's application point). CLI:
+`format-text --char-spacing`/`--h-scale`/`--superscript`/`--subscript`/
+`--no-script`. Superscript/subscript ratios (0.60× size, +0.34×/−0.18×
+rise, both of the BASE size per decision 019 Amendment B item B.3) are
+pdfce's own choice, not an Acrobat parity claim (Acrobat's own values
+are an unsourced gap in the parity catalog). **Decision 019 Amendment
+B, filed same day, corrects three things found while building this
+slice** — see the decision-log entry immediately below for the full
+account: (1) the `Tz`×justify disclosure named the wrong mechanism (the
+real cause is the formatted run's width delta, not a `TJ`-adjustment
+rescale — the rescaled-`TJ` premise is true in general but the specific
+`TJ` numbers carrying justify slack sit outside the edit's set/restore
+wrap); (2) the `Ts`-rise spec-citation flag was verified NOT to be an
+error in this document (only in `text_state.rs`, already fixed); (3)
+R89's "`Tfs`" is now stated explicitly as the BASE size. Also fixed in
+this slice: a live defect where `EditSession::format_text`'s own
+hand-listed no-op predicate had drifted out of sync with the `FormatRequest`
+fields Pass 19.1 added, making a spacing-only request a phantom no-op on
+the GUI-facing `EditSession` path specifically (the CLI's `set_format`
+path was unaffected) — replaced with `req.is_empty()` so the predicate
+cannot drift again. Second occurrence of the same bug shape as Amendment
+A.4's missing `q`/`Q` arms (a hand-maintained check mirroring a
+structure's shape, rather than derived from it) — see `ROADMAP.md`'s new
+standing rule R92.
+
 Full design, the four-case font-on-edit matrix, the fast-follow ladder
 (FF-A offline reflow ladder through FF-H spacing/synthetic-styles — FF-A/
 FF-B boundary amended by decision 015, FF-H re-scoped by decision 019,
@@ -4135,3 +4164,58 @@ with a forward pointer.
   Fixed with two new regression tests in the same Pass. No
   `pdfce-core`/`pdfce-render` GUI-dependency change; `cargo tree`
   re-verified clean.
+- **2026-08-03 (same-day, Amendment B to decision 019) — Pass 19.1
+  SHIPPED (`603b051`); mechanism correction (`Tz`×justify), a spec-
+  citation flag verified closed, and R89's base-size ambiguity
+  resolved. Full record:
+  `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`
+  Amendment B.**
+  1. **The `Tz`×justify disclosure named the wrong mechanism.** §19.1's
+     scope note and §3.1's options table both say "`Th` rescales every
+     `TJ` numeric adjustment (§9.3.4), so a `Tz` change invalidates a
+     justified line's slack." `Th` genuinely does rescale `TJ`
+     adjustments per §9.3.4 — but the `TJ` numbers carrying a
+     15.1-justified line's slack sit in `format.rs`'s `pre`/`post`
+     splice segments, OUTSIDE the `set_ops`/`restore_ops` wrap that
+     scopes a `Tz` edit — they run at ambient (unchanged) `Th` and are
+     NOT rescaled. **The conclusion survives (a `Tz` edit does
+     invalidate a justified line and needs a re-justify offer); the
+     cause does not** — it is the formatted run's changed rendered
+     WIDTH (`ΔA`, §9.4.4's `tx` formula) making the pre-computed slack
+     wrong for the run's new width, not any `TJ` value itself changing.
+     `ROADMAP.md`'s ★ Pass 19.x §19.1 slice bullet corrected to match.
+     Filed as a general finding:
+     `C:\personal_rag\pdf\lesson_20260803_tz_th_rescales_tj_adjustments_not_slack_outside_wrap.md`.
+  2. **The flagged `Ts`=§9.3.6 spec-citation error was verified NOT to
+     exist in the decision document** — only in `text_state.rs` (three
+     comment citations, already fixed by the engineer in this slice).
+     The document's own §1.3 item 6 carries no clause citation, its
+     "(§1.3.6)" cross-reference at §3.2 is internal numbering (not an
+     ISO clause), and §12 References already correctly says "§9.3.7
+     rise." No document edit needed; recorded so the flag closes with
+     an explanation.
+  3. **R89's "`Tfs`" is now stated explicitly as the BASE size** — the
+     size in effect for the run at the point of formatting (i.e. the
+     size the operator is setting the run TO, if size and
+     superscript/subscript are edited in the same request), not any
+     other candidate value. Previously ambiguous in the decision text;
+     the implementation had already chosen base and now the record
+     says so.
+  Also: the engineer's fourth flagged item (R88's four-rung wording in
+  `ROADMAP.md`'s Standing Rules) was checked and found **already
+  correct** — no edit needed, recorded in Amendment B so the item
+  closes. **New standing rule R92** (methodology, no decision number):
+  a predicate that hand-duplicates the shape of a data structure it
+  inspects (an exhaustive field-by-field no-op check, a hand-listed
+  operator-arm list) drifts silently the moment the structure gains a
+  field or case. Second occurrence of this exact bug shape — the first
+  was Amendment A.4's missing `q`/`Q` arms in `text_edit::edit::Walk`;
+  this time it was `EditSession::format_text`'s own hand-listed no-op
+  predicate (`set_size.is_none() && set_fill.is_none() &&
+  set_font.is_none()`), which Pass 19.1's new `FormatRequest` fields
+  bypassed entirely, making a spacing-only request a phantom `NoOp` on
+  the GUI-facing `EditSession` path specifically (the CLI's
+  `set_format` path, which used the real `FormatRequest`, was
+  unaffected). Fixed by replacing the hand-list with `req.is_empty()`.
+  General rule: derive such predicates from the structure itself, never
+  hand-maintain a mirror of it.

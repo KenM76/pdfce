@@ -43,6 +43,125 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 19.1 — `Tc`/`Tz`/super-subscript direct text-state authoring, the Acrobat-parity slice (decision 019, extends the Pass 19.0 consolidation) — 2026-08-03, committed `603b051`
+
+**Extends `format.rs`'s existing `pre | set_ops | mid | restore_ops |
+post` splice, no parallel path.** New types: `MetricSpec`
+(`Absolute | Relative` per R89), `ScriptPosition`, `ScriptMetrics`,
+`SUPERSCRIPT`/`SUBSCRIPT` constants; three new `FormatRequest` fields;
+seven new `FormatReport` fields; two new `FormatError` variants
+(`AmbientUnrestorable`, `BadHorizScale`); `push_state_param` (the R88
+restore-ladder application point); `derived_operand` (see the float-
+noise finding, below); five new disclosures. CLI: `--char-spacing
+V[pt|em]`, `--h-scale PCT`, `--superscript`/`--subscript`/`--no-script`.
+
+**Gates:** `cargo test --workspace` 1643 → 1663, 0 failed; fmt/clippy
+clean; `bash tools/check-ui-strings.sh` exit 0; `cargo tree -p
+pdfce-core`/`-p pdfce-render` GUI-dep-free; **zero new Cargo
+dependencies**; **R85 (preview-equals-saved) 16/16**, including a new
+`format_text_spacing_preview_equals_saved` case; roundtrip unchanged
+and proven **non-vacuous** by `md5sum`-distinct binaries built from a
+genuine pre-change `git worktree` checkout (directly addresses the
+vacuous-comparison failure mode flagged at Pass 19.0's ship — see
+`D:\dev\rag\rust\git_stash_on_clean_tree_makes_before_after_comparison_vacuous.md`).
+
+**ENGINEER-VERIFIED end-to-end**, on a real fixture — the emitted
+content stream:
+
+```
+BT /F1 12 Tf 72 700 Td /F1 7.2 Tf 0.24 Tc 85 Tz 4.08 Ts (hello) Tj /F1 12 Tf 0 Tc 100 Tz 0 Ts ( world) Tj ET
+```
+
+Set before the run, restored immediately after, inside the same text
+object, no `q`/`Q` (illegal there per §8.2 Table 51/Figure 9).
+`7.2 = 0.6 × 12`; `4.08 = 0.34 × 12`.
+
+**Superscript/subscript ratios: 0.60× size, +0.34×/−0.18× rise, both of
+the BASE size** (decision 019 Amendment B item B.3 makes this explicit
+— the decision text left "which `Tfs`" ambiguous). Kept from decision
+019 §3.2 rather than re-picked; the Acrobat parity RAG records
+Acrobat's own values as an explicit GAP, so this is pdfce's own choice,
+not a parity claim, and sits inside ordinary typographic practice —
+the asymmetry (larger rise than drop) is deliberate: a lowered glyph
+hits its own line's descenders while a raised one has the ascender
+band to work with. Every emitted value is disclosed by number in both
+the report and the CLI output — no hidden magic number.
+
+**Restore-ladder rungs exercised: 1 (spec default), 2 (observed raw
+bytes), and 3 (`ObservedIndirect`, the important one) end-to-end.**
+Rung 3 tested on `2 0.25 (lead) "` — asserts the restore re-spells
+`0.25 Tc` in its own dedicated operator AND that `(lead) "` appears
+**exactly once** in the appended revision (a raw-bytes replay would
+have re-painted the string; see decision 019 Amendment A item A.1 /
+`C:\personal_rag\pdf\lesson_20260803_quote_operator_side_effect_poisons_raw_byte_restore.md`
+for why). **Rung 4 (refuse-and-disclose) is tested at the planner but
+is UNREACHABLE end-to-end**: `text_edit::edit::Walk` has no `b"Do"`
+arm, so a run inside a Form XObject is never located as a format
+anchor in the first place. The builder followed Amendment A.2's
+precedent (multi-stream `/Contents` refuse is architecturally
+unreachable today) and declined to manufacture an untestable trigger —
+filed as a known limit, not a test gap.
+
+**FOUR CORRECTIONS from building this slice — decision 019 Amendment B
+filed** (`docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`
+Amendment B; `ARCHITECTURE.md` §12/§5.11 updated to match):
+1. **The `Tz` × justify MECHANISM was misstated**, in decision 019
+   and in this file's own ★ Pass 19.x entry (now corrected, see
+   below). `Th` genuinely rescales `TJ` adjustments per §9.3.4 — but
+   the `TJ` numbers carrying a justified line's slack sit OUTSIDE the
+   edit's set/restore wrap (in the `pre`/`post` splice) and run at
+   ambient `Th`, unrescaled. The conclusion (a `Tz` edit invalidates a
+   justified line) survives; the cause is the run's changed rendered
+   WIDTH (`ΔA`), not a `TJ`-value rescale. Filed as a general finding:
+   `C:\personal_rag\pdf\lesson_20260803_tz_th_rescales_tj_adjustments_not_slack_outside_wrap.md`.
+2. **A flagged spec-citation error (`Ts` cited as §9.3.6, text
+   rendering mode, instead of §9.3.7, text rise) was verified NOT to
+   exist in the decision document** — only in `text_state.rs` (three
+   comment citations), already fixed. §9.3.7 is used throughout the
+   new code.
+3. **R89 now states explicitly that ratios resolve against the BASE
+   size** — decision 019 left "`Tfs`" ambiguous; the implementation
+   had to choose (chose base) and the record now says so.
+4. **R88's four-rung wording in this file's own Standing Rules was
+   checked and found already correct** — no edit needed; recorded so
+   the item closes rather than silently drops.
+
+**A LIVE DEFECT, found by the R85 oracle — its SECOND real catch.**
+`EditSession::format_text` hand-listed its own no-op predicate
+(`set_size.is_none() && set_fill.is_none() && set_font.is_none()`).
+Pass 19.1's new `FormatRequest` fields bypassed it entirely, making a
+spacing-only request a phantom `NoOp` on the **GUI-facing
+`EditSession` path specifically** — the CLI's `set_format` path, which
+consumes the real `FormatRequest` directly, was unaffected. Fixed by
+replacing the hand-list with `req.is_empty()`. Same "duplicated
+predicate drifts from what it duplicates" bug shape as decision 019
+Amendment A.4 (missing `q`/`Q` arms) — now seen twice, recorded as
+**new standing rule R92** (Standing rules, below).
+
+**Two more findings:**
+- **Float noise nobody anticipated:** `12.0 × 0.60` is
+  `7.199999999999999` in Rust's shortest-round-trip formatting, and
+  that noise was headed straight into the emitted stream. New
+  `derived_operand` rounds to 6 dp, applied **only to values pdfce
+  itself derives** — an operator-supplied absolute value passes
+  through untouched, because rounding a typed number would be a silent
+  modification of the caller's own input. Filed:
+  `D:\dev\rag\rust\shortest_roundtrip_float_format_needs_derived_value_rounding.md`.
+- **A latent follower-mispositioning bug, fixed in passing:** the `ΔA`
+  computation evaluated `a_new` at the AMBIENT `Tc`/`Th` on both sides
+  of the delta — correct only while neither could change, which is
+  exactly the slice that makes them changeable. Now evaluated at the
+  NEW values. Also: `Tz ≤ 0` is refused by name rather than clamped,
+  since it collapses or mirrors the run.
+
+**Rule 11 (CLI parity) — shipped in-Pass.** **No GUI code and no GUI
+verification this Pass** — the property surface is slice 19.3, and
+this entry says so plainly rather than implying an on-screen check
+occurred. Verification was the CLI oracle plus the new R85 case, which
+drives the same `EditSession` the GUI drives — so the phantom-`NoOp`
+defect above was caught on the exact code path the GUI will use, even
+though no GUI frame was rendered this Pass.
+
 ### Pass 19.0 — shared text-state model: consolidation + ambient publication (decision 019, correctness-only, no new operator surface) — 2026-08-03, committed `38fffad`
 
 **Consolidates three private ambient-text-state trackers into one.** New
@@ -5501,10 +5620,46 @@ running total drifted by one somewhere in continuations 60–62). The
 backup bundle (`D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle`) is
 unchanged this continuation and does not yet cover these three commits.
 
+**UPDATE (continuation 64, real date 2026-08-03) — the 39→43
+commit-count flag from continuation 63 is RESOLVED, and Pass 19.1
+SHIPPED.** Two new commits this filing — **`5c1f5dc`** (docs: the
+39→43 arithmetic resolution + backup-bundle regeneration) → **`603b051`**
+(Pass 19.1, `Tc`/`Tz`/super-subscript authoring — see the Pass 19.1
+Shipped entry, top of Shipped). Both hashes engineer-verified via
+`git cat-file -t` per R87. Branch `pass-8-redaction`, **45 commits**
+confirmed by `git rev-list --count HEAD` (not merely engineer-reported
+this time — an actual recount), still no git remote configured.
+**The 39→43 gap was an ANCHORING error, not an arithmetic one:** 39 was
+the commit count at `743e463`, but the filing immediately preceding the
+"43" figure was actually `0c385a9`, where the count was **40** — so
+40 + 3 (`f45d8d6`, `38fffad`, `1a2e265`) = 43, and the flag raised at
+continuation 63 was correct to raise even though 43 itself was also
+correct. **General lesson kept (not just the corrected number): a
+running total is only as good as the anchor it is added to, and "the
+last number I filed" is not necessarily "the number at the last commit
+I am counting from"** — the remedy is what R87 already prescribes
+(produce the figure from `git` at filing time), applied here for real.
+This is the THIRD filing-integrity issue this audit habit has caught in
+this project (see R87's own note for the first two) — the habit is
+earning its keep, keep raising these rather than silently reconciling
+them. The stale-bundle flag from continuation 63 is also closed:
+regenerated at `D:\Dev\pdfce-backups\pdfce-20260803-1145.bundle`
+(verified, covered all 43 commits at the time of its own creation; is
+itself now two commits behind again as of this filing — regeneration
+is a point-in-time action, not a standing guarantee).
+
 **Pass 19.0 shipped 2026-08-03 (`38fffad`) — see Shipped above; no
-longer listed here. Pass 19.1 (`Tc`/`Tz`/super-subscript authoring) is
-now IN PROGRESS** — see the ★ Pass 19.x entry under Next up for the
-full slice record and decision 019 Amendment A (`1a2e265`).
+longer listed here. Pass 19.1 (`Tc`/`Tz`/super-subscript authoring)
+SHIPPED 2026-08-03 (`603b051`) — see Shipped above; no longer listed
+here. Pass 19.2 (free-form `Ts` + synthetic bold/italic) is now IN
+PROGRESS** — see the ★ Pass 19.x entry under Next up for the full
+slice record and decision 019 Amendment A (`1a2e265`). **Decision 019
+Amendment B is filed as part of THIS librarian pass** (three
+corrections found while building 19.1 — mechanism fix, citation-flag
+closure, R89 base-size clarification — plus new standing rule R92) and
+is **not yet committed** as of this filing; it will land in whatever
+commit captures this session's `ROADMAP.md`/`ARCHITECTURE.md`/decision-
+019-doc edits, expected to be commit 46 on this branch.
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
@@ -6060,7 +6215,7 @@ default stands: docked-only, its own Backlog entry, still unanswered.
 §10 Q1 (the `egui_tiles`-vs-hand-rolled question this note originally
 tracked) is ANSWERED and BUILT — see Pass 18.1 above.
 
-### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendment A, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 IN PROGRESS)
+### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendments A/B, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 SHIPPED 2026-08-03, Pass 19.2 IN PROGRESS)
 
 **Decision 019 ACCEPTED via the KenAgent protocol.** Full record:
 `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`. Filed
@@ -6170,17 +6325,38 @@ existing `FormatText`/`AddText` one-command-per-accepted-edit path):**
   only on divergence, with a dedicated tripwire test guarding the gate
   19.1 will relax.
 - **19.1 — `Tc` + `Tz` + superscript/subscript authoring (core + CLI).
-  The Acrobat-parity slice.** `MetricSpec::{Absolute, Relative}` per
-  R89. Includes a `Tz` × justify disclosure: `Th` rescales every `TJ`
-  numeric adjustment, so a horizontal-scale edit on justified text
-  needs its own disclosed interaction, not a silent double-application.
+  The Acrobat-parity slice. SHIPPED 2026-08-03, committed `603b051`**
+  — see the Pass 19.1 Shipped entry (top of Shipped) for the full
+  build record. `MetricSpec::{Absolute, Relative}` per R89 (ratios
+  resolve against the BASE font size — decision 019 Amendment B item
+  B.3). Includes a `Tz` × justify disclosure — **CORRECTED wording,
+  Amendment B item B.1:** `Th` genuinely rescales every `TJ` numeric
+  adjustment (§9.3.4) in general, but the specific `TJ` adjustments
+  carrying a 15.1-justified line's slack sit OUTSIDE this edit's
+  `set_ops`/`restore_ops` wrap (in the `pre`/`post` splice segments) and
+  run at ambient, unchanged `Th` — they are NOT rescaled. The real
+  cause is the formatted run's changed rendered WIDTH (`ΔA`, §9.4.4),
+  which makes slack computed for the run's OLD width wrong for its NEW
+  width. Same practical consequence (re-justify offered), corrected
+  mechanism. Superscript/subscript ratios are pdfce's own choice — size
+  **0.60×** base size, rise **+0.34×**/**−0.18×** of base size — not an
+  Acrobat parity claim (Acrobat's own values are an unsourced gap in
+  the parity catalog); every emitted value is disclosed by number.
 - **19.2 — Free-form `Ts` + synthetic bold/italic (core + CLI). The
-  deliberate exceed.** `StyleSynthesis` provenance enum; R90's gate
-  wired behind the same coverage check Pass 14.2 already uses for
-  family/style changes. **Prerequisite check before this slice starts:**
-  confirm `pdfce-render` actually honours `Tr 2` and a sheared `Tm` — if
-  it doesn't, R85 (preview-equals-saved) breaks the moment this slice
-  ships a feature the canvas can't paint.
+  deliberate exceed. IN PROGRESS** (2026-08-03, a builder is on it).
+  `StyleSynthesis` provenance enum; R90's gate wired behind the same
+  coverage check Pass 14.2 already uses for family/style changes.
+  **Prerequisite check before this slice starts:** confirm
+  `pdfce-render` actually honours `Tr 2` and a sheared `Tm` — if it
+  doesn't, R85 (preview-equals-saved) breaks the moment this slice
+  ships a feature the canvas can't paint. **Status as of this
+  filing:** appears satisfied BY INSPECTION, not yet confirmed
+  empirically — `interpret.rs:1446-1457` fills then strokes with
+  `stroke_color`/`stroke_params()` per Table 106 set at
+  `text.rs:304-313`, and `Tm` is applied as a full six-component
+  `Transform::from_row` at `interpret.rs:1134-1138`. The builder is
+  confirming with a rendered fixture before relying on it — do not
+  treat this bullet as the confirmation itself.
 - **19.3 — GUI: the spacing/style property surface.** Dispatch
   `pdfce-ui-specialist` first, per the standing Feature-fidelity/
   UI-design discipline.
@@ -6188,7 +6364,9 @@ existing `FormatText`/`AddText` one-command-per-accepted-edit path):**
   result).** Gated per Q1/R91's decision bands.
 
 **Standing rules R88–R91 added** (see Standing rules, below) — the
-ceiling was R87.
+ceiling was R87. **R92 added 2026-08-03** (decision 019 Amendment B,
+methodology: hand-duplicated no-op/arm-list predicates drift silently
+— see Standing rules, below).
 
 **Open items for the operator** — see Open operator questions, below:
 the `Tw` census middle-band judgement call; FF-C's rule-13 dependency
@@ -8557,24 +8735,31 @@ blocking Pass 19.0's in-progress build:**
   **Now more precise (continuation 59, 2026-08-03): there is no git
   remote configured at all** — the commit chain exists solely on this
   machine (30 commits at continuation 59; 39 at continuation 61's
-  filing; **43 as of continuation 63**, confirmed by
-  `git rev-list --count HEAD`).
+  filing; 43 as of continuation 63; **45 as of continuation 64**,
+  confirmed by `git rev-list --count HEAD` directly, not
+  engineer-reported-then-recounted this time).
 
-  **The 39→43 arithmetic flag is RESOLVED (engineer, 2026-08-03): 43 is
-  correct, and the flag was right to be raised.** The apparent gap came
-  from anchoring on a stale figure: 39 was the count at `743e463`, but
-  the immediately preceding filing was `0c385a9`, where the count was
-  **40**. So 40 + 3 (`f45d8d6`, `38fffad`, `1a2e265`) = 43. Recording
-  the resolution rather than just the corrected number, because the
-  failure mode is reusable — a running total is only as good as the
-  anchor it is added to, and "the last number I filed" is not
-  necessarily "the number at the last commit I am counting from". A verified backup bundle
-  exists as a stopgap (`D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle`,
-  superseding the earlier `...20260803.bundle`, itself now STALE — it
-  predates all three continuation-63 commits and has not been
-  regenerated), not a substitute for an actual push decision. Also
-  flag: the branch is still named `pass-8-redaction` though it now
-  carries Passes 9 through 19.0 —
+  **The 39→43 arithmetic flag is RESOLVED (engineer, 2026-08-03): 43
+  was correct, and the flag was right to be raised.** The apparent gap
+  came from anchoring on a stale figure: 39 was the count at `743e463`,
+  but the immediately preceding filing was `0c385a9`, where the count
+  was **40**. So 40 + 3 (`f45d8d6`, `38fffad`, `1a2e265`) = 43.
+  Recording the resolution rather than just the corrected number,
+  because the failure mode is reusable — **a running total is only as
+  good as the anchor it is added to, and "the last number I filed" is
+  not necessarily "the number at the last commit I am counting from"**
+  (this is now recorded as the reusable lesson behind the discipline,
+  not a one-off correction). This is the THIRD filing-integrity issue
+  this exact audit habit has caught in this project — see standing rule
+  R87's own note for the first two. A verified backup bundle exists as
+  a stopgap
+  (`D:\Dev\pdfce-backups\pdfce-20260803-1145.bundle`, superseding the
+  earlier `...0830.bundle`; covered all 43 commits at the time of its
+  own creation and is **already two commits behind again** as of
+  continuation 64's `5c1f5dc`/`603b051` — regeneration is a
+  point-in-time action, not a standing guarantee, not a substitute for
+  an actual push decision). Also flag: the branch is still named
+  `pass-8-redaction` though it now carries Passes 9 through 19.1 —
   worth renaming whenever a push is authorized.
 - Encryption (Pass 5 / decision 007)'s `/R 6` sourcing method and the
   `LEGAL.md` §2 Adobe-supplement contradiction — both still gate its
@@ -9493,6 +9678,29 @@ blocking Pass 19.0's in-progress build:**
   decision bands (≥60% of sampled real-world documents → build; ≤25% →
   close the item; 25–60% → escalate to the operator) — see the ★ Pass
   19.x entry (Next up) and Open operator questions.
+- **R92 — A predicate that hand-duplicates the shape of a data
+  structure it inspects drifts silently the moment the structure gains
+  a field or case (methodology; no decision number; librarian-assigned;
+  2026-08-03, decision 019 Amendment B).** An exhaustive field-by-field
+  no-op/emptiness check, or a hand-listed operator-arm list mirroring an
+  operator set, is a duplication of information the structure itself
+  already carries — the moment the structure grows, the duplicate is
+  silently stale. **Second occurrence of this exact bug shape in this
+  project:** the first was decision 019 Amendment A.4 (`text_edit::
+  edit::Walk` had no `q`/`Q` arm at all, a hand-maintained operator-arm
+  list that never grew to cover them); the second was Pass 19.1's
+  discovery that `EditSession::format_text` hand-listed its own no-op
+  predicate (`set_size.is_none() && set_fill.is_none() &&
+  set_font.is_none()`), which Pass 19.1's new `FormatRequest` fields
+  bypassed entirely — a spacing-only request became a phantom `NoOp` on
+  the GUI-facing `EditSession` path specifically, while the CLI path
+  (which used the real `FormatRequest` directly) was unaffected. Prefer
+  deriving such a predicate from the structure itself (an `is_empty()`
+  method on the type, an exhaustive match with no wildcard) over
+  hand-maintaining a parallel check — same underlying discipline as
+  `D:\dev\rag\rust\non_exhaustive_no_effect_defining_crate_wildcard_free_match.md`
+  (keep in-crate matches wildcard-free so a new variant is a compile
+  error at every decision point, never a silent `_`-arm fallback).
 
 ## Update protocol
 
