@@ -1746,11 +1746,18 @@ impl EditSession {
         use crate::text_edit::FormatError as FmtError;
         use crate::text_edit::format::plan_format;
 
-        // The pre-checks `plan_format` assumes (mirrors the free `set_format`):
-        // a no-op request and encryption are refused before any surgery. The
-        // request's operation fields are public, so no private accessor is
-        // needed.
-        if req.set_size.is_none() && req.set_fill.is_none() && req.set_font.is_none() {
+        // The pre-checks `plan_format` assumes (mirrors the free
+        // `set_format`): a no-op request and encryption are refused before
+        // any surgery.
+        //
+        // The emptiness test is delegated to `FormatRequest::is_empty`
+        // rather than re-listed here. It used to be re-listed, and Pass
+        // 19.1 found out why that was a bug: three new operation fields
+        // were added, the copy here did not learn about them, and a
+        // spacing-only request became a phantom `NoOp` on the session path
+        // — the very path the GUI drives — while succeeding through the
+        // free function. One predicate, two callers.
+        if req.is_empty() {
             return Err(FmtError::NoOp);
         }
         if self.base.trailer().contains_key(b"Encrypt") {
@@ -7853,5 +7860,41 @@ mod text_edit_session_tests {
         );
         assert_eq!(session.undo_depth(), 0);
         assert!(!session.is_modified());
+    }
+
+    /// Regression, Pass 19.1: the session's own emptiness check used to
+    /// hand-list `set_size`/`set_fill`/`set_font`, so a request carrying
+    /// ONLY one of the new spacing controls was rejected as a phantom
+    /// `NoOp` here while succeeding through the free `set_format`. That is
+    /// the worst shape of bug this project keeps re-learning — a predicate
+    /// duplicated in two places, one of which is the path the GUI drives.
+    ///
+    /// Each of the three 19.1 controls is asserted to be a real operation
+    /// on its own, so adding a fourth without updating
+    /// [`FormatRequest::is_empty`](crate::text_edit::FormatRequest) fails
+    /// here rather than in a GUI bug report.
+    #[test]
+    fn a_spacing_only_format_request_is_not_a_no_op_on_the_session_path() {
+        use crate::text_edit::{MetricSpec, ScriptPosition};
+
+        for req in [
+            FormatRequest::new(0, "hello").char_spacing(MetricSpec::Absolute(0.5)),
+            FormatRequest::new(0, "hello").h_scale(90.0),
+            FormatRequest::new(0, "hello").script(ScriptPosition::Superscript),
+        ] {
+            let src = text_pdf("BT /F1 12 Tf 72 700 Td (hello) Tj ET\n");
+            let mut session = EditSession::new(Document::from_bytes(src.clone()).unwrap());
+            session
+                .format_text(&req, &FormatOptions::default())
+                .expect("a 19.1 control alone is a real formatting operation");
+            assert_eq!(session.undo_depth(), 1);
+            assert_eq!(session.undo_kind(), Some(CommandKind::FormatText));
+
+            // …and it rides the existing one-command-per-edit undo
+            // semantics: no new CommandKind was needed (decision 019 §1.2).
+            session.undo();
+            assert!(!session.is_modified());
+            assert_eq!(save(&session), src, "undo must be byte-identical");
+        }
     }
 }

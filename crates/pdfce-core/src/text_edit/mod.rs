@@ -79,7 +79,8 @@ pub use edit::{
 pub use encoding::{CharEncoding, EncodeResult, InverseEncoding, RInvTrigger, Refusal};
 pub use format::{
     FillModel, FontSelector, FormatError, FormatOptions, FormatOutcome, FormatReport,
-    FormatRequest, NewFill, set_format,
+    FormatRequest, MetricSpec, NewFill, SUBSCRIPT, SUPERSCRIPT, ScriptMetrics, ScriptPosition,
+    set_format,
 };
 pub use model::{
     Block, BlockDiagnostics, BlockKind, BlockRecognitionOptions, EditableTextModel, GlyphRef, Line,

@@ -1256,6 +1256,33 @@ enum Command {
     ///   embeds a font. An outlined/vector run has no font to swap and is
     ///   refused. `--font-dir` supplies non-embedded faces (decision 012).
     ///
+    /// Pass 19.1 adds three direct text-state controls, each emitted for the
+    /// matched run ONLY and explicitly restored to the run's ambient value
+    /// immediately after it (text state persists for the whole content stream
+    /// per ISO 32000-1 §9.3, and `q`/`Q` are illegal inside a text object per
+    /// §8.2 Table 51, so the scope is closed by restoring BY VALUE):
+    ///
+    /// - `--char-spacing V` sets character spacing `Tc` (§9.3.2). Accepts
+    ///   `0.5` or `0.5pt` (ABSOLUTE — unscaled text-space units, written as
+    ///   typed at any size) and `20em` (RELATIVE — 20 THOUSANDTHS of an em,
+    ///   the typographic tracking unit, NOT 20 ems), which is re-derived
+    ///   against the run's size so a later resize stays correct.
+    /// - `--h-scale PCT` sets horizontal scaling `Tz` (§9.3.4) as a percentage
+    ///   of normal width; 100 is normal. It stretches the glyphs themselves,
+    ///   not just the gaps, and also scales the spacing parameters.
+    /// - `--superscript` / `--subscript` / `--no-script` set the baseline via
+    ///   `Ts` (§9.3.7) plus a reduced `Tf` size. The size and rise ratios are
+    ///   pdfce's OWN documented defaults, NOT a parity claim (Acrobat's are
+    ///   undocumented), and are printed by value in the report. A free-form
+    ///   numeric rise is deferred (decision 019 §3.2).
+    ///
+    /// If the run's ambient value for a parameter cannot be restored — it was
+    /// inherited from outside the edited content stream — the edit is REFUSED
+    /// by name with nothing applied, rather than guessing a default that would
+    /// silently change content pdfce did not touch. Changing a run's width
+    /// inside a JUSTIFIED line invalidates that line's slack; pdfce discloses
+    /// that and offers re-justification instead of leaving it wrong.
+    ///
     /// A formatting change inside a tagged (accessible) run PRESERVES its
     /// BDC/EMC+MCID wrapper and discloses that the structure tree went stale —
     /// pdfce does not reproduce Acrobat's tag-corruption defect (R72).
@@ -1280,6 +1307,26 @@ enum Command {
         /// its resource key (`F2`) or its `/BaseFont` (`Times-Bold`).
         #[arg(long, value_name = "NAME")]
         set_font: Option<String>,
+        /// Character spacing `Tc` (§9.3.2) for the matched run. `0.5` or
+        /// `0.5pt` is ABSOLUTE (unscaled text-space units); `20em` is
+        /// RELATIVE and means 20 THOUSANDTHS of an em (the tracking unit) —
+        /// not 20 ems — and is re-derived if the run is later resized.
+        #[arg(long = "char-spacing", value_name = "V[pt|em]")]
+        char_spacing: Option<String>,
+        /// Horizontal scaling `Tz` (§9.3.4) for the matched run, as a
+        /// percentage of normal glyph width. 100 is normal; must be > 0.
+        #[arg(long = "h-scale", value_name = "PCT")]
+        h_scale: Option<f64>,
+        /// Raise the matched run to superscript (`Ts` rise + reduced size).
+        #[arg(long, conflicts_with_all = ["subscript", "no_script"])]
+        superscript: bool,
+        /// Lower the matched run to subscript (`Ts` drop + reduced size).
+        #[arg(long, conflicts_with = "no_script")]
+        subscript: bool,
+        /// Reset the matched run to the baseline (`0 Ts`, size unchanged) —
+        /// how an inherited non-zero rise is flattened for one run.
+        #[arg(long = "no-script")]
+        no_script: bool,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -2187,6 +2234,11 @@ fn run() -> ExitCode {
             set_size,
             set_color,
             set_font,
+            char_spacing,
+            h_scale,
+            superscript,
+            subscript,
+            no_script,
             output,
             pin,
             font_dirs,
@@ -2198,6 +2250,19 @@ fn run() -> ExitCode {
             set_size,
             set_color: set_color.as_deref(),
             set_font: set_font.as_deref(),
+            char_spacing: char_spacing.as_deref(),
+            h_scale,
+            // clap's `conflicts_with` guarantees at most one is set, so this
+            // ladder cannot silently prefer one over another.
+            script: if superscript {
+                Some(pdfce_core::text_edit::ScriptPosition::Superscript)
+            } else if subscript {
+                Some(pdfce_core::text_edit::ScriptPosition::Subscript)
+            } else if no_script {
+                Some(pdfce_core::text_edit::ScriptPosition::Normal)
+            } else {
+                None
+            },
             pin,
             font_dirs: &font_dirs,
         }),
@@ -5249,8 +5314,51 @@ struct FormatTextArgs<'a> {
     set_color: Option<&'a str>,
     /// A target font resource key or `/BaseFont`.
     set_font: Option<&'a str>,
+    /// `--char-spacing` as passed, e.g. `0.5`, `0.5pt`, `20em`.
+    char_spacing: Option<&'a str>,
+    /// `--h-scale` percentage (100 = normal).
+    h_scale: Option<f64>,
+    /// The baseline toggle, already resolved from the three exclusive flags.
+    script: Option<pdfce_core::text_edit::ScriptPosition>,
     pin: bool,
     font_dirs: &'a [PathBuf],
+}
+
+/// Parse a `--char-spacing` argument into a [`MetricSpec`]
+/// (`0.5` / `0.5pt` → absolute; `20em` → 20 thousandths of an em).
+///
+/// The `em` suffix means **‰ of an em**, not ems — the typographic tracking
+/// convention, and the same unit space `TJ`'s own adjustments live in
+/// (§9.4.3). That is a genuine trap, so it is spelled out in `--help`, in
+/// the error text below, and in the save report's disclosure. It is also
+/// self-refuting in practice: a `Tc` of 20 *ems* would be a 240 pt gap
+/// between every pair of glyphs at 12 pt.
+///
+/// Returns a human-readable error string (surfaced on stderr) rather than
+/// panicking, exactly as [`parse_set_color`] does.
+fn parse_char_spacing(spec: &str) -> Result<pdfce_core::text_edit::MetricSpec, String> {
+    use pdfce_core::text_edit::MetricSpec;
+    let raw = spec.trim();
+    let (number, relative) = match raw {
+        r if r.len() > 2 && r.to_ascii_lowercase().ends_with("em") => (&r[..r.len() - 2], true),
+        r if r.len() > 2 && r.to_ascii_lowercase().ends_with("pt") => (&r[..r.len() - 2], false),
+        r => (r, false),
+    };
+    let value: f64 = number.trim().parse().map_err(|_| {
+        format!(
+            "--char-spacing {spec:?}: expected a number optionally suffixed `pt` (absolute, \
+             unscaled text-space units) or `em` (RELATIVE — thousandths of an em, the tracking \
+             unit; `20em` is 20/1000 em, NOT 20 ems)"
+        )
+    })?;
+    if !value.is_finite() {
+        return Err(format!("--char-spacing {spec:?}: not a finite number"));
+    }
+    Ok(if relative {
+        MetricSpec::Relative(value)
+    } else {
+        MetricSpec::Absolute(value)
+    })
 }
 
 /// Parse a `--set-color MODEL:C,..` argument into a [`NewFill`]
@@ -5317,6 +5425,18 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
         },
         None => None,
     };
+    // Likewise the character-spacing spec — a bad unit suffix must fail
+    // before the input file is even opened.
+    let char_spacing = match args.char_spacing {
+        Some(spec) => match parse_char_spacing(spec) {
+            Ok(m) => Some(m),
+            Err(msg) => {
+                eprintln!("pdfce-cli: {msg}");
+                return exit::EDIT_REFUSED;
+            }
+        },
+        None => None,
+    };
 
     let source = match std::fs::read(args.input) {
         Ok(b) => b,
@@ -5348,6 +5468,15 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
     if let Some(name) = args.set_font {
         req = req.font(FontSelector::new(name));
     }
+    if let Some(spec) = char_spacing {
+        req = req.char_spacing(spec);
+    }
+    if let Some(pct) = args.h_scale {
+        req = req.h_scale(pct);
+    }
+    if let Some(pos) = args.script {
+        req = req.script(pos);
+    }
     let opts = FormatOptions::default().with_disposition(if args.pin {
         FollowerDisposition::Pin
     } else {
@@ -5367,6 +5496,8 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
                 | FormatError::NoMatch(_)
                 | FormatError::Unsupported(_)
                 | FormatError::PageIndex(_)
+                | FormatError::AmbientUnrestorable(_)
+                | FormatError::BadHorizScale(_)
                 | FormatError::Encrypted => exit::EDIT_REFUSED,
                 FormatError::Write(_) => exit::SAVE_REFUSED,
                 FormatError::Content(_) | FormatError::PageTree(_) => exit::RUNTIME_ERROR,
@@ -5398,6 +5529,39 @@ fn cmd_format_text(args: &FormatTextArgs<'_>) -> u8 {
         .as_ref()
         .map_or_else(|| "none".to_owned(), |(o, n)| format!("{o}->{n}"));
     println!("  set_size={size_str} set_color={color_str} set_font={font_str}");
+    // Pass 19.1's three controls, printed as `ambient->emitted` so the line
+    // is diffable and so the RATIOS pdfce chose are visible by value rather
+    // than buried in the code (rule 4).
+    let tc_str = report
+        .char_spacing_change
+        .map_or_else(|| "none".to_owned(), |(o, n)| format!("{o}->{n}"));
+    let tz_str = report
+        .h_scale_change
+        .map_or_else(|| "none".to_owned(), |(o, n)| format!("{o}%->{n}%"));
+    let script_str = report.script.map_or_else(
+        || "none".to_owned(),
+        |p| {
+            let rise = report
+                .rise_change
+                .map_or_else(|| "0".to_owned(), |(_, n)| format!("{n}"));
+            let size = report
+                .script_size
+                .map_or_else(|| "unchanged".to_owned(), |(b, e)| format!("{b}->{e}"));
+            format!("{}(Ts={rise} Tf={size})", p.label())
+        },
+    );
+    println!("  char_spacing={tc_str} h_scale={tz_str} script={script_str}");
+    if !report.restore_narrowed.is_empty() {
+        let names: Vec<String> = report
+            .restore_narrowed
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        println!("  restore_narrowed={}", names.join(","));
+    }
+    if report.justify_slack_invalidated {
+        println!("  justify_slack_invalidated=1");
+    }
     println!(
         "  base_font={} content_object={} advance_delta={:.3} followers_repositioned={} fill_narrowed={}",
         report.base_font,

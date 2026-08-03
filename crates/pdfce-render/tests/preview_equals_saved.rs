@@ -245,7 +245,8 @@ use pdfce_core::edit::EditSession;
 use pdfce_core::fontdata::Std14;
 use pdfce_core::page_tree::{self, Page, Rect};
 use pdfce_core::text_edit::{
-    AddTextRequest, EditOptions, EditRequest, FormatOptions, FormatRequest, ReflowRequest,
+    AddTextRequest, EditOptions, EditRequest, FormatOptions, FormatRequest, MetricSpec,
+    ReflowRequest, ScriptPosition,
 };
 use pdfce_core::vartext::{Quadding, TextColor};
 use pdfce_core::vector::{AxisConstraint, Point};
@@ -496,6 +497,37 @@ fn format_text_preview_equals_saved() {
     )
     .expect("format_text applies");
     check("format-text", &s, 0, Visible::Yes);
+}
+
+/// `format-text` — the Pass 19.1 direct text-state controls: character
+/// spacing (`Tc`), horizontal scaling (`Tz`) and a superscript (`Ts` plus a
+/// reduced `Tf` size).
+///
+/// A separate case from the size one above, and not redundant with it,
+/// because these three exercise a **different renderer path**: `Tz`
+/// reshapes the glyph outline itself (§9.3.4 — it affects "both the glyph's
+/// shape and its horizontal displacement"), `Ts` translates the text
+/// rendering matrix (§9.3.7), and `Tc` enters the §9.4.4 advance. If
+/// `pdfce-render` honoured any of the three differently from the way the
+/// saved file is re-read, the preview would show a spacing the file does
+/// not have — which is precisely the R85 failure, and precisely the class of
+/// bug an operator would report as "it looked right until I saved it".
+///
+/// It is also the gate on the state-RESTORE emission: the fixture's run is
+/// followed by other content, so a restore that this crate's interpreter
+/// resolved differently from the core's walk would diverge here.
+#[test]
+fn format_text_spacing_preview_equals_saved() {
+    let mut s = session("textedit", "format_color.pdf");
+    s.format_text(
+        &FormatRequest::new(0, "hello")
+            .char_spacing(MetricSpec::Absolute(0.6))
+            .h_scale(80.0)
+            .script(ScriptPosition::Superscript),
+        &FormatOptions::default(),
+    )
+    .expect("format_text applies the 19.1 spacing controls");
+    check("format-text-spacing", &s, 0, Visible::Yes);
 }
 
 /// `reflow` — re-wrapping a whole paragraph block to a new width

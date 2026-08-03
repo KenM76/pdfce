@@ -150,7 +150,7 @@ pub enum TextStateParam {
     HorizScale,
     /// `TL` — leading (§9.3.5), unscaled text-space units.
     Leading,
-    /// `Ts` — text rise (§9.3.6), unscaled text-space units.
+    /// `Ts` — text rise (§9.3.7), unscaled text-space units.
     Rise,
     /// `Tr` — text rendering mode (§9.3.6, Table 106), an integer.
     RenderMode,
@@ -307,7 +307,7 @@ pub struct TextStateParams {
     pub h_scale: f64,
     /// `TL` — leading (§9.3.5).
     pub leading: f64,
-    /// `Trise` — text rise (§9.3.6). Enters `Trm` as a translation, so it
+    /// `Trise` — text rise (§9.3.7). Enters `Trm` as a translation, so it
     /// moves the glyph but does **not** change its advance.
     pub rise: f64,
     /// `Tmode` — text rendering mode (§9.3.6, Table 106). Modes 3 and 7
@@ -525,6 +525,21 @@ impl AmbientValue {
         !matches!(self.origin, AmbientOrigin::ObservedIndirect { .. })
     }
 
+    /// The name of the side-effect operator that set this value (`TD` or
+    /// `"`), when the origin is [`AmbientOrigin::ObservedIndirect`].
+    ///
+    /// Exists so a caller can *name the culprit* in its narrowing
+    /// disclosure — "restored by re-spelling because `\"` also shows a
+    /// string" is an explanation an operator can act on, while "restored by
+    /// re-spelling" alone is a shrug. `None` for every other origin.
+    #[must_use]
+    pub const fn indirect_setter(&self) -> Option<&'static str> {
+        match self.origin {
+            AmbientOrigin::ObservedIndirect { setter } => Some(setter),
+            _ => None,
+        }
+    }
+
     /// The operator bytes that reinstate this value — the R88 ladder.
     ///
     /// - [`AmbientOrigin::Initial`] → `param`'s spec-default bytes.
@@ -627,7 +642,7 @@ pub struct AmbientTextState {
     pub h_scale: AmbientValue,
     /// `TL` — leading (§9.3.5).
     pub leading: AmbientValue,
-    /// `Ts` — text rise (§9.3.6).
+    /// `Ts` — text rise (§9.3.7).
     pub rise: AmbientValue,
     /// `Tr` — text rendering mode (§9.3.6, Table 106).
     pub render_mode: AmbientValue,
