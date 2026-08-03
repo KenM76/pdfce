@@ -28,9 +28,35 @@
 >    visible counterpart must be explained — was independently confirmed
 >    as a real shipped bug and partially addressed in commit `c998521`
 >    (the object-edit tool drew *no* selection outline at all, because
->    the drawing lived in an unreachable branch). §C's remaining asks
->    (type badge, invisible/approximate-hit disclosure, status readout)
->    are still owed.
+>    the drawing lived in an unreachable branch).
+>
+>    **Update (`pdfce-ui-specialist`, 2026-08-03, Pass 18.4 audit): §C's
+>    remaining asks HAVE NOW SHIPPED**, confirmed by reading the code —
+>    `object_summary::describe_object`/`ObjectSummary` (the single
+>    description path, §C.6), the status-bar selection readout
+>    (`selection_readout`, §C.5), the per-kind letter badges
+>    (`draw_selection_badge`/`object_kind_badge`, §C.1), the
+>    dashed-vs-solid outline distinction keyed on
+>    `ObjectSummary::bounds_are_approximate` (§C.2), and the
+>    minimum-visible-extent inflation for degenerate (zero-width/height)
+>    paths (`canvas::visible_outline_rect`/`MIN_OUTLINE_EXTENT_PX`) are
+>    all live. **Still owed, unchanged:** §C.3's Alt+click
+>    overlapping-object cycling (not found in the codebase as of this
+>    audit — coordinate with whatever cycling mechanism is landing
+>    concurrently, per new §E.4 below) and §C.4's annotation/form-field
+>    canvas hit-testing (still a deliberately deferred scope boundary,
+>    not a regression). **One new, more urgent finding from this same
+>    audit: §0.2's own characterization of the text bbox — and the
+>    matching shipped disclosure sentence in
+>    `ui_text::object_note(ObjectNote::ApproximateTextBounds)` — is
+>    factually wrong, not merely incomplete.** See the rewritten §0.2
+>    and the new **§E** below. The shipped sentence currently tells the
+>    operator "the selection is correct even though the box looks
+>    empty," which is false in exactly the case that matters most
+>    (clicking visible text can miss). This is a documentation/copy bug
+>    in already-shipped, user-facing text and should be corrected
+>    independently of — and not blocked on — the geometry fix §E
+>    specifies.
 >
 > 3. **§D (Measure ▾ discoverability) is CONFIRMED and made more urgent
 >    by an observation this spec could not have had:** screenshots of the
@@ -144,26 +170,112 @@ this spec makes binding is only the OUTCOME — **on-screen catch radius
 must be zoom-invariant**, matching the snap engine's already-proven
 behavior, not a new invention.
 
-### 0.2 "A box highlighting that doesn't correspond to anything" — a legibility gap, not a hit-testing bug
+### 0.2 "A box highlighting that doesn't correspond to anything" — a legibility gap, AND (corrected 2026-08-03) a genuinely mis-shaped, mis-positioned hit target, not merely an undisclosed one
 
-The selection outline (`main.rs:5370-5388`) is one uniform 2px accent
-rect drawn around `selection_outline_bounds` with **zero accompanying
-text anywhere in the app** — no status-bar line, no properties panel
-(the existing "Properties" window is *document*-level Info-dict fields
-only, `properties_window`, `main.rs:4352` — it has no concept of a
-canvas selection at all, confirmed by reading it in full: it edits
-`doc.properties_draft`, never `doc.canvas_selection`). So a successful
-hit currently has **no way to tell the operator what it hit.** Combined
-with §0.1's tolerance bug and `TextObject`'s bbox-only, origin-inflated
-approximation (`decompose.rs:305-327`, `approximate: bool` always
-`true` — the box is deliberately wider than the visible glyphs), the
-most likely real explanation for "a box that doesn't correspond to
-anything" is: **the operator hit a text object's inflated bounding box
-in the whitespace around/above the actual glyphs, and the app never
-said so.** §C is the direct fix; it requires zero core changes for the
-Text case specifically, since `TextObject.approximate` already exists
-and is already `true` — the fact was always computable, just never
-surfaced.
+> **⚠ HISTORICAL AS OF `1b38e34` (Pass 18.6, 2026-08-03) — engineer note.**
+>
+> **Everything in §0.2 and §B.3 below is now a description of the OLD
+> behaviour.** It is accurate about what the code used to do, and it is
+> retained deliberately: the em-box geometry is *why* four separate
+> defects reached the operator as a single sentence ("I don't seem to be
+> able to click on objects"), and deleting the analysis would erase the
+> reason the other three were found at all.
+>
+> **What shipped instead.** §E's recommendation was implemented. The text
+> hit-target is now derived from font metrics — summed advance widths for
+> the horizontal extent, `/FontDescriptor` ascent/descent for the vertical
+> — not a square inflated around the run's start point. On the same
+> fixture:
+>
+> | | bbox | basis |
+> |---|---|---|
+> | before (§0.2's subject) | `16,136,44,164` (28 × 28 pt) | em-box around the pen start |
+> | after (`1b38e34`) | `30,147.102,70.46,160.052` | `bounds=font-metrics` |
+>
+> Verified both directions: a click on the visible glyphs now HITS
+> (`--hit 65,152 --tolerance 0` → `index=1`), and a click on the blank
+> paper to their left now MISSES (`--hit 20,152` → `index=none`). Both
+> were previously the opposite.
+>
+> **§E is the live spec for this area.** One deviation from it shipped
+> and was right: §E.3 asked for two states, and four were implemented
+> (`TextBoundsBasis::{FontMetrics, MetricAdvancesNominalHeight,
+> EstimatedAdvances, EmBox}`), because a Type 3 or descriptor-less
+> CIDFont has real advances with a *guessed* height, and a
+> non-standard-14 font lacking `/Widths` has *estimated* advances.
+> Collapsing either into `FontMetrics` would have shipped precisely the
+> "sentence that no longer matches the box" failure §E.3 exists to
+> prevent. The em-box remains as the documented no-fonts fallback, so
+> §0.2's geometry is still reachable — it is the floor, no longer the
+> norm.
+
+**Correction (`pdfce-ui-specialist`, 2026-08-03).** This section
+originally described `TextObject`'s bbox as "deliberately wider than
+the visible glyphs" — i.e. annoying but safe, erring toward being easy
+to hit. **Measured against a real fixture, that is wrong.** On
+`fixtures/synthetic/vector/mixed.pdf`, `pdfce-cli object-list` reports
+the "Vector" text object's bbox as `bbox=16,136,44,164` — a **28×28pt
+square** — while the rendered glyphs run roughly 40pt wide and start
+well inside that square's left edge. The corrected mechanism, read
+from `decompose.rs` itself (`end_text`, `record_text_origin`,
+`Bounds::inflate`, confirmed by tracing all three):
+
+1. For each text-showing operator (`Tj`/`TJ`/`'`/`"`) inside one
+   `BT`…`ET`, `record_text_origin` records only the **pen-START
+   position** (the text-space origin `(0,0)` mapped through the
+   current `Tm`/`Td`-composed text matrix and the CTM) — never the
+   position the pen ends up at after the string's glyphs advance. Every
+   such origin across the whole text object is folded into one bbox via
+   `Bounds::union_point`.
+2. `end_text` then calls `Bounds::inflate(margin)` on that
+   origins-only bbox, where `margin` is the **largest `Tf` size seen**
+   in the object. `inflate`'s own implementation (`geometry.rs:313-321`)
+   subtracts `margin` from `min` and adds `margin` to `max` on **both**
+   axes — i.e. for a text object with a single pen-start point (the
+   common case: one `Tj` call), the result is a **square of side
+   `2 × margin`, centered exactly on that one point.**
+
+The consequence is not "wider and taller than the ink" — it is a fixed
+square straddling the point where the text **begins**, which is wrong
+in two directions at once, both confirmed on screen:
+
+- **Roughly half the square's width sits to the LEFT of the text
+  entirely** — in the blank paper before the first glyph — so clicking
+  visible whitespace there selects the text object. This is the
+  operator's literal complaint ("a box highlighting on the screen that
+  doesn't seem to correspond to anything").
+- **The square's right half extends only about one em past the pen
+  start** — for any string longer than roughly one character's width
+  (i.e. almost all real text), **the box ends before the string does.**
+  Clicking directly on visible glyphs past that point **misses the
+  object entirely.** This is the serious half the old "wider and
+  taller" framing concealed: the box is not a safe, generous
+  over-approximation, it systematically **undercuts** the very ink it
+  claims to bound. It is also **not corrected by §0.1's tolerance
+  fix** — `hit_test_point`'s tolerance is a uniform pad added around
+  whatever bbox exists (`hit.rs:24-26`, `object_hit`'s text/image/form
+  branch: "the point is inside the object's page bbox (inflated by
+  `tolerance`)"); it softens both failure directions a little but does
+  not touch the box's shape or its off-center offset, and the two bugs
+  (tolerance units, box geometry) are additive, independently-real, and
+  independently fixed.
+
+So the operator's "a box that doesn't correspond to anything" complaint
+has **two distinct real causes in the Text case**, not one: (a) the box
+extends into blank paper the operator can see is empty (the original,
+correctly-identified half of this finding), and (b) the box can fail
+to cover glyphs the operator is looking straight at and clicking on
+directly (the half this section previously got backwards). §C's
+disclosure work (below, shipped in Pass 18.4 — see the STATUS NOTICE)
+correctly addresses (a): it is honest about the box being an
+approximation. It does **not** address (b), because disclosing an
+inaccurate hit target is not the same as fixing one — a click that
+misses visible ink and does nothing is not meaningfully improved by a
+sentence explaining, after the fact, that the box was inaccurate.
+**§E (new, below) specifies the actual geometry fix for (b).** It also
+flags that the shipped disclosure sentence for (a) currently oversells
+its own safety — see §E.3 for the correction that sentence itself now
+needs.
 
 ### 0.3 "The Tools dock should have tabs, including a layer tree I can click"
 
@@ -483,7 +595,7 @@ Reading `decompose.rs` in full:
 | Object kind | Fields available TODAY | Row content buildable NOW | Gap |
 |---|---|---|---|
 | `PathObject` | `style: PaintStyle` (fill rule + stroke bool), `line_width`, `fill_color`/`stroke_color: Rgb`, `subpaths` (→ anchor count via `page_subpaths()`/`anchors()`) | **Full detail row, no core change needed:** `Path · stroke 0.5pt #1A73E8 · 4 nodes` or `Path · fill #FFFFFF (nonzero) · 4 nodes` (a no-paint `n`-op path per `PaintStyle::is_invisible()` gets its own explicit label, §C.2) | none |
-| `TextObject` | `page_bbox` (origin-inflated approximation), `approximate: bool` (always `true`) | **Only:** `Text · approx. bounds, Npt tall` — no string, no font name, nothing else exists to show | **Binding core ask, §B.4 #1** — no extracted string preview, no resolved font name/size are captured anywhere in the decomposition today |
+| `TextObject` | `page_bbox` — **not** a wider-than-ink safety margin (corrected 2026-08-03, §0.2): a fixed square of side `2 × (largest Tf size seen)` centered on the pen-START position of the run, so it typically extends into blank space before the text AND stops short of the string's true right edge; `approximate: bool` (always `true`) | **Only:** `Text · approx. bounds, Npt tall` — no string, no font name, nothing else exists to show | **Binding core ask, §B.4 #1** — no extracted string preview, no resolved font name/size are captured anywhere in the decomposition today. **Separately, §E specifies a binding core ask to correct the bbox's SHAPE/POSITION itself** — §B.4 #1 (string/font preview) and §E's geometry fix are independent asks; a font name being displayable does not imply the box is accurate, and an accurate box does not by itself surface a string preview. |
 | `ImageObject` | `source: ImageSource` (Inline/XObject/Form), `ctm`, `page_bbox` | **Only:** `Image · inline`/`Image · XObject`/`Form XObject · not decomposed` (source kind is honestly disclosable now) | **Binding core ask, §B.4 #2** — no pixel width/height, no colorspace captured |
 
 **This gap is not cosmetic.** The tree's stated, operator-requested
@@ -848,6 +960,273 @@ that is a bug against the existing spec, not new scope for this one.
 
 ---
 
+## E. Text hit-target geometry — the fix, not just the disclosure
+
+**Added by `pdfce-ui-specialist`, 2026-08-03**, on dispatch to correct
+§0.2/§B.3 and specify the actual fix. This is a **fourth independent
+contributor** to "I don't seem to be able to click on objects,"
+alongside the three already fixed (zoom-inverted select tolerance,
+§0.1; the object-edit tool drawing no outline, commit `c998521`; a
+page-centring coordinate offset). Pass 18.4 shipped honest *disclosure*
+of the approximation — the operator is no longer misled about a
+correct-but-confusing hit. Disclosure is not a fix: the hit target
+described in §0.2 is still in the wrong place. This section specifies
+what replaces it.
+
+### E.1 Options weighed, and why
+
+Four candidates, in the order the dispatch posed them:
+
+**1. Real glyph extents (per-glyph shaping via `skrifa`).** Most
+accurate — an actual ink bounding box per glyph, composed into a run
+extent. **Recommend against, for an architectural reason, not just a
+cost one.** `pdfce-core::text_extract::font`'s own module doc states
+the boundary this project already committed to: *"Merging \[rendering
+and extraction] would force `pdfce-core` to depend on a font
+rasterization stack it must not have (R21: `skrifa` lives in
+`pdfce-render`)."* `TextObject`/`decompose.rs` live in
+`pdfce-core::vector` — pulling glyph shaping into that walk would
+violate the same R21 boundary this project already drew for a sibling
+reason. It could only be done OUTSIDE `pdfce-core`, as a `pdfce-gui`-
+or `pdfce-render`-side hit-test-only side channel (glyph shapes would
+never enter `TextObject`/`PageObjects` themselves, since core cannot
+depend on render). That is a real, larger, cross-crate design — a new
+data path parallel to the object model, not an extension of it — for a
+gain that, per option 2 below, is not needed for the common case.
+**Not recommended now; not ruled out forever** if a future consumer
+(e.g. exact-outline redaction, §C.2's deferred same-colour heuristic)
+independently justifies the cost.
+
+**2. A better dictionary-derived approximation — RECOMMENDED.**
+Accumulate real advance widths and use font-descriptor ascent/descent,
+instead of inflating a point by the largest `Tf` size. The load-bearing
+finding that makes this cheap rather than speculative: **the width-
+resolution machinery this needs already exists in `pdfce-core`, built
+for a different consumer, and is reused by at least three others.**
+`text_extract::font::ExtractFont` (`font.rs:234-262`) already resolves,
+from dictionary data alone — **no font program, no `skrifa`, no
+`pdfce-render` dependency**:
+
+- simple-font widths: `/FirstChar` + `/Widths`, else the compiled-in
+  standard-14 AFM tables (`pdfce-core::fontdata`), else `/MissingWidth`
+  (§9.6.2.1/§9.8.2);
+- composite-font (Type0) widths: the descendant CIDFont's `/W` array
+  over `/DW` (§9.7.4.3) — critically, this covers the *`Identity-H`
+  subsetted-composite case* that `text_extract::font`'s own docs name
+  as "the common modern document" for character-identity resolution
+  (Word/Chrome-PDF-export output). Widths for that case come from a
+  **dictionary array**, not the font program, so this fix's coverage is
+  not limited to simple fonts — it reaches the dominant real-world
+  case for BOTH font models;
+- Type 3's `/FontMatrix` width-space scale quirk (§9.6.5), already
+  handled (`type3_width_scale`).
+
+And per `edit.rs:16`/`addtext.rs`/`redact.rs`'s own comments, **this
+same width table already backs `text_edit::edit`, `text_edit::addtext`,
+and `redact`'s own advance-width math** ("Width `w0` comes from the
+SAME `/Widths`/AFM the render path uses"). Wiring a fourth consumer
+(`decompose.rs`'s `TextObject` construction) into an already-proven,
+already-shared resolver is "reuse the fix vector already in the
+codebase" (this project's own recurring finding shape, cf. §0.1) — not
+new font-metrics research.
+
+**What this costs, named precisely, so it is not underestimated as a
+one-liner:**
+
+- `record_text_origin` today records only the pen-START point per
+  text-showing operator (`decompose.rs:1183-1196`) and throws away the
+  `Tf` NAME operand entirely (`decompose.rs:935-939`, "the number
+  operand is the size" — the font-resource name that precedes it is
+  never kept). Computing a real run extent needs, per text-showing
+  operator: the start position (already tracked) **plus** the summed
+  advance for that specific string, which needs the CURRENT font's
+  resolved width table.
+- That means `decompose`/`decompose_page` need a new resolver seam
+  mirroring the existing `XObjectResolver`/`NoXObjects` pattern
+  (`decompose.rs:462-476`) — call it a `FontMetricsResolver` or similar
+  (**the engineer's call**, per this project's "name the contract, not
+  the struct" convention) — so a caller that already has a
+  `DocumentView`/resource-dict context (the GUI's `ObjectModelProvider`
+  build path, or `pdfce-cli`) can supply width/ascent/descent
+  resolution without `decompose.rs` itself gaining general
+  document-resolution machinery it has deliberately declined for
+  images too.
+- The advance formula itself (`Tz` horizontal scaling, `Tc`/`Tw`
+  character/word spacing per §9.4.4) **must be the SAME formula
+  `text_edit`'s own width math already uses** — do not re-derive it a
+  third time inside `decompose.rs`. `pdfce-render`'s `text.rs::
+  advance_for` is the canonical *statement* of the formula (cited from
+  the spec); `text_edit`'s own core-side implementation is the
+  reusable one for this purpose, since `decompose.rs` cannot depend on
+  `pdfce-render`. **The engineer's call which existing core function to
+  share — it must be one of the existing ones, never a new,
+  independently-written fourth copy of the same arithmetic** (core
+  today already has three: extraction, edit/addtext/reflow layout, and
+  redaction survivor-width estimation — a `decompose`-side fourth,
+  written from scratch, is exactly the kind of quiet divergence
+  decision 011 already named as this project's recurring failure
+  shape).
+- Vertical extent: use the font's `/FontDescriptor` `/Ascent`/
+  `/Descent` (or the compiled-in standard-14 descriptor for a bare
+  base-14 dict, `pdfce-core::fontdata`) rather than the current
+  isotropic "inflate by font size in every direction." Both are
+  dictionary/compiled-data facts, not font-program measurements.
+- None of this touches round-trip/minimal-diff (project rule 3):
+  `TextObject.page_bbox` is read-only descriptive data consumed for
+  selection/hit-testing/marquee only — it is never written back to the
+  file — so improving its accuracy has zero interaction with the save
+  path.
+
+**What Tier 2 still gets wrong, named honestly (so the disclosure in
+§E.3 can be accurate about it):** it is a metrics-derived box, not
+measured glyph ink. It will not follow italic overhang, decorative
+swashes, or a string of periods/hyphens that never reaches the font's
+nominal ascent. A run that changes `Tf` size mid-string still uses one
+run-level vertical extent (the largest size seen), same simplification
+as today. These are real, smaller residual inaccuracies — categorically
+better than today's "can miss the ink entirely," not a claim of exact
+glyph-outline fidelity.
+
+**3. Asymmetric tolerance (generous-only slack around the existing
+box).** **Recommend against as anything more than a stopgap**, and
+name why precisely: `hit_test_point`'s tolerance is already a *uniform*
+pad added around whatever bbox exists (`hit.rs:24-26`). Making that pad
+larger, or biasing it, softens both failure directions a little but
+fixes neither — the box is still centered on the wrong point and still
+has the wrong shape; a generous-enough pad to reliably reach the far
+end of a long string would, at the SAME time, extend the "hits blank
+paper" failure further left, which is the literal thing the operator
+complained about. This is the "reintroduces selects nothing" risk the
+dispatch asked to be weighed explicitly: it does, and it is not a
+trade worth making when option 2 fixes the actual shape at comparable
+(dictionary-only) cost.
+
+**4. Status quo (origin + em-box, disclosed).** Already shipped
+(Pass 18.4); already known to miss visible ink. Not acceptable as the
+resting state — named here only to close the option set.
+
+**Recommendation: ship option 2.** It is the "honest cheaper option
+that is nearly as good" the dispatch asked for explicitly — in the
+dominant real-world case (simple fonts with `/Widths`, and composite
+fonts with a `/W` array, which between them cover the large majority of
+real PDFs including the Identity-H-subsetted case this project's own
+extraction work already flagged as the common modern producer output)
+it is not merely "nearly as good" as glyph shaping, it is **the correct
+answer to the question the box is actually supposed to answer**
+("where does the PDF position this text," not "what is this glyph's
+ink outline") — glyph shaping only wins for the residual cases named
+above, at a cost (cross-crate hit-test-only data path, or per-click
+font loading) categorically larger than this option's.
+
+### E.2 What happens to `approximate: true` and the dashed outline
+
+**Keep both**, for a reason distinct from today's reason. Today,
+`approximate: true` discloses "this box is not the ink" because the
+box is wrong in both position and extent. After option 2, the box's
+POSITION and OVERALL EXTENT are correct (a compliant reader positions
+glyphs by exactly this arithmetic) — but it is still not literal glyph
+outlines (§E.1's residual list). So the flag's *meaning* narrows:
+before, it disclosed "this box may not correspond to what you see, in
+either direction"; after, it discloses "this box is derived from the
+font's layout metrics, not measured from the rendered glyph shapes" —
+still true, still worth a dashed outline (R84: shape cue, not colour
+alone), just a smaller, more specific gap. The dashed-vs-solid
+mechanism (`ObjectSummary::bounds_are_approximate`, `object_summary.rs:
+219-232`) needs no change — it already asks "is this a deliberate
+approximation of extent," which remains `true` under option 2; only
+the WORDING behind it changes (§E.3).
+
+### E.3 The disclosure sentence must change, in TWO ways — one urgent regardless of when E.1 ships
+
+**Finding, independent of the geometry fix's timeline:** the shipped
+sentence for `ObjectNote::ApproximateTextBounds`
+(`ui_text.rs:1665-1670`) says:
+
+> "The box around text is approximate: pdfce measures a text object
+> from where each run of glyphs STARTS, then pads by the largest type
+> size it saw, so the box is normally wider and taller than the ink.
+> Clicking blank space near text can therefore select the text — the
+> selection is correct even though the box looks empty."
+
+This is **the same wrong claim as the original §0.2**, now live as
+user-facing copy, and it does not merely omit the miss case — it
+**affirmatively denies it** ("the selection is correct even though the
+box looks empty"). Per rule 4 (fuzzy, never sneaky), a disclosure that
+states something false is worse than no disclosure: it tells an
+operator whose click just failed that it must have succeeded. **This
+sentence must be corrected as its own fix, not bundled with or blocked
+on §E.1's geometry work** — it is a copy-accuracy bug in already-shipped
+text, correctable today. Contract for the corrected sentence, until
+E.1 ships (naming the facts it must state, per this project's
+"contract not exact prose" convention — final wording is
+`ui_text.rs`'s voice/the engineer's call):
+
+1. The box is derived from where the text run **starts** plus the
+   largest type size used — not measured from the rendered glyph
+   shapes.
+2. It can be **smaller than the visible text as well as larger** — so
+   it can select blank paper near the text, **and it can fail to
+   select the text itself** when clicked directly.
+3. **Do not** state or imply that a click is "still correct" as a
+   blanket reassurance — that is the specific false claim to remove.
+
+**Once E.1 ships**, the sentence changes again — not back to
+reassurance, but to a narrower, still-honest gap. Facts the new
+sentence must state:
+
+1. The box now reflects the font's actual layout metrics (character
+   advances plus the font's designed ascent/descent), not a fixed
+   em-square guess.
+2. It is still not a measurement of the rendered glyph outlines — it
+   can be slightly off for italic overhang, decorative glyphs, or
+   strings whose visible ink does not reach the font's nominal height
+   (e.g. a row of hyphens).
+3. It should **not** repeat claim 2 above ("can select blank paper
+   *or* miss visible text") once E.1 ships, because that claim becomes
+   false in the case E.1 fixes — an unchanged sentence here would be
+   the same "approximate bounds becomes a lie in the other direction"
+   failure the dispatch asked to guard against, just delayed rather
+   than avoided.
+
+**This means `ObjectNote::ApproximateTextBounds` needs to carry enough
+information to pick between these two sentences** — e.g. a reason
+field or a second variant distinguishing "em-box fallback" from
+"metrics-derived" (Type3/undecodable-composite/missing-widths cases
+may still fall back to the em-box even after E.1 ships, per E.1's own
+fallback ladder) — **named as a binding contract, not a struct shape**:
+whatever case produced the box must be recoverable at disclosure time,
+so the sentence shown always matches the box actually drawn. Shipping
+E.1 without this would leave some text objects silently using the
+OLD, now-inaccurate sentence with no way to tell which sentence
+applies to which selection — a regression in honesty, not an
+improvement.
+
+### E.4 Interaction with overlapping-hit cycling (landing concurrently)
+
+§C.3 specifies Alt+click cycling through overlapping hits at one
+point — confirmed not yet in the codebase as of this audit, and
+described as being built concurrently with this finding. **Binding
+coordination point, not a design change to that feature:** whatever
+candidate-list query backs cycling must use the **same** `page_bbox` +
+tolerance `hit_test_point` uses for a plain click — never a separately-
+tuned, looser tolerance for cycling specifically. Today's oversized,
+offset text box would, if left as the candidate-list input, make text
+objects appear as a cycle candidate for clicks that are nowhere near
+their visible ink (over-represented — crowding out the object actually
+under the pointer) while simultaneously being **unreachable** for
+clicks squarely on the text itself (under-represented — absent from
+the very candidate list an operator would expect it to head). Fixing
+the box per E.1 fixes both distortions in cycling's candidate list for
+free, since cycling and plain-click share the same underlying
+geometry; it does **not** need its own separate correctness work
+against text specifically, provided the builder currently landing
+cycling reads candidates from the corrected `page_bbox` rather than
+hardcoding today's em-box assumption into new code. Flagged explicitly
+so that concurrent work does not bake in the geometry this section is
+in the process of correcting.
+
+---
+
 ## Discoverability / accessibility checklist run against this spec
 
 - **Plain-English labels, tooltip states WHEN not just WHAT:** every
@@ -910,6 +1289,10 @@ that is a bug against the existing spec, not new scope for this one.
 | Tree row-string precompute / virtualization (§B.6) | **P0 for `show_rows`; P1 for the disclosed-cap fallback** | Fallback only needed if precompute alone doesn't suffice |
 | Drag-reorder / undock tabs (§A.6) | **Not scoped — operator decision needed** | Flagged, not built |
 | Objects-tab search/filter (§B.7) | **P1 (backlog)** | Natural pairing with reserved Search icon |
+| Correct the shipped `ApproximateTextBounds` disclosure sentence (§E.3, pre-E.1 wording) | **P0** | Live copy currently states a false reassurance ("selection is correct even though box looks empty"); fixable today, independent of the geometry work |
+| Text-object bbox geometry fix — dictionary/AFM-derived advances + descriptor ascent/descent (§E.1, option 2) | **P0** | Fourth confirmed contributor to "can't click objects"; reuses `text_extract::font`'s existing width resolver, no `skrifa`/render dependency |
+| Post-fix disclosure sentence + `ObjectNote` reason split (§E.3) | **P0, ships in the SAME pass as the geometry fix** | Must not leave some text objects showing the stale sentence with no way to tell which applies |
+| Alt+click cycling reads the SAME corrected `page_bbox`/tolerance as plain click (§E.4) | **Coordination note for the concurrent builder** | Not new scope; prevents the em-box assumption from being baked into new candidate-list code |
 
 ---
 
@@ -948,3 +1331,20 @@ that is a bug against the existing spec, not new scope for this one.
    Alt+click through a stack of objects" or "why doesn't clicking an
    annotation select it in the tree" does not treat either as an
    unnoticed regression; both were deliberately deferred here.
+6. **(Added 2026-08-03) §0.2/§B.3's original description of the text
+   hit-target was itself wrong, and the correction changes the fix.**
+   The box is not a wider-than-ink safety margin; it is a fixed square
+   centered on the text run's pen-start point, which routinely (a)
+   extends into blank paper left of the text AND (b) stops short of
+   the string's true right edge — so clicking visible glyphs can miss
+   the object entirely. This is a fourth, independently-real
+   contributor to "I can't click objects," on top of the three already
+   fixed. New §E specifies the fix (dictionary/AFM-derived accumulated
+   advances, reusing `text_extract::font`'s already-built width
+   resolver — no `skrifa`, no new cross-crate dependency) and the two
+   disclosure-sentence corrections it requires (one fixable today,
+   independent of the geometry work; one that ships alongside it).
+   **Also flag to whoever owns `ui_text.rs`:** the currently-shipped
+   `ApproximateTextBounds` sentence asserts a false reassurance today
+   and should be corrected as its own small fix without waiting for
+   the geometry work, per §E.3.

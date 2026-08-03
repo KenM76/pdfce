@@ -8025,3 +8025,283 @@ dependencies this continuation.
   one in `D:\dev\rag\egui\`
   (`bottom_panel_height_change_retriggers_fit_to_viewport_zoom.md`); all
   three index files updated.
+
+**Same-day continuation 60 (real date 2026-08-03) — Pass 18.5 SHIPPED
+(`hit_test_point_all` + Alt+click click-through cycling + text/image
+object detail — the last two items owed from the whole Pass 18.x /
+decision-017-Amendment-A family), a correction to the Pass 18.4
+disclosure text, and a correction to the librarian's OWN previous
+commit-chain filing.** Branch `pass-8-redaction`; four commits landed
+on top of `a5d1d18` (continuation-59 HEAD): `25b4783` (docs: correct
+the commit chain itself) → `d296666` (fix: the Pass 18.4
+`ApproximateTextBounds` disclosure was itself wrong) → `9998a6b` (Pass
+18.5) → `6a6a48f` (tools: blank-capture guard now samples the CLIENT
+rect). Chain now **35 commits** from the first implementation commit,
+**36 on the branch total**, still all local-only, still no git remote
+configured at all. Workspace: `cargo test --workspace` 1559 → 1599
+passed, 0 failed; doc-tests 69 passed; `cargo fmt --check` / `cargo
+clippy --workspace --all-targets -D warnings` clean; `cargo tree -p
+pdfce-core`/`-p pdfce-render` GUI-dep-free; `bash
+tools/check-ui-strings.sh` exit 0; `fuzz/` `cargo check --all-targets`
+clean; zero new Cargo dependencies this continuation.
+
+**Shipped:**
+- **Pass 18.5** — `hit_test_point_all` + Alt+click click-through
+  cycling + text/image object detail, committed `9998a6b`. Closes BOTH
+  items deferred at Pass 18.4's ship: the core `hit_test_point_all` API
+  (with `hit_test_point` now structurally defined as its head, so the
+  two provably cannot disagree) and §B.4's core `pdfce-core` additions
+  (`TextObject` string/font preview via a new `FontResolver` seam,
+  `ImageObject` pixel dimensions). **All six numbered Pass 18.x slices
+  (18.0–18.5) are now shipped.** Full record: `ROADMAP.md` Shipped
+  (top).
+- **Pass 18.4 disclosure correction** — committed `d296666`. The
+  `ApproximateTextBounds` copy shipped at Pass 18.4 repeated the same
+  wrong text-bbox model the ui-spec itself carries, and reassured the
+  operator a surprising selection was "correct" while disclosing
+  nothing about the opposite, worse failure (a click on visible text
+  can MISS the object). Rewritten to state the real box construction
+  and both failure directions. Disclosure only — the underlying
+  geometry fix is in progress (ui-spec §E, builder implementing).
+- **GUI observation-harness fix** — committed `6a6a48f`. The blank-
+  capture guard (`d15c360`, continuation 58) sampled the whole WINDOW
+  rect, which always varies (OS-painted title bar), so it could PASS on
+  a white, unpresented client area — a strictly worse failure than the
+  black-window case it was built to catch. Fixed to sample the CLIENT
+  rect only. `gui-click.ps1` also gained `-Modifiers Shift|Ctrl|Alt`
+  support (needed to verify Alt+click in the running app for Pass
+  18.5, per R86).
+- **Librarian filing correction** — committed `25b4783`. The commit
+  chain the librarian filed at continuation 59 was missing `7274fdd`
+  (itself the commit that repaired an earlier fabricated hash) and had
+  conflated "commits in the chain" with "commits on the branch." Both
+  fixed and re-verified against `git rev-list`.
+
+**Decisions made this session:**
+- **New `pdfce-core` API-design invariant, filed to `ROADMAP.md`'s
+  Standing rules by cross-reference and to `D:\dev\rag\rust\`
+  generally: a singular "best match" query is always defined as the
+  structural head of its plural "all matches" sibling** — one private
+  iterator, `.next()` for the singular form, `.collect()` for the
+  plural, so the two provably cannot disagree. Applied at both the
+  `pdfce-core` function level (`hit_test_point`/`hit_test_point_all`)
+  and the `pdfce-gui` trait level (`CanvasTargetProvider::hit_test`/
+  `hit_test_all`, singular now a PROVIDED default over the REQUIRED
+  plural method).
+- **Memory/work-bound judgment call: text previews are capped at
+  DECOMPOSITION time (`MAX_TEXT_PREVIEW_CHARS = 64`), not display
+  time, and stored as owned truncated `String`s, not borrowed spans.**
+  Reasoned explicitly in the Pass 18.5 Shipped entry — a span-based
+  design would keep the source `ContentStream` alive for the object's
+  whole lifetime and re-run the font-decode ladder on every
+  Objects-tree row redraw (which happens every frame); an owned,
+  pre-truncated string pays the decode cost once. A separate, smaller
+  GUI-layer display cap (`ROW_TEXT_CHARS = 32`) is kept independent of
+  the core cap so tuning one can never silently retypeset the other.
+- **New `ROADMAP.md` Standing rule R87** — hashes and commit/test
+  counts handed to a doc-writing agent (the librarian included) are
+  filed as fact with no independent verification; this is the SECOND
+  filing error this project's own "verify against `git`" habit has
+  caught. R87 makes explicit that these figures must be engineer-
+  produced directly from `git`/`cargo test` and spot-checked after
+  filing, never recalled from memory or a prior summary.
+- **Pass-count amendment:** the ★ Pass 18.x family header now reads
+  "ALL 6 numbered slices 18.0–18.5 SHIPPED" (was 5, ending at 18.4) —
+  the only item left open from the whole decision-017/Amendment-A/
+  ui-spec family is the ui-spec's own text-bbox-model wording
+  correction, now IN PROGRESS rather than merely filed.
+
+**Findings + decisions (empirical):**
+- **`TextPreview` is sourced-text-only — no derived word-space or
+  line-break.** `simple-winansi.pdf` previews as
+  `"HelloworldSecond line"` because its word gap is a `TJ` kerning
+  offset (no literal space glyph) and its line break a bare `Td` move
+  (§14.8.2.5 layout modes S3/S5) — `text_extract`'s `plain_text` mode
+  derives both; a preview intentionally does not, judged more honest
+  than presenting a reader's guess as the document's own content.
+  Project-internal (a documented `pdfce-core` behavior with spec
+  citations), not escalated to any RAG.
+- **`TextFont::size` is the literal `Tf` operand, not the rendered
+  glyph size** — `/F1 1 Tf` + a `12 0 0 12 .. Tm` scaling matrix
+  renders at 12pt but reports `size: 1.0`. Documented on the field and
+  in CLI help; project-internal, not escalated (this is a `pdfce-core`
+  API-shape decision, not a generalizable Rust/egui/PDF-domain fact).
+- **A blank-capture guard sampling the WINDOW rect can pass on a
+  white, unpresented client area, because the OS-painted title bar
+  alone supplies enough pixel variance to satisfy a uniformity check.**
+  Escalated to
+  `D:\dev\rag\egui\blank_capture_guard_must_sample_client_rect_not_window_rect.md`.
+- **Define a singular "best match" query as the structural head of its
+  plural "all matches" sibling** (one private iterator, `.next()` vs
+  `.collect()`) so the two provably cannot disagree — generalizes
+  beyond hit-testing to any resolve-with-fallbacks/ranked-match API.
+  Escalated to
+  `D:\dev\rag\rust\define_singular_query_as_head_of_plural_query.md`.
+- **Doc-writing agents have no shell — any hash/count handed to them
+  is filed as fact.** Confirmed a second time this project (see
+  Decisions, above); recorded as `ROADMAP.md` R87, not escalated
+  further (project-internal methodology, not a Rust/egui/PDF-domain
+  fact).
+
+**Still in flight:**
+- ui-spec §E text-bbox hit-target geometry fix — IN PROGRESS, builder
+  implementing; not yet shipped.
+- `-Pid` parameter on `tools/gui-click.ps1`/`observe-gui.ps1` — filed to
+  Backlog, not built.
+- No GUI redaction-apply flow (carried, unchanged).
+- `✓`/`✕` glyph verification (carried, unchanged).
+- Pass 12.M2c (dimension-tool bug-fix cluster) — still filed, not
+  scoped.
+- Open operator questions (c) (multi-monitor undock) and (e) (R86
+  standing-rule blessing) remain unanswered.
+- The operator priority sequence's items #3 (text-handling: FF-B,
+  FF-H, FF-C) and #4 (form-building) remain the next concrete dispatch
+  — unchanged from continuation 59, nothing this continuation blocks or
+  advances them.
+
+**For next session:**
+- Items #3 (text-handling fast-follows) and #4 (form-building) remain
+  the recommended next dispatch unless the operator gives a new steer.
+  The ui-spec §E geometry fix is already in flight independently and
+  doesn't block either.
+- Flag to the operator at next contact, all carried or newly precise:
+  (1) the icon build shipped ahead of the Pass-17-first sequencing at
+  continuation 57 (carried, unresolved flag); (2) the GUI has no
+  redaction-apply flow at all (carried); (3) R86 remains unanswered
+  (carried); (4) **there is no git remote configured at all** — the
+  36-commit branch exists solely on this machine; the verified backup
+  bundle (`D:\Dev\pdfce-backups\pdfce-20260803.bundle`) has NOT been
+  regenerated against this continuation's four new commits — treat it
+  as stale until refreshed; (5) the branch is still named
+  `pass-8-redaction` though it now spans Passes 9–18.5 — worth a rename
+  whenever a push is authorized.
+- Carried, unchanged: push/publish call; encryption `/R 6` +
+  `LEGAL.md` §2; list-authoring scope.
+- Two new cross-project RAG findings filed this continuation — one in
+  `D:\dev\rag\egui\`
+  (`blank_capture_guard_must_sample_client_rect_not_window_rect.md`),
+  one in `D:\dev\rag\rust\`
+  (`define_singular_query_as_head_of_plural_query.md`); both index
+  files updated. No `personal_rag/pdf` finding this continuation — all
+  four commits were pdfce-internal engineering/tooling/API-design, not
+  PDF-domain-empirical, and nothing here is "what the spec says" either
+  (no dispatch to `pdfce-spec-librarian` needed).
+
+**Same-day continuation 61 (real date 2026-08-03) — Pass 18.6 SHIPPED
+(text hit-target geometry now derived from font metrics, not
+glyph-origin inflation — ui-spec §E), closing the FOURTH and last named
+contributing cause of the operator's 2026-08-02 "I don't seem to be
+able to click on objects" report.** One commit, `1b38e34`, on top of
+`6a6a48f` (continuation-60 HEAD). Branch `pass-8-redaction`, now **37
+commits**, still no git remote configured. Backup bundle refreshed at
+`D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle` (verified complete —
+supersedes the stale `pdfce-20260803.bundle` flagged at continuation
+60). Workspace: `cargo test --workspace` 1599 → 1613 passed, 0 failed;
+`cargo fmt --check` / `cargo clippy --workspace --all-targets -D
+warnings` clean; `bash tools/check-ui-strings.sh` exit 0; `cargo tree -p
+pdfce-core`/`-p pdfce-render` GUI-dep-free; zero new Cargo dependencies.
+
+**Shipped:**
+- **Pass 18.6** — text hit-target geometry now derived from font
+  metrics, committed `1b38e34`. `TextObject`'s bbox was the pen-START
+  point of each show operator inflated symmetrically by the largest
+  `Tf` size (a square centred on the run's start, for the common
+  single-`Tj` case); it is now the summed advance widths across the run
+  for the horizontal extent and `/FontDescriptor` ascent/descent for
+  the vertical, via a four-rung fallback ladder (`/Ascent`+`/Descent` →
+  `/FontBBox` → compiled-in standard-14 → nominal em, flagged). Measured
+  on `mixed.pdf`: `bbox=16,136,44,164` → `bbox=30,147.102,70.46,160.052`.
+  Engineer-verified via the CLI hit-test oracle AND on screen: a click on
+  visible glyphs that used to MISS now hits; a click on blank paper to
+  the left that used to FALSE-HIT now misses. Full record: `ROADMAP.md`
+  Shipped (top).
+
+**Decisions made this session:**
+- **Four bbox bases shipped, not the two ui-spec §E asked for**
+  (`TextBoundsBasis::{FontMetrics, MetricAdvancesNominalHeight,
+  EstimatedAdvances, EmBox}`) — judged necessary, not scope creep: a
+  Type 3 or descriptor-less CIDFont has real advances but a guessed
+  height; a non-standard-14 font with no `/Widths` has estimated
+  advances. Collapsing either into `FontMetrics` would reproduce
+  exactly the "sentence that no longer matches the box" failure §E
+  exists to prevent, and the third case is not hypothetical — the
+  project's own `text/identity-h-no-tounicode.pdf` fixture exercises it.
+- **New single-source-of-truth invariant for the text-advance formula:**
+  `advance_tx(w0, tfs, tc, tw, th)` is now the ONE copy of §9.4.4's
+  displacement formula, shared by `text_extract::page::show_code`,
+  `redact::glyph`, and the decompose walk — a third, independent
+  implementation was about to be written before this consolidation.
+
+**Findings + decisions (empirical):**
+- **Two latent decompose-walk bugs found and fixed in passing, both
+  invisible under the old ±1-em-inflated geometry:** (1) `'` and `"` did
+  not perform their `T*` line move, and `"` did not set `Tw`/`Tc`
+  (§9.4.3 Table 109); (2) `Tc`/`Tw`/`Tz`/`Ts` were not tracked in the
+  decomposer at all — `GState` now carries them with Table 105 initial
+  values, saved/restored across `q`/`Q`. General lesson: making geometry
+  honest exposed correctness bugs the sloppy geometry had been masking.
+  Project-internal (pdfce's own decompose walk), not escalated to any
+  RAG.
+- **PDF-domain finding, escalated to `C:\personal_rag\pdf\`:** ISO
+  32000-1 §9.8 Table 122 marks `/Ascent`/`/Descent` Required on any
+  non-Type-3 font descriptor, but real subsetted CIDFonts (and pdfce's
+  own synthetic CID fixture) frequently omit the descriptor ENTIRELY —
+  the `/FontBBox`-then-standard14-then-nominal-em fallback ladder is
+  load-bearing in practice, not defensive. Filed as
+  `C:\personal_rag\pdf\lesson_20260803_cidfont_descriptor_ascent_descent_often_absent.md`;
+  subject `index.md` and master `index.md` both updated. This subject
+  (`personal_rag/pdf`) already existed on disk (seeded 2026-07-29 from
+  the separate Open PDF Studio fork project, per that subject's own
+  `index.md`) — not created this continuation, just added to.
+- **CLI output contract change (rule 11), additive not breaking:**
+  `object-list` text rows gain `bounds=font-metrics|
+  metric-advances-nominal-height|estimated-advances|em-box`; bbox
+  coordinates now print at 4 dp with trailing zeros trimmed (previously
+  seventeen digits of `f64`/`f32`-widening artefact, four orders below
+  the hit tolerance).
+
+**Still in flight:**
+- **Documentation-only reconciliation still owed, NOT built this
+  continuation** (flagged by the engineer, out of scope for a builder
+  — this is `pdfce-ui-specialist` territory):
+  `docs/ui_specs/pass-17-dock-and-layer-tree.md` §0.2/§B.3 still
+  describe the OLD "wider and taller than the ink" bbox model in the
+  present tense, even though the same file's own §E (written earlier
+  this family) already carries the correct model. Needs a
+  `pdfce-ui-specialist` re-dispatch to reconcile the two sections
+  against each other.
+- All six numbered Pass 18.x slices (18.0-18.5) plus this Pass 18.6
+  follow-on are now SHIPPED. The whole decision-017/Amendment-A/ui-spec
+  family is closed except the documentation item immediately above.
+- `-Pid` on the observation scripts; no GUI redaction-apply flow;
+  `✓`/`✕` verification; status-bar/fit-zoom feedback loop (standing
+  hazard, unchanged); letter badges pending real icons; `egui_kittest`
+  harness — all carried, unchanged from continuation 60.
+- Operator priority sequence items #3 (text-handling: FF-B/FF-H/FF-C)
+  and #4 (form-building) remain the next concrete dispatch — this
+  continuation was a bug-fix follow-on, not a step toward either.
+
+**For next session:**
+- Items #3 (text-handling fast-follows) and #4 (form-building) remain
+  the recommended next dispatch unless the operator gives a new steer.
+- Flag to the operator at next contact, all carried: (1) the icon build
+  shipped ahead of the Pass-17-first sequencing at continuation 57
+  (unresolved flag); (2) the GUI has no redaction-apply flow at all;
+  (3) R86 (whether headless-only verification is acceptable going
+  forward) remains unanswered; (4) there is still no git remote
+  configured — the 37-commit branch exists solely on this machine, and
+  the refreshed backup bundle
+  (`D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle`) is the only
+  off-session copy; (5) the branch is still named `pass-8-redaction`
+  though it now spans Passes 9-18.6 — worth a rename whenever a push is
+  authorized. Also newly worth a dispatch: a `pdfce-ui-specialist`
+  re-visit to reconcile ui-spec §0.2/§B.3 against its own §E (item
+  above).
+- Carried, unchanged: push/publish call; encryption `/R 6` +
+  `LEGAL.md` §2; list-authoring scope.
+- One new `C:\personal_rag\pdf\` finding filed this continuation (see
+  above); no `D:\dev\rag\rust\`/`D:\dev\rag\egui\` findings this
+  continuation (nothing ecosystem-generalizable surfaced — the two
+  latent decompose-walk bugs and the four-basis bbox design are
+  pdfce-internal, and the CID-descriptor-omission finding is PDF-domain,
+  not Rust/egui).

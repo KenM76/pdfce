@@ -250,6 +250,62 @@ two implementation deviations found while building it
 `Option<&[u8]>`, not `&[u8]`): §12 entries "2026-08-02 — Decision 018"
 and its same-day continuation-56 follow-up, below.
 
+**IMPLEMENTED (2026-08-03, Pass 18.5, commit `9998a6b`):** the vector
+object model (`pdfce_core::vector`, introduced incrementally from
+decision 011/Pass 9a onward, not otherwise itemized in this section)
+gains two hit-testing/content-detail additions. **Invariant:**
+`hit_test_point` is defined as the structural head
+(`hits_front_to_back(..).next()`) of the new
+`hit_test_point_all -> Vec<HitResult>` (`hits_front_to_back(..).collect()`)
+— the two cannot disagree because there is one private iterator
+underneath both; see §12's continuation-60 entry for the full rationale
+and the cross-project generalization filed to
+`D:\dev\rag\rust\define_singular_query_as_head_of_plural_query.md`.
+**`TextObject`** gains `preview: TextPreview` (sourced-text-only, no
+derived spacing; four-variant enum, not `Option<String>`) and
+`font: Option<TextFont>` (`size` is the literal `Tf` operand, not the
+rendered glyph size) via a new `FontResolver` seam
+(`NoFonts`/`DocumentFonts`, zero GUI dependency, `decompose(...)`'s
+public signature unchanged). **`ImageObject`** gains `pixel_size`. Full
+build record: `ROADMAP.md`'s Pass 18.5 Shipped entry.
+
+**IMPLEMENTED (2026-08-03, Pass 18.6, commit `1b38e34`):** `TextObject`'s
+bounding box is no longer the pen-start point of each show operator
+inflated symmetrically by the largest `Tf` size in the run (a square
+centred on the run's start, for the common single-`Tj` case). It is now
+the summed §9.4.4 advance widths across the run for the horizontal
+extent, and the resolved font's ascent/descent for the vertical extent,
+computed via a new `TextBoundsBasis` four-variant enum
+(`FontMetrics | MetricAdvancesNominalHeight | EstimatedAdvances |
+EmBox`) — deliberately four bases, not the two the originating ui-spec
+(§E) asked for, because a Type 3 or descriptor-less CIDFont has real
+advances but only a guessed height, and a non-standard-14 font with no
+`/Widths` has estimated advances; collapsing either into `FontMetrics`
+would silently misrepresent the confidence of the box. `EmBox` is the
+prior (pre-Pass-18.6) geometry, kept as the guaranteed fallback for
+`NoFonts`/unresolvable-font/non-finite-`Tf`-size objects — never
+silently upgraded to a basis the data doesn't support. New `Vertical`
+ascent/descent resolver, a four-rung fallback ladder: `/Ascent`+
+`/Descent` (§9.8 Table 122) → `/FontBBox` `ury`/`lly` (§7.9.5) →
+compiled-in standard-14 descriptor metrics (§9.6.2.2) → nominal 1.0/
+−0.25 em, flagged. Composite (Type 0) fonts resolve through the
+**descendant** font's descriptor (§9.8.1 — a Type 0 dict itself never
+carries one); Type 3 always takes the nominal rung (its own descriptor
+numbers, when present, live in `/FontMatrix` glyph space, not text
+space). **Invariant:** `advance_tx(w0, tfs, tc, tw, th)` is now the ONE
+implementation of §9.4.4's displacement formula, shared verbatim by
+`text_extract::page::show_code`, `redact::glyph`, and this bbox
+computation — a fourth call site was about to become a third
+independent implementation before this consolidation. Two latent
+decompose-walk bugs, invisible under the prior ±1-em-inflated geometry,
+were found and fixed in the same Pass: `'`/`"` did not perform their
+`T*` line move (§9.4.3 Table 109), and `Tc`/`Tw`/`Tz`/`Ts` were not
+tracked in the decomposer's `GState` at all. Zero new Cargo
+dependencies — reuses `text_extract::font::ExtractFont`'s existing
+dictionary-only resolver (rule R21: no glyph-shaping crate in
+`pdfce-core`, a hit-test runs per click). Full build record:
+`ROADMAP.md`'s Pass 18.6 Shipped entry (top of Shipped).
+
 ## 5. Round-trip / non-destructive-editing invariant
 
 Analogous to the tail-bytes / lazy-round-trip discipline the user's
@@ -3757,3 +3813,150 @@ with a forward pointer.
   dependency, license-classified and attributed. Full record:
   `ROADMAP.md`'s Pass 18.1 Shipped entry;
   `docs/decisions/017-tabbed-dockable-panel-system.md` ("AMENDMENT A").
+- **2026-08-03 (same-day continuation 60) — Decision 017 Amendment A
+  follow-up: Pass 18.5 SHIPPED (`9998a6b`), delivering §B.4's core
+  `pdfce-core` additions and the `hit_test_point_all` Alt+click-cycling
+  API named as owed at Pass 18.4's ship. Two API-design decisions and
+  one product/memory-tradeoff decision recorded, none of them reversals
+  of anything, all extending `pdfce-core`'s public surface.**
+  1. **New invariant: a singular "best match" query is defined as the
+     structural HEAD of its plural "all matches" sibling, never a
+     second parallel implementation.** `hit_test_point` is now
+     `hits_front_to_back(..).next()`; `hit_test_point_all` is
+     `hits_front_to_back(..).collect()` over the SAME private iterator
+     — `hit_test_point(..) == hit_test_point_all(..).first().copied()`
+     is therefore provably true, not a convention two future edits
+     could silently break. The same shape is applied one layer up at
+     the `pdfce-gui` trait boundary: `CanvasTargetProvider::hit_test_all`
+     is the REQUIRED method, `hit_test` a PROVIDED default defined as
+     its `.first()`. Recorded as a **general API-design rule for any
+     future singular/plural query pair added to `pdfce-core`** (hit-
+     testing, snap-candidate resolution, field-lookup-with-fallbacks),
+     not a one-off. Full pattern + generalization:
+     `D:\dev\rag\rust\define_singular_query_as_head_of_plural_query.md`.
+  2. **`FontResolver` seam added to the vector-decomposition path**
+     (`pdfce-core`, zero GUI dependency): `NoFonts` (prior behavior,
+     unchanged, still the default `decompose(...)` delegates to) and
+     `DocumentFonts` (memoizing — one `ExtractFont::resolve` per
+     distinct font resource per PAGE, not per text object). Reuses
+     `text_extract::ExtractFont::{codes, to_unicode}` directly — the
+     same §9.10.2 simple/composite-font decode ladder `extract-text`
+     already climbs — rather than standing up a second, parallel
+     decoder for the identical problem. `TextObject` gains
+     `preview: TextPreview` (a four-variant enum —
+     `Decoded{text,truncated,lossy}` / `Undecodable` / `Unavailable` /
+     `Empty` — deliberately NOT `Option<String>`, because "no text to
+     show" has four semantically distinct causes and only one of them
+     is actually a fact about the document) and `font: Option<TextFont>`
+     (`size` is the raw `Tf` operand as the content stream states it,
+     NOT the rendered glyph size — folding the text matrix's scale in
+     would produce a number disagreeing with the content stream itself,
+     and this layer has no glyph-metrics access to defend a "measured"
+     alternative). `ImageObject` gains `pixel_size`.
+  3. **Memory/work-bound decision: the text preview is capped AT
+     DECOMPOSITION TIME (`MAX_TEXT_PREVIEW_CHARS = 64`), not at GUI
+     display time, and owned `String`s are stored, not borrowed
+     spans.** The decode loop physically stops at the cap, so a large
+     `Tj` string is never fully decoded and then discarded — the cap
+     bounds decode WORK, not merely result memory (worst case ≈450 B
+     per text object, ≈100 B realistic; a 50,000-object page tops out
+     ≈22 MB worst case / ≈5 MB realistic). Owned strings were chosen
+     over spans specifically because a span-based design would need
+     the source `ContentStream` kept alive for the `VectorObject`'s
+     whole lifetime AND the font-decode ladder re-run on every row
+     redraw — and Objects-tree rows redraw every frame in an
+     immediate-mode GUI, so that cost would be paid continuously. A
+     separate, smaller GUI-layer display cap (`ROW_TEXT_CHARS = 32`)
+     sits on top of the core 64-char cap so a future change to either
+     cap cannot silently retypeset the other.
+  Also this continuation: the Pass 18.4 `ApproximateTextBounds`
+  disclosure text (§4/decision-017-Amendment-A lineage, selection
+  legibility) was found to be itself inaccurate — it repeated the same
+  wrong text-bbox model (§0.2/§B.3 of the ui-spec) that Pass 18.4's own
+  Finding 1 had already flagged as wrong, and reassured the operator a
+  surprising selection was "correct" while disclosing nothing about the
+  opposite, worse failure (a click on visible glyphs can MISS the
+  object). Fixed (`d296666`) — disclosure only, the underlying
+  hit-target geometry fix is IN PROGRESS (ui-spec §E authored, a
+  builder implementing it). Gates: `cargo test --workspace` 1559 →
+  1599, 0 failed; doc-tests 69 passed; fmt/clippy clean; `cargo tree -p
+  pdfce-core`/`-p pdfce-render` GUI-dep-free; zero new Cargo
+  dependencies. Full record: `ROADMAP.md`'s Pass 18.5 Shipped entry
+  (top of Shipped) and the Pass 18.4 entry's dated correction footer.
+- **2026-08-03 (same-day continuation 61) — Decision 017 Amendment A /
+  ui-spec §E follow-up: Pass 18.6 SHIPPED (`1b38e34`), replacing
+  `TextObject`'s glyph-origin-inflated bbox with one derived from font
+  metrics. Closes the FOURTH and last named contributing cause of the
+  operator's "can't click on objects" report. Two decisions recorded,
+  both extensions of `pdfce-core`'s public data model, neither a
+  reversal.**
+  1. **`TextBoundsBasis` ships as a FOUR-variant enum
+     (`FontMetrics | MetricAdvancesNominalHeight | EstimatedAdvances |
+     EmBox`), not the two-basis design the ui-spec (§E) specified.**
+     Judged necessary, not scope creep: a Type 3 or descriptor-less
+     CIDFont has real advance widths but only a guessed height (no
+     `/FontDescriptor` to source ascent/descent from); a non-standard-14
+     font with no `/Widths` array has estimated, not measured, advances.
+     Collapsing either case into `FontMetrics` would misrepresent the
+     box's own confidence — exactly the "sentence that no longer matches
+     the box" failure the ui-spec's own §E was written to prevent. Not
+     hypothetical: the project's own `text/identity-h-no-tounicode.pdf`
+     fixture (pre-existing, not added for this Pass) naturally exercises
+     the `EstimatedAdvances` case. `EmBox` is the pre-Pass-18.6 geometry,
+     preserved verbatim as the fallback for `NoFonts`/unresolvable-font/
+     non-finite-`Tf`-size objects, pinned by a regression test — an
+     unresolvable font is never silently upgraded to a stronger-sounding
+     basis than the data actually supports.
+  2. **New four-rung font-metrics fallback ladder for vertical extent
+     (ascent/descent), recorded as a general resolution-order pattern
+     for any future font-dependent measurement in `pdfce-core`:**
+     `/Ascent`+`/Descent` (§9.8 Table 122, the spec's own Required
+     fields) → `/FontBBox` `ury`/`lly` (§7.9.5, always present on any
+     descriptor that exists at all) → compiled-in standard-14 descriptor
+     metrics (§9.6.2.2's no-descriptor-permitted case) → nominal 1.0/
+     −0.25 em, explicitly flagged as a guess. Composite (Type 0) fonts
+     resolve through the descendant font's descriptor, never the Type 0
+     dict's own (§9.8.1 forbids a descriptor there). Type 3 always takes
+     the nominal rung regardless of whether a descriptor happens to be
+     present, because its numbers, if any, live in `/FontMatrix` glyph
+     space, not text space. **PDF-domain empirical finding filed to**
+     `C:\personal_rag\pdf\lesson_20260803_cidfont_descriptor_ascent_descent_often_absent.md`
+     **— real subsetted CIDFonts frequently omit `/FontDescriptor`
+     entirely despite Table 122 marking Ascent/Descent Required, making
+     this ladder load-bearing in practice, not merely defensive.**
+  3. **Invariant: `advance_tx(w0, tfs, tc, tw, th)` is now the single
+     shared implementation of §9.4.4's text-displacement formula**,
+     used by `text_extract::page::show_code`, `redact::glyph`, and this
+     Pass's bbox-computation decompose walk — consolidating what was
+     about to become a third, independently-drifting implementation of
+     the same formula. Recorded here because it is the same
+     "define-the-shared-thing-once" discipline as continuation 60's
+     singular/plural query invariant, applied to a different kind of
+     duplication (a formula, not a query shape).
+  Two latent decompose-walk correctness bugs, invisible under the prior
+  geometry, were found and fixed in passing: `'`/`"` did not perform
+  their `T*` line move and `"` did not set `Tw`/`Tc` (§9.4.3 Table 109);
+  `Tc`/`Tw`/`Tz`/`Ts` were not tracked in the decomposer's `GState` at
+  all (now carried with Table 105 initial values, saved/restored across
+  `q`/`Q`). Zero new Cargo dependencies. Gates: `cargo test --workspace`
+  1599 → 1613, 0 failed; fmt/clippy clean; `cargo tree -p pdfce-core`/
+  `-p pdfce-render` GUI-dep-free. Full record: `ROADMAP.md`'s Pass 18.6
+  Shipped entry (top of Shipped); `ARCHITECTURE.md` §4's own
+  "IMPLEMENTED (2026-08-03, Pass 18.6...)" paragraph (above) for the
+  body-section update this decision requires.
+- **2026-08-03 (same-day continuation 60) — Documentation-process
+  finding, recorded as methodology rather than a product/architecture
+  decision: doc-writing agents have no shell, so hashes/counts handed
+  to them are filed as fact with no independent verification.** This is
+  the SECOND filing error this project's own "verify against `git`"
+  habit has caught (the first: commit `7274fdd` went missing from its
+  own chain listing at continuation 59; the second: that same listing's
+  hash set and commit-vs-branch count conflation, corrected this
+  continuation, `25b4783`). New standing rule `ROADMAP.md` R87 records
+  the resulting discipline: hashes and commit/test counts are always
+  produced by the engineer directly from `git`/`cargo test`, never
+  recalled from memory or a prior summary, and spot-checked after
+  filing. No `pdfce-core`/`pdfce-render`/`pdfce-gui` architecture is
+  affected by this entry — recorded here per this file's practice of
+  logging any decision-shaped finding the project produces, not only
+  ones that touch shipped code.

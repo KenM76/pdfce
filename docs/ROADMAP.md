@@ -43,6 +43,147 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 18.6 — text hit-target geometry now derived from font metrics, not glyph-origin inflation (ui-spec §E, closing the FOURTH and last named cause of "can't click on objects") — 2026-08-03, committed `1b38e34`
+
+**Closes Backlog's "ui-spec §B.4/§C follow-ons" item 1 for real** — Pass
+18.4 (`be62e48`) and its `d296666` correction fixed the DISCLOSURE text
+about the wrong bbox model; this Pass fixes the bbox itself. Of the four
+named contributing causes of the operator's 2026-08-02 "I don't seem to
+be able to click on objects" report — Pass 18.0's zoom-inverted select
+tolerance (`9a68d6f`), the Obj tool's missing selection outline
+(`c998521`), the page-centring coordinate offset (`3f6f5ae`), and this
+text-bbox approximation — **all four are now fixed**, not just explained.
+
+`TextObject`'s bbox was the pen-START point of each show operator
+inflated symmetrically by the largest `Tf` size in the run (a square
+centred on the run's start, for the common single-`Tj` case). It is now
+the summed advance widths across the run for the horizontal extent and
+`/FontDescriptor` ascent/descent for the vertical. Measured on
+`fixtures/synthetic/vector/mixed.pdf`: `before: bbox=16,136,44,164` →
+`after: bbox=30,147.102,70.46,160.052` — the old box left ~14 pt of
+blank paper before the first glyph and stopped ~26 pt short of the last
+(see Pass 18.4's Finding 1 and its `d296666` correction footer, both
+above, for the historical/wrong values — left as-is, append-only, now
+cross-referenced here as superseded).
+
+**Implementation.** New `Vertical { ascent, descent, nominal }` with a
+four-rung ladder: `/Ascent`+`/Descent` (§9.8 Table 122) → `/FontBBox`
+`ury`/`lly` (§7.9.5) → compiled-in standard-14 descriptor (§9.6.2.2
+no-descriptor case) → nominal 1.0/−0.25 em, flagged. Composite fonts
+read the descendant's descriptor per §9.8.1 (descriptors shall not be
+used with Type 0 itself). Type 3 deliberately takes the nominal rung —
+its descriptor numbers, if any, live in `/FontMatrix` glyph space, not
+text space. Reuses `text_extract::font::ExtractFont`'s existing
+dictionary-only resolver — no `skrifa`, no glyph shaping added to
+`pdfce-core` (rule R21; a hit-test runs per click). New
+`advance_tx(w0, tfs, tc, tw, th)` is now the ONE copy of §9.4.4's
+displacement formula, shared by `text_extract::page::show_code`,
+`redact::glyph`, and this Pass's decompose walk (previously drifting
+toward a third, independent implementation).
+
+**Four bbox bases shipped, not the two the ui-spec §E asked for**
+(`TextBoundsBasis::{FontMetrics, MetricAdvancesNominalHeight,
+EstimatedAdvances, EmBox}`) — deliberate, not scope creep: a Type 3 or
+descriptor-less CIDFont has real advances but a guessed height; a
+non-standard-14 font with no `/Widths` has estimated advances. Collapsing
+either into `FontMetrics` would silently reproduce the exact "sentence
+that no longer matches the box" failure §E exists to prevent — and the
+third case is not hypothetical, the existing `text/identity-h-no-tounicode.pdf`
+fixture exercises it. `approximate` stays `true` in all four bases; only
+`EmBox` keeps the "can MISS it" warning. `NoFonts`/unresolvable-font/
+non-finite-`Tf`-size objects fall back to the *original* geometry,
+basis `EmBox`, pinned by a test — never silently upgraded to a basis the
+data doesn't support.
+
+**Two latent bugs found and fixed in passing, both filed as a general
+lesson (making geometry honest exposed correctness bugs the sloppy
+geometry had been masking):**
+1. `'` and `"` did not perform their `T*` line move, and `"` did not set
+   `Tw`/`Tc` (§9.4.3 Table 109).
+2. `Tc`/`Tw`/`Tz`/`Ts` were not tracked in the decomposer at all —
+   `GState` now carries them with Table 105 initial values, saved/
+   restored across `q`/`Q`.
+Both were invisible under a ±1 em inflation and are not invisible under
+a box that claims to be where the text actually is.
+
+**Not modelled, stated in doc comments rather than silently
+mis-measured:** vertical writing mode, `Tr` 3/7 (invisible text is
+deliberately still bounded), clipping.
+
+**ENGINEER-VERIFIED (R86), via the CLI oracle (same code path as the
+GUI) and on screen, on `mixed.pdf`:**
+```
+ON the visible glyphs   --hit 65,152 --tolerance 0  -> index=1 kind=text   (was a MISS)
+blank paper to the left --hit 20,152 --tolerance 0  -> index=none          (was a FALSE HIT)
+```
+On screen the dashed outline now hugs the word; readout:
+`Selected: Text · "Vector" · Helvetica 14 pt · bounds from metrics —
+40.5 × 13.0 pt at (30.0, 147.1).`
+
+**CLI output contract (rule 11) — additive, not breaking.** Text rows in
+`object-list` gain `bounds=font-metrics|metric-advances-nominal-height|
+estimated-advances|em-box`; bbox coordinates now print at 4 dp with
+trailing zeros trimmed (the raw `f64` was printing seventeen digits of
+f32-widening artefact — four orders below the hit tolerance). Both
+changes are additive/lossless for any `key=`-matching consumer.
+
+**Stale values this Pass created, marked historical rather than deleted
+(append-only) — cross-referenced here, not rewritten in place:** the
+Pass 18.4 entry's `bbox=16,136,44,164` / `28.0 × 28.0 pt at (16.0,
+136.0)` figures (above) are now historical, pre-fix values — the old
+geometry is exactly why four separate bugs were reported by the operator
+as one. `docs/ui_specs/pass-17-dock-and-layer-tree.md` §0.2/§B.3 still
+describe the old (wrong) model in the present tense; that file is
+`pdfce-ui-specialist`'s territory, not corrected here — flagged for a
+`pdfce-ui-specialist` pass to reconcile §0.2/§B.3 against its own
+already-written §E.
+
+Gates: `cargo test --workspace` 1599 → 1613 passed, 0 failed; `cargo fmt
+--check` / `cargo clippy --workspace --all-targets -D warnings` clean;
+`bash tools/check-ui-strings.sh` exit 0; `cargo tree -p pdfce-core` /
+`-p pdfce-render` GUI-dep-free; zero new Cargo dependencies. 11 new core
+unit tests + 2 CLI integration tests + a bbox assertion added to the
+GUI↔`object-list` oracle-agreement test.
+
+### GUI observation-harness fix — blank-capture guard now samples the CLIENT rect, not the window rect; `gui-click.ps1` gained modifier-key support — 2026-08-03, committed `6a6a48f`
+
+**The blank-capture guard added at `d15c360` (continuation 58) sampled the whole WINDOW, not the client area — a guard that can pass on a real failure is worse than no guard, because it earns trust it hasn't earned.** The window rect includes the title bar, which the OS shell paints independently of the application (icon, caption text, min/max/close buttons) — so it always supplies pixel variation, even on a frame the app itself never presented. A capture with a painted title bar and a completely WHITE client area (eframe not yet drawn) therefore PASSED the guard, because the *sampled* pixel set was never uniform, even though the region that matters — what the application actually drew — was blank. The guard's original target case (a fully black, sleeping-display capture) still fired correctly, which is exactly the trap: **a guard that catches the obvious failure and misses the subtle one is more dangerous than no guard, because it earns unearned trust** — a partially-correct guard reads, at a glance, as a working one.
+
+Fixed by resolving the CLIENT rect via `GetClientRect` + `ClientToScreen` and sampling only inside it, excluding the shell-painted chrome entirely.
+
+**Same session, `tools/gui-click.ps1` gained `-Modifiers Shift|Ctrl|Alt`** (held via `keybd_event`, released in a `finally` block so a mid-script exception can't leave a modifier key latched across the whole desktop). Without it, Alt+click (Pass 18.5's click-through-cycling gesture, below) was unverifiable in the running app — and R86 (a Pass does not ship until observed working) makes that verification a ship condition, not an optional nicety.
+
+**Harness gap still owed, not fixed this session:** both `observe-gui.ps1` and `gui-click.ps1` select their target process via `Select-Object -First 1` over the process name, with no way to disambiguate two simultaneously-running instances. A worktree-isolated agent session this cycle had to kill a stale `pdfce-gui.exe` left over from a previous session to stop its synthesized clicks from landing in the wrong window. A `-Pid` parameter on both scripts would close this — filed to Backlog below.
+
+Escalated to `D:\dev\rag\egui\` (see below): screen-capture blank-frame detection must sample the CLIENT rect, not the window rect, on Windows.
+
+Gates: no test-count change (tooling, not product code); `cargo fmt --check`/`cargo clippy` unaffected; no new Cargo dependency.
+
+### Pass 18.5 — `hit_test_point_all` + Alt+click click-through cycling; text/image object detail in decomposition (ui-spec §B.4 core additions + §C's deferred Alt+click cycling, both now SHIPPED) — 2026-08-03, committed `9998a6b`
+
+Delivers the two explicitly-owed core APIs named at Pass 18.4's ship (see that Shipped entry's "Deferred and explicitly owed" paragraph, below) and at the Backlog's "ui-spec §B.4/§C follow-ons" entry (below).
+
+**`hit_test_point_all` (`pdfce-core/src/vector/hit.rs`).** A private `hits_front_to_back()` iterator is the one definition; `hit_test_point` is `.next()` on it, `hit_test_point_all` is `.collect()`. **`hit_test_point(..) == hit_test_point_all(..).first().copied()` is now structural, not conventional** — the two provably cannot disagree, because there is only one hit-testing implementation underneath both. `hit_test_point` still allocates nothing (it never materializes the `Vec`). The same shape is applied at the GUI boundary: `CanvasTargetProvider::hit_test_all` is now the REQUIRED trait method and `hit_test` a PROVIDED method defined as its head (`.first()`), so no future provider implementation can make the singular and plural queries disagree.
+
+**Click-through cycling (Alt+click, per ui-spec §C.3 — chosen specifically to avoid colliding with Shift's existing additive-select binding).** Before this Pass, an object occluded by another object at the same point was structurally UNREACHABLE by pointer — the topmost-only `hit_test_point` gave no path to anything beneath it. Alt+click now steps through the full stack at that point. `ClickCycle` state is **derived-live, not explicitly torn down**: it remains valid only while (a) the same page, (b) the pointer stays within `CYCLE_SAME_POINT_CANVAS = 4.0` canvas units of the originating click, and (c) the current selection is still the object THIS cycle produced. Any of those three failing resets the cycle silently on the next click. There is exactly one explicit clear, in `prune_canvas_selection` (which every edit/undo/redo already funnels through) — because after a content rewrite the same `TargetId` can resolve to a semantically different object, and a stale cycle must not silently continue against it.
+
+**Disclosed in the status readout on every click, not only when cycling is active** — `1 of 3 at this point — Alt+click for the next` — a deliberate choice: this is how an operator discovers the capability exists at all, so it's shown even on a plain single-object click. Suppressed for the trivial `1 of 1` case (no ambiguity, nothing to disclose).
+
+**Text/image object detail (ui-spec §B.4, the core-data-model addition Pass 18.1 deferred).** `TextObject` gains `preview: TextPreview` and `font: Option<TextFont>`; `ImageObject` gains `pixel_size`. New `FontResolver` seam with two implementations: `NoFonts` (the prior behavior, preserved) and `DocumentFonts` (memoizing — one `ExtractFont::resolve` call per distinct font resource per page, not per text object). `decompose(...)`'s public signature is UNCHANGED and internally delegates to `NoFonts`, so every existing geometry-only caller is a no-diff. Decoding reuses `text_extract::ExtractFont::{codes, to_unicode}` directly — the SAME §9.10.2 simple/composite-font ladder `extract-text` already climbs, not a second, parallel decoder for the same problem.
+
+**Rule 11 (CLI/GUI parity) honoured:** `object-list --all-hits` now emits one `hit-candidate … ordinal=N` line per hit, front-most first; text rows gain `font=`/`resource=`/`size=`/`text=`/`truncated=`/`lossy=`; image rows gain `pixels=WxH`. New fixture `fixtures/synthetic/vector/overlap.pdf` (three concentric filled squares, generated via `tools/gen-vector-fixtures.py`, documented in `PROVENANCE.md`); the other five existing synthetic vector fixtures regenerate byte-identically, confirming the generator itself is untouched.
+
+**Memory/work-bound decision, recorded because it was a genuine judgment call, not an obvious default:** the text preview is capped AT DECOMPOSITION TIME, not at display time. `MAX_TEXT_PREVIEW_CHARS = 64`, and the decode loop physically STOPS at that count — a 10 kB `Tj` string is never fully decoded and then discarded, so the cap is a work bound on decode, not merely a memory bound on the result. Worst case ≈450 bytes per text object (≈100 bytes realistic); a 50,000-text-object page tops out ≈22 MB worst case / ≈5 MB realistic. **Owned, truncated `String`s were chosen over borrowed spans deliberately:** a span-based design would require keeping the source `ContentStream` alive for the `VectorObject`'s entire lifetime AND re-running the font-decode ladder on every row redraw — and Objects-tree rows redraw every frame, so that cost would be paid continuously, not once. The separate, smaller display cap (`ROW_TEXT_CHARS = 32`, applied in the GUI layer on top of the already-64-char-capped core value) exists specifically so a future memory-tuning decision on ONE cap can never silently retypeset the other.
+
+**Three honest limitations, disclosed rather than hidden — all deliberate, all reversible:**
+1. **The preview is sourced-only text, with no derived spacing.** `simple-winansi.pdf` previews as `"HelloworldSecond line"` — its word gap is a `TJ` kerning offset with no literal space glyph, and its line break is a bare `Td` move (§14.8.2.5 layout modes S3/S5), neither of which the content stream states as a character. `text_extract`'s `plain_text` mode *derives* both a space and a line break for exactly this case; `sourced_text` mode omits both, and a preview uses the latter. Reusing the derived layer here would mean re-implementing `text_extract/layout.rs`'s heuristics over a second interpreter pass. Judged: an odd-but-literally-true string is a more honest preview than a reader-supplied guess presented as if it were the document's own content. **One call site (`Decomposer::decode_show_string`) — reversible in an afternoon if this judgment is revisited.**
+2. **`TextFont::size` is the `Tf` operand exactly as the content stream states it, not the rendered glyph size.** `/F1 1 Tf` followed by `12 0 0 12 tx ty Tm` renders at 12 pt but reports `size: 1.0` — folding the text matrix's scale into this field would produce a number that disagrees with what the content stream literally says, and `pdfce-core` has no glyph-metrics access at this layer to defend a "measured" alternative anyway. Documented on the field itself and in the relevant CLI help text.
+3. **`TextPreview` is a four-variant enum (`Decoded{text,truncated,lossy}` / `Undecodable` / `Unavailable` / `Empty`), deliberately not `Option<String>`.** "No text to show" has four semantically distinct causes, and only one of the four (`Empty`) is actually a fact about the document itself — collapsing all four into `None` would silently discard that distinction from every future caller.
+
+Gates: `cargo test --workspace` 1559 → 1599 passed, 0 failed; doc-tests 69 passed; `cargo fmt --check` / `cargo clippy --workspace --all-targets -D warnings` clean; `bash tools/check-ui-strings.sh` exit 0; `cargo tree -p pdfce-core`/`-p pdfce-render` GUI-dep-free; zero new Cargo dependencies; `fuzz/` `cargo check --all-targets` clean.
+
+**ENGINEER-VERIFIED ON SCREEN (R86):** on `overlap.pdf`, a plain click at the centre reads `Selected: Path · filled #33B34D · 4 node(s) — 60.0 × 60.0 pt at (120.0, 120.0). 1 of 3 at this point — Alt+click for the next.`; Alt+click advances to `#E69933 · 160.0 × 160.0 pt at (70.0, 70.0). 2 of 3`, with both the selection outline and the `P` corner badge moving to the newly-cycled object. On `mixed.pdf`: `Selected: Text · "Vector" · Helvetica 14 pt · approximate bounds` and `Selected: Image · 2 × 2 px`.
+
 ### `ui-strings` CI gate — was RED AT BASELINE (140 hits) and hiding a real R1 violation; FIXED and moved to a local script — 2026-08-03, committed `a5d1d18`
 
 **The job enforcing decision 002 R1 (single string catalog, `ui_text.rs`)
@@ -220,6 +361,42 @@ Gates: `cargo test --workspace` 1538 → 1559 passed, 0 failed; `cargo fmt
 `cargo tree -p pdfce-core` / `-p pdfce-render` free of egui/eframe/
 winit/wgpu/glow/egui_tiles (GUI-core separation intact); zero new Cargo
 dependencies.
+
+**CORRECTION (2026-08-03, committed `d296666`) — the `ApproximateTextBounds`
+disclosure text shipped by THIS Pass was itself inaccurate, in the
+dangerous direction.** The copy written here explained why a selection
+box can sit over blank paper by repeating the same "normally wider and
+taller than the ink" model Finding 1 (above) had already identified as
+WRONG in the ui-spec, and concluded "the selection is correct even
+though the box looks empty." Traced to `decompose.rs`
+(`record_text_origin`/`end_text`) and `geometry.rs` (`Bounds::inflate`):
+only the pen-START point of each show operator is recorded, and the box
+is that single point inflated symmetrically by the largest `Tf` size in
+the run — for the common single-`Tj` case this is a SQUARE centred on
+the run's start, not a padded region around the ink. It reaches
+backward into blank paper before the text begins and stops roughly one
+em in, short of most strings' actual extent. **The shipped copy
+reassured the operator that a surprising selection was correct, while
+saying nothing about the opposite and strictly worse failure mode:
+clicking directly on visible glyphs can MISS the text object entirely.**
+An operator who read that note, then failed to select some visible
+text, would reasonably conclude the tool was broken — having just been
+told selection was reliable by the same feature. Rewritten to state the
+actual box construction, BOTH failure directions (surprise-hit and
+surprise-miss), and a workaround (click nearer the start of the line).
+**This is disclosure only — the underlying hit-target geometry is still
+wrong; see the Backlog "ui-spec §B.4/§C follow-ons" entry's item 1, now
+IN PROGRESS** (`pdfce-ui-specialist` has written the corrected geometry
+spec, ui-spec §E, and a builder is implementing the fix as of this
+filing).
+
+**FURTHER CORRECTION (2026-08-03, committed `1b38e34`) — the underlying
+geometry itself is now fixed, not merely disclosed. See the Pass 18.6
+Shipped entry (top of Shipped) for the full build record.** All of this
+entry's `bbox=16,136,44,164` / `28.0 × 28.0 pt at (16.0, 136.0)` figures,
+above, are historical (pre-fix) values, left in place per the append-only
+rule — they are the reason the operator's complaint was originally
+reported as one bug instead of four.
 
 ### Menu-affordance & glyph-coverage audit — tofu-glyph class CLOSED (pdfce-ui-specialist audit + engineer fixes) — 2026-08-03, committed `85a6cac` / `a1badc1` / `eeadbcb` / `869d891`
 
@@ -4963,6 +5140,42 @@ path selection-outline case) — all filed to Backlog below. See
 `SESSION_LOG.md`'s 2026-08-02 entry, same-day continuation 58, for the
 full session record.
 
+**UPDATE (continuation 59, same real date 2026-08-03): Pass 18.4
+SHIPPED** (selection legibility, ui-spec §C — see its own Shipped entry
+above) **and the `ui-strings` CI gate, found red at baseline on 140
+hits, was fixed.** §C's full selection-legibility asks are now
+delivered end-to-end; §B.4's core `pdfce-core` additions and the
+`hit_test_point_all` Alt+click-cycling API remained open at this point.
+
+**UPDATE (continuation 60, same real date 2026-08-03): Pass 18.5
+SHIPPED** (`hit_test_point_all` + Alt+click click-through cycling +
+text/image object detail — see its own Shipped entry above), **closing
+BOTH remaining items from the ui-spec §B.4/§C follow-ons Backlog entry.
+All six numbered Pass 18.x slices (18.0–18.5) are now SHIPPED.** The
+Pass 18.4 `ApproximateTextBounds` disclosure text, itself found to be
+inaccurate (repeating the same wrong bbox model the ui-spec carries),
+was also corrected this continuation (`d296666`). The one item left
+open from the whole Pass 18.x / decision-017 family is the ui-spec's
+own text-bbox-model wording (§0.2/§B.3) — now IN PROGRESS, not merely
+filed: `pdfce-ui-specialist` has written the corrected geometry spec
+(ui-spec §E) and a builder is implementing the underlying hit-target
+fix. See `SESSION_LOG.md`'s 2026-08-03 entry, same-day continuation 60,
+for the full session record.
+
+**UPDATE (continuation 61, same real date 2026-08-03): Pass 18.6
+SHIPPED** (text hit-target geometry now derived from font metrics — see
+its own Shipped entry, top of Shipped). **This closes the fourth and
+last named contributing cause of the operator's original "can't click
+on objects" complaint** — all four (Pass 18.0's zoom-inverted tolerance,
+the Obj tool's missing selection outline, the page-centring coordinate
+offset, and the origin-inflated text bbox) are now fixed, not merely
+explained. All six numbered Pass 18.x slices plus this follow-on fix are
+now SHIPPED; the only remaining loose end is reconciling
+`docs/ui_specs/pass-17-dock-and-layer-tree.md` §0.2/§B.3's own wording
+against its own already-written §E — `pdfce-ui-specialist` territory,
+not built by this fix. See `SESSION_LOG.md`'s 2026-08-03 entry, same-day
+continuation 61, for the full session record.
+
 
 ONLY.** The operator authorized "commit all work"; the engineer
 committed the entire working tree as **`d8b3903`** on branch
@@ -5097,6 +5310,46 @@ working branch is still named `pass-8-redaction` but now carries
 Passes 9 through 18.4, the full icon set, the `egui_tiles` dock shell,
 and three independent click-tracking root-cause fixes — worth a rename
 whenever a push is authorized.
+
+**UPDATE (continuation 60, real date 2026-08-03):** four more commits
+landed on top of `a5d1d18` (continuation-59 HEAD) — **`25b4783`** (docs:
+correct the commit chain itself — it had been missing `7274fdd`, the
+commit that repairs a fabricated hash in the Pass 18.3 filing, and had
+conflated "commits in the chain" with "commits on the branch"; both
+fixed and re-verified against `git rev-list`, not re-assembled by hand
+— see the correction note above, this is now the record of that
+correction being folded back into the librarian-owned chain) →
+**`d296666`** (fix: the Pass 18.4 `ApproximateTextBounds` disclosure
+text was itself wrong — see the dated correction footer on the Pass
+18.4 Shipped entry, above) → **`9998a6b`** (Pass 18.5:
+`hit_test_point_all` + Alt+click click-through cycling + text/image
+object detail — see its own Shipped entry, above) → **`6a6a48f`**
+(tools: the blank-capture guard now samples the CLIENT area, not the
+whole window — see the GUI observation-harness Shipped entry, above).
+Full chain, **35 commits** from the first implementation commit:
+**`d8b3903` → `79d1c6f` → `e13f3e6` → `19ed865` → `801a748` → `c7c1744`
+→ `6150e1a` → `7c93cc3` → `2abbd75` → `dd3a8b8` → `76485b5` → `0569373`
+→ `9a68d6f` → `3a56b55` → `f2d5fae` → `c998521` → `dae0139` → `b73604d`
+→ `f9bb560` → `c59b0c4` → `7274fdd` → `85a6cac` → `437a6f7` → `a1badc1`
+→ `d15c360` → `eeadbcb` → `f963895` → `3f6f5ae` → `869d891` → `be62e48`
+→ `a5d1d18` → `25b4783` → `d296666` → `9998a6b` → `6a6a48f`**. Plus
+`67967b2` (the bootstrap commit, predating `d8b3903`) for a **branch
+total of 36**. All 36 remain **local-only**; no git remote is configured
+at all; push authorization is still a separate, not-yet-granted
+operator item; the verified backup bundle remains
+`D:\Dev\pdfce-backups\pdfce-20260803.bundle` (not yet re-generated
+against these four new commits — regenerate before treating it as
+current). **Standing methodology, now confirmed twice in one project:**
+the doc-writing agents (`pdfce-librarian` included) have no shell of
+their own — any hash or count handed to them is filed as fact, verbatim,
+with no independent means to check it. This is the SECOND filing error
+this exact audit habit has caught (the first being `7274fdd` itself,
+folded into the continuation-59 filing before this correction). The
+standing rule this justifies: **hashes and commit/test counts must be
+produced by the engineer directly from `git`/`cargo test` output and
+spot-checked (`git cat-file -t`, `git rev-list --count`) after filing,
+not assembled from memory or from a prior summary** — see the new
+Standing rule R87, below.
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
@@ -5401,6 +5654,15 @@ without a new operator instruction.
    directive does not resolve it; do not fold list-authoring into
    "text-handling" without a further, explicit operator answer to that
    specific question.
+   **Namesake-collision note, not to be mistaken for progress on FF-H
+   (added 2026-08-03, Pass 18.6):** Pass 18.6 added `Tc`/`Tw`/`Tz`/`Ts`
+   tracking to `pdfce-core`'s vector-DECOMPOSE walk's `GState`
+   (`crates/pdfce-core/src/vector/decompose.rs`) — a bug fix for
+   accurately measuring the bbox of EXISTING content during hit-testing,
+   nothing to do with authoring. FF-H is about the add-new-text/
+   in-place-text-edit authoring engines APPLYING these parameters when
+   writing new content. Same four operator names, two unrelated code
+   paths — FF-H's own scope is UNCHANGED and NOT advanced by Pass 18.6.
 4. **Form-building tools, after — "if that makes sense."** Queued
    behind items 1–3. This is form field CREATION/authoring (adding new
    AcroForm fields to a document), distinct from the already-shipped
@@ -5496,7 +5758,7 @@ recommendation on how the operator should weigh it). (b) sequence Pass
 and the sequence has since fully discharged (continuation 58) — see the
 ★★★★★ reordering entry above.
 
-### ★ Pass 18.x — Tabbed dock, layer/object tree, selection legibility, Measure ▾ affordance fix (decision 017 + Amendment A + `docs/ui_specs/pass-17-dock-and-layer-tree.md`, ALL 5 numbered slices 18.0/18.1/18.2/18.3/18.4 SHIPPED 2026-08-03 — ui-spec §B.4 core-data-model asks + the text-bbox-model correction still OPEN, see Backlog)
+### ★ Pass 18.x — Tabbed dock, layer/object tree, selection legibility, Measure ▾ affordance fix (decision 017 + Amendment A + `docs/ui_specs/pass-17-dock-and-layer-tree.md`, ALL 6 numbered slices 18.0–18.5 PLUS the follow-on Pass 18.6 text-bbox-geometry fix SHIPPED 2026-08-03 — only the ui-spec's own §0.2/§B.3 wording reconciliation remains open, `pdfce-ui-specialist` territory, see Backlog)
 
 **Pass-number note (same pattern as decision 014's Pass 13→14
 renumber — see that entry above, "PASS-NUMBER RENUMBER"):** the UI
@@ -5541,10 +5803,13 @@ archived record uses for its own superseded "13.x" self-reference.
   do not assume this Pass closed §B/§C in full just because it shipped
   the dock shell and object tree. **UPDATE — Pass 18.4 (below) has since
   delivered §C's full selection-legibility asks** (type badge, invisible/
-  approximate-hit disclosure, status readout) **end-to-end. §B.4's core
-  additions to `pdfce-core` (`TextObject` string/font preview,
-  `ImageObject` pixel dimensions) remain undelivered** — see the Backlog
-  entry (amended) for what's still owed.
+  approximate-hit disclosure, status readout) **end-to-end.** **FURTHER
+  UPDATE — Pass 18.5 (below) has since delivered §B.4's core additions
+  to `pdfce-core` as well** (`TextObject` string/font preview,
+  `ImageObject` pixel dimensions) — see that entry and the Backlog entry
+  (amended) for the full record. Nothing from §B/§C remains undelivered
+  except the ui-spec's own text-bbox-model wording, tracked separately
+  below (Pass 18.4's finding 1 / the Backlog item's item 1).
 - **Pass 18.4 — Selection legibility (ui-spec §C). SHIPPED 2026-08-03,
   committed `be62e48` — see the Pass 18.4 Shipped entry (above) for the
   full build record, including its own "Pass-number note" flag (the
@@ -5559,9 +5824,42 @@ archived record uses for its own superseded "13.x" self-reference.
   correspond to anything" complaint reproduces as a real, now-explained
   case — an approximate text bbox that is narrower than and offset from
   the glyph ink it describes (see the Backlog entry's ui-spec-correction
-  item). Deferred, not built: Alt+click cycling through overlapping
-  objects (needs a new `pdfce-core` `hit_test_point_all` API — see
-  Backlog).
+  item). Deferred, not built at THIS Pass: Alt+click cycling through
+  overlapping objects (needed a new `pdfce-core` `hit_test_point_all`
+  API) — **SHIPPED since, as Pass 18.5 (below).**
+- **Pass 18.5 — `hit_test_point_all` + Alt+click click-through cycling;
+  text/image object detail in decomposition. SHIPPED 2026-08-03,
+  committed `9998a6b` — see the Pass 18.5 Shipped entry (top of Shipped)
+  for the full build record.** Closes BOTH items Pass 18.4 deferred:
+  Alt+click cycling through overlapping objects (a new
+  `hit_test_point_all` core API, with `hit_test_point` now structurally
+  defined as its head so the two provably cannot disagree) and §B.4's
+  core-data-model additions (`TextObject` string/font preview via a new
+  `FontResolver` seam, `ImageObject` pixel dimensions). Also fixes the
+  Pass 18.4 `ApproximateTextBounds` disclosure text (`d296666`, same
+  continuation — see the Pass 18.4 Shipped entry's dated correction
+  footer), which had repeated the same wrong bbox model the ui-spec
+  itself carries. **All numbered Pass 18.x slices are now SHIPPED.** The
+  one item still open from this whole family is the ui-spec's own
+  text-bbox-model wording correction (§0.2/§B.3) — now IN PROGRESS, not
+  merely filed (`pdfce-ui-specialist` has written the corrected
+  geometry spec as ui-spec §E; a builder is implementing the underlying
+  hit-target fix) — see the Backlog entry (amended) for status.
+  **UPDATE — SHIPPED since, as Pass 18.6 (below).**
+- **Pass 18.6 — text hit-target geometry now derived from font metrics,
+  not glyph-origin inflation (ui-spec §E). SHIPPED 2026-08-03, committed
+  `1b38e34` — see the Pass 18.6 Shipped entry (top of Shipped) for the
+  full build record.** Fixes the geometry Pass 18.4 only diagnosed and
+  disclosed: `TextObject`'s bbox is now the summed advance widths across
+  the run plus `/FontDescriptor` ascent/descent, via a four-rung metrics
+  ladder, reusing `text_extract`'s existing font resolver (no new
+  dependency). **This is the fourth and last named contributing cause of
+  the operator's original "can't click on objects" complaint, now fixed**
+  — alongside Pass 18.0's tolerance fix, the Obj tool's selection-outline
+  fix, and the page-centring coordinate-offset fix. The only remaining
+  loose end from the whole Pass 18.x / decision-017 family is reconciling
+  the ui-spec's own §0.2/§B.3 wording against its already-written §E —
+  `pdfce-ui-specialist` territory, not built by this fix.
 - **Pass 18.2 — `object-list` CLI subcommand. SHIPPED 2026-08-02,
   committed `dae0139` — see Shipped above.** Closed the gap found this
   session: `object-move`'s own help text told operators to get object
@@ -7004,7 +7302,12 @@ nothing gets forgotten, not as a commitment to build in this order.
   audit — needs its own direct-observation check.
 - **ui-spec §B.4 follow-on — core data-model additions (filed
   2026-08-03, deviation flagged at Pass 18.1's ship; §C's half of this
-  entry SHIPPED 2026-08-03 as Pass 18.4, see amendment below).** Pass
+  entry SHIPPED 2026-08-03 as Pass 18.4; §B.4's core additions and the
+  Alt+click-cycling API SHIPPED as Pass 18.5; the text-bbox-geometry
+  item SHIPPED as Pass 18.6 — see amendments below. ALL THREE items this
+  bullet ever named are now SHIPPED; only a documentation reconciliation
+  in `pdfce-ui-specialist`'s own ui-spec file remains, see the item-1
+  amendment below).** Pass
   18.1 shipped the `egui_tiles` dock shell and object/layer tree but did
   NOT deliver **§B.4's core additions to `pdfce-core`** (zero GUI
   dependency added) — extend `TextObject` with a short extracted-string
@@ -7059,6 +7362,43 @@ nothing gets forgotten, not as a commitment to build in this order.
      new `pdfce-core` API returning all hits, nearest/topmost-first
      ordered, before Alt+click cycling can be built — not started.
 
+  **AMENDED 2026-08-03 (Pass 18.5 ship, committed `9998a6b`) — items 3
+  and the original §B.4 core-data-model additions are now SHIPPED, not
+  open; item 1 is now IN PROGRESS, not merely filed.**
+  - **Item 3 (`hit_test_point_all` + Alt+click cycling): SHIPPED.** See
+    the Pass 18.5 Shipped entry (top of Shipped) for the full build
+    record — `hit_test_point` is now structurally defined as the head of
+    `hit_test_point_all`'s iterator, not a separate implementation, and
+    `CanvasTargetProvider::hit_test_all` mirrors the same shape at the
+    GUI trait boundary.
+  - **The original §B.4 core additions (`TextObject` extracted-string
+    preview + resolved font-name/size; `ImageObject` pixel width/height):
+    SHIPPED**, same commit — `TextObject::preview: TextPreview` +
+    `TextObject::font: Option<TextFont>`, `ImageObject::pixel_size`, via
+    a new `FontResolver` seam (`NoFonts`/`DocumentFonts`). See the Pass
+    18.5 Shipped entry for the three disclosed limitations (preview is
+    sourced-only text with no derived spacing; `TextFont::size` is the
+    raw `Tf` operand, not the rendered size; `TextPreview` is a
+    four-variant enum, not `Option<String>`).
+  - **Item 1 (ui-spec text-bbox-model correction): SHIPPED, as Pass
+    18.6.** **AMENDED 2026-08-03 (Pass 18.6 ship, committed `1b38e34`) —
+    the underlying hit-target geometry itself is now fixed**, not merely
+    disclosed. `TextObject`'s bbox is now the summed advance widths
+    across the run plus `/FontDescriptor` ascent/descent (a four-rung
+    metrics ladder), replacing the origin-inflated square. See the Pass
+    18.6 Shipped entry (top of Shipped) for the full build record,
+    including the two latent decompose-walk bugs (missing `T*` on `'`/
+    `"`, untracked `Tc`/`Tw`/`Tz`/`Ts`) found and fixed in passing. **The
+    only piece of this item still open is documentation-only:**
+    `docs/ui_specs/pass-17-dock-and-layer-tree.md` §0.2/§B.3 still
+    describe the OLD (wrong) "wider and taller than the ink" model in the
+    present tense, even though the same file's own §E already carries
+    the correct one — needs a `pdfce-ui-specialist` pass to reconcile the
+    two, not a builder task.
+  - **Item 2 (status-bar/`Fit page`-zoom feedback loop): unchanged,
+    still a standing hazard**, not scheduled as its own Pass — see the
+    original item 2 text above and the escalated RAG finding.
+
 - **`egui_kittest`-based headless canvas-gesture testing harness (filed
   2026-08-02, no Pass number assigned).** Found while building the GUI
   observation harness (`tools/observe-gui.ps1`/`gui-click.ps1`, Shipped
@@ -7088,6 +7428,20 @@ nothing gets forgotten, not as a commitment to build in this order.
   itself) would need the standard rule-13 license classification before
   landing in `Cargo.toml`, even though it would likely be a dev-only
   dependency (test/tooling surface, not shipped in the release binary).
+
+- **`-Pid` parameter needed on `tools/gui-click.ps1` and
+  `tools/observe-gui.ps1` (filed 2026-08-03, no Pass number assigned).**
+  Both scripts select their target process via `Select-Object -First 1`
+  over the process name, with no way to disambiguate two simultaneously
+  running instances. Found this session (Pass 18.5/`6a6a48f`): a
+  worktree-isolated agent had to kill a stale `pdfce-gui.exe` left over
+  from a previous session to stop its synthesized clicks from landing in
+  the wrong window instead of the one actually under test. Fix: add an
+  optional `-Pid` parameter to both scripts that filters to a specific
+  process ID when supplied, falling back to the current MRU-first
+  behavior when omitted. Not yet scoped into a Pass; tooling-only, no
+  product code involved, no license classification needed (no new
+  dependency).
 
 - **★ UX flag — marquee-vs-pan canvas-drag default change at Pass 9a —
   RESOLVED, KEPT (reviewed at Pass 12.M1, 2026-08-01).** Pass 9a's
@@ -8665,6 +9019,21 @@ nothing gets forgotten, not as a commitment to build in this order.
   not yet in force** — do not cite it as binding until the operator
   answers item (e); it is recorded here now so the number is reserved
   and the text is ready the moment it is confirmed.
+- **R87 — Hashes and commit/test counts handed to a doc-writing agent
+  must be engineer-verified against `git`/`cargo test` and spot-checked
+  after filing, never filed on trust (methodology; no decision number;
+  librarian-assigned; 2026-08-03, continuation 60).** `pdfce-librarian`
+  (and every other doc-writing agent) has no shell of its own — any
+  figure it's handed is filed verbatim as fact, with no independent way
+  to check it. This is the **second** filing error this exact habit has
+  caught in this project (the first: `7274fdd`, a hash-repair commit,
+  went missing from its own chain listing at continuation 59; the
+  second: that same chain listing's own hash/count, corrected at
+  continuation 60 — see the commit-chain UPDATE paragraph above). Every
+  hash and every commit/test count in this file and in `SESSION_LOG.md`
+  is produced by the engineer running `git rev-list`/`git cat-file -t`/
+  `cargo test --workspace` directly, not recalled or re-derived from a
+  prior summary, and is spot-checked once filed.
 
 ## Update protocol
 
