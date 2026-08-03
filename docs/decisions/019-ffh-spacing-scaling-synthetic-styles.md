@@ -1213,3 +1213,97 @@ sneaky), 6 (documentation-first), 10 (style/API guidelines), 11 (CLI parity),
   "revisit_triggers": ["The census lands in the 25-60% band -> Ken decides Tw (see for_ken_personally).", "Operators frequently decline synthesis and change family instead -> flip the in-place-edit remedy ORDER to match Add-Text's.", "Reload-time synthesis re-detection produces false positives on real corpus files (e.g. a legitimately stroked display face) -> tighten the detector or demote the badge to a hint.", "FF-C ships and makes embedding a real Bold face routine -> re-evaluate whether synthesis should stay first in the in-place-edit remedy order.", "A tagged-PDF accessibility workflow needs a live structure tree -> schedule the cut FF-I item as a real accessibility Pass."]
 }
 ```
+
+---
+
+# AMENDMENT A — 2026-08-03 — three corrections from building slice 19.0
+
+**Filed by:** pdfce-engineer, after slice 19.0 shipped (`38fffad`). Each item
+below is a place where the decision as written was wrong or unbuildable, found
+by implementing it. Where this amendment and the record above differ, **this
+amendment wins.**
+
+## A.1 The restore ladder needs a FOURTH rung — and without it §19.1 ships a bug
+
+§3.4 / R88 define a three-tier ladder: spec default when provably unset,
+**observed raw operand bytes** when set, refuse-and-disclose when unobservable.
+The middle rung says "raw operand bytes where available", which is right as far
+as it goes and **names the wrong failure**. It assumes the bytes are either
+available or absent. There is a third case: **available and poisonous.**
+
+Two operators set text-state parameters as a *side effect* of doing something
+else:
+
+| Operator | Sets | Also does |
+|---|---|---|
+| `TD` (Table 108) | `TL` (leading) | moves to the next line |
+| `"` (Table 109) | `Tw` **and** `Tc` | **shows a string** |
+
+Re-emitting the captured bytes of a `"` as a word-spacing restore **repaints
+the text**. The bytes are a faithful record of where the value came from and a
+catastrophic restore instruction. A ladder that reaches for "the raw bytes" the
+moment they exist walks straight into it.
+
+**Resolution, implemented in 19.0:** a fourth origin,
+`AmbientOrigin::ObservedIndirect { setter }`. The value is known and restorable,
+but by **re-spelling** it in its own dedicated operator (`2 Tw`, `-14 TL`) rather
+than by replaying the bytes. It reports `is_byte_faithful() == false` so callers
+disclose the narrowing — the same posture already used for `fill_narrowed`.
+Inside a Form XObject it degrades to the refuse tier like any other set value.
+
+**R88's wording must change accordingly:** the rule is not "restore from raw
+bytes where available" but *"restore from raw bytes where they are a faithful
+and side-effect-free record of the value; re-spell where the value is known but
+its source operator did more than set it; refuse where the value is
+unobservable."*
+
+## A.2 §3.4's tier-3 case (i) — multi-stream `/Contents` — is unreachable in pdfce
+
+The record names two triggers for the refuse tier: state set in one element of a
+multi-stream `/Contents` array, and state inherited through a Form XObject. Only
+the second exists here.
+
+`ContentStream::from_page` concatenates the entire `/Contents` array into one
+decoded buffer *before* any walk runs, and a decode failure on any element fails
+the whole page rather than yielding a partial prefix. So there is no
+set-in-element-1 blind spot to refuse on. The builder correctly declined to
+manufacture a trigger for it rather than leave an untestable branch.
+
+This is a property of pdfce's architecture, not of the spec — **if the
+concatenation ever becomes lazy or per-element, the case becomes real and the
+refuse tier must grow it back.** Recorded here so that change knows what it
+breaks.
+
+## A.3 §19.0's "hoist `Tf`/`Tfs`" is not buildable without moving published output
+
+The extraction walk narrows `Tfs` to `f32` — because `GlyphProvenance::tf_size`
+publishes `f32` — and then widens it again for the §9.4.4 advance. The other two
+walks carry `f64` throughout. A shared `f64 font_size` turns
+`f64::from(v as f32)` into `v`, which **perturbs published glyph positions**.
+The same trap applies to `Tz` (narrow-then-divide is not bit-identical to
+divide-then-narrow).
+
+So the shared type is **exactly the six single-operand text-state parameters** —
+which is R88's own set — and `Tf`/`Tfs` stay with their consumers. Forcing the
+hoist would have failed the roundtrip-unchanged gate, which is the gate that
+makes a correctness-plumbing slice trustworthy.
+
+Related, and deliberately not "fixed": `pdfce-render::text::TextState` is a
+**fourth** tracker in another crate. It stays, for the same reason `advance_tx`
+was not pushed across the crate boundary — the render-parity cross-check wants
+an independent implementation. **§19.0's "exactly one definition" is true of
+`pdfce-core` only**, and saying so is more useful than a claim that reads
+tidier.
+
+## A.4 An unrelated live defect this slice exposed
+
+`text_edit::edit::Walk` had **no `q` and no `Q` arm at all** — verified before
+and after (`grep -c 'b"q"'`: 0 → 1). Text state *and fill colour* leaked past
+`Q` in the model, which means **shipped Pass 14.2 behaviour could re-emit a fill
+colour that a `Q` had already discarded**. §1.2's audit reported the missing
+`Ts`/`Tr` arms and missed this.
+
+Not a 19.x prerequisite — a bug in already-shipped code, fixed in 19.0 with two
+tests. Recorded because the audit that missed it was otherwise the strongest
+part of the decision, and "the audit was thorough" is exactly the belief that
+lets the next gap through.
