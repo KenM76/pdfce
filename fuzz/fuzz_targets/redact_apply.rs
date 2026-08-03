@@ -135,7 +135,7 @@ fuzz_target!(|data: &[u8]| {
                 if let Ok(pages) = page_tree::pages(&back) {
                     let mut decoded = Vec::new();
                     for page in &pages {
-                        if let Ok(cs) = ContentStream::from_page(&back, page) {
+                        if let Ok(cs) = ContentStream::from_page(&back.view(), page) {
                             decoded.extend_from_slice(&cs.buf);
                         }
                     }

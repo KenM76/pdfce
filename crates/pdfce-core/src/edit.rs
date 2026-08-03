@@ -141,6 +141,7 @@ use crate::pageops::references::{DanglingReport, census_dangling};
 use crate::signature::{SaveMode, SignatureCensus, SignatureImpact, census, impact_of};
 use crate::span::ByteSpan;
 use crate::vartext::FontResource;
+use crate::view::{DocumentView, StreamSource};
 use crate::writer::content::ContentBuilder;
 use crate::writer::{DirtySet, SaveOptions, SaveReport, WriteError};
 
@@ -999,6 +1000,53 @@ impl EditSession {
         SessionGraph { session: self }
     }
 
+    /// A read view of the document **as the operator currently has it**,
+    /// for every consumer that also needs stream BYTES — the rasterizer,
+    /// the vector object model, `pageops`' cross-document copier.
+    ///
+    /// This is the fix for the defect recorded in
+    /// `docs/decisions/018-edited-state-is-what-the-canvas-renders.md`:
+    /// from Pass 3.1 to Pass 16.2 the GUI rasterized
+    /// [`EditSession::document`] — the BASE revision — so every edit the
+    /// operator made was authored correctly and displayed not at all.
+    /// Passing `&session.view()` where `&session.document()` used to go is
+    /// the whole of the read-path half of that fix.
+    ///
+    /// Two halves, matching [`crate::view`]'s two:
+    ///
+    /// - **Graph:** `self`, via this type's [`ObjectGraph`] impl — the base
+    ///   with the overlay applied and deletions honoured, identical to
+    ///   [`EditSession::graph`].
+    /// - **Bytes:** a [`StreamSource::Split`] over the base file and the
+    ///   R45 `staging` buffer. NOT
+    ///   [`EditSession::authored_source`], which would memcpy the entire
+    ///   file on every call (see that method's own warning) — the split
+    ///   form resolves a staged span with one integer comparison and no
+    ///   allocation, which is what makes this callable once per rendered
+    ///   frame.
+    ///
+    /// The version is the base document's: a session cannot currently
+    /// raise `/Version`, and if one ever can, this is the line that has to
+    /// learn about it.
+    ///
+    /// # ⚠️ Read-only
+    ///
+    /// The returned view must never reach the writer — see
+    /// [`DocumentView`]'s own doc comment and decision 018 §10 hazard 1.
+    /// Saving goes through [`EditSession::dirty_set`], which hands the
+    /// writer the staging buffer under its own contract.
+    #[must_use]
+    pub fn view(&self) -> DocumentView<'_> {
+        DocumentView::with_source(
+            self,
+            StreamSource::Split {
+                base: self.base.bytes(),
+                staged: &self.staging,
+            },
+            self.base.version(),
+        )
+    }
+
     // -- the save-time diff ------------------------------------------
 
     /// Compute the dirty set: **what currently differs from the base
@@ -1056,12 +1104,29 @@ impl EditSession {
     /// file alone when nothing has been authored, or `base ++ staging`
     /// when the session carries authored appearance streams.
     ///
-    /// This is what a [`DocumentView`](crate::pageops::DocumentView) built
+    /// This is what a [`DocumentView`] built
     /// over an editing session must use as its `bytes`, so that
     /// extract/merge/split reading an authored appearance's `data_span`
     /// (which points past the base) resolves it — the X5 hazard the
     /// `DocumentView` assertion was written to catch. Returns a borrowed
     /// slice (zero-copy) in the common no-authoring case.
+    ///
+    /// # ⚠️ NOT for per-frame use
+    ///
+    /// Once anything has been authored this returns `Cow::Owned` — a full
+    /// `base ++ staging` memcpy, which on decision 018's benchmark document
+    /// is ~14 MB **per call**. That is fine for its intended
+    /// once-per-operation `pageops` callers (extract/merge/split, which
+    /// then serialize a whole new file anyway) and completely unacceptable
+    /// on a render loop.
+    ///
+    /// Anything that reads stream bytes repeatedly — the rasterizer, the
+    /// vector decomposer, the GUI hit-test provider — must use
+    /// [`EditSession::view`] instead, whose
+    /// [`StreamSource::Split`] resolves the same spans against the same two
+    /// buffers with one comparison and no allocation. Decision 018 §4
+    /// records this rejection explicitly so the cheap-looking call does not
+    /// get reintroduced on the hot path later.
     #[must_use]
     pub fn authored_source(&self) -> std::borrow::Cow<'_, [u8]> {
         if self.staging.is_empty() {
@@ -2066,10 +2131,17 @@ impl EditSession {
         // Decompose the base content and plan the surgery; the borrow of
         // `self.base` is scoped so it ends before the `&mut self` commit.
         let new_content = {
-            let stream = crate::content::ContentStream::from_page(&self.base, page)
+            // BASE READ, deliberately (decision 018 caller audit). The
+            // method docs above say why: `object_index` must line up with
+            // whoever decomposed the base, and a page already rewritten
+            // this session is REFUSED above rather than misindexed. Reading
+            // the session view here would silently renumber the objects
+            // under the caller's index.
+            let base_view = self.base.view();
+            let stream = crate::content::ContentStream::from_page(&base_view, page)
                 .map_err(EditError::VectorEditContent)?;
             let resolver = crate::vector::DocumentXObjects {
-                doc: &self.base,
+                view: &base_view,
                 resources: &page.resources,
             };
             let model =
@@ -2112,7 +2184,14 @@ impl EditSession {
                 .to_vec();
             return ContentStream::parse(raw);
         }
-        ContentStream::from_page(&self.base, page)
+        // BASE READ, deliberately (decision 018 caller audit). The session
+        // case is the branch above, which reads the RAW staged stream
+        // directly — a staged content stream is stored unfiltered, so
+        // routing it through `from_page` (which runs `decode_stream`) would
+        // double-handle it. This branch is only reached when the session has
+        // NOT rewritten this content object, where base and session agree by
+        // definition.
+        ContentStream::from_page(&self.base.view(), page)
     }
 
     /// Build the one [`Command`] that replaces `content_id` with the freshly
@@ -2390,13 +2469,44 @@ pub struct SessionGraph<'a> {
     session: &'a EditSession,
 }
 
+/// The session itself, as a graph.
+///
+/// [`SessionGraph`] already expressed exactly this, and for the page-tree
+/// walk it remains the ergonomic handle (`Copy`, no lifetime juggling).
+/// This impl exists because [`DocumentView`] holds a `&'a dyn ObjectGraph`,
+/// and a `SessionGraph` constructed inside [`EditSession::view`] would be a
+/// **temporary** — it could not outlive the call that built it, so the
+/// borrow would not compile. `&self` can, and does.
+///
+/// Behaviour is identical to [`SessionGraph`]'s by construction:
+/// `SessionGraph` now delegates here rather than reimplementing, so the two
+/// views of a session can never drift apart the way two hand-written copies
+/// of a walk would (the reason [`crate::graph`] is a trait in the first
+/// place).
+impl ObjectGraph for EditSession {
+    fn value(&self, id: ObjId) -> Option<&Object> {
+        // Disambiguated: the inherent `EditSession::value` is the real
+        // implementation (overlay, then deletions, then base) and this
+        // trait method is its projection, not the other way round.
+        Self::value(self, id)
+    }
+
+    fn trailer_entry(&self, key: &[u8]) -> Option<&Object> {
+        // The session's WORKING trailer, not the base's: an operator who
+        // created `/Info` this session must see it here (Pass 3.1).
+        self.trailer.get(key)
+    }
+}
+
 impl ObjectGraph for SessionGraph<'_> {
     fn value(&self, id: ObjId) -> Option<&Object> {
         self.session.value(id)
     }
 
     fn trailer_entry(&self, key: &[u8]) -> Option<&Object> {
-        self.session.trailer.get(key)
+        // Delegates to `<EditSession as ObjectGraph>` so there is exactly
+        // one definition of "the session's trailer" (see that impl).
+        ObjectGraph::trailer_entry(self.session, key)
     }
 }
 

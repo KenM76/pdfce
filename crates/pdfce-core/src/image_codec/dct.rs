@@ -138,8 +138,13 @@ use super::{
     Codec, CodecColorModel, CodecNotes, CodedImage, ImageCodecError, MAX_IMAGE_DIMENSION,
     MAX_IMAGE_PIXELS, MAX_IMAGE_SAMPLE_BYTES,
 };
-use crate::document::Document;
+// decision 018: the codecs resolve indirect entries through a `DocumentView`
+// rather than a `&Document`, so an image whose dictionary lives in an
+// editing session decodes as the operator currently has it. `Document` is
+// still named by the back-compat `decode_image` wrapper in `mod.rs`.
+use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
+use crate::view::DocumentView;
 
 /// Ceiling on progressive scans, against the progressive-scan bomb.
 ///
@@ -169,7 +174,7 @@ const MAX_PROGRESSIVE_SCANS: usize = 100;
 /// is crossed; [`ImageCodecError::Corrupt`] for anything `zune-jpeg`
 /// rejects.
 pub(super) fn decode(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     data: &[u8],
     parms: Option<&Dict>,
     dict: &Dict,
@@ -645,7 +650,7 @@ const fn unsupported_sof(marker: u8) -> Option<&'static str> {
 /// outside that range is meaningless, and is treated as absent rather
 /// than as an error — falling back to the component-count default,
 /// which is what a reader with no `/DecodeParms` at all would do.
-fn dict_color_transform(doc: &Document, parms: Option<&Dict>) -> Option<u8> {
+fn dict_color_transform(doc: &DocumentView<'_>, parms: Option<&Dict>) -> Option<u8> {
     let value = parms
         .and_then(|d| d.get(b"ColorTransform"))
         .map(|o| doc.resolve(o))
@@ -667,7 +672,7 @@ fn dict_color_transform(doc: &Document, parms: Option<&Dict>) -> Option<u8> {
 /// is not a polarity declaration (and `pdfce-render` will ignore it
 /// with its own `decode_array_ignored` note). This function OBSERVES
 /// the entry; it never applies it — R26 as clarified by decision 006.
-fn has_decode_array(doc: &Document, dict: &Dict) -> bool {
+fn has_decode_array(doc: &DocumentView<'_>, dict: &Dict) -> bool {
     matches!(
         dict.get(b"Decode").map(|o| doc.resolve(o)),
         Some(Object::Array(_))
@@ -688,7 +693,7 @@ fn has_decode_array(doc: &Document, dict: &Dict) -> bool {
 /// entry inconsistent with the filter an error, and a DCTDecode image
 /// "shall always deliver 8-bit samples", so any other stated value is a
 /// disagreement worth surfacing.
-fn geometry_disagrees(doc: &Document, dict: &Dict, width: u32, height: u32) -> bool {
+fn geometry_disagrees(doc: &DocumentView<'_>, dict: &Dict, width: u32, height: u32) -> bool {
     let int = |key: &[u8]| -> Option<i64> {
         dict.get(key)
             .map(|o| doc.resolve(o))

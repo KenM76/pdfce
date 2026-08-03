@@ -257,8 +257,13 @@ use super::{
     Codec, CodecColorModel, CodecNotes, CodedImage, ImageCodecError, MAX_IMAGE_DIMENSION,
     MAX_IMAGE_PIXELS, MAX_IMAGE_SAMPLE_BYTES,
 };
-use crate::document::Document;
+// decision 018: the codecs resolve indirect entries through a `DocumentView`
+// rather than a `&Document`, so an image whose dictionary lives in an
+// editing session decodes as the operator currently has it. `Document` is
+// still named by the back-compat `decode_image` wrapper in `mod.rs`.
+use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
+use crate::view::DocumentView;
 
 /// Ceiling on `hayro-jpeg2000`'s internal working set, in bytes.
 ///
@@ -351,7 +356,7 @@ enum SMaskInData {
 /// access is bounds-checked, and the `image_codec_jpx` fuzz target
 /// asserts it over arbitrary bytes.
 pub(super) fn decode(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     data: &[u8],
     dict: &Dict,
     notes: &mut CodecNotes,
@@ -557,7 +562,7 @@ fn interleave(plane: &[f32], bit_depth: u8, index: usize, stride: usize, out: &m
 /// integer) or to pick one of the defined meanings (inventing a rule the
 /// spec does not have). Ignoring the codestream's alpha is the outcome
 /// that cannot corrupt what is drawn.
-fn smask_in_data(doc: &Document, dict: &Dict) -> SMaskInData {
+fn smask_in_data(doc: &DocumentView<'_>, dict: &Dict) -> SMaskInData {
     match dict
         .get(b"SMaskInData")
         .map(|o| doc.resolve(o))
@@ -652,7 +657,7 @@ fn icc_data_color_space(profile: &[u8]) -> Option<&[u8; 4]> {
 /// `/ColorSpace` and `/BitsPerComponent` optional for this filter, which
 /// is the entire point of the audit that preceded this Pass.
 fn geometry_disagrees(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     dict: &Dict,
     width: u32,
     height: u32,
@@ -688,7 +693,7 @@ fn geometry_disagrees(
 /// covers the case a JPX image actually hits in practice (a bare
 /// `/DeviceRGB` beside a grayscale codestream) without duplicating the
 /// colour-space resolver.
-fn dict_colorspace_components(doc: &Document, dict: &Dict) -> Option<usize> {
+fn dict_colorspace_components(doc: &DocumentView<'_>, dict: &Dict) -> Option<usize> {
     match dict.get(b"ColorSpace").map(|o| doc.resolve(o))? {
         Object::Name(name) => match name.as_bytes() {
             b"DeviceGray" | b"CalGray" | b"G" => Some(1),

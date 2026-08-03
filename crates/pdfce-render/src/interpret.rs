@@ -114,10 +114,13 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use pdfce_core::content::{ContentStream, ContentTokenKind, Operation};
-use pdfce_core::document::Document;
+// decision 018: read paths take a `DocumentView` (graph + byte source), so
+// the same code renders a loaded file or an editing session's unsaved state.
 use pdfce_core::filters;
+use pdfce_core::graph::ObjectGraph;
 use pdfce_core::object::{Dict, ObjId, Object, Stream};
 use pdfce_core::span::ByteSpan;
+use pdfce_core::view::DocumentView;
 use tiny_skia::{
     BlendMode, FillRule, FilterQuality, LineCap as SkCap, LineJoin as SkJoin, Mask, Paint, Path,
     PathBuilder, Pattern, Pixmap, Rect, SpreadMode, Stroke, StrokeDash, Transform,
@@ -542,7 +545,7 @@ fn push_sample(list: &mut Vec<String>, value: &str) {
 /// substitute faces for any font that carries no program (decision 004
 /// §6.3 — the renderer never goes looking for one itself, R19).
 pub fn run(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     content: &ContentStream,
     resources: &Dict,
     fonts: &FontEnvironment,
@@ -616,7 +619,7 @@ pub enum TracedNode {
 /// this page-level cross-check).
 #[must_use]
 pub fn trace_paths(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     content: &ContentStream,
     resources: &Dict,
     fonts: &FontEnvironment,
@@ -664,7 +667,7 @@ pub fn trace_paths(
 /// appearance streams that annotations are made of).
 #[allow(clippy::too_many_arguments)]
 fn run_nested(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     content: &ContentStream,
     resources: &Dict,
     fonts: &FontEnvironment,
@@ -739,7 +742,7 @@ fn run_nested(
 /// rendered` is incremented by `do_form`, so an appearance is also counted
 /// as a form — correct, because an appearance *is* a form XObject.
 pub fn run_form_at(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     stream: &Stream,
     id: Option<ObjId>,
     resources_fallback: &Dict,
@@ -792,7 +795,7 @@ struct Interpreter<'a> {
     compat_depth: usize,
     resources: &'a Dict,
     /// The document, for resolving indirect resource/font entries.
-    doc: &'a Document,
+    doc: &'a DocumentView<'a>,
     /// Substitute faces available to `Tf` (R19: supplied, never found).
     fonts: &'a FontEnvironment,
     /// `Tm`/`Tlm`, live only between `BT` and `ET` (§9.4.1). `None`
@@ -1682,8 +1685,13 @@ impl Interpreter<'_> {
             return;
         }
 
+        // `doc.slice`, not `span.slice(doc.bytes())` (decision 018 §4): a
+        // form XObject authored this session — every dimension and markup
+        // annotation appearance is one — has its content stream in the R45
+        // staging half, which is precisely why authored annotations never
+        // appeared on the canvas before Pass 17.0.
         let doc = self.doc;
-        let Some(raw) = stream.data_span.slice(doc.bytes()) else {
+        let Some(raw) = doc.slice(stream.data_span) else {
             self.diag.tolerated += 1;
             return;
         };
@@ -1779,8 +1787,10 @@ impl Interpreter<'_> {
     /// `Do` on an image XObject: pull the still-encoded sample bytes out
     /// of the file and hand them to the shared image path.
     fn do_image(&mut self, dict: &Dict, data: ByteSpan, pixmap: &mut Pixmap) {
+        // See `run_form`: resolved through the view, so an image XObject
+        // staged this session resolves too (decision 018 §4).
         let doc = self.doc;
-        let Some(raw) = data.slice(doc.bytes()) else {
+        let Some(raw) = doc.slice(data) else {
             self.diag.tolerated += 1;
             return;
         };
@@ -2082,7 +2092,7 @@ fn intersect_clip(
 /// Table 95's documented default — the identity matrix. Note this is an
 /// **array** operand, unlike `cm`/`Tm`, whose six numbers are loose
 /// operands.
-fn matrix_entry(doc: &Document, dict: &Dict) -> Option<Transform> {
+fn matrix_entry(doc: &DocumentView<'_>, dict: &Dict) -> Option<Transform> {
     let items = doc.resolve(dict.get(b"Matrix")?).as_array()?;
     let n: Vec<f32> = items
         .iter()
@@ -2104,7 +2114,7 @@ fn matrix_entry(doc: &Document, dict: &Dict) -> Option<Transform> {
 /// idiom and normalizing destroys it. Two arrays of numbers, opposite
 /// rules — worth naming at both sites so neither gets "fixed" to match
 /// the other.
-fn rect_entry(doc: &Document, dict: &Dict, key: &[u8]) -> Option<Rect> {
+fn rect_entry(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Option<Rect> {
     let items = doc.resolve(dict.get(key)?).as_array()?;
     let n: Vec<f32> = items
         .iter()

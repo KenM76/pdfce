@@ -63,6 +63,15 @@ use pdfce_core::document::Document;
 use pdfce_core::page_tree::Page;
 use tiny_skia::{Pixmap, Transform};
 
+// `DocumentView` is a parameter type of this crate's public entry points
+// ([`render_page_view`], [`render_page_with_view`]), so it is re-exported
+// rather than merely imported — the Rust API Guidelines' rule against
+// naming a dependency's type in a public signature without giving
+// consumers a way to name it through this crate (same reason `tiny_skia`
+// is re-exported above).
+#[doc(inline)]
+pub use pdfce_core::view::DocumentView;
+
 pub use font::{FallbackKey, FontData, FontEnvironment, GlyphSource, RenderOptions};
 pub use interpret::Diagnostics;
 // `RenderedPage::pixmap` is a public field of a `tiny_skia` type, so this
@@ -74,7 +83,9 @@ pub use interpret::Diagnostics;
 pub use tiny_skia;
 // Re-export the core types the rendering surface is built around, so a
 // consumer can name them through this crate alone (kept from Pass 0's
-// surface for continuity).
+// surface for continuity). `DocumentView` joins them at Pass 17.0 for
+// exactly the same reason: it is now a parameter type of this crate's
+// public entry points, so a consumer must be able to name it here.
 #[doc(inline)]
 pub use pdfce_core::{PdfError, PdfVersion};
 
@@ -110,8 +121,11 @@ pub struct RenderedPage {
     pub diagnostics: Diagnostics,
 }
 
-/// Rasterize one page at `scale` device pixels per user-space unit
-/// (`scale = dpi / 72.0`; `1.0` ≈ 72 DPI).
+/// Rasterize one page of a **loaded file** at `scale` device pixels per
+/// user-space unit (`scale = dpi / 72.0`; `1.0` ≈ 72 DPI).
+///
+/// A thin wrapper over [`render_page_view`] with `doc.view()` — see that
+/// function for what the distinction buys and why this signature was kept.
 ///
 /// # Errors
 ///
@@ -119,13 +133,63 @@ pub struct RenderedPage {
 /// the guard. Deferred/unknown operators are NOT errors; they are
 /// diagnostics (module docs).
 pub fn render_page(doc: &Document, page: &Page, scale: f32) -> Result<RenderedPage, RenderError> {
-    render_page_with(doc, page, scale, &RenderOptions::default())
+    render_page_view(&doc.view(), page, scale)
 }
 
-/// Rasterize one page with caller-supplied options — currently the
-/// [`FontEnvironment`], i.e. the substitute faces available to any font
-/// in the document that carries no embedded program (decision 004
-/// §6.3).
+/// Rasterize one page of a loaded file with caller-supplied options.
+///
+/// A thin wrapper over [`render_page_with_view`] with `doc.view()`.
+///
+/// # Errors
+///
+/// As [`render_page`].
+pub fn render_page_with(
+    doc: &Document,
+    page: &Page,
+    scale: f32,
+    options: &RenderOptions,
+) -> Result<RenderedPage, RenderError> {
+    render_page_with_view(&doc.view(), page, scale, options)
+}
+
+/// Rasterize one page of **whatever document view the caller hands over**
+/// — a loaded file, or an editing session with its unsaved edits applied.
+///
+/// # Why this exists (decision 018)
+///
+/// Until Pass 17.0 this crate only knew how to render a `&Document`, and
+/// the GUI could only give it
+/// [`EditSession::document()`](pdfce_core::edit::EditSession::document) —
+/// the BASE revision. Every editing feature from Pass 3.1 to Pass 16.2
+/// therefore authored correctly and displayed not at all. Taking a
+/// [`DocumentView`] is the fix: it carries both halves a renderer needs
+/// (the object graph *and* the byte source its stream spans resolve
+/// against), so a session's staged appearance and content streams resolve
+/// out of the R45 staging buffer instead of reading off the end of the base
+/// file.
+///
+/// The `&Document` entry points ([`render_page`], [`render_page_with`]) are
+/// preserved verbatim as wrappers over these, which is what kept the
+/// blast radius of that change near zero: `pdfce-cli`, `tools/roundtrip`,
+/// `tools/font-parity`, `tools/render-parity` and every existing render
+/// test are untouched, and "render the file on disk" remains a
+/// one-argument idea.
+///
+/// # Errors
+///
+/// As [`render_page`].
+pub fn render_page_view(
+    view: &DocumentView<'_>,
+    page: &Page,
+    scale: f32,
+) -> Result<RenderedPage, RenderError> {
+    render_page_with_view(view, page, scale, &RenderOptions::default())
+}
+
+/// Rasterize one page of a document view with caller-supplied options —
+/// currently the [`FontEnvironment`], i.e. the substitute faces available
+/// to any font in the document that carries no embedded program (decision
+/// 004 §6.3).
 ///
 /// This is the seam through which a shell hands the renderer a system
 /// face it discovered — a CJK font, or a user's explicit override.
@@ -133,11 +197,13 @@ pub fn render_page(doc: &Document, page: &Page, scale: f32) -> Result<RenderedPa
 /// (rule R19), which is what makes the same document render to the same
 /// pixels on a CI runner, a developer laptop, and the WASM fork.
 ///
+/// See [`render_page_view`] for the view-vs-document distinction.
+///
 /// # Errors
 ///
 /// As [`render_page`].
-pub fn render_page_with(
-    doc: &Document,
+pub fn render_page_with_view(
+    doc: &DocumentView<'_>,
     page: &Page,
     scale: f32,
     options: &RenderOptions,

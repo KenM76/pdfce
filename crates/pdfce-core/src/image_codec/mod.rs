@@ -119,7 +119,9 @@ mod fixtures_jpx;
 
 use crate::document::Document;
 use crate::filters::{self, FilterError, FilterNotes};
+use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
+use crate::view::DocumentView;
 
 /// Maximum `width × height` accepted for a single decoded image
 /// (pdfce policy, ARCHITECTURE.md §10.1 — no Annex C limit exists).
@@ -480,6 +482,13 @@ pub fn terminal_codec(dict: &Dict) -> Result<Option<Codec>, FilterError> {
 /// - `raw` is the still-encoded stream data.
 /// - `inline` selects §8.9.7's stricter filter rules.
 ///
+/// This is the **base-revision** entry point, kept with its original
+/// `&Document` signature so that every existing caller — the four
+/// `image_codec_*` fuzz targets, this module's own tests, the
+/// `cmyk_variants` acceptance test — is untouched by decision 018. It is a
+/// thin wrapper over [`decode_image_view`]; a caller that must decode an
+/// image as an editing session currently has it calls that directly.
+///
 /// # Errors
 ///
 /// [`ImageCodecError`] — every failure is structured and names the
@@ -488,6 +497,27 @@ pub fn terminal_codec(dict: &Dict) -> Result<Option<Codec>, FilterError> {
 /// `image_codec_dct` fuzz target asserts it.
 pub fn decode_image(
     doc: &Document,
+    dict: &Dict,
+    raw: &[u8],
+    inline: bool,
+) -> Result<CodedImage, ImageCodecError> {
+    decode_image_view(&doc.view(), dict, raw, inline)
+}
+
+/// [`decode_image`] over an explicit [`DocumentView`] — the general form.
+///
+/// Exists because `pdfce-render` renders **whatever view it was handed**
+/// (decision 018): rasterizing an editing session must resolve an image
+/// dictionary's indirect entries, and a `/JBIG2Globals` payload, against
+/// the session rather than the file on disk. Everything else about the
+/// decode is identical; see [`decode_image`] for the parameter contract and
+/// the error posture.
+///
+/// # Errors
+///
+/// As [`decode_image`].
+pub fn decode_image_view(
+    doc: &DocumentView<'_>,
     dict: &Dict,
     raw: &[u8],
     inline: bool,
@@ -549,7 +579,7 @@ pub fn decode_image(
 /// entries become `0` rather than an error: validating Table 89 is the
 /// renderer's job and it already does it, and duplicating that check
 /// here would give two places for the rules to disagree.
-fn uncoded(doc: &Document, dict: &Dict, samples: Vec<u8>, notes: CodecNotes) -> CodedImage {
+fn uncoded(doc: &DocumentView<'_>, dict: &Dict, samples: Vec<u8>, notes: CodecNotes) -> CodedImage {
     let int = |key: &[u8]| -> u32 {
         dict.get(key)
             .map(|o| doc.resolve(o))

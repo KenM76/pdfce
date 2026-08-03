@@ -90,11 +90,12 @@ fn render_points(tp: &TracedPath) -> Vec<(f64, f64)> {
 /// geometry agrees point-for-point.
 fn cross_check(name: &str) {
     let doc = fixture(name);
+    let view = doc.view();
     let page = &pages(&doc).expect("page tree")[0];
 
     // Object model: paths in paint order (skip text/image — the renderer's
     // trace records only paths).
-    let model = decompose_page(&doc, page, Matrix::IDENTITY).expect("decompose");
+    let model = decompose_page(&view, page, Matrix::IDENTITY).expect("decompose");
     let core: Vec<Vec<(f64, f64)>> = model
         .objects
         .iter()
@@ -105,9 +106,9 @@ fn cross_check(name: &str) {
         .collect();
 
     // Renderer: the real interpreter's walk, identity initial CTM.
-    let content = ContentStream::from_page(&doc, page).expect("content");
+    let content = ContentStream::from_page(&view, page).expect("content");
     let traced = trace_paths(
-        &doc,
+        &view,
         &content,
         &page.resources,
         &pdfce_render::FontEnvironment::bundled(),

@@ -331,7 +331,11 @@ pub(crate) fn plan_reflow_from_doc(
     let engine = ReflowEngine::new(&model);
     let preview = engine.preview(block_index, &req)?;
 
-    let stream = ContentStream::from_page(doc, page)?;
+    // BASE READ (decision 018 caller audit) — the one-shot `&Document`
+    // reflow entry point; the block model it was planned against was
+    // extracted from the same base document a few lines above, so reading
+    // anything else here would desynchronize the two.
+    let stream = ContentStream::from_page(&doc.view(), page)?;
     plan_reflow(doc, page, &stream, &model, block_index, &preview)
 }
 

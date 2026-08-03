@@ -59,12 +59,15 @@
 //! immediately for the semantic view; the raw span still re-emits the
 //! original abbreviated bytes for untouched images (round-trip, §5).
 
-use crate::document::Document;
 use crate::filters::{self, FilterError};
+// NOTE: `crate::graph::ObjectGraph` is not imported: `from_page` reaches the
+// graph via `DocumentView::graph()`, whose `&dyn ObjectGraph` resolves trait
+// methods without the trait being in scope.
 use crate::lexer::{Lexer, Token, TokenKind};
 use crate::object::{Dict, Name, Object};
 use crate::page_tree::Page;
 use crate::span::ByteSpan;
+use crate::view::DocumentView;
 
 /// One token of a content stream. `span` indexes the DECODED content
 /// buffer the token was parsed from (see module docs).
@@ -180,22 +183,47 @@ impl ContentStream {
     /// separator can never merge tokens and its absence could fail to
     /// separate them).
     ///
+    /// ## Which document does `view` mean? (decision 018)
+    ///
+    /// This used to take `&Document` — always the file as loaded. It now
+    /// takes a [`DocumentView`], because the answer genuinely differs by
+    /// caller and the type should make the caller say which they meant:
+    ///
+    /// - `&doc.view()` — **the base revision**. What a one-shot
+    ///   `pdfce-cli` operation, a text/redaction planner, or a save-time
+    ///   walk wants: the bytes on disk, no session overlay.
+    /// - `&session.view()` — **the edited state**. What the rasterizer and
+    ///   the vector object model want, so the operator sees the page they
+    ///   are actually editing.
+    ///
+    /// Getting this wrong is not a crash, it is the Pass 17.0 defect: the
+    /// content parses fine and shows the wrong document. Every caller in
+    /// the tree was audited when this signature changed, and the ones whose
+    /// base-vs-session intent is not obvious from context carry a comment
+    /// saying which they are and why.
+    ///
     /// # Errors
     ///
     /// [`ContentError`] — decode failures or malformed content syntax.
-    pub fn from_page(doc: &Document, page: &Page) -> Result<Self, ContentError> {
+    pub fn from_page(view: &DocumentView<'_>, page: &Page) -> Result<Self, ContentError> {
         let mut buf: Vec<u8> = Vec::new();
         for (i, id) in page.contents.iter().enumerate() {
-            let obj = doc
-                .get(*id)
-                .map(|io| &io.value)
-                .ok_or(ContentError::NotAStream)?;
+            // `graph().value` rather than `doc.get(id).map(|io| &io.value)`:
+            // the graph is the one abstraction both a `Document` and an
+            // `EditSession` overlay answer, and an `IndirectObject`'s
+            // provenance is of no interest to a reader (decision 018 §3).
+            let obj = view.graph().value(*id).ok_or(ContentError::NotAStream)?;
             let Object::Stream(stream) = obj else {
                 return Err(ContentError::NotAStream);
             };
-            let raw = stream
-                .data_span
-                .slice(doc.bytes())
+            // `view.slice` rather than `span.slice(doc.bytes())`: a session
+            // view has TWO buffers (base + R45 staging) and a content stream
+            // rewritten this session — by `edit_text`, `format_text`,
+            // `apply_reflow` or a 9c-min vector edit — has its payload in the
+            // staging half. Indexing the base alone is exactly how those
+            // edits stayed invisible.
+            let raw = view
+                .slice(stream.data_span)
                 .ok_or(ContentError::NotAStream)?;
             let decoded = filters::decode_stream(&stream.dict, raw)?;
             if i > 0 {

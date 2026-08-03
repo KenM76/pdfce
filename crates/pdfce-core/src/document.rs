@@ -87,6 +87,7 @@ use crate::object::{Dict, IndirectObject, ObjId, Object, Provenance};
 use crate::objstm::{ObjStmError, ObjectStream};
 use crate::parser::{ParseError, Parser};
 use crate::recover::{self, RecoveryReport};
+use crate::view::DocumentView;
 use crate::xref::{self, SectionShape, XrefEntry, XrefError, XrefErrorKind, XrefTable};
 use crate::{PdfError, PdfVersion};
 
@@ -497,6 +498,43 @@ impl Document {
     #[must_use]
     pub fn bytes(&self) -> &[u8] {
         &self.buf
+    }
+
+    /// A read view of this document for the rasterizer, the vector object
+    /// model and `pageops` — the file exactly as loaded.
+    ///
+    /// The mirror of [`EditSession::view`](crate::edit::EditSession::view),
+    /// and the reason every read path can take one parameter type
+    /// ([`DocumentView`]) instead of two overloads. A `Document` has no
+    /// overlay and no staging buffer, so its view carries a
+    /// [`StreamSource::Contiguous`](crate::view::StreamSource::Contiguous)
+    /// over [`Document::bytes`] — meaning "render the file as it is on
+    /// disk", which is exactly what `pdfce-cli` and the round-trip tools
+    /// want — and why `pdfce-render`'s `&Document` back-compat wrappers can
+    /// build one implicitly without changing any caller's behaviour.
+    ///
+    /// Cheap: two borrows plus a version probe. Building one per call is
+    /// the intended usage; there is nothing to cache.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pdfce_core::document::Document;
+    /// use pdfce_core::graph::ObjectGraph;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let doc = Document::from_bytes(
+    ///     include_bytes!("../../../fixtures/synthetic/hello.pdf").to_vec(),
+    /// )?;
+    /// let view = doc.view();
+    /// assert_eq!(view.version(), doc.version());
+    /// assert_eq!(view.catalog_id(), doc.catalog_id());
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn view(&self) -> DocumentView<'_> {
+        DocumentView::new(self, self.bytes(), self.version())
     }
 
     /// The newest trailer dictionary (§7.5.5 Table 15).

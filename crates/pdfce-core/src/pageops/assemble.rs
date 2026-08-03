@@ -109,7 +109,10 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::graph::ObjectGraph;
+// NOTE: `crate::graph::ObjectGraph` is deliberately NOT imported here.
+// Since decision 018 this module reaches the graph through
+// `DocumentView::graph()`, which yields a `&dyn ObjectGraph` — and trait
+// methods on a trait object resolve without the trait being in scope.
 use crate::object::{Dict, Name, ObjId, Object, Stream};
 use crate::page_tree::{self, PageSlot};
 use crate::span::ByteSpan;
@@ -133,83 +136,21 @@ pub const MAX_COPY_DEPTH: usize = 64;
 /// generated rather than parsed.
 pub const MAX_COPIED_OBJECTS: usize = 5_000_000;
 
-/// A document to copy pages *out of*: its object graph plus the buffer
-/// its stream spans index into.
-///
-/// Two fields rather than one `&Document` because the graph may be an
-/// **edit session's overlay** — extract-from-the-open-document has to see
-/// unsaved deletes and reorders — while the `bytes` are the coordinate
-/// system every stream span in that graph indexes.
-///
-/// ## The assertion this type was created to guard — now DISCHARGED (R45)
-///
-/// The original invariant (written here so it could not be forgotten) was:
-/// *"no Pass 3.2 session edit introduces stream bytes the base buffer does
-/// not already hold; a Pass that changes that must revisit this type."*
-/// **Pass 6.1 is that Pass** — annotation authoring stages appearance
-/// content streams whose spans point *past* the base file (X5). The
-/// assertion is discharged not by deleting it but by **amending what
-/// `bytes` means**: it is no longer "always the base revision" but "the
-/// buffer the graph's spans index into", which for
-/// - a plain [`Document`](crate::document::Document) is its base bytes, and
-/// - an [`EditSession`](crate::edit::EditSession) carrying authored
-///   appearances is its [`authored_source`](crate::edit::EditSession::authored_source)
-///   — `base ++ staging`, the single combined coordinate system (base
-///   spans in the prefix, authored spans, offset by `base.len()`, in the
-///   suffix).
-///
-/// So the caller building a view over an editing session **must** pass
-/// `session.authored_source()` as `bytes`, not `session.document().bytes()`
-/// — otherwise an authored appearance's span reads off the end of the base
-/// buffer and stages as empty (the exact X5 failure). A plain document is
-/// unaffected: its `authored_source` is just its base bytes.
-pub struct DocumentView<'a> {
-    graph: &'a dyn ObjectGraph,
-    bytes: &'a [u8],
-    version: PdfVersion,
-}
-
-impl<'a> DocumentView<'a> {
-    /// Build a view over `graph`, whose stream spans index into `bytes`.
-    #[must_use]
-    pub const fn new(graph: &'a dyn ObjectGraph, bytes: &'a [u8], version: PdfVersion) -> Self {
-        Self {
-            graph,
-            bytes,
-            version,
-        }
-    }
-
-    /// The object graph this view reads.
-    #[must_use]
-    pub const fn graph(&self) -> &'a dyn ObjectGraph {
-        self.graph
-    }
-
-    /// The buffer this view's stream spans index into.
-    #[must_use]
-    pub const fn bytes(&self) -> &'a [u8] {
-        self.bytes
-    }
-
-    /// The version this view's document declares.
-    #[must_use]
-    pub const fn version(&self) -> PdfVersion {
-        self.version
-    }
-}
-
-impl std::fmt::Debug for DocumentView<'_> {
-    /// Hand-written because `&dyn ObjectGraph` is not `Debug` and adding
-    /// that bound would infect every implementor for the sake of one
-    /// derive. Prints the facts a debugging session actually wants.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DocumentView")
-            .field("version", &self.version)
-            .field("bytes", &self.bytes.len())
-            .finish()
-    }
-}
+// `DocumentView` used to be DEFINED here. Decision 018 promoted it to the
+// top-level [`crate::view`] module, because `pdfce-render`, the vector
+// object model and the GUI's hit-test provider all need the same
+// abstraction and none of them should have to reach into `pageops` for it.
+//
+// The re-export is not vestigial politeness: `pageops::DocumentView` is the
+// path every existing caller (`pdfce-cli`, `pageops`' own submodules, the
+// page-op integration tests) already names, and decision 018's whole
+// premise is that this change costs no call sites. The type's original R45
+// doc comment — "the caller building a view over an editing session must
+// pass `session.authored_source()` as `bytes`" — is now DISCHARGED
+// STRUCTURALLY rather than by instruction: `EditSession::view()` builds a
+// [`crate::view::StreamSource::Split`], which serves an authored
+// appearance's span from the staging half without materializing anything.
+pub use crate::view::DocumentView;
 
 /// What outline (bookmark) entries the assembled document gets.
 ///
@@ -423,7 +364,7 @@ pub fn assemble(
     // for inherited-attribute materialization, and for index → id.
     let mut slots: Vec<Vec<PageSlot>> = Vec::with_capacity(sources.len());
     for source in sources {
-        slots.push(page_tree::page_slots(source.graph)?);
+        slots.push(page_tree::page_slots(source.graph())?);
     }
 
     // Resolve `order` into (source, page id), refusing out-of-range and
@@ -489,7 +430,7 @@ pub fn assemble(
                 index: position,
                 count: 0,
             })?;
-        let Some(page_dict) = view.graph.resolved(id).as_dict() else {
+        let Some(page_dict) = view.graph().resolved(id).as_dict() else {
             return Err(PageOpError::PageNotADictionary { id });
         };
 
@@ -541,7 +482,7 @@ pub fn assemble(
     );
     if let Some(index) = options.catalog_from
         && let Some(view) = sources.get(index)
-        && let Some(source_catalog) = view.graph.catalog_dict()
+        && let Some(source_catalog) = view.graph().catalog_dict()
     {
         carry_catalog_entries(
             &mut copier,
@@ -558,7 +499,7 @@ pub fn assemble(
     for (index, view) in sources.iter().enumerate() {
         let _ = index;
         report.named_destinations_dropped +=
-            crate::pageops::references::DestinationResolver::new(view.graph).named_count();
+            crate::pageops::references::DestinationResolver::new(view.graph()).named_count();
     }
 
     // AcroForm (§12.7.2), then outlines (§12.3.3).
@@ -585,10 +526,10 @@ pub fn assemble(
     if let Some(index) = options.info_from
         && let Some(view) = sources.get(index)
         && let Some(info_id) = view
-            .graph
+            .graph()
             .trailer_entry(b"Info")
             .and_then(Object::as_reference)
-        && view.graph.value(info_id).is_some()
+        && view.graph().value(info_id).is_some()
     {
         let number = copier.map_reference(view, index, info_id)?;
         if let Some(number) = number {
@@ -709,12 +650,12 @@ fn build_acroform(
     let selected_set: HashSet<(usize, ObjId)> = selected.iter().copied().collect();
     for (source_index, view) in sources.iter().enumerate() {
         for slot in slots.get(source_index).map(Vec::as_slice).unwrap_or(&[]) {
-            let Some(page) = view.graph.resolved(slot.id).as_dict() else {
+            let Some(page) = view.graph().resolved(slot.id).as_dict() else {
                 continue;
             };
             let Some(annots) = page
                 .get(b"Annots")
-                .map(|o| view.graph.resolve(o))
+                .map(|o| view.graph().resolve(o))
                 .and_then(Object::as_array)
             else {
                 continue;
@@ -741,26 +682,26 @@ fn build_acroform(
 
     for (source_index, view) in sources.iter().enumerate() {
         let Some(acroform) = view
-            .graph
+            .graph()
             .catalog_dict()
-            .and_then(|c| c.get(b"AcroForm").map(|o| view.graph.resolve(o)))
+            .and_then(|c| c.get(b"AcroForm").map(|o| view.graph().resolve(o)))
             .and_then(Object::as_dict)
         else {
             continue;
         };
         need_appearances |= acroform
             .get(b"NeedAppearances")
-            .map(|o| view.graph.resolve(o))
+            .map(|o| view.graph().resolve(o))
             .is_some_and(|v| matches!(v, Object::Boolean(true)));
         sig_flags |= acroform
             .get(b"SigFlags")
-            .map(|o| view.graph.resolve(o))
+            .map(|o| view.graph().resolve(o))
             .and_then(Object::as_int)
             .unwrap_or(0);
 
         if let Some(dr) = acroform
             .get(b"DR")
-            .map(|o| view.graph.resolve(o))
+            .map(|o| view.graph().resolve(o))
             .and_then(Object::as_dict)
         {
             for (category, value) in dr.iter() {
@@ -774,7 +715,7 @@ fn build_acroform(
 
         let Some(source_fields) = acroform
             .get(b"Fields")
-            .map(|o| view.graph.resolve(o))
+            .map(|o| view.graph().resolve(o))
             .and_then(Object::as_array)
         else {
             continue;
@@ -852,12 +793,12 @@ fn field_widget_coverage(
         if depth > MAX_COPY_DEPTH || !visited.insert(id) {
             continue;
         }
-        let Some(dict) = view.graph.resolved(id).as_dict() else {
+        let Some(dict) = view.graph().resolved(id).as_dict() else {
             continue;
         };
         let kids = dict
             .get(b"Kids")
-            .map(|o| view.graph.resolve(o))
+            .map(|o| view.graph().resolve(o))
             .and_then(Object::as_array);
         match kids {
             Some(kids) if !kids.is_empty() => {
@@ -1010,7 +951,7 @@ impl Copier {
         if let Some(existing) = self.mapping.get(&(source_index, id)) {
             return Ok(Some(*existing));
         }
-        if self.barrier.contains(&(source_index, id)) || view.graph.value(id).is_none() {
+        if self.barrier.contains(&(source_index, id)) || view.graph().value(id).is_none() {
             self.dangling += 1;
             return Ok(None);
         }
@@ -1037,7 +978,7 @@ impl Copier {
                 .ok_or(PageOpError::SourceOutOfRange {
                     index: source_index,
                 })?;
-            let Some(value) = view.graph.value(id).cloned() else {
+            let Some(value) = view.graph().value(id).cloned() else {
                 self.store(number, Object::Null);
                 continue;
             };
@@ -1135,7 +1076,14 @@ impl Copier {
     /// `crate::writer::serialize`'s documented degradation rule instead
     /// of introducing a second one.
     fn stage(&mut self, view: &DocumentView<'_>, stream: &Stream) -> ByteSpan {
-        let data = stream.data_span.slice(view.bytes).unwrap_or(&[]);
+        // `view.slice` rather than a raw `span.slice(view.bytes)`: the view
+        // may be over an editing session, where the payload of an authored
+        // appearance lives in the staging half of a
+        // [`crate::view::StreamSource::Split`] and there is no single buffer
+        // to index (decision 018 §4). Same degradation as before for an
+        // unresolvable span — stage empty, per `crate::writer::serialize`'s
+        // documented rule.
+        let data = view.slice(stream.data_span).unwrap_or(&[]);
         let start = self.staging.len();
         self.staging.extend_from_slice(data);
         ByteSpan::new(start, data.len())

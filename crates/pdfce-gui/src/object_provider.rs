@@ -39,12 +39,12 @@
 //! mints and decodes it.
 
 use eframe::egui::{Pos2, Rect};
-use pdfce_core::document::Document;
 use pdfce_core::page_tree::Page;
 use pdfce_core::vector::{
     Bounds, MarqueeMode, Matrix, PageObjects, Point, VectorObject, decompose_page, hit_test_point,
     hit_test_rect,
 };
+use pdfce_core::view::DocumentView;
 use pdfce_render::page_device_geometry;
 use pdfce_render::tiny_skia::{Point as SkPoint, Transform};
 
@@ -86,15 +86,25 @@ pub struct ObjectModelProvider {
 }
 
 impl ObjectModelProvider {
-    /// Build a provider for `page` (at `page_index`) from `doc`.
+    /// Build a provider for `page` (at `page_index`) from `view`.
     ///
     /// Returns `None` only if the page's content cannot be decoded/tokenized
     /// (the same failure the renderer would hit) — the caller then falls
     /// back to [`crate::canvas::EmptyTargetProvider`], so selection simply
     /// finds nothing rather than breaking.
+    ///
+    /// # Pass a SESSION view, not the base document (decision 018)
+    ///
+    /// `OpenDoc::ensure_object_provider` passes `&session.view()`. Passing
+    /// `&session.document().view()` — which is what this did through Pass
+    /// 16.2 — decomposes the base revision, so hit-testing, marquee
+    /// selection and the measure tool's snapping all address geometry the
+    /// operator can no longer see and miss geometry they can. The raster
+    /// and this provider must be built from the *same* view or the canvas
+    /// shows one document and responds as another.
     #[must_use]
-    pub fn build(doc: &Document, page: &Page, page_index: usize) -> Option<Self> {
-        let objects = decompose_page(doc, page, Matrix::IDENTITY).ok()?;
+    pub fn build(view: &DocumentView<'_>, page: &Page, page_index: usize) -> Option<Self> {
+        let objects = decompose_page(view, page, Matrix::IDENTITY).ok()?;
         let (_, _, to_canvas) = page_device_geometry(page, 1.0);
         Some(Self {
             page_index,

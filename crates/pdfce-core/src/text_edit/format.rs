@@ -488,7 +488,10 @@ pub fn set_format(
     let page = pages
         .get(req.page_index)
         .ok_or(FormatError::PageIndex(req.page_index))?;
-    let stream = ContentStream::from_page(doc, page)?;
+    // BASE READ (decision 018 caller audit) — same rationale as
+    // `text_edit::edit_text`: this is the one-shot `&Document` entry point,
+    // planning against the file as loaded for an incremental save.
+    let stream = ContentStream::from_page(&doc.view(), page)?;
     let plan = plan_format(doc, page, &stream, req, opts)?;
     // Incremental save (R34/R70), exactly as 14.1: the plan's report already
     // carries the correct content_object / extra_objects_emptied, so the

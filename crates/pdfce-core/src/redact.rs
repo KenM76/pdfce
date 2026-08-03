@@ -1090,11 +1090,16 @@ pub fn apply_redactions(
 
     for (index, red, contents) in &plan {
         let page = pages.get(*index).ok_or(RedactError::NothingToApply)?;
-        // Parse the page's concatenated content.
-        let stream = ContentStream::from_page(doc, page).map_err(|e| RedactError::Content {
-            page: index + 1,
-            source: e,
-        })?;
+        // Parse the page's concatenated content. BASE READ (decision 018
+        // caller audit): `apply_redactions` is a one-shot whole-document
+        // operation over a loaded `&Document` — there is no session here,
+        // and the spans it computes are consumed by the writer, which is
+        // contractually a base-bytes consumer.
+        let stream =
+            ContentStream::from_page(&doc.view(), page).map_err(|e| RedactError::Content {
+                page: index + 1,
+                source: e,
+            })?;
         let overlay = build_overlay(&red.overlay);
         let result = redact_page_content(doc, &page.resources, &red.boxes, &stream, &overlay);
 
@@ -1858,7 +1863,7 @@ mod tests {
         let mut out = Vec::new();
         let pages = page_tree::pages(doc).unwrap();
         for page in &pages {
-            if let Ok(cs) = ContentStream::from_page(doc, page) {
+            if let Ok(cs) = ContentStream::from_page(&doc.view(), page) {
                 out.extend_from_slice(&cs.buf);
             }
         }

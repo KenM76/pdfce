@@ -38,7 +38,7 @@ fn model(doc: &Document) -> (PageObjects, Page) {
         .into_iter()
         .next()
         .expect("one page");
-    let m = decompose_page(doc, &page, Matrix::IDENTITY).expect("decompose");
+    let m = decompose_page(&doc.view(), &page, Matrix::IDENTITY).expect("decompose");
     (m, page)
 }
 
@@ -78,7 +78,7 @@ fn paths_fixture_decomposes_every_shape_and_offers_one_centerline() {
     // Every object's byte span slices back to real source content (the
     // editing handle is a genuine index into the decoded stream).
     for obj in &m.objects {
-        let content = pdfce_core::content::ContentStream::from_page(&doc, &_page).unwrap();
+        let content = pdfce_core::content::ContentStream::from_page(&doc.view(), &_page).unwrap();
         assert!(obj.bytes().slice(&content.buf).is_some());
     }
 }
@@ -176,8 +176,8 @@ fn decomposition_is_read_only_over_the_document() {
     let doc = fixture("paths.pdf");
     let before = doc.bytes().to_vec();
     let page = pages(&doc).unwrap().into_iter().next().unwrap();
-    let a = decompose_page(&doc, &page, Matrix::IDENTITY).unwrap();
-    let b = decompose_page(&doc, &page, Matrix::IDENTITY).unwrap();
+    let a = decompose_page(&doc.view(), &page, Matrix::IDENTITY).unwrap();
+    let b = decompose_page(&doc.view(), &page, Matrix::IDENTITY).unwrap();
     assert_eq!(a.objects.len(), b.objects.len());
     for (x, y) in a.objects.iter().zip(&b.objects) {
         assert_eq!(x.bytes(), y.bytes());

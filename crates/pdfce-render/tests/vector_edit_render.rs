@@ -91,7 +91,8 @@ fn render_points(tp: &TracedPath) -> Vec<(f64, f64)> {
 /// document's first page (the R59 agree-by-construction check).
 fn cross_check(doc: &Document) -> Vec<Vec<(f64, f64)>> {
     let page = &pages(doc).expect("page tree")[0];
-    let model = decompose_page(doc, page, Matrix::IDENTITY).expect("decompose");
+    let view = doc.view();
+    let model = decompose_page(&view, page, Matrix::IDENTITY).expect("decompose");
     let core: Vec<Vec<(f64, f64)>> = model
         .objects
         .iter()
@@ -101,9 +102,9 @@ fn cross_check(doc: &Document) -> Vec<Vec<(f64, f64)>> {
         })
         .collect();
 
-    let content = ContentStream::from_page(doc, page).expect("content");
+    let content = ContentStream::from_page(&view, page).expect("content");
     let traced = trace_paths(
-        doc,
+        &view,
         &content,
         &page.resources,
         &pdfce_render::FontEnvironment::bundled(),

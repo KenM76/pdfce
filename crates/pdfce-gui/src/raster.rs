@@ -55,8 +55,11 @@ use std::collections::HashMap;
 // way for the two to drift to incompatible versions in `Cargo.lock`.
 // `tiny_skia` likewise comes through `pdfce_render`, for the same reason.
 use eframe::egui;
-use pdfce_core::document::Document;
 use pdfce_core::page_tree::Page;
+// decision 018: the GUI rasterizes a `DocumentView`, not a `&Document`, so
+// the canvas can be handed the EDITED state (`session.view()`). See
+// `PdfceApp`/`OpenDoc` in `main.rs` for which view each call site passes.
+use pdfce_core::view::DocumentView;
 use pdfce_render::{Diagnostics, FontEnvironment, tiny_skia};
 
 /// Nominal width, in egui points, of a thumbnail in the page rail.
@@ -142,7 +145,7 @@ fn pixmap_to_color_image(pixmap: &tiny_skia::Pixmap) -> egui::ColorImage {
 fn rasterize(
     ctx: &egui::Context,
     id: &str,
-    doc: &Document,
+    doc: &DocumentView<'_>,
     page: &Page,
     scale: f32,
     annotations: bool,
@@ -155,8 +158,8 @@ fn rasterize(
     // when the operator has configured no font folders).
     let mut options = pdfce_render::RenderOptions::default().with_annotations(annotations);
     options.fonts = fonts.clone();
-    let rendered =
-        pdfce_render::render_page_with(doc, page, scale, &options).map_err(|e| e.to_string())?;
+    let rendered = pdfce_render::render_page_with_view(doc, page, scale, &options)
+        .map_err(|e| e.to_string())?;
     let image = pixmap_to_color_image(&rendered.pixmap);
     let texture = ctx.load_texture(id, image, egui::TextureOptions::LINEAR);
     Ok((texture, rendered.diagnostics))
@@ -179,7 +182,7 @@ fn rasterize(
 #[allow(clippy::too_many_arguments)]
 pub fn render_page_texture(
     ctx: &egui::Context,
-    doc: &Document,
+    doc: &DocumentView<'_>,
     page: &Page,
     page_index: usize,
     raster_scale: f32,
@@ -264,7 +267,7 @@ impl ThumbnailCache {
     pub fn build(
         &mut self,
         ctx: &egui::Context,
-        doc: &Document,
+        doc: &DocumentView<'_>,
         page: &Page,
         page_index: usize,
         pixels_per_point: f32,

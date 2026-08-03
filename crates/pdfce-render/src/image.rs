@@ -130,10 +130,13 @@
 //! buffer is `4 × W × H` bytes, so the product is checked **before any
 //! allocation or decode** against [`MAX_IMAGE_PIXELS`].
 
-use pdfce_core::document::Document;
+// decision 018: read paths take a `DocumentView` (graph + byte source), so
+// the same code renders a loaded file or an editing session's unsaved state.
 use pdfce_core::filters::{self, FilterError};
+use pdfce_core::graph::ObjectGraph;
 use pdfce_core::image_codec::{self, Codec, CodecColorModel, CodedImage, ImageCodecError};
 use pdfce_core::object::{Dict, Object};
+use pdfce_core::view::DocumentView;
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
 use crate::gstate::Rgb;
@@ -325,7 +328,7 @@ pub struct DecodedImage {
 ///
 /// [`ImageError`] — see its variants. Every one means "nothing drawn".
 pub fn decode(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     dict: &Dict,
     raw: &[u8],
     resources: &Dict,
@@ -344,7 +347,7 @@ pub fn decode(
         return Err(ImageError::TooLarge);
     }
 
-    let coded = image_codec::decode_image(doc, dict, raw, origin == ImageOrigin::Inline)
+    let coded = image_codec::decode_image_view(doc, dict, raw, origin == ImageOrigin::Inline)
         .map_err(map_codec_error)?;
 
     let mut notes = ImageNotes {
@@ -445,7 +448,7 @@ impl SampleLayout {
 /// "entries inconsistent with each other" case (an image with no
 /// samples cannot be painted, and a zero stride would divide by zero
 /// downstream).
-fn positive_dimension(doc: &Document, dict: &Dict, key: &[u8]) -> Result<u32, ImageError> {
+fn positive_dimension(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Result<u32, ImageError> {
     let raw = dict
         .get(key)
         .map(|o| doc.resolve(o))
@@ -596,7 +599,7 @@ fn decode_stencil(
 
 /// Build the RGBA texels for a colour image.
 fn decode_sampled(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     dict: &Dict,
     coded: &CodedImage,
     width: u32,
@@ -992,7 +995,7 @@ fn codestream_space(coded: &CodedImage) -> Result<Space, ImageError> {
 /// (`Indexed` over `ICCBased` is two levels; a self-referential named
 /// resource is unbounded).
 fn resolve_space(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     obj: &Object,
     resources: &Dict,
     depth: usize,
@@ -1034,7 +1037,7 @@ fn resolve_space(
 
 /// The array forms of `/ColorSpace`.
 fn resolve_space_array(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     items: &[Object],
     resources: &Dict,
     depth: usize,
@@ -1096,7 +1099,7 @@ fn resolve_space_array(
 /// the palette simply ends early and out-of-range indices paint black
 /// with [`ImageNotes::palette_out_of_range`] set.
 fn resolve_indexed(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     items: &[Object],
     resources: &Dict,
     depth: usize,
@@ -1138,23 +1141,25 @@ fn resolve_indexed(
             .ok_or(ImageError::UnsupportedColorSpace(
                 "/Indexed without a lookup table".into(),
             ))?;
-    let lookup: Vec<u8> =
-        match lookup_obj {
-            Object::String(bytes) => bytes.clone(),
-            Object::Stream(stream) => {
-                let raw = stream.data_span.slice(doc.bytes()).ok_or(
-                    ImageError::UnsupportedColorSpace(
-                        "/Indexed lookup stream is out of bounds".into(),
-                    ),
-                )?;
-                filters::decode_stream(&stream.dict, raw).map_err(map_filter_error)?
-            }
-            _ => {
-                return Err(ImageError::UnsupportedColorSpace(
-                    "/Indexed lookup is neither a string nor a stream".into(),
-                ));
-            }
-        };
+    let lookup: Vec<u8> = match lookup_obj {
+        Object::String(bytes) => bytes.clone(),
+        Object::Stream(stream) => {
+            // `doc.slice`, not `span.slice(doc.bytes())`: on a session
+            // view the payload may live in the R45 staging half and
+            // there is no single buffer to index (decision 018 §4).
+            let raw = doc
+                .slice(stream.data_span)
+                .ok_or(ImageError::UnsupportedColorSpace(
+                    "/Indexed lookup stream is out of bounds".into(),
+                ))?;
+            filters::decode_stream(&stream.dict, raw).map_err(map_filter_error)?
+        }
+        _ => {
+            return Err(ImageError::UnsupportedColorSpace(
+                "/Indexed lookup is neither a string nor a stream".into(),
+            ));
+        }
+    };
 
     let mut table = Vec::with_capacity(hival + 1);
     for i in 0..=hival {

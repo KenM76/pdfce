@@ -1427,10 +1427,34 @@ impl OpenDoc {
     ///
     /// Called after every edit, undo and redo. Both halves are needed:
     /// the page list carries `/Rotate`, and the cached textures are
-    /// pictures of the *old* rotation. Only the current page's texture
-    /// and the thumbnails are discarded — the document is not reloaded,
-    /// because the base revision (and therefore every byte span the
-    /// renderer resolves) has not changed.
+    /// pictures of the *old* content. Only the current page's texture and
+    /// the thumbnails are discarded — the document is not reloaded, because
+    /// `EditSession` **is** the open document: the next rasterization reads
+    /// `self.session.view()`, which composes the base revision with the
+    /// session's overlay and its R45 staging buffer live.
+    ///
+    /// ## Correction (decision 018 §1.1)
+    ///
+    /// This comment used to end *"the document is not reloaded, because the
+    /// base revision (and therefore every byte span the renderer resolves)
+    /// has not changed."* That was true through Pass 3.1 and **false from
+    /// Pass 6.1 onward**, when annotation authoring began staging appearance
+    /// streams whose spans point past the base file. The claim was the
+    /// fossil of the defect: cache invalidation here was always correct —
+    /// the GUI faithfully re-rasterized on every edit and faithfully
+    /// reproduced the base, because the *read path* passed
+    /// `session.document()`. No generation key was ever needed; the
+    /// parameter type was the bug.
+    ///
+    /// ## `Page` is a snapshot — this is the only place it is refreshed
+    ///
+    /// [`Page`] is captured here (`contents`, `resources`, boxes,
+    /// `/Rotate`) and then held until the next call. Every commit path must
+    /// therefore funnel through this method, or the canvas ends up pairing
+    /// a correct *view* with a stale *page* — an object whose content id
+    /// changed under an edit would render from the old stream. Decision 018
+    /// §10 hazard 2 names that risk explicitly; `apply_edit` and the canvas
+    /// tools' commit helpers are the funnels that discharge it.
     fn refresh_pages(&mut self) {
         if let Ok(pages) = self.session.pages() {
             self.pages = pages;
@@ -1467,10 +1491,17 @@ impl OpenDoc {
         // `target_provider()`, so there is exactly ONE decomposition per page
         // (ui-spec §3.3). `None` (an undecodable page) makes selection find
         // nothing, exactly as the old no-op `EmptyTargetProvider` did.
+        // `session.view()`, NOT `session.document()` (decision 018). The
+        // provider must decompose the SAME revision the canvas rasterizes,
+        // or the operator gets a page showing an object they cannot click —
+        // and, worse, can click an object that is no longer there. Building
+        // both from one view makes that consistency structural rather than a
+        // thing two call sites have to remember.
+        let view = self.session.view();
         self.object_model = self
             .pages
             .get(page_index)
-            .and_then(|page| ObjectModelProvider::build(self.session.document(), page, page_index));
+            .and_then(|page| ObjectModelProvider::build(&view, page, page_index));
         self.provider_page = Some(page_index);
     }
 
@@ -1550,9 +1581,16 @@ impl OpenDoc {
             self.page_texture = None;
             return;
         };
+        // `session.view()`, NOT `session.document()` (decision 018 §1). This
+        // one argument is why every editing feature from Pass 3.1 to Pass
+        // 16.2 was invisible: `document()` is the BASE revision, so the
+        // canvas faithfully re-rendered the file as it was opened after
+        // every single edit. The view composes the overlay and the R45
+        // staging buffer, so authored dimensions, markup appearances,
+        // spliced content streams and vector edits all resolve.
         match raster::render_page_texture(
             ctx,
-            self.session.document(),
+            &self.session.view(),
             page,
             self.view.page_index,
             raster_scale,
@@ -1970,6 +2008,16 @@ impl PdfceApp {
             Ok(()) => {
                 doc.canvas_selection.clear();
                 doc.vector_drag = None;
+                // `refresh_pages` FIRST (decision 018 §10 hazard 2 audit,
+                // Pass 17.0). `delete_object` rewrites the page's content
+                // stream, so this is a commit like any other and owes the
+                // same invalidation: the cached raster is a picture of the
+                // deleted object, and `ensure_object_provider` alone cannot
+                // help because it early-returns while `provider_page` still
+                // equals the current page. Before Pass 17.0 the missing
+                // texture drop was invisible — the canvas re-rendered the
+                // base either way — so this call site looked correct.
+                doc.refresh_pages();
                 doc.ensure_object_provider();
                 self.edit_note = Some(ui_text::vector_object_deleted().to_owned());
             }
@@ -4992,9 +5040,24 @@ impl PdfceApp {
                                     if budget > 0 {
                                         if doc.thumbnails.is_pending(index) {
                                             budget -= 1;
+                                            // STILL A BASE READ, unchanged
+                                            // behaviour: `.document().view()`
+                                            // is `session.document()` wearing
+                                            // the new parameter type. The
+                                            // rail therefore continues to
+                                            // show the file as opened.
+                                            // Switching it to
+                                            // `session.view()` is Pass 17.1's
+                                            // `session.document()` audit
+                                            // (decision 018 §8 — "thumbnails
+                                            // need a read fix, not a key";
+                                            // `refresh_pages` already clears
+                                            // the cache wholesale, so no
+                                            // generation key is required
+                                            // when it happens).
                                             doc.thumbnails.build(
                                                 &ctx,
-                                                doc.session.document(),
+                                                &doc.session.document().view(),
                                                 page,
                                                 index,
                                                 pixels_per_point,
@@ -7724,13 +7787,34 @@ fn annotation_status(
 /// GUI glue only: every geometry decision is a headless-tested
 /// `vector_edit_tool`/`canvas`/`vector` helper; the surgery is `pdfce-core`.
 ///
-/// **Known compile-and-launch limitation (documented, not a defect):** the
-/// object provider is rebuilt from the base document (`session.document()`),
-/// so after one committed vector edit on a page the base-relative object
-/// indices no longer match the session-current content, and the core
-/// refuses a second same-session edit with `VectorEditNeedsReopen` (rule 4)
-/// — save and reopen to continue editing that page. The correctness of each
-/// individual edit is proven headlessly in `pdfce-core`/`pdfce-render`.
+/// **Known limitation (documented, not a defect):** after one committed
+/// vector edit on a page, the core refuses a second same-session edit with
+/// `VectorEditNeedsReopen` (rule 4) — save and reopen to continue editing
+/// that page. The correctness of each individual edit is proven headlessly
+/// in `pdfce-core`/`pdfce-render`.
+///
+/// ## Corrected at Pass 17.0 (decision 018)
+///
+/// The stated *reason* used to be *"the object provider is rebuilt from the
+/// base document (`session.document()`), so after one committed vector edit
+/// the base-relative object indices no longer match the session-current
+/// content."* Half of that is no longer true and the other half moved:
+///
+/// - The provider is now rebuilt from **`session.view()`**
+///   (`OpenDoc::ensure_object_provider`), so its indices describe the
+///   content the operator is actually looking at.
+/// - The refusal now comes entirely from the core:
+///   `EditSession::vector_surgery` decomposes the **base** on purpose — so
+///   that `object_index` means the same thing to every caller — and
+///   therefore refuses any page whose first `/Contents` object this session
+///   has already rewritten, rather than risk misindexing it.
+///
+/// The two agree on every page that has *not* been rewritten this session
+/// (base content and session content are the same bytes there), and on a
+/// page that *has* been, the edit is refused before any index is used. So
+/// the limitation is unchanged in effect, and is now a deliberate core
+/// refusal rather than a GUI read-path accident. Lifting it is a scoped
+/// core change (session-relative object indices), not a GUI one.
 #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 fn run_vector_edit_tool(
     doc: &mut OpenDoc,
@@ -7903,17 +7987,37 @@ fn run_vector_edit_tool(
                 doc.vector_drag = None;
             }
         }
+        // Both arms call `refresh_pages` before rebuilding the provider —
+        // the decision 018 §10 hazard 2 audit (Pass 17.0) found these two
+        // sites, plus `delete_selected_object`, committing a real content
+        // rewrite WITHOUT it. They did their own
+        // `ensure_object_provider` + `prune_canvas_selection`, which looks
+        // equivalent and is not:
+        //
+        // 1. `ensure_object_provider` early-returns while `provider_page`
+        //    still equals the current page, so the provider was never
+        //    actually rebuilt — only `refresh_pages` nulls that key;
+        // 2. nothing dropped `page_texture`, so even with Pass 17.0's
+        //    session-aware read path the moved geometry would not repaint
+        //    until some unrelated event invalidated the cached raster.
+        //
+        // Before Pass 17.0 neither omission was observable, because the
+        // canvas rendered the base revision no matter what. `refresh_pages`
+        // is a strict superset of what these arms did (page list, texture,
+        // thumbnails, provider key, marquee, selection prune), so the
+        // explicit `ensure_object_provider` that follows only pulls the
+        // rebuild into THIS frame rather than the next.
         Commit::Move { idx, dx, dy } => {
             let _ = doc.session.move_object(page_index, idx, dx, dy);
             doc.vector_drag = None;
+            doc.refresh_pages();
             doc.ensure_object_provider();
-            doc.prune_canvas_selection();
         }
         Commit::Node { idx, node, to } => {
             let _ = doc.session.move_node(page_index, idx, node, to);
             doc.vector_drag = None;
+            doc.refresh_pages();
             doc.ensure_object_provider();
-            doc.prune_canvas_selection();
         }
     }
 }

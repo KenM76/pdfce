@@ -78,8 +78,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use pdfce_core::document::Document;
+// decision 018: read paths take a `DocumentView` (graph + byte source), so
+// the same code renders a loaded file or an editing session's unsaved state.
+use pdfce_core::graph::ObjectGraph;
 use pdfce_core::object::{Dict, Object};
+use pdfce_core::view::DocumentView;
 use tiny_skia::Transform;
 
 use crate::font::coredata::{self, BaseEncoding, Std14};
@@ -569,7 +572,7 @@ impl UnsupportedFont {
 /// 004 §4.3's Pass 1 scope. The caller counts it and skips the text —
 /// it must never fall back to "render something."
 pub fn load(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     font_dict: &Dict,
     env: &FontEnvironment,
 ) -> Result<LoadedFont, UnsupportedFont> {
@@ -591,7 +594,7 @@ pub fn load(
 /// §9.6 simple font: pick a program, resolve all 256 codes, tabulate
 /// all 256 widths.
 fn load_simple(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     font_dict: &Dict,
     env: &FontEnvironment,
     base_font: String,
@@ -636,7 +639,7 @@ fn load_simple(
 
 /// §9.7 composite font, `Identity-H` only.
 fn load_composite(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     font_dict: &Dict,
     base_font: String,
 ) -> Result<LoadedFont, UnsupportedFont> {
@@ -688,9 +691,10 @@ fn load_composite(
         // either a name or a stream (§9.7 gotchas), and is only legal
         // here.
         match doc.resolve(descendant.get(b"CIDToGIDMap").unwrap_or(&Object::Null)) {
-            Object::Stream(s) => s
-                .data_span
-                .slice(doc.bytes())
+            // `doc.slice` (decision 018 §4) — a session view has two
+            // buffers, so a span cannot be applied to one of them alone.
+            Object::Stream(s) => doc
+                .slice(s.data_span)
                 .and_then(|raw| pdfce_core::filters::decode_stream(&s.dict, raw).ok())
                 .map_or(CidToGid::Identity, CidToGid::Stream),
             _ => CidToGid::Identity,
@@ -729,7 +733,7 @@ fn load_composite(
 ///
 /// Shape is decided by the type of the element AFTER `c`: an array
 /// means shape 1, an integer means shape 2.
-fn parse_w_array(doc: &Document, descendant: &Dict) -> Vec<(u32, u32, f32)> {
+fn parse_w_array(doc: &DocumentView<'_>, descendant: &Dict) -> Vec<(u32, u32, f32)> {
     let Some(items) = doc
         .resolve(descendant.get(b"W").unwrap_or(&Object::Null))
         .as_array()
@@ -802,7 +806,7 @@ fn substitute_face(
     flags: u32,
     italic_angle: f64,
     descriptor: Option<&Dict>,
-    doc: &Document,
+    doc: &DocumentView<'_>,
 ) -> Result<(FontData, GlyphSource), UnsupportedFont> {
     // (1) exact, then (2) subset-tag-stripped — an operator's own face.
     if let Some(data) = env.named(base_font) {
@@ -838,7 +842,7 @@ fn substitute_face(
 /// then falls through to the font program's own built-in encoding,
 /// which is precisely what the implicit-base rule asks for.
 fn encoding_table(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     font_dict: &Dict,
     embedded: bool,
     flags: u32,
@@ -1001,7 +1005,7 @@ fn resolve_gids(program: &FontProgram<'_>, names: &[Option<String>]) -> [Option<
 /// encoding table and the program's built-in names) → `/MissingWidth`
 /// (Table 122 default 0).
 fn width_table(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     font_dict: &Dict,
     names: &[Option<String>],
     program: &FontProgram<'_>,
@@ -1056,13 +1060,15 @@ fn width_table(
 /// `FontFile` (bare Type 1), which is preference order, not spec order:
 /// at most one is present in a conforming descriptor, and probing the
 /// most common first costs nothing.
-fn embedded_program(doc: &Document, descriptor: &Dict) -> Option<Vec<u8>> {
+fn embedded_program(doc: &DocumentView<'_>, descriptor: &Dict) -> Option<Vec<u8>> {
     for key in [b"FontFile2".as_slice(), b"FontFile3", b"FontFile"] {
         let Some(obj) = descriptor.get(key).map(|o| doc.resolve(o)) else {
             continue;
         };
         if let Object::Stream(stream) = obj
-            && let Some(raw) = stream.data_span.slice(doc.bytes())
+            // `doc.slice` (decision 018 §4): an embedded font program a
+            // future Pass stages this session must be readable too.
+            && let Some(raw) = doc.slice(stream.data_span)
             && let Ok(bytes) = pdfce_core::filters::decode_stream(&stream.dict, raw)
             && !bytes.is_empty()
         {
@@ -1073,13 +1079,13 @@ fn embedded_program(doc: &Document, descriptor: &Dict) -> Option<Vec<u8>> {
 }
 
 /// A resolved name-valued entry, as a `String`.
-fn name_of(doc: &Document, dict: &Dict, key: &[u8]) -> Option<String> {
+fn name_of(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Option<String> {
     let n = doc.resolve(dict.get(key)?).as_name()?;
     Some(String::from_utf8_lossy(n.as_bytes()).into_owned())
 }
 
 /// A resolved dictionary-valued entry.
-fn dict_of<'a>(doc: &'a Document, dict: &'a Dict, key: &[u8]) -> Option<&'a Dict> {
+fn dict_of<'a>(doc: &'a DocumentView<'a>, dict: &'a Dict, key: &[u8]) -> Option<&'a Dict> {
     doc.resolve(dict.get(key)?).as_dict()
 }
 

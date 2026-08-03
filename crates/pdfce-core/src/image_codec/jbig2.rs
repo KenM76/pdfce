@@ -91,9 +91,14 @@ use super::{
     Codec, CodecColorModel, CodecNotes, CodedImage, ImageCodecError, MAX_IMAGE_DIMENSION,
     MAX_IMAGE_PIXELS,
 };
-use crate::document::Document;
+// decision 018: the codecs resolve indirect entries through a `DocumentView`
+// rather than a `&Document`, so an image whose dictionary lives in an
+// editing session decodes as the operator currently has it. `Document` is
+// still named by the back-compat `decode_image` wrapper in `mod.rs`.
 use crate::filters;
+use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
+use crate::view::DocumentView;
 
 /// Decode a `JBIG2Decode` codestream.
 ///
@@ -111,7 +116,7 @@ use crate::object::{Dict, Object};
 /// fails. `hayro-jbig2` returns a structured error for every failure
 /// mode, so the mapping is total and nothing here can panic.
 pub(super) fn decode(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     data: &[u8],
     parms: Option<&Dict>,
     dict: &Dict,
@@ -204,14 +209,20 @@ pub(super) fn decode(
 /// [`ImageCodecError::Filter`] if the globals stream exists but its own
 /// filter chain fails. That one *is* an error: the file said the
 /// segments are over there, and they cannot be read.
-fn globals(doc: &Document, parms: Option<&Dict>) -> Result<Option<Vec<u8>>, ImageCodecError> {
+fn globals(
+    doc: &DocumentView<'_>,
+    parms: Option<&Dict>,
+) -> Result<Option<Vec<u8>>, ImageCodecError> {
     let Some(entry) = parms.and_then(|d| d.get(b"JBIG2Globals")) else {
         return Ok(None);
     };
     let Object::Stream(stream) = doc.resolve(entry) else {
         return Ok(None);
     };
-    let Some(raw) = stream.data_span.slice(doc.bytes()) else {
+    // `view.slice`, not `span.slice(doc.bytes())`: a session view resolves a
+    // globals stream authored this session out of the R45 staging half
+    // (decision 018 §4). Same refusal for an out-of-bounds span.
+    let Some(raw) = doc.slice(stream.data_span) else {
         return Err(corrupt_detail("/JBIG2Globals stream data is out of bounds"));
     };
     Ok(Some(filters::decode_stream(&stream.dict, raw)?))
@@ -263,7 +274,7 @@ fn corrupt_detail(detail: &str) -> ImageCodecError {
 ///
 /// `/BitsPerComponent` is included because Table 89 fixes it at 1 for
 /// this filter. An **absent** entry is not a disagreement.
-fn geometry_disagrees(doc: &Document, dict: &Dict, width: u32, height: u32) -> bool {
+fn geometry_disagrees(doc: &DocumentView<'_>, dict: &Dict, width: u32, height: u32) -> bool {
     let int = |key: &[u8]| -> Option<i64> {
         dict.get(key)
             .map(|o| doc.resolve(o))

@@ -393,9 +393,14 @@ impl DocumentView<'_> {
     /// `&dyn ObjectGraph` blocks the derive's bounds. This is the manual
     /// equivalent, and exists so [`insert`] can put the same view into a
     /// slice twice-shaped API without the caller pre-building one.
+    ///
+    /// Carries the [`crate::view::StreamSource`] through as-is rather than
+    /// going via `bytes()`, so a view over an editing session copies as a
+    /// session view (decision 018 §4); reconstructing it from a single
+    /// buffer would be the X5 mis-slice.
     #[must_use]
     pub const fn clone_view(&self) -> DocumentView<'_> {
-        DocumentView::new(self.graph(), self.bytes(), self.version())
+        DocumentView::with_source(self.graph(), self.source(), self.version())
     }
 }
 

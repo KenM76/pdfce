@@ -304,7 +304,12 @@ pub(super) fn walk_page(
     page: &Page,
     options: &ExtractOptions,
 ) -> Result<(Vec<Item>, TextDiagnostics), ContentError> {
-    let stream = ContentStream::from_page(doc, page)?;
+    // BASE READ (decision 018 caller audit): text extraction runs over a
+    // loaded `&Document` for search, copy and the CLI's `extract-text`.
+    // Making it session-aware is a separate, deliberate change (it would
+    // alter what a GUI search matches mid-edit) and is NOT part of Pass
+    // 17.0.
+    let stream = ContentStream::from_page(&doc.view(), page)?;
     let mut walk = Walk {
         doc,
         options,

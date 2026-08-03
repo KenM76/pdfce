@@ -78,7 +78,7 @@ fn save(session: &EditSession) -> Vec<u8> {
 /// Decompose page 0 of a document into its selectable objects.
 fn decompose0(doc: &Document) -> PageObjects {
     let pages = page_tree::pages(doc).unwrap();
-    decompose_page(doc, &pages[0], Matrix::IDENTITY).unwrap()
+    decompose_page(&doc.view(), &pages[0], Matrix::IDENTITY).unwrap()
 }
 
 /// The object id of page 0's first `/Contents` stream — the only object a

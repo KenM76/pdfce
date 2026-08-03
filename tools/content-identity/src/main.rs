@@ -109,7 +109,7 @@ fn measure_file(rel: &str, abs: &Path, totals: &mut Totals) {
         return;
     };
     for page in &pages {
-        let cs = match ContentStream::from_page(&doc, page) {
+        let cs = match ContentStream::from_page(&doc.view(), page) {
             Ok(cs) => cs,
             Err(_) => continue, // decode/tokenize failure is a different gap
         };

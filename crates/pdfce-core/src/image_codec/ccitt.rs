@@ -120,8 +120,13 @@ use super::{
     Codec, CodecColorModel, CodecNotes, CodedImage, ImageCodecError, MAX_IMAGE_DIMENSION,
     MAX_IMAGE_PIXELS, MAX_IMAGE_SAMPLE_BYTES,
 };
-use crate::document::Document;
+// decision 018: the codecs resolve indirect entries through a `DocumentView`
+// rather than a `&Document`, so an image whose dictionary lives in an
+// editing session decodes as the operator currently has it. `Document` is
+// still named by the back-compat `decode_image` wrapper in `mod.rs`.
+use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
+use crate::view::DocumentView;
 
 /// Table 11's parameters, resolved against their verified defaults.
 ///
@@ -187,7 +192,7 @@ impl Default for Params {
 /// [`ImageCodecError::Corrupt`] for a malformed codestream or a
 /// nonsensical `/Columns`.
 pub(super) fn decode(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     data: &[u8],
     parms: Option<&Dict>,
     dict: &Dict,
@@ -272,7 +277,7 @@ pub(super) fn decode(
 /// default. Refusing the image outright would lose more than it
 /// protects, and the decode still fails cleanly if the default is wrong
 /// for the data.
-fn params(doc: &Document, parms: Option<&Dict>) -> Params {
+fn params(doc: &DocumentView<'_>, parms: Option<&Dict>) -> Params {
     let mut out = Params::default();
     let Some(parms) = parms else { return out };
     let int = |key: &[u8]| -> Option<i64> {
@@ -374,7 +379,7 @@ fn settings(params: &Params, columns: u32, rows: u32) -> DecodeSettings {
 /// as one of the two mechanical reasons this codec needs `&Document` at
 /// all. `None` means neither is usable and the caller falls back to
 /// [`row_ceiling`].
-fn declared_rows(doc: &Document, params: &Params, dict: &Dict) -> Option<u32> {
+fn declared_rows(doc: &DocumentView<'_>, params: &Params, dict: &Dict) -> Option<u32> {
     u32::try_from(params.rows)
         .ok()
         .filter(|&r| r > 0)
@@ -465,7 +470,7 @@ fn corrupt(detail: &str) -> ImageCodecError {
 /// error, and this filter "shall always deliver 1-bit samples". An
 /// **absent** `/BitsPerComponent` is not a disagreement — image masks
 /// routinely omit it, and §8.9.6.2 fixes it at 1 for them anyway.
-fn geometry_disagrees(doc: &Document, dict: &Dict, width: u32, height: u32) -> bool {
+fn geometry_disagrees(doc: &DocumentView<'_>, dict: &Dict, width: u32, height: u32) -> bool {
     let int = |key: &[u8]| -> Option<i64> {
         dict.get(key)
             .map(|o| doc.resolve(o))

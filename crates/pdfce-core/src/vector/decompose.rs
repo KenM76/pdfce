@@ -57,10 +57,11 @@
 //! (`fuzz/fuzz_targets/vector_decompose.rs`) drives exactly these shapes.
 
 use crate::content::{ContentStream, ContentToken, ContentTokenKind};
-use crate::document::Document;
+use crate::graph::ObjectGraph;
 use crate::object::{Dict, Object};
 use crate::page_tree::Page;
 use crate::span::ByteSpan;
+use crate::view::DocumentView;
 
 use super::geometry::{Bounds, Matrix, Point, Rgb, cubic_from_v, cubic_from_y, rect_corners};
 
@@ -456,7 +457,7 @@ pub enum XObjectShape {
 ///
 /// Split out as a trait so the decomposition is testable with a stub (or
 /// [`NoXObjects`]) and drivable by the fuzz target **without constructing a
-/// [`Document`]** — the heavy dependency only the `Do`-resolution path
+/// [`DocumentView`]** — the heavy dependency only the `Do`-resolution path
 /// needs. Real callers use [`DocumentXObjects`].
 pub trait XObjectResolver {
     /// Classify the XObject named `name` in the current resource
@@ -467,7 +468,7 @@ pub trait XObjectResolver {
 
 /// A resolver that classifies nothing — for content with no XObjects, and
 /// for unit tests / the fuzz target that exercise the path/text walk
-/// without a [`Document`].
+/// without a [`DocumentView`].
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NoXObjects;
 
@@ -478,10 +479,24 @@ impl XObjectResolver for NoXObjects {
 }
 
 /// The production resolver: classifies a `Do` name against a page's
-/// resolved `/XObject` subdictionary in a [`Document`] (§7.8.3, §8.8).
+/// resolved `/XObject` subdictionary in a [`DocumentView`] (§7.8.3, §8.8).
+///
+/// Takes a view rather than a `&Document` (decision 018) so that an
+/// XObject *created this session* — a dimension's or markup annotation's
+/// form XObject, an image inserted by a future Pass — classifies as the
+/// object model's caller sees it. A base-only resolver would decline to
+/// classify it, and the object would silently vanish from selection and
+/// snapping while remaining visible on the canvas: the two-views-disagree
+/// failure decision 011 §Z2 warns against.
+///
+/// The field is named `view` rather than `doc` on purpose: the rename makes
+/// every construction site a compile error rather than a silent
+/// type-inference success, which is how the base-vs-session intent of each
+/// one got audited when this changed.
 pub struct DocumentXObjects<'a> {
-    /// The document, for resolving indirect `/XObject` entries.
-    pub doc: &'a Document,
+    /// The document view, for resolving indirect `/XObject` entries against
+    /// whichever revision the caller means.
+    pub view: &'a DocumentView<'a>,
     /// The resource dictionary the `Do` name is looked up in.
     pub resources: &'a Dict,
 }
@@ -491,23 +506,23 @@ impl XObjectResolver for DocumentXObjects<'_> {
         let entry = self
             .resources
             .get(b"XObject")
-            .map(|o| self.doc.resolve(o))
+            .map(|o| self.view.resolve(o))
             .and_then(Object::as_dict)?
             .get(name)?;
-        let Object::Stream(stream) = self.doc.resolve(entry) else {
+        let Object::Stream(stream) = self.view.resolve(entry) else {
             return None;
         };
         let subtype = stream
             .dict
             .get(b"Subtype")
-            .map(|o| self.doc.resolve(o))
+            .map(|o| self.view.resolve(o))
             .and_then(Object::as_name)
             .map(|n| n.as_bytes());
         match subtype {
             Some(b"Image") => Some(XObjectShape::Image),
             Some(b"Form") => Some(XObjectShape::Form {
-                bbox: dict_rect(self.doc, &stream.dict, b"BBox").unwrap_or(Bounds::EMPTY),
-                matrix: dict_matrix(self.doc, &stream.dict).unwrap_or(Matrix::IDENTITY),
+                bbox: dict_rect(self.view, &stream.dict, b"BBox").unwrap_or(Bounds::EMPTY),
+                matrix: dict_matrix(self.view, &stream.dict).unwrap_or(Matrix::IDENTITY),
             }),
             // Structural inference for a malformed missing /Subtype, matching
             // the renderer's Width+Height ⇒ image, BBox ⇒ form heuristic.
@@ -516,8 +531,8 @@ impl XObjectResolver for DocumentXObjects<'_> {
                     Some(XObjectShape::Image)
                 } else if stream.dict.contains_key(b"BBox") {
                     Some(XObjectShape::Form {
-                        bbox: dict_rect(self.doc, &stream.dict, b"BBox").unwrap_or(Bounds::EMPTY),
-                        matrix: dict_matrix(self.doc, &stream.dict).unwrap_or(Matrix::IDENTITY),
+                        bbox: dict_rect(self.view, &stream.dict, b"BBox").unwrap_or(Bounds::EMPTY),
+                        matrix: dict_matrix(self.view, &stream.dict).unwrap_or(Matrix::IDENTITY),
                     })
                 } else {
                     None
@@ -529,11 +544,11 @@ impl XObjectResolver for DocumentXObjects<'_> {
 
 /// Read a four-number rectangle entry, normalized per §7.9.5, as a
 /// [`Bounds`] in the dictionary's own space.
-fn dict_rect(doc: &Document, dict: &Dict, key: &[u8]) -> Option<Bounds> {
-    let items = doc.resolve(dict.get(key)?).as_array()?;
+fn dict_rect(view: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Option<Bounds> {
+    let items = view.resolve(dict.get(key)?).as_array()?;
     let n: Vec<f64> = items
         .iter()
-        .filter_map(|o| doc.resolve(o).as_number())
+        .filter_map(|o| view.resolve(o).as_number())
         .collect();
     let [x0, y0, x1, y1] = <[f64; 4]>::try_from(n).ok()?;
     Some(Bounds {
@@ -543,8 +558,8 @@ fn dict_rect(doc: &Document, dict: &Dict, key: &[u8]) -> Option<Bounds> {
 }
 
 /// Read a six-number `/Matrix` entry (Table 95) as a [`Matrix`].
-fn dict_matrix(doc: &Document, dict: &Dict) -> Option<Matrix> {
-    let items = doc.resolve(dict.get(b"Matrix")?).as_array()?;
+fn dict_matrix(view: &DocumentView<'_>, dict: &Dict) -> Option<Matrix> {
+    let items = view.resolve(dict.get(b"Matrix")?).as_array()?;
     let n: Vec<f64> = items.iter().filter_map(Object::as_number).collect();
     let [a, b, c, d, e, f] = <[f64; 6]>::try_from(n).ok()?;
     Some(Matrix::new(a, b, c, d, e, f))
@@ -562,6 +577,22 @@ fn dict_matrix(doc: &Document, dict: &Dict) -> Option<Matrix> {
 /// page-space geometry in genuine PDF default user space (what the GUI
 /// provider and the dimensioning subsystem expect).
 ///
+/// ## Which revision gets decomposed (decision 018)
+///
+/// `view` decides, and the choice is operator-visible:
+///
+/// - `&session.view()` decomposes **the edited state**. This is what the
+///   GUI's `ObjectModelProvider` passes, so a shape the operator just
+///   moved is selectable where it now appears, and the dimensioning tool
+///   snaps to the geometry actually on screen.
+/// - `&doc.view()` decomposes **the base revision**. This is what a
+///   one-shot CLI operation passes, and what
+///   [`EditSession`](crate::edit::EditSession)'s own vector-surgery path
+///   passes deliberately: its `object_index` values must line up with a
+///   caller that indexed the base, which is why editing a page whose
+///   content was already rewritten this session is *refused* rather than
+///   silently misindexed.
+///
 /// # Errors
 ///
 /// [`crate::content::ContentError`] if the content streams cannot be
@@ -576,19 +607,19 @@ fn dict_matrix(doc: &Document, dict: &Dict) -> Option<Matrix> {
 ///
 /// # fn demo(doc: &Document) -> Result<(), Box<dyn std::error::Error>> {
 /// let page = &pages(doc)?[0];
-/// let model = decompose_page(doc, page, Matrix::IDENTITY)?;
+/// let model = decompose_page(&doc.view(), page, Matrix::IDENTITY)?;
 /// println!("{} selectable objects", model.objects.len());
 /// # Ok(())
 /// # }
 /// ```
 pub fn decompose_page(
-    doc: &Document,
+    view: &DocumentView<'_>,
     page: &Page,
     initial: Matrix,
 ) -> Result<PageObjects, crate::content::ContentError> {
-    let content = ContentStream::from_page(doc, page)?;
+    let content = ContentStream::from_page(view, page)?;
     let resolver = DocumentXObjects {
-        doc,
+        view,
         resources: &page.resources,
     };
     Ok(decompose(&content, initial, &resolver))
@@ -598,9 +629,9 @@ pub fn decompose_page(
 /// XObject resolver and initial CTM.
 ///
 /// This is the walk's true entry point: [`decompose_page`] is the
-/// [`Document`]-backed convenience over it, and unit tests / the fuzz
+/// [`DocumentView`]-backed convenience over it, and unit tests / the fuzz
 /// target call this directly with [`NoXObjects`] (or a stub) over a
-/// [`ContentStream::parse`] result — no [`Document`] required.
+/// [`ContentStream::parse`] result — no document at all required.
 #[must_use]
 pub fn decompose(
     content: &ContentStream,

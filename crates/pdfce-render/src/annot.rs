@@ -60,10 +60,12 @@
 //!   6.0 report / ROADMAP residuals.
 
 use pdfce_core::annot::{Annotation, Appearance};
-use pdfce_core::document::Document;
+// decision 018: read paths take a `DocumentView` (graph + byte source), so
+// the same code renders a loaded file or an editing session's unsaved state.
 use pdfce_core::graph::ObjectGraph;
 use pdfce_core::object::{Dict, ObjId, Object};
 use pdfce_core::page_tree::{Page, Rect};
+use pdfce_core::view::DocumentView;
 use tiny_skia::{Pixmap, Point, Transform};
 
 use crate::font::FontEnvironment;
@@ -98,7 +100,7 @@ const MIN_BOX_EXTENT: f32 = 1e-6;
 /// content-only raster is reproduced exactly because no appearance pixels
 /// are laid down.
 pub(crate) fn survey_page_annotations(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     page: &Page,
     base_ctm: Transform,
     fonts: &FontEnvironment,
@@ -173,7 +175,7 @@ pub(crate) fn survey_page_annotations(
 /// (§12.5.5), or refuse it by a named, counted diagnostic.
 #[allow(clippy::too_many_arguments)] // every argument is placement input.
 fn paint_appearance(
-    doc: &Document,
+    doc: &DocumentView<'_>,
     page: &Page,
     base_ctm: Transform,
     fonts: &FontEnvironment,
@@ -310,7 +312,7 @@ fn fit_matrix(tbox: [f32; 4], rect: Rect) -> Transform {
 
 /// Read a `/Matrix` array (Table 95) as a [`Transform`], defaulting to the
 /// identity when absent or malformed (Table 95's documented default).
-fn read_matrix(doc: &Document, dict: &Dict) -> Transform {
+fn read_matrix(doc: &DocumentView<'_>, dict: &Dict) -> Transform {
     let Some(items) = dict
         .get(b"Matrix")
         .map(|o| doc.resolve(o))
@@ -334,7 +336,7 @@ fn read_matrix(doc: &Document, dict: &Dict) -> Transform {
 /// Returns `None` when the value is not an array of four resolvable
 /// numbers — a malformed `/BBox`, which the caller reports as a placement
 /// refusal rather than repairs.
-fn read_rect_numbers(doc: &Document, dict: &Dict, key: &[u8]) -> Option<[f64; 4]> {
+fn read_rect_numbers(doc: &DocumentView<'_>, dict: &Dict, key: &[u8]) -> Option<[f64; 4]> {
     let items = doc.resolve(dict.get(key)?).as_array()?;
     let n: Vec<f64> = items
         .iter()
@@ -355,7 +357,13 @@ fn read_rect_numbers(doc: &Document, dict: &Dict, key: &[u8]) -> Option<[f64; 4]
 )]
 mod tests {
     use super::*;
+    // `Document` is a test-only name here since decision 018 moved the
+    // module's own parameter type to `DocumentView`: the fixtures build a
+    // real parsed file and then render it through the `&Document`
+    // back-compat wrappers, which is exactly the coverage those wrappers
+    // need.
     use crate::{RenderOptions, render_page, render_page_with};
+    use pdfce_core::document::Document;
 
     /// Assemble a classic-xref PDF from numbered object bodies (raw bytes,
     /// for stream objects). Non-contiguous numbering is tolerated (gaps

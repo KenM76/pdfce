@@ -713,7 +713,11 @@ pub fn edit_text(
     let page = pages
         .get(req.page_index)
         .ok_or(EditError::PageIndex(req.page_index))?;
-    let stream = ContentStream::from_page(doc, page)?;
+    // BASE READ (decision 018 caller audit): `edit_text` is the one-shot
+    // `&Document` entry point — it plans against the file as loaded and
+    // hands the plan to an incremental save. The GUI's accumulating
+    // multi-edit path is `EditSession::current_page_content`, not this.
+    let stream = ContentStream::from_page(&doc.view(), page)?;
     let plan = plan_edit(doc, page, &stream, req, opts)?;
     // Incremental save (R34/R70): replace the first content object with the
     // spliced buffer, empty any extras. The report's content_object /
