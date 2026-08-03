@@ -97,6 +97,15 @@ public static extern bool IsIconic(IntPtr hWnd);
 
 [DllImport("user32.dll")]
 public static extern IntPtr GetForegroundWindow();
+
+[DllImport("user32.dll")]
+public static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+[DllImport("user32.dll")]
+public static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+
+[StructLayout(LayoutKind.Sequential)]
+public struct POINT { public int X, Y; }
 '@
 }
 
@@ -179,11 +188,40 @@ try {
     # certifying a Pass as observed-working (standing rule R86) on the strength
     # of an image containing no evidence. Sampling a sparse grid is enough --
     # any real UI has a toolbar, text or a page edge somewhere in it.
+    # Sample the CLIENT area only, never the whole window.
+    #
+    # The title bar is painted by the shell, not by the app, so it always has
+    # colour variation — an app icon, a caption, close buttons. Sampling the
+    # full window therefore finds "several distinct colours" even when the
+    # application surface underneath is entirely blank, and the guard passes on
+    # a frame containing no evidence.
+    #
+    # That is not theoretical: it let through a capture with a fully painted
+    # title bar and a completely white client area, because eframe had not yet
+    # presented. The all-black sleeping-display case fired correctly on the very
+    # next attempt, which is exactly the trap — a guard that catches the obvious
+    # failure and misses the subtle one is more dangerous than no guard, because
+    # it earns trust it does not deserve.
+    $clientOrigin = New-Object PdfceNative.Win32+POINT
+    $clientRect   = New-Object PdfceNative.Win32+RECT
+    $sx0 = 0; $sy0 = 0; $sw = $width; $sh = $height
+    if ([PdfceNative.Win32]::GetClientRect($hwnd, [ref] $clientRect) -and
+        [PdfceNative.Win32]::ClientToScreen($hwnd, [ref] $clientOrigin)) {
+        $cw = $clientRect.Right - $clientRect.Left
+        $ch = $clientRect.Bottom - $clientRect.Top
+        if ($cw -gt 0 -and $ch -gt 0) {
+            $sx0 = $clientOrigin.X - $rect.Left
+            $sy0 = $clientOrigin.Y - $rect.Top
+            $sw  = [Math]::Min($cw, $width  - $sx0)
+            $sh  = [Math]::Min($ch, $height - $sy0)
+        }
+    }
+
     $distinct = @{}
-    $stepX = [Math]::Max(1, [int]($width  / 24))
-    $stepY = [Math]::Max(1, [int]($height / 24))
-    for ($x = 0; $x -lt $width; $x += $stepX) {
-        for ($y = 0; $y -lt $height; $y += $stepY) {
+    $stepX = [Math]::Max(1, [int]($sw / 24))
+    $stepY = [Math]::Max(1, [int]($sh / 24))
+    for ($x = $sx0; $x -lt ($sx0 + $sw); $x += $stepX) {
+        for ($y = $sy0; $y -lt ($sy0 + $sh); $y += $stepY) {
             $c = $bitmap.GetPixel($x, $y)
             $distinct["$($c.R),$($c.G),$($c.B)"] = $true
             if ($distinct.Count -gt 3) { break }
@@ -192,7 +230,7 @@ try {
     }
     if ($distinct.Count -le 1) {
         $only = ($distinct.Keys | Select-Object -First 1)
-        throw "REFUSING TO RETURN A BLANK CAPTURE: every sampled pixel of '$ProcessName' is ($only). That is not a screenshot of the UI — the display is likely asleep, or eframe has not presented a frame yet (it repaints only on input; send a real mouse move or click first), or a window animation was mid-flight. No observation was made."
+        throw "REFUSING TO RETURN A BLANK CAPTURE: every sampled pixel of '$ProcessName'`s CLIENT AREA is ($only). That is not a screenshot of the UI — the display is likely asleep, or eframe has not presented a frame yet (it repaints only on input; send a real mouse move or click first), or a window animation was mid-flight. No observation was made."
     }
 
     $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
