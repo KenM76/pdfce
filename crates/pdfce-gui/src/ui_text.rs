@@ -47,7 +47,7 @@ use std::path::Path;
 use pdfce_core::PdfVersion;
 use pdfce_core::dimension::Unit;
 use pdfce_core::edit::{CommandKind, InfoField};
-use pdfce_core::vector::{AxisConstraint, FillRule, PaintStyle, Rgb, SnapKind};
+use pdfce_core::vector::{AxisConstraint, FillRule, PaintStyle, Rgb, SnapKind, TextBoundsBasis};
 
 use crate::object_summary::{Degeneracy, ObjectKind, ObjectNote, ObjectSummary, SelectionCensus};
 
@@ -1730,7 +1730,19 @@ fn headline_note(summary: &ObjectSummary) -> Option<ObjectNote> {
 /// of the same fact, never two different facts.
 pub fn object_note_short(note: ObjectNote) -> &'static str {
     match note {
-        ObjectNote::ApproximateTextBounds => "approximate bounds",
+        // Four short forms, not one, because the row's job is to flag which
+        // KIND of doubt applies — "may miss the letters" and "measured from
+        // the font's metrics" are different warnings, and a row that gave
+        // both the same two words would leave the operator no reason to open
+        // the full explanation for the one that matters.
+        ObjectNote::ApproximateTextBounds(TextBoundsBasis::FontMetrics) => "bounds from metrics",
+        ObjectNote::ApproximateTextBounds(TextBoundsBasis::MetricAdvancesNominalHeight) => {
+            "estimated height"
+        }
+        ObjectNote::ApproximateTextBounds(TextBoundsBasis::EstimatedAdvances) => "estimated widths",
+        ObjectNote::ApproximateTextBounds(TextBoundsBasis::EmBox) => {
+            "rough bounds \u{2014} may miss"
+        }
         ObjectNote::PaintsNothing => "paints nothing",
         ObjectNote::DegenerateBounds(Degeneracy::VerticalRule) => "zero width",
         ObjectNote::DegenerateBounds(Degeneracy::HorizontalRule) => "zero height",
@@ -1757,14 +1769,36 @@ pub fn object_note_short(note: ObjectNote) -> &'static str {
 /// explanation — and an explanation is the entire deliverable here.
 pub fn object_note(note: ObjectNote) -> &'static str {
     match note {
-        ObjectNote::ApproximateTextBounds => {
-            "The box around text is approximate, and it can sit in the wrong place: pdfce \
-measures a text object only from where each run of glyphs STARTS, then pads that point by the \
-largest type size it saw — so the box is roughly a square centred on the run's start, not a \
-box around the ink. It therefore reaches into blank paper before the text, and usually stops \
-short of the end of a long run. Two consequences, in opposite directions: clicking blank space \
-near text can select the text, AND clicking directly on visible glyphs can MISS it. If a click \
-on the letters does not select them, try clicking nearer the start of the line."
+        ObjectNote::ApproximateTextBounds(TextBoundsBasis::FontMetrics) => {
+            "The box around text is laid out from the font's own metrics: pdfce adds up the \
+width of every character the run shows, and takes the height from the font's designed ascent \
+and descent. That is exactly how a PDF reader places the text, so the box is where the text \
+is. It is still not traced around the letters themselves, so it can be slightly generous \
+above short lowercase words, and slightly tight around an italic's overhang or a swash."
+        }
+        ObjectNote::ApproximateTextBounds(TextBoundsBasis::MetricAdvancesNominalHeight) => {
+            "The box around text is laid out from the font's own character widths, so its LEFT \
+and RIGHT edges are where the text really starts and ends. Its HEIGHT is a standing estimate: \
+this font declares no ascent or descent for pdfce to read, so the box is one type size tall \
+above the baseline and a quarter of one below. Expect it to be taller than the letters rather \
+than shorter."
+        }
+        ObjectNote::ApproximateTextBounds(TextBoundsBasis::EstimatedAdvances) => {
+            "The box around text is the right shape but an estimated size: this font carries no \
+width table of its own, and is not one of the 14 standard faces whose metrics pdfce has built \
+in, so the width of each character was estimated from a similar face. The box starts where the \
+text starts and grows with the run, but its right-hand edge can be off by a few points either \
+way. If a click near the end of the line misses, click nearer the middle."
+        }
+        ObjectNote::ApproximateTextBounds(TextBoundsBasis::EmBox) => {
+            "The box around this text is a rough guess, and it can sit in the wrong place. \
+pdfce could not read the font behind at least part of this run, so it has no character widths \
+to lay the text out with; it falls back to marking where the run STARTS and padding that point \
+by the largest type size it saw. The result is roughly a square centred on the start of the \
+text, not a box around the ink — so it reaches into blank paper before the text, and usually \
+stops short of the end of a long run. Two consequences, in opposite directions: clicking blank \
+space near text can select the text, AND clicking directly on visible glyphs can MISS it. If a \
+click on the letters does not select them, try clicking nearer the start of the line."
         }
         ObjectNote::PaintsNothing => {
             "This path paints nothing at all — it is a clipping path or a shape that was built \

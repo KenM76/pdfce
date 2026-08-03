@@ -223,12 +223,128 @@ fn lists_a_text_object_with_its_bbox() {
     let text = stdout(&out);
     assert!(text.contains("kind=text"), "{text}");
     // A text object is bbox-only (it carries no editable node geometry), so
-    // the row is bbox + the `approximate=` disclosure: 1 means the box was
-    // estimated from the positioning operators rather than glyph metrics,
-    // which is why a click can land slightly off a glyph.
-    assert!(text.contains("bbox=48,646,96,724"), "{text}");
+    // the row is bbox + the two disclosure fields. `approximate=1` says the
+    // box is not measured glyph ink — true of every text object — and
+    // `bounds=` says which of the four constructions produced it.
+    //
+    // The fixture shows "Hello world" then "Second line" in Helvetica 24 at
+    // x=72, second line one 24 pt leading below. Helvetica is a standard-14
+    // face, so both its advance widths and its /Ascent+/Descent are real
+    // metrics: the box's LEFT edge is the pen start (72) and its RIGHT edge
+    // is 72 plus the accumulated advances of the longer line — NOT
+    // `72 + one em`, which is what the pre-metrics box gave.
+    assert!(text.contains("bounds=font-metrics"), "{text}");
+    assert!(text.contains("bbox=72,665.032,232.008,717.232"), "{text}");
     assert!(text.contains("approximate=1"), "{text}");
     assert!(text.contains("objects=1 paths=0 text=1"), "{text}");
+}
+
+/// **The geometry regression.** The box must START at the pen and END past
+/// the last glyph — the two properties the pre-metrics em box got wrong in
+/// opposite directions, and the reason clicking visible letters could miss.
+///
+/// `mixed.pdf` shows `(Vector)` in Helvetica 14 at `30 150 Td`. Summing the
+/// AFM advances for V-e-c-t-o-r gives 2890/1000 em ⇒ 40.46 pt, and
+/// Helvetica's descriptor gives ascent 718 / descent −207 ⇒ +10.05/−2.90 pt.
+/// So the box is `30,147.10 → 70.46,160.05`.
+///
+/// The old box was `16,136 → 44,164`: a 28 × 28 pt square centred on
+/// (30,150). Note what that means concretely and why this test asserts BOTH
+/// edges — the old box's left edge (16) was 14 pt of blank paper before the
+/// first glyph, and its right edge (44) stopped 26 pt short of the last one.
+#[test]
+fn a_text_bbox_starts_at_the_pen_and_covers_the_whole_run() {
+    let f = fixture("vector/mixed.pdf");
+    let out = run("object-list", &[f.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let row = stdout(&out)
+        .lines()
+        .find(|l| l.contains("kind=text"))
+        .expect("the fixture has a text object")
+        .to_owned();
+    assert!(row.contains("bbox=30,147.102,70.46,160.052"), "{row}");
+    assert!(row.contains("bounds=font-metrics"), "{row}");
+
+    // And the hit test agrees, which is the point of the whole exercise: a
+    // click on the LAST glyph of "Vector" (x≈68, comfortably past the old
+    // box's right edge of 44) selects the text...
+    let on_glyphs = run(
+        "object-list",
+        &[f.to_str().unwrap(), "--hit", "68,152", "--tolerance", "0"],
+    );
+    assert!(
+        hit_line(&on_glyphs).contains("index=1 kind=text"),
+        "a click on the last letters must select the text: {}",
+        hit_line(&on_glyphs)
+    );
+
+    // ...and a click on the blank paper to the LEFT of the text (x=20, which
+    // the old 28 pt square covered) selects nothing.
+    let on_paper = run(
+        "object-list",
+        &[f.to_str().unwrap(), "--hit", "20,152", "--tolerance", "0"],
+    );
+    assert!(
+        hit_line(&on_paper).contains("index=none"),
+        "blank paper before the text must not select it: {}",
+        hit_line(&on_paper)
+    );
+}
+
+/// A **composite** font's advances come from `/W` over `/DW` (§9.7.4.3), a
+/// dictionary array — not from the font program — so the metrics path
+/// reaches the `Identity-H`-subsetted case that is the dominant modern
+/// producer output, not only simple fonts.
+///
+/// The fixture's text cannot be DECODED (no `/ToUnicode`, §9.10.2's dead
+/// end) and that is orthogonal: reading a CID's width and knowing which
+/// character it is are two different lookups, and this row proves pdfce
+/// still gets the first one right while honestly failing the second.
+///
+/// It also pins the THIRD basis. The fixture's descendant CIDFont carries
+/// `/DW` + `/W` but no `/FontDescriptor` at all, so the advances are real
+/// and the vertical extent is pdfce's nominal em — reported as
+/// `bounds=metric-advances-nominal-height`, not as `font-metrics`. Claiming
+/// the better basis here would be exactly the "sentence that no longer
+/// matches the box" failure ui-spec §E.3 forbids.
+#[test]
+fn a_composite_font_run_is_measured_from_its_w_array() {
+    let f = fixture("text/identity-h-no-tounicode.pdf");
+    let out = run("object-list", &[f.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let row = stdout(&out)
+        .lines()
+        .find(|l| l.contains("kind=text"))
+        .expect("the fixture has a text object")
+        .to_owned();
+    // Undecodable text, measurable box — the two facts are independent.
+    assert!(row.contains("text=undecodable"), "{row}");
+    assert!(
+        row.contains("bounds=metric-advances-nominal-height"),
+        "{row}"
+    );
+
+    // The box must be WIDER than one em: an em box would be the pre-metrics
+    // failure reappearing under a composite font. `size=18`, and the run's
+    // `/W`-declared advances carry it to 81 pt.
+    assert!(row.contains("size=18"), "{row}");
+    let bbox = row
+        .split_whitespace()
+        .find_map(|t| t.strip_prefix("bbox="))
+        .expect("a bbox field");
+    let n: Vec<f64> = bbox.split(',').map(|v| v.parse().unwrap()).collect();
+    let (width, size) = (n[2] - n[0], 18.0_f64);
+    assert!(
+        width > size,
+        "a multi-glyph run must be wider than one em: {row}"
+    );
+    // And the nominal height is exactly the 1.0/0.25 em pair, so a reader of
+    // this test can tell the guess apart from a measurement at a glance.
+    let height = n[3] - n[1];
+    assert!(
+        (height - size * 1.25).abs() < 1e-6,
+        "nominal height should be 1.25 em: {row}"
+    );
 }
 
 /// A page past the end, and `--page 0`, are both clean named refusals — a

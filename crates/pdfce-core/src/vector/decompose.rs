@@ -493,19 +493,104 @@ pub enum TextPreview {
     Empty,
 }
 
+/// What a [`TextObject`]'s bounding box was actually built from.
+///
+/// The box is an approximation under every variant (no variant means
+/// "measured glyph outlines" — see [`TextObject`]'s own note), but the
+/// variants are **not** interchangeable: they differ by roughly an order of
+/// magnitude in how far the box can be from the ink, and a consumer that
+/// discloses the approximation must say which one it is looking at.
+/// ui-spec `pass-17-dock-and-layer-tree.md` §E.3 makes that binding: *"the
+/// sentence shown always matches the box actually drawn"* — one disclosure
+/// sentence covering all four would be accurate for one of them and a lie
+/// for the rest.
+///
+/// Ordered best-to-worst, which is also the order the walk prefers them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TextBoundsBasis {
+    /// **The good case.** Every glyph's horizontal advance came from the
+    /// font's own width table — `/Widths` for a simple font (§9.6.2.1),
+    /// `/W` over `/DW` for a composite one (§9.7.4.3), or the compiled-in
+    /// standard-14 AFM metrics for a base-14 dictionary that omitted its
+    /// `/Widths` (§9.6.2.2) — and the vertical extent from the font's
+    /// `/FontDescriptor` `/Ascent`/`/Descent` (§9.8, Table 122).
+    ///
+    /// The box is where a conforming reader lays the run out. What it is
+    /// still not: the ink. Accented capitals exceed `/Ascent` by the
+    /// clause's own definition, italic overhang leans past the advance, and
+    /// a run of hyphens never reaches the nominal ascent — so the box can
+    /// be a little tall or a little narrow at the extremes.
+    FontMetrics,
+    /// Advances came from the font's width table as in
+    /// [`Self::FontMetrics`], but **no vertical extent was available** —
+    /// no usable `/Ascent`+`/Descent`, no `/FontBBox`, and not a
+    /// standard-14 face — so the height is pdfce's nominal em fallback.
+    /// The canonical case is a Type 3 font (§9.6.5), whose glyph space is
+    /// its own `/FontMatrix` and whose descriptor is optional.
+    ///
+    /// Horizontally as good as `FontMetrics`; vertically a guess, and the
+    /// horizontal axis is the one that was broken.
+    MetricAdvancesNominalHeight,
+    /// The font carried **no width source at all** — no `/Widths`, and not
+    /// one of the standard 14 — so `text_extract` estimated its advances
+    /// from metrically-similar Helvetica (its own
+    /// [`FontNote::WidthsEstimated`](crate::text_extract::FontNote::WidthsEstimated)).
+    /// §9.6.2.2 does not permit this shape; real files ship it anyway.
+    ///
+    /// The box has the right *structure* — it starts where the run starts
+    /// and grows with the run's length — but its width is an estimate of an
+    /// estimate. Better than an em box; not a measurement.
+    EstimatedAdvances,
+    /// **The fallback.** No font was resolvable for at least one of the
+    /// object's show operators, so that operator's extent is the legacy
+    /// approximation: the hull of the text-showing **origins** (each
+    /// `Tj`/`TJ`/`'`/`"` pen position mapped to page space) inflated
+    /// isotropically by the largest `Tf` size seen.
+    ///
+    /// This is the box every text object had before advance accumulation
+    /// existed, and its failure mode is why the change was made: for a
+    /// single-`Tj` object it is a **square centred on where the run
+    /// starts**, so it covers blank paper to the left of the first glyph
+    /// and stops roughly one em in — clicking directly on visible letters
+    /// past that point misses the object. It is kept, rather than dropped
+    /// in favour of nothing, because a loose hit target is strictly better
+    /// than none: fonts genuinely go missing (a damaged file, a caller with
+    /// no document — [`NoFonts`]), and a selection surface that silently
+    /// stops working on such a page would be the worse failure.
+    ///
+    /// Also the basis reported when an object **mixes** metered and
+    /// unmetered show operators: part of the box is an em-box guess, so the
+    /// weaker claim is the honest one for the whole.
+    EmBox,
+}
+
 /// A text object (`BT`…`ET`) — selectable-for-move/delete, with an
 /// identifying preview.
 ///
-/// **The bbox is a deliberate approximation.** `pdfce-core` has no glyph
-/// metrics (font programs and widths live behind the `pdfce-render`
-/// loader), so the bbox is the bounding box of the text-showing **origins**
-/// (each `Tj`/`TJ`/`'`/`"` pen position, mapped to page space) inflated by
-/// the largest `Tf` size seen — a coarse em box. It reliably covers the
-/// text's start points (so the object is selectable) but does not measure
-/// the exact horizontal extent, and it does not fold a scaling `Tm` into
-/// the inflation. [`TextObject::approximate`] is always `true` to disclose
-/// this (fuzzy, never sneaky); an exact text bbox is a fast-follow once the
-/// dimensioning subsystem needs to snap to glyph geometry.
+/// **The bbox is a deliberate approximation — of one of four kinds.**
+/// `pdfce-core` has no glyph *outlines* (font programs live behind the
+/// `pdfce-render` loader, R21), but it does have every font's *layout
+/// metrics*, from dictionary data alone: advance widths (§9.6.2.1
+/// `/Widths`, §9.7.4.3 `/W`/`/DW`, or the compiled-in standard-14 AFM
+/// tables) and vertical extent (§9.8 Table 122 `/Ascent`/`/Descent`). The
+/// walk lays the run out with exactly the arithmetic §9.4.4 specifies —
+/// per-code advances through the shared
+/// [`advance_tx`](crate::text_extract::font) formula, `Tc`/`Tw`/`Tz`
+/// applied, `TJ` offsets applied to the text matrix, every glyph's box
+/// mapped through `Trm = [Tfs·Th 0 0 Tfs 0 Ts] × Tm × CTM` — and unions the
+/// result. That is where a conforming reader puts the text, so the box is
+/// where the text is.
+///
+/// [`bounds_basis`](Self::bounds_basis) says which of the four cases
+/// produced this particular box, and [`approximate`](Self::approximate)
+/// stays `true` in all of them: a metrics-derived box is still not measured
+/// ink (accents exceed `/Ascent`, italics overhang the advance), which is a
+/// smaller and more specific gap than the em-box fallback's, but a gap.
+///
+/// **Not part of the file.** This bbox is read-only descriptive data
+/// consumed for selection, hit-testing and marquee; it is never written
+/// back, so improving its accuracy has no interaction with the
+/// round-trip/minimal-diff invariant (project rule 3).
 ///
 /// **The preview and font are identity, not content.** They exist so an
 /// object row can say `Text · "Section A-A" · Helvetica 10` instead of
@@ -515,10 +600,19 @@ pub enum TextPreview {
 /// order — calls [`crate::text_extract::extract_page`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextObject {
-    /// Page-space approximate bounds (module docs).
+    /// Page-space bounds (module docs), built per
+    /// [`bounds_basis`](Self::bounds_basis).
     pub page_bbox: Bounds,
-    /// Always `true` — the bbox is an origin-derived approximation.
+    /// Always `true` — no variant of the bbox is measured glyph ink.
+    ///
+    /// Kept as a `bool` rather than folded into
+    /// [`bounds_basis`](Self::bounds_basis) because it answers a different
+    /// question: *"should this box be drawn as an approximation?"* (yes,
+    /// always, today) versus *"how good an approximation is it?"*. A future
+    /// exact-outline path would flip this one to `false`.
     pub approximate: bool,
+    /// Which of the four constructions produced [`page_bbox`](Self::page_bbox).
+    pub bounds_basis: TextBoundsBasis,
     /// What the object's shown strings decoded to (or why they did not).
     pub preview: TextPreview,
     /// The font in effect at the first show operator, if there was one.
@@ -1095,6 +1189,18 @@ struct GState {
     /// could produce one.
     font: Option<Arc<ExtractFont>>,
     leading: f64,
+    /// `Tc` — character spacing (§9.3.2, Table 105), user-space units added
+    /// to every glyph's displacement.
+    char_spacing: f64,
+    /// `Tw` — word spacing (§9.3.3). Applies **only** to the single-byte
+    /// character code 32, which is why it is inert under `Identity-H`.
+    word_spacing: f64,
+    /// `Th` — horizontal scaling, already divided by 100 (§9.3.4: the `Tz`
+    /// operand "shall be a percentage of the normal width"). Initial 1.0.
+    h_scale: f64,
+    /// `Ts` — text rise (§9.3.6), the vertical shift of the baseline used
+    /// for super/subscripts. Enters the box through `Trm`'s `f` element.
+    rise: f64,
 }
 
 impl GState {
@@ -1108,6 +1214,12 @@ impl GState {
             font_resource: None,
             font: None,
             leading: 0.0,
+            // Table 105 initial values: Tc = 0, Tw = 0, Tz = 100 (⇒ Th =
+            // 1.0), Ts = 0.
+            char_spacing: 0.0,
+            word_spacing: 0.0,
+            h_scale: 1.0,
+            rise: 0.0,
         }
     }
 }
@@ -1128,7 +1240,30 @@ struct PathAccum {
 /// accumulator.
 struct TextAccum {
     token_start: usize,
+    /// The hull of every show operator's pen-START position, page space.
+    ///
+    /// Still tracked even when the metrics path is available, for two
+    /// reasons: it is the emptiness test that decides whether a `BT`…`ET`
+    /// produced an object at all, and it is the input to the
+    /// [`TextBoundsBasis::EmBox`] fallback.
     origins: Bounds,
+    /// The union of every laid-out glyph's box, page space — the
+    /// metrics-derived extent. Empty when no show operator had a usable
+    /// font.
+    ink: Bounds,
+    /// The hull of the pen-start positions of the show operators that could
+    /// NOT be laid out (no resolvable font, or an unusable `Tf` size). Each
+    /// contributes an em box around its origin, exactly as every text
+    /// object did before advances were accumulated.
+    unmetered: Bounds,
+    /// Whether any laid-out glyph used estimated widths
+    /// (`ExtractFont::width_estimated`) — degrades the basis to
+    /// [`TextBoundsBasis::EstimatedAdvances`].
+    widths_estimated: bool,
+    /// Whether any laid-out glyph used a nominal vertical extent
+    /// (`ExtractFont::vertical_is_nominal`) — degrades the basis to
+    /// [`TextBoundsBasis::MetricAdvancesNominalHeight`].
+    vertical_nominal: bool,
     max_font_size: f64,
     text_matrix: Matrix,
     line_matrix: Matrix,
@@ -1162,6 +1297,10 @@ impl TextAccum {
         Self {
             token_start,
             origins: Bounds::EMPTY,
+            ink: Bounds::EMPTY,
+            unmetered: Bounds::EMPTY,
+            widths_estimated: false,
+            vertical_nominal: false,
             max_font_size: 0.0,
             text_matrix: Matrix::IDENTITY,
             line_matrix: Matrix::IDENTITY,
@@ -1195,6 +1334,26 @@ impl TextAccum {
             }
         };
         (preview, self.font)
+    }
+
+    /// Which of the four constructions the accumulated state entitles this
+    /// object's box to claim (see [`TextBoundsBasis`]).
+    ///
+    /// Worst-wins, deliberately: an object that laid out three runs from
+    /// real `/Widths` and one from nothing is reported as
+    /// [`TextBoundsBasis::EmBox`], because part of the box the operator is
+    /// looking at IS an em box and a disclosure describing only the good
+    /// part would be the more misleading of the two available sentences.
+    fn basis(&self) -> TextBoundsBasis {
+        if self.ink.is_empty() || !self.unmetered.is_empty() {
+            TextBoundsBasis::EmBox
+        } else if self.widths_estimated {
+            TextBoundsBasis::EstimatedAdvances
+        } else if self.vertical_nominal {
+            TextBoundsBasis::MetricAdvancesNominalHeight
+        } else {
+            TextBoundsBasis::FontMetrics
+        }
     }
 }
 
@@ -1456,6 +1615,32 @@ impl<'a> Decomposer<'a> {
                     self.gs.leading = v;
                 }
             }
+            // §9.3 Table 105 text-state parameters that enter the run's
+            // layout arithmetic. They are part of the GRAPHICS state, not
+            // the text object, so `q`/`Q` saves and restores them and they
+            // survive across `BT`/`ET` — which is why they live on `GState`
+            // beside the CTM rather than on the text accumulator.
+            b"Tc" => {
+                if let &[v] = nums.as_slice() {
+                    self.gs.char_spacing = v;
+                }
+            }
+            b"Tw" => {
+                if let &[v] = nums.as_slice() {
+                    self.gs.word_spacing = v;
+                }
+            }
+            b"Tz" => {
+                if let &[v] = nums.as_slice() {
+                    // §9.3.4: the operand is a PERCENTAGE.
+                    self.gs.h_scale = v / 100.0;
+                }
+            }
+            b"Ts" => {
+                if let &[v] = nums.as_slice() {
+                    self.gs.rise = v;
+                }
+            }
             b"Td" => {
                 if let &[tx, ty] = nums.as_slice() {
                     self.text_line_offset(tx, ty);
@@ -1480,7 +1665,30 @@ impl<'a> Decomposer<'a> {
                 let leading = self.gs.leading;
                 self.text_line_offset(0.0, -leading);
             }
-            b"Tj" | b"TJ" | b"'" | b"\"" => self.show_text(operands),
+            b"Tj" | b"TJ" => self.show_text(operands),
+            // §9.4.3 Table 109: `'` is exactly `T*` followed by `Tj`, and
+            // `"` is `aw Tw`, `ac Tc`, `T*`, `Tj`. Before advance
+            // accumulation the line move was skipped (the origin hull was
+            // inflated by a whole em anyway, which hid a one-line error);
+            // a box that now claims to be where the text is has to make it.
+            b"'" => {
+                let leading = self.gs.leading;
+                self.text_line_offset(0.0, -leading);
+                self.show_text(operands);
+            }
+            b"\"" => {
+                // `aw ac string "` — the two NUMERIC operands are word and
+                // character spacing, in that order, and they persist in the
+                // graphics state afterwards (Table 109's own wording: the
+                // operator "shall set" them).
+                if let &[aw, ac] = nums.as_slice() {
+                    self.gs.word_spacing = aw;
+                    self.gs.char_spacing = ac;
+                }
+                let leading = self.gs.leading;
+                self.text_line_offset(0.0, -leading);
+                self.show_text(operands);
+            }
 
             // ---- external objects (§8.8) ----
             b"Do" => self.do_xobject(operands, first, op_index),
@@ -1694,13 +1902,50 @@ impl<'a> Decomposer<'a> {
     }
 
     /// Handle one text-showing operator (`Tj`/`TJ`/`'`/`"`): record the pen
-    /// origin for the approximate bbox, capture the font on the first one,
-    /// and decode the operand strings into the preview.
+    /// origin, capture the font on the first one, decode the operand
+    /// strings into the preview, **and lay the run out** so the object's
+    /// bbox is the extent of the glyphs rather than a square around where
+    /// they start.
     ///
-    /// The origin bookkeeping is exactly what this used to do and is
-    /// unchanged — the bbox geometry (and therefore hit-testing, and
-    /// therefore every existing test and fixture expectation) does not move
-    /// because a preview was added.
+    /// ## The layout, and what is and is not modelled
+    ///
+    /// Per code, in file order (§9.4.4):
+    ///
+    /// 1. `w0` — the glyph's advance in text space, from
+    ///    [`ExtractFont::width`]: `/Widths` (§9.6.2.1), `/W` over `/DW`
+    ///    (§9.7.4.3), the standard-14 AFM tables, or `/MissingWidth`.
+    ///    **Dictionary data only** — no font program is opened, which is
+    ///    what keeps this walk inside `pdfce-core` (R21 puts glyph
+    ///    rasterization in `pdfce-render`).
+    /// 2. `tx = (w0·Tfs + Tc + Tw)·Th`, through the shared
+    ///    [`advance_tx`](crate::text_extract::font) — the ONE copy of that
+    ///    formula in the crate, also used by extraction and redaction.
+    ///    `Tw` participates only for the single-byte code 32 (§9.3.3), a
+    ///    decision [`ExtractFont::codes`] already makes per code.
+    /// 3. The glyph's box in text space is `x ∈ [0, w0]`,
+    ///    `y ∈ [descent, ascent]` from §9.8 Table 122, mapped to page space
+    ///    by `Trm = [Tfs·Th 0 0 Tfs 0 Ts] × Tm × CTM` and unioned into
+    ///    [`TextAccum::ink`]. All four corners are mapped, not two, because
+    ///    a rotated or skewed `Tm`/CTM makes the axis-aligned page-space
+    ///    hull of a text-space rectangle depend on all four.
+    /// 4. `Tm ← translate(tx, 0) × Tm`.
+    ///
+    /// A `TJ` array's numeric elements move the text matrix by
+    /// `−(v/1000)·Tfs·Th` **when they are met**, not folded into the
+    /// neighbouring glyph's advance — Table 109 is explicit that the amount
+    /// "shall be subtracted from the current horizontal coordinate", i.e.
+    /// the pen moves and the *next* glyph is shown there.
+    ///
+    /// **Not modelled, and therefore not claimed:** vertical writing mode
+    /// (§9.4.4's `ty` branch — every advance here is horizontal, so a
+    /// `Identity-V` run's box will be the width of its glyphs laid side by
+    /// side rather than stacked); `Tr` render mode 3/7 (invisible text is
+    /// still bounded, deliberately — an OCR layer under a scan is a real,
+    /// selectable object and hiding it from selection would be the surprise);
+    /// and any clip the text may be under. A run that changes `Tf` SIZE
+    /// mid-string is modelled correctly per code, since `Tfs` is read from
+    /// the graphics state at each show operator — but the em-box fallback
+    /// still uses only the largest size seen.
     fn show_text(&mut self, operands: &[ContentToken]) {
         // Snapshot the graphics-state reads before borrowing `self.text`
         // mutably; `Arc::clone` is a refcount bump, not a font copy.
@@ -1736,25 +1981,137 @@ impl<'a> Decomposer<'a> {
 
         // §9.4.3 Table 109: `Tj`/`'` take one string; `"` takes `aw ac
         // string`; `TJ` takes an array of strings interleaved with numeric
-        // offsets. Every STRING operand in the run is shown text and every
-        // number is positioning, so walking the operands and taking the
-        // strings covers all four operators without a per-operator branch —
-        // and tolerates a malformed run (a `Tj` with two strings) by
-        // showing both, which is what a lenient reader would render.
+        // offsets. Every STRING operand in the run is shown text, so walking
+        // the operands and taking the strings covers all four operators
+        // without a per-operator branch — and tolerates a malformed run (a
+        // `Tj` with two strings) by showing both, which is what a lenient
+        // reader would render.
+        //
+        // A number at the TOP level is NOT a positioning offset (it is
+        // `"`'s `aw`/`ac`, already consumed by the operator dispatch);
+        // only numbers INSIDE the `TJ` array are.
         for token in operands {
             let ContentTokenKind::Operand(object) = &token.kind else {
                 continue;
             };
             match object {
-                Object::String(bytes) => self.decode_show_string(bytes),
+                Object::String(bytes) => self.show_string(bytes),
                 Object::Array(items) => {
                     for item in items {
-                        if let Object::String(bytes) = item {
-                            self.decode_show_string(bytes);
+                        match item {
+                            Object::String(bytes) => self.show_string(bytes),
+                            other => {
+                                if let Some(v) = other.as_number() {
+                                    self.tj_offset(v);
+                                }
+                            }
                         }
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    /// One show string: decode it into the preview AND lay it out into the
+    /// ink bounds. Two jobs, one traversal order, deliberately adjacent so
+    /// a future edit cannot advance the pen without decoding or vice versa.
+    fn show_string(&mut self, bytes: &[u8]) {
+        self.decode_show_string(bytes);
+        self.advance_show_string(bytes);
+    }
+
+    /// Apply a `TJ` array's numeric element to the text matrix (Table 109).
+    ///
+    /// "The number shall be expressed in thousandths of a unit of text
+    /// space… This amount shall be subtracted from the current horizontal
+    /// coordinate", scaled by the font size and by `Th` (§9.4.4's `−Tj/1000`
+    /// term sits inside the same `× Tfs … × Th` product as `w0`).
+    ///
+    /// A non-finite operand is ignored rather than allowed to poison the
+    /// text matrix — one NaN would turn every subsequent bbox on the page
+    /// into `NaN` and silently un-hit-test the rest of the object
+    /// (ARCHITECTURE.md §10).
+    fn tj_offset(&mut self, v: f64) {
+        let tfs = self.gs.font_size;
+        let th = self.gs.h_scale;
+        let tx = -(v / 1000.0) * tfs * th;
+        if !tx.is_finite() {
+            return;
+        }
+        if let Some(t) = self.text.as_mut() {
+            t.text_matrix = Matrix::translate(tx, 0.0).post_concat(t.text_matrix);
+        }
+    }
+
+    /// Lay out one show string's codes, unioning each glyph's box into
+    /// [`TextAccum::ink`] and advancing the text matrix (this function's
+    /// contract is documented in full on [`Self::show_text`]).
+    ///
+    /// When no usable font is in scope the string contributes **nothing to
+    /// `ink`** and its pen origin is added to [`TextAccum::unmetered`]
+    /// instead, which is what makes the object fall back to the em box and
+    /// SAY it did ([`TextBoundsBasis::EmBox`]). "Usable" is deliberately
+    /// strict: a resolved font with a zero or non-finite `Tf` size would lay
+    /// every glyph out at a single point, producing a degenerate box that
+    /// looks like a measurement and is not one.
+    fn advance_show_string(&mut self, bytes: &[u8]) {
+        let ctm = self.gs.ctm;
+        let tfs = self.gs.font_size;
+        let th = self.gs.h_scale;
+        let tc = self.gs.char_spacing;
+        let word_spacing = self.gs.word_spacing;
+        let rise = self.gs.rise;
+        let font = self.gs.font.clone();
+
+        let usable = font.filter(|_| {
+            tfs.is_finite() && tfs != 0.0 && th.is_finite() && tc.is_finite() && rise.is_finite()
+        });
+
+        let Some(t) = self.text.as_mut() else {
+            return;
+        };
+        let Some(font) = usable else {
+            // No width source for this run: its extent is unknowable here,
+            // so only its start point is, and the em-box fallback covers it.
+            let origin = ctm.map_point(t.text_matrix.map_point(Point::new(0.0, 0.0)));
+            t.unmetered = t.unmetered.union_point(origin);
+            return;
+        };
+
+        if font.width_estimated() {
+            t.widths_estimated = true;
+        }
+        if font.vertical_is_nominal() {
+            t.vertical_nominal = true;
+        }
+        let ascent = f64::from(font.ascent());
+        let descent = f64::from(font.descent());
+
+        for code in font.codes(bytes) {
+            let w0 = f64::from(font.width(code.value));
+            let tw = if code.word_spacing_applies {
+                word_spacing
+            } else {
+                0.0
+            };
+            let tx = crate::text_extract::font::advance_tx(w0, tfs, tc, tw, th);
+
+            // §9.4.4: Trm = [Tfs·Th 0 0 Tfs 0 Ts] × Tm × CTM.
+            let params = Matrix::new(tfs * th, 0.0, 0.0, tfs, 0.0, rise);
+            let trm = params.post_concat(t.text_matrix).post_concat(ctm);
+            for (gx, gy) in [(0.0, descent), (w0, descent), (0.0, ascent), (w0, ascent)] {
+                let p = trm.map_point(Point::new(gx, gy));
+                // A corner that is not finite (a degenerate CTM, a
+                // hostile `Tm`) is dropped rather than allowed to swallow
+                // the whole bbox — `union_point` would propagate the NaN.
+                if p.is_finite() {
+                    t.ink = t.ink.union_point(p);
+                }
+            }
+
+            if tx.is_finite() {
+                t.text_matrix = Matrix::translate(tx, 0.0).post_concat(t.text_matrix);
             }
         }
     }
@@ -1819,10 +2176,29 @@ impl<'a> Decomposer<'a> {
             self.diag.objects_dropped += 1;
             return;
         }
-        // Inflate the origin bounds by the largest em box seen — a coarse,
-        // disclosed over-approximation (TextObject docs).
+        // Assemble the box from whichever construction the run's fonts
+        // entitled it to (`TextBoundsBasis`, and `TextAccum::basis`'s
+        // worst-wins rule).
+        //
+        // The em-box margin is the largest `Tf` size seen, floored at 1.0
+        // so a `BT`…`ET` that never set a font still produces a target big
+        // enough to click. `inflate` is isotropic — it subtracts the margin
+        // from `min` and adds it to `max` on BOTH axes — which for a single
+        // pen-start point is a square of side `2 × margin` centred on that
+        // point. That shape is the whole reason the metrics path exists;
+        // it survives only where nothing better is available.
+        let basis = t.basis();
         let margin = (t.max_font_size).max(1.0);
-        let page_bbox = t.origins.inflate(margin);
+        let page_bbox = if t.ink.is_empty() {
+            t.origins.inflate(margin)
+        } else if t.unmetered.is_empty() {
+            t.ink
+        } else {
+            // Mixed: the metered runs contribute their real extent, the
+            // unmetered ones their em box, and `basis` already reports the
+            // weaker of the two claims for the union.
+            t.ink.union(t.unmetered.inflate(margin))
+        };
         let bytes = self.span_of(t.token_start, op_index);
         let token_start = t.token_start;
         let (preview, font) = t.finish();
@@ -1830,6 +2206,7 @@ impl<'a> Decomposer<'a> {
         self.objects.push(VectorObject::Text(TextObject {
             page_bbox,
             approximate: true,
+            bounds_basis: basis,
             preview,
             font,
             tokens: TokenRange {
@@ -2151,10 +2528,93 @@ mod tests {
                 Object::Array(vec![Object::Dict(descendant)]),
             ),
         ]);
+        // /Widthy — a NON-standard-14 simple font that carries its own
+        // §9.6.2.1 `/Widths` array and a §9.8 Table 122 descriptor. The
+        // dominant real-world simple-font shape, and the one that must
+        // reach `TextBoundsBasis::FontMetrics` without any compiled-in AFM
+        // help: every code from 'A' (65) up is 500/1000 em wide, the
+        // ascent is 0.8 em and the descent −0.2 em.
+        let widthy = dict(&[
+            (b"Type", name(b"Font")),
+            (b"Subtype", name(b"Type1")),
+            (b"BaseFont", name(b"NotAStandardFace")),
+            (b"FirstChar", Object::Integer(65)),
+            (b"Widths", Object::Array(vec![Object::Integer(500); 60])),
+            (
+                b"FontDescriptor",
+                Object::Dict(dict(&[
+                    (b"Type", name(b"FontDescriptor")),
+                    (b"FontName", name(b"NotAStandardFace")),
+                    (b"Flags", Object::Integer(32)),
+                    (b"Ascent", Object::Integer(800)),
+                    (b"Descent", Object::Integer(-200)),
+                ])),
+            ),
+        ]);
+        // /Widthless — the §9.6.2.2-violating shape real producers ship: a
+        // font that is neither standard-14 nor carries `/Widths`, so
+        // `text_extract` estimates its advances from Helvetica and says so
+        // (`FontNote::WidthsEstimated`). Must degrade to
+        // `TextBoundsBasis::EstimatedAdvances`, never claim `FontMetrics`.
+        let widthless = dict(&[
+            (b"Type", name(b"Font")),
+            (b"Subtype", name(b"Type1")),
+            (b"BaseFont", name(b"AlsoNotStandard")),
+        ]);
+        // /Cid — a composite font whose DESCENDANT carries `/W`, `/DW` and
+        // a descriptor (§9.7.4.3 + §9.8.1's "the descriptor belongs to the
+        // descendant"). Proves the metrics path reaches the Identity-H
+        // subsetted case, which is what a modern producer emits.
+        let cid_descendant = dict(&[
+            (b"Type", name(b"Font")),
+            (b"Subtype", name(b"CIDFontType2")),
+            (b"BaseFont", name(b"ABCDEF+Wide")),
+            (
+                b"CIDSystemInfo",
+                Object::Dict(dict(&[
+                    (b"Registry", Object::String(b"Adobe".to_vec())),
+                    (b"Ordering", Object::String(b"Identity".to_vec())),
+                    (b"Supplement", Object::Integer(0)),
+                ])),
+            ),
+            (b"DW", Object::Integer(1000)),
+            // CIDs 1..=3 are 750/1000 em each.
+            (
+                b"W",
+                Object::Array(vec![
+                    Object::Integer(1),
+                    Object::Integer(3),
+                    Object::Integer(750),
+                ]),
+            ),
+            (
+                b"FontDescriptor",
+                Object::Dict(dict(&[
+                    (b"Type", name(b"FontDescriptor")),
+                    (b"FontName", name(b"ABCDEF+Wide")),
+                    (b"Flags", Object::Integer(4)),
+                    (b"Ascent", Object::Integer(900)),
+                    (b"Descent", Object::Integer(-300)),
+                ])),
+            ),
+        ]);
+        let cid = dict(&[
+            (b"Type", name(b"Font")),
+            (b"Subtype", name(b"Type0")),
+            (b"BaseFont", name(b"ABCDEF+Wide")),
+            (b"Encoding", name(b"Identity-H")),
+            (
+                b"DescendantFonts",
+                Object::Array(vec![Object::Dict(cid_descendant)]),
+            ),
+        ]);
         let fonts = dict(&[
             (b"F1", Object::Dict(helvetica.clone())),
             (b"F2", Object::Dict(helvetica)),
             (b"Undecodable", Object::Dict(undecodable)),
+            (b"Widthy", Object::Dict(widthy)),
+            (b"Widthless", Object::Dict(widthless)),
+            (b"Cid", Object::Dict(cid)),
         ]);
         dict(&[(b"Font", Object::Dict(fonts))])
     }
@@ -2330,6 +2790,249 @@ mod tests {
         assert!(texts[0].approximate);
         // origin (72,700) inflated by the 12 pt font size
         assert!(texts[0].page_bbox.contains(Point::new(72.0, 700.0)));
+    }
+
+    // -- text bbox geometry (ui-spec §E.1) ----------------------------------
+
+    /// **The headline fix.** A simple font with its own `/Widths` and a
+    /// descriptor produces a box that starts at the pen, ends past the last
+    /// glyph, and is as tall as the font says — not a square around the pen.
+    ///
+    /// `/Widthy` is 500/1000 em per code with ascent 0.8 em and descent
+    /// −0.2 em, so `(ABCD) Tj` at 10 pt from (100, 500) must give exactly
+    /// `100,498 → 120,508`. Every number is checked, because the failure
+    /// this replaces was not "slightly off" — it was a box in the wrong
+    /// PLACE, and only pinning all four edges catches a regression to it.
+    #[test]
+    fn a_run_with_real_widths_is_bounded_by_its_accumulated_advances() {
+        let m = model_with_fonts(b"BT /Widthy 10 Tf 100 500 Td (ABCD) Tj ET");
+        let t = texts(&m).remove(0);
+        assert_eq!(t.bounds_basis, TextBoundsBasis::FontMetrics);
+        // Still `approximate`: metrics-derived is not measured ink (§E.2).
+        assert!(t.approximate);
+        let b = t.page_bbox;
+        assert!((b.min.x - 100.0).abs() < 1e-6, "{b:?}");
+        assert!((b.max.x - 120.0).abs() < 1e-6, "4 × 0.5 em at 10 pt: {b:?}");
+        assert!((b.min.y - 498.0).abs() < 1e-6, "descent −0.2 em: {b:?}");
+        assert!((b.max.y - 508.0).abs() < 1e-6, "ascent 0.8 em: {b:?}");
+    }
+
+    /// The regression that motivated the change, stated as a property
+    /// rather than as numbers: the pen start is the box's LEFT edge, and a
+    /// point three-quarters of the way along the run is INSIDE the box.
+    ///
+    /// Under the old origin-inflate construction both were false — the box
+    /// began one em to the left of the pen and ended one em to its right,
+    /// so a four-glyph run's last two glyphs sat outside the box that
+    /// claimed to bound them.
+    #[test]
+    fn the_box_covers_the_glyphs_and_not_the_paper_before_them() {
+        let m = model_with_fonts(b"BT /Widthy 10 Tf 100 500 Td (ABCDEFGH) Tj ET");
+        let b = texts(&m).remove(0).page_bbox;
+        // 8 glyphs × 5 pt = 40 pt of run.
+        assert!(
+            b.contains(Point::new(130.0, 502.0)),
+            "a point three-quarters along the run must be inside: {b:?}"
+        );
+        assert!(
+            !b.contains(Point::new(95.0, 502.0)),
+            "blank paper 5 pt before the pen must be outside: {b:?}"
+        );
+        assert!(
+            !b.contains(Point::new(145.0, 502.0)),
+            "blank paper 5 pt past the run must be outside: {b:?}"
+        );
+    }
+
+    /// A **composite** font's advances come from the descendant's `/W`
+    /// array (§9.7.4.3) and its vertical extent from the descendant's
+    /// `/FontDescriptor` (§9.8.1) — a dictionary lookup, not a font-program
+    /// read, so the Identity-H subsetted case every modern producer emits
+    /// is measured, not fallen back on.
+    ///
+    /// `/Cid` is 750/1000 em for CIDs 1-3, ascent 0.9, descent −0.3. Codes
+    /// are TWO bytes (§9.7.6.2), so `<000100020003>` is three glyphs:
+    /// 3 × 0.75 × 20 = 45 pt wide, 18 pt above and 6 pt below the baseline.
+    #[test]
+    fn a_composite_run_is_measured_from_the_descendants_w_array() {
+        let m = model_with_fonts(b"BT /Cid 20 Tf 10 100 Td <000100020003> Tj ET");
+        let t = texts(&m).remove(0);
+        assert_eq!(t.bounds_basis, TextBoundsBasis::FontMetrics);
+        let b = t.page_bbox;
+        assert!((b.min.x - 10.0).abs() < 1e-6, "{b:?}");
+        assert!((b.max.x - 55.0).abs() < 1e-4, "3 × 0.75 em at 20 pt: {b:?}");
+        assert!((b.min.y - 94.0).abs() < 1e-4, "{b:?}");
+        assert!((b.max.y - 118.0).abs() < 1e-4, "{b:?}");
+    }
+
+    /// A **standard-14** font that omits `/Widths` entirely (§9.6.2.2's
+    /// permitted shape) is still measured: the widths come from the
+    /// compiled-in AFM tables and the vertical extent from the compiled-in
+    /// descriptor, so the basis is the good one with no dictionary metrics
+    /// present at all.
+    ///
+    /// Helvetica's `H`=722, `i`=222, at 20 pt ⇒ 18.88 pt of run; ascent
+    /// 718, descent −207.
+    #[test]
+    fn a_standard_14_font_with_no_widths_is_measured_from_the_afm_tables() {
+        let m = model_with_fonts(b"BT /F1 20 Tf 50 50 Td (Hi) Tj ET");
+        let t = texts(&m).remove(0);
+        assert_eq!(t.bounds_basis, TextBoundsBasis::FontMetrics);
+        let b = t.page_bbox;
+        assert!((b.max.x - b.min.x - 18.88).abs() < 1e-3, "{b:?}");
+        assert!((b.max.y - 50.0 - 14.36).abs() < 1e-3, "ascent: {b:?}");
+        assert!((50.0 - b.min.y - 4.14).abs() < 1e-3, "descent: {b:?}");
+    }
+
+    /// A font that is neither standard-14 nor carries `/Widths` has its
+    /// advances ESTIMATED by `text_extract` (`FontNote::WidthsEstimated`).
+    /// The box is still the right shape — it starts at the pen and grows
+    /// with the run — but the basis must say the widths were guessed rather
+    /// than claim `FontMetrics`.
+    #[test]
+    fn estimated_widths_degrade_the_basis_rather_than_being_passed_off() {
+        let m = model_with_fonts(b"BT /Widthless 10 Tf 0 0 Td (AAAA) Tj ET");
+        let t = texts(&m).remove(0);
+        assert_eq!(t.bounds_basis, TextBoundsBasis::EstimatedAdvances);
+        let b = t.page_bbox;
+        assert!((b.min.x - 0.0).abs() < 1e-6, "{b:?}");
+        assert!(b.max.x > 10.0, "four glyphs are wider than one em: {b:?}");
+    }
+
+    /// **The fallback must still work.** `decompose` with [`NoFonts`] — a
+    /// damaged file, a unit test, a caller with no document — produces the
+    /// old origin-hull box, flagged [`TextBoundsBasis::EmBox`] so the
+    /// disclosure shown for it is the blunt one.
+    ///
+    /// A hit target that is loose beats one that panics or vanishes: this
+    /// is the case where pdfce genuinely does not know where the text ends,
+    /// and the honest answer is a coarse box that says it is coarse.
+    #[test]
+    fn with_no_font_the_box_falls_back_to_the_origin_em_square_and_says_so() {
+        let m = model(b"BT /F1 12 Tf 72 700 Td (Hi) Tj ET");
+        let t = texts(&m).remove(0);
+        assert_eq!(t.bounds_basis, TextBoundsBasis::EmBox);
+        let b = t.page_bbox;
+        // Exactly the pre-metrics geometry: a 24 pt square centred on the
+        // pen start.
+        assert!((b.min.x - 60.0).abs() < 1e-6, "{b:?}");
+        assert!((b.max.x - 84.0).abs() < 1e-6, "{b:?}");
+        assert!((b.min.y - 688.0).abs() < 1e-6, "{b:?}");
+        assert!((b.max.y - 712.0).abs() < 1e-6, "{b:?}");
+    }
+
+    /// A text object whose runs MIX measurable and unmeasurable fonts gets
+    /// the union of both constructions, and reports the WEAKER basis: part
+    /// of the box the operator is looking at really is an em-box guess, and
+    /// a disclosure describing only the good half would be the more
+    /// misleading of the two sentences available.
+    ///
+    /// `/Nope` is not in the resource dictionary, so its run has no
+    /// decoder and no widths.
+    #[test]
+    fn a_mixed_run_reports_the_weaker_basis_and_unions_both_boxes() {
+        let m = model_with_fonts(
+            b"BT /Widthy 10 Tf 100 500 Td (AB) Tj /Nope 10 Tf 200 0 Td (CD) Tj ET",
+        );
+        let t = texts(&m).remove(0);
+        assert_eq!(t.bounds_basis, TextBoundsBasis::EmBox);
+        let b = t.page_bbox;
+        // The measured run's left edge is the pen at x=100; the unmeasured
+        // run at x=300 contributes an em box, so the right edge is 310.
+        assert!((b.min.x - 100.0).abs() < 1e-6, "{b:?}");
+        assert!((b.max.x - 310.0).abs() < 1e-6, "{b:?}");
+    }
+
+    /// A **multi-run** text object: several show operators inside one
+    /// `BT`…`ET`, positioned by `Td`/`T*`/`TJ`, are all laid out into one
+    /// box. Two lines 12 pt apart, so the box spans both baselines' extents
+    /// and is wider than either line alone.
+    #[test]
+    fn a_multi_run_text_object_bounds_every_run() {
+        let m = model_with_fonts(b"BT /Widthy 10 Tf 12 TL 100 500 Td (AB) Tj T* (ABCDEF) Tj ET");
+        let t = texts(&m).remove(0);
+        assert_eq!(t.bounds_basis, TextBoundsBasis::FontMetrics);
+        let b = t.page_bbox;
+        // Widest line: 6 glyphs × 5 pt from x=100.
+        assert!((b.min.x - 100.0).abs() < 1e-6, "{b:?}");
+        assert!((b.max.x - 130.0).abs() < 1e-6, "{b:?}");
+        // Top from the first line's ascent (500 + 8), bottom from the
+        // second line's descent (488 − 2).
+        assert!((b.max.y - 508.0).abs() < 1e-6, "{b:?}");
+        assert!((b.min.y - 486.0).abs() < 1e-6, "{b:?}");
+    }
+
+    /// The layout parameters §9.4.4 folds into the advance are all applied:
+    /// `Tc` widens every glyph's step, `Tz` scales the whole displacement,
+    /// and a `TJ` offset moves the pen between glyphs.
+    ///
+    /// Baseline `(AB)` at 10 pt with /Widthy is 10 pt wide. With `Tc 2`
+    /// each of the two steps grows by 2, so the run's advance is 14 — but
+    /// the BOX ends at the last glyph's right edge, which is the first
+    /// glyph's advance (7) plus the second glyph's width (5) = 12.
+    #[test]
+    fn character_spacing_and_horizontal_scaling_enter_the_box() {
+        /// The right edge of the one text object `src` decomposes to.
+        fn right_edge(src: &[u8]) -> f64 {
+            let m = model_with_fonts(src);
+            texts(&m).remove(0).page_bbox.max.x
+        }
+
+        assert!((right_edge(b"BT /Widthy 10 Tf 0 0 Td (AB) Tj ET") - 10.0).abs() < 1e-6);
+        assert!((right_edge(b"BT /Widthy 10 Tf 2 Tc 0 0 Td (AB) Tj ET") - 12.0).abs() < 1e-6);
+        // Tz 50 halves every horizontal displacement AND the glyph's own
+        // width (both are inside Trm's `a` element / the `× Th` product).
+        assert!((right_edge(b"BT /Widthy 10 Tf 50 Tz 0 0 Td (AB) Tj ET") - 5.0).abs() < 1e-6);
+        // A TJ offset of −1000 (one em, subtracted from the horizontal
+        // coordinate ⇒ a move to the RIGHT) opens a 10 pt gap before the
+        // second glyph, so the run ends at 5 + 10 + 5 = 20.
+        assert!((right_edge(b"BT /Widthy 10 Tf 0 0 Td [(A) -1000 (B)] TJ ET") - 20.0).abs() < 1e-6);
+    }
+
+    /// A scaling/translating `Tm` and a `cm` both reach the box, because
+    /// every glyph corner is mapped through `Trm = params × Tm × CTM`
+    /// (§9.4.4) rather than through the CTM alone. The pre-metrics box
+    /// folded neither into its inflation, which is why a text object inside
+    /// a scaled form could not be clicked at all.
+    #[test]
+    fn the_text_matrix_and_ctm_both_scale_the_box() {
+        // Tm doubles: a 10 pt (AB) run becomes 20 pt wide starting at 100.
+        let m = model_with_fonts(b"BT /Widthy 10 Tf 2 0 0 2 100 200 Tm (AB) Tj ET");
+        let b = texts(&m).remove(0).page_bbox;
+        assert!((b.min.x - 100.0).abs() < 1e-6, "{b:?}");
+        assert!((b.max.x - 120.0).abs() < 1e-6, "{b:?}");
+        assert!((b.max.y - 200.0 - 16.0).abs() < 1e-6, "ascent × 2: {b:?}");
+
+        // A `cm` scale multiplies on top of the same run.
+        let m = model_with_fonts(b"3 0 0 3 0 0 cm BT /Widthy 10 Tf 0 0 Td (AB) Tj ET");
+        let b = texts(&m).remove(0).page_bbox;
+        assert!((b.max.x - 30.0).abs() < 1e-6, "{b:?}");
+    }
+
+    /// `Tc`/`Tw`/`Tz`/`Ts` are TEXT STATE, which §9.3 makes part of the
+    /// graphics state — so `q`/`Q` saves and restores them. A `Tz` set
+    /// inside a `q`…`Q` must not leak out and squeeze a later text object.
+    #[test]
+    fn text_state_parameters_are_saved_and_restored_by_q_and_capital_q() {
+        let m = model_with_fonts(b"q 50 Tz Q BT /Widthy 10 Tf 0 0 Td (AB) Tj ET");
+        let b = texts(&m).remove(0).page_bbox;
+        assert!(
+            (b.max.x - 10.0).abs() < 1e-6,
+            "the Tz inside q/Q must not survive it: {b:?}"
+        );
+    }
+
+    /// `'` is `T*` then `Tj` and `"` is `aw Tw`, `ac Tc`, `T*`, `Tj`
+    /// (§9.4.3 Table 109). Both move to the next line FIRST, so a box that
+    /// claims to be where the text is has to account for the leading.
+    #[test]
+    fn the_quote_operators_advance_a_line_before_showing() {
+        let m = model_with_fonts(b"BT /Widthy 10 Tf 20 TL 0 100 Td (AB) ' ET");
+        let b = texts(&m).remove(0).page_bbox;
+        // The run is shown at y = 100 − 20 = 80, so the top of the box is
+        // 80 + 8 (ascent), not 108.
+        assert!((b.max.y - 88.0).abs() < 1e-6, "{b:?}");
+        assert!((b.min.y - 78.0).abs() < 1e-6, "{b:?}");
     }
 
     /// The `Tf` operands are read from the STREAM, so the resource name and

@@ -5341,9 +5341,11 @@ impl PdfceApp {
     ///
     /// This gap bites hardest exactly where it matters most — Text is the
     /// object kind most likely to be the "box over nothing" culprit, because
-    /// its bbox is inflated around glyph ORIGINS and so routinely covers
-    /// whitespace. The row says so in words, which is the part of the answer
-    /// that is buildable now.
+    /// its bbox is never measured glyph ink: it is laid out from the font's
+    /// advance widths and designed ascent/descent where those are readable,
+    /// and falls back to a coarse em box around the run's start where they
+    /// are not. The row says which, in words, and the full sentence in the
+    /// readout explains it.
     ///
     /// ## Virtualized, never silently truncated (§B.6)
     ///
@@ -10554,13 +10556,17 @@ mod tests {
     ///
     /// This is the case §0.2 of the ui-spec identified as the most likely real
     /// cause of "a box highlighting that doesn't seem to correspond to
-    /// anything" — the text bbox is inflated around glyph origins, so clicking
-    /// whitespace near text selects the text and draws a box over blank paper.
+    /// anything".
+    ///
+    /// `decompose` (as opposed to `decompose_page`) resolves no fonts, so
+    /// this exercises the [`TextBoundsBasis::EmBox`] fallback deliberately:
+    /// the sentence shown for it is the one that must NOT reassure, because
+    /// that box really can miss the glyphs it claims to bound.
     #[test]
     fn a_text_selection_readout_explains_its_approximate_box() {
         use object_summary::ObjectNote;
         use pdfce_core::content::ContentStream;
-        use pdfce_core::vector::{Matrix, NoXObjects, decompose};
+        use pdfce_core::vector::{Matrix, NoXObjects, TextBoundsBasis, decompose};
 
         let cs = ContentStream::parse(b"BT /F1 12 Tf 40 40 Td (Hi) Tj ET".to_vec()).expect("parse");
         let objects = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
@@ -10571,13 +10577,21 @@ mod tests {
         // The size is stated, so an operator can compare the box on screen
         // against the number and see for themselves that they disagree.
         assert!(readout.contains("pt at ("), "{readout:?}");
+        let note_kind = ObjectNote::ApproximateTextBounds(TextBoundsBasis::EmBox);
         assert!(
-            summary.notes.contains(&ObjectNote::ApproximateTextBounds),
+            summary.notes.contains(&note_kind),
             "{:?}", // ui-text-exempt: test assertion payload, never displayed
             summary.notes
         );
-        let note = ui_text::object_note(ObjectNote::ApproximateTextBounds);
-        assert!(note.contains("approximate"), "{note:?}");
+        let note = ui_text::object_note(note_kind);
+        // The two facts §E.3 makes binding for the fallback sentence: it
+        // names the miss direction, and it does NOT reassure that a click
+        // was correct anyway.
+        assert!(note.contains("MISS"), "{note:?}");
+        assert!(
+            !note.contains("selection is correct"),
+            "the fallback sentence must not reassure: {note:?}"
+        );
     }
 
     /// The degenerate case found while observing the running app: a horizontal
@@ -10803,10 +10817,15 @@ mod tests {
     /// ```text
     /// pdfce-cli object-list fixtures/synthetic/vector/mixed.pdf --page 1
     /// object page=1 index=0 kind=path  bbox=20,20,280,20  subpaths=1 anchors=2 …
-    /// object page=1 index=1 kind=text  bbox=16,136,44,164  approximate=1
+    /// object page=1 index=1 kind=text  bbox=30,147.102,70.46,160.052  approximate=1 bounds=font-metrics
     /// object page=1 index=2 kind=image bbox=30,250,90,290  source=xobject
     /// object-list … objects=3 paths=1 text=1 images=1 forms=0
     /// ```
+    ///
+    /// The text row's bbox is the accumulated advances of `(Vector)` in
+    /// Helvetica 14 from `30 150 Td` — 40.46 pt wide, 10.05 above the
+    /// baseline and 2.90 below. It read `16,136,44,164` (a 28 × 28 pt square
+    /// centred on the pen start) before the advances were accumulated.
     ///
     /// run against this fixture. The panel reaches the model through
     /// `ObjectModelProvider`, which the CLI does not use — but both call the
@@ -10841,6 +10860,21 @@ mod tests {
             objects[2],
             pdfce_core::vector::VectorObject::Image(_)
         ));
+
+        // The text object's bbox, to the same numbers the oracle prints —
+        // the value that would silently diverge first if either side ever
+        // grew its own text-layout arithmetic.
+        let pdfce_core::vector::VectorObject::Text(text) = &objects[1] else {
+            panic!("index 1 is the text object");
+        };
+        assert_eq!(
+            text.bounds_basis,
+            pdfce_core::vector::TextBoundsBasis::FontMetrics
+        );
+        assert!((text.page_bbox.min.x - 30.0).abs() < 1e-6, "{text:?}");
+        assert!((text.page_bbox.max.x - 70.46).abs() < 1e-3, "{text:?}");
+        assert!((text.page_bbox.min.y - 147.102).abs() < 1e-3, "{text:?}");
+        assert!((text.page_bbox.max.y - 160.052).abs() < 1e-3, "{text:?}");
 
         // The rows the panel would draw, top to bottom. Front-most first, so
         // the image (painted last) heads the list and the stroked line

@@ -51,9 +51,14 @@
 //! | `font: None` | [`ObjectSummary::font`] = `None` | No `Tf` was in effect. Never invented. |
 //! | `pixel_size: None` | [`ObjectSummary::pixels`] = `None` | A form XObject has no samples; a malformed image's `/Width`/`/Height` are unusable. Deriving a number from the bbox would state a resolution the file does not have. |
 //!
-//! The one thing still not said is a text object's **exact** extent — the
-//! bbox remains the origin-hull approximation
-//! ([`ObjectNote::ApproximateTextBounds`], on every text object).
+//! The one thing still not said is a text object's **exact** extent. The
+//! bbox is now laid out from the font's own metrics — per-code advances
+//! from `/Widths`/`/W`/the standard-14 AFM tables, height from
+//! `/FontDescriptor` — so it is where a conforming reader puts the run, but
+//! it is not measured glyph ink, and for a font with no usable metrics it
+//! falls back to the old origin hull. [`ObjectNote::ApproximateTextBounds`]
+//! is on every text object and carries which of the four constructions
+//! produced this one.
 //!
 //! ## [`ObjectNote`] — the point of the whole module
 //!
@@ -66,7 +71,7 @@
 //!
 //! | Note | Real cause of a "box over nothing" |
 //! |---|---|
-//! | [`ObjectNote::ApproximateTextBounds`] | `TextObject`'s bbox is the hull of glyph ORIGINS inflated by the largest `Tf` size — routinely wider and taller than the ink, so clicking whitespace *near* text legitimately selects it. `approximate` is always `true`, so this note is on every text object. |
+//! | [`ObjectNote::ApproximateTextBounds`] | `TextObject`'s bbox is never measured glyph ink, so it can enclose paper the operator can see is empty (a font's designed ascent sits above most lowercase letters) and, in the `EmBox` fallback, can miss visible glyphs entirely. `approximate` is always `true`, so this note is on every text object; its payload says which construction produced the box, and therefore which of four sentences explains it. |
 //! | [`ObjectNote::PaintsNothing`] | An `n`-op path (a clip, or a discarded construction) is a real, selectable object that paints no pixels at all (`PaintStyle::is_invisible`). |
 //! | [`ObjectNote::DegenerateBounds`] | A horizontal or vertical rule has a bbox of zero height or width. It is selectable and correct — and a zero-extent outline rect strokes **nothing**, so before this Pass the operator saw a click that appeared to do nothing at all. |
 //! | [`ObjectNote::NoBounds`] | The object has no finite geometry, so no outline can be drawn anywhere. Rare, and previously indistinguishable from a dead click. |
@@ -80,7 +85,7 @@
 //! verbatim instead and lets the operator draw the conclusion.
 
 use pdfce_core::vector::{
-    Bounds, ImageSource, PaintStyle, Rgb, TextFont, TextPreview, VectorObject,
+    Bounds, ImageSource, PaintStyle, Rgb, TextBoundsBasis, TextFont, TextPreview, VectorObject,
 };
 
 /// Which kind of thing a selection is.
@@ -135,9 +140,22 @@ pub enum Degeneracy {
 /// a disclosure rather than a guess (rule 4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ObjectNote {
-    /// The bounds are an approximation inflated around glyph origins, so the
-    /// outline is wider and taller than the visible text.
-    ApproximateTextBounds,
+    /// The bounds of a text object are an approximation — of the kind the
+    /// payload names.
+    ///
+    /// Parameterized rather than split into four sibling variants for the
+    /// same reason [`ObjectNote::DegenerateBounds`] carries a
+    /// [`Degeneracy`]: every consumer that asks *"is this box
+    /// approximate?"* wants one answer for all four, and every consumer
+    /// that EXPLAINS the box needs to know which one — so the question and
+    /// the detail must not be two separate notes that could disagree.
+    ///
+    /// ui-spec §E.3 makes carrying the reason binding: shipping a better
+    /// box with one sentence describing all four cases would leave some
+    /// text objects disclosed by a sentence that no longer matches the box
+    /// actually drawn, which is a regression in honesty rather than the
+    /// improvement the geometry work was for.
+    ApproximateTextBounds(TextBoundsBasis),
     /// The path paints no pixels — an `n`-op clip or discarded construction.
     PaintsNothing,
     /// The bounds have zero extent on one or both axes.
@@ -176,8 +194,11 @@ impl ObjectNote {
         dead_code,
         reason = "the note catalog; swept by the string tests today, and the list any future notes-legend or filter must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 9] = [
-        Self::ApproximateTextBounds,
+    pub const ALL: [Self; 12] = [
+        Self::ApproximateTextBounds(TextBoundsBasis::FontMetrics),
+        Self::ApproximateTextBounds(TextBoundsBasis::MetricAdvancesNominalHeight),
+        Self::ApproximateTextBounds(TextBoundsBasis::EstimatedAdvances),
+        Self::ApproximateTextBounds(TextBoundsBasis::EmBox),
         Self::PaintsNothing,
         Self::DegenerateBounds(Degeneracy::VerticalRule),
         Self::DegenerateBounds(Degeneracy::HorizontalRule),
@@ -278,11 +299,20 @@ impl ObjectSummary {
     /// R84 (never colour alone): a solid box claims *this is where the object
     /// is*, a dashed box claims *the object is somewhere in here*. Today only
     /// text is approximate, but this asks the QUESTION rather than testing
-    /// the kind, so an exact text bbox (ui-spec §B.4 #1) turns the dashes off
-    /// by itself with no second place to update.
+    /// the kind, so an exact text bbox turns the dashes off by itself with
+    /// no second place to update.
+    ///
+    /// **All four [`TextBoundsBasis`] cases stay dashed**, including
+    /// [`TextBoundsBasis::FontMetrics`] (ui-spec §E.2): a metrics-derived
+    /// box is where a conforming reader lays the run out, but it is still
+    /// not measured ink — accented capitals exceed `/Ascent` by that
+    /// entry's own definition and italic overhang leans past the advance.
+    /// The dashes' claim narrowed; it did not become false.
     #[must_use]
     pub fn bounds_are_approximate(&self) -> bool {
-        self.notes.contains(&ObjectNote::ApproximateTextBounds)
+        self.notes
+            .iter()
+            .any(|n| matches!(n, ObjectNote::ApproximateTextBounds(_)))
     }
 }
 
@@ -332,8 +362,10 @@ pub fn describe_object(object: &VectorObject) -> ObjectSummary {
             if t.approximate {
                 // Insert FIRST: for text this is the whole explanation, and a
                 // degenerate text bbox (possible for an empty `BT`/`ET`) is
-                // the lesser fact.
-                notes.insert(0, ObjectNote::ApproximateTextBounds);
+                // the lesser fact. The basis travels with the note so the
+                // sentence shown always describes the box actually drawn
+                // (ui-spec §E.3).
+                notes.insert(0, ObjectNote::ApproximateTextBounds(t.bounds_basis));
             }
             let (text, text_truncated) = match &t.preview {
                 // An all-U+FFFD string is withheld: `ObjectNote::
@@ -550,8 +582,15 @@ mod tests {
         assert_eq!(font.base_font.as_deref(), Some("Helvetica"));
         assert_eq!(font.size, 24.0);
         // A decodable string earns no decode disclosure — only the
-        // ever-present approximate-bounds one.
-        assert_eq!(text.notes, vec![ObjectNote::ApproximateTextBounds]);
+        // ever-present approximate-bounds one. The fixture's Helvetica is a
+        // standard-14 face, so its widths and its ascent/descent are both
+        // real metrics and the basis is the good one.
+        assert_eq!(
+            text.notes,
+            vec![ObjectNote::ApproximateTextBounds(
+                TextBoundsBasis::FontMetrics
+            )]
+        );
     }
 
     /// The honest-failure case: a font whose encoding defeats decoding
@@ -650,13 +689,20 @@ mod tests {
     }
 
     /// The other headline case, and the one the operator most likely hit:
-    /// a text object is ALWAYS approximate, so its outline routinely covers
+    /// a text object is ALWAYS approximate, so its outline covers
     /// whitespace around and above the glyphs.
+    ///
+    /// `only` decomposes with no document behind it, so no font resolves and
+    /// the basis is the em-box fallback — which is exactly the state whose
+    /// disclosure has to be the blunt one.
     #[test]
     fn a_text_object_always_discloses_its_approximate_bounds() {
         let s = only(b"BT /F1 12 Tf 40 40 Td (Hi) Tj ET");
         assert_eq!(s.kind, ObjectKind::Text);
-        assert_eq!(s.notes.first(), Some(&ObjectNote::ApproximateTextBounds));
+        assert_eq!(
+            s.notes.first(),
+            Some(&ObjectNote::ApproximateTextBounds(TextBoundsBasis::EmBox))
+        );
         assert!(s.bounds_are_approximate());
         // Nothing is fabricated for text: no string, no font, no colour.
         assert_eq!(s.colour, None);

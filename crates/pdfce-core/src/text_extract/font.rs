@@ -242,8 +242,92 @@ pub struct ExtractFont {
     /// Glyph-space → text-space scale. `0.001` for every font except
     /// Type 3, where §9.6.5's `/FontMatrix` sets it.
     width_scale: f32,
+    /// The font's vertical extent, text space (§9.8 Table 122).
+    vertical: Vertical,
     /// Everything worth disclosing about this font.
     pub notes: Vec<FontNote>,
+}
+
+/// A font's vertical extent in **text space** (already divided by the
+/// glyph-space scale), plus where it came from.
+///
+/// ISO 32000-1 §9.8 Table 122 defines `/Ascent` ("the maximum height above
+/// the baseline reached by glyphs in this font", accents excluded) and
+/// `/Descent` ("the maximum depth below the baseline… shall be a negative
+/// number"), both **required** for every font descriptor except a Type 3's,
+/// and both "units in glyph space" (§9.8.1). Together they are the only
+/// dictionary-sourced answer to *how tall is a line of this font* — the
+/// vertical half of a text object's bounding box, exactly as the widths are
+/// its horizontal half.
+///
+/// The `nominal` flag is the honesty half: when neither the descriptor, its
+/// `/FontBBox`, nor a compiled-in standard-14 descriptor could supply the
+/// pair, the numbers below are a **guess of pdfce's own** and every consumer
+/// that reports a box built from them must say so rather than present the
+/// guess as the font's designed metrics (rule 4).
+#[derive(Debug, Clone, Copy)]
+struct Vertical {
+    /// Maximum height above the baseline, text space, positive.
+    ascent: f32,
+    /// Maximum depth below the baseline, text space, **negative**.
+    descent: f32,
+    /// `true` when [`NOMINAL_ASCENT`]/[`NOMINAL_DESCENT`] were substituted
+    /// because the font supplied nothing usable.
+    nominal: bool,
+}
+
+/// The ascent pdfce substitutes when a font supplies no usable vertical
+/// metrics — one full em above the baseline.
+///
+/// Deliberately the same number `redact`'s glyph box uses
+/// (`GLYPH_BOX_ASCENT`), and for the same reason: with nothing to measure,
+/// **over-covering is the safe direction**. A hit target that is slightly
+/// too tall costs a click that selects text the operator was aiming just
+/// above; one that is too short costs a click on the letters themselves
+/// doing nothing, which is the failure this whole mechanism exists to
+/// remove. One em is above every real font's `/Ascent` (Helvetica's is
+/// 0.718 em) without being absurd.
+const NOMINAL_ASCENT: f32 = 1.0;
+
+/// The descent pdfce substitutes alongside [`NOMINAL_ASCENT`] — a quarter
+/// em below the baseline, negative per §9.8 Table 122's sign convention,
+/// and again `redact`'s `GLYPH_BOX_DESCENT` value.
+const NOMINAL_DESCENT: f32 = -0.25;
+
+/// **The one advance formula.** ISO 32000-1 §9.4.4's horizontal glyph
+/// displacement, in unscaled text-space units.
+///
+/// > `tx = ((w0 − Tj/1000) × Tfs + Tc + Tw) × Th`
+///
+/// This function takes `w0` with the `Tj` term **already folded in** (the
+/// callers that support `TJ` apply the array's kerning offsets to the text
+/// matrix as they meet them, so the offset never reaches here), leaving:
+///
+/// > `tx = (w0 × Tfs + Tc + Tw) × Th`
+///
+/// where `w0` is the glyph's width already in text space (what
+/// [`ExtractFont::width`] returns), `Tfs` the `Tf` size, `Tc` the character
+/// spacing (§9.3.2), `Tw` the word spacing (§9.3.3 — the caller decides
+/// whether it applies, since it fires only for the single-byte code 32),
+/// and `Th` the horizontal scaling `Tz/100` (§9.3.4).
+///
+/// **Why it is a function at all.** `pdfce-core` had this arithmetic
+/// written out three times (extraction's `show_code`, redaction's `glyph`,
+/// and the text-edit layout path) before a fourth consumer — the vector
+/// object model's text bounding box — needed it. Three copies that agree
+/// today are three copies that can disagree tomorrow, which decision 011
+/// §Z2 names as this project's recurring failure shape. Every consumer now
+/// calls this; `pdfce-render`'s `TextState::advance_for` is the same
+/// formula stated in the rendering crate, which cannot depend on core's
+/// internals, and is cross-checked by the render-parity gate rather than
+/// shared.
+///
+/// `f64` throughout because two of the three callers already work in `f64`
+/// and the third (extraction) is narrowed back to `f32` at its own call
+/// site; doing the arithmetic in the wider type never loses precision the
+/// narrower one had.
+pub(crate) fn advance_tx(w0: f64, tfs: f64, tc: f64, tw: f64, th: f64) -> f64 {
+    (w0 * tfs + tc + tw) * th
 }
 
 /// Advance-width tables, in the two shapes the two font models use.
@@ -325,6 +409,25 @@ impl ExtractFont {
             });
         }
 
+        // §9.8.1: "Beginning with PDF 1.5, font descriptors may be used
+        // with Type 3 fonts" — but a Type 3's descriptor numbers are in
+        // ITS glyph space, which `/FontMatrix` defines with six elements,
+        // not the single horizontal scale `width_scale` carries. Rather
+        // than scale a vertical extent by a horizontal factor, a Type 3
+        // takes the nominal fallback and SAYS it is nominal.
+        let vertical = if is_type3 {
+            Vertical {
+                ascent: NOMINAL_ASCENT,
+                descent: NOMINAL_DESCENT,
+                nominal: true,
+            }
+        } else {
+            let descriptor = doc
+                .resolve(font_dict.get(b"FontDescriptor").unwrap_or(&Object::Null))
+                .as_dict();
+            resolve_vertical(doc, descriptor, std14)
+        };
+
         Self {
             base_font,
             to_unicode,
@@ -333,6 +436,7 @@ impl ExtractFont {
             width: CodeWidth::One,
             widths,
             width_scale,
+            vertical,
             notes,
         }
     }
@@ -418,6 +522,17 @@ impl ExtractFont {
             |d| composite_widths(doc, d),
         );
 
+        // §9.8.1: "Font descriptors shall not be used with Type 0 fonts."
+        // The descriptor belongs to the DESCENDANT CIDFont, so that is
+        // where the vertical extent is read from. A Type 0 has no
+        // standard-14 identity, so there is no AFM rung here — either the
+        // descendant supplies metrics or the extent is nominal.
+        let vertical = resolve_vertical(
+            doc,
+            descendant.and_then(|d| doc.resolve(d.get(b"FontDescriptor")?).as_dict()),
+            None,
+        );
+
         Self {
             base_font,
             to_unicode,
@@ -426,6 +541,7 @@ impl ExtractFont {
             width,
             widths,
             width_scale: 0.001,
+            vertical,
             notes,
         }
     }
@@ -522,6 +638,34 @@ impl ExtractFont {
                 .map_or(*default, |&(_, _, w)| w),
         };
         glyph_space * self.width_scale
+    }
+
+    /// The font's maximum height above the baseline, **text space**
+    /// (§9.8 Table 122 `/Ascent`), so a caller multiplies by the `Tf` size
+    /// directly — the vertical twin of [`Self::width`].
+    ///
+    /// Always positive. See [`Vertical`] for the resolution ladder and for
+    /// what [`Self::vertical_is_nominal`] discloses.
+    pub(crate) fn ascent(&self) -> f32 {
+        self.vertical.ascent
+    }
+
+    /// The font's maximum depth below the baseline, **text space**
+    /// (§9.8 Table 122 `/Descent`). **Negative**, per the clause's own
+    /// stated sign convention.
+    pub(crate) fn descent(&self) -> f32 {
+        self.vertical.descent
+    }
+
+    /// Whether [`Self::ascent`]/[`Self::descent`] are pdfce's nominal
+    /// fallback rather than the font's own numbers.
+    ///
+    /// A consumer that draws a box from them must disclose this: a box
+    /// built on a guess and a box built on the file's declared metrics are
+    /// two different claims, and presenting the first as the second is the
+    /// exact shape rule 4 forbids.
+    pub(crate) fn vertical_is_nominal(&self) -> bool {
+        self.vertical.nominal
     }
 
     /// How many bytes one character code occupies in a show string: one
@@ -846,6 +990,87 @@ fn simple_widths(
         *slot = estimate;
     }
     Widths::Simple(table)
+}
+
+/// Resolve a font's vertical extent from dictionary data alone (§9.8
+/// Table 122), in text space, with a four-rung ladder and an honest
+/// bottom rung.
+///
+/// | Rung | Source | Why it is preferred to the next |
+/// |---|---|---|
+/// | 1 | `/Ascent` + `/Descent` on the descriptor | The two entries §9.8 defines for exactly this question, and **required** on every non-Type-3 descriptor. Accents are excluded by the clause's own wording, which is the small, named residual inaccuracy of any box built from them. |
+/// | 2 | `/FontBBox` `ury` / `lly` | Also required (Table 122), and it *includes* accents, so it over-covers rather than under-covers — the safe direction for a hit target. Second because it is the box enclosing **every** glyph placed at a common origin, which for a font with one tall outlier is materially looser than `/Ascent`. |
+/// | 3 | The compiled-in standard-14 descriptor | §9.6.2.2 permits a standard-14 font dictionary to carry no descriptor at all; `pdfce-core::fontdata` holds the real AFM-derived numbers for those 14 faces, so this is still the FONT's metrics, not a guess. |
+/// | 4 | [`NOMINAL_ASCENT`]/[`NOMINAL_DESCENT`] | Nothing usable was found. Flagged `nominal: true` so every consumer discloses the guess. |
+///
+/// Both rungs 1 and 2 require BOTH numbers before they are accepted: half
+/// a measurement silently completed from a different source would be a
+/// composite no clause describes.
+///
+/// The `/1000` is §9.8.1's "all integer values shall be units in glyph
+/// space", with §9.2.4's glyph→text conversion; the sole exception (a
+/// Type 3's `/FontMatrix` glyph space) never reaches here, see
+/// [`ExtractFont::resolve_simple`].
+fn resolve_vertical(
+    doc: &DocumentView<'_>,
+    descriptor: Option<&Dict>,
+    std14: Option<Std14>,
+) -> Vertical {
+    const GLYPH_SPACE: f32 = 0.001;
+
+    if let Some(d) = descriptor {
+        let num = |key: &[u8]| doc.resolve(d.get(key)?).as_number();
+        // Rung 1. `/Descent` "shall be a negative number" — a producer
+        // that writes it positive is corrected here rather than trusted,
+        // since a positive descent would fold the box's bottom edge above
+        // the baseline and make the box shorter than the ink.
+        if let (Some(a), Some(dsc)) = (num(b"Ascent"), num(b"Descent"))
+            && a > 0.0
+            && dsc != 0.0
+        {
+            return Vertical {
+                ascent: a as f32 * GLYPH_SPACE,
+                descent: -(dsc.abs() as f32) * GLYPH_SPACE,
+                nominal: false,
+            };
+        }
+        // Rung 2: `/FontBBox` is `[llx lly urx ury]` (§7.9.5).
+        if let Some(items) = doc
+            .resolve(d.get(b"FontBBox").unwrap_or(&Object::Null))
+            .as_array()
+            && let Some(n) = <[f64; 4]>::try_from(
+                items
+                    .iter()
+                    .filter_map(|o| doc.resolve(o).as_number())
+                    .collect::<Vec<f64>>(),
+            )
+            .ok()
+            .filter(|n| n[3] > n[1])
+        {
+            return Vertical {
+                ascent: n[3] as f32 * GLYPH_SPACE,
+                descent: n[1].min(0.0) as f32 * GLYPH_SPACE,
+                nominal: false,
+            };
+        }
+    }
+
+    // Rung 3.
+    if let Some(std14) = std14 {
+        let d = fontdata::std14_descriptor(std14);
+        return Vertical {
+            ascent: f32::from(d.ascender) * GLYPH_SPACE,
+            descent: -(f32::from(d.descender).abs()) * GLYPH_SPACE,
+            nominal: false,
+        };
+    }
+
+    // Rung 4.
+    Vertical {
+        ascent: NOMINAL_ASCENT,
+        descent: NOMINAL_DESCENT,
+        nominal: true,
+    }
 }
 
 /// §9.7.4.3 composite-font widths: `/DW` (Table 117 default 1000) and

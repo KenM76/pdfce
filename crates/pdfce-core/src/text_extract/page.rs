@@ -827,7 +827,16 @@ impl Walk<'_> {
         } else {
             0.0
         };
-        let tx = (w0 * self.ts.size + self.ts.char_spacing + tw) * self.ts.h_scale;
+        // The ONE copy of §9.4.4's displacement (`font::advance_tx`), not a
+        // local restatement of it — see that function's "why it is a
+        // function at all".
+        let tx = super::font::advance_tx(
+            f64::from(w0),
+            f64::from(self.ts.size),
+            f64::from(self.ts.char_spacing),
+            f64::from(tw),
+            f64::from(self.ts.h_scale),
+        ) as f32;
 
         let invisible = matches!(self.ts.render_mode, 3 | 7);
         if invisible {

@@ -688,7 +688,10 @@ impl<'a> Surgeon<'a> {
         };
         let w0 = f64::from(font.width(code));
         let tw = if word_spacing { self.tw } else { 0.0 };
-        let tx = (w0 * self.tf_size + self.tc + tw) * self.th;
+        // The ONE copy of §9.4.4's displacement (`text_extract::font::
+        // advance_tx`), shared with extraction and with the vector object
+        // model's text bounding box.
+        let tx = crate::text_extract::font::advance_tx(w0, self.tf_size, self.tc, tw, self.th);
 
         // Trm = [Tfs·Th 0 0 Tfs 0 Ts] × Tm × CTM (§9.4.4). The glyph box
         // in text space is x ∈ [0, w0], y ∈ [-descent, ascent], deliberately

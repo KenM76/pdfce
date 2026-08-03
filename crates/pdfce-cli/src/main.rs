@@ -7611,6 +7611,30 @@ fn paint_token(style: pdfce_core::vector::PaintStyle) -> &'static str {
     }
 }
 
+/// How a text object's bbox was built, as a stable token — the CLI half of
+/// ui-spec §E.3's requirement that a box's *provenance* be recoverable
+/// wherever the box is shown.
+///
+/// `approximate=1` alone cannot answer the question a script (or an
+/// operator diagnosing a missed click) actually has, because it is `1` for
+/// every text object. These four tokens can:
+///
+/// | Token | Meaning |
+/// |---|---|
+/// | `font-metrics` | Advances from the font's own width table, height from its `/FontDescriptor`. The box is where a conforming reader lays the run out. |
+/// | `metric-advances-nominal-height` | Advances real; no ascent/descent available, so the height is a nominal em (the Type 3 case). |
+/// | `estimated-advances` | The font carried no width source at all, so the advances are estimated from metrically-similar Helvetica (§9.6.2.2 does not permit such a font; real files ship them). |
+/// | `em-box` | No font resolved for at least one show operator: that part of the box is the legacy square around the run's START position, which reaches into blank paper before the text and stops short of its end. |
+fn bounds_basis_token(basis: pdfce_core::vector::TextBoundsBasis) -> &'static str {
+    use pdfce_core::vector::TextBoundsBasis;
+    match basis {
+        TextBoundsBasis::FontMetrics => "font-metrics",
+        TextBoundsBasis::MetricAdvancesNominalHeight => "metric-advances-nominal-height",
+        TextBoundsBasis::EstimatedAdvances => "estimated-advances",
+        TextBoundsBasis::EmBox => "em-box",
+    }
+}
+
 /// A page-space [`Bounds`](pdfce_core::vector::Bounds) as the stable
 /// `minx,miny,maxx,maxy` token, or `none` for a box that enclosed no finite
 /// point.
@@ -7620,11 +7644,39 @@ fn paint_token(style: pdfce_core::vector::PaintStyle) -> &'static str {
 /// and `Bounds::is_empty` is `min > max`, not `min == max`. Reporting such a
 /// box as `none` would have made exactly the thin geometry this tool exists
 /// to find look unlocatable.
+/// Coordinates are printed at **four decimal places with trailing zeros
+/// trimmed**, so `50.0` prints as `50` (as it always has) and a
+/// metrics-derived text edge at `70.46000272035599` prints as `70.46`
+/// rather than as seventeen digits of `f32`-widening artefact. Four
+/// decimals is 1/10 000 of a PDF point — four orders of magnitude finer
+/// than the hit-test tolerance that consumes these numbers, so the
+/// rounding cannot change any answer this tool gives.
 fn bbox_token(b: pdfce_core::vector::Bounds) -> String {
     if b.is_empty() {
         "none".to_owned()
     } else {
-        format!("{},{},{},{}", b.min.x, b.min.y, b.max.x, b.max.y)
+        format!(
+            "{},{},{},{}",
+            coord_token(b.min.x),
+            coord_token(b.min.y),
+            coord_token(b.max.x),
+            coord_token(b.max.y)
+        )
+    }
+}
+
+/// One page-space coordinate, at four decimal places with trailing zeros
+/// (and a trailing `.`) trimmed — see [`bbox_token`].
+fn coord_token(v: f64) -> String {
+    let s = format!("{v:.4}");
+    let trimmed = s.trim_end_matches('0').trim_end_matches('.');
+    // `-0` is the one output the trim can produce that reads as a defect
+    // rather than as a number; it is a real f64 value, and `0` is the same
+    // point.
+    if trimmed == "-0" {
+        "0".to_owned()
+    } else {
+        trimmed.to_owned()
     }
 }
 
@@ -7753,10 +7805,10 @@ fn object_detail(obj: &pdfce_core::vector::VectorObject) -> (&'static str, Strin
                 ),
             )
         }
-        // `approximate=1` means the bbox was estimated from the text
-        // positioning operators rather than measured from glyph metrics —
-        // worth surfacing, because it is the reason a click that looks
-        // inside a glyph can miss (or a click beside it can hit).
+        // `approximate=1` means the bbox is not measured glyph ink. It is
+        // `1` for every text object and always will be until pdfce reads
+        // glyph outlines, so on its own it does not distinguish the good
+        // case from the bad one — which is what `bounds=` is for.
         //
         // The `text=`/`font=`/`resource=`/`size=` fields are the CLI half of
         // ui-spec §B.4 #1 (rule 11): the GUI's object row and this line
@@ -7765,8 +7817,9 @@ fn object_detail(obj: &pdfce_core::vector::VectorObject) -> (&'static str, Strin
         VectorObject::Text(t) => (
             "text",
             format!(
-                "approximate={} {} {}",
+                "approximate={} bounds={} {} {}",
                 u32::from(t.approximate),
+                bounds_basis_token(t.bounds_basis),
                 font_fields(t.font.as_ref()),
                 text_preview_fields(&t.preview),
             ),
