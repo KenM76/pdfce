@@ -1538,13 +1538,76 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **List** a page's vector objects in paint order — the index discovery
+    /// path for `object-move`, `object-delete` and `node-move`.
+    ///
+    /// Read-only; nothing is written. One `object …` line per selectable
+    /// object, then an `object-list …` summary line. The `index=` on each
+    /// line IS the value those three editing subcommands take as `--object`:
+    /// both come from the same `pdfce_core::vector::decompose_page` walk, in
+    /// the same paint order, so the correspondence is exact and not a
+    /// convention this subcommand invents.
+    ///
+    /// Every geometry figure is in **PDF user space** (page space): origin at
+    /// the page's lower-left, Y increasing upward, units of points (1/72 in).
+    /// That is the same frame `object-move --dx/--dy`, `node-move --x/--y`
+    /// and `dimension-add --points` use.
+    ///
+    /// `--hit X,Y` additionally answers "which object would a click here
+    /// select?" by calling the SAME `pdfce_core::vector::hit_test_point` the
+    /// GUI's object-edit tool calls, so the answer is authoritative for the
+    /// GUI's behaviour rather than a second implementation of it. One
+    /// difference, deliberately: the GUI receives a *canvas-space* pointer
+    /// (Y-down device coordinates, page rotation applied) and converts it to
+    /// PDF space before hit-testing, whereas `--hit` takes PDF space
+    /// directly — so on a rotated or non-zero-origin page the number you
+    /// would read off a screen ruler is NOT the number to pass here. Use the
+    /// `bbox=` values this subcommand prints.
+    ///
+    /// A `--hit` MISS is a valid answer, not an error: the exit code stays 0
+    /// and the `hit …` line reports `index=none`. Scripts branch on that
+    /// field, not on the exit status.
+    ///
+    /// Example — inventory page 1:
+    ///
+    ///     pdfce-cli object-list drawing.pdf --page 1
+    ///
+    /// Example — ask what a click at (200, 200) would select:
+    ///
+    ///     pdfce-cli object-list drawing.pdf --page 1 --hit 200,200
+    ///
+    /// Example — move whatever object index 2 turned out to be:
+    ///
+    ///     pdfce-cli object-move drawing.pdf --object 2 --dx=10 --dy=0 -o out.pdf
+    ObjectList {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// Report which object a click at this page-space point would select,
+        /// as `X,Y` in PDF user space (points).
+        #[arg(long, value_name = "X,Y", allow_hyphen_values = true)]
+        hit: Option<String>,
+        /// Page-space slack, in points, a `--hit` point may miss an object's
+        /// edge by and still select it. Default 3.0 — the GUI's
+        /// `FALLBACK_SELECT_TOLERANCE`, i.e. the catch radius a click gets at
+        /// 100% zoom. Ignored without `--hit`.
+        ///
+        /// `allow_hyphen_values` matches the other numeric operands in this
+        /// CLI (`--dx`, `--dy`, `--x`, `--y`): a leading `-` must reach the
+        /// f64 parser as a value, so a negative reaches the handler's
+        /// named refusal instead of dying as a clap usage error (exit 2)
+        /// that tells the operator nothing about why it is wrong.
+        #[arg(long, default_value_t = HIT_TOLERANCE_PT, allow_hyphen_values = true)]
+        tolerance: f64,
+    },
     /// **Move** a vector object (Pass 9c-min, decision 011 §2.5): translate
     /// all of an object's path-construction operands by a page-space
     /// `(dx, dy)` via content-stream surgery. Only the edited content stream
     /// changes; every other object stays byte-verbatim (the R46/§5.7 named
-    /// exception). `--object` is the object's 0-based paint-order index (as
-    /// `object-list`/`dimension-list`-style tooling or a decomposition
-    /// reports it).
+    /// exception). `--object` is the object's 0-based paint-order index —
+    /// run `object-list` on the page to discover it.
     ObjectMove {
         /// Input PDF.
         input: PathBuf,
@@ -2227,6 +2290,12 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_layer_toggle(&input, group, hide, &output, mode, verify_undo),
+        Command::ObjectList {
+            input,
+            page,
+            hit,
+            tolerance,
+        } => cmd_object_list(&input, page, hit.as_deref(), tolerance),
         Command::ObjectMove {
             input,
             page,
@@ -7463,6 +7532,295 @@ objects={} appended={} out_bytes={}",
         r.bytes_written,
     );
     finish_edit(input, &outcome)
+}
+
+// =====================================================================
+// `object-list` — paint-order object inventory + headless hit-test
+// =====================================================================
+//
+// WHY this subcommand exists: `object-move`, `object-delete` and
+// `node-move` all address an object by its 0-based paint-order index, and
+// before this there was NO way — CLI or GUI — to discover that index. The
+// editing subcommands' own help text pointed at "`object-list`-style
+// tooling" that did not exist, so the three edits were effectively
+// unusable outside a debugger. This closes that gap.
+//
+// It is deliberately read-only and deliberately thin: every number it
+// prints comes from `pdfce_core::vector::decompose_page` and
+// `pdfce_core::vector::hit_test_point` — the SAME two functions the GUI's
+// `ObjectModelProvider` calls — so the listing cannot drift from what the
+// edits address or from what a click in the GUI selects. Re-deriving
+// either here would recreate exactly the "two decompositions quietly
+// diverge" failure decision 011 Z2 warns against.
+
+/// Default `--tolerance` for `object-list --hit`, in page-space points.
+///
+/// Chosen to equal `pdfce-gui`'s `object_provider::FALLBACK_SELECT_TOLERANCE`
+/// (3.0), which is the canvas-space catch radius a click falls back to. At
+/// 100% zoom the canvas is distance-preserving against page space (the
+/// `page_device_geometry` scale-1.0 map is a pure rotation + Y-flip +
+/// translation), so 3.0 pt here reproduces the GUI's 100%-zoom behaviour.
+/// The GUI's *live* tolerance additionally scales as `1 / zoom` to hold the
+/// on-screen radius constant; the CLI has no zoom, so it takes the value
+/// literally and the operator overrides it when reproducing a zoomed click.
+const HIT_TOLERANCE_PT: f64 = 3.0;
+
+/// A stable one-token name for a path's paint disposition (ISO 32000-1
+/// §8.5.3): what actually marks the page, which is also what decides how
+/// [`pdfce_core::vector::hit_test_point`] tests it — a filled path is hit
+/// by its interior under its winding rule, a stroke-only path only by
+/// proximity to its outline, and a `n` no-op/clip path only within the bare
+/// tolerance. Printing it makes an otherwise-baffling hit-test result
+/// ("I clicked inside it and missed") self-explaining.
+fn paint_token(style: pdfce_core::vector::PaintStyle) -> &'static str {
+    use pdfce_core::vector::FillRule;
+    match (style.fill, style.stroke) {
+        (Some(FillRule::NonZero), true) => "fill-nonzero+stroke",
+        (Some(FillRule::NonZero), false) => "fill-nonzero",
+        (Some(FillRule::EvenOdd), true) => "fill-evenodd+stroke",
+        (Some(FillRule::EvenOdd), false) => "fill-evenodd",
+        (None, true) => "stroke",
+        // An `n` path: constructed, painted by nothing (a clip or a
+        // discarded path). Still selectable, but only precisely.
+        (None, false) => "none",
+    }
+}
+
+/// A page-space [`Bounds`](pdfce_core::vector::Bounds) as the stable
+/// `minx,miny,maxx,maxy` token, or `none` for a box that enclosed no finite
+/// point.
+///
+/// A **zero-width or zero-height box is NOT `none`** — a horizontal rule or
+/// a vertical rule legitimately has one degenerate axis (`min.y == max.y`),
+/// and `Bounds::is_empty` is `min > max`, not `min == max`. Reporting such a
+/// box as `none` would have made exactly the thin geometry this tool exists
+/// to find look unlocatable.
+fn bbox_token(b: pdfce_core::vector::Bounds) -> String {
+    if b.is_empty() {
+        "none".to_owned()
+    } else {
+        format!("{},{},{},{}", b.min.x, b.min.y, b.max.x, b.max.y)
+    }
+}
+
+/// One `object …` line's kind + kind-specific detail fields, for the object
+/// at paint-order `index`.
+///
+/// Kinds are `path` / `text` / `image` / `form`. `image` and `form` are the
+/// same [`VectorObject::Image`](pdfce_core::vector::VectorObject) arm
+/// discriminated by its [`ImageSource`](pdfce_core::vector::ImageSource):
+/// a Form XObject is reported separately because it is a *container* whose
+/// contents were flattened into this same paint-order list, which materially
+/// changes what deleting it does.
+fn object_detail(obj: &pdfce_core::vector::VectorObject) -> (&'static str, String) {
+    use pdfce_core::vector::{ImageSource, VectorObject};
+    match obj {
+        VectorObject::Path(p) => {
+            // `anchors` is the count `node-move --node` indexes into: every
+            // subpath's start plus each segment endpoint, in decomposition
+            // order. Equal to `vector::anchor_count` by construction (that
+            // function's own doc comment), derived here from the geometry so
+            // no second content-stream walk is needed for a listing.
+            let anchors: usize = p.subpaths.iter().map(|sp| sp.anchors().count()).sum();
+            let closed = p.subpaths.iter().filter(|sp| sp.closed).count();
+            (
+                "path",
+                format!(
+                    "subpaths={} anchors={anchors} closed={closed} paint={} line_width={}",
+                    p.subpaths.len(),
+                    paint_token(p.style),
+                    p.line_width,
+                ),
+            )
+        }
+        // `approximate=1` means the bbox was estimated from the text
+        // positioning operators rather than measured from glyph metrics —
+        // worth surfacing, because it is the reason a click that looks
+        // inside a glyph can miss (or a click beside it can hit).
+        VectorObject::Text(t) => ("text", format!("approximate={}", u32::from(t.approximate))),
+        VectorObject::Image(i) => {
+            let kind = match i.source {
+                ImageSource::Form => "form",
+                ImageSource::Inline | ImageSource::XObject => "image",
+            };
+            let source = match i.source {
+                ImageSource::Inline => "inline",
+                ImageSource::XObject => "xobject",
+                ImageSource::Form => "form",
+            };
+            (kind, format!("source={source}"))
+        }
+    }
+}
+
+/// Parse a `--hit X,Y` operand into a page-space point.
+///
+/// Deliberately strict — a silently-misparsed coordinate would report a
+/// confident wrong answer about which object a click selects, which is worse
+/// than a refusal (rule 4: fuzzy, never sneaky). `None` on anything but
+/// exactly two finite comma-separated numbers.
+fn parse_hit_point(s: &str) -> Option<pdfce_core::vector::Point> {
+    let (x, y) = s.split_once(',')?;
+    let x: f64 = x.trim().parse().ok()?;
+    let y: f64 = y.trim().parse().ok()?;
+    (x.is_finite() && y.is_finite()).then(|| pdfce_core::vector::Point::new(x, y))
+}
+
+/// `object-list` — inventory one page's vector objects in paint order, and
+/// optionally answer a headless hit-test query (read-only).
+///
+/// ## Contract
+///
+/// - Emits one `object page=… index=… kind=… bbox=… …` line per object, in
+///   paint order (index 0 painted first, so the LAST line is topmost).
+/// - Emits a `hit …` line iff `--hit` was supplied.
+/// - Emits an `object-list …` summary line last.
+/// - Exit `SUCCESS` (0) on a readable page — including when the page has no
+///   objects, and including when `--hit` MISSES. A miss is a valid answer,
+///   not a failure; scripts read the `index=` field (`none` on a miss)
+///   rather than the exit code.
+/// - Exit `RUNTIME_ERROR` (1) for an out-of-range/zero `--page`, a
+///   malformed `--hit`, an unreadable page tree, or content that will not
+///   tokenize. Exit `IO_ERROR`/`NOT_A_PDF` per [`exit_code_for_doc`] for a
+///   file that will not load.
+///
+/// ## Why the hit-test is here and not reimplemented
+///
+/// It calls [`pdfce_core::vector::hit_test_point`] on the model
+/// [`pdfce_core::vector::decompose_page`] returned — byte for byte the path
+/// `pdfce-gui`'s `ObjectModelProvider::hit_test` takes after it converts the
+/// pointer out of canvas space. That makes this subcommand a *diagnostic
+/// oracle* for GUI selection: if `--hit` reports an index headlessly and a
+/// click at the corresponding screen position does not select, the defect is
+/// in the GUI's input/coordinate path, not in core's geometry.
+fn cmd_object_list(input: &Path, page_number: u32, hit: Option<&str>, tolerance: f64) -> u8 {
+    use pdfce_core::vector::{Matrix, decompose_page, hit_test_point};
+
+    // Validate the query operands BEFORE loading the document: a typo
+    // should fail immediately and identically whether or not the file
+    // happens to be readable, and — critically — before any `object` rows
+    // are printed, so a refusal never leaves half an answer on stdout.
+    let hit_point = match hit {
+        None => None,
+        Some(raw) => match parse_hit_point(raw) {
+            Some(p) => Some(p),
+            None => {
+                eprintln!(
+                    "pdfce-cli: {}: malformed --hit `{raw}` (expected `X,Y` in PDF user space, \
+e.g. `--hit 200,200`)",
+                    input.display()
+                );
+                return exit::RUNTIME_ERROR;
+            }
+        },
+    };
+    // `--tolerance` is parsed by clap as a bare f64, so `nan` and negatives
+    // both arrive intact. Either would make EVERY query a miss, which reads
+    // as "hit-testing is broken" rather than "you passed nonsense" — refuse
+    // by name instead (rule 4: fuzzy, never sneaky).
+    if hit_point.is_some() && (!tolerance.is_finite() || tolerance < 0.0) {
+        eprintln!(
+            "pdfce-cli: {}: --tolerance must be a finite, non-negative number of points \
+(got `{tolerance}`)",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+
+    let doc = match open_for_read(input) {
+        Ok(doc) => doc,
+        Err(code) => return code,
+    };
+    let pages = match pdfce_core::page_tree::pages(&doc) {
+        Ok(pages) => pages,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    // 1-based → 0-based, matching every other `--page` subcommand.
+    // `checked_sub` absorbs `--page 0` without wrapping; `get` absorbs
+    // past-the-end. Both land on one message, as `render-page` does.
+    let Some(page) = page_number
+        .checked_sub(1)
+        .and_then(|i| pages.get(i as usize))
+    else {
+        eprintln!(
+            "pdfce-cli: {}: page {page_number} is out of range (document has {} page(s), \
+numbered 1..={})",
+            input.display(),
+            pages.len(),
+            pages.len()
+        );
+        return exit::RUNTIME_ERROR;
+    };
+
+    // `Matrix::IDENTITY` is the initial CTM the GUI provider also passes, so
+    // the coordinates printed here are the page space every other page-space
+    // operand in this CLI uses.
+    let model = match decompose_page(&doc.view(), page, Matrix::IDENTITY) {
+        Ok(model) => model,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: page {page_number}: {err}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+
+    let (mut paths, mut text, mut images, mut forms) = (0usize, 0usize, 0usize, 0usize);
+    for (index, obj) in model.objects.iter().enumerate() {
+        let (kind, detail) = object_detail(obj);
+        match kind {
+            "path" => paths += 1,
+            "text" => text += 1,
+            "form" => forms += 1,
+            _ => images += 1,
+        }
+        println!(
+            "object page={page_number} index={index} kind={kind} bbox={} {detail}",
+            bbox_token(obj.page_bbox()),
+        );
+    }
+
+    if let Some(point) = hit_point {
+        // The tolerance is passed through verbatim so the operator can
+        // reproduce any zoom's catch radius; a non-finite or negative value
+        // would make every query a miss, which reads as "hit-testing is
+        // broken", so refuse it by name instead.
+        if !tolerance.is_finite() || tolerance < 0.0 {
+            eprintln!(
+                "pdfce-cli: {}: --tolerance must be a finite, non-negative number of points",
+                input.display()
+            );
+            return exit::RUNTIME_ERROR;
+        }
+        let found = hit_test_point(&model, point, tolerance);
+        let (index, kind) = match found {
+            Some(i) => (
+                i.to_string(),
+                model
+                    .objects
+                    .get(i)
+                    .map_or("none", |obj| object_detail(obj).0)
+                    .to_owned(),
+            ),
+            None => ("none".to_owned(), "none".to_owned()),
+        };
+        println!(
+            "hit page={page_number} at={},{} tolerance={tolerance} index={index} kind={kind}",
+            point.x, point.y,
+        );
+    }
+
+    let d = &model.diagnostics;
+    println!(
+        "object-list {} page={page_number} objects={} paths={paths} text={text} images={images} \
+forms={forms} dropped_objects={} dropped_nodes={}",
+        input.display(),
+        model.objects.len(),
+        d.objects_dropped,
+        d.nodes_dropped,
+    );
+    exit::SUCCESS
 }
 
 /// Grouped arguments for `object-move` (Pass 9c-min) — a struct to keep the
