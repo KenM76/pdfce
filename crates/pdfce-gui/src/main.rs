@@ -271,8 +271,32 @@ const THUMBNAILS_PER_FRAME: usize = 2;
 /// page does not sit flush against the panel edges under a fit mode.
 const CANVAS_MARGIN: f32 = 16.0;
 
-/// Minimum size for an icon-only button, so click targets stay usable
-/// regardless of how narrow the glyph inside them happens to be.
+/// Minimum size for a button, so click targets stay usable regardless of how
+/// narrow the content inside them happens to be.
+///
+/// # It is a FLOOR, not a size — use `.min_size()`, not `add_sized()`
+///
+/// `ui.add_sized(ICON_BUTTON_SIZE, button)` allocates *exactly* this
+/// rectangle and lays the button out inside it. For an icon that is what you
+/// want. For a button carrying a WORD it is a cap, and egui responds to a
+/// 28 pt cap by wrapping the label one character at a time.
+///
+/// This was not a hypothetical. Six word-buttons were built with `add_sized`,
+/// and observing the running Add-Text tool showed "Place point" rendered as
+/// four stacked fragments — `Pla` / `ce` / `poi` / `nt` — in a column barely
+/// wider than a scrollbar. The same defect had "Accept reflow" and "Reject
+/// reflow" in it, on controls that terminate an edit gesture.
+///
+/// Worth recording *how* it surfaced: the glyph-coverage gate had just
+/// replaced those buttons' tofu check/cross marks with drawable ones, and the
+/// screenshot taken to confirm that fix is what exposed the layout. A test
+/// can prove a character has a glyph; only looking proves the operator can
+/// read the button (standing rule R86).
+///
+/// So: `ui.add(egui::Button::new(text).min_size(ICON_BUTTON_SIZE))` for
+/// anything with a label — the accessibility floor without the cap — and
+/// `add_sized` only for genuinely icon-only controls, which is what
+/// `icon_button`/`glyph_button` already do.
 const ICON_BUTTON_SIZE: egui::Vec2 = egui::vec2(28.0, 24.0);
 
 /// Default width, in points, of the right-hand panel dock.
@@ -9047,18 +9071,18 @@ fn run_text_edit_tool(
                     if state.pending.is_some() {
                         ui.horizontal(|ui| {
                             if ui
-                                .add_sized(
-                                    ICON_BUTTON_SIZE,
-                                    egui::Button::new(ui_text::accept_edit()),
+                                .add(
+                                    egui::Button::new(ui_text::accept_edit())
+                                        .min_size(ICON_BUTTON_SIZE),
                                 )
                                 .clicked()
                             {
                                 do_accept = true;
                             }
                             if ui
-                                .add_sized(
-                                    ICON_BUTTON_SIZE,
-                                    egui::Button::new(ui_text::reject_edit()),
+                                .add(
+                                    egui::Button::new(ui_text::reject_edit())
+                                        .min_size(ICON_BUTTON_SIZE),
                                 )
                                 .clicked()
                             {
@@ -9071,18 +9095,18 @@ fn run_text_edit_tool(
                     if let Some(r) = state.reflow.as_ref() {
                         ui.horizontal(|ui| {
                             if ui
-                                .add_sized(
-                                    ICON_BUTTON_SIZE,
-                                    egui::Button::new(ui_text::reflow_accept()),
+                                .add(
+                                    egui::Button::new(ui_text::reflow_accept())
+                                        .min_size(ICON_BUTTON_SIZE),
                                 )
                                 .clicked()
                             {
                                 do_accept_reflow = true;
                             }
                             if ui
-                                .add_sized(
-                                    ICON_BUTTON_SIZE,
-                                    egui::Button::new(ui_text::reflow_reject()),
+                                .add(
+                                    egui::Button::new(ui_text::reflow_reject())
+                                        .min_size(ICON_BUTTON_SIZE),
                                 )
                                 .clicked()
                             {
@@ -9820,9 +9844,9 @@ fn run_add_text_tool(
                             );
                         });
                         if ui
-                            .add_sized(
-                                ICON_BUTTON_SIZE,
-                                egui::Button::new(ui_text::add_text_place_box_button()),
+                            .add(
+                                egui::Button::new(ui_text::add_text_place_box_button())
+                                    .min_size(ICON_BUTTON_SIZE),
                             )
                             .clicked()
                         {
@@ -9839,9 +9863,9 @@ fn run_add_text_tool(
                             );
                         }
                     } else if ui
-                        .add_sized(
-                            ICON_BUTTON_SIZE,
-                            egui::Button::new(ui_text::add_text_place_point_button()),
+                        .add(
+                            egui::Button::new(ui_text::add_text_place_point_button())
+                                .min_size(ICON_BUTTON_SIZE),
                         )
                         .clicked()
                     {

@@ -261,3 +261,27 @@ continuation-67/68 framing ("item #3 next, item #4 undispatched") still
 describes current dispatch — FF-H's slot in item #3 is now closed and a
 NEW item (redaction-apply, not itself one of the four) is what's
 actively building.
+
+**UPDATE — 2026-08-03, SESSION_LOG continuation 70: the GUI
+redaction-apply flow SHIPPED as Pass 8.1 (`9a68999`) — nothing is now
+in progress, and item #4 (form-building tools) is next per the
+standing order.** `redact_apply.rs` runs the same absence proof at
+GUI runtime, before the confirmation dialog opens; two new defects
+found by direct observation (marks-list-pushes-Apply-below-the-fold;
+a mislabeled overlap count) both fixed same commit; three new standing
+rules filed (R97 free-function-for-testable-security-proofs, R98
+apply-before-confirm-for-pure-operations, R99 state-before-detail-in-
+short-dock-panes; ceiling now R99). **Separately, and concurrently:
+`pdfce-acrobat-librarian`'s form-building/authoring research is DONE**
+(5 new `forms__*.md` files + 3 addenda) and **a KenAgent decision
+agent is actively scoping item #4 in `docs/decisions/` as of this
+filing** — the next dispatch after this is very likely a Pass 8.1-style
+build against that decision, not a fresh research round. Headline
+research finding to carry forward: field-name collision is
+type-branched (same-type merges into `/Kids`, different-type refuses
+by name) — `pdfce-core`'s field model should be a `/Kids` object graph
+from day one. Branch `pass-8-redaction`, 60 commits
+(`24bdbc6`/`9a68999` verified via `git cat-file -t`), still no remote.
+Open operator question (l) (the redaction-apply sequencing call) is
+now "outcome done, ratification still open" — don't read it as fully
+closed.

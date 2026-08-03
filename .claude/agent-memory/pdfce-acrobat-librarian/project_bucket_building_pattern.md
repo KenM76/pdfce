@@ -153,6 +153,39 @@ while still remembering Forms is the one confirmed counter-example (its
 own dedicated bit + DocMDP tier) so the pattern isn't overstated as
 universal.
 
+**Forms bucket, form-BUILDING/authoring extension (2026-08-03) added a new
+wrinkle worth reusing: a bucket can need a second, LATER extension session
+to catalog a DIFFERENT capability within the SAME bucket that the original
+build deliberately or incidentally left uncovered** — the original Forms
+session (2026-07-31) covered field types, appearance/NeedAppearances,
+auto-detection, flatten, and fill/save/export (i.e. FILLING an
+already-authored form), but not AUTHORING (placing a brand-new field on a
+page that had none). The dispatching brief was explicit that filling is
+already shipped (Pass 7.0/7.1) and must NOT be re-cataloged — handle this
+the same way as the Text-editing bucket's "partial by design" pattern
+above: state the split explicitly in the file count note, in the Trigger-
+topics entry, and in the report back, so a future session doesn't assume
+"Forms bucket, N files" means uniformly-covered ground. **A second,
+reusable finding from this same session**: when a dispatching brief
+explicitly flags one question as "the one I most expect to be subtle" or
+similarly signals it as the highest-value target, budget search effort
+asymmetrically toward THAT question first — in this case a single,
+precisely-targeted search ("Acrobat form field name already exists rename
+duplicate field name") surfaced a directly-quoted Acrobat error string on
+the first attempt, which became the session's central, highest-value
+finding (the type-checked name-collision branch: same-type merges, cross-
+type refuses). Worth treating "the requester told me what they expect to
+be decisive" as a genuine prioritization signal, not just framing color.
+**Third finding**: this session hit TWO distinct instances of "searched
+directly, targeted, and confirmed nothing exists" (radio-group member-
+deletion aftermath; tab-order behavior on mid-order field insertion) —
+worth explicitly labeling these gaps as "search-confirmed-unfillable from
+web sourcing" rather than the more common "not yet searched" gap framing,
+since it changes the recommended next step for `pdfce-engineer` from
+"search again" to "test empirically against a real Acrobat install once
+fixtures exist" — a materially different, more useful instruction to leave
+behind for a gap that has already absorbed real search budget.
+
 **Contested/conflicting-tier-or-fact resolution — a DIFFERENT pattern
 from the redaction removal-scope GAP above, worth telling apart.** The
 redaction pattern applies to a must_have-grade MECHANISM question with

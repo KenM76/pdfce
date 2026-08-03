@@ -240,3 +240,22 @@ A newly-found, in-progress item as of continuation 67: 341 corpus
 files are unopenable on a `/Contents`-resolves-to-Null defect (fail-
 clean violation) — a builder is fixing it; once it ships it will be
 the next commit(s) to fold into this chain.
+
+**UPDATE — continuation 68/69 (2026-08-03).** The `/Contents` defect
+fix shipped (`409a6b5`, 289 files recovered, new standing rules
+R94–R95) and Pass 19.4 (`Tw`) shipped (`a1638f4`), closing decision
+019/FF-H end-to-end with Amendment F (R96). Branch reached 58 commits
+by continuation 69, still local-only, still no remote.
+
+**UPDATE — continuation 70 (2026-08-03, Pass 8.1 — GUI redaction-apply
+flow shipped, `9a68999`).** Two hashes this continuation, both
+verified by `git cat-file -t`: `24bdbc6`, `9a68999`. **Branch total now
+60 commits**, still all local-only, still no git remote configured —
+the gap since continuation 69 (58) is exactly the 2 new hashes,
+consistent (no missing-commit flag needed this time). Push/publish
+authorization remains the sole open gate, unchanged in kind since
+continuation 50. Backup bundle NOT regenerated this continuation —
+still stale relative to at least continuations 63 onward; flag to the
+operator, don't assume it covers current HEAD. As always, verify tip
+with `git log --oneline -1` and count with `git rev-list --count HEAD`
+before trusting any number in this file.

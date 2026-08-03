@@ -1289,19 +1289,19 @@ themselves were kept."
 pub fn thumbnail_drag_tooltip(number: usize) -> String {
     format!(
         "Page {number}. Click to view it, click its checkbox to select it, or drag \
-it to a new position. Keyboard: Alt+↑ / Alt+↓ moves the selected pages."
+it to a new position. Keyboard: Alt+Up / Alt+Down moves the selected pages."
     )
 }
 
 /// Tooltip on the move-selection-up control.
 pub fn move_selection_up_tooltip() -> &'static str {
-    "Move the selected pages one position earlier (Alt+↑). One Undo step reverses \
+    "Move the selected pages one position earlier (Alt+Up). One Undo step reverses \
 the whole move."
 }
 
 /// Tooltip on the move-selection-down control.
 pub fn move_selection_down_tooltip() -> &'static str {
-    "Move the selected pages one position later (Alt+↓). One Undo step reverses \
+    "Move the selected pages one position later (Alt+Down). One Undo step reverses \
 the whole move."
 }
 
@@ -2879,11 +2879,11 @@ pub fn format_unit_absolute_tooltip() -> &'static str {
 
 /// The "what is true right now" caption shown beside a spacing/baseline row.
 ///
-/// Deliberately the same ⓘ-prefixed shape as the reflow rows' own
+/// Deliberately the same ℹ-prefixed shape as the reflow rows' own
 /// detected/overridden captions three rows above in this same panel — one
 /// established convention applied to a second control family, not a new one.
 pub fn format_ambient_caption(value_text: &str) -> String {
-    format!("ⓘ Now: {value_text}")
+    format!("ℹ Now: {value_text}")
 }
 
 /// Appended to a caption when the value is provably still the PDF default —
@@ -2922,7 +2922,7 @@ pub fn format_ambient_baseline_value(rise: f64, per_mille: f64) -> String {
 /// Caption used when the caret's run carries no provenance, so pdfce cannot
 /// state what is in force. Says so rather than showing a confident zero.
 pub fn format_ambient_unknown() -> &'static str {
-    "ⓘ Now: pdfce cannot read this run's spacing state (no provenance for it)"
+    "ℹ Now: pdfce cannot read this run's spacing state (no provenance for it)"
 }
 
 /// Caption used when there is no caret at all — including immediately after
@@ -2933,7 +2933,7 @@ pub fn format_ambient_unknown() -> &'static str {
 /// different facts, and collapsing them would report a limitation pdfce does
 /// not have.
 pub fn format_ambient_no_caret() -> &'static str {
-    "ⓘ Click into text on the page to see and change its spacing."
+    "ℹ Click into text on the page to see and change its spacing."
 }
 
 /// Label for the word-spacing row.
@@ -3030,7 +3030,7 @@ pub fn format_style_tooltip() -> &'static str {
 /// its wording cannot drift from what Apply will actually do.
 pub fn format_style_preview_synthesize(style: &str) -> String {
     format!(
-        "ⓘ No real {style} face for this family is on the page — Apply will \
+        "ℹ No real {style} face for this family is on the page — Apply will \
          synthesize a faux {style}, disclosed by name in the strip below, \
          never silently."
     )
@@ -3045,7 +3045,7 @@ pub fn format_style_preview_synthesize(style: &str) -> String {
 /// has had to correct after shipping before.
 pub fn format_style_preview_real_face(style: &str, real_font: &str, resource: &str) -> String {
     format!(
-        "ⓘ A real {style} face is on this page as '{real_font}' (resource \
+        "ℹ A real {style} face is on this page as '{real_font}' (resource \
          /{resource}) — Apply will be REFUSED, because pdfce fakes a style \
          only when no real one exists. Use the Font control above to switch \
          to it."
@@ -3186,7 +3186,7 @@ pub fn word_spacing_composite_hint() -> &'static str {
 /// only WHAT TO DO ABOUT IT, and points at a control that is already three
 /// rows below in the same panel rather than at a new mechanism.
 pub fn format_justify_invalidated_hint() -> &'static str {
-    "ⓘ Use the \"Reflow paragraph…\" control in this panel to recompute this \
+    "ℹ Use the \"Reflow paragraph…\" control in this panel to recompute this \
      paragraph's justified spacing for its new width."
 }
 
@@ -3231,12 +3231,12 @@ pub fn preview_tag() -> &'static str {
 
 /// The Accept control for a pending edit (§6.4).
 pub fn accept_edit() -> &'static str {
-    "✓ Accept"
+    "✔ Accept"
 }
 
 /// The Reject control for a pending edit (§6.4).
 pub fn reject_edit() -> &'static str {
-    "✕ Reject"
+    "✖ Reject"
 }
 
 /// Heading of the accepted-edit disclosure strip (§8.1).
@@ -3250,9 +3250,9 @@ pub fn refusal_strip_title() -> &'static str {
 }
 
 /// One disclosure bullet, rendered verbatim from the core report (§8.1); the
-/// ⓘ marker is paired with the text, never a colour alone (rule 6).
+/// ℹ marker is paired with the text, never a colour alone (rule 6).
 pub fn disclosure_bullet(text: &str) -> String {
-    format!("ⓘ {text}")
+    format!("ℹ {text}")
 }
 
 /// One refusal line, rendered verbatim from the core error `Display` (§8.2);
@@ -3279,7 +3279,7 @@ pub fn cross_run_selection_notice() -> &'static str {
 
 /// R-INV-1 (embedded-subset floor).
 pub fn r_inv_1_hint() -> &'static str {
-    "Supply this font via a font folder (Tools → Font folders) so pdfce can \
+    "Supply this font via a font folder (Tools › Font folders) so pdfce can \
      use its full character set, or keep this edit to characters already on \
      the page."
 }
@@ -3310,7 +3310,7 @@ pub fn r_inv_repertoire_hint() -> &'static str {
 /// `FormatError::CoverageFailure`.
 pub fn format_coverage_hint() -> &'static str {
     "Choose a font that includes every character in this selection, or supply \
-     one via Tools → Font folders."
+     one via Tools › Font folders."
 }
 
 /// `FormatError::TargetFontMissing`.
@@ -3359,7 +3359,7 @@ pub fn reflow_disabled_pending_tooltip() -> &'static str {
 /// verbatim core disclosure (§3/§13-item-3). Shown as background context, not
 /// an alarm.
 pub fn reflow_recognition_note() -> &'static str {
-    "ⓘ Reflow may group these paragraph guides slightly differently than the \
+    "ℹ Reflow may group these paragraph guides slightly differently than the \
      boundaries shown above, to keep centred, right-aligned, or justified \
      paragraphs whole."
 }
@@ -3387,11 +3387,11 @@ pub fn reflow_leading_label() -> &'static str {
 /// The alignment caption when the detected value is being kept (§6.2). `align`
 /// is the detected alignment's keyword.
 pub fn reflow_detected_caption(align: &str) -> String {
-    format!("ⓘ Detected: {align} (from the original layout)")
+    format!("ℹ Detected: {align} (from the original layout)")
 }
 
 /// The alignment caption when no clear signal was found and Left was the
-/// fallback (§6.2) — ⚠, an honest limitation, not ⓘ.
+/// fallback (§6.2) — ⚠, an honest limitation, not ℹ.
 pub fn reflow_ambiguous_caption() -> &'static str {
     "⚠ No clear alignment signal in this paragraph — defaulted to Left"
 }
@@ -3422,12 +3422,12 @@ pub fn reflow_wrap_width_label() -> &'static str {
 /// The Accept control for a reflow under review (§7) — distinct wording from
 /// the plain-edit `accept_edit`, since both can render in the same strip.
 pub fn reflow_accept() -> &'static str {
-    "✓ Accept reflow"
+    "✔ Accept reflow"
 }
 
 /// The Reject control for a reflow under review (§7).
 pub fn reflow_reject() -> &'static str {
-    "✕ Reject reflow"
+    "✖ Reject reflow"
 }
 
 // §7.3 reflow refusal "what would lift it" hints — one per named condition.
@@ -3484,7 +3484,7 @@ pub fn add_text_tool_button() -> &'static str {
 pub fn add_text_tool_tooltip() -> &'static str {
     "Add brand-new text to the page itself — a label, caption, or note that becomes real, \
 permanent page content, exactly like the text already here (Ctrl+Shift+E). This is NOT the same \
-as Text → Text box (a removable annotation) — for a comment or sticky note instead, use \
+as Text › Text box (a removable annotation) — for a comment or sticky note instead, use \
 Text. To fix text that's already on the page, use Edit Text (Ctrl+E)."
 }
 
@@ -3702,7 +3702,7 @@ pub fn measure_length_readout(raw_points: f64, scaled: &str, raw_units: bool) ->
     if raw_units {
         format!("{raw_points:.2} pt ({scaled})")
     } else {
-        format!("{raw_points:.2} pt \u{2192} {scaled}")
+        format!("{raw_points:.2} pt = {scaled}")
     }
 }
 
@@ -3751,7 +3751,7 @@ pub fn scale_entry_paper_basis_caption() -> &'static str {
 /// The scale-entry live preview (ui-spec §4.2 "→ scale = 1:100"). `ratio` is
 /// the engine-computed `ScalePreview::ratio_label`, rendered verbatim.
 pub fn scale_entry_preview(ratio: &str) -> String {
-    format!("\u{2192} scale = {ratio}")
+    format!("gives scale = {ratio}")
 }
 
 /// The group-panel window title (ui-spec §5.1).
@@ -3903,12 +3903,12 @@ pub fn add_text_leading_label() -> &'static str {
 /// Edit Text's `accept_edit`/reflow's `reflow_accept`, since several review
 /// controls can be visible across a session (15.2 §11's reasoning).
 pub fn add_text_accept() -> &'static str {
-    "✓ Add"
+    "✔ Add"
 }
 
 /// The Reject control for an add-text draft (§7.3).
 pub fn add_text_reject() -> &'static str {
-    "✕ Cancel"
+    "✖ Cancel"
 }
 
 /// Tooltip on the disabled Accept button while the draft is empty (§7.1/§6.3):
@@ -3927,7 +3927,7 @@ pub fn add_text_default_font_label() -> &'static str {
 /// The §7.2 P1 continuity link shown in the disclosure strip after an accepted
 /// add: switches to the Edit Text tool so the just-added run can be re-edited.
 pub fn edit_this_text_now_button() -> &'static str {
-    "Edit this text now →"
+    "Edit this text now ›"
 }
 
 // §6.2 add-text "what would lift it" hint table — one entry per named
@@ -3978,44 +3978,42 @@ pub fn add_text_generic_hint() -> &'static str {
 // Snapping engine — fuzzy snap indicator (Pass 12.M1)
 // ---------------------------------------------------------------------------
 //
-// The marker glyph + type label a measure tool (Pass 12.M2) shows at the
-// current snap candidate BEFORE the click commits (`docs/ui_specs/
-// pass-12.M2-dimension-tools.md` §2.2). A DISTINCT glyph/label is reserved
-// for the derived filled-quad centerline (§2.3.1), the one fuzzy inference
-// that carries an extra two-click confirm. Shape distinguishes kind so colour
-// is never the sole signal (rule 6). The glyphs are single Unicode marks
-// rendered inline; the label is the human name of the snapped geometry.
+// The type label a measure tool (Pass 12.M2) shows at the current snap
+// candidate BEFORE the click commits (`docs/ui_specs/
+// pass-12.M2-dimension-tools.md` §2.2). A DISTINCT label is reserved for the
+// derived filled-quad centerline (§2.3.1), the one fuzzy inference that
+// carries an extra two-click confirm. Shape distinguishes kind so colour is
+// never the sole signal (rule 6) — but the shape is drawn as VECTOR ART, not
+// as text; see the note below.
+//
+// THE MARKER GLYPH CATALOG THAT USED TO LIVE HERE IS GONE, DELIBERATELY.
+// ----------------------------------------------------------------------
+// `snap_glyph(kind)` returned one Unicode mark per `SnapKind` — ◼ ● ⊕ ▲ ✕ ▤
+// ┄ ⊞ — and carried an `#[allow(dead_code)]` whose `reason` stated it was
+// "drawn by the Pass 12.M2 measure tools' overlay (spec 2.2)". It was not.
+// It had ZERO call sites anywhere in the crate. What actually reaches the
+// screen is `canvas.rs::snap_marker_shapes()`, which paints filled rects,
+// circles and line segments via `painter.extend(...)` — real vector
+// primitives, never a text glyph — with `snap_indicator_label()` beside it.
+//
+// It was removed rather than repaired because the glyph-coverage gate at the
+// bottom of this file showed that SEVEN of its eight marks have no glyph in
+// pdfce's font stack. Had anyone ever taken the `reason` at its word and
+// wired the function up, seven of eight snap candidates would have shown an
+// empty box — and the `reason` line would have been read as evidence that the
+// display was already proven. A dead function whose annotation claims it is
+// live is worse than an unannotated one: it converts "nobody has tested this"
+// into "somebody tested this" (standing rule R93).
 
-/// The snap-indicator marker glyph for a candidate of `kind` — the small mark
-/// drawn AT the candidate point (Pass 12.M2 §2.2). Shape (not colour) carries
-/// the meaning (rule 6). The derived-centerline glyph is deliberately distinct
-/// from the routine centerline tick so the operator sees at a glance that that
-/// one candidate needs the extra confirm (§2.3.1).
-#[allow(
-    dead_code,
-    reason = "Pass 12.M1 indicator glyph catalog; drawn by the Pass 12.M2 measure tools' overlay (spec 2.2)"
-)]
-pub fn snap_glyph(kind: SnapKind) -> &'static str {
-    match kind {
-        SnapKind::Node => "\u{25FC}",              // ◼ filled square
-        SnapKind::Endpoint => "\u{25CF}",          // ● filled circle
-        SnapKind::Center => "\u{2295}",            // ⊕ crosshair-in-circle
-        SnapKind::Midpoint => "\u{25B2}",          // ▲ small triangle
-        SnapKind::Intersection => "\u{2715}",      // ✕ cross
-        SnapKind::DerivedCenterline => "\u{25A4}", // ▤ hatch square (distinct)
-        SnapKind::SegmentCenterline => "\u{2504}", // ┄ dashed tick
-        SnapKind::Axis => "\u{229E}",              // ⊞ grid glyph
-    }
-}
-
-/// The snap-indicator type label beside the glyph (Pass 12.M2 §2.2): the human
-/// name of the snapped geometry, so the operator sees exactly what was inferred
-/// before committing (fuzzy-never-sneaky). The derived-centerline label carries
-/// the "(unconfirmed)" qualifier the routine kinds do not (§2.3.1).
-#[allow(
-    dead_code,
-    reason = "Pass 12.M1 indicator label catalog; drawn by the Pass 12.M2 measure tools' overlay (spec 2.2)"
-)]
+/// The snap-indicator type label (Pass 12.M2 §2.2): the human name of the
+/// snapped geometry, so the operator sees exactly what was inferred before
+/// committing (fuzzy-never-sneaky). The derived-centerline label carries the
+/// "(unconfirmed)" qualifier the routine kinds do not (§2.3.1).
+///
+/// Live: painted at `main.rs:11372` beside the vector snap marker. It
+/// previously carried an `#[allow(dead_code)]` that had become false — the
+/// allow was removed, so if this ever stops being called the compiler says so
+/// instead of an annotation vouching for it.
 pub fn snap_indicator_label(kind: SnapKind) -> &'static str {
     match kind {
         SnapKind::Node => "node",
@@ -4562,4 +4560,384 @@ pub fn redact_save_kept_pending_marks(count: usize) -> String {
         "That save kept {count} pending redaction mark(s) in the file — the marked content is \
 still there. Marking does not remove anything; nothing is removed until you apply."
     )
+}
+
+// ============================================================================
+// GLYPH-COVERAGE GATE
+// ============================================================================
+
+/// Extract every character that appears inside a Rust string literal in `src`.
+///
+/// # Why this scans source text instead of calling the catalog's functions
+///
+/// The obvious implementation is a hand-written list of "the glyphs we use",
+/// checked one by one. That list is a duplicated predicate, and duplicated
+/// predicates drift (standing rule R92): the day someone adds an arrow to a
+/// new warning string, the list does not grow with it, and the gate reports
+/// green on a catalog it no longer describes.
+///
+/// Calling every `pub fn` in this file instead is no better — most take
+/// parameters, several take enums, and any newly-added function is invisible
+/// until someone remembers to call it from the test. Same drift, more code.
+///
+/// Scanning the file's own bytes is the only formulation that is *complete by
+/// construction*: a string literal cannot be added to this catalog without
+/// appearing in this file, and decision 002's rule R1 requires every
+/// operator-visible string to live in this catalog. So the set of literals in
+/// this file is the set of strings pdfce can draw.
+///
+/// # What it deliberately excludes
+///
+/// Line and block comments, including doc comments. This file's prose is dense
+/// with characters that are never painted: the warning sign appears in doc
+/// comments explaining *why* a warning is worded as it is, and U+25BE is named
+/// in comments recording the defect that removed it. Treating those as
+/// renderable strings would make the gate fire on its own documentation, which
+/// is the fastest way to teach everyone to ignore it.
+///
+/// # What it deliberately includes
+///
+/// `\u{...}` escapes are decoded to the character they denote. This is not a
+/// nicety: `snap_indicator_glyph()` writes U+2715 in escaped form, and a
+/// scanner that looked only for literal non-ASCII bytes would report full
+/// coverage while missing every escaped glyph in the file. The escape form is
+/// *more* likely to hide a coverage bug than the literal form, because it is
+/// chosen exactly when a character is hard to see in an editor.
+///
+/// # Known limits, stated rather than hidden
+///
+/// - Raw strings (`r"..."`) are not parsed. The file contains none today, and
+///   this function *panics* if one appears rather than silently mis-scanning
+///   from that point on — a gate that quietly stops covering the rest of the
+///   file is worse than one that fails loudly.
+/// - Characters composed at runtime (a `format!` of a value that itself holds
+///   a glyph) are outside any static scan. Those come from PDF content, not
+///   from this catalog, and are the renderer's problem rather than the font
+///   stack's.
+#[cfg(test)]
+fn scan_string_literal_chars(src: &str) -> std::collections::BTreeSet<char> {
+    #[derive(Clone, Copy, PartialEq)]
+    enum State {
+        Code,
+        LineComment,
+        BlockComment(u32),
+        Str,
+    }
+
+    let mut found = std::collections::BTreeSet::new();
+    let mut state = State::Code;
+    let chars: Vec<char> = src.chars().collect();
+    let mut i = 0usize;
+    // Tracks the previous character while in `Code`, so a raw-string prefix
+    // can be told from the final `r` of an identifier such as `"Author"`.
+    let mut prev_code_char = ' ';
+
+    while i < chars.len() {
+        let c = chars[i];
+        let next = chars.get(i + 1).copied();
+
+        match state {
+            State::Code => {
+                if c == '/' && next == Some('/') {
+                    state = State::LineComment;
+                    i += 2;
+                    continue;
+                }
+                if c == '/' && next == Some('*') {
+                    state = State::BlockComment(1);
+                    i += 2;
+                    continue;
+                }
+                if c == 'r'
+                    && !prev_code_char.is_alphanumeric()
+                    && prev_code_char != '_'
+                    && (next == Some('"') || next == Some('#'))
+                {
+                    panic!(
+                        "scan_string_literal_chars: a RAW STRING literal appeared at char offset \
+{i}. This scanner does not parse raw strings, and continuing would silently mis-scan the rest of \
+the file, reporting a clean glyph-coverage result for text it never actually read. Extend the \
+scanner before using raw strings in this catalog."
+                    );
+                }
+                if c == '"' {
+                    state = State::Str;
+                    i += 1;
+                    continue;
+                }
+                prev_code_char = c;
+                i += 1;
+            }
+            State::LineComment => {
+                if c == '\n' {
+                    state = State::Code;
+                    prev_code_char = ' ';
+                }
+                i += 1;
+            }
+            State::BlockComment(depth) => {
+                if c == '*' && next == Some('/') {
+                    state = if depth <= 1 {
+                        State::Code
+                    } else {
+                        State::BlockComment(depth - 1)
+                    };
+                    i += 2;
+                    continue;
+                }
+                if c == '/' && next == Some('*') {
+                    state = State::BlockComment(depth + 1);
+                    i += 2;
+                    continue;
+                }
+                i += 1;
+            }
+            State::Str => {
+                if c == '\\' {
+                    // `\u{XXXX}` denotes a real character the operator will
+                    // see; every other escape (`\n`, `\"`, `\\`, and the
+                    // line-continuation backslash-newline) denotes nothing
+                    // that needs a glyph.
+                    if next == Some('u') && chars.get(i + 2) == Some(&'{') {
+                        let mut j = i + 3;
+                        let mut hex = String::new();
+                        while j < chars.len() && chars[j] != '}' {
+                            hex.push(chars[j]);
+                            j += 1;
+                        }
+                        if let Ok(cp) = u32::from_str_radix(&hex, 16)
+                            && let Some(ch) = char::from_u32(cp)
+                        {
+                            found.insert(ch);
+                        }
+                        i = j + 1;
+                        continue;
+                    }
+                    i += 2;
+                    continue;
+                }
+                if c == '"' {
+                    state = State::Code;
+                    prev_code_char = '"';
+                    i += 1;
+                    continue;
+                }
+                found.insert(c);
+                i += 1;
+            }
+        }
+    }
+
+    found
+}
+
+#[cfg(test)]
+mod glyph_coverage_tests {
+    use super::scan_string_literal_chars;
+    use eframe::egui::epaint::text::{FontDefinitions, FontsImpl, TextOptions};
+    use eframe::egui::{FontFamily, FontId};
+
+    /// Build the font stack the running application actually uses.
+    ///
+    /// pdfce-gui installs no custom fonts (`grep -r FontDefinitions
+    /// crates/pdfce-gui/src` finds only this test), so `FontDefinitions::
+    /// default()` *is* the shipped stack: Ubuntu-Light, then
+    /// NotoEmoji-Regular, then emoji-icon-font. That equality is the whole
+    /// reason this headless test can stand in for looking at the screen — the
+    /// moment pdfce starts setting its own fonts, this helper has to be
+    /// changed to mirror them or the gate becomes a check on a font stack
+    /// nobody ships.
+    fn shipped_fonts() -> FontsImpl {
+        FontsImpl::new(TextOptions::default(), FontDefinitions::default())
+    }
+
+    /// `Proportional` is the family every `RichText` and label in `main.rs`
+    /// renders with. The size is a real input to the oracle below (advance
+    /// width scales with it), so it is fixed at a normal UI size rather than
+    /// left to a default that might change.
+    fn proportional() -> FontId {
+        FontId::new(14.0, FontFamily::Proportional)
+    }
+
+    /// Does the shipped font stack actually draw `c`, or does it substitute?
+    ///
+    /// # Why not `Fonts::has_glyph`, the API named for exactly this
+    ///
+    /// Because it answers a subtly different question, and on this font stack
+    /// the difference inverts the result for every character that matters.
+    ///
+    /// `has_glyph` is implemented as `resolve_face(c) != replacement_face_key`
+    /// — "did resolution land somewhere other than the face we fall back to?"
+    /// That is only equivalent to "is `c` present" when the fallback face
+    /// contains nothing else anyone uses. `CachedFamily::new` picks the
+    /// replacement face by searching the chain for `◻` (U+25FB WHITE MEDIUM
+    /// SQUARE), which Ubuntu-Light does not have — so the replacement face is
+    /// one of the two *emoji* faces, and every symbol that legitimately lives
+    /// in that same face is reported missing.
+    ///
+    /// This was not reasoned out in advance; the gate's own positive control
+    /// caught it. The first version of this module used `has_glyph` and
+    /// reported 15 characters as tofu — including U+26A0, which is painted in
+    /// the live status bar, and U+2714, which is painted by
+    /// `ui.painter().text(...)` for the multi-select checkmark in a feature
+    /// shipped back at Pass 3.2. Both are visibly on screen. Had the control
+    /// not been there, this test would have "found" fifteen defects that do
+    /// not exist and triggered a pointless rewrite of a working catalog.
+    ///
+    /// # What this uses instead
+    ///
+    /// `Fonts::glyph_width`, which resolves the face and then asks *that face*
+    /// for `c`'s advance width. A face reached by genuine charmap support
+    /// returns a real advance; the fallback-to-replacement path asks the
+    /// replacement face for a character it does not have, gets `None`, and
+    /// returns `0.0`. So a positive width means a real glyph regardless of
+    /// which face in the chain owns it — which is the question actually being
+    /// asked.
+    ///
+    /// The trade is that genuinely zero-advance characters (combining marks,
+    /// joiners) read as missing. Those are filtered explicitly by the caller
+    /// rather than absorbed here, so the exclusion stays visible.
+    fn draws(fonts: &mut FontsImpl, id: &FontId, c: char) -> bool {
+        fonts.font(&id.family).glyph_width(c, id.size) > 0.0
+    }
+
+    /// Prove the gate can tell present from absent before trusting what it
+    /// says about anything else.
+    ///
+    /// A coverage check that answers "yes" for every input is
+    /// indistinguishable from a working one right up until it matters. So:
+    /// one character known to render (U+26A0, painted live in the status bar
+    /// today) and one known not to (U+25BE, whose absence is the documented
+    /// defect that got it removed from this catalog — see
+    /// `docs/ui_specs/menu-affordance-and-glyph-coverage.md` §1). If either
+    /// control fails, every other assertion in this module is void, which is
+    /// why this is a separate test rather than a line inside the main one.
+    #[test]
+    fn coverage_check_distinguishes_present_from_absent() {
+        let mut fonts = shipped_fonts();
+        let id = proportional();
+
+        assert!(
+            draws(&mut fonts, &id, '\u{26A0}'),
+            "POSITIVE CONTROL FAILED: U+26A0 WARNING SIGN is painted in the live status bar \
+today, so the shipped font stack must have it. If this fails, the font stack changed and every \
+other assertion in this module is measuring something other than what pdfce ships."
+        );
+
+        assert!(
+            draws(&mut fonts, &id, '\u{2714}'),
+            "POSITIVE CONTROL FAILED: U+2714 HEAVY CHECK MARK is painted by \
+`ui.painter().text(...)` for the multi-select checkmark, shipped at Pass 3.2 and visible on \
+screen. A stack that cannot draw it is not the stack pdfce runs on."
+        );
+
+        assert!(
+            !draws(&mut fonts, &id, '\u{25BE}'),
+            "NEGATIVE CONTROL FAILED: U+25BE BLACK DOWN-POINTING SMALL TRIANGLE is absent from \
+every font in egui's default chain, and that absence is precisely the tofu defect that removed \
+it from this catalog. If the check now reports it as present, the check is answering 'yes' \
+indiscriminately and proves nothing about the glyphs below."
+        );
+    }
+
+    /// Every character pdfce can draw from this catalog must have a real glyph.
+    ///
+    /// # Why this is a test and not a screenshot
+    ///
+    /// Standing rule R86 requires operator-facing behavior to be observed in
+    /// the running application. Observation found the U+25BE tofu — but only
+    /// because the four buttons carrying it happened to be on screen at once.
+    /// A glyph used in a rarely-reached refusal string could sit broken
+    /// indefinitely without ever appearing in a capture. This test reaches
+    /// every string in the catalog whether or not any screen shows it, so the
+    /// two methods are complementary rather than redundant: observation proves
+    /// the layout, this proves the coverage.
+    ///
+    /// # What a failure means
+    ///
+    /// The named character renders as an empty box wherever it appears. The
+    /// fix is *not* to bundle a font — that would grow the single-folder
+    /// distribution for one glyph. It is to replace the character with a word,
+    /// with an SVG from `icons.rs` (the mask-and-tint pipeline that already
+    /// draws real art), or with a codepoint the chain does cover.
+    #[test]
+    fn every_glyph_in_the_catalog_has_a_real_face() {
+        let src = include_str!("ui_text.rs");
+        let chars = scan_string_literal_chars(src);
+
+        // Sanity-check the scanner found something plausible before drawing
+        // any conclusion from its output: a scanner that silently returned an
+        // empty set would make this test pass while reading nothing at all.
+        assert!(
+            chars.len() > 50,
+            "SCANNER FAILURE: only {} distinct characters were extracted from a {}-byte catalog. \
+The scanner is not reading the file, so a green result here would be meaningless.",
+            chars.len(),
+            src.len()
+        );
+        assert!(
+            chars.contains(&'\u{26A0}'),
+            "SCANNER FAILURE: the catalog demonstrably contains U+26A0 (the status-bar warning \
+prefix) but the scanner did not extract it, so it is not reading string literals correctly."
+        );
+        // Anchored on a codepoint that appears ONLY in escaped form, in copy
+        // that is actually shown: U+201C is the opening curly quote the
+        // redaction report wraps removed text in. This assertion previously
+        // named U+2715, which lived only inside the `snap_glyph` catalog —
+        // deleting that dead function took the anchor with it and turned this
+        // guard red. If it ever has to move again, move it to another
+        // escape-only codepoint, never to a literal one, or it stops
+        // exercising the escape path at all.
+        assert!(
+            chars.contains(&'\u{201C}'),
+            "SCANNER FAILURE: the catalog contains U+201C written as a `\\u{{...}}` escape, but \
+the scanner did not extract it — the escape-decoding path is broken, which would hide every \
+escaped glyph in the file."
+        );
+
+        let mut fonts = shipped_fonts();
+        let id = proportional();
+
+        let missing: Vec<char> = chars
+            .iter()
+            .copied()
+            // ASCII is covered by every face in the chain, and checking it
+            // only adds noise to a failure message.
+            .filter(|c| !c.is_ascii())
+            // A variation selector carries no glyph of its own; it modifies
+            // the presentation of the preceding character. `has_glyph` will
+            // always say no, correctly and uselessly.
+            .filter(|c| !matches!(*c, '\u{FE0E}' | '\u{FE0F}' | '\u{200D}'))
+            // Space-like characters have a real advance but no ink, and the
+            // no-break space in particular is used deliberately in this
+            // catalog. `draws` cannot distinguish "blank by design" from
+            // "blank by failure" for them, so they are named rather than
+            // silently swept in.
+            .filter(|c| !c.is_whitespace())
+            // U+FFFD REPLACEMENT CHARACTER is the one deliberate exception.
+            // pdfce emits it as the visible marker for a byte it could not
+            // decode, and no face in the chain has it — so epaint substitutes
+            // its own replacement mark, U+25FB WHITE MEDIUM SQUARE. An
+            // empty-looking box is *precisely* the intended appearance for an
+            // undecodable character, so the substitution happens to land on
+            // the right picture by a different route. Named here rather than
+            // filtered silently, because this is the only place in the whole
+            // catalog where "renders as a box" is the correct outcome.
+            .filter(|c| *c != '\u{FFFD}')
+            .filter(|c| !draws(&mut fonts, &id, *c))
+            .collect();
+
+        assert!(
+            missing.is_empty(),
+            "TOFU: {} character(s) used in operator-visible strings have no glyph in any font of \
+the shipped stack (Ubuntu-Light, NotoEmoji-Regular, emoji-icon-font) and will render as an empty \
+box: {}",
+            missing.len(),
+            missing
+                .iter()
+                .map(|c| format!("U+{:04X} {c:?}", *c as u32))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
 }

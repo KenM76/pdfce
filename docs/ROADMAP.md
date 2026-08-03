@@ -43,6 +43,34 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 8.1 — GUI redaction-apply flow (the GUI half of Pass 8.0's redaction feature; decision 018's live-edit-rendering framing; `docs/ui_specs/pass-8-redaction.md` §§3–4) — **THE HALF-SHIPPED SECURITY FEATURE IS NOW WHOLE** — 2026-08-03, committed `9a68999`
+
+**Before this Pass, `grep -c "apply_redactions\|RedactApply" crates/pdfce-gui/src/main.rs` returned 0.** pdfce could mark redactions in the GUI and disclose the mark count (the status bar warned *"⚠ N UNAPPLIED redaction mark(s) — this document is NOT redacted"*), but applying — the operation that actually removes covered content — was CLI-only (`pdfce-cli redact-apply`). The app named the danger and withheld the remedy. This Pass closes that gap end-to-end: mark, review, apply, and a runtime-verified confirmation, all reachable from the running GUI.
+
+**Build.** New `crates/pdfce-gui/src/redact_apply.rs` (640 lines) — the whole pipeline as a **free function over `&EditSession`**, deliberately, so the security assertion can be a TEST rather than a manual inspection (see the standing-rule-adjacent finding below). New `DockPanel::Redact`, reached through the same `panel_body` dispatcher as every other dock surface (R80). `Icon::Redact` — the icon set's only solid-filled glyph (per its own documented §8.1 exception, the one place an outline icon would misrepresent what the operation does) — un-reserved and wired to the new panel. Core gained `RedactionMark`/`redaction_marks()`; `count_redaction_marks` now delegates to it, so the status-bar count and the panel's list walk the SAME data — a "3 marks" banner beside a 2-row list is now structurally impossible, not merely untested-for. Core also gained `EditSession::delete_redaction_mark` + `CommandKind::DeleteRedactionMark` — needed because bulk mark-by-search must stay reviewable (rule 4): undo cannot reject the 3rd of 40 marks without discarding the 38 good ones. Deliberately NOT a general `delete_annotation` — it refuses any non-`/Redact` subtype by construction, so it cannot become a back door for deleting widgets or reply chains.
+
+**Gates:** `cargo test --workspace` **1756 → 1768, 0 failed** (baseline measured from a fresh checkout, not quoted from a prior filing); fmt/clippy clean; `check-ui-strings.sh` clean; `cargo tree -p pdfce-core` / `cargo tree -p pdfce-render` confirmed free of GUI dependencies; **R85 21/21**.
+
+**The design decision worth recording above the feature itself: there is no incremental-save fallback because the code path does not exist to be taken — an absence, not a check that could be bypassed.** An incremental save would leave the un-redacted content sitting in the file's previous revision, inside a file the operator has just been told is redacted. Engineer-verified: the only two occurrences of `to_incremental_bytes` anywhere in `redact_apply.rs` are comments EXPLAINING the absence; a precise grep for a call to it returns nothing. (The librarian's own first grep of this claim was too coarse and appeared to contradict the builder — re-run precisely, the claim held. Recorded because the correction is itself the lesson: verify a "this can't happen" claim by grepping for the call, not for the word.)
+
+**The security proof proves ABSENCE, not invisibility — this is the finding worth generalizing.** `applied_redaction_leaves_no_recoverable_trace_in_the_saved_bytes` drives the EXACT GUI pipeline and asserts three independent absences of the secret: (1) `text_extract::extract_document` on the saved bytes — the same extractor the CLI and Copy-text use; (2) **every** stream in the file, decoded — not just page content, but form XObjects, metadata, and object-stream containers, so a stale compressed copy is caught; (3) the raw file bytes. Plus a **negative control** (`KEEPTHIS`, never marked, must still extract) so a build that emits a blank page would FAIL the test rather than pass it vacuously. **Deliberately no raster assertion** — a black box drawn over live text is precisely the §12.5.6.23 false-redaction failure mode, so "the region looks blank" is the wrong question to ask.
+
+**The same proof runs at RUNTIME on the real output, before the confirmation dialog even opens** — that is what licenses the word "verified" in the confirmation UI. A survivor found in a decoded stream refuses the apply and writes nothing; a survivor found in raw bytes only is disclosed as an acknowledgement-gated residual, worded to claim only what pdfce actually knows (*"It may be an unrelated coincidence, or a copy in a carrier pdfce does not recognise — pdfce cannot tell which"*). Strings under 4 characters are excluded from the raw-byte half of the check and **counted in the report** rather than silently dropped.
+
+**Two defects found only by looking (R86), fixed in the same commit:**
+- The ui-spec's `max_height(240.0)` marks list pushed **"Review & Apply Redactions…" below the fold** in a ~250 pt dock pane — a panel that shows the marks but hides the way to finish them is an active nudge toward "marking is redacting," the exact misconception the status-bar warning exists to prevent. Reordered to **state → action → detail** (mark count and warning first, Review & Apply next, the scrollable mark list last).
+- The confirmation report attributed the ENTIRE `annotations_removed` count to *overlapping* annotations; core counts the marks themselves plus true overlaps together and does not separate them. On the fixture this read "3 annotations overlapping a marked region will also be removed" when all three WERE the marks. Reworded to state an accurate total instead of a false attribution.
+
+All four GUI states (marks-present-not-applied, review dialog open, applying, applied-and-confirmed) were observed on a running build via `tools/observe-gui.ps1`/`gui-click.ps1` with `-ProcessId`; the blank-capture guard refused a uniform frame twice before a real click woke eframe, exactly as it is documented to. Applied output independently confirmed post-hoc: `list-redactions` reports 0, a raw grep for the secret returns 0, no `/Prev` chain, `/Info` `/Title` scrubbed.
+
+**Where the spec no longer fits current reality — recorded, not silently deviated from.** Six items: §3.1's dedicated `SidePanel` design is now an R80 violation on paper (the shipped build correctly used `DockPanel::Redact` instead, mounted in the upper tab group — A.3 caps a default tab group at two labels and `egui_tiles` hides overflow behind scroll arrows, now enforced by a new test `no_default_tab_group_holds_more_than_two_panes`); §3.1's icon-only button design is superseded by the shipped icon set; **§4.3's permanence wording was factually WRONG for this build** ("cannot be undone once you save this" assumes apply mutates the open document — it does not; apply writes a NEW file and leaves the open session untouched); §4.3/§7 assumed a *predicted* report, but because `apply_redactions` is a pure function the apply now runs BEFORE the modal opens and the report states MEASUREMENTS — strictly better, and it changes §5.1's calculus (see R98, Standing rules); §4.4's `could_not_remove` field does not exist in core — derived instead in one `residual_lines()` function so the pass/fail gate and the printed report section cannot drift apart; §3.2's `✕` glyph was replaced with the word "Remove," citing the project's already-shipped tofu finding on that glyph.
+
+**Not built — scope-called and named, not silently dropped.** §2.2/§2.6 canvas drag-marking and its transient property bar (the §1.1 canvas-substrate dependency this needed has since landed, so this is a scope call, not a block — filed as a named follow-up under Backlog, recommended as a `CanvasTool::Redact` variant rather than a parallel drag implementation); §6 Sanitize (filed under Backlog's Redaction bucket, unchanged).
+
+**Rule 11 does not apply.** `redact-mark`/`redact-apply`/`list-redactions` shipped as CLI in Pass 8.0. This Pass adds no new CLI surface because the CLI already had the whole feature — this Pass was the missing GUI half.
+
+**Standing-rule-adjacent facts, three of which are now filed as new standing rules (R97–R99, below; ceiling was R96, now R99):** the free-function-over-data-so-the-proof-can-be-a-test pattern (R97); the apply-computes-before-confirming pattern that turns a predicted report into a measured one (R98); the ~250 pt dock-pane-height finding that a panel's primary action must precede its detail list (R99). Also recorded, not promoted to a numbered rule: the third confirmation-dialog convention (resizable 760×560, scrollable body) as the shared shape for any future report-bearing destructive confirmation; A.3's two-panes-per-default-group cap is now test-enforced.
+
 ### Pass 19.4 — `Tw` (word spacing) direct-authoring control (core + CLI + GUI; decision 019, closes FF-H — **decision 019 / FF-H COMPLETE end-to-end, all five slices 19.0–19.4 shipped**) — 2026-08-03, committed `a1638f4`
 
 **MILESTONE: decision 019 / FF-H is COMPLETE, and with it the operator's
@@ -5694,7 +5722,7 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 
 ## In progress
 
-### GUI redaction-apply flow (Backlog item promoted to In progress 2026-08-03; no Pass ID assigned yet — a builder is on this now)
+### GUI redaction-apply flow — **SHIPPED as Pass 8.1 (`9a68999`), 2026-08-03. See the Pass 8.1 Shipped entry (top of Shipped) for the full build record.** Retained below as the historical framing (append-only discipline).
 
 **Promoted from Backlog the same continuation decision 019/FF-H
 completed (Pass 19.4, `a1638f4`).** The GUI can mark redactions and
@@ -5728,6 +5756,14 @@ here, and as new Open operator question (l), so it doesn't read as
 silent scope drift if the operator would have preferred item #4 dispatched
 next per the standing order. See the Backlog entry (below, now marked
 PROMOTED) for the full prior framing.
+
+**RESOLVED by shipping (2026-08-03) — see the Pass 8.1 Shipped entry
+(top of Shipped).** The sequencing call itself is still unratified by
+the operator (Open operator question (l), below, remains open as a
+retrospective flag, not a live blocker), but the work it authorized is
+now done. Item #4 (form-building tools) is next per the ★★★ priority
+sequence — its Acrobat-parity research is already teed up, see the
+updated Forms Backlog entry below.
 
 ### ★★★★ HEADLINE FINDING (2026-08-02) — THE GUI NEVER RENDERS UNSAVED EDITS. READ THIS BEFORE TRUSTING ANY "the operator can't verify feature X" report.
 
@@ -6362,8 +6398,19 @@ SHIPPED** (`a1638f4`) — see the Pass 19.4 Shipped entry (top of
 Shipped) and the now-retired ★ Pass 19.x entry under Next up. This
 whole In-progress entry (the `/Contents` defect and its sequencing
 rationale) is fully historical as of this update — nothing from this
-thread remains open. **What IS in progress now: the GUI redaction-apply
-flow** — see its own new In-progress entry, below.
+thread remains open. **UPDATE (continuation 70, real date 2026-08-03):
+the GUI redaction-apply flow has since SHIPPED, as Pass 8.1** (`9a68999`,
+engineer-reported hash verified by `git cat-file -t`, alongside
+`24bdbc6` also verified this continuation) — see the Pass 8.1 Shipped
+entry (top of Shipped). Branch `pass-8-redaction`, **60 commits** as
+reported this continuation (the librarian has no shell of its own and
+files the count as handed, per the standing methodology noted above;
+not independently re-run via `git rev-list --count HEAD`), still no
+git remote configured. **Nothing is currently in progress** — the next
+dispatch per the ★★★ operator priority sequence is item #4
+(form-building tools), whose Acrobat-parity research
+(`pdfce-acrobat-librarian`'s form-authoring extension session) is
+already teed up — see the updated Forms Backlog entry, below.
 
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
@@ -8519,10 +8566,12 @@ nothing gets forgotten, not as a commitment to build in this order.
 
 - **GUI has no redaction-apply flow at all (filed 2026-08-03, Pass
   17.1/17.2, no Pass number assigned). PROMOTED TO IN PROGRESS
-  2026-08-03** — see the new "GUI redaction-apply flow" entry under
-  *In progress* (above) for current status and the engineer-sequencing
-  flag (dispatched ahead of item #4/forms in the ★★★ priority sequence).
-  Original framing retained below. The GUI can mark redactions and
+  2026-08-03, then SHIPPED 2026-08-03 as Pass 8.1 (`9a68999`) — see the
+  Pass 8.1 Shipped entry (top of Shipped) for the full build record.
+  This item is CLOSED.** Original framing retained below (append-only).
+  See the new "canvas drag-marking + property bar" bullet immediately
+  below for the one piece of the original ui-spec (§2.2/§2.6) this Pass
+  deliberately did not build. The GUI can mark redactions and
   disclose the marks, but cannot APPLY a redaction (the operation that
   actually removes covered content) — applying is CLI-only,
   `pdfce-cli redact-apply`. Predates this session but newly notable
@@ -8535,6 +8584,18 @@ nothing gets forgotten, not as a commitment to build in this order.
   confirm/apply modal, most likely, not a live-preview surface). See
   the Pass 17.1/17.2 Shipped entry and `ARCHITECTURE.md` §12's
   continuation-58 decision-018 entry for the full architectural framing.
+- **Canvas drag-marking + transient property bar for redaction (filed
+  2026-08-03, Pass 8.1's ship — `docs/ui_specs/pass-8-redaction.md`
+  §§2.2/2.6, no Pass number assigned).** Scope-called out of Pass 8.1
+  by name, not silently dropped: the ui-spec's canvas-drag mark gesture
+  and its transient property bar were never built — Pass 8.1 shipped
+  mark-by-search and the review/apply flow only. The §1.1 canvas-
+  interaction-substrate dependency this needed has since landed (Pass
+  12.0), so this is now a scope call rather than a block. **Recommended
+  approach, per the Pass 8.1 build record:** add a `CanvasTool::Redact`
+  variant to the existing canvas-tool enum rather than a parallel,
+  bespoke drag implementation — reuses the marquee/drag machinery
+  already shipped for selection and dimensioning.
 - **`✓`/`✕` glyph verification still owed (filed 2026-08-03, sibling of
   the now-closed menu-affordance/glyph-coverage class).** `✓`/`✕`
   (U+2713/U+2715) on three tools' Accept/Reject buttons were never
@@ -8995,6 +9056,47 @@ nothing gets forgotten, not as a commitment to build in this order.
   generation rules, default field properties per type, Acrobat's own
   auto-detect heuristics) before scoping a Pass, same discipline as
   every other Backlog-to-Pass promotion.
+  **AMENDMENT (2026-08-03) — the form-field-creation research is now
+  DONE; scoping is IN FLIGHT via a KenAgent decision agent writing to
+  `docs/decisions/` (form-building scope), concurrent with this
+  filing.** `pdfce-acrobat-librarian` added 5 new files
+  (`forms__field_creation_minimums.md`,
+  `forms__field_naming_hierarchy_and_collisions.md`,
+  `forms__radio_group_authoring.md`, `forms__tab_order.md`,
+  `forms__authoring_limits_and_refusals.md`) plus dated addenda to 3
+  existing files — bucket now 17 files total, index in
+  `D:\Dev\Rag-Specialized\Acrobat_Features\index.md`. **Headline
+  finding, recorded as the bucket's central must_have acceptance
+  criterion:** a newly-typed field name colliding with an existing
+  field's name is TYPE-BRANCHED — same name + same type MERGES into
+  one logical field with additional `/Kids` widget members (the
+  correct, intentional mechanism radio groups and legitimately-
+  duplicated fields depend on); same name + a DIFFERENT type is
+  REFUSED outright with a specific quoted error string. **Recommendation
+  to whoever scopes this into a Pass: `pdfce-core`'s field model must
+  be a `/Kids` object graph from day one, not a flat name-keyed list**
+  — retrofitting this distinction later is expensive. Also produced:
+  two search-confirmed-unfillable GAPs on radio-group member deletion
+  (recommend empirical testing against a real Acrobat install once
+  fixtures exist, rather than further web research); no source anywhere
+  on tab-order insertion behavior (recommend pdfce adopt its own
+  documented deterministic rule rather than claim parity); a sourced
+  exceed-Acrobat opportunity (Acrobat's own newly-created fields ship
+  UNTAGGED, even in Acrobat's own accessibility-forward workflow); and
+  two unreconciled conflicts flagged rather than guessed — (a)
+  `core_ops__merge_combine_files.md` (already built) documents
+  Combine-Files as defaulting to auto-RENAMING duplicate field names
+  across merged source files, while this session's separately-sourced
+  finding describes same-named fields across merged documents as
+  LINKING into one field by default (plausibly different Acrobat
+  versions/entry points, not reconciled); (b) the encrypted-document
+  permission workflow (two sourced accounts of "add fields before
+  securing" vs. "unlock with owner password, then Prepare Form works,"
+  not reconciled). See `D:\Dev\Rag-Specialized\Acrobat_Features\
+  index.md`'s 2026-08-03 extension-session entry for the full record.
+  **The librarian avoided `docs/decisions/` this filing per explicit
+  instruction — the KenAgent decision agent's scope work there is not
+  reflected above beyond noting it is in flight.**
 - **XFA** — legacy Adobe forms tech. **Verify current status before
   scoping** — Adobe has been deprecating XFA in Acrobat; consult the
   spec RAG + a fresh web check before committing engineering time here.
@@ -9008,6 +9110,23 @@ nothing gets forgotten, not as a commitment to build in this order.
   XFA support/deprecation status," which is a spec/vendor-status
   question the census cannot answer; that verification is still owed
   before any XFA engineering time is committed.
+  **AMENDMENT (2026-08-03) — the standing open item is PARTIALLY
+  answered, PARTIALLY still open.** `xfa__deprecation_status_and_
+  hybrid_forms.md` (`D:\Dev\Rag-Specialized\Acrobat_Features\`)
+  confirms dynamic XFA has NO AcroForm at all as of Acrobat 8.1+, so
+  `out_of_scope` reads clean for dynamic XFA — but **static-XFA-hybrid
+  new-field-creation permissibility (does Acrobat allow authoring a NEW
+  AcroForm field into a document that also carries a static-XFA
+  stream?) is an explicit, unresolved GAP**, surfaced by this session's
+  forms-authoring research and not answered by the census or the prior
+  deprecation-timeline lookup. Acrobat's own precise version-level
+  deprecation date also remains a GAP (third-party-vendor-sourced
+  approximate timing only, no Adobe-primary source found). **This is
+  an operator-relevant call, not just an engineering one**: the
+  `CLAUDE.md` open item asks to verify XFA's relevance before
+  committing engineering time; this amendment narrows exactly what
+  still needs verifying (hybrid-form authoring permissibility, exact
+  deprecation date) rather than closing the item.
 - **Digital signatures** — PAdES profiles (B-B, B-T, B-LT, B-LTA),
   PKCS#7 signing + verification, incremental-update-based signing
   (see `ARCHITECTURE.md` §5), timestamp authority (RFC 3161) support.
@@ -9094,7 +9213,20 @@ nothing gets forgotten, not as a commitment to build in this order.
 - **Redaction** — true content removal (not visual-overlay-only), per
   `ARCHITECTURE.md` §5 corollary. This is a trust-critical feature;
   needs explicit test coverage proving removed content is actually
-  gone from the saved bytes, not just hidden.
+  gone from the saved bytes, not just hidden. **AMENDED 2026-08-03 —
+  mark + apply + review, CLI and GUI, are all SHIPPED (Pass 8.0, Pass
+  8.1) with the absence-proof test coverage this bullet asked for. Two
+  named items remain in this bucket, both filed as their own Backlog
+  bullets rather than duplicated here:** canvas drag-marking + the
+  transient property bar (see the bullet immediately above the
+  Forms/AcroForm bucket, below — a scope call out of Pass 8.1, not a
+  block); and **Sanitize / Remove Hidden Information (§6 of the
+  ui-spec)** — not yet scoped into any Pass, no builder dispatched.
+  `redaction__sanitize_remove_hidden_information.md`
+  (`D:\Dev\Rag-Specialized\Acrobat_Features\`) already grounds this
+  capability's acceptance criteria from the 2026-07-31 Redaction-bucket
+  research session — re-read it, don't re-research, when Sanitize is
+  scoped.
 - **Bates numbering / stamping** — header/footer stamps, sequential
   numbering across a batch, watermarks.
 - **Annotation display (read-side)** — created 2026-08-01 by decision
@@ -9503,17 +9635,22 @@ blocking Pass 19.0's in-progress build:**
 **New this session (2026-08-03, Pass 19.4 ship) — one item, a
 sequencing flag rather than a blocking question:**
 - **(l) Engineer sequencing call: GUI redaction-apply flow dispatched
-  ahead of item #4 (forms) in the ★★★ operator priority sequence.**
-  With decision 019/FF-H complete, the engineer chose to dispatch the
-  GUI redaction-apply flow (Backlog → In progress, no Pass ID yet) next,
-  ahead of form-building tools, on the grounds that completing a
-  half-shipped **security** feature (the GUI currently tells the
-  operator their document "is NOT redacted" with no in-app remedy)
-  outranks starting a new feature family. This is a scope-sequencing
-  judgment call, not itself required by any standing rule or prior
-  operator instruction — flagged so it isn't discovered only after
-  redaction-apply ships. **Default: no objection assumed** unless the
-  operator explicitly wants item #4 dispatched first instead.
+  ahead of item #4 (forms) in the ★★★ operator priority sequence —
+  the WORK is now done (Pass 8.1 SHIPPED 2026-08-03, `9a68999`); the
+  RATIFICATION question stays open.** With decision 019/FF-H complete,
+  the engineer chose to dispatch the GUI redaction-apply flow
+  (Backlog → In progress → now Shipped) next, ahead of form-building
+  tools, on the grounds that completing a half-shipped **security**
+  feature (the GUI used to tell the operator their document "is NOT
+  redacted" with no in-app remedy — no longer true, see the Pass 8.1
+  Shipped entry) outranks starting a new feature family. This is a
+  scope-sequencing judgment call, not itself required by any standing
+  rule or prior operator instruction — flagged so it isn't discovered
+  only after the fact. **Default: no objection assumed** — item #4
+  (form-building tools) is next per the standing order, its
+  Acrobat-parity research already done (see the updated Forms Backlog
+  entry) — unless the operator retroactively objects to the
+  reordering itself.
 
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
@@ -10624,6 +10761,59 @@ sequencing flag rather than a blocking question:**
   that runs before it and ask whether the input class the gate is meant
   to catch can even survive to reach it. See
   `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`.
+- **R97 — A security- or correctness-critical proof should be extracted
+  to a free function over data, so the proof can be a TEST rather than
+  a manual inspection (methodology; no decision number; librarian-
+  assigned; 2026-08-03, Pass 8.1, `redact_apply.rs`).** Pass 8.1's
+  redaction-apply pipeline was written as a free function taking
+  `&EditSession`, deliberately, rather than as inline GUI event-handler
+  code — the resulting `applied_redaction_leaves_no_recoverable_trace_
+  in_the_saved_bytes` test can drive the EXACT production pipeline
+  headlessly and assert absence across the extractor, every decoded
+  stream, and the raw bytes, with a negative control. Had the same
+  logic lived inline in an `egui` click handler, the same proof would
+  have needed either a GUI-driving test harness or a human inspecting
+  the code path by eye — a materially weaker guarantee for a
+  trust-critical claim. General form: when a change's correctness
+  claim is genuinely load-bearing (security, data-loss, round-trip),
+  prefer shaping the implementation so the claim CAN be asserted by a
+  test over the running production code, even where the natural first
+  draft would embed the logic directly in a UI callback.
+- **R98 — A confirmation dialog for a destructive, irreversible-in-
+  effect operation should compute and disclose the REAL outcome before
+  the operator confirms, not a prediction of it, whenever the
+  underlying operation is a pure function (methodology; no decision
+  number; librarian-assigned; 2026-08-03, Pass 8.1).** Because
+  `apply_redactions` is pure (it does not mutate the open session; it
+  produces a new file's bytes), Pass 8.1's confirmation flow runs the
+  apply BEFORE opening the confirmation modal and shows the operator
+  the actual measured report (glyphs removed, annotations removed,
+  residuals found) rather than a prediction assembled from the marks
+  alone. This is strictly more honest than a prediction, and it is
+  what licenses the security proof (R97) to run before the operator
+  ever sees the dialog, so a survivor can refuse the whole apply rather
+  than be disclosed as a residual after the fact. General form: when a
+  confirm-then-act flow's "act" step is pure/side-effect-free relative
+  to the object being confirmed, prefer computing the real result first
+  and presenting it as the confirmation content, over predicting what
+  the result will probably be.
+- **R99 — In a bounded dock-pane container, a panel's primary action
+  must be reachable before its detail/list content, not after it (UI
+  methodology, R86-family finding; librarian-assigned; 2026-08-03, Pass
+  8.1, observed via `-ProcessId`).** Pass 8.1's Redact panel originally
+  ordered mark-count → scrollable mark list → "Review & Apply
+  Redactions…" button; in a default `egui_tiles` tab group (~250 pt
+  tall), the list alone pushed the action below the fold. A panel that
+  shows the danger (unapplied marks) and hides the remedy (the button
+  to finish the job) is an active nudge toward the exact misconception
+  the status-bar warning exists to prevent. Fixed by reordering to
+  **state → action → detail**: summary/warning first, the primary
+  action next, the scrollable/expandable detail list last. General
+  form: for any dock panel whose content can grow past its typical
+  visible height, order state-then-action-then-detail, not
+  content-then-action — R86's "observed working in the running
+  application" discipline is what catches this, since headless tests
+  have no viewport height to push anything below.
 
 ## Update protocol
 

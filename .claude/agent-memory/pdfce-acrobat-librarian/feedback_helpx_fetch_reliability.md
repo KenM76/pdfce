@@ -118,6 +118,23 @@ replenish mid-session. Go straight to WebFetch on non-helpx URLs already
 known from the existing RAG corpus (prior citations, sibling files'
 Source sections) rather than burning attempts on helpx.adobe.com itself.
 
+Confirmed a tenth time, but with an ATYPICALLY CLEAN result (2026-08-03,
+extending the Forms bucket for form-BUILDING/authoring scoping): this
+session never attempted a direct `helpx.adobe.com` fetch at all — went
+straight to `WebSearch` snippets from the first query, consistent with the
+fastest-observed pattern from a prior same-day Forms session. `WebSearch`
+itself worked normally all session (no quota exhaustion, unlike several
+prior sessions). 2/2 direct `WebFetch` attempts against
+`community.adobe.com` thread URLs (surfaced via WebSearch) succeeded
+cleanly — no timeouts, no 403s, no ECONNRESET. Worth noting as a
+data point that `community.adobe.com` specifically has now succeeded on
+every direct-fetch attempt made against it across multiple sessions,
+distinct from and more reliable than `helpx.adobe.com` itself — when a
+promising `community.adobe.com` thread URL surfaces in search results,
+it is worth a direct fetch attempt (not just relying on the snippet),
+since the full thread often contains a more precise quote (e.g. a
+verbatim Acrobat error-message string) than the search snippet alone.
+
 Confirmed a ninth time (2026-08-01, extending `measure__scale_and_calibration.md`
 to try to close the static-vs-associative GAP for decision 011): `WebSearch`
 exhausted at 200/200 before the first query again; the one candidate
