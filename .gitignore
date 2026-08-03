@@ -61,3 +61,10 @@ tools/observations/
 # corpus AND fixtures/synthetic (which a determinism check runs over). Analysis
 # output, never source — same split as the tools/**/out-* rule above.
 /fixtures/*-roundtrip.tsv
+
+# Corpus-census output (tools/tw-census). Analysis over the gitignored
+# external corpus — evidence, not source. Same split as the roundtrip and
+# corpus-harness rules above: the TOOL is tracked, its findings are not.
+/fixtures/external/tw-census*.tsv
+/fixtures/external/tw-census*.txt
+/fixtures/external/tw-census*.log
