@@ -1,0 +1,57 @@
+# tw-census — the decision-019 §3.3 corpus census that gates `Tw` authoring.
+#
+# WHY THIS EXISTS (docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md
+# §3.3 and §6 slice 19.4): decision 019 declined to ship word spacing (`Tw`)
+# as an operator-facing authoring control and made the question CONDITIONAL
+# on a measurement that had never been taken. `Tw` is spec-void for composite
+# (multi-byte-code) fonts — ISO 32000-1 §9.3.3 applies it only to a
+# single-byte character code 32 — so the control's usefulness is bounded by
+# the share of real text whose font is simple. §3.3 set explicit decision
+# bands (>= 60% build / <= 25% close / in between escalate) and required the
+# number to come from a census rather than an argument.
+#
+# This tool is that census. It reports the number; it does not make the call.
+#
+# WHY OUT-OF-TREE (workspace-excluded via the root manifest's `exclude`, the
+# same pattern as tools/roundtrip, tools/corpus-report and tools/difftest):
+#   (1) keeps `cargo test --workspace` fast and dependency-light;
+#   (2) keeps the GUI-core-separation `cargo tree` invariant checks
+#       unambiguous;
+#   (3) keeps cargo-about's generated THIRD_PARTY_LICENSES.md an accurate
+#       picture of the SHIPPING dependency graph only (docs/LEGAL.md §6.3).
+# This tool is never shipped.
+#
+# ZERO NEW DEPENDENCIES: the only dependency is `pdfce-core` by path. Every
+# other thing it needs (directory walking, thread + timeout isolation, TSV
+# writing, percentage formatting) is std. That is deliberate — a measurement
+# harness whose numbers gate a product decision should not be able to blame a
+# third-party crate for them.
+#
+# FIXTURE RULE (docs/LEGAL.md §5): corpus files fed to this tool are
+# rights-cleared corpora only and are NEVER committed to the repo —
+# fixtures/external/ is gitignored scratch space. This tool reads files in
+# place and emits only aggregate counts plus a per-file TSV.
+
+[package]
+name = "tw-census"
+version = "0.0.0"
+edition = "2024"
+publish = false
+# license intentionally unset — internal tool, never shipped or published
+# (same posture as the workspace, docs/LEGAL.md §1).
+
+# Detach from the parent workspace explicitly (belt to the root manifest's
+# `exclude` braces): this package is its own single-crate workspace with its
+# own Cargo.lock, so its dependency tree never mingles with the shipping one.
+[workspace]
+
+[dependencies]
+# The crate under measurement, path-referenced so the harness fails to
+# compile (rather than silently drifting) if its API changes under it.
+pdfce-core = { path = "../../crates/pdfce-core" }
+
+[profile.release]
+# The corpus is ~4,000 files and every page of every one is extracted with
+# per-glyph provenance capture on. A debug build turns a few minutes into an
+# hour.
+opt-level = 3

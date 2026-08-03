@@ -55,6 +55,7 @@ exclude = [
     "tools/content-identity",
     "tools/font-parity",
     "tools/recover-sweep",
+    "tools/tw-census",
     "fuzz",
 ]
 
