@@ -5470,31 +5470,9 @@ impl PdfceApp {
             }
 
             // §5.1 live-preview overlay: painted above the raster via the
-            // painter, NEVER a re-raster. This Pass has an empty selection and
-            // the no-op provider, so `selection_outline_bounds` returns empty and
-            // nothing is stroked — the "paints nothing this Pass" criterion,
-            // exercised (not omitted) so Pass 9a's selection outlines and future
-            // tools' in-progress previews plug into a live call site. A selection
-            // outline is a 2px SHAPE, not a tint (rule 6): a real boundary.
-            let outlines = canvas::selection_outline_bounds(
-                &doc.canvas_selection,
-                doc.target_provider(),
-                doc.view.page_index,
-            );
-            if !outlines.is_empty() {
-                let painter = ui.painter_at(image_rect);
-                let stroke = egui::Stroke::new(2.0, ui.visuals().selection.stroke.color);
-                for canvas_bounds in outlines {
-                    let min = viewer::page_to_screen(canvas_bounds.min, image_rect, extent, zoom);
-                    let max = viewer::page_to_screen(canvas_bounds.max, image_rect, extent, zoom);
-                    painter.rect_stroke(
-                        egui::Rect::from_two_pos(min, max),
-                        0.0,
-                        stroke,
-                        egui::StrokeKind::Inside,
-                    );
-                }
-            }
+            // painter, NEVER a re-raster. A selection outline is a 2px SHAPE,
+            // not a tint (rule 6): a real boundary.
+            draw_selection_outlines(doc, ui, image_rect, extent, zoom);
         } // end: non-text-edit-tool object-selection path (Pass 14.3 gate)
 
         // Pass 12.M2b ui-spec §5: the modeless "Dimension Groups" panel. Drawn
@@ -7816,6 +7794,56 @@ fn annotation_status(
 /// refusal rather than a GUI read-path accident. Lifting it is a scoped
 /// core change (session-relative object indices), not a GUI one.
 #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+/// Stroke a 2px outline around every currently-selected canvas object.
+///
+/// # Why this is a shared function and not inline code
+///
+/// It used to be inline in the plain-selection branch of `canvas`, which meant
+/// **the object-edit tool drew no selection feedback at all**: that branch is
+/// an `else`, and `run_vector_edit_tool` returns long before it. Clicking an
+/// object with the Obj tool selected it, armed Delete, and armed drag-to-move —
+/// while showing the operator absolutely nothing.
+///
+/// That is the second half of the operator's 2026-08-02 report, *"If I click
+/// the one to edit objects, I don't seem to be able to click on objects."* The
+/// first half was a real hit-testing bug (a canvas-space tolerance shrinking to
+/// sub-pixel on screen as you zoom out, fixed in `SELECT_SCREEN_TOLERANCE_PX`).
+/// This is the other half, and it is the more deceptive of the two: hit-testing
+/// worked, selection worked, the state was correct — and the tool looked
+/// completely dead because nothing was painted. A correct action with no
+/// feedback is indistinguishable from a broken one.
+///
+/// Every tool that owns the canvas and supports object selection must call
+/// this. Painting is a `painter` overlay above the raster, never a re-raster.
+fn draw_selection_outlines(
+    doc: &OpenDoc,
+    ui: &egui::Ui,
+    image_rect: egui::Rect,
+    extent: (f32, f32),
+    zoom: f32,
+) {
+    let outlines = canvas::selection_outline_bounds(
+        &doc.canvas_selection,
+        doc.target_provider(),
+        doc.view.page_index,
+    );
+    if outlines.is_empty() {
+        return;
+    }
+    let painter = ui.painter_at(image_rect);
+    let stroke = egui::Stroke::new(2.0, ui.visuals().selection.stroke.color);
+    for canvas_bounds in outlines {
+        let min = viewer::page_to_screen(canvas_bounds.min, image_rect, extent, zoom);
+        let max = viewer::page_to_screen(canvas_bounds.max, image_rect, extent, zoom);
+        painter.rect_stroke(
+            egui::Rect::from_two_pos(min, max),
+            0.0,
+            stroke,
+            egui::StrokeKind::Inside,
+        );
+    }
+}
+
 fn run_vector_edit_tool(
     doc: &mut OpenDoc,
     ui: &mut egui::Ui,
@@ -8020,6 +8048,12 @@ fn run_vector_edit_tool(
             doc.ensure_object_provider();
         }
     }
+
+    // Show what is selected. Drawn LAST, after the frame's selection change and
+    // any commit have been applied, so the outline reflects the state the
+    // operator just produced rather than the previous frame's. Without this the
+    // object-edit tool selects silently — see `draw_selection_outlines`.
+    draw_selection_outlines(doc, ui, image_rect, extent, zoom);
 }
 
 fn run_measure_tool(
