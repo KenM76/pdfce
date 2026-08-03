@@ -865,30 +865,50 @@ structural change. Two new architectural facts this decision
 establishes, both binding on any future text-state-emitting code in
 `pdfce-core`: (1) **`q`/`Q` are illegal inside `BT…ET`** (ISO 32000-1
 §8.2 Table 51/Figure 9) — ambient text-state restoration after a
-formatted run is therefore always **restore-by-value**, resolved by the
-same three-tier ladder `TextColor::restore_bytes` already established
-for fill colour (spec default when provably unset → observed raw
-operand bytes when set → refuse-and-disclose when unobservable), never
-by scoping (R88); (2) **`Tc`/`Ts` are unscaled text-space quantities
-(§9.3) and are not rescaled by `Tfs`** — pdfce's model stores them as a
-discriminated `Absolute | Relative` quantity so a font-size change
-cannot silently mis-scale a stored rise or tracking value (R89). A
-third finding is a code-hygiene one rather than a spec fact: ambient
+formatted run is therefore always **restore-by-value**, resolved by a
+ladder in the same family as `TextColor::restore_bytes` (fill colour)
+but with one more rung than that ladder needed (R88, corrected by
+Amendment A below — see the decision-log entry for why a third
+"available" case exists between "observed raw bytes" and "refuse"); (2)
+**`Tc`/`Ts` are unscaled text-space quantities (§9.3) and are not
+rescaled by `Tfs`** — pdfce's model stores them as a discriminated
+`Absolute | Relative` quantity so a font-size change cannot silently
+mis-scale a stored rise or tracking value (R89 — `Tf`/`Tfs` themselves
+are explicitly OUT of this unification, per Amendment A item 3, to
+avoid perturbing already-published glyph positions). A third finding
+was a code-hygiene one rather than a spec fact: ambient
 `Tc`/`Tw`/`Tz`/`Ts` state was independently tracked three times in
 three different modules (`text_extract::page::TextState`,
 `text_edit::edit::Walk`/`reflow_apply::BlockTextState`,
-`vector::decompose::GState`) with zero shared publication — Pass 19.0
-consolidates these into one tracker and publishes `Ts`/`Tr` through
-`GlyphProvenance` for the first time. `Tw` itself is explicitly **not**
-promoted to a direct authoring control by this decision — its
-inter-word-distribution job stays with 15.1's `TJ`-based reflow design,
-and any future promotion is gated behind a corpus census (R91), never
-built speculatively. Synthetic bold/italic (Tr 2 + `Tm` shear, R90) is
-new authoring surface, not a data-model change, and does not warrant
-its own subsection here. Full design: `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`;
-decision-log entry below; Pass slicing (19.0 consolidation → 19.1
-`Tc`/`Tz`/super-subscript → 19.2 `Ts`/synthesis → 19.3 GUI → 19.4 `Tw`
-conditional) in `ROADMAP.md`'s ★ Pass 19.x entry.
+`vector::decompose::GState`) with zero shared publication.
+
+**Pass 19.0 SHIPPED (2026-08-03, `38fffad`) — this consolidation is now
+built, not merely planned.** New `pdfce-core/src/text_state.rs` in two
+layers: `TextStateParam`/`TextStateParams` (parameter identity +
+resolved values, for arithmetic-only consumers) and
+`AmbientValue`/`AmbientOrigin`/`AmbientTextState`/`AmbientRestoreError`
+(values plus restore provenance, four-rung — see Amendment A below).
+One `apply_operator` update rule is now shared by all three walks.
+`GlyphProvenance` gains `text_state` (the resolved ambient parameters at
+the glyph's show point) and `composite` (whether this glyph came from a
+composite/synthesized run) fields, published for the first time —
+previously dropped at provenance-construction time. `Tw` is tracked and
+preserved but still **not** promoted to a direct authoring control by
+this decision — its inter-word-distribution job stays with 15.1's
+`TJ`-based reflow design, and any future promotion is gated behind a
+corpus census (R91), never built speculatively. Synthetic bold/italic
+(Tr 2 + `Tm` shear, R90) is new authoring surface, not a data-model
+change, and does not warrant its own subsection here. `cargo test
+--workspace` 1613 → 1643; zero new Cargo dependencies;
+`fixtures/synthetic` roundtrip byte-identical (verified from a genuine
+pre-change worktree build, not a `git stash` on an already-clean tree —
+see `D:\dev\rag\rust\git_stash_on_clean_tree_makes_before_after_comparison_vacuous.md`
+for why the first comparison attempt was vacuous). Full design:
+`docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md` +
+Amendment A; decision-log entries below; Pass slicing (19.0
+consolidation SHIPPED → 19.1 `Tc`/`Tz`/super-subscript IN PROGRESS →
+19.2 `Ts`/synthesis → 19.3 GUI → 19.4 `Tw` conditional) in
+`ROADMAP.md`'s ★ Pass 19.x entry.
 
 Full design, the four-case font-on-edit matrix, the fast-follow ladder
 (FF-A offline reflow ladder through FF-H spacing/synthetic-styles — FF-A/
@@ -4057,3 +4077,61 @@ with a forward pointer.
   R88–R91 (ceiling was R87); Pass family: `ROADMAP.md`'s ★ Pass 19.x
   (19.0 consolidation IN PROGRESS → 19.1 `Tc`/`Tz`/super-subscript → 19.2
   `Ts`/synthesis → 19.3 GUI → 19.4 `Tw` conditional).
+- **2026-08-03 (same-day, Amendment A to decision 019) — Pass 19.0
+  SHIPPED; three deviations from decision 019/R88-R89 as originally
+  written, all now binding, plus a live defect in shipped Pass-14.2
+  code found by this slice. Full record:
+  `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`
+  Amendment A.**
+  1. **R88's three-tier restore ladder needed a FOURTH rung — its
+     wording is corrected below.** "Observed raw operand bytes when
+     set" assumed a setter's bytes are either available or absent;
+     there is a third case, available and POISONOUS. `TD` sets `TL` as
+     a documented side effect of moving the line, and `"` sets
+     `Tw`/`Tc` while SHOWING A STRING (§9.4.3 Tables 108/109) — replaying
+     either's raw bytes as a spacing-only restore re-executes the side
+     effect. Resolved by a new `AmbientOrigin::ObservedIndirect { setter
+     }` rung: the value is known but its source operator did more than
+     set it, so the restore RE-SPELLS the value in its own dedicated
+     operator rather than replaying captured bytes, and
+     `is_byte_faithful()` reports `false` for disclosure. **R88's
+     wording is corrected to:** restore from raw bytes where they are a
+     faithful and side-effect-free record → re-spell where the value is
+     known but its source operator did more than set it → refuse where
+     unobservable. (Filed as its own generalizable finding:
+     `C:\personal_rag\pdf\lesson_20260803_quote_operator_side_effect_poisons_raw_byte_restore.md`.)
+  2. **§3.4's tier-3 case (i) (multi-stream `/Contents`) is
+     architecturally UNREACHABLE today, not merely rare.**
+     `ContentStream::from_page` concatenates the entire `/Contents`
+     array before any operator walk begins, and a decode failure on any
+     element fails the whole page rather than yielding a partial
+     prefix — so "unobservable because the byte stream ends mid-array"
+     cannot currently occur. Recorded with the condition that would
+     make it reachable again (lazy/per-element concatenation), rather
+     than manufacturing an untestable trigger.
+  3. **`Tf`/`Tfs` are NOT unified into the shared `TextStateParam`
+     model — R89's "exactly one definition" claim is narrowed to the
+     six single-operand parameters R88 covers.** The extraction walk
+     narrows `Tfs` to `f32` to publish `GlyphProvenance::tf_size`, then
+     re-widens it for the §9.4.4 advance computation; unifying to `f64`
+     throughout would perturb already-published glyph positions (bit-
+     for-bit, not just semantically) — the same narrow-then-divide vs.
+     divide-then-narrow trap applies to `Tz`. "Exactly one definition"
+     is therefore true of `pdfce-core` only, by design:
+     `pdfce-render::text::TextState` remains a deliberate FOURTH
+     tracker, kept independent on purpose because render-parity wants
+     an implementation that cannot share a bug with the authoring-side
+     model.
+  **Live defect found and fixed by this slice, in already-shipped Pass
+  14.2 code, not a decision-019 design question:** `text_edit::edit::
+  Walk` had **no `q` and no `Q` arm at all** (engineer-verified 0 → 1
+  occurrences before/after). Text state AND fill colour leaked past a
+  `Q` in the in-place-edit model — shipped Pass 14.2 behavior could
+  re-emit a fill colour a `Q` had already discarded. Decision 019 §1.2's
+  own audit of missing arms reported the missing `Ts`/`Tr` cases and
+  missed this one; both facts are recorded together deliberately — the
+  audit was otherwise the strongest part of the decision, and "the
+  audit was thorough" is exactly the belief that let this gap through.
+  Fixed with two new regression tests in the same Pass. No
+  `pdfce-core`/`pdfce-render` GUI-dependency change; `cargo tree`
+  re-verified clean.

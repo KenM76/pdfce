@@ -43,6 +43,133 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 19.0 — shared text-state model: consolidation + ambient publication (decision 019, correctness-only, no new operator surface) — 2026-08-03, committed `38fffad`
+
+**Consolidates three private ambient-text-state trackers into one.** New
+`pdfce-core/src/text_state.rs` in two layers:
+`TextStateParam`/`TextStateParams` (parameter identity + resolved
+values, for arithmetic-only consumers) and
+`AmbientValue`/`AmbientOrigin`/`AmbientTextState`/`AmbientRestoreError`
+(values plus restore provenance). One `apply_operator` update rule is
+now shared by all three walks (`text_extract::page::TextState`,
+`text_edit::edit::Walk`/`reflow_apply::BlockTextState`,
+`vector::decompose::GState`). `GlyphProvenance` gains `text_state` and
+`composite` fields, published for the first time — previously dropped
+at provenance-construction time (`text_edit::edit::Walk` had no
+`b"Ts"`/`b"Tr"` arm at all, so pdfce could not yet restore an ambient
+rise it never observed).
+
+**Gates:** `cargo test --workspace` 1613 → 1643 passed, 0 failed;
+`cargo fmt --check`/`cargo clippy --workspace --all-targets -D
+warnings` clean; `bash tools/check-ui-strings.sh` exit 0; `cargo tree -p
+pdfce-core`/`-p pdfce-render` GUI-dep-free; zero new Cargo dependencies;
+`fixtures/synthetic` roundtrip byte-identical.
+
+**Verification-method finding, worth recording on its own:** the first
+roundtrip comparison attempt was VACUOUS — it ran `git stash`
+immediately before the "before" build, but the tree was already clean
+at that point (a prior commit had landed the change), so `git stash`
+silently no-op'd and both "before" and "after" builds used the
+identical binary. "Byte-identical" was therefore true but proved
+nothing. Redone by building the harness from a real pre-change
+`git worktree` checkout instead. **General rule: a before/after
+comparison must be demonstrated to actually compare two different
+artifacts, not merely asserted to** — escalated to
+`D:\dev\rag\rust\git_stash_on_clean_tree_makes_before_after_comparison_vacuous.md`.
+
+**Three deviations from decision 019/R88-R89 as originally written, all
+recorded in decision 019 Amendment A (`1a2e265`) and reflected in
+`ARCHITECTURE.md` §5/§12 — file any future reference to this slice
+against the amendment, not the original decision text:**
+1. **The restore ladder needed a FOURTH rung.** R88's "raw operand
+   bytes where available" assumed bytes are either available or
+   absent; there is a third case, **available and poisonous**. `TD`
+   sets `TL` as a documented side effect of moving the line, and `"`
+   sets `Tw`/`Tc` **while showing a string** — replaying a captured
+   `"`'s raw bytes as a spacing-only restore *repaints the text*.
+   Resolved with `AmbientOrigin::ObservedIndirect { setter }`, which
+   re-spells the value in its own operator and reports
+   `is_byte_faithful() == false` for disclosure. **R88's wording is
+   corrected below** (Standing rules) from "restore from raw bytes
+   where available" to "restore from raw bytes where they are a
+   faithful and side-effect-free record; re-spell where the value is
+   known but its source operator did more than set it; refuse where
+   unobservable." Also filed as a general PDF-editing finding:
+   `C:\personal_rag\pdf\lesson_20260803_quote_operator_side_effect_poisons_raw_byte_restore.md`.
+2. **§3.4's tier-3 case (i) (multi-stream `/Contents`) is
+   architecturally UNREACHABLE today**, not merely rare —
+   `ContentStream::from_page` concatenates the whole `/Contents` array
+   before any walk, and a decode failure fails the whole page rather
+   than yielding a partial prefix. Recorded with the condition that
+   would make it reachable again (lazy/per-element concatenation)
+   rather than manufacturing an untestable trigger.
+3. **`Tf`/`Tfs` cannot be hoisted into the shared model.** The
+   extraction walk narrows `Tfs` to `f32` to publish
+   `GlyphProvenance::tf_size` and re-widens it for the §9.4.4 advance
+   computation; unifying to `f64` would perturb already-published glyph
+   positions bit-for-bit (same narrow-then-divide-vs-divide-then-narrow
+   trap applies to `Tz`). The shared type is exactly R88's six
+   single-operand parameters. Also: **"exactly one definition" is true
+   of `pdfce-core` only** — `pdfce-render::text::TextState` remains a
+   deliberate FOURTH tracker, kept independent on purpose because
+   render-parity wants an implementation that cannot share a bug with
+   the authoring-side model.
+
+**A live defect in already-shipped Pass 14.2 code, found by this slice
+and worth its own record:** `text_edit::edit::Walk` had **no `q` and no
+`Q` arm at all** (engineer-verified 0 → 1 occurrences before/after).
+Text state AND fill colour leaked past a `Q` in the in-place-edit
+model — shipped Pass 14.2 behavior could re-emit a fill colour a `Q`
+had already discarded. Decision 019 §1.2's own audit of missing arms
+reported the missing `Ts`/`Tr` cases and missed this one — recorded
+alongside the fix as a meta-point: that audit was otherwise the
+strongest part of the decision, and "the audit was thorough" is exactly
+the belief that let this gap through. Fixed with two new regression
+tests in the same Pass; the justify-gate mechanism (`reflow_apply`'s
+`Tc`/`Tz`/`Tw` preamble leak, decision 019's other named correctness
+item) is also closed — `restore_ops` now emits only on divergence and
+emits nothing on any current fixture (why roundtrip is unchanged), with
+a dedicated tripwire test (`reflow_leaves_the_following_text_state_unchanged`)
+that fails the moment 19.1 relaxes the justify gate without a restore.
+
+**Rule 11 (CLI parity) — deliberately NOT extended this Pass.** No CLI
+surface added. Recommendation recorded for 19.1: `extract-text --json`
+should carry the published ambient state, not `object-list` (the wrong
+home — `object-list` is a paint-order/hit-test inventory keyed on
+vector objects; ambient text state is per-run) — and not yet, since
+shipping a flag now would fix its output shape before the
+`MetricSpec::{Absolute,Relative}` decision is made in 19.1.
+
+### Observation scripts refuse an ambiguous target — `-ProcessId` disambiguation on `observe-gui.ps1`/`gui-click.ps1`, closing the Backlog item filed at Pass 18.5's ship — 2026-08-03, committed `f45d8d6`
+
+**Both scripts previously selected their target process with
+`Select-Object -First 1` over the process name.** With two `pdfce-gui`
+instances running simultaneously that silently picks one of them — and
+a synthesized click aimed at the wrong window is an unintended action
+on some other running application, not merely a failed observation.
+Not hypothetical: a build agent had to kill a stale instance because it
+could not say which one a script's clicks were actually landing on.
+
+**Both scripts now take an optional `-ProcessId` parameter and REFUSE
+outright when several candidate processes exist and none was named**,
+listing the running candidate ids so the caller can disambiguate.
+Falls back to the prior MRU-first behavior when only one instance is
+running or `-ProcessId` is supplied. Deliberately **not** named `-Pid`
+— `$Pid` is a PowerShell automatic variable, and a parameter that
+shadows it fails confusingly rather than cleanly.
+
+**Verified all three paths live** (single instance / `-ProcessId`
+supplied / ambiguous-and-refused). Incidentally, the first verification
+attempt demonstrated the client-area blank-frame guard (`6a6a48f`,
+Pass 18.5's Shipped entry) catching a case that had previously slipped
+through — a fully WHITE client area under a painted title bar — and
+confirmed that a mouse *move* does not wake eframe where a real click
+does. **First time that failure mode was observed being caught by the
+harness rather than reasoned about after the fact.**
+
+Gates: no test-count change (tooling, not product code); no new Cargo
+dependency.
+
 ### Pass 18.6 — text hit-target geometry now derived from font metrics, not glyph-origin inflation (ui-spec §E, closing the FOURTH and last named cause of "can't click on objects") — 2026-08-03, committed `1b38e34`
 
 **Closes Backlog's "ui-spec §B.4/§C follow-ons" item 1 for real** — Pass
@@ -5351,6 +5478,34 @@ spot-checked (`git cat-file -t`, `git rev-list --count`) after filing,
 not assembled from memory or from a prior summary** — see the new
 Standing rule R87, below.
 
+**UPDATE (continuation 63, real date 2026-08-03):** three more commits
+reported this filing — **`f45d8d6`** (tools: observation scripts refuse
+an ambiguous target, `-ProcessId` disambiguation) → **`38fffad`** (Pass
+19.0, shared text-state model — see the Pass 19.0 Shipped entry, top of
+Shipped) → **`1a2e265`** (docs: decision 019 Amendment A). All three
+hashes were engineer-verified via `git cat-file -t` per R87. Branch
+`pass-8-redaction`, engineer-reported total **43 commits**, still no git
+remote configured. **Arithmetic flag, not silently reconciled:** the
+continuation-60 chain (36, including the bootstrap commit) plus
+continuation 61's `1b38e34` plus continuation 62's two commits
+(`67f49bb`, `743e463`) sums to 39 — matching the "39 commits" figure
+recorded at continuation 62 — and **this continuation's three new
+commits would bring that to 42, one short of the reported 43.** Per this
+project's own standing discipline (R87 — hash/count figures are
+produced by the engineer directly from `git`, not assembled from
+memory, and are spot-checked after filing), this discrepancy is
+recorded rather than quietly absorbed into "43"; whoever next runs
+`git rev-list --count HEAD` on this branch should resolve it (either a
+fourth commit landed that wasn't reported to this filing, or the
+running total drifted by one somewhere in continuations 60–62). The
+backup bundle (`D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle`) is
+unchanged this continuation and does not yet cover these three commits.
+
+**Pass 19.0 shipped 2026-08-03 (`38fffad`) — see Shipped above; no
+longer listed here. Pass 19.1 (`Tc`/`Tz`/super-subscript authoring) is
+now IN PROGRESS** — see the ★ Pass 19.x entry under Next up for the
+full slice record and decision 019 Amendment A (`1a2e265`).
+
 **Pass 16.0, Pass 16.1, AND Pass 16.2 all shipped 2026-08-01 — see
 Shipped above; no longer listed here. Decision 016 / FF-D (add NEW page
 text as real page content) is now COMPLETE end-to-end.** 16.0
@@ -5905,7 +6060,7 @@ default stands: docked-only, its own Backlog entry, still unanswered.
 §10 Q1 (the `egui_tiles`-vs-hand-rolled question this note originally
 tracked) is ANSWERED and BUILT — see Pass 18.1 above.
 
-### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019, DECIDED 2026-08-03; Pass 19.0 IN PROGRESS)
+### ★ Pass 19.x — FF-H: direct text-state formatting (`Tc`/`Tz` + free-form `Ts` + synthetic bold/italic), `Tw` evidence-gated (decision 019 + Amendment A, DECIDED 2026-08-03; Pass 19.0 SHIPPED 2026-08-03, Pass 19.1 IN PROGRESS)
 
 **Decision 019 ACCEPTED via the KenAgent protocol.** Full record:
 `docs/decisions/019-ffh-spacing-scaling-synthetic-styles.md`. Filed
@@ -5998,20 +6153,22 @@ StructTree/ActualText update" Backlog entry, below.
 **Slices (Pass 19.x; no new `CommandKind` — every slice rides the
 existing `FormatText`/`AddText` one-command-per-accepted-edit path):**
 - **19.0 — Text-state consolidation + ambient publication (core + CLI;
-  CORRECTNESS ONLY, no new operator surface). IN PROGRESS — a builder
-  is on it now.** Consolidates the three private ambient-spacing
-  trackers (`text_extract::page::TextState`,
+  CORRECTNESS ONLY, no new operator surface). SHIPPED 2026-08-03,
+  committed `38fffad` — see the Pass 19.0 Shipped entry (top of
+  Shipped) for the full build record, including three deviations from
+  this decision as originally written (now decision 019 Amendment A,
+  `1a2e265`) and a live `q`/`Q` state-leak defect found and fixed in
+  already-shipped Pass 14.2 code.** Consolidated the three private
+  ambient-spacing trackers (`text_extract::page::TextState`,
   `text_edit::edit::Walk`/`reflow_apply::BlockTextState`,
   `vector::decompose::GState`) and publishes `Ts`/`Tr` through
-  `GlyphProvenance` for the first time — today dropped at
-  provenance-construction time (`text_edit::edit::Walk` has no `b"Ts"`
-  or `b"Tr"` arm at all, so pdfce cannot yet restore an ambient rise it
-  never observed). Also fixes a **live, currently-masked state leak**
-  in `reflow_apply.rs`: its preamble emits `Tc`/`Tz`/`Tw` before
-  `BT…ET` with no restore and no `q`/`Q` (illegal there regardless —
-  §8.2 Table 51/Figure 9), benign today only because the justify gate
-  refuses whenever `|tc| > ε || |tw| > ε` — exactly the gate 19.1 would
-  want to relax.
+  `GlyphProvenance` for the first time — previously dropped at
+  provenance-construction time. Also fixed the **live, previously-
+  masked state leak** in `reflow_apply.rs` (its preamble emitted
+  `Tc`/`Tz`/`Tw` before `BT…ET` with no restore and no `q`/`Q`, illegal
+  there regardless — §8.2 Table 51/Figure 9) — `restore_ops` now emits
+  only on divergence, with a dedicated tripwire test guarding the gate
+  19.1 will relax.
 - **19.1 — `Tc` + `Tz` + superscript/subscript authoring (core + CLI).
   The Acrobat-parity slice.** `MetricSpec::{Absolute, Relative}` per
   R89. Includes a `Tz` × justify disclosure: `Th` rescales every `TJ`
@@ -7592,18 +7749,15 @@ nothing gets forgotten, not as a commitment to build in this order.
   dependency (test/tooling surface, not shipped in the release binary).
 
 - **`-Pid` parameter needed on `tools/gui-click.ps1` and
-  `tools/observe-gui.ps1` (filed 2026-08-03, no Pass number assigned).**
-  Both scripts select their target process via `Select-Object -First 1`
-  over the process name, with no way to disambiguate two simultaneously
-  running instances. Found this session (Pass 18.5/`6a6a48f`): a
-  worktree-isolated agent had to kill a stale `pdfce-gui.exe` left over
-  from a previous session to stop its synthesized clicks from landing in
-  the wrong window instead of the one actually under test. Fix: add an
-  optional `-Pid` parameter to both scripts that filters to a specific
-  process ID when supplied, falling back to the current MRU-first
-  behavior when omitted. Not yet scoped into a Pass; tooling-only, no
-  product code involved, no license classification needed (no new
-  dependency).
+  `tools/observe-gui.ps1` (filed 2026-08-03, no Pass number assigned) —
+  RESOLVED 2026-08-03, committed `f45d8d6`.** Both scripts previously
+  selected their target process via `Select-Object -First 1` over the
+  process name, with no way to disambiguate two simultaneously running
+  instances. Shipped as an **`-ProcessId`** parameter (deliberately not
+  `-Pid` — `$Pid` is a PowerShell automatic variable and shadowing it
+  fails confusingly) that both scripts now REFUSE to proceed without
+  when several candidate processes exist, listing the running ids. See
+  the Shipped entry (top of Shipped) for the verification record.
 
 - **★ UX flag — marquee-vs-pan canvas-drag default change at Pass 9a —
   RESOLVED, KEPT (reviewed at Pass 12.M1, 2026-08-01).** Pass 9a's
@@ -8402,12 +8556,25 @@ blocking Pass 19.0's in-progress build:**
   not-yet-granted authorization (see "In progress" GIT STATUS above).
   **Now more precise (continuation 59, 2026-08-03): there is no git
   remote configured at all** — the commit chain exists solely on this
-  machine (30 commits at continuation 59; **39 commits as of this
-  session**, engineer-verified). A verified backup bundle exists as a
-  stopgap (`D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle`,
-  superseding the earlier `...20260803.bundle`), not a substitute for
-  an actual push decision. Also flag: the branch is still named
-  `pass-8-redaction` though it now carries Passes 9 through 19.0 —
+  machine (30 commits at continuation 59; 39 at continuation 61's
+  filing; **43 as of continuation 63**, confirmed by
+  `git rev-list --count HEAD`).
+
+  **The 39→43 arithmetic flag is RESOLVED (engineer, 2026-08-03): 43 is
+  correct, and the flag was right to be raised.** The apparent gap came
+  from anchoring on a stale figure: 39 was the count at `743e463`, but
+  the immediately preceding filing was `0c385a9`, where the count was
+  **40**. So 40 + 3 (`f45d8d6`, `38fffad`, `1a2e265`) = 43. Recording
+  the resolution rather than just the corrected number, because the
+  failure mode is reusable — a running total is only as good as the
+  anchor it is added to, and "the last number I filed" is not
+  necessarily "the number at the last commit I am counting from". A verified backup bundle
+  exists as a stopgap (`D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle`,
+  superseding the earlier `...20260803.bundle`, itself now STALE — it
+  predates all three continuation-63 commits and has not been
+  regenerated), not a substitute for an actual push decision. Also
+  flag: the branch is still named `pass-8-redaction` though it now
+  carries Passes 9 through 19.0 —
   worth renaming whenever a push is authorized.
 - Encryption (Pass 5 / decision 007)'s `/R 6` sourcing method and the
   `LEGAL.md` §2 Adobe-supplement contradiction — both still gate its
@@ -9259,20 +9426,28 @@ blocking Pass 19.0's in-progress build:**
   prior summary, and is spot-checked once filed.
 - **R88 — Direct text-state formatting is scoped by explicit
   restore-by-value, never by `q`/`Q`, never by normalization (decision
-  019, 2026-08-03).** Any `Tc`/`Tw`/`Tz`/`Ts`/`Tr` pdfce emits to affect
-  one run is followed by an explicit restore of the resolved ambient
-  value, emitted **inside the same text object** — `q`/`Q` are "Special
-  graphics state" operators and are **not permitted inside `BT…ET`**
-  (ISO 32000-1 §8.2 Table 51/Figure 9), and splitting the text object to
-  use them would discard `Tm` (§9.4.1). The ambient value is resolved by
-  the three-tier ladder already established for fill colour
-  (`TextColor::restore_bytes`, Pass 14.2): spec default when provably
-  unset → observed raw operand bytes when set in the stream →
-  **refuse-and-disclose when unobservable** (multi-stream `/Contents`,
-  Form-XObject-inherited state, unparseable prefix). A guessed default
-  restore is never emitted. New text authored inside a balanced
-  `q … BT … ET … Q` envelope (the `addtext.rs` path, Pass 16.x) is
-  exempt: `Q` performs the restore.
+  019, 2026-08-03; wording CORRECTED 2026-08-03 by decision 019
+  Amendment A / Pass 19.0 — see the Pass 19.0 Shipped entry and
+  `ARCHITECTURE.md` §12 for why a fourth rung was needed).** Any
+  `Tc`/`Tw`/`Tz`/`Ts`/`Tr` pdfce emits to affect one run is followed by
+  an explicit restore of the resolved ambient value, emitted **inside
+  the same text object** — `q`/`Q` are "Special graphics state"
+  operators and are **not permitted inside `BT…ET`** (ISO 32000-1 §8.2
+  Table 51/Figure 9), and splitting the text object to use them would
+  discard `Tm` (§9.4.1). The ambient value is resolved by a **four-rung**
+  ladder (corrected from the original three-rung wording): spec default
+  when provably unset → **restore from raw operand bytes where they are
+  a faithful and side-effect-free record** → **re-spell the value in
+  its own dedicated operator where it is known but its source operator
+  did more than set it** (`AmbientOrigin::ObservedIndirect` — e.g. `"`
+  sets `Tw`/`Tc` while showing a string, `TD` sets `TL` while moving the
+  line; replaying either's raw bytes as a spacing-only restore would
+  re-execute the side effect) → **refuse-and-disclose when unobservable**
+  (Form-XObject-inherited state, unparseable prefix; the multi-stream
+  `/Contents` case is currently architecturally unreachable — see
+  Amendment A item 2). A guessed default restore is never emitted. New
+  text authored inside a balanced `q … BT … ET … Q` envelope (the
+  `addtext.rs` path, Pass 16.x) is exempt: `Q` performs the restore.
 - **R89 — Size-relative typographic quantities are stored as ratios and
   derived at emit time (decision 019, 2026-08-03).** `Tc` and `Ts` are
   in *unscaled text space units* and are **not** scaled by `Tfs` (§9.3)

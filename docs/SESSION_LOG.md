@@ -8476,6 +8476,179 @@ this filing, not yet shipped.
   (3) branch-rename-on-push still pending; (4) the GUI still has no
   redaction-apply flow; (5) R86 (headless-vs-observed "done" definition)
   still unanswered.
+
+**Same-day continuation 63 (real date 2026-08-03) — Pass 19.0 SHIPPED
+(`38fffad`, shared text-state model); decision 019 Amendment A filed
+(`1a2e265`, three deviations from the decision as originally written +
+a live `q`/`Q` defect fixed in already-shipped Pass 14.2 code); the
+observation-scripts `-Pid` Backlog item RESOLVED (`f45d8d6`,
+`-ProcessId` disambiguation). Three commits, hashes engineer-verified
+via `git cat-file -t` (R87): `f45d8d6` → `38fffad` → `1a2e265`. Branch
+`pass-8-redaction`, engineer-reported chain now **43 commits**, still no
+git remote configured. Pass 19.1 (`Tc`/`Tz`/super-subscript authoring)
+is now IN PROGRESS, a separate builder dispatch.**
+
+**Shipped:**
+- **`f45d8d6` — observation scripts refuse an ambiguous target.** Both
+  `observe-gui.ps1` and `gui-click.ps1` previously picked a target
+  process via `Select-Object -First 1` over the process name; with two
+  `pdfce-gui` instances running that silently selects one, and a
+  synthesized click landing in the wrong window is an unintended action
+  on some other running application, not merely a failed observation.
+  Both scripts now take an optional `-ProcessId` parameter and REFUSE
+  when several candidates exist and none was named, listing the
+  running ids. Named `-ProcessId`, not `-Pid` — `$Pid` is a PowerShell
+  automatic variable and shadowing it fails confusingly. Verified all
+  three paths live (single instance / `-ProcessId` given / ambiguous-
+  and-refused); the verification run incidentally caught the
+  client-area blank-frame guard (`6a6a48f`) working as intended on a
+  real failure (a fully white client area under a painted title bar),
+  and confirmed a mouse *move* does not wake eframe where a real click
+  does — first time this failure mode was caught by the harness rather
+  than reasoned about after the fact. Resolves the Backlog item filed
+  at Pass 18.5's ship.
+- **`38fffad` — Pass 19.0 (shared text-state model), decision 019's
+  first slice, SHIPPED.** New `pdfce-core/src/text_state.rs`:
+  `TextStateParam`/`TextStateParams` (identity + resolved values) and
+  `AmbientValue`/`AmbientOrigin`/`AmbientTextState`/`AmbientRestoreError`
+  (values + restore provenance, now four rungs — see Amendment A
+  below). One `apply_operator` rule shared by all three former private
+  walks. `GlyphProvenance` gains `text_state` + `composite`.
+  `cargo test --workspace` 1613 → 1643 passed, 0 failed; fmt/clippy
+  clean; `check-ui-strings.sh` exit 0; `cargo tree` clean; zero new
+  dependencies; `fixtures/synthetic` roundtrip byte-identical.
+- **`1a2e265` — decision 019 Amendment A**, recording the three
+  deviations below plus the `q`/`Q` defect. `ARCHITECTURE.md` §5/§12
+  both updated to match (decision log + body section together, per this
+  file's own discipline).
+
+**Decisions made this session:**
+- **R88's restore ladder needed a FOURTH rung, and its wording is
+  CORRECTED, not merely clarified.** The original wording ("observed
+  raw operand bytes when set") assumed a setter's bytes are either
+  available or absent. There is a third case: **available and
+  poisonous.** `TD` sets `TL` as a documented side effect of moving the
+  line (§9.4.3 Table 108); `"` sets `Tw`/`Tc` **while showing a
+  string** (Table 109) — replaying a captured `"`'s raw bytes as a
+  spacing-only restore *repaints the text*. Resolved with
+  `AmbientOrigin::ObservedIndirect { setter }`: the value is known but
+  its source operator did more than set it, so the restore RE-SPELLS
+  the value in its own dedicated operator, and `is_byte_faithful()`
+  reports `false` for disclosure. **New R88 wording:** restore from raw
+  bytes where they are a faithful and side-effect-free record →
+  re-spell where the value is known but its source operator did more
+  than set it → refuse where unobservable.
+- **§3.4's tier-3 case (i), multi-stream `/Contents`, is architecturally
+  UNREACHABLE today, not merely rare.** `ContentStream::from_page`
+  concatenates the entire `/Contents` array before any operator walk,
+  and a decode failure fails the whole page rather than yielding a
+  partial prefix. Recorded with the condition that would make it real
+  again (lazy/per-element concatenation) rather than manufacturing an
+  untestable trigger to exercise a currently-dead branch.
+- **`Tf`/`Tfs` are explicitly OUT of the R89 unification — "exactly one
+  definition" is narrowed to the six single-operand parameters R88
+  covers.** The extraction walk narrows `Tfs` to `f32` to publish
+  `GlyphProvenance::tf_size`, then re-widens it for the §9.4.4 advance
+  computation; unifying to `f64` throughout would perturb already-
+  published glyph positions bit-for-bit (same narrow-then-divide vs.
+  divide-then-narrow trap applies to `Tz`). Also: `pdfce-render::text::
+  TextState` remains a deliberate FOURTH tracker (not consolidated),
+  kept independent on purpose so render-parity work cannot share a bug
+  with the authoring-side model.
+- **Verification-methodology finding: a before/after comparison must be
+  demonstrated to compare two different artifacts, not merely
+  asserted to.** The first roundtrip-comparison attempt ran `git stash`
+  immediately before the "before" build, but the tree was already
+  clean at that point — `git stash` silently no-op'd, so both builds
+  used the identical binary and "byte-identical" proved nothing. Redone
+  from a genuine pre-change `git worktree` checkout. Escalated to
+  `D:\dev\rag\rust\git_stash_on_clean_tree_makes_before_after_comparison_vacuous.md`.
+
+**Findings + decisions (empirical):**
+- **A live defect in already-shipped Pass 14.2 code, found by this
+  slice: `text_edit::edit::Walk` had NO `q` and NO `Q` arm at all**
+  (engineer-verified 0 → 1 occurrences before/after this fix). Text
+  state AND fill colour leaked past a `Q` in the in-place-edit model —
+  shipped Pass 14.2 behavior could re-emit a fill colour a `Q` had
+  already discarded. Decision 019 §1.2's own audit of missing arms
+  reported the missing `Ts`/`Tr` cases and missed this one. Recorded as
+  a meta-point, not just a bug: that audit was otherwise the strongest
+  part of the decision, and "the audit was thorough" is exactly the
+  belief that let this gap through. Fixed with two new regression
+  tests in the same Pass.
+- **The `reflow_apply` state-leak flagged at decision 019's filing
+  (continuation 62) is now closed, and the justify gate is left
+  untouched.** `restore_ops` emits only on divergence, and emits
+  nothing on any current fixture (which is why roundtrip is unchanged);
+  a dedicated tripwire test
+  (`reflow_leaves_the_following_text_state_unchanged`) fails the moment
+  19.1 relaxes the justify gate without a restore.
+- **The `"` operator's raw bytes are a general re-paint hazard for any
+  text-state restore mechanism, not just pdfce's.** Escalated to
+  `C:\personal_rag\pdf\lesson_20260803_quote_operator_side_effect_poisons_raw_byte_restore.md`
+  — any PDF editor capturing "the bytes that set this parameter" for
+  later replay must classify the setting operator as side-effect-free
+  vs. side-effect-bearing first.
+- **Rule 11 (CLI parity) — deliberately not extended this Pass.** No
+  CLI surface added. Recorded recommendation for 19.1:
+  `extract-text --json` should carry the published ambient state (not
+  `object-list`, the wrong home — paint-order/hit-test inventory keyed
+  on vector objects, not per-run text state) — and not until 19.1
+  decides `MetricSpec::{Absolute,Relative}`, so the flag's output shape
+  is fixed once, not twice.
+- **Commit-count arithmetic flag, not silently reconciled.** The
+  continuation-60 chain (36, incl. bootstrap) + continuation-61's
+  `1b38e34` + continuation-62's two commits (`67f49bb`, `743e463`) sums
+  to 39 (matches the figure recorded at continuation 62); this
+  continuation's three new commits would bring that to 42, one short of
+  the engineer-reported **43**. Recorded per R87 rather than quietly
+  absorbed — whoever next runs `git rev-list --count HEAD` should
+  resolve whether a fourth, unreported commit landed or the running
+  total drifted by one in continuations 60–62.
+
+**Still in flight:**
+- **Pass 19.1** (`Tc`+`Tz`+super/subscript authoring, the Acrobat-parity
+  slice) — IN PROGRESS, a separate builder dispatch, concurrent with
+  this filing. 19.2–19.4 not started.
+- Carried, unchanged: no GUI redaction-apply flow; `✓`/`✕` glyph
+  verification; status-bar/`Fit page`-zoom feedback loop (standing
+  hazard); letter badges pending real icons; `egui_kittest` harness
+  gap; the five Open operator questions (g)–(k) from continuation 62;
+  list-authoring scope call; `LEGAL.md` §2; Encryption's `/R 6`
+  sourcing method.
+- Branch still named `pass-8-redaction`, now spanning Passes 9–19.0 —
+  worth a rename whenever a push is authorized.
+- No git remote configured; backup bundle
+  (`D:\Dev\pdfce-backups\pdfce-20260803-0830.bundle`) is now STALE — it
+  predates all three commits this continuation and has not been
+  regenerated.
+
+**For next session:**
+- Continue Pass 19.1 to completion (`Tc`/`Tz`/super-subscript +
+  `MetricSpec::{Absolute,Relative}` + the `Tz`×justify disclosure), then
+  the named prerequisite check before 19.2 starts: confirm
+  `pdfce-render` actually honours `Tr 2` and a sheared `Tm`.
+- **RESOLVED (engineer, same continuation): the 39→43 commit-count flag.**
+  `git rev-list --count HEAD` = **43**, which is correct. The apparent
+  gap was an anchoring error: 39 was the count at `743e463`, but the
+  immediately preceding filing was `0c385a9`, where the count was 40 —
+  so 40 + 3 (`f45d8d6`, `38fffad`, `1a2e265`) = 43. The flag was right
+  to be raised; raising it rather than silently reconciling is exactly
+  what R87 asks for, and it is the third filing-integrity issue this
+  habit has caught. Lesson kept: a running total is only as good as the
+  anchor it is added to, and "the last number I filed" is not
+  necessarily "the number at the last commit I am counting from".
+  Backup bundle regenerated at
+  `D:\Dev\pdfce-backups\pdfce-20260803-1145.bundle` (verified), which
+  also closes the stale-bundle flag.
+- Regenerate the backup bundle to cover the three continuation-63
+  commits.
+- Flag to the operator at next contact, all carried: (1) the five Open
+  operator questions (g)–(k); (2) push/publish call still ungranted,
+  chain now 43 commits (verified by `git rev-list`), still no
+  remote; (3) branch-rename-on-push still pending; (4) the GUI still
+  has no redaction-apply flow; (5) R86 (headless-vs-observed "done"
+  definition) still unanswered.
 - No `D:\dev\rag\rust\`/`D:\dev\rag\egui\`/`C:\personal_rag\pdf\`
   findings filed this continuation — everything surfaced (the three
   code-audit findings, the `q`/`Q` illegality, the removal-as-evidence
