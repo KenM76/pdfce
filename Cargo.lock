@@ -957,6 +957,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "egui_tiles"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9eb8fef6130bd04fcb7bb3584845605e57c56fed249bc3ca5a568e696cc0a174"
+dependencies = [
+ "ahash",
+ "egui",
+ "itertools",
+ "log",
+]
+
+[[package]]
 name = "either"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2291,6 +2303,7 @@ name = "pdfce-gui"
 version = "0.0.0"
 dependencies = [
  "eframe",
+ "egui_tiles",
  "pdfce-core",
  "pdfce-render",
  "rfd",

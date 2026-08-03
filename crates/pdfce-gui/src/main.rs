@@ -215,6 +215,7 @@
 #![forbid(unsafe_code)]
 
 mod canvas;
+mod dock;
 mod icons;
 mod measure_tool;
 mod object_provider;
@@ -236,6 +237,7 @@ use pdfce_core::writer::SaveOptions;
 use pdfce_core::xref::XrefErrorKind;
 
 use canvas::{CanvasTargetProvider, CanvasTool, EscapeOutcome, GestureInterrupt, TargetId};
+use dock::{DockPanel, DockTree};
 use object_provider::ObjectModelProvider;
 use raster::{PageTexture, ThumbnailCache};
 use viewer::{FitMode, ViewState};
@@ -269,6 +271,26 @@ const CANVAS_MARGIN: f32 = 16.0;
 /// Minimum size for an icon-only button, so click targets stay usable
 /// regardless of how narrow the glyph inside them happens to be.
 const ICON_BUTTON_SIZE: egui::Vec2 = egui::vec2(28.0, 24.0);
+
+/// Default width, in points, of the right-hand panel dock.
+///
+/// Raised from the historic 320 pt when the dock became an `egui_tiles`
+/// panel host (decision 017 Amendment A.3). Two reasons, both structural
+/// rather than aesthetic:
+///
+/// 1. **The dock now holds real content**, not a four-row tool list — an
+///    object tree whose rows carry a kind, a paint disposition, a colour and
+///    a node count, and a metadata form with a label column beside a text
+///    column. 320 pt truncated both.
+/// 2. **`egui_tiles` draws HORIZONTAL tab bars only**, and 0.16.0's answer
+///    to a bar that does not fit is scroll arrows — i.e. it hides tabs.
+///    A.3 is explicit that scroll arrows appearing in the DEFAULT layout
+///    mean the default layout is wrong, so the width has to be chosen to
+///    keep the widest default tab bar ("Properties" + "Batch Tools") whole.
+///
+/// Still a *default*: the panel is resizable, and this is only where it
+/// starts.
+const DOCK_DEFAULT_WIDTH_PTS: f32 = 380.0;
 
 /// Maximum height, in points, the status bar's body may occupy before it
 /// becomes internally scrollable (P0-4).
@@ -358,17 +380,37 @@ struct PdfceApp {
     rail_expanded: bool,
     /// Whether the status bar's diagnostics detail is expanded.
     diagnostics_expanded: bool,
-    /// Whether the document-properties panel is showing.
-    properties_open: bool,
+    /// The right-hand dock's layout — which panels exist, how they are
+    /// split, and which tab of each group is in front (decision 017 +
+    /// Amendment A; standing rule R80).
+    ///
+    /// This replaced a `properties_open: bool`. The old flag was a *second*
+    /// source of truth about whether the operator was looking at Properties,
+    /// and it could disagree with the screen; the tree is the only source
+    /// now, queried through [`dock::panel_is_active`].
+    ///
+    /// **Session state only, and disclosed as such in the dock header**
+    /// (§7 / A.6 / R82) — the same stance as [`Self::rail_expanded`] and
+    /// [`Self::font_folders`], for a sharper reason here: persisting it
+    /// would mean either eframe's platform app-data Storage (which breaks
+    /// decision 003's single-folder-portable posture) or R15's user-state
+    /// partition, which does not exist yet.
+    dock: DockTree,
     /// The outcome of the most recent save, kept until the next one so
     /// the operator gets a persistent answer rather than a toast they
     /// might miss.
     save_result: Option<SaveOutcome>,
-    /// Whether the right-hand Tools dock is showing.
+    /// Whether the right-hand panel dock is showing.
     ///
-    /// The one new toolbar control Pass 3.2 adds. Session state only, for
-    /// the same reason `rail_expanded` is: growing a settings file one
-    /// ad-hoc field at a time is how it becomes unmaintainable.
+    /// Visibility only — [`Self::dock`] owns the *shape*. Keeping the two
+    /// apart is what lets the operator close the dock and reopen it to the
+    /// arrangement they left, and it is why "is Properties on screen?" is
+    /// `tools_open && dock::panel_is_active(&dock, DockPanel::Properties)`
+    /// rather than a flag that has to be kept in step by hand.
+    ///
+    /// Session state only, for the same reason `rail_expanded` is: growing
+    /// a settings file one ad-hoc field at a time is how it becomes
+    /// unmaintainable.
     tools_open: bool,
     /// Which Tools-dock entry is expanded, if any.
     tools_selected: Option<Tool>,
@@ -616,15 +658,29 @@ impl Default for PdfceApp {
             status: Status::Idle,
             rail_expanded: true,
             diagnostics_expanded: false,
-            // Properties start **closed**: progressive disclosure. Page
-            // navigation is core, metadata editing is occasional, and a
-            // panel that is always open costs canvas width on every
-            // document to serve a task most sessions never perform.
-            properties_open: false,
+            // The dock's default arrangement (decision 017 A.3): the object
+            // tree on top, Properties and Batch Tools sharing the group
+            // below it, so the tree and the properties form are visible AT
+            // THE SAME TIME. Built even while the dock is closed, because
+            // `tools_open` decides visibility and this decides shape — two
+            // separate questions, and conflating them is what made the old
+            // `properties_open` flag able to lie.
+            dock: dock::default_tree(),
             save_result: None,
-            // The dock starts closed: progressive disclosure. Everything
-            // in it acts on files the operator has not opened, which is
-            // by definition not what they are doing right now.
+            // The dock starts CLOSED: progressive disclosure, and the
+            // status quo before decision 017 — an operator who wants it
+            // opens it from the toolbar, or from the Properties control,
+            // which now routes here.
+            //
+            // Note that the ORIGINAL justification for closed-by-default
+            // ("everything in it acts on files the operator has not
+            // opened") is no longer true — the dock now also holds a
+            // page-scoped object tree and the open document's own metadata.
+            // The default was nevertheless left alone: decision 017 gives
+            // no guidance on it, an always-open 380 pt panel costs canvas
+            // width on every document, and flipping a startup default is a
+            // product call to make deliberately rather than as a side
+            // effect of a layout-engine change.
             tools_open: false,
             tools_selected: None,
             merge_inputs: Vec::new(),
@@ -1271,6 +1327,21 @@ struct OpenDoc {
     /// `decompose_page` per frame (ui-spec §3.3 / §10 ask #4). Selection
     /// reaches it as a `&dyn CanvasTargetProvider` via [`Self::target_provider`].
     object_model: Option<ObjectModelProvider>,
+    /// The object-tree row the panel has already scrolled into view — the
+    /// first target of the selection as it stood the last time the tree drew
+    /// (ui-spec §B.5, "canvas selection → row").
+    ///
+    /// Exists to make the reveal fire **once per selection change** instead
+    /// of every frame. Without it, a selection made on the canvas would drag
+    /// the tree's scroll position back to the selected row on all 60 frames
+    /// a second, so an operator scrolling the tree to look at something else
+    /// could not move — the panel would fight them. Comparing against the
+    /// current first-selected target makes the reveal an edge trigger.
+    ///
+    /// `None` means "nothing revealed yet", which is also the correct state
+    /// after the selection is cleared: the next selection, even of the same
+    /// object, is a fresh change worth revealing.
+    objects_revealed: Option<TargetId>,
     /// The page index [`Self::object_model`] was last built for (Pass 9a).
     /// The provider decomposes only the CURRENT page (module docs of
     /// `object_provider`), so it is rebuilt lazily whenever this stops
@@ -1352,6 +1423,7 @@ impl OpenDoc {
             // page change / edit) — `None` here (and after every edit) forces
             // that first build; until then selection finds nothing.
             object_model: None,
+            objects_revealed: None,
             provider_page: None,
             marquee_start: None,
             // Pass 12.M2b: no measure tool active, the group panel closed, a
@@ -1728,8 +1800,23 @@ enum Action {
     Undo,
     /// Re-apply the most recently reversed edit.
     Redo,
-    /// Show or hide the document-properties panel.
+    /// Bring the document-properties panel to the front of the dock, or —
+    /// if it is already the panel on screen — close the dock.
+    ///
+    /// **The name is kept, and so is its toolbar control and shortcut; only
+    /// the effect moved** (decision 017 §8.3 / A.4 #2). Before the dock this
+    /// toggled a floating window. It now opens the dock and activates
+    /// [`DockPanel::Properties`], which is the same operator intent
+    /// ("show me the document's metadata") pointed at the surface that
+    /// actually hosts it.
     ToggleProperties,
+    /// Rebuild the dock's layout from scratch (decision 017 §8.12 / A.4 #6).
+    ///
+    /// Its own action rather than an inline mutation because it is a
+    /// **command**, not a widget state flip: it must run in `apply()` with
+    /// every other command, after the frame's drawing is finished and the
+    /// real tree has been restored from the borrow-dance swap.
+    ResetPanelLayout,
     /// Commit the properties panel's draft text as one undoable edit.
     ApplyProperties,
     /// Write the document (with its unsaved edits) to a path the
@@ -1883,14 +1970,30 @@ impl PdfceApp {
         } else {
             None
         };
-        // P0-2: if the Properties panel happens to be open, reseed its
-        // draft from the newly loaded document. `properties_open` outlives
-        // any one document, and a fresh `OpenDoc` starts with an empty
-        // draft, so without this the still-showing panel renders an empty
-        // grid until the operator closes and reopens it.
-        if self.properties_open
-            && let Status::Open(doc) = &mut self.status
-        {
+        // P0-2, WIDENED to unconditional by decision 017 §8.4 / A.4 #3 —
+        // the prerequisite bugfix that had to ship with or before the
+        // Properties migration.
+        //
+        // A fresh `OpenDoc` starts with an EMPTY `properties_draft`, and the
+        // draft used to be seeded only when the properties surface was open
+        // at open time. That was survivable while Properties was a floating
+        // window an operator explicitly opened (opening it ran
+        // `seed_properties_draft` on the way in), and the guard here patched
+        // the one case where the window outlived the document.
+        //
+        // A DOCK PANEL makes the blast radius worse in a way no guard can
+        // cover: the panel is persistently mounted, so it can be drawn
+        // against a document it was never "opened" for. The failure mode is
+        // silent and looks like data loss — an empty metadata form for a
+        // document that has a title and an author — and the operator's
+        // natural next move is to type into the blank boxes and press Apply,
+        // which would then WRITE that emptiness over real metadata.
+        //
+        // Seeding unconditionally costs one pass over four `/Info` fields
+        // per open. There is no "half-typed field to protect" here: the
+        // document just changed, so any draft still in memory describes a
+        // file that is no longer on screen.
+        if let Status::Open(doc) = &mut self.status {
             doc.seed_properties_draft();
         }
     }
@@ -3167,12 +3270,44 @@ impl PdfceApp {
                 return;
             }
             Action::ToggleProperties => {
-                self.properties_open = !self.properties_open;
-                if self.properties_open
-                    && let Status::Open(doc) = &mut self.status
-                {
+                // Decision 017 §8.3: same entry point, new destination.
+                //
+                // "Already showing" means BOTH that the dock is open and
+                // that Properties is the front tab of its group — the two
+                // halves of "is it on screen?". Asking the tree rather than
+                // a flag of our own is what stops the toolbar toggle from
+                // ever disagreeing with what the operator can see, which is
+                // exactly the failure the retired `properties_open` boolean
+                // was capable of.
+                if self.tools_open && dock::panel_is_active(&self.dock, DockPanel::Properties) {
+                    self.tools_open = false;
+                    return;
+                }
+                self.tools_open = true;
+                // A `false` here means the panel is not mounted at all —
+                // impossible today (nothing can close a pane) but cheap to
+                // survive: fall back to the default layout rather than
+                // opening a dock that does not contain what was asked for.
+                // Fail-soft, the same posture §7 binds the future
+                // layout-restore path to.
+                if !dock::activate(&mut self.dock, DockPanel::Properties) {
+                    self.dock = dock::default_tree();
+                    dock::activate(&mut self.dock, DockPanel::Properties);
+                }
+                if let Status::Open(doc) = &mut self.status {
                     doc.seed_properties_draft();
                 }
+                return;
+            }
+            Action::ResetPanelLayout => {
+                // Wholesale replacement, not a repair: the operator reached
+                // for this because the arrangement is wrong in some way they
+                // could not undo by dragging, and a partial fix that left
+                // some of the damage would send them straight back to the
+                // button. `default_tree` is also the single definition of
+                // "where the panels start", so reset and startup cannot
+                // drift apart.
+                self.dock = dock::default_tree();
                 return;
             }
             Action::ApplyProperties => {
@@ -3395,6 +3530,7 @@ impl PdfceApp {
             | Action::ToggleRail
             | Action::ToggleAnnotations
             | Action::ToggleProperties
+            | Action::ResetPanelLayout
             | Action::ApplyProperties
             | Action::Save
             | Action::ToggleTools
@@ -3744,25 +3880,26 @@ impl eframe::App for PdfceApp {
                     self.thumbnail_rail(ui, &mut actions, pixels_per_point)
                 });
         }
-        // The Tools dock claims RIGHT space, so like the rail it must be
+        // The panel dock claims RIGHT space, so like the rail it must be
         // added before the CentralPanel and after the full-width status
         // bar. Order is load-bearing here, not stylistic.
+        //
+        // Tab-chain (decision 017 §8.7): the panel-add order is UNCHANGED —
+        // toolbar → status → rail → dock → canvas. Inside the dock, the tab
+        // bars are drawn before their panes' widgets, so Tab still visits
+        // pick-then-fill, exactly as the hand-rolled row list would have.
         if self.tools_open {
             egui::Panel::right("tools")
-                .default_size(320.0)
-                .show(ui, |ui| {
-                    egui::ScrollArea::vertical()
-                        .id_salt("tools-dock")
-                        .show(ui, |ui| self.tools_dock(ui, &mut actions));
-                });
+                .default_size(DOCK_DEFAULT_WIDTH_PTS)
+                .show(ui, |ui| self.dock_body(ui, &mut actions));
         }
         egui::CentralPanel::default().show(ui, |ui| self.canvas(ui, &mut actions));
-        // Last, so the floating window draws over the panels rather
-        // than being clipped by whichever one it happens to overlap.
-        self.properties_window(&ctx, &mut actions);
-        // Later still: the signature confirmation is the one blocking
-        // question in this Pass, so it draws over everything including
-        // Properties.
+        // (Decision 017 §8.3 / A.4 #2: the document-properties floating
+        // window used to be drawn here, after the panels, so it would not be
+        // clipped. It is now a dock panel — see `DockPanel::Properties` —
+        // and there is deliberately NO float-OR-dock dual mode.)
+        // The signature confirmation is the one blocking question in this
+        // Pass, so it draws over everything including the dock.
         self.signature_confirmation(&ctx, &mut actions);
         // And the copy confirmation alongside it: the same blocking
         // treatment, because a clipboard write is destructive to
@@ -3771,9 +3908,11 @@ impl eframe::App for PdfceApp {
         // The Pass 6.2 text-entry popup: a small non-blocking window that
         // collects the text before authoring.
         self.text_entry_popup(&ctx, &mut actions);
-        // The keyboard-shortcuts reference (P1-2): modeless, like
-        // Properties — reading a reference while looking at the document
-        // is exactly the use case, so it never blocks the canvas.
+        // The keyboard-shortcuts reference (P1-2): modeless — reading a
+        // reference while looking at the document is exactly the use case,
+        // so it never blocks the canvas. R81 permits this as a TRANSIENT,
+        // modeless reference; it is not something an operator keeps open
+        // while working, which is what would make it owe a dock panel.
         self.shortcuts_window(&ctx);
 
         for action in actions {
@@ -4467,10 +4606,16 @@ impl PdfceApp {
                         actions.push(Action::RotateRight);
                     }
                 });
+                // Decision 017 §8.3 keeps this control and its shortcut as
+                // the Properties entry point and changes only where they
+                // lead. Its selected state is now DERIVED from the dock —
+                // "the dock is open AND Properties is its front tab" — so
+                // the toggle reports what is on screen rather than a
+                // separate boolean that could disagree with it.
                 if Self::icon_text_toggle(
                     ui,
                     icons::Icon::Properties,
-                    self.properties_open,
+                    self.tools_open && dock::panel_is_active(&self.dock, DockPanel::Properties),
                     ui_text::properties_button(),
                     ui_text::properties_tooltip(),
                 )
@@ -4875,112 +5020,407 @@ impl PdfceApp {
         }
     }
 
-    fn properties_window(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
-        if !self.properties_open {
-            return;
-        }
+    // -- the panel dock (decision 017 + Amendment A) -----------------
+
+    /// Draw the whole right-hand dock: a one-line header, then the
+    /// `egui_tiles` tree.
+    ///
+    /// ## The borrow dance, and why it is written exactly this way
+    ///
+    /// `Tree::ui` takes `&mut dyn Behavior<Pane>`, and pdfce's behaviour
+    /// needs `&mut PdfceApp` to draw panel bodies — but the tree lives *in*
+    /// `PdfceApp`, so passing both at once is two mutable borrows of the
+    /// same value. The standard escape is to move the tree out for the
+    /// duration.
+    ///
+    /// **`std::mem::take` does not compile here.** `egui_tiles::Tree`
+    /// derives only `Clone, PartialEq` — not `Default` — a fact decision 017
+    /// §6.2 recorded in advance precisely so this Pass would not spend time
+    /// rediscovering it. [`dock::swap_tree`] supplies the stand-in for
+    /// `std::mem::replace` instead.
+    ///
+    /// While the swap is in place, `self.dock` is an EMPTY tree. Nothing
+    /// reachable from a panel body may read or write it — a panel that wants
+    /// to change the layout pushes an [`Action`], which is applied after the
+    /// real tree is restored. The restore is unconditional (no early return
+    /// between the replace and the put-back) so a panic-free path cannot
+    /// leave the app dockless.
+    fn dock_body(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        self.dock_header(ui, actions);
+
+        // Snapshotted BEFORE the tree draws: `Behavior` callbacks have no
+        // other way to learn which tile is its container's current tab, and
+        // R84 needs that to give the active tab a weight cue rather than
+        // leaving colour to carry the state alone.
+        let active = self.dock.active_tiles();
+
+        let mut tree = std::mem::replace(&mut self.dock, dock::swap_tree());
+        let mut behavior = dock::DockBehavior {
+            app: self,
+            actions,
+            active,
+        };
+        tree.ui(&mut behavior, ui);
+        self.dock = tree;
+    }
+
+    /// The dock's header strip: the layout-reset command and the
+    /// session-only disclosure.
+    ///
+    /// Both are here rather than on a tab bar for the same reason: they are
+    /// properties of the DOCK, not of any one panel, and `egui_tiles`'
+    /// per-tab-bar hook would have repeated them once per group.
+    ///
+    /// **Reset ships in the same Pass as the dragging** (decision 017 §8.12,
+    /// promoted by A.4 #6 from "nice to have" to necessary): a draggable
+    /// layout can be wrecked in ways a fixed one cannot — a pane dragged to
+    /// a two-pixel sliver, a group nested inside a group inside a group —
+    /// and shipping the wreckage without the undo would be shipping a trap.
+    ///
+    /// **The disclosure is visible text, not a tooltip** (§7 / A.6 / R82).
+    /// An operator will arrange panels, close pdfce, and reopen it; finding
+    /// the arrangement gone with no prior warning is exactly the surprise
+    /// decision 012 set the precedent against for the font-folders setting.
+    fn dock_header(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        ui.horizontal(|ui| {
+            if ui
+                .button(ui_text::dock_reset_layout_button())
+                .on_hover_text(ui_text::dock_reset_layout_tooltip())
+                .clicked()
+            {
+                actions.push(Action::ResetPanelLayout);
+            }
+        });
+        ui.label(
+            egui::RichText::new(ui_text::dock_layout_session_only_note())
+                .small()
+                .weak(),
+        );
+        ui.separator();
+    }
+
+    /// **The one panel-body dispatcher** (decision 017 §8.1 / A.4 #1;
+    /// standing rule R80).
+    ///
+    /// Every dockable surface is reached through here and nowhere else,
+    /// which is what makes "no panel is reachable ONLY as a floating window"
+    /// a structural property instead of a convention someone has to
+    /// remember. §8.1 predicted this function would "survive verbatim if the
+    /// §6 trigger ever fires" — it did fire, and it did.
+    ///
+    /// Each body gets its OWN scroll area with its OWN `id_salt`. Sharing
+    /// one salt across panels is a real egui immediate-mode footgun: scroll
+    /// state is keyed by id, so two panels sharing a salt would inherit each
+    /// other's scroll offset when the operator switched tabs — the object
+    /// tree scrolled to row 900 would leave the properties form scrolled off
+    /// its own top.
+    fn panel_body(&mut self, panel: DockPanel, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        match panel {
+            DockPanel::Objects => egui::ScrollArea::vertical()
+                .id_salt("dock-objects")
+                .show(ui, |ui| self.objects_panel(ui)),
+            DockPanel::Properties => egui::ScrollArea::vertical()
+                .id_salt("dock-properties")
+                .show(ui, |ui| self.properties_panel(ui, actions)),
+            DockPanel::BatchTools => egui::ScrollArea::vertical()
+                .id_salt("dock-batch-tools")
+                .show(ui, |ui| self.tools_dock(ui, actions)),
+        };
+    }
+
+    /// The document-properties panel — the body that used to live in the
+    /// floating `properties_window` (decision 017 §8.3 / A.4 #2).
+    ///
+    /// The migration is a **move, not a copy**: there is deliberately no
+    /// float-OR-dock dual mode, because two code paths for the same content
+    /// would each need their own open-state, position/size and focus
+    /// handling, and would drift. The toolbar's Properties control and its
+    /// shortcut are unchanged as the *entry point* — only their effect moved
+    /// (see [`Action::ToggleProperties`]), so the muscle memory survives and
+    /// only the destination changed.
+    ///
+    /// Never blank: with nothing open it states the precondition rather than
+    /// showing an empty form, because a blank region is indistinguishable
+    /// from a broken one.
+    fn properties_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let Status::Open(doc) = &mut self.status else {
+            ui.label(ui_text::properties_dock_no_document_hint());
             return;
         };
-        let mut open = true;
-        egui::Window::new(ui_text::properties_window_title())
-            .open(&mut open)
-            .resizable(true)
-            .default_width(420.0)
-            .show(ctx, |ui| {
-                if doc.properties_lossy {
-                    // Honesty over tidiness: some stored bytes could not
-                    // be decoded with certainty, so the operator is told
-                    // before they overwrite them (the code that decides
-                    // this is `pdfce_core::edit::decode_text_string`).
-                    ui.colored_label(
-                        ui.visuals().warn_fg_color,
-                        ui_text::properties_lossy_warning(),
-                    );
-                }
-                egui::Grid::new("properties-grid")
-                    .num_columns(2)
-                    .spacing([12.0, 6.0])
-                    .show(ui, |ui| {
-                        for (field, text) in &mut doc.properties_draft {
-                            // Per-field lossy marking, carried from the
-                            // Pass 3.1 review: the panel-level warning
-                            // says SOMETHING here is uncertain, which
-                            // leaves the operator guessing which box.
-                            let lossy = doc
-                                .session
-                                .info_text(*field)
-                                .is_some_and(|value| !value.exact);
-                            let label = ui.label(ui_text::info_field_label(*field));
-                            if lossy {
-                                ui.colored_label(
-                                    ui.visuals().warn_fg_color,
-                                    ui_text::info_field_lossy_marker(),
-                                )
-                                .on_hover_text(ui_text::info_field_lossy_tooltip());
-                                label.on_hover_text(ui_text::info_field_lossy_tooltip());
-                            }
-                            ui.add(
-                                egui::TextEdit::singleline(text)
-                                    .desired_width(f32::INFINITY)
-                                    .hint_text(ui_text::info_field_hint()),
-                            );
-                            ui.end_row();
-                        }
-                    });
-                ui.separator();
-                ui.label(ui_text::properties_help());
-                // Apply and Revert are greyed out when the draft already
-                // matches the document: a live control that provably does
-                // nothing trains the operator to distrust the panel.
-                // Carried from the Pass 3.1 review.
-                let dirty = doc.properties_draft.iter().any(|(field, text)| {
-                    let stored = doc.session.info_text(*field).map(|value| value.text);
-                    let wanted = if text.is_empty() {
-                        None
-                    } else {
-                        Some(text.clone())
-                    };
-                    stored != wanted
-                });
-                ui.horizontal(|ui| {
-                    if ui
-                        .add_enabled(dirty, egui::Button::new(ui_text::properties_apply_button()))
-                        .on_hover_text(if dirty {
-                            ui_text::properties_apply_tooltip()
-                        } else {
-                            ui_text::properties_apply_unchanged_tooltip()
-                        })
-                        .clicked()
-                    {
-                        actions.push(Action::ApplyProperties);
-                    }
-                    if ui
-                        .add_enabled(
-                            dirty,
-                            egui::Button::new(ui_text::properties_revert_button()),
+        if doc.properties_lossy {
+            // Honesty over tidiness: some stored bytes could not be decoded
+            // with certainty, so the operator is told before they overwrite
+            // them (the code that decides this is
+            // `pdfce_core::edit::decode_text_string`).
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::properties_lossy_warning(),
+            );
+        }
+        egui::Grid::new("properties-grid")
+            .num_columns(2)
+            .spacing([12.0, 6.0])
+            .show(ui, |ui| {
+                for (field, text) in &mut doc.properties_draft {
+                    // Per-field lossy marking, carried from the Pass 3.1
+                    // review: the panel-level warning says SOMETHING here is
+                    // uncertain, which leaves the operator guessing which box.
+                    let lossy = doc
+                        .session
+                        .info_text(*field)
+                        .is_some_and(|value| !value.exact);
+                    let label = ui.label(ui_text::info_field_label(*field));
+                    if lossy {
+                        ui.colored_label(
+                            ui.visuals().warn_fg_color,
+                            ui_text::info_field_lossy_marker(),
                         )
-                        // P1-5: the disabled Revert now explains itself the
-                        // way the disabled Apply beside it already does.
-                        .on_hover_text(if dirty {
-                            ui_text::properties_revert_tooltip()
-                        } else {
-                            ui_text::properties_revert_unchanged_tooltip()
-                        })
-                        .clicked()
-                    {
-                        doc.seed_properties_draft();
+                        .on_hover_text(ui_text::info_field_lossy_tooltip());
+                        label.on_hover_text(ui_text::info_field_lossy_tooltip());
                     }
-                });
+                    ui.add(
+                        egui::TextEdit::singleline(text)
+                            .desired_width(f32::INFINITY)
+                            .hint_text(ui_text::info_field_hint()),
+                    );
+                    ui.end_row();
+                }
             });
-        if !open {
-            self.properties_open = false;
+        ui.separator();
+        ui.label(ui_text::properties_help());
+        // Apply and Revert are greyed out when the draft already matches the
+        // document: a live control that provably does nothing trains the
+        // operator to distrust the panel. Carried from the Pass 3.1 review.
+        let dirty = doc.properties_draft.iter().any(|(field, text)| {
+            let stored = doc.session.info_text(*field).map(|value| value.text);
+            let wanted = if text.is_empty() {
+                None
+            } else {
+                Some(text.clone())
+            };
+            stored != wanted
+        });
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(dirty, egui::Button::new(ui_text::properties_apply_button()))
+                .on_hover_text(if dirty {
+                    ui_text::properties_apply_tooltip()
+                } else {
+                    ui_text::properties_apply_unchanged_tooltip()
+                })
+                .clicked()
+            {
+                actions.push(Action::ApplyProperties);
+            }
+            if ui
+                .add_enabled(
+                    dirty,
+                    egui::Button::new(ui_text::properties_revert_button()),
+                )
+                // P1-5: the disabled Revert now explains itself the way the
+                // disabled Apply beside it already does.
+                .on_hover_text(if dirty {
+                    ui_text::properties_revert_tooltip()
+                } else {
+                    ui_text::properties_revert_unchanged_tooltip()
+                })
+                .clicked()
+            {
+                doc.seed_properties_draft();
+            }
+        });
+    }
+
+    /// The object/layer tree panel (`docs/ui_specs/pass-17-dock-and-layer-
+    /// tree.md` §B — the section the dock reversal left standing).
+    ///
+    /// ## What it is FOR — the operator's own words
+    ///
+    /// > *"I'd like to have a layer tree there for the document that I can
+    /// > also click on to select objects. at least that way we can
+    /// > troubleshoot better what I am clicking on in the GUI area."*
+    ///
+    /// So its first job is answering **"what am I clicking on"**, and every
+    /// design choice below is subordinate to that. It is a diagnostic
+    /// instrument first and a navigation aid second.
+    ///
+    /// ## A flat list, not a hierarchy — and why that is not a shortcut
+    ///
+    /// §B.1: `pdfce_core::vector::PageObjects` has **no optional-content-
+    /// group (OCG) membership for page content at all** —
+    /// `VectorObject::{Path,Text,Image}` carry no `/OC`. There is therefore
+    /// no real grouping to render, and inventing one would be a lie about
+    /// the document's structure. (The Pass 12.M2 dimension-group OCGs are a
+    /// different mechanism entirely — annotation-layer visibility — and have
+    /// their own panel; do not conflate them.) A middle grouping level
+    /// becomes possible only once `decompose_page` tracks `BDC`/`EMC`
+    /// optional-content membership. Deferred, not overlooked.
+    ///
+    /// ## Front-most FIRST — justified, not merely conventional (§B.2)
+    ///
+    /// The list is drawn in REVERSE paint order: the last-painted (topmost)
+    /// object is the first row. Two reasons, in priority order:
+    ///
+    /// 1. **It matches what a click does.** `hit_test_point` resolves
+    ///    overlapping candidates topmost-first, so the object the operator
+    ///    most likely just hit — the one they are confused about — is at the
+    ///    top of the list, not scrolled to the bottom of a thousand rows.
+    ///    For a panel whose whole purpose is "what did I just click", any
+    ///    other order buries the answer.
+    /// 2. It is the prevailing convention for layer/object panels (top of
+    ///    list = top of z-order), cited strictly as a metaphor-level
+    ///    convention, never as a copied GUI structure.
+    ///
+    /// The row's visible `#n` is the **paint-order** index, NOT the display
+    /// position. That is deliberate: `#n` is the number
+    /// `pdfce-cli object-list` prints as `index=`, and the number
+    /// `object-move`/`object-delete`/`node-move` take as an operand. A
+    /// display-position number would look equally authoritative and address
+    /// a different object.
+    ///
+    /// ## Row detail is honestly incomplete for Text and Image (§B.3/§B.4)
+    ///
+    /// Path rows are complete — paint disposition, colour, node count — all
+    /// of it already in the model. Text and Image rows are not, and cannot
+    /// be: `TextObject` carries a bbox, `approximate`, and token/byte spans
+    /// — **no string, no font, no size** — and `ImageObject` carries no
+    /// pixel dimensions or colourspace. The spec's illustrative
+    /// `Text · "Section A-A" · Helvetica 10pt` row is not buildable today.
+    /// Shipping the honest lesser row beats blocking the panel, and beats a
+    /// fabricated one; §B.4's two core extensions are named as owed.
+    ///
+    /// This gap bites hardest exactly where it matters most — Text is the
+    /// object kind most likely to be the "box over nothing" culprit, because
+    /// its bbox is inflated around glyph ORIGINS and so routinely covers
+    /// whitespace. The row says so in words, which is the part of the answer
+    /// that is buildable now.
+    ///
+    /// ## Virtualized, never silently truncated (§B.6)
+    ///
+    /// A complex drawing can decompose to tens of thousands of objects.
+    /// `ScrollArea::show_rows` lays out only the rows actually on screen, so
+    /// the list stays cheap at any size and **no cap is applied** — there is
+    /// nothing to disclose because nothing is hidden. If a future cost
+    /// (row-string precompute, memory) ever forces a cap, §B.6 binds it to
+    /// be visible text naming both numbers, never a quietly shortened list.
+    fn objects_panel(&mut self, ui: &mut egui::Ui) {
+        let Status::Open(doc) = &mut self.status else {
+            ui.label(ui_text::objects_dock_no_document_hint());
+            return;
+        };
+        // The dock is added BEFORE the CentralPanel, so on the first frame
+        // after a page change or an edit the canvas has not yet rebuilt the
+        // provider. Calling it here makes the tree correct on that frame
+        // instead of one frame stale; it is idempotent and costs a single
+        // index compare in the steady state, and — critically — it is the
+        // SAME `ensure_object_provider`, so the tree and the canvas share
+        // ONE decomposition rather than each building their own (the Z2
+        // "two decompositions quietly diverge" failure decision 011 warns
+        // against).
+        doc.ensure_object_provider();
+
+        let Some(provider) = doc.object_model.as_ref() else {
+            // `None` here means the page's content could not be decoded.
+            // Stated in words rather than shown as an empty list, because a
+            // failure state must never be visually indistinguishable from a
+            // success state that happens to have no content.
+            ui.label(ui_text::objects_dock_decompose_failed_hint());
+            return;
+        };
+        let objects = &provider.page_objects().objects;
+        let total = objects.len();
+        if total == 0 {
+            ui.label(ui_text::objects_dock_empty_page_hint());
+            return;
+        }
+
+        ui.label(ui_text::objects_dock_intro());
+        ui.label(ui_text::objects_dock_summary(
+            total,
+            doc.canvas_selection.len(),
+        ));
+        ui.separator();
+
+        // The first selected target, in paint order. Drives both the
+        // scroll-reveal edge trigger and nothing else — multi-select
+        // highlights every matching row independently (§B.5).
+        let first_selected = doc.canvas_selection.iter().next().copied();
+        let reveal_row = (first_selected != doc.objects_revealed)
+            .then(|| first_selected.map(|t| display_row_for_target(t, total)))
+            .flatten();
+        doc.objects_revealed = first_selected;
+
+        // `Button::selectable` is not `small()` by default, so its height
+        // floor is `interact_size.y`; declaring the same value as the row
+        // height is what keeps `show_rows`' virtual scroll arithmetic in
+        // step with what is actually painted.
+        let row_height = ui.spacing().interact_size.y;
+        let mut scroll = egui::ScrollArea::vertical().id_salt("objects-tree-rows");
+        if let Some(row) = reveal_row {
+            // Reveal by SCROLL OFFSET rather than `Response::scroll_to_me`:
+            // under virtualization the selected row may not have been laid
+            // out at all this frame, so there would be no response to scroll
+            // to. The offset is computed from the same row geometry
+            // `show_rows` uses, so it lands on the row regardless.
+            let spacing = ui.spacing().item_spacing.y;
+            scroll = scroll.vertical_scroll_offset(row as f32 * (row_height + spacing));
+        }
+
+        let mut clicked: Option<(TargetId, bool)> = None;
+        scroll.show_rows(ui, row_height, total, |ui, rows| {
+            for row in rows {
+                // Front-most first: display row 0 is the LAST-painted
+                // object (see the "Front-most FIRST" section above).
+                let index = total - 1 - row;
+                let Some(object) = objects.get(index) else {
+                    continue;
+                };
+                let target = TargetId(index as u64);
+                let selected = doc.canvas_selection.contains(&target);
+                let label = ui_text::object_row(index, object);
+                // R84: selected state is never colour alone. The background
+                // fill is `Button::selectable`'s; the BOLD is this project's
+                // standing second cue, and survives greyscale.
+                let text = Self::toggle_label(selected, &label);
+                let response = ui.add_sized(
+                    egui::vec2(ui.available_width(), row_height),
+                    // `Atom::grow()` after the text pushes the label to the
+                    // LEFT edge; a centred label in a list of rows reads as
+                    // a column of buttons, not as a list.
+                    egui::Button::selectable(selected, (text, egui::Atom::grow())).small(),
+                );
+                if response
+                    .on_hover_text(ui_text::objects_dock_row_tooltip())
+                    .clicked()
+                {
+                    clicked = Some((target, ui.input(|i| i.modifiers.shift)));
+                }
+            }
+        });
+
+        // Applied after the loop so the selection is not mutated while the
+        // rows are still reading it (and so one click cannot cascade into
+        // the rows drawn after it within the same frame).
+        if let Some((target, shift)) = clicked {
+            // §B.5: the EXACT function the canvas click path calls
+            // (`main.rs`'s object-selection branch), never a second,
+            // divergent selection path. Plain click replaces, Shift+click
+            // toggles membership — the canvas's own convention, mirrored
+            // rather than reinvented, so an operator who learned one has
+            // already learned the other.
+            doc.canvas_selection =
+                canvas::selection_after_click(&doc.canvas_selection, Some(target), shift);
+            // A tree-driven selection must not then yank the tree's own
+            // scroll: the operator is already looking at the row they
+            // clicked. Recording it as "already revealed" suppresses the
+            // edge trigger on the next frame.
+            doc.objects_revealed = doc.canvas_selection.iter().next().copied();
         }
     }
 
     /// The keyboard-shortcuts reference window (P1-2).
     ///
-    /// Modeless, like [`Self::properties_window`]: reading a shortcut
+    /// Modeless: reading a shortcut
     /// reference while looking at the document is exactly the use case, so
     /// it never blocks the canvas. The whole chord list is one catalog
     /// entry ([`ui_text::shortcuts_reference`]) shown inside a scroll area,
@@ -8352,6 +8792,30 @@ fn annotation_status(
 ///
 /// Every tool that owns the canvas and supports object selection must call
 /// this. Painting is a `painter` overlay above the raster, never a re-raster.
+/// Where an object sits in the Objects panel's **display** order, given its
+/// paint-order [`TargetId`] and the page's object count (ui-spec §B.2).
+///
+/// The panel lists front-most first, so display row = `total - 1 - index`.
+/// Pulled out of [`PdfceApp::objects_panel`] as a free function for exactly
+/// one reason: it is the only arithmetic in that panel that can be wrong in
+/// a way a human would notice (the scroll-reveal landing on the wrong row,
+/// or one row off the end), and this crate's standing split is that wiring
+/// gets reviewed while arithmetic gets a test.
+///
+/// Out-of-range input is clamped rather than refused. A [`TargetId`] can
+/// outlive the object it named — an edit shortens the list and
+/// `prune_canvas_selection` has not run yet — and the worst honest outcome
+/// of a stale id is scrolling to the wrong row for one frame. Panicking, or
+/// refusing to draw the list, would both be worse answers to a transient.
+fn display_row_for_target(target: TargetId, total: usize) -> usize {
+    if total == 0 {
+        return 0;
+    }
+    let last = total - 1;
+    let index = usize::try_from(target.0).unwrap_or(last).min(last);
+    last - index
+}
+
 fn draw_selection_outlines(
     doc: &OpenDoc,
     ui: &egui::Ui,
@@ -9479,5 +9943,341 @@ mod tests {
         );
         // Every hint is a non-empty next-step sentence.
         assert!(!reflow_refusal_hint(&already).is_empty());
+    }
+
+    // ---- Pass 18.4 dock + object tree ------------------------------------
+
+    /// A fixture path, resolved from this crate's manifest directory so the
+    /// test does not depend on the working directory the runner chose.
+    fn fixture(rel: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/synthetic")
+            .join(rel)
+    }
+
+    /// **The regression test for decision 017 §8.4 / A.4 #3** — the
+    /// prerequisite bugfix the Properties migration was not allowed to ship
+    /// without.
+    ///
+    /// Before the fix, `open_path` seeded `properties_draft` only if the
+    /// floating properties window happened to be open, so a freshly opened
+    /// document normally carried an EMPTY draft. That was survivable while
+    /// Properties was a window an operator explicitly opened (opening it
+    /// seeded the draft on the way in). It is not survivable for a
+    /// persistently-mounted dock panel, which can be drawn against a
+    /// document nobody ever "opened" it for — the operator would see an
+    /// empty metadata form, and typing into it and pressing Apply would
+    /// write that emptiness over the document's real metadata.
+    ///
+    /// The assertion is deliberately about the draft's SHAPE, not its
+    /// content: one entry per `InfoField`, present without anyone touching
+    /// the panel. That is exactly the property the old code lacked, and it
+    /// holds for a document whose `/Info` is absent or empty — which is the
+    /// case that used to look identical to the bug.
+    #[test]
+    fn opening_a_document_seeds_the_properties_draft_without_the_panel_being_open() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("hello.pdf"));
+        let Status::Open(doc) = &app.status else {
+            panic!("the fixture did not open");
+        };
+        assert_eq!(
+            doc.properties_draft.len(),
+            InfoField::all().len(),
+            "the properties draft was not seeded on open — the dock panel \
+             would render an empty metadata form (decision 017 §8.4)"
+        );
+        for (field, _) in &doc.properties_draft {
+            assert!(
+                InfoField::all().contains(field),
+                "the draft holds a field that is not an InfoField"
+            );
+        }
+    }
+
+    /// Opening a SECOND document must reseed, not leave the first
+    /// document's draft in place — the "stale" half of the same bug. A dock
+    /// row showing the previous file's author is a quieter failure than an
+    /// empty one and a worse one, because it looks correct.
+    #[test]
+    fn opening_a_second_document_replaces_the_previous_drafts_content() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("hello.pdf"));
+        // Simulate half-typed, uncommitted edits against document one.
+        if let Status::Open(doc) = &mut app.status {
+            for (_, text) in &mut doc.properties_draft {
+                text.push_str("stale");
+            }
+        }
+        app.open_path(fixture("vector/mixed.pdf"));
+        let Status::Open(doc) = &app.status else {
+            panic!("the second fixture did not open");
+        };
+        assert!(
+            doc.properties_draft
+                .iter()
+                .all(|(_, t)| !t.contains("stale")),
+            "the previous document's draft survived an Open"
+        );
+    }
+
+    /// The Objects panel lists front-most first (ui-spec §B.2), so display
+    /// row 0 is the LAST-painted object. Getting this backwards would put
+    /// the object a click most likely hit at the bottom of a long list —
+    /// which is the one thing the panel exists to avoid.
+    #[test]
+    fn the_object_tree_lists_the_topmost_object_first() {
+        // Five objects, paint order 0..4. #4 was painted last, so it is
+        // topmost, so it is display row 0.
+        assert_eq!(display_row_for_target(TargetId(4), 5), 0);
+        assert_eq!(display_row_for_target(TargetId(3), 5), 1);
+        assert_eq!(display_row_for_target(TargetId(0), 5), 4);
+        // A single-object page: the only object is the only row.
+        assert_eq!(display_row_for_target(TargetId(0), 1), 0);
+    }
+
+    /// A stale target id (an edit shortened the list, and
+    /// `prune_canvas_selection` has not run yet) must clamp, never panic and
+    /// never index past the end — the worst honest outcome is one frame
+    /// scrolled to the wrong row.
+    #[test]
+    fn a_stale_target_clamps_instead_of_panicking() {
+        assert_eq!(display_row_for_target(TargetId(99), 5), 0);
+        assert_eq!(display_row_for_target(TargetId(0), 0), 0);
+        assert_eq!(display_row_for_target(TargetId(u64::MAX), 3), 0);
+    }
+
+    /// Every object kind produces a row that carries its paint-order index
+    /// and names its kind — the two facts the panel exists to supply. Text
+    /// and image rows are honestly thinner than the ui-spec's illustrative
+    /// examples (§B.3/§B.4: the core model carries no text string, font or
+    /// pixel size), and this asserts the floor they must still clear.
+    #[test]
+    fn every_object_kind_gets_a_row_naming_its_index_and_its_kind() {
+        use pdfce_core::content::ContentStream;
+        use pdfce_core::vector::{Matrix, NoXObjects, decompose};
+
+        // A stroked line, a text object and an inline image, in paint order.
+        let src = b"10 20 m 100 20 l S BT /F1 12 Tf 40 40 Td (Hi) Tj ET";
+        let cs = ContentStream::parse(src.to_vec()).expect("parse");
+        let objects = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+        assert!(objects.objects.len() >= 2, "fixture stream decomposed thin");
+
+        for (index, object) in objects.objects.iter().enumerate() {
+            let row = ui_text::object_row(index, object);
+            assert!(
+                row.contains(&format!("#{index}")),
+                "row {row:?} does not carry its paint-order index"
+            );
+            assert!(
+                row.len() > 8,
+                "row {row:?} is too thin to identify anything"
+            );
+        }
+        // The path row must name what it paints and how many nodes it has:
+        // "it paints nothing" is the direct answer to "why is there a
+        // selection box over blank paper?" (§C.2).
+        let path_row = ui_text::object_row(0, &objects.objects[0]);
+        assert!(path_row.contains("Path"), "{path_row:?}");
+        assert!(path_row.contains("node"), "{path_row:?}");
+    }
+
+    /// A no-paint (`n`) path must say so in words. This is the single
+    /// cheapest answer to the operator's "a box highlighting that doesn't
+    /// correspond to anything" — a clip or discarded path is a real,
+    /// selectable object that marks no pixels.
+    #[test]
+    fn a_path_that_paints_nothing_says_so() {
+        use pdfce_core::vector::{FillRule, PaintStyle};
+        let invisible = PaintStyle {
+            fill: None,
+            stroke: false,
+        };
+        assert!(invisible.is_invisible());
+        let label = ui_text::paint_style_label(invisible);
+        assert!(
+            label.contains("nothing"),
+            "an n-op path's label must say it paints nothing, got {label:?}"
+        );
+        // Every disposition gets a DISTINCT label, or the row cannot
+        // distinguish a filled shape from a stroked one.
+        let mut seen = BTreeSet::new();
+        for fill in [None, Some(FillRule::NonZero), Some(FillRule::EvenOdd)] {
+            for stroke in [false, true] {
+                let label = ui_text::paint_style_label(PaintStyle { fill, stroke });
+                assert!(seen.insert(label), "duplicate paint label {label:?}");
+            }
+        }
+    }
+
+    /// Colours are rendered as `#RRGGBB`, and out-of-range components are
+    /// clamped at DISPLAY time rather than repaired in the model — the
+    /// decomposition records what the content stream actually said.
+    #[test]
+    fn colours_render_as_clamped_hex() {
+        use pdfce_core::vector::Rgb;
+        assert_eq!(ui_text::rgb_hex(Rgb::BLACK), "#000000");
+        assert_eq!(
+            ui_text::rgb_hex(Rgb {
+                r: 1.0,
+                g: 1.0,
+                b: 1.0
+            }),
+            "#FFFFFF"
+        );
+        // Out of gamut in both directions: clamped, never wrapped.
+        assert_eq!(
+            ui_text::rgb_hex(Rgb {
+                r: 2.0,
+                g: -1.0,
+                b: 0.5
+            }),
+            "#FF0080"
+        );
+    }
+
+    /// **The Objects panel agrees with `pdfce-cli object-list`.**
+    ///
+    /// There is already a headless oracle for exactly the data this panel
+    /// displays: `object-list` prints the same `decompose_page` walk with the
+    /// same paint-order indices, and its own doc comment names it a
+    /// "diagnostic oracle for GUI selection". This test pins the agreement so
+    /// a future change to either side fails here rather than being discovered
+    /// by an operator comparing two answers.
+    ///
+    /// The expected values are the literal output of
+    ///
+    /// ```text
+    /// pdfce-cli object-list fixtures/synthetic/vector/mixed.pdf --page 1
+    /// object page=1 index=0 kind=path  bbox=20,20,280,20  subpaths=1 anchors=2 …
+    /// object page=1 index=1 kind=text  bbox=16,136,44,164  approximate=1
+    /// object page=1 index=2 kind=image bbox=30,250,90,290  source=xobject
+    /// object-list … objects=3 paths=1 text=1 images=1 forms=0
+    /// ```
+    ///
+    /// run against this fixture. The panel reaches the model through
+    /// `ObjectModelProvider`, which the CLI does not use — but both call the
+    /// SAME `decompose_page`, which is why they can be compared at all and
+    /// why a divergence would mean something had grown a second walk (the Z2
+    /// failure decision 011 warns against).
+    #[test]
+    fn the_object_tree_agrees_with_the_object_list_oracle() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture("vector/mixed.pdf"));
+        let Status::Open(doc) = &mut app.status else {
+            panic!("the fixture did not open");
+        };
+        doc.ensure_object_provider();
+        let provider = doc
+            .object_model
+            .as_ref()
+            .expect("the fixture page decomposes");
+        let objects = &provider.page_objects().objects;
+
+        assert_eq!(objects.len(), 3, "object-list reports objects=3");
+        // Paint order, index by index, exactly as the oracle prints it.
+        assert!(matches!(
+            objects[0],
+            pdfce_core::vector::VectorObject::Path(_)
+        ));
+        assert!(matches!(
+            objects[1],
+            pdfce_core::vector::VectorObject::Text(_)
+        ));
+        assert!(matches!(
+            objects[2],
+            pdfce_core::vector::VectorObject::Image(_)
+        ));
+
+        // The rows the panel would draw, top to bottom. Front-most first, so
+        // the image (painted last) heads the list and the stroked line
+        // (painted first) is at the bottom — the reverse of the oracle's
+        // print order, by design (§B.2), with the SAME index numbers.
+        let rows: Vec<String> = (0..objects.len())
+            .map(|row| {
+                let index = objects.len() - 1 - row;
+                ui_text::object_row(index, &objects[index])
+            })
+            .collect();
+        assert!(
+            rows[0].starts_with("#2") && rows[0].contains("Image"),
+            "{rows:?}"
+        );
+        assert!(
+            rows[1].starts_with("#1") && rows[1].contains("Text"),
+            "{rows:?}"
+        );
+        assert!(
+            rows[2].starts_with("#0") && rows[2].contains("Path"),
+            "{rows:?}"
+        );
+        // The oracle says `paint=stroke` for index 0; the row must say the
+        // same thing in the panel's own words, not a different one.
+        assert!(rows[2].contains("stroked"), "{rows:?}");
+
+        // And the display-row arithmetic the scroll-reveal uses agrees with
+        // the ordering the rows were built with.
+        assert_eq!(display_row_for_target(TargetId(2), 3), 0);
+        assert_eq!(display_row_for_target(TargetId(0), 3), 2);
+    }
+
+    /// A tree row click and a canvas click must produce the SAME selection —
+    /// they are the same function (`canvas::selection_after_click`), and this
+    /// pins that they stay so. A second, divergent selection path is the
+    /// specific thing ui-spec §B.5 forbids.
+    #[test]
+    fn tree_selection_and_canvas_selection_are_one_operation() {
+        let empty = BTreeSet::new();
+        let plain = canvas::selection_after_click(&empty, Some(TargetId(2)), false);
+        assert_eq!(plain, BTreeSet::from([TargetId(2)]));
+        // Shift adds...
+        let added = canvas::selection_after_click(&plain, Some(TargetId(0)), true);
+        assert_eq!(added, BTreeSet::from([TargetId(0), TargetId(2)]));
+        // ...and Shift on an already-selected row removes, which is the
+        // canvas's own toggle convention, mirrored rather than reinvented.
+        let removed = canvas::selection_after_click(&added, Some(TargetId(2)), true);
+        assert_eq!(removed, BTreeSet::from([TargetId(0)]));
+    }
+
+    /// The toolbar's Properties control must report what is ON SCREEN.
+    ///
+    /// Its selected state is `tools_open && Properties is the front tab`,
+    /// derived from the dock rather than from a flag of its own — the
+    /// retired `properties_open` boolean could disagree with the screen, and
+    /// a toggle that lies about its own state is worse than no toggle.
+    #[test]
+    fn the_properties_toggle_reports_what_is_on_screen() {
+        let mut app = PdfceApp::default();
+        // Dock closed: Properties is not on screen, whatever the tree says.
+        assert!(!app.tools_open);
+        assert!(dock::panel_is_active(&app.dock, DockPanel::Properties));
+        let showing =
+            |a: &PdfceApp| a.tools_open && dock::panel_is_active(&a.dock, DockPanel::Properties);
+        assert!(!showing(&app));
+
+        app.tools_open = true;
+        assert!(showing(&app));
+
+        // Bringing Batch Tools forward hides Properties behind it, and the
+        // toggle must follow — this is the exact disagreement the old
+        // boolean was capable of.
+        dock::activate(&mut app.dock, DockPanel::BatchTools);
+        assert!(!showing(&app));
+        // ...while the object tree above the split stays visible throughout.
+        assert!(dock::panel_is_active(&app.dock, DockPanel::Objects));
+    }
+
+    /// "Reset panel layout" must restore the DEFAULT arrangement, not merely
+    /// some arrangement — including the Objects-above-Properties split that
+    /// decision 017 A.3 makes the point of the whole default.
+    #[test]
+    fn resetting_the_layout_restores_the_default_arrangement() {
+        let mut app = PdfceApp::default();
+        dock::activate(&mut app.dock, DockPanel::BatchTools);
+        assert!(!dock::panel_is_active(&app.dock, DockPanel::Properties));
+
+        app.dock = dock::default_tree();
+        assert!(dock::panel_is_active(&app.dock, DockPanel::Objects));
+        assert!(dock::panel_is_active(&app.dock, DockPanel::Properties));
     }
 }

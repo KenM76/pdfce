@@ -36,6 +36,33 @@ eframe = { version = "0.35", default-features = false, features = [
 ] }
 # rfd: native file-open/save dialogs, no C dependency (docs/PRIOR_ART.md). MIT.
 rfd = "0.17.2"
+# egui_tiles: the tiling/docking layout engine behind the right-hand panel
+# dock (docs/decisions/017-tabbed-dockable-panel-system.md, AMENDMENT A —
+# the operator fired §6.1's pre-armed adoption trigger on 2026-08-02).
+#
+# Licence: MIT OR Apache-2.0 — permissive, so LEGAL.md §6.2 step 3 applies
+# (proceed and log; no operator flag). Decision 017 §6.2's vetting stands;
+# only the version-specific facts were re-verified against the release
+# actually resolved here (0.16.0): `rust-version = 1.92`, pdfce's exact
+# MSRV — the `main`-branch bump to 1.95 §6.2 warned about has NOT reached a
+# release, so no downgrade-pin was needed; `egui ^0.35.0`, pdfce's exact
+# pin; ONE new package in the shipping graph, its transitive deps (ahash,
+# itertools, log) all already present at satisfying versions via
+# eframe/egui/epaint.
+#
+# `default-features = false` is LOAD-BEARING, not tidiness: this crate's
+# default feature set is `["serde"]`, which would pull `serde` in AND turn
+# on `egui/serde`. Decision 017 §7 and A.6 keep panel layout SESSION-ONLY
+# this Pass; persistence, when it comes, rides R15's named user-state
+# partition inside the distribution folder, never eframe's platform
+# app-data Storage (which would contradict decision 003's
+# single-folder-portable posture). Enabling the feature now would add
+# packages for a capability deliberately not shipped.
+#
+# GUI-core separation (CLAUDE.md rule 2, ARCHITECTURE.md §3): this is a
+# `pdfce-gui`-only dependency and must stay one —
+# `pdfce-core`/`pdfce-render`/`pdfce-cli` must never acquire it.
+egui_tiles = { version = "0.16.0", default-features = false }
 pdfce-core.workspace = true
 # pdfce-render: added at Pass 1, the Pass that first draws a page. The GUI
 # consumes exactly the same headless rasterizer `pdfce-cli render-page` does

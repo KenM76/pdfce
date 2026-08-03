@@ -47,7 +47,9 @@ use std::path::Path;
 use pdfce_core::PdfVersion;
 use pdfce_core::dimension::Unit;
 use pdfce_core::edit::{CommandKind, InfoField};
-use pdfce_core::vector::{AxisConstraint, SnapKind};
+use pdfce_core::vector::{
+    AxisConstraint, FillRule, ImageSource, PaintStyle, Rgb, SnapKind, VectorObject,
+};
 
 // ---------------------------------------------------------------------------
 // Toolbar — file
@@ -459,10 +461,20 @@ pub fn text_add_failed(reason: &str) -> String {
 // Document-properties panel (ISO 32000-1 §14.3.3)
 // ---------------------------------------------------------------------------
 
-/// Title of the document-properties window.
-pub fn properties_window_title() -> &'static str {
-    "Document properties"
-}
+// REMOVED — `properties_window_title()` ("Document properties").
+//
+// It titled the floating `egui::Window` that decision 017 §8.3 / A.4 #2
+// retired: the document-properties form is now a dock panel, and a dock
+// panel's name is its TAB label — `dock_panel_properties_label()`. Deleting
+// the entry rather than leaving it unused is deliberate, following the Pass
+// 18.3 precedent for surfaceless catalog entries: a `ui_text.rs` function
+// with no call site is a string nobody can find in the running app, and the
+// catalog's value is that reading it tells you what the UI says.
+//
+// The ui-spec's §A.2 rename of this string to "Document Properties" is moot
+// for the same reason: it existed to defuse a collision with a *selection*
+// inspector that §A's superseded design would have introduced beside it. No
+// such panel ships, and no second surface competes for the word.
 
 /// Row label for one editable metadata field.
 ///
@@ -1319,6 +1331,271 @@ pub fn tool_insert_pages_label() -> &'static str {
 /// Label of the dock's Font-folders entry (decision 012).
 pub fn tool_font_folders_label() -> &'static str {
     "Font folders…"
+}
+
+// ---------------------------------------------------------------------------
+// Panel dock — tab labels, tooltips, chrome (decision 017 + Amendment A)
+// ---------------------------------------------------------------------------
+//
+// Every tab label below doubles as a drag handle's visible name, and every
+// tooltip below doubles as that tab's AccessKit accessible NAME (egui_tiles
+// 0.16.0 ships its tab bars unnamed — see `crate::dock`'s module docs). So a
+// tooltip here is not decoration: it is the only thing a screen reader has
+// to go on. Decision 017 §8.6's rule applies with extra force — say WHEN to
+// reach for the panel, never restate the label.
+
+/// Tab label of the object/layer tree panel (ui-spec §B).
+///
+/// "Objects", not "Layers": the panel lists the page's *content-stream
+/// objects* in paint order, and the model has no optional-content-group
+/// (OCG) grouping for page content to build real layers from (§B.1). Calling
+/// it "Layers" would promise a hierarchy that does not exist.
+pub fn dock_panel_objects_label() -> &'static str {
+    "Objects"
+}
+
+/// Purpose tooltip / accessible name for the Objects tab.
+pub fn dock_panel_objects_tooltip() -> &'static str {
+    "List everything drawn on this page, front to back, so you can work out what a click on \
+the canvas is selecting — and select an object from the list when it is too small or too \
+hidden to click."
+}
+
+/// Tab label of the document-properties panel.
+///
+/// Plain "Properties" is now unambiguous: decision 017 §8.3 retired the
+/// floating document-properties window, so there is no second surface in the
+/// app competing for the word. (The ui-spec's §A.2 rename to "Document
+/// Properties" existed to defuse a collision with a *selection* inspector
+/// that §A's superseded design would have added; no such panel ships here.)
+pub fn dock_panel_properties_label() -> &'static str {
+    "Properties"
+}
+
+/// Purpose tooltip / accessible name for the Properties tab.
+pub fn dock_panel_properties_tooltip() -> &'static str {
+    "Read and edit the whole document's title, author, subject and keywords. This is the \
+file's own metadata, not anything about the object you have selected."
+}
+
+/// Tab label of the batch-tools panel.
+///
+/// **Renamed from "Tools" deliberately** (decision 017 §8.5, still binding
+/// under A.4 #4): a row labelled "Tools" inside a container operators call
+/// "the Tools dock" — reached from a toolbar button also labelled "Tools" —
+/// is a three-way collision people trip on. "Batch" also says the true
+/// scope: these act on files, mostly ones that are not even open.
+pub fn dock_panel_batch_tools_label() -> &'static str {
+    "Batch Tools"
+}
+
+/// Purpose tooltip / accessible name for the Batch Tools tab.
+pub fn dock_panel_batch_tools_tooltip() -> &'static str {
+    "Combine, split or insert pages across whole files, and manage the font folders pdfce \
+draws missing typefaces from. Tools that act on pages you can already see — delete, reorder, \
+rotate, extract — live on the page thumbnails instead."
+}
+
+/// Fallback tab title for a CONTAINER tab — a tab group the operator built
+/// by dragging one group inside another.
+///
+/// pdfce's default layout never produces one, so this names the container's
+/// shape rather than inventing a title pdfce has no basis for.
+pub fn dock_container_tab_label(kind: egui_tiles::ContainerKind) -> &'static str {
+    match kind {
+        egui_tiles::ContainerKind::Tabs => "Tab group",
+        egui_tiles::ContainerKind::Horizontal => "Side-by-side group",
+        egui_tiles::ContainerKind::Vertical => "Stacked group",
+        egui_tiles::ContainerKind::Grid => "Grid group",
+    }
+}
+
+/// Tab title for a tile the layout engine can no longer resolve.
+///
+/// Should be unreachable. Shown rather than swallowed because a tab with no
+/// title is indistinguishable from a rendering bug, and an operator who can
+/// name what they saw can report it.
+pub fn dock_missing_tile_label() -> &'static str {
+    "(panel unavailable)"
+}
+
+/// Label of the dock header's reset control (decision 017 §8.12 / A.4 #6).
+pub fn dock_reset_layout_button() -> &'static str {
+    "Reset panel layout"
+}
+
+/// Tooltip on the reset control — says WHEN to reach for it.
+///
+/// A draggable layout can be wrecked in ways a fixed one cannot (a pane
+/// dragged to a sliver, a group nested three deep), which is exactly why
+/// Amendment A promoted this from "nice to have" to ships-in-the-same-Pass.
+pub fn dock_reset_layout_tooltip() -> &'static str {
+    "Put every panel back where it started. Use this if dragging has left a panel too small \
+to read, or hidden behind a tab you cannot find."
+}
+
+/// The dock header's persistence disclosure (decision 017 §7 / A.6, R82).
+///
+/// Visible text, not a tooltip: the operator will arrange panels and then
+/// close the app, and finding the arrangement gone with no prior warning is
+/// precisely the surprise decision 012 set the precedent against.
+pub fn dock_layout_session_only_note() -> &'static str {
+    "Panel arrangement lasts for this session only — it is not saved when you close pdfce."
+}
+
+/// Shown in the Properties panel when no document is open.
+///
+/// The panel is never blanked: a blank region is indistinguishable from a
+/// broken one, so the honest answer is a sentence naming the precondition.
+pub fn properties_dock_no_document_hint() -> &'static str {
+    "Open a document to read or edit its title, author, subject and keywords."
+}
+
+// ---------------------------------------------------------------------------
+// Objects panel — the page's object/layer tree (ui-spec §B)
+// ---------------------------------------------------------------------------
+
+/// Intro line above the object list. States the ordering convention, because
+/// "which end of this list is the front of the page?" is otherwise a guess.
+pub fn objects_dock_intro() -> &'static str {
+    "Everything drawn on this page, front-most first. Click a row to select it on the page; \
+Shift+click to add it to, or remove it from, the selection."
+}
+
+/// Empty state: nothing is open.
+pub fn objects_dock_no_document_hint() -> &'static str {
+    "Open a document to see the objects on its pages."
+}
+
+/// Empty state: the page decomposed cleanly and holds nothing selectable.
+///
+/// Deliberately distinct from [`objects_dock_decompose_failed_hint`] — a
+/// genuinely blank page and a page pdfce could not read must never look
+/// identical (fuzzy, never sneaky: a failure state must not be
+/// indistinguishable from a success state that happens to be empty).
+pub fn objects_dock_empty_page_hint() -> &'static str {
+    "This page has nothing selectable on it — no shapes, text or images that pdfce can \
+address individually."
+}
+
+/// Empty state: the page's content could not be analysed.
+pub fn objects_dock_decompose_failed_hint() -> &'static str {
+    "pdfce could not analyse this page's contents, so it cannot list its objects. The page \
+may still display correctly; clicking objects on it will find nothing."
+}
+
+/// Summary line under the object list: how many objects, and how many of
+/// them are selected right now.
+pub fn objects_dock_summary(total: usize, selected: usize) -> String {
+    format!("{total} object(s) on this page, {selected} selected.")
+}
+
+/// Tooltip on an object row. One entry for every row rather than a
+/// per-kind variant: the interaction is identical whatever was clicked, and
+/// R2 forbids assembling this sentence from fragments.
+pub fn objects_dock_row_tooltip() -> &'static str {
+    "Select this object on the page. Shift+click to add it to, or remove it from, the current \
+selection."
+}
+
+/// A path object's row (ui-spec §B.3 — the one kind the core model can
+/// already describe in full).
+///
+/// `index` is the object's PAINT-ORDER index, printed verbatim so it
+/// cross-references `pdfce-cli object-list`'s `index=` field and the
+/// `object-move`/`object-delete`/`node-move` operands, which all address an
+/// object by exactly this number. Showing a display-position number instead
+/// (the list is drawn back-to-front) would produce a number that looks
+/// authoritative and addresses the wrong object.
+pub fn object_row_path(index: usize, paint: &str, colour: &str, nodes: usize) -> String {
+    format!("#{index}  Path · {paint} {colour} · {nodes} node(s)")
+}
+
+/// A text object's row.
+///
+/// **Honest lesser detail, by necessity** (ui-spec §B.3/§B.4 #1). The core
+/// model's `TextObject` carries a bounding box and nothing else — no
+/// extracted string, no font name, no size — so the rich row the spec
+/// sketched ("Text · \"Section A-A\" · Helvetica 10pt") is not buildable
+/// today. It is better to ship a row that says what pdfce actually knows
+/// than to block the panel, and far better than a fabricated label. The
+/// "approximate" wording is not padding: the bbox is inflated around the
+/// glyph ORIGINS, so it is routinely wider and taller than the visible
+/// text — which is the single most likely explanation for a selection
+/// outline that appears to surround nothing.
+pub fn object_row_text(index: usize) -> String {
+    format!("#{index}  Text · approximate bounds, no text content captured yet")
+}
+
+/// An image or form-XObject object's row.
+pub fn object_row_image(index: usize, source: ImageSource) -> String {
+    let kind = match source {
+        ImageSource::Inline => "Image · drawn inline in the page",
+        ImageSource::XObject => "Image · a reusable image object",
+        ImageSource::Form => "Form · a nested drawing, listed as one object",
+    };
+    format!("#{index}  {kind}")
+}
+
+/// One-line row text for any object — the single description path the panel
+/// uses, so a fill colour can never be described one way in a row and
+/// another way elsewhere (ui-spec §C.6's single-source-of-truth ask, applied
+/// now so a later selection inspector inherits it instead of forking it).
+pub fn object_row(index: usize, object: &VectorObject) -> String {
+    match object {
+        VectorObject::Path(p) => {
+            let nodes: usize = p.subpaths.iter().map(|sp| sp.anchors().count()).sum();
+            // Which colour a viewer actually sees is decided by the paint
+            // disposition: an unfilled path shows only its stroke colour, so
+            // reporting the (unused, default-black) fill colour there would
+            // be a confidently wrong answer.
+            let colour = if p.style.fill.is_some() {
+                rgb_hex(p.fill_color)
+            } else if p.style.stroke {
+                rgb_hex(p.stroke_color)
+            } else {
+                String::new()
+            };
+            object_row_path(index, paint_style_label(p.style), &colour, nodes)
+        }
+        VectorObject::Text(_) => object_row_text(index),
+        VectorObject::Image(i) => object_row_image(index, i.source),
+    }
+}
+
+/// Plain-language name for a path's painting disposition (§8.5.3, Table 60).
+///
+/// Words rather than the CLI's machine tokens (`fill-nonzero+stroke`): this
+/// is prose an operator reads, and the two surfaces have different
+/// audiences. The `n` case is spelled out at length because "paints nothing"
+/// is the direct answer to "why is there a selection box over blank paper?"
+/// — a clip or discarded path is still a real, selectable object.
+pub fn paint_style_label(style: PaintStyle) -> &'static str {
+    match (style.fill, style.stroke) {
+        (Some(FillRule::NonZero), true) => "filled and stroked",
+        (Some(FillRule::NonZero), false) => "filled",
+        (Some(FillRule::EvenOdd), true) => "filled (even-odd) and stroked",
+        (Some(FillRule::EvenOdd), false) => "filled (even-odd)",
+        (None, true) => "stroked",
+        (None, false) => "paints nothing (a clip or discarded path)",
+    }
+}
+
+/// Format a colour as `#RRGGBB` (R6: number formatting lives in the
+/// catalog, never inline at a call site).
+///
+/// Components are clamped before scaling: a PDF may set a colour component
+/// outside 0..1 and the decomposition records what it read rather than
+/// silently repairing it, so the clamp belongs here, at the point of
+/// display, not in the model.
+pub fn rgb_hex(colour: Rgb) -> String {
+    let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    format!(
+        "#{:02X}{:02X}{:02X}",
+        byte(colour.r),
+        byte(colour.g),
+        byte(colour.b)
+    )
 }
 
 // ---------------------------------------------------------------------------
