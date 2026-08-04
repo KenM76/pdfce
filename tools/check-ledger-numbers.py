@@ -254,17 +254,52 @@ def main() -> int:
     # The preventive half: state the live ceilings so assigning the next
     # number does not require reading an 11,000-line file (standing rule
     # R106). Printed on success AND failure — it is useful either way.
-    families = defaultdict(list)
+    #
+    # A Pass family is CLAIMED as soon as a decision record or a Backlog
+    # entry names it, which happens well before any `### Pass N.n` heading
+    # exists. Scanning only headings therefore reports a family as free
+    # while it is already spoken for.
+    #
+    # That is not a theoretical gap — it fired within an hour of this tool
+    # shipping. Decision 020 claimed Pass 20.0–20.7 in ROADMAP's Backlog
+    # prose with no heading yet, and a scoping agent working from the
+    # heading-only view proposed Pass 20.x for a *different* feature family.
+    # The heading scan said "highest family: 19", which was true and
+    # useless. So the ceiling is computed over every `Pass N` mention in
+    # the file, and claimed-but-unheaded families are called out by name —
+    # they are precisely the ones a reader cannot see by skimming.
+    heading_families = defaultdict(list)
     for _, pid in passes:
-        families[pid.split(".")[0]].append(pid)
-    top = sorted(families, key=lambda f: pass_sort_key(f))[-1] if families else "?"
-    highest_in_top = (
-        max(families[top], key=pass_sort_key) if families else "?"
+        heading_families[pid.split(".")[0]].append(pid)
+
+    mentioned = defaultdict(list)
+    for ln in lines:
+        for pid in re.findall(rf"Pass ({PASS_ID})", ln):
+            mentioned[pid.split(".")[0]].append(pid)
+
+    def top_of(fams):
+        if not fams:
+            return "?", "?"
+        top = sorted(fams, key=pass_sort_key)[-1]
+        return top, max(fams[top], key=pass_sort_key)
+
+    head_top, head_high = top_of(heading_families)
+    ment_top, ment_high = top_of(mentioned)
+    claimed_only = sorted(
+        (f for f in mentioned if f not in heading_families),
+        key=pass_sort_key,
     )
 
     print()
     print("LIVE CEILINGS (read these before assigning any new number):")
-    print(f"  highest Pass family : {top}   (highest ID in it: {highest_in_top})")
+    print(f"  Pass families with headings : up to {head_top} (highest ID {head_high})")
+    print(f"  Pass families MENTIONED     : up to {ment_top} (highest ID {ment_high})")
+    if claimed_only:
+        print(
+            "  CLAIMED BUT NOT YET HEADED  : "
+            + ", ".join(claimed_only)
+            + "  <- already spoken for; do NOT reuse"
+        )
     print(f"  standing rules      : R{max(rules)}  -> next free is R{max(rules) + 1}")
     print(
         f"  decision records    : {max(decisions):03d} "

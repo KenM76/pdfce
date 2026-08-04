@@ -285,3 +285,19 @@ from day one. Branch `pass-8-redaction`, 60 commits
 Open operator question (l) (the redaction-apply sequencing call) is
 now "outcome done, ratification still open" — don't read it as fully
 closed.
+
+**UPDATE — 2026-08-03, SESSION_LOG continuation 72: FF-C's rule-13
+licensing sub-question is CLEARED, no operator decision needed —
+FF-C now blocks only on scope/sequencing (Q3 build order FF-H → FF-C →
+FF-B).** The engineer worked the classification ahead of the Pass
+(`subsetter 0.2.6`, MIT OR Apache-2.0, all-permissive transitive
+graph, `cargo metadata`-verified) instead of waiting on an operator
+check-in — `LEGAL.md` §6.2 step 3 applies (proceed and log). Full
+record: `PRIOR_ART.md` §Fonts "FF-C dependency classification (rule
+13) — COMPLETE, 2026-08-03"; `ROADMAP.md`'s FF-D-fast-follow-FF-C
+Backlog bullet and Open operator question (h) both amended same
+continuation. Don't describe FF-C as licence-gated in any future
+session — only "when does it get scoped" remains open. Item #4
+(forms) is still queued behind item #3's remaining FF-C/FF-B slices,
+per the standing order; a KenAgent decision agent is concurrently
+scoping FF-C (will land as decision 021).

@@ -259,3 +259,23 @@ still stale relative to at least continuations 63 onward; flag to the
 operator, don't assume it covers current HEAD. As always, verify tip
 with `git log --oneline -1` and count with `git rev-list --count HEAD`
 before trusting any number in this file.
+
+**UPDATE — continuation 71/72 (2026-08-03, Pass 18.7 shipped; checker
++ FF-C classification filed).** Branch reached 62 commits by
+continuation 71 (backup bundle refreshed same continuation,
+`pdfce-20260803-1936.bundle`, current to `d9960cd`). Continuation 71
+added `09be28d` (Pass 18.7), `d9960cd` (decision 020 filed), `1111652`
+(Pass-number correction commit) — all three verified via `git
+cat-file -t`. Continuation 72 (this librarian dispatch) confirms two
+further hashes named by the dispatching engineer as already
+committed: `4dc8cf8` (`tools/check-ledger-numbers.py`) and `d738950`
+(`PRIOR_ART.md` FF-C classification + `CLAUDE.md` XFA fix) — **this
+librarian could not independently verify either with `git cat-file -t`
+this dispatch, having no shell-execution tool available** (tools:
+Read/Write/Edit/Glob/Grep/WebSearch/WebFetch only); treat those two
+hashes as engineer-reported, not librarian-verified, until a future
+session with `git` access confirms them. Push/publish authorization
+remains the sole open gate, unchanged in kind since continuation 50.
+Verify current tip/count with `git log --oneline -1` / `git rev-list
+--count HEAD` before trusting any number in this file — likely ~64+
+commits by the time this is read.

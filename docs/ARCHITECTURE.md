@@ -3074,6 +3074,20 @@ with a forward pointer.
     //`/Names /JavaScript` re-emit byte-verbatim under incremental save.
     `has_additional_actions` + `calc_order_count` are surfaced
     recognition-only; the full JS-disclosure histogram is Pass 7.1.
+    **FORWARD POINTER (added 2026-08-03, decision 020 §1.2.6/§7.2):**
+    this guarantee is **structural to fill, not to the AcroForm subsystem
+    as a whole** — it holds because fill never writes the `/AcroForm`
+    dict, not because of any test. Field **creation** (decision 020's
+    Pass 20.x family, F1) must append to `/AcroForm/Fields`, which is a
+    write to that same dict, so the guarantee **stops holding the moment
+    that family starts** — and because it held by construction rather
+    than by assertion, no test existing today will go red when it does.
+    Decision 020 requires F1 to add a dedicated byte-grep test proving
+    `/CO`//`/AA`//`/Names /JavaScript` still re-emit verbatim after a
+    field is authored, and requires this very note to be updated when
+    F1 ships so a future reader does not inherit the stronger,
+    now-partial claim. See the decision-020 entry below for the full
+    finding.
   - **(f) Additivity preserves R34/R46.** A new module + additive
     methods/variants + one new `pub fn`; the re-emission path and
     `add_markup`/`add_text_annotation` are byte-unchanged. Full-corpus R46
@@ -4704,3 +4718,137 @@ with a forward pointer.
   (finding 1, the unreachable-gate methodology) and
   `C:\personal_rag\pdf\lesson_20260803_word_spacing_multiplied_by_horizontal_scaling.md`
   (finding 3, the `Tw`×`Th` coupling).
+- **2026-08-03 (same-day continuation 71) — Decision 020 filed: form
+  field AUTHORING (field-identity model, XFA scope, slice order, tab
+  order, tagging, four research conflicts). Status: DECIDED, SCOPED,
+  NOT STARTED — Pass 20.x is unbuilt.** Archived at
+  `docs/decisions/020-form-field-authoring.md`. Requested by
+  `pdfce-engineer` scoping operator priority item #4 ("form building
+  tools"); depends on decision 009 (JS posture) and decision 019 §3.7
+  (the FF-I cut). **No body-section update this entry** — nothing has
+  shipped, so `ARCHITECTURE.md` §4/§5/§12.7 describe no new reality yet;
+  §4 (core data model) and this file's forms-model description get
+  updated when Pass 20.x's F0/F1 actually land, not now. The one
+  exception is the forward pointer added to the decision-009 entry
+  above (§1.2.6/§7.2), because decision 020 changes what that
+  **already-shipped** guarantee will mean once authoring exists — that
+  is a change to a currently-true statement, not a future one.
+  - **The single sharpest finding: decision 009's byte-verbatim
+    JS-carrier guarantee (fill never touches `/AcroForm`) does not
+    survive field creation, and no existing test will notice.** Field
+    creation must write `/AcroForm/Fields`. Full reasoning at the
+    decision-009 entry's forward pointer, above; F1 owes the byte-grep
+    test that makes the guarantee test-enforced again rather than
+    silently partial.
+  - **Data model (Q1): the shipped flat `AcroForm.fields: Vec<Field>`
+    read projection is CORRECT and STAYS — it is not a graph-vs-flat
+    question at all.** `Field.widgets: Vec<Widget>` already carries the
+    one-to-many that matters, and every write path already fans out
+    over it. What is missing is everything *above* the terminal field.
+    The fix is a **write-side-only** resolver
+    (`resolve_field_path(graph, fqn) -> FieldPath`) that walks the raw
+    `/Kids` object graph — never a rewrite of the fuzz-tested,
+    corpus-proven read path. `Field` gains one new additive `pub` field,
+    `parent: Option<ObjId>`. New standing rule **R100**: field identity
+    is the FQN, derived from the graph not stored, so every authoring
+    write resolves against the graph before it writes.
+  - **Collision branch is FOUR-WAY, not two.** Vacant → create; Terminal
+    + type-match → merge (Shape A→B promotion, R101/R102); Terminal +
+    type-mismatch → refuse (`FieldTypeCollision`); and a fourth branch
+    the research and Acrobat both lack because neither authors
+    hierarchy — **Grouping** (a non-terminal node, which Table 220 says
+    has no type of its own) → refuse (`NameIsGroupingNode`). New
+    standing rule **R101**: a widget kid pdfce authors carries no `/T`,
+    `/FT`, or `/Kids` — pdfce's own `kid_is_field` heuristic promotes
+    any such kid to a separate terminal field, silently destroying group
+    semantics. New standing rule **R102**: pdfce never normalizes field
+    shape — Shape A→B promotion happens only when Table 220 makes the
+    merged form illegal, and Shape B never collapses back to A
+    (`ARCHITECTURE.md` §5.6 "never normalize," applied to a shape that
+    section did not originally anticipate).
+  - **XFA: dynamic stays `out_of_scope` (unchanged). Static-XFA-hybrid
+    field creation is REFUSED BY NAME, decided here rather than left as
+    an Acrobat-parity GAP** — pdfce can write the AcroForm half of a
+    hybrid but not the XFA half, so a one-sided add makes an XFA-aware
+    viewer and a non-XFA viewer show two different field counts for the
+    same document. Decided from pdfce's own capability boundary, not
+    from an unresolvable question about what Acrobat does.
+  - **Slice order: F0 (correctness-only substrate, no operator surface,
+    rule-11 exempt on the Pass 19.0 precedent) → F1 (text-field creation
+    THROUGH the resolver, all four collision outcomes live and
+    tested — the P0 floor, not a lone text field) → F2 (checkbox/radio +
+    deletion) → F3 (choice + push button) → F4 (tab order, BLOCKED on a
+    `pdfce-spec-librarian` dispatch — Table 30's `/Tabs` row and the ISO
+    32000-2 delta are verified absent from the spec RAG) → F5 (GUI,
+    `pdfce-ui-specialist` dispatch required first). F6/F7 fast-follows,
+    non-gating.** Signature-field creation deferred to Pass 10
+    (Signatures); barcode fields cut outright (JS-driven population,
+    permanently forbidden by decision 009).
+  - **Tab order: new standing rule R104 — `/Tabs` is a MODE, not a
+    snapshot.** Under `/R`/`/C`/`/S` pdfce reorders nothing on field
+    insertion (there is no stored sequence to maintain); under an
+    explicit order the new field is appended to the end and that fact
+    is disclosed; `/Tabs` is never written as a side effect of creation.
+    Corrects the parity research's "always correctly re-sorted"
+    recommendation, which read literally would re-sort `/Annots` on
+    every insertion — a minimal-diff violation (R32/R46) that also
+    changes annotation paint order. Missed case the research did not
+    name: `/Tabs /S` + an untagged new field has **no defined tab
+    position at all**, not "last," because structure order derives from
+    the tag tree and pdfce-authored fields are untagged; F1 must detect
+    and disclose this, not defer it to F4.
+  - **Tagging: split, not a re-opening of FF-I.** New standing rule
+    **R105** — every field pdfce authors carries `/TU`
+    (mandatory-or-explicitly-declined; omitting both `--tooltip` and
+    `--no-tooltip` is an error, never a silent default), because for
+    form fields specifically `/TU` — not the structure tree — is what
+    assistive technology actually reads (WebAIM, sourced;
+    screen readers read fields through the interactive-field layer,
+    bypassing the tag tree). Writing `/StructElem`/`/ParentTree` stays
+    cut with FF-I, unchanged rationale — the test applied: does the
+    proposal build a partial structure-tree writer? `/TU` does not;
+    `/StructElem` does.
+  - **Dead-guard debt, the prospective form of R96 — new standing rule
+    R103.** The parity research's `must_have` (a `/P` bit-6
+    permission gate on field creation) would be dead code today: every
+    `EditSession` authoring path already refuses `/Encrypt` documents
+    outright, unconditionally, before any forms code runs. Decision: do
+    not build the bit-6 gate now; record it as owed to Pass 5
+    (Encryption), where it becomes reachable and provable. What ships
+    instead is a DocMDP/FieldMDP certification gate **stricter than
+    fill's** — creation refuses at any `/DocMDP` tier and on any
+    `/FieldMDP`, vs. fill's `/P >= 2` permit.
+  - **Standing rules R100–R105 filed (six rules; RENUMBERED from the
+    decision document's own original R97–R102 — see below).** Full
+    text: `ROADMAP.md` Standing rules.
+  - **Renumbering note, filed here for the audit trail.** The decision
+    document, drafted concurrently with continuation 70's Pass 8.1
+    filing, proposed its six rules as R97–R102 against a believed
+    ceiling of R96. Continuation 70 had already claimed R97–R99 for
+    three unrelated Pass 8.1 findings by the time both filings landed.
+    `pdfce-librarian` renumbered all six of decision 020's rules to
+    R100–R105 in both the decision document (prose and Appendix A JSON,
+    in place, with a machine-readable mapping added) and `ROADMAP.md`,
+    rather than leaving a collision on disk. No rule's *substance*
+    changed, only its number.
+  - **Four unresolved research items closed, none escalated:**
+    Combine-Files auto-rename-vs-link is one behavior with a documented
+    fallback, not a contradiction (fast-follow F7: make it an operator
+    choice, `--on-field-collision rename|link|refuse`); the encrypted-
+    document conflict is structurally inapplicable to pdfce's
+    architecture (Layer 1) and R96-verified dead code today if built as
+    the research proposed (Layer 2, see R103 above); the two radio-
+    deletion GAPs are reframed out of existence — decided as pdfce's own
+    documented, test-provable rule rather than deferred to an empirical
+    check against a real Acrobat install.
+  - **Five open items filed for the operator, not decided solo** (full
+    text: `ROADMAP.md`'s Open operator questions and the Forms/AcroForm
+    Backlog entry): (1) whether item #4 should start at all, given item
+    #3 (FF-C/FF-B) is not yet closed; (2) whether "add a signature field
+    for someone else to sign" (no signing subsystem required) should be
+    pulled into F3; (3) confirm the barcode-field parity subtraction is
+    acceptable; (4) retire or re-scope the standing XFA-deprecation
+    open item; (5) — resolved, not open — §10.2's competing claim about
+    an unfinished GUI redaction-apply flow was written against a stale
+    tree and is corrected in place in the decision document itself
+    (Pass 8.1 shipped `9a68999` before this decision was filed).

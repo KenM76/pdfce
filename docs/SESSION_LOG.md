@@ -9693,3 +9693,311 @@ that directory.
 - Regenerate the backup bundle to cover this continuation's 2 new
   commits (`24bdbc6`, `9a68999`) plus whatever the concurrent
   form-building decision session adds.
+
+**Same-day continuation 71 (real date 2026-08-03) — Pass 18.7
+(glyph-coverage gate + tofu fixes) SHIPPED (`09be28d`); decision 020
+(form field AUTHORING) filed, SCOPED, NOT STARTED (`d9960cd`);
+R100–R105 filed (renumbered from a collision with continuation 70's
+R97–R99); backup-bundle staleness flag CLOSED.** Hashes verified with
+`git cat-file -t`: `09be28d`, `d9960cd`. Branch `pass-8-redaction`, 62
+commits, still no remote.
+
+**PASS-NUMBER CORRECTION (filed by `pdfce-librarian`, same real date,
+a dispatch separate from and after the work below):** `09be28d`'s own
+commit subject line reads *"Pass 19.4: glyph-coverage gate; fix tofu
+Accept/Reject, info markers, arrows"* — that number was already taken,
+by `a1638f4` (`Tw`, decision 019/FF-H, filed continuation 69). This
+entry originally filed the work below with no Pass ID at all, which
+was also wrong — the work has clear acceptance criteria and belongs in
+the numbered ledger. **Corrected to Pass 18.7** (next free slot in the
+18.x UI-quality line, not the 19.x decision-019 family) by
+`pdfce-librarian`, recorded on the branch by a dedicated empty
+correction commit, `1111652` ("docs: correct Pass number on `09be28d`
+— glyph-coverage gate is 18.7, not 19.4"), verified via `git cat-file
+-t` alongside the four hashes already named. **This is the THIRD
+documented instance of this exact collision class on this project**
+(Pass 18.4's commit called itself "Pass 18.2"; decision 014's design
+proposed "Pass 13.x", already taken) **and lands the same real day as
+the R97–R105 standing-rule renumbering below — the same underlying gap
+(no automated uniqueness check on any of this project's numbered
+ledgers) surfacing twice in one session.** New standing rule **R106**
+filed in `ROADMAP.md` (ceiling was R105, now R106) recording the
+methodology fix: read the live ceiling immediately before assigning
+any Pass/rule/decision number, and treat a number proposed by
+concurrently-drafted work as provisional until the librarian confirms
+it against `ROADMAP.md` at filing time. Full record: `ROADMAP.md`'s
+Pass 18.7 Shipped entry's own Pass-number note (top of Shipped).
+
+**Shipped:**
+- Pass 18.7 — Glyph-coverage gate + tofu-glyph fixes, committed
+  `09be28d` (subject line self-reports "Pass 19.4" in error — see the
+  Pass-number correction above; corrected to 18.7). A headless test
+  (`scan_string_literal_chars`) reads `ui_text.rs`'s own bytes and
+  checks every operator-visible character against the font stack the
+  app actually runs on; found twelve broken glyphs across three
+  already-shipped features (in-place text edit, reflow, add-text) —
+  U+2713/U+2715 and U+24D8 rendered as tofu on every single edit, not
+  once per session. Full record: `ROADMAP.md`'s Pass 18.7 Shipped
+  entry (top of Shipped, above Pass 8.1).
+
+**Decisions made this session:**
+- **Decision 020 — form field AUTHORING** filed by a KenAgent decision
+  agent, archived at `docs/decisions/020-form-field-authoring.md`.
+  Status: DECIDED (six sub-questions answered), SCOPED (Pass
+  20.0–20.7 assigned and verified free), **NOT STARTED** — this
+  filing does not authorize building Pass 20.0. Full record:
+  `ARCHITECTURE.md` §12's continuation-71 entry; `ROADMAP.md`'s
+  amended Forms/AcroForm Backlog entry.
+- **Standing rules R100–R105 filed**, all six from decision 020 §5,
+  **renumbered from the decision document's own original R97–R102**
+  because continuation 70 had already claimed R97–R99 for three
+  unrelated Pass 8.1 findings by the time both filings landed
+  concurrently. Renumbering was applied to BOTH the decision document
+  (prose + Appendix A JSON, with a machine-readable mapping added
+  there) and `ROADMAP.md`'s Standing rules, so the two records agree —
+  no rule's substance changed, only its number. This is the fourth
+  filing-integrity issue this project's dated-artifact discipline has
+  caught (see R87's own note for the first three; this one is a
+  concurrency collision rather than an arithmetic error, a new failure
+  shape for the same underlying discipline).
+
+**Findings + decisions (empirical):**
+- **The methodology finding worth escalating past this session:
+  `epaint::Fonts::has_glyph` is not a glyph-coverage oracle — it
+  compares the resolved face against the REPLACEMENT face, and the
+  replacement face is itself chosen by searching the font chain for a
+  glyph (`◻` U+25FB) that the primary face (Ubuntu-Light) lacks, so the
+  replacement face ends up being an emoji face.** Every symbol sharing
+  that face reads as "missing" whether it renders or not — 15 false
+  positives observed, including U+26A0 and U+2714, both demonstrably
+  painted on screen today. Without a positive control (checking the
+  oracle against characters already known to render) this would have
+  produced twelve real fixes and three imaginary ones, on a green
+  test's authority. Fixed oracle: `Font::glyph_width(c, size) > 0.0`.
+- **A second defect found only by looking (R86), not by the new gate:**
+  `add_sized(ICON_BUTTON_SIZE, ..)` is a layout CAP, not an
+  accessibility FLOOR — egui wraps a label one character per line once
+  it overflows the fixed size. "Place point" rendered as four stacked
+  fragments; two of six affected buttons were "Accept reflow"/"Reject
+  reflow." Fixed via `.min_size(ICON_BUTTON_SIZE)`. Stated as the
+  session's crispest generalization: a test can prove a character has
+  a glyph; only looking proves the operator can read the button.
+  Considered for a new standing rule, declined — it sharpens R86's
+  existing rationale rather than adding new behavior.
+- **`snap_glyph()` DELETED, not repaired** — zero call sites, carried a
+  now-disproven `#[allow(dead_code, reason = "drawn by the ... measure
+  tools' overlay")]`; 7 of its 8 marks were uncovered by the corrected
+  oracle. R93's exact shape (a comment vouching for behavior nobody
+  checked), caught before anyone wired the function up rather than
+  after.
+- **Decision 020's headline finding: decision 009's byte-verbatim
+  JS-carrier guarantee does not survive field creation, and no
+  existing test will notice when it stops holding.** Fill never writes
+  `/AcroForm`, so `/CO`/`/AA`/`/Names /JavaScript` re-emit verbatim —
+  structurally, not by assertion. Field creation (Pass 20.1/F1) must
+  write `/AcroForm/Fields`, which breaks the guarantee's structural
+  basis silently. A forward-pointer note was added to the decision-009
+  entry in `ARCHITECTURE.md` §12 itself (not only to decision 020's own
+  entry), per this continuation's explicit instruction, because
+  decision 020 changes what an ALREADY-SHIPPED guarantee will mean
+  once F1 lands.
+- **Decision 020's data-model correction to its own prior Backlog
+  recommendation:** the shipped flat `AcroForm.fields: Vec<Field>` read
+  projection is correct and unchanged — `Field.widgets: Vec<Widget>`
+  already carries the one-to-many that matters. What was missing is a
+  write-side-only graph resolver (`resolve_field_path`), not a rewrite
+  of the fuzz-tested read path. The "build it as a `/Kids` graph from
+  day one" line filed in this bucket back in continuation 50 is now
+  superseded framing, retained for history per append-only discipline.
+- **Four ways, not two, in the field-creation collision branch** — a
+  fourth outcome (`Grouping`, refuse `NameIsGroupingNode`) exists
+  because pdfce authors dotted hierarchy and Acrobat/the parity
+  research never encounter it (neither exposes hierarchy authoring). A
+  non-terminal field has no type (Table 220), so it collides with
+  neither the same-type-merge nor different-type-refuse branches.
+- **XFA: the standing hybrid-authoring GAP is now DECIDED, not
+  resolved empirically** — static-XFA-hybrid field creation is refused
+  by name, from pdfce's own capability boundary (it can write half a
+  hybrid form, not the other half, and a one-sided write makes two
+  viewers show two different field counts for one document). The
+  standing "verify XFA deprecation status" open item is narrowed, not
+  closed — filed as new Open operator question (p): retire it, or
+  re-scope to "before any XFA read/fill work."
+
+**RAG escalations this continuation (filenames corrected by
+`pdfce-librarian`'s same-day Pass-number-correction dispatch — this
+entry originally cited the first two files under different names,
+before any file existed at those paths; the names below are the
+canonical, actually-written ones):**
+- `D:\dev\rag\egui\epaint_035_has_glyph_false_positive_via_replacement_face_fallback.md`
+  — new file, the `has_glyph` false-positive finding + fix
+  (`glyph_width`) + the concrete false-positive set.
+- `D:\dev\rag\egui\egui_add_sized_is_a_layout_cap_not_an_accessibility_floor.md`
+  — new file, the `add_sized` per-character-wrap finding + fix
+  (`.min_size`).
+- `D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md` —
+  AMENDED with a dated 2026-08-03 footer generalizing point 2
+  ("verify a gate's negative case") to also cover an ORACLE's
+  specificity, not only a gate's sensitivity — cross-referencing the
+  `has_glyph` finding as a second, independent instance of "verify the
+  checker against a known-good case too." Not a new file — the
+  existing lesson already stated the negative-case half of this
+  principle; this extends it rather than duplicating it.
+- `D:\dev\rag\egui\index.md` and `D:\dev\rag\rust\index.md` updated
+  with the new/amended entries.
+- Nothing filed to `C:\personal_rag\pdf\` this continuation — both
+  findings are egui/rendering-domain, not PDF-domain.
+
+**Still in flight:**
+- **Nothing is currently in progress; Pass 20.0 (F0) is scoped but not
+  authorized to start** — Open operator question (m) (should item #4
+  start at all, given FF-C/FF-B are still open) is the gating
+  question, and this continuation's default is explicitly NOT to
+  start, unlike most other open items' "default to the stated
+  fallback."
+- Four more decision-020 items filed for the operator, none blocking:
+  (n) pull "signature field for someone else to sign" into F3? (o)
+  confirm the barcode-field parity subtraction; (p) XFA open-item
+  retire/re-scope; (q) CLI-surface migration question, flagged as
+  librarian/engineer territory, not Ken's.
+- F4 (tab order) is pre-blocked on a `pdfce-spec-librarian` dispatch
+  for Table 30's `/Tabs` row, §14.7 structure-order derivation, and
+  the ISO 32000-2 `/Tabs` delta — verified absent from the spec RAG
+  this session, named as a hard prerequisite in decision 020 itself.
+- F5 (GUI) is pre-flagged as requiring a `pdfce-ui-specialist`
+  dispatch before building, per standing rule (non-trivial UI).
+- Carried, unchanged: `✓`/`✕` glyph verification — **now closed by
+  this continuation's own Shipped entry**, remove from future
+  "carried forward" lists; `ⓘ` tofu suspicion — **also now closed,
+  same entry**; status-bar/fit-zoom feedback loop; letter badges
+  pending real icons; `egui_kittest` harness gap; Open operator
+  questions (h)–(k) unanswered; FF-C and FF-B remain unscheduled per
+  decision 019's own Q3 build order — and are now also the gating
+  fact behind new Open operator question (m).
+- Branch still named `pass-8-redaction`, now spanning Passes 9 through
+  19.4 plus Pass 18.7 and decision 020's filing — still worth a rename
+  whenever a push is authorized.
+- **Backup-bundle staleness flag CLOSED this continuation** (was open
+  since continuation 70): refreshed to
+  `D:\Dev\pdfce-backups\pdfce-20260803-1936.bundle`,
+  `git bundle verify` reports "records a complete history," current to
+  `d9960cd`. Will drift stale again with the next commit, per the
+  standing pattern.
+
+**For next session:**
+- Flag to the operator at next contact, carried forward: (1) push/
+  publish call still ungranted, chain now 62 commits, still no remote;
+  (2) branch-rename-on-push still pending; (3) the twelve-glyph tofu
+  defect is fixed and the two ui-spec items it was blocking are
+  resolved; (4) R86 still unanswered (open question (e)); (5) the
+  kerning parity gap unscoped (open question (k)); (6) decision 020 is
+  DECIDED and SCOPED but explicitly NOT authorized to start — the
+  operator's answer to open question (m) is the actual gate on Pass
+  20.0, not this filing; (7) four smaller decision-020 questions (n)
+  through (q) await an answer but do not block anything.
+- When/if the operator answers (m) affirmatively, dispatch
+  `pdfce-spec-librarian` for F4's prerequisite (Table 30 `/Tabs` +
+  §14.7 + the ISO 32000-2 delta) in parallel with starting Pass 20.0
+  (F0), since F0 does not depend on it.
+- Regenerate the backup bundle again once further commits land — the
+  one made this continuation (`...1936.bundle`) is already
+  point-in-time as of `d9960cd`.
+
+**Same-day continuation 72 (real date 2026-08-03) — `docs/ROADMAP.md`'s
+duplicated Pass 4 heading fixed; the R106-flagged uniqueness checker
+now exists and ships GREEN; FF-C's rule-13 licensing sub-question
+CLEARED without an operator decision (no code changes this
+continuation).**
+
+**Fixed:**
+- `docs/ROADMAP.md` — the `### Pass 4 — Text extraction / structured
+  content` heading under `## Next up` was declared TWICE, back to
+  back, with nothing between the two headings (an unknown-age
+  accidental double-paste, not caught by anything before now). Removed
+  the redundant heading, kept the body attached to the single
+  remaining one. Verified no other section in `ROADMAP.md` has a
+  same-section duplicate Pass ID by walking all 60 `### Pass ` /
+  `#### Pass ` headings against the file's four top-level sections by
+  hand (Shipped: 51 IDs, all distinct; In progress: none; Next up: 9
+  IDs, all distinct post-fix; Backlog: none) — this librarian has no
+  shell-execution tool this session, so `tools/check-ledger-numbers.py`
+  itself was read and its logic reproduced manually rather than run;
+  the engineer or a future session should still run
+  `python tools/check-ledger-numbers.py --stats` directly for the
+  authoritative exit code before treating this as fully closed.
+
+**Filed:**
+- `tools/check-ledger-numbers.py` (shipped at `4dc8cf8`, this real
+  date) recorded against **R106** with a prose amendment appended
+  directly under R106's existing text in `ROADMAP.md`'s Standing
+  rules — deliberately NOT written as a new `- **R106 —` bullet, since
+  the checker's own R26 allowlist note warns that shape reads as a
+  competing rule definition unless allowlisted. The amendment records:
+  per-section (not global) Pass-ID uniqueness, since a Pass legitimately
+  appears twice — once planned, once Shipped — and nine such pairs
+  exist today; the em-dash-prefix-only parse rule for Pass headings (a
+  heading's descriptive half routinely names OTHER Passes); the R26
+  amendment-shape allowlist trap; the `--stats` under-parse catch (5 of
+  106 rules, `R53`–`R57`, use a `(was R-JS-1)`-style parenthetical the
+  first pattern didn't allow for); and that this was the FIFTH
+  numbering collision found the same real day, this one a duplicated
+  heading rather than a proposed-number collision.
+- `docs/ROADMAP.md`'s FF-D-fast-follow-FF-C Backlog bullet and Open
+  operator question (h) both amended: FF-C's rule-13 dependency
+  classification is **DONE and CLEARS without an operator decision** —
+  `subsetter 0.2.6` (Typst) is `MIT OR Apache-2.0` with an all-permissive
+  transitive graph (`cargo metadata` on a scratch crate, not crates.io
+  pages or memory), `LEGAL.md` §6.2 step 3 applies (proceed and log,
+  same disposition `egui_tiles` got). Net cost 2 new packages
+  (`subsetter`, `write-fonts 0.48.1`); `write-fonts` resolves via
+  `subsetter` to `read-fonts 0.39.2`/`font-types 0.11.3`, matching
+  `pdfce-render`'s existing load-bearing `skrifa 0.42` pin by
+  construction — a bare `cargo add write-fonts` would instead select
+  0.51.0 and split the graph across two incompatible font-parser
+  versions. Full record: `PRIOR_ART.md`'s new "FF-C dependency
+  classification (rule 13) — COMPLETE, 2026-08-03" subsection under
+  Fonts (filed by the engineer at `d738950`, prior to this dispatch —
+  this continuation propagates that finding into `ROADMAP.md`'s two
+  outward-facing pointers). **What remains for FF-C is scope/sequencing
+  only (Q3 of ★ Pass 19.x: FF-H → FF-C → FF-B), not licensing.** A
+  KenAgent decision agent is concurrently scoping FF-C into a Pass
+  family (will land as decision 021, writing to `docs/decisions/` —
+  this continuation did not touch that directory).
+- `CLAUDE.md`'s XFA bullet — engineer-authored at `d738950`, prior to
+  this dispatch, correctly reported as out of sync but outside this
+  role's tiers; flag discharged, no librarian action needed (see
+  `SESSION_LOG.md` continuation 71's XFA finding and the corresponding
+  ROADMAP Open operator question (p) for the underlying content).
+
+**RAG escalations this continuation:**
+- `D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md` —
+  AMENDED (second amendment this real date) with a new section: a
+  hand-maintained numbered ledger (Pass IDs, standing-rule numbers,
+  decision numbers) is a primary key with no integrity constraint; no
+  existing lint/test/CI job has any concept of it; the fix that
+  actually worked was a checker that PRINTS THE LIVE CEILING before a
+  number gets assigned (prevention), not a duplicate-detector alone
+  (detection-only fires after the wrong number is already committed).
+  Generalizes past pdfce to any hand-maintained ID scheme (ticket
+  prefixes, RFC/ADR numbers, migration sequence numbers). Tags
+  extended with `id-collision`, `numbering`, `primary-key`.
+  `D:\dev\rag\rust\index.md` updated with a summary of both amendments
+  now on this file.
+
+**Still in flight:**
+- Unchanged from continuation 71: Pass 20.0 (F0) scoped, not
+  authorized to start (Open operator question (m) is the gate); FF-B
+  and (now) FF-C await only scope/sequencing, not a blocking decision;
+  branch `pass-8-redaction` still unpushed.
+
+**For next session:**
+- Run `python tools/check-ledger-numbers.py --stats` for the
+  authoritative confirmation this continuation's manual check stands
+  in for (this librarian dispatch had no shell-execution tool
+  available). Expected: exit 0, "ledger-numbers: clean — no duplicate
+  Pass, rule, or decision numbers," ceilings printed as Pass family 19
+  (highest ID 19.4), rules R106 → next free R107, decisions 020 → next
+  free 021.
+- FF-C's remaining open question is purely "when does it get scoped
+  into a Pass," not "is it licensed cleanly" — don't re-open the
+  licensing question when FF-C's turn comes.

@@ -140,7 +140,7 @@ group member and pdfce's own reader promotes it to a separate terminal
 field, and the group semantics — mutual exclusivity, shared `/V` — are
 gone. The document would still be legal PDF; it just would not be the
 thing the operator asked for, and pdfce would be the one that broke it.
-This becomes **R98**.
+This becomes **R101**.
 
 #### 1.2.4 `/Encrypt` documents are refused outright by every authoring path
 
@@ -366,7 +366,7 @@ mechanism.** The binding rule is not "the model is a graph." It is:
 > write, and must be able to attach a widget to an existing node without
 > creating a second node.**
 
-This becomes **R97**. It is stronger than "use a graph" because it names
+This becomes **R100**. It is stronger than "use a graph" because it names
 the failure it prevents (a second node) rather than the representation it
 prefers.
 
@@ -378,7 +378,7 @@ One function, one choke point:
 /// Resolve a fully-qualified field name against the live object graph.
 ///
 /// This is the ONLY entry point through which any authoring write may
-/// learn what a name currently denotes (R97). It walks the raw
+/// learn what a name currently denotes (R100). It walks the raw
 /// `/AcroForm/Fields` tree — including non-terminal grouping nodes, which
 /// the read projection (`AcroForm.fields`) deliberately discards — because
 /// §12.7.3.2 derives the FQN from the tree's shape, so only the tree can
@@ -480,7 +480,7 @@ When deletion drops a Shape-B field to one remaining widget, pdfce
 **leaves it as Shape B**. Collapsing would rewrite two objects for a purely
 cosmetic normalization. `ARCHITECTURE.md` §5.6 — *"Never normalize"* —
 already forbids this class of tidying; this is that rule applied to a shape
-it did not anticipate. Becomes **R99**.
+it did not anticipate. Becomes **R102**.
 
 #### 3.1.7 What changes in the shipped Pass 7.x code
 
@@ -673,7 +673,7 @@ can actually create, so it cannot be designed until F1–F3 fix the set.
 > 4. Setting `/Tabs`, and authoring an explicit order, are **separate,
 >    explicit operations** (F4) — never implied by placing a field.
 
-Becomes **R101**.
+Becomes **R104**.
 
 #### 3.4.2 Why this differs from the research's recommendation, and why the difference matters
 
@@ -785,7 +785,7 @@ Acrobat's own model makes it to skip."*
    <text>` or `--no-tooltip` — omitting **both** is an error, not a silent
    default. This is deliberately stricter than a warning: a silently-absent
    `/TU` is invisible to the person who created it and load-bearing for
-   the person who cannot see the form. Becomes **R102**.
+   the person who cannot see the form. Becomes **R105**.
 2. **OUT OF SCOPE, stays FF-I:** writing `/StructElem` / `/ParentTree`
    entries. Unchanged rationale.
 3. **What ships instead of a partial writer:** on a document with
@@ -878,7 +878,7 @@ guarded case cannot pass is dead code that looks live."*
 
 This generalizes R96 in the prospective direction — R96 says *detect* dead
 guards; the lesson here is *don't write one*, record the debt where it
-becomes payable. Becomes **R100**.
+becomes payable. Becomes **R103**.
 
 **What this family does inherit for free, and must test as firing:**
 `suppressed_object_count() > 0 → ObjectCreationWouldExposeHiddenObjects`,
@@ -926,7 +926,7 @@ becomes a curiosity, not a gate.
   field type whose last widget is deleted. Consistent with the "one merge
   mechanism, not a radio-specific path" principle the research is right
   to insist on.
-- **No Shape-B→A collapse** on the way down (§3.1.6 / R99).
+- **No Shape-B→A collapse** on the way down (§3.1.6 / R102).
 
 All three are pdfce's own documented design choices, flagged as such, and
 provable by pdfce's own tests.
@@ -1037,7 +1037,21 @@ ships a version that skips the question, and skipping the question is O1.
 
 ## 5. Standing rules proposed (binding; `pdfce-librarian` assigns final `Rnn`; current ceiling **R96**)
 
-- **R97 — Field identity is the fully-qualified name, and every authoring
+> **RENUMBERED by `pdfce-librarian`, continuation 71, 2026-08-03.** This
+> section originally proposed the six rules below as **R97–R102**, against
+> a ceiling of R96 believed current at drafting time. That ceiling was
+> stale by the time this decision was filed: continuation 70, running
+> concurrently, had already claimed **R97–R99** for three unrelated Pass
+> 8.1 findings (`redact_apply.rs` extraction, the confirmation-dialog
+> real-outcome rule, and dock-pane action ordering — see `ROADMAP.md`
+> Standing rules). The six rules below are therefore renumbered
+> **R100–R105** throughout this document (prose and the Appendix A JSON
+> block both updated in place); the real ceiling immediately before this
+> decision was **R99**, not R96. See `ROADMAP.md` Standing rules for the
+> filed R100–R105 text (verbatim from this section) and Appendix A's new
+> `renumbered_by_librarian` field for the machine-readable mapping.
+
+- **R100 — Field identity is the fully-qualified name, and every authoring
   write resolves that name against the object graph before it writes.**
   §12.7.3.2 derives the FQN from the field tree's shape rather than storing
   it, so only the tree can answer what a name denotes. All field-creation,
@@ -1046,27 +1060,27 @@ ships a version that skips the question, and skipping the question is O1.
   Two same-FQN sibling fields are a malformed document pdfce must never
   author — pdfce's own reader treats that shape as damage to cope with
   (`fields_named()` fan-out), not as an intended result.
-- **R98 — A widget kid carries no field keys.** A `/Kids` entry pdfce
+- **R101 — A widget kid carries no field keys.** A `/Kids` entry pdfce
   authors as a *widget* must not contain `/T`, `/FT`, or `/Kids`.
   `pdfce-core`'s own `kid_is_field` promotes any such kid to a separate
   terminal field, silently destroying the group semantics (radio mutual
   exclusivity, shared `/V`) the widget was created to have. Verified
   against the shipped parser, not inferred.
-- **R99 — pdfce never normalizes field shape.** Shape A→B promotion occurs
+- **R102 — pdfce never normalizes field shape.** Shape A→B promotion occurs
   **only** when a second widget makes the merged form illegal under Table
   220; Shape B **never** collapses back to A when deletion leaves one
   widget. `ARCHITECTURE.md` §5.6 ("never normalize") applied to a shape it
   did not anticipate — cosmetic re-tidying of an object the operator did
   not logically change is a minimal-diff violation regardless of how much
   nicer the result looks.
-- **R100 — A guard whose precondition is already refused by a coarser
+- **R103 — A guard whose precondition is already refused by a coarser
   earlier gate is not built; the refinement is recorded as owed to the Pass
   that removes the coarser gate.** The prospective form of R96. Verified
   instance: the `/P` bit-6 field-creation permission is unreachable while
   `/Encrypt` documents are refused outright by every authoring path, so it
   is filed against Pass 5 (Encryption) rather than written now as a gate
   that cannot fire.
-- **R101 — `/Tabs` is a mode, not a snapshot.** Under `/Tabs /R`, `/C` or
+- **R104 — `/Tabs` is a mode, not a snapshot.** Under `/Tabs /R`, `/C` or
   `/S`, pdfce reorders nothing on field insertion — the order is computed
   by the consumer and there is no stored sequence to maintain. Re-sorting
   `/Annots` to "realize" a computed order rewrites references pdfce did not
@@ -1074,7 +1088,7 @@ ships a version that skips the question, and skipping the question is O1.
   caused by a non-visible feature. Under an explicit/manual order the new
   widget is appended to the end and that fact is disclosed. `/Tabs` is
   never written as a side effect of field creation.
-- **R102 — Every field pdfce authors carries `/TU`, or an explicitly
+- **R105 — Every field pdfce authors carries `/TU`, or an explicitly
   recorded operator declination.** For form fields, `/TU` — not the
   structure tree — is the accessible name assistive technology actually
   reads (WebAIM, sourced). It costs one optional string on an object pdfce
@@ -1141,7 +1155,7 @@ fuzz target 13 re-run over the new shapes.
 - `/DR` font-resource merge: reuse an existing `/Helv` if present; add if
   absent; **never rename or renumber existing resources** (§5.6).
 - `/AcroForm` created (plus the catalog entry) if the document has none.
-- `/TU` mandatory-or-declined (R102).
+- `/TU` mandatory-or-declined (R105).
 - Dotted-name path semantics + period-in-`/T` refusal (§3.1.4).
 - `/Tabs /S` + untagged-field disclosure (§3.4.3); tagged-document
   disclosure (§3.5.3).
@@ -1170,7 +1184,7 @@ fuzz target 13 re-run over the new shapes.
 - **Shape A→B promotion proven**: after the second call, the page's
   `/Annots` references the new widget object, **not** the field dict; the
   field dict has no `/Subtype`; both widgets carry `/Parent`.
-- **R98 proven**: no authored widget kid carries `/T`, `/FT`, or `/Kids`
+- **R101 proven**: no authored widget kid carries `/T`, `/FT`, or `/Kids`
   (byte-grep test).
 - **§7.2's JS-carrier test** (below) — mandatory, this slice.
 - R85 oracle covers `add-field`.
@@ -1198,7 +1212,7 @@ mutually-exclusively on `set-button-state` and renders correct on/off
 states; deleting the **selected** member clears `/V` to `/Off`, sets every
 remaining `/AS` to `/Off`, and **discloses the cleared selection**;
 deleting the last member removes the parent field from `/AcroForm/Fields`;
-a 3→1 deletion leaves Shape B intact (R99, byte-verified); `regenerate-appearances`
+a 3→1 deletion leaves Shape B intact (R102, byte-verified); `regenerate-appearances`
 still skips buttons (unchanged `_ => continue`).
 
 ### F3 — Choice fields + push buttons (core + CLI)
@@ -1227,7 +1241,7 @@ row/column sort from memory violates project rule 1.
 - `forms set-tab-order --mode structure|row|column --page N`
 - `forms set-tab-order --order f1,f2,f3 --page N` (explicit; realized as
   `/Annots` position, which is also paint order — **disclose that**).
-- R101 enforced: creation never writes `/Tabs`.
+- R104 enforced: creation never writes `/Tabs`.
 
 ### F5 — GUI authoring surface (gui)
 
@@ -1235,7 +1249,7 @@ row/column sort from memory violates project rule 1.
 R83: the type palette exposes **only** the types F1–F3 shipped — no
 greyed-out signature or barcode entry, no placeholder. R84 for the
 selected-tool state. `/TU` is a prompted field, not an optional one
-(R102). The tagged-document and `/Tabs /S` disclosures surface as
+(R105). The tagged-document and `/Tabs /S` disclosures surface as
 non-modal strip text, matching the existing refusal-strip convention.
 
 **R86 applies** (if in force by then): observed working in the running
@@ -1353,7 +1367,7 @@ a dependency were added — and none is.
    none is proposed — a childless grouping node has no purpose.
 6. **The `/Tabs` sort algorithms are not designed here** — F4 is
    deliberately blocked on spec sourcing (§3.4.4), so this decision states
-   the *rule* (R101) and not the *implementation*.
+   the *rule* (R104) and not the *implementation*.
 7. **Barcode and signature field creation are absent**, by decision
    (§3.3.4). Both are genuine Acrobat capabilities. This is a parity
    subtraction, stated as one.
@@ -1364,7 +1378,7 @@ a dependency were added — and none is.
 
 Each is sourced against a documented Acrobat behavior, not asserted:
 
-1. **`/TU` is mandatory-or-declined** (R102). Acrobat makes it trivially
+1. **`/TU` is mandatory-or-declined** (R105). Acrobat makes it trivially
    skippable and its own accessibility checker then flags the result.
 2. **Tagged-document disclosure.** Acrobat leaves new fields untagged and
    says nothing; its own remediation guidance treats tagging as a separate
@@ -1658,14 +1672,20 @@ four Q6 items. None of them needs an operator answer to be correct.
   },
 
   "standing_rules_proposed": [
-    {"id": "R97", "text": "Field identity is the fully-qualified name, and every authoring write resolves that name against the object graph before it writes."},
-    {"id": "R98", "text": "A widget kid carries no field keys — no /T, /FT, /Kids — because pdfce's own kid_is_field promotes any such kid to a separate terminal field, destroying group semantics."},
-    {"id": "R99", "text": "pdfce never normalizes field shape: Shape A->B promotion only when a second widget makes the merged form illegal; Shape B never collapses back to A."},
-    {"id": "R100", "text": "A guard whose precondition is already refused by a coarser earlier gate is not built; the refinement is recorded as owed to the Pass that removes the coarser gate. (Prospective form of R96.)"},
-    {"id": "R101", "text": "/Tabs is a mode, not a snapshot — pdfce reorders nothing under S/R/C, appends and discloses under an explicit order, and never writes /Tabs as a side effect of field creation."},
-    {"id": "R102", "text": "Every field pdfce authors carries /TU, or an explicitly recorded operator declination. Omitting both --tooltip and --no-tooltip is an error, never a silent default."}
+    {"id": "R100", "text": "Field identity is the fully-qualified name, and every authoring write resolves that name against the object graph before it writes."},
+    {"id": "R101", "text": "A widget kid carries no field keys — no /T, /FT, /Kids — because pdfce's own kid_is_field promotes any such kid to a separate terminal field, destroying group semantics."},
+    {"id": "R102", "text": "pdfce never normalizes field shape: Shape A->B promotion only when a second widget makes the merged form illegal; Shape B never collapses back to A."},
+    {"id": "R103", "text": "A guard whose precondition is already refused by a coarser earlier gate is not built; the refinement is recorded as owed to the Pass that removes the coarser gate. (Prospective form of R96.)"},
+    {"id": "R104", "text": "/Tabs is a mode, not a snapshot — pdfce reorders nothing under S/R/C, appends and discloses under an explicit order, and never writes /Tabs as a side effect of field creation."},
+    {"id": "R105", "text": "Every field pdfce authors carries /TU, or an explicitly recorded operator declination. Omitting both --tooltip and --no-tooltip is an error, never a silent default."}
   ],
   "standing_rule_ceiling_at_time_of_writing": "R96",
+  "renumbered_by_librarian": {
+    "when": "2026-08-03, continuation 71",
+    "reason": "collision — continuation 70 concurrently claimed R97-R99 for three unrelated Pass 8.1 findings before this decision's R97-R102 was filed; the real ceiling immediately before this decision was R99, not the R96 this document was drafted against",
+    "mapping": {"R97": "R100", "R98": "R101", "R99": "R102", "R100": "R103", "R101": "R104", "R102": "R105"},
+    "note": "all prose + JSON occurrences in this file updated in place to the right-hand column; standing_rule_ceiling_at_time_of_writing above is left as the honest historical value, not corrected"
+  },
 
   "invariant_risks": {
     "round_trip": [
@@ -1708,8 +1728,8 @@ four Q6 items. None of them needs an operator answer to be correct.
 
   "dispatches_required": [
     {"agent": "pdfce-spec-librarian", "before": "F4", "topic": "Table 30 /Tabs entry; §14.7 structure-order derivation; ISO 32000-2 /Tabs delta values — verified absent from the spec RAG"},
-    {"agent": "pdfce-ui-specialist", "before": "F5", "topic": "field placement interaction, type palette (R83), /TU prompting (R102), disclosure strips"},
-    {"agent": "pdfce-librarian", "on": "acceptance of this decision", "topic": "file Pass 20.x entries under Next up; add R97-R102; add the ARCHITECTURE.md §12 dated entry cross-referencing this record"}
+    {"agent": "pdfce-ui-specialist", "before": "F5", "topic": "field placement interaction, type palette (R83), /TU prompting (R105), disclosure strips"},
+    {"agent": "pdfce-librarian", "on": "acceptance of this decision", "topic": "file Pass 20.x entries under Next up; add R100-R105; add the ARCHITECTURE.md §12 dated entry cross-referencing this record"}
   ],
 
   "new_cargo_dependencies": 0
