@@ -11530,34 +11530,27 @@ fn annotation_status(
 /// GUI glue only: every geometry decision is a headless-tested
 /// `vector_edit_tool`/`canvas`/`vector` helper; the surgery is `pdfce-core`.
 ///
-/// **Known limitation (documented, not a defect):** after one committed
-/// vector edit on a page, the core refuses a second same-session edit with
-/// `VectorEditNeedsReopen` (rule 4) — save and reopen to continue editing
-/// that page. The correctness of each individual edit is proven headlessly
-/// in `pdfce-core`/`pdfce-render`.
+/// ## The one-edit-per-page limitation, and its removal (Pass 25.3)
 ///
-/// ## Corrected at Pass 17.0 (decision 018)
+/// Until 2026-08-04 a page accepted exactly ONE vector edit per session and
+/// then refused every further one with `VectorEditNeedsReopen`, telling the
+/// operator to save and reopen. The stated reason was index alignment:
+/// `vector_surgery` decomposed the BASE content, so once the page had been
+/// rewritten, base-relative indices no longer described what the operator
+/// could see.
 ///
-/// The stated *reason* used to be *"the object provider is rebuilt from the
-/// base document (`session.document()`), so after one committed vector edit
-/// the base-relative object indices no longer match the session-current
-/// content."* Half of that is no longer true and the other half moved:
+/// That was backwards. Pass 17.0 (decision 018) had already moved the
+/// provider to `session.view()` — the edited revision — so the surgery's
+/// base-decompose was the side that was out of step, and the refusal was
+/// guarding against a mismatch the core was itself creating. `vector_surgery`
+/// now decomposes the session-CURRENT content through the same
+/// `current_page_content` helper `edit_text` uses, the two agree by
+/// construction, and vector edits accumulate like text edits always have.
 ///
-/// - The provider is now rebuilt from **`session.view()`**
-///   (`OpenDoc::ensure_object_provider`), so its indices describe the
-///   content the operator is actually looking at.
-/// - The refusal now comes entirely from the core:
-///   `EditSession::vector_surgery` decomposes the **base** on purpose — so
-///   that `object_index` means the same thing to every caller — and
-///   therefore refuses any page whose first `/Contents` object this session
-///   has already rewritten, rather than risk misindexing it.
-///
-/// The two agree on every page that has *not* been rewritten this session
-/// (base content and session content are the same bytes there), and on a
-/// page that *has* been, the edit is refused before any index is used. So
-/// the limitation is unchanged in effect, and is now a deliberate core
-/// refusal rather than a GUI read-path accident. Lifting it is a scoped
-/// core change (session-relative object indices), not a GUI one.
+/// The operator found it within minutes of subpath delete shipping: *"After
+/// clicking and deleting an object I couldn't delete another one after
+/// selecting it."* On a drawing whose stray lines are the thing to remove,
+/// one edit per session was not a limitation — it was the feature not working.
 #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
 /// Stroke a 2px outline around every currently-selected canvas object.
 ///

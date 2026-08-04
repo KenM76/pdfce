@@ -365,20 +365,103 @@ fn moving_a_text_object_is_refused_as_not_a_path() {
     assert!(!s.is_modified());
 }
 
+/// **Vector edits accumulate within one session.**
+///
+/// This test previously asserted the OPPOSITE — that a second surgery on the
+/// same page was refused with `VectorEditNeedsReopen`, on the reasoning that
+/// base-relative indices no longer hold once the page has been rewritten. The
+/// reasoning was right and the conclusion was backwards: the caller that
+/// supplies the index (the GUI's object provider) decomposes the session view,
+/// so the surgery's own base-decompose was the thing out of step. It now reads
+/// the page's CURRENT content, the same helper `edit_text` uses, and the
+/// mismatch the refusal guarded against cannot arise.
+///
+/// The operator found it immediately: *"After clicking and deleting an object
+/// I couldn't delete another one after selecting it."* On a CAD drawing whose
+/// stray lines are what needs removing, one edit per page per session is not a
+/// limitation, it is the feature not working.
 #[test]
-fn a_second_vector_edit_in_one_session_is_refused_to_reopen() {
+fn vector_edits_accumulate_in_one_session() {
     let base = edit_fixture();
     let mut s = session(&base);
-    s.move_object(0, 0, 1.0, 1.0).unwrap();
-    // The page's content was rewritten this session: base-relative indices no
-    // longer hold, so a second surgery is refused by name (not misindexed).
-    let err = s.move_object(0, 1, 1.0, 1.0).unwrap_err();
+    s.move_object(0, 0, 1.0, 1.0)
+        .expect("the first edit succeeds");
+    s.move_object(0, 1, 1.0, 1.0)
+        .expect("a second edit on the same page must compose on top of the first");
+    assert_eq!(s.undo_depth(), 2, "each edit is its own undoable command");
+
+    // Both edits are really present: undoing once must leave the document
+    // still modified (the first edit standing), and undoing twice must return
+    // it to pristine. Asserting the DEPTH alone would pass even if the second
+    // command had staged nothing.
+    s.undo().expect("undo the second edit");
     assert!(
-        matches!(err, EditError::VectorEditNeedsReopen { page_index: 0 }),
-        "got {err:?}"
+        s.is_modified(),
+        "one undo must leave the first edit in place"
     );
-    // The first edit is intact; the refusal added nothing.
-    assert_eq!(s.undo_depth(), 1);
+    s.undo().expect("undo the first edit");
+    assert!(!s.is_modified(), "undoing both must return to pristine");
+}
+
+/// **Two subpath deletes in one session remove the two parts that were
+/// asked for** — the invariant the old one-edit-per-page refusal existed to
+/// protect, now held by construction instead.
+///
+/// This is the test that matters for accumulation. Undo depth proves commands
+/// were recorded; it says nothing about whether the SECOND index still meant
+/// what the caller thought. Here the second delete is planned against content
+/// the first already rewrote, and the assertion is geometric: after removing
+/// part 0 and then part 0 again, the one line left must be the third.
+///
+/// If `vector_surgery` ever went back to decomposing the base, the second
+/// delete would index into stale bytes and this would fail — which is exactly
+/// what it is for.
+#[test]
+fn two_subpath_deletes_in_one_session_remove_the_right_two_parts() {
+    let base = std::fs::read(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/synthetic/vector/multi-subpath-one-object.pdf"),
+    )
+    .expect("the multi-subpath fixture loads");
+    let mut s = session(&base);
+
+    // The fixture's six subpaths start at x = 50, 50, 50, 100, 200, 300.
+    // Removing index 0 twice leaves the third horizontal plus the verticals.
+    let before = decompose0(&Document::from_bytes(base.clone()).unwrap());
+    let subpaths_before = match &before.objects[0] {
+        pdfce_core::vector::VectorObject::Path(p) => p.subpaths.len(),
+        _ => panic!("expected a path"),
+    };
+    assert_eq!(subpaths_before, 6, "fixture shape");
+
+    s.delete_subpath(0, 0, 0).expect("first delete");
+    s.delete_subpath(0, 0, 0)
+        .expect("a SECOND delete on the same page must plan against the first's result");
+    assert_eq!(s.undo_depth(), 2);
+
+    let after = Document::from_bytes(save(&s)).expect("the saved file re-parses");
+    let model = decompose0(&after);
+    let path = match &model.objects[0] {
+        pdfce_core::vector::VectorObject::Path(p) => p,
+        _ => panic!("expected a path"),
+    };
+    assert_eq!(
+        path.subpaths.len(),
+        4,
+        "two deletes must remove exactly two subpaths — not one (the second \
+         silently lost) and not three (the second misindexed)"
+    );
+    let first_xs: Vec<f64> = path
+        .subpaths
+        .iter()
+        .filter_map(|sp| sp.anchors().next().map(|p| p.x))
+        .collect();
+    assert_eq!(
+        first_xs,
+        vec![50.0, 100.0, 200.0, 300.0],
+        "the two removed must be the FIRST two horizontals; a stale second \
+         index would have taken a different pair"
+    );
 }
 
 #[test]

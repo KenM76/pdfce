@@ -747,21 +747,6 @@ pub enum EditError {
     /// the one the renderer would hit on the same page.
     #[error("the page content could not be read for a vector edit: {0}")]
     VectorEditContent(#[source] crate::content::ContentError),
-    /// A basic vector edit was attempted on a page whose first content
-    /// stream this session **already rewrote** (a prior vector, text, or
-    /// format edit). The 9c-min surgery decomposes the **base** page content
-    /// — its object indices and operator byte ranges are base-relative — so
-    /// it refuses cleanly rather than misindex the staged content. Save and
-    /// reopen to keep editing this page (the same honest refusal
-    /// [`EditSession::reflow_block`] makes, rule 4).
-    #[error(
-        "page {page_index}'s content was already edited this session; the vector-edit surgery is \
-         planned against the base content, so save and reopen before vector-editing this page again"
-    )]
-    VectorEditNeedsReopen {
-        /// The 0-based page index.
-        page_index: usize,
-    },
     /// A basic vector edit named a page that has no `/Contents` stream to
     /// edit (an empty page).
     #[error("page {page_index} has no /Contents stream to vector-edit")]
@@ -2077,8 +2062,7 @@ impl EditSession {
     /// singular CTM, malformed operator — see
     /// [`crate::vector::VectorEditError`]), [`EditError::PageOutOfRange`],
     /// [`EditError::VectorEditNoContents`], [`EditError::VectorEditContent`]
-    /// (undecodable page), [`EditError::VectorEditNeedsReopen`] (this page's
-    /// content was already edited this session), [`EditError::DocumentEncrypted`],
+    /// (undecodable page), [`EditError::DocumentEncrypted`],
     /// or [`EditError::CertificationForbidsChange`]. Every refusal happens
     /// **before** any mutation (rule 4).
     pub fn move_object(
@@ -2116,7 +2100,7 @@ impl EditSession {
     ///
     /// [`EditError::VectorEdit`] (out-of-range object),
     /// [`EditError::PageOutOfRange`], [`EditError::VectorEditNoContents`],
-    /// [`EditError::VectorEditContent`], [`EditError::VectorEditNeedsReopen`],
+    /// [`EditError::VectorEditContent`],
     /// [`EditError::DocumentEncrypted`], or
     /// [`EditError::CertificationForbidsChange`]. Every refusal happens
     /// before any mutation (rule 4).
@@ -2175,7 +2159,7 @@ impl EditSession {
     /// [`SubpathStructureMismatch`](crate::vector::VectorEditError::SubpathStructureMismatch);
     /// [`EditError::VectorEdit`] with `NotAPath` for a text/image target; plus
     /// [`EditError::PageOutOfRange`], [`EditError::VectorEditNoContents`],
-    /// [`EditError::VectorEditContent`], [`EditError::VectorEditNeedsReopen`],
+    /// [`EditError::VectorEditContent`],
     /// [`EditError::DocumentEncrypted`], or
     /// [`EditError::CertificationForbidsChange`]. Every refusal happens before
     /// any mutation (rule 4).
@@ -2225,7 +2209,7 @@ impl EditSession {
     /// an `re`-rectangle corner or an implicit `h`-reopened start that cannot
     /// be node-edited, singular CTM), [`EditError::PageOutOfRange`],
     /// [`EditError::VectorEditNoContents`], [`EditError::VectorEditContent`],
-    /// [`EditError::VectorEditNeedsReopen`], [`EditError::DocumentEncrypted`],
+    /// [`EditError::DocumentEncrypted`],
     /// or [`EditError::CertificationForbidsChange`]. Every refusal happens
     /// before any mutation (rule 4).
     pub fn move_node(
@@ -2256,12 +2240,18 @@ impl EditSession {
     /// the writer handles the §5.7/§5.9 promotion for free and the byte
     /// contract is inherited).
     ///
-    /// Decomposing the **base** (not the session-current) content is what
-    /// makes `object_index` line up with a caller that decomposed the base
-    /// document (the GUI object provider, the CLI's fresh load), and it is
-    /// why a page whose content was already rewritten this session is refused
-    /// ([`EditError::VectorEditNeedsReopen`]) rather than misindexed —
-    /// exactly [`Self::reflow_block`]'s discipline.
+    /// Decomposing the **session-current** content (this session's staged
+    /// stream if the page has already been rewritten, else the base) is what
+    /// makes `object_index` line up with the caller that supplied it: the GUI
+    /// object provider decomposes `session.view()`, i.e. the edited revision
+    /// (decision 018, Pass 17.0), and the CLI's fresh load has no session edits
+    /// so the two agree by definition. It is also what makes successive vector
+    /// edits ACCUMULATE, through the same [`Self::current_page_content`] helper
+    /// [`Self::edit_text`] uses.
+    ///
+    /// This previously read the base unconditionally and refused once a page
+    /// had been touched. See the comment at the read site for why that was
+    /// backwards.
     fn vector_surgery(
         &mut self,
         kind: CommandKind,
@@ -2290,22 +2280,40 @@ impl EditSession {
             .contents
             .first()
             .ok_or(EditError::VectorEditNoContents { page_index })?;
-        if self.state.contains_key(&content_id) {
-            return Err(EditError::VectorEditNeedsReopen { page_index });
-        }
-
-        // Decompose the base content and plan the surgery; the borrow of
-        // `self.base` is scoped so it ends before the `&mut self` commit.
+        // Decompose the page's CURRENT content — the session's own staged
+        // stream if a prior edit already rewrote it, else the base.
+        //
+        // This used to read the BASE unconditionally and refuse outright
+        // (`VectorEditNeedsReopen`) once the page had been touched, on the
+        // reasoning that `object_index` must line up with whoever decomposed
+        // the base. The reasoning was sound and the conclusion was backwards:
+        // the caller that supplies the index is the GUI's object provider,
+        // which decomposes `session.view()` — the EDITED revision (decision
+        // 018, Pass 17.0). So base-decomposing here was the thing out of step,
+        // and the refusal existed to stop a mismatch this function was itself
+        // creating.
+        //
+        // Reading current content aligns the two and makes vector edits
+        // ACCUMULATE, exactly as `edit_text` / `format_text` already do
+        // through this same helper. That is not a bonus: on a CAD drawing
+        // where one object holds 1194 subpaths, "one vector edit per page per
+        // session, then save and reopen" makes deleting stray lines — the
+        // operator's actual task — unusable. Reported 2026-08-04: "After
+        // clicking and deleting an object I couldn't delete another one after
+        // selecting it."
+        //
+        // Undo is unaffected: each command still records its own before/after
+        // for `content_id`, and `text_edit_command`'s `first_edit` gate
+        // already distinguishes the first rewrite from later ones.
         let new_content = {
-            // BASE READ, deliberately (decision 018 caller audit). The
-            // method docs above say why: `object_index` must line up with
-            // whoever decomposed the base, and a page already rewritten
-            // this session is REFUSED above rather than misindexed. Reading
-            // the session view here would silently renumber the objects
-            // under the caller's index.
-            let base_view = self.base.view();
-            let stream = crate::content::ContentStream::from_page(&base_view, page)
+            let stream = self
+                .current_page_content(content_id, page)
                 .map_err(EditError::VectorEditContent)?;
+            // The XObject resolver reads the BASE view deliberately: page
+            // `/Resources` are not rewritten by content surgery, so base and
+            // session agree on them, and the base view is the one guaranteed
+            // to be borrowable here.
+            let base_view = self.base.view();
             let resolver = crate::vector::DocumentXObjects {
                 view: &base_view,
                 resources: &page.resources,
