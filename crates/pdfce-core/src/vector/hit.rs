@@ -237,6 +237,136 @@ fn text_hit(t: &TextObject, point: Point, tolerance: f64) -> bool {
     t.runs.iter().any(|r| r.inflate(tolerance).contains(point))
 }
 
+/// Which **subpaths** of the path object at `object_index` a point hits,
+/// nearest first.
+///
+/// # Why an object is not always the unit an operator means
+///
+/// A PDF path object may hold any number of subpaths, and a producer is free to
+/// put an entire drawing in one. Measured on a real SolidWorks export: object
+/// 5870 of page 1 is a single stroked path with **1194 subpaths and 6681
+/// anchors** covering a 550×500 pt isometric view — every visible line of that
+/// view is one object as far as [`hit_test_point`] is concerned. Clicking any
+/// line selects all of them, and the operator's report was the direct
+/// consequence: *"how do I click on individual lines and nodes to move or
+/// delete them?"*
+///
+/// So selection needs a second level. This is the query for it: given the
+/// object the operator has already entered, which of its subpaths is under the
+/// pointer. It is deliberately a separate function rather than a mode of
+/// [`hit_test_point`] — descending into an object is a decision the shell makes
+/// from a gesture (a double-click), and the geometry layer should not have to
+/// know about selection depth.
+///
+/// # Ordering
+///
+/// **Nearest first, by distance to the subpath's outline** — not paint order.
+/// Subpaths within one object are painted by a single operator, so there is no
+/// z-order among them to inherit; "the line I clicked on" is the nearest one,
+/// and any other order would be arbitrary dressed up as meaningful.
+///
+/// # Contract
+///
+/// - Returns empty for a non-path object, an out-of-range index, or no hit.
+/// - `tolerance` is in page units and is added to the stroke half-width, the
+///   same way [`hit_test_point`] treats it, so a click that selects the object
+///   can always then select one of its subpaths.
+/// - A filled path also hits on interior containment, per subpath, so clicking
+///   inside one closed shape of a many-shape path picks that shape.
+#[must_use]
+pub fn hit_test_subpaths(
+    model: &PageObjects,
+    object_index: usize,
+    point: Point,
+    tolerance: f64,
+) -> Vec<usize> {
+    let Some(VectorObject::Path(path)) = model.objects.get(object_index) else {
+        return Vec::new();
+    };
+    let half = stroke_half_width(path);
+    if !path.page_bbox.inflate(half + tolerance).contains(point) {
+        return Vec::new();
+    }
+    let threshold = if path.style.stroke {
+        half + tolerance
+    } else {
+        tolerance
+    };
+
+    let mut hits: Vec<(f64, usize)> = Vec::new();
+    for (i, sp) in path.page_subpaths().iter().enumerate() {
+        let one = std::slice::from_ref(sp);
+        let d = outline_distance(one, point);
+        // An interior hit on a filled subpath counts at distance zero: the
+        // operator is pointing squarely at that shape, which should outrank a
+        // neighbouring outline they merely came close to.
+        let inside = path
+            .style
+            .fill
+            .is_some_and(|rule| point_inside(one, point, rule));
+        if inside {
+            hits.push((0.0, i));
+        } else if d <= threshold {
+            hits.push((d, i));
+        }
+    }
+    // `total_cmp` rather than `partial_cmp().unwrap()`: `outline_distance`
+    // returns infinity for an empty subpath, and a NaN coordinate that survived
+    // flattening must not panic the sort (R- untrusted input reaches here).
+    hits.sort_by(|a, b| a.0.total_cmp(&b.0));
+    hits.into_iter().map(|(_, i)| i).collect()
+}
+
+/// The page-space bounding box of one subpath of one object.
+///
+/// The companion to [`hit_test_subpaths`]: a shell that can select a subpath
+/// must be able to outline it, and the object's own `page_bbox` describes the
+/// whole 1194-subpath view rather than the one line the operator picked.
+///
+/// Returns `None` for a non-path object, an out-of-range index, or a subpath
+/// with no finite points.
+#[must_use]
+pub fn subpath_bounds(model: &PageObjects, object_index: usize, subpath: usize) -> Option<Bounds> {
+    let VectorObject::Path(path) = model.objects.get(object_index)? else {
+        return None;
+    };
+    let sp = path.page_subpaths().into_iter().nth(subpath)?;
+    // `EMPTY` is the grow-from-nothing seed, and `union_point` drops
+    // non-finite points — so a subpath whose every vertex is hostile yields an
+    // empty box, which the `is_empty` guard turns into `None` rather than a
+    // ±∞ rectangle a caller would try to draw.
+    let b = flatten(&sp)
+        .into_iter()
+        .fold(Bounds::EMPTY, Bounds::union_point);
+    (!b.is_empty()).then_some(b)
+}
+
+/// Shortest distance from `point` to any segment of these subpaths, or
+/// infinity if they contain no segment.
+///
+/// Factored out of [`outline_within`]'s shape because [`hit_test_subpaths`]
+/// needs the magnitude to ORDER hits, not merely a yes/no against a threshold.
+/// `outline_within` keeps its early return — it is on the per-object hit path,
+/// where the answer is a bool and stopping at the first segment within range
+/// matters across thousands of objects per click.
+fn outline_distance(subpaths: &[Subpath], point: Point) -> f64 {
+    let mut best = f64::INFINITY;
+    for sp in subpaths {
+        let poly = flatten(sp);
+        for w in poly.windows(2) {
+            let [a, b] = w else { continue };
+            best = best.min(dist_sq_point_segment(point, *a, *b));
+        }
+        if sp.closed
+            && poly.len() >= 2
+            && let (Some(&last), Some(&firstp)) = (poly.last(), poly.first())
+        {
+            best = best.min(dist_sq_point_segment(point, last, firstp));
+        }
+    }
+    best.sqrt()
+}
+
 fn object_hit(obj: &VectorObject, point: Point, tolerance: f64) -> bool {
     match obj {
         VectorObject::Path(p) => path_hit(p, point, tolerance),

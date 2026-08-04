@@ -254,6 +254,17 @@ use viewer::{FitMode, ViewState};
 /// Initial window size, in logical points.
 const INITIAL_WINDOW_SIZE: [f32; 2] = [1100.0, 800.0];
 
+/// Fixed outer height of the bottom status panel, in points.
+///
+/// Sized for the common case — the one-line summary plus a selection or edit
+/// note, roughly two to three lines — with the status bar's own `ScrollArea`
+/// absorbing anything longer inside this budget rather than growing the panel.
+///
+/// It is a CONSTANT on purpose; see the call site for the defect that a
+/// content-driven height caused (the page re-fitting because a click added a
+/// line of text somewhere else on screen).
+const STATUS_PANEL_HEIGHT_PTS: f32 = 92.0;
+
 /// How long a continuous zoom gesture must be idle before the view
 /// commits to a real re-rasterization. See the module docs.
 ///
@@ -5145,7 +5156,33 @@ impl eframe::App for PdfceApp {
         // Panels, in the order documented at the top of this file:
         // toolbar, status bar, rail, canvas.
         egui::Panel::top("toolbar").show(ui, |ui| self.toolbar(ui, &mut actions));
-        egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
+        // The status panel's height is FIXED, not content-driven.
+        //
+        // ui-spec `gesture-commit-and-shell-conventions-audit.md` §3.3. With an
+        // automatic height, anything the status bar has to say changes how much
+        // vertical space is left for the canvas — and `apply_fit` re-derives the
+        // zoom from that every frame. So merely SELECTING an object, which adds
+        // one line to the selection readout, shrank the canvas and re-fitted the
+        // page: measured on 2026-08-04 as the canvas going from
+        // [[313.5 71.0]-[1466.5 962.0]] at zoom 0.7279 to
+        // [[325.1 71.0]-[1454.9 944.0]] at zoom 0.7132 purely from a click.
+        // The page visibly jumped and shrank when the operator clicked it.
+        //
+        // A constant makes the panel's contribution to the central area
+        // invariant, so `apply_fit` only ever sees a viewport change the
+        // operator caused on purpose — a window resize, a Fit-mode click,
+        // toggling the rail or dock — all of which SHOULD re-fit.
+        //
+        // No disclosure is suppressed (rule R20, and rule 4's non-suppression
+        // clause): `status_bar` already scrolls internally, so every line stays
+        // reachable. Only the OUTER height stops reacting to how many lines
+        // happen to exist this frame. The cost is a little permanently-reserved
+        // space when there is nothing to say, which is how a status/terminal
+        // panel behaves in most desktop editors, and strictly better than a
+        // page that jumps on click.
+        egui::Panel::bottom("status")
+            .exact_size(STATUS_PANEL_HEIGHT_PTS)
+            .show(ui, |ui| self.status_bar(ui));
         if self.rail_expanded {
             egui::Panel::left("thumbnails")
                 .default_size(raster::THUMBNAIL_WIDTH_PTS + 40.0)

@@ -1741,6 +1741,21 @@ enum Command {
         /// without `--hit`.
         #[arg(long)]
         all_hits: bool,
+        /// Descend INTO this object index and report which of its subpaths the
+        /// `--hit` point lands on, nearest first, as `subpath-hit …` lines.
+        ///
+        /// A CAD producer routinely emits an entire drawing view as ONE path
+        /// object with hundreds of subpaths — one measured SolidWorks export
+        /// has a single object holding 1194 subpaths and 6681 anchors for a
+        /// whole isometric view. Per-object hit testing correctly names that
+        /// object, which is useless if what you meant was one line of it. This
+        /// is the level below: the same query the GUI runs after a double-click
+        /// enters an object.
+        ///
+        /// Combine with `--hit`; ignored without it. Prints nothing for a
+        /// non-path object or an out-of-range index.
+        #[arg(long, value_name = "INDEX")]
+        enter: Option<usize>,
         /// Page-space slack, in points, a `--hit` point may miss an object's
         /// edge by and still select it. Default 3.0 — the GUI's
         /// `FALLBACK_SELECT_TOLERANCE`, i.e. the catch radius a click gets at
@@ -2474,12 +2489,14 @@ fn run() -> ExitCode {
             page,
             hit,
             all_hits,
+            enter,
             tolerance,
         } => cmd_object_list(ObjectListArgs {
             input: &input,
             page_number: page,
             hit: hit.as_deref(),
             all_hits,
+            enter,
             tolerance,
         }),
         Command::ObjectMove {
@@ -8390,6 +8407,7 @@ struct ObjectListArgs<'a> {
     page_number: u32,
     hit: Option<&'a str>,
     all_hits: bool,
+    enter: Option<usize>,
     tolerance: f64,
 }
 
@@ -8434,13 +8452,16 @@ struct ObjectListArgs<'a> {
 /// same object as the `hit` line, and the rest of the list is exactly what
 /// repeated Alt+clicks walk through.
 fn cmd_object_list(args: ObjectListArgs<'_>) -> u8 {
-    use pdfce_core::vector::{Matrix, decompose_page, hit_test_point_all};
+    use pdfce_core::vector::{
+        Matrix, decompose_page, hit_test_point_all, hit_test_subpaths, subpath_bounds,
+    };
 
     let ObjectListArgs {
         input,
         page_number,
         hit,
         all_hits,
+        enter,
         tolerance,
     } = args;
 
@@ -8584,6 +8605,27 @@ kind={} bbox={}",
                         .map_or_else(|| "none".to_owned(), |o| bbox_token(o.page_bbox())),
                 );
             }
+        }
+    }
+
+    // The level BELOW the object: which subpath of an entered object the same
+    // point lands on. Printed after the `hit`/`hit-candidate` lines because it
+    // refines them — a reader sees which object was named, then which of its
+    // parts. Silent without `--hit`, and silent for a non-path or out-of-range
+    // `--enter`, so a script may pass `--enter` unconditionally.
+    if let (Some(point), Some(index)) = (hit_point, enter) {
+        for (ordinal, sp) in hit_test_subpaths(&model, index, point, tolerance)
+            .into_iter()
+            .enumerate()
+        {
+            println!(
+                "subpath-hit page={page_number} object={index} ordinal={ordinal} subpath={sp} \
+bbox={}",
+                subpath_bounds(&model, index, sp).map_or_else(
+                    || "none".to_owned(),
+                    |b| format!("{},{},{},{}", b.min.x, b.min.y, b.max.x, b.max.y)
+                ),
+            );
         }
     }
 
