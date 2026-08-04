@@ -213,6 +213,110 @@ pub fn resolve_drag_placement(
     }
 }
 
+/// Where the canvas must be scrolled to so the page point under the pointer
+/// stays under the pointer across a zoom step — "zoom to cursor".
+///
+/// # Why this exists
+///
+/// Ctrl+wheel previously called `zoom_by` and nothing else. The scroll offset
+/// was left alone, so the *viewport centre* was the fixed point of the zoom and
+/// whatever the operator was pointing at slid away — worse the further from
+/// centre they were pointing, which is exactly where a person zooms in on a
+/// drawing detail. Every other application that zooms a canvas (browsers, CAD,
+/// Inkscape, Office) anchors on the cursor, and the operator reported ours as
+/// "jarring" on 2026-08-04 for that reason.
+///
+/// # The geometry
+///
+/// The page is drawn at `display` pixels inside a scroll-area content box of
+/// `outer = max(display, viewport)` — the `max` is what lets the area still
+/// scroll when the page is bigger AND centre the page when it is smaller (see
+/// the reservation comment in `main.rs`). So the page's top-left sits at
+/// `margin = (outer - display) / 2` in content coordinates, and a point at
+/// fraction `anchor_frac` of the page appears on screen at
+///
+/// ```text
+///     screen = viewport_origin + margin + anchor_frac * display - offset
+/// ```
+///
+/// Holding `screen` fixed across the step and solving for the new offset gives
+///
+/// ```text
+///     offset₁ = offset₀ + anchor_frac * (display₁ - display₀) + (margin₁ - margin₀)
+/// ```
+///
+/// which needs no knowledge of where the viewport is on screen — only sizes.
+/// The margin term is not a refinement: while the page is smaller than the
+/// viewport the offset is pinned at zero and *all* of the movement is the
+/// margin shrinking, so dropping it would make zoom-to-cursor do nothing at
+/// precisely the "fit page" zoom an operator starts from.
+///
+/// # Contract
+///
+/// - `anchor_frac` is the pointer's position as a fraction of the page's drawn
+///   size, `(pointer - page_top_left) / display₀`. Values outside `0..=1` are
+///   meaningful (the pointer may be in the centring margin) and are not clamped.
+/// - The result is clamped to the scrollable range `0 ..= max(0, display₁ -
+///   viewport)`, so a caller may hand it straight to `ScrollArea::scroll_offset`
+///   without producing an offset the area would fight back against.
+/// - Non-finite inputs yield `offset_before` unchanged: refusing to move is the
+///   only safe answer, since a NaN offset would blank the canvas.
+#[must_use]
+pub fn zoom_anchor_offset(
+    offset_before: (f32, f32),
+    display_before: (f32, f32),
+    display_after: (f32, f32),
+    viewport: (f32, f32),
+    anchor_frac: (f32, f32),
+) -> (f32, f32) {
+    /// Centring margin on one axis: half the slack when the page is smaller
+    /// than the viewport, zero once it is larger.
+    fn margin(display: f32, viewport: f32) -> f32 {
+        (display.max(viewport) - display) / 2.0
+    }
+
+    /// One axis of the solve above, plus the scrollable-range clamp.
+    fn axis(off0: f32, d0: f32, d1: f32, v: f32, u: f32) -> f32 {
+        let off1 = off0 + u * (d1 - d0) + (margin(d1, v) - margin(d0, v));
+        off1.clamp(0.0, (d1 - v).max(0.0))
+    }
+
+    let finite = [
+        offset_before.0,
+        offset_before.1,
+        display_before.0,
+        display_before.1,
+        display_after.0,
+        display_after.1,
+        viewport.0,
+        viewport.1,
+        anchor_frac.0,
+        anchor_frac.1,
+    ]
+    .iter()
+    .all(|f| f.is_finite());
+    if !finite {
+        return offset_before;
+    }
+
+    (
+        axis(
+            offset_before.0,
+            display_before.0,
+            display_after.0,
+            viewport.0,
+            anchor_frac.0,
+        ),
+        axis(
+            offset_before.1,
+            display_before.1,
+            display_after.1,
+            viewport.1,
+            anchor_frac.1,
+        ),
+    )
+}
+
 /// Whether entering `tool` builds the Pass 14.3 `TextEdit` per-page state — the
 /// TextEdit half of the mutual-exclusion invariant (Pass 16.2 §0.1).
 #[must_use]
@@ -1229,6 +1333,133 @@ pub fn snap_marker_shapes(at: Pos2, kind: SnapKind, color: Color32, size: f32) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- zoom to cursor -----------------------------------------------
+
+    /// The whole point, stated as the invariant rather than as an offset:
+    /// re-derive where the anchored page point lands on screen after the step
+    /// and assert it has not moved.
+    ///
+    /// Screen position is `margin + frac * display - offset` relative to the
+    /// viewport origin, which is the same expression the doc comment solves —
+    /// so this checks the solve, not merely that the code agrees with itself
+    /// about arithmetic (R93: assert the outcome, not the intent).
+    fn anchored_screen_x(off: f32, d: f32, v: f32, u: f32) -> f32 {
+        (d.max(v) - d) / 2.0 + u * d - off
+    }
+
+    #[test]
+    fn the_point_under_the_cursor_stays_under_the_cursor() {
+        // A page larger than the viewport, pointer three quarters across —
+        // i.e. far from centre, where the old centre-anchored behaviour was
+        // most visibly wrong.
+        let (v, u) = (800.0_f32, 0.75_f32);
+        let (d0, d1) = (1200.0_f32, 1800.0_f32); // a 1.5x zoom in
+        let off0 = 300.0_f32;
+        let before = anchored_screen_x(off0, d0, v, u);
+
+        let off1 = zoom_anchor_offset((off0, 0.0), (d0, d0), (d1, d1), (v, v), (u, u)).0;
+        let after = anchored_screen_x(off1, d1, v, u);
+
+        assert!(
+            (after - before).abs() < 0.01,
+            "the anchored point moved {} px across the zoom (before {before}, after {after})",
+            after - before
+        );
+    }
+
+    #[test]
+    fn zooming_in_from_fit_page_moves_the_view_even_though_the_offset_starts_pinned() {
+        // The case the margin term exists for: at "fit page" the page is
+        // SMALLER than the viewport, so offset is 0 and cannot go lower.
+        // Zooming past the viewport must start scrolling toward the anchor.
+        let (v, u) = (800.0_f32, 0.9_f32); // pointer near the right edge
+        let (d0, d1) = (600.0_f32, 2000.0_f32);
+        let off1 = zoom_anchor_offset((0.0, 0.0), (d0, d0), (d1, d1), (v, v), (u, u)).0;
+        assert!(
+            off1 > 0.0,
+            "zooming in past the viewport with the pointer off-centre must scroll toward it, \
+             got {off1}"
+        );
+        let before = anchored_screen_x(0.0, d0, v, u);
+        let after = anchored_screen_x(off1, d1, v, u);
+        assert!(
+            (after - before).abs() < 0.01,
+            "the anchored point moved {} px",
+            after - before
+        );
+    }
+
+    #[test]
+    fn the_offset_never_leaves_the_scrollable_range() {
+        // Zooming OUT far enough that the page no longer fills the viewport
+        // must land at 0 rather than at a negative offset the scroll area
+        // would silently fight.
+        let out = zoom_anchor_offset(
+            (900.0, 900.0),
+            (2000.0, 2000.0),
+            (400.0, 400.0),
+            (800.0, 800.0),
+            (0.1, 0.1),
+        );
+        assert_eq!(
+            out,
+            (0.0, 0.0),
+            "zoomed-out offset must clamp to the origin"
+        );
+
+        // And never past the far edge.
+        let (v, d1) = (800.0_f32, 1000.0_f32);
+        let out = zoom_anchor_offset((900.0, 0.0), (500.0, 500.0), (d1, d1), (v, v), (5.0, 0.0));
+        assert!(
+            out.0 <= d1 - v + 0.01,
+            "offset {} exceeds the maximum scroll {}",
+            out.0,
+            d1 - v
+        );
+    }
+
+    /// **The clamp wins over the anchor, deliberately.** Documented as its own
+    /// test because it is the one case where zoom-to-cursor visibly does not
+    /// hold the point still, and a future reader could mistake that for the
+    /// bug this feature fixes.
+    ///
+    /// Anchoring near an edge can demand an offset past the end of the page.
+    /// Honouring it would scroll blank space into view; every other canvas
+    /// application saturates instead, so the anchored point drifts by exactly
+    /// the amount the range was short. Found by a test that first asserted
+    /// exact preservation here and failed by 60 px — the assertion was wrong,
+    /// not the code.
+    #[test]
+    fn anchoring_past_the_page_edge_saturates_rather_than_scrolling_into_blank_space() {
+        let (v, u) = (800.0_f32, 0.9_f32);
+        let (d0, d1) = (600.0_f32, 1000.0_f32);
+        let off1 = zoom_anchor_offset((0.0, 0.0), (d0, d0), (d1, d1), (v, v), (u, u)).0;
+        let want = 0.9 * (d1 - d0) - 100.0; // 260: the unclamped solve
+        let max = d1 - v; // 200: all the range there is
+        assert!(
+            want > max,
+            "this case must actually be over-range to test it"
+        );
+        assert_eq!(off1, max, "the offset must saturate at the page edge");
+    }
+
+    #[test]
+    fn a_non_finite_input_refuses_to_move_rather_than_blanking_the_canvas() {
+        // `anchor_frac` divides by the drawn page size, which is zero for one
+        // frame after an open — so NaN really can reach here.
+        let off0 = (120.0, 45.0);
+        assert_eq!(
+            zoom_anchor_offset(
+                off0,
+                (0.0, 0.0),
+                (100.0, 100.0),
+                (800.0, 800.0),
+                (f32::NAN, 0.5)
+            ),
+            off0
+        );
+    }
 
     // ---- pan suppression (spec §1.3) ----------------------------------
 

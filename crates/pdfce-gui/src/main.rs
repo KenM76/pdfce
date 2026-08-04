@@ -220,6 +220,7 @@
 #![forbid(unsafe_code)]
 
 mod canvas;
+mod diag;
 mod dock;
 mod icons;
 mod measure_tool;
@@ -356,13 +357,56 @@ const STATUS_BAR_MAX_HEIGHT: f32 = 220.0;
 fn main() -> eframe::Result {
     let initial = std::env::args_os().nth(1).map(PathBuf::from);
 
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("pdfce")
+        .with_inner_size(INITIAL_WINDOW_SIZE)
+        .with_min_inner_size([640.0, 480.0]);
+
+    // Test harness: place the window explicitly and do NOT let it take focus.
+    //
+    // A GUI defect can only be settled by driving the real application (R86),
+    // but doing that on the operator's own desktop takes their focus and covers
+    // their work — on 2026-08-04 they were mid-task and had asked that the
+    // screen be left alone, which would have made the one available oracle
+    // unusable. Given a position off the visible desktop plus `with_active`
+    // off, the process runs a genuine event loop that synthesized window
+    // messages can drive and [`diag`] can report on, while nothing appears in
+    // front of anyone.
+    //
+    // Deliberately NOT `with_visible(false)`: a hidden window is not merely an
+    // invisible one — it stops being laid out, so the very interactions under
+    // test would be skipped and the trace would show a fault that is only an
+    // artefact of the harness.
+    if let Some(spec) = std::env::var_os("PDFCE_DIAG_VIEWPORT") {
+        // ui-text-exempt: environment variable name, never displayed
+        let nums: Vec<f32> = spec
+            .to_string_lossy()
+            .split(',')
+            .filter_map(|s| s.trim().parse().ok())
+            .collect();
+        if let [x, y, w, h] = nums[..] {
+            viewport = viewport
+                .with_position([x, y])
+                .with_inner_size([w, h])
+                .with_active(false);
+        }
+    }
+
     let native_options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("pdfce")
-            .with_inner_size(INITIAL_WINDOW_SIZE)
-            .with_min_inner_size([640.0, 480.0]),
+        viewport,
         ..Default::default()
     };
+
+    // Unconditional first line when tracing: without it an empty trace has two
+    // very different meanings — "the process never saw PDFCE_DIAG" and "the
+    // process saw nothing worth reporting" — and a harness cannot tell them
+    // apart. Cost the investigation a round trip on 2026-08-04.
+    diag::trace(|| {
+        format!(
+            "start argv1={initial:?} viewport={:?}",
+            native_options.viewport
+        )
+    });
 
     eframe::run_native(
         "pdfce",
@@ -403,6 +447,11 @@ fn configure_context(ctx: &egui::Context) {
 struct PdfceApp {
     /// What, if anything, is open.
     status: Status,
+    /// An opt-in scripted input run ([`diag::Script`]), `None` in every normal
+    /// launch. Present only when `PDFCE_DIAG_SCRIPT` was set, which is how a
+    /// GUI defect gets investigated on a machine whose screen belongs to
+    /// someone else.
+    diag_script: Option<diag::Script>,
     /// Whether the thumbnail rail is showing.
     ///
     /// Session state only — deliberately not persisted to disk. Real UI
@@ -799,6 +848,7 @@ impl Default for PdfceApp {
         Self {
             status: Status::Idle,
             rail_expanded: true,
+            diag_script: diag::Script::from_env(),
             diagnostics_expanded: false,
             selection_notes_expanded: false,
             // The dock's default arrangement (decision 017 A.3): the object
@@ -1551,6 +1601,30 @@ enum AddPlacement {
     },
 }
 
+/// The inputs to a zoom-to-cursor solve, captured on the frame the Ctrl+wheel
+/// was seen and consumed on the next one.
+///
+/// All four are measured in the SAME frame, which is what makes them a
+/// consistent snapshot: mixing this frame's pointer with last frame's offset
+/// would anchor to a page position that was never on screen.
+#[derive(Clone, Copy, Debug)]
+struct ZoomAnchor {
+    /// The pointer as a fraction of the page's drawn size, `(0,0)` at the
+    /// page's top-left corner and `(1,1)` at its bottom-right. Outside that
+    /// range when the pointer is in the centring margin beside the page —
+    /// which is legitimate and is not clamped, so zooming while pointing just
+    /// off the page edge still tracks that spot.
+    frac: (f32, f32),
+    /// The scroll area's offset that frame.
+    offset_before: (f32, f32),
+    /// The page's drawn size in points-on-screen that frame.
+    display_before: (f32, f32),
+    /// The scroll area's inner viewport that frame. Assumed unchanged next
+    /// frame; if the window is resized in the very same frame as a wheel step
+    /// the anchor is off by the resize, which self-corrects on the next step.
+    viewport: (f32, f32),
+}
+
 struct OpenDoc {
     /// Where it came from (shown in the toolbar; never reopened).
     path: PathBuf,
@@ -1604,6 +1678,16 @@ struct OpenDoc {
     /// at once) from "the operator is mid-wheel-gesture" (wait for the
     /// gesture to settle).
     zoom_commanded: bool,
+    /// Recorded on the frame a Ctrl+wheel arrives, consumed on the next one:
+    /// where the pointer was over the page, so the scroll offset can be moved
+    /// to keep that point still. See [`canvas::zoom_anchor_offset`].
+    ///
+    /// It has to span two frames because the new zoom is not known when the
+    /// wheel is seen — the zoom is an [`Action`] applied after the UI is built
+    /// and it clamps, so the only honest source of "how big is the page now"
+    /// is the next frame's own `display_size`. Recording the *inputs* and
+    /// solving later avoids predicting a clamp we do not control.
+    zoom_anchor: Option<ZoomAnchor>,
     /// Which pages are selected for a batch operation, by 0-based index.
     ///
     /// Ordered (a `BTreeSet`) so that "the selected pages" is always a
@@ -1764,6 +1848,7 @@ impl OpenDoc {
             thumbnails: ThumbnailCache::default(),
             zoom_commit_at: Instant::now(),
             zoom_commanded: false,
+            zoom_anchor: None,
             selected_pages: BTreeSet::new(),
             selection_anchor: None,
             dragged_page: None,
@@ -4889,10 +4974,103 @@ fn is_unsupported_structure(err: &DocError) -> bool {
 // ---------------------------------------------------------------------------
 
 impl eframe::App for PdfceApp {
+    /// Feed one scripted input step into the frame about to be built.
+    ///
+    /// This is the correct seam for it: `raw_input_hook` runs *before* egui
+    /// digests the frame's input, so an injected event is indistinguishable
+    /// from one the window delivered — the pointer state, the click detection,
+    /// and every `Response` are all computed from it normally. Pushing events
+    /// from inside [`Self::ui`] would not work at all: by then the pointer
+    /// state for the frame has already been resolved, so widgets would see
+    /// nothing and the harness would "prove" a defect that does not exist.
+    ///
+    /// One step per frame, deliberately. egui distinguishes a click from a
+    /// drag by what happens across frames, so collapsing press and release
+    /// into one frame would test a gesture the application can never receive.
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        let Some(script) = self.diag_script.as_mut() else {
+            return;
+        };
+        // An off-screen window gets no natural repaint traffic, so the script
+        // would stall between steps. Ask for the next frame unconditionally
+        // while it runs.
+        ctx.request_repaint();
+        let Some(step) = script.advance() else {
+            // Finished: ask the window to close, so a run lasts exactly as
+            // long as its script rather than a guessed timeout.
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        };
+        let modifiers = egui::Modifiers::default();
+        match step {
+            diag::Step::Wait => {}
+            diag::Step::Move(x, y) => {
+                raw_input
+                    .events
+                    .push(egui::Event::PointerMoved(egui::pos2(x, y)));
+            }
+            diag::Step::Down(x, y) | diag::Step::Up(x, y) => {
+                let pressed = matches!(step, diag::Step::Down(..));
+                // The move rides along with the button so the pointer is at
+                // the right place even if the preceding step was a `Wait`.
+                raw_input
+                    .events
+                    .push(egui::Event::PointerMoved(egui::pos2(x, y)));
+                raw_input.events.push(egui::Event::PointerButton {
+                    pos: egui::pos2(x, y),
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers,
+                });
+            }
+            diag::Step::Tool(on) => {
+                if let Status::Open(doc) = &mut self.status {
+                    doc.active_tool = on.then_some(CanvasTool::VectorEdit);
+                    doc.vector_drag = None;
+                }
+            }
+            diag::Step::Delete => {
+                for pressed in [true, false] {
+                    raw_input.events.push(egui::Event::Key {
+                        key: egui::Key::Delete,
+                        physical_key: None,
+                        pressed,
+                        repeat: false,
+                        modifiers,
+                    });
+                }
+            }
+        }
+        diag::trace(|| format!("step {step:?}"));
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let pixels_per_point = ctx.pixels_per_point();
         let mut actions: Vec<Action> = Vec::new();
+
+        // The outermost trace point: whether a frame ran at all, and whether
+        // any pointer input reached egui. Everything else in the canvas trace
+        // is downstream of both, so an empty canvas trace is only meaningful
+        // once this line has shown a frame with a pressed pointer.
+        if diag::enabled() {
+            let (pressed, released, pos, events) = ctx.input(|i| {
+                (
+                    i.pointer.any_pressed(),
+                    i.pointer.any_released(),
+                    i.pointer.latest_pos(),
+                    i.events.clone(),
+                )
+            });
+            if !events.is_empty() {
+                diag::trace(|| {
+                    format!(
+                        "frame pressed={pressed} released={released} pos={pos:?} doc={} events={events:?}",
+                        matches!(self.status, Status::Open(_))
+                    )
+                });
+            }
+        }
 
         // Pass 12.0 substrate: the three flags Escape precedence resolves
         // through (spec §3.5), computed once from the open document (or
@@ -7477,67 +7655,127 @@ impl PdfceApp {
         if suppress_pan {
             scroll_source.drag = egui::scroll_area::DragScroll::Never;
         }
-        let image_response = egui::ScrollArea::both()
+        // Zoom to cursor, half two: a wheel step was seen last frame and the
+        // new zoom is now known (post-clamp), so solve for the offset that
+        // keeps the anchored page point under the pointer and force it onto
+        // the area before it lays out. Taken, not peeked — one wheel step
+        // moves the view once.
+        let mut scroll_area = egui::ScrollArea::both()
             .id_salt("page-canvas")
-            .scroll_source(scroll_source)
-            .show(ui, |ui| {
-                // Centre the page MANUALLY rather than with
-                // `ui.centered_and_justified`, because that helper returns the
-                // JUSTIFIED CONTAINER rect — the whole available area — while
-                // drawing the image centred inside it. Taking that rect as
-                // `image_rect` made every page↔screen mapping wrong by the
-                // centring margin whenever the page was smaller than the
-                // viewport.
-                //
-                // The symptom was severe and specific: at "Fit page" on a page
-                // narrower/shorter than the canvas, selection outlines drew
-                // offset from the object they outlined (~105 px on one
-                // measured case — exactly the vertical margin), and clicking
-                // directly ON a visible object MISSED it. At high zoom, where
-                // the page exceeds the viewport and the margin is zero, the
-                // same click landed perfectly. That is the giveaway: the error
-                // scaled with the margin, not with the zoom.
-                //
-                // Worst of all, it is worst at exactly the zoom an operator
-                // uses to see a whole page. This is a THIRD distinct cause of
-                // the operator's 2026-08-02 "I don't seem to be able to click
-                // on objects", after the zoom-inverted select tolerance
-                // (`SELECT_SCREEN_TOLERANCE_PX`) and the object-edit tool
-                // drawing no selection outline at all.
-                //
-                // So: reserve `max(page, viewport)` so the ScrollArea still
-                // scrolls when the page is larger AND there is a margin to
-                // centre within when it is smaller, then place the image at an
-                // explicit centred rect. `Ui::put`/`allocate_rect` return a
-                // Response whose `.rect` IS that rect, so `image_rect` is the
-                // page's true drawn rect by construction rather than by
-                // coincidence.
-                let avail = ui.available_size();
-                let outer = egui::vec2(display_size.x.max(avail.x), display_size.y.max(avail.y));
-                let (outer_rect, _) = ui.allocate_exact_size(outer, egui::Sense::hover());
-                let page_rect = egui::Rect::from_center_size(outer_rect.center(), display_size);
-                if let Some(texture) = texture {
-                    ui.put(
-                        page_rect,
-                        egui::Image::from_texture(&texture)
-                            .fit_to_exact_size(display_size)
-                            .sense(canvas_sense),
-                    )
-                } else {
-                    // First frame after an open: the texture is made at the
-                    // end of this frame. Reserve the page's space (same rect,
-                    // same sense) so nothing jumps when it arrives — and so
-                    // the substrate's canonical canvas response exists even
-                    // before the first raster.
-                    ui.allocate_rect(page_rect, canvas_sense)
-                }
-            })
-            .inner;
+            .scroll_source(scroll_source);
+        if let Some(anchor) = doc.zoom_anchor.take() {
+            let (x, y) = canvas::zoom_anchor_offset(
+                anchor.offset_before,
+                anchor.display_before,
+                (display_size.x, display_size.y),
+                anchor.viewport,
+                anchor.frac,
+            );
+            scroll_area = scroll_area.scroll_offset(egui::vec2(x, y));
+        }
+        let scroll_output = scroll_area.show(ui, |ui| {
+            // Centre the page MANUALLY rather than with
+            // `ui.centered_and_justified`, because that helper returns the
+            // JUSTIFIED CONTAINER rect — the whole available area — while
+            // drawing the image centred inside it. Taking that rect as
+            // `image_rect` made every page↔screen mapping wrong by the
+            // centring margin whenever the page was smaller than the
+            // viewport.
+            //
+            // The symptom was severe and specific: at "Fit page" on a page
+            // narrower/shorter than the canvas, selection outlines drew
+            // offset from the object they outlined (~105 px on one
+            // measured case — exactly the vertical margin), and clicking
+            // directly ON a visible object MISSED it. At high zoom, where
+            // the page exceeds the viewport and the margin is zero, the
+            // same click landed perfectly. That is the giveaway: the error
+            // scaled with the margin, not with the zoom.
+            //
+            // Worst of all, it is worst at exactly the zoom an operator
+            // uses to see a whole page. This is a THIRD distinct cause of
+            // the operator's 2026-08-02 "I don't seem to be able to click
+            // on objects", after the zoom-inverted select tolerance
+            // (`SELECT_SCREEN_TOLERANCE_PX`) and the object-edit tool
+            // drawing no selection outline at all.
+            //
+            // So: reserve `max(page, viewport)` so the ScrollArea still
+            // scrolls when the page is larger AND there is a margin to
+            // centre within when it is smaller, then place the image at an
+            // explicit centred rect. `Ui::put`/`allocate_rect` return a
+            // Response whose `.rect` IS that rect, so `image_rect` is the
+            // page's true drawn rect by construction rather than by
+            // coincidence.
+            let avail = ui.available_size();
+            let outer = egui::vec2(display_size.x.max(avail.x), display_size.y.max(avail.y));
+            let (outer_rect, _) = ui.allocate_exact_size(outer, egui::Sense::hover());
+            let page_rect = egui::Rect::from_center_size(outer_rect.center(), display_size);
+            let response = if let Some(texture) = texture {
+                ui.put(
+                    page_rect,
+                    egui::Image::from_texture(&texture)
+                        .fit_to_exact_size(display_size)
+                        .sense(canvas_sense),
+                )
+            } else {
+                // First frame after an open: the texture is made at the
+                // end of this frame. Reserve the page's space (same rect,
+                // same sense) so nothing jumps when it arrives — and so
+                // the substrate's canonical canvas response exists even
+                // before the first raster.
+                ui.allocate_rect(page_rect, canvas_sense)
+            };
+            // `avail` rides out with the response because it is the
+            // viewport the zoom-to-cursor solve needs, and it is only
+            // knowable in here — the same `avail` that decided `outer`
+            // above, so the margin the solve reconstructs is the margin
+            // this frame actually drew.
+            (response, avail)
+        });
+
+        let (image_response, viewport_size) = scroll_output.inner;
+        // The offset the area settled on THIS frame, i.e. the `offset_before`
+        // of any zoom step the operator starts now.
+        let scroll_offset = scroll_output.state.offset;
 
         // This `image_response` — not the outer ScrollArea's — is the
         // substrate's canonical canvas response; its `.rect` is the
         // `image_rect` every §2 geometry call takes this frame.
         let image_rect = image_response.rect;
+
+        // The trace that answers "did the canvas widget see the click at all",
+        // which no amount of reading the dispatch below can answer. Emitted
+        // only on a frame where the pointer actually did something, so a run
+        // produces a handful of lines rather than one per idle frame.
+        if diag::enabled() {
+            let (down, pressed, released) = ui.input(|i| {
+                (
+                    i.pointer.any_down(),
+                    i.pointer.any_pressed(),
+                    i.pointer.any_released(),
+                )
+            });
+            if pressed || released || down {
+                let p = ui.ctx().pointer_latest_pos();
+                diag::trace(|| {
+                    format!(
+                        "canvas tool={:?} rect={:?} zoom={zoom} hovered={} clicked={} \
+                         drag_started={} dragged={} drag_stopped={} pointer={p:?} \
+                         interact={:?} down={down} pressed={pressed} released={released} \
+                         provider={} sel={}",
+                        doc.active_tool,
+                        image_rect,
+                        image_response.hovered(),
+                        image_response.clicked(),
+                        image_response.drag_started(),
+                        image_response.dragged(),
+                        image_response.drag_stopped(),
+                        image_response.interact_pointer_pos(),
+                        doc.object_model.is_some(),
+                        doc.canvas_selection.len(),
+                    )
+                });
+            }
+        }
 
         // §1.4: clicking the canvas (or, once a tool drags, drag-starting it)
         // requests focus for the canvas's own id, making it a genuine Tab
@@ -7610,6 +7848,15 @@ impl PdfceApp {
                     shift,
                     alt,
                 );
+                diag::trace(|| {
+                    format!(
+                        "plain-click screen={screen_pos:?} canvas={canvas_pos:?} tol={tol} \
+                         hits={} first={:?} newsel={}",
+                        hits.len(),
+                        hits.first(),
+                        selection.len()
+                    )
+                });
                 doc.canvas_selection = selection;
                 doc.click_cycle = cycle;
             }
@@ -7681,6 +7928,32 @@ impl PdfceApp {
         if image_response.hovered() {
             let factor = ui.ctx().input(|i| i.zoom_delta());
             if (factor - 1.0).abs() > f32::EPSILON {
+                // Zoom to cursor, half one: remember WHERE on the page the
+                // pointer is before the zoom lands. Anchoring on the viewport
+                // centre instead (which is what happens when nothing records
+                // this) drags the detail being inspected out from under the
+                // operator, worse the further off-centre they point — reported
+                // as "jarring" on 2026-08-04. Solved next frame, once the
+                // clamped zoom is known; see `ZoomAnchor`.
+                //
+                // Guarded on a positive drawn size because `frac` divides by
+                // it, and on a known pointer because a zoom gesture can also
+                // arrive from a trackpad pinch with the pointer off-window.
+                let pointer = ui.ctx().pointer_latest_pos();
+                if let Some(p) = pointer
+                    && display_size.x > 0.0
+                    && display_size.y > 0.0
+                {
+                    doc.zoom_anchor = Some(ZoomAnchor {
+                        frac: (
+                            (p.x - image_rect.min.x) / display_size.x,
+                            (p.y - image_rect.min.y) / display_size.y,
+                        ),
+                        offset_before: (scroll_offset.x, scroll_offset.y),
+                        display_before: (display_size.x, display_size.y),
+                        viewport: (viewport_size.x, viewport_size.y),
+                    });
+                }
                 actions.push(Action::ZoomBy(factor));
             }
         }
@@ -11188,6 +11461,15 @@ fn run_vector_edit_tool(
                 shift,
                 alt,
             );
+            diag::trace(|| {
+                format!(
+                    "vector-click screen={sp:?} canvas={canvas_pos:?} tol={tol} hits={} \
+                     first={:?} newsel={}",
+                    hits.len(),
+                    hits.first(),
+                    selection.len()
+                )
+            });
             new_selection = Some(selection);
             new_cycle = Some(cycle);
         }
@@ -11307,13 +11589,15 @@ fn run_vector_edit_tool(
         // explicit `ensure_object_provider` that follows only pulls the
         // rebuild into THIS frame rather than the next.
         Commit::Move { idx, dx, dy } => {
-            let _ = doc.session.move_object(page_index, idx, dx, dy);
+            let outcome = doc.session.move_object(page_index, idx, dx, dy);
+            diag::trace(|| format!("commit-move idx={idx} dx={dx} dy={dy} -> {outcome:?}"));
             doc.vector_drag = None;
             doc.refresh_pages();
             doc.ensure_object_provider();
         }
         Commit::Node { idx, node, to } => {
-            let _ = doc.session.move_node(page_index, idx, node, to);
+            let outcome = doc.session.move_node(page_index, idx, node, to);
+            diag::trace(|| format!("commit-node idx={idx} node={node} to={to:?} -> {outcome:?}"));
             doc.vector_drag = None;
             doc.refresh_pages();
             doc.ensure_object_provider();

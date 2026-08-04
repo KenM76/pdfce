@@ -1,0 +1,226 @@
+//! # diag — an opt-in trace of what the canvas actually received
+//!
+//! ## Why this exists
+//!
+//! A GUI defect in this project has exactly one honest oracle: the running
+//! application (standing rule R86). Everything else — reading the dispatch
+//! chain, unit-testing the pure decision functions, checking the CLI's answer
+//! to the same query — can be entirely green while the operator still cannot
+//! select an object, because the thing that failed sits between the window
+//! manager and our first line of code.
+//!
+//! That happened. On 2026-08-04 the operator reported that clicking a drawing
+//! object selected nothing. The hit-test was verified correct through
+//! `pdfce-cli` (the same `pdfce-core` query, same fixture, right answer), every
+//! selection decision function passed headless, and the dispatch from toolbar
+//! toggle to `run_vector_edit_tool` read correctly line by line. Reading harder
+//! was not going to close the gap: the remaining candidates were all of the
+//! form "does `Response::clicked()` fire at all", which is unobservable from
+//! the source.
+//!
+//! ## Why it does not just take a screenshot
+//!
+//! The operator was using the machine for real work and explicitly asked that
+//! the screen not be commandeered. So the diagnostic has to come out of the
+//! process as *text*, from a window that need never be looked at — which also
+//! makes it usable from a script, a CI run, or a machine with no display at
+//! all.
+//!
+//! ## Contract
+//!
+//! - **Off unless asked.** Enabled only when the `PDFCE_DIAG` environment
+//!   variable is set to a non-empty value, read once per process. With it
+//!   unset, [`enabled`] is a relaxed atomic load and [`trace`]'s argument
+//!   closure is never called — so a call site costs nothing and may be left in
+//!   place permanently rather than added and deleted around each investigation
+//!   (which is how the *next* defect ends up needing this file written again).
+//! - **Writes to stderr, one line per event, `key=value` fields.** stderr
+//!   because it needs no path, no handle to keep open, no failure mode of its
+//!   own, and redirects with `2>`. `key=value` because the consumer is a grep
+//!   or an LLM, not a person reading a log.
+//! - **Never a user-facing string.** Nothing here is shown in the interface, so
+//!   none of it belongs in `ui_text` (rule R1 governs operator-visible copy).
+//! - **Never load-bearing.** No behaviour may depend on the trace. If deleting
+//!   this module changed what the application does, the trace would have become
+//!   a feature with no tests.
+//!
+//! ## Usage
+//!
+//! ```text
+//! PDFCE_DIAG=1 pdfce-gui file.pdf 2> trace.txt
+//! ```
+
+use std::sync::OnceLock;
+
+/// One step of a scripted input run — see [`Script`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Step {
+    /// Move the pointer to a screen position, in egui points.
+    Move(f32, f32),
+    /// Press the primary button at a position.
+    Down(f32, f32),
+    /// Release the primary button at a position.
+    Up(f32, f32),
+    /// Press and release the Delete key.
+    Delete,
+    /// Enter the object-edit tool (`tool:obj`) or leave every tool
+    /// (`tool:none`).
+    ///
+    /// Set directly rather than by clicking the toolbar, so a script isolates
+    /// the question "does this tool's canvas dispatch work" from the separate
+    /// question "is its toolbar button wired up". A harness that could only
+    /// reach a tool through its button would confuse the two.
+    Tool(bool),
+    /// Burn a frame. Used to let a texture, a provider rebuild, or egui's own
+    /// click detection settle between steps.
+    Wait,
+}
+
+/// A scripted sequence of input events, one step per frame, injected into
+/// egui's `RawInput` before the frame is built.
+///
+/// # Why inject at egui's seam rather than at the window's
+///
+/// The obvious harness posts `WM_MOUSEMOVE`/`WM_LBUTTONDOWN` to the window and
+/// lets the real stack carry them. That was tried first on 2026-08-04 and does
+/// not work for an off-screen window: winit calls `TrackMouseEvent` on the
+/// move, Windows answers `WM_MOUSELEAVE` because the physical cursor is
+/// elsewhere, and the button message is then dropped before it becomes an egui
+/// event. The observed event list was `[PointerMoved, PointerGone]` — forever,
+/// no matter how the messages were ordered.
+///
+/// Injecting `egui::Event`s directly sidesteps a plumbing layer that is not
+/// the one under suspicion. Every reported selection defect has been at or
+/// below `Response::clicked()`; the operator's own clicks demonstrably reach
+/// egui (they produce hover feedback). So the layer this skips is the layer
+/// already known to work, and the layers it exercises — hit test, selection
+/// resolution, tool dispatch, outline drawing — are exactly the ones in doubt.
+///
+/// **This is a diagnostic, not a substitute for a unit test.** It proves what
+/// the *live application* does with an input; a passing script is evidence, not
+/// a regression guard. Anything it discovers should end up pinned by a headless
+/// test as well.
+///
+/// # Format
+///
+/// `PDFCE_DIAG_SCRIPT` is a semicolon-separated step list:
+///
+/// ```text
+/// PDFCE_DIAG_SCRIPT="wait;wait;wait;move:800,550;down:800,550;up:800,550;wait;wait"
+/// ```
+#[derive(Debug, Default)]
+pub struct Script {
+    steps: Vec<Step>,
+    next: usize,
+}
+
+impl Script {
+    /// Parse the environment's script, or `None` if none was requested.
+    ///
+    /// Unparseable steps are skipped rather than fatal: a harness that dies on
+    /// a typo mid-investigation wastes a whole run, and the trace shows which
+    /// steps actually ran.
+    pub fn from_env() -> Option<Self> {
+        // ui-text-exempt: environment variable name, never displayed
+        let raw = std::env::var("PDFCE_DIAG_SCRIPT").ok()?;
+        let steps: Vec<Step> = raw.split(';').filter_map(parse_step).collect();
+        if steps.is_empty() {
+            return None;
+        }
+        Some(Self { steps, next: 0 })
+    }
+
+    /// The step for this frame, consuming it. `None` once the script is done.
+    pub fn advance(&mut self) -> Option<Step> {
+        let step = self.steps.get(self.next).copied();
+        if step.is_some() {
+            self.next += 1;
+        }
+        step
+    }
+}
+
+/// Parse one `verb:args` step. Kept a free function so it is unit-testable
+/// without an egui context or an environment variable.
+fn parse_step(s: &str) -> Option<Step> {
+    let s = s.trim();
+    let (verb, rest) = s.split_once(':').unwrap_or((s, ""));
+    let mut nums = rest.split(',').filter_map(|n| n.trim().parse::<f32>().ok());
+    let mut xy = || Some((nums.next()?, nums.next()?));
+    match verb {
+        "move" => xy().map(|(x, y)| Step::Move(x, y)),
+        "down" => xy().map(|(x, y)| Step::Down(x, y)),
+        "up" => xy().map(|(x, y)| Step::Up(x, y)),
+        "delete" => Some(Step::Delete),
+        "wait" => Some(Step::Wait),
+        "tool" => match rest.trim() {
+            "obj" => Some(Step::Tool(true)),
+            "none" => Some(Step::Tool(false)),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Whether tracing was requested for this process.
+///
+/// Resolved once and cached: the check sits in a per-frame path, and re-reading
+/// the environment there would put a lock and an allocation in the frame loop
+/// to answer a question that cannot change after start-up.
+pub fn enabled() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| {
+        std::env::var_os("PDFCE_DIAG").is_some_and(|v| !v.is_empty()) // ui-text-exempt: environment variable name, never displayed
+    })
+}
+
+/// Emit one trace line, building the message only if tracing is on.
+///
+/// Takes a closure rather than a `String` so a disabled build path performs no
+/// formatting — the call sites interpolate rects, pointer positions and hit
+/// counts, and doing that work every frame to throw it away would be a real
+/// cost in the one loop that must not get slower.
+pub fn trace(f: impl FnOnce() -> String) {
+    if enabled() {
+        eprintln!("pdfce-diag {}", f()); // ui-text-exempt: diagnostic trace, never displayed in the UI
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn steps_parse_and_bad_ones_are_skipped_rather_than_fatal() {
+        let steps: Vec<Step> = "move:10,20;down:10,20;up:10,20;delete;wait;nonsense;up:oops"
+            .split(';')
+            .filter_map(parse_step)
+            .collect();
+        assert_eq!(
+            steps,
+            vec![
+                Step::Move(10.0, 20.0),
+                Step::Down(10.0, 20.0),
+                Step::Up(10.0, 20.0),
+                Step::Delete,
+                Step::Wait,
+            ]
+        );
+    }
+
+    /// Each step is handed out exactly once, and the script then reports
+    /// exhaustion by returning `None` — which is what tells the harness to
+    /// close the window, so a run lasts exactly as long as its script rather
+    /// than a guessed timeout.
+    #[test]
+    fn a_script_hands_out_each_step_once_then_runs_dry() {
+        let mut s = Script {
+            steps: vec![Step::Wait, Step::Delete],
+            next: 0,
+        };
+        assert_eq!(s.advance(), Some(Step::Wait));
+        assert_eq!(s.advance(), Some(Step::Delete));
+        assert_eq!(s.advance(), None);
+        assert_eq!(s.advance(), None, "exhaustion must be stable, not a cycle");
+    }
+}
