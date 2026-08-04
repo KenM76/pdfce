@@ -160,6 +160,7 @@
 use std::collections::BTreeSet;
 
 use crate::document::Document;
+use crate::font_embed::FontEmbedPlan;
 use crate::fontdata::{self, BaseEncoding, Std14};
 use crate::graph::ObjectGraph;
 use crate::linebreak::greedy_pack;
@@ -236,6 +237,43 @@ pub enum NewTextColor {
     Rgb(f64, f64, f64),
 }
 
+/// Which face a new run is written in.
+///
+/// # Why an enum and not two optional fields
+///
+/// The alternative — keep `base_font: Std14` and add `embed:
+/// Option<FontEmbedPlan>` — is additive and would not have broken a single
+/// call site. It also admits a state that means nothing: both set. Someone
+/// then has to write down which wins, and every later reader has to find
+/// that sentence. Decision 021 asked for the enum precisely so the
+/// contradiction is unrepresentable, and it turned out to cost one struct
+/// literal, because every other construction already goes through
+/// [`AddTextRequest::with_font`].
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum NewTextFace {
+    /// A bundled Standard-14 face, written by name with no embedded program
+    /// (R79). The default, and still the right answer for Latin text: it
+    /// adds no bytes to the file and needs no donor.
+    Std14(Std14),
+    /// A subsetted donor face, embedded as a new `/Type0` resource (FF-C,
+    /// decision 021). Boxed because the plan carries the whole font program
+    /// and `AddTextRequest` is passed by value in several places — an
+    /// unboxed variant would make every request the size of a font.
+    Embedded(Box<FontEmbedPlan>),
+}
+
+impl NewTextFace {
+    /// The Standard-14 face, when this is one.
+    #[must_use]
+    pub fn std14(&self) -> Option<Std14> {
+        match self {
+            Self::Std14(f) => Some(*f),
+            Self::Embedded(_) => None,
+        }
+    }
+}
+
 /// One add-new-text request: WHAT to add, WHERE, in WHICH face.
 ///
 /// Construct with [`Self::new`] (Helvetica, bundled, 12 pt, black) and refine
@@ -251,8 +289,9 @@ pub struct AddTextRequest {
     pub origin: (f64, f64),
     /// The text to add (UTF-8; encoded to single-byte codes per the face).
     pub text: String,
-    /// Which Standard-14 face to write (default [`Std14::Helvetica`]).
-    pub base_font: Std14,
+    /// Which face to write (default [`Std14::Helvetica`], via
+    /// [`NewTextFace::Std14`]).
+    pub face: NewTextFace,
     /// The disclosed provenance of the rendering face (default
     /// [`FontProvenance::Bundled`]).
     pub provenance: FontProvenance,
@@ -288,7 +327,7 @@ impl AddTextRequest {
             page_index,
             origin,
             text: text.into(),
-            base_font: Std14::Helvetica,
+            face: NewTextFace::Std14(Std14::Helvetica),
             provenance: FontProvenance::Bundled,
             size: 12.0,
             color: NewTextColor::Black,
@@ -344,7 +383,24 @@ impl AddTextRequest {
     /// Set the Standard-14 face.
     #[must_use]
     pub fn with_font(mut self, base_font: Std14) -> Self {
-        self.base_font = base_font;
+        self.face = NewTextFace::Std14(base_font);
+        self
+    }
+
+    /// Write the run in a subsetted donor face, embedded as a new resource.
+    ///
+    /// The plan comes from `pdfce_render::font::subset::plan_subset` — this
+    /// crate has no font parser and deliberately never gains one (decision
+    /// 021 §3.2, R21), so the caller does the parsing and hands over plain
+    /// data.
+    ///
+    /// Embedding is never a default and never inferred: it is reached only by
+    /// calling this, which is standing rule R108's "explicit, per-action
+    /// operator choice" expressed in the type system rather than in a
+    /// comment.
+    #[must_use]
+    pub fn with_embedded_face(mut self, plan: FontEmbedPlan) -> Self {
+        self.face = NewTextFace::Embedded(Box::new(plan));
         self
     }
 
@@ -429,6 +485,31 @@ pub enum AddTextError {
     /// inverse-encoding gate), by name.
     #[error(transparent)]
     Refused(Refusal),
+    /// A wrap box was given together with an embedded donor face.
+    ///
+    /// `layout_boxed` measures through the Standard-14 inverse-encoding
+    /// table; giving it a second width source is its own slice (decision 021
+    /// §3.4). Refused BY NAME rather than quietly falling back to point
+    /// text, because silently ignoring a box the operator drew produces a
+    /// result that looks deliberate and is not.
+    #[error(
+        "pdfce can't wrap text to a box in an embedded font yet — that combination isn't          supported in this first cut. Add the text as a single line, or choose a built-in font          for the box."
+    )]
+    EmbeddedBoxedUnsupported,
+    /// The embedded font could not be emitted as PDF objects.
+    #[error(transparent)]
+    Embed(#[from] crate::font_embed::FontEmbedError),
+    /// The embedded plan does not cover a character of the text.
+    ///
+    /// Should be unreachable when the caller built the plan from the same
+    /// string, and is checked anyway: the plan arrives from another crate,
+    /// and "the caller passed matching inputs" is a claim, not evidence
+    /// (R93). Emitting a CID the font lacks would draw `.notdef` boxes in a
+    /// document that reported success.
+    #[error(
+        "internal: the embedded font plan has no glyph for {ch:?}, so the text could not be          written. This is a pdfce bug — the plan and the text disagree."
+    )]
+    EmbeddedPlanIncomplete { ch: char },
     /// No page at the requested index.
     #[error("no page at index {0}")]
     PageIndex(usize),
@@ -576,7 +657,34 @@ pub fn add_text(doc: &Document, req: &AddTextRequest) -> Result<AddTextOutcome, 
     let span = ByteSpan::new(start, prep.content_data.len());
 
     dirty.replace(content_id, make_raw_stream(span, prep.content_data.len()));
-    dirty.replace(font_id, prep.font_dict.clone());
+
+    match prep.embed.as_ref() {
+        // FF-C: five NEW objects instead of one font dict. The font program
+        // is staged after the content stream in the same buffer, so both
+        // spans are relative to the same base (R45 combined source).
+        Some(plan) => {
+            let prog_start = base_len + staging.len();
+            staging.extend_from_slice(&plan.program);
+            let prog_span = ByteSpan::new(prog_start, plan.program.len());
+            let program_stream = make_font_program_stream(prog_span, plan.program.len());
+
+            let objects = crate::font_embed::build_objects(plan, font_num, program_stream)
+                .map_err(AddTextError::Embed)?;
+            // The page's /Font entry must point at the /Type0 wrapper, not at
+            // any of its parts. `build_objects` returns that id explicitly
+            // rather than leaving the caller to assume it is the first —
+            // an assumption that would still "work" until the allocation
+            // order changed.
+            debug_assert_eq!(objects.font_dict_id, font_id);
+            for (id, obj) in objects.objects {
+                dirty.replace(id, obj);
+            }
+        }
+        None => {
+            dirty.replace(font_id, prep.font_dict.clone());
+        }
+    }
+
     dirty.replace(prep.page_id, Object::Dict(new_page));
     dirty.set_staging(staging);
 
@@ -653,7 +761,20 @@ pub(crate) struct AddTextPrep {
     /// The `q BT…ET Q` content-stream bytes (leading `\n` included).
     pub(crate) content_data: Vec<u8>,
     /// The Standard-14 font dictionary object.
+    ///
+    /// Meaningless when [`Self::embed`] is `Some` — the embedded path builds
+    /// five objects through `font_embed::build_objects` instead. It is left
+    /// populated rather than made `Option` because every Std-14 caller would
+    /// then have to unwrap something that is always present for them.
     pub(crate) font_dict: Object,
+    /// The donor plan, when this run is written in an embedded face (FF-C).
+    ///
+    /// Its presence is what switches the save path from "one font dict" to
+    /// "five new objects", which is why it lives on the prep rather than
+    /// being re-derived from the request: the prep is the single recipe both
+    /// the free function and the session build from, and a second read of
+    /// `req.face` in the saver is a second place for the two to disagree.
+    pub(crate) embed: Option<Box<FontEmbedPlan>>,
     /// The disclosure report (object numbers 0 until saved).
     pub(crate) report: AddTextReport,
 }
@@ -733,7 +854,10 @@ pub(crate) fn plan_add_text<G: ObjectGraph + ?Sized>(
     // Face selection and the encode table — the SHARED setup (below) both this
     // planner and the pure `preview_wrap` use, so a boxed preview encodes and
     // measures a literal string exactly as the committed add will.
-    let font = req.base_font;
+    let font = req
+        .face
+        .std14()
+        .unwrap_or(crate::fontdata::Std14::Helvetica);
     let base_font_name = fontdata::std14_base_font_name(font);
     let (inv, enc, symbolic) = face_encoding(font);
 
@@ -742,7 +866,43 @@ pub(crate) fn plan_add_text<G: ObjectGraph + ?Sized>(
     // width via the shipped 15.x greedy breaker and emits N justified/aligned
     // lines. Both APPEND identically (below) — the only difference is the
     // `q BT…ET Q` body these two builders produce.
+    //
+    // FF-C (decision 021) adds a THIRD shape to this branch: an embedded
+    // donor face is composite, so it shows 2-byte CIDs from a hex string
+    // rather than single-byte codes from a literal one, and it brings five
+    // new objects instead of one font dict. Boxed layout is not available
+    // for it at the 21.0 floor — `layout_boxed` measures through the
+    // Standard-14 inverse-encoding table, and giving it a second width
+    // source is its own slice. That limit is a NAMED refusal rather than a
+    // silent fallback to point text, because silently ignoring a wrap box
+    // the operator drew is the rule-4 failure this project keeps refusing
+    // to commit.
+    let embed_plan: Option<&FontEmbedPlan> = match &req.face {
+        NewTextFace::Embedded(p) => Some(p.as_ref()),
+        NewTextFace::Std14(_) => None,
+    };
+    if embed_plan.is_some() && req.wrap_box.is_some() {
+        return Err(AddTextError::EmbeddedBoxedUnsupported);
+    }
+
     let (content_data, extra) = match req.wrap_box {
+        None if embed_plan.is_some() => {
+            // `expect`-free: the guard above proves it.
+            let Some(plan) = embed_plan else {
+                return Err(AddTextError::EmbeddedBoxedUnsupported);
+            };
+            let cids = cids_for(plan, &req.text)?;
+            let bytes = build_content_embedded(&font_name, req.size, req.color, req.origin, &cids);
+            (
+                bytes,
+                ExtraReport::point(vec![format!(
+                    "new run is written in an EMBEDDED subset of '{}' — {} glyph(s), {} byte(s)                      of font program added; the document now carries its own glyphs for this                      text (decision 021 / FF-C)",
+                    plan.base_name,
+                    plan.glyphs.len(),
+                    plan.program.len()
+                )]),
+            )
+        }
         None => {
             let encoded = inv
                 .encode_str(&req.text, &BTreeSet::new())
@@ -818,7 +978,30 @@ pub(crate) fn plan_add_text<G: ObjectGraph + ?Sized>(
         font_name,
         content_data,
         font_dict,
+        embed: match &req.face {
+            NewTextFace::Embedded(p) => Some(p.clone()),
+            NewTextFace::Std14(_) => None,
+        },
         report,
+    })
+}
+
+/// A `FontFile2` stream object: the subsetted program plus the `/Length1`
+/// ISO 32000-1 §9.9 Table 127 requires for a TrueType program.
+///
+/// `/Length1` is the length of the UNCOMPRESSED program. pdfce stages the
+/// program uncompressed, so it equals `/Length` here — written explicitly
+/// anyway, because a consumer is entitled to read `/Length1` and a future
+/// compression pass that set only `/Length` would silently produce a font
+/// whose declared uncompressed size was its compressed one.
+fn make_font_program_stream(span: ByteSpan, len: usize) -> Object {
+    let mut dict = Dict::new();
+    let n = i64::try_from(len).unwrap_or(i64::MAX);
+    dict.insert(Name::from(b"Length"), Object::Integer(n));
+    dict.insert(Name::from(b"Length1"), Object::Integer(n));
+    Object::Stream(crate::object::Stream {
+        dict,
+        data_span: span,
     })
 }
 
@@ -885,6 +1068,84 @@ fn build_content(
     // into a literal `( … )` string by the shared writer helper.
     emit_literal_string(&mut out, codes);
     out.extend_from_slice(b" Tj\n");
+    out.extend_from_slice(b"ET\n");
+    out.push(b'Q');
+    out
+}
+
+/// Build the `q BT…ET Q` body for an EMBEDDED (composite) face.
+///
+/// The Standard-14 sibling [`build_content`] shows a literal `( … )` string of
+/// single-byte codes. A `/Type0` font with `Identity-H` addresses glyphs by
+/// TWO-byte CID (§9.7.6.2), so the operand is a hex string instead — writing
+/// the same literal form here would silently address the wrong glyphs, and
+/// would do so *plausibly*, because half the bytes would still land on real
+/// CIDs.
+/// Map each character of `text` to its CID in `plan`.
+///
+/// The plan is normally built from this exact string, so a miss "cannot
+/// happen" — which is precisely why it is checked. The plan crosses a crate
+/// boundary as plain data, and a caller that reused a plan for a different
+/// string would otherwise emit CIDs the embedded subset has no glyphs for:
+/// a page of `.notdef` boxes, reported as a successful add.
+///
+/// Linear scan rather than a map: a subset is small by construction (it is
+/// the glyphs for one run), and building a `HashMap` per call to avoid a
+/// scan of a handful of entries would cost more than it saves.
+fn cids_for(plan: &FontEmbedPlan, text: &str) -> Result<Vec<u16>, AddTextError> {
+    text.chars()
+        .map(|ch| {
+            plan.glyphs
+                .iter()
+                .find(|g| g.unicode == ch)
+                .map(|g| g.cid)
+                .ok_or(AddTextError::EmbeddedPlanIncomplete { ch })
+        })
+        .collect()
+}
+
+fn build_content_embedded(
+    font_name: &[u8],
+    size: f64,
+    color: NewTextColor,
+    origin: (f64, f64),
+    cids: &[u16],
+) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.push(b'\n');
+    out.extend_from_slice(b"q\n");
+    out.extend_from_slice(b"BT\n");
+    out.push(b'/');
+    out.extend_from_slice(font_name);
+    out.push(b' ');
+    emit_number(&mut out, size);
+    out.extend_from_slice(b" Tf\n");
+    match color {
+        NewTextColor::Black => out.extend_from_slice(b"0 g\n"),
+        NewTextColor::Rgb(r, g, b) => {
+            emit_number(&mut out, r.clamp(0.0, 1.0));
+            out.push(b' ');
+            emit_number(&mut out, g.clamp(0.0, 1.0));
+            out.push(b' ');
+            emit_number(&mut out, b.clamp(0.0, 1.0));
+            out.extend_from_slice(b" rg\n");
+        }
+    }
+    out.extend_from_slice(b"1 0 0 1 ");
+    emit_number(&mut out, origin.0);
+    out.push(b' ');
+    emit_number(&mut out, origin.1);
+    out.extend_from_slice(b" Tm\n");
+    // Hex string (§7.3.4.3), two bytes per CID, big-endian. Hex rather than
+    // a literal string because a CID may contain any byte value, including
+    // the ones a literal string would have to escape — and an escape the
+    // writer and a reader disagree about is a glyph-level corruption that
+    // renders as plausible WRONG TEXT rather than as an error.
+    out.push(b'<');
+    for cid in cids {
+        out.extend_from_slice(format!("{cid:04X}").as_bytes());
+    }
+    out.extend_from_slice(b"> Tj\n");
     out.extend_from_slice(b"ET\n");
     out.push(b'Q');
     out
