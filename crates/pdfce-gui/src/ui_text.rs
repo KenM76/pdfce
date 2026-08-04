@@ -2014,15 +2014,26 @@ pub fn entered_object_readout(
     object: usize,
     subpath: Option<usize>,
     parts: Option<usize>,
+    stacked: Option<(usize, usize)>,
 ) -> String {
     let scope = match parts {
         Some(n) => format!("object #{object}, which is drawn as {n} separate part(s)"),
         None => format!("object #{object}"),
     };
+    // "part 2 of 5 here" is the only way an operator learns there is anything
+    // UNDERNEATH what they clicked. Without it Alt+click is a feature nobody
+    // finds, and the nearest part looks like the only one there is — the same
+    // disclosure obligation the object-level readout carries (ui-spec §C.3).
+    let stack = match stacked {
+        Some((position, total)) if total > 1 => {
+            format!(" ({position} of {total} here — Alt+click for the next)")
+        }
+        _ => String::new(),
+    };
     match subpath {
         Some(sp) => format!(
-            "Inside {scope} — part #{sp} is selected. Click another part to pick it, press Delete \
-to remove it, or press Escape to go back to whole objects."
+            "Inside {scope} — part #{sp} is selected{stack}. Click another part to pick it, press \
+Delete to remove it, or press Escape to go back to whole objects."
         ),
         None => format!(
             "Inside {scope} — no part picked yet. Click one of its parts, or press Escape to go \

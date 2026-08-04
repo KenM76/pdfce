@@ -1727,6 +1727,10 @@ struct OpenDoc {
     /// of what is selected, not of which tool is armed: descending into a view,
     /// switching tools, and still being inside it is correct behaviour.
     entered: Option<canvas::EnteredObject>,
+    /// A live Alt+click cycle at the part level, so a line UNDERNEATH another
+    /// is reachable. Without it `subpath_hits`'s nearest-first ordering makes
+    /// the nearest part the only one that can ever be selected.
+    subpath_cycle: Option<canvas::SubpathCycle>,
     /// Which pages are selected for a batch operation, by 0-based index.
     ///
     /// Ordered (a `BTreeSet`) so that "the selected pages" is always a
@@ -1890,6 +1894,7 @@ impl OpenDoc {
             zoom_anchor: None,
             last_scroll_offset: egui::Vec2::ZERO,
             entered: None,
+            subpath_cycle: None,
             selected_pages: BTreeSet::new(),
             selection_anchor: None,
             dragged_page: None,
@@ -2152,7 +2157,13 @@ impl OpenDoc {
     /// caller should NOT also change the object-level selection, or descending
     /// into a view and clicking one of its lines would simultaneously re-select
     /// the whole view and undo the descent visually.
-    fn apply_click_depth(&mut self, canvas_pos: egui::Pos2, tol: f64, double: bool) -> bool {
+    fn apply_click_depth(
+        &mut self,
+        canvas_pos: egui::Pos2,
+        tol: f64,
+        double: bool,
+        alt: bool,
+    ) -> bool {
         let page_index = self.view.page_index;
         let object_hit = self
             .object_model
@@ -2170,14 +2181,45 @@ impl OpenDoc {
         } else {
             self.entered.map(|e| e.object)
         };
-        let subpath_hit = probe.and_then(|o| {
-            self.object_model
-                .as_ref()
-                .and_then(|p| p.subpath_hits(o, canvas_pos, tol).first().copied())
-        });
+        let hits: Vec<usize> = probe
+            .and_then(|o| {
+                self.object_model
+                    .as_ref()
+                    .map(|p| p.subpath_hits(o, canvas_pos, tol))
+            })
+            .unwrap_or_default();
+
+        // Alt+click steps one part deeper into the stack under the pointer.
+        // `subpath_hits` is ordered nearest-first, so without this the nearest
+        // part is the ONLY one ever selectable and a line lying under another
+        // — routine in a hatched or dimensioned CAD view — is unreachable.
+        // Same rule as object-level click-through, through the same function
+        // (R92), so Alt means one thing everywhere.
+        let current = self.entered.and_then(|e| e.subpath);
+        let resume = self
+            .subpath_cycle
+            .filter(|c| probe.is_some_and(|o| c.continues(o, canvas_pos, current)))
+            .map(|c| c.ordinal)
+            .or_else(|| current.and_then(|sp| hits.iter().position(|&h| h == sp)));
+        let ordinal = canvas::cycle_ordinal(alt, resume, hits.len());
+        let subpath_hit = hits.get(ordinal).copied();
 
         let before = self.entered;
         self.entered = canvas::depth_after_click(before, double, object_hit, subpath_hit);
+        // The cycle belongs to the object actually entered, which a
+        // double-click may have just changed. Dropped whenever the click did
+        // not land on a part, so a stale "part 2 of 5" can never describe a
+        // stack that is no longer under the pointer.
+        self.subpath_cycle = match (self.entered, subpath_hit) {
+            (Some(e), Some(produced)) => Some(canvas::SubpathCycle {
+                object: e.object,
+                point: canvas_pos,
+                ordinal,
+                total: hits.len(),
+                produced,
+            }),
+            _ => None,
+        };
         self.entered.is_some()
     }
 
@@ -2206,6 +2248,7 @@ impl OpenDoc {
         // This runs from `refresh_pages`, which every edit, undo and redo
         // already funnels through.
         self.entered = None;
+        self.subpath_cycle = None;
         // A click cycle cannot survive an edit or a page change. Its
         // liveness checks compare `TargetId`s, and after a content rewrite
         // the SAME index can name a different object — so "2 of 3 at this
@@ -5217,6 +5260,19 @@ impl eframe::App for PdfceApp {
                     modifiers,
                 });
             }
+            diag::Step::AltClick(pressed, x, y) => {
+                let alt = egui::Modifiers::ALT;
+                raw_input
+                    .events
+                    .push(egui::Event::PointerMoved(egui::pos2(x, y)));
+                raw_input.events.push(egui::Event::PointerButton {
+                    pos: egui::pos2(x, y),
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: alt,
+                });
+                raw_input.modifiers = alt;
+            }
             diag::Step::Zoom(factor) => raw_input.events.push(egui::Event::Zoom(factor)),
             diag::Step::Middle(pressed, x, y) => {
                 raw_input
@@ -8153,7 +8209,7 @@ impl PdfceApp {
                 // otherwise picking a line inside a view would re-select the
                 // whole view in the same frame and visually undo the descent.
                 let consumed_inside =
-                    doc.apply_click_depth(canvas_pos, tol, image_response.double_clicked());
+                    doc.apply_click_depth(canvas_pos, tol, image_response.double_clicked(), alt);
                 diag::trace(|| {
                     format!(
                         "depth-click canvas={canvas_pos:?} double={} consumed={consumed_inside} \
@@ -11350,6 +11406,9 @@ fn selection_readout(doc: &OpenDoc, ui: &mut egui::Ui, expanded: &mut bool) {
             entered.object,
             entered.subpath,
             parts,
+            doc.subpath_cycle
+                .filter(|c| Some(c.produced) == entered.subpath)
+                .map(|c| (c.position(), c.total)),
         ))
         .on_hover_text(ui_text::entered_object_tooltip());
     }
@@ -11819,7 +11878,7 @@ fn run_vector_edit_tool(
     // outcome in this function: `apply_click_depth` needs `&mut doc`, and the
     // read borrows of the page and the object model are still live inside the
     // block below.
-    let mut depth_request: Option<(egui::Pos2, f64, bool)> = None;
+    let mut depth_request: Option<(egui::Pos2, f64, bool, bool)> = None;
 
     {
         let page = &doc.pages[page_index];
@@ -11872,7 +11931,13 @@ fn run_vector_edit_tool(
             // double-click descend with no tool and do nothing with the object
             // tool armed: exactly the invisible divergence the shared method
             // was written to prevent.
-            depth_request = Some((canvas_pos, tol, image_response.double_clicked()));
+            depth_request = Some((canvas_pos, tol, image_response.double_clicked(), alt));
+            diag::trace(|| {
+                format!(
+                    "vector-depth-click canvas={canvas_pos:?} double={} alt={alt}",
+                    image_response.double_clicked()
+                )
+            });
             let hits = doc
                 .object_model
                 .as_ref()
@@ -11983,11 +12048,18 @@ fn run_vector_edit_tool(
     // object-level selection computed above is discarded, or picking one part
     // of a view would re-select the whole view in the same frame and visually
     // undo the descent.
-    if let Some((pos, tol, double)) = depth_request
-        && doc.apply_click_depth(pos, tol, double)
-    {
-        new_selection = None;
-        new_cycle = None;
+    if let Some((pos, tol, double, alt)) = depth_request {
+        let consumed = doc.apply_click_depth(pos, tol, double, alt);
+        diag::trace(|| {
+            format!(
+                "vector-depth consumed={consumed} entered={:?} cycle={:?}",
+                doc.entered, doc.subpath_cycle
+            )
+        });
+        if consumed {
+            new_selection = None;
+            new_cycle = None;
+        }
     }
     if let Some(sel) = new_selection {
         doc.canvas_selection = sel;

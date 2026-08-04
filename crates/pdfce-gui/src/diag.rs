@@ -78,6 +78,11 @@ pub enum Step {
     Down(f32, f32),
     /// Release the primary button at a position.
     Up(f32, f32),
+    /// Press (`true`) or release (`false`) the primary button with **Alt**
+    /// held — the click-through modifier. Its own step because the modifier
+    /// has to be set on the event itself; egui reads modifiers from the event,
+    /// not from a separate key-state channel.
+    AltClick(bool, f32, f32),
     /// Press (`true`) or release (`false`) the MIDDLE button at a position —
     /// the pan gesture, which the primary-button steps cannot express.
     Middle(bool, f32, f32),
@@ -177,6 +182,8 @@ fn parse_step(s: &str) -> Option<Step> {
         "down" => xy().map(|(x, y)| Step::Down(x, y)),
         "up" => xy().map(|(x, y)| Step::Up(x, y)),
         "zoom" => rest.trim().parse().ok().map(Step::Zoom),
+        "altdown" => xy().map(|(x, y)| Step::AltClick(true, x, y)),
+        "altup" => xy().map(|(x, y)| Step::AltClick(false, x, y)),
         "mdown" => xy().map(|(x, y)| Step::Middle(true, x, y)),
         "mup" => xy().map(|(x, y)| Step::Middle(false, x, y)),
         "delete" => Some(Step::Delete),

@@ -939,23 +939,17 @@ pub fn selection_and_cycle_after_click(
         return (selection_after_click(current, Some(topmost), shift), None);
     }
 
-    let ordinal = if alt {
-        let from = cycle
-            .filter(|c| c.continues(page_index, point, current))
-            .map(|c| c.ordinal)
-            .or_else(|| {
-                // No live cycle: start from wherever the current selection
-                // sits in this stack, if it sits in it at all.
-                (current.len() == 1)
-                    .then(|| hits.iter().position(|t| current.contains(t)))
-                    .flatten()
-            });
-        // `from` is where we ARE; the step goes to the next one, wrapping.
-        // With nowhere to step from, an Alt+click is a plain click.
-        from.map_or(0, |i| (i + 1) % hits.len())
-    } else {
-        0
-    };
+    let resume = cycle
+        .filter(|c| c.continues(page_index, point, current))
+        .map(|c| c.ordinal)
+        .or_else(|| {
+            // No live cycle: start from wherever the current selection sits in
+            // this stack, if it sits in it at all.
+            (current.len() == 1)
+                .then(|| hits.iter().position(|t| current.contains(t)))
+                .flatten()
+        });
+    let ordinal = cycle_ordinal(alt, resume, hits.len());
 
     let target = hits.get(ordinal).copied().unwrap_or(topmost);
     (
@@ -968,6 +962,71 @@ pub fn selection_and_cycle_after_click(
             produced: target,
         }),
     )
+}
+
+/// Which ordinal in a front-to-back hit stack a click resolves to.
+///
+/// The click-through rule, in one place: a plain click always takes the
+/// front-most; an Alt+click steps one deeper, wrapping; and an Alt+click with
+/// nowhere to resume from behaves as a plain click, because "step from
+/// nothing" has no meaningful answer and silently landing somewhere in the
+/// middle of a stack would be worse than landing on top.
+///
+/// `resume_from` is where the click is stepping FROM — a live cycle's ordinal,
+/// or the position of the current selection within this stack.
+///
+/// Extracted because two levels of the selection ladder need identical
+/// behaviour: objects, and the subpaths inside an entered object. Alt+click
+/// meaning "the next one down" at one level and something subtly different at
+/// the other is exactly the kind of divergence an operator experiences as the
+/// application being inconsistent, and exactly what R92 warns duplicated
+/// predicates drift into.
+#[must_use]
+pub fn cycle_ordinal(alt: bool, resume_from: Option<usize>, len: usize) -> usize {
+    if !alt || len == 0 {
+        return 0;
+    }
+    resume_from.map_or(0, |i| (i + 1) % len)
+}
+
+/// A live click-through cycle at the **subpath** level — the part-level twin
+/// of [`ClickCycle`].
+///
+/// Separate from `ClickCycle` rather than generic over the target type,
+/// because the two anchor to different things: an object cycle is anchored to
+/// a page and a `TargetId`, a subpath cycle to the entered OBJECT and a plain
+/// index. Forcing them into one type would need a page/object union that only
+/// exists to satisfy the abstraction.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SubpathCycle {
+    /// The entered object the cycle belongs to.
+    pub object: usize,
+    /// The canvas-space point it is anchored to.
+    pub point: Pos2,
+    /// 0-based position in the nearest-first hit list the last click took.
+    pub ordinal: usize,
+    /// How many parts were under the pointer — the `5` in "part 2 of 5 here".
+    pub total: usize,
+    /// The subpath index that click selected; the cycle only continues while
+    /// that is still what is selected.
+    pub produced: usize,
+}
+
+impl SubpathCycle {
+    /// Whether this cycle still applies to a click at `point` inside `object`
+    /// with `current` selected.
+    #[must_use]
+    pub fn continues(self, object: usize, point: Pos2, current: Option<usize>) -> bool {
+        self.object == object
+            && self.point.distance(point) <= CYCLE_SAME_POINT_CANVAS
+            && current == Some(self.produced)
+    }
+
+    /// The 1-based position for display ("part **2** of 5 here").
+    #[must_use]
+    pub fn position(self) -> usize {
+        self.ordinal.saturating_add(1)
+    }
 }
 
 /// The selection set after a **marquee** enclosed `hits` (spec §4.2).
@@ -1522,6 +1581,63 @@ pub fn snap_marker_shapes(at: Pos2, kind: SnapKind, color: Color32, size: f32) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- click-through ordinal ----------------------------------------
+
+    #[test]
+    fn a_plain_click_always_takes_the_front_most() {
+        assert_eq!(cycle_ordinal(false, None, 5), 0);
+        assert_eq!(
+            cycle_ordinal(false, Some(3), 5),
+            0,
+            "a plain click must RESET the cycle, not continue it"
+        );
+    }
+
+    #[test]
+    fn alt_steps_one_deeper_and_wraps() {
+        assert_eq!(cycle_ordinal(true, Some(0), 3), 1);
+        assert_eq!(cycle_ordinal(true, Some(1), 3), 2);
+        assert_eq!(cycle_ordinal(true, Some(2), 3), 0, "must wrap, not stick");
+    }
+
+    #[test]
+    fn alt_with_nowhere_to_resume_from_behaves_as_a_plain_click() {
+        // Landing somewhere in the middle of a stack the operator has not
+        // stepped into would be worse than landing on top.
+        assert_eq!(cycle_ordinal(true, None, 4), 0);
+    }
+
+    #[test]
+    fn an_empty_stack_never_indexes() {
+        assert_eq!(cycle_ordinal(true, Some(2), 0), 0);
+        assert_eq!(cycle_ordinal(false, None, 0), 0);
+    }
+
+    #[test]
+    fn a_subpath_cycle_only_continues_for_the_same_object_point_and_selection() {
+        let c = SubpathCycle {
+            object: 7,
+            point: Pos2::new(100.0, 100.0),
+            ordinal: 1,
+            total: 3,
+            produced: 42,
+        };
+        assert!(c.continues(7, Pos2::new(100.0, 100.0), Some(42)));
+        assert!(
+            !c.continues(8, Pos2::new(100.0, 100.0), Some(42)),
+            "a different object is a different stack"
+        );
+        assert!(
+            !c.continues(7, Pos2::new(400.0, 400.0), Some(42)),
+            "a click somewhere else starts over"
+        );
+        assert!(
+            !c.continues(7, Pos2::new(100.0, 100.0), Some(9)),
+            "if the selection changed underneath, the cycle is stale"
+        );
+        assert_eq!(c.position(), 2, "1-based for display");
+    }
 
     // ---- selection depth ----------------------------------------------
 
