@@ -67,12 +67,13 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
   one-off Pass detail. The Obj tool selects **everything** on a page —
   content objects, annotations, ce dimensions, pdf dimensions alike —
   but it does not thereby inherit every verb for every kind it can
-  select. A dimension's re-measure gesture stays owned by the Measure
-  tool (where the operator's mental model is "I am measuring," and
-  where a two-stage disclosed old→new preview belongs); the Obj tool's
-  role is to select the dimension and offer a **`Re-measure` verb that
-  hands off** to the Measure tool with that dimension loaded, never to
-  perform the geometry edit itself. Stated as the reusable rule: a tool
+  select. A ce dimension's re-measure gesture stays owned by the
+  Measure tool (where the operator's mental model is "I am measuring,"
+  and where a two-stage disclosed old→new preview belongs); the Obj
+  tool's role is to select the ce dimension and offer a **`Re-measure`
+  verb that hands off** to the Measure tool with that ce dimension
+  loaded, never to perform the geometry edit itself. Stated as the
+  reusable rule: a tool
   that is instructed to be "universal" is universal at whichever layer
   the instruction was actually about — confirm which layer before
   concluding two requirements conflict. See decisions
@@ -9445,7 +9446,7 @@ nothing gets forgotten, not as a commitment to build in this order.
     (`pdfce_core::annot::is_visible_on_screen`/`selectable_annotations`
     extracted from the renderer's own predicate, one definition two
     consumers; `EditSession::delete_annotation`/`delete_dimension`,
-    dimension-aware — prunes the `/PieceInfo` sidecar in the same
+    ce-dimension-aware — prunes the `/PieceInfo` sidecar in the same
     command) → **22.0b** CLI (`annot-list`, `annot-delete`,
     `dimension-delete`, `dimension-list` widened to print `annot=`,
     `object-list --enclose` for the marquee's first-ever headless
@@ -9464,18 +9465,18 @@ nothing gets forgotten, not as a commitment to build in this order.
     and `FractionMode::Fraction{reduce:true}` are both implemented,
     documented with runnable examples, spec-mirrored into `/Measure` —
     and constructed from **nowhere outside a unit test**. No operator,
-    GUI or CLI, can produce a fraction-formatted dimension today. **Must
+    GUI or CLI, can produce a fraction-formatted ce dimension today. **Must
     also fix the already-filed Pass 12.M2c bug #1** (ratio-scale entry
     silently overwrites the group's display unit) in the same slice, or
     the new control ships looking broken from day one — see the
     Pass 12.M2c cluster entry, above, bug 1, which now cross-references
     this Pass.
-  - **Pass 23.1** (decision 023, Q5) — dimension re-measure +
+  - **Pass 23.1** (decision 023, Q5) — ce-dimension re-measure +
     whole-dimension move. **Depends on 22.0** (reuses its
     sidecar-pruning discipline and guarded-`/AP`-write fix — building
     23.1 first would force both to be re-derived under pressure).
     `EditSession::set_dimension_geometry`; Measure-tool endpoint
-    handles on a selected dimension; a two-stage disclosed gesture
+    handles on a selected ce dimension; a two-stage disclosed gesture
     (old→new value + delta + group/scale visible live, mouse-up never
     commits, Accept/Reject). See the Glossary's new "Obj-tool
     universality" entry, above, for the reconciliation that makes this
@@ -10513,7 +10514,7 @@ slice or an already-decided default that can be revisited:**
   Pass 22.0's `delete_annotation` becomes a THIRD unreconciled exception**
   (see the §5.9/§5.12 note for exactly which shipped/proposed operations
   already sit outside R58's literal scope).
-- **(w) Per-group vs. per-dimension display format?** Decision 023 §6.3/
+- **(w) Per-group vs. per-ce-dimension display format?** Decision 023 §6.3/
   §10 item 1 recommends **per-group**, with "draw a second group at the
   same scale" as the free escape hatch if a workflow needs two formats
   inside one scale context. **Default: per-group, as recommended** —
@@ -10549,7 +10550,8 @@ slice or an already-decided default that can be revisited:**
   deferred, as scoped** — confirm if refit should be pulled forward.
 - **(ab) Should snapping see inside form XObjects?** Decision 023 §2.4/
   §10 item 7 — today it cannot, which means **the operator cannot
-  dimension to a line inside a placed CAD block** even after Pass 23.2
+  author a ce dimension referencing a line inside a placed CAD block**
+  even after Pass 23.2
   makes that geometry navigable/selectable. Consuming it in the snap
   engine is a separate, real cost (a snap query over a deeply-nested
   page is materially larger than today's top-level-only query) — not a
@@ -12319,8 +12321,8 @@ slice or an already-decided default that can be revisited:**
   while its `DimensionRecord` survives in the sidecar causes the next
   scale change to write a fresh `/AP` stream at a REMOVED object id,
   resurrecting an orphan appearance stream nothing references, and
-  `dimension-list` keeps reporting a dimension that is not on the page
-  (a disclosure lie, rule 4). `EditSession::delete_annotation` (Pass
+  `dimension-list` keeps reporting a ce dimension that is not on the
+  page (a disclosure lie, rule 4). `EditSession::delete_annotation` (Pass
   22.0) must use the guarded-write pattern and prune the sidecar in the
   SAME command, not a follow-up one. Also inherited by
   `set_dimension_geometry` (Pass 23.1, decision 023 §5.5 item 1) — the
@@ -12389,7 +12391,7 @@ slice or an already-decided default that can be revisited:**
 - **R118 — A display-format preference never rides the gesture that
   first set it (decision 023 §9 item 4, filed continuation 80,
   2026-08-04; librarian-assigned number).** Format lives on the
-  persistent entity (a dimension group), is settable independently of
+  persistent entity (a ce-dimension group), is settable independently of
   whatever transient gesture originally set it (a scale-entry dialog),
   and shows a live sample of the operator's OWN data before Apply.
   Sourced from a concrete coupling defect: `set_group_scale(scale,

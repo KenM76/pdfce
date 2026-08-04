@@ -11003,3 +11003,127 @@ filed: "pdf dimension" vs "ce dimension," never bare "dimension."
   qualified by subtype throughout, seems fine; "object" is used both
   for `PageObjects` vector objects and generic PDF objects — not
   audited this session, flagged only as a maybe).
+
+**Same-day continuation 80 (real date 2026-08-04) — decisions 022/023
+FILED into `ROADMAP.md`/`ARCHITECTURE.md` §12, exactly the follow-up
+continuation 79 recommended. `pdfce-librarian`-only filing, no code
+shipped.**
+
+**Shipped:**
+- No new Pass entry shipped or built. This continuation is documentation-
+  only: Pass 22.0 and Pass 23.0–23.3 are now FILED (Backlog, not yet
+  started) but not begun.
+
+**Decisions made this session:**
+- **Standing rules R111–R120 assigned** against the live ceiling
+  (R110, re-confirmed by Grep against `ROADMAP.md` — this librarian has
+  no Bash/shell tool and could not run
+  `tools/check-ledger-numbers.py` directly). R111–R114 = decision 022's
+  four proposed rules; R115–R120 = decision 023's six (including the
+  "may be too small for a number" methodology rule — numbered anyway,
+  on the R106 precedent that a methodology rule earns a number when it
+  closes a concrete collision risk, which R120/`resolve_escape`'s
+  two-concurrent-Pass signature hazard does). Two amendment notes
+  added: R111 (decision 023 found a second live violation, form
+  XObjects) and R112 (strengthened to require the handle also express
+  LEVEL).
+- **Pass families 22 and 23 confirmed free and headed for the first
+  time** — `### Pass` headings did not exist for either before this
+  filing (Grep-verified, not script-verified, same caveat as above).
+  Filed as a new Backlog bucket (not Next up) — both decisions are
+  "Decided, engineer to schedule," structurally identical in status to
+  the Forms bucket (decision 020), which is the precedent followed for
+  placement.
+- **R58's staleness flagged, NOT fixed.** `ARCHITECTURE.md` §5.9 and
+  `ROADMAP.md`'s R58 bullet both gain a note that R58's literal text
+  ("every removal/scrub operation forces a full rewrite") is already
+  contradicted by two SHIPPED operations (`delete_object`,
+  `delete_redaction_mark`) that correctly stay under incremental save —
+  the same confidentiality-contract-vs-not distinction §5.11/R70
+  already drew for text editing. The wording fix itself is left to the
+  operator (new Open operator question (v)) per decision 022 §5.4's own
+  explicit deferral — this librarian added the flag, not the rewrite.
+  New `ARCHITECTURE.md` §5.12 records the SETTLED half (annotation
+  deletion is not a fifth forced-full-rewrite family member) separately
+  from the unsettled wording question.
+
+**Findings + decisions:**
+- **No `ARCHITECTURE.md` §3/§4 body-section update this filing —
+  deliberate, following the decision-020/021 precedent verbatim**
+  ("nothing has shipped, so §4 describes no new reality yet"). This
+  directly resolves what the dispatch flagged as a live risk ("you have
+  carried §3/§4 sync debt before; do not let this one accrue") by NOT
+  writing speculative pre-ship content into the core-data-model
+  contract, rather than by writing it. The one exception (§5.9/§5.12)
+  is a correction to ALREADY-shipped reality, not a preview of
+  unbuilt work — same category as decision 020's decision-009
+  forward-pointer exception, cited explicitly in both new §12 entries.
+- **The Obj-tool-universality reconciliation (decision 023 §5.1–§5.2)
+  recorded in its own right, per the dispatch's explicit ask** — added
+  to `ROADMAP.md`'s Glossary as a durable project principle, not just
+  restated inside the Pass entry: the Obj tool is universal at the
+  SELECTION layer (it can select anything), not the verb layer (a ce
+  dimension's re-measure gesture stays owned by the Measure tool, the
+  Obj tool only routes to it). This is the sentence that lets the
+  operator's "everything" instruction and decision 022's
+  anti-silent-re-measure argument both hold without either being bent.
+- **Eight new Open operator questions filed: (u)–(ab)** — drawn from
+  decision 022 §9 items 2/3 (widget-annotation delete posture; R58
+  wording) and decision 023 §10 items 1/2/3/4/5/7 (per-group vs.
+  per-ce-dimension format; `reduce` GUI toggle; form-un-sharing command;
+  navigation-depth model; node-delete curve-refit; snapping inside
+  forms). Neither decision's own "for the operator" section had ever
+  been given ROADMAP letters before this filing — both listed the
+  items only inline in the decision documents themselves.
+- **Ordering judgment given, as explicitly asked for by the operator:
+  decision 023 §7.1's "Pass 23.0 first" is an engineering-risk-only
+  argument (zero hierarchy risk, no dependency) and does not fix what
+  was reported.** The terminology audit (continuation 79) found the
+  operator's original complaint is very likely a pdf-dimension/
+  form-XObject problem that neither 22.0 nor 23.0 touches — only 23.2
+  (dependent on 22.0) does. Recorded plainly, as a recommendation not a
+  decision, in both the new Backlog entry and a footer added to Open
+  operator question (t): the fix-oriented build order is **22.0 → 23.2**,
+  and question (t)'s own confirmation step (open the reported drawing,
+  or ask) should happen before committing to any order at all, since it
+  determines whether 22.0 alone or 22.0+23.2 is the actual fix. 23.0's
+  zero-risk shape makes it safe to build in parallel or while waiting on
+  that confirmation, not a reason to sequence it strictly first.
+- **Cross-references tightened, not just added:** the Pass 12.M2c
+  cluster's bug-#1 pointer (previously "see the ★ decisions 022/023
+  filing-status note under Standing rules," which named no entry that
+  actually existed under that description) now points at the real new
+  Backlog bucket by name.
+
+**Still in flight:**
+- Pass 21.1 wiring — unchanged, still the entire remaining scope for
+  FF-C composite-run editability; not touched this continuation.
+- Pass 22.0/23.0–23.3 — now filed with stable IDs, standing rules, and
+  open questions, but **zero code written**. Nothing promoted to Next
+  up or In progress this continuation; that is the engineer's/
+  operator's sequencing call, informed by (but not settled by) this
+  filing's ordering judgment.
+- Open operator question (t)'s core confirmation (whether the
+  operator's drawing contained pdf dimensions, ce dimensions, or both)
+  is UNCHANGED,
+  still unresolved — only the "file the decisions" action item that
+  question (t) itself named as owed is discharged this continuation.
+
+**For next session:**
+- Resolve Open operator question (t)'s confirmation before starting
+  build — it determines whether Pass 22.0 alone, or 22.0+23.2, is the
+  actual fix for the operator's reported box-select complaint.
+- Once confirmed, decide build order: this filing's recommendation is
+  22.0 → 23.2 (fix-oriented) rather than decision 023's own 23.0-first
+  (risk-minimizing) — the operator/engineer may reasonably choose
+  differently, but should choose knowingly rather than by default.
+- Eight new open questions now live in `ROADMAP.md` ((u)–(ab)), joining
+  continuation 79's (t); none block Pass 22.0/23.0 starting, all are
+  worth a batched answer
+  when Ken is next reviewing open items — several have stated defaults
+  that will simply apply if left unanswered (see each item's own
+  "Default:" line).
+- §4 (core data model) and §3 (workspace layout) still owe their real
+  body-section updates once Pass 22.0c (`TargetId` enum) and Pass 23.2
+  (`PageObjects.containers`) actually ship — flagged here so it isn't
+  rediscovered as "sync debt" the way earlier Passes' §3/§4 gaps were.

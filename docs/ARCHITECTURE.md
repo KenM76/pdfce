@@ -799,6 +799,31 @@ and must rewrite (content-stream surgery + container decomposition). R58
 is the standing-rule form of "removal is never additive, and never
 incremental."
 
+**Staleness flagged, text NOT changed (decision 022 §5.4, filed
+`pdfce-librarian` continuation 80, 2026-08-04 — full text:
+`ROADMAP.md` Standing rules R58 and Open operator question (v)).**
+R58's binding text above ("every removal/scrub operation forces a full
+rewrite") is already contradicted by two shipped operations that
+correctly stay under the project's default incremental save:
+`EditSession::delete_object` (Pass 9c-min, `76485b5`, content-stream
+surgery removing visible page geometry) and `delete_redaction_mark`
+(Pass 8). Neither operation's contract is confidentiality — see §5.11,
+below, which already established that distinction for in-place text
+editing (a change, not a removal) and whose reasoning applies here by
+extension (a removal whose contract is "no longer in the current
+revision," not "provably unrecoverable"). Decision 022's own proposed
+`EditSession::delete_annotation` (Pass 22.0, unbuilt) would be a THIRD
+such exception if shipped without a wording fix. **The correction this
+rule needs — narrowing "every removal/scrub operation" to "every
+operation whose contract is CONFIDENTIALITY" (redaction, scrub, a
+recovered-base save) — is deliberately not made in this entry.**
+Decision 022 explicitly declines to narrow a standing rule's scope
+solo, asking for operator confirmation first (`ROADMAP.md` Open
+operator question (v)); this section records the discrepancy rather
+than resolving it unilaterally. See §5.12, below, for the settled
+(non-wording) part of this same finding: whether annotation deletion
+joins the forced-full-rewrite family at all.
+
 ### 5.10 A cross-reference-recovered document forces a full rewrite (R67 — third sibling of §5.2/R35 and §5.9/R58)
 
 *(Added 2026-07-31, decision 013. **FLIPPED TO SHIPPED/ACTIVE 2026-08-01**
@@ -1277,6 +1302,67 @@ see below), and the six standing rules (R69–R74) are in
 `docs/decisions/014-acrobat-text-editing.md`; Pass slicing (14.0
 read-only model → 14.1 edit+relayout+font-gate → 14.2 formatting → 14.3
 canvas UI) and its Shipped records are in `ROADMAP.md`.
+
+### 5.12 Annotation deletion is surgery-under-incremental-save, NOT a fifth forced-full-rewrite sibling (decision 022 — DECIDED, Pass 22.0 unbuilt)
+
+*(Added 2026-08-04, `pdfce-librarian` continuation 80, as a
+forward-looking design note ahead of Pass 22.0's build — same
+disposition §5.11 had ahead of Pass 14.1, per §5.11's own header note
+above. This section records the SETTLED half of decision 022 §5.4's
+finding — family membership — and separates it from the UNSETTLED half
+— R58's exact wording — which stays flagged, not fixed, at §5.9,
+above, pending Open operator question (v).)*
+
+§§5.2/5.9/5.10 (R35/R58/R67) form a **forced-full-rewrite family**:
+every member exists because incremental save structurally *preserves*
+superseded content, which is disqualifying wherever the operation's own
+contract is confidentiality. **Deleting a pdfce-authored annotation
+(`EditSession::delete_annotation`/`delete_dimension`, decision 022 §6.1,
+Pass 22.0) is confirmed NOT a fifth member of that family**, by the same
+reasoning §5.11 already applied to in-place text editing: deleting an
+annotation is a removal, but its contract is "this is no longer in the
+current revision," never "this must be provably unrecoverable." The
+prior revision remaining reachable through undo/version history is that
+mechanism working as intended, not a defect the way a redaction that
+leaves the redacted text recoverable would be. Truly making content
+unrecoverable remains Redaction's job (§5.2/R35) and, where it applies,
+Sanitize/scrub's (§5.9/R58); conflating annotation deletion with either
+would force a routine "remove this ce dimension" action through a full
+rewrite that drops revision history for no security reason the
+operation ever promised.
+
+**Exactly which objects change on an annotation delete, per decision
+022 §5.1 — at most four, and the fourth only for a pdfce-authored ce
+dimension:**
+
+1. The `/Annots` container — indirect-array XOR inline, never both
+   (`EditSession::remove_from_annots`, already shipped and reused
+   verbatim, no new logic).
+2. The annotation dictionary — a `Removal`.
+3. The `/AP` `/N` stream object — a `Removal`, resolved BEFORE any
+   mutation (the `delete_redaction_mark` pattern).
+4. The catalog `/PieceInfo` sidecar (ce dimensions only) — via the
+   existing `catalog_dimension_write`, in the SAME command (R113).
+
+**Zero page content streams change** — this is not content surgery at
+all, which is a cheap, machine-checkable distinguishing claim
+(`tools/content-identity` reporting 0 for `annot-delete`/
+`dimension-delete`, decision 022's acceptance criterion A4). This
+places annotation deletion architecturally closer to the R107 family
+(precisely-named object allocation/removal, proven by
+object-id-disjointness, not a runtime guard) than to R35/R58/R67's
+content-stream-rewrite family, despite both being "delete" operations
+in the colloquial sense.
+
+**What this section does NOT settle:** whether R58's own binding TEXT
+should be corrected to name this exception explicitly (`ARCHITECTURE.md`
+§5.9, above; `ROADMAP.md` Standing rules R58; Open operator question
+(v)) — that is a standing-rule-wording call decision 022 itself declines
+to make solo, and this librarian is not making it here either. This
+section settles only the underlying architectural question (family
+membership), which is not in genuine dispute — three independent
+instances (`delete_object`, `delete_redaction_mark`, and now
+`delete_annotation`) already agree.
 
 ## 6. Packaging: single-folder portable
 
@@ -5228,3 +5314,203 @@ with a forward pointer.
   `build_objects`, `EmbeddedFontObjects`, `FontEmbedError` in
   `crates/pdfce-core/src/font_embed.rs`), not re-derived from the
   decision document. Full text: §3 and §4, above.
+
+- **2026-08-04 (continuation 80) — Decision 022 filed: annotations in
+  canvas selection (ce dimensions cannot be selected or deleted by any
+  surface). Status: DECIDED, SCOPED, NOT STARTED — Pass 22.0 is
+  unbuilt.** Archived at
+  `docs/decisions/022-annotations-in-canvas-selection.md`. Requested by
+  `pdfce-engineer`, triggered by the operator's box-select complaint on
+  a CAD drawing. **No §3/§4 body-section update this entry** — nothing
+  has shipped, same disposition as decisions 020's and 021's own
+  entries above (§4 gets its `TargetId`/`ObjectModelProvider` reality
+  update when Pass 22.0 actually lands). **The one exception, same
+  logic as decision 020's decision-009 forward-pointer exception: §5.9
+  gains a staleness flag (not a rewrite) and a new §5.12**, because
+  the underlying finding — R58's literal text already contradicted by
+  shipped code — is true today, independent of whether Pass 22.0 ever
+  ships.
+  - **Root cause, verified empirically, not by inspection alone.** The
+    GUI's selectable-object model (`decompose_page` → `ContentStream::
+    from_page`) is page content streams ONLY. ce dimensions are `/Line`+
+    `/IT /LineDimension` annotations in `/Annots`, a parallel object
+    space `decompose_page` never reads. `pdfce-render`'s
+    `survey_page_annotations` paints them anyway (after content
+    interpretation), so a ce dimension is visible and unselectable —
+    confirmed on the committed fixture
+    `fixtures/synthetic/dimension/linear-dim.pdf`: `object-list --hit`
+    at the ce dimension's label band returns `candidates=0` although
+    `dimension-list` reports one ce dimension present.
+  - **A second, more severe defect found during the investigation, not
+    the one reported:** there is NO way to delete a ce dimension at
+    all — not by canvas selection, not by the Objects panel, not by
+    any `pdfce-cli` subcommand, not by any `EditSession` method. A ce
+    dimension, once authored, was permanent for the life of the
+    document until this decision closed the gap.
+  - **A third, latent corruption path found while reasoning about what
+    delete must do:** `set_group_scale` pushes an `ObjectWrite`
+    replacing every member's `/AP` stream UNCONDITIONALLY, while the
+    annotation-dict half of the same loop is guarded. Deleting an
+    annotation generically without pruning its `/PieceInfo` record
+    would let a later scale change resurrect an orphan `/AP` at a
+    removed object id. New standing rule **R113** closes this by
+    requiring the prune in the SAME command as the delete.
+  - **`TargetId` widens from a `u64` newtype to a two-variant enum,
+    `{Content(u64), Annot(ObjId)}`** — chosen over three rejected
+    alternatives (a second parallel selection channel, re-litigating
+    R60's one-substrate rule for no reason; a tagged-integer partition
+    of the existing `u64`, which would make every existing "handles an
+    out-of-range id gracefully" site handle an annotation WRONGLY but
+    QUIETLY instead; injecting annotations into `PageObjects` in core,
+    which would silently diverge the GUI provider's index space from
+    `EditSession::vector_surgery`'s content-only decompose — the
+    identical class of failure `ARCHITECTURE.md`/decision 011's Z2
+    finding already named). `canvas.rs` needs ZERO semantic changes —
+    it already treats the value opaquely. New standing rule **R111**
+    (selection enumerates exactly what the renderer paints) and **R112**
+    (a selectable kind carries its verb set in its type, so
+    move/drag-node are structurally ABSENT from the `Annot` arm, never
+    a silent no-op) are the two structural rules this choice earns.
+  - **Verb scope, this slice: select + delete only.** Move and
+    drag-node are not "unimplemented for annotations," they are
+    unrepresentable for them — R112's whole point. A ce dimension is
+    one baked `/AP` appearance, not a bundle of independently-editable
+    lines/nodes (§4.1) — decision 023 later builds on this exact
+    finding to permanently refuse descending into a ce dimension's
+    `/AP` content (R115/R116's territory).
+  - **Not a fifth forced-full-rewrite family member.** Zero page
+    content streams change; incremental save (R36/R70) stays the
+    default. Full reasoning: `ARCHITECTURE.md` §5.12, new above. R58's
+    own binding TEXT is flagged as already-stale by this finding (two
+    shipped operations, `delete_object`/`delete_redaction_mark`,
+    already sit outside its literal scope) but is NOT rewritten by this
+    entry — decision 022 explicitly declines to narrow a standing
+    rule's scope solo; `ROADMAP.md` Open operator question (v).
+  - **Four standing rules filed: R111–R114.** Full text:
+    `ROADMAP.md` Standing rules. Slice plan: Pass 22.0a (core) →
+    22.0b (CLI, rule 11) → 22.0c (GUI). Full acceptance criteria:
+    decision 022 §6.4.
+  - **Five items filed for the operator, not decided solo:** whether
+    the Obj tool is "everything" or "page content only" (ANSWERED by
+    decision 023, below — everything, at the selection layer); whether
+    a widget annotation's delete refuses by name or cascades into form
+    surgery (`ROADMAP.md` Open operator question (u)); R58's wording
+    fix (question (v), above); R86 sign-off itself (already-open
+    question (e), not new); whether ce-dimension re-measure is wanted
+    at all (ANSWERED by decision 023, below — yes).
+
+- **2026-08-04 (continuation 80) — Decision 023 filed: the Obj tool is
+  for everything — level navigation, node-level editing, ce-dimension
+  re-measure, and the missing format surface. AMENDS decision 022 (see
+  below; 022 is NOT edited, per `docs/decisions/README.md`'s
+  append-only rule — this is a new record with a librarian-owned
+  forward reference). Status: DECIDED, SCOPED, NOT STARTED — Pass
+  family 23 is unbuilt.** Archived at
+  `docs/decisions/023-object-tool-level-navigation-and-dimension-authoring-controls.md`.
+  Requested by `pdfce-engineer`, answering decision 022's own open
+  question 1 plus three operator-added scope items (level navigation,
+  node-level operations, ce-dimension re-measure) and one gap report
+  (units/display-type unreachable from any surface). **No §3/§4
+  body-section update this entry** — same disposition as decision
+  022's entry above; §4 gets its `PageObjects.containers`/`Container`/
+  `ContainerKind` addition when Pass 23.2 actually lands.
+  - **The operator's answer: yes, the Obj tool is for everything —
+    but this is true at the SELECTION layer, not the verb layer, and
+    that distinction is what makes the answer buildable without
+    reopening decision 022 §4.2's anti-silent-re-measure argument.**
+    The Obj tool selects everything (content, annotations, ce and pdf
+    dimensions alike) and offers a `Re-measure` verb that HANDS OFF to
+    the Measure tool, which owns the gesture. Recorded as a durable
+    project principle in `ROADMAP.md`'s Glossary ("Obj-tool
+    universality"), not just in this decision's own text, because it
+    resolves a real tension (operator instruction vs. decision 022's
+    silence argument) in a way future scoping calls will need again.
+  - **A second, independent live violation of decision 022's own
+    proposed R111 was found: form XObjects.** `pdfce-render`'s
+    interpreter recurses into a `Do` on a form (§8.10, its own cycle
+    set + depth cap already exist, `interpret.rs`), painting the
+    form's contents individually, while `decompose.rs` emits ONE
+    opaque object for the same `Do`. Every line inside a placed CAD
+    block — a title block, a hatch, a nested drawing block — is
+    painted and unselectable, the exact defect class decision 022
+    found for ce dimensions, one object space over. **This is almost
+    certainly the defect behind the operator's ORIGINAL report** — a
+    CAD-exported drawing's "dimension lines" are very likely pdf
+    dimensions living in exactly this kind of placed block, not ce
+    dimensions at all. See `ROADMAP.md` Open operator question (t) for
+    the full scoping finding and the recommendation to confirm before
+    treating Pass 22.0's ship as closing the original complaint.
+  - **The core object model stays flat.** `PageObjects.objects` remains
+    a `Vec<VectorObject>` in paint order, index space byte-for-byte
+    unchanged — the same load-bearing reason decision 022 §2 option (e)
+    already established (`EditSession::vector_surgery`'s content-only
+    decompose and the GUI provider's `decompose_page` must keep
+    agreeing by construction, or `object-move --object N` and a GUI
+    drag silently stop meaning the same thing). Hierarchy is added as
+    (a) contiguous RANGES over that list for marked-content sequences
+    and (b) a FOREST of content streams, one flat list per form stream
+    — new standing rule **R115**. `TargetId::Content`'s payload grows
+    from `u64` to `ContentPath { stream, index }` — payload only, no
+    further `canvas.rs` substrate change, a direct dividend of decision
+    022 choosing the enum over a tagged integer.
+  - **Form-XObject aliasing is the sharpest hazard in the whole
+    design.** A form's content stream is ONE object invoked N times;
+    editing inside it edits every placement. Refused by name
+    (`FormStreamIsShared`), the invocation count MEASURED not assumed
+    — new standing rule **R116**.
+  - **`NumberFormat::inch_fraction` and `FractionMode::Fraction{reduce:
+    true}` are shipped, documented, spec-mirrored capabilities
+    reachable from NOWHERE outside a unit test** — no operator can ask
+    for a fraction-formatted ce dimension today. New standing rule
+    **R117**, R83's inverse: a shipped capability reachable from no
+    surface is a defect of the same class as an affordance with no
+    capability. Closed by Pass 23.0's `group-set-format` CLI/GUI
+    surface (new standing rule **R118** — format is decoupled from the
+    scale-entry gesture that currently co-owns it).
+  - **Ce-dimension re-measure is granted, re-framed as two-stage and
+    disclosed — new standing rule R119**, preserving decision 022
+    §4.2's silence-not-capability argument as a rule now that the
+    capability is wanted. Owned by the Measure tool (endpoint handles
+    on a selected ce dimension); the Obj tool routes to it, never performs
+    the edit itself. `set_dimension_geometry` re-runs `author_dimension`
+    and replaces `/L`/`/Rect`/`/Contents`/`/AP` — the same machinery
+    `set_group_scale` already runs per member — and inherits R113's
+    guarded-write discipline. `group.rs:163`'s "The immutable geometry"
+    doc comment on `DimensionKind` ships FALSE once this lands and must
+    be corrected in the same commit (R93 in reverse).
+  - **Escape's precedence chain gains a new slot, `LeaveGroupLevel`,
+    between `CancelGesture` and `ExitTool`** (Escape walks out one
+    level per press, never skipping). Because a second, concurrently
+    in-flight Pass also edits `resolve_escape`'s signature, the
+    function's three positional `bool`s are replaced with a named-field
+    `EscapeContext` struct BEFORE either Pass's slot is added — new
+    standing rule **R120**, numbered despite the decision's own hedge
+    that it might be "too small," on the R106 precedent that a
+    methodology rule earns a number when it closes a concrete,
+    identified collision risk.
+  - **Node-level editing is well-defined within named bounds.** Node
+    delete = remove the anchor, join the two incident segments with one
+    straight segment (curvature loss disclosed, never silently
+    refit — a refit would be a FUZZY operation under rule 4 and can
+    only ship as a reviewable preview, deferred by name). Multi-node
+    move must be ONE core plan (`plan_move_nodes`), never N sequential
+    `move_node` calls. `DegenerateCtm` must NOT be raised for node
+    delete — deletion needs no coordinate transform, so the refusal
+    would be unreachable by construction (R96's inverse: a refusal that
+    fires when it structurally cannot be wrong is as dishonest as one
+    that never fires when it should).
+  - **Six standing rules filed: R115–R120** (R111–R114 belong to
+    decision 022, above; R112 is STRENGTHENED and R111 gains a second
+    documented violation by this decision — both amendment notes are on
+    their own Standing-rules bullets). Full text: `ROADMAP.md` Standing
+    rules.
+  - **Slice plan: Pass 23.0 (format/units, zero dependency) → Pass
+    23.1 (re-measure + move, depends on 22.0) → Pass 23.2 (level
+    navigation, READ-ONLY, depends on 22.0) → Pass 23.3 (node
+    selection/move/delete, depends on 23.2).** 22.0 must ship before
+    23.1/23.2 start, or their inherited guarded-write/sidecar-pruning
+    discipline gets re-derived under pressure; 23.0 is the sole
+    exception. Full acceptance criteria: decision 023 §7.
+  - **Eight items filed for the operator, not decided solo** — see
+    `ROADMAP.md` Open operator questions (w)–(ab), plus 022's still-open
+    (u)/(v). Full text: decision 023 §10.
