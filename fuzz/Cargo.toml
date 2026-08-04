@@ -53,6 +53,17 @@ libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
 [dependencies.pdfce-core]
 path = "../crates/pdfce-core"
 
+# pdfce-render, for the FF-C donor-subsetting target (Pass 21.0). The
+# subsetter lives there, not in core, because producing a subset requires
+# parsing the donor and core has no font parser (decision 021 §3.2, R21).
+#
+# This does NOT weaken the GUI-core-separation check: the fuzz crate is
+# outside the shipping workspace (root Cargo.toml `exclude`), so it never
+# appears in `cargo tree -p pdfce-core` / `-p pdfce-render` and cannot
+# pull anything into a shipped binary.
+[dependencies.pdfce-render]
+path = "../crates/pdfce-render"
+
 # cargo-fuzz builds with the release profile; keep debuginfo so crash
 # backtraces point at real source lines.
 [profile.release]
@@ -122,6 +133,13 @@ bench = false
 [[bin]]
 name = "image_codec_jpx"
 path = "fuzz_targets/image_codec_jpx.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "font_subset"
+path = "fuzz_targets/font_subset.rs"
 test = false
 doc = false
 bench = false

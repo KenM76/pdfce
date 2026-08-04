@@ -66,6 +66,7 @@ Usage:
 from __future__ import annotations
 
 import io
+import struct
 import sys
 from pathlib import Path
 
@@ -154,6 +155,204 @@ def build_subset_truetype() -> bytes:
         f"cmap coverage drifted: {sorted(cmap)} != {sorted(ord(c) for c in CARRIED)}"
     )
     return data
+
+
+def build_cycle_truetype() -> bytes:
+    """A TrueType whose composite glyphs form CYCLES.
+
+    Two shapes, both of which a naive recursive `glyf` walk would follow
+    forever:
+
+      * `gSelf` is a composite whose only component is `gSelf` — a
+        one-glyph loop.
+      * `gPing` and `gPong` are composites referencing each other — a
+        two-glyph loop, which a depth counter reset per glyph would miss.
+
+    WHY THIS FIXTURE EXISTS INSTEAD OF A GUARD
+    ------------------------------------------
+    Composite-glyph recursion is the obvious unbounded-recursion risk in any
+    font subsetter, and `ARCHITECTURE.md` §10 would normally demand a depth
+    cap. Decision 021 §3.5 deliberately does NOT add one: `subsetter`'s
+    `closure()` is an iterative worklist that enqueues a component only when
+    the remapper has not already seen it, so the visited set grows
+    monotonically and is bounded by `numGlyphs`. It terminates structurally,
+    upstream. A pdfce-side cap would sit behind a filter its guarded case
+    cannot pass — a guard that reads as protection and executes never (R96).
+
+    So the property is asserted rather than defended. This fixture is what
+    makes that assertion possible, and — the part a redundant guard could
+    never do — it will FAIL if upstream ever rewrites that walk recursively.
+
+    Fully synthetic (`docs/LEGAL.md` §5); no byte comes from a real font.
+    """
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+    from fontTools.ttLib.tables import _g_l_y_f as glyf_mod
+
+    glyph_names = [".notdef", "gBase", "gSelf", "gPing", "gPong"]
+
+    fb = FontBuilder(UPEM, isTTF=True)
+    fb.setupGlyphOrder(glyph_names)
+
+    # One real outline so the font is not degenerate — a subsetter that
+    # bailed out early on a contentless font would pass the cycle test
+    # without ever walking anything.
+    pen = TTGlyphPen(None)
+    pen.moveTo((50, 0))
+    pen.lineTo((550, 0))
+    pen.lineTo((550, 500))
+    pen.lineTo((50, 500))
+    pen.closePath()
+    base = pen.glyph()
+
+    def composite(component_names):
+        g = glyf_mod.Glyph()
+        g.numberOfContours = -1  # composite
+        g.components = []
+        for name in component_names:
+            c = glyf_mod.GlyphComponent()
+            c.glyphName = name
+            c.x, c.y = 0, 0
+            c.flags = 0
+            g.components.append(c)
+        return g
+
+    # Built ACYCLIC first — every composite points at `gBase`.
+    #
+    # fontTools cannot WRITE a cyclic composite: `Glyph.compile` recalculates
+    # bounds by walking components, and that walk is recursive, so building
+    # the cycle directly dies with a Python RecursionError before a byte is
+    # emitted. Which is itself the point being made — a recursive composite
+    # walk is the natural implementation, and it is exactly the one that
+    # cannot survive this input.
+    #
+    # So the cycles are introduced afterwards, by rewriting the two-byte
+    # component glyph indices in the compiled `glyf` table (see
+    # `_make_components_cyclic`). The resulting file is well-formed sfnt that
+    # no normal font tool would produce and every consumer must survive.
+    glyphs = {
+        ".notdef": TTGlyphPen(None).glyph(),
+        "gBase": base,
+        "gSelf": composite(["gBase"]),
+        "gPing": composite(["gBase"]),
+        "gPong": composite(["gBase"]),
+    }
+
+    fb.setupGlyf(glyphs)
+    fb.setupHorizontalMetrics({name: (ADVANCE, 50) for name in glyph_names})
+    fb.setupHorizontalHeader(ascent=800, descent=-200)
+    fb.setupNameTable({"familyName": "pdfceCycleDemo", "styleName": "Regular"})
+    fb.setupCharacterMap(
+        {ord("A"): "gBase", ord("S"): "gSelf", ord("P"): "gPing", ord("Q"): "gPong"}
+    )
+    fb.setupOS2(sTypoAscender=800, sTypoDescender=-200)
+    fb.setupPost()
+
+    buf = io.BytesIO()
+    fb.font.save(buf)
+    data = _make_components_cyclic(buf.getvalue(), glyph_names)
+
+    # Verify-don't-assume (R22): read the FINISHED BYTES back and confirm the
+    # cycles are really in them. If the patch ever silently misses — a table
+    # layout change, a different component encoding — this fixture stops
+    # testing the thing it is named for, and every test built on it passes
+    # for the wrong reason.
+    idx = {n: i for i, n in enumerate(glyph_names)}
+    comps = _component_indices(data, glyph_names)
+    assert comps["gSelf"] == [idx["gSelf"]], f"gSelf must reference itself: {comps}"
+    assert comps["gPing"] == [idx["gPong"]], f"gPing must reference gPong: {comps}"
+    assert comps["gPong"] == [idx["gPing"]], f"gPong must reference gPing: {comps}"
+    assert data[:4] == b"\x00\x01\x00\x00", "sfnt magic"
+    return data
+
+
+def _sfnt_tables(data: bytes) -> dict[str, tuple[int, int]]:
+    """`tag -> (offset, length)` from the sfnt table directory."""
+    num = int.from_bytes(data[4:6], "big")
+    out = {}
+    for i in range(num):
+        rec = 12 + 16 * i
+        tag = data[rec : rec + 4].decode("latin-1")
+        off = int.from_bytes(data[rec + 8 : rec + 12], "big")
+        ln = int.from_bytes(data[rec + 12 : rec + 16], "big")
+        out[tag] = (off, ln)
+    return out
+
+
+def _glyph_offsets(data: bytes, count: int) -> list[int]:
+    """Absolute `glyf` offsets for glyphs 0..count, from `loca` + `head`."""
+    tabs = _sfnt_tables(data)
+    head_off = tabs["head"][0]
+    # indexToLocFormat is the last field of head: 0 = short (offset/2).
+    fmt = int.from_bytes(data[head_off + 50 : head_off + 52], "big", signed=True)
+    loca_off = tabs["loca"][0]
+    glyf_off = tabs["glyf"][0]
+    out = []
+    for i in range(count + 1):
+        if fmt == 0:
+            v = int.from_bytes(data[loca_off + 2 * i : loca_off + 2 * i + 2], "big") * 2
+        else:
+            v = int.from_bytes(data[loca_off + 4 * i : loca_off + 4 * i + 4], "big")
+        out.append(glyf_off + v)
+    return out
+
+
+def _component_indices(data: bytes, names: list[str]) -> dict[str, list[int]]:
+    """Glyph indices each composite glyph references, read from the bytes."""
+    offs = _glyph_offsets(data, len(names))
+    found: dict[str, list[int]] = {}
+    for i, name in enumerate(names):
+        start, end = offs[i], offs[i + 1]
+        if end - start < 10:
+            continue  # empty glyph
+        ncont = int.from_bytes(data[start : start + 2], "big", signed=True)
+        if ncont >= 0:
+            continue  # simple glyph
+        refs, p = [], start + 10
+        while True:
+            flags = int.from_bytes(data[p : p + 2], "big")
+            refs.append(int.from_bytes(data[p + 2 : p + 4], "big"))
+            p += 4
+            p += 4 if (flags & 0x0001) else 2          # ARG_1_AND_2_ARE_WORDS
+            if flags & 0x0008:
+                p += 2                                  # WE_HAVE_A_SCALE
+            elif flags & 0x0040:
+                p += 4                                  # X_AND_Y_SCALE
+            elif flags & 0x0080:
+                p += 8                                  # TWO_BY_TWO
+            if not (flags & 0x0020):                    # MORE_COMPONENTS
+                break
+        found[name] = refs
+    return found
+
+
+def _make_components_cyclic(data: bytes, names: list[str]) -> bytes:
+    """Rewrite composite component indices in place to form the cycles.
+
+    Patches the two-byte glyph index inside each composite's first component
+    record: `gSelf -> gSelf`, `gPing -> gPong`, `gPong -> gPing`.
+    """
+    idx = {n: i for i, n in enumerate(names)}
+    offs = _glyph_offsets(data, len(names))
+    out = bytearray(data)
+    targets = {"gSelf": idx["gSelf"], "gPing": idx["gPong"], "gPong": idx["gPing"]}
+    for name, new_index in targets.items():
+        i = idx[name]
+        start = offs[i]
+        ncont = int.from_bytes(data[start : start + 2], "big", signed=True)
+        assert ncont < 0, f"{name} is not a composite glyph"
+        # Header is 10 bytes; the component record starts with flags then the
+        # glyph index.
+        pos = start + 10 + 2
+        out[pos : pos + 2] = struct.pack(">H", new_index)
+    return bytes(out)
+
+
+def _reread(data: bytes):
+    """Parse built bytes back, so assertions test the FILE, not the builder."""
+    from fontTools.ttLib import TTFont
+
+    return TTFont(io.BytesIO(data))
 
 
 def serialize(objects: dict[int, bytes]) -> bytes:
@@ -279,6 +478,10 @@ def main() -> int:
     donor = out_dir / "subset-donor.ttf"
     donor.write_bytes(build_subset_truetype())
     print(f"wrote {donor} ({donor.stat().st_size} bytes)")
+
+    cyc = out_dir / "subset-cycle-donor.ttf"
+    cyc.write_bytes(build_cycle_truetype())
+    print(f"wrote {cyc} ({cyc.stat().st_size} bytes)  [composite-glyph cycles]")
     print(f"  /BaseFont  {BASE_FONT}   (subset tag: {tag})")
     print(f"  carries    {CARRIED!r}")
     print(f"  absent     any other character — 'Z' is the canonical probe")

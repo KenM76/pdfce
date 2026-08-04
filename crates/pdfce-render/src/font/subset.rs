@@ -449,6 +449,57 @@ mod tests {
         assert_eq!(err, SubsetError::NoCoverage);
     }
 
+    /// A donor whose composite glyphs form CYCLES must terminate.
+    ///
+    /// `subset-cycle-donor.ttf` carries two shapes a naive recursive `glyf`
+    /// walk would follow forever: `gSelf` references itself, and `gPing`/
+    /// `gPong` reference each other. The second matters separately — a depth
+    /// counter reset per glyph would catch the first and miss it.
+    ///
+    /// # Why this is a test and not a guard
+    ///
+    /// `ARCHITECTURE.md` §10 would normally demand a depth cap here.
+    /// Decision 021 §3.5 deliberately declines: `subsetter`'s `closure()` is
+    /// an iterative worklist that enqueues a component only when the remapper
+    /// has not seen it, so the visited set grows monotonically and is bounded
+    /// by `numGlyphs`. It terminates structurally, upstream. A pdfce-side cap
+    /// would sit behind a filter its guarded case cannot pass — a guard that
+    /// reads as protection and executes never (R96).
+    ///
+    /// So the property is asserted instead of defended, and this test can do
+    /// what a redundant guard never could: **fail** if upstream ever rewrites
+    /// that walk recursively.
+    ///
+    /// The assertion is simply that this returns. A stack overflow aborts the
+    /// process rather than unwinding, so "the test finished" IS the result —
+    /// there is no cleverer check available, and pretending otherwise by
+    /// wrapping it in something that looks more rigorous would be theatre.
+    ///
+    /// Worth recording: fontTools cannot even WRITE this font. Building the
+    /// cycle directly dies with a Python RecursionError, because its bounds
+    /// recalculation walks components recursively. The fixture is built
+    /// acyclic and the component indices patched in the compiled `glyf`
+    /// bytes. That a mature font library takes the recursive route is the
+    /// best evidence that the non-recursive one is worth asserting.
+    #[test]
+    fn composite_glyph_cycles_terminate() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/synthetic/text/subset-cycle-donor.ttf"
+        );
+        let bytes = std::fs::read(path).unwrap_or_else(|e| {
+            panic!("missing cycle fixture at {path}: {e}. Run `python tools/gen-subset-font-fixtures.py`.")
+        });
+
+        // 'S' -> gSelf (one-glyph cycle).
+        let _ = plan_subset(&bytes, 0, &['S'], "pdfceCycleDemo", "ABCDEF");
+        // 'P' -> gPing -> gPong -> gPing (two-glyph cycle).
+        let _ = plan_subset(&bytes, 0, &['P'], "pdfceCycleDemo", "ABCDEF");
+        // Both cycles reachable at once, plus a real outline, so the walk has
+        // somewhere legitimate to go as well as somewhere circular.
+        let _ = plan_subset(&bytes, 0, &['A', 'S', 'P', 'Q'], "pdfceCycleDemo", "ABCDEF");
+    }
+
     #[test]
     fn garbage_is_refused_as_not_a_font() {
         let err = plan_subset(b"this is not a font at all", 0, &['A'], "X", "ABCDEF").unwrap_err();
