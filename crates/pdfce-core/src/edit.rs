@@ -386,6 +386,17 @@ pub enum CommandKind {
     /// command; undo restores the byte-identical pre-drag content stream.
     /// See [`EditSession::move_node`].
     MoveNode,
+    /// ONE **subpath** of a path object was deleted (Pass 25.2): its
+    /// construction operators were removed from the content stream while the
+    /// object's other subpaths kept their exact bytes (surgery, R46/§5.7).
+    ///
+    /// A distinct kind from [`CommandKind::DeleteObject`] even though the
+    /// mechanism is the same splice, because the two are different things to
+    /// undo and different things to *read in a history*: "deleted a drawing
+    /// view" and "deleted one line of a drawing view" must not look alike to
+    /// an operator scanning what they did. See
+    /// [`EditSession::delete_subpath`].
+    DeleteSubpath,
 }
 
 /// Which geometric-markup subtype [`EditSession::add_markup`] authored,
@@ -2123,6 +2134,71 @@ impl EditSession {
                 },
             )?;
             Ok(crate::vector::plan_delete(stream, obj)?)
+        })
+    }
+
+    /// **Delete one subpath** of the path object at paint-order `object_index`
+    /// on page `page_index`, as one undoable command (Pass 25.2).
+    ///
+    /// # Why this is not just `delete_object` with a smaller target
+    ///
+    /// A CAD producer commonly emits an entire drawing view as a single path
+    /// object — measured on a real SolidWorks export, one stroked path with
+    /// 1194 subpaths covering a whole isometric view. On such a file
+    /// [`EditSession::delete_object`] can only remove the entire view, and an
+    /// operator asking to delete "this line" means one of its subpaths. This
+    /// is that operation.
+    ///
+    /// `subpath_index` is into the object's subpaths in **decomposition
+    /// order** — the same order [`crate::vector::hit_test_subpaths`] returns
+    /// indices in, so a subpath picked by a click can be handed straight here.
+    /// The planner re-derives the subpaths from the operator bytes and refuses
+    /// if the counts disagree, so an index can never silently name a different
+    /// line from the one that was picked.
+    ///
+    /// Content-stream surgery via [`crate::vector::plan_delete_subpath`]: only
+    /// the edited stream is re-emitted; every other object in the file stays
+    /// byte-verbatim (R46/§5.7 named exception). Lands as one
+    /// [`CommandKind::DeleteSubpath`]; undo restores the byte-identical
+    /// pre-delete stream.
+    ///
+    /// **Deleting the only subpath deletes the object**, because a painting
+    /// operator with no path is not a smaller object — it is meaningless.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::VectorEdit`] wrapping
+    /// [`SubpathOutOfRange`](crate::vector::VectorEditError::SubpathOutOfRange),
+    /// [`ClippingPath`](crate::vector::VectorEditError::ClippingPath) (deleting
+    /// part of a clip would change what OTHER content is visible — refused
+    /// under rule 4), or
+    /// [`SubpathStructureMismatch`](crate::vector::VectorEditError::SubpathStructureMismatch);
+    /// [`EditError::VectorEdit`] with `NotAPath` for a text/image target; plus
+    /// [`EditError::PageOutOfRange`], [`EditError::VectorEditNoContents`],
+    /// [`EditError::VectorEditContent`], [`EditError::VectorEditNeedsReopen`],
+    /// [`EditError::DocumentEncrypted`], or
+    /// [`EditError::CertificationForbidsChange`]. Every refusal happens before
+    /// any mutation (rule 4).
+    pub fn delete_subpath(
+        &mut self,
+        page_index: usize,
+        object_index: usize,
+        subpath_index: usize,
+    ) -> Result<(), EditError> {
+        self.vector_surgery(CommandKind::DeleteSubpath, page_index, |stream, model| {
+            let count = model.objects.len();
+            let obj = model.objects.get(object_index).ok_or(
+                crate::vector::VectorEditError::ObjectOutOfRange {
+                    index: object_index,
+                    count,
+                },
+            )?;
+            let path = vector_object_as_path(obj, object_index)?;
+            Ok(crate::vector::plan_delete_subpath(
+                stream,
+                path,
+                subpath_index,
+            )?)
         })
     }
 

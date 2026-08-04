@@ -2825,6 +2825,78 @@ impl PdfceApp {
         }
     }
 
+    /// Delete the selected **subpath** — one part of an entered object (Pass
+    /// 25.2).
+    ///
+    /// # Why the entered state is dropped on success
+    ///
+    /// `refresh_pages` → `prune_canvas_selection` already clears it, and that
+    /// is deliberate rather than incidental: after the content stream is
+    /// rewritten, part #668 of the object is a DIFFERENT line from the one
+    /// that had that ordinal a moment ago. Staying "inside" with an ordinal
+    /// that has silently re-pointed is worse than being put back at object
+    /// level, because the outline would look authoritative while naming
+    /// something the operator never chose. Decision 025 scopes the better
+    /// answer (Pass 26.2 — survive the edit and say so); until that lands, the
+    /// honest behaviour is to step back out.
+    ///
+    /// # Failures are shown, not swallowed
+    ///
+    /// The refusals this can hit are real and specific — a clipping path, a
+    /// structure that cannot be safely indexed — and they are the reason the
+    /// operation is safe. Reporting them through the same channel as a failed
+    /// save means an operator who is refused finds out WHY.
+    fn delete_selected_subpath(&mut self) {
+        let (page_index, object_index, subpath_index) = {
+            let Status::Open(doc) = &self.status else {
+                return;
+            };
+            let Some(entered) = doc.entered else {
+                return;
+            };
+            let Some(subpath) = entered.subpath else {
+                return;
+            };
+            (doc.view.page_index, entered.object, subpath)
+        };
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        let outcome = doc
+            .session
+            .delete_subpath(page_index, object_index, subpath_index);
+        let reported = outcome
+            .as_ref()
+            .map_err(std::string::ToString::to_string)
+            .err();
+        match outcome {
+            Ok(()) => {
+                doc.canvas_selection.clear();
+                doc.vector_drag = None;
+                // `refresh_pages` FIRST, for the same reason whole-object
+                // delete needs it (decision 018 §10 hazard 2): the cached
+                // raster is a picture of the part that just went, and
+                // `ensure_object_provider` alone early-returns while
+                // `provider_page` still equals the current page.
+                doc.refresh_pages();
+                doc.ensure_object_provider();
+                self.edit_note = Some(ui_text::subpath_deleted(subpath_index));
+            }
+            Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
+        }
+        // Traced AFTER the outcome is applied, and carrying what the operator
+        // will actually be told. A trace of the return value alone would have
+        // said `Ok(())` for a delete whose disclosure never reached the status
+        // bar — which is exactly the gap that has to be visible here (R93: the
+        // trace must report the real outcome, not the intent).
+        diag::trace(|| {
+            format!(
+                "commit-delete-subpath object={object_index} subpath={subpath_index} err={reported:?} note={:?}",
+                self.edit_note
+            )
+        });
+    }
+
     /// Turn the selected pages, or — when nothing is selected — the page
     /// currently on screen.
     ///
@@ -4541,13 +4613,31 @@ impl PdfceApp {
                 // the page-rail page selection. The two selections are distinct
                 // (a page-rail selection vs. a canvas object selection), so the
                 // tool disambiguates which Delete means.
+                // Pass 25.2: a selected SUBPATH outranks both. It is the most
+                // specific thing selected, and reaching it took two deliberate
+                // acts (a double-click to enter, a click to pick), so Delete
+                // can only mean it.
+                //
+                // Deliberately NOT gated on the object-edit tool, unlike
+                // whole-object delete. That gate exists because Delete
+                // otherwise means "delete the selected pages", and the tool is
+                // what disambiguates. With a subpath entered there is no
+                // ambiguity to resolve, so requiring a tool as well would be a
+                // rule with no reason behind it — the kind an operator
+                // experiences as the application being arbitrary.
+                let delete_subpath = matches!(
+                    &self.status,
+                    Status::Open(doc) if doc.entered.is_some_and(|e| e.subpath.is_some())
+                );
                 let delete_object = matches!(
                     &self.status,
                     Status::Open(doc)
                         if doc.active_tool == Some(CanvasTool::VectorEdit)
                             && !doc.canvas_selection.is_empty()
                 );
-                if delete_object {
+                if delete_subpath {
+                    self.delete_selected_subpath();
+                } else if delete_object {
                     self.delete_selected_object();
                 } else {
                     self.delete_selection();
@@ -5209,6 +5299,16 @@ impl eframe::App for PdfceApp {
             ),
             _ => (false, false, false),
         };
+        // Whether the CANVAS has something Delete should remove while a tool is
+        // armed — see the binding in `collect_keyboard_actions`. Only the
+        // object-edit tool qualifies: the text tools own Delete as a character
+        // operation, and with no tool armed the key is collected anyway.
+        let canvas_delete_target = match &self.status {
+            Status::Open(doc) if doc.active_tool == Some(CanvasTool::VectorEdit) => {
+                doc.entered.is_some_and(|e| e.subpath.is_some()) || !doc.canvas_selection.is_empty()
+            }
+            _ => false,
+        };
         let canvas_gesture_discardable =
             matches!(self.current_gesture_interrupt(), GestureInterrupt::Discard);
         collect_keyboard_actions(
@@ -5218,6 +5318,7 @@ impl eframe::App for PdfceApp {
             add_text_active,
             canvas_gesture_discardable,
             canvas_selection_nonempty,
+            canvas_delete_target,
         );
 
         // P0-5: drop-to-open. Read the frame's dropped files (set by the
@@ -5393,6 +5494,7 @@ fn collect_keyboard_actions(
     add_text_active: bool,
     gesture_discardable: bool,
     canvas_selection_nonempty: bool,
+    canvas_delete_target: bool,
 ) {
     use egui::{Key, Modifiers};
 
@@ -5459,7 +5561,21 @@ fn collect_keyboard_actions(
     // 14.4 §6.1), so the global page-delete binding yields to the canvas. (This
     // also un-swallows the text-edit Backspace, which was previously consumed
     // here before the tool's own handler ran.)
-    if !tool_active {
+    //
+    // `canvas_delete_target` re-opens exactly one hole in that yield: the
+    // object-edit tool, which has its own Delete meaning and no text caret to
+    // protect. Without it the binding was strictly unreachable for that tool —
+    // `Action::DeleteSelection`'s own `delete_object` branch requires
+    // `active_tool == VectorEdit`, and this gate guaranteed the key never
+    // arrived in that state. A guard behind an unpassable filter is dead code
+    // wearing a feature's clothes (R96), and it had been dead since Pass
+    // 9c-min. Found on 2026-08-04 while wiring subpath delete, which would
+    // have inherited the same silence the moment an operator armed the tool
+    // first — the natural thing to do.
+    //
+    // The text tools are deliberately NOT given this hole: Delete there is
+    // forward-character-delete, and hijacking it would break typing.
+    if !tool_active || canvas_delete_target {
         pressed(Modifiers::NONE, Key::Delete, Action::DeleteSelection);
         pressed(Modifiers::NONE, Key::Backspace, Action::DeleteSelection);
     }
@@ -11706,6 +11822,11 @@ fn run_vector_edit_tool(
     let mut new_selection: Option<std::collections::BTreeSet<TargetId>> = None;
     let mut new_cycle: Option<Option<canvas::ClickCycle>> = None;
     let mut new_drag: Option<Option<vector_edit_tool::VectorDrag>> = None;
+    // A click's effect on the selection DEPTH, deferred like every other
+    // outcome in this function: `apply_click_depth` needs `&mut doc`, and the
+    // read borrows of the page and the object model are still live inside the
+    // block below.
+    let mut depth_request: Option<(egui::Pos2, f64, bool)> = None;
 
     {
         let page = &doc.pages[page_index];
@@ -11745,12 +11866,20 @@ fn run_vector_edit_tool(
         // through the SAME resolver the plain-selection path uses — a second
         // cycling rule for the object-edit tool would be a divergence the
         // operator would experience as the tool "cycling differently".
-        if image_response.clicked()
+        if (image_response.clicked() || image_response.double_clicked())
             && let Some(sp) = image_response.interact_pointer_pos()
         {
             let canvas_pos = viewer::screen_to_page(sp, image_rect, extent, zoom);
             let (shift, alt) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
             let tol = canvas::screen_tolerance_to_page(canvas::SELECT_SCREEN_TOLERANCE_PX, zoom);
+            // The SAME level navigation the no-tool path has. Recorded here and
+            // applied below rather than duplicated — the whole reason
+            // `apply_click_depth` is one method on `OpenDoc` (R92). Wiring it
+            // into only one of the two paths, which is what shipped first, made
+            // double-click descend with no tool and do nothing with the object
+            // tool armed: exactly the invisible divergence the shared method
+            // was written to prevent.
+            depth_request = Some((canvas_pos, tol, image_response.double_clicked()));
             let hits = doc
                 .object_model
                 .as_ref()
@@ -11856,6 +11985,17 @@ fn run_vector_edit_tool(
     }
 
     // Apply the frame's outcome (no read borrows held now).
+    //
+    // Depth FIRST: when the click was consumed inside an entered object, the
+    // object-level selection computed above is discarded, or picking one part
+    // of a view would re-select the whole view in the same frame and visually
+    // undo the descent.
+    if let Some((pos, tol, double)) = depth_request
+        && doc.apply_click_depth(pos, tol, double)
+    {
+        new_selection = None;
+        new_cycle = None;
+    }
     if let Some(sel) = new_selection {
         doc.canvas_selection = sel;
     }

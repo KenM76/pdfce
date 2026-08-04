@@ -2021,14 +2021,32 @@ pub fn entered_object_readout(
     };
     match subpath {
         Some(sp) => format!(
-            "Inside {scope} — part #{sp} is selected. Click another part to pick it, or press \
-Escape to go back to whole objects."
+            "Inside {scope} — part #{sp} is selected. Click another part to pick it, press Delete \
+to remove it, or press Escape to go back to whole objects."
         ),
         None => format!(
             "Inside {scope} — no part picked yet. Click one of its parts, or press Escape to go \
 back to whole objects."
         ),
     }
+}
+
+/// Status note after deleting one part of an object (Pass 25.2).
+///
+/// Says which part went AND that the selection stepped back out, because both
+/// are things the operator will otherwise have to work out from the screen.
+/// After a delete the remaining parts renumber, so the ordinal is reported as
+/// history ("part #667 was deleted") rather than as a thing still selectable —
+/// wording that stays true after the renumber.
+///
+/// Names undo explicitly. This is the first destructive operation reachable
+/// without arming a tool, so the way back has to be in the same sentence as
+/// the thing that happened.
+pub fn subpath_deleted(index: usize) -> String {
+    format!(
+        "Part #{index} was deleted. You are back to whole objects — press Ctrl+Z to undo, or \
+double-click the object to work inside it again."
+    )
 }
 
 /// Tooltip on the inside-an-object readout.
@@ -2039,8 +2057,9 @@ back to whole objects."
 /// exported as one object per view).
 pub fn entered_object_tooltip() -> &'static str {
     "Double-click an object to work inside it. Drawings exported from CAD often put a whole view \
-into one object, so selecting a single line means going one level down first. Escape comes back \
-out. Moving and deleting individual parts is not available yet — only selecting them."
+into one object, so selecting a single line means going one level down first. Click a part to \
+select it, press Delete to remove it, and Escape to come back out. Moving an individual part is \
+not available yet."
 }
 
 /// Plain-language name for a path's painting disposition (§8.5.3, Table 60).

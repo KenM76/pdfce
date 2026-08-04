@@ -135,6 +135,41 @@ pub enum VectorEditError {
         "the object contains a malformed construction operator (unexpected operand count), so it cannot be moved without tearing it"
     )]
     MalformedOperand,
+    /// A subpath delete named an index past the object's subpath count.
+    #[error("subpath index {index} is out of range (the object has {count} subpath(s))")]
+    SubpathOutOfRange {
+        /// The 0-based subpath index that was asked for.
+        index: usize,
+        /// How many subpaths the object has, in decomposition order.
+        count: usize,
+    },
+    /// A subpath delete was asked for on a path that establishes a **clipping
+    /// region** (`W` / `W*`, §8.5.4) rather than painting marks.
+    ///
+    /// Refused because the visible effect would be somewhere the operator was
+    /// not looking: removing one subpath of a clip changes which OTHER content
+    /// shows through. Rule 4 (fuzzy, never sneaky) forbids exactly that.
+    #[error(
+        "this path defines a clipping region, so deleting part of it would change what other content is visible rather than removing a mark"
+    )]
+    ClippingPath,
+    /// The subpaths re-derived from the object's operator bytes do not agree
+    /// in COUNT with the decomposition the caller indexed against.
+    ///
+    /// The index would then name a different subpath from the one the operator
+    /// selected — a wrong deletion that nothing downstream can detect. Refused
+    /// rather than guessed. The usual cause is a subpath PDF starts implicitly
+    /// (a segment operator after `h`, §8.5.2.1), which has no operator of its
+    /// own to remove.
+    #[error(
+        "this path's structure cannot be edited by subpath index ({from_operators} subpath(s) found in its operators, {from_decomposition} in the geometry), so the wrong one might be removed"
+    )]
+    SubpathStructureMismatch {
+        /// Subpaths found by walking the object's construction operators.
+        from_operators: usize,
+        /// Subpaths the geometric decomposition reports.
+        from_decomposition: usize,
+    },
     /// A node-drag named an anchor index past the object's anchor count.
     #[error("node index {index} is out of range (the object has {count} anchor(s))")]
     NodeOutOfRange {
@@ -304,6 +339,233 @@ pub fn plan_delete(
         content: splice(&content.buf, &mut edits),
         operators_touched: 1,
     })
+}
+
+/// Plan a **subpath delete**: remove ONE subpath's construction operators
+/// from a path object, leaving the object's other subpaths byte-verbatim.
+///
+/// # Why this operation exists at all
+///
+/// A CAD producer routinely emits an entire drawing view as one path object.
+/// Measured on a real SolidWorks export: one stroked path with **1194
+/// subpaths** covering a 550×500 pt isometric view. [`plan_delete`] can only
+/// remove the whole view. This removes one line of it — which is what an
+/// operator asking to "delete this line" almost always means on such a file.
+///
+/// # The index, and the guard that makes it safe
+///
+/// `subpath_index` is into `obj.subpaths` — the SAME ordering
+/// [`super::hit_test_subpaths`] returns and the GUI selects with. That
+/// agreement is not assumed: this re-derives the subpaths from the operator
+/// bytes and **refuses if the two counts disagree**
+/// ([`VectorEditError::SubpathStructureMismatch`]). A silent disagreement
+/// would delete a different line from the one the operator picked, which is
+/// the single worst outcome available here and is not detectable afterwards
+/// by looking at the file.
+///
+/// Only subpaths begun by an explicit `m` or `re` are counted. A subpath that
+/// PDF starts implicitly — a segment operator after `h`, which reopens at the
+/// closed subpath's start point (§8.5.2.1) — has no operator of its own to
+/// remove cleanly, so its presence trips the count guard and the whole edit is
+/// refused rather than approximated. This is the same posture
+/// [`VectorEditError::ImplicitNode`] takes for node drags.
+///
+/// # Clipping paths are refused
+///
+/// If the object's operators include `W` or `W*`, its subpaths define a
+/// **clipping region** (§8.5.4), not marks on the page. Deleting one would
+/// change which OTHER content is visible — an edit whose visible effect is
+/// somewhere the operator was not looking, and the definition of sneaky (rule
+/// 4). Refused by name.
+///
+/// # Deleting the last subpath deletes the object
+///
+/// A path object with no construction operators left is not a smaller object;
+/// it is a painting operator with no path, which is meaningless. So when
+/// `obj` has exactly one subpath this removes the object's whole byte span —
+/// identical to [`plan_delete`]. Callers that need to distinguish the two
+/// outcomes should check `obj.subpaths.len() == 1` before calling.
+///
+/// # Errors
+///
+/// [`VectorEditError::SubpathOutOfRange`], [`VectorEditError::ClippingPath`],
+/// or [`VectorEditError::SubpathStructureMismatch`]. Each is raised before any
+/// content byte is produced, so a refusal leaves the document untouched.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::content::ContentStream;
+/// use pdfce_core::vector::{decompose, NoXObjects, Matrix, VectorObject};
+/// use pdfce_core::vector::edit::plan_delete_subpath;
+///
+/// // Three separate lines painted by ONE `S` — one object, three subpaths.
+/// let cs = ContentStream::parse(b"0 0 m 10 0 l 0 5 m 10 5 l 0 9 m 10 9 l S".to_vec()).unwrap();
+/// let model = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+/// let VectorObject::Path(path) = &model.objects[0] else { unreachable!() };
+/// assert_eq!(path.subpaths.len(), 3);
+///
+/// // Remove the middle one; the other two keep their exact bytes.
+/// let plan = plan_delete_subpath(&cs, path, 1).unwrap();
+/// assert_eq!(plan.content, b"0 0 m 10 0 l 0 9 m 10 9 l S");
+/// ```
+pub fn plan_delete_subpath(
+    content: &ContentStream,
+    obj: &PathObject,
+    subpath_index: usize,
+) -> Result<PlannedEdit, VectorEditError> {
+    if is_clipping_path(content, obj.tokens.start, obj.tokens.end) {
+        return Err(VectorEditError::ClippingPath);
+    }
+
+    let declared = obj.subpaths.len();
+    if subpath_index >= declared {
+        return Err(VectorEditError::SubpathOutOfRange {
+            index: subpath_index,
+            count: declared,
+        });
+    }
+
+    // The last one standing: an empty path is not an object.
+    if declared == 1 {
+        let span = obj.bytes;
+        let mut edits = vec![(span.start, span.end(), Vec::new())];
+        return Ok(PlannedEdit {
+            content: splice(&content.buf, &mut edits),
+            operators_touched: 1,
+        });
+    }
+
+    let sites = enumerate_subpath_sites(content, obj.tokens.start, obj.tokens.end);
+    if sites.len() != declared {
+        return Err(VectorEditError::SubpathStructureMismatch {
+            from_operators: sites.len(),
+            from_decomposition: declared,
+        });
+    }
+    let site = sites
+        .get(subpath_index)
+        .copied()
+        .ok_or(VectorEditError::SubpathOutOfRange {
+            index: subpath_index,
+            count: declared,
+        })?;
+
+    // Swallow the whitespace that FOLLOWED the removed operators, so the
+    // separator before them becomes the separator between their neighbours.
+    // Without this every delete leaves a widening gap behind — cosmetically
+    // untidy on one edit, and on a 1194-subpath drawing an operator could
+    // remove hundreds of lines and leave hundreds of orphaned runs of spaces.
+    //
+    // Trailing rather than leading, and bounded by the object's own span, so
+    // this can never reach across into a neighbouring object's bytes or run
+    // two tokens together.
+    let end = extend_over_whitespace(&content.buf, site.byte_end, obj.bytes.end());
+    let mut edits = vec![(site.byte_start, end, Vec::new())];
+    Ok(PlannedEdit {
+        content: splice(&content.buf, &mut edits),
+        operators_touched: 1,
+    })
+}
+
+/// Advance `end` past any PDF white-space characters (§7.2.2 Table 1), never
+/// beyond `limit` and never beyond the buffer.
+fn extend_over_whitespace(buf: &[u8], mut end: usize, limit: usize) -> usize {
+    let limit = limit.min(buf.len());
+    while end < limit
+        && matches!(
+            buf.get(end),
+            Some(b' ' | b'\t' | b'\r' | b'\n' | b'\x00' | b'\x0c')
+        )
+    {
+        end += 1;
+    }
+    end
+}
+
+/// The byte span of one subpath's construction operators, from its opening
+/// `m`/`re` through its last segment (including a closing `h`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SubpathSite {
+    /// First byte of the opening `m` / `re` operator's operand run.
+    byte_start: usize,
+    /// One past the last byte of the subpath's final construction operator.
+    byte_end: usize,
+}
+
+/// Whether the object's operators establish a clipping region (`W` / `W*`,
+/// §8.5.4).
+///
+/// Checked from the OPERATORS rather than from [`PaintStyle`]: `is_invisible`
+/// is true for a bare `n` as well as for `W n`, and a bare `n` path clips
+/// nothing. Refusing both would be over-broad, and over-broad refusals teach
+/// an operator that the tool says no for no reason.
+fn is_clipping_path(content: &ContentStream, start: usize, end: usize) -> bool {
+    ops_in_range(content, start, end).iter().any(|item| {
+        matches!(
+            item.keyword(&content.buf),
+            Some(b"W") | Some(b"W*") // ui-text-exempt: PDF operator keywords, §8.5.4
+        )
+    })
+}
+
+/// Byte spans of the object's explicitly-started subpaths, in operator order.
+///
+/// Mirrors [`enumerate_anchors`]'s walk, but grouping rather than per-anchor:
+/// an `m` (2 operands) or `re` (4 operands) opens a span, every following
+/// segment operator extends it, and a painting or clipping operator ends it.
+///
+/// A segment operator arriving with no span open — the implicit reopen after
+/// `h` (§8.5.2.1) — is deliberately NOT counted as a subpath here. It cannot
+/// be deleted cleanly (it has no operator that says "a subpath starts"), and
+/// leaving it uncounted makes the caller's count guard trip, which refuses the
+/// whole edit. That is the intended outcome: a structure this walk does not
+/// model exactly must not be edited by index.
+fn enumerate_subpath_sites(content: &ContentStream, start: usize, end: usize) -> Vec<SubpathSite> {
+    let mut sites: Vec<SubpathSite> = Vec::new();
+    let mut open: Option<SubpathSite> = None;
+    for item in ops_in_range(content, start, end) {
+        let Some(keyword) = item.keyword(&content.buf) else {
+            continue;
+        };
+        let nums = item.nums();
+        let bs = item.byte_start();
+        let be = item.byte_end();
+        match keyword {
+            b"m" if nums.len() == 2 => {
+                sites.extend(open.take());
+                open = Some(SubpathSite {
+                    byte_start: bs,
+                    byte_end: be,
+                });
+            }
+            b"re" if nums.len() == 4 => {
+                // A whole closed subpath in one operator: it opens and closes
+                // in the same step, so it is pushed rather than left open.
+                sites.extend(open.take());
+                sites.push(SubpathSite {
+                    byte_start: bs,
+                    byte_end: be,
+                });
+            }
+            b"l" | b"c" | b"v" | b"y" | b"h" => {
+                // With nothing open this is an implicit reopen (§8.5.2.1), and
+                // it is left UNCOUNTED on purpose — see the function docs; the
+                // caller's count guard turns it into a refusal rather than a
+                // guess.
+                if let Some(site) = open.as_mut() {
+                    site.byte_end = be;
+                }
+            }
+            _ => {
+                // A painting, clipping or graphics-state operator ends any
+                // open subpath.
+                sites.extend(open.take());
+            }
+        }
+    }
+    sites.extend(open.take());
+    sites
 }
 
 /// Plan a **node drag**: rewrite the single anchor `node_index` of `obj` to

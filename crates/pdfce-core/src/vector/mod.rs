@@ -69,7 +69,8 @@ pub use decompose::{
     decompose_page, decompose_with_fonts,
 };
 pub use edit::{
-    PlannedEdit, VectorEditError, anchor_count, plan_delete, plan_move, plan_move_node,
+    PlannedEdit, VectorEditError, anchor_count, plan_delete, plan_delete_subpath, plan_move,
+    plan_move_node,
 };
 pub use geometry::{Bounds, Matrix, Point, Rgb, cubic_from_v, cubic_from_y, rect_corners};
 pub use hit::{

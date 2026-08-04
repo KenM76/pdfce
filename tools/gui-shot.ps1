@@ -29,7 +29,12 @@ param(
     [int]$CaptureAfterSeconds = 12,
     [string]$Exe = "$PSScriptRoot\..\target\release\pdfce-gui.exe",
     [string]$Log = "$env:TEMP\pdfce-shot-trace.txt",
-    [int]$X = 40, [int]$Y = 40, [int]$W = 1760, [int]$H = 1150
+    [int]$X = 40, [int]$Y = 40, [int]$W = 1760, [int]$H = 1150,
+    # Capture region, defaulting to the whole window. Kept SEPARATE from the
+    # window rect because conflating them silently resizes the application to
+    # crop a screenshot — which changes the very layout being inspected, so the
+    # picture answers a different question from the one asked.
+    [int]$CropX = -1, [int]$CropY = -1, [int]$CropW = -1, [int]$CropH = -1
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,9 +53,13 @@ Start-Sleep -Seconds $CaptureAfterSeconds
 # device context: a GPU-composited (wgpu/glow) surface is frequently blank in a
 # PrintWindow/BitBlt of the window DC, which would silently produce an empty
 # image and "prove" a rendering bug that does not exist.
-$bmp = New-Object System.Drawing.Bitmap $W, $H
+$cx = if ($CropX -ge 0) { $CropX } else { $X }
+$cy = if ($CropY -ge 0) { $CropY } else { $Y }
+$cw = if ($CropW -gt 0) { $CropW } else { $W }
+$ch = if ($CropH -gt 0) { $CropH } else { $H }
+$bmp = New-Object System.Drawing.Bitmap $cw, $ch
 $g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($X, $Y, 0, 0, (New-Object System.Drawing.Size $W, $H))
+$g.CopyFromScreen($cx, $cy, 0, 0, (New-Object System.Drawing.Size $cw, $ch))
 $bmp.Save($Shot, [System.Drawing.Imaging.ImageFormat]::Png)
 $g.Dispose(); $bmp.Dispose()
 

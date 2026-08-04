@@ -1824,6 +1824,49 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Delete one subpath** of a path object (Pass 25.2): remove a single
+    /// subpath's construction operators via surgery (R46/§5.7), leaving the
+    /// object's other subpaths byte-verbatim.
+    ///
+    /// This is the operation for CAD output. A producer routinely emits a whole
+    /// drawing view as ONE path object — a measured SolidWorks export has a
+    /// single stroked path holding 1194 subpaths for one isometric view — so
+    /// `object-delete` there removes the entire view. This removes one line of
+    /// it. Find the index with
+    /// `object-list --hit X,Y --enter OBJECT`, which prints `subpath-hit` lines
+    /// nearest-first.
+    ///
+    /// NOT redaction: it removes a drawing element from a page, not covered
+    /// content for security.
+    ///
+    /// Refused, by name and before any mutation, when the path defines a
+    /// clipping region (deleting part of it would change what OTHER content is
+    /// visible), and when the subpaths found in the operators disagree in count
+    /// with the geometry (the index could then name a different line from the
+    /// one intended). Deleting the only subpath deletes the object.
+    SubpathDelete {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// 0-based paint-order object index on the page.
+        #[arg(long)]
+        object: usize,
+        /// 0-based subpath index within that object, in decomposition order —
+        /// the same order `object-list --enter` reports.
+        #[arg(long)]
+        subpath: usize,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Drag a node** of a path object (Pass 9c-min, decision 011 §2.5):
     /// rewrite ONE anchor's coordinate pair to a page-space point via surgery
     /// (R46/§5.7). `--node` is the anchor's 0-based index in decomposition
@@ -2526,6 +2569,23 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_object_delete(&input, page, object, &output, mode, verify_undo),
+        Command::SubpathDelete {
+            input,
+            page,
+            object,
+            subpath,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_subpath_delete(&SubpathDeleteArgs {
+            input: &input,
+            page,
+            object,
+            subpath,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
         Command::NodeMove {
             input,
             page,
@@ -8745,6 +8805,71 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
         u32::from(outcome.undo_identical),
     );
     finish_edit(input, &outcome)
+}
+
+/// Grouped arguments for `subpath-delete` (Pass 25.2) — a struct to keep the
+/// handler under clippy's `too_many_arguments` bar, like its siblings.
+struct SubpathDeleteArgs<'a> {
+    input: &'a Path,
+    page: u32,
+    object: usize,
+    subpath: usize,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `subpath-delete` — remove ONE subpath of a path object via content-stream
+/// surgery, leaving the object's other subpaths byte-verbatim.
+///
+/// ## Contract
+///
+/// - Emits one `subpath-delete …` line naming the page, object, subpath and
+///   the usual save-report fields, then defers the exit code to
+///   [`finish_edit`] like every other editing subcommand.
+/// - Every refusal — clipping path, structure mismatch, out-of-range index,
+///   non-path object — happens before any mutation and is reported through
+///   [`report_edit_error`], so the refusal vocabulary and exit codes are the
+///   same ones the GUI surfaces. The operator gets the same answer whichever
+///   shell they came through, which is the point of having one core.
+fn cmd_subpath_delete(args: &SubpathDeleteArgs<'_>) -> u8 {
+    let page_index = (args.page.max(1) - 1) as usize;
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    if let Err(err) = session.delete_subpath(page_index, args.object, args.subpath) {
+        return report_edit_error(args.input, &err);
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "subpath-delete {} page {} object={} subpath={} mode={} -> {}; changed={} objects={} \
+appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.page,
+        args.object,
+        args.subpath,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
 }
 
 /// Grouped arguments for `node-move` (Pass 9c-min).
