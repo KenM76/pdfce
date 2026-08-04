@@ -136,7 +136,8 @@ pub fn hit_test_point(model: &PageObjects, point: Point, tolerance: f64) -> Opti
 ///
 /// The hit predicate is the same per-kind rule [`hit_test_point`] uses —
 /// fill-interior under the object's winding rule, stroke proximity within
-/// half the CTM-scaled line width, bbox for text/image/form — because both
+/// **half the CTM-scaled line width PLUS `tolerance`**, bbox inflated by
+/// `tolerance` for text/image/form — because both
 /// functions filter the one [`hits_front_to_back`] scan. **Empty** for a
 /// miss and for a non-finite point; never `None`-vs-empty ambiguity.
 ///

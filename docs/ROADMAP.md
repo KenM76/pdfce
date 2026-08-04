@@ -59,6 +59,24 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
   When a report or request uses "dimension" unqualified, infer from
   context and **echo back the qualified term** so a mismatch surfaces
   before work starts, not after.
+- **Obj-tool universality is a selection-layer property, not a
+  verb-layer one** — decision 023 §5.2's reconciliation of the
+  operator's "the Obj tool is for everything" instruction against
+  decision 022 §4.2's anti-silent-re-measure argument, recorded here
+  because it is a durable project-wide design principle, not a
+  one-off Pass detail. The Obj tool selects **everything** on a page —
+  content objects, annotations, ce dimensions, pdf dimensions alike —
+  but it does not thereby inherit every verb for every kind it can
+  select. A dimension's re-measure gesture stays owned by the Measure
+  tool (where the operator's mental model is "I am measuring," and
+  where a two-stage disclosed old→new preview belongs); the Obj tool's
+  role is to select the dimension and offer a **`Re-measure` verb that
+  hands off** to the Measure tool with that dimension loaded, never to
+  perform the geometry edit itself. Stated as the reusable rule: a tool
+  that is instructed to be "universal" is universal at whichever layer
+  the instruction was actually about — confirm which layer before
+  concluding two requirements conflict. See decisions
+  022 §4.2/023 §5.1–§5.2 for the full worked derivation.
 
 ## Shipped
 
@@ -7503,8 +7521,10 @@ subsystem — NOT part of the ui-spec/dock family above:
    the paper-basis unit. **Also named in decision 023 §6.5/§10.9 as a
    coupled bug that must be fixed in the same slice as Pass 23.0
    (format & units GUI surface), or that new control ships looking
-   broken from day one — see the ★ decisions 022/023 filing-status
-   note under Standing rules.**
+   broken from day one — see the "Object-tool selection, level
+   navigation & ce-dimension authoring controls" Backlog bucket
+   (filed continuation 80, 2026-08-04), below, for the filed Pass
+   entry.**
 2. The circular (radius/diameter) tool renders NO status feedback
    below the 3-point fit threshold — the whole status body lives
    inside `if let Some(fit)`, so a partial pick shows nothing.
@@ -9370,6 +9390,180 @@ nothing gets forgotten, not as a commitment to build in this order.
   reference-renderer pixel-parity harness stays a Pass 1.1 remainder,
   made materially cheaper by Pass 3.0's self-comparison oracle (see
   Pass 3.0's raster-oracle note).
+- **Object-tool selection, level navigation & ce-dimension authoring
+  controls — Pass 22.0 (decision 022) / Pass 23.0–23.3 (decision 023).
+  Filed 2026-08-04 (continuation 80). Status: both DECIDED, SCOPED,
+  NOT STARTED — no code has been written for either.** Archived at
+  `docs/decisions/022-annotations-in-canvas-selection.md` and
+  `docs/decisions/023-object-tool-level-navigation-and-dimension-authoring-controls.md`.
+  Pass families **22** and **23** verified free at both decisions'
+  own write time (`python tools/check-ledger-numbers.py --stats`,
+  per each document's own preamble) and re-confirmed by this filing
+  via a live Grep of `ROADMAP.md` for `Pass 22`/`Pass 23` — no
+  `### Pass 22` / `### Pass 23` heading existed anywhere in this file
+  before this entry. **Methodology note: this librarian has no
+  Bash/shell tool and could not execute
+  `tools/check-ledger-numbers.py` directly this filing** — the
+  confirmation above is a Grep against the same source file the
+  checker reads, not a script run; recorded so a future reader does
+  not assume the checker itself was invoked.
+
+  **Origin.** The operator reported box-select failing on "dimension
+  lines and dimensions" in a CAD drawing (2026-08-03/04). Investigation
+  found **two independent, structurally identical defects**, not one:
+  1. **Decision 022** — ce dimensions (`/Line`+`/IT /LineDimension`
+     annotations pdfce itself authors) are painted by the renderer but
+     never enumerated by the selection model (`decompose_page` never
+     reads `/Annots`), so they cannot be clicked, marqueed, **or
+     deleted by any surface at all** — a second, more severe defect
+     found during the investigation: there was no way to remove a ce
+     dimension by any means whatsoever, canvas, Objects panel, or CLI.
+  2. **Decision 023** — the SAME paint/select asymmetry exists a
+     second time, independently, in **form XObjects**:
+     `pdfce-render` recurses into a `Do` on a form and paints its
+     contents individually; `decompose.rs` emits **one opaque object**
+     for the whole form. Every line inside a placed CAD block (a title
+     block, a hatch, a nested drawing block) is visible and
+     unselectable.
+
+  **★ Restated at the point of filing, because it changes what
+  "closes the original report" means:** per Open operator question
+  (t), below, the operator's original complaint was almost certainly
+  describing a CAD-exported drawing — **pdf dimensions**, not ce
+  ones. If so, **Pass 22.0 alone does not fix what was reported.**
+  22.0 fixes a real, independently-confirmed defect (ce dimensions
+  were never selectable or deletable, a genuine gap the operator had
+  not yet hit) — but it is Pass 23.2 (level navigation, dependent on
+  22.0), not Pass 22.0, that closes the form-XObject asymmetry most
+  likely responsible for the literal report. Both are worth building
+  regardless; only one is the literal fix. **Not yet confirmed** which
+  the operator's drawing actually contained — see (t) for the
+  recommended one-question/one-file-open confirmation step.
+
+  **Sub-slice plan and dependency graph:**
+  - **Pass 22.0** (decision 022) — three sub-slices: **22.0a** core
+    (`pdfce_core::annot::is_visible_on_screen`/`selectable_annotations`
+    extracted from the renderer's own predicate, one definition two
+    consumers; `EditSession::delete_annotation`/`delete_dimension`,
+    dimension-aware — prunes the `/PieceInfo` sidecar in the same
+    command) → **22.0b** CLI (`annot-list`, `annot-delete`,
+    `dimension-delete`, `dimension-list` widened to print `annot=`,
+    `object-list --enclose` for the marquee's first-ever headless
+    oracle) → **22.0c** GUI (`TargetId` widened `u64` → a two-variant
+    enum `{Content(u64), Annot(ObjId)}`; composite `ObjectModelProvider`;
+    **select + delete only** — move/drag-node are structurally absent
+    from the `Annot` arm, so there is no affordance and no unfireable
+    refusal). Full acceptance criteria: decision 022 §6.4 (A1–A9).
+  - **Pass 23.0** (decision 023, Q6) — format/units GUI surface. **Zero
+    dependency on 22.0.** `EditSession::set_group_format` (decoupled
+    from scale — today format can only change by re-drawing a scale
+    line); CLI `group-set-format --style decimal|fraction --denominator
+    N --reduce`; GUI group-row controls + a live sample of the
+    operator's own data before Apply. Closes **two dead-capability
+    defects** found during the same audit: `NumberFormat::inch_fraction`
+    and `FractionMode::Fraction{reduce:true}` are both implemented,
+    documented with runnable examples, spec-mirrored into `/Measure` —
+    and constructed from **nowhere outside a unit test**. No operator,
+    GUI or CLI, can produce a fraction-formatted dimension today. **Must
+    also fix the already-filed Pass 12.M2c bug #1** (ratio-scale entry
+    silently overwrites the group's display unit) in the same slice, or
+    the new control ships looking broken from day one — see the
+    Pass 12.M2c cluster entry, above, bug 1, which now cross-references
+    this Pass.
+  - **Pass 23.1** (decision 023, Q5) — dimension re-measure +
+    whole-dimension move. **Depends on 22.0** (reuses its
+    sidecar-pruning discipline and guarded-`/AP`-write fix — building
+    23.1 first would force both to be re-derived under pressure).
+    `EditSession::set_dimension_geometry`; Measure-tool endpoint
+    handles on a selected dimension; a two-stage disclosed gesture
+    (old→new value + delta + group/scale visible live, mouse-up never
+    commits, Accept/Reject). See the Glossary's new "Obj-tool
+    universality" entry, above, for the reconciliation that makes this
+    buildable without reopening decision 022 §4.2.
+  - **Pass 23.2** (decision 023, Q1–Q3) — level navigation: containers
+    (a form-XObject invocation OR a balanced marked-content sequence,
+    taken as a union), descend one level per double-click, ascend via
+    Escape (`LeaveGroupLevel`, a new precedence-chain slot between
+    `CancelGesture` and `ExitTool`) or click-outside (nearest common
+    ancestor), a breadcrumb that is simultaneously the level disclosure
+    and the ascent affordance. **Depends on 22.0** (`TargetId` enum
+    widening; payload grows to `ContentPath`, no further substrate
+    change — a direct dividend of 022 choosing the enum over the
+    tagged-integer alternative it rejected). **READ-ONLY — writes
+    nothing**, the largest slice at zero round-trip risk. **This is the
+    slice that closes the form-XObject paint/select asymmetry** (§0
+    finding 2) — the candidate fix for the operator's literal original
+    report, per question (t).
+  - **Pass 23.3** (decision 023, Q4) — node selection set, multi-node
+    move (**ONE** core plan, `plan_move_nodes`, not N sequential
+    `move_node` calls), node delete (straight-join semantics, curvature
+    disclosed-as-lost). Named, reachable, R96-tested refusals:
+    `SubpathWouldDegenerate`, `RectangleNode`, `ImplicitNode`,
+    `NotAPath`, `FormStreamIsShared`. `DegenerateCtm` must **NOT** be
+    raised for node delete — deletion needs no coordinate transform, so
+    no such failure exists; raising it anyway would be a refusal no
+    test could honestly reach. A node-display ceiling with disclosure
+    (never a silent first-N) is required — `MAX_NODES` is 4,000,000 and
+    a plotted drawing routinely carries tens of thousands of anchors.
+    **Depends on 23.2** (level 3 is the level below level 2).
+
+  **Librarian's read on slice ordering, asked for explicitly by the
+  operator, not just filed as a fact:** decision 023 §7.1 orders **23.0
+  first**, and its stated reason is entirely an **engineering-risk**
+  argument — zero hierarchy risk, no dependency on 022, a clean CLI
+  oracle. That reasoning is sound on its own terms, but it is silent on
+  **user impact**, and the terminology audit that produced Open
+  operator question (t) changes the user-impact picture materially: the
+  operator's actual reported pain (box-select failing on a CAD drawing)
+  is very likely a **pdf-dimension**/form-XObject problem that **neither
+  22.0 nor 23.0 touches** — only 23.2 (which depends on 22.0) does.
+  Shipping 23.0 first means the first thing that ships from this whole
+  body of decided work is a **ce-dimension** format-precision control,
+  while the reported bug remains unfixed. I do not think that is the
+  right ordering if the goal is "fix what was reported soonest" —
+  **22.0 → 23.2 is the fix-oriented order**, and it is also the order
+  decision 023's own dependency graph already requires for 23.2
+  regardless of where 23.0 lands, so putting 23.0 first buys engineering
+  safety at the cost of sequencing, not in exchange for it. My
+  recommendation: resolve question (t)'s confirmation (open the
+  operator's file, or ask — near-zero cost) before committing to a
+  build order at all, since it is what actually determines whether
+  22.0 alone or 22.0+23.2 is the fix; treat 23.0's zero-risk,
+  zero-dependency shape as a reason it is a safe thing to build **in
+  parallel or while waiting on that confirmation**, not as a reason to
+  sequence it strictly ahead of the fix. This is a recommendation, not
+  a decision — sequencing calls of this shape have consistently been
+  left to the engineer/operator on this project (see the item (l)/(m)
+  precedent, Open operator questions, below).
+
+  **Standing rules assigned:** R111–R120 (see Standing rules, below,
+  for full text and the two amendments 023 makes to 022's proposed
+  rules). Ceiling before this filing was R110; **ceiling is now
+  R120.** **New open operator questions filed:** (u)–(ab) — see Open
+  operator questions, below.
+
+  **Cross-references:** Open operator question (t) (the scoping
+  question this whole bucket exists to answer); the "Ce-dimension-tool
+  bug-fix cluster — Pass 12.M2c" entry, above (bug #1 coupling with
+  Pass 23.0); the "Vector graphics editing (Inkscape-parity)" bucket,
+  above (Pass 23.3's node selection/multi-move/delete is that bucket's
+  "Node/Bézier path editing" line item, now Pass-scoped for the first
+  time); `ARCHITECTURE.md` §12 (dated decision-022/023 entries) and new
+  §5.12 (the R58-family-membership clarification these decisions
+  surfaced, independent of whether either Pass ships).
+
+  **No `ARCHITECTURE.md` §3/§4 body-section update this filing** — same
+  disposition as decisions 020's and 021's own entries (`ARCHITECTURE.md`
+  §12): nothing has shipped, so §4 (core data model) describes no new
+  reality yet; §4 gets its `PageObjects.containers`/`Container`/
+  `ContainerKind` row added when Pass 23.2 actually lands, not now. The
+  one exception, by the same logic as decision 020's decision-009
+  forward-pointer exception: `ARCHITECTURE.md` §5.9/R58's text is
+  **already** stale against **already-shipped** code
+  (`delete_object`/Pass 9c-min, `delete_redaction_mark`/Pass 8) — that
+  is a correction to a currently-true statement, not a preview of a
+  future one, so it is made now (see the new §5.12 note) rather than
+  deferred to either Pass's ship.
 - **Forms (AcroForm)** — field creation/editing, appearance-stream
   generation, form-field auto-detection (as a *hint*, per
   fuzzy-never-sneaky), flatten-to-static.
@@ -10270,6 +10464,97 @@ exercises neither):**
   filing so that filing can happen with the qualified `pdf dimension`/
   `ce dimension` terminology from day one rather than needing its own
   correction pass.
+  **FILED (continuation 80, 2026-08-04) — the deliberately-deferred
+  filing named above is now done.** Decisions 022 and 023 are promoted
+  into `ROADMAP.md` as the "Object-tool selection, level navigation &
+  ce-dimension authoring controls — Pass 22.0 / Pass 23.0–23.3" Backlog
+  bucket (below), with standing rules R111–R120 assigned and new open
+  questions (u)–(ab) filed (below) and `ARCHITECTURE.md` §12 dated. **The
+  scoping question itself — which kind of dimension the operator's
+  original drawing actually contained — remains open**, unresolved by
+  this filing; only the "file it" action item is discharged. **Librarian's
+  ordering read, added at filing time:** the fix-oriented build order is
+  **22.0 → 23.2** (23.2 is the slice that closes the form-XObject
+  asymmetry most likely responsible for the original report); decision
+  023 §7.1's 23.0-first ordering is a pure engineering-risk argument and
+  does not fix what was reported — see the new Backlog bucket's own
+  "Librarian's read on slice ordering" paragraph for the full reasoning.
+  This does not resolve the confirmation step above; it only says what
+  order to build in once that confirmation lands (or in parallel with
+  seeking it).
+
+**New this session (2026-08-04, continuation 80) — eight items, drawn
+from decisions 022 §9 and 023 §10's "for the operator" sections, filed
+here for the first time (both decisions themselves only listed them
+inline; none had a ROADMAP letter until now). None block Pass 22.0/23.0
+starting build — each is a scope/preference question about a LATER
+slice or an already-decided default that can be revisited:**
+- **(u) Widget (form-field) annotations — refuse deletion by name, or
+  cascade into form surgery?** Decision 022 §6.2/§9 item 2 recommends
+  refuse (`AnnotationIsWidget`) — deleting a widget without its
+  `/AcroForm /Fields` entry orphans the field, which is form surgery
+  (decision 020's R100–R106 family), not annotation surgery. **Default:
+  refuse, as recommended** — confirm if cascading into form deletion is
+  wanted instead.
+- **(v) R58's literal wording is already stale — fix the rule text, or
+  leave it and keep accumulating named exceptions?** Decision 022 §5.4/
+  §9 item 3 found that R58's binding text ("every removal/scrub
+  operation forces a full rewrite") is **already contradicted** by two
+  shipped operations (`delete_object`, Pass 9c-min; `delete_redaction_mark`,
+  Pass 8) that correctly stay under incremental save, using the same
+  confidentiality-contract-vs-not distinction §5.11/R70 already
+  established for in-place text editing. Decision 022 explicitly declines
+  to narrow a standing rule's scope solo. **This filing adds a flagged
+  staleness note to `ARCHITECTURE.md` §5.9/§5.12 and to R58's own
+  Standing-rules bullet, below, WITHOUT rewriting R58's binding text** —
+  the correction itself (narrowing "every removal/scrub" to
+  "confidentiality-contract removals") is what needs your confirmation.
+  **Default if unanswered: the flag stays, the text stays unchanged, and
+  Pass 22.0's `delete_annotation` becomes a THIRD unreconciled exception**
+  (see the §5.9/§5.12 note for exactly which shipped/proposed operations
+  already sit outside R58's literal scope).
+- **(w) Per-group vs. per-dimension display format?** Decision 023 §6.3/
+  §10 item 1 recommends **per-group**, with "draw a second group at the
+  same scale" as the free escape hatch if a workflow needs two formats
+  inside one scale context. **Default: per-group, as recommended** —
+  confirm this fits, or the group model needs revisiting before Pass
+  23.0 ships.
+- **(x) A GUI toggle for `reduce` (`3/4"` vs. the shipped-default `6/8"`
+  kept-denominators), or CLI-only?** Decision 023 §6.4/§10 item 2 ships
+  `reduce` CLI-only, disclosed in the GUI rather than exposed as a
+  checkbox (nobody asked for it). **Default: CLI-only, as scoped** —
+  say so if a GUI toggle is wanted.
+- **(y) Form-XObject "make this placement independent" un-sharing
+  command — wanted, or is refuse-by-name (`FormStreamIsShared`) the
+  whole feature?** Decision 023 §1.4/§10 item 3 — a form placed N times
+  shares one content stream, so editing inside it is refused while
+  N > 1 (Pass 23.3). An un-share command (duplicate the stream, rewrite
+  the one `Do`) is a real, deliberate minimal-diff-breaking trade, not a
+  freebie. **Default: refuse only, no un-share command** — say so if
+  wanted as a fast-follow.
+- **(z) Fixed three navigation levels, or as deep as the file's own
+  structure goes?** Decision 023 §1.3/§10 item 4 recommends **as deep as
+  the file goes**, terminating at nodes — a fixed-three design would
+  either refuse to enter a nested block or lie about where the operator
+  is standing. **Default: as deep as the file goes, as recommended** —
+  this is the only item in this block where the alternative is
+  materially worse, not just different, but confirming avoids
+  discovering a disagreement mid-build.
+- **(aa) Node delete between two curve segments → a straight join with
+  disclosed curvature loss, or is a reviewable curve-refit wanted as a
+  later feature?** Decision 023 §4.5/§10 item 5 ships the straight-join
+  semantics now (deterministic, spec-trivial) and names curve-preserving
+  refit as a deferred, larger, rule-4-governed (reviewable preview)
+  feature, not built in 23.3. **Default: straight-join now, refit
+  deferred, as scoped** — confirm if refit should be pulled forward.
+- **(ab) Should snapping see inside form XObjects?** Decision 023 §2.4/
+  §10 item 7 — today it cannot, which means **the operator cannot
+  dimension to a line inside a placed CAD block** even after Pass 23.2
+  makes that geometry navigable/selectable. Consuming it in the snap
+  engine is a separate, real cost (a snap query over a deeply-nested
+  page is materially larger than today's top-level-only query) — not a
+  freebie alongside 23.2. **No default stated** — this is a genuine
+  cost/benefit call, not a "ship the obviously-better option" item.
 
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
@@ -10932,6 +11217,27 @@ exercises neither):**
   bytes → zero. An incremental scrub is a contradiction in terms. See
   `ARCHITECTURE.md` §5.9 (which generalizes §5.2's R35), the Pass 8.0
   Shipped entry, and the ui-spec that surfaced it.
+  **Staleness flagged, text NOT changed (decision 022 §5.4, filed
+  continuation 80, 2026-08-04) — see Open operator question (v),
+  above.** This rule's literal text ("every removal/scrub operation")
+  is already contradicted by two shipped operations that correctly stay
+  under incremental save: `EditSession::delete_object` (Pass 9c-min,
+  content-stream surgery) and `delete_redaction_mark` (Pass 8). Both are
+  removals whose contract is NOT confidentiality (§5.11/R70 already
+  established this distinction for in-place text editing, the same
+  reasoning applies here) — deleting page content or an annotation says
+  "this is no longer in the current revision," not "this must be
+  provably unrecoverable," and undo/version history remaining reachable
+  is that working as intended, not a defect. Decision 022's own proposed
+  `delete_annotation` (Pass 22.0) would be a **third** such exception if
+  built without a wording fix. The correction this rule's text needs —
+  narrowing "every removal/scrub operation" to "every operation whose
+  contract is CONFIDENTIALITY (redaction, scrub, recovered-base save)" —
+  is deliberately NOT made here; decision 022 explicitly declines to
+  narrow a standing rule's scope solo, and this librarian is following
+  that same restraint rather than unilaterally rewriting binding rule
+  text. Full reasoning: `ARCHITECTURE.md` §5.9's new staleness note and
+  §5.12.
 - **R59 — Render-fidelity is proved against an INDEPENDENT renderer at
   corpus scale before any subsystem edits content it re-renders.** Added
   2026-08-01 (decision 010). A self-comparison (pdfce-before vs
@@ -11964,6 +12270,168 @@ exercises neither):**
   `D:\dev\rag\rust\overloaded_term_ambiguity_becomes_scope_ambiguity.md`
   this session (worked example: this exact case), indexed in
   `D:\dev\rag\rust\index.md`.
+
+- **R111 — Selection enumerates exactly what the renderer paints
+  (decision 022 §8, filed continuation 80, 2026-08-04;
+  librarian-assigned number).** Any object space the canvas paints must
+  be hit-testable through the SAME visibility predicate the renderer
+  uses, defined once in `pdfce-core`, never re-derived in `pdfce-gui`.
+  A paint/hit-test asymmetry is a defect of the same class as decision
+  011's Z2 two-decompositions divergence, one object space over. This
+  rule's absence is the whole cause of decision 022 existing: ce
+  dimensions were painted from Pass 6.1 onward and selectable from
+  never, and no gate existed to notice. **Amended by decision 023 §8
+  item 8 (2026-08-04): a SECOND, independent live violation of this
+  exact rule was found in form XObjects** — `pdfce-render`'s
+  interpreter recurses into a `Do` on a form (painting its contents
+  individually) while `decompose.rs` emits one opaque object for the
+  same `Do`, so this rule's first gate must cover both object spaces,
+  not just annotations. Enforcement: decision 022's A3 (annotation
+  visibility, Pass 22.0) and decision 023's C2 (form-content visibility,
+  Pass 23.2).
+- **R112 — A selectable kind carries its verb set in its type
+  (decision 022 §8, filed continuation 80, 2026-08-04;
+  librarian-assigned number).** Handles like `TargetId` are an enum
+  over kinds, and every verb dispatch on that handle is an exhaustive
+  match; a verb that does not apply to a kind is UNREPRESENTABLE, never
+  a silent no-op. This is the structural form of R83: R83 forbids the
+  affordance for an unavailable verb, this rule forbids the shape that
+  makes adding that affordance by accident easy in the first place — a
+  half-polymorphic verb set (select works, move silently does nothing)
+  is worse than not selecting at all. **Amended by decision 023 §8
+  item 7 (2026-08-04): STRENGTHENED — the handle must also express
+  LEVEL** (which container/depth an object sits at), or level becomes a
+  runtime convention of exactly the class decision 022 §2 option (d)
+  (the rejected tagged-integer partition) already refused. Concretely:
+  `TargetId::Content`'s payload grows from a bare `u64` to `ContentPath
+  { stream, index }` in Pass 23.2 — payload only, no further substrate
+  change, a direct dividend of this rule choosing the enum over a
+  tagged integer in the first place.
+- **R113 — Deleting a pdfce-authored annotation prunes its
+  `/PieceInfo` record in the same command (decision 022 §5.3/§8, filed
+  continuation 80, 2026-08-04; librarian-assigned number).** The
+  sidecar and the document object graph must never diverge across one
+  undoable command, in either direction. Derived from a concrete,
+  found-not-hypothesized corruption path: `set_group_scale`
+  (`edit.rs:6083-6130`) pushes an `ObjectWrite` replacing every
+  member's `/AP` stream UNCONDITIONALLY, while the annotation-dict half
+  of the same loop is guarded — so deleting an annotation generically
+  while its `DimensionRecord` survives in the sidecar causes the next
+  scale change to write a fresh `/AP` stream at a REMOVED object id,
+  resurrecting an orphan appearance stream nothing references, and
+  `dimension-list` keeps reporting a dimension that is not on the page
+  (a disclosure lie, rule 4). `EditSession::delete_annotation` (Pass
+  22.0) must use the guarded-write pattern and prune the sidecar in the
+  SAME command, not a follow-up one. Also inherited by
+  `set_dimension_geometry` (Pass 23.1, decision 023 §5.5 item 1) — the
+  same corruption shape reintroduced from a re-measure direction if not
+  guarded there too.
+- **R114 — Every new selection or gesture surface ships a headless
+  oracle in the same Pass (decision 022 §8, filed continuation 80,
+  2026-08-04; librarian-assigned number).** Rule 11's logic (each
+  feature ships its `pdfce-cli` surface) applied specifically to
+  VERIFICATION surfaces, not just authoring ones. Concrete gap this
+  closes: `hit_test` has had `object-list --hit` since Pass 9a;
+  `hit_test_rect` (the marquee) had NOTHING, and the marquee gap this
+  decision exists to close was found by a human clicking the app, not
+  by any gate. Decision 023's `object-list --tree`/`--level N`
+  (Pass 23.2) is the same rule applied to descent: descent is a pure
+  function of (point, level, container forest), so it is fully
+  assertable headlessly even though the marquee's visual reading is
+  not.
+- **R115 — A PDF page's structural hierarchy is a laminar interval
+  family over paint order, plus a forest of content streams — never a
+  re-parented object list (decision 023 §9 item 1, filed continuation
+  80, 2026-08-04; librarian-assigned number).** A `BDC`…`EMC` sequence
+  (§14.6) is by definition a contiguous token range, so the objects it
+  encloses are a contiguous index range in paint order; nesting
+  produces nested ranges, never crossing ones. A form's contents live
+  in a DIFFERENT content stream and were never in the page's index
+  space to begin with, so giving them their own flat list is the
+  truth, not a workaround. Any container model preserves each stream's
+  flat paint-order index space byte-for-byte; hierarchy is an INDEX
+  over it, a view, never the canonical structure. Protects the exact
+  agreement `EditSession::vector_surgery`'s content-only decompose and
+  the GUI provider's `decompose_page` share BY CONSTRUCTION (decision
+  022 §2 option (e)'s reasoning) — the agreement that makes
+  `object-move --object 2` and a GUI drag mean the same thing — at the
+  one moment (adding hierarchy) most likely to break it silently.
+- **R116 — Editing inside a form XObject is refused while that form is
+  invoked more than once, and the invocation count is MEASURED, not
+  assumed (decision 023 §1.4/§9 item 2, filed continuation 80,
+  2026-08-04; librarian-assigned number).** A form's content stream is
+  ONE object; `Do` paints it N times. A correct, minimal, byte-perfect
+  edit to that shared stream is still wrong for every placement but the
+  one the operator meant — editing a path inside a title block placed
+  on 12 pages changes it on all 12. Not a bug to fix; it is what a form
+  XObject IS (§8.10 — reuse is the entire point). Named refusal:
+  `FormStreamIsShared { form: ObjId, invocations: usize }`, reachable
+  trivially (any repeated block) and owed a test asserting it FIRES
+  (R96). When the count is exactly 1, this is DISCLOSED (not silent),
+  so the operator learns the rule from the common case rather than only
+  from the refusal.
+- **R117 — A shipped capability reachable from no surface is a defect
+  of the same class as an affordance with no capability — R83's
+  inverse (decision 023 §9 item 3, filed continuation 80, 2026-08-04;
+  librarian-assigned number).** Every constructor of an
+  operator-visible formatting or behavior variant is reachable from at
+  least one surface (GUI or CLI), or it is deleted — a capability that
+  exists in code but that no operator can ever invoke is exactly as
+  dishonest as an affordance that promises a capability that doesn't
+  exist, just in the opposite direction. Sourced concretely:
+  `NumberFormat::inch_fraction` and `FractionMode::Fraction{reduce:
+  true}` are both live, documented with runnable examples, spec-mirrored
+  into `/Measure`, unit-tested — and constructed from NOWHERE outside
+  that one test. No operator, GUI or CLI, can ask pdfce to do something
+  it already fully implements. Closed by Pass 23.0's `--style`/
+  `--denominator`/`--reduce` CLI surface, which costs nothing beyond
+  argument parsing (R96 governs the CLI: a name must be reachable).
+- **R118 — A display-format preference never rides the gesture that
+  first set it (decision 023 §9 item 4, filed continuation 80,
+  2026-08-04; librarian-assigned number).** Format lives on the
+  persistent entity (a dimension group), is settable independently of
+  whatever transient gesture originally set it (a scale-entry dialog),
+  and shows a live sample of the operator's OWN data before Apply.
+  Sourced from a concrete coupling defect: `set_group_scale(scale,
+  format)` is the only setter that exists, so precision is only
+  changeable today by re-drawing a scale line — an artifact of where
+  the control happened to land, not a design. `set_group_format`
+  (Pass 23.0) decouples the two.
+- **R119 — A geometry change to a measurement is two-stage and
+  disclosed: old → new visible before commit, and mouse-up is never
+  the commit (decision 023 §9 item 5, filed continuation 80,
+  2026-08-04; librarian-assigned number. Preserves decision 022 §4.2's
+  principle as a rule now that the capability — re-measure — is
+  wanted, rather than discarding the principle along with the original
+  prohibition).** In a measurement tool specifically, a drag that
+  silently changes a reported measurement is the single sneakiest thing
+  the application could do (rule 4) — the argument was always about
+  SILENCE, not about whether re-measure should exist at all. What must
+  be on screen before Accept can be pressed: the old value, the new
+  value, the delta, and the group/scale the new value was computed
+  under. Reject or Escape reverts to the pre-drag geometry via the
+  shipped `CancelGesture` mechanism. Governs `set_dimension_geometry`
+  (Pass 23.1).
+- **R120 — A precedence chain resolved from booleans takes a
+  named-field context, not positional arguments (decision 023 §9 item
+  6, filed continuation 80, 2026-08-04; librarian-assigned number,
+  numbered despite the decision document's own hedge that it "may be
+  judged too small for a number" — R106 is direct precedent that a
+  methodology rule earns a number when it materially prevents a
+  concrete collision risk, and this one does).** Concrete risk this
+  closes: `resolve_escape(tool_active: bool, gesture_discardable: bool,
+  canvas_selection_nonempty: bool)` is about to be edited by TWO
+  concurrent Passes (the in-flight navigation Pass's context-menu-
+  dismissal slot, and Pass 23.2's `LeaveGroupLevel` slot) — each
+  appending a positional `bool` produces
+  `resolve_escape(true, false, true, false, true)` at the call site, a
+  shape where a transposed argument compiles, type-checks, and silently
+  reorders Escape's precedence. Fixed by whichever Pass lands first
+  changing the signature ONCE to a named-field `EscapeContext` struct;
+  each subsequent Pass then ADDS a field, and a transposition becomes a
+  name error instead of a silent behavior change.
+
+  **Ceiling is now R120** (was R110 before this entry).
 
 ## Update protocol
 
