@@ -1,6 +1,6 @@
 ---
 name: project-mit-license-and-priority-sequence
-description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling (item #3 PARTIAL: FF-H DONE, FF-C/FF-B open) → forms (item #4, still undispatched). Decision 019/★ Pass 19.x COMPLETE (all 5 slices, 2026-08-03, `a1638f4`) — Amendment F filed (R91 unreachable-gate fix, R96 new). Engineer now dispatching GUI redaction-apply flow (not one of the 4 items) ahead of item #4 — flagged sequencing call, Open operator question (l).
+description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling (item #3: FF-H DONE, FF-C DECIDED/SCOPED as Pass 21.x NOT STARTED per decision 021, FF-B open) → forms (item #4, still undispatched). Pass 8.1 (GUI redaction-apply) SHIPPED. Decision 021 (FF-C) filed 2026-08-03: add-only re-scope, R107–R110, ceiling now R110.
 metadata:
   type: project
 ---
@@ -301,3 +301,40 @@ session — only "when does it get scoped" remains open. Item #4
 (forms) is still queued behind item #3's remaining FF-C/FF-B slices,
 per the standing order; a KenAgent decision agent is concurrently
 scoping FF-C (will land as decision 021).
+
+**UPDATE — 2026-08-03, SESSION_LOG continuation 73: decision 021 filed
+— FF-C is DECIDED and SCOPED as ★ Pass 21.x, status NOT STARTED.**
+Item #3's FF-C slot now has a concrete build plan, same as FF-H got at
+continuation 62 (decision 019). **Headline correction worth carrying
+forward accurately: FF-C as previously described everywhere in the
+project (R71, decision 014 §5.3, the spec-RAG stub) was NOT
+implementable** — it described extending the document's own embedded
+font in place, but a subset font by definition doesn't contain the
+missing glyph; there's no operation on `FontFile2` alone that produces
+it. FF-C is re-scoped **add-only**: it adds a new, subsetted font
+resource from a donor face (decision 012's `--font-dir`) and never
+touches an existing font program/dictionary — new standing rule R107.
+Do not describe FF-C as "extends the embedded subset" in any future
+session; that framing is now wrong. Slices: 21.0 (core+CLI, P0 floor,
+lifts pdfce's widest text-authoring wall — no non-Latin text at all
+today) → 21.1 (composite-run edit, makes 21.0 editable — **do not
+report FF-C as done if only 21.0 has shipped**, that would be a
+capability regression against the shipped Std-14 add-text path,
+invisible to the existing R85 raster oracle) → 21.2 (`set-font` to an
+embedded face) → 21.3 (GUI, `pdfce-ui-specialist` first). New standing
+rules R107–R110 (ceiling now R110, was R106). Net dependency cost
+refined from 2 packages to 1 (`subsetter`, `default-features = false`
+— `PRIOR_ART.md` amended). Two new operator questions filed, both
+Ken's per `docs/decisions/README.md`, neither blocking 21.0/21.1: (r)
+font-EULA policy for a donor whose `OS/2` `fsType` forbids/is
+unparseable; (s) whether Pass 21.0 refuses complex scripts (Arabic/
+Devanagari/Thai) by name, since R17 (no shaping, ever) means they'd
+embed but render wrong (recommendation: refuse by name). Item #4
+(forms) remains queued behind item #3's now-single remaining open
+slice, FF-B (FF-H done, FF-C scoped-not-started). Also this
+continuation: `tools/check-ledger-numbers.py`'s own blind spot
+(ceiling scanned only headings, missed Pass 20.x claimed-in-prose)
+fixed same day at `d30842c` — see
+[[project-uncommitted-repo-worktree-risk]] for the commit/hash update
+and `D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md` for
+the generalized finding.

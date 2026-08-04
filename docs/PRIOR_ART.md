@@ -142,7 +142,7 @@ of which is a Rust-native engine.
 | `ttf-parser` | MIT OR Apache-2.0 (crates.io) / Apache-2.0 (repo field — discrepancy unresolved) | **DO NOT ADOPT (read path)** — verdict flipped 2026-07-30, decision 004 §3.2/§5.2 | The anticipated re-verify happened: aged another 8 months with no commit (last 2025-11-22, no release since 2024-11-29) and grew a queue of unmerged SECURITY-flavored PRs (COLRv1 paint-graph recursion cap, glyf/gvar composite visit cap, CFF2 BLEND empty-stack guard, avar i16 overflow — four filed 2026-07-20, unlanded). Exactly the hardening class pdfce's §10 threat model needs landed, not pending. No bare-Type1 support either. |
 | `rustybuzz` | MIT | superseded by `harfrust` for any future AUTHORING shaping (decision 004 R17: the RENDER path never shapes) | Pure-Rust HarfBuzz port, pinned to ttf-parser, same staleness (0.20.1, 2024-11-12). Note epaint 0.35 itself moved to `harfrust`. |
 | `allsorts` (Yeslogic) | **Apache-2.0 ONLY (no MIT arm)** | write-side fallback only (decision 001 §6.2), REJECTED for the read path (decision 004 §3.2) | Parser+shaper+**subsetter** from Prince. Actively maintained, but: 23 direct deps incl. `libc`/`ouroboros`/`brotli-decompressor`, no `no_std` (jeopardizes the wasm32 invariant, R11), no crate-level unsafe forbid, no bare-Type1 outline path. Decision 004 §9 flags this evidence into the eventual write-side scoping. |
-| `subsetter` (Typst) | MIT OR Apache-2.0 (**verified live at 0.2.6, 2026-08-03**) | **ADOPT (write path) — rule-13 classification COMPLETE, see "FF-C dependency classification" below** | Purpose-built PDF-embedding subsetter for TrueType/CFF, minimal deps — what Typst itself uses. Leanest option for the write-side embedding/subsetting need. **The 2026-08-03 re-verification found something better than "still permissive": `subsetter 0.2.6` depends on `skrifa 0.42.1`, `read-fonts 0.39.2`, `font-types 0.11.3` — bit-for-bit the versions pdfce already pins through epaint 0.35 — so it unifies with the read path instead of forking it.** Net cost to pdfce's graph is **2 packages**: `subsetter` itself and `write-fonts 0.48.1`. Everything else it wants is already present. |
+| `subsetter` (Typst) | MIT OR Apache-2.0 (**verified live at 0.2.6, 2026-08-03**) | **ADOPT (write path) — rule-13 classification COMPLETE, see "FF-C dependency classification" below** | Purpose-built PDF-embedding subsetter for TrueType/CFF, minimal deps — what Typst itself uses. Leanest option for the write-side embedding/subsetting need. **The 2026-08-03 re-verification found something better than "still permissive": `subsetter 0.2.6` depends on `skrifa 0.42.1`, `read-fonts 0.39.2`, `font-types 0.11.3` — bit-for-bit the versions pdfce already pins through epaint 0.35 — so it unifies with the read path instead of forking it.** Net cost to pdfce's graph at DEFAULT features is **2 packages**: `subsetter` itself and `write-fonts 0.48.1`. **AMENDED 2026-08-03 (decision 021 §3.2): with `default-features = false` (the `variable-fonts` feature — which exists solely to instance variable fonts at non-default axis coordinates, unneeded at pdfce's P0 — is what pulls `write-fonts`/`kurbo` in), net cost drops to 1 package: `subsetter` alone.** `subsetter`'s only non-optional dependency is `rustc-hash 2.1`, already present via `type-map`←eframe. The 2-package figure stays on record as what a naive `cargo add subsetter` costs; `default-features = false` is the R24-style call pdfce already applies to `zune-jpeg`/`hayro-*`. |
 | `fontdue` | MIT OR Apache-2.0 OR Zlib | reference-only | Rasterizer only, no shaping (maintainer has publicly declined to add it). |
 | `read-fonts`/`skrifa`/`write-fonts` (Google "fontations") | MIT OR Apache-2.0 | **ADOPT (read path)** — decision 004 §4.1, R21: the single font-program parser in pdfce-render | Most actively maintained font stack, corporate-backed, `#![forbid(unsafe_code)]`, no_std/wasm-clean. THE finding (004 §3.1): `skrifa` re-exports read-fonts as `skrifa::raw`, whose public `ps` module parses bare PostScript **Type 1** (PFB/PFA/eexec/lenIV, verified at source) and bare **CFF** with charstring-to-outline evaluation — all four PDF FontFile cases via one dependency, already in Cargo.lock via epaint 0.35 (zero new packages; pin 0.42 to epaint's resolution, `cargo tree --duplicates` guard). hayro and krilla independently converged on the same stack. |
 | `postscript` crate | Apache-2.0 OR MIT | **REJECT** — verdict resolved 2026-07-30 (decision 004 §3.2) | The prototype check happened by source inspection: it is a TOKENIZER — its type2 module exposes Program/Operator/Operations and no path/segment/pen types. It does not evaluate charstrings to outlines. |
@@ -175,7 +175,8 @@ scratch crate (not by reading crates.io pages, and not from memory):
 | `subsetter` licence | `MIT OR Apache-2.0` |
 | Every crate in its transitive graph | permissive — 14× `MIT OR Apache-2.0`, 4× `Apache-2.0 OR MIT`, 2× `Zlib OR Apache-2.0 OR MIT`, 1× `(MIT OR Apache-2.0) AND Unicode-3.0` |
 | Copyleft (GPL/LGPL/AGPL/MPL) anywhere in the graph | **none** |
-| Packages genuinely NEW to pdfce's workspace | **2** — `subsetter 0.2.6`, `write-fonts 0.48.1` |
+| Packages genuinely NEW to pdfce's workspace (default features) | 2 — `subsetter 0.2.6`, `write-fonts 0.48.1` |
+| Packages genuinely NEW, `default-features = false` (decision 021 §3.2) | **1** — `subsetter 0.2.6` only |
 | Version skew against the existing read path | **none** — see below |
 
 Under `LEGAL.md` §6.2 that is step 3, *proceed and log*: permissive
@@ -183,6 +184,27 @@ dependencies are not flagged to the operator, only copyleft ones are.
 The same disposition `egui_tiles` got. **The remaining `CLAUDE.md`
 open item on FF-C is therefore about scope and sequencing, not
 licensing — do not keep describing it as a licence gate.**
+
+**AMENDED 2026-08-03 (decision 021 §3.2) — the net-cost figure
+refines from 2 packages to 1, and turning the feature off makes the
+version-unification hazard above moot for this dependency specifically
+(the hazard itself stays real and the version map above stays worth
+keeping, because it is exactly what bites anyone reaching for
+`write-fonts` directly).** `subsetter 0.2.6`'s manifest: `default =
+["variable-fonts"]`, and `variable-fonts = ["dep:skrifa",
+"dep:write-fonts", "dep:kurbo"]` is its only feature — it exists
+solely to instance variable fonts at non-default axis coordinates,
+which pdfce does not need at P0. With `default-features = false`,
+`subsetter`'s only non-optional dependency is `rustc-hash = "2.1"`,
+already present in pdfce's `Cargo.lock` via `type-map`←eframe, so the
+net-new count is `subsetter` alone. Re-verified live via `cargo
+metadata --offline` on a scratch crate carrying `subsetter` (features
+off) plus `skrifa = "0.42"`, to prove co-resolution rather than assert
+it: 11 packages, every one permissive, single `read-fonts 0.39.2` /
+`font-types 0.11.3` / `skrifa 0.42.1` — pdfce's exact pinned set.
+Named revisit trigger (decision 021 §8.2): if variable-font donors turn
+out common in operator font folders, enable `variable-fonts` and accept
+`write-fonts 0.48` back into the graph, with the pin discipline above.
 
 The `(MIT OR Apache-2.0) AND Unicode-3.0` entry is `unicode-ident`,
 and it is **already in pdfce's graph today** (via `syn`/`proc-macro2`),

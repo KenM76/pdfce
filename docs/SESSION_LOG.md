@@ -10001,3 +10001,131 @@ continuation).**
 - FF-C's remaining open question is purely "when does it get scoped
   into a Pass," not "is it licensed cleanly" — don't re-open the
   licensing question when FF-C's turn comes.
+
+**Same-day continuation 73 (real date 2026-08-03) — decision 021 filed
+and confirmed (FF-C: font subsetting/glyph embedding, DECIDED/SCOPED/
+NOT STARTED); the ledger-checker's mentioned-but-unheaded blind spot
+folded into R106; continuation 72's manual-check caveat DISCHARGED
+(the engineer ran `tools/check-ledger-numbers.py --stats` directly:
+GREEN, exit 0, 61 (section, Pass ID) pairs / 106 rules / 21 decisions /
+1 allowlisted amendment).**
+
+**Filed:**
+- `docs/decisions/021-ffc-font-subsetting-and-glyph-embedding.md`
+  (committed `d30842c`, alongside the ledger-checker's companion fix).
+  **Confirmed the engineer's own numbering correction rather than
+  re-deriving it**: the scoping session's original draft claimed rule
+  ceiling R99 and Pass 20.x free, both stale by the time it was
+  written (three librarian filings had landed the same day); the
+  engineer caught both before filing and corrected to R107–R110 and
+  Pass 21.x, declining the record's own §10.3 recommendation to
+  renumber decision 020 to 21.x (premised on 20.x being unclaimed — it
+  is not). Verified against the live ledger: R106 was indeed the
+  ceiling, Pass 20.x is indeed claimed (decision 020's Backlog prose,
+  unheaded) — the correction stands as filed.
+- **Standing rules R107–R110 added** to `ROADMAP.md` (ceiling now
+  R110, was R106): R107 (FF-C add-only, never rewrites an existing
+  font program/dictionary — object-id-disjointness TEST, not a runtime
+  guard, per R96); R108 (embedding is an explicit per-action operator
+  choice, real computed subset size/coverage shown, R98 applied, never
+  a default); R109 (font-embedding permission read from the donor's
+  `OS/2` `fsType` before subsetting and disclosed, never assumed —
+  policy itself is new Open operator question (r)); R110 (a composite
+  run is editable only where `/ToUnicode` is VERIFIED injective, per
+  font per session — `Identity-H` with no `/ToUnicode` stays a
+  permanent hard skip, R65 untouched).
+- **★ Pass 21.x filed under `ROADMAP.md` Next up** — 21.0 (core+CLI,
+  P0 floor, lifts the widest wall: pdfce today cannot add ANY text
+  outside WinAnsi/Symbol/ZapfDingbats) → 21.1 (composite-run edit,
+  makes 21.0's output editable — explicitly flagged: shipping 21.0
+  without 21.1 and calling FF-C done would ship a capability
+  regression against the already-shipped Std-14 add-text path, and
+  every existing gate including the R85 raster oracle would report
+  success while missing it — the `flatten_fields` failure shape) →
+  21.2 (`set-font` to an embedded face; also makes the shipped
+  `format_coverage_hint()` GUI text honest for the first time — it
+  currently promises a remedy the write path does not deliver, a
+  current honesty gap independent of when FF-C lands) → 21.3 (GUI,
+  `pdfce-ui-specialist` dispatched first).
+- **Amendments filed**: `ROADMAP.md` R21 (scope note — the write-side
+  `subsetter` internal reader is admitted, discharging R21's own
+  escape clause; `cargo tree --duplicates` guard unchanged), R71
+  (FF-C ceases to be "a deferred writer subsystem," trust ladder gains
+  a fourth rung), R79 ("no embedding" → "no embedding **by default**");
+  the FF-D-fast-follow-FF-C Backlog bullet (decision 021 pointer +
+  headline correction); two new Open operator questions (r) font-EULA
+  policy and (s) complex-script refusal-by-name, both flagged as
+  Ken's per `docs/decisions/README.md`, neither blocking on
+  21.0/21.1; `docs/decisions/012-operator-supplied-fonts.md` §6
+  ("the write side — unrelated" corrected — FF-C is the write-side
+  consumer of decision 012's `--font-dir` supply mechanism);
+  `PRIOR_ART.md`'s "FF-C dependency classification" section (net cost
+  refines from 2 packages to **1** at `subsetter`'s
+  `default-features = false` — `variable-fonts` was the only thing
+  pulling in `write-fonts`/`kurbo`, unneeded at P0; the 2-package
+  figure stays on record as the naive-`cargo add` cost);
+  `ARCHITECTURE.md` §12 dated entry (decision 020's "no body-section
+  update, nothing shipped yet" disposition applied identically here).
+- **`ROADMAP.md` R106 amendment (second)** — folded the ledger
+  checker's own blind spot into R106 rather than filing a new rule,
+  since it is the same subject. The checker's ceiling report had
+  scanned only `### Pass N` headings; decision 020 claims Pass
+  20.0–20.7 in Backlog *prose* with no heading yet, so the checker
+  reported "highest Pass family: 19" (true, useless) and, independently,
+  this decision's own scoping session made the identical mistake
+  reading the same heading-only view. **Generalized as recorded in
+  R106's amendment: a ceiling computed only from completed/finished
+  records under-reports, and does so specifically in the direction
+  that causes collisions**, because the things most likely to collide
+  with a fresh proposal are exactly the other fresh, not-yet-finished
+  proposals a finished-only view excludes. The fix (already shipped by
+  the engineer at `d30842c`, confirmed present in
+  `tools/check-ledger-numbers.py`): scan every `Pass N` mention, not
+  only headings, and name claimed-but-unheaded families explicitly as
+  `CLAIMED BUT NOT YET HEADED`.
+- Repo commit-count note updated: **66 commits, still no remote**
+  (was 62 at continuation 71). Both figures are dispatching-engineer-
+  reported, not librarian-verified — this librarian dispatch again had
+  no shell-execution tool available. The engineer reports six hashes
+  spot-verified on their side with `git cat-file -t` (`d30842c`,
+  `4dc8cf8`, `d738950`, `1111652`, `d9960cd`, `09be28d` — all confirmed
+  `commit` objects), closing continuation 72's open verification gap
+  for `4dc8cf8`/`d738950` (previously engineer-reported only). Flagged
+  that per-commit hash tracking is no longer exhaustive past
+  continuation 62's count; use `git rev-list --count HEAD` for the
+  live figure going forward rather than trusting a filed number.
+
+**RAG escalations this continuation:**
+- `D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md` —
+  AMENDED (third amendment) with the generalized ceiling-under-reporting
+  finding above, applicable beyond Pass IDs to any "is this name/slot
+  taken" check (branch names, ticket numbers, feature-flag names,
+  migration sequence numbers): count CLAIMS, not completions, and name
+  the claimed-but-unfinished ones explicitly rather than folding them
+  silently into "not taken." `D:\dev\rag\rust\index.md` updated with a
+  one-line summary of the third amendment.
+
+**Still in flight:**
+- ★ Pass 21.x is filed and scoped but **NOT STARTED** — 21.0 is next
+  when the engineer picks it up. `pdfce-spec-librarian` dispatch (spec
+  RAG stub rewrite) is owed BEFORE any 21.0 code — the current stub
+  actively misdescribes the mechanism.
+- Two new operator questions (r)/(s) are non-blocking for 21.0/21.1
+  specifically but will gate 21.0's own scope if Ken answers (s) before
+  the engineer starts (refuse-complex-scripts-by-name is the
+  recommendation, not yet confirmed).
+- Branch `pass-8-redaction` still unpushed, 66 commits.
+
+**For next session:**
+- Before writing any Pass 21.0 code, dispatch `pdfce-spec-librarian` to
+  rewrite `font__subsetting_ffc_queue.md` — it currently describes the
+  wrong mechanism ("add outline to the document's existing `glyf`")
+  and would actively mislead an implementer.
+- The object-id-disjointness test (R107's enforcement) is the single
+  highest-leverage thing to write FIRST in 21.0, per the decision
+  document's own engineer handoff note — write it while the emitter is
+  trivially correct, before the 21.2 "just widen the existing font"
+  temptation exists.
+- Surface (r) and (s) to Ken at the next natural check-in; neither
+  blocks starting 21.0/21.1, but (s) shapes what 21.0's own "L1"
+  headline is honestly allowed to claim.

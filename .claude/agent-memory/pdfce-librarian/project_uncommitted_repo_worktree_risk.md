@@ -1,6 +1,6 @@
 ---
 name: project-uncommitted-repo-worktree-risk
-description: RESOLVED 2026-08-01 (commit d8b3903, then 79d1c6f + e13f3e6) — pdfce's crates/ tree is no longer uncommitted, and the engineer now commits in logical per-Pass/per-decision chunks. Kept as a resolved record; see bottom of file for the resolution and what still remains open (push, gated on separate operator go-ahead).
+description: RESOLVED 2026-08-01 (commit d8b3903, then 79d1c6f + e13f3e6) — pdfce's crates/ tree is no longer uncommitted, and the engineer now commits in logical per-Pass/per-decision chunks. Branch pass-8-redaction at 66 commits as of continuation 73 (2026-08-03), still no remote. This librarian has no shell tool — commit counts/hashes are engineer-reported, not self-verified, unless noted otherwise.
 metadata:
   type: project
 ---
@@ -279,3 +279,26 @@ remains the sole open gate, unchanged in kind since continuation 50.
 Verify current tip/count with `git log --oneline -1` / `git rev-list
 --count HEAD` before trusting any number in this file — likely ~64+
 commits by the time this is read.
+
+**UPDATE — continuation 73 (2026-08-03, decision 021 filed: FF-C font
+subsetting/glyph embedding, DECIDED/SCOPED/NOT STARTED).** Branch
+`pass-8-redaction` now **66 commits**, still no remote — both figures
+**dispatching-engineer-reported**, not librarian-verified: this
+librarian dispatch again had no shell-execution tool available
+(tools: Read/Write/Edit/Glob/Grep/WebSearch/WebFetch only), same
+constraint as continuation 72. The engineer reports six hashes spanning
+the range spot-verified with `git cat-file -t` on their side (all
+confirmed `commit` objects): `d30842c` (decision 021 + the
+ledger-checker's mentioned-but-unheaded fix), `4dc8cf8`
+(`tools/check-ledger-numbers.py` — only engineer-reported, not
+librarian-verified, as of continuation 72; now engineer-confirmed),
+`d738950` (`PRIOR_ART.md` FF-C classification, also now
+engineer-confirmed), `1111652` (Pass-number correction commit),
+`d9960cd` (decision 020), `09be28d` (Pass 18.7). Treat all six as
+engineer-verified, not independently librarian-verified, until a
+future librarian dispatch has `git` access itself. Per-commit hash
+listing stays non-exhaustive past continuation 62's count (see that
+update) — always re-run `git rev-list --count HEAD` / `git cat-file -t`
+rather than trusting this file's numbers past their filing date.
+Push/publish authorization remains the sole open gate, unchanged in
+kind since continuation 50.

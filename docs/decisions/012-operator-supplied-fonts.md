@@ -300,7 +300,15 @@ core/render; fmt/clippy clean.
   matching is by name; FF3 (manual slot mapping) is the fuzzier, opt-in
   successor.
 - **Any shaping / GSUB / bidi** — R17, never in the render path.
-- **The write side** (font embedding/subsetting) — unrelated.
+- ~~**The write side** (font embedding/subsetting) — unrelated.~~
+  **CORRECTED 2026-08-03 (decision 021 §4.2) — now false.** FF-C
+  (font subsetting/glyph embedding, decided and scoped as Pass 21.x by
+  decision 021) is the write-side consumer of this decision's supply
+  mechanism: `--font-dir` (this decision's `GlyphSource`/
+  `FontEnvironment` seam) is FF-C's donor-face source. The two
+  decisions are not unrelated — decision 012 supplies faces for
+  *reading/rendering*, decision 021 supplies faces for *embedding*, and
+  both draw from the same operator-configured font folder.
 
 ---
 

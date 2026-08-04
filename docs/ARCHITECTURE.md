@@ -4852,3 +4852,125 @@ with a forward pointer.
     an unfinished GUI redaction-apply flow was written against a stale
     tree and is corrected in place in the decision document itself
     (Pass 8.1 shipped `9a68999` before this decision was filed).
+
+- **2026-08-03 (same-day) — Decision 021 filed: FF-C, font subsetting
+  and glyph embedding. Status: DECIDED, SCOPED, NOT STARTED — Pass
+  21.x is unbuilt.** Archived at
+  `docs/decisions/021-ffc-font-subsetting-and-glyph-embedding.md`.
+  Requested by `pdfce-engineer` (operator priority #3, decision 019 §3.8
+  build order FF-H → FF-C → FF-B, FF-H complete at `a1638f4`). **No
+  §3/§4 body-section update this entry** — nothing has shipped, same
+  disposition as decision 020's entry above; §3 (workspace layout) and
+  §4 (core data model) get their `pdfce-render::font::subset`/
+  `pdfce-core::font_embed` module rows added when Pass 21.0 actually
+  lands, not now.
+  - **The headline finding: FF-C as filed everywhere else in this
+    project (`ROADMAP.md` R71, decision 014 §5.3, and the spec RAG's
+    `font__subsetting_ffc_queue.md`) is not implementable.** All three
+    describe FF-C as extending the document's own embedded font in
+    place — but a subset font by definition does not contain the glyph
+    being added; there is no operation on an existing `FontFile2` alone
+    that produces missing outline data, only a donor face on disk or
+    nothing. Verified at source, not relayed: `subsetter 0.2.6`'s
+    `src/lib.rs:20–21` states embedding forces `/Type0`+`Identity-H`
+    because it strips `cmap`; the spec-RAG stub's own line 42 names the
+    now-wrong "add outline to `glyf`" mechanism. **FF-C is re-scoped,
+    add-only: it adds a new, subsetted font resource from a donor face
+    and never modifies an existing font program or font dictionary.**
+    The spec-RAG stub's rewrite is dispatched to `pdfce-spec-librarian`
+    before any Pass 21.0 code, per decision 021 §9.
+  - **Crate boundary: `subsetter` goes in `pdfce-render`, zero new
+    `pdfce-core` dependencies.** `pdfce-render::font` gains a
+    `SubsetPlan` producer (parses the donor via the existing skrifa
+    parser, calls `subsetter::subset`); `pdfce-core::font_embed`
+    defines the plain-data contract and emits the PDF objects
+    (`/Type0`+CIDFont dict+`FontFile2`/`3`+`/W`+`/ToUnicode`). This
+    does not re-open standing rule **R21** (one font parser in the
+    *read* path) — R21's own escape clause ("no second parser without a
+    new decision record") is what this record discharges;
+    `subsetter`'s internal reader never renders a glyph or reaches
+    `Diagnostics`, and the `cargo tree --duplicates` guard is unchanged.
+    `default-features = false` on `subsetter` (dropping the
+    `variable-fonts` feature, unneeded at P0) cuts the net new-package
+    cost from 2 (`subsetter`+`write-fonts`) to **1** (`subsetter`
+    alone) — `PRIOR_ART.md`'s "FF-C dependency classification" section
+    amended accordingly (below).
+  - **Round-trip: no new exception needed, because FF-C never earns
+    one.** New standing rule **R107** — FF-C only ever ADDS font
+    resources, never rewrites an existing `/FontFile`/`/FontFile2`/
+    `/FontFile3`/`/FontDescriptor`/`/Font`/CIDFont dictionary.
+    Original content streams stay byte-identical (§5.1/R32/R46);
+    incremental save (§5, R36/R70) stays the default; FF-C joins
+    neither the §5.9/R58 nor §5.10/R67 forced-full-rewrite family.
+    Enforced by an object-id-disjointness corpus test (the R97 shape),
+    not a runtime guard — a guard in an emitter that can only allocate
+    fresh object ids is unreachable by construction (R96's dead-code
+    shape).
+  - **Disclosure (fuzzy-never-sneaky, rule 4): new standing rules R108
+    and R109.** **R108** — embedding is an explicit, per-action operator
+    choice, never a default or a silent upgrade of the existing R79
+    no-embed path; because subsetting is pure, the confirmation shows
+    the real computed subset byte count and covered/uncovered character
+    list (R98 applied), never an estimate. **R109** — font-embedding
+    permission (OpenType `OS/2` `fsType`, which `subsetter` strips) is
+    read from the donor *before* subsetting and disclosed; absent or
+    unparseable data is disclosed as unknown, never silently treated as
+    "permitted." The bit semantics themselves are deliberately not
+    stated in the decision record — sourced from the OpenType spec by
+    `pdfce-spec-librarian`, never from recall (rule 1); the accept/
+    refuse *policy* for a forbidding/unparseable `fsType` is Ken's own
+    call, filed as new Open operator question (r), below.
+  - **Composite-run editability: new standing rule R110.** A composite
+    run is editable only where its `/ToUnicode` is VERIFIED injective,
+    per font, per session — checked against the data, never inferred
+    from pdfce having authored the font (R93's own discipline, applied
+    here). `Identity-H` with no `/ToUnicode` remains a permanent hard
+    skip; **R65 is untouched.** Named because shipping Pass 21.0 (the
+    adder) without 21.1 (the editor) would ship a capability
+    *regression* against the already-shipped Std-14 add-text path — text
+    pdfce can add but never again edit — while every existing counter
+    (including the R85 raster oracle) reports success; this is the
+    `flatten_fields`-shaped failure (correct counters, wrong artifact)
+    and needs a deliberate acceptance criterion at ship, not merely a
+    gate.
+  - **Standing rules R107–R110 filed (four rules). Ceiling is now
+    R110.** Full text: `ROADMAP.md` Standing rules. Numbering
+    corrected by the engineer before filing against a
+    `ROADMAP.md` that had moved underneath the scoping session (three
+    librarian filings landed the same day) — see the decision
+    document's own "NUMBERING CORRECTION" section and
+    `tools/check-ledger-numbers.py`'s companion fix (below).
+  - **Amendments filed in the same session, all cross-referenced from
+    the decision document §4.2:** `ROADMAP.md` R21 (scope note,
+    discharging its own escape clause), R71 (FF-C ceases to be "a
+    deferred writer subsystem," now scoped Pass 21.x, trust ladder
+    gains a fourth rung: refuse → offer embed (R108) → embed on
+    accept), R79 ("no embedding" → "no embedding **by default**");
+    `docs/decisions/012-operator-supplied-fonts.md` §6 ("the write side
+    — unrelated" corrected — FF-C is the write-side consumer of
+    decision 012's `--font-dir` supply mechanism); `PRIOR_ART.md`'s
+    "FF-C dependency classification" section (net-cost refinement, 1
+    package not 2, at `default-features = false`).
+  - **`tools/check-ledger-numbers.py` companion fix, same session
+    (commit `d30842c`, alongside this decision's filing).** The
+    checker's ceiling report had scanned only `### Pass N` headings —
+    but decision 020 claims Pass 20.0–20.7 in Backlog *prose* with no
+    heading yet, so the checker reported "highest Pass family: 19,"
+    true and useless, and this decision's own scoping session
+    independently made the identical mistake (proposing Pass 20.x for
+    FF-C before the engineer caught and corrected it to 21.x). Fixed:
+    the checker now reports mentioned-but-unheaded Pass families by
+    name as "CLAIMED BUT NOT YET HEADED." Folded into standing rule
+    R106 as a dated amendment (below) rather than filed as a new rule,
+    since it is the same subject (ledger-ceiling reads must not
+    under-report).
+  - **Two items filed for the operator, not decided solo** (full text:
+    `ROADMAP.md` Open operator questions (r)/(s)): font-EULA policy for
+    a donor face whose `OS/2` `fsType` forbids embedding/subsetting, or
+    is absent/unparseable (refuse / disclose-and-acknowledge /
+    disclose-and-proceed — a legal call per `docs/decisions/README.md`,
+    not an engineering one); and whether Pass 21.0 refuses complex
+    scripts (Arabic/Devanagari/Thai) by name given **R17 (no shaping,
+    ever)** means they would embed but render wrong — recommendation is
+    refuse-by-name, but it caps a headline capability so it is Ken's
+    call.

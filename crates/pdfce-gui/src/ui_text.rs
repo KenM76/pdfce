@@ -3278,10 +3278,39 @@ pub fn cross_run_selection_notice() -> &'static str {
 // §8.2 "what would lift it" hint table — one entry per refusal family.
 
 /// R-INV-1 (embedded-subset floor).
+///
+/// # Corrected 2026-08-03 — this text promised a remedy that does not work
+///
+/// It used to open with *"Supply this font via a font folder (Tools › Font
+/// folders) so pdfce can use its full character set."* That is false, and it
+/// was false in every shipped build that carried it.
+///
+/// Supplying a face through decision 012's font folders changes **how
+/// existing text is drawn on screen**. It does not change what
+/// `pdfce-core` writes: `format.rs`'s coverage check consults only the
+/// target font's own encoding and the codes already carried on the page,
+/// and `addtext.rs`'s own header states pdfce *"writes an identical named
+/// non-embedded dict either way."* `pdfce-core` has no functional awareness
+/// of `FontEnvironment` at all — its single mention is a doc comment about
+/// refining a *display* trust level.
+///
+/// So an operator who followed this hint would install a font, watch the
+/// preview improve, retry the edit, and be refused again with the same
+/// message — with no way to tell that the advice was the problem. That is a
+/// rule-4 failure of the quietest kind: not a wrong result, a wrong
+/// instruction that makes the operator doubt themselves.
+///
+/// The wording below states the remedy that actually exists today and names
+/// the one that does not yet, in the same voice as
+/// [`format_target_missing_hint`] — which was already honest about FF-C and
+/// is why the inconsistency was findable at all.
 pub fn r_inv_1_hint() -> &'static str {
-    "Supply this font via a font folder (Tools › Font folders) so pdfce can \
-     use its full character set, or keep this edit to characters already on \
-     the page."
+    "This font is an embedded subset and doesn't carry that character. Keep \
+     this edit to characters the font already uses on the page, or apply a \
+     font that does carry it. Supplying a font via Tools › Font folders will \
+     NOT lift this — supplied faces change how existing text is drawn on \
+     screen, not what gets written to the file. Embedding a face that covers \
+     the character is a planned fast-follow (FF-C)."
 }
 
 /// R-INV-2/3/4 (symbolic / ToUnicode-only / composite).
@@ -3308,9 +3337,22 @@ pub fn r_inv_repertoire_hint() -> &'static str {
 }
 
 /// `FormatError::CoverageFailure`.
+///
+/// # Corrected 2026-08-03 — same false remedy as [`r_inv_1_hint`]
+///
+/// It used to end *"…or supply one via Tools › Font folders."* Verified
+/// against `format.rs`: the coverage check reads `target.glyph_names()` (the
+/// page font's own encoding) and `carried_codes(recs, &resource)` (codes
+/// already present on the page). Neither consults a supplied face, so
+/// supplying one cannot change the outcome. See [`r_inv_1_hint`] for the
+/// full reasoning; both were corrected together because they are the same
+/// mistake told twice.
 pub fn format_coverage_hint() -> &'static str {
-    "Choose a font that includes every character in this selection, or supply \
-     one via Tools › Font folders."
+    "Choose a font already on this page that includes every character in this \
+     selection. Supplying a font via Tools › Font folders will NOT lift this \
+     — supplied faces change how existing text is drawn on screen, not what \
+     gets written to the file. Embedding a face that covers the character is \
+     a planned fast-follow (FF-C)."
 }
 
 /// `FormatError::TargetFontMissing`.
