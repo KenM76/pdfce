@@ -593,6 +593,60 @@ item 20, where the new file spanned an uncovered clause). Four sub-findings:
   discipline — do not cite a paywalled clause to justify a recommendation that stands
   without it).
 
+**24. An EMBEDDING/REDISTRIBUTION dispatch (FF-C, Pass 21.0) — four moves that are
+new, on top of items 15/18/20/21/23.** Established 2026-08-03 building the
+font-embedding recipe against decision 021.
+
+- **A DEPENDENCY CRATE's behaviour asserted in a decision record is a hypothesis
+  too — read the vendored source.** Extends items 15/18/21 (clause numbers, flag
+  values, named rules) to **third-party code**. Decision 021 §3.4 listed
+  `subsetter`'s emitted table set as "GLYF+LOCA (or CFF), HEAD, HMTX, MAXP, NAME,
+  POST"; the crate **also** emits `HHEA` (written inside `hmtx::subset`, invisible
+  in the `_subset()` call list) and `CVT`/`FPGM`/`PREP`. That mattered because ISO
+  32000-1 §9.9 has a `shall`-if-present list containing exactly those tables — the
+  decision's list read like a conformance violation and the real output is
+  conformant. Route: `~/.cargo/registry/src/index.crates.io-*/​<crate>-<ver>/src/`,
+  already vendored, no network. **Grep the call-site list AND the per-table module**
+  — a table can be pushed by a sibling's subsetter.
+- **When a dispatch frames a dependency's behaviour as a LIMITATION TO WORK
+  AROUND, check whether the spec MANDATES it.** `subsetter` strips `cmap`;
+  decision 021 treated that as a crate constraint forcing `/Type0`. ISO 32000-1
+  §9.9 actually says the `cmap` table "**shall not be present**" under a CIDFont
+  dictionary — the crate is *complying*, not limiting. And §9.9 separately carries
+  a **`shall` on conforming writers** to use `/Type0`+`Identity-H` for OpenType
+  `glyf` programs. The reframe ("mandated, not tolerated") is worth more than the
+  fact, because it removes a standing "should we work around this?" question.
+- **A CONSUMER-OBLIGATION question has three possible answers, and "the spec is
+  silent" is the least likely.** The dispatch asked whether the OpenType spec says
+  how a consumer *should behave* vs merely what bits *mean*, and warned not to
+  blur them. It states **three explicit `must`s** in `fsType`'s Comments field —
+  plus a **document-level** obligation buried in the value-4 prose ("Documents
+  containing Preview & Print fonts must be opened read-only"). Separately, **ISO
+  32000-1 §9.9's opening paragraph is a licensing rule** ("embedded font programs
+  **shall** be used only to view and print the document"; new text needs "a
+  licensed copy … not a copy extracted from the PDF file") that nobody reads
+  because the clause is filed under *Embedded Font Programs* and is normally
+  cited only for Table 126. **When a topic is licensing-adjacent, read the whole
+  clause, not the table it is famous for.** Deliverable shape that worked: quote
+  the obligations, tabulate which pdfce *action* each one bears on, and state
+  explicitly that the policy response remains the operator's — the RAG supplies
+  the text, not the choice.
+- **A CROSS-SPEC BRIDGE GAP is a PERMANENT spec-ambiguity, not a corpus gap**
+  (extends item 2b). ISO 32000-1 names no permission field; the OpenType spec
+  never mentions PDF. Neither says how a `fsType` value maps to a PDF embedding
+  decision. No ingestion closes it ⇒ spec-ambiguity table, and it is *the reason*
+  the product question is a policy call. Same shape as the APP14 transform-byte
+  row, but between two *live* standards rather than a dead reference.
+
+**Also this build:** a **REWRITE-not-extend** dispatch is item-3's retraction
+discipline at whole-file scale — keep the path (other docs cite it), retain the
+wrong mechanism in a `CORRECTION <date>` blockquote, **and sweep for the derived
+files that inherited the error** (`iso32000__ref__inverse_encoding.md`'s
+"FF-C lifts R-INV-1/2/4" rows needed their own `AMENDMENT` block; the index's
+historical build note needed an inline bracket). And when a dispatch supplies a
+clause list, expect ~2 in 6 to be wrong: `/CIDSet` was dispatched as §9.7.4.2 (it
+is §9.8.3 Table 124) and the subset tag as §9.8.1 (it is §9.6.4).
+
 **16. Under a NO-FALLBACK-SYNTHESIS product rule (pdfce R43), per-subtype spec
 coverage collapses to a binary "AP-vs-fallback map".** Every ISO 32000-1 §12.5.6
 geometry subtype defines a fallback look from its own keys (`L`/`Vertices`/

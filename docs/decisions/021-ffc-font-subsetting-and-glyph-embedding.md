@@ -178,8 +178,14 @@ today a promise the write path does not keep.** FF-C makes it honest.
 
 `FontEmbedError::` — `DonorNotSfnt` (bare Type 1 donor; `subsetter` is
 sfnt-only → `Err(UnknownKind)`) · `DonorUnsupported` (CFF2 without
-`variable-fonts` → `Err(Unimplemented)`) · `DonorMalformed` · `DonorTooLarge`
-(§3.5) · `EmbeddingNotPermitted` (§3.6, fsType) · `CoverageIncomplete`.
+`variable-fonts` → `Err(Unimplemented)`; **also, per §10 C-3, any CFF-outline
+donor at P0** — `subsetter`'s CFF output is `OTTO`-wrapped and cannot be
+conformantly emitted as either `/FontFile3 /Subtype /OpenType` (Table 126
+requires `cmap`, which `subsetter` strips) or `/CIDFontType0C` (which
+requires a bare CFF program, not an OTTO container); narrowed to `glyf`
+donors at 21.0, lifted in a later slice) · `DonorMalformed` · `DonorTooLarge`
+(§3.5) · **`SubsettingNotPermitted` / `EmbeddingNotPermitted`** (§3.6, §10
+C-7 — split into two distinct fsType refusals, not one) · `CoverageIncomplete`.
 
 ### 3.2 Q2 — crate boundary: **B2**, and it does **not** threaten the invariants
 
@@ -337,6 +343,15 @@ pre-existing font object ids in **∅**. That test can fail if someone later
 
 ### 3.4 Q4 — slice plan and the P0 floor
 
+**Spec-review correction (2026-08-03) — read before the emitted-table list
+below, which predates it.** §10 C-3 found that `subsetter`'s CFF output
+cannot be emitted conformantly under this section's original M2 plan (it
+wraps CFF donors in an `OTTO` sfnt that Table 126 requires a `cmap` for,
+and `subsetter` strips `cmap` unconditionally). **Pass 21.0's P0 floor is
+narrowed to `glyf` (TrueType-outline) donors only; CFF donors are refused
+by name (`DonorUnsupported`) until a later slice.** Full reasoning, and why
+L1 survives intact despite the narrowing, in §10 C-3.
+
 **The forced structural fact.** From `subsetter`'s own `lib.rs`, verified at
 source by the engineer:
 
@@ -481,7 +496,11 @@ confirmed.
    semantics are deliberately not stated here**: they are claim-bearing, they
    govern a refuse-or-proceed decision, and per rule 1 must be sourced from
    the OpenType specification by `pdfce-spec-librarian`, never recalled. The
-   *policy* is Ken's (§7).
+   *policy* is Ken's (§7). **Update (2026-08-03): the bit semantics are now
+   sourced — see §10 C-7/the fsType open-question narrowing below.** Bit 8
+   (No subsetting) and bit 9 (Bitmap embedding only / "unembeddable") are
+   *distinct* refusals, not one `EmbeddingNotPermitted` — R109 amended
+   accordingly.
 3. **Re-editability**, for 21.0 shipped before 21.1: an FF-C-authored run is
    composite; say so, and say that in-place editing of it arrives in 21.1.
 
@@ -511,13 +530,20 @@ confirmed.
   **actual** subset byte count and the **actual** covered/uncovered character
   list (R98), never an estimate.
 - **R109 — Font-embedding permission is read from the donor face and
-  disclosed; never assumed, never guessed.** Read before subsetting
-  (`subsetter` strips `OS/2`). A face whose permission bits forbid embedding
-  or subsetting is refused by name (`EmbeddingNotPermitted`). Absent or
-  unparseable permission data is disclosed as unknown and follows the operator
-  policy of §7 — pdfce never silently treats "no data" as "permitted". Bit
-  semantics sourced from the OpenType specification via
-  `pdfce-spec-librarian`, never from recall.
+  disclosed; never assumed, never guessed. AMENDED 2026-08-03 (§10 C-7):
+  fsType is not one gate — the refusal is TWO distinct named diagnostics,
+  not one `EmbeddingNotPermitted`.** Read before subsetting (`subsetter`
+  strips `OS/2`). **`SubsettingNotPermitted`** — bit 8, `0x0100`, "No
+  subsetting": permits embedding the whole face but forbids the one thing
+  FF-C ever does. **`EmbeddingNotPermitted`** — bit 9, `0x0200`, "Bitmap
+  embedding only," the specification's own "unembeddable" case for
+  outline-program embedding. Absent or unparseable permission data is
+  disclosed as unknown and follows the operator policy of §7 — pdfce never
+  silently treats "no data" as "permitted," and never treats it as bit-0
+  `0x0000` (*Installable*) either, since Installable is the **most**
+  permissive value, not a safe stand-in for missing data. Bit semantics
+  sourced from the OpenType specification via `pdfce-spec-librarian`, never
+  from recall.
 - **R110 — A composite run is editable only where its `/ToUnicode` is VERIFIED
   injective, per font, per session.** Injectivity — every CID maps to exactly
   one scalar, and no two CIDs map to the same scalar — is what makes the
@@ -534,7 +560,7 @@ confirmed.
 | **R71** | *"FF-C is a deferred writer subsystem"* → scoped as Pass 21.x. The trust ladder gains a fourth rung: **refuse → offer embed (R108) → embed on accept**. R-INV-1's wording gains the remedy pointer. |
 | **R79** | *"no embedding"* → *"no embedding **by default**"*. |
 | **decision 012 §6** | *"The write side — unrelated"* is now false. FF-C is the write-side consumer of decision 012's supply mechanism; `--font-dir` is FF-C's donor source. |
-| **`font__subsetting_ffc_queue.md`** | **Rewrite, do not extend.** Dispatch `pdfce-spec-librarian` for §9.7.4.2 `/CIDSet` · §9.7.4.3 `/W`/`/DW`/`/CIDToGIDMap` · §9.8.1 subset tag (`ABCDEF+`) · §9.9 Table 126 `FontFile3` `/Subtype` selection · §9.10.3 `/ToUnicode` CMap authoring · **OpenType `OS/2` `fsType`** (R109's dependency, currently a named GAP). |
+| **`font__subsetting_ffc_queue.md`** | **Rewrite, do not extend.** Dispatch `pdfce-spec-librarian` for **§9.8.3 Table 124** `/CIDSet` (corrected 2026-08-03; was miscited as §9.7.4.2) · §9.7.4.3 `/W`/`/DW`/`/CIDToGIDMap` · **§9.6.4** subset tag (`ABCDEF+`) (corrected 2026-08-03; was miscited as §9.8.1, which has no subset rule) · §9.9 Table 126 `FontFile3` `/Subtype` selection · §9.10.3 `/ToUnicode` CMap authoring · **OpenType `OS/2` `fsType`** (R109's dependency — sourced 2026-08-03, see §10 C-7). |
 | **`PRIOR_ART.md`** | Net-cost refinement (1 package at `default-features = false`, 2 at default) plus the feature-flag finding. |
 
 ### 4.3 Code changes (21.0)
@@ -644,6 +670,83 @@ criterion, not a gate.
 | `pdfce-acrobat-librarian` | before 21.2/21.3 acceptance criteria | Acrobat's embed-on-edit behaviour: when it embeds vs substitutes, what it discloses, how it handles a font whose `fsType` forbids embedding |
 | `pdfce-ui-specialist` | **before 21.3** | The refusal→remedy flow, the R98 embed confirmation, the face picker, the licence disclosure surface |
 | `pdfce-librarian` | on acceptance | File Pass 21.x under Next up; assign R107–R110; the R21/R71/R79 amendments; the decision-012 §6 correction; the `ARCHITECTURE.md` §12 dated entry; the `PRIOR_ART.md` net-cost refinement |
+
+---
+
+## 10. Spec review (2026-08-03) — amendment, eight findings against the record above
+
+`pdfce-spec-librarian` completed the dispatch owed in §9. This record was
+written from crate source and shipped code, **not from the standard** — the
+standard has now been read and partly disagrees. All eight findings are
+recorded, favourable and unfavourable alike: reversing a correct-but-
+unsourced claim later would be worse than recording why it held.
+
+**C-3 — CHANGES THE WORK. `subsetter`'s CFF output cannot be emitted
+conformantly as §3.4/M2 assumed.** `subsetter` emits an **`OTTO`-wrapped
+sfnt** for CFF donors — verified at source, `lib.rs:492`,
+`FontFlavor::Cff => 0x4F54544F`, the `OTTO` tag. ISO 32000-1 §9.9 **Table
+126**'s `OpenType` rows **require a `cmap` table for CFF-outline programs**
+(the `glyf` row does not) — and `subsetter` strips `cmap` by design. So its
+CFF output cannot conformantly be `/FontFile3 /Subtype /OpenType`, while
+`/CIDFontType0C` requires a **bare** CFF program, not an OTTO container.
+§3.4's *"`subsetter` absorbs the TrueType/CFF split entirely"* is **true for
+simple-vs-composite, false for the descriptor key**.
+
+**Scope call (librarian, recorded as a §3.4 amendment, not a new decision —
+it narrows a decided Pass on a sourced constraint, and the decision already
+names `DonorUnsupported` for CFF2, so this extends the same refusal):**
+**Pass 21.0's P0 floor is restricted to `glyf` (TrueType-outline) donors.
+CFF donors are refused by name (`DonorUnsupported`) at 21.0** and lifted in
+a later slice once the OTTO-unwrap and the CID-keyed-CFF question are
+settled. Rationale: **L1 survives intact** — Noto Sans JP/CJK, DejaVu and
+most Google Fonts are TrueType `glyf`, so "pdfce can add non-Latin text" is
+unaffected — and the alternative is emitting a non-conformant `/FontFile3`
+on day one, which veraPDF would catch late and expensively. The refusal is
+reachable and testable (R96). **This is a narrowing of the P0 floor, not a
+silent cut — flag it to Ken at next contact.**
+
+**C-7 — fsType is not one gate, and R109's original taxonomy was too
+coarse.** Bit 8 (*No subsetting*) forbids **the only thing FF-C does**: a
+face at `0x0108` permits *editable embedding* while forbidding subsetting.
+Bit 9 makes a face "unembeddable" in the specification's own word. R109 is
+amended (§4.1, above) to name these as **distinct** refusals —
+`SubsettingNotPermitted` and `EmbeddingNotPermitted` — not one
+`EmbeddingNotPermitted`.
+
+**C-8 — an independent, sourced argument for the add-only (W2) call that
+§3.1 did not cite.** ISO 32000-1 §9.9's opening paragraph is a licensing
+rule: *"In the absence of explicit information to the contrary, embedded
+font programs **shall** be used only to view and print the document,"* and
+creating new text requires *"a licensed copy of the font program, **not a
+copy extracted from the PDF file**."* ⇒ **an existing document's
+`/FontFile*` is not an admissible FF-C donor.** This is a second,
+independent reason W1/W3 were correctly rejected in §3.1 — the first was
+"the bytes don't exist" (§1.2), this one is "and you may not use them even
+where they do." **Modality check, so this is not overstated:** the
+producer-side rule (*"should not be incorporated"*) is a **`should`**, so
+§9.9 is **not** a blanket `shall not` on embedding a restricted face —
+only the reuse-as-a-donor case above is a `shall`. Flagged for the
+librarian/engineer to judge whether this deserves standing-rule status as
+a constraint on donor provenance; no current rule states it.
+
+**C-1 — favourable.** §3.4's emitted-table list omits `HHEA` (actually
+written by `hmtx::subset`) and `CVT`/`FPGM`/`PREP`. ISO 32000-1 §9.9
+requires exactly those if present in the original, so the **real** output
+satisfies the rule the decision's list appeared to violate. Watch item: the
+hinting tables are skipped under `interjector.is_skrifa()`.
+
+**C-2 / C-6 — reframes that strengthen the decision.** `cmap` removal is
+not merely a crate quirk, it is **mandated**: §9.9 says that under a
+CIDFont dictionary *"the `cmap` table is not needed and **shall not** be
+present."* And §9.9 carries a **`shall`** on conforming writers to use
+`/Type0` + `Identity-H` for OpenType `glyf` programs. So **M2 (§3.4) is
+spec-directed, not crate-forced** — the original text understated its own
+case.
+
+**C-4 / C-5 — citation fixes, applied verbatim (§4.2, above).** `/CIDSet`
+is **§9.8.3 Table 124**, not §9.7.4.2. The subset prefix is **§9.6.4**, not
+§9.8.1 (which has no subset rule). §4.2's dispatch table carried both
+errors; corrected in place above so nobody re-derives from a wrong pointer.
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: project-mit-license-and-priority-sequence
-description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling (item #3: FF-H DONE, FF-C DECIDED/SCOPED as Pass 21.x NOT STARTED per decision 021, FF-B open) → forms (item #4, still undispatched). Pass 8.1 (GUI redaction-apply) SHIPPED. Decision 021 (FF-C) filed 2026-08-03: add-only re-scope, R107–R110, ceiling now R110.
+description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling (item #3: FF-H DONE, FF-C DECIDED/SCOPED as Pass 21.x NOT STARTED per decision 021, FF-B open) → forms (item #4, still undispatched). Pass 8.1 (GUI redaction-apply) SHIPPED. Decision 021 (FF-C) filed 2026-08-03, add-only re-scope, R107–R110, ceiling R110; AMENDED same day (continuation 74) after spec review — P0 floor narrowed to glyf/TrueType donors only (CFF refused by name until a later slice), R109 split into SubsettingNotPermitted/EmbeddingNotPermitted.
 metadata:
   type: project
 ---
@@ -338,3 +338,35 @@ fixed same day at `d30842c` — see
 [[project-uncommitted-repo-worktree-risk]] for the commit/hash update
 and `D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md` for
 the generalized finding.
+
+**UPDATE — 2026-08-03, SESSION_LOG continuation 74: `pdfce-spec-librarian`'s
+decision-021 dispatch returned — eight findings, two change the work.
+Decision 021 AMENDED (§10), status unchanged (DECIDED/SCOPED/NOT
+STARTED).** **The one fact most likely to bite a future session that
+skips straight to "21.0, glyf donors, go build": Pass 21.0's P0 floor is
+now `glyf` (TrueType-outline) donors ONLY — CFF donors are refused by
+name (`DonorUnsupported`) until a later slice**, because `subsetter`
+wraps CFF donors in an `OTTO` sfnt that ISO 32000-1 §9.9 Table 126
+requires a `cmap` for, and `subsetter` strips `cmap` unconditionally
+(verified at source, `lib.rs:492`). L1 (the non-Latin headline) still
+holds — Noto Sans JP/CJK, DejaVu, most Google Fonts are TrueType `glyf`
+— but don't assume a CFF/OpenType-CFF donor "just works" at 21.0; it's a
+named, tested refusal, not an oversight. **R109 also split**: fsType is
+TWO distinct refusals now, not one `EmbeddingNotPermitted` —
+`SubsettingNotPermitted` (bit 8, `0x0100`, forbids the one thing FF-C
+does) and `EmbeddingNotPermitted` (bit 9, `0x0200`, the spec's own
+"unembeddable" case). Open operator question (r) is narrowed to just
+absent/unparseable `OS/2` (and the spec-silent `fsType == 1`) — the
+forbids-embedding/forbids-subsetting cases are no longer Ken's call,
+they're spec-sourced and R109 refuses them by name automatically.
+**Separately this continuation, unrelated to the spec review:** two
+shipped operator-facing hints (`r_inv_1_hint()`, `format_coverage_hint()`)
+were found FALSE — both told the operator that supplying a font would
+fix a coverage/subset refusal, and neither does, in any shipped build —
+fixed at `0893191`. A synthetic embedded-subset-font fixture is now
+explicitly owed against Pass 21.0 (`fixtures/synthetic` has none
+suitable) — both to test 21.0 itself and to finally observe the
+corrected hints on screen. Full record:
+`docs/decisions/021-ffc-font-subsetting-and-glyph-embedding.md` §10 and
+`ARCHITECTURE.md` §12's continuation-74 dated entry. Branch now 67
+commits — see [[project-uncommitted-repo-worktree-risk]].

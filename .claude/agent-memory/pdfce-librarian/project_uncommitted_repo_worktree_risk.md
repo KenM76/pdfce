@@ -1,6 +1,6 @@
 ---
 name: project-uncommitted-repo-worktree-risk
-description: RESOLVED 2026-08-01 (commit d8b3903, then 79d1c6f + e13f3e6) — pdfce's crates/ tree is no longer uncommitted, and the engineer now commits in logical per-Pass/per-decision chunks. Branch pass-8-redaction at 66 commits as of continuation 73 (2026-08-03), still no remote. This librarian has no shell tool — commit counts/hashes are engineer-reported, not self-verified, unless noted otherwise.
+description: RESOLVED 2026-08-01 (commit d8b3903, then 79d1c6f + e13f3e6) — pdfce's crates/ tree is no longer uncommitted, and the engineer now commits in logical per-Pass/per-decision chunks. Branch pass-8-redaction at 67 commits as of continuation 74 (2026-08-03), still no remote. This librarian has no shell tool — commit counts/hashes are engineer-reported, not self-verified, unless noted otherwise.
 metadata:
   type: project
 ---
@@ -302,3 +302,19 @@ update) — always re-run `git rev-list --count HEAD` / `git cat-file -t`
 rather than trusting this file's numbers past their filing date.
 Push/publish authorization remains the sole open gate, unchanged in
 kind since continuation 50.
+
+**UPDATE — continuation 74 (2026-08-03, decision 021 spec-review
+amendment: FF-C P0 floor narrowed to `glyf` donors, R109 split into two
+refusals — no new Pass shipped, docs-only).** One new hash this
+continuation, engineer-reported and stated as `git cat-file -t`-verified
+on the dispatching side: `0893191` (fix: two false operator-facing font
+hints, `r_inv_1_hint()`/`format_coverage_hint()`, corrected to stop
+promising a remedy the write path doesn't deliver). Carried forward from
+continuation 73: `d30842c`. **Branch `pass-8-redaction` now 67 commits,
+still no remote** — this librarian dispatch again had no shell-execution
+tool (Read/Write/Edit/Glob/Grep/WebSearch/WebFetch only) and could not
+independently verify either hash. `tools/check-ledger-numbers.py`
+reported GREEN, exit 0, per the dispatching message. Push/publish
+authorization remains the sole open gate, unchanged in kind since
+continuation 50. Verify current tip/count with `git log --oneline -1` /
+`git rev-list --count HEAD` before trusting any number in this file.

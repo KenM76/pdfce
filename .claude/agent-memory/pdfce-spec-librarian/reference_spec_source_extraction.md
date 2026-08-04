@@ -114,6 +114,24 @@ and `pdfminer` installed. Extraction recipe that works:
   `WebFetch` and `curl` with a full browser UA — the PDF Association's
   `/extensions/` and `/resource/pdf-specification-archive/` indexes are **not
   machine-reachable**, so plan on `WebSearch` + Wayback instead.
+- **Microsoft OpenType specification (verified 2026-08-03).** `learn.microsoft.com`
+  HTML pages work with `WebFetch`: `https://learn.microsoft.com/en-us/typography/opentype/spec/<page>`
+  (`os2`, `otff`, `head`, `hmtx`, `cmap`, `post`, `glyf`, `loca`, `maxp`, `name`,
+  `cff`, `cff2`, …). Big pages exceed the inline cap and land in
+  `C:\Users\Ken\.claude\projects\<proj>\<session>\tool-results\toolu_*.txt` —
+  `sed`/`grep` that file rather than re-fetching. **The GitHub raw route is DEAD:**
+  `raw.githubusercontent.com/MicrosoftDocs/typography/{live,main,<the page's own
+  pinned gitcommit>}/typographydocs/opentype/spec/<page>.md` all return **404**, so
+  the docs repo's `LICENSE` cannot be read ⇒ record `free_primary` per `LEGAL.md`
+  §2 but attach a `NEEDS VERIFICATION` on the *redistribution* grant and hold
+  quotation to sentence/table-row level (memory item 6, availability ≠ licence).
+- **Vendored Rust crate sources are a legitimate, offline verification route** —
+  `~/.cargo/registry/src/index.crates.io-*/​<crate>-<version>/src/`. Used
+  2026-08-03 to check `subsetter 0.2.6`'s emitted table set against a decision
+  record's claim. Cheap (`grep -n "Tag::" src/lib.rs`), no network, and the crate
+  version is pinned by the workspace lock so the reading is reproducible. This is
+  *verification of a dependency claim*, **not** sourcing a normative algorithm
+  from code — that remains the thing to put to the user first (memory item 16).
 - **Adobe font technical notes** live at
   `https://adobe-type-tools.github.io/font-tech-notes/pdfs/<NNNN>.<Name>.pdf`
   (e.g. `5004.AFM_Spec.pdf`). **All `partners.adobe.com` TN URLs are dead.**

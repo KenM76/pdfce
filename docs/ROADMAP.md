@@ -7302,20 +7302,47 @@ FF-C authors is editable only where its `/ToUnicode` is VERIFIED
 injective, per font, per session; `Identity-H` with no `/ToUnicode`
 stays a permanent hard skip (**R65 untouched**).
 
+**SPEC-REVIEW AMENDMENT (2026-08-03) — narrows 21.0's P0 floor, see
+`docs/decisions/021-ffc-font-subsetting-and-glyph-embedding.md` §10 for
+the full eight-finding record.** `pdfce-spec-librarian`'s dispatch (§9,
+above) found `subsetter`'s CFF output is an `OTTO`-wrapped sfnt that
+cannot conformantly satisfy ISO 32000-1 §9.9 Table 126 (`FontFile3`
+`/OpenType` requires `cmap` for CFF-outline programs; `subsetter` strips
+`cmap` unconditionally; `/CIDFontType0C` needs a bare CFF program, not an
+OTTO container) — decision 021 §3.4/M2's own claim that *"`subsetter`
+absorbs the TrueType/CFF split entirely"* is true for simple-vs-composite,
+false for the descriptor key. **21.0's P0 floor is narrowed to `glyf`
+(TrueType-outline) donors only; CFF donors are refused by name
+(`DonorUnsupported`) until a later slice.** L1 (the headline capability)
+survives intact — Noto Sans JP/CJK, DejaVu, and most Google Fonts are
+TrueType `glyf`. R109 is also amended: fsType's bit 8 (*No subsetting*,
+the only thing FF-C does) and bit 9 (*Bitmap embedding only* — the spec's
+own "unembeddable" case) are now two distinct named refusals
+(`SubsettingNotPermitted` / `EmbeddingNotPermitted`), not one. The bit
+semantics that gate Open operator question (r) are now spec-sourced (see
+that item's update, below).
+
 **Slices:**
-- **21.0 — core + CLI. THE P0 FLOOR.** `SubsetPlan` producer;
-  `font_embed` emitter; wire into `addtext.rs`
+- **21.0 — core + CLI. THE P0 FLOOR (glyf/TrueType donors only — see
+  the spec-review amendment above; CFF donors refused by name).**
+  `SubsetPlan` producer; `font_embed` emitter; wire into `addtext.rs`
   (`base_font: Std14` → `NewTextFace { Std14 | Embedded }`); hostile-
   input guards (§3.5: input-side byte ceiling, corpus-measured not
   guessed; a synthetic composite-glyph-cycle fixture, not a depth
   guard — `subsetter`'s `closure()` is iteratively bounded by
-  construction; a `cargo-fuzz` target); `fsType` read; disclosure. CLI:
+  construction; a `cargo-fuzz` target); `fsType` read (two distinct
+  refusal diagnostics, per the amendment above); disclosure. CLI:
   `add-text --embed-font`. **Lifts the single widest wall in the
   product**: pdfce today cannot add ANY text outside WinAnsi/Symbol/
   ZapfDingbats — no Greek, Cyrillic, CJK, Hebrew, or Devanagari, at
   all. `add-text` already exists as a CLI subcommand (rule 11 note,
   same reasoning Pass 19.3/8.1 recorded) — 21.0 extends its flags, adds
-  no new subcommand.
+  no new subcommand. **Owed fixture, filed here (2026-08-03):** a
+  synthetic PDF with an embedded **subset** font plus a character
+  outside its repertoire — `fixtures/synthetic` currently has none
+  suitable, and both `format_coverage_hint()` and `r_inv_1_hint()`
+  need it to be observed on screen for the first time (see the
+  `0893191` hint-fix note in the 2026-08-03 SESSION_LOG entry).
 - **21.1 — core + CLI.** Composite-run edit/format where `/ToUnicode`
   is verified injective (R110); conditionally lifts R-INV-4. **Makes
   21.0's output editable — do not ship 21.0 without this and call FF-C
@@ -7344,9 +7371,11 @@ advance with no GSUB/GPOS, so FF-C's non-Latin headline is "CJK,
 Cyrillic, Greek, Hebrew without vowel points — yes; Arabic, Devanagari,
 Thai — the glyphs embed and the text is WRONG." Do not let the L1
 headline imply otherwise. Variable-font donors embed at their default
-instance only (feature off); bare Type 1 donors and CFF2 donors are
-unsupported (`DonorNotSfnt`/`DonorUnsupported`); the emitted font is
-PDF-only, will not install elsewhere.
+instance only (feature off); bare Type 1 donors and **all CFF-outline
+donors (not just CFF2 — narrowed 2026-08-03, see the spec-review
+amendment above)** are unsupported at P0 (`DonorNotSfnt`/
+`DonorUnsupported`); the emitted font is PDF-only, will not install
+elsewhere.
 
 **Standing rules R107–R110 added** (see Standing rules, below) — the
 ceiling was R106. **Ceiling is now R110.**
@@ -10026,16 +10055,30 @@ Ken's per `docs/decisions/README.md` (legal call / headline-capability
 scope call), neither blocking ★ Pass 21.x's P0 slice (21.0/21.1 do not
 need either answered — a face with no `OS/2` data or a Latin-only donor
 exercises neither):**
-- **(r) Font-EULA policy — what should pdfce do when a donor face's
-  `OS/2` `fsType` forbids embedding/subsetting, or — the common case —
-  when `OS/2` is absent or unparseable?** Embedding redistributes a
-  third party's font; this is a font EULA question, entirely separate
-  from rule 13 (which is about CODE licenses) and from pdfce's own MIT.
-  Options per decision 021 §7.1: refuse outright · disclose and require
-  an explicit operator acknowledgement · disclose and proceed.
-  Deliberately not picked in the decision record, and the bit values
-  deliberately not quoted from memory (rule 1) — R109 is written to
-  accept whichever policy is chosen.
+- **(r) Font-EULA policy — NARROWED 2026-08-03 (spec review, decision
+  021 §10). What should pdfce do when a donor face's `OS/2` is ABSENT or
+  UNPARSEABLE?** The forbids-embedding/forbids-subsetting cases are no
+  longer open — the bit semantics are now sourced (fsType `0x000F`
+  usage sub-field valid values 0/2/4/8, bit 0 permanently reserved,
+  `0x0100` No subsetting, `0x0200` Bitmap embedding only, `0x00F0`/
+  `0xFC00` reserved; bits 8–9 MUST be ignored on `OS/2` v0/v1) and R109
+  is amended to refuse each by name (`SubsettingNotPermitted` /
+  `EmbeddingNotPermitted`) — that much is no longer Ken's call, it is
+  spec-directed. **What remains genuinely open, and is narrower and
+  sharper than this item's original framing:** the specification is
+  silent on absent/unparseable `OS/2`, and on `fsType == 1` (an
+  undefined usage-subfield value). **The asymmetry is the trap:**
+  `fsType == 0` means *Installable*, the MOST permissive value, so
+  "absent" cannot be modelled as `0` — a missing-data default of "most
+  permissive" is exactly the silent-"permitted" failure R109 already
+  forbids. Options per decision 021 §7.1, unchanged: refuse outright ·
+  disclose and require an explicit operator acknowledgement · disclose
+  and proceed. Deliberately not picked in the decision record — R109 is
+  written to accept whichever policy is chosen. **Permanent finding,
+  also recorded (decision 021 §10 C-7/C-8, `pdfce-spec-librarian`): the
+  fsType↔PDF bridge exists in NEITHER specification** — ISO 32000-1
+  names no field, OpenType never mentions PDF — which is why this stays
+  an operator call and not a lookup.
 - **(s) Complex scripts (Arabic/Devanagari/Thai) — refuse by name at
   Pass 21.0, or disclose loudly and let the operator decide?** FF-C
   plus standing rule R17 (no shaping, ever) means these scripts would
@@ -11438,14 +11481,22 @@ exercises neither):**
   covered/uncovered character list (R98 applied), never an estimate.
 - **R109 — Font-embedding permission is read from the donor face and
   disclosed; never assumed, never guessed (decision 021, 2026-08-03;
-  librarian-assigned number).** Read before subsetting (`subsetter`
-  strips `OS/2`). A face whose permission bits forbid embedding or
-  subsetting is refused by name (`EmbeddingNotPermitted`). Absent or
-  unparseable permission data is disclosed as unknown; pdfce never
-  silently treats "no data" as "permitted." Bit semantics sourced from
-  the OpenType specification via `pdfce-spec-librarian`, never from
-  recall (rule 1). The accept/refuse policy itself is Open operator
-  question (r), below.
+  librarian-assigned number). AMENDED 2026-08-03 (spec review, decision
+  021 §10 C-7): fsType is not one gate — TWO distinct named refusals,
+  not one `EmbeddingNotPermitted`.** Read before subsetting (`subsetter`
+  strips `OS/2`). **`SubsettingNotPermitted`** — bit 8, `0x0100`, "No
+  subsetting": permits embedding the whole face but forbids the one
+  thing FF-C ever does. **`EmbeddingNotPermitted`** — bit 9, `0x0200`,
+  "Bitmap embedding only," the specification's own "unembeddable" case.
+  Absent or unparseable permission data is disclosed as unknown; pdfce
+  never silently treats "no data" as "permitted" — and never treats it
+  as bit-0 `0x0000` ("Installable") either, since Installable is the
+  MOST permissive value, not a safe stand-in for missing data. Bit
+  semantics sourced from the OpenType specification via
+  `pdfce-spec-librarian`, never from recall (rule 1). The accept/refuse
+  policy itself is Open operator question (r), below — narrowed by this
+  amendment to the absent/unparseable-`OS/2` case specifically, since
+  the bit semantics themselves are no longer open.
 - **R110 — A composite run is editable only where its `/ToUnicode` is
   VERIFIED injective, per font, per session (decision 021, 2026-08-03;
   librarian-assigned number).** Injectivity — every CID maps to exactly

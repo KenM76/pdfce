@@ -10129,3 +10129,179 @@ GREEN, exit 0, 61 (section, Pass ID) pairs / 106 rules / 21 decisions /
 - Surface (r) and (s) to Ken at the next natural check-in; neither
   blocks starting 21.0/21.1, but (s) shapes what 21.0's own "L1"
   headline is honestly allowed to claim.
+
+**Same-day continuation 74 (real date 2026-08-03) — `pdfce-spec-librarian`'s
+decision-021 dispatch returned: eight findings, two change the work.
+Decision 021 AMENDED (§10), `ROADMAP.md` and `ARCHITECTURE.md` §12
+updated to match. Two shipped operator-facing hints found FALSE and
+corrected (`0893191`). One RAG-escalation item DECLINED and redirected —
+it was spec-librarian's territory, not this librarian's, despite being
+asked for directly.**
+
+**Filed:**
+- `docs/decisions/021-ffc-font-subsetting-and-glyph-embedding.md` — new
+  "## 10. Spec review (2026-08-03)" section with all eight findings
+  (C-1 through C-8); pointer notes added at §3.4, §3.6 item 2, and the
+  refusal table in §3.1 so a reader hits the correction before the
+  now-superseded claims; §4.2's dispatch table and §4.1's R109 bullet
+  corrected/amended in place (citations fixed, not merely annotated,
+  per the explicit instruction that a wrong pointer must not survive
+  for someone to re-derive from).
+- **C-3 (CHANGES THE WORK, scope call made this continuation):** Pass
+  21.0's P0 floor is restricted to `glyf` (TrueType-outline) donors;
+  CFF donors are refused by name (`DonorUnsupported`, extending the
+  CFF2 diagnostic already named in the decision) until a later slice.
+  Cause: `subsetter` wraps CFF donors in an `OTTO` sfnt (`lib.rs:492`,
+  `FontFlavor::Cff => 0x4F54544F`), and ISO 32000-1 §9.9 Table 126
+  requires `cmap` for CFF-outline `OpenType` programs — which
+  `subsetter` strips unconditionally, and which `/CIDFontType0C`
+  (the bare-CFF alternative) forbids wrapping in an OTTO container
+  either way. No conformant emission path exists for CFF donors under
+  the plan as filed. Recorded as a narrowing amendment to decision
+  021 §3.4, not a new decision record — L1 (the headline non-Latin
+  capability) survives intact because Noto Sans JP/CJK, DejaVu, and
+  most Google Fonts are TrueType `glyf`; flagged to Ken as a narrowing,
+  not a silent cut.
+- **R109 amended** (`ROADMAP.md` Standing rules + decision 021 §4.1):
+  fsType is two distinct refusals, not one `EmbeddingNotPermitted`.
+  Bit 8 (`0x0100`, No subsetting) forbids the one thing FF-C does while
+  still permitting whole-face embedding — `SubsettingNotPermitted`.
+  Bit 9 (`0x0200`, Bitmap embedding only) is the spec's own
+  "unembeddable" case — `EmbeddingNotPermitted`. Full bit table now
+  sourced: `0x000F` usage sub-field valid values 0/2/4/8, bit 0
+  permanently reserved, `0x00F0`/`0xFC00` reserved, bits 8–9 MUST be
+  ignored on `OS/2` v0/v1.
+- **Open operator question (r) narrowed** (`ROADMAP.md`): the
+  forbids-embedding/forbids-subsetting cases are no longer Ken's call —
+  spec-sourced, R109 refuses them by name. What remains open is
+  strictly narrower: absent/unparseable `OS/2`, and the spec-silent
+  `fsType == 1`. **The asymmetry that makes this a real trap, not a
+  formality:** `fsType == 0` is *Installable*, the MOST permissive
+  value — so "absent" cannot be modelled as `0` without recreating the
+  exact silent-"permitted" failure R109 exists to forbid. Also recorded
+  as a permanent finding: the fsType↔PDF bridge exists in **neither**
+  specification (ISO 32000-1 names no such field; OpenType never
+  mentions PDF) — which is precisely why this stays an operator call
+  rather than a lookup.
+- **Two favourable corrections recorded, not just the unfavourable
+  ones** (C-1, C-2/C-6) — the decision as filed *understated* its own
+  case: the emitted-table list omitted `HHEA`/`CVT`/`FPGM`/`PREP`,
+  which §9.9 requires when present and `subsetter` does emit; and
+  `cmap` removal plus the `/Type0`+`Identity-H` choice are `shall`s in
+  §9.9, not merely inherited crate behavior — M2 is spec-directed, not
+  crate-forced. Recording favourable findings alongside unfavourable
+  ones is deliberate: reversing a correct-but-unsourced claim later
+  would be worse than recording why it held.
+- **Two citation fixes, applied verbatim** (C-4, C-5): `/CIDSet` is
+  §9.8.3 Table 124, not §9.7.4.2; the subset-tag prefix rule is §9.6.4,
+  not §9.8.1 (which has no subset rule). Fixed in place in decision
+  021 §4.2's dispatch table.
+- **C-8, flagged not decided:** ISO 32000-1 §9.9's opening paragraph —
+  embedded font programs *"shall be used only to view and print the
+  document"* absent contrary information, and new text needs *"a
+  licensed copy of the font program, not a copy extracted from the PDF
+  file"* — means an existing document's `/FontFile*` is not an
+  admissible FF-C donor, independent of the "the bytes don't exist"
+  reason already on record. Modality checked: the producer-side
+  sentence is a `should`, not a `shall` — recorded as NOT a blanket
+  embedding prohibition, to avoid overstating it. Filed as a candidate
+  for standing-rule status (donor provenance); not assigned a number
+  this continuation — that call belongs to the engineer/operator, not
+  solo to this librarian.
+- `ARCHITECTURE.md` §12 — new dated entry (2026-08-03, same day, after
+  the original decision-021 entry) recording all of the above as a
+  correction with a forward pointer, per the section's own
+  append-only-with-forward-pointer discipline; the original entry is
+  **not retracted**, it stands as the record of what was decided before
+  the spec dispatch returned.
+- `ROADMAP.md` — Pass 21.x entry gets a "SPEC-REVIEW AMENDMENT
+  (2026-08-03)" block ahead of the Slices list; the 21.0 slice bullet
+  now states the glyf-only restriction explicitly; "Honest limits"
+  updated (CFF donors, not just CFF2, unsupported at P0); Standing
+  rules R109 amended in place with a dated note; Open operator
+  question (r) rewritten to the narrowed scope.
+
+**Two shipped hints found FALSE, fixed (`0893191`) — filed by the
+engineer, recorded here:**
+- `r_inv_1_hint()` and `format_coverage_hint()` both told the operator
+  that supplying a font via Tools › Font folders would lift a
+  coverage/subset refusal. **False in every shipped build** — verified:
+  `format.rs`'s check reads only `target.glyph_names()` and
+  `carried_codes(recs, &resource)`; `addtext.rs:157` states pdfce
+  *"writes an identical named non-embedded dict either way"*; and
+  `pdfce-core` has no functional awareness of `FontEnvironment` (one
+  crate-wide mention, a doc comment about display trust level only).
+  An operator following the hint would install a font, watch the
+  preview genuinely improve, retry the save, and be refused again with
+  the identical message — a rule-4 failure of the quiet kind: not a
+  wrong result, a wrong instruction, which makes the operator doubt
+  themselves rather than the tool.
+- **How it surfaced, worth keeping:** not testing — decision 021 had
+  to enumerate which refusals FF-C lifts, which meant reading each
+  refusal's message beside the code that raises it, and
+  `format_target_missing_hint()`, six lines away, was already honest
+  about FF-C. One hint naming a real limit next to two denying it was
+  the tell. **Recorded as an observation for the engineer to judge as a
+  possible standing-rule candidate ("scoping a feature is an audit of
+  the copy around the refusals it touches") — not assigned a rule
+  number by this librarian**, since it wasn't clearly generalizable
+  enough to file to any cross-project RAG tier (not Rust/egui-
+  ecosystem, not PDF-domain-empirical) and rule-adoption isn't this
+  librarian's call to make solo.
+- **Not observed on screen, stated honestly:** triggering either
+  refusal needs a fixture with an embedded *subset* font plus a
+  character outside it, and none exists (`fixtures/synthetic` has
+  three files, none suitable). Verified instead: glyph gate clean,
+  call sites untouched, `check-ui-strings` clean, 1770 tests green.
+  **Filed as an owed fixture against Pass 21.0** (`ROADMAP.md`'s 21.0
+  slice bullet, above) — it is a prerequisite for testing 21.0 and the
+  right moment to finally observe these two hints on screen.
+
+**RAG escalation DECLINED this continuation — redirect, not a write:**
+- The dispatching message asked this librarian to write "ISO 32000-1
+  §9.9 forbids using a font program extracted from a PDF as the source
+  for newly authored text" (plus the fsType absent-`OS/2` asymmetry)
+  to `C:\personal_rag\pdf\`. **Declined.** Per this agent's own hard
+  rule 6: a finding that is "the canonical spec says X" belongs to
+  `pdfce-spec-librarian`'s `D:\Dev\Rag-Specialized\PDF_Spec\`, not to
+  `personal_rag/pdf`, which is scoped to empirical real-world-PDF
+  divergence from spec. Both halves of the requested lesson are pure
+  spec citation with no empirical "what we observed a real file/tool
+  actually do" content — there is no PDF-producer-divergence angle
+  here, just a spec clause. Correct action per the standing redirect
+  instruction: point back at `pdfce-spec-librarian`'s existing corpus
+  (it already ingested §9.9 and the fsType bit table for this same
+  dispatch) rather than duplicate the citation into a different tier
+  under a different voice. No file written to `personal_rag/pdf` this
+  continuation.
+
+**Repo status:** hashes `0893191` (the hint fix) and `d30842c`
+(decision 021 + ledger-checker fix, carried from continuation 73) both
+independently verified with `git cat-file -t` per the dispatching
+message — this librarian still has no shell-execution tool and cannot
+self-verify. Branch `pass-8-redaction`, **67 commits, still no
+remote**. `tools/check-ledger-numbers.py` reported GREEN, exit 0.
+
+**Still in flight:**
+- ★ Pass 21.x is filed, scoped, and now spec-corrected but **NOT
+  STARTED** — 21.0 is next, restricted to `glyf` donors at P0.
+- `pdfce-spec-librarian`'s stub rewrite (`font__subsetting_ffc_queue.md`)
+  is still owed before any 21.0 code — unaffected by this continuation
+  beyond the citation fixes above; still describes the wrong mechanism
+  until rewritten.
+- Fixture owed: a synthetic embedded-subset-font PDF for
+  `fixtures/synthetic`, needed to observe the two corrected hints on
+  screen and to test 21.0 itself.
+- Open operator questions (r) [narrowed] and (s) [unchanged] still
+  await Ken; neither blocks starting 21.0/21.1.
+
+**For next session:**
+- Read decision 021 §10 before touching Pass 21.0 code — the P0 floor
+  is narrower than the original filing implies (`glyf` donors only).
+- Build the missing embedded-subset-font fixture early in 21.0; it
+  unblocks both the fixture-owed test debt above and 21.0's own test
+  plan.
+- Dispatch `pdfce-spec-librarian` for the stub rewrite before writing
+  the `SubsetPlan` producer, per the standing instruction (unchanged
+  from continuation 73).
+- Surface (r) [narrowed] and (s) to Ken at the next natural check-in.

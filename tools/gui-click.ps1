@@ -73,9 +73,40 @@
     injects at the OS layer winit reads, so `egui::Modifiers` sees the real
     state rather than a synthesized message the event loop may ignore.
 
+.PARAMETER Type
+    Text to type after the click sequence completes. Added 2026-08-03 because
+    R86 kept being unsatisfiable for the whole in-place-text-editing family:
+    every refusal in that family (R-INV-1's embedded-subset floor,
+    `FormatError::CoverageFailure`, the encoding triggers) is reached only by
+    SELECTING a run and then TYPING a replacement. Clicks alone get you to the
+    property bar and no further, so those messages could never be read on
+    screen — which is exactly how two of them went several releases telling
+    the operator to do something that could not work.
+
+    WHY KEYEVENTF_UNICODE AND NOT VIRTUAL KEY CODES
+    -----------------------------------------------
+    Virtual-key codes are keyboard-LAYOUT dependent: sending VK_Z produces
+    'z' on a US layout and 'w' on AZERTY. A harness that types different
+    characters on different machines is worse than no harness, because it
+    fails in a way that looks like an application bug.
+
+    KEYEVENTF_UNICODE bypasses the layout entirely — `wScan` carries the UTF-16
+    code unit and Windows delivers exactly that character. It is also the only
+    practical way to type the non-Latin text FF-C exists to support; a Greek or
+    Cyrillic probe has no virtual-key code on a Latin keyboard at all.
+
+    LIMIT, STATED: this sends one WM_CHAR-equivalent per UTF-16 code unit, so
+    characters outside the BMP arrive as two surrogate halves. egui reassembles
+    them correctly, but a test asserting "one keystroke" would be wrong.
+
 .EXAMPLE
     pwsh -File tools/gui-click.ps1 -Clicks "1235,45"
     # click the Measure menu
+
+.EXAMPLE
+    pwsh -File tools/gui-click.ps1 -Clicks "487,277" -Type "ABZ"
+    # select a text run, then type a replacement containing a character the
+    # page's embedded subset font does not carry — the R-INV-1 probe
 
 .EXAMPLE
     pwsh -File tools/gui-click.ps1 -Clicks "700,300","900,300" -DelayMs 500
@@ -93,7 +124,8 @@ param(
     [int]      $DelayMs     = 400,
     [switch]   $MoveOnly,
     [ValidateSet('Shift', 'Ctrl', 'Alt')]
-    [string[]] $Modifiers   = @()
+    [string[]] $Modifiers   = @(),
+    [string]   $Type        = ''
 )
 
 Set-StrictMode -Version Latest
@@ -121,6 +153,24 @@ public static extern IntPtr GetForegroundWindow();
 
 [DllImport("user32.dll")]
 public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+[StructLayout(LayoutKind.Sequential)]
+public struct KEYBDINPUT {
+    public ushort wVk; public ushort wScan; public uint dwFlags;
+    public uint time; public IntPtr dwExtraInfo;
+}
+
+// INPUT is a tagged union. Only the keyboard arm is used here, but the
+// struct must still be the full size the OS expects, hence the explicit
+// layout with the 8-byte type tag followed by the union payload.
+[StructLayout(LayoutKind.Explicit)]
+public struct INPUT {
+    [FieldOffset(0)]  public uint type;
+    [FieldOffset(8)]  public KEYBDINPUT ki;
+}
+
+[DllImport("user32.dll", SetLastError = true)]
+public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 '@
 }
 
@@ -220,4 +270,53 @@ finally {
     foreach ($m in $held) {
         [PdfceInput.Win32]::keybd_event([byte]$VK[$m], 0, $KEYEVENTF_KEYUP, [UIntPtr]::Zero)
     }
+}
+
+# ---------------------------------------------------------------------------
+# Typing stage. Runs AFTER the clicks and AFTER the modifiers are released,
+# because every use so far is "click to focus something, then type into it" —
+# and a modifier still held would turn the text into a shortcut sequence.
+# ---------------------------------------------------------------------------
+if ($Type) {
+    # Re-verify the foreground window. The click loop may have taken a while,
+    # and typing into the wrong window is worse than clicking into it: a click
+    # is one stray event, a string is a stream of them, and some of those
+    # characters are destructive in an editor.
+    $fgNow = [PdfceInput.Win32]::GetForegroundWindow()
+    if ($fgNow -ne $proc.MainWindowHandle) {
+        throw "REFUSING TO TYPE: '$ProcessName' is no longer the foreground window (foreground is $fgNow). The text would be delivered to whatever now has focus."
+    }
+
+    $INPUT_KEYBOARD    = 1
+    $KEYEVENTF_UNICODE = 0x0004
+    $size = [System.Runtime.InteropServices.Marshal]::SizeOf([type]'PdfceInput.Win32+INPUT')
+
+    # One UTF-16 code unit per event pair. `wVk` MUST be 0 when
+    # KEYEVENTF_UNICODE is set — a non-zero virtual key silently wins and the
+    # layout-independence this exists for is lost.
+    foreach ($unit in [System.Text.Encoding]::Unicode.GetBytes($Type) | ForEach-Object -Begin { $i = 0; $buf = @() } -Process { $buf += $_ } -End { for ($j = 0; $j -lt $buf.Count; $j += 2) { [uint16]($buf[$j] -bor ($buf[$j+1] -shl 8)) } }) {
+        # keybd_event, NOT SendInput.
+        #
+        # SendInput is the modern API and the first implementation used it.
+        # It returned 0 with ERROR_INVALID_PARAMETER (87) on every call,
+        # despite `Marshal.SizeOf` confirming the expected x64 layout —
+        # INPUT 32 bytes, KEYBDINPUT 24 — so the declaration was right and
+        # PowerShell's marshalling of the `INPUT[]` union array was not.
+        # Chasing that is a PowerShell interop problem, not a pdfce problem.
+        #
+        # `keybd_event` is the legacy entry point that Windows implements in
+        # terms of SendInput internally, it takes no union and no array, and
+        # it is ALREADY PROVEN IN THIS SCRIPT — the modifier press/release
+        # above uses it and works. With `bVk = 0` and KEYEVENTF_UNICODE it is
+        # layout-independent in exactly the same way, which was the whole
+        # reason for preferring SendInput.
+        #
+        # Deliberately choosing the older API that demonstrably works here
+        # over the newer one that does not.
+        [PdfceInput.Win32]::keybd_event(0, [byte]($unit -band 0xFF), $KEYEVENTF_UNICODE, [UIntPtr]::Zero)
+        [PdfceInput.Win32]::keybd_event(0, [byte]($unit -band 0xFF), $KEYEVENTF_UNICODE -bor $KEYEVENTF_KEYUP, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 40
+    }
+    Write-Output "typed $($Type.Length) character(s)"
+    Start-Sleep -Milliseconds $DelayMs
 }

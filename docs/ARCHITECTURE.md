@@ -4974,3 +4974,84 @@ with a forward pointer.
     ever)** means they would embed but render wrong — recommendation is
     refuse-by-name, but it caps a headline capability so it is Ken's
     call.
+
+- **2026-08-03 (same-day) — Decision 021 AMENDED after
+  `pdfce-spec-librarian`'s dispatch: FF-C's P0 floor narrowed to `glyf`
+  donors; R109 split into two refusals. Status unchanged — DECIDED,
+  SCOPED, NOT STARTED, Pass 21.x still unbuilt.** Forward pointer:
+  full eight-finding record archived at
+  `docs/decisions/021-ffc-font-subsetting-and-glyph-embedding.md` §10
+  ("Spec review (2026-08-03)"). The prior entry above (filed the same
+  day, before the dispatch returned) is **not retracted** — it stands
+  as the record of what was decided from crate source before the spec
+  was read; this entry is the correction, per the same append-only-
+  with-forward-pointer discipline this section already uses for
+  superseded decisions.
+  - **Scope-changing finding (C-3): `subsetter`'s CFF output cannot be
+    emitted conformantly under the plan filed above.** Verified at
+    source (`lib.rs:492`, `FontFlavor::Cff => 0x4F54544F`, the `OTTO`
+    tag): `subsetter` wraps CFF donors in an `OTTO` sfnt. ISO 32000-1
+    §9.9 Table 126 requires a `cmap` table for CFF-outline `OpenType`
+    programs (the `glyf` row does not), and `subsetter` strips `cmap`
+    unconditionally — so the CFF path can satisfy neither
+    `/FontFile3 /Subtype /OpenType` (needs `cmap`) nor
+    `/CIDFontType0C` (needs a bare CFF program, not an OTTO container).
+    The prior entry's claim that *"`subsetter` absorbs the TrueType/CFF
+    split entirely"* is true for simple-vs-composite dispatch, false
+    for the descriptor-key choice.
+  - **Scope call (librarian, recorded here as the decision this
+    finding produced): Pass 21.0's P0 floor is restricted to `glyf`
+    (TrueType-outline) donors; CFF donors are refused by name
+    (`DonorUnsupported`, extending the same diagnostic already used for
+    CFF2) until a later slice.** Not a new decision record — a
+    narrowing of the already-decided Pass 21.x on a sourced constraint.
+    L1 (the headline non-Latin capability) survives intact: Noto Sans
+    JP/CJK, DejaVu, and most Google Fonts are TrueType `glyf`. The
+    alternative — shipping a non-conformant `/FontFile3` at P0 — would
+    surface late, expensively, and only under veraPDF. Flagged to Ken
+    as a narrowing, not a silent cut.
+  - **R109 amended: fsType is not one gate, split into two named
+    refusals.** Bit 8 (`0x0100`, *No subsetting*) forbids the one thing
+    FF-C ever does while still permitting whole-face embedding —
+    `SubsettingNotPermitted`. Bit 9 (`0x0200`, *Bitmap embedding only*)
+    is the specification's own "unembeddable" case for outline-program
+    embedding — `EmbeddingNotPermitted`. Absent/unparseable `OS/2` is
+    disclosed as unknown and must never be treated as bit-0 `0x0000`
+    (*Installable*, the MOST permissive value) — that asymmetry is the
+    reason "absent" cannot default to "permitted." Full bit table
+    (`0x000F` usage sub-field 0/2/4/8, bit 0 reserved, `0x00F0`/`0xFC00`
+    reserved, bits 8–9 ignored on `OS/2` v0/v1) now sourced; `ROADMAP.md`
+    Open operator question (r) narrowed accordingly — the accept/refuse
+    *policy* for absent/unparseable `OS/2` (and the spec-silent
+    `fsType == 1`) remains Ken's call, everything else is no longer
+    open.
+  - **A second, independent argument for the already-decided add-only
+    (W2) call (C-8), not previously cited.** ISO 32000-1 §9.9's opening
+    paragraph: embedded font programs *"shall be used only to view and
+    print the document"* absent contrary information, and creating new
+    text needs *"a licensed copy of the font program, not a copy
+    extracted from the PDF file."* An existing document's `/FontFile*`
+    is therefore not an admissible FF-C donor — independent of §1.2's
+    "the bytes don't exist" reason, this is "and you may not reuse them
+    even where they do." Modality note: the producer-side sentence is a
+    `should`, not a `shall` — do not overstate this into a blanket
+    embedding prohibition. Filed as a candidate for standing-rule status
+    (donor provenance), not yet assigned a number.
+  - **Two favourable corrections (C-1, C-2/C-6): the prior entry
+    understated its own case.** The emitted-table list omitted `HHEA`/
+    `CVT`/`FPGM`/`PREP`, which §9.9 requires when present in the
+    original and `subsetter` does emit (via `hmtx::subset` and, absent
+    the `interjector.is_skrifa()` hinting-skip path, the hint tables).
+    And `cmap` removal plus the `/Type0`+`Identity-H` choice are not
+    merely `subsetter` behavior pdfce happens to inherit — §9.9 states
+    both as `shall`s on conforming writers. M2 (§3.4 of the decision
+    document) is spec-directed, not crate-forced.
+  - **Two citation corrections (C-4, C-5), fixed in place in the
+    decision document's §4.2 dispatch table:** `/CIDSet` is §9.8.3
+    Table 124, not §9.7.4.2; the subset-tag prefix rule is §9.6.4, not
+    §9.8.1 (which has no subset rule).
+  - **No further §3/§4 body-section update this entry** — same
+    disposition as both decision 020's and decision 021's original
+    entries above: nothing has shipped, so the workspace-layout and
+    core-data-model tables stay untouched until Pass 21.0 actually
+    lands.
