@@ -81,6 +81,294 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 25.1 — Double-click to work INSIDE an object: `EnteredObject`, subpath outlining, and the depth state machine (GUI half of the subpath-selection pair; **RENUMBERED from the commit's own "24.0a" — see the Pass-number note on Pass 25.0, below**) — 2026-08-04, committed `5df8f26`
+
+**What the operator gets.** Double-click a page object with the Obj tool
+and pdfce descends into it: the object's subpaths are outlined
+individually in amber, the readout names the entered object, and clicks
+inside now pick a *subpath* rather than re-picking the whole object.
+Escape leaves. Clicking outside leaves. Changing page or making an edit
+leaves. This is the GUI half of Pass 25.0's core primitive, and together
+the pair is what makes a CAD drawing selectable at all (see the numbers
+in Pass 25.0's entry — one path object can be an entire drawing view).
+
+**Build.**
+
+- New `canvas::EnteredObject` (the descended-into state) plus a **pure**
+  `canvas::depth_after_click`, with **7 tests, one per rule**: double-click
+  enters; an ordinary click inside re-picks a subpath without leaving;
+  a click outside leaves; Escape leaves; an edit leaves; a page change
+  leaves (both of the last two via `prune_canvas_selection`); and the
+  no-object-under-cursor case.
+- **Both click paths call one shared `OpenDoc::apply_click_depth`.** This
+  is R92 applied deliberately rather than discovered afterwards — a
+  single-click handler and a double-click handler that each decide depth
+  independently are two copies of the same predicate, and they drift.
+- New `CanvasTargetProvider` methods `subpath_hits` / `subpath_bounds_canvas`
+  — the GUI's read-only window onto Pass 25.0's core functions, so no GUI
+  code re-derives subpath geometry (the GUI-core separation invariant, and
+  R111's "selection enumerates exactly what the renderer paints" shape).
+- New `SUBPATH_OUTLINE_COLOR` — **amber, deliberately NOT the selection
+  accent.** An entered object's subpath outlines are a different *kind*
+  of feedback from "this is selected," and reusing the accent would say
+  the whole object was selected at a moment when it specifically is not.
+  R84 also applies: the entered state is announced by the readout in
+  words, so the colour is never carrying the meaning alone.
+- New `ui_text` strings `entered_object_readout` / `entered_object_tooltip`
+  (R1 single catalog).
+
+**★ The status-panel jump, fixed in this stretch — a defect nobody
+reported because it looked like the app working.** The bottom status
+`egui::Panel` now has `.exact_size(STATUS_PANEL_HEIGHT_PTS)` (92 pt).
+Before this, its height was content-driven: selecting an object added a
+status line, which shrank the central area, which made `apply_fit`
+recompute the fit zoom — **so the page visibly jumped and shrank on
+click, from clicking.** Measured before the fix: canvas rect
+`[[313.5 71.0]-[1466.5 962.0]]` at zoom `0.7279` became
+`[[325.1 71.0]-[1454.9 944.0]]` at zoom `0.7132`, purely from a
+selection. After: byte-identical across a selection. This is the exact
+feedback loop already recorded in
+`D:\dev\rag\egui\bottom_panel_height_change_retriggers_fit_to_viewport_zoom.md`
+(filed 2026-08-03), which named "reserve a fixed height" as the
+structural fix it had not yet applied — this Pass applies it. Root cause
+independently identified by `pdfce-ui-specialist` in
+`docs/ui_specs/gesture-commit-and-shell-conventions-audit.md` §3
+(finding D7 / §3.3). New standing rule **R128** (below).
+
+**NOT shipped, and NOT offered — R83 honoured in the UI text itself.**
+Moving a subpath and deleting a subpath are not built; neither is level 2
+(nodes). The entered-object tooltip **says so in words** rather than
+showing a disabled control, which is R83's own preferred shape. Both are
+filed under *Next up* this filing (see "Subpath-level edit verbs" and the
+cross-reference to Pass 23.3 for nodes).
+
+**Rule 11 does not apply**, and the absence is reasoned rather than
+missed: this Pass is a pure GUI depth state machine. Its headless
+equivalent — querying which subpaths a point hits — shipped in Pass 25.0
+as `object-list --enter INDEX --hit X,Y`.
+
+**Contradiction surfaced by this Pass, flagged not resolved — read before
+scheduling Pass 23.2.** Decision 023 §1 defines a three-level model
+(level 1 = smallest structural container, level 2 = object, level 3 =
+nodes) with **no subpath level at all**, and specifies double-click as
+the descend gesture and a new `LeaveGroupLevel` slot in
+`canvas::resolve_escape` as the ascent. Pass 25.1 has now shipped a
+double-click descend and an Escape ascent **for a level decision 023's
+model does not contain**. These are not compatible as written: either the
+subpath level joins decision 023's ladder (making it four levels) or the
+two gestures collide. See the flag under *Next up* → "Level-model
+reconciliation (decisions 023 × Pass 25.x)".
+
+### Pass 25.0 — Subpath-level hit testing: `hit_test_subpaths` + `subpath_bounds` (core + CLI) — 2026-08-04, committed `7fc943a`
+
+**★ Pass-number note (hard rule "Pass IDs are stable, never reused";
+CORRECTION filed at the same time as the work, by both the engineer and
+this librarian).** The implementation commit's own subject line reads
+**"Pass 24.0a: subpath-level hit testing."** Pass family **24** was
+genuinely free when the engineer picked it — `tools/check-ledger-numbers.py`
+reported the live ceiling as `23.3` — and it was claimed **the same real
+day** by a second, concurrently-drafted workstream:
+`docs/decisions/024-ribbon-command-surface-and-the-accept-reject-problem.md`
+claims Passes **24.0–24.5** for the ribbon/command-surface family and
+names those numbers in six Pass entries plus its own acceptance criteria.
+Two workstreams read the same ceiling and claimed the same family.
+
+**Canonical assignment, binding from this filing:**
+
+| Work | Pass IDs |
+|---|---|
+| Ribbon command surface + the confirm model (decision 024) | **24.0 – 24.5** |
+| Subpath-level hit testing (core + CLI) | **25.0** |
+| Double-click to work inside an object (GUI) | **25.1** |
+
+The follow-on commit `5df8f26`'s message records the renumbering on the
+branch; **this roadmap entry is the canonical Pass-ID record and the
+`7fc943a` commit message is not rewritten** (history stays as committed)
+— the same convention already used for Pass 18.7 (commit said "19.4"),
+Pass 18.4 (commit said "18.2") and decision 014's "13.x" → "14.x"
+renumber. The ribbon family keeps 24 rather than being moved because a
+decision record is append-only (`docs/decisions/README.md`) and names its
+Pass numbers throughout, whereas a Pass's number lives in one commit
+subject and one roadmap entry — moving the cheaper side is the whole
+argument.
+
+**This is the FOURTH documented Pass-ID collision and the SIXTH numbering
+collision overall on this project**, which is what R106 exists for. R106
+worked exactly as designed on the detection side — both parties ran the
+checker, both recorded the ceiling they read — and it did not prevent
+this one, because **the checker reports the ceiling of what is WRITTEN,
+and a number claimed by an in-flight draft that has not landed yet is
+invisible to it.** That is a real, named limitation of the mitigation,
+recorded here rather than being rediscovered on the seventh collision;
+see the amendment appended to R106's Standing-rules bullet, below.
+
+**What shipped.**
+
+- `pdfce_core::vector::hit_test_subpaths(model, object_index, point, tolerance)
+  -> Vec<usize>` and `subpath_bounds(model, object_index, subpath) -> Option<Bounds>`.
+- **Ordering is NEAREST FIRST by outline distance, not paint order** —
+  and the reasoning is the load-bearing part: all subpaths within one
+  object share a **single painting operator**, so there is no z-order
+  among them to inherit. Paint order is the right answer *between*
+  objects (R111) and is meaningless *inside* one. Sorting by distance is
+  therefore not a heuristic standing in for z-order; it is the only
+  total order the data actually supports.
+- New private `outline_distance`; the existing `outline_within` keeps its
+  early return, so the hot per-object hit path pays nothing for the new
+  per-subpath path.
+- New fixture `fixtures/synthetic/vector/multi-subpath-one-object.pdf`
+  plus its generator `tools/gen-multi-subpath-fixture.py` (synthetic —
+  rule 7 / `LEGAL.md` §5).
+- New test file `crates/pdfce-core/tests/subpath_hit.rs`, **6 tests**.
+- **CLI (rule 11 satisfied):** `object-list --enter INDEX --hit X,Y`
+  prints `subpath-hit` lines — the headless oracle for everything Pass
+  25.1 then does with the mouse, which is what let 25.1's GUI work be
+  checked against a non-GUI answer.
+
+**Why this was not optional refinement.** See the measured CAD-export
+structure recorded this same session in
+`C:\personal_rag\pdf\lesson_20260804_cad_export_one_path_object_per_drawing_view.md`:
+on a real SolidWorks export, page 1 object **5870** is a single stroked
+path holding **1,194 subpaths / 6,681 anchors**, bbox
+`590.7,500.2 → 1140.9,1000.3` — a 550 × 500 pt isometric view that is
+**one object**. Three further objects of 950, 881 and 742 subpaths are
+the other three views. Per-object hit testing selects an entire drawing
+view for any click anywhere in it. Sub-object selection is therefore a
+**requirement for the operator's primary use case**, not a refinement of
+one.
+
+### Pass 18.9 — Middle-drag panning, and every canvas drag becomes primary-button-only — 2026-08-04, committed `f69edd9`
+
+**What the operator asked for.** Inkscape-style navigation: hold the
+middle button and drag to pan. **Pointer panning had not existed since
+Pass 9a** — Pass 9a took left-drag for the marquee and no other button
+was bound, so on a page larger than the viewport the only pan was the
+scrollbars.
+
+**Implemented against the scroll offset, NOT by re-enabling
+`ScrollSource::drag`.** That knob is **button-agnostic**: turning it on
+restores left-drag panning too, which destroys the marquee. The
+one-line-looking fix and the correct fix are different fixes, and the
+difference is only visible if you know the knob's granularity.
+
+**★ The regression this Pass caught BEFORE shipping — the finding worth
+the most.** `egui::Response::drag_started()`, `dragged()` and
+`drag_stopped()` are **button-agnostic**: they return `true` for a middle
+drag and for a right drag. So the moment middle-drag panning existed, a
+middle-drag that happened to start over a selected object would have been
+read by the object-edit tool as *"move this object"* — **silently
+rewriting the page while the operator believed he was panning.** No
+error, no disclosure, an edit in the undo log the operator never asked
+for. Fixed structurally rather than at the one call site that would have
+broken: **all 15 canvas call sites** now go through new
+`canvas::primary_drag_started` / `primary_dragged` / `primary_drag_stopped`.
+The right button is excluded too, **ahead of** the context menus the
+operator has asked for — so the context-menu Pass inherits a canvas that
+already cannot mistake a right-drag for an edit. New standing rule
+**R126** (below); filed to `D:\dev\rag\egui\` as an ecosystem finding,
+because nothing about it is pdfce-specific.
+
+**`canvas::pan_offset` clamps to the scrollable range.** Without the
+clamp, panning at fit-page zoom slid the page ~50 px and snapped back —
+the offset was being set outside what the `ScrollArea` would accept and
+egui corrected it on the next frame. **3 tests.**
+
+**KNOWN LIMITATION — deliberately deferred, referred to
+`pdfce-ui-specialist`, filed under *Next up* this filing.** The operator
+also asked to "navigate beyond the page's edges" (overscroll). This is
+**not a different clamp** — `pan_offset`'s clamp is correct for the space
+that exists. Overscroll needs *reserved space around the page*, and that
+has a visible consequence the operator has to want: scrollbars present at
+every zoom level, including fit-page, where today there are none.
+`canvas::pan_offset` is the single place it will change. Filed as
+"Canvas overscroll — navigate beyond the page edges" under *Next up*.
+
+**Rule 11 does not apply** — there is no headless equivalent of "where
+the viewport is scrolled to." Stated so the omission reads as reasoned.
+
+### Pass 18.8 — Zoom to cursor, and a way to observe the GUI without the screen — 2026-08-04, committed `b716311`
+
+**Two things in one Pass, both answering "I can't verify what the app is
+doing":** the operator's zoom complaint, and the harness that would have
+caught the false bug report this same Pass produced (below).
+
+**Zoom to cursor.** Ctrl+wheel now anchors the zoom on the pointer
+instead of the viewport centre. New **pure** fn
+`canvas::zoom_anchor_offset`; the solve is
+
+```text
+offset1 = offset0 + frac * (display1 - display0) + (margin1 - margin0)
+margin  = (max(display, viewport) - display) / 2
+```
+
+**The margin term is load-bearing and is the part that is easy to drop.**
+Below fit-page zoom the scroll offset is pinned at 0, so *all* of the
+movement is the centring margin — omit that term and zoom-to-cursor does
+nothing at **exactly the zoom an operator starts from**, which is the
+one place the feature would be judged. Implemented as a **two-frame
+`ZoomAnchor`**, because the post-clamp zoom is not yet known at the
+moment the wheel event arrives.
+
+**4 tests, each asserting the INVARIANT rather than an expected offset** —
+they re-derive where the anchored document point lands after the zoom and
+assert it is still under the cursor, instead of pinning a magic number
+that would have to be recomputed by hand every time the layout changed.
+**One of the four initially failed by 60 px and the ASSERTION was wrong,
+not the code:** anchoring near a page edge must *saturate*, because the
+scroll offset cannot go past the end of the scrollable range and the
+anchored point therefore cannot stay under the cursor. That case now has
+its own named test rather than being folded back into the general one —
+a saturating case sharing a test with a non-saturating one is a test
+whose failure never tells you which property broke.
+
+**★ The false bug report, and why it is a process finding rather than a
+footnote.** The operator reported *"I still can't select or drag or
+delete."* It was **a stale binary**: his running instance held
+`target/release/pdfce-gui.exe`, so the rebuild failed with *"Access is
+denied"* and he kept running the pre-fix build. The engineer verified
+freshness by comparing the exe's timestamp **to the last COMMIT** — and
+that check passed, because the commit *was* older than the exe. **The
+check could not have detected the problem it was performed for**: the
+question was "is this binary newer than the FIX," and the proxy answered
+"is this binary newer than something that predates the fix." A check
+against the wrong reference is worse than no check, because it produces
+confidence. New standing rule **R129** (below).
+
+**New `crates/pdfce-gui/src/diag.rs` — env-gated GUI observation.** Three
+capabilities, all off unless an environment variable is set:
+
+- `PDFCE_DIAG` — tracing of canvas state (selection, tool, depth, rects).
+- `PDFCE_DIAG_SCRIPT` — **scripted input injection through eframe's
+  `raw_input_hook`**. This is the correct seam: it runs *before* egui
+  digests the frame, so an injected `egui::Event` is indistinguishable
+  from a real one and the multi-frame click/drag state machine evaluates
+  it as a genuine gesture. Pushing events from inside the UI closure does
+  **not** work — pointer state for the frame is already resolved and the
+  widgets see nothing.
+- `PDFCE_DIAG_VIEWPORT=x,y,w,h` — places the window off the visible
+  desktop, with `.with_active(false)`.
+
+New tools: `tools/gui-drive.ps1`, `tools/gui-shot.ps1`.
+
+**Two negative results from building it, both filed to `D:\dev\rag\egui\`
+because both cost real time and neither is discoverable from the docs.**
+(1) Driving an eframe window with Win32 `PostMessage(WM_MOUSEMOVE /
+WM_LBUTTONDOWN)` **fails when the window is off-screen** — winit calls
+`TrackMouseEvent` on the move, Windows answers `WM_MOUSELEAVE` because
+the physical cursor is elsewhere, and egui-winit then drops the button
+because it only emits `PointerButton` when it knows the pointer position;
+the observed event list was `[PointerMoved, PointerGone]` in *every*
+message ordering tried. (2) `ViewportBuilder::with_visible(false)` is the
+**wrong** way to hide a test window — a hidden window stops being laid
+out, so the interactions under test are skipped and the trace reports
+artefacts of the harness. `with_position([-4000, -4000])` +
+`.with_active(false)` gives a genuinely laid-out, interactive, invisible
+window.
+
+**Rule 11 does not apply** to either half (a zoom gesture and a GUI
+observation harness have no headless subcommand equivalent) — stated so
+the omission reads as reasoned.
+
 ### Pass 21.0 — FF-C P0 floor: font subsetting/embedding for `add-text`, `glyf`/TrueType donors only (decision 021 §§3–4, narrowed by the 2026-08-03 spec-review amendment) — **PDFCE CAN NOW ADD NON-LATIN TEXT TO A PDF** — 2026-08-04, chain `88b9487`→`0c4f490`→`d4e7355`→`5b7bed3`→`eb0bde5`→`48c6b77` (six commits, all independently `git cat-file -t` verified)
 
 **Before this Pass, `add-text` could not write ANY character outside WinAnsi/Symbol/ZapfDingbats — no Greek, Cyrillic, CJK, Hebrew, or Devanagari, at all.** That was the single widest wall in the product (named as such at decision 021's filing, `ROADMAP.md`'s ★ Pass 21.x entry under Next up). This Pass takes it down for scripts that do not require shaping. Per R17 (no shaping, ever), Arabic/Devanagari/Thai remain out of scope — see Honest limits, below.
@@ -6844,6 +7132,182 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
+### ★ Pass 24.0–24.5 — Ribbon command surface + the end of the floating Accept/Reject box (decision 024, filed 2026-08-04, DECIDED — NOT STARTED)
+
+**Source:** `docs/decisions/024-ribbon-command-surface-and-the-accept-reject-problem.md`
+(1,629 lines), written by `pdfce-ui-specialist`/consultant against the
+operator's verbatim 2026-08-04 request, plus the supporting audit
+`docs/ui_specs/gesture-commit-and-shell-conventions-audit.md` (divergences
+D1–D10, the Accept/Reject redesign, the status-panel root cause, a
+professional read on the ribbon, and a P0/P1/P2 change list).
+
+**Operator's words, verbatim:** *"The interface is a bit weird where
+there is a separate accept / reject box somewhere on the screen to click
+- I've never seen any other software operate that way. Zoom is also
+jarring because cntrol-scroll doesn't treat the cursor as the center of
+the zoom, but the workspace area instead. There's quite a few weird gui
+setup decisions that don't match up to anything I've seen in other
+software. This should look and feel like the ribbon interface in MS
+Office, solidworks, and other modern software."* The zoom half **shipped
+as Pass 18.8** (above) before this record was filed.
+
+**★ The finding that reframes the complaint, and the reason 24.0 comes
+first: it is about PLACEMENT, not about the confirm step existing.**
+SolidWorks — one of the two products the operator named — has a ✓/✗ pair
+on essentially every modal PropertyManager command. What it does *not*
+do is float that pair over the graphics area at a position derived from
+the drawing. pdfce's is an `egui::Area` at
+`.fixed_pos(image_rect.min.x + 8.0, image_rect.max.y - 8.0)` at three
+sites (`main.rs:9366`, `:10244`, `:11942`) — **its position is a function
+of the DOCUMENT**, so it moves on zoom, on scroll and on page change, and
+it sits over page content at the one corner of a CAD drawing most likely
+to hold a title block. Read naively, "I've never seen any other software
+operate that way" would license deleting disclosures pdfce is obliged to
+make; read correctly, it asks for the same confirm at a fixed,
+window-relative anchor. That distinction is the whole reason decision 024
+narrows rule 4 instead of repealing it.
+
+**Six Passes, in the order decision 024 §6 requires** (the order is the
+argument — the operator sees the *confirm* fixed first, in a Pass that
+contains no ribbon at all):
+
+- **Pass 24.0** — the confirm leaves the page: a fixed-anchor
+  `Panel::top("toolstrip")`, the three `image_rect`-anchored status
+  `Area`s deleted with **every disclosure string surviving byte-for-byte**,
+  Enter commits in all three tools (today it commits in exactly one —
+  Add Text, `main.rs:9959-9970`), Reject routed through
+  `resolve_escape`'s `CancelGesture` instead of a per-tool flag. **No
+  ribbon. No dependency on 22.0, 23.x or anything else in the family.**
+  Smallest Pass in the record and the one that answers the complaint.
+- **Pass 24.1** — ribbon shell: tab strip, `File ▾` menu (egui 0.35's
+  real `MenuBar`/`MenuButton` API), QAT (Open/Save/Undo/Redo), Home and
+  View bands. **Zero new commands, zero behaviour change** — a
+  relocation, measured as one.
+- **Pass 24.2** — tool contextual tabs; the three floating property bars
+  come off the page and the 24.0 tool strip retires into each tool tab's
+  `Finish` group.
+- **Pass 24.3** — selection contextual tabs. **Depends on Pass 22.0 and
+  Pass 23.2** and cannot be pulled forward.
+- **Pass 24.4** — collapse (`Panel::show_switched`/`show_collapsible`),
+  overflow via whole-group collapse right-to-left into `MenuButton`s;
+  **scroll arrows are treated as a defect report**, per decision 017
+  Amendment A's existing invariant.
+- **Pass 24.5** — keyboard, focus, and an honest accessibility statement.
+
+**Rule 11 does not apply to any Pass in this family** — every one is a
+pure GUI-shell change with no headless equivalent; there is no
+`pdfce-cli` surface for "where the Accept button is." **R85 is untouched**
+— no Pass in the family writes a byte, and `tools/content-identity` must
+report 0 changed content streams for the whole family as a mechanical
+guard against a "while I'm in here" edit.
+
+**Standing rules R121–R125 assigned** to this record (see Standing rules,
+below). **New open operator questions (ac)–(aj) assigned** (see Open
+operator questions, below).
+
+**★★ OPERATOR ACTION REQUIRED, and NOT applied by any agent: decision 024
+§4.4 proposes NARROWING `CLAUDE.md` rule 4 ("fuzzy, never sneaky"), and
+`CLAUDE.md` is Ken's file.** The proposal is that rule 4 is a requirement
+on **disclosure**, not on any particular widget — satisfied by the
+inferred value being on screen and the commit being a deliberate act (a
+key press, or a click on a control at a fixed predictable position), and
+**not** satisfied by a control whose position is derived from the
+document. Its consequence is real and is stated plainly in the record: a
+Tier-1 direct manipulation (object move, node drag, page rotate, a
+click-click linear measure with snapping **off**) would stop showing an
+Accept button and commit on gesture completion, with undo as the escape
+hatch. Decision 024 §4.4 checks the narrowing item-by-item against every
+rule that depends on rule 4 (R119, R71, R72/R75/R76, R90, R98, R118, R83,
+R85) and none weaken. **The full proposed wording is in decision 024
+§4.4; no agent may apply it.** Filed as open operator question **(ac)**.
+
+**What decision 024 deliberately does NOT change:** the `egui_tiles` dock
+stays (§3.4 — the operator chose the widest docking model available three
+days earlier and both reference products have a ribbon *and* persistent
+side panels; the ribbon carries commands, the dock carries state you keep
+looking at, and R81 already draws that line); redaction apply's blocking
+confirmation stays (R98).
+
+### Level-model reconciliation (decision 023 × Pass 25.x) — FLAG, needs a decision before Pass 23.2 is scheduled
+
+Decision 023 §1 defines **three** levels — level 1 = the smallest
+structural container (form-XObject invocation or balanced marked-content
+sequence), level 2 = the object, level 3 = nodes — and specifies
+**double-click to descend** plus a new **`LeaveGroupLevel`** slot in
+`canvas::resolve_escape` to ascend. **Pass 25.1 has now shipped a
+double-click descend and an Escape ascent for a level that model does not
+contain: the subpath** (between object and nodes). Two consequences:
+
+1. **The gestures collide.** Pass 23.2 cannot add its own double-click
+   descend and Escape ascent beside Pass 25.1's without deciding what a
+   double-click means when both a container and a subpath level are
+   available.
+2. **The measured CAD evidence argues that the subpath level is the one
+   that matters, and that Pass 23.2's containers may not exist at all in
+   the operator's own files.** The SolidWorks export root-caused this
+   session has **zero form XObjects** (the pre-existing
+   `C:\personal_rag\pdf\lesson_20260729_solidworks_pdf_publisher_flat_vector_no_xobjects.md`
+   recorded this for the same producer) and page 1 carries ~5,900
+   objects, one of which is a **1,194-subpath drawing view**. On such a
+   page decision 023's own §1 says "level 1 collapses to level 2 and the
+   tool must say so" — i.e. **container descent has nothing to descend
+   into**, and the only useful descent is the one Pass 25.x built.
+
+**This directly bears on the librarian's continuation-80 ordering
+recommendation and partially contradicts it.** That filing recommended
+**22.0 → 23.2** as the fix-oriented order for the operator's box-select
+complaint, on the reasoning that 23.2 closes the form-XObject
+paint/select asymmetry. The measurement now in hand says the operator's
+file has no form XObjects, so 23.2 would not have fixed it and **Pass
+25.0/25.1 already did**. Recorded as a correction to that recommendation
+rather than a silent revision of it (append-only discipline). Open
+operator question **(t)**'s confirmation step is correspondingly
+**partly discharged by measurement**: the reported drawing is a flat,
+container-free CAD export whose selection problem was one path object per
+view plus one page-wide text object — not a container problem. Whether
+Pass 23.2 is still wanted for *other* files is unchanged and still open.
+
+**Recommendation (not a decision):** fold the subpath into decision 023's
+ladder as a fourth level and let one gesture walk the whole ladder
+(container → object → subpath → node), with the breadcrumb naming the
+current rung — rather than two descend mechanisms sharing one gesture.
+`pdfce-ui-specialist` should own the gesture question; the engineer owns
+whether decision 023 needs an amendment record.
+
+### Subpath-level edit verbs — move a subpath, delete a subpath (follow-on to Pass 25.1, NOT built and NOT offered)
+
+Pass 25.1 shipped subpath **selection** and deliberately shipped no
+subpath **verbs** — R83, honoured in the UI text, which says so in words
+rather than showing a disabled control. What is owed:
+
+- **Move a selected subpath** (translate its construction operators;
+  the object's other subpaths untouched).
+- **Delete a selected subpath** (excise its construction operators from
+  the shared painting operator's run).
+
+Both are content-stream surgery inside one object and therefore inherit
+the whole existing refusal family — `FormStreamIsShared`, `NotAPath`,
+`MalformedOperand`, `DegenerateCtm` — and R96's requirement that each
+refusal be reachable from an input that would otherwise succeed. **Level
+2 (nodes) is NOT this entry** — node selection, multi-node move and node
+delete are already Pass **23.3** (decision 023 Q4), and this entry must
+not be scoped to duplicate it. Sequencing depends on the level-model
+reconciliation flagged above.
+
+### Canvas overscroll — navigate beyond the page edges (deferred from Pass 18.9, referred to `pdfce-ui-specialist`)
+
+The operator asked for middle-drag panning **and** for the ability to
+"navigate beyond the page's edges." Pass 18.9 shipped the first and
+deliberately deferred the second, because it is **not a different clamp**:
+`canvas::pan_offset`'s clamp is correct for the scrollable space that
+currently exists. Overscroll requires **reserved space around the page**,
+and that has a visible consequence the operator has to actually want —
+scrollbars present at every zoom level, including fit-page, where today
+there are none. `canvas::pan_offset` is the single place the change
+lands. **`pdfce-ui-specialist` should rule on the trade** (how much
+margin, whether it is proportional to zoom, and whether fit-page keeps
+its scrollbar-free look) before any code is written.
+
 ### ★★★ OPERATOR PRIORITY SEQUENCE (set 2026-08-01, SESSION_LOG continuation 50) — READ THIS FIRST
 
 Ken's directive, same continuation as the MIT license decision: **"get
@@ -10484,6 +10948,43 @@ exercises neither):**
   order to build in once that confirmation lands (or in parallel with
   seeking it).
 
+  **★ SUBSTANTIALLY ANSWERED BY MEASUREMENT (continuation 81,
+  2026-08-04) — and the continuation-80 ordering read above is
+  CORRECTED, not silently revised.** The engineer root-caused the
+  reported drawing directly (commits `a4c345b`, `627c807`, then Passes
+  25.0/25.1). The measured structure of that CAD export:
+  - Page 1 carries ~5,900 objects, and object **5870 is a single
+    stroked path holding 1,194 subpaths / 6,681 anchors**, bbox
+    `590.7,500.2 → 1140.9,1000.3` — a 550 × 500 pt isometric view that
+    is **one object**. Three further objects of 950, 881 and 742
+    subpaths are the other three views. Per-object hit testing
+    therefore selects an entire drawing view for any click.
+  - **One text object held every pdf-dimension label on the sheet** —
+    237 show-text runs, bbox `23.1,14.1 → 1564.3,1216.5`, i.e. the
+    whole page, painted at index 5871 of 5903. Hit-testing its
+    enclosing rectangle made it the front-most hit for **every click
+    anywhere on the page**. Fixed in `627c807` by hit-testing per
+    show-text RUN rather than per `BT`…`ET` block.
+  - The producer emits **zero form XObjects** (already recorded for
+    this producer at
+    `C:\personal_rag\pdf\lesson_20260729_solidworks_pdf_publisher_flat_vector_no_xobjects.md`).
+
+  **Consequence for this question:** the unselectable geometry was
+  neither ce dimensions (so Pass 22.0 was not the fix) **nor a placed
+  form (so Pass 23.2 would not have been the fix either)** — on a
+  container-free page, decision 023's own §1 says level 1 collapses to
+  level 2 and there is nothing to descend into. The actual fix was
+  per-run text hit testing plus **sub-object (subpath) selection**,
+  which shipped as Passes 25.0/25.1. Continuation 80's "22.0 → 23.2 is
+  the fix-oriented order" recommendation was reasonable on the evidence
+  available then and is **wrong on the evidence now** — recorded here as
+  a correction rather than an edit, per append-only discipline. Passes
+  22.0 and 23.2 remain independently worth building for the defects
+  they actually close; neither is the fix for what was reported. **What
+  is still open:** whether the operator considers the original complaint
+  resolved by 25.0/25.1 on his own file — an R86 confirmation on the
+  real drawing, not a fixture.
+
 **New this session (2026-08-04, continuation 80) — eight items, drawn
 from decisions 022 §9 and 023 §10's "for the operator" sections, filed
 here for the first time (both decisions themselves only listed them
@@ -10557,6 +11058,68 @@ slice or an already-decided default that can be revisited:**
   page is materially larger than today's top-level-only query) — not a
   freebie alongside 23.2. **No default stated** — this is a genuine
   cost/benefit call, not a "ship the obviously-better option" item.
+
+**From decision 024 (ribbon + the confirm model), filed 2026-08-04,
+continuation 81 — (ac)–(aj):**
+
+- **(ac) ★ THE ONE THAT TOUCHES YOUR HANDS — the rule-4 narrowing, and
+  which operations STOP asking.** Decision 024 §4.4 proposes narrowing
+  `CLAUDE.md` rule 4 so that it binds **disclosure**, not a particular
+  widget. Consequence: a click-click linear measure with snapping
+  **off**, an object move, a node drag and a page rotate would all
+  commit on gesture completion with undo as the escape hatch, while
+  anything carrying a snapped point, a best-fit circle, a scale, a
+  font-trust decision or a reflow keeps its two-stage confirm. **That
+  boundary is a judgement about your work, not a technical fact.** Also
+  note the file ownership: `CLAUDE.md` is yours, so **no agent will
+  apply the rewording** — the proposed wording sits in decision 024
+  §4.4 waiting for you. *Default if unanswered:* ship the proposed
+  tier table and make it cheap to move an operation between tiers.
+- **(ad) The permanent height cost of a ribbon.** ~96 pt idle (~126 pt
+  with a tool armed) against today's ~34 pt, on an 800 pt default
+  window — roughly 10% of window height moved from document to chrome,
+  every frame. Collapse recovers it at the cost of a click. Acceptable?
+  *Default:* ship it and report the **measured** number in Pass 24.1
+  (criterion B7) so the question can be re-asked with real figures.
+- **(ae) A conventional menu bar as well, or `File ▾` alone?** Every
+  product you named has File/Edit/View menus; Office removed its menu
+  bar precisely in order to have a ribbon. *Recommendation:* `File ▾`
+  alone — one command surface, not two. *Default:* as recommended.
+- **(af) Decision 017 §10 Q1's "wide model" is answered but unbuilt.**
+  You said yes to `egui_tiles` owning the whole content area with open
+  documents as panes. It has never been built and decision 024 does not
+  build it. Still wanted? *Default:* leave as a Backlog item; the
+  ribbon neither helps nor hinders it.
+- **(ag) Drag on the canvas — marquee or pan?** `main.rs:182-189`'s own
+  comment admits the UX review on this default was owed and never
+  happened. **Partly answered in practice by Pass 18.9** (middle-drag
+  now pans), so the live question narrows to: should *left*-drag on
+  empty canvas also pan, with the marquee moving to a modifier?
+  *Recommendation:* no — keep left-drag as the marquee now that
+  middle-drag pans, which is the CAD/Illustrator convention and
+  SolidWorks' own idiom. *Default:* as recommended.
+- **(ah) Zoom/navigation on the View tab, or permanently visible?**
+  Zoom is used constantly and putting it behind a tab switch is the
+  classic ribbon regression. Options: keep it on the QAT row; put it in
+  the status bar (browser convention); or accept the tab.
+  *Recommendation:* a status-bar zoom cluster **plus** the View tab —
+  the status bar is already permanent and currently carries no
+  controls. *Default:* View tab only, revisit after use.
+- **(ai) Contextual-tab flicker on marquee selection.** The
+  highest-risk R86 item in the family: if dragging a marquee across a
+  CAD page makes a tab appear and disappear continuously, contextual
+  tabs are wrong for pdfce even though they are right for Office.
+  Cheap mitigation exists (defer contextual-tab changes until the
+  gesture ends). *Default:* defer-until-gesture-end, shipped in Pass
+  24.3.
+- **(aj) The ce-dimension contextual tab's exact label.**
+  `Dimension (pdfce)` is the proposal. **Rule 15 makes this your call
+  by construction** — it is a mutual-intelligibility rule and the
+  string is the point of contact: a tab reading just "Dimension" on a
+  CAD sheet carrying dozens of **pdf dimensions** and a handful of **ce
+  dimensions** tells you nothing about which kind you have hold of,
+  while its verbs (re-measure, re-scale, delete) apply only to ce
+  dimensions. *Default:* as proposed.
 
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
@@ -12037,6 +12600,33 @@ slice or an already-decided default that can be revisited:**
   `D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md`
   (Amendment 2026-08-03 third) as a generalizable finding.
 
+  **Amendment (2026-08-04, third, `pdfce-librarian`) — the SIXTH
+  collision happened anyway, and it exposes the limit of what a
+  ceiling checker can do.** Pass family **24** was claimed the same
+  real day by two independent workstreams: the subpath-hit-testing
+  build (commit `7fc943a`, subject "Pass 24.0a") and decision 024's
+  ribbon family (Passes 24.0–24.5). **Both parties ran
+  `tools/check-ledger-numbers.py` and both correctly read the same
+  ceiling** (`Pass families MENTIONED: up to 23`) — the checker did
+  not fail, and the second amendment's mention-scanning fix did not
+  help, because **at the moment each read the file, the other's claim
+  existed only in an unsaved draft.** Resolution: the ribbon family
+  keeps 24.0–24.5 and the subpath work was renumbered to **Pass 25.0 /
+  25.1** — a decision record is append-only and names its Pass numbers
+  throughout, whereas a Pass's number lives in one commit subject and
+  one roadmap entry, so moving the cheaper side is the whole argument.
+  **The generalizable statement, worth more than the fix:** a ceiling
+  computed from a file can only ever see numbers that have been
+  WRITTEN TO THAT FILE. Concurrent drafting defeats it by construction,
+  and no improvement to the checker closes that gap. The only
+  mitigations that actually work are procedural, and both are already
+  in this rule's own text: (1) claim a number by writing a stub into
+  `ROADMAP.md` *first*, before drafting against it — an unwritten claim
+  is not a claim; (2) treat any number in a commit message or a draft
+  as PROVISIONAL until `pdfce-librarian` confirms it at filing time.
+  This is now **six** numbering collisions and **four** Pass-ID
+  collisions on this project.
+
 - **R107 — FF-C only ever ADDS font resources; it never modifies an
   existing font program or font dictionary (decision 021, 2026-08-03;
   numbering corrected by the engineer before filing, confirmed by the
@@ -12434,6 +13024,174 @@ slice or an already-decided default that can be revisited:**
   name error instead of a silent behavior change.
 
   **Ceiling is now R120** (was R110 before this entry).
+
+- **R121 — A tool's confirm lives at a fixed, window-relative anchor;
+  never at a position derived from the document (decision 024 §7,
+  filed 2026-08-04, continuation 81; librarian-assigned number).** A
+  control that commits or cancels an operation must be at the same
+  screen location for every tool, and must not move when the operator
+  zooms, scrolls or changes page. Sourced concretely: `main.rs:9366`,
+  `:10244` and `:11942` all position Accept/Reject at
+  `image_rect.min.x + 8, image_rect.max.y - 8` with a `LEFT_BOTTOM`
+  pivot, so the confirm control tracks the **page image** and is drawn
+  over page content. The operator reported this as *"a separate accept
+  / reject box somewhere on the screen"* — and it is literally
+  somewhere. The neighbouring Measure property bar had the identical
+  defect diagnosed in its own comment (`main.rs:11813-11817`) and was
+  patched by making it **draggable**, which makes the operator
+  responsible for moving the application's own controls out of his way:
+  the correct emergency patch and the wrong permanent answer. Governs
+  Pass 24.0.
+
+- **R122 — Every gesture that has a commit has a KEYBOARD commit
+  (decision 024 §7, filed 2026-08-04, continuation 81;
+  librarian-assigned number).** Enter commits the pending result;
+  Escape resolves through `canvas::resolve_escape`'s precedence chain
+  and never through a private per-tool reject path; Ctrl+Enter where
+  plain Enter is meaningful inside the gesture. Sourced concretely:
+  this shipped in exactly **one tool of three** (Add Text,
+  `main.rs:9959-9970`) and in no other, so the Measure tool and the
+  Text Edit tool could only be committed with the mouse — at the moving
+  target R121 describes. A keyboard commit is what makes R121's fixed
+  anchor *optional* rather than mandatory: measure, glance at the
+  readout, Enter.
+
+- **R123 — The command surface's structure is derived from what pdfce
+  can do, never from another product's menus (decision 024 §7, filed
+  2026-08-04, continuation 81; librarian-assigned number).** The
+  extension of `CLAUDE.md` rule 12 (the Acrobat RAG catalogs
+  capability, never GUI mechanics) and R61 (Inkscape is a behavioural
+  reference only) to the ribbon's own taxonomy: tab names, group names
+  and command placement are decided from pdfce's own organising
+  question — **what does this command act on?** — which the codebase
+  already uses (`main.rs:5734-5736`, `:5850-5855`: view-state commands
+  "govern what is on screen rather than the document," and mixing them
+  with edit commands "would make 'does this button change my file?'
+  unanswerable at a glance"). A tab set copied from a competitor's
+  ribbon is trade dress, and it also produces placements no operator
+  can derive from first principles.
+
+- **R124 — Empty space in the command surface stays empty (decision 024
+  §7, filed 2026-08-04, continuation 81; librarian-assigned number).**
+  A ribbon group is never padded with disabled placeholders for unbuilt
+  features, and a sparse tab is not a defect. This is R83's application
+  to a surface that — unlike a full toolbar row — has **visible free
+  space and therefore actively invites the violation**. A greyed
+  control for a feature that does not exist promises a capability; a
+  gap promises nothing, which is the truth. Directly relevant because
+  pdfce has ~30 toolbar commands against six proposed tabs, so the
+  surface will genuinely look sparse and the temptation is real.
+
+- **R125 — Only the ACTIVE tab's band is emitted (decision 024 §7,
+  filed 2026-08-04, continuation 81; librarian-assigned number,
+  numbered despite the decision document's own hedge that it is
+  "possibly too small for a number" — R106 and R120 are both direct
+  precedent that a methodology rule earns a number when it prevents a
+  concrete, named regression).** Inactive tabs' controls are not
+  built, not laid out, and not in the focus chain. Verified as the
+  **only** available mechanism: egui 0.35 has no focus group, no roving
+  tabindex and no tab-index concept (zero source hits for all three),
+  and `skip_ahead_auto_ids` (`src/ui.rs:898`) is an **ID allocation**
+  tool, not a focus-order tool. So immediate-mode non-emission is the
+  sole way a six-tab ribbon keeps a shorter Tab chain (~12 + 7) than
+  the flat toolbar it replaces (~25). The regression this forecloses: a
+  future "render all tabs and hide the inactive ones" optimisation
+  would turn a keyboard improvement into a keyboard regression **with
+  no visual symptom at all.**
+
+- **R126 — Every canvas gesture predicate is BUTTON-QUALIFIED (Pass
+  18.9, 2026-08-04, continuation 81; librarian-assigned number).**
+  `egui::Response::drag_started()`, `dragged()` and `drag_stopped()`
+  are **button-agnostic** — they return `true` for a middle drag and
+  for a right drag. The moment a canvas binds any non-primary button to
+  navigation (middle-drag pan) or to a context menu (right-drag), every
+  unqualified drag read becomes a latent silent-edit bug: a middle-drag
+  that begins over a selected object is read by the object-edit tool as
+  *"move this object"* and **rewrites the page while the operator
+  believes he is panning** — no error, no disclosure, an entry in the
+  undo log he never asked for. The fix is structural, not per-site:
+  route every canvas gesture read through
+  `canvas::primary_drag_started` / `primary_dragged` /
+  `primary_drag_stopped` (all 15 call sites converted in Pass 18.9),
+  and exclude the right button at the same time, **ahead of** the
+  context-menu work, so that Pass inherits a canvas that cannot mistake
+  a right-drag for an edit. Corollary, from the same Pass:
+  `ScrollSource::drag` is likewise button-agnostic, so it is **not** a
+  legitimate way to add middle-drag panning — enabling it restores
+  left-drag panning and destroys the marquee. Escalated to
+  `D:\dev\rag\egui\egui_response_drag_predicates_are_button_agnostic.md`.
+
+- **R127 — A diagnostic trace never reports state that was computed and
+  then discarded (Pass 18.8/18.9, 2026-08-04, continuation 81;
+  librarian-assigned number; an extension of R93 from claims in
+  comments and disclosures to claims in traces).** R93 covers a
+  statement in the codebase that was true when written and silently
+  went false. A trace line has a second, sharper failure mode: it can
+  be **true at the instant it is emitted and false about the frame it
+  purports to describe**, because the value it printed was computed and
+  then thrown away before anything acted on it. Concrete instance: a
+  canvas trace printed `newsel=1` for a selection that a later
+  clamp/prune in the same frame discarded — so the trace said
+  "something was selected" about a frame in which nothing ended up
+  selected, and the operator-facing symptom ("I can't select anything")
+  was contradicted by the very instrument built to diagnose it. A
+  diagnostic that can disagree with the state the application actually
+  used is worse than no diagnostic, because it is believed. Rule: a
+  trace line is emitted from the **committed** value — after every
+  clamp, prune and precedence resolution — or it names the stage it is
+  reporting (`newsel_precommit=1`) so the reader cannot mistake a
+  candidate for an outcome.
+
+- **R128 — A panel whose size feeds a fit-to-viewport computation has a
+  FIXED size (Pass 25.1, 2026-08-04, continuation 81;
+  librarian-assigned number).** A content-driven panel adjacent to a
+  content area whose zoom is derived from the remaining viewport is a
+  feedback loop: more panel content → smaller central area → different
+  fit scale → the page visibly jumps and resizes in response to
+  something the operator did not ask to resize. Measured on pdfce
+  before the fix: a single object selection added a status line and
+  moved the canvas rect from `[[313.5 71.0]-[1466.5 962.0]]` at zoom
+  `0.7279` to `[[325.1 71.0]-[1454.9 944.0]]` at zoom `0.7132` —
+  **from clicking.** Worse than cosmetic: it invalidates the click
+  coordinates the operator just used, because the page's on-screen rect
+  moves between the click frame and the next render. Fix:
+  `egui::Panel::exact_size(f32)` (pdfce: `STATUS_PANEL_HEIGHT_PTS` =
+  92 pt), which pins the outer size so content changes cannot perturb
+  the central region at all. The alternative structural fix — recompute
+  the fit scale only on an explicit trigger (window resize, re-fit
+  request) rather than every frame — is equally valid and is the one to
+  reach for when a panel genuinely must grow. Already recorded
+  ecosystem-wide at
+  `D:\dev\rag\egui\bottom_panel_height_change_retriggers_fit_to_viewport_zoom.md`.
+
+- **R129 — A freshness check compares against the CHANGE being
+  verified, never against a proxy that predates it (Pass 18.8,
+  2026-08-04, continuation 81; librarian-assigned number; the
+  companion to R86 — an observation of the running application is only
+  evidence if the binary observed contains the change).** Concrete
+  instance, and it cost a full false bug report: the operator reported
+  *"I still can't select or drag or delete"* after a fix had shipped.
+  The cause was a **stale binary** — his running instance held
+  `target/release/pdfce-gui.exe`, so the rebuild failed with *"Access
+  is denied"* and he kept running the pre-fix build. Freshness was then
+  "verified" by comparing the exe's timestamp **to the last commit**,
+  which passed, because the commit was indeed older than the exe.
+  **The check could not have detected the problem it was performed
+  for**: the question was "is this binary newer than the FIX," and the
+  proxy answered "is this binary newer than something that predates the
+  fix." A check against the wrong reference is worse than no check,
+  because it manufactures confidence and redirects the investigation
+  into the source. Rule: verify against the artifact of the change
+  itself — the build's own exit status, a version/build stamp compiled
+  into the binary, or a symbol/string only the fix introduces — and
+  treat a build that did not *succeed* as a build that did not happen.
+  Generalizes past binaries to caches, generated files, deployed
+  bundles and RAG snapshots.
+
+  **Ceiling is now R129** (was R120 before this entry). R121–R125 are
+  decision 024's, assigned at filing per the R107–R110 precedent (rules
+  from a filed decision record are adopted at filing, not at ship);
+  R126–R129 are from work shipped this continuation.
 
 ## Update protocol
 

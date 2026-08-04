@@ -5514,3 +5514,143 @@ with a forward pointer.
   - **Eight items filed for the operator, not decided solo** — see
     `ROADMAP.md` Open operator questions (w)–(ab), plus 022's still-open
     (u)/(v). Full text: decision 023 §10.
+
+- **2026-08-04 (continuation 81) — Decision 024 filed: a ribbon command
+  surface, and the end of the floating Accept/Reject box.** Source:
+  `docs/decisions/024-ribbon-command-surface-and-the-accept-reject-problem.md`,
+  written against the operator's verbatim 2026-08-04 request, with the
+  supporting audit `docs/ui_specs/gesture-commit-and-shell-conventions-audit.md`
+  (divergences D1–D10, the Accept/Reject redesign, the status-panel root
+  cause, a ribbon assessment, and a P0/P1/P2 change list). **Two halves,
+  decided independently and shippable independently** — the confirm model
+  does not depend on the ribbon and ships first. Extends decision 017 +
+  Amendment A (the `egui_tiles` dock); amends nothing.
+  - **The reframing that drives the whole record: the operator's
+    Accept/Reject complaint is about PLACEMENT, not about the confirm
+    step existing.** SolidWorks — one of the two products he named —
+    carries a ✓/✗ pair on essentially every modal PropertyManager
+    command; what it does not do is float that pair over the graphics
+    area at a position derived from the drawing. pdfce's is an
+    `egui::Area` at
+    `.fixed_pos(image_rect.min.x + 8.0, image_rect.max.y - 8.0)` with a
+    `LEFT_BOTTOM` pivot, at three sites (`main.rs:9366`, `:10244`,
+    `:11942`) — **its position is a function of the DOCUMENT**, so it
+    moves on zoom, on scroll and on page change, and it sits over page
+    content at the corner of a CAD drawing most likely to hold a title
+    block. Read naively the complaint would license deleting disclosures
+    pdfce is obliged to make; read correctly it asks for the same
+    confirm at a fixed, window-relative anchor.
+  - **Adopted: a hand-built ribbon — six fixed tabs (Home, Insert, Edit,
+    Measure, Protect, View) plus a `File ▾` menu button, a fixed
+    four-control Quick Access row (Open/Save/Undo/Redo), and contextual
+    tabs keyed on the armed tool and on the selected object's kind.
+    ZERO new dependencies.** No ribbon crate exists for egui in any state
+    of repair (verified against crates.io and the GitHub repo/issue/
+    discussion APIs — zero repos, zero issues, zero discussions), so
+    pdfce would be first and there is no reference implementation to crib
+    from. egui 0.35 nonetheless supplies more of the parts than expected:
+    a real `MenuBar`/`MenuButton`/`SubMenu` API whose own doc comment
+    recommends a `Panel::top`, and `Panel::show_switched` /
+    `show_collapsible`, which is exactly the ribbon collapse/expand
+    primitive already written and already animated.
+  - **The `egui_tiles` dock is explicitly NOT replaced.** Nothing in the
+    operator's message is about the dock; both reference products have a
+    ribbon **and** persistent side panels; the two surfaces are
+    orthogonal (the ribbon carries commands, the dock carries state you
+    keep looking at — the line R81 already draws); and an unbounded
+    Objects tree, a multi-field Properties form and a scrollable Redact
+    mark list do not fit in a ~68 pt horizontal band. The dock gains one
+    uniform toggle per panel on the View tab, which also normalises the
+    two-mental-models problem where `Tools` opens the whole dock while
+    `Properties`/`Redact` each open it *and* activate one tab.
+  - **The confirm model becomes three tiers, keyed on one question — did
+    pdfce infer anything the operator did not directly specify?** Tier 1
+    (direct manipulation: object move, node drag, page rotate, markup
+    shape authoring, whole-ce-dimension move) commits on gesture
+    completion with undo as the escape hatch and shows no confirm
+    control at all. Tier 2 (inference under review: snapped points,
+    best-fit circles, scale derivation, derived centerlines, ce-dimension
+    re-measure, the font trust ladder, reflow, Add-Text box wrap)
+    commits through a **fixed-anchor tool strip** — a full-width
+    `Panel::top` whose position is a function of the WINDOW, identical
+    for every tool, that cannot cover document content because a panel
+    shrinks the central region rather than overlaying it, and that
+    orders state → action → detail (R99 at a second surface). Tier 3
+    (keyboard, universal): Enter commits, Escape resolves through
+    `canvas::resolve_escape`, Ctrl+Enter where plain Enter is meaningful
+    in-gesture — today Enter commits in **exactly one tool of three**
+    (Add Text, `main.rs:9959-9970`), which is why two of three tools can
+    only be committed with the mouse at the moving target above.
+    **Rejected for Tier 2: on-canvas ✓/✗ handles at the gesture** — a
+    smaller floating box in a less predictable place, occluding the
+    geometry being measured, unable to carry the disclosure text Tier 2
+    exists to display.
+  - **Rule 4 ("fuzzy, never sneaky") is proposed for NARROWING, not
+    repeal — and no agent may apply it.** `CLAUDE.md` is the operator's
+    file. The proposal (decision 024 §4.4, full wording there) makes rule
+    4 bind **disclosure** rather than any particular widget: satisfied by
+    the inferred value being on screen and the commit being a deliberate
+    act at a fixed predictable position; not satisfied by a control whose
+    position is derived from the document; and explicitly not requiring a
+    two-click confirmation for a direct manipulation that is fully
+    visible and reversible in one undo. The record checks the narrowing
+    item-by-item against every rule that depends on rule 4 (R119, R71,
+    R72/R75/R76, R90, R98, R118, R83, R85) and none weaken. Diagnosis
+    worth keeping: three tools independently converged on a floating
+    box, each citing the one before it as precedent, and the ROADMAP
+    recorded the convergence approvingly — **convergence by precedent is
+    not convergence on the right answer**; the rule never asked for a
+    box, it asked that the operator be able to see and reject what pdfce
+    inferred. Filed as open operator question **(ac)**.
+  - **Five standing rules filed: R121–R125** (fixed-anchor confirm;
+    keyboard commit for every gesture that has a commit; the command
+    surface's taxonomy derived from pdfce's own capabilities and never
+    from a competitor's menus — the ribbon-scoped extension of rule 12
+    and R61; empty ribbon space stays empty, R83 at a surface that
+    invites the violation; only the active tab's band is emitted, which
+    is the *only* mechanism available because egui 0.35 has no focus
+    group, no roving tabindex and no tab-index concept). Full text:
+    `ROADMAP.md` Standing rules.
+  - **Slice plan: Pass 24.0** (confirm leaves the page — fixed-anchor
+    tool strip + universal Enter/Escape; **no ribbon**, no dependency on
+    anything) **→ 24.1** (ribbon shell: tab strip, `File ▾`, QAT,
+    Home/View bands; zero new commands, zero behaviour change) **→ 24.2**
+    (tool contextual tabs; property bars come off the page) **→ 24.3**
+    (selection contextual tabs; **depends on Pass 22.0 and Pass 23.2**
+    and cannot be pulled forward) **→ 24.4** (collapse + whole-group
+    overflow degradation; scroll arrows treated as a defect report per
+    decision 017 Amendment A) **→ 24.5** (keyboard, focus, and an honest
+    accessibility statement). Rule 11 does not apply to any Pass in the
+    family — there is no `pdfce-cli` surface for "where the Accept button
+    is" — and R85 is untouched, with `tools/content-identity` = 0 as the
+    mechanical guard for the whole family.
+  - **Accessibility, stated rather than implied:** egui 0.35's
+    `WidgetType` has no `Tab`/`TabList`/`Toolbar`/`MenuBar` role and its
+    AccessKit mapping sends `Button | CollapsingHeader | SelectableLabel`
+    all to `Role::Button`. AccessKit itself has `Role::Tab`/`Role::TabList`
+    — the ceiling is egui's mapping, not the backend. Ribbon tabs will
+    therefore announce as buttons with a correct pressed state and
+    nothing more: **the same already-documented debt `dock.rs` records
+    for `egui_tiles` tabs, at a second surface.** Keytips are refused by
+    name. Already captured ecosystem-wide at
+    `D:\dev\rag\egui\egui_035_no_tab_tablist_widgettype.md`.
+  - **What is given up, recorded so it is a conscious trade:** ~96 pt of
+    chrome idle (~126 pt with a tool armed) against today's ~34 pt, i.e.
+    ~10% of an 800 pt window moved from document to chrome permanently;
+    one extra click for any command not on the active tab; a visibly
+    sparse surface with the obvious remedy forbidden by R83/R124; a
+    second hand-rolled layout surface with no prior art anywhere; and
+    ~60 new `ui_text.rs` entries.
+  - **Eight items filed for the operator, not decided solo** — see
+    `ROADMAP.md` Open operator questions (ac)–(aj). Full text: decision
+    024 §8.
+  - **No `ARCHITECTURE.md` §3/§4 body-section update this filing** —
+    same disposition as decisions 020–023: nothing has shipped, and
+    every Pass in the family is confined to `pdfce-gui`, so §3's crate
+    layout and §4's core data model describe no new reality. The one
+    thing §9-adjacent to watch, named by the decision itself: a ribbon
+    introduces new transient view state (active tab, collapse state,
+    contextual-tab set) and the path of least resistance for "which tab
+    should be active for this selection" is to ask a core type. **It must
+    not** — the contextual-tab dispatcher is a pure function in
+    `pdfce-gui`.
