@@ -10305,3 +10305,113 @@ remote**. `tools/check-ledger-numbers.py` reported GREEN, exit 0.
   the `SubsetPlan` producer, per the standing instruction (unchanged
   from continuation 73).
 - Surface (r) [narrowed] and (s) to Ken at the next natural check-in.
+
+**Same-day continuation 75 (real date 2026-08-04) — Pass 21.0 SHIPPED
+(`48c6b77`): pdfce can now add non-Latin text to a PDF. `ROADMAP.md`,
+this file, and `D:\dev\rag\rust\` updated.**
+
+**Shipped:**
+- Pass 21.0 — FF-C P0 floor (decision 021 §§3–4, narrowed by the
+  2026-08-03 spec-review amendment): `subsetter`-backed font
+  subsetting/embedding wired into `add-text` for `glyf`/TrueType
+  donors, plus `pdfce-cli add-text --embed-font`. Six commits, chain
+  `88b9487`→`0c4f490`→`d4e7355`→`5b7bed3`→`eb0bde5`→`48c6b77`, all six
+  independently `git cat-file -t` verified by the operator. **This
+  lifts the single widest wall in the product** — before this Pass,
+  `add-text` could not write any character outside WinAnsi/Symbol/
+  ZapfDingbats. Full build record filed as the Pass 21.0 Shipped entry
+  (top of `ROADMAP.md`'s Shipped section).
+
+**Decisions made this session:**
+- No new architectural decision — this Pass executes decision 021 as
+  already scoped (continuations 73/74). One correction propagated
+  forward into the record: decision 021 §3.4 understated its own case
+  on `/Type0`+`Identity-H` being forced — it is forced TWICE (both by
+  `subsetter` stripping `cmap` AND independently by §9.9's own
+  `shall`s), not once. Filed as a note on the Pass 21.0 Shipped entry,
+  not a new decision record.
+- Rule-adoption discipline held again this continuation, consistent
+  with continuation 74's precedent: two rule-shaped findings from this
+  Pass's bug hunt (a disclosure string needs its TEXT tested against
+  the producing branch; an exit-code `_ =>` catch-all silently
+  reclassifies future variants as crashes) were written to
+  `D:\dev\rag\rust\` as generalizable Rust findings but NOT assigned
+  new `ROADMAP.md` standing-rule numbers — adopting a new numbered
+  standing rule not already named in an existing decision record isn't
+  this librarian's call to make solo.
+
+**Findings + decisions:**
+- **R109's `fsType` donor-permission read, though named in decision
+  021's original 21.0 slice bullet, did NOT ship with Pass 21.0.**
+  `add-text --embed-font` currently embeds a donor face without
+  reading or disclosing its `OS/2` `fsType` embedding-permission bits
+  — a real gap against R108/R109's own design intent and against rule
+  4 (fuzzy-never-sneaky), not mere deferred polish. Flagged
+  prominently in three places: the Pass 21.0 Shipped entry's own "NOT
+  yet implemented" section, a dated amendment on R109's Standing-rules
+  bullet, and the new Pass 21.1 In-progress entry (which now also
+  carries the fsType-read follow-up pending an engineer decision on
+  whether to fold it into 21.1 or open a standalone slice). Until this
+  lands, any `add-text --embed-font` output should be treated as
+  UNVERIFIED against the donor's own embedding licence.
+- **Composite-glyph-cycle fixture (`48c6b77`) is a worked example of
+  "assert the property, don't guard against the unreachable"** —
+  `subsetter`'s `closure()` walk is iteratively bounded by
+  construction, so a depth guard in pdfce's own glue would be
+  unreachable dead code dressed as a defence (R96 shape); the fixture
+  proves termination directly instead, and fontTools independently
+  corroborates the choice — it cannot even construct the adversarial
+  cycle by the recursive route (`RecursionError`). Escalated to
+  `D:\dev\rag\rust\assert_termination_property_instead_of_unreachable_depth_guard.md`.
+- **`eb0bde5`'s bug hunt (running the CLI once, not just testing it)
+  found four defects no automated gate caught**, the sharpest being a
+  disclosure string (`base_font=Helvetica`, "no glyph embedding
+  (R79)") that stayed true-looking on a run that had just embedded a
+  font — R93's exact shape, and no existing test asserts a
+  disclosure's exact text against the branch that produced it.
+  Escalated to
+  `D:\dev\rag\rust\disclosure_text_must_be_tested_against_producing_branch.md`.
+  A fourth defect (`EmbeddedBoxedUnsupported` exiting 1 instead of its
+  own named 9) traced to a `_ =>` catch-all arm in the exit-code
+  mapping. Escalated to
+  `D:\dev\rag\rust\exit_code_catchall_reclassifies_future_variants_as_crash.md`.
+  All three new files indexed in `D:\dev\rag\rust\index.md` this
+  continuation.
+- `tools/fontfile-census`'s negative result (2 MiB would refuse none
+  of 1,563 embedded programs across 4,023 real PDFs) does NOT set
+  FF-C's donor byte ceiling — the census measures *embedded* font
+  programs, and ISO 32000-1 §9.9 forbids using an embedded program
+  extracted from a PDF as an FF-C donor (decision 021 §10 C-8). The
+  tool prints this caveat in its own output. Filed as a PDF-domain
+  empirical lesson to `C:\personal_rag\pdf\` this continuation (see
+  below) — distinct from the Rust-RAG escalations above because the
+  finding is about real-world PDF font-embedding practice, not Rust
+  tooling.
+
+**Still in flight:**
+- Pass 21.1 (composite-run editability, R110) — promoted to In
+  progress; NOT optional, decision 021 is explicit that FF-C is not
+  "done" without it.
+- R109's fsType read — owed, currently homeless between 21.1 and a
+  possible standalone slice; needs an engineer call.
+- Pass 21.2 (`set-font` to an embedded face) and 21.3 (GUI face
+  picker, `pdfce-ui-specialist` dispatched first) — unchanged, Next up,
+  NOT STARTED.
+- Open operator questions (r) [narrowed] and (s) — still await Ken;
+  neither blocks 21.1 or the fsType-read follow-up.
+- Repo status: 74 commits, still no remote; backup bundle refreshed to
+  `D:\Dev\pdfce-backups\pdfce-20260804-0015.bundle`
+  (`git bundle verify`-clean).
+
+**For next session:**
+- Decide whether R109's fsType read is folded into Pass 21.1 or opened
+  as its own small slice before 21.2 — this is an engineer call, named
+  here so it isn't lost.
+- Build the still-owed embedded-subset-font fixture
+  (`fixtures/synthetic`) — needed to observe `format_coverage_hint()`/
+  `r_inv_1_hint()` on screen for the first time and to test 21.0/21.1
+  properly; owed since continuation 74, still not built.
+- Do not describe FF-C as "shipped" or "complete" in any operator-
+  facing summary until 21.1 (and ideally the fsType read) land — 21.0
+  alone is a capability regression risk (can add text it can't edit)
+  and a licence-disclosure gap (embeds without reading `fsType`).

@@ -135,6 +135,35 @@ pub enum SubsetError {
         missing.iter().collect::<String>()
     )]
     IncompleteCoverage { missing: Vec<char> },
+    /// The donor's `fsType` forbids embedding outright (usage value 2).
+    ///
+    /// OpenType `OS/2` §Comments: Restricted License embedding means the
+    /// font *"must not be modified, embedded or exchanged"*. This is the
+    /// font author's licence expressed in the file, and pdfce honours it.
+    #[error(
+        "this font's own licence bits say it may not be embedded in a document (Restricted License embedding). pdfce will not override the font author's setting. Choose a different face."
+    )]
+    EmbeddingNotPermitted,
+    /// The donor permits embedding but forbids SUBSETTING (bit 8).
+    ///
+    /// A separate refusal from [`Self::EmbeddingNotPermitted`], and the
+    /// distinction is real: a face at `0x0108` permits *editable embedding*
+    /// and forbids subsetting. FF-C always subsets — `subsetter` has no
+    /// pass-through mode — so pdfce cannot honour that combination, and
+    /// saying "may not be embedded" would misdescribe the font's licence.
+    #[error(
+        "this font allows embedding but not SUBSETTING, and pdfce always subsets (it embeds only the glyphs your text needs). pdfce can't honour that combination yet. Choose a different face."
+    )]
+    SubsettingNotPermitted,
+    /// The donor permits only BITMAP embedding (bit 9).
+    ///
+    /// `subsetter` emits `glyf`/CFF outlines only, so bit 9 is unsatisfiable
+    /// by FF-C. The specification's own word for this state, when a font has
+    /// no bitmaps, is *"unembeddable"*.
+    #[error(
+        "this font allows only its bitmap glyphs to be embedded, and pdfce embeds outlines. Choose a different face."
+    )]
+    OutlineEmbeddingNotPermitted,
     /// The face has no `head` table, so units-per-em is unknown.
     #[error("this font is missing the table that says how its coordinates are scaled")]
     NoHeadTable,
@@ -180,6 +209,14 @@ pub fn plan_subset(
     } else {
         return Err(SubsetError::CffNotSupported);
     };
+
+    // R109: read the font author's embedding permission BEFORE subsetting.
+    //
+    // It has to be before, not after, for a mechanical reason as well as a
+    // moral one: `subsetter` strips `OS/2` from its output, so once the
+    // subset exists the permission bits are gone and there is nothing left
+    // to check.
+    check_embedding_permission(&font)?;
 
     let head = font.head().map_err(|_| SubsetError::NoHeadTable)?;
     let upem = f64::from(head.units_per_em());
@@ -315,6 +352,66 @@ pub fn plan_subset(
             flags: 32,
         },
     })
+}
+
+/// Honour the donor's OpenType `fsType` embedding permissions (R109).
+///
+/// Bit semantics are sourced from the OpenType specification via
+/// `pdfce-spec-librarian` (`PDF_Spec/fonts/font__opentype_os2_fstype.md`),
+/// not from recall — this governs a refuse-or-proceed decision about
+/// redistributing a third party's font, which is exactly the class of claim
+/// rule 1 forbids reconstructing from memory.
+///
+/// | field | meaning |
+/// |---|---|
+/// | `& 0x000F` | usage sub-field; valid values 0, 2, 4, 8 |
+/// | `0` | Installable — most permissive |
+/// | `2` | Restricted License — *"must not be modified, embedded or exchanged"* |
+/// | `4` | Preview & Print — may embed, but the document *"must be opened read-only"* |
+/// | `8` | Editable — may embed, and edits may be saved |
+/// | bit 8 `0x0100` | **No subsetting** |
+/// | bit 9 `0x0200` | **Bitmap embedding only** |
+///
+/// # Two deliberate non-refusals, both flagged rather than decided here
+///
+/// **Absent or unparseable `OS/2` proceeds.** The specification states no
+/// default and no fallback permission for a missing table (RAG gap N1), so
+/// this is pdfce policy, and it is Ken's to set (decision 021 §7.1, open
+/// operator question (r)). The trap to avoid is modelling "absent" as `0`:
+/// `0` means *Installable*, the MOST permissive value, so defaulting to it
+/// would silently grant the broadest right on the least information.
+/// Proceeding without pretending the data said so is the honest middle.
+///
+/// **Value 4 (Preview & Print) proceeds.** It permits embedding; what it
+/// additionally requires is that the *document* be opened read-only
+/// thereafter — an obligation on every later reader, which pdfce cannot
+/// enforce and which no PDF field expresses. Refusing would block a large
+/// share of real fonts over a constraint that is not about the embed itself.
+/// Also Ken's call, and also flagged.
+///
+/// Bits 8 and 9 are only honoured from `OS/2` version 2 onward: the
+/// specification says they **must be ignored** on versions 0 and 1, where
+/// they had no assigned meaning. Reading them there would refuse fonts on
+/// the strength of bytes that never meant anything.
+fn check_embedding_permission(font: &FontRef<'_>) -> Result<(), SubsetError> {
+    let Ok(os2) = font.os2() else {
+        // No OS/2: proceed. See the doc comment — NOT treated as 0.
+        return Ok(());
+    };
+    let fs_type = os2.fs_type();
+
+    if fs_type & 0x000F == 2 {
+        return Err(SubsetError::EmbeddingNotPermitted);
+    }
+    if os2.version() >= 2 {
+        if fs_type & 0x0200 != 0 {
+            return Err(SubsetError::OutlineEmbeddingNotPermitted);
+        }
+        if fs_type & 0x0100 != 0 {
+            return Err(SubsetError::SubsettingNotPermitted);
+        }
+    }
+    Ok(())
 }
 
 /// Map `subsetter`'s errors to pdfce's, preserving the distinction between
@@ -498,6 +595,104 @@ mod tests {
         // Both cycles reachable at once, plus a real outline, so the walk has
         // somewhere legitimate to go as well as somewhere circular.
         let _ = plan_subset(&bytes, 0, &['A', 'S', 'P', 'Q'], "pdfceCycleDemo", "ABCDEF");
+    }
+
+    fn fstype_donor(label: &str) -> Vec<u8> {
+        let path = format!(
+            "{}/../../fixtures/synthetic/text/subset-fstype-{label}.ttf",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        std::fs::read(&path).unwrap_or_else(|e| {
+            panic!("missing fixture {path}: {e}. Run `python tools/gen-subset-font-fixtures.py`.")
+        })
+    }
+
+    fn plan_fstype(label: &str) -> Result<pdfce_core::font_embed::FontEmbedPlan, SubsetError> {
+        plan_subset(&fstype_donor(label), 0, &['A'], "pdfceFsTypeDemo", "ABCDEF")
+    }
+
+    /// R109: the font author's embedding licence, honoured per value.
+    ///
+    /// Every arm is asserted as FIRING, not merely as "the happy path still
+    /// works" (R96) — and the permissive arms are asserted too, because a
+    /// check that refused everything would satisfy the refusal assertions
+    /// alone and break the feature completely.
+    #[test]
+    fn fstype_embedding_permissions_are_honoured_per_value() {
+        // Value 0 (Installable) and 8 (Editable) both permit embedding.
+        assert!(plan_fstype("installable").is_ok(), "Installable must embed");
+        assert!(plan_fstype("editable").is_ok(), "Editable must embed");
+
+        // Value 2 (Restricted License) forbids embedding outright.
+        assert_eq!(
+            plan_fstype("restricted").unwrap_err(),
+            SubsetError::EmbeddingNotPermitted
+        );
+
+        // Bit 8: permits embedding, forbids SUBSETTING — a genuinely
+        // different refusal, and one that would be misdescribed as "may not
+        // be embedded" if the two were merged.
+        assert_eq!(
+            plan_fstype("nosubset").unwrap_err(),
+            SubsetError::SubsettingNotPermitted
+        );
+
+        // Bit 9: outlines forbidden; pdfce embeds outlines only.
+        assert_eq!(
+            plan_fstype("bitmaponly").unwrap_err(),
+            SubsetError::OutlineEmbeddingNotPermitted
+        );
+    }
+
+    /// Bits 8 and 9 had no assigned meaning before `OS/2` version 2, and the
+    /// specification says a consumer **must ignore** them there.
+    ///
+    /// The fixture pair carries IDENTICAL bits (`0x0108`) at v4 and v1. If
+    /// pdfce read them unconditionally, both would refuse and this test
+    /// would fail — which is the whole point: version gating is invisible
+    /// unless something asserts the same bytes mean different things.
+    #[test]
+    fn bits_8_and_9_are_ignored_before_os2_version_2() {
+        assert_eq!(
+            plan_fstype("nosubset").unwrap_err(),
+            SubsetError::SubsettingNotPermitted,
+            "at OS/2 v4 bit 8 must be honoured"
+        );
+        assert!(
+            plan_fstype("nosubset-v1").is_ok(),
+            "at OS/2 v1 bits 8/9 must be IGNORED — the spec says a consumer must not read them there, so refusing would reject a font on the strength of bytes that never meant anything"
+        );
+    }
+
+    /// Preview & Print permits the EMBED; what it additionally requires is
+    /// that the document be opened read-only afterwards — an obligation on
+    /// every later reader that pdfce cannot enforce and no PDF field
+    /// expresses.
+    ///
+    /// pdfce proceeds. Refusing would block a large share of real fonts over
+    /// a constraint that is not about the embedding action itself. Asserted
+    /// explicitly so the choice is visible as a choice rather than as an
+    /// omission, and flagged as decision 021 §7.1 / open operator question
+    /// (r) — Ken's to settle.
+    #[test]
+    fn preview_and_print_proceeds_and_that_is_a_recorded_choice() {
+        assert!(plan_fstype("preview-print").is_ok());
+    }
+
+    /// A font with NO `OS/2` proceeds, and must NOT be modelled as value 0.
+    ///
+    /// The specification states no default for a missing table, so this is
+    /// pdfce policy (open operator question (r)). The trap is that `0` means
+    /// *Installable* — the most permissive value — so defaulting to it would
+    /// silently grant the broadest right on the least information. The donor
+    /// fixture from the sibling tests has no `OS/2` at all, which is exactly
+    /// the case.
+    #[test]
+    fn a_font_without_os2_proceeds_without_being_treated_as_installable() {
+        assert!(
+            plan_subset(&donor(), 0, &['A'], "pdfceSubsetDemo", "ABCDEF").is_ok(),
+            "a font with no OS/2 must still be embeddable"
+        );
     }
 
     #[test]

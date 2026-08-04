@@ -43,6 +43,38 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 21.0 — FF-C P0 floor: font subsetting/embedding for `add-text`, `glyf`/TrueType donors only (decision 021 §§3–4, narrowed by the 2026-08-03 spec-review amendment) — **PDFCE CAN NOW ADD NON-LATIN TEXT TO A PDF** — 2026-08-04, chain `88b9487`→`0c4f490`→`d4e7355`→`5b7bed3`→`eb0bde5`→`48c6b77` (six commits, all independently `git cat-file -t` verified)
+
+**Before this Pass, `add-text` could not write ANY character outside WinAnsi/Symbol/ZapfDingbats — no Greek, Cyrillic, CJK, Hebrew, or Devanagari, at all.** That was the single widest wall in the product (named as such at decision 021's filing, `ROADMAP.md`'s ★ Pass 21.x entry under Next up). This Pass takes it down for scripts that do not require shaping. Per R17 (no shaping, ever), Arabic/Devanagari/Thai remain out of scope — see Honest limits, below.
+
+**Build, six commits in the order decision 021 §"Slices" required:**
+
+- **`88b9487`** — `subsetter` (Typst; MIT OR Apache-2.0) dependency + `pdfce-core::font_embed` emitter + **the R107 object-id-disjointness test, written FIRST**, while the emitter was still trivially correct rather than deferred to 21.2 when `set-font`'s temptation to "just widen the existing font" exists. Verified non-vacuous by planting an id-reuse violation and watching it fail, naming the offending object. Deliberately a TEST, not a runtime guard: a guard inside a function that can only allocate fresh ids is unreachable by construction (R96's dead-code shape). Dependency re-verified rather than inherited (R87): one new package, `read-fonts 0.39.2` only (no `write-fonts`), `default-features = false` — `pdfce-core` gains zero new dependencies. `/Type0` + `Identity-H` turned out forced TWICE, not once: `subsetter` strips `cmap` by design, and §9.9 independently `shall`s both the CIDFont's `cmap` absence and `Identity-H` — decision 021 §3.4 understated its own case; corrected in the record here.
+- **`0c4f490`** — `tools/fontfile-census` (new corpus tool). **Its negative result matters more than its numbers.** 4,023 files, 1,563 embedded programs, p50 11 KB, max 1,195,688 bytes — a 2 MiB ceiling would refuse none of them. **These numbers do NOT set FF-C's donor byte ceiling**, because ISO 32000-1 §9.9's opening paragraph (decision 021 §10 C-8, spec-review) means an existing document's `/FontFile*` is never an admissible FF-C donor — the donor is always an operator-supplied font file, and no corpus of PDFs contains those. The tool prints this caveat in its OWN output, not only in the commit message, because the number is what gets copied forward and the caveat is what stops it being copied into the wrong constant.
+- **`d4e7355`** — the `pdfce-render` producer. `MAX_DONOR_BYTES = 64 MiB`; the constant's doc comment states the census result, states that it does not apply, and calls the number a JUDGEMENT, not a derivation. Errors separate *"your font"* from *"our bug"* — three `subsetter`-documented self-bug variants get a message saying so and asking to be reported, rather than letting an operator spend an afternoon proving their own font is valid. CFF donors are refused BY NAME (`DonorUnsupported`), distinct from "not a font" (`DonorNotSfnt`) — *"the font is fine, pdfce's support for this kind is not."* **A structural test-suite gap caught here:** every test was an error-path test until the fixture generator gained a standalone `.ttf` — because §9.9 rules out extracting a donor from a PDF, the happy path is UNREACHABLE without a real font file on disk, so a complete-looking refusal-test suite could have shipped beside entirely untested working code.
+- **`5b7bed3`** — `add-text` widened: `base_font: Std14` → `face: NewTextFace { Std14 | Embedded }` (an enum, not an additive field — the additive alternative breaks zero call sites but admits a meaningless both-set state; the enum cost one struct literal across all 57 pre-existing references). The bug the enum shape prevents: an `Identity-H` run shows 2-byte CIDs, so reusing the literal-string content-stream builder would still RENDER — onto whichever glyphs those bytes happen to address. Wrong text that looks like right text. New `build_content_embedded` path; a test asserts the ABSENCE of `(AB) Tj`-shaped literal-string show operators on an embedded run. **A test name corrected before it could mislead:** `embedding_rewrites_no_pre_existing_object_except_the_page` was renamed to `embedded_add_allocates_at_least_six_new_objects` (an incremental save re-parses as the merged view, so the original name claimed more than its assertion proved) and now points at the `font_embed` unit test as the authoritative R107 check.
+- **`eb0bde5`** — `pdfce-cli add-text --embed-font` (rule 11: extends the existing `add-text` subcommand, same reasoning as Pass 19.3/8.1 — recorded so the absence of a NEW subcommand reads as reasoned, not missed). R108 respected structurally: embedding is never inferred (not from `--font-dir`, not from the text needing it); the real computed subset size is printed before anything is written (*"456 byte(s) of font program"*, a measurement, R98 applied — never *"will add roughly N KB,"* a prediction). **Running it once found a lie no test caught:** the first successful embed still printed `base_font=Helvetica` and disclosed *"no glyph embedding (R79)"* — on a run that had JUST embedded a font. The disclosure predated FF-C, when it was the only true answer, and stayed true-looking after a second answer existed (R93 exactly — no test asserts a disclosure's TEXT against the branch that produced it; flagged below as an owed test-shape). Three more defects found the same way, same commit: a duplicated disclosure line; mangled whitespace from a `\` line-continuation in two format strings; and `EmbeddedBoxedUnsupported` exiting **1 (generic runtime error) instead of 9 (its own named exit code)** because it fell into a `_ =>` catch-all arm in the exit-code mapping — telling a calling script pdfce had CRASHED when it had DECLINED. Flagged below as a second owed rule-shaped finding (a `_ =>` arm in an exit-code map is a standing decision that every future variant is a crash, made once and never revisited).
+- **`48c6b77`** — fuzz target #20 (`font_subset`) + a synthetic composite-glyph-CYCLE fixture. Targets pdfce's own glue, not `subsetter`'s internals: the donor-byte ceiling's ordering relative to parsing, the `u16` narrowing of a GID sourced from a hostile `cmap` (truncation silently selects a DIFFERENT VALID glyph — the worst outcome, because it still renders), the units-per-em division, and total error-mapping coverage. **The cycle fixture is what decision 021 specifies INSTEAD of a depth guard, and it passes.** `subsetter`'s own `closure()` walk is iteratively bounded by construction, so a depth cap in pdfce's glue would be unreachable dead code dressed as a defence (R96 shape) — the fixture asserts the termination property directly instead. **fontTools cannot even write this fixture** — building the component cycle directly with fontTools dies with a Python `RecursionError`, because its own bounds-recalculation walk is recursive. That a mature, widely-used font library takes the recursive route is the strongest evidence the fixture's non-recursive property is worth asserting rather than assuming. Built acyclic, then the component-glyph indices are patched directly in the compiled `glyf` bytes, then RE-READ from the finished bytes to confirm the cycle survived the patch (R22).
+
+**Gates.** `cargo test --workspace` **1779 → 1790, 0 failed** (measured from a fresh checkout, not quoted). fmt clean; `clippy -D warnings` clean; `check-ui-strings.sh` clean; `check-ledger-numbers.py` clean. `cargo tree -p pdfce-core -p pdfce-render` confirmed GUI-free (R107's crate-boundary invariant). The fuzz crate gaining a `pdfce-render` dependency does NOT weaken this check — `fuzz/` sits outside the shipping workspace.
+
+**Honest limits — do not let the non-Latin headline overstate them.** Point text only: boxed layout with an embedded face is refused BY NAME, because `layout_boxed` measures glyph advances through the Standard-14 inverse-encoding table, which an embedded CID font does not populate. TrueType (`glyf`) donors only — CFF is refused by name (spec-review C-3: `subsetter` wraps CFF in an OTTO sfnt that cannot conformantly satisfy either `FontFile3 /OpenType`'s `cmap` requirement or `/CIDFontType0C`'s bare-CFF requirement). **No shaping, ever (R17):** CJK, Cyrillic, Greek, and Hebrew-without-points work correctly; **Arabic, Devanagari, and Thai will embed and RENDER WRONG** (glyphs placed by advance, no GSUB/GPOS) — Open operator question (s) (below) still governs whether pdfce should refuse these by name.
+
+**NOT yet implemented, despite being named in decision 021's original 21.0 slice bullet — flagged here, not silently dropped.** **R109's `fsType` donor-permission read did NOT ship in this Pass.** `add-text --embed-font` currently embeds a donor face without reading or disclosing its `OS/2` `fsType` bits — meaning pdfce can silently embed a font whose license forbids subsetting (bit 8) or forbids embedding outright (bit 9), with no refusal and no disclosure. This is a real gap against R108/R109's own design intent (rule 4, fuzzy-never-sneaky) and against decision 021's own P0 scope, not mere polish deferred to a later slice — see "Still owed," below, and the dated amendment added to R109's Standing-rules bullet (below) recording the gap.
+
+**Two rule-shaped findings from `eb0bde5`'s bug hunt, recorded here per the engineer's explicit request — NOT adopted as new numbered standing rules this filing (rule-adoption for the numbered ledger is not this librarian's call to make solo; see the R107–R110 precedent of librarian-assigned numbers only against an existing decision record).** (1) A disclosure/hint string needs a test that asserts its TEXT against the specific branch that produced it, not merely a test that the string exists — `has-glyph-embedded` staying `false`-shaped prose on a build that had just embedded a font is R93's exact failure mode, and no existing gate catches it. (2) An exit-code mapping's `_ =>` catch-all arm is a standing decision that every future error variant is an unhandled crash, made once at write time and never revisited as variants are added — worth an exhaustiveness discipline (parallel to the existing `non_exhaustive_no_effect_...` Rust-RAG finding) rather than a wildcard arm. Both written to `D:\dev\rag\rust\` this filing (see RAG escalations, below) as generalizable Rust findings; neither is a PDF-domain finding, so neither goes to `personal_rag/pdf`.
+
+**Still owed from decision 021 — named explicitly so 21.0 does not read as "FF-C done":**
+- **Pass 21.1 (composite-run editability under verified-injective `/ToUnicode`, R110) is NOT optional polish.** Shipping 21.0 alone means pdfce can add text (e.g. Japanese) it can never afterward edit — a capability REGRESSION against the already-shipped Std-14 add-text path. Invisible to every existing gate including the R85 raster oracle, which will show the glyphs correctly and say nothing about editability (the `flatten_fields`-failure shape: correct counters, wrong artifact). **Promoted to In progress, below** (was Next-up-only pending 21.0's ship).
+- **R109's `fsType` read** (see "NOT yet implemented," above) — the spec librarian has already sourced the full bit table (decision 021 §10, `ROADMAP.md` Standing rules R109 bullet), so this is an implementation gap, not a research gap.
+- **The `/W`, `/CIDSet`, and subset-tag clause citations** decision 021 §4.2's dispatch table now carries correctly (§9.8.3 Table 124 for `/CIDSet`, §9.6.4 for the subset-tag prefix — both fixed by the spec-review amendment, continuation 74) are available for whoever picks up 21.2's `set-font` widening.
+
+**RAG escalations, this filing:**
+- `D:\dev\rag\rust\assert_termination_property_instead_of_unreachable_depth_guard.md` — when upstream already bounds a walk structurally, assert the termination PROPERTY with a fixture that can fail, rather than adding a depth guard that becomes unreachable dead code dressed as a defence (R96 shape). Worked example: `subsetter`'s `closure()` is iteratively bounded by construction, so pdfce's composite-glyph-cycle fixture proves termination directly; a fontTools cross-check shows a MATURE library cannot even construct the adversarial input by the recursive route (`RecursionError`), which is the evidence that makes the argument concrete.
+- `D:\dev\rag\rust\disclosure_text_must_be_tested_against_producing_branch.md` — a disclosure/hint string needs a test asserting its exact TEXT against the specific code branch that produced it; a test that only asserts the string's existence lets it go stale silently when a new branch is added beside it (found: `add-text --embed-font`'s `base_font=Helvetica`/"no glyph embedding (R79)" disclosure survived unchanged onto the first successful embed run).
+- `D:\dev\rag\rust\exit_code_catchall_reclassifies_future_variants_as_crash.md` — an exit-code mapping's `_ =>` arm silently reclassifies every future error variant as an unhandled crash (exit 1) instead of its own named code; found via `EmbeddedBoxedUnsupported` (intended exit 9) exiting 1.
+- All three indexed in `D:\dev\rag\rust\index.md` this filing. No `personal_rag/pdf` entry from this Pass's engineering findings (none are PDF-producer-divergence-from-spec; the fontfile-census corpus finding is filed to `personal_rag/pdf` separately, see its own lesson file, this same session).
+
 ### Pass 18.7 — Glyph-coverage gate + tofu-glyph fixes — a headless test checking every operator-visible character in `ui_text.rs` against the font stack the app actually runs on, plus the twelve breakages it found — 2026-08-03, committed `09be28d`
 
 **Pass-number note (flag, per hard rule "Pass IDs are stable, never
@@ -5780,6 +5812,10 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 
 ## In progress
 
+### Pass 21.1 — FF-C composite-run editability under verified-injective `/ToUnicode` (decision 021 R110; promoted from ★ Pass 21.x's Next-up slice list, 2026-08-04, on Pass 21.0's ship)
+
+**Promoted the same session Pass 21.0 shipped (`48c6b77`), per decision 021's own instruction not to call FF-C done without it.** See the Pass 21.0 Shipped entry (top of Shipped) and the ★ Pass 21.x entry (Next up, below) for full framing. Scope: core + CLI. `/ToUnicode` verified injective (every CID maps to exactly one scalar, no two CIDs share a scalar) per font, per session, before a composite run FF-C authored becomes editable (R110); conditionally lifts R-INV-4 for that font only. Non-injective, absent, or partial `/ToUnicode` keeps refusing — `Identity-H` with no `/ToUnicode` remains R65's permanent hard skip, untouched by this Pass. **Also owed alongside 21.1, named at Pass 21.0's ship and not yet assigned its own slice number:** R109's `fsType` donor-permission read, which decision 021 scoped into 21.0 but did not ship there (see the Pass 21.0 Shipped entry's "NOT yet implemented" note) — whoever picks up 21.1 should confirm with the engineer whether to fold the fsType read in here or open it as a small standalone slice before 21.2.
+
 ### GUI redaction-apply flow — **SHIPPED as Pass 8.1 (`9a68999`), 2026-08-03. See the Pass 8.1 Shipped entry (top of Shipped) for the full build record.** Retained below as the historical framing (append-only discipline).
 
 **Promoted from Backlog the same continuation decision 019/FF-H
@@ -7240,7 +7276,9 @@ recorded for awareness — closing it is FF-E's scope). The `Tw` census
 middle-band judgement call (former item (g)) is CLOSED AS MOOT, see
 Open operator questions.
 
-### ★ Pass 21.x — FF-C: font subsetting and glyph embedding (decision 021, 2026-08-03, DECIDED — NOT STARTED)
+### ★ Pass 21.x — FF-C: font subsetting and glyph embedding (decision 021, 2026-08-03, DECIDED — **21.0 SHIPPED 2026-08-04, `48c6b77` — see the Pass 21.0 Shipped entry, top of Shipped, for the full build record. 21.1 promoted to In progress, below. 21.2/21.3 remain here, NOT STARTED.**)
+
+**21.0 shipped narrower than this entry's original P0-floor bullet promised — flagged, not silently corrected in place.** Per the Pass 21.0 Shipped entry's own "NOT yet implemented" note: R109's `fsType` donor-permission read (named in the 21.0 slice bullet below) did NOT ship with 21.0. `add-text --embed-font` today embeds a donor face without reading or disclosing its embedding-permission bits. This is tracked as owed alongside 21.1, not deferred to 21.2/21.3.
 
 **Full record:**
 `docs/decisions/021-ffc-font-subsetting-and-glyph-embedding.md`.
@@ -7323,36 +7361,42 @@ semantics that gate Open operator question (r) are now spec-sourced (see
 that item's update, below).
 
 **Slices:**
-- **21.0 — core + CLI. THE P0 FLOOR (glyf/TrueType donors only — see
-  the spec-review amendment above; CFF donors refused by name).**
-  `SubsetPlan` producer; `font_embed` emitter; wire into `addtext.rs`
-  (`base_font: Std14` → `NewTextFace { Std14 | Embedded }`); hostile-
-  input guards (§3.5: input-side byte ceiling, corpus-measured not
-  guessed; a synthetic composite-glyph-cycle fixture, not a depth
-  guard — `subsetter`'s `closure()` is iteratively bounded by
-  construction; a `cargo-fuzz` target); `fsType` read (two distinct
-  refusal diagnostics, per the amendment above); disclosure. CLI:
-  `add-text --embed-font`. **Lifts the single widest wall in the
-  product**: pdfce today cannot add ANY text outside WinAnsi/Symbol/
-  ZapfDingbats — no Greek, Cyrillic, CJK, Hebrew, or Devanagari, at
-  all. `add-text` already exists as a CLI subcommand (rule 11 note,
-  same reasoning Pass 19.3/8.1 recorded) — 21.0 extends its flags, adds
-  no new subcommand. **Owed fixture, filed here (2026-08-03):** a
+- **21.0 — SHIPPED 2026-08-04, `48c6b77`. See the Pass 21.0 Shipped
+  entry (top of Shipped) for the full build record.** Original plan
+  (retained for audit trail): core + CLI, THE P0 FLOOR (glyf/TrueType
+  donors only — see the spec-review amendment above; CFF donors
+  refused by name). `SubsetPlan` producer; `font_embed` emitter; wire
+  into `addtext.rs` (`base_font: Std14` → `NewTextFace { Std14 |
+  Embedded }`); hostile-input guards (§3.5: input-side byte ceiling,
+  corpus-measured not guessed; a synthetic composite-glyph-cycle
+  fixture, not a depth guard — `subsetter`'s `closure()` is
+  iteratively bounded by construction; a `cargo-fuzz` target); `fsType`
+  read (two distinct refusal diagnostics, per the amendment above);
+  disclosure. CLI: `add-text --embed-font`. Lifts the single widest
+  wall in the product: pdfce today cannot add ANY text outside
+  WinAnsi/Symbol/ZapfDingbats — no Greek, Cyrillic, CJK, Hebrew, or
+  Devanagari, at all. `add-text` already exists as a CLI subcommand
+  (rule 11 note, same reasoning Pass 19.3/8.1 recorded) — 21.0 extends
+  its flags, adds no new subcommand. **AS SHIPPED, the `fsType` read
+  sub-item above did NOT land** — see the Pass 21.0 Shipped entry's
+  "NOT yet implemented" note; tracked as owed, not silently dropped.
+  **Owed fixture, filed 2026-08-03, STILL OWED at 21.0's ship:** a
   synthetic PDF with an embedded **subset** font plus a character
   outside its repertoire — `fixtures/synthetic` currently has none
   suitable, and both `format_coverage_hint()` and `r_inv_1_hint()`
-  need it to be observed on screen for the first time (see the
+  still need it to be observed on screen for the first time (see the
   `0893191` hint-fix note in the 2026-08-03 SESSION_LOG entry).
-- **21.1 — core + CLI.** Composite-run edit/format where `/ToUnicode`
-  is verified injective (R110); conditionally lifts R-INV-4. **Makes
-  21.0's output editable — do not ship 21.0 without this and call FF-C
-  done.** Left alone, 21.0 would let pdfce add text (e.g. Japanese) it
-  can never afterward edit: a capability *regression* against the
-  already-shipped Std-14 add-text path, invisible to every existing
-  gate including the R85 raster oracle (which will show the glyphs,
-  not that they're uneditable — the `flatten_fields` failure shape,
-  correct counters/wrong artifact). Needs a deliberate acceptance
-  criterion at ship, not merely a gate.
+- **21.1 — PROMOTED TO IN PROGRESS 2026-08-04 (see In progress,
+  above/below).** core + CLI. Composite-run edit/format where
+  `/ToUnicode` is verified injective (R110); conditionally lifts
+  R-INV-4. **Makes 21.0's output editable — do not call FF-C done
+  until this ships.** Left alone, 21.0 lets pdfce add text (e.g.
+  Japanese) it can never afterward edit: a capability *regression*
+  against the already-shipped Std-14 add-text path, invisible to every
+  existing gate including the R85 raster oracle (which will show the
+  glyphs, not that they're uneditable — the `flatten_fields` failure
+  shape, correct counters/wrong artifact). Needs a deliberate
+  acceptance criterion at ship, not merely a gate.
 - **21.2 — core + CLI.** `set-font` to a newly embedded face;
   `format.rs` composite-target emission. Makes the shipped
   `format_coverage_hint()` GUI text honest for the first time — it
@@ -9795,6 +9839,12 @@ nothing gets forgotten, not as a commitment to build in this order.
   the ★ Pass 21.x entry) → 21.2 (`set-font` to an embedded face) → 21.3
   (GUI, `pdfce-ui-specialist` dispatched first). Full slice detail: the
   ★ Pass 21.x entry under Next up, below.
+  **AMENDMENT (2026-08-04): Pass 21.0 SHIPPED (`48c6b77`) — see the
+  Pass 21.0 Shipped entry, top of Shipped. pdfce can now add non-Latin
+  (glyf/TrueType-donor) text via `add-text --embed-font`. Pass 21.1
+  promoted to In progress (above/below). R109's fsType read, though
+  named in 21.0's original scope, did NOT ship — tracked as an owed
+  gap alongside 21.1, not FF-C-complete yet.**
 
 - ~~**FF-D follow-up — certification-signature guard gap on
   `add_text`/`EditSession::add_text`. Flagged 2026-08-01 at Pass 16.0's
@@ -10139,6 +10189,15 @@ exercises neither):**
   the standing pattern above, this is still a point-in-time snapshot,
   not a substitute for an actual push decision, and will drift behind
   again with the next commit.
+  **UPDATED (continuation 75, 2026-08-04): 74 commits, still no
+  remote.** Six hashes spanning Pass 21.0's build independently
+  verified with `git cat-file -t` (`88b9487`, `0c4f490`, `d4e7355`,
+  `5b7bed3`, `eb0bde5`, `48c6b77` — all confirmed `commit` objects).
+  Backup bundle refreshed to
+  `D:\Dev\pdfce-backups\pdfce-20260804-0015.bundle`, `git bundle
+  verify`-clean; supersedes `...1936.bundle`. Same standing caveat:
+  point-in-time snapshot, will drift behind again with the next
+  commit, not a substitute for an actual push decision.
 - Encryption (Pass 5 / decision 007)'s `/R 6` sourcing method and the
   `LEGAL.md` §2 Adobe-supplement contradiction — both still gate its
   scoping when it activates.
@@ -11497,6 +11556,15 @@ exercises neither):**
   policy itself is Open operator question (r), below — narrowed by this
   amendment to the absent/unparseable-`OS/2` case specifically, since
   the bit semantics themselves are no longer open.
+  **IMPLEMENTATION GAP, dated note (2026-08-04, Pass 21.0's ship): this
+  read does NOT exist in the shipped code yet.** `add-text
+  --embed-font` (Pass 21.0, `48c6b77`) embeds a donor face without
+  reading or disclosing `fsType` — R109 is currently a specified
+  rule with a sourced bit table and no enforcing code. Tracked as owed
+  alongside Pass 21.1 (In progress, above) — see the Pass 21.0 Shipped
+  entry's "NOT yet implemented" note for the full record. Until this
+  lands, treat any `add-text --embed-font` output as UNVERIFIED against
+  the donor's own embedding licence.
 - **R110 — A composite run is editable only where its `/ToUnicode` is
   VERIFIED injective, per font, per session (decision 021, 2026-08-03;
   librarian-assigned number).** Injectivity — every CID maps to exactly

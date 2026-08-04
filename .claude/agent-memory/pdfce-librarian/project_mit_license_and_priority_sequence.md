@@ -1,6 +1,6 @@
 ---
 name: project-mit-license-and-priority-sequence
-description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling (item #3: FF-H DONE, FF-C DECIDED/SCOPED as Pass 21.x NOT STARTED per decision 021, FF-B open) → forms (item #4, still undispatched). Pass 8.1 (GUI redaction-apply) SHIPPED. Decision 021 (FF-C) filed 2026-08-03, add-only re-scope, R107–R110, ceiling R110; AMENDED same day (continuation 74) after spec review — P0 floor narrowed to glyf/TrueType donors only (CFF refused by name until a later slice), R109 split into SubsettingNotPermitted/EmbeddingNotPermitted.
+description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling (item #3: FF-H DONE, FF-C Pass 21.0 SHIPPED 2026-08-04 (glyf/TrueType donors, add-only) with 21.1/21.2/21.3 + R109 fsType-read still owed, FF-B open) → forms (item #4, still undispatched). Pass 8.1 (GUI redaction-apply) SHIPPED. Decision 021 (FF-C) filed 2026-08-03, add-only re-scope, R107–R110, ceiling R110; AMENDED 2026-08-03 (continuation 74) after spec review — P0 floor narrowed to glyf/TrueType donors only, R109 split into SubsettingNotPermitted/EmbeddingNotPermitted; Pass 21.0 shipped 2026-08-04 WITHOUT the R109 fsType-read sub-item (owed, flagged, not silently dropped).
 metadata:
   type: project
 ---
@@ -370,3 +370,35 @@ corrected hints on screen. Full record:
 `docs/decisions/021-ffc-font-subsetting-and-glyph-embedding.md` §10 and
 `ARCHITECTURE.md` §12's continuation-74 dated entry. Branch now 67
 commits — see [[project-uncommitted-repo-worktree-risk]].
+
+**UPDATE — 2026-08-04, SESSION_LOG continuation 75: Pass 21.0 (FF-C P0
+floor) SHIPPED (`48c6b77`) — pdfce can now add non-Latin (`glyf`/
+TrueType-donor) text via `add-text --embed-font`. Item #3's FF-C slot
+is PARTIALLY closed — do NOT describe FF-C or item #3 as "done."**
+Six-commit chain `88b9487`→`0c4f490`→`d4e7355`→`5b7bed3`→`eb0bde5`
+→`48c6b77`, all six verified by the OPERATOR directly with `git
+cat-file -t` (a first — previously always engineer-relayed). **Two
+things explicitly NOT done, named so a future session doesn't assume
+FF-C is finished:** (1) **Pass 21.1** (composite-run editability under
+verified-injective `/ToUnicode`, R110) — promoted to `ROADMAP.md` In
+progress; decision 021 is explicit that 21.0 alone is a capability
+REGRESSION (pdfce can add non-Latin text it can never edit) against
+the shipped Std-14 add-text path. (2) **R109's `fsType` donor-
+permission read** — named in 21.0's original scope but did NOT ship;
+`add-text --embed-font` currently embeds a donor face without checking
+whether its own OpenType permission bits forbid subsetting/embedding.
+Flagged as a real gap against rule 4 (fuzzy-never-sneaky), not mere
+polish — recorded in three places in `ROADMAP.md` (the Pass 21.0
+Shipped entry, a dated amendment on R109's Standing-rules bullet, and
+the new Pass 21.1 In-progress entry). Three RAG findings from this
+Pass's bug hunt escalated to `D:\dev\rag\rust\` (a rule-shaped
+"assert termination, don't guard the unreachable" pattern; two testing-
+discipline findings — stale disclosure text, exit-code `_ =>`
+catch-all — deliberately NOT promoted to new `ROADMAP.md` standing-rule
+numbers, consistent with the continuation-74 precedent that solo rule
+adoption isn't this librarian's call). One PDF-domain empirical finding
+filed to `C:\personal_rag\pdf\` (embedded-font-size census ≠ donor-face
+ceiling — different populations). Branch now **74 commits** — see
+[[project-uncommitted-repo-worktree-risk]]. Item #4 (forms) remains
+queued behind item #3's still-open FF-C follow-ons (21.1, fsType read,
+21.2, 21.3) and FF-B, unchanged in kind since continuation 73.

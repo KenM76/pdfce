@@ -1,6 +1,6 @@
 ---
 name: project-uncommitted-repo-worktree-risk
-description: RESOLVED 2026-08-01 (commit d8b3903, then 79d1c6f + e13f3e6) — pdfce's crates/ tree is no longer uncommitted, and the engineer now commits in logical per-Pass/per-decision chunks. Branch pass-8-redaction at 67 commits as of continuation 74 (2026-08-03), still no remote. This librarian has no shell tool — commit counts/hashes are engineer-reported, not self-verified, unless noted otherwise.
+description: RESOLVED 2026-08-01 (commit d8b3903, then 79d1c6f + e13f3e6) — pdfce's crates/ tree is no longer uncommitted, and the engineer now commits in logical per-Pass/per-decision chunks. Branch pass-8-redaction at 74 commits as of continuation 75 (2026-08-04, Pass 21.0 shipped), still no remote. This librarian has no shell tool — commit counts/hashes are engineer-reported/operator-reported, not self-verified, unless noted otherwise.
 metadata:
   type: project
 ---
@@ -318,3 +318,18 @@ reported GREEN, exit 0, per the dispatching message. Push/publish
 authorization remains the sole open gate, unchanged in kind since
 continuation 50. Verify current tip/count with `git log --oneline -1` /
 `git rev-list --count HEAD` before trusting any number in this file.
+
+**UPDATE — continuation 75 (2026-08-04, Pass 21.0 shipped: FF-C P0
+floor, pdfce can now add non-Latin text to a PDF).** Six new hashes
+this continuation, `88b9487`→`0c4f490`→`d4e7355`→`5b7bed3`→`eb0bde5`
+→`48c6b77` — **for the first time, verified by the OPERATOR directly
+with `git cat-file -t`** (per the dispatching message), not merely
+engineer-relayed. This librarian still has no shell-execution tool
+(Read/Write/Edit/Glob/Grep/WebSearch/WebFetch only) and could not
+independently re-verify. **Branch `pass-8-redaction` now 74 commits,
+still no remote.** Backup bundle refreshed:
+`D:\Dev\pdfce-backups\pdfce-20260804-0015.bundle`, `git bundle
+verify`-clean, supersedes `...1936.bundle`. Push/publish authorization
+remains the sole open gate, unchanged in kind since continuation 50.
+Verify current tip/count with `git log --oneline -1` / `git rev-list
+--count HEAD` before trusting any number in this file.

@@ -266,6 +266,59 @@ def build_cycle_truetype() -> bytes:
     return data
 
 
+def build_fstype_truetype(fs_type: int, os2_version: int = 4) -> bytes:
+    """A donor whose `OS/2` `fsType` carries `fs_type` (R109 fixtures).
+
+    Each embedding-permission refusal pdfce can raise needs a font that
+    actually triggers it. Without these the refusals are unreachable, and an
+    unreachable refusal is one nobody has ever seen fire — the exact
+    situation that let two operator-facing hints ship wrong for several
+    releases (`0893191`).
+
+    `os2_version` is a parameter because bits 8 and 9 (`No subsetting`,
+    `Bitmap embedding only`) **must be ignored** on `OS/2` versions 0 and 1,
+    where they had no assigned meaning. A fixture pair at v1 and v4 with the
+    same bits set is what proves pdfce honours that gating rather than
+    reading the bytes unconditionally.
+
+    Fully synthetic (`docs/LEGAL.md` §5).
+    """
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+
+    fb = FontBuilder(UPEM, isTTF=True)
+    fb.setupGlyphOrder([".notdef", "gA"])
+
+    pen = TTGlyphPen(None)
+    pen.moveTo((80, 0))
+    pen.lineTo((520, 0))
+    pen.lineTo((520, 600))
+    pen.lineTo((80, 600))
+    pen.closePath()
+
+    fb.setupGlyf({".notdef": TTGlyphPen(None).glyph(), "gA": pen.glyph()})
+    fb.setupHorizontalMetrics({".notdef": (ADVANCE, 80), "gA": (ADVANCE, 80)})
+    fb.setupHorizontalHeader(ascent=800, descent=-200)
+    fb.setupNameTable({"familyName": "pdfceFsTypeDemo", "styleName": "Regular"})
+    fb.setupCharacterMap({ord("A"): "gA"})
+    fb.setupOS2(sTypoAscender=800, sTypoDescender=-200, version=os2_version)
+    fb.font["OS/2"].fsType = fs_type
+    fb.setupPost()
+
+    buf = io.BytesIO()
+    fb.font.save(buf)
+    data = buf.getvalue()
+
+    # Verify-don't-assume (R22): read the finished bytes back. fontTools is
+    # entitled to normalise an OS/2 field, and a fixture whose fsType quietly
+    # reverted to 0 would make every permission test pass by permitting.
+    reread = _reread(data)
+    got = reread["OS/2"].fsType
+    assert got == fs_type, f"fsType did not survive the write: wanted {fs_type:#06x}, got {got:#06x}"
+    assert reread["OS/2"].version == os2_version, "OS/2 version drifted"
+    return data
+
+
 def _sfnt_tables(data: bytes) -> dict[str, tuple[int, int]]:
     """`tag -> (offset, length)` from the sfnt table directory."""
     num = int.from_bytes(data[4:6], "big")
@@ -482,6 +535,21 @@ def main() -> int:
     cyc = out_dir / "subset-cycle-donor.ttf"
     cyc.write_bytes(build_cycle_truetype())
     print(f"wrote {cyc} ({cyc.stat().st_size} bytes)  [composite-glyph cycles]")
+
+    # One donor per embedding-permission outcome (R109). Named for the bits
+    # rather than the verdict, so renaming a refusal does not orphan a file.
+    for label, bits, ver in [
+        ("installable", 0x0000, 4),   # value 0 — most permissive
+        ("restricted", 0x0002, 4),    # value 2 — may not be embedded
+        ("preview-print", 0x0004, 4), # value 4 — embeddable, doc read-only
+        ("editable", 0x0008, 4),      # value 8 — embeddable and editable
+        ("nosubset", 0x0108, 4),      # bit 8 — editable BUT no subsetting
+        ("bitmaponly", 0x0208, 4),    # bit 9 — outlines forbidden
+        ("nosubset-v1", 0x0108, 1),   # same bits, v1 -> bits 8/9 IGNORED
+    ]:
+        f = out_dir / f"subset-fstype-{label}.ttf"
+        f.write_bytes(build_fstype_truetype(bits, ver))
+        print(f"wrote {f.name} (fsType={bits:#06x}, OS/2 v{ver})")
     print(f"  /BaseFont  {BASE_FONT}   (subset tag: {tag})")
     print(f"  carries    {CARRIED!r}")
     print(f"  absent     any other character — 'Z' is the canonical probe")
