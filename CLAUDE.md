@@ -173,6 +173,41 @@ padding "for the reader." If a sentence doesn't add a fact a future
 lookup needs, cut it. This is a standing instruction from the user
 (2026-07-23), binding on every agent that writes to any of these RAGs.
 
+### 15. Dimension terminology: "pdf dimensions" vs "ce dimensions" — never bare "dimensions"
+
+Two entirely different things share the word *dimension* in this project,
+and they have **opposite properties**. Always qualify which:
+
+- **pdf dimensions** — dimensions already present in the PDF, exported by
+  CAD or another authoring tool. Existing page content (or foreign
+  annotations). pdfce reads them, measures against them, and must not
+  silently alter them. The `55 5/8"` printed on a drawing is a *pdf
+  dimension*.
+- **ce dimensions** — the dimension objects **pdfce authors**: `/Line` +
+  `/IT /LineDimension` annotations with a baked `/AP`, their groups, scale,
+  `/Measure` dict and `/PieceInfo` sidecar. Everything under
+  `crates/pdfce-core/src/dimension/`. Authored, editable, deletable,
+  re-measurable — pdfce's own.
+
+**Binding on every agent**, and on every reply, commit message, doc comment,
+decision record, RAG entry and **subagent dispatch**. Dispatches especially:
+a subagent handed the ambiguity writes an entire analysis in it, which is
+exactly how it reached the operator.
+
+**Why (operator, 2026-08-04):** he could not decode analysis that used
+"dimension" throughout without ever saying which kind — and he named the
+failure in *both* directions: ambiguous output is hard for him to act on,
+and an ambiguous report *from* him can send troubleshooting down the wrong
+path. This is a mutual-intelligibility rule, not a style preference.
+
+When the operator says "dimension" unqualified, infer from context and
+**echo back the qualified term**, so a mismatch surfaces before the work
+rather than after it.
+
+The distinction is **provenance**, not representation: a ce dimension is
+still a ce dimension after save-and-reopen, and a pdf dimension does not
+become a ce dimension because pdfce can see it.
+
 ## How a typical Claude session goes
 
 1. **Read `docs/ROADMAP.md`** for current state.

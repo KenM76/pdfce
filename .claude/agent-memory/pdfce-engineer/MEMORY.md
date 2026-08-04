@@ -1,6 +1,7 @@
 # MEMORY.md — pdfce-engineer index
 
 - [KenAgent decision protocol](feedback_kenagent_decisions.md) — route technical decisions through autonomous-builder; archive Markdown to docs/decisions/
+- [Dimension terminology](feedback_dimension_terminology.md) — say "pdf dimensions" (CAD-exported) vs "ce dimensions" (pdfce-authored); never bare "dimensions"
 - [Inkscape parity scope](project_inkscape_parity.md) — 2026-07-30: scope = Acrobat Pro + Inkscape vector-editing parity; Inkscape is GPL, reference-only
 - [Launch on completion](feedback_launch_on_completion.md) — always launch the app (GUI window / CLI demo) when a work unit completes, not just report
 - [Fuzz ASan DLL](reference_fuzz_asan_dll.md) — Windows cargo-fuzz needs MSVC clang_rt.asan DLL on PATH or dies with STATUS_DLL_NOT_FOUND
