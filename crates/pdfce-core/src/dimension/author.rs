@@ -56,6 +56,23 @@ const LINE_WIDTH: f64 = 0.75;
 /// Arrowhead length (points).
 const ARROW_LEN: f64 = 7.0;
 
+/// Gap left between the measured point and the start of its extension line.
+///
+/// **Convention, not mandated.** ANSI/ASME practice is about 1.5 mm in
+/// mechanical drawing (1.6-3 mm architectural); ISO 129-1 requires a gap but
+/// leaves the value to the field, expressing related distances as multiples of
+/// the line width. 4 pt is about 1.4 mm. Decision 026 records the sourcing and
+/// the confidence behind both of these numbers; neither is a standard's
+/// requirement and neither should be cited as one.
+const EXT_GAP: f64 = 4.0;
+
+/// How far an extension line continues PAST the dimension line.
+///
+/// **Convention, not mandated** — see [`EXT_GAP`]. ~1 mm mechanical, ~3 mm
+/// architectural under ANSI practice; 8x line width under ISO. 3 pt is about
+/// 1 mm.
+const EXT_OVERSHOOT: f64 = 3.0;
+
 /// The annotation-dictionary keys [`author_dimension`] OWNS — the ones a
 /// regeneration must overwrite, and must REMOVE when the new state does not
 /// produce them.
@@ -121,6 +138,7 @@ pub struct AuthoredDimension {
 ///     a: Point::new(100.0, 100.0),
 ///     b: Point::new(200.0, 100.0),
 ///     constraint: AxisConstraint::Horizontal,
+///     offset: 0.0,
 /// };
 /// let authored = author_dimension(
 ///     &kind,
@@ -155,9 +173,15 @@ pub fn author_dimension(
     b.set_line_join(LineJoin::Miter);
 
     match *kind {
-        DimensionKind::Linear { a, .. } => {
-            draw_linear(&mut b, &mut bounds, l0, l1);
-            let _ = a;
+        DimensionKind::Linear { .. } => {
+            // The measured points, for the extension lines. `linear_geometry`
+            // is the ONE definition of this frame — `leader_endpoints` above
+            // reads the same function for the dimension line's ends, so the
+            // two cannot disagree about where the dimension sits.
+            let (ext_a, ext_b) = kind
+                .linear_geometry()
+                .map_or((l0, l1), |(_, _, pa, pb)| (pa, pb));
+            draw_linear(&mut b, &mut bounds, l0, l1, ext_a, ext_b);
         }
         DimensionKind::Circular { fit, .. } => {
             draw_circular(&mut b, &mut bounds, fit.center, fit.radius, l1);
@@ -227,7 +251,14 @@ pub fn author_dimension(
 /// linear dimension, or centre→rim (`centre + (radius, 0)`) for a circular one.
 fn leader_endpoints(kind: &DimensionKind) -> (Point, Point) {
     match *kind {
-        DimensionKind::Linear { a, b, .. } => (a, b),
+        // The DIMENSION LINE's ends, not the picked points (Pass 27.0). These
+        // differ whenever the constraint is Horizontal/Vertical and the picks
+        // are not already aligned, or whenever there is a standoff. Returning
+        // the picks here is what drew a constrained dimension at an angle and
+        // wrote a `/L` that disagreed with the drawn line.
+        DimensionKind::Linear { a, b, .. } => kind
+            .linear_geometry()
+            .map_or((a, b), |(dim_a, dim_b, _, _)| (dim_a, dim_b)),
         DimensionKind::Circular { fit, .. } => (
             fit.center,
             Point::new(fit.center.x + fit.radius, fit.center.y),
@@ -235,29 +266,68 @@ fn leader_endpoints(kind: &DimensionKind) -> (Point, Point) {
     }
 }
 
-/// Draw a linear dimension's leader + end extension ticks + arrowheads.
-fn draw_linear(b: &mut ContentBuilder, bounds: &mut BoundsAcc, a: Point, c: Point) {
+/// Draw a linear ce dimension: the dimension line, real extension (witness)
+/// lines back to the measured points, and terminators (Pass 27.0).
+///
+/// # What changed, and why the old shape was wrong
+///
+/// This used to stroke a line straight between the two PICKED points and add
+/// a 4 pt perpendicular tick at each end. That is only correct when the picks
+/// already lie on the constraint axis and there is no standoff — i.e. almost
+/// never. `ext_a`/`ext_b` are the measured points; `a`/`c` are the dimension
+/// line's own ends, which the caller derives from
+/// [`DimensionKind::linear_geometry`].
+///
+/// Extension lines are **omitted, not clamped**, when they would be shorter
+/// than the gap they must leave — which is exactly the zero-standoff case,
+/// where the dimension line already passes through the point and a witness
+/// line would be a stub of nothing. The two extension lines may point in
+/// OPPOSITE directions (picks straddling the dimension line), so each takes
+/// its own direction from its own endpoints rather than from the sign of the
+/// standoff.
+fn draw_linear(
+    b: &mut ContentBuilder,
+    bounds: &mut BoundsAcc,
+    a: Point,
+    c: Point,
+    ext_a: Point,
+    ext_b: Point,
+) {
     let (ux, uy) = unit_vector(a, c);
-    // Perpendicular, for the short extension ticks at each end.
-    let (px, py) = (-uy, ux);
-    let tick = 4.0;
 
-    // The dimension leader line.
+    // The dimension line.
     b.move_to(a.x, a.y);
     b.line_to(c.x, c.y);
     b.paint(Paint::Stroke);
     bounds.add(a);
     bounds.add(c);
 
-    // Extension ticks perpendicular at each end.
-    for &end in &[a, c] {
-        let t0 = Point::new(end.x - px * tick, end.y - py * tick);
-        let t1 = Point::new(end.x + px * tick, end.y + py * tick);
-        b.move_to(t0.x, t0.y);
-        b.line_to(t1.x, t1.y);
+    // Extension lines: from just clear of the measured point, to just past the
+    // dimension line. Both offsets are DRAFTING CONVENTION, not mandated by
+    // any standard — ANSI practice is ~1.5 mm gap and ~1 mm overshoot in
+    // mechanical work; ISO expresses both as multiples of the line width.
+    // Decision 026 records the sourcing and the confidence for each; they are
+    // constants here so a per-standard style can replace them without moving
+    // the geometry.
+    for (point, dim_end) in [(ext_a, a), (ext_b, c)] {
+        let (dx, dy) = (dim_end.x - point.x, dim_end.y - point.y);
+        let len = dx.hypot(dy);
+        if !len.is_finite() || len <= EXT_GAP + EXT_OVERSHOOT {
+            // Too short to draw as a witness line: the dimension line is
+            // already at (or through) the point.
+            continue;
+        }
+        let (nx, ny) = (dx / len, dy / len);
+        let start = Point::new(point.x + nx * EXT_GAP, point.y + ny * EXT_GAP);
+        let end = Point::new(
+            point.x + nx * (len + EXT_OVERSHOOT),
+            point.y + ny * (len + EXT_OVERSHOOT),
+        );
+        b.move_to(start.x, start.y);
+        b.line_to(end.x, end.y);
         b.paint(Paint::Stroke);
-        bounds.add(t0);
-        bounds.add(t1);
+        bounds.add(start);
+        bounds.add(end);
     }
 
     // Arrowheads pointing outward at each end (toward the extension ticks).
@@ -445,6 +515,7 @@ mod tests {
             a: Point::new(100.0, 100.0),
             b: Point::new(200.0, 100.0),
             constraint: AxisConstraint::Horizontal,
+            offset: 0.0,
         }
     }
 

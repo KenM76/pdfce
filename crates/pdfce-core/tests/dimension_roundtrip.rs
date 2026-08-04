@@ -56,6 +56,7 @@ fn linear() -> DimensionKind {
         a: Point::new(100.0, 200.0),
         b: Point::new(300.0, 200.0),
         constraint: AxisConstraint::Horizontal,
+        offset: 0.0,
     }
 }
 
@@ -197,6 +198,7 @@ fn changing_group_scale_regenerates_all_member_labels() {
                 a: Point::new(0.0, 0.0),
                 b: Point::new(100.0, 0.0),
                 constraint: AxisConstraint::Horizontal,
+                offset: 0.0,
             },
         )
         .unwrap();
@@ -415,6 +417,186 @@ fn deleting_an_unknown_ce_dimension_is_refused_by_name() {
             pdfce_core::edit::EditError::DimensionNotFound { id: 999 }
         ),
         "got {err:?}"
+    );
+}
+
+/// **The defect the operator reported, pinned as an invariant.**
+///
+/// *"It looks like it give me the correct horizontal or vertical dimension but
+/// it shows at an angle."* — 2026-08-04.
+///
+/// `leader_endpoints` returned the two PICKED points verbatim, so a dimension
+/// constrained to Horizontal was drawn along whatever angle the two clicks
+/// happened to make, while `measured_length` correctly reported only the
+/// horizontal component. The line disagreed with its own caption.
+///
+/// The invariant is the fix stated as a property: the dimension line's length
+/// equals the measured value, for every constraint and every pick pair. That
+/// is checked here over a spread of inputs rather than one, because the old
+/// behaviour was CORRECT whenever the picks happened to be axis-aligned — a
+/// single well-chosen example would have passed before the fix.
+#[test]
+fn the_drawn_line_is_exactly_as_long_as_the_number_printed_on_it() {
+    use pdfce_core::vector::AxisConstraint;
+
+    let picks = [
+        ((100.0, 200.0), (300.0, 200.0)), // already horizontal
+        ((100.0, 200.0), (300.0, 260.0)), // the reported case: skewed
+        ((300.0, 260.0), (100.0, 200.0)), // reversed pick order
+        ((100.0, 200.0), (100.0, 400.0)), // already vertical
+        ((120.0, 180.0), (260.0, 90.0)),  // skewed the other way
+    ];
+    for constraint in [
+        AxisConstraint::Horizontal,
+        AxisConstraint::Vertical,
+        AxisConstraint::Aligned,
+    ] {
+        for (offset, ((ax, ay), (bx, by))) in
+            [0.0_f64, 25.0, -40.0].into_iter().zip(picks.iter().cycle())
+        {
+            let kind = DimensionKind::Linear {
+                a: Point::new(*ax, *ay),
+                b: Point::new(*bx, *by),
+                constraint,
+                offset,
+            };
+            let Some((dim_a, dim_b, ext_a, ext_b)) = kind.linear_geometry() else {
+                continue; // degenerate aligned pick: no axis, refused by design
+            };
+            let drawn = (dim_b.x - dim_a.x).hypot(dim_b.y - dim_a.y);
+            let measured = kind.measured_points();
+            assert!(
+                (drawn - measured).abs() < 0.001,
+                "{constraint:?} offset={offset}: the drawn line is {drawn} long but the \
+                 label says {measured}"
+            );
+            // And the extension lines really do reach the measured points —
+            // that is the other half of what was asked for.
+            assert_eq!(
+                (ext_a.x, ext_a.y),
+                (*ax, *ay),
+                "the first extension line must anchor on the first picked point"
+            );
+            assert_eq!((ext_b.x, ext_b.y), (*bx, *by));
+        }
+    }
+}
+
+/// A horizontal ce dimension is drawn HORIZONTALLY even when the picks are not.
+///
+/// The invariant above would also be satisfied by a line of the right length
+/// pointing the wrong way; this pins the direction.
+#[test]
+fn a_constrained_dimension_line_runs_along_its_constraint() {
+    use pdfce_core::vector::AxisConstraint;
+
+    let h = DimensionKind::Linear {
+        a: Point::new(100.0, 200.0),
+        b: Point::new(300.0, 260.0),
+        constraint: AxisConstraint::Horizontal,
+        offset: 0.0,
+    };
+    let (a, b, _, _) = h.linear_geometry().unwrap();
+    assert!(
+        (a.y - b.y).abs() < 0.001,
+        "a horizontal dimension's line must have equal y at both ends, got {a:?} {b:?}"
+    );
+
+    let v = DimensionKind::Linear {
+        a: Point::new(100.0, 200.0),
+        b: Point::new(160.0, 400.0),
+        constraint: AxisConstraint::Vertical,
+        offset: 0.0,
+    };
+    let (a, b, _, _) = v.linear_geometry().unwrap();
+    assert!(
+        (a.x - b.x).abs() < 0.001,
+        "a vertical dimension's line must have equal x at both ends, got {a:?} {b:?}"
+    );
+}
+
+/// The standoff's SIGN must not depend on which point was clicked first.
+///
+/// Without canonicalising the normal, clicking right-to-left negates it, and
+/// the same positive offset puts the dimension line on the opposite side of
+/// the drawing — which an operator experiences as the control working
+/// backwards at random.
+#[test]
+fn the_standoff_direction_does_not_depend_on_pick_order() {
+    use pdfce_core::vector::AxisConstraint;
+
+    let forward = DimensionKind::Linear {
+        a: Point::new(100.0, 200.0),
+        b: Point::new(300.0, 200.0),
+        constraint: AxisConstraint::Horizontal,
+        offset: 30.0,
+    };
+    let backward = DimensionKind::Linear {
+        a: Point::new(300.0, 200.0),
+        b: Point::new(100.0, 200.0),
+        constraint: AxisConstraint::Horizontal,
+        offset: 30.0,
+    };
+    let (fa, _, _, _) = forward.linear_geometry().unwrap();
+    let (ba, _, _, _) = backward.linear_geometry().unwrap();
+    assert!(
+        fa.y > 200.0 && ba.y > 200.0,
+        "a positive standoff must put the line ABOVE the feature either way: \
+         {fa:?} vs {ba:?}"
+    );
+}
+
+/// A sidecar written before the offset field existed still loads completely.
+///
+/// The hazard this guards is specific and severe: `deserialize_model` gates on
+/// `Version` with exact equality and answers `None` on a mismatch, which the
+/// caller turns into a FRESH model — so a schema-version bump would have
+/// silently discarded every group, every calibrated scale and every membership
+/// of every existing dimensioned file, while the `/Line` annotations kept
+/// rendering perfectly. `/Offset` is therefore an OPTIONAL key at the existing
+/// version, and this proves the old shape still round-trips.
+#[test]
+fn a_sidecar_without_the_offset_key_still_loads_every_group_and_dimension() {
+    use pdfce_core::object::{Dict, Name};
+
+    let (_orig, mut s) = session();
+    s.add_dimension(0, DEFAULT_GROUP_ID, linear()).unwrap();
+    s.set_group_scale(
+        DEFAULT_GROUP_ID,
+        ScaleState::Calibrated { scale: 0.01 },
+        NumberFormat::decimal(Unit::Meter, 2),
+    )
+    .unwrap();
+
+    // Serialise, then strip /Offset from every dimension — exactly the shape a
+    // pre-27.0 build wrote.
+    let serialized = pdfce_core::dimension::serialize_model(&s.dimension_model());
+    let mut d: Dict = serialized.as_dict().unwrap().clone();
+    let stripped: Vec<Object> = d
+        .get(b"Dimensions")
+        .and_then(Object::as_array)
+        .unwrap()
+        .iter()
+        .map(|dim| {
+            let mut c = dim.as_dict().unwrap().clone();
+            c.remove(b"Offset");
+            Object::Dict(c)
+        })
+        .collect();
+    d.insert(Name::from(b"Dimensions"), Object::Array(stripped));
+
+    let recovered = deserialize_model(&Object::Dict(d)).expect("an older sidecar must still load");
+    assert_eq!(
+        recovered.dimensions().len(),
+        1,
+        "the dimension must survive a sidecar with no /Offset"
+    );
+    assert!(
+        matches!(
+            recovered.group(DEFAULT_GROUP_ID).map(|g| g.scale),
+            Some(ScaleState::Calibrated { .. })
+        ),
+        "and so must the calibrated scale — losing it is the failure mode this pins"
     );
 }
 

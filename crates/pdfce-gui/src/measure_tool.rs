@@ -118,6 +118,9 @@ impl LinearPick {
             Some(a) => {
                 self.first = None;
                 Some(DimensionKind::Linear {
+                    // Pass 27.0: no standoff by default, so what commits is
+                    // what `preview_segment` drew.
+                    offset: 0.0,
                     a,
                     b: p,
                     constraint: self.constraint,
@@ -822,6 +825,7 @@ mod tests {
                 a: p(10.0, 20.0),
                 b: p(50.0, 20.0),
                 constraint: AxisConstraint::Aligned,
+                offset: 0.0,
             }
         );
         assert!(!lp.in_progress(), "the pick resets, ready for the next dim");
@@ -843,6 +847,7 @@ mod tests {
                 a: p(10.0, 20.0),
                 b: p(50.0, 80.0), // RAW, not (50,20)
                 constraint: AxisConstraint::Horizontal,
+                offset: 0.0,
             }
         );
         // The measured value still honours the constraint (|Δx| = 40).
@@ -892,7 +897,14 @@ mod tests {
         let gui_kind = lp.commit_point(b).unwrap();
 
         // CLI path: the exact construction from pdfce-cli/src/main.rs.
-        let cli_kind = DimensionKind::Linear { a, b, constraint };
+        // Pass 27.0: the CLI's own default standoff is also 0.0, so the
+        // GUI/CLI byte-equivalence this test pins is unchanged by the field.
+        let cli_kind = DimensionKind::Linear {
+            a,
+            b,
+            constraint,
+            offset: 0.0,
+        };
 
         assert_eq!(gui_kind, cli_kind);
     }

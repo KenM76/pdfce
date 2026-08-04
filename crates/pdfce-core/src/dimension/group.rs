@@ -101,6 +101,25 @@ pub enum DimensionKind {
         b: Point,
         /// The alignment constraint (Aligned / Horizontal / Vertical).
         constraint: AxisConstraint,
+        /// Signed standoff of the dimension line from point `a`, along the
+        /// constraint's canonical normal, in points (Pass 27.0).
+        ///
+        /// # Why a scalar based at `a`, and why the default is exactly zero
+        ///
+        /// The dimension line does not run between the picked points — it runs
+        /// PARALLEL to the constraint axis, offset away from the drawing, with
+        /// extension (witness) lines reaching back to the points. This is the
+        /// distance it stands off by. Positive is up (horizontal dimensions)
+        /// or right (vertical ones); see [`DimensionKind::axis_frame`], whose
+        /// normal is canonicalised so the sign does not depend on which point
+        /// the operator clicked first.
+        ///
+        /// The default is **0.0**, which places the dimension line through `a`
+        /// — reproducing exactly what the tool's own preview already draws. So
+        /// an existing ce dimension deserialised without this key looks
+        /// identical to how it looked before the field existed, and the
+        /// sidecar migration costs nothing.
+        offset: f64,
     },
     /// A radius/diameter dimension over a best-fit circle. Stores the fit
     /// (centre + radius + residual — the residual surfaced per decision 011
@@ -114,6 +133,93 @@ pub enum DimensionKind {
 }
 
 impl DimensionKind {
+    /// The dimension line's own frame: the unit vector along the axis being
+    /// measured, and the canonical normal the standoff is measured along
+    /// (Pass 27.0).
+    ///
+    /// # Why this exists as its own function
+    ///
+    /// The constraint decides the direction the dimension line RUNS, and until
+    /// Pass 27.0 nothing consumed that fact: `leader_endpoints` returned the
+    /// two picked points verbatim, so a dimension constrained to Horizontal
+    /// was drawn at whatever angle the operator's two clicks happened to make.
+    /// The value was right and the line was wrong — the operator's report,
+    /// 2026-08-04: *"It looks like it give me the correct horizontal or
+    /// vertical dimension but it shows at an angle."*
+    ///
+    /// # The canonical normal, and why the sign must not depend on click order
+    ///
+    /// The normal is the axis rotated a quarter turn counter-clockwise, then
+    /// flipped if necessary so it points up (or right, for a vertical
+    /// dimension). Without that flip, clicking right-to-left instead of
+    /// left-to-right would negate the normal, and the same positive standoff
+    /// would put the dimension line on the opposite side of the drawing. An
+    /// operator would experience that as the offset control working backwards
+    /// half the time, for no reason they could see.
+    ///
+    /// Returns `None` for a degenerate `Aligned` dimension (two coincident
+    /// picks), which has no axis to speak of — refused rather than fabricated.
+    #[must_use]
+    pub fn axis_frame(&self) -> Option<(Point, Point)> {
+        let Self::Linear {
+            a, b, constraint, ..
+        } = *self
+        else {
+            return None;
+        };
+        let u = match constraint {
+            AxisConstraint::Horizontal => Point::new(1.0, 0.0),
+            AxisConstraint::Vertical => Point::new(0.0, 1.0),
+            AxisConstraint::Aligned => {
+                let (dx, dy) = (b.x - a.x, b.y - a.y);
+                let len = dx.hypot(dy);
+                if !len.is_finite() || len <= f64::EPSILON {
+                    return None;
+                }
+                Point::new(dx / len, dy / len)
+            }
+        };
+        // Perpendicular, counter-clockwise, then canonicalised into the upper
+        // half-plane (ties broken toward +x) so the sign of `offset` means the
+        // same thing regardless of pick order.
+        let mut n = Point::new(-u.y, u.x);
+        if n.y < 0.0 || (n.y == 0.0 && n.x < 0.0) {
+            n = Point::new(-n.x, -n.y);
+        }
+        Some((u, n))
+    }
+
+    /// Where the dimension LINE runs, and where each extension line reaches
+    /// from — everything the appearance needs (Pass 27.0).
+    ///
+    /// Returns `(dim_a, dim_b, ext_from_a, ext_from_b)`: the two ends of the
+    /// dimension line, and the two measured points the extension lines run to.
+    ///
+    /// # The invariant this exists to hold
+    ///
+    /// `|dim_b - dim_a|` equals [`Self::measured_points`], always. The drawn
+    /// line is exactly as long as the number printed on it. Before Pass 27.0 a
+    /// Horizontal dimension whose picks differed in y drew `hypot(dx, dy)`
+    /// while its label said `dx` — a line that disagreed with its own caption,
+    /// which is the specific thing an operator cannot be expected to catch.
+    ///
+    /// `None` for a non-linear or degenerate dimension.
+    #[must_use]
+    pub fn linear_geometry(&self) -> Option<(Point, Point, Point, Point)> {
+        let Self::Linear { a, b, offset, .. } = *self else {
+            return None;
+        };
+        let (u, n) = self.axis_frame()?;
+        // Projection of the pick-to-pick vector onto the axis: the measured
+        // extent. Its SIGN matters — it decides which way the terminators
+        // point — so it is not taken as an absolute here.
+        let t = (b.x - a.x) * u.x + (b.y - a.y) * u.y;
+        let o = Point::new(offset * n.x, offset * n.y);
+        let dim_a = Point::new(a.x + o.x, a.y + o.y);
+        let dim_b = Point::new(dim_a.x + t * u.x, dim_a.y + t * u.y);
+        Some((dim_a, dim_b, a, b))
+    }
+
     /// This geometry translated by a page-space `(dx, dy)`.
     ///
     /// # Why the measured value is untouched, on purpose
@@ -131,10 +237,18 @@ impl DimensionKind {
     #[must_use]
     pub fn translated(self, dx: f64, dy: f64) -> Self {
         match self {
-            Self::Linear { a, b, constraint } => Self::Linear {
+            Self::Linear {
+                a,
+                b,
+                constraint,
+                offset,
+            } => Self::Linear {
                 a: Point::new(a.x + dx, a.y + dy),
                 b: Point::new(b.x + dx, b.y + dy),
                 constraint,
+                // The standoff is relative to `a`, which moved with it, so a
+                // translation leaves it untouched.
+                offset,
             },
             Self::Circular { fit, show_diameter } => Self::Circular {
                 fit: FitCircle {
@@ -152,7 +266,9 @@ impl DimensionKind {
     #[must_use]
     pub fn measured_points(&self) -> f64 {
         match *self {
-            DimensionKind::Linear { a, b, constraint } => measured_length(a, b, constraint),
+            DimensionKind::Linear {
+                a, b, constraint, ..
+            } => measured_length(a, b, constraint),
             DimensionKind::Circular { fit, show_diameter } => {
                 if show_diameter {
                     2.0 * fit.radius
@@ -431,6 +547,7 @@ mod tests {
             a: Point::new(a.0, a.1),
             b: Point::new(b.0, b.1),
             constraint: c,
+            offset: 0.0,
         }
     }
 

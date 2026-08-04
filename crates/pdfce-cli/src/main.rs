@@ -7836,6 +7836,10 @@ fn cmd_dimension_add(args: &DimensionAddArgs<'_>) -> u8 {
                 return exit::EDIT_REFUSED;
             };
             DimensionKind::Linear {
+                // Pass 27.0: no standoff by default — the dimension line runs
+                // through the first picked point, which is exactly what the
+                // tool's own preview draws.
+                offset: 0.0,
                 a: *a,
                 b: *b,
                 constraint: constraint.to_core(),

@@ -185,7 +185,12 @@ fn serialize_dimension(dim: &DimensionRecord) -> Object {
         Object::Integer(i64::from(dim.group.0)),
     );
     match dim.kind {
-        DimensionKind::Linear { a, b, constraint } => {
+        DimensionKind::Linear {
+            a,
+            b,
+            constraint,
+            offset,
+        } => {
             d.insert(Name::from(b"Kind"), Object::Name(Name::from(b"linear")));
             d.insert(Name::from(b"A"), point_array(a));
             d.insert(Name::from(b"B"), point_array(b));
@@ -193,6 +198,23 @@ fn serialize_dimension(dim: &DimensionRecord) -> Object {
                 Name::from(b"Constraint"),
                 Object::Name(Name(constraint_token(constraint).to_vec())),
             );
+            // OPTIONAL, and deliberately NOT a schema-version bump.
+            //
+            // `deserialize_model` gates on `Version` with exact equality and
+            // answers `None` on a mismatch — which the caller turns into a
+            // FRESH model. Bumping the version for this key would therefore
+            // make every older file silently lose every group, every
+            // calibrated scale and every membership, while its `/Line`
+            // annotations kept rendering perfectly — so nothing would look
+            // wrong until the next save made the loss permanent.
+            //
+            // An absent key reads back as the 0.0 default, which draws exactly
+            // what the pre-27.0 build drew. Written only when non-zero, so a
+            // file that never used a standoff keeps byte-identical sidecar
+            // output.
+            if offset != 0.0 {
+                d.insert(Name::from(b"Offset"), Object::Real(offset));
+            }
         }
         DimensionKind::Circular { fit, show_diameter } => {
             d.insert(Name::from(b"Kind"), Object::Name(Name::from(b"circular")));
@@ -220,6 +242,9 @@ fn deserialize_dimension(obj: &Object) -> Option<DimensionRecord> {
             a: point_of(d.get(b"A")?)?,
             b: point_of(d.get(b"B")?)?,
             constraint: parse_constraint(&name_of(d.get(b"Constraint"))?)?,
+            // Absent in every sidecar written before Pass 27.0. The 0.0
+            // default is what makes that migration free rather than lossy.
+            offset: d.get(b"Offset").and_then(Object::as_number).unwrap_or(0.0),
         },
         b"circular" => DimensionKind::Circular {
             fit: FitCircle {
@@ -325,6 +350,7 @@ mod tests {
                 a: Point::new(1.0, 2.0),
                 b: Point::new(3.0, 4.0),
                 constraint: AxisConstraint::Horizontal,
+                offset: 0.0,
             },
         );
         // Wire fake object handles to prove they round-trip.
