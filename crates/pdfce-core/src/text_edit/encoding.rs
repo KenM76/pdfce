@@ -49,6 +49,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::fontdata::{self, BaseEncoding};
+use crate::text_extract::cmap::{NotInjective, ToUnicodeCMap};
 
 /// The exhaustive refuse/disclose triggers of the inverse-encoding gate
 /// (inverse-encoding RAG §2). Hard refusals are 1, 2, 3, 4, 7, 8; 5 and 6
@@ -193,6 +194,125 @@ pub struct EncodeResult {
     pub codes: Vec<u8>,
     /// Soft disclosures accumulated (R-INV-5 choices), verbatim.
     pub disclosures: Vec<String>,
+}
+
+/// The inverse encoding map for one **composite** (`/Type0`) font.
+///
+/// The multi-byte sibling of [`InverseEncoding`]. Where that one inverts a
+/// simple font's code→glyph-name table, this inverts a `/ToUnicode` CMap —
+/// and only where doing so is sound, which is standing rule R110's whole
+/// subject.
+///
+/// # Why this is a separate type rather than a mode on the simple one
+///
+/// They answer the same question and share almost nothing to answer it with.
+/// The simple encoder reasons about glyph NAMES, `/Differences`, ligature
+/// components and code occupancy — none of which exist for a CIDFont, whose
+/// codes are opaque indices with no names attached. Folding the two together
+/// would mean a type where half the fields are meaningless depending on a
+/// flag, and every method would have to say which half it was in.
+///
+/// # What it cannot do, and will not pretend to
+///
+/// * **Add a character the font lacks.** A composite subset carries the CIDs
+///   it carries; there is no code for a glyph that is not there. That is the
+///   composite form of R-INV-1 and it refuses by name.
+/// * **Work at all without an injective `/ToUnicode`.** Construction goes
+///   through [`ToUnicodeCMap::injective_inverse`], so a font whose map is a
+///   ligature table or has colliding entries never produces one of these.
+///   The refusal happens where the evidence is, not here.
+#[derive(Debug, Clone)]
+pub struct CompositeEncoding {
+    base_font: String,
+    /// Unicode scalar → the CID that shows it. One CID, because the map it
+    /// was built from was verified injective.
+    reverse: BTreeMap<char, u32>,
+}
+
+/// The result of encoding text into a composite font's codes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompositeEncodeResult {
+    /// The CIDs, in text order.
+    pub cids: Vec<u16>,
+}
+
+impl CompositeEncodeResult {
+    /// The operand bytes for a `Tj`/`TJ` string, big-endian per §9.7.6.2.
+    ///
+    /// `Identity-H` codes are two bytes, most significant first. Producing
+    /// the bytes here rather than at the splice keeps the byte order in one
+    /// place — the failure mode for getting it wrong is not a crash but a
+    /// page of plausible, entirely different glyphs.
+    #[must_use]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(self.cids.len() * 2);
+        for cid in &self.cids {
+            out.extend_from_slice(&cid.to_be_bytes());
+        }
+        out
+    }
+}
+
+impl CompositeEncoding {
+    /// Build from a font's `/ToUnicode`, or refuse with the reason.
+    ///
+    /// # Errors
+    ///
+    /// Returns the [`NotInjective`] obstruction verbatim — a ligature
+    /// destination, a collision naming both codes, an empty map, or a map too
+    /// large to materialise. The caller surfaces it; this type does not
+    /// paraphrase it into something vaguer.
+    pub fn build(base_font: &str, cmap: &ToUnicodeCMap) -> Result<Self, NotInjective> {
+        Ok(Self {
+            base_font: base_font.to_owned(),
+            reverse: cmap.injective_inverse()?,
+        })
+    }
+
+    /// Encode `target` into this font's CIDs.
+    ///
+    /// # Errors
+    ///
+    /// Refuses by name on the first character the font has no CID for. The
+    /// composite form of R-INV-1: a subset carries what it carries, and there
+    /// is no code that means a glyph the program does not contain.
+    pub fn encode_str(&self, target: &str) -> Result<CompositeEncodeResult, Refusal> {
+        let mut cids = Vec::with_capacity(target.chars().count());
+        for ch in target.chars() {
+            let Some(&code) = self.reverse.get(&ch) else {
+                return Err(Refusal {
+                    trigger: RInvTrigger::TargetAbsent,
+                    character: Some(ch),
+                    base_font: self.base_font.clone(),
+                    message: format!(
+                        "this font has no glyph for {ch:?}, and pdfce cannot add one to a font                          that is already embedded. Keep this edit to characters the font already                          uses, or choose a font that covers it."
+                    ),
+                });
+            };
+            // A CID wider than 16 bits cannot be written as an `Identity-H`
+            // code. Refused rather than truncated: a truncated CID is a
+            // DIFFERENT, VALID glyph, so the page would render confidently
+            // wrong text with nothing to indicate it.
+            let Ok(cid) = u16::try_from(code) else {
+                return Err(Refusal {
+                    trigger: RInvTrigger::TargetAbsent,
+                    character: Some(ch),
+                    base_font: self.base_font.clone(),
+                    message: format!(
+                        "this font maps {ch:?} to a glyph index pdfce cannot write in this                          encoding."
+                    ),
+                });
+            };
+            cids.push(cid);
+        }
+        Ok(CompositeEncodeResult { cids })
+    }
+
+    /// Whether this font can show `ch` at all.
+    #[must_use]
+    pub fn covers(&self, ch: char) -> bool {
+        self.reverse.contains_key(&ch)
+    }
 }
 
 /// The inverse encoding map for one **simple** font.
@@ -446,6 +566,76 @@ fn canonical_code(u: char) -> Option<u8> {
 )]
 mod tests {
     use super::*;
+
+    /// Build a composite encoder from `beginbfchar` pairs.
+    fn composite(pairs: &[(u16, &str)]) -> Result<CompositeEncoding, NotInjective> {
+        let mut body =
+            String::from("begincmap\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n");
+        body.push_str(&format!("{} beginbfchar\n", pairs.len()));
+        for (code, dst) in pairs {
+            let hex: String = dst.encode_utf16().map(|u| format!("{u:04X}")).collect();
+            body.push_str(&format!("<{code:04X}> <{hex}>\n"));
+        }
+        body.push_str("endbfchar\nendcmap\n");
+        CompositeEncoding::build("TEST+Composite", &ToUnicodeCMap::parse(body.as_bytes()))
+    }
+
+    #[test]
+    fn encodes_text_into_the_fonts_own_cids() {
+        let enc = composite(&[(1, "A"), (2, "B"), (3, "C")]).expect("injective");
+        let out = enc.encode_str("CAB").expect("all three are covered");
+        assert_eq!(out.cids, vec![3, 1, 2]);
+    }
+
+    /// Byte order is the whole ballgame for a composite operand: writing
+    /// the CID little-endian would still produce a valid two-byte code,
+    /// pointing at a DIFFERENT glyph. Nothing would error; the page would
+    /// simply say something else.
+    #[test]
+    fn operand_bytes_are_big_endian_two_per_cid() {
+        let enc = composite(&[(0x0102, "A")]).expect("injective");
+        let out = enc.encode_str("A").expect("covered");
+        assert_eq!(out.cids, vec![0x0102]);
+        assert_eq!(
+            out.to_bytes(),
+            vec![0x01, 0x02],
+            "Identity-H codes are big-endian (§9.7.6.2); reversed, this addresses glyph 0x0201"
+        );
+    }
+
+    /// The composite form of R-INV-1: a subset carries what it carries,
+    /// and no code means a glyph the program does not contain.
+    #[test]
+    fn a_character_the_font_lacks_is_refused_by_name() {
+        let enc = composite(&[(1, "A")]).expect("injective");
+        let err = enc.encode_str("AZ").expect_err("Z is not in this font");
+        assert_eq!(err.character, Some('Z'));
+        assert_eq!(err.trigger, RInvTrigger::TargetAbsent);
+        assert!(
+            err.message.contains("no glyph"),
+            "the refusal must say what is missing: {}",
+            err.message
+        );
+    }
+
+    /// A non-injective CMap must never yield an encoder at all — the
+    /// refusal belongs where the evidence is (R110), not at encode time
+    /// when the caller has already committed to an edit.
+    #[test]
+    fn a_non_injective_cmap_yields_no_encoder() {
+        let err = composite(&[(1, "A"), (7, "A")]).expect_err("two codes, one char");
+        assert!(matches!(err, NotInjective::Collision { .. }), "{err:?}");
+    }
+
+    /// Empty input is not an error — replacing text with nothing is a
+    /// deletion, and the encoder has no opinion about that.
+    #[test]
+    fn empty_text_encodes_to_no_cids() {
+        let enc = composite(&[(1, "A")]).expect("injective");
+        let out = enc.encode_str("").expect("empty is not a refusal");
+        assert!(out.cids.is_empty());
+        assert!(out.to_bytes().is_empty());
+    }
 
     /// A full `WinAnsiEncoding` code->name table `E`.
     fn winansi_table() -> Box<[Option<String>; 256]> {
