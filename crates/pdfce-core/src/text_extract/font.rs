@@ -358,6 +358,16 @@ enum Widths {
 }
 
 impl ExtractFont {
+    /// This font's `/ToUnicode` CMap, if it declared one.
+    ///
+    /// Exposed for standing rule R110: whether a COMPOSITE run is editable
+    /// turns on whether its CMap is injective, and that is a property of the
+    /// CMap rather than of anything else `ExtractFont` publishes. Read-only
+    /// borrow — the CMap is built once per font per extraction and shared.
+    #[must_use]
+    pub fn to_unicode_cmap(&self) -> Option<&ToUnicodeCMap> {
+        self.to_unicode.as_ref()
+    }
     /// Resolve a font dictionary for extraction.
     ///
     /// Infallible: unlike the rendering side there is no "this font is

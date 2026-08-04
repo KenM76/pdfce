@@ -1086,7 +1086,30 @@ impl<'a> Walk<'a> {
         }
 
         // Decode each string element into codes (simple font = 1 byte/code).
-        // A composite font is not decoded (edit is refused later, R-INV-4).
+        //
+        // A composite font is NOT decoded here.
+        //
+        // This comment used to say "edit is refused later, R-INV-4". That is
+        // FALSE, and the falsehood has an operator-facing cost. Because the
+        // run is never decoded, the text is never located; because it is
+        // never located, `classify_font` is never reached for it; so
+        // R-INV-4's carefully-worded composite refusal NEVER FIRES from
+        // `edit-text`. What the operator actually sees is "text to edit was
+        // not found in an editable run on the page" — which reads as "your
+        // text isn't there" when the truth is "it is there, in a font pdfce
+        // declines to edit". Those two lead to completely different next
+        // actions, and only one of them is available.
+        //
+        // Found by trying to reach the R-INV-4 message through the CLI with
+        // a composite fixture built for the purpose, and failing. Recorded
+        // here rather than silently corrected because the fix is a change to
+        // the LOCATION path — decode composite runs far enough to match, so
+        // the right refusal can fire — and that belongs in its own slice
+        // with its own tests, not bolted onto a comment repair.
+        //
+        // OWED (Pass 21.1): make a composite run locatable-but-refused
+        // rather than invisible, so the specific refusal reaches the person
+        // who has to act on it.
         let simple = font.as_ref().is_some_and(ExtractFont::is_simple);
         for (ei, elem) in raw.iter().enumerate() {
             match elem {
@@ -1577,16 +1600,46 @@ pub(crate) fn classify_font(
         .map(|n| n.as_bytes().to_vec())
         .unwrap_or_default();
 
-    // R-INV-4: composite (Type 0 / CIDFont) — named non-goal (FF-C/FF-E).
+    // R-INV-4: composite (Type 0 / CIDFont).
+    //
+    // Still refused. The re-encoding path is single-byte end to end —
+    // `InverseEncoding` maps a char to `Vec<u8>` and the operand writer
+    // assumes that width — so making composite runs editable is a change to
+    // the whole encoding seam, not a branch here. That is the rest of Pass
+    // 21.1.
+    //
+    // What HAS changed is WHY. This message used to cite glyph subsetting
+    // (FF-C) as a co-blocker. FF-C shipped in Pass 21.0, so that sentence
+    // became false and would have sent anyone reading it to look at the
+    // wrong thing. It also read as a permanent limitation, when standing
+    // rule R110 has since established that composite editability is a
+    // property of the FONT — whether its `/ToUnicode` is injective — rather
+    // than a blanket one.
+    //
+    // So the refusal now consults the CMap and says which kind of "no" this
+    // is. A font whose map cannot be inverted will NEVER be editable and
+    // names the specific obstruction; a font whose map inverts cleanly is
+    // waiting on pdfce, and says so. That distinction costs one lookup and
+    // is the difference between an operator fixing their document and an
+    // operator waiting for a release that would not have helped them.
     if subtype.as_slice() == b"Type0" || !font.is_simple() {
+        let why = match font.to_unicode_cmap() {
+            Some(cmap) => match cmap.injective_inverse() {
+                Ok(_) => "This font's character map CAN be inverted, so editing it is possible in principle; pdfce's re-encoding path does not handle multi-byte codes yet."
+                    .to_owned(),
+                Err(e) => format!(
+                    "This font's character map cannot be inverted, so pdfce could not know which code to write back: {e}"
+                ),
+            },
+            None => "This font declares no /ToUnicode character map, so pdfce cannot tell which code produces a given character."
+                .to_owned(),
+        };
         return Err(EditError::Refused(Refusal {
             trigger: RInvTrigger::Composite,
             character: None,
             base_font: font.base_font.clone(),
             message: format!(
-                "R-INV-4: font '{}' is a composite (Type 0 / CIDFont) run; in-place editing of \
-                 composite/CJK fonts is deferred (FF-E) — re-encoding a composite subset also \
-                 needs glyph subsetting (FF-C).",
+                "R-INV-4: font '{}' is a composite (Type 0 / CIDFont) run, which pdfce cannot edit in place. {why}",
                 font.base_font
             ),
         }));
