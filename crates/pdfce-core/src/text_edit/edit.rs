@@ -1128,6 +1128,43 @@ impl<'a> Walk<'a> {
                                 t1,
                             });
                         }
+                    } else if let Some(f) = font.as_ref() {
+                        // COMPOSITE: decode far enough to be FINDABLE, and no
+                        // further. Text is populated so this run can be
+                        // selected as the anchor; no slots are pushed,
+                        // because a slot is a per-code EDIT handle and
+                        // `ShowSlot::code` is a `u8` that cannot hold a
+                        // 2-byte CID. Making it editable is the rest of Pass
+                        // 21.1 and a change to the whole encoding seam.
+                        //
+                        // The point of decoding at all is that the run must
+                        // be REACHABLE for the composite refusal to fire on
+                        // it. Before this, composite runs were invisible to
+                        // the anchor search, so the operator got "not found"
+                        // — a wrong answer — instead of a refusal naming the
+                        // font.
+                        //
+                        // Two bytes per code assumes `Identity-H`, which is
+                        // what real-world composite text overwhelmingly uses
+                        // and what pdfce itself writes (Pass 21.0). A
+                        // composite font on some other CMap decodes to
+                        // nothing here and stays invisible — the OLD
+                        // behaviour, not a new regression, and narrower than
+                        // it was.
+                        // Slice pattern rather than `pair[0]`/`pair[1]`:
+                        // `chunks_exact(2)` does guarantee the length, but
+                        // `clippy::indexing_slicing` is DENIED crate-wide
+                        // because this crate parses untrusted input, and
+                        // carving out an exception wherever the author can
+                        // see the invariant is how a deny-by-default rule
+                        // becomes advisory. The pattern makes the guarantee
+                        // the compiler's rather than the reader's.
+                        for pair in bytes.chunks_exact(2) {
+                            let [hi, lo] = pair else { continue };
+                            let code = u32::from(*hi) << 8 | u32::from(*lo);
+                            let (chars, _) = f.to_unicode(code);
+                            text.push_str(&chars);
+                        }
                     }
                     elems.push(ShowElem::Str(bytes.clone()));
                 }
@@ -1279,10 +1316,20 @@ pub(crate) fn plan_edit(
         ));
     }
 
-    // --- map the find text to a contiguous code range in one element ---
-    let m = match_run(anchor, &req.find)?;
-
     // --- resolve the anchor font + classify it (R-INV-2/3/4) ---
+    //
+    // ORDER MATTERS, and it was wrong. This block used to sit AFTER
+    // `match_run`, which meant a composite run reported `NoMatch` — "text to
+    // edit was not found in an editable run on the page" — instead of the
+    // composite refusal, because `match_run` needs per-code slots and
+    // composite runs have none. The operator was told their text was absent
+    // when it was present in a font pdfce declines to edit.
+    //
+    // Classifying first fixes it without touching `match_run`: a font-level
+    // refusal (R-INV-2/3/4) is a property of the RUN, not of whether the
+    // sought text happens to be inside it, so there was never a reason to
+    // establish the match before applying it. For a simple font nothing
+    // changes — the same call, the same inputs, a few lines earlier.
     let font_dict =
         resolve_font_dict(doc, &page.resources, &anchor.font_name).ok_or_else(|| {
             EditError::Unsupported("the run's font resource is unresolvable".to_owned())
@@ -1292,6 +1339,9 @@ pub(crate) fn plan_edit(
     // against the base and splices the result), so the base view is correct.
     let font = ExtractFont::resolve(&doc.view(), font_dict);
     let class = classify_font(doc, font_dict, &font)?;
+
+    // --- map the find text to a contiguous code range in one element ---
+    let m = match_run(anchor, &req.find)?;
 
     // --- build the inverse map and encode the replacement (R-INV-1/5/6/7/8) ---
     let glyph_names = font.glyph_names().ok_or_else(|| {
