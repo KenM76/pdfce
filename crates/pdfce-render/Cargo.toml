@@ -45,6 +45,48 @@ tiny-skia = "0.11"
 # Adobe Glyph List, sourced BSD-3-Clause (decision 004 §5.6).
 skrifa = "0.42"
 
+# subsetter: the write-side font subsetter (decision 021 / FF-C, Pass 21.x).
+# Typst's, purpose-built for PDF embedding. MIT OR Apache-2.0, and every
+# crate in its transitive graph is permissive — classified per rule 13
+# before adding, see docs/PRIOR_ART.md "FF-C dependency classification".
+#
+# WHY IT LIVES IN pdfce-render AND NOT pdfce-core (decision 021 §3.2).
+# Subsetting is a WRITE concern, so `pdfce-core` looks like the obvious
+# home. It is not. Producing a subset first requires PARSING the donor —
+# cmap lookup for coverage, `hmtx` for advances, `head`/`post`/`OS/2` for
+# the descriptor and the embedding-permission bits — and that parser
+# already exists here, in `font/program.rs`. Putting `subsetter` in core
+# would add a SECOND font parser to a crate that has none today (its
+# `fontdata/` is compiled metrics only) purely to avoid a plain-data seam.
+# So: this crate produces a `FontEmbedPlan`; `pdfce-core` defines that type
+# and emits the PDF objects from it. `pdfce-core` gains nothing.
+#
+# This does NOT contradict R21 ("one font parser"). R21 is scoped to the
+# READ path and carries its own clause — "No second parser enters without
+# a new decision record" — which decision 021 is. `subsetter`'s internal
+# reader never renders a glyph, never picks a substitute, and never
+# reaches `Diagnostics`; it reads in order to rewrite, and if its output
+# is ever displayed it is skrifa that re-reads it.
+#
+# `default-features = false` IS LOAD-BEARING, NOT TIDINESS (R24), and it
+# is load-bearing twice over here:
+#
+#   1. The default feature is `variable-fonts`, which exists solely to
+#      instance VARIABLE fonts at non-default axis coordinates. pdfce does
+#      not need that at P0.
+#   2. Enabling it pulls `write-fonts` — fine at the 0.48 line `subsetter`
+#      pins, but a bare `cargo add write-fonts` selects 0.51, which wants
+#      `read-fonts 0.42` and would put a SECOND semver-incompatible
+#      fontations stack beside epaint's. That is the exact hazard the
+#      skrifa comment above describes, reachable through a feature flag.
+#
+# With the feature off this adds exactly ONE package to the workspace
+# lock: `subsetter` itself. Its only non-optional dependency, `rustc-hash`,
+# is already present via `type-map` <- eframe. Verified by `cargo metadata`
+# on a scratch crate carrying both `subsetter` and `skrifa = "0.42"`:
+# a single `read-fonts 0.39.2`, a single `font-types 0.11.3`.
+subsetter = { version = "0.2", default-features = false }
+
 [dev-dependencies]
 # flate2: TEST-ONLY. The image tests need a genuinely Flate-encoded
 # sample stream to prove the image path runs the /Filter chain rather
