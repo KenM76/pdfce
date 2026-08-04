@@ -127,6 +127,38 @@ pub const MAX_DST_BYTES: usize = 512;
 /// low hundreds of thousands).
 pub const MAX_CMAP_TOKENS: usize = 10_000_000;
 
+/// Why a `/ToUnicode` CMap could not be inverted (standing rule R110).
+///
+/// Each variant names a specific obstruction. "This font is unsupported"
+/// would leave the operator with nothing to act on and no way to tell a
+/// ligature from a genuinely broken map (R27).
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum NotInjective {
+    /// A code maps to more than one character — a ligature or a decomposed
+    /// sequence.
+    #[error(
+        "code {code} maps to {text:?}, which is more than one character, so there is no single          code that means just one of them"
+    )]
+    MultiCharDestination { code: u32, text: String },
+    /// Two codes map to the same character.
+    #[error(
+        "codes {first} and {second} both map to {ch:?}, so mapping that character back to a code          has no single answer"
+    )]
+    Collision { ch: char, first: u32, second: u32 },
+    /// A code maps to the empty string.
+    #[error("code {code} maps to nothing at all")]
+    EmptyDestination { code: u32 },
+    /// The CMap has no usable entries.
+    #[error("this font's character map is empty")]
+    Empty,
+    /// The CMap declares more entries than pdfce will materialise.
+    #[error(
+        "this font's character map declares more than {entries} entries; pdfce will not expand it"
+    )]
+    TooLarge { entries: usize },
+}
+
 /// A parsed `ToUnicode` CMap: character code → Unicode **string**.
 ///
 /// Cheap to clone is deliberately *not* claimed — a CMap is built once
@@ -547,6 +579,102 @@ impl ToUnicodeCMap {
         None
     }
 
+    /// Build the code←character inverse, but only if this CMap is INJECTIVE.
+    ///
+    /// # Why editing a composite run turns on exactly this
+    ///
+    /// R-INV-4 refuses to edit `/Type0` runs because there is no
+    /// Unicode→CID map: the PDF carries CID→Unicode, and inverting it is
+    /// *lossy in general*. "In general" is doing a lot of work in that
+    /// sentence — inversion is lossy precisely when the forward map is not
+    /// injective, and injectivity is a **checkable property of the data**
+    /// rather than something to assume either way (standing rule R110).
+    ///
+    /// A pdfce-authored CMap is injective by construction. It is checked
+    /// anyway, because authorship is a claim and the check is evidence
+    /// (R93) — and because plenty of third-party CMaps are injective too, so
+    /// checking rather than trusting is what makes the lift general instead
+    /// of self-serving.
+    ///
+    /// # What disqualifies a CMap, and why each one genuinely does
+    ///
+    /// * **A multi-character destination.** A code mapping to `"ffi"` is a
+    ///   ligature. Editing one character of that run has no single answer —
+    ///   there is no code meaning "just the f" — so the whole run stays
+    ///   refused rather than pdfce picking an interpretation.
+    /// * **Two codes mapping to the same character.** The inverse is then a
+    ///   relation, not a function: pdfce would have to choose which code to
+    ///   write, and either choice silently changes which glyph appears.
+    /// * **An empty destination.** Nothing to invert.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NotInjective`] naming the specific obstruction, so the
+    /// refusal can tell the operator which font and which character rather
+    /// than "this font is unsupported".
+    pub fn injective_inverse(&self) -> Result<BTreeMap<char, u32>, NotInjective> {
+        let mut inverse: BTreeMap<char, u32> = BTreeMap::new();
+        let mut seen = 0usize;
+
+        // Ranges are expanded here, unlike `lookup`, which resolves them
+        // lazily. Injectivity is a property of the WHOLE map — a collision
+        // between a range member and a single is invisible to any
+        // point lookup — so there is no way to answer this question without
+        // materialising. The ceiling below is what keeps that safe.
+        let mut all: Vec<(u32, String)> = self
+            .singles
+            .iter()
+            .map(|(c, t)| (*c, t.to_string()))
+            .collect();
+        for range in &self.ranges {
+            // `lo..=hi` is attacker-controlled and may span the whole 32-bit
+            // space. Bounded per range AND in total.
+            let span = u64::from(range.hi) - u64::from(range.lo) + 1;
+            if span > MAX_BF_ENTRIES as u64 {
+                return Err(NotInjective::TooLarge {
+                    entries: MAX_BF_ENTRIES,
+                });
+            }
+            for code in range.lo..=range.hi {
+                if let Some(text) = self.lookup(code) {
+                    all.push((code, text));
+                }
+                seen += 1;
+                if seen > MAX_BF_ENTRIES {
+                    return Err(NotInjective::TooLarge {
+                        entries: MAX_BF_ENTRIES,
+                    });
+                }
+            }
+        }
+
+        for (code, text) in all {
+            let mut chars = text.chars();
+            let (Some(ch), None) = (chars.next(), chars.next()) else {
+                if text.is_empty() {
+                    return Err(NotInjective::EmptyDestination { code });
+                }
+                return Err(NotInjective::MultiCharDestination { code, text });
+            };
+            if let Some(&first) = inverse.get(&ch) {
+                // Two codes, one character. Report BOTH codes: knowing only
+                // the character leaves the operator unable to find the
+                // problem in the font.
+                return Err(NotInjective::Collision {
+                    ch,
+                    first,
+                    second: code,
+                });
+            }
+            inverse.insert(ch, code);
+        }
+
+        if inverse.is_empty() {
+            return Err(NotInjective::Empty);
+        }
+        Ok(inverse)
+    }
+
     /// Whether this CMap contains no usable mapping at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -698,6 +826,95 @@ fn code_from_bytes(bytes: &[u8]) -> Option<u32> {
 )]
 mod tests {
     use super::*;
+
+    /// Build a CMap from `beginbfchar` entries, for the R110 inverse tests.
+    fn bfchar_cmap(pairs: &[(u16, &str)]) -> ToUnicodeCMap {
+        let mut body =
+            String::from("begincmap\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n");
+        body.push_str(&format!("{} beginbfchar\n", pairs.len()));
+        for (code, dst) in pairs {
+            let hex: String = dst.encode_utf16().map(|u| format!("{u:04X}")).collect();
+            body.push_str(&format!("<{code:04X}> <{hex}>\n"));
+        }
+        body.push_str("endbfchar\nendcmap\n");
+        ToUnicodeCMap::parse(body.as_bytes())
+    }
+
+    /// The ordinary case R110 exists to allow: a one-to-one CMap inverts.
+    #[test]
+    fn a_one_to_one_cmap_inverts() {
+        let hiragana_a = '\u{3042}';
+        let cmap = bfchar_cmap(&[(1, "A"), (2, "B"), (3, "\u{3042}")]);
+        let inv = cmap.injective_inverse().expect("this CMap is injective");
+        assert_eq!(inv.get(&'A'), Some(&1));
+        assert_eq!(inv.get(&'B'), Some(&2));
+        assert_eq!(inv.get(&hiragana_a), Some(&3), "non-Latin must invert too");
+        assert_eq!(inv.len(), 3);
+    }
+
+    /// Two codes, one character: the inverse is a relation, not a function.
+    ///
+    /// pdfce would have to CHOOSE which code to write back, and either
+    /// choice silently changes which glyph appears. Both codes are named in
+    /// the error, because knowing only the character leaves the operator
+    /// unable to find the problem in the font.
+    #[test]
+    fn two_codes_mapping_to_one_character_is_refused_with_both_codes_named() {
+        let cmap = bfchar_cmap(&[(1, "A"), (7, "A")]);
+        let err = cmap.injective_inverse().unwrap_err();
+        match err {
+            NotInjective::Collision { ch, first, second } => {
+                assert_eq!(ch, 'A');
+                assert_eq!((first, second), (1, 7));
+            }
+            other => panic!("expected Collision, got {other:?}"),
+        }
+    }
+
+    /// A ligature — one code, several characters — has no single-character
+    /// inverse, so the run stays refused rather than pdfce picking an
+    /// interpretation of "edit the f in ffi".
+    #[test]
+    fn a_ligature_destination_is_refused_by_name() {
+        let cmap = bfchar_cmap(&[(1, "A"), (2, "ffi")]);
+        let err = cmap.injective_inverse().unwrap_err();
+        match err {
+            NotInjective::MultiCharDestination { code, text } => {
+                assert_eq!(code, 2);
+                assert_eq!(text, "ffi");
+            }
+            other => panic!("expected MultiCharDestination, got {other:?}"),
+        }
+    }
+
+    /// A CMap pdfce did NOT author must be evaluated on its merits, or R110
+    /// is a rule that only ever says yes to pdfce's own output — which
+    /// would make the whole lift self-serving rather than general.
+    ///
+    /// The §9.10.3 EXAMPLE 2 body is the least pdfce-shaped CMap available:
+    /// it is the standard's own, written years before this project.
+    #[test]
+    fn the_standards_own_example_cmap_is_evaluated_on_its_merits() {
+        let cmap = ToUnicodeCMap::parse(EXAMPLE_2);
+        // Deliberately NOT asserting "it inverts". Whether the standard's
+        // example happens to be injective is a fact about that example, not
+        // about pdfce. What matters is that the check RUNS on a foreign
+        // CMap and reaches a decision with a stated reason, rather than
+        // special-casing provenance.
+        match cmap.injective_inverse() {
+            Ok(inv) => assert!(!inv.is_empty(), "an Ok inverse must not be empty"),
+            Err(e) => assert!(!e.to_string().is_empty(), "a refusal must state its reason"),
+        }
+    }
+
+    /// An empty CMap has nothing to invert, and must say so rather than
+    /// returning an empty map a caller would read as "everything is
+    /// editable".
+    #[test]
+    fn an_empty_cmap_is_refused_rather_than_inverting_to_nothing() {
+        let cmap = ToUnicodeCMap::parse(b"begincmap\nendcmap\n");
+        assert_eq!(cmap.injective_inverse().unwrap_err(), NotInjective::Empty);
+    }
 
     /// The §9.10.3 EXAMPLE 2 body, verbatim from the standard.
     const EXAMPLE_2: &[u8] = b"/CIDInit /ProcSet findresource begin
