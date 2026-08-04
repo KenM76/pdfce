@@ -265,6 +265,18 @@ const INITIAL_WINDOW_SIZE: [f32; 2] = [1100.0, 800.0];
 /// line of text somewhere else on screen).
 const STATUS_PANEL_HEIGHT_PTS: f32 = 92.0;
 
+/// Outline colour for a selected SUBPATH inside an entered object.
+///
+/// Deliberately not the theme's selection accent, which means "this object is
+/// selected". A subpath selection means something else — "inside this object,
+/// this part" — and giving the two states the same cue would make a descent
+/// look like an ordinary selection of a suspiciously small object.
+///
+/// Amber, matching the "in progress / not yet an edit" hue the measure and
+/// add-text previews already use, because an entered object IS a transient
+/// working state rather than a committed one.
+const SUBPATH_OUTLINE_COLOR: egui::Color32 = egui::Color32::from_rgb(210, 140, 40);
+
 /// How long a continuous zoom gesture must be idle before the view
 /// commits to a real re-rasterization. See the module docs.
 ///
@@ -1708,6 +1720,13 @@ struct OpenDoc {
     /// which is the difference between panning that tracks the hand and
     /// panning that lags it.
     last_scroll_offset: egui::Vec2,
+    /// Which object the operator has entered, and which subpath inside it is
+    /// selected — the second selection level (`canvas::EnteredObject`).
+    ///
+    /// Lives on the document rather than in the tool because it is a property
+    /// of what is selected, not of which tool is armed: descending into a view,
+    /// switching tools, and still being inside it is correct behaviour.
+    entered: Option<canvas::EnteredObject>,
     /// Which pages are selected for a batch operation, by 0-based index.
     ///
     /// Ordered (a `BTreeSet`) so that "the selected pages" is always a
@@ -1870,6 +1889,7 @@ impl OpenDoc {
             zoom_commanded: false,
             zoom_anchor: None,
             last_scroll_offset: egui::Vec2::ZERO,
+            entered: None,
             selected_pages: BTreeSet::new(),
             selection_anchor: None,
             dragged_page: None,
@@ -2115,6 +2135,52 @@ impl OpenDoc {
     /// concrete [`Self::object_model`] so there is no separate boxed provider to
     /// keep in sync — the Pass 12.M1 §10 ask #4 wiring that lets the snap engine
     /// and selection share one decomposition.
+    /// Apply one canvas click to the selection **depth**, and report whether
+    /// the click was consumed at the subpath level.
+    ///
+    /// # Why both click paths call this rather than each doing it
+    ///
+    /// The plain (no-tool) selection path and the object-edit tool already
+    /// duplicate the object-level click logic. Duplicated predicates drift
+    /// (R92), and depth is exactly the kind of state where drift is invisible
+    /// until an operator finds that double-click works with one tool armed and
+    /// not another. One method, two callers.
+    ///
+    /// # The return value
+    ///
+    /// `true` when the click landed inside an entered object — meaning the
+    /// caller should NOT also change the object-level selection, or descending
+    /// into a view and clicking one of its lines would simultaneously re-select
+    /// the whole view and undo the descent visually.
+    fn apply_click_depth(&mut self, canvas_pos: egui::Pos2, tol: f64, double: bool) -> bool {
+        let page_index = self.view.page_index;
+        let object_hit = self
+            .object_model
+            .as_ref()
+            .and_then(|p| p.hit_test(page_index, canvas_pos, tol))
+            .map(|t| t.0 as usize);
+
+        // Probe for a subpath in the object the RULES will consult: the one
+        // under the pointer for a double-click (which may be a different
+        // object), the already-entered one otherwise. Probing the wrong one
+        // would make "click away to leave" impossible, because a hit on some
+        // other object's subpath would read as a hit inside this one.
+        let probe = if double {
+            object_hit
+        } else {
+            self.entered.map(|e| e.object)
+        };
+        let subpath_hit = probe.and_then(|o| {
+            self.object_model
+                .as_ref()
+                .and_then(|p| p.subpath_hits(o, canvas_pos, tol).first().copied())
+        });
+
+        let before = self.entered;
+        self.entered = canvas::depth_after_click(before, double, object_hit, subpath_hit);
+        self.entered.is_some()
+    }
+
     fn target_provider(&self) -> Option<&dyn CanvasTargetProvider> {
         self.object_model
             .as_ref()
@@ -2131,6 +2197,15 @@ impl OpenDoc {
     /// no-op; the call site exists so Pass 9a's real provider gets the
     /// cleanup for free.
     fn prune_canvas_selection(&mut self) {
+        // The entered object cannot survive an edit or a page change, for the
+        // same reason the click cycle cannot: after a content rewrite the SAME
+        // paint-order index can name a different object, and the same subpath
+        // ordinal a different line. Keeping it would leave an outline drawn
+        // around whatever now happens to occupy that slot — a selection that
+        // silently changed what it refers to, which is worse than no selection.
+        // This runs from `refresh_pages`, which every edit, undo and redo
+        // already funnels through.
+        self.entered = None;
         // A click cycle cannot survive an edit or a page change. Its
         // liveness checks compare `TargetId`s, and after a content rewrite
         // the SAME index can name a different object — so "2 of 3 at this
@@ -4800,7 +4875,15 @@ impl PdfceApp {
             // Pass 12.0 substrate: clear the canvas selection (spec §3.5
             // step 3). A view-state change, never an edit. Always a no-op
             // this Pass (the set is always empty); wired for Pass 9a.
-            Action::ClearCanvasSelection => doc.canvas_selection.clear(),
+            Action::ClearCanvasSelection => {
+                doc.canvas_selection.clear();
+                // Escape also LEAVES an entered object. It is the universal
+                // "back out one level" key, and an operator who has descended
+                // into a drawing view and pressed Escape means to be out of it
+                // — not to be left inside with nothing selected, which looks
+                // identical to being outside and behaves differently.
+                doc.entered = None;
+            }
             Action::FirstPage => doc.view.go_to_page(0, count),
             Action::PrevPage => doc.view.prev_page(count),
             Action::NextPage => doc.view.next_page(count),
@@ -7932,22 +8015,48 @@ impl PdfceApp {
             // rubber-band.
             run_vector_edit_tool(doc, ui, &image_response, image_rect, extent, zoom);
         } else {
-            if image_response.clicked()
+            if (image_response.clicked() || image_response.double_clicked())
                 && let Some(screen_pos) = image_response.interact_pointer_pos()
             {
                 let canvas_pos = viewer::screen_to_page(screen_pos, image_rect, extent, zoom);
                 let (shift, alt) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
                 let tol =
                     canvas::screen_tolerance_to_page(canvas::SELECT_SCREEN_TOLERANCE_PX, zoom);
+                // Depth first: a double-click descends into the object under
+                // the pointer, and a click inside an entered object picks one
+                // of its subpaths. `true` means the click was consumed at that
+                // level, so the object-level selection below is skipped —
+                // otherwise picking a line inside a view would re-select the
+                // whole view in the same frame and visually undo the descent.
+                let consumed_inside =
+                    doc.apply_click_depth(canvas_pos, tol, image_response.double_clicked());
+                diag::trace(|| {
+                    format!(
+                        "depth-click canvas={canvas_pos:?} double={} consumed={consumed_inside} \
+                         entered={:?}",
+                        image_response.double_clicked(),
+                        doc.entered
+                    )
+                });
                 // The ALL-hits query, always — even for a plain click, whose
                 // outcome is unchanged (the head of the list). The extra
                 // information is what the readout discloses as "1 of 3 at
                 // this point", which is how the operator finds out there is
                 // anything underneath to Alt+click to (ui-spec §C.3).
-                let hits = doc
-                    .target_provider()
-                    .map(|p| p.hit_test_all(doc.view.page_index, canvas_pos, tol))
-                    .unwrap_or_default();
+                //
+                // Skipped entirely when the click was consumed inside an
+                // entered object. Computing it and discarding it would be
+                // merely wasteful; TRACING it and discarding it was actively
+                // misleading — the log read `newsel=1` for a selection that was
+                // never applied, which is the kind of evidence that sends the
+                // next investigation down a false path (R93).
+                let hits = if consumed_inside {
+                    Vec::new()
+                } else {
+                    doc.target_provider()
+                        .map(|p| p.hit_test_all(doc.view.page_index, canvas_pos, tol))
+                        .unwrap_or_default()
+                };
                 let (selection, cycle) = canvas::selection_and_cycle_after_click(
                     &hits,
                     &doc.canvas_selection,
@@ -7957,17 +8066,23 @@ impl PdfceApp {
                     shift,
                     alt,
                 );
-                diag::trace(|| {
-                    format!(
-                        "plain-click screen={screen_pos:?} canvas={canvas_pos:?} tol={tol} \
-                         hits={} first={:?} newsel={}",
-                        hits.len(),
-                        hits.first(),
-                        selection.len()
-                    )
-                });
-                doc.canvas_selection = selection;
-                doc.click_cycle = cycle;
+                // Applied — and traced — only when the click was NOT consumed
+                // inside an entered object: picking a line within a view must
+                // not also re-select the whole view, which would visually undo
+                // the descent in the same frame it happened.
+                if !consumed_inside {
+                    diag::trace(|| {
+                        format!(
+                            "plain-click screen={screen_pos:?} canvas={canvas_pos:?} tol={tol} \
+                             hits={} first={:?} newsel={}",
+                            hits.len(),
+                            hits.first(),
+                            selection.len()
+                        )
+                    });
+                    doc.canvas_selection = selection;
+                    doc.click_cycle = cycle;
+                }
             }
 
             // §4.2 marquee — Pass 9a's rubber-band selection. A drag on the
@@ -11078,6 +11193,27 @@ fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
 /// call the Objects panel's rows and the canvas type badges make, so the three
 /// surfaces cannot drift into describing one object three ways.
 fn selection_readout(doc: &OpenDoc, ui: &mut egui::Ui, expanded: &mut bool) {
+    // Being INSIDE an object is a selection state in its own right and gets
+    // said out loud. Two things need stating that an outline cannot: that the
+    // operator is at the second level at all (so the different-coloured box is
+    // explained rather than merely noticed), and how many parts the object has
+    // — which is the number that explains why clicking a line selected an
+    // entire view in the first place.
+    if let Some(entered) = doc.entered {
+        let parts = doc.object_model.as_ref().and_then(|p| {
+            match p.page_objects().objects.get(entered.object) {
+                Some(pdfce_core::vector::VectorObject::Path(path)) => Some(path.subpaths.len()),
+                _ => None,
+            }
+        });
+        ui.label(ui_text::entered_object_readout(
+            entered.object,
+            entered.subpath,
+            parts,
+        ))
+        .on_hover_text(ui_text::entered_object_tooltip());
+    }
+
     let selected = doc.canvas_selection.len();
     if selected == 0 {
         return;
@@ -11358,6 +11494,41 @@ fn draw_selection_outlines(
     extent: (f32, f32),
     zoom: f32,
 ) {
+    // The entered object's selected subpath, drawn FIRST and in its own hue.
+    //
+    // Without this the second selection level is invisible: the operator
+    // double-clicks a drawing view, pdfce descends into it, and the screen
+    // looks exactly as it did — which is indistinguishable from the
+    // double-click having done nothing. R83's sibling problem: an affordance
+    // that works but shows nothing is as good as absent.
+    //
+    // A different colour from the object accent because it means something
+    // different — "inside this object, this part" rather than "this object" —
+    // and drawn before the object outlines so an object outline is never
+    // hidden beneath it.
+    if let Some(entered) = doc.entered
+        && let Some(sp) = entered.subpath
+        && let Some(provider) = doc.object_model.as_ref()
+        && let Some(b) = provider.subpath_bounds_canvas(entered.object, sp)
+    {
+        let painter = ui.painter_at(image_rect);
+        let min = viewer::page_to_screen(b.min, image_rect, extent, zoom);
+        let max = viewer::page_to_screen(b.max, image_rect, extent, zoom);
+        // The same degenerate-box treatment the object outlines get: most
+        // subpaths of a CAD drawing ARE single straight lines, so a
+        // zero-height box is the common case here rather than the exception.
+        let rect = canvas::visible_outline_rect(
+            egui::Rect::from_two_pos(min, max),
+            canvas::MIN_OUTLINE_EXTENT_PX,
+        );
+        painter.rect_stroke(
+            rect,
+            0.0,
+            egui::Stroke::new(2.0, SUBPATH_OUTLINE_COLOR),
+            egui::StrokeKind::Outside,
+        );
+    }
+
     let outlines = canvas::selection_outline_bounds(
         &doc.canvas_selection,
         doc.target_provider(),

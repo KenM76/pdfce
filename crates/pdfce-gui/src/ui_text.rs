@@ -1992,6 +1992,57 @@ pub fn selection_readout_tooltip() -> &'static str {
 click rows to select objects you cannot see."
 }
 
+/// Status line for being INSIDE an object — the second selection level.
+///
+/// # What it has to communicate, and why each part earns its place
+///
+/// The operator's whole confusion was that clicking one line of a drawing
+/// selected the entire view. The `parts` count is the explanation: this object
+/// really does contain 1194 pieces, so per-object selection was not
+/// misbehaving. Saying it here is what turns a surprising behaviour into an
+/// understandable one.
+///
+/// "Inside" rather than "entered" or "in group": PDF path objects are not
+/// groups, and calling them one would set up an expectation of group operations
+/// (ungroup, add-to-group) that do not exist. "Inside" describes the state
+/// without claiming a structure.
+///
+/// The way OUT is stated every time. A mode an operator can enter by accident —
+/// a double-click is easy to produce unintentionally — and cannot obviously
+/// leave is the worst kind, and one line of text is the whole remedy.
+pub fn entered_object_readout(
+    object: usize,
+    subpath: Option<usize>,
+    parts: Option<usize>,
+) -> String {
+    let scope = match parts {
+        Some(n) => format!("object #{object}, which is drawn as {n} separate part(s)"),
+        None => format!("object #{object}"),
+    };
+    match subpath {
+        Some(sp) => format!(
+            "Inside {scope} — part #{sp} is selected. Click another part to pick it, or press \
+Escape to go back to whole objects."
+        ),
+        None => format!(
+            "Inside {scope} — no part picked yet. Click one of its parts, or press Escape to go \
+back to whole objects."
+        ),
+    }
+}
+
+/// Tooltip on the inside-an-object readout.
+///
+/// Names the gesture that gets here, because a feature reachable only by a
+/// gesture nobody mentions is a feature nobody finds — and explains WHY the
+/// level exists, in the words of the situation that produces it (a CAD drawing
+/// exported as one object per view).
+pub fn entered_object_tooltip() -> &'static str {
+    "Double-click an object to work inside it. Drawings exported from CAD often put a whole view \
+into one object, so selecting a single line means going one level down first. Escape comes back \
+out. Moving and deleting individual parts is not available yet — only selecting them."
+}
+
 /// Plain-language name for a path's painting disposition (§8.5.3, Table 60).
 ///
 /// Words rather than the CLI's machine tokens (`fill-nonzero+stroke`): this

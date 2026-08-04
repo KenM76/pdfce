@@ -149,6 +149,40 @@ impl ObjectModelProvider {
         &self.objects
     }
 
+    /// Which subpath of `object` a canvas-space click lands on — the second
+    /// selection level, for objects that hold a whole drawing view.
+    ///
+    /// A thin adapter over [`pdfce_core::vector::hit_test_subpaths`], exactly
+    /// like [`Self::hit_test_all`] is over the per-object query: convert canvas
+    /// space to PDF user space, apply the same degenerate-tolerance fallback,
+    /// and let the core own the geometry. Sharing that fallback matters —
+    /// without it a click could select an object and then find none of its
+    /// subpaths, which reads as "the second level is broken" rather than "the
+    /// tolerance was zero".
+    ///
+    /// Nearest first. Empty for a non-path object or an out-of-range index.
+    pub(crate) fn subpath_hits(&self, object: usize, point: Pos2, tolerance: f64) -> Vec<usize> {
+        let Some(pdf) = self.canvas_to_pdf(point) else {
+            return Vec::new();
+        };
+        let tolerance = if tolerance.is_finite() && tolerance > 0.0 {
+            tolerance
+        } else {
+            FALLBACK_SELECT_TOLERANCE
+        };
+        pdfce_core::vector::hit_test_subpaths(&self.objects, object, pdf, tolerance)
+    }
+
+    /// A subpath's bounds in **canvas** space, for drawing its outline.
+    ///
+    /// The object's own bounds would draw a rectangle around the entire view
+    /// and tell the operator they had selected the whole thing again — which is
+    /// the misunderstanding entering the object exists to resolve.
+    pub(crate) fn subpath_bounds_canvas(&self, object: usize, subpath: usize) -> Option<Rect> {
+        let b = pdfce_core::vector::subpath_bounds(&self.objects, object, subpath)?;
+        self.pdf_bounds_to_canvas(b)
+    }
+
     /// The page-space anchor sample points of the object at paint-order
     /// `index` (Pass 12.M2b — the circular best-fit tool's fit input, ui-spec
     /// §3.3). A path object contributes every anchor of every subpath, in

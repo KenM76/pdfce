@@ -213,6 +213,74 @@ pub fn resolve_drag_placement(
     }
 }
 
+/// Which object the operator has **entered**, and which of its subpaths is
+/// selected inside it.
+///
+/// A PDF path object can hold an entire drawing view — one measured CAD export
+/// has 1194 subpaths in a single object — so "the object under the pointer" is
+/// often not the thing the operator means. Entering an object switches
+/// selection to the level below it, the way entering a group does in a vector
+/// editor (R61: Inkscape as a behavioural reference, never a code source).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EnteredObject {
+    /// Paint-order index of the object that was entered.
+    pub object: usize,
+    /// The selected subpath within it, if any. `None` means "inside this
+    /// object, nothing picked yet" — a real state, reached by entering an
+    /// object at a point where no subpath is close enough.
+    pub subpath: Option<usize>,
+}
+
+/// What a canvas click does to the selection **depth**.
+///
+/// Separated from `selection_and_cycle_after_click`, which decides WHICH
+/// objects are selected, because depth is an orthogonal question: the same
+/// click can change one, the other, or both. Keeping them apart is also what
+/// lets this be tested exhaustively with plain `Option<usize>` inputs, with no
+/// document, no geometry and no egui frame.
+///
+/// # The rules, and why each one
+///
+/// - **Double-click on an object → enter it**, selecting the nearest subpath.
+///   This is the operator's own stated model ("double-click to get to the next
+///   level down") and the vector-editor convention.
+/// - **Single click while inside, on a subpath → re-pick** that subpath. Once
+///   you are inside, ordinary clicking works at that level; requiring a
+///   double-click for every subsequent pick would make the level feel modal in
+///   a way no editor is.
+/// - **Single click while inside, hitting NO subpath → leave.** Clicking away
+///   is how every editor exits a group. The alternative — staying inside
+///   forever until Escape — strands an operator who has forgotten they
+///   descended, which is the failure mode a depth model has to avoid above all.
+/// - **Double-click on empty space → leave**, for the same reason; a
+///   double-click is also a click.
+/// - **Entering a DIFFERENT object** replaces the entry rather than nesting.
+///   PDF path objects do not nest, so a stack would be depth for its own sake.
+#[must_use]
+pub fn depth_after_click(
+    entered: Option<EnteredObject>,
+    double: bool,
+    object_hit: Option<usize>,
+    subpath_hit: Option<usize>,
+) -> Option<EnteredObject> {
+    match (entered, double) {
+        // Already inside an object, ordinary click: re-pick within it, or
+        // leave if the click landed on nothing in it.
+        (Some(e), false) => subpath_hit.map(|sp| EnteredObject {
+            object: e.object,
+            subpath: Some(sp),
+        }),
+        // Double-click: enter whatever object is under the pointer (possibly a
+        // different one), or leave if there is none.
+        (_, true) => object_hit.map(|object| EnteredObject {
+            object,
+            subpath: subpath_hit,
+        }),
+        // Not inside anything, ordinary click: nothing to do at this level.
+        (None, false) => None,
+    }
+}
+
 /// The scroll offset a middle-drag pan should move to, clamped to what the
 /// canvas can actually show.
 ///
@@ -1413,6 +1481,77 @@ pub fn snap_marker_shapes(at: Pos2, kind: SnapKind, color: Color32, size: f32) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- selection depth ----------------------------------------------
+
+    /// Shorthand so the table below reads as rules rather than as struct
+    /// literals.
+    fn ent(object: usize, subpath: Option<usize>) -> Option<EnteredObject> {
+        Some(EnteredObject { object, subpath })
+    }
+
+    #[test]
+    fn a_double_click_enters_the_object_under_the_pointer() {
+        assert_eq!(
+            depth_after_click(None, true, Some(5870), Some(667)),
+            ent(5870, Some(667)),
+            "double-clicking a many-subpath object must descend into it"
+        );
+    }
+
+    #[test]
+    fn entering_where_no_subpath_is_close_still_enters() {
+        // A real state: inside the object, nothing picked. Collapsing this to
+        // "not entered" would make a double-click near the middle of a sparse
+        // view silently do nothing.
+        assert_eq!(depth_after_click(None, true, Some(3), None), ent(3, None));
+    }
+
+    #[test]
+    fn once_inside_an_ordinary_click_re_picks_within_the_same_object() {
+        assert_eq!(
+            depth_after_click(ent(5870, Some(667)), false, Some(5870), Some(12)),
+            ent(5870, Some(12)),
+            "a second pick inside must not require a second double-click"
+        );
+    }
+
+    #[test]
+    fn clicking_nothing_while_inside_leaves_rather_than_stranding_the_operator() {
+        assert_eq!(
+            depth_after_click(ent(5870, Some(667)), false, None, None),
+            None
+        );
+        // Even if some OTHER object is under the pointer: it is not a subpath
+        // of the entered one, so the click is outside, and outside means out.
+        assert_eq!(
+            depth_after_click(ent(5870, Some(667)), false, Some(11), None),
+            None
+        );
+    }
+
+    #[test]
+    fn a_double_click_on_a_different_object_replaces_rather_than_nests() {
+        assert_eq!(
+            depth_after_click(ent(5870, Some(667)), true, Some(42), Some(0)),
+            ent(42, Some(0)),
+            "PDF path objects do not nest, so neither should the entry"
+        );
+    }
+
+    #[test]
+    fn a_double_click_on_empty_space_leaves() {
+        assert_eq!(
+            depth_after_click(ent(5870, Some(667)), true, None, None),
+            None
+        );
+        assert_eq!(depth_after_click(None, true, None, None), None);
+    }
+
+    #[test]
+    fn an_ordinary_click_at_object_level_changes_no_depth() {
+        assert_eq!(depth_after_click(None, false, Some(7), Some(1)), None);
+    }
 
     // ---- middle-drag pan ----------------------------------------------
 
