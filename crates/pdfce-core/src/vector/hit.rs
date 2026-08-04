@@ -67,7 +67,9 @@
 //! fuzz target) that is well within a screen pixel at any realistic zoom
 //! for the tolerances selection uses.
 
-use super::decompose::{FillRule, PageObjects, PathObject, Segment, Subpath, VectorObject};
+use super::decompose::{
+    FillRule, PageObjects, PathObject, Segment, Subpath, TextObject, VectorObject,
+};
 use super::geometry::{Bounds, Matrix, Point};
 
 /// Fixed cubic-flattening subdivision (module docs). 16 chords is
@@ -197,10 +199,48 @@ pub fn hit_test_rect(model: &PageObjects, rect: Bounds, mode: MarqueeMode) -> Ve
 
 /// Whether `point` hits `obj` within `tolerance` (module docs' per-kind
 /// rules).
+/// Whether `point` hits a text object.
+///
+/// Tests the **per-run boxes**, not the object's enclosing rectangle.
+///
+/// # Why the enclosing rectangle is the wrong shape
+///
+/// A `BT`…`ET` may hold any number of show operators anywhere on the page,
+/// and nothing obliges a producer to keep them together. `page_bbox` is
+/// their union, so for a producer that puts every label on a drawing in one
+/// text object, that rectangle spans the whole sheet while the ink covers
+/// almost none of it — and every point in the gaps "hits" the object.
+///
+/// This was measured, not hypothesised. On a SolidWorks export, one text
+/// object holding every dimension label had `page_bbox` = 23,14 → 1564,1216
+/// (the entire drawing) and was painted near the front, so it was the
+/// front-most hit for every click on the page; at one point over a real
+/// line it beat 57 genuine objects beneath it. Selection was effectively
+/// dead on that document, and empty space appeared to select "something"
+/// that could not be seen.
+///
+/// The gaps between runs are not part of the object, and now they do not
+/// behave as if they were.
+///
+/// # The fallback, and why it is the old behaviour rather than a miss
+///
+/// `runs` is empty when no show operator could be laid out (no resolvable
+/// font, an unusable `Tf`) or when the object exceeded [`MAX_TEXT_RUNS`].
+/// Then this falls back to `page_bbox` — imprecise, but it is what pdfce
+/// did before and it keeps the object reachable. Treating an empty `runs`
+/// as "hits nothing" would make text that pdfce cannot measure completely
+/// unselectable, which trades a wrong hit for a missing one.
+fn text_hit(t: &TextObject, point: Point, tolerance: f64) -> bool {
+    if t.runs.is_empty() {
+        return t.page_bbox.inflate(tolerance).contains(point);
+    }
+    t.runs.iter().any(|r| r.inflate(tolerance).contains(point))
+}
+
 fn object_hit(obj: &VectorObject, point: Point, tolerance: f64) -> bool {
     match obj {
         VectorObject::Path(p) => path_hit(p, point, tolerance),
-        VectorObject::Text(t) => t.page_bbox.inflate(tolerance).contains(point),
+        VectorObject::Text(t) => text_hit(t, point, tolerance),
         VectorObject::Image(i) => i.page_bbox.inflate(tolerance).contains(point),
     }
 }

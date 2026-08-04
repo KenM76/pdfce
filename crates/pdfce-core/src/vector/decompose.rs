@@ -123,6 +123,21 @@ pub const MAX_OBJECTS: usize = 1_000_000;
 /// emitted with the nodes it has).
 pub const MAX_NODES: usize = 4_000_000;
 
+/// Per-object ceiling on retained [`TextObject::runs`].
+///
+/// A `BT`…`ET` may contain arbitrarily many show operators, and each
+/// retained box costs 32 bytes on an object that already exists. This bounds
+/// that at ~128 KB for the pathological case while sitting far above any
+/// real text object — the SolidWorks export that motivated per-run bounds
+/// carried its whole label set in one object and did not approach it.
+///
+/// Past the ceiling `runs` is CLEARED rather than truncated. A truncated
+/// list is worse than none: a consumer testing against the first N runs
+/// would silently stop hit-testing the rest of the object, which is a
+/// wrong answer wearing the shape of a right one. Empty means "fall back to
+/// `page_bbox`", which is merely imprecise.
+pub const MAX_TEXT_RUNS: usize = 4_096;
+
 /// How many decoded characters of a text object's shown string
 /// [`TextPreview::Decoded`] retains.
 ///
@@ -604,6 +619,34 @@ pub struct TextObject {
     /// Page-space bounds (module docs), built per
     /// [`bounds_basis`](Self::bounds_basis).
     pub page_bbox: Bounds,
+    /// The per-show-operator boxes whose union is [`page_bbox`](Self::page_bbox).
+    ///
+    /// # Why this exists, and what it fixes
+    ///
+    /// `page_bbox` is one rectangle enclosing an entire `BT`…`ET`. That is
+    /// the right shape for "where is this object" and the WRONG shape for
+    /// "did the operator click on it": a producer is free to put every label
+    /// on a drawing inside one `BT`…`ET`, and then the enclosing rectangle
+    /// spans the whole sheet while the ink covers almost none of it.
+    ///
+    /// Measured on a real SolidWorks export: one text object carrying every
+    /// dimension label, `page_bbox` = 23,14 → 1564,1216 — the whole drawing
+    /// — painted near the top of paint order. Hit-testing that rectangle
+    /// made it the front-most hit for EVERY click on the page; at one point
+    /// on a real line it beat 57 genuine objects underneath it. The operator
+    /// experienced it as "clicking does nothing" and "sometimes I get a box
+    /// that doesn't correspond to anything".
+    ///
+    /// So selection tests these instead. Each entry is one show operator's
+    /// laid-out extent, so the gaps BETWEEN runs are correctly not part of
+    /// the object.
+    ///
+    /// Empty when no run could be laid out (no resolvable font, an unusable
+    /// `Tf`), in which case a consumer falls back to `page_bbox` — the
+    /// previous behaviour, which is the honest answer when nothing finer is
+    /// known. Also empty past [`MAX_TEXT_RUNS`], where retaining more costs
+    /// more than the precision is worth.
+    pub runs: Vec<Bounds>,
     /// Always `true` — no variant of the bbox is measured glyph ink.
     ///
     /// Kept as a `bool` rather than folded into
@@ -1245,6 +1288,16 @@ struct TextAccum {
     /// produced an object at all, and it is the input to the
     /// [`TextBoundsBasis::EmBox`] fallback.
     origins: Bounds,
+    /// Per-show-operator boxes, page space — the un-unioned form of
+    /// [`Self::ink`]. See [`TextObject::runs`] for why they are kept.
+    runs: Vec<Bounds>,
+    /// The box of the show operator currently being laid out, folded into
+    /// `runs` when it ends. Separate from `ink` because `ink` must stay the
+    /// running union for the existing basis logic.
+    current_run: Bounds,
+    /// Set once `runs` passes [`MAX_TEXT_RUNS`], so the overflow is decided
+    /// once rather than re-tested per run.
+    runs_overflowed: bool,
     /// The union of every laid-out glyph's box, page space — the
     /// metrics-derived extent. Empty when no show operator had a usable
     /// font.
@@ -1295,6 +1348,9 @@ impl TextAccum {
         Self {
             token_start,
             origins: Bounds::EMPTY,
+            runs: Vec::new(),
+            current_run: Bounds::EMPTY,
+            runs_overflowed: false,
             ink: Bounds::EMPTY,
             unmetered: Bounds::EMPTY,
             widths_estimated: false,
@@ -2017,6 +2073,35 @@ impl<'a> Decomposer<'a> {
     fn show_string(&mut self, bytes: &[u8]) {
         self.decode_show_string(bytes);
         self.advance_show_string(bytes);
+        self.close_text_run();
+    }
+
+    /// Fold the just-laid-out show operator's box into `runs`.
+    ///
+    /// Called per show operator rather than per `BT`…`ET`, because the gaps
+    /// BETWEEN operators are exactly what the enclosing rectangle wrongly
+    /// claims. A `TJ` array is one run by design: its numeric elements are
+    /// kerning within a single positioned string, not separate placements,
+    /// so splitting on them would fragment a word into per-glyph boxes for
+    /// no gain.
+    fn close_text_run(&mut self) {
+        let Some(t) = self.text.as_mut() else { return };
+        if t.current_run.is_empty() {
+            return;
+        }
+        let run = std::mem::replace(&mut t.current_run, Bounds::EMPTY);
+        if t.runs_overflowed {
+            return;
+        }
+        if t.runs.len() >= MAX_TEXT_RUNS {
+            // Clear, do not truncate — see MAX_TEXT_RUNS. A partial list
+            // would make a consumer stop hit-testing the rest of the object
+            // while looking like it had tested all of it.
+            t.runs.clear();
+            t.runs_overflowed = true;
+            return;
+        }
+        t.runs.push(run);
     }
 
     /// Apply a `TJ` array's numeric element to the text matrix (Table 109).
@@ -2105,6 +2190,7 @@ impl<'a> Decomposer<'a> {
                 // the whole bbox — `union_point` would propagate the NaN.
                 if p.is_finite() {
                     t.ink = t.ink.union_point(p);
+                    t.current_run = t.current_run.union_point(p);
                 }
             }
 
@@ -2164,7 +2250,7 @@ impl<'a> Decomposer<'a> {
     }
 
     fn end_text(&mut self, op_index: usize) {
-        let Some(t) = self.text.take() else {
+        let Some(mut t) = self.text.take() else {
             return; // unbalanced ET
         };
         if t.origins.is_empty() {
@@ -2199,10 +2285,17 @@ impl<'a> Decomposer<'a> {
         };
         let bytes = self.span_of(t.token_start, op_index);
         let token_start = t.token_start;
+        // Taken BEFORE `finish()`, which consumes the accumulator.
+        if !t.current_run.is_empty() && !t.runs_overflowed && t.runs.len() < MAX_TEXT_RUNS {
+            let open = t.current_run;
+            t.runs.push(open);
+        }
+        let runs = std::mem::take(&mut t.runs);
         let (preview, font) = t.finish();
         self.diag.text += 1;
         self.objects.push(VectorObject::Text(TextObject {
             page_bbox,
+            runs,
             approximate: true,
             bounds_basis: basis,
             preview,

@@ -8331,9 +8331,18 @@ fn object_detail(obj: &pdfce_core::vector::VectorObject) -> (&'static str, Strin
         VectorObject::Text(t) => (
             "text",
             format!(
-                "approximate={} bounds={} {} {}",
+                // `runs=` is the headless oracle for per-run hit-testing.
+                // `bounds=` reports the ENCLOSING rectangle, which for a
+                // producer that puts many labels in one BT..ET can span the
+                // whole page while the ink covers almost none of it — so the
+                // bounds field alone cannot tell an operator whether
+                // selection will behave. The run count can: `runs=0` means
+                // selection falls back to that enclosing box, `runs=N` means
+                // it tests N real extents.
+                "approximate={} bounds={} runs={} {} {}",
                 u32::from(t.approximate),
                 bounds_basis_token(t.bounds_basis),
+                t.runs.len(),
                 font_fields(t.font.as_ref()),
                 text_preview_fields(&t.preview),
             ),
