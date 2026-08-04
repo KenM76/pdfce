@@ -493,7 +493,7 @@ pub enum AddTextError {
     /// text, because silently ignoring a box the operator drew produces a
     /// result that looks deliberate and is not.
     #[error(
-        "pdfce can't wrap text to a box in an embedded font yet — that combination isn't          supported in this first cut. Add the text as a single line, or choose a built-in font          for the box."
+        "pdfce can't wrap text to a box in an embedded font yet - that combination isn't supported in this first cut. Add the text as a single line, or choose a built-in font for the box."
     )]
     EmbeddedBoxedUnsupported,
     /// The embedded font could not be emitted as PDF objects.
@@ -893,15 +893,11 @@ pub(crate) fn plan_add_text<G: ObjectGraph + ?Sized>(
             };
             let cids = cids_for(plan, &req.text)?;
             let bytes = build_content_embedded(&font_name, req.size, req.color, req.origin, &cids);
-            (
-                bytes,
-                ExtraReport::point(vec![format!(
-                    "new run is written in an EMBEDDED subset of '{}' — {} glyph(s), {} byte(s)                      of font program added; the document now carries its own glyphs for this                      text (decision 021 / FF-C)",
-                    plan.base_name,
-                    plan.glyphs.len(),
-                    plan.program.len()
-                )]),
-            )
+            // No extra disclosure here: the face disclosure below already
+            // says this run is an embedded subset, with the same numbers.
+            // Saying it twice made the CLI print two paragraphs that
+            // differed only in wording, which reads as two separate facts.
+            (bytes, ExtraReport::point(Vec::new()))
         }
         None => {
             let encoded = inv
@@ -931,12 +927,31 @@ pub(crate) fn plan_add_text<G: ObjectGraph + ?Sized>(
     let tagged = is_tagged(graph);
 
     let mut disclosures = Vec::new();
-    disclosures.push(format!(
-        "new run uses a {} Standard-14 face '{}' by name+code — no glyph embedding \
-         (R79 / ISO 32000-1 §9.6.2.2); provenance is disclosed, not the document's own",
-        req.provenance.word(),
-        base_font_name
-    ));
+    // The face disclosure must describe what this run ACTUALLY did.
+    // Until FF-C there was only one answer, so it was written
+    // unconditionally — and the moment `--embed-font` shipped, that line
+    // went on asserting "no glyph embedding (R79)" about runs that had
+    // just embedded a font. Caught by reading the CLI's own output on the
+    // first real embed, not by any test: no test asserted a disclosure's
+    // TEXT against the branch that produced it. R93 — a confident
+    // statement is worse than none, because it stops the reader looking.
+    match embed_plan {
+        Some(plan) => disclosures.push(format!(
+            "new run uses an EMBEDDED SUBSET of '{}' — the document now carries its own \
+             glyph program for this text ({} glyph(s), {} bytes), so it renders the same \
+             everywhere instead of depending on the reader's fonts (decision 021 / FF-C). \
+             Nothing already in the file was rewritten (R107)",
+            plan.base_name,
+            plan.glyphs.len(),
+            plan.program.len()
+        )),
+        None => disclosures.push(format!(
+            "new run uses a {} Standard-14 face '{}' by name+code — no glyph embedding \
+             (R79 / ISO 32000-1 §9.6.2.2); provenance is disclosed, not the document's own",
+            req.provenance.word(),
+            base_font_name
+        )),
+    }
     if !has_own_resources {
         disclosures.push(
             "this page INHERITED its /Resources from an ancestor /Pages node; pdfce gave the \
@@ -955,7 +970,13 @@ pub(crate) fn plan_add_text<G: ObjectGraph + ?Sized>(
     disclosures.extend(extra.disclosures.iter().cloned());
 
     let report = AddTextReport {
-        base_font: base_font_name.to_owned(),
+        // The tagged subset name for an embedded run. Reporting the
+        // Std-14 default here would name a face the output does not
+        // contain.
+        base_font: match embed_plan {
+            Some(plan) => plan.tagged_name(),
+            None => base_font_name.to_owned(),
+        },
         provenance: req.provenance,
         font_resource_name: String::from_utf8_lossy(&font_name).into_owned(),
         content_object: 0,

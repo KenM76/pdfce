@@ -1523,6 +1523,26 @@ enum Command {
         /// the chosen `--font` name discloses provenance `Supplied`. Repeatable.
         #[arg(long = "font-dir", value_name = "DIR")]
         font_dirs: Vec<PathBuf>,
+        /// SUBSET AND EMBED this font file, so the saved PDF carries its own
+        /// glyphs for the added text (FF-C, decision 021 / Pass 21.0).
+        ///
+        /// Without this, `add-text` writes a Standard-14 face by name with no
+        /// embedding (R79), which means the text is limited to that face's
+        /// repertoire — in practice WinAnsi, so no Greek, Cyrillic, CJK or
+        /// Hebrew at all. With it, pdfce reads the given face, keeps only the
+        /// glyphs this text needs, and adds them to the document as a new
+        /// `/Type0` resource. Nothing already in the file is rewritten.
+        ///
+        /// This is ALWAYS explicit and never inferred — not from
+        /// `--font-dir`, not from the text needing it (R108). Embedding
+        /// changes the file size and redistributes someone else's font, so
+        /// pdfce will refuse rather than decide for you.
+        ///
+        /// TrueType (`.ttf`) only in this first cut; a CFF/PostScript
+        /// (`.otf`) face is refused by name. `--box` is not yet supported
+        /// with an embedded face.
+        #[arg(long = "embed-font", value_name = "FONT-FILE")]
+        embed_font: Option<PathBuf>,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -2362,6 +2382,7 @@ fn run() -> ExitCode {
             size,
             color,
             font_dirs,
+            embed_font,
             output,
         } => cmd_add_text(&AddTextArgs {
             input: &input,
@@ -2376,6 +2397,7 @@ fn run() -> ExitCode {
             size,
             color: color.as_deref(),
             font_dirs: &font_dirs,
+            embed_font: embed_font.as_deref(),
         }),
         Command::DimensionAdd {
             input,
@@ -4975,6 +4997,47 @@ struct AddTextArgs<'a> {
     /// `"r,g,b"` fill colour, or `None` for black.
     color: Option<&'a str>,
     font_dirs: &'a [PathBuf],
+    /// Path to a donor font file to SUBSET AND EMBED (FF-C, decision 021).
+    ///
+    /// `None` keeps the shipped R79 behaviour: a Standard-14 face written by
+    /// name with no embedding. Embedding is never inferred from anything
+    /// else — not from `--font-dir`, not from the text containing non-Latin
+    /// characters — because R108 makes it an explicit per-action choice, and
+    /// an "I noticed you needed this" default is exactly the silent
+    /// file-size and font-redistribution change that rule exists to prevent.
+    embed_font: Option<&'a Path>,
+}
+
+/// Six uppercase ASCII letters derived from a face name, for the §9.6.4
+/// subset prefix.
+///
+/// Deterministic rather than random. A random tag would be equally valid and
+/// would make two otherwise identical runs produce different bytes, which
+/// breaks byte-comparison — and byte-comparison is how this project proves
+/// its round-trip invariant. Derived from the name so two different faces in
+/// one document are unlikely to collide.
+///
+/// Not a hash with collision guarantees, and does not pretend to be: if two
+/// faces ever do collide, the consequence is two subsets sharing a tag, which
+/// consumers tolerate (the tag is a hint, not an identifier). Spending
+/// entropy here to avoid a harmless collision would cost the determinism,
+/// which is the property actually worth having.
+fn subset_tag_for(name: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in name.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    (0..6)
+        .map(|i| {
+            let k = (h >> (i * 8)) & 0xff;
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "the modulo keeps this inside the 26-letter alphabet"
+            )]
+            char::from(b'A' + (k % 26) as u8)
+        })
+        .collect()
 }
 
 /// `add-text`: Pass 16.0 add NEW page text (decision 016 / FF-D).
@@ -5129,6 +5192,68 @@ fn cmd_add_text(args: &AddTextArgs<'_>) -> u8 {
         .with_provenance(provenance)
         .with_size(args.size)
         .with_color(color);
+
+    // FF-C (decision 021 / Pass 21.0): --embed-font subsets a donor face and
+    // embeds it, so the saved file carries its own glyphs.
+    //
+    // The subset is computed HERE, before anything is written, and its real
+    // numbers are printed. That is R108/R98 applied: subsetting is a pure
+    // function, so there is no reason to describe the outcome in the future
+    // tense. "will add roughly N KB" is a prediction; "added 11,240 bytes for
+    // 14 glyph(s)" is a measurement, and only one of them can be wrong.
+    if let Some(donor_path) = args.embed_font {
+        let donor = match std::fs::read(donor_path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!(
+                    "pdfce-cli: cannot read the font file {}: {e}",
+                    donor_path.display()
+                );
+                return exit::IO_ERROR;
+            }
+        };
+        // Deduplicated and ordered: the plan only needs each distinct
+        // character once, and `plan_subset` reports coverage gaps against
+        // exactly what it was asked for — passing "AAB" would otherwise
+        // report 'A' missing twice.
+        let mut wanted: Vec<char> = args.text.chars().collect();
+        wanted.sort_unstable();
+        wanted.dedup();
+
+        let stem = donor_path.file_stem().map_or_else(
+            || "EmbeddedFont".to_owned(),
+            |s| s.to_string_lossy().into_owned(),
+        );
+        // A subset tag must be exactly six uppercase ASCII letters (§9.6.4).
+        // Derived from the face name so repeated runs over the same font are
+        // reproducible — a random tag would make byte-comparison of two
+        // otherwise identical outputs impossible, which the round-trip
+        // harness depends on.
+        let tag = subset_tag_for(&stem);
+
+        let plan = match pdfce_render::font::subset::plan_subset(&donor, 0, &wanted, &stem, &tag) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("pdfce-cli: add-text refused: {e}");
+                return exit::EDIT_REFUSED;
+            }
+        };
+
+        // One line, no continuation. A `\` line-continuation inside the
+        // format string looked tidier in source and printed a run of
+        // spaces to the terminal, because the leading indentation of the
+        // continued line is only stripped when nothing follows the
+        // backslash. Readable source is not worth unreadable output.
+        println!(
+            "embedding a subset of '{}': {} glyph(s), {} byte(s) of font program, covering {} character(s) — subset tag {}",
+            plan.base_name,
+            plan.glyphs.len(),
+            plan.program.len(),
+            wanted.len(),
+            plan.subset_tag
+        );
+        req = req.with_embedded_face(plan);
+    }
     if let Placement::Boxed {
         rect: (x, y, w, h),
         align,
@@ -5155,6 +5280,14 @@ fn cmd_add_text(args: &AddTextArgs<'_>) -> u8 {
                 | AddTextError::CertificationForbidsChange { .. }
                 | AddTextError::HiddenObjects { .. }
                 | AddTextError::ObjectNumbersExhausted
+                // Both FF-C refusals are operator-facing: something about
+                // the request cannot be honoured, and the operator can
+                // change it. They belong with the refusals, not in the
+                // `_ => RUNTIME_ERROR` catch-all, which would have told a
+                // script that pdfce had crashed rather than declined.
+                | AddTextError::EmbeddedBoxedUnsupported
+                | AddTextError::EmbeddedPlanIncomplete { .. }
+                | AddTextError::Embed(_)
                 | AddTextError::Unsupported(_) => exit::EDIT_REFUSED,
                 AddTextError::Write(_) => exit::SAVE_REFUSED,
                 AddTextError::PageTree(_) => exit::RUNTIME_ERROR,
