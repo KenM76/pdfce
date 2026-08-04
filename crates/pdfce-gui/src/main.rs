@@ -8548,7 +8548,8 @@ fn run_text_edit_tool(
         // Property bar (§7): a floating top panel, appearing with the tool.
         egui::Area::new(egui::Id::new("pdfce-text-edit-propbar"))
             .order(egui::Order::Foreground)
-            .fixed_pos(image_rect.min + egui::vec2(8.0, 8.0))
+            .movable(true)
+            .default_pos(image_rect.min + egui::vec2(8.0, 8.0))
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_max_width(360.0);
@@ -9813,7 +9814,8 @@ fn run_add_text_tool(
         //    REAL egui widget (accesskit), never painter-drawn. --
         egui::Area::new(egui::Id::new("pdfce-add-text-propbar"))
             .order(egui::Order::Foreground)
-            .fixed_pos(image_rect.min + egui::vec2(8.0, 8.0))
+            .movable(true)
+            .default_pos(image_rect.min + egui::vec2(8.0, 8.0))
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_max_width(380.0);
@@ -11490,12 +11492,40 @@ fn run_measure_tool(
 
         // -- Property bar (ui-spec §2.5/§2.6/§3.4/§4.2): a floating top panel;
         //    every control a REAL egui widget (accesskit). --
+        // MOVABLE and CLOSABLE (operator request, 2026-08-04).
+        //
+        // It was `.fixed_pos(...)`, pinned to the page's top-left corner with
+        // no way to shift it or dismiss it. On a drawing whose dimensions sit
+        // under that corner, the box covers exactly the geometry the operator
+        // is trying to pick — and the only escape was to switch tools, which
+        // also throws away the gesture in progress.
+        //
+        // `default_pos` + `movable` keeps the same opening position (nothing
+        // moves for anyone who was happy with it) while letting it be dragged
+        // off the work. Close puts the TOOL away, not merely the box: leaving
+        // a tool armed with its controls hidden would keep canvas clicks
+        // doing something the operator can no longer see the settings for.
+        let mut close_tool = false;
         egui::Area::new(egui::Id::new("pdfce-measure-propbar"))
             .order(egui::Order::Foreground)
-            .fixed_pos(image_rect.min + egui::vec2(8.0, 8.0))
+            .default_pos(image_rect.min + egui::vec2(8.0, 8.0))
+            .movable(true)
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_max_width(440.0);
+                    ui.horizontal(|ui| {
+                        // Right-aligned so it cannot be hit while reaching for
+                        // the tool's own first control.
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui
+                                .button(ui_text::tool_panel_close())
+                                .on_hover_text(ui_text::tool_panel_close_tooltip())
+                                .clicked()
+                            {
+                                close_tool = true;
+                            }
+                        });
+                    });
                     if canvas::tool_builds_measure_linear(active) {
                         ui.label(ui_text::measure_linear_menu_item());
                         ui.label(ui_text::measure_linear_hint());
@@ -11574,6 +11604,15 @@ fn run_measure_tool(
                     }
                 });
             });
+
+        // Closing the box puts the TOOL away, and the in-progress pick with
+        // it. Keeping a half-finished two-point gesture alive behind a
+        // dismissed panel would leave the next canvas click completing a
+        // measurement the operator thought they had cancelled.
+        if close_tool {
+            doc.active_tool = None;
+            return;
+        }
 
         // -- Status / disclosure strip + Accept/Reject (ui-spec §2.6/§6). --
         let gscale = model

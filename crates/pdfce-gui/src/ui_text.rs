@@ -3790,6 +3790,27 @@ pub fn scale_entry_paper_basis_caption() -> &'static str {
     "Paper-unit basis: 1 in = 72 pt."
 }
 
+/// The close control on a floating tool property bar.
+///
+/// A WORD, not a glyph. The obvious U+2715 cross is absent from every font
+/// in egui's default chain and renders as an empty box — the shipped
+/// glyph-coverage finding (Pass 18.7). A word also reads correctly to a
+/// screen reader without needing a separate accessible name.
+pub fn tool_panel_close() -> &'static str {
+    "Close"
+}
+
+/// Tooltip on that control, saying what closing actually DOES.
+///
+/// Closing a tool's box puts the TOOL away rather than merely hiding the
+/// box. Leaving a tool armed with its controls invisible would mean canvas
+/// clicks kept doing something the operator could no longer see the
+/// settings for, which is the quietest way to make an application feel
+/// possessed.
+pub fn tool_panel_close_tooltip() -> &'static str {
+    "Put this tool away. The canvas goes back to normal selection."
+}
+
 /// Placeholder/hint under the real-length field, showing the notations the
 /// scale-by-known-dimension workflow accepts.
 ///
