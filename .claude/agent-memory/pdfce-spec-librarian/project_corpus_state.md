@@ -647,6 +647,66 @@ historical build note needed an inline bracket). And when a dispatch supplies a
 clause list, expect ~2 in 6 to be wrong: `/CIDSet` was dispatched as §9.7.4.2 (it
 is §9.8.3 Table 124) and the subset tag as §9.8.1 (it is §9.6.4).
 
+**25. A FIGURE is normative content and can be READ AS GEOMETRY — extract the
+source page's content stream and reconstruct the paths.** Established 2026-08-04
+on the §12.5.6.7 offset-dimension build. `/LLE`'s entire meaning hangs on the
+phrase **"the line proper"**, which occurs **exactly once in 756 pages and is
+never defined**; the prose admits two opposite geometries and the only
+disambiguator the standard offers is "as shown in Figure 60". Spec figures are
+**vector art, not raster** ⇒ `pypdf` `page.get_contents().get_data()`, walk the
+`cm` stack, collect `m`/`l`/`re` segments, transform to page space. Cost: two
+commands. Output: the leader stroke splits **47.5 : 9.5 = `LL` : `LLE` at one
+consistent 0.95 figure scale**; the rival reading requires **two** scales (1.14
+and 0.95) ⇒ **refuted arithmetically, not by plausibility.** Three sub-rules:
+
+- **Report the method and the raw numbers**, labelled *derived measurement of a
+  normative illustration*, never as spec prose. It is evidence of the same class
+  as item 14's term-frequency counts, applied to a picture.
+- **State what the figure CANNOT settle.** Figure 60 cannot corroborate the `LL`
+  sign rule because `/L`'s traversal order is unobservable in a drawing, and it
+  does **not** render `LLO` at all (stroke starts at parameter 0). Saying so
+  keeps the two facts it *does* settle trustworthy. A figure that "looks like it
+  confirms everything" is being over-read.
+- **Cross-check a second invariant while you have the coordinates.** `|/L| =
+  299.8` vs `|line proper| = 299.9` proved the offset is a **rigid translation**
+  ⇒ the measured length is identical either way ⇒ the dispatch's stated fear
+  ("getting it backwards would misreport every dimension") is **structurally
+  impossible on that axis**. Refuting the *severity* of a dispatch's worry is as
+  valuable as answering its question.
+
+**Also this build — a GEOMETRY-AUTHORING dispatch's shape:**
+
+- **"Which array holds the measured points?" is answered by ONE conditional
+  sentence, and that sentence is the whole file.** Table 175's `L` row: "**If the
+  `LL` entry is present, this value shall represent the endpoints of the leader
+  lines rather than the endpoints of the line itself.**" Key semantics that
+  *change based on a sibling key's presence* are the highest-value thing to quote
+  verbatim — paraphrase destroys the conditional. Sweep any authoring table for
+  rows whose meaning is keyed on another entry (`meaningful only if Cap is true`
+  ×2 here; `Required if LLE is present` ×1) and render them as a **dependency
+  graph**, not prose.
+- **The spec often ALREADY NAMES the thing the code invented.** pdfce's
+  hand-rolled 4 pt perpendicular tick is the standard `Butt` line ending ("a
+  short line at the endpoint perpendicular to the line itself"); its arrowheads
+  are the `OpenArrow`/`ClosedArrow`/`ROpenArrow`/`RClosedArrow` family. **But the
+  spec specifies no size/length/angle for ANY of the 10 endings**, so the
+  invented dimensions are *conformant* — the finding is a **naming/interop
+  opportunity, not a bug**. Report those separately from real contradictions; a
+  contradiction table that grades everything "wrong" gets ignored.
+- **A relative-only definition is a GAP.** `ROpenArrow` = "in the reverse
+  direction **from `OpenArrow`**" while `OpenArrow`'s own direction is never
+  stated ⇒ outward-vs-inward cannot be chosen mechanically. Watch for definitions
+  anchored only to a sibling that is itself unanchored.
+- **A domain's vocabulary can be entirely absent from the standard that supports
+  it.** `dimension line` / `extension line` / `witness line` = **0 hits each** in
+  ISO 32000-1, yet the feature is fully expressible. Naming that absence stops a
+  future session grepping for the wrong words and concluding the corpus has a gap.
+- **A dispatch can be RIGHT.** Every key name, the table number, and both
+  non-negativity constraints the dispatch asserted were confirmed verbatim; the
+  `/LLO`-is-the-CAD-gap hypothesis was confirmed too. Re-deriving cost nothing and
+  the "DISPATCH CONFIRMED" line is useful provenance (same posture as item 19's
+  flag-value note). Record confirmations, not just corrections.
+
 **16. Under a NO-FALLBACK-SYNTHESIS product rule (pdfce R43), per-subtype spec
 coverage collapses to a binary "AP-vs-fallback map".** Every ISO 32000-1 §12.5.6
 geometry subtype defines a fallback look from its own keys (`L`/`Vertices`/
