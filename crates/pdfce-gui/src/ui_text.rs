@@ -4953,6 +4953,16 @@ drawing convention, and it lets every dimension on the sheet be compared at a gl
 reduces it to 3/8\"."
 }
 
+/// Status note after deleting a ce dimension (Pass 25.6).
+///
+/// Says "measurement" rather than "dimension": the operator's page may well
+/// also carry pdf dimensions exported from CAD, which pdfce did not author and
+/// this did not touch. Naming the thing by what pdfce made of it avoids a
+/// sentence that could be read as "one of the drawing's dimensions is gone".
+pub fn dimension_deleted() -> &'static str {
+    "Measurement deleted — press Ctrl+Z to undo."
+}
+
 #[cfg(test)]
 mod glyph_coverage_tests {
     use super::scan_string_literal_chars;

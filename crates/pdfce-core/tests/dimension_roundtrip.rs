@@ -20,6 +20,7 @@ use pdfce_core::dimension::{
 };
 use pdfce_core::document::Document;
 use pdfce_core::edit::EditSession;
+use pdfce_core::graph::ObjectGraph;
 use pdfce_core::object::{ObjId, Object};
 use pdfce_core::vector::{AxisConstraint, Point};
 use pdfce_core::writer::SaveOptions;
@@ -326,6 +327,94 @@ fn dimension_rects_reports_the_current_position_not_the_opened_one() {
     assert!(
         s.dimension_rects(7).is_empty(),
         "an out-of-range page must be empty, not a fallback to page 0"
+    );
+}
+
+/// **Deleting a ce dimension removes all four of its traces.**
+///
+/// The interesting assertion is not "it's gone from the page" — it is that the
+/// SIDECAR record went too. Leaving it would make pdfce keep believing in a
+/// dimension the file no longer contains, and the next group-wide re-format
+/// would try to regenerate an annotation that is not there.
+#[test]
+fn deleting_a_ce_dimension_removes_the_annotation_and_the_sidecar_record() {
+    let (_orig, mut s) = session();
+    let (annot_id, dim_id) = s.add_dimension(0, DEFAULT_GROUP_ID, linear()).unwrap();
+    assert_eq!(s.dimension_rects(0).len(), 1);
+
+    s.delete_dimension(dim_id).unwrap();
+
+    assert!(
+        s.dimension_rects(0).is_empty(),
+        "nothing is left on the page to click"
+    );
+    assert!(
+        s.dimension_model().dimension(dim_id).is_none(),
+        "the sidecar record must go too, or pdfce keeps believing in it"
+    );
+    // The group survives on purpose — it carries a calibrated scale that is
+    // not cheap to redo, and losing it as a side effect would be silent.
+    assert!(
+        s.dimension_model().group(DEFAULT_GROUP_ID).is_some(),
+        "removing the last member must not take the group with it"
+    );
+
+    // On reload the page must not still point at the annotation, and the
+    // annotation object must be gone. Checked from the saved FILE rather than
+    // the session, because a removal that only exists in the overlay would
+    // pass every in-memory assertion and still ship a dangling reference.
+    let reloaded = Document::from_bytes(save(&s)).unwrap();
+    let pages = pdfce_core::page_tree::pages(&reloaded).unwrap();
+    let page = reloaded.get(pages[0].id).unwrap().value.clone();
+    let refs: Vec<ObjId> = page
+        .as_dict()
+        .and_then(|d| d.get(b"Annots").cloned())
+        .map(|a| reloaded.view().resolve(&a).clone())
+        .and_then(|a| {
+            a.as_array()
+                .map(|arr| arr.iter().filter_map(Object::as_reference).collect())
+        })
+        .unwrap_or_default();
+    assert!(
+        !refs.contains(&annot_id),
+        "the /Annots reference must be dropped, or the page points at nothing: {refs:?}"
+    );
+}
+
+/// Undo restores a deleted ce dimension completely.
+#[test]
+fn undoing_a_ce_dimension_delete_restores_it() {
+    let (_orig, mut s) = session();
+    let (_annot, dim_id) = s.add_dimension(0, DEFAULT_GROUP_ID, linear()).unwrap();
+    let before = save(&s);
+    s.delete_dimension(dim_id).unwrap();
+    assert_ne!(save(&s), before, "the delete must actually change the file");
+    s.undo().expect("undo the delete");
+    assert_eq!(
+        save(&s),
+        before,
+        "undoing a delete must restore the byte-identical prior save"
+    );
+    assert_eq!(
+        s.dimension_rects(0).len(),
+        1,
+        "and it must be clickable again"
+    );
+}
+
+/// A stale id is refused by name rather than silently doing nothing.
+#[test]
+fn deleting_an_unknown_ce_dimension_is_refused_by_name() {
+    let (_orig, mut s) = session();
+    let err = s
+        .delete_dimension(pdfce_core::dimension::DimensionId(999))
+        .expect_err("an unknown id must refuse");
+    assert!(
+        matches!(
+            err,
+            pdfce_core::edit::EditError::DimensionNotFound { id: 999 }
+        ),
+        "got {err:?}"
     );
 }
 

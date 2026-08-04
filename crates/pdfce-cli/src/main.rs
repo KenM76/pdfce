@@ -1588,6 +1588,29 @@ enum Command {
         /// Input PDF.
         input: PathBuf,
     },
+    /// **Delete a ce dimension** (Pass 25.6): remove its `/Annots` reference,
+    /// its annotation dictionary, its `/AP` appearance stream and its
+    /// `/PieceInfo` sidecar record, together, as one undoable command.
+    ///
+    /// Find the id with `dimension-list`. The dimension's GROUP is left alone
+    /// even when this was its last member — a group carries a calibrated scale
+    /// that is not cheap to redo.
+    DimensionDelete {
+        /// Input PDF.
+        input: PathBuf,
+        /// The ce dimension id, as printed by `dimension-list`.
+        #[arg(long)]
+        dimension: u32,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// Create a named dimension group (Pass 12.M2). Prints the new group id.
     GroupAdd {
         /// Input PDF.
@@ -2486,6 +2509,13 @@ fn run() -> ExitCode {
             verify_undo,
         }),
         Command::DimensionList { input } => cmd_dimension_list(&input),
+        Command::DimensionDelete {
+            input,
+            dimension,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_dimension_delete(&input, dimension, &output, mode, verify_undo),
         Command::GroupAdd {
             input,
             name,
@@ -7874,6 +7904,55 @@ undo_verified={} undo_identical={}",
 }
 
 /// `dimension-list` — inventory the stored dimension model (read-only).
+/// `dimension-delete` — remove one ce dimension and every trace of it.
+///
+/// ## Contract
+///
+/// - Emits one `dimension-delete …` line with the usual save-report fields,
+///   then defers the exit code to [`finish_edit`].
+/// - An unknown id is refused through [`report_edit_error`] before any
+///   mutation, with the same message and exit code the GUI surfaces.
+fn cmd_dimension_delete(
+    input: &Path,
+    dimension: u32,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    if let Err(err) = session.delete_dimension(pdfce_core::dimension::DimensionId(dimension)) {
+        return report_edit_error(input, &err);
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "dimension-delete {} dimension={dimension} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
+}
+
 fn cmd_dimension_list(input: &Path) -> u8 {
     use pdfce_core::dimension::{DimensionKind, ScaleState};
 

@@ -2919,6 +2919,32 @@ impl PdfceApp {
     /// structure that cannot be safely indexed — and they are the reason the
     /// operation is safe. Reporting them through the same channel as a failed
     /// save means an operator who is refused finds out WHY.
+    fn delete_selected_dimension(&mut self) {
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        let Some(id) = doc.selected_dimension else {
+            return;
+        };
+        let outcome = doc.session.delete_dimension(id);
+        match outcome {
+            Ok(()) => {
+                doc.selected_dimension = None;
+                doc.dimension_drag = None;
+                doc.refresh_pages();
+                doc.ensure_object_provider();
+                self.edit_note = Some(ui_text::dimension_deleted().to_owned());
+            }
+            Err(ref err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
+        }
+        diag::trace(|| {
+            format!(
+                "commit-delete-dimension id={id:?} -> {:?}",
+                outcome.as_ref().map_err(std::string::ToString::to_string)
+            )
+        });
+    }
+
     fn delete_selected_subpath(&mut self) {
         let (page_index, object_index, subpath_index) = {
             let Status::Open(doc) = &self.status else {
@@ -4698,6 +4724,14 @@ impl PdfceApp {
                 // ambiguity to resolve, so requiring a tool as well would be a
                 // rule with no reason behind it — the kind an operator
                 // experiences as the application being arbitrary.
+                // Pass 25.6: a selected ce dimension outranks everything. It
+                // is pdfce's own annotation, selecting one is a deliberate
+                // click on a thing that sits on top of the drawing, and there
+                // is no other reading of Delete while one is selected.
+                let delete_dimension = matches!(
+                    &self.status,
+                    Status::Open(doc) if doc.selected_dimension.is_some()
+                );
                 let delete_subpath = matches!(
                     &self.status,
                     Status::Open(doc) if doc.entered.is_some_and(|e| e.subpath.is_some())
@@ -4708,7 +4742,9 @@ impl PdfceApp {
                         if doc.active_tool == Some(CanvasTool::VectorEdit)
                             && !doc.canvas_selection.is_empty()
                 );
-                if delete_subpath {
+                if delete_dimension {
+                    self.delete_selected_dimension();
+                } else if delete_subpath {
                     self.delete_selected_subpath();
                 } else if delete_object {
                     self.delete_selected_object();
@@ -5391,7 +5427,9 @@ impl eframe::App for PdfceApp {
         // operation, and with no tool armed the key is collected anyway.
         let canvas_delete_target = match &self.status {
             Status::Open(doc) if doc.active_tool == Some(CanvasTool::VectorEdit) => {
-                doc.entered.is_some_and(|e| e.subpath.is_some()) || !doc.canvas_selection.is_empty()
+                doc.selected_dimension.is_some()
+                    || doc.entered.is_some_and(|e| e.subpath.is_some())
+                    || !doc.canvas_selection.is_empty()
             }
             _ => false,
         };

@@ -381,6 +381,23 @@ impl DimensionModel {
     /// Delete `group`, reassigning its members to the default group (ui-spec
     /// §5.2: never a silent orphan). The default group cannot be deleted.
     /// Returns how many members were reassigned.
+    /// Remove one dimension from the model, returning whether it was there.
+    ///
+    /// The record only — the caller owns removing the annotation objects it
+    /// names. Keeping those two halves in one method would put document
+    /// mutation inside the pure model, which is what keeps this type testable
+    /// without a `Document` at all.
+    ///
+    /// The dimension's GROUP is deliberately left, even when this was its last
+    /// member: a group is a named container carrying a scale the operator
+    /// calibrated, and discarding that as a side effect of removing the last
+    /// dimension would silently throw away work that is not cheap to redo.
+    pub fn remove_dimension(&mut self, id: DimensionId) -> bool {
+        let before = self.dimensions.len();
+        self.dimensions.retain(|d| d.id != id);
+        self.dimensions.len() != before
+    }
+
     pub fn delete_group(&mut self, id: GroupId) -> usize {
         if id == DEFAULT_GROUP_ID {
             return 0;

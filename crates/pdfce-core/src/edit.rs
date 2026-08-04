@@ -358,6 +358,11 @@ pub enum CommandKind {
     /// translated and its annotation + baked `/AP` regenerated from it. ONE
     /// undoable command. See [`EditSession::move_dimension`].
     MoveDimension,
+    /// A ce dimension was DELETED (Pass 25.6): its `/Annots` reference, its
+    /// annotation dictionary, its `/AP` stream and its sidecar record were all
+    /// removed together. ONE undoable command. See
+    /// [`EditSession::delete_dimension`].
+    DeleteDimension,
     /// A dimension group's scale/units/format changed and every wired
     /// member's baked `/AP` label was regenerated (Pass 12.M2, the Pass 7.1
     /// regenerate pattern) — ONE undo entry however many members updated.
@@ -6302,6 +6307,95 @@ impl EditSession {
                 ))
             })
             .collect()
+    }
+
+    /// **Delete a ce dimension**, as one undoable command (Pass 25.6).
+    ///
+    /// Removes three things together, because leaving any one of them is a
+    /// different kind of wrong:
+    ///
+    /// 1. the reference from its page's `/Annots` — otherwise the page points
+    ///    at an object that is gone;
+    /// 2. the annotation dictionary and its `/AP` `/N` appearance stream —
+    ///    the stream is authored for this dimension alone and referenced by
+    ///    nothing else, so leaving it orphans a stream in every later save;
+    /// 3. the record from the `/PieceInfo` sidecar — otherwise pdfce keeps
+    ///    believing in a dimension the file no longer contains, and the next
+    ///    group-wide re-format would try to regenerate it.
+    ///
+    /// The group is left alone even when this was its last member. A group is
+    /// a named container with a scale the operator calibrated; deleting it as
+    /// a side effect of removing the last dimension would throw that
+    /// calibration away silently, and re-measuring is not free.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionNotFound`] for an unknown id or one never wired
+    /// into a document, plus the encryption and enforced-certification guards.
+    /// Every refusal happens before any mutation (rule 4).
+    pub fn delete_dimension(&mut self, dimension: DimensionId) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let mut model = self.read_dimension_model();
+        let record = model
+            .dimension(dimension)
+            .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
+        let annot_id = record
+            .annot
+            .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
+        let ap_id = record.ap;
+
+        // The page it lives on, from the annotation's own `/P` (§12.5.2) —
+        // the sidecar deliberately does not duplicate the page, so `/P` is the
+        // only honest source.
+        let page_id = self
+            .value(annot_id)
+            .and_then(Object::as_dict)
+            .and_then(|d| d.get(b"P").and_then(Object::as_reference))
+            .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
+
+        let Some(Object::Dict(page_dict)) = self.value(page_id) else {
+            return Err(EditError::NotADictionary {
+                id: page_id,
+                key: "Annots",
+            });
+        };
+        let mut updated = page_dict.clone();
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        // Same helper, same two `/Annots` shapes, as redaction-mark removal:
+        // `Some` when `/Annots` is an indirect array (patch that object, leave
+        // the page dict alone), `None` when inline (already composed into
+        // `updated`). Writing the page dict in the indirect case would be a
+        // no-op write that inflates the dirty set.
+        match self.remove_from_annots(&mut updated, &[annot_id])? {
+            Some(shared) => objects.push(shared),
+            None => objects.push(self.page_write(page_id, updated)),
+        }
+
+        model.remove_dimension(dimension);
+        objects.push(self.catalog_dimension_write(&model)?);
+
+        let mut removals: Vec<Removal> = Vec::new();
+        for id in std::iter::once(annot_id).chain(ap_id) {
+            if self.base.get(id).is_some() || self.state.contains_key(&id) {
+                removals.push(Removal {
+                    id,
+                    was_deleted: self.deleted.contains(&id),
+                    is_deleted: true,
+                });
+            }
+        }
+
+        self.commit(Command {
+            kind: CommandKind::DeleteDimension,
+            objects,
+            removals,
+            trailer: None,
+        });
+        Ok(())
     }
 
     /// **Move a ce dimension** by a page-space `(dx, dy)`, as one undoable
