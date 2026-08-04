@@ -10877,3 +10877,129 @@ have to re-derive it by grepping five separate continuations):**
   engineering work, but (1) and (2) in particular are legal/product
   calls this project has been shipping interim engineering defaults
   around rather than resolving.
+
+**Same-day continuation 79 (real date 2026-08-04) — terminology ruling
+filed: "pdf dimension" vs "ce dimension," never bare "dimension."
+`pdfce-librarian`-only filing, no code shipped.**
+
+**Shipped:**
+- No new Pass entry. This continuation is documentation-only, per the
+  operator's explicit terminology ruling and the librarian dispatch
+  that followed it.
+
+**Decisions made this session:**
+- **Operator ruling (2026-08-04), codified as `CLAUDE.md` rule 15,
+  commit `89c5837`: bare "dimension" is banned project-wide.** Two
+  unrelated things share the word with OPPOSITE properties — a **pdf
+  dimension** (CAD/authoring-tool-exported content already in the
+  file, read-only from pdfce's side) and a **ce dimension** (a
+  `/Line`+`/IT /LineDimension` annotation pdfce itself authors, fully
+  editable/deletable). The distinction is provenance, not
+  representation. Why a rule, not a style note: the operator could not
+  decode analysis that used "dimension" throughout without saying
+  which kind, in both directions — ambiguous agent output is hard for
+  him to act on, and an ambiguous report from him can misdirect
+  troubleshooting. Binding on every agent, reply, commit message, doc
+  comment, decision record, RAG entry, and subagent dispatch. Full
+  text: `CLAUDE.md` rule 15; cross-referenced from `ROADMAP.md`'s
+  Glossary (new `pdf dimension` / `ce dimension` entries, this
+  filing) and Standing rules (new ★ Terminology ruling entry, this
+  filing).
+
+**Findings + decisions:**
+- **Audit result: the ROADMAP prose itself was mostly clean.** Grepped
+  every "dimension" mention across `ROADMAP.md` and `SESSION_LOG.md`.
+  Pass 21.x (FF-C font subsetting) has zero "dimension" mentions —
+  unrelated subsystem, no action needed. The 2026-08-04 SESSION_LOG
+  continuations (75–78) had zero "dimension" mentions prior to this
+  filing. The one Backlog bucket that did — "Dimension-tool bug-fix
+  cluster," Pass 12.M2c — was entirely about **ce dimensions**
+  (pdfce's own dimensioning tool, Pass 12.M2/12.M2b family) and has
+  been retitled/qualified in place ("Ce-dimension-tool bug-fix
+  cluster"; Backlog is a mutable current-state section, not
+  append-only, so this was a direct edit, not a dated footer).
+- **★ The load-bearing finding is at the decision-record level, not
+  the prose level.** Decisions 022 (annotations in canvas selection)
+  and 023 (Obj-tool level navigation, node editing, dimension
+  re-measure, format surface) exist at `docs/decisions/022-...md` and
+  `docs/decisions/023-...md`, both dated 2026-08-04, status "Decided
+  (consultant recommendation; engineer to schedule, librarian to
+  file)" — **but neither has yet been promoted into a `ROADMAP.md`
+  Pass entry or an `ARCHITECTURE.md` §12 decision-log entry.** Read
+  both in full for this audit. **Both are scoped almost entirely
+  around ce dimensions**: decision 022's root cause is that
+  `decompose_page` never reads `/Annots`, so a ce dimension (painted
+  via `pdfce-render`'s annotation pass) is invisible to every selection
+  path; decision 023 inherits the same framing for re-measure (§5) and
+  the display-format surface (§6). Decision 023 §0 finding 2 / §1.2 DOES
+  independently find a second, structurally identical paint/select
+  asymmetry in **form XObjects** — `pdfce-render`'s interpreter recurses
+  into a `Do` on a form and paints its contents individually, while
+  `decompose.rs` emits one opaque object for the same `Do` — which is a
+  **pdf-dimension-shaped** defect (foreign, CAD-exported content: title
+  blocks, hatches, placed drawing blocks), addressed by Pass 23.2
+  (level navigation), not Pass 22.0.
+- **The scoping question this produces, filed as new ROADMAP Open
+  operator question (t).** The operator's original complaint — some
+  objects in a CAD-exported drawing don't box-select, "like dimension
+  lines and dimensions in that drawing" — was almost certainly
+  describing **pdf dimensions**, not pdfce-authored ce ones. If the
+  unselectable geometry in that drawing was flattened paths or a
+  placed form (the common CAD-export shape), **Pass 22.0 alone does
+  not fix what was reported.** 22.0 fixes a real, independently
+  confirmed defect (ce dimensions were never selectable by any surface
+  — a gap the operator had not yet hit, per decision 022 §0's own
+  second finding), but it is a different defect from the one in the
+  original report. Pass 23.2 is the more likely candidate fix for the
+  literal complaint. Recorded as a recommendation, not a decision —
+  confirming which the drawing's unselectable objects actually were is
+  the operator's call, not resolved by this audit.
+- **Filing decisions 022/023 into `ROADMAP.md`/`ARCHITECTURE.md` §12
+  (including standing-rule number assignment against decision 022 §8's
+  4 proposed rules and decision 023 §9's up-to-6) is deliberately NOT
+  done this continuation.** Scoped out on purpose: filing them now,
+  today, with the qualified `pdf dimension`/`ce dimension` terminology
+  established in the same session as the ruling, means they enter the
+  permanent record correctly from day one rather than needing a second
+  correction pass. Flagged as owed, next session.
+
+**Still in flight:**
+- Pass 21.1 wiring — unchanged from continuation 78, still the entire
+  remaining scope for FF-C composite-run editability; not touched this
+  continuation.
+- Decisions 022/023 — not yet filed as Pass entries; see above. Pass
+  22.0 (select + delete ce dimensions) and Pass 23.0–23.3 (format
+  surface, re-measure, level navigation, node editing) remain
+  unscheduled in the numbered ledger despite being fully designed.
+- New ROADMAP Open operator question (t) — the 022-vs-023 scoping
+  question above — joins the existing consolidated operator-decisions
+  list from continuation 78 (font-EULA policy, complex-script posture,
+  form-tools sequencing, R86 ratification).
+
+**For next session:**
+- File decisions 022 and 023 into `ROADMAP.md` (Pass 22.0a/b/c under
+  Next up; Pass 23.0–23.3 under Next up or Backlog per dependency
+  ordering — 23.0 is independent, 23.1/23.2 depend on 22.0) and into
+  `ARCHITECTURE.md` §12, using `pdf dimension`/`ce dimension`
+  throughout. Assign standing-rule numbers against decision 022 §8 (4
+  proposed rules, next free per the decision's own header was R111 at
+  filing time — **re-verify the live ceiling before assigning, per
+  this project's own repeated numbering-collision history**) and
+  decision 023 §9 (up to 6 proposed rules, one explicitly hedged as
+  "may be too small for a number" — judgment call, not automatic).
+  Add the `TargetId` enum / composite-provider change to
+  `ARCHITECTURE.md`'s body sections once actually built (decision-log
+  entry now, body-section sync when Pass 22.0c ships — same
+  disposition as decision 021's entry).
+- Confirm Open operator question (t) with Ken before treating Pass
+  22.0's eventual ship as closing the original box-select complaint —
+  open the original CAD-exported drawing (or ask) to determine whether
+  its unselectable "dimension lines and dimensions" were pdf
+  dimensions or ce dimensions.
+- New RAG file `D:\dev\rag\rust\overloaded_term_ambiguity_becomes_scope_ambiguity.md`
+  (indexed) generalizes this session's finding — worth a skim next
+  time an overloaded term shows up anywhere else in this project's
+  vocabulary (candidates worth a future glance: "annotation" already
+  qualified by subtype throughout, seems fine; "object" is used both
+  for `PageObjects` vector objects and generic PDF objects — not
+  audited this session, flagged only as a maybe).

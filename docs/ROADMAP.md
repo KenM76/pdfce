@@ -40,6 +40,25 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
   other projects (MatExtractor): algorithmic suggestions (OCR text,
   auto-detected form fields, suggested Bates ranges) are always
   reviewable hints, never silent auto-applies.
+- **pdf dimension** — a dimension already present in the PDF, exported
+  by CAD or another authoring tool: existing page content, or a
+  foreign (non-pdfce) annotation. pdfce reads it and may measure
+  against it, but must never silently alter it. The `55 5/8"` printed
+  on a CAD drawing is a *pdf dimension*.
+- **ce dimension** — a dimension object **pdfce itself authors**:
+  `/Line` + `/IT /LineDimension` annotations with a baked `/AP`, plus
+  their groups, scale, `/Measure` dict and `/PieceInfo` sidecar.
+  Everything under `crates/pdfce-core/src/dimension/`. Authored,
+  editable, deletable, re-measurable — pdfce's own.
+  **Bare "dimension(s)" is banned project-wide — always qualify as
+  one of these two.** The distinction is *provenance, not
+  representation*: a ce dimension is still a ce dimension after
+  save-and-reopen; a pdf dimension does not become a ce dimension
+  because pdfce can see and render it. Binding statement:
+  `CLAUDE.md` rule 15 (operator ruling, 2026-08-04, commit `89c5837`).
+  When a report or request uses "dimension" unqualified, infer from
+  context and **echo back the qualified term** so a mismatch surfaces
+  before work starts, not after.
 
 ## Shipped
 
@@ -7466,24 +7485,36 @@ forbids/is unparseable (a legal call, Ken's per
 (Arabic/Devanagari/Thai) by name given R17, or discloses loudly and
 lets the operator decide (recommendation: refuse by name).
 
-### Dimension-tool bug-fix cluster — Pass 12.M2c (Backlog, code-trace found 2026-08-02, distinct from Pass 18.x)
+### Ce-dimension-tool bug-fix cluster — Pass 12.M2c (Backlog, code-trace found 2026-08-02, distinct from Pass 18.x)
+
+**Terminology note (added 2026-08-04, `pdfce-librarian`, per `CLAUDE.md`
+rule 15 — see the ★ Terminology ruling entry under Standing rules and
+the Glossary's `pdf dimension` / `ce dimension` entries):** every
+"dimension" below is a **ce dimension** — pdfce's own authored
+dimensioning tool (Pass 12.M2/12.M2b family) — not a pdf dimension
+read from a CAD export. Retitled from "Dimension-tool bug-fix cluster"
+for consistency; no bug content changed.
 
 Five named bugs found by an engineer code trace this session (file:line
-cited), sibling of Pass 12.M2/12.M2b in the same dimensioning
+cited), sibling of Pass 12.M2/12.M2b in the same ce-dimensioning
 subsystem — NOT part of the ui-spec/dock family above:
 
 1. Ratio scale entry silently overwrites the group's display unit with
-   the paper-basis unit.
+   the paper-basis unit. **Also named in decision 023 §6.5/§10.9 as a
+   coupled bug that must be fixed in the same slice as Pass 23.0
+   (format & units GUI surface), or that new control ships looking
+   broken from day one — see the ★ decisions 022/023 filing-status
+   note under Standing rules.**
 2. The circular (radius/diameter) tool renders NO status feedback
    below the 3-point fit threshold — the whole status body lives
    inside `if let Some(fit)`, so a partial pick shows nothing.
 3. "+ New Group" is a silent no-op on an empty name, with the button
    left enabled (should disable, or disclose why nothing happened).
-4. Post-second-click linear-dimension clicks are dead with no hint
+4. Post-second-click linear-ce-dimension clicks are dead with no hint
    that Accept/Reject is the required next action.
 5. Measure tools and the group panel are entirely unreachable on a
    page whose render failed (no fallback/disclosure path).
-6. Stale comment at `main.rs:5286` still claims on-canvas dimension
+6. Stale comment at `main.rs:5286` still claims on-canvas ce-dimension
    authoring is unbuilt — false since Pass 12.M2b (`7c93cc3`,
    2026-08-01); correct or remove it in the same Pass that touches
    this code next.
@@ -10186,6 +10217,59 @@ exercises neither):**
   capability (FF-C's non-Latin story becomes "CJK/Cyrillic/Greek/Hebrew
   yes, Arabic/Devanagari/Thai no"), so it is worth Ken's call rather
   than a solo engineering decision.
+- **(t) Does decision 022 (Pass 22.0) actually fix what was originally
+  reported, or does decision 023 (Pass 23.2) — filed 2026-08-04, not
+  yet promoted into a Pass entry above; both records exist only at
+  `docs/decisions/022-annotations-in-canvas-selection.md` and
+  `docs/decisions/023-object-tool-level-navigation-and-dimension-authoring-controls.md`.**
+  Filed by `pdfce-librarian` per the 2026-08-04 terminology-ruling
+  dispatch (see the ★ Terminology ruling entry, Standing rules, below)
+  — a scoping question surfaced while qualifying "dimension" mentions
+  across the record, not itself a terminology fix.
+  **What the audit found:** decision 022 is scoped almost entirely
+  around **ce dimensions** — pdfce's own authored `/Line`+
+  `/IT /LineDimension` annotations. Its root-cause finding (§1) is that
+  `decompose_page` never reads `/Annots`, so a ce dimension is painted
+  but not selectable or deletable by any surface. Decision 023 inherits
+  the same ce-dimension framing for re-measure (§5) and the format
+  surface (§6), but its §0 finding 2 / §1.2 independently identifies a
+  **second, structurally identical paint/select asymmetry — this time
+  in form XObjects**: `pdfce-render`'s interpreter recurses into a
+  `Do` on a form and paints its contents individually, while
+  `decompose.rs` emits one opaque object for the same `Do`, so every
+  line inside a placed CAD block (a title block, a hatch, a nested
+  drawing block) is visible and unselectable. That is a **pdf
+  dimension**-shaped defect (foreign, CAD-exported content), not a ce
+  one, and it is Pass 23.2 (level navigation), not Pass 22.0, that
+  closes it.
+  **The scoping question:** the operator's original complaint that
+  "some objects don't seem to box select, like dimension lines and
+  dimensions in that drawing" was describing a CAD-exported drawing —
+  almost certainly **pdf dimensions**, not pdfce-authored ce ones. If
+  the unselectable geometry in that drawing was flattened paths or a
+  placed form (the common CAD-export shape), **Pass 22.0 alone does
+  not fix what was reported** — 22.0 fixes a real defect (ce dimensions
+  were never selectable at all, a genuine gap the operator had not yet
+  hit per decision 022 §0) but a different one. Pass 23.2 is the
+  candidate fix for the literal original report.
+  **Recommendation, not a decision:** confirm with the operator which
+  the original drawing's unselectable "dimension lines and dimensions"
+  actually were (open the file, or ask) before treating Pass 22.0's
+  ship as closing the original complaint. Both Passes are worth
+  building regardless — they close two independently real, differently
+  scoped instances of the same paint/select-asymmetry class (decision
+  022's own proposed standing rule §8) — but only one of them is the
+  literal fix for what was reported, and it may not be 22.0.
+  **Also flagged, not itself part of this question:** decisions 022
+  and 023 are not yet filed into `ROADMAP.md` as Pass 22.0/23.0–23.3
+  entries or into `ARCHITECTURE.md` §12 — they exist only as decision
+  records (`docs/decisions/`). Filing them (including any standing-rule
+  number assignment against decision 022 §8 / decision 023 §9) is owed
+  as a separate `pdfce-librarian` dispatch ("roadmap update — new
+  request" / "decision log entry"), deliberately not done in this same
+  filing so that filing can happen with the qualified `pdf dimension`/
+  `ce dimension` terminology from day one rather than needing its own
+  correction pass.
 
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
@@ -11835,6 +11919,51 @@ exercises neither):**
   can add composite text it cannot edit) until all four land.
 
   **Ceiling is now R110** (was R106 before this entry).
+
+- **★ Terminology ruling (operator, 2026-08-04) — "pdf dimension" vs
+  "ce dimension," never bare "dimension." Codified as `CLAUDE.md` rule
+  15, committed `89c5837`; cross-referenced from the Glossary, above
+  (this project rule, like "Documentation-first" and the other
+  unnumbered bullets at the top of this section, is not itself an
+  R-numbered empirical/architectural rule).** Two unrelated things
+  share the word "dimension" in this project with **opposite
+  properties** — a **pdf dimension** is CAD/authoring-tool-exported
+  content already in the file, which pdfce reads and measures against
+  but must never alter; a **ce dimension** is a `/Line`+
+  `/IT /LineDimension` annotation pdfce itself authors, fully editable
+  and deletable. The distinction is provenance, not representation: a
+  ce dimension stays one after save-and-reopen; a pdf dimension does
+  not become one because pdfce can render it. **Why it is a rule, not
+  a style note:** the operator could not decode analysis that used
+  "dimension" throughout without saying which kind, and named the
+  failure in both directions — ambiguous output from an agent is hard
+  to act on, and an ambiguous report *from* him can send troubleshooting
+  down the wrong path. Binding on every agent, every reply, every
+  commit message, every decision record, every RAG entry, and every
+  subagent dispatch. **Audited this filing (`pdfce-librarian`) against
+  the ROADMAP Backlog dimensioning bullets, Pass 21.x, and the
+  2026-08-04 SESSION_LOG continuations** — Pass 21.x (FF-C font
+  subsetting) has no "dimension" mentions at all and needed no change;
+  the 2026-08-04 SESSION_LOG continuations (75–78) likewise had none
+  prior to this filing; the one existing bucket that did — the
+  "Dimension-tool bug-fix cluster," Pass 12.M2c, Backlog above — was
+  entirely about ce dimensions (pdfce's own dimensioning tool) and has
+  been retitled/qualified in place (Backlog is a mutable current-state
+  section, not append-only, so this was an in-place edit, not a dated
+  footer). **The load-bearing finding is at the decision-record level,
+  not the prose level** — see new Open operator question (t), above:
+  decisions 022 and 023 (filed 2026-08-04, not yet promoted into
+  ROADMAP Pass entries) are scoped almost entirely around ce
+  dimensions, while the operator's original box-select complaint was
+  very likely about pdf dimensions in a CAD export, which decision
+  023's independently-found form-XObject paint/select asymmetry (Pass
+  23.2), not decision 022 (Pass 22.0), actually addresses. **RAG
+  escalation:** the generalizable finding — an ambiguous overloaded
+  term in project documentation eventually becomes an ambiguous SCOPE,
+  not merely an ambiguous sentence — is filed to
+  `D:\dev\rag\rust\overloaded_term_ambiguity_becomes_scope_ambiguity.md`
+  this session (worked example: this exact case), indexed in
+  `D:\dev\rag\rust\index.md`.
 
 ## Update protocol
 
