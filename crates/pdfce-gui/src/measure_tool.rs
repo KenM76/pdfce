@@ -54,8 +54,8 @@
 //! unaffected (this module is not in core), and it adds no dependency.
 
 use pdfce_core::dimension::{
-    DimensionKind, FitCircle, GroupId, LengthParseError, NumberFormat, ScaleEntry, ScalePreview,
-    ScaleState, Unit, fit_circle_taubin, parse_length, preview_group_scale,
+    DimensionKind, FitCircle, FractionMode, GroupId, LengthParseError, NumberFormat, ScaleEntry,
+    ScalePreview, ScaleState, Unit, fit_circle_taubin, parse_length, preview_group_scale,
 };
 use pdfce_core::vector::{AxisConstraint, Point, constrained_second_point, measured_length};
 
@@ -315,6 +315,22 @@ pub struct ScaleEntryFields {
     /// The paper-unit basis for the ratio path (default [`Unit::Inch`]; PDF
     /// paper units are 1/72", disclosed — ui-spec §4.2).
     pub basis: Unit,
+    /// How the fractional part of every label in this group is displayed
+    /// (Pass 25.5).
+    ///
+    /// `None` means "whatever the unit's default is" — the behaviour before
+    /// this field existed, and still the right answer for an operator who
+    /// never opens the display controls. `Some` is an explicit choice that
+    /// must survive a unit change, which is why it is stored rather than
+    /// re-derived from the unit each time.
+    ///
+    /// Exists because the operator asked for it directly: *"also want to be
+    /// able to choose the units and display type - rounding, fraction, etc."*
+    /// The unit was already selectable; the display type was hardcoded to
+    /// `Unit::default_format()` at commit, so a drawing dimensioned in inches
+    /// always read `55.63"` and could never read `55 5/8"` — the notation the
+    /// drawing itself uses.
+    pub fraction: Option<FractionMode>,
 }
 
 impl Default for ScaleEntryFields {
@@ -328,6 +344,7 @@ impl Default for ScaleEntryFields {
             ratio_paper: 1.0,
             ratio_real: 100.0,
             basis: Unit::Inch,
+            fraction: None,
         }
     }
 }
@@ -418,11 +435,21 @@ impl ScaleEntryFields {
     #[must_use]
     pub fn commit(&self, drawn_pdf_length: Option<f64>) -> Option<(ScaleState, NumberFormat)> {
         let preview = self.preview(drawn_pdf_length)?;
+        // An explicit display choice wins over the unit's default, and
+        // survives a unit change — an operator who asked for eighths does not
+        // want them silently reverted by switching from inches to feet.
+        let format = match self.fraction {
+            Some(fraction) => NumberFormat {
+                unit: preview.unit,
+                fraction,
+            },
+            None => preview.unit.default_format(),
+        };
         Some((
             ScaleState::Calibrated {
                 scale: preview.scale,
             },
-            preview.unit.default_format(),
+            format,
         ))
     }
 }
@@ -705,6 +732,78 @@ mod tests {
 
     fn p(x: f64, y: f64) -> Point {
         Point::new(x, y)
+    }
+
+    // ---- display format (Pass 25.5) -------------------------------------
+
+    /// A fields set that commits: real-length path, 100 units over a drawn
+    /// line of 200 pt.
+    fn calibrated(unit: Unit) -> ScaleEntryFields {
+        ScaleEntryFields {
+            use_real_length: true,
+            real_length: 100.0,
+            real_length_text: "100".to_owned(),
+            unit,
+            ..ScaleEntryFields::default()
+        }
+    }
+
+    #[test]
+    fn with_no_explicit_choice_the_units_default_format_is_used() {
+        let f = calibrated(Unit::Inch);
+        let (_scale, format) = f.commit(Some(200.0)).expect("commits");
+        assert_eq!(
+            format,
+            Unit::Inch.default_format(),
+            "an operator who never opens the display controls must get the \
+             unchanged behaviour"
+        );
+    }
+
+    /// **The operator's ask.** An explicit fraction choice reaches the format.
+    ///
+    /// Without this the display type was pinned to `Unit::default_format()`,
+    /// so a drawing dimensioned in inches always read `55.63"` and could never
+    /// read `55 5/8"` — the notation the drawing uses, and the notation the
+    /// scale field already ACCEPTS as input.
+    #[test]
+    fn an_explicit_fraction_choice_is_what_commits() {
+        let mut f = calibrated(Unit::Inch);
+        f.fraction = Some(FractionMode::Fraction {
+            denominator: 16,
+            reduce: false,
+        });
+        let (_scale, format) = f.commit(Some(200.0)).expect("commits");
+        assert_eq!(
+            format.fraction,
+            FractionMode::Fraction {
+                denominator: 16,
+                reduce: false
+            }
+        );
+        assert_eq!(format.unit, Unit::Inch);
+    }
+
+    #[test]
+    fn an_explicit_choice_survives_a_unit_change() {
+        // Choosing eighths and then switching unit must not silently revert to
+        // that unit's default notation — the operator asked for a notation,
+        // not for a notation-on-this-unit.
+        let mut f = calibrated(Unit::Inch);
+        f.fraction = Some(FractionMode::Fraction {
+            denominator: 8,
+            reduce: true,
+        });
+        f.unit = Unit::FeetInches;
+        let (_scale, format) = f.commit(Some(200.0)).expect("commits");
+        assert_eq!(format.unit, Unit::FeetInches);
+        assert_eq!(
+            format.fraction,
+            FractionMode::Fraction {
+                denominator: 8,
+                reduce: true
+            }
+        );
     }
 
     // ---- LinearPick A→B state machine (ui-spec §2.1) --------------------

@@ -277,6 +277,20 @@ const STATUS_PANEL_HEIGHT_PTS: f32 = 92.0;
 /// working state rather than a committed one.
 const SUBPATH_OUTLINE_COLOR: egui::Color32 = egui::Color32::from_rgb(210, 140, 40);
 
+/// Outline colour for a SELECTED ce dimension (Pass 25.5).
+///
+/// A ce dimension is pdfce's own annotation rather than page content, and its
+/// selection cue says so: a distinct teal, not the page-object accent and not
+/// the amber "inside an object" hue. Three states, three cues — an operator
+/// should never have to work out which kind of thing is selected from context.
+const DIMENSION_SELECT_COLOR: egui::Color32 = egui::Color32::from_rgb(40, 150, 160);
+
+/// Outline colour while a ce dimension is being dragged — the same
+/// "in progress, not yet an edit" orange every other live preview uses, so the
+/// distinction being drawn is committed-vs-pending rather than a fourth
+/// unrelated colour.
+const DIMENSION_DRAG_COLOR: egui::Color32 = egui::Color32::from_rgb(210, 90, 40);
+
 /// How long a continuous zoom gesture must be idle before the view
 /// commits to a real re-rasterization. See the module docs.
 ///
@@ -1731,6 +1745,20 @@ struct OpenDoc {
     /// is reachable. Without it `subpath_hits`'s nearest-first ordering makes
     /// the nearest part the only one that can ever be selected.
     subpath_cycle: Option<canvas::SubpathCycle>,
+    /// The ce dimension the operator has selected on the canvas, if any
+    /// (Pass 25.5).
+    ///
+    /// Its own field rather than a `TargetId` in `canvas_selection`, because a
+    /// ce dimension is an ANNOTATION, not page content: it is hit-tested from
+    /// the sidecar model rather than the content decomposition, and the two
+    /// selections mean different things to Delete, to drag and to the
+    /// properties readout. Decision 022 scopes folding annotations into
+    /// `TargetId` properly; conflating them here ahead of that would make the
+    /// object-level code lie about what it holds.
+    selected_dimension: Option<pdfce_core::dimension::DimensionId>,
+    /// An in-flight ce-dimension drag: where the pointer went down, in PDF
+    /// page space. The move commits on release as ONE undoable command.
+    dimension_drag: Option<(pdfce_core::dimension::DimensionId, egui::Pos2)>,
     /// Which pages are selected for a batch operation, by 0-based index.
     ///
     /// Ordered (a `BTreeSet`) so that "the selected pages" is always a
@@ -1895,6 +1923,8 @@ impl OpenDoc {
             last_scroll_offset: egui::Vec2::ZERO,
             entered: None,
             subpath_cycle: None,
+            selected_dimension: None,
+            dimension_drag: None,
             selected_pages: BTreeSet::new(),
             selection_anchor: None,
             dragged_page: None,
@@ -8169,7 +8199,26 @@ impl PdfceApp {
         // object selection — so it takes over the click dispatch and the
         // overlay entirely. Otherwise the Pass 12.0 object-selection path runs
         // unchanged (a no-op with the shippable empty provider).
-        if doc.active_tool == Some(CanvasTool::TextEdit) {
+        // Pass 25.5: ce dimensions are hit-tested BEFORE the tool dispatch. A
+        // dimension sits on top of the drawing it measures, so a pointer over
+        // one means it; and repositioning a label is something an operator
+        // does while doing something else, not a mode they arm.
+        //
+        // Skipped for the text tools, which own the canvas as a caret surface
+        // and would be broken by a click being eaten out from under them.
+        let dimension_consumed = if matches!(
+            doc.active_tool,
+            Some(CanvasTool::TextEdit | CanvasTool::AddText)
+        ) {
+            false
+        } else {
+            run_dimension_drag(doc, ui, &image_response, image_rect, extent, zoom)
+        };
+
+        if dimension_consumed {
+            // The click/drag belonged to a ce dimension. Nothing below runs, so
+            // the drawing underneath is neither selected nor moved by it.
+        } else if doc.active_tool == Some(CanvasTool::TextEdit) {
             run_text_edit_tool(doc, ui, &image_response, image_rect, extent, zoom, font_env);
         } else if doc.active_tool == Some(CanvasTool::AddText) {
             // Pass 16.2: the Add-Page-Text tool owns the canvas — click places a
@@ -11967,8 +12016,22 @@ fn run_vector_edit_tool(
 
         // Drag start: classify as a node grab (near a selected object's
         // anchor) or a whole-object move.
+        //
+        // `press_origin`, NOT `interact_pointer_pos`. egui reports
+        // `drag_started` on the frame the drag threshold is crossed, so the
+        // pointer has ALREADY moved off the press point by the time this runs
+        // — measured at 45 pt on a real drag. Two consequences, both silent:
+        // the node-vs-object classification is made against a point the
+        // operator never pressed on (so a node grab can miss its anchor), and
+        // `VectorDrag::delta` measures every subsequent move from that drifted
+        // origin, making every object move short by the drag threshold.
+        //
+        // Found while building the ce-dimension drag (Pass 25.5), where the
+        // same mistake put the press outside the annotation's own rect and the
+        // drag grabbed nothing at all — the visible version of a bug that had
+        // been quietly shortening object moves since Pass 9c-min.
         if canvas::primary_drag_started(image_response)
-            && let Some(sp) = image_response.interact_pointer_pos()
+            && let Some(sp) = ui.ctx().input(|i| i.pointer.press_origin())
             && let Some(start) = to_pdf(sp)
             && let Some(idx) = selected
         {
@@ -12118,6 +12181,189 @@ fn run_vector_edit_tool(
     // operator just produced rather than the previous frame's. Without this the
     // object-edit tool selects silently — see `draw_selection_outlines`.
     draw_selection_outlines(doc, ui, image_rect, extent, zoom);
+}
+
+/// Select and drag ce dimensions on the canvas (Pass 25.5).
+///
+/// # Why this runs alongside every tool rather than owning the canvas
+///
+/// A ce dimension is pdfce's own annotation, and repositioning one is the kind
+/// of tidying an operator does WHILE doing something else — after placing a
+/// dimension, while measuring the next thing, while reading the drawing. Making
+/// it a mode would mean arming a tool to nudge a label, which is exactly the
+/// "why does this need a mode" friction the shell is already carrying too much
+/// of.
+///
+/// It takes priority over object selection when the pointer is over a ce
+/// dimension, because a dimension sits ON TOP of the drawing it measures: the
+/// operator pointing at it means it, and the page content underneath is
+/// reachable everywhere else.
+///
+/// # What a drag does, and does not
+///
+/// Dragging translates the dimension — both measured points move together, so
+/// the value is unchanged (`DimensionKind::translated`). That is the whole
+/// operation: repositioning a dimension is not re-measuring it. Changing WHAT
+/// is measured means picking new points, which is authoring a new one.
+///
+/// The commit is one `EditSession::move_dimension`, undoable with Ctrl+Z, and
+/// happens on RELEASE — the live feedback during the drag is an outline, never
+/// a partial edit.
+fn run_dimension_drag(
+    doc: &mut OpenDoc,
+    ui: &egui::Ui,
+    image_response: &egui::Response,
+    image_rect: egui::Rect,
+    extent: (f32, f32),
+    zoom: f32,
+) -> bool {
+    let page_index = doc.view.page_index;
+    let Some(page) = doc.pages.get(page_index) else {
+        return false;
+    };
+
+    // Canvas-space rects of everything clickable, nearest-last (authoring
+    // order), so the LAST match is the one drawn most recently — the same
+    // "topmost wins" rule page content uses.
+    let rects: Vec<(pdfce_core::dimension::DimensionId, egui::Rect)> = doc
+        .session
+        .dimension_rects(page_index)
+        .into_iter()
+        .filter_map(|(id, [llx, lly, urx, ury])| {
+            let a = viewer::pdf_space_to_canvas(egui::pos2(llx as f32, lly as f32), page)?;
+            let b = viewer::pdf_space_to_canvas(egui::pos2(urx as f32, ury as f32), page)?;
+            Some((id, egui::Rect::from_two_pos(a, b)))
+        })
+        .collect();
+    if rects.is_empty() {
+        return false;
+    }
+
+    if diag::enabled() && ui.input(|i| i.pointer.any_down() || i.pointer.any_released()) {
+        diag::trace(|| {
+            format!(
+                "dim-rects n={} ptr={:?} started={} dragged={} stopped={} clicked={} drag={:?}                  sel={:?}",
+                rects.len(),
+                image_response
+                    .interact_pointer_pos()
+                    .map(|sp| viewer::screen_to_page(sp, image_rect, extent, zoom)),
+                canvas::primary_drag_started(image_response),
+                canvas::primary_dragged(image_response),
+                canvas::primary_drag_stopped(image_response),
+                image_response.clicked(),
+                doc.dimension_drag,
+                doc.selected_dimension
+            )
+        });
+    }
+
+    let hit_at = |screen: egui::Pos2| -> Option<pdfce_core::dimension::DimensionId> {
+        let canvas = viewer::screen_to_page(screen, image_rect, extent, zoom);
+        rects
+            .iter()
+            .rev()
+            .find(|(_, r)| r.contains(canvas))
+            .map(|(id, _)| *id)
+    };
+
+    // Click selects. Reported as consumed so the object-selection path does
+    // not ALSO select the drawing underneath in the same frame.
+    let mut consumed = false;
+    if image_response.clicked()
+        && let Some(sp) = image_response.interact_pointer_pos()
+        && let Some(id) = hit_at(sp)
+    {
+        doc.selected_dimension = Some(id);
+        consumed = true;
+    }
+
+    // Drag start: only on a dimension, so a drag beginning on empty canvas
+    // still belongs to the marquee / active tool.
+    //
+    // `press_origin`, NOT `interact_pointer_pos`. egui reports `drag_started`
+    // on the frame the drag threshold is crossed, by which point the pointer
+    // has already moved off the press point — measured here as 45 pt away,
+    // which put it outside the dimension's own rect and made the drag find
+    // nothing to grab. A drag belongs to whatever was under the pointer when
+    // the button went DOWN.
+    if canvas::primary_drag_started(image_response)
+        && let Some(sp) = ui.ctx().input(|i| i.pointer.press_origin())
+        && let Some(id) = hit_at(sp)
+        && let Some(pdf) =
+            viewer::canvas_to_pdf_space(viewer::screen_to_page(sp, image_rect, extent, zoom), page)
+    {
+        doc.selected_dimension = Some(id);
+        doc.dimension_drag = Some((id, pdf));
+        consumed = true;
+    }
+
+    // Live outline + commit on release.
+    if let Some((id, start_pdf)) = doc.dimension_drag {
+        consumed = true;
+        let cur = image_response.interact_pointer_pos().and_then(|sp| {
+            viewer::canvas_to_pdf_space(viewer::screen_to_page(sp, image_rect, extent, zoom), page)
+        });
+        if let Some(cur) = cur {
+            let (dx, dy) = (
+                f64::from(cur.x - start_pdf.x),
+                f64::from(cur.y - start_pdf.y),
+            );
+            if let Some((_, rect)) = rects.iter().find(|(rid, _)| *rid == id) {
+                // The page-space delta as a screen vector: map the delta and
+                // the origin through the same transform and subtract, exactly
+                // as the object-move preview does.
+                let d_screen = viewer::pdf_space_to_canvas(
+                    egui::pos2(cur.x - start_pdf.x, cur.y - start_pdf.y),
+                    page,
+                )
+                .zip(viewer::pdf_space_to_canvas(egui::pos2(0.0, 0.0), page))
+                .map(|(a, b)| (a - b) * zoom)
+                .unwrap_or(egui::Vec2::ZERO);
+                let min = viewer::page_to_screen(rect.min, image_rect, extent, zoom) + d_screen;
+                let max = viewer::page_to_screen(rect.max, image_rect, extent, zoom) + d_screen;
+                ui.painter_at(image_rect).rect_stroke(
+                    egui::Rect::from_two_pos(min, max),
+                    0.0,
+                    egui::Stroke::new(2.0, DIMENSION_DRAG_COLOR),
+                    egui::StrokeKind::Outside,
+                );
+            }
+            if canvas::primary_drag_stopped(image_response) {
+                let outcome = doc.session.move_dimension(id, dx, dy);
+                diag::trace(|| {
+                    format!(
+                        "commit-move-dimension id={id:?} dx={dx} dy={dy} -> {:?}",
+                        outcome.as_ref().map_err(std::string::ToString::to_string)
+                    )
+                });
+                doc.dimension_drag = None;
+                if outcome.is_ok() {
+                    doc.refresh_pages();
+                    doc.ensure_object_provider();
+                }
+            }
+        } else if canvas::primary_drag_stopped(image_response) {
+            // The pointer left the window mid-drag: abandon rather than commit
+            // a move to a position that was never shown.
+            doc.dimension_drag = None;
+        }
+    }
+
+    // Show what is selected, whether or not a drag is in flight.
+    if let Some(id) = doc.selected_dimension
+        && let Some((_, rect)) = rects.iter().find(|(rid, _)| *rid == id)
+        && doc.dimension_drag.is_none()
+    {
+        let min = viewer::page_to_screen(rect.min, image_rect, extent, zoom);
+        let max = viewer::page_to_screen(rect.max, image_rect, extent, zoom);
+        ui.painter_at(image_rect).rect_stroke(
+            egui::Rect::from_two_pos(min, max),
+            0.0,
+            egui::Stroke::new(2.0, DIMENSION_SELECT_COLOR),
+            egui::StrokeKind::Outside,
+        );
+    }
+    consumed
 }
 
 fn run_measure_tool(
@@ -12716,6 +12962,74 @@ fn scale_entry_widget(
     // The paper-unit basis is ALWAYS shown, even when the ratio path is not
     // selected (ui-spec §4.2 — the operator learns the basis exists first).
     ui.label(ui_text::scale_entry_paper_basis_caption());
+    // -- Display format (Pass 25.5): how the number is written, separate from
+    //    what it measures.
+    //
+    // The operator asked for this by name: "also want to be able to choose the
+    // units and display type - rounding, fraction, etc." The unit was already
+    // selectable; the display type was fixed at the unit's default, so a
+    // drawing dimensioned in inches always read `55.63"` and could never read
+    // `55 5/8"` — the notation the drawing itself uses, and the notation the
+    // scale-by-known-dimension field already ACCEPTS as input. Reading back in
+    // a different notation from the one you typed is its own small betrayal.
+    ui.separator();
+    ui.label(ui_text::format_section_label());
+    let unit = fields.unit;
+    let mut mode = fields
+        .fraction
+        .unwrap_or_else(|| unit.default_format().fraction);
+    let was_decimal = matches!(mode, pdfce_core::dimension::FractionMode::Decimal { .. });
+    ui.horizontal(|ui| {
+        if ui
+            .selectable_label(was_decimal, ui_text::format_decimal_label())
+            .clicked()
+        {
+            mode = pdfce_core::dimension::FractionMode::Decimal { places: 2 };
+        }
+        if ui
+            .selectable_label(!was_decimal, ui_text::format_fraction_label())
+            .clicked()
+        {
+            mode = pdfce_core::dimension::FractionMode::Fraction {
+                denominator: 16,
+                reduce: false,
+            };
+        }
+    });
+    match &mut mode {
+        pdfce_core::dimension::FractionMode::Decimal { places } => {
+            ui.horizontal(|ui| {
+                ui.label(ui_text::format_places_label());
+                ui.add(egui::DragValue::new(places).range(0..=6));
+            });
+        }
+        pdfce_core::dimension::FractionMode::Fraction {
+            denominator,
+            reduce,
+        } => {
+            ui.horizontal(|ui| {
+                ui.label(ui_text::format_denominator_label());
+                // Powers of two only: 1/10" is not a thing a drawing is
+                // dimensioned in, and a free spinner would let an operator ask
+                // for one and then wonder why the numbers look wrong.
+                egui::ComboBox::from_id_salt("pdfce-format-denominator")
+                    .selected_text(ui_text::format_denominator_value(*denominator))
+                    .show_ui(ui, |ui| {
+                        for d in [2u32, 4, 8, 16, 32, 64] {
+                            ui.selectable_value(
+                                denominator,
+                                d,
+                                ui_text::format_denominator_value(d),
+                            );
+                        }
+                    });
+            });
+            ui.checkbox(reduce, ui_text::format_reduce_label())
+                .on_hover_text(ui_text::format_reduce_tooltip());
+        }
+    }
+    fields.fraction = Some(mode);
+
     // Live preview of the resulting scale, BEFORE Accept (ui-spec §4.2).
     if let Some(prev) = fields.preview(drawn) {
         ui.label(ui_text::scale_entry_preview(&prev.ratio_label));

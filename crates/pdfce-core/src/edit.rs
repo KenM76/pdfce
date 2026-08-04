@@ -127,9 +127,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use crate::annot::AnnotFlags;
 use crate::annot_author::{self, MarkupSpec, TextAnnotSpec};
 use crate::dimension::{
-    DEFAULT_GROUP_ID, DimensionId, DimensionKind, DimensionModel, GroupId, NumberFormat,
-    ScaleState, Unit, author_dimension, build_ocg, build_ocproperties, deserialize_model,
-    serialize_model,
+    AUTHORED_ANNOT_KEYS, AUTHORED_MEASURE_KEY, DEFAULT_GROUP_ID, DimensionId, DimensionKind,
+    DimensionModel, GroupId, NumberFormat, ScaleState, Unit, author_dimension, build_ocg,
+    build_ocproperties, deserialize_model, serialize_model,
 };
 use crate::document::Document;
 use crate::fontdata::Std14;
@@ -354,6 +354,10 @@ pub enum CommandKind {
     /// and the authoritative `/PieceInfo` sidecar updated — all ONE undo
     /// entry (decision 011 §2.4, §12.9 / §8.11 / §14.5).
     AddDimension,
+    /// A ce dimension was MOVED (Pass 25.5): its stored geometry was
+    /// translated and its annotation + baked `/AP` regenerated from it. ONE
+    /// undoable command. See [`EditSession::move_dimension`].
+    MoveDimension,
     /// A dimension group's scale/units/format changed and every wired
     /// member's baked `/AP` label was regenerated (Pass 12.M2, the Pass 7.1
     /// regenerate pattern) — ONE undo entry however many members updated.
@@ -549,6 +553,25 @@ pub enum EditError {
     ObjectCreationWouldExposeHiddenObjects {
         /// How many entries would be exposed.
         count: usize,
+    },
+    /// A ce-dimension operation named a dimension the sidecar model does not
+    /// contain (Pass 25.5).
+    ///
+    /// Reachable from a stale selection: an id survives an undo that removed
+    /// the dimension it named. Refused by name rather than ignored, so a
+    /// caller finds out its handle went stale instead of watching a move
+    /// silently do nothing.
+    #[error("no ce dimension with id {id} exists in this document")]
+    DimensionNotFound {
+        /// The dimension id that was asked for.
+        id: u32,
+    },
+    /// A ce-dimension operation named a group the sidecar model does not
+    /// contain (Pass 25.5).
+    #[error("no ce dimension group with id {id} exists in this document")]
+    DimensionGroupNotFound {
+        /// The group id that was asked for.
+        id: u32,
     },
     /// A **certification signature** with an enforced permissions entry
     /// forbids this structural change (§12.8.4 Table 258).
@@ -6164,55 +6187,20 @@ impl EditSession {
         let mut model = self.read_dimension_model();
         model.set_group_scale(group, scale, format);
 
-        let members: Vec<(DimensionKind, ObjId, ObjId)> = model
+        // Regeneration goes through the ONE shared path (R92). This used to
+        // rewrite the annotation inline, and touched only `/Rect`,
+        // `/Contents` and `/Measure` — correct for a scale change, where the
+        // geometry does not move, and silently wrong for anything that DOES
+        // move it, because `/L` (the measured line, §12.5.6.7) would keep its
+        // old endpoints. Pass 25.5's move needs `/L` rewritten, and having two
+        // regenerators disagreeing about which keys authoring owns is exactly
+        // how that kind of staleness survives review.
+        let members: Vec<DimensionId> = model
             .members(group)
-            .filter_map(|d| Some((d.kind, d.annot?, d.ap?)))
+            .filter(|d| d.annot.is_some() && d.ap.is_some())
+            .map(|d| d.id)
             .collect();
-
-        let mut objects: Vec<ObjectWrite> = Vec::new();
-        for (kind, annot_id, ap_id) in &members {
-            let authored = author_dimension(kind, scale, format);
-            // Replace the /AP stream object with the regenerated appearance.
-            let mut ap_dict = authored.ap_dict;
-            ap_dict.insert(
-                Name::from(b"Length"),
-                Object::Integer(i64::try_from(authored.ap_content.len()).unwrap_or(i64::MAX)),
-            );
-            let ap_span = self.stage_bytes(&authored.ap_content);
-            objects.push(ObjectWrite {
-                id: *ap_id,
-                before: self.state.get(ap_id).cloned(),
-                after: Some(Object::Stream(Stream {
-                    dict: ap_dict,
-                    data_span: ap_span,
-                })),
-            });
-            // Update the annotation's /Rect, /Contents and /Measure in place,
-            // preserving its /AP, /P, /OC, /F wiring.
-            if let Some(Object::Dict(old)) = self.value(*annot_id) {
-                let mut a = old.clone();
-                if let Some(rect) = authored.annot.get(b"Rect") {
-                    a.insert(Name::from(b"Rect"), rect.clone());
-                }
-                a.insert(
-                    Name::from(b"Contents"),
-                    Object::String(authored.label.clone().into_bytes()),
-                );
-                match authored.annot.get(b"Measure") {
-                    Some(m) => {
-                        a.insert(Name::from(b"Measure"), m.clone());
-                    }
-                    None => {
-                        a.remove(b"Measure");
-                    }
-                }
-                objects.push(ObjectWrite {
-                    id: *annot_id,
-                    before: self.state.get(annot_id).cloned(),
-                    after: Some(Object::Dict(a)),
-                });
-            }
-        }
+        let mut objects = self.regenerate_dimension_writes(&model, &members)?;
 
         let catalog_write = self.catalog_dimension_write(&model)?;
         objects.push(catalog_write);
@@ -6256,7 +6244,209 @@ impl EditSession {
         Ok(result)
     }
 
+    /// Every ce dimension wired onto `page_index`, with its page-space
+    /// `/Rect` as `[llx, lly, urx, ury]` — the query a shell hit-tests
+    /// against to let an operator click one (Pass 25.5).
+    ///
+    /// # Why this lives in the core rather than in the shell
+    ///
+    /// "Which ce dimensions are on this page, and where" needs the sidecar
+    /// model, the annotation objects, and the session overlay resolved
+    /// together. A GUI that assembled that itself would be reaching through
+    /// three layers to rebuild something the session already knows, and would
+    /// go stale the first time any of the three changed shape. It is also the
+    /// query a CLI needs to report what is on a page, so it belongs where both
+    /// shells can reach it (`ARCHITECTURE.md` §3).
+    ///
+    /// Returned in sidecar order, which is authoring order. Dimensions not yet
+    /// wired into a document, or whose annotation has no readable `/Rect`, are
+    /// omitted — there is nothing on the page to click.
+    ///
+    /// **Overlay-aware**: a dimension moved this session reports its NEW rect,
+    /// so a shell hit-tests what the operator can currently see rather than
+    /// what the file said on open (decision 018's discipline, applied to
+    /// annotations).
+    #[must_use]
+    pub fn dimension_rects(&self, page_index: usize) -> Vec<(DimensionId, [f64; 4])> {
+        let Ok(slots) = self.page_slots() else {
+            return Vec::new();
+        };
+        let Some(page_id) = slots.get(page_index).map(|s| s.id) else {
+            return Vec::new();
+        };
+        let model = self.read_dimension_model();
+        model
+            .dimensions()
+            .iter()
+            .filter_map(|record| {
+                let annot_id = record.annot?;
+                let dict = self.value(annot_id)?.as_dict()?;
+                // `/P` names the page the annotation lives on (§12.5.2). A
+                // dimension authored onto another page must not be clickable
+                // here, and comparing ids is the only honest test — the
+                // sidecar deliberately does not duplicate the page.
+                if dict.get(b"P").and_then(Object::as_reference) != Some(page_id) {
+                    return None;
+                }
+                let rect = dict.get(b"Rect")?.as_array()?;
+                let v: Vec<f64> = rect.iter().filter_map(Object::as_number).collect();
+                let [llx, lly, urx, ury] = v[..] else {
+                    return None;
+                };
+                // Normalised: §7.9.5 allows either corner order, and a shell
+                // that assumed min/max would silently fail to hit a rect
+                // written the other way round.
+                Some((
+                    record.id,
+                    [llx.min(urx), lly.min(ury), llx.max(urx), lly.max(ury)],
+                ))
+            })
+            .collect()
+    }
+
+    /// **Move a ce dimension** by a page-space `(dx, dy)`, as one undoable
+    /// command (Pass 25.5).
+    ///
+    /// Translates the stored geometry and regenerates the annotation and its
+    /// baked `/AP` from it. The measured VALUE is unchanged — a translation
+    /// preserves every distance — so the label reads the same before and
+    /// after; what moves is where the dimension sits on the page.
+    ///
+    /// # Why regeneration rather than patching `/Rect`
+    ///
+    /// A ce dimension's appearance is baked at absolute coordinates:
+    /// leader lines, ticks, arrowheads and the label are all drawn into the
+    /// `/AP` stream in the annotation's own space. Nudging `/Rect` alone would
+    /// slide the box and leave the drawing inside it exactly where it was —
+    /// visibly wrong at the first pixel. `author_dimension` is pure and
+    /// deterministic precisely so it can be re-run (`add_dimension` records
+    /// the `annot`/`ap` handles "so a later scale change can regenerate"), and
+    /// this is the first caller to take it up on that.
+    ///
+    /// # What is preserved
+    ///
+    /// The regenerated annotation starts from the EXISTING dictionary and
+    /// overwrites only the keys authoring owns (`/Rect`, `/L`, `/Contents`,
+    /// `/C`, `/Measure`). `/P`, `/OC`, `/F`, and any key another product
+    /// added survive untouched — the round-trip discipline applied inside a
+    /// dictionary rather than across a file.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionNotFound`] for an unknown id or one never wired
+    /// into a document, plus the usual encryption / enforced-certification
+    /// guards. Every refusal happens before any mutation (rule 4).
+    pub fn move_dimension(
+        &mut self,
+        dimension: DimensionId,
+        dx: f64,
+        dy: f64,
+    ) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let mut model = self.read_dimension_model();
+        let record = model
+            .dimension(dimension)
+            .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
+        let moved = record.kind.translated(dx, dy);
+        if let Some(d) = model.dimension_mut(dimension) {
+            d.kind = moved;
+        }
+
+        let mut objects = self.regenerate_dimension_writes(&model, &[dimension])?;
+        objects.push(self.catalog_dimension_write(&model)?);
+        self.commit(Command {
+            kind: CommandKind::MoveDimension,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(())
+    }
+
     // ---- private helpers ----
+
+    /// Re-author the annotation + `/AP` of each named dimension from the
+    /// model's CURRENT geometry, scale and format.
+    ///
+    /// The one regeneration path, shared by every operation that changes what
+    /// a ce dimension should look like. A second copy of this would be a
+    /// second place for "which keys does authoring own" to be answered, and
+    /// the two answers would drift (R92).
+    ///
+    /// Dimensions not yet wired into a document (no `annot`/`ap` handle) are
+    /// skipped rather than refused: they have no appearance to regenerate, and
+    /// failing the whole operation because one member is unwired would make a
+    /// group-wide format change fragile for no benefit.
+    fn regenerate_dimension_writes(
+        &mut self,
+        model: &DimensionModel,
+        ids: &[DimensionId],
+    ) -> Result<Vec<ObjectWrite>, EditError> {
+        let mut objects = Vec::new();
+        for &id in ids {
+            let Some(record) = model.dimension(id) else {
+                return Err(EditError::DimensionNotFound { id: id.0 });
+            };
+            let (Some(annot_id), Some(ap_id)) = (record.annot, record.ap) else {
+                continue; // never wired into a document; nothing to regenerate
+            };
+            let group = model
+                .group(record.group)
+                .ok_or(EditError::DimensionGroupNotFound { id: record.group.0 })?;
+            let authored = author_dimension(&record.kind, group.scale, group.format);
+
+            let mut ap_dict = authored.ap_dict;
+            ap_dict.insert(
+                Name::from(b"Length"),
+                Object::Integer(i64::try_from(authored.ap_content.len()).unwrap_or(i64::MAX)),
+            );
+            let ap_span = self.stage_bytes(&authored.ap_content);
+            objects.push(ObjectWrite {
+                id: ap_id,
+                before: self.state.get(&ap_id).cloned(),
+                after: Some(Object::Stream(Stream {
+                    dict: ap_dict,
+                    data_span: ap_span,
+                })),
+            });
+
+            // Start from the EXISTING dictionary so `/P`, `/OC`, `/F` and any
+            // foreign key survive, and overwrite only what authoring owns.
+            let existing = self
+                .value(annot_id)
+                .and_then(Object::as_dict)
+                .cloned()
+                .unwrap_or_default();
+            let mut annot = existing;
+            for key in AUTHORED_ANNOT_KEYS
+                .into_iter()
+                .chain(std::iter::once(AUTHORED_MEASURE_KEY))
+            {
+                match authored.annot.get(key) {
+                    Some(v) => {
+                        annot.insert(Name::from(key), v.clone());
+                    }
+                    // Authoring did not produce this key for the new state —
+                    // an uncalibrated group has no `/Measure` — so a stale one
+                    // must GO, not linger and claim a scale that no longer
+                    // applies.
+                    None => {
+                        annot.remove(key);
+                    }
+                }
+            }
+            objects.push(ObjectWrite {
+                id: annot_id,
+                before: self.state.get(&annot_id).cloned(),
+                after: Some(Object::Dict(annot)),
+            });
+        }
+        Ok(objects)
+    }
 
     /// Read the authoritative model from the catalog `/PieceInfo /pdfce
     /// /Private` sidecar, or a fresh model if absent/unparseable (the

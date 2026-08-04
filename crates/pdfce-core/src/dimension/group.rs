@@ -114,6 +114,38 @@ pub enum DimensionKind {
 }
 
 impl DimensionKind {
+    /// This geometry translated by a page-space `(dx, dy)`.
+    ///
+    /// # Why the measured value is untouched, on purpose
+    ///
+    /// A translation is a rigid motion: every distance it preserves. So a
+    /// moved ce dimension reads exactly the same as before, and that is
+    /// correct rather than a shortcut — moving a dimension repositions the
+    /// annotation on the page, it does not re-measure anything. An operator
+    /// who wants a different value is picking different points, which is a
+    /// different operation.
+    ///
+    /// A `Circular` dimension moves its fitted CENTRE and keeps its radius,
+    /// for the same reason; the residual is a property of the fit that
+    /// produced it and is carried unchanged.
+    #[must_use]
+    pub fn translated(self, dx: f64, dy: f64) -> Self {
+        match self {
+            Self::Linear { a, b, constraint } => Self::Linear {
+                a: Point::new(a.x + dx, a.y + dy),
+                b: Point::new(b.x + dx, b.y + dy),
+                constraint,
+            },
+            Self::Circular { fit, show_diameter } => Self::Circular {
+                fit: FitCircle {
+                    center: Point::new(fit.center.x + dx, fit.center.y + dy),
+                    ..fit
+                },
+                show_diameter,
+            },
+        }
+    }
+
     /// The stored geometry length in PDF points that the display value scales
     /// (`measured_points × scale`). Linear = the constrained length; Circular
     /// = radius, or `2×radius` when displaying diameter.

@@ -224,6 +224,143 @@ fn changing_group_scale_regenerates_all_member_labels() {
     assert_eq!(contents(b_id), "1.00 m");
 }
 
+/// **Moving a ce dimension relocates it without re-measuring it.**
+///
+/// A translation is a rigid motion, so the measured value must be identical
+/// before and after — moving a dimension repositions the annotation, it does
+/// not change what was measured. The `/Rect` and `/L` must shift by exactly
+/// the requested delta.
+///
+/// `/L` is the assertion that matters. The regeneration this shares with
+/// `set_group_scale` used to rewrite only `/Rect`, `/Contents` and `/Measure`,
+/// which is indistinguishable from correct for a scale change and leaves a
+/// moved dimension's measured line (§12.5.6.7) pointing at where it used to
+/// be — a file that renders right and reports the wrong endpoints to every
+/// other reader.
+#[test]
+fn moving_a_ce_dimension_shifts_its_geometry_and_keeps_its_value() {
+    let (_orig, mut s) = session();
+    let (annot_id, dim_id) = s.add_dimension(0, DEFAULT_GROUP_ID, linear()).unwrap();
+    s.set_group_scale(
+        DEFAULT_GROUP_ID,
+        ScaleState::Calibrated { scale: 0.01 },
+        NumberFormat::decimal(Unit::Meter, 2),
+    )
+    .unwrap();
+
+    let read = |bytes: Vec<u8>| -> (Vec<f64>, Vec<f64>, String) {
+        let doc = Document::from_bytes(bytes).unwrap();
+        let Object::Dict(d) = &doc.get(annot_id).unwrap().value else {
+            panic!("annotation is not a dictionary")
+        };
+        let nums = |key: &[u8]| -> Vec<f64> {
+            d.get(key)
+                .and_then(Object::as_array)
+                .map(|a| a.iter().filter_map(Object::as_number).collect())
+                .unwrap_or_default()
+        };
+        let label = match d.get(b"Contents").unwrap() {
+            Object::String(b) => String::from_utf8_lossy(b).into_owned(),
+            _ => panic!("contents not a string"),
+        };
+        (nums(b"Rect"), nums(b"L"), label)
+    };
+
+    let (rect0, l0, label0) = read(save(&s));
+    assert_eq!(
+        l0.len(),
+        4,
+        "a /Line annotation carries /L as [x1 y1 x2 y2]"
+    );
+
+    s.move_dimension(dim_id, 25.0, -10.0).unwrap();
+    let (rect1, l1, label1) = read(save(&s));
+
+    assert_eq!(
+        label1, label0,
+        "a translation preserves every distance, so the measured value must not change"
+    );
+    for (i, (after, before)) in l1.iter().zip(&l0).enumerate() {
+        let expected = before + if i % 2 == 0 { 25.0 } else { -10.0 };
+        assert!(
+            (after - expected).abs() < 0.001,
+            "/L component {i} must shift by the requested delta: {after} vs {expected}"
+        );
+    }
+    for (i, (after, before)) in rect1.iter().zip(&rect0).enumerate() {
+        let expected = before + if i % 2 == 0 { 25.0 } else { -10.0 };
+        assert!(
+            (after - expected).abs() < 0.001,
+            "/Rect component {i} must shift by the requested delta: {after} vs {expected}"
+        );
+    }
+}
+
+/// `dimension_rects` reports what is CURRENTLY on the page, overlay and all.
+///
+/// The overlay half is the point: a shell hit-tests this to let an operator
+/// click a ce dimension, so it has to describe where the dimension is now, not
+/// where the file said it was on open. Reporting the stale rect would make a
+/// moved dimension clickable at its old position and dead at its new one.
+#[test]
+fn dimension_rects_reports_the_current_position_not_the_opened_one() {
+    let (_orig, mut s) = session();
+    let (_annot, dim_id) = s.add_dimension(0, DEFAULT_GROUP_ID, linear()).unwrap();
+
+    let before = s.dimension_rects(0);
+    assert_eq!(before.len(), 1, "the authored dimension is on page 0");
+    assert_eq!(before[0].0, dim_id);
+
+    s.move_dimension(dim_id, 30.0, 15.0).unwrap();
+    let after = s.dimension_rects(0);
+    assert_eq!(after.len(), 1);
+    for (i, (a, b)) in after[0].1.iter().zip(&before[0].1).enumerate() {
+        let expected = b + if i % 2 == 0 { 30.0 } else { 15.0 };
+        assert!(
+            (a - expected).abs() < 0.001,
+            "rect component {i} must reflect the move already made this session"
+        );
+    }
+
+    // A page with no ce dimensions reports none rather than every page's.
+    assert!(
+        s.dimension_rects(7).is_empty(),
+        "an out-of-range page must be empty, not a fallback to page 0"
+    );
+}
+
+/// Undo of a move restores the dimension exactly.
+#[test]
+fn undoing_a_ce_dimension_move_restores_it() {
+    let (_orig, mut s) = session();
+    let (_annot, dim_id) = s.add_dimension(0, DEFAULT_GROUP_ID, linear()).unwrap();
+    let before = save(&s);
+    s.move_dimension(dim_id, 40.0, 40.0).unwrap();
+    assert_ne!(save(&s), before, "the move must actually change the file");
+    s.undo().expect("undo the move");
+    assert_eq!(
+        save(&s),
+        before,
+        "undoing a move must restore the byte-identical prior save"
+    );
+}
+
+/// A stale dimension id is refused by name rather than silently doing nothing.
+#[test]
+fn moving_an_unknown_ce_dimension_is_refused_by_name() {
+    let (_orig, mut s) = session();
+    let err = s
+        .move_dimension(pdfce_core::dimension::DimensionId(999), 1.0, 1.0)
+        .expect_err("an unknown id must refuse");
+    assert!(
+        matches!(
+            err,
+            pdfce_core::edit::EditError::DimensionNotFound { id: 999 }
+        ),
+        "got {err:?}"
+    );
+}
+
 #[test]
 fn toggling_a_layer_moves_the_group_ocg_into_d_off() {
     let (_orig, mut s) = session();

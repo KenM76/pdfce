@@ -59,7 +59,7 @@ pub mod sidecar;
 pub mod units;
 
 // Re-export the everyday surface at `crate::dimension::…`.
-pub use author::{AuthoredDimension, author_dimension};
+pub use author::{AUTHORED_ANNOT_KEYS, AUTHORED_MEASURE_KEY, AuthoredDimension, author_dimension};
 pub use fit::{FitCircle, fit_circle_taubin, fit_circle_taubin_refined};
 pub use group::{
     DEFAULT_GROUP_ID, DimensionId, DimensionKind, DimensionModel, DimensionRecord, Group, GroupId,

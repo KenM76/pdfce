@@ -4896,6 +4896,63 @@ scanner before using raw strings in this catalog."
     found
 }
 
+/// Heading for the display-format controls in the scale editor (Pass 25.5).
+///
+/// "How it's written" rather than "Number format": the operator's own words
+/// were "display type - rounding, fraction", i.e. the question is about
+/// notation, and a plain-language heading is what makes it findable by someone
+/// looking for exactly that.
+pub fn format_section_label() -> &'static str {
+    "How it's written"
+}
+
+/// Decimal-notation choice.
+pub fn format_decimal_label() -> &'static str {
+    "Decimal"
+}
+
+/// Fraction-notation choice — the one a drawing is usually dimensioned in.
+pub fn format_fraction_label() -> &'static str {
+    "Fractions"
+}
+
+/// Label for the decimal-places spinner.
+pub fn format_places_label() -> &'static str {
+    "Decimal places:"
+}
+
+/// Label for the fraction-denominator picker.
+pub fn format_denominator_label() -> &'static str {
+    "Round to nearest:"
+}
+
+/// One denominator choice, written the way a drawing writes it.
+///
+/// `1/16` rather than `16`: the number on its own is ambiguous — it could
+/// plausibly be read as "16 decimal places" by someone who has just come from
+/// the control above it.
+pub fn format_denominator_value(denominator: u32) -> String {
+    format!("1/{denominator}")
+}
+
+/// Checkbox for reducing fractions to lowest terms.
+pub fn format_reduce_label() -> &'static str {
+    "Reduce fractions"
+}
+
+/// Why an operator might NOT want fractions reduced.
+///
+/// Unreduced is the architectural and machine-shop convention — a drawing
+/// dimensioned to sixteenths writes `6/16"`, not `3/8"`, so every dimension on
+/// the sheet shares a denominator and can be compared at a glance. pdfce
+/// defaults to unreduced for that reason, which is the opposite of what a
+/// calculator would do, so the reason is stated rather than assumed.
+pub fn format_reduce_tooltip() -> &'static str {
+    "Off (the default) keeps the denominator you chose, so 6/16\" stays 6/16\" — the usual \
+drawing convention, and it lets every dimension on the sheet be compared at a glance. On \
+reduces it to 3/8\"."
+}
+
 #[cfg(test)]
 mod glyph_coverage_tests {
     use super::scan_string_literal_chars;

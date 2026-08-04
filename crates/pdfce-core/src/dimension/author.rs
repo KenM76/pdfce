@@ -56,6 +56,36 @@ const LINE_WIDTH: f64 = 0.75;
 /// Arrowhead length (points).
 const ARROW_LEN: f64 = 7.0;
 
+/// The annotation-dictionary keys [`author_dimension`] OWNS — the ones a
+/// regeneration must overwrite, and must REMOVE when the new state does not
+/// produce them.
+///
+/// Declared here, next to the code that writes them, because "which keys does
+/// authoring own" has exactly one correct answer and it belongs where the
+/// authoring happens. A regenerator keeping its own list would drift the first
+/// time this function learns a new key — and the failure would be silent: a
+/// stale `/Measure` left behind by an uncalibrated regeneration claims a scale
+/// that no longer applies, and every conforming reader believes it.
+///
+/// `/AP` is deliberately NOT here. The appearance stream's object id is
+/// allocated once when the dimension is wired into a document and reused
+/// across regenerations, so the reference must survive; only the stream's
+/// CONTENT is rewritten.
+///
+/// `/C` is deliberately NOT here either, though this function does write it on
+/// first authoring. It is a default colour, not something derived from the
+/// geometry, scale or format — so nothing about a regeneration makes an
+/// existing `/C` stale. Owning it would mean the first recolouring feature
+/// silently loses its work the next time anything is regenerated, which is a
+/// bug that would be very hard to attribute.
+pub const AUTHORED_ANNOT_KEYS: [&[u8]; 6] =
+    [b"Type", b"Subtype", b"IT", b"Rect", b"L", b"Contents"];
+
+/// The key authoring writes only when the group is calibrated (§12.9 Table
+/// 261) — separated from [`AUTHORED_ANNOT_KEYS`] only for documentation; it is
+/// handled by the same overwrite-or-remove rule.
+pub const AUTHORED_MEASURE_KEY: &[u8] = b"Measure";
+
 /// The result of authoring one dimension — the pieces [`crate::edit`] wires
 /// into a document. Mirrors [`crate::annot_author::AuthoredAppearance`] so the
 /// edit-session wiring is identical (allocate `/AP` + annot numbers, stage
