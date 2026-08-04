@@ -20,6 +20,9 @@ pub mod bundled;
 pub mod coredata;
 pub mod program;
 pub mod select;
+/// Donor-face subsetting for FF-C (Pass 21.x, decision 021). Produces the
+/// plain-data `FontEmbedPlan` that `pdfce-core::font_embed` emits from.
+pub mod subset;
 
 use std::collections::HashMap;
 use std::sync::Arc;

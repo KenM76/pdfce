@@ -263,6 +263,22 @@ def main() -> int:
     path = out_dir / "subset-simple-embedded.pdf"
     path.write_bytes(subset_simple_embedded())
     print(f"wrote {path} ({path.stat().st_size} bytes)")
+
+    # The SAME program, standalone, as a DONOR fixture for FF-C (Pass 21.0).
+    #
+    # `plan_subset` takes a font file from the operator's font folder, not a
+    # program lifted out of a PDF — ISO 32000-1 §9.9 forbids the latter
+    # ("a licensed copy of the font program, not a copy extracted from the
+    # PDF file"). So the round-trip test needs a real .ttf on disk, and
+    # without one the only tests possible are error-path ones: every refusal
+    # would be covered and the path that actually does the work would not.
+    #
+    # Emitting it here rather than in a second generator keeps the two
+    # artefacts provably identical — the donor IS the embedded program — so a
+    # test can subset the donor and compare against what the PDF carries.
+    donor = out_dir / "subset-donor.ttf"
+    donor.write_bytes(build_subset_truetype())
+    print(f"wrote {donor} ({donor.stat().st_size} bytes)")
     print(f"  /BaseFont  {BASE_FONT}   (subset tag: {tag})")
     print(f"  carries    {CARRIED!r}")
     print(f"  absent     any other character — 'Z' is the canonical probe")
