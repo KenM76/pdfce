@@ -179,9 +179,14 @@
 //!   `smooth_scroll_delta`), so the scroll area cannot pan and zoom off
 //!   the same gesture. Breaking this convention is the single most
 //!   common way a from-scratch viewer feels wrong.
-//! - Drag pans, via the scroll area's own drag-to-scroll. Panning
-//!   triggers **no** re-raster at all: it moves the viewport over an
-//!   existing texture.
+//! - **Drag does NOT pan** (corrected 2026-08-04; this previously read
+//!   "Drag pans, via the scroll area's own drag-to-scroll"). Pass 9a made
+//!   a drag on the canvas a rubber-band MARQUEE and moved panning to the
+//!   wheel and scrollbars — deliberately, but its own comment records that
+//!   a UX review was owed on that default and never happened. The operator
+//!   asking for middle-drag panning IS that review arriving. Panning, by
+//!   whatever gesture, triggers **no** re-raster: it moves the viewport
+//!   over an existing texture.
 //! - PageUp/PageDown step pages; Home/End jump to the first/last.
 //! - Ctrl+Plus / Ctrl+Minus / Ctrl+0 are page zoom, matching browsers
 //!   and every PDF reader. This requires switching off egui's
@@ -7439,8 +7444,35 @@ impl PdfceApp {
         //
         // Pan suppression (spec §1.2/§1.3) is expressed by flipping this
         // source's `drag` off (egui 0.35 has no `drag_to_scroll` builder;
-        // `ScrollSource.drag` is the knob). Always `DragScroll::Always` this
-        // Pass, since `suppress_pan` is always `false`.
+        // `ScrollSource.drag` is the knob).
+        //
+        // CORRECTED 2026-08-04. This said: "Always `DragScroll::Always` this
+        // Pass, since `suppress_pan` is always `false`." It asserted the
+        // exact opposite of what the code does.
+        //
+        //     suppress_pan = selection_mode || canvas_suppresses_pan(t, None)
+        //                  = !t            || (t && true)
+        //                  = !t || t
+        //                  = true, in every state
+        //
+        // So `drag` is set to `Never` unconditionally and DRAG-TO-PAN IS OFF
+        // EVERYWHERE — with a tool active and without one. That is what Pass
+        // 9a decided in effect (its own comment above says panning "moves to
+        // the mouse wheel and the scrollbars"), so the BEHAVIOUR is
+        // intentional; what was wrong was this comment insisting the opposite,
+        // while the module doc at the top of this file still says "Drag pans,
+        // via the scroll area's own drag-to-scroll" — also now false.
+        //
+        // The `||` is a tautology and reads as a live decision. Left as-is
+        // deliberately: making it `= tool_active` would be a no-op today and
+        // would quietly change behaviour the moment the no-tool branch is
+        // revisited, which is precisely the review the operator's
+        // navigation request has now triggered. It should be resolved THERE,
+        // as a decision, not tidied away here as a cleanup.
+        //
+        // Found because the operator asked for middle-drag panning; the
+        // reason they asked is that plain-drag panning has not existed since
+        // Pass 9a, and nothing said so.
         let mut scroll_source = egui::scroll_area::ScrollSource::ALL;
         if suppress_pan {
             scroll_source.drag = egui::scroll_area::DragScroll::Never;
