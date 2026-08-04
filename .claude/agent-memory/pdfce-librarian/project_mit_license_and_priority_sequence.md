@@ -1,6 +1,6 @@
 ---
 name: project-mit-license-and-priority-sequence
-description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling (item #3: FF-H DONE, FF-C Pass 21.0 SHIPPED 2026-08-04 (glyf/TrueType donors, add-only) with 21.1/21.2/21.3 + R109 fsType-read still owed, FF-B open) → forms (item #4, still undispatched). Pass 8.1 (GUI redaction-apply) SHIPPED. Decision 021 (FF-C) filed 2026-08-03, add-only re-scope, R107–R110, ceiling R110; AMENDED 2026-08-03 (continuation 74) after spec review — P0 floor narrowed to glyf/TrueType donors only, R109 split into SubsettingNotPermitted/EmbeddingNotPermitted; Pass 21.0 shipped 2026-08-04 WITHOUT the R109 fsType-read sub-item (owed, flagged, not silently dropped).
+description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling (item #3: FF-H DONE, FF-C Pass 21.0 SHIPPED (glyf/TrueType donors, add-only) + R109 fsType-read SHIPPED + R110 primitive SHIPPED + R-INV-4 reachability fix SHIPPED (all continuation 76, 2026-08-04) — Pass 21.1 (composite-run editability, ShowSlot::code widening) still In progress/unbuilt, do NOT call FF-C done; FF-B open) → forms (item #4, still undispatched). Pass 8.1 (GUI redaction-apply) SHIPPED. Decision 021 (FF-C) filed 2026-08-03, add-only re-scope, ceiling now R110. Continuation 77 (2026-08-04): librarian-only session — ARCHITECTURE.md §3/§4 sync for Pass 21.0 discharged, R93/R96 amended (fourth/second occurrence), no new standing rule adopted for the "false comment" pattern.
 metadata:
   type: project
 ---
@@ -402,3 +402,42 @@ ceiling — different populations). Branch now **74 commits** — see
 [[project-uncommitted-repo-worktree-risk]]. Item #4 (forms) remains
 queued behind item #3's still-open FF-C follow-ons (21.1, fsType read,
 21.2, 21.3) and FF-B, unchanged in kind since continuation 73.
+
+**UPDATE — 2026-08-04, SESSION_LOG continuation 76: R109's fsType read
+SHIPPED (`58fe3f6`), R110's primitive SHIPPED (`c0ed638`), AND a
+shipped-but-unreachable R-INV-4 refusal was found and fixed
+(`8e08e80`+`87d3cb0`+`6b69956`) — item #3's FF-C follow-ons are
+shrinking but Pass 21.1 (actual composite-run editability) is STILL
+unbuilt.** Headline finding: `edit.rs` carried a comment claiming
+composite runs are refused later by R-INV-4 — false, because
+`match_run` silently filtered every composite run to `NoMatch` before
+the R-INV-4 gate could ever run, so the correct font-limitation
+refusal had NEVER once fired on any input, from Pass 21.0's ship
+through this fix. Fix was ordering (classify font before matching
+text), not new machinery — same dead-guard-behind-a-filter shape as
+the Pass 19.4 `Tw` finding, filed as a second occurrence. Composite
+runs are now correctly located and refused for the right, disclosed
+reason — **still not rewritable**: `ShowSlot::code` (currently `u8`)
+must widen to hold multi-byte CIDs before R110's conditional edit-lift
+has anything to attach to. Branch reached 79 commits. Two items
+carried forward as still-owed at continuation 76's own filing: the
+`ARCHITECTURE.md` §3/§4 body-section sync for Pass 21.0's new modules,
+and a judgement call on whether the four-instance "confident comment
+asserts untrue behavior" pattern warrants a new standing rule.
+
+**UPDATE — 2026-08-04, SESSION_LOG continuation 77 (librarian-only, no
+code): both of continuation 76's carried-forward items resolved.**
+(1) **No new standing rule** — the pattern is judged to already be R93
+(now filed as its fourth occurrence) plus R96 (now filed with a second
+occurrence recording the generalized "precondition-after-search" shape
+this instance demonstrates); R86 (still PENDING, awaiting item (e))
+gets a queued scope note that "observed working" also covers refusal
+paths, not just successes, since that habit — not a new rule — is what
+actually caught the `edit.rs` defect. (2) **`ARCHITECTURE.md` §3/§4
+sync for Pass 21.0's `pdfce-render::font::subset`/`pdfce-core::
+font_embed` modules is now DONE**, plus a dated §12 entry closing the
+gap. Repo/backup re-verified: still 79 commits, backup bundle
+refreshed to `...0325.bundle`, verify-clean, current to `6b69956`. Item
+#3's remaining live work is unchanged in kind: `ShowSlot::code`
+widening + multi-byte operand writer to actually close Pass 21.1; item
+#4 (forms) still queued behind it.

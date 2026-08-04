@@ -1,6 +1,6 @@
 ---
 name: project-uncommitted-repo-worktree-risk
-description: RESOLVED 2026-08-01 (commit d8b3903, then 79d1c6f + e13f3e6) — pdfce's crates/ tree is no longer uncommitted, and the engineer now commits in logical per-Pass/per-decision chunks. Branch pass-8-redaction at 74 commits as of continuation 75 (2026-08-04, Pass 21.0 shipped), still no remote. This librarian has no shell tool — commit counts/hashes are engineer-reported/operator-reported, not self-verified, unless noted otherwise.
+description: RESOLVED 2026-08-01 (commit d8b3903, then 79d1c6f + e13f3e6) — pdfce's crates/ tree is no longer uncommitted, and the engineer now commits in logical per-Pass/per-decision chunks. Branch pass-8-redaction at 79 commits as of continuation 77 (2026-08-04), still no remote. Backup bundle current (pdfce-20260804-0325.bundle, verify-clean, to 6b69956) as of continuation 77. This librarian has no shell tool — commit counts/hashes are engineer-reported/operator-reported, not self-verified, unless noted otherwise.
 metadata:
   type: project
 ---
@@ -333,3 +333,29 @@ verify`-clean, supersedes `...1936.bundle`. Push/publish authorization
 remains the sole open gate, unchanged in kind since continuation 50.
 Verify current tip/count with `git log --oneline -1` / `git rev-list
 --count HEAD` before trusting any number in this file.
+
+**UPDATE — continuation 76 (2026-08-04, R109 fsType-read closed,
+R110's primitive shipped, R-INV-4 reachability fix).** Five hashes
+`58fe3f6`/`c0ed638`/`8e08e80`/`87d3cb0`/`6b69956`, operator-verified
+with `git cat-file -t` again (second time this project has had direct
+operator verification, not just engineer relay). **Branch reached 79
+commits by continuation 76's filing** (flagged then as "stale by two
+commits" against the backup, since the bundle at that point was
+`...0015.bundle`, only 74-commit-deep).
+
+**UPDATE — continuation 77 (2026-08-04, librarian-only, no code) —
+BOTH carried-forward gaps from continuation 76 discharged.** (1)
+**Repo/backup state independently re-verified**, not merely
+re-derived: still 79 commits (matches continuation 76's count exactly
+— no drift), still no remote. Backup bundle **refreshed and
+verify-clean**: `D:\Dev\pdfce-backups\pdfce-20260804-0325.bundle`,
+current to `6b69956` — the "stale by two commits" flag from
+continuation 76 is now discharged. (2) The `ARCHITECTURE.md` §3/§4
+body-section sync for Pass 21.0's `pdfce-render::font::subset`/
+`pdfce-core::font_embed` modules — owed since continuation 75, carried
+through 76 — is now DONE (§3 crate-layout notes, a full §4 IMPLEMENTED
+entry, and a dated §12 decision-log entry closing the gap). Push/
+publish authorization remains the sole open gate, unchanged in kind
+since continuation 50. As always, verify tip/count with `git log
+--oneline -1` / `git rev-list --count HEAD` before trusting any number
+in this file past its filing date.

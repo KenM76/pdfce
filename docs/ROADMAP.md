@@ -60,13 +60,13 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 **Honest limits — do not let the non-Latin headline overstate them.** Point text only: boxed layout with an embedded face is refused BY NAME, because `layout_boxed` measures glyph advances through the Standard-14 inverse-encoding table, which an embedded CID font does not populate. TrueType (`glyf`) donors only — CFF is refused by name (spec-review C-3: `subsetter` wraps CFF in an OTTO sfnt that cannot conformantly satisfy either `FontFile3 /OpenType`'s `cmap` requirement or `/CIDFontType0C`'s bare-CFF requirement). **No shaping, ever (R17):** CJK, Cyrillic, Greek, and Hebrew-without-points work correctly; **Arabic, Devanagari, and Thai will embed and RENDER WRONG** (glyphs placed by advance, no GSUB/GPOS) — Open operator question (s) (below) still governs whether pdfce should refuse these by name.
 
-**NOT yet implemented, despite being named in decision 021's original 21.0 slice bullet — flagged here, not silently dropped.** **R109's `fsType` donor-permission read did NOT ship in this Pass.** `add-text --embed-font` currently embeds a donor face without reading or disclosing its `OS/2` `fsType` bits — meaning pdfce can silently embed a font whose license forbids subsetting (bit 8) or forbids embedding outright (bit 9), with no refusal and no disclosure. This is a real gap against R108/R109's own design intent (rule 4, fuzzy-never-sneaky) and against decision 021's own P0 scope, not mere polish deferred to a later slice — see "Still owed," below, and the dated amendment added to R109's Standing-rules bullet (below) recording the gap.
+**NOT yet implemented, despite being named in decision 021's original 21.0 slice bullet — flagged here, not silently dropped.** **R109's `fsType` donor-permission read did NOT ship in this Pass.** `add-text --embed-font` currently embeds a donor face without reading or disclosing its `OS/2` `fsType` bits — meaning pdfce can silently embed a font whose license forbids subsetting (bit 8) or forbids embedding outright (bit 9), with no refusal and no disclosure. This is a real gap against R108/R109's own design intent (rule 4, fuzzy-never-sneaky) and against decision 021's own P0 scope, not mere polish deferred to a later slice — see "Still owed," below, and the dated amendment added to R109's Standing-rules bullet (below) recording the gap. **GAP CLOSED (continuation 76, 2026-08-04, `58fe3f6`) — see R109's Standing-rules bullet (below) for the full shipped design (three refusals, ordering before subsetting, two interim non-refusal defaults flagged against Open operator question (r)).**
 
 **Two rule-shaped findings from `eb0bde5`'s bug hunt, recorded here per the engineer's explicit request — NOT adopted as new numbered standing rules this filing (rule-adoption for the numbered ledger is not this librarian's call to make solo; see the R107–R110 precedent of librarian-assigned numbers only against an existing decision record).** (1) A disclosure/hint string needs a test that asserts its TEXT against the specific branch that produced it, not merely a test that the string exists — `has-glyph-embedded` staying `false`-shaped prose on a build that had just embedded a font is R93's exact failure mode, and no existing gate catches it. (2) An exit-code mapping's `_ =>` catch-all arm is a standing decision that every future error variant is an unhandled crash, made once at write time and never revisited as variants are added — worth an exhaustiveness discipline (parallel to the existing `non_exhaustive_no_effect_...` Rust-RAG finding) rather than a wildcard arm. Both written to `D:\dev\rag\rust\` this filing (see RAG escalations, below) as generalizable Rust findings; neither is a PDF-domain finding, so neither goes to `personal_rag/pdf`.
 
 **Still owed from decision 021 — named explicitly so 21.0 does not read as "FF-C done":**
-- **Pass 21.1 (composite-run editability under verified-injective `/ToUnicode`, R110) is NOT optional polish.** Shipping 21.0 alone means pdfce can add text (e.g. Japanese) it can never afterward edit — a capability REGRESSION against the already-shipped Std-14 add-text path. Invisible to every existing gate including the R85 raster oracle, which will show the glyphs correctly and say nothing about editability (the `flatten_fields`-failure shape: correct counters, wrong artifact). **Promoted to In progress, below** (was Next-up-only pending 21.0's ship).
-- **R109's `fsType` read** (see "NOT yet implemented," above) — the spec librarian has already sourced the full bit table (decision 021 §10, `ROADMAP.md` Standing rules R109 bullet), so this is an implementation gap, not a research gap.
+- **Pass 21.1 (composite-run editability under verified-injective `/ToUnicode`, R110) is NOT optional polish.** Shipping 21.0 alone means pdfce can add text (e.g. Japanese) it can never afterward edit — a capability REGRESSION against the already-shipped Std-14 add-text path. Invisible to every existing gate including the R85 raster oracle, which will show the glyphs correctly and say nothing about editability (the `flatten_fields`-failure shape: correct counters, wrong artifact). **Promoted to In progress, below** (was Next-up-only pending 21.0's ship). **UPDATE (continuation 76, 2026-08-04): substantial progress, still NOT shipped** — the R110 primitive (`injective_inverse`) landed, and the composite-run refusal that was silently unreachable in `edit.rs` is now fixed (a shipped-but-dead R-INV-4 gate, same shape as the Pass 19.4 `Tw` finding). Composite runs are now correctly LOCATED and REFUSED with the right reason — still not EDITABLE (`ShowSlot::code` widening + multi-byte operand writer remain owed). See Pass 21.1's In-progress entry and R110's Standing-rules bullet (below) for the full build record.
+- **R109's `fsType` read** (see "NOT yet implemented," above) — the spec librarian has already sourced the full bit table (decision 021 §10, `ROADMAP.md` Standing rules R109 bullet), so this is an implementation gap, not a research gap. **CLOSED (continuation 76, 2026-08-04, `58fe3f6`)** — see R109's Standing-rules bullet, below, for the shipped design.
 - **The `/W`, `/CIDSet`, and subset-tag clause citations** decision 021 §4.2's dispatch table now carries correctly (§9.8.3 Table 124 for `/CIDSet`, §9.6.4 for the subset-tag prefix — both fixed by the spec-review amendment, continuation 74) are available for whoever picks up 21.2's `set-font` widening.
 
 **RAG escalations, this filing:**
@@ -5816,6 +5816,22 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 
 **Promoted the same session Pass 21.0 shipped (`48c6b77`), per decision 021's own instruction not to call FF-C done without it.** See the Pass 21.0 Shipped entry (top of Shipped) and the ★ Pass 21.x entry (Next up, below) for full framing. Scope: core + CLI. `/ToUnicode` verified injective (every CID maps to exactly one scalar, no two CIDs share a scalar) per font, per session, before a composite run FF-C authored becomes editable (R110); conditionally lifts R-INV-4 for that font only. Non-injective, absent, or partial `/ToUnicode` keeps refusing — `Identity-H` with no `/ToUnicode` remains R65's permanent hard skip, untouched by this Pass. **Also owed alongside 21.1, named at Pass 21.0's ship and not yet assigned its own slice number:** R109's `fsType` donor-permission read, which decision 021 scoped into 21.0 but did not ship there (see the Pass 21.0 Shipped entry's "NOT yet implemented" note) — whoever picks up 21.1 should confirm with the engineer whether to fold the fsType read in here or open it as a small standalone slice before 21.2.
 
+**Continuation 76 (2026-08-04) build log — three landed commits, this Pass is closer to shippable but NOT there yet.**
+
+- **`58fe3f6`** — R109's fsType read, folded into this Pass's build rather than opened as a separate slice (the engineer's call, resolving the "fold in or standalone" question left open above). Full design recorded on R109's own Standing-rules bullet — three named refusals (`SubsettingNotPermitted`, `EmbeddingNotPermitted`, and the correct non-firing of either on `nosubset-v1`'s v1 `OS/2`), read before subsetting because `subsetter` strips `OS/2`, seven fixtures. Two non-refusal cases (absent/unparseable `OS/2`; `fsType == 4` Preview & Print) ship as an interim disclose-and-proceed default — Open operator question (r), below, stays open for either to be overridden.
+- **`c0ed638`** — `ToUnicodeCMap::injective_inverse()`, the R110 primitive. Full design on R110's own Standing-rules bullet — three named disqualifying obstructions (ligature, many-to-one collision, empty map), ranges materialised (not lazily resolved, unlike ordinary lookup) so a range/single collision can't hide, and a non-committal test against the standard's own §9.10.3 EXAMPLE 2 (asserts the check runs and decides, not that the standard's example inverts).
+- **`8e08e80` + `87d3cb0` + `6b69956`** — **the headline finding.** A composite run's R-INV-4 refusal was UNREACHABLE from `edit-text` — `edit.rs` carried a comment claiming the refusal fired later; it never did, because the text-match stage failed first (`NoMatch`) on every composite run, present-and-locatable or not, so `classify_font` (R-INV-4's home) was never reached. Same shape as the Pass 19.4 `Tw`/R91 dead-guard finding, this time on R-INV-4 — filed as a SECOND occurrence of the existing RAG finding, not a new file (see RAG escalations, below). Fix: classify the font BEFORE matching, since the font-level refusal is a property of the run, not of whether the sought text is inside it. Composite runs now decode far enough to be findable and no further (`ShowSlot::code` stays `u8`, can't hold a CID). `6b69956` is a regression test asserting the ERROR VARIANT, verified non-vacuous by reverting the fix and watching the wrong diagnosis come back.
+
+**What this Pass has NOT yet delivered: actual editability.** Composite runs are now correctly located and refused for the right, disclosed reason — they are not yet rewritable. `ShowSlot::code` (currently `u8`) must widen to hold multi-byte CIDs, and the content-stream operand writer must learn to emit multi-byte show operators, before R110's conditional lift has anything to attach to. Until that lands, Pass 21.0's own capability-regression warning (pdfce can add composite text it cannot edit) stays live, unchanged by this continuation's work.
+
+**Honest limit, carried forward from the reachability fix:** the widened decode assumes `Identity-H` specifically (what pdfce itself writes, and what real composite text overwhelmingly uses in practice) — other CMap encodings on a composite run remain invisible to this decode path, same as before the fix. Narrowed, not regressed.
+
+**RAG escalations, continuation 76:**
+- `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md` — extended with a SECOND occurrence (R-INV-4/`edit-text`, distinct code path from the original R91/`Tw` finding, same exact shape) and a generalized framing: a precondition check (a property of the OBJECT) placed after a search step (a property of the QUERY) only ever fires for objects the search can already handle — so the cases it exists for are exactly the cases that never reach it.
+- `D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md` — extended with a fourth occurrence (the `edit.rs` comment asserting R-INV-4 fires "later" when it structurally could not) — now four confirmed instances of a confidently-worded comment asserting untrue runtime behavior on this project alone. Flagged to the engineer as a pattern frequent enough to be worth judging for standing-rule elevation — that adoption call is not this librarian's to make solo (same discipline as continuations 74/75).
+- Both indexed already (edits to existing files, not new ones) — no `index.md` change needed this filing.
+- No `personal_rag/pdf` entry this continuation — the fsType semantics are canonical OpenType-spec content (spec-librarian's territory, already sourced), and the Identity-H-prevalence honest-limit note above is a restated existing observation, not a new empirically-verified finding from this session (no fresh census was run to back it).
+
 ### GUI redaction-apply flow — **SHIPPED as Pass 8.1 (`9a68999`), 2026-08-03. See the Pass 8.1 Shipped entry (top of Shipped) for the full build record.** Retained below as the historical framing (append-only discipline).
 
 **Promoted from Backlog the same continuation decision 019/FF-H
@@ -10129,6 +10145,19 @@ exercises neither):**
   fsType↔PDF bridge exists in NEITHER specification** — ISO 32000-1
   names no field, OpenType never mentions PDF — which is why this stays
   an operator call and not a lookup.
+  **INTERIM DEFAULT SHIPPED (continuation 76, 2026-08-04, `58fe3f6`) —
+  this does NOT close the question.** Absent/unparseable `OS/2` now
+  proceeds, disclosed as unknown. A second case also ships the same
+  disclose-and-proceed default: `fsType == 4` (Preview & Print), which
+  permits the embed itself but additionally obliges the *document*
+  stay read-only thereafter — an obligation on every future reader
+  that pdfce has no PDF field to express and cannot enforce, so
+  "proceed" here is a pragmatic default, not a claim that the
+  obligation is satisfied. Both were shipped as the engineering default
+  needed to ship code at all, not as a resolution — Ken can still pick
+  refuse-outright or disclose-and-acknowledge for either case, and
+  R109 is written to accept whichever policy is chosen (unchanged from
+  the narrowing above).
 - **(s) Complex scripts (Arabic/Devanagari/Thai) — refuse by name at
   Pass 21.0, or disclose loudly and let the operator decide?** FF-C
   plus standing rule R17 (no shaping, ever) means these scripts would
@@ -10198,6 +10227,16 @@ exercises neither):**
   verify`-clean; supersedes `...1936.bundle`. Same standing caveat:
   point-in-time snapshot, will drift behind again with the next
   commit, not a substitute for an actual push decision.
+  **UPDATED (continuation 76, 2026-08-04): 79 commits, still no
+  remote.** Five hashes spanning this continuation's Pass 21.1 build
+  independently verified with `git cat-file -t` by the operator
+  (`58fe3f6`, `c0ed638`, `8e08e80`, `87d3cb0`, `6b69956` — all
+  confirmed `commit` objects). **The backup bundle is now STALE, two
+  commits behind** — `...0015.bundle` (continuation 75) does not cover
+  any of the five hashes above; not yet refreshed this continuation.
+  Flag carried forward rather than silently fixed: a fresh
+  `git bundle create` + `git bundle verify` pass is owed before the
+  next natural checkpoint.
 - Encryption (Pass 5 / decision 007)'s `/R 6` sourcing method and the
   `LEGAL.md` §2 Adobe-supplement contradiction — both still gate its
   scoping when it activates.
@@ -11057,6 +11096,20 @@ exercises neither):**
   not yet in force** — do not cite it as binding until the operator
   answers item (e); it is recorded here now so the number is reserved
   and the text is ready the moment it is confirmed.
+  **Scope note queued for activation (librarian-assigned, 2026-08-04,
+  continuation 77 — not yet in force, same PENDING status as the rule
+  itself):** "observed working in the running application" is not
+  limited to success paths. A REFUSAL is operator-facing behavior too —
+  the operator sees a message, or doesn't, exactly as much as they see
+  a feature working — so once confirmed, R86 also requires observing a
+  refusal actually fire in the running GUI/CLI before a Pass that adds
+  or changes one is recorded as Shipped, not merely that the refusal
+  compiles and its unit test passes. This is not a new rule: it is what
+  actually caught continuation 76's R-INV-4/R96 finding above — the
+  refusal had a green test and a confident comment, and was only proven
+  unreachable by trying to make it fire in a real edit and failing
+  twice. Filed as a scope clarification to fold in whenever item (e) is
+  answered, not as new machinery.
 - **R87 — Hashes and commit/test counts handed to a doc-writing agent
   must be engineer-verified against `git`/`cargo test` and spot-checked
   after filing, never filed on trust (methodology; no decision number;
@@ -11227,7 +11280,7 @@ exercises neither):**
 - **R93 — A code comment asserting a behavior is not evidence the
   behavior holds, even when two independent comments on both ends of a
   contract agree (methodology; no decision number; librarian-assigned;
-  2026-08-03, Pass 19.3).** Third occurrence of this exact failure shape
+  2026-08-03, Pass 19.3).** Fourth occurrence of this exact failure shape
   in this project: (1) decision 018's `refresh_pages` doc comment —
   "the document is not reloaded, because the base revision ... has not
   changed" — was true through Pass 3.1 and silently false from Pass 6.1
@@ -11241,7 +11294,16 @@ exercises neither):**
   asserted the SAME wrong claim, so cross-referencing the two doc
   comments against each other caught nothing; agreement between two
   confident assertions is not corroboration when both are unverified
-  against the actual data. **The generalizable rule:** a doc comment
+  against the actual data; (4) `edit.rs`'s comment — *"a composite font
+  is not decoded (edit is refused later, R-INV-4)"* — read as correct
+  and was wired to a real refusal, but the refusal could never fire:
+  `match_run`, the stage immediately before it, silently filtered every
+  composite run to `NoMatch` before `classify_font` (R-INV-4's home)
+  ever ran, so `edit-text` on a genuinely locatable composite run always
+  returned the generic "text not found" refusal, never the R-INV-4
+  font-limitation one, on any input, ever (continuation 76, 2026-08-04,
+  `8e08e80`+`87d3cb0`+`6b69956` — full record under R96, below, and
+  R110's Standing-rules bullet). **The generalizable rule:** a doc comment
   describing a cross-module contract (two conventions match, a cache is
   still valid, a rule fires before a later one) is a claim, not a
   guarantee, and needs the same standard of evidence R86 already
@@ -11300,6 +11362,31 @@ exercises neither):**
   Before trusting any refusal/validation gate exists, trace every stage
   that runs before it and ask whether the input class the gate is meant
   to catch can even survive to reach it. See
+  `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`.
+  **Second occurrence (continuation 76, 2026-08-04,
+  `8e08e80`+`87d3cb0`+`6b69956`), distinct code path, same exact
+  shape:** R-INV-4's composite-run refusal in `edit.rs` was correctly
+  written and correctly wired, and structurally unreachable, because
+  `match_run` — the text-decode/match stage immediately before it — read
+  `ShowData::text` and silently filtered every composite run to
+  `NoMatch` before the font-aware gate could run; composite runs were
+  never decoded far enough to be matched. Found by trying to reach the
+  refusal message and failing TWICE — once against an undecodable
+  fixture (where `NoMatch` was arguably honest) and again against a
+  purpose-built `cidfonttype2-with-tounicode.pdf` whose text was
+  genuinely findable, still getting `NoMatch`; the second failure is
+  what proved the bug, not reading the code. Fix was ORDERING, not new
+  machinery: classify the anchor's font BEFORE `match_run`, since a
+  font-level refusal is a property of the run, never of whether the
+  sought text sits inside it. **Generalized framing this occurrence
+  adds:** a PRECONDITION check (a property of the OBJECT) placed after
+  a SEARCH step (a property of the QUERY) only ever fires for objects
+  the search can already handle — so the cases the guard exists for are
+  exactly the cases that never reach it. The only reliable guard against
+  this shape is a test that asserts the ERROR VARIANT the gate is meant
+  to produce (not merely that some error occurs), because nothing in the
+  type system requires a refusal to be reachable. Filed as the RAG
+  file's second occurrence, not a new file — see
   `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`.
 - **R97 — A security- or correctness-critical proof should be extracted
   to a free function over data, so the proof can be a TEST rather than
@@ -11556,15 +11643,43 @@ exercises neither):**
   policy itself is Open operator question (r), below — narrowed by this
   amendment to the absent/unparseable-`OS/2` case specifically, since
   the bit semantics themselves are no longer open.
-  **IMPLEMENTATION GAP, dated note (2026-08-04, Pass 21.0's ship): this
-  read does NOT exist in the shipped code yet.** `add-text
-  --embed-font` (Pass 21.0, `48c6b77`) embeds a donor face without
-  reading or disclosing `fsType` — R109 is currently a specified
-  rule with a sourced bit table and no enforcing code. Tracked as owed
-  alongside Pass 21.1 (In progress, above) — see the Pass 21.0 Shipped
-  entry's "NOT yet implemented" note for the full record. Until this
-  lands, treat any `add-text --embed-font` output as UNVERIFIED against
-  the donor's own embedding licence.
+  **GAP CLOSED (continuation 76, 2026-08-04, `58fe3f6`) — the read now
+  exists in shipped code.** `add-text --embed-font` reads `fsType`
+  from the donor's `OS/2` table BEFORE subsetting (`subsetter` strips
+  `OS/2`, so this ordering is forced, not stylistic) and enforces the
+  two named refusals above. **Three refusals, not two — worth stating
+  precisely because the third is a non-refusal:** bit 8
+  (`SubsettingNotPermitted`) fires because FF-C always subsets, so a
+  face at `0x0108` (embeddable + no-subsetting) is correctly refused
+  even though whole-face embedding would be legal — reporting this as
+  a blanket "may not be embedded" would misdescribe the font's own
+  licence, which is exactly why bit 8 and bit 9 are separate named
+  variants rather than one `EmbeddingNotPermitted`. Bit 9
+  (`EmbeddingNotPermitted`) is unconditionally unsatisfiable for FF-C,
+  since pdfce embeds outlines, never bitmaps. Version-gating enforced:
+  bits 8–9 are ignored on `OS/2` v0/v1 — the load-bearing fixture pair
+  is `nosubset` (v4) vs. `nosubset-v1` (v1), **byte-identical bit
+  patterns, different enforcement**, because a fixture that only varies
+  the bits (not the version) cannot prove the version gate is even
+  consulted. Seven fixtures total, one per outcome (`SubsettingNotPermitted`,
+  `EmbeddingNotPermitted`, `nosubset-v1` no-op, absent `OS/2`, unparseable
+  `OS/2`, `fsType==0` Installable proceeds, ordinary permitted proceeds).
+  **Two non-refusal cases shipped as an INTERIM DEFAULT, not a
+  resolution of Open operator question (r), below:** absent/unparseable
+  `OS/2` proceeds (disclosed as unknown, never silently modelled as
+  bit-0 `0x0000` Installable — see the trap already named above) and
+  `fsType == 4` (Preview & Print) also proceeds, because that value
+  permits the embed itself; what it additionally obliges is that the
+  *document* stay read-only thereafter, an obligation on every future
+  reader that pdfce has no PDF field to express and cannot enforce.
+  Both are flagged, not decided — (r) remains open for Ken to pick a
+  different policy for either case. Bit semantics re-confirmed sourced
+  from `font__opentype_os2_fstype.md` (`pdfce-spec-librarian`), not
+  recall (rule 1) — this governs redistributing a third party's font,
+  exactly the class rule 1 exists to guard. Until this commit, any
+  `add-text --embed-font` output from Pass 21.0 alone was UNVERIFIED
+  against the donor's licence; that caveat is now retired for output
+  produced from this commit forward.
 - **R110 — A composite run is editable only where its `/ToUnicode` is
   VERIFIED injective, per font, per session (decision 021, 2026-08-03;
   librarian-assigned number).** Injectivity — every CID maps to exactly
@@ -11574,6 +11689,78 @@ exercises neither):**
   (R93). Non-injective, absent, or partial `/ToUnicode` keeps
   refusing. `Identity-H` with no `/ToUnicode` remains a permanent hard
   skip — **R65 untouched.**
+
+  **Primitive SHIPPED (continuation 76, 2026-08-04, `c0ed638`):
+  `ToUnicodeCMap::injective_inverse()`.** Three disqualifying
+  obstructions, each independently checked and named in the refusal:
+  a **ligature** (one code maps to a multi-character string, e.g.
+  "ffi" — no code means "just the f," so the inverse has no answer for
+  that scalar alone); **two codes mapping to one character** (the
+  inverse becomes a relation, not a function — pdfce would have to
+  CHOOSE which code an edit resolves to, and either choice silently
+  changes the glyph; both colliding codes are named in the refusal,
+  not just "non-injective"); and an **empty map**. Ranges are
+  MATERIALISED for this check (unlike ordinary `/ToUnicode` lookup,
+  which resolves lazily) — a collision between a range member and a
+  separate `bfchar` single entry is invisible to any point lookup and
+  would otherwise go undetected; bounded per range and in total so a
+  hostile range cannot turn the check itself into a resource sink.
+  Tested against the standard's own §9.10.3 EXAMPLE 2 CMap WITHOUT
+  asserting whether it inverts — whether the standard's own example
+  happens to be injective is a fact about the example, not about
+  pdfce; the test asserts only that the check runs to completion on a
+  FOREIGN CMap and reaches a decision with a stated reason, so R110
+  cannot silently become a rule that only ever answers "yes" on
+  pdfce's own output.
+
+  **Composite-run refusal made REACHABLE (continuation 76, 2026-08-04,
+  `8e08e80`+`87d3cb0`+`6b69956`) — the headline finding this
+  continuation.** `edit.rs` carried a comment claiming composite fonts
+  are refused later, by R-INV-4 — the comment was FALSE: a composite
+  run's text is decoded only far enough to attempt `match_run`, and
+  because that decode failed to locate the sought text, `classify_font`
+  (where R-INV-4 actually lives) was never reached — `edit-text` on a
+  genuinely present, genuinely locatable composite run returned the
+  generic "text not found" refusal, never the R-INV-4 font-limitation
+  refusal, on ANY input, ever. Same dead-guard-behind-a-filter shape as
+  the Pass 19.4 `Tw` finding (`R-INV-4` this time, not `R91`) — see
+  the RAG escalation, below, filed as a SECOND occurrence of that exact
+  pattern rather than a new file. **Found by failing to reach the
+  message twice**, not by reading code: once against the existing
+  (undecodable) composite fixture, where `NoMatch` was arguably honest,
+  and again against a purpose-built `cidfonttype2-with-tounicode.pdf`
+  whose text IS genuinely findable — and still getting `NoMatch`. The
+  second failure is what proved the bug. **Fix is ORDERING, not new
+  machinery:** classify the anchor's font BEFORE `match_run`, since a
+  font-level refusal is a property of the run, never of whether the
+  sought text sits inside it — there was never a reason to match
+  first. Composite runs are now decoded far enough to be **findable and
+  no further** (`ShowSlot::code` is a `u8` and cannot hold a 2-byte
+  CID, so decoding stops at "text populated, no code slots"). Verified
+  all three arms by running them, not just testing them: injective-CMap
+  composite → the real R-INV-4 refusal, naming pdfce's own limitation;
+  no-CMap composite → still `NoMatch`, and that is HONEST (no character
+  map means pdfce genuinely cannot say what text is there — narrowed,
+  not eliminated); simple font → unchanged, still edits, exit 0.
+  `6b69956` is a regression test asserting the ERROR VARIANT (not
+  merely that an error occurs), verified non-vacuous by reverting the
+  reorder and watching it fail with the wrong diagnosis, then
+  restoring — its positive control matters because the fix reorders a
+  path EVERY font shares, so the plausible break is refusing
+  everything, which would satisfy a same-shaped composite assertion
+  while silently destroying editing for every working document.
+  **Honest limit, recorded not hidden:** the widened decode assumes
+  `Identity-H` specifically; other CMap encodings on a composite run
+  stay invisible to this decode path exactly as they were before this
+  fix — narrowed, not regressed.
+
+  **STILL OWED — composite runs are LOCATABLE-BUT-REFUSED, not yet
+  EDITABLE.** `ShowSlot::code` must widen past `u8` and the operand
+  writer must learn multi-byte codes before an injective-`/ToUnicode`
+  composite run can actually be rewritten — R110's conditional lift is
+  real but has nothing to attach to yet. Pass 21.0 alone remains a
+  capability regression (pdfce can add text it cannot edit) until this
+  lands.
 
   **Ceiling is now R110** (was R106 before this entry).
 

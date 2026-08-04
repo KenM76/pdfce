@@ -10415,3 +10415,268 @@ this file, and `D:\dev\rag\rust\` updated.**
   facing summary until 21.1 (and ideally the fsType read) land — 21.0
   alone is a capability regression risk (can add text it can't edit)
   and a licence-disclosure gap (embeds without reading `fsType`).
+
+**Same-day continuation 76 (real date 2026-08-04) — R109's fsType-read
+gap CLOSED (`58fe3f6`); R110's primitive shipped (`c0ed638`); a
+SHIPPED-BUT-UNREACHABLE R-INV-4 refusal found and fixed
+(`8e08e80`+`87d3cb0`+`6b69956`). `ROADMAP.md`, `ARCHITECTURE.md` §12,
+and two `D:\dev\rag\rust\` files updated. Pass 21.1 remains In
+progress — NOT shipped, composite runs are locatable-but-refused, not
+yet editable.**
+
+**Shipped:**
+- No new Pass entry this continuation — all five commits land inside
+  the already-open Pass 21.1 (In progress). Continuation 75's own
+  "Still owed" item (R109's fsType read) is closed as part of this
+  continuation's build; see Findings, below.
+
+**Decisions made this session:**
+- **R109's fsType read folded into Pass 21.1's build** rather than
+  opened as its own standalone slice — resolving the "fold in or
+  standalone" question continuation 75 left open, an engineer call.
+- **Two of Open operator question (r)'s three previously-open
+  sub-cases now ship an interim disclose-and-proceed default** (absent/
+  unparseable `OS/2`; `fsType == 4` Preview & Print) — an engineering
+  default needed to ship working code, explicitly NOT a resolution of
+  (r). Ken retains the final call on both; R109 was written to accept
+  whichever policy he picks, so nothing about this default is
+  load-bearing against a future override.
+- **Rule-adoption discipline held again, consistent with continuations
+  74/75's precedent.** This continuation's headline finding is now the
+  FOURTH instance on this project of a confidently-worded comment
+  asserting runtime behavior that does not occur (after three prior
+  instances already on record in `D:\dev\rag\rust\
+  trust_but_verify_doc_comments_are_not_evidence.md`, plus this
+  session's own `snap_glyph` `#[allow]` and stale add-text disclosure
+  findings, filed to Pass 21.0's own entry). Judged NOT to warrant a
+  new numbered `ROADMAP.md` standing rule on this librarian's own
+  authority — flagged to the engineer as a pattern frequent enough to
+  be worth a deliberate elevation call, not silently adopted.
+
+**Findings + decisions:**
+- **R109's fsType read is now enforced, not merely specified.** Read
+  from the donor's `OS/2` before subsetting (`subsetter` strips it);
+  three named outcomes — `SubsettingNotPermitted` (bit 8, forbids the
+  one thing FF-C ever does even though whole-face embedding stays
+  legal — the reason bit 8 and bit 9 are separate refusals, not one
+  `EmbeddingNotPermitted`), `EmbeddingNotPermitted` (bit 9,
+  unconditionally unsatisfiable since pdfce embeds outlines, never
+  bitmaps), and correct non-firing on `OS/2` v0/v1 (proven by a
+  `nosubset`/`nosubset-v1` fixture pair with byte-identical bits and
+  different enforcement — version gating is invisible unless something
+  asserts the same bytes mean different things across versions). Seven
+  fixtures, one per outcome. Full record: R109's Standing-rules bullet
+  and `ARCHITECTURE.md` §12's 2026-08-04 entry.
+- **The headline finding: a shipped refusal (R-INV-4) was unreachable
+  from `edit-text` on composite runs.** `edit.rs` carried a comment
+  claiming composite fonts are refused later, by R-INV-4 — false: the
+  text-match stage returned `NoMatch` on every composite run before
+  `classify_font` (R-INV-4's home) could run, so the operator got "text
+  not found" instead of the correct font-limitation refusal, on ANY
+  composite input, ever. Found by trying to reach the message and
+  failing TWICE — once against an undecodable fixture (where `NoMatch`
+  was arguably honest) and again against a purpose-built
+  `cidfonttype2-with-tounicode.pdf` whose text is genuinely findable,
+  still getting `NoMatch`. The second failure is what proved the bug.
+  Fix is ORDERING: classify the font before matching text, since the
+  font-level refusal is a property of the run, never of whether the
+  sought text sits inside it. Verified all three arms by running them:
+  injective-CMap composite → the real R-INV-4 refusal; no-CMap
+  composite → still `NoMatch`, honestly (no character map, no way to
+  say what text is there); simple font → unchanged. Same exact shape as
+  the already-recorded Pass 19.4 `Tw`/R91 finding, different rule,
+  different code path — filed as a SECOND occurrence of the existing
+  RAG file, not a new one. Escalated to
+  `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`
+  (second occurrence, with a generalized framing: a precondition check
+  on the OBJECT placed after a search step on the QUERY only ever fires
+  for objects the search can already handle) and to
+  `D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`
+  (fourth occurrence overall).
+- **Honest limit carried forward, not new this continuation:** the
+  widened composite decode assumes `Identity-H` specifically, which is
+  what pdfce itself writes and what real composite text overwhelmingly
+  uses in practice — other CMap encodings on a composite run stay
+  invisible to this decode path, exactly as before the fix. Narrowed,
+  not regressed. Not filed to `personal_rag/pdf` — no fresh corpus
+  census backs the "overwhelmingly" claim this session (distinct from
+  the `tw-census` corpus finding already on record there, which
+  measures composite-run PREVALENCE, not CMap-encoding choice within
+  composite runs).
+- **R110's primitive shipped: `ToUnicodeCMap::injective_inverse()`.**
+  Three named disqualifying obstructions (ligature: one code maps to a
+  multi-character string, no code answers for the substring alone;
+  many-to-one: two codes collide on one scalar, making the inverse a
+  relation pdfce would have to arbitrarily resolve; empty map). Ranges
+  materialised for this check specifically, unlike ordinary lazy
+  `/ToUnicode` lookup, so a range/single collision can't hide. Tested
+  against the standard's own §9.10.3 EXAMPLE 2 without asserting
+  whether it inverts (that's a fact about the standard's example, not
+  about pdfce) — the test only asserts the check runs to completion on
+  a FOREIGN CMap and reaches a reasoned decision.
+- **Still NOT shipped: actual composite-run editability.** Composite
+  runs are now correctly located and refused for the right, disclosed
+  reason — not yet rewritable. `ShowSlot::code` (currently `u8`) must
+  widen to hold multi-byte CIDs and the operand writer must learn
+  multi-byte show operators before R110's conditional lift has anything
+  to attach to. Pass 21.0's capability-regression warning (pdfce can
+  add composite text it cannot edit) is unchanged by this continuation.
+
+**Still in flight:**
+- Pass 21.1 — still In progress, not shippable: editability itself
+  (`ShowSlot::code` widening + multi-byte operand writer) remains
+  unbuilt.
+- Open operator questions (r) [now carries a shipped interim default
+  for two of its three sub-cases, still formally open] and (s)
+  [unchanged] — still await Ken.
+- Repo status: **79 commits, still no remote.** Five hashes spanning
+  this continuation's build independently verified by the operator
+  with `git cat-file -t` (`58fe3f6`, `c0ed638`, `8e08e80`, `87d3cb0`,
+  `6b69956`). **Backup bundle is now STALE, two commits behind** —
+  `...0015.bundle` (continuation 75) does not cover any of this
+  continuation's five commits; not refreshed this continuation.
+- `ARCHITECTURE.md` §3/§4 body-section update for Pass 21.0's new
+  `pdfce-render::font::subset`/`pdfce-core::font_embed` modules is
+  still owed from continuation 75's ship — flagged again, not silently
+  absorbed into this filing.
+
+**For next session:**
+- Refresh the backup bundle — two commits stale as of this filing.
+- Build `ShowSlot::code` widening + the multi-byte operand writer to
+  actually close Pass 21.1 and retire the capability-regression
+  warning; this is the remaining blocker between "locatable-but-refused"
+  and "editable."
+- Consider whether the four-instance "confident comment asserts untrue
+  runtime behavior" pattern warrants a new numbered `ROADMAP.md`
+  standing rule — an engineer/operator call, not filed solo this
+  session.
+- Do the owed `ARCHITECTURE.md` §3/§4 body-section sync for Pass
+  21.0's new modules, carried over from continuation 75.
+- Do not describe FF-C or Pass 21.1 as "shipped" or "complete" in any
+  operator-facing summary — composite editability is still unbuilt.
+
+**Same-day continuation 77 (real date 2026-08-04) — librarian-only
+filing: no code shipped. Repo/backup state re-verified (79 commits,
+backup bundle refreshed and verify-clean, current to `6b69956`);
+standing-rule adoption call resolved as NO new rule (R93 and R96
+amended in place instead, R86 given a queued scope note); the owed
+`ARCHITECTURE.md` §3/§4 body-section sync for Pass 21.0's font-embed
+modules is DISCHARGED; a post-reorder GUI smoke test is recorded, no
+defect found.**
+
+**Shipped:**
+- No new Pass entry — this continuation is documentation/librarian
+  work only. Pass 21.1 remains In progress, unchanged from
+  continuation 76: composite runs are locatable-and-refused, not yet
+  rewritable.
+
+**Decisions made this session:**
+- **Repo/backup state re-verified, not re-derived.** Branch
+  `pass-8-redaction`, 79 commits, no remote — unchanged count from
+  continuation 76. Backup bundle refreshed to
+  `D:\Dev\pdfce-backups\pdfce-20260804-0325.bundle`, `git bundle
+  verify`-clean, current to `6b69956` — discharges continuation 76's
+  "backup bundle STALE, two commits behind" flag.
+- **The four-instance "confident comment asserts untrue runtime
+  behavior" pattern does NOT get a new numbered standing rule.**
+  Reasoning, recorded because "considered and declined" is itself a
+  decision worth not re-deriving: R93 already IS this rule (a code
+  comment asserting a behavior is not evidence the behavior holds) —
+  the `edit.rs`/R-INV-4 instance is filed as R93's fourth occurrence,
+  not a fifth rule, because a new rule saying "comments lie" would not
+  have caught this instance any better than R93 already states, and a
+  standing-rules list's usefulness is inversely proportional to its
+  length. What actually caught this instance was R86's habit (observe
+  the behavior in the running application) applied to a REFUSAL path
+  rather than a success path — that is the one place a rule TEXT
+  needed sharpening, so it is filed as a queued scope note on R86
+  itself (still PENDING, per item (e) — the note activates alongside
+  the rule, not before) rather than as new machinery.
+- **The same `edit.rs`/R-INV-4 instance is ALSO filed as R96's second
+  occurrence**, because the general form it demonstrates is more
+  useful than the instance: a PRECONDITION check (a property of the
+  OBJECT) placed after a SEARCH step (a property of the QUERY) only
+  ever fires for objects the search can already handle — so the cases
+  the guard exists for are exactly the cases that never reach it. The
+  only reliable defense is a test asserting the ERROR VARIANT a gate is
+  meant to produce, since nothing in the type system requires a
+  refusal to be reachable.
+
+**Findings + decisions:**
+- `docs/ROADMAP.md` Standing rules: **R93** updated from "third
+  occurrence" to a fourth, adding the `edit.rs` composite-font comment
+  and its false claim in full. **R96** gains a "second occurrence"
+  paragraph recording the same instance with the generalized
+  precondition-after-search framing (already filed to
+  `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`
+  as its second occurrence in continuation 76 — this filing brings the
+  ROADMAP standing-rule text itself into agreement with that RAG file,
+  which is where the "second occurrence" language previously lived
+  without a matching ROADMAP bullet). **R86** gains a queued,
+  not-yet-active scope note: once item (e) is answered and R86 goes
+  live, "observed working in the running application" also covers
+  refusal paths, not just success paths — a refusal is operator-facing
+  behavior exactly as much as a working feature is.
+- `docs/ARCHITECTURE.md` §3 (workspace layout) now documents
+  `pdfce-core::font_embed.rs` (plain-data `FontEmbedPlan`/
+  `SubsetGlyph`/`DescriptorMetrics`/`OutlineKind`, `build_objects`) and
+  `pdfce-render::font::subset.rs` (`plan_subset`, `SubsetError`,
+  `MAX_DONOR_BYTES`) under their owning crates, sourced from the
+  modules' own doc comments and public signatures, not re-derived from
+  the decision document. §4 (core data model) gains a full IMPLEMENTED
+  entry for Pass 21.0 recording the same surface plus R107's
+  allocate-only round-trip guarantee and the crate-split rationale
+  (decision 021 §3.2): subsetting reads like a `pdfce-core` job because
+  it is a write concern, but producing a subset first requires
+  *parsing* the donor, and that parser already lives in
+  `pdfce-render` — putting `subsetter` in `pdfce-core` would give a
+  crate with no font-program parser two of them purely to avoid a
+  plain-data seam, so the seam is deliberate and `pdfce-core` gains
+  zero new dependencies from this Pass. Also recorded: `pdfce-core`
+  still has no font-program parser after Pass 21.0 (`fontdata/` stays
+  metrics-only), and the entry is explicit that Pass 21.0's contract
+  is ADD-only — R110/Pass 21.1 governs editability and remains unbuilt,
+  so this sync is not a claim that FF-C is complete. `ARCHITECTURE.md`
+  §12 gains a dated 2026-08-04 entry closing the gap continuation 76
+  flagged (no new decision — an implementation-record/documentation
+  entry against the already-decided decision 021).
+- **Smoke test after the shared-path reorder (`87d3cb0`), recorded, no
+  defect.** `87d3cb0` reordered font classification above `match_run`
+  in `edit.rs` — a path every font shares, not just composite runs —
+  so it was verified in the running GUI rather than assumed safe from
+  the regression test alone (R86's discipline, applied proactively).
+  Release build, `hello.pdf`, Edit Text tool: clicked into a run, typed
+  a character, accepted. Canvas updated to "Times will sXubstitute
+  too.", the page thumbnail updated with it (Pass 17.0 live-edit
+  rendering still correct), the title bar showed the unsaved-changes
+  marker, and the "Last edit" panel showed its three disclosure
+  bullets (non-embedded-face provenance, incremental-save/prior-text-
+  survives, relayout/overflow). The `ℹ` markers rendered as real
+  glyphs (Pass 18.7 holding). No regression, nothing owed from this —
+  filed as an R86 observation because "a shared path was reordered and
+  the interactive path was checked" is only reassuring if written
+  down; otherwise a future reader has to re-derive whether it happened.
+
+**Still in flight:**
+- Pass 21.1 — still In progress, unchanged: `ShowSlot::code` widening
+  past `u8` and a multi-byte operand writer remain unbuilt; composite
+  runs stay locatable-but-refused, not editable.
+- Open operator questions (r) [interim default live for two of three
+  sub-cases, formally still open] and (s) [unchanged] — still await
+  Ken.
+- Repo status: 79 commits, no remote, backup bundle current and
+  verified as of this filing (see Decisions, above).
+- No `ARCHITECTURE.md` §3/§4 sync debt remains from Pass 21.0 — fully
+  discharged this continuation.
+
+**For next session:**
+- Build `ShowSlot::code` widening + the multi-byte operand writer to
+  close Pass 21.1 and retire the capability-regression warning — this
+  is the one remaining blocker between "locatable-but-refused" and
+  "editable," unchanged from continuation 76's ask.
+- Do not describe FF-C or Pass 21.1 as "shipped" or "complete" in any
+  operator-facing summary — composite editability is still unbuilt.
+- When Open operator question (e) is answered and R86 goes live, apply
+  its queued scope note (refusal paths count as operator-visible
+  behavior too) at the same time — it is written and waiting, not a
+  separate follow-up task.

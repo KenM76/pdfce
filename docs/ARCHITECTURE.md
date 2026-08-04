@@ -117,6 +117,17 @@ D:\Dev\pdfce\
                                    (produces a display-list / draw-op stream, NOT pixels).
                                    ZERO windowing/GUI/rendering-backend dependencies.
                                    THIS is the crate that forks to WASM later.
+                                   **`font_embed.rs` (Pass 21.0, FF-C, decision 021,
+                                   commit `48c6b77`; body-section sync 2026-08-04
+                                   continuation 77):** plain-data contract
+                                   (`FontEmbedPlan`/`SubsetGlyph`/`DescriptorMetrics`/
+                                   `OutlineKind`) plus `build_objects` — emits the new
+                                   `/Type0`+`/CIDFontType2`+`/FontDescriptor`+
+                                   `FontFile2`+`/ToUnicode` PDF objects from a plan
+                                   `pdfce-render` fills in. No font-PROGRAM parser
+                                   lives here — `fontdata/` stays metrics-only, even
+                                   after this Pass. See §4 for the full contract and
+                                   why the split runs this way.
     pdfce-render\               <- Takes pdfce-core's draw-op stream + resources
                                    (fonts, images, color spaces) and rasterizes to an
                                    in-memory pixel buffer via `tiny-skia` (CPU-only,
@@ -143,6 +154,24 @@ D:\Dev\pdfce\
                                    concern (`MAX_XOBJECT_DEPTH`, §10.1), distinct from
                                    pdfce-core's parse-time recursion guards (page-tree
                                    depth, xref/ObjStm cycles).
+                                   **`font\subset.rs` (Pass 21.0, FF-C, decision 021,
+                                   commit `48c6b77`; body-section sync 2026-08-04
+                                   continuation 77):** `plan_subset` parses an
+                                   operator-supplied donor face via the existing
+                                   skrifa parser (no second font-program parser — R21
+                                   unchanged), checks OpenType `OS/2 fsType` embedding
+                                   permission (R109) BEFORE calling `subsetter::subset`
+                                   (`subsetter` strips `OS/2`), and produces a
+                                   plain-data `FontEmbedPlan` for `pdfce-core::
+                                   font_embed` to emit. `SubsetError` (R27-shaped,
+                                   one variant per distinct cause) and
+                                   `MAX_DONOR_BYTES` (64 MiB, a judgement call, not a
+                                   corpus measurement — the census that measured real
+                                   embedded font programs cannot apply to an
+                                   operator-supplied donor face; see the constant's
+                                   own doc comment) live here. P0 floor: `glyf`
+                                   (TrueType-outline) donors only — CFF donors are
+                                   refused by name (decision 021 §10, C-3).
     pdfce-gui\                  <- The native desktop shell. egui/eframe application,
                                    window chrome, file dialogs (rfd crate), menus,
                                    docking layout (egui_dock or hand-rolled), the
@@ -305,6 +334,61 @@ dependencies — reuses `text_extract::font::ExtractFont`'s existing
 dictionary-only resolver (rule R21: no glyph-shaping crate in
 `pdfce-core`, a hit-test runs per click). Full build record:
 `ROADMAP.md`'s Pass 18.6 Shipped entry (top of Shipped).
+
+**IMPLEMENTED (2026-08-03, Pass 21.0, FF-C, decision 021, commit
+`48c6b77`; §3/§4 body-section sync filed 2026-08-04, continuation 77 —
+flagged owed at ship, discharged here):** `pdfce-core` gains
+`font_embed.rs` — the FIRST pdfce-core surface that emits a *new*,
+operator-supplied font program into a PDF, distinct from every prior
+font-touching module which only ever READ existing font resources.
+Public: `FontEmbedPlan` (plain-data contract: `SubsetGlyph`,
+`DescriptorMetrics`, `OutlineKind` — `TrueType` emittable at P0,
+`Cff` refused by name, decision 021 §10 C-3), `build_objects(&plan) ->
+Result<EmbeddedFontObjects, FontEmbedError>` (allocates a `/Type0`
+font dict + `/CIDFontType2` descendant + `/FontDescriptor` +
+`FontFile2` stream + `/ToUnicode` CMap — always `Identity-H`, forced
+independently by both `subsetter` stripping `cmap` and ISO 32000-1
+§9.9's `shall`). **Round-trip: R107 — this module only ever
+ALLOCATES fresh object ids, never rewrites an existing `/FontFile*`/
+`/FontDescriptor`/`/Font` dict**, so FF-C needs no new §5 exception;
+incremental save stays the default.
+
+`pdfce-render` gains `font::subset` — `plan_subset(donor_bytes, ...)
+-> Result<FontEmbedPlan, SubsetError>`, parsing the donor via the
+existing skrifa parser (no second font-program parser added anywhere
+— R21 unchanged) and calling `subsetter::subset`. Reads the donor's
+`OS/2 fsType` BEFORE subsetting, since `subsetter` strips `OS/2`
+(R109: `SubsettingNotPermitted` on bit 8, `EmbeddingNotPermitted` on
+bit 9, both correctly inert on `OS/2` v0/v1). `MAX_DONOR_BYTES` = 64
+MiB, a judgement call rather than a corpus measurement (`ARCHITECTURE.md`
+§10.1 wants a bound on attacker-influenced bytes; the project's own
+`tools/fontfile-census` measured EXISTING embedded font programs, which
+ISO 32000-1 §9.9 forbids reusing as an FF-C donor — so that census
+cannot justify this constant, and the number is stated as argued, not
+measured; see the constant's own doc comment).
+
+**Why the split runs core/render rather than living entirely in one
+crate (decision 021 §3.2):** subsetting is a *write* concern, so
+`pdfce-core` looks like its natural home — but producing a subset
+first requires *parsing* the donor (coverage from `cmap`, advances
+from `hmtx`, descriptor metrics, the `fsType` bits), and that parser
+already exists in `pdfce-render`. Putting `subsetter` in `pdfce-core`
+would give a crate with no font-program parser two of them, purely to
+avoid a plain-data seam. So the seam **is** the design: `pdfce-render`
+parses and subsets, `pdfce-core` emits the PDF objects, and
+`pdfce-core` gains **zero** new dependencies from this Pass.
+`pdfce-core` still has no font-program parser after Pass 21.0 —
+`fontdata/` (§4, standard-14 metrics) remains compiled-in metrics
+only, unchanged.
+
+**Composite-run editability is explicitly NOT part of this contract.**
+Pass 21.0 can only ADD composite text; R110 (Standing rules) governs
+whether an already-present composite run can be EDITED, and as of this
+entry `ShowSlot::code` (§4's `Page`/text-decode model) is still `u8`
+and cannot hold a multi-byte CID — composite runs Pass 21.0 adds are
+locatable and correctly refused (R-INV-4), not yet rewritable. Do not
+read this §4 entry as FF-C being complete; see `ROADMAP.md`'s Pass
+21.1 In-progress entry.
 
 ## 5. Round-trip / non-destructive-editing invariant
 
@@ -5055,3 +5139,92 @@ with a forward pointer.
     entries above: nothing has shipped, so the workspace-layout and
     core-data-model tables stay untouched until Pass 21.0 actually
     lands.
+
+- **2026-08-04 (continuation 76) — Decision 021 implementation update:
+  R109's fsType read SHIPPED (`58fe3f6`); an interim default policy is
+  now live for two of the three previously-open sub-cases of Open
+  operator question (r); the R110 primitive SHIPPED (`c0ed638`); and a
+  reachability defect in R-INV-4's enforcement was found and fixed
+  (`8e08e80`+`87d3cb0`+`6b69956`). Status: decision 021 unchanged
+  (DECIDED, SCOPED) — this entry records IMPLEMENTATION against an
+  already-decided design, not a new decision.** Full build record:
+  `ROADMAP.md`'s Pass 21.1 In-progress entry and the R109/R110
+  Standing-rules bullets.
+  - **R109 shipped as three named refusals, read before subsetting**
+    (forced by `subsetter` stripping `OS/2`): `SubsettingNotPermitted`
+    (bit 8), `EmbeddingNotPermitted` (bit 9), and bits 8–9 correctly
+    ignored on `OS/2` v0/v1 (the `nosubset`/`nosubset-v1` fixture pair
+    — byte-identical bits, different enforcement — is what proves the
+    version gate is consulted, not merely present in the code).
+  - **Two of the three previously-open sub-cases of (r) now ship an
+    interim disclose-and-proceed default — NOT a resolution of (r).**
+    Absent/unparseable `OS/2` proceeds, disclosed as unknown (never
+    modelled as bit-0 `0x0000` Installable, per the asymmetry already
+    on record). `fsType == 4` (Preview & Print) also proceeds — it
+    permits the embed; the additional obligation it imposes (the
+    *document*, not just the font, must stay read-only afterward) has
+    no PDF field to carry it and pdfce cannot enforce it, so "proceed"
+    here is a pragmatic default under a named limit, not a claim the
+    obligation is met. `ROADMAP.md` Open operator question (r) carries
+    the same dated amendment; Ken can still choose a different policy
+    for either case without any code-shape change (R109 was written to
+    accept whichever policy is chosen).
+  - **R110's primitive, `ToUnicodeCMap::injective_inverse()`, shipped.**
+    Three named disqualifying obstructions (ligature, many-to-one
+    collision, empty map); ranges materialised for this check
+    specifically (ordinary `/ToUnicode` lookup stays lazy) so a
+    range/single collision is not invisible to it.
+  - **Reachability defect found and fixed: R-INV-4's composite-run
+    refusal was unreachable from `edit-text`.** `edit.rs` asserted, in
+    a comment, that composite runs are refused later by R-INV-4 — false
+    by construction, because the preceding text-match stage returned
+    `NoMatch` on every composite run (decoded or not) before
+    `classify_font` (R-INV-4's home) could ever run. Same shape,
+    different code path, as the Pass 19.4 `Tw`/R91 finding already on
+    record (`ROADMAP.md` standing rules; RAG file
+    `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`,
+    now carrying this as a second occurrence). Fix: classify the font
+    BEFORE matching text, since the refusal is a property of the run,
+    not of whether the sought text is inside it — no invariant
+    definition changed, R-INV-4 now simply fires when it was always
+    supposed to. **No §3/§4/§5 body-section rewrite needed this
+    entry** — R-INV-4's definition in §5's text-editing invariant list
+    (if present) already stated the intended behavior correctly; the
+    defect was in enforcement ordering, not in what was documented as
+    true.
+  - **Outstanding gap, flagged not fixed this entry:** Pass 21.0's own
+    ship (`48c6b77`, continuation 75) never received a §3/§4
+    body-section update for the new `pdfce-render::font::subset`/
+    `pdfce-core::font_embed` modules, despite this section's own
+    "both need to change together" discipline — carried forward as
+    still-owed, not absorbed silently into this filing.
+
+- **2026-08-04 (continuation 77) — §3/§4 body-section sync for Pass
+  21.0's `pdfce-render::font::subset`/`pdfce-core::font_embed`
+  DISCHARGED. No new decision — this entry closes the gap flagged in
+  continuation 76's entry above and in continuation 75's original
+  Pass 21.0 ship.** §3 (workspace layout) now documents both modules
+  under their owning crates (`font_embed.rs`'s plain-data contract +
+  `build_objects` under `pdfce-core`; `font\subset.rs`'s `plan_subset`,
+  `SubsetError`, `MAX_DONOR_BYTES` under `pdfce-render`), and §4 (core
+  data model) gains a full IMPLEMENTED entry for Pass 21.0 recording
+  the public surface, R107's allocate-only round-trip guarantee, and
+  the crate-split rationale (decision 021 §3.2) in the same terms as
+  the module docstrings themselves — subsetting is a *write* concern
+  and looks like `pdfce-core`'s job, but producing a subset first
+  requires *parsing* the donor, and that parser already lives in
+  `pdfce-render`; putting `subsetter` in `pdfce-core` would give a
+  crate with no font-program parser two of them purely to avoid a
+  plain-data seam, so the seam is the design and `pdfce-core` gains
+  zero new dependencies. Also recorded in §4: `pdfce-core` still has no
+  font-program parser after Pass 21.0 — `fontdata/` remains compiled-in
+  metrics only — and Pass 21.0's contract is explicitly scoped to
+  ADDING composite text, not editing it; R110/Pass 21.1 governs
+  editability and is unbuilt as of this entry, so this sync must not be
+  read as FF-C being complete. Sourced from the modules' own doc
+  comments and public signatures (`plan_subset`, `SubsetError`,
+  `MAX_DONOR_BYTES` in `crates/pdfce-render/src/font/subset.rs`;
+  `FontEmbedPlan`, `SubsetGlyph`, `DescriptorMetrics`, `OutlineKind`,
+  `build_objects`, `EmbeddedFontObjects`, `FontEmbedError` in
+  `crates/pdfce-core/src/font_embed.rs`), not re-derived from the
+  decision document. Full text: §3 and §4, above.

@@ -482,7 +482,28 @@ pub(crate) enum ShowOp {
 /// text match back to the bytes to splice.
 #[derive(Debug, Clone)]
 pub(crate) struct ShowSlot {
-    pub(crate) code: u8,
+    /// The character code this slot shows.
+    ///
+    /// `u32`, not `u8`, since Pass 21.1. A simple font's code IS one byte
+    /// and always will be (§9.4.3), so this is wider than that case needs —
+    /// but a composite font addresses glyphs by a multi-byte code, and the
+    /// `u8` here is the specific thing that made composite runs
+    /// unrepresentable rather than merely unimplemented. Widening it is
+    /// behaviour-preserving on its own; it is the substrate the rest of
+    /// 21.1 needs, landed separately so that the step which DOES change
+    /// behaviour is not tangled with a mechanical type change.
+    ///
+    /// Pair it with [`Self::width`]: a code's value does not tell you how
+    /// many bytes it occupied, and every byte-range calculation needs that.
+    pub(crate) code: u32,
+    /// How many bytes this code occupied in the operand string.
+    ///
+    /// 1 for a simple font, 2 for `Identity-H`. Carried per slot rather
+    /// than per run because it is what the byte-range arithmetic in
+    /// [`match_run`] consumes, and deriving it there from the font would
+    /// mean re-answering a question the decode already answered — the kind
+    /// of duplicated predicate that drifts (R92).
+    pub(crate) width: u8,
     /// Index into the operator's [`ShowElem`] list.
     pub(crate) elem: usize,
     /// Byte offset of this code within that element's string.
@@ -1121,7 +1142,8 @@ impl<'a> Walk<'a> {
                             text.push_str(&chars);
                             let t1 = text.len();
                             slots.push(ShowSlot {
-                                code: byte,
+                                code: u32::from(byte),
+                                width: 1,
                                 elem: ei,
                                 byte_in_elem: bi,
                                 t0,
@@ -1131,11 +1153,37 @@ impl<'a> Walk<'a> {
                     } else if let Some(f) = font.as_ref() {
                         // COMPOSITE: decode far enough to be FINDABLE, and no
                         // further. Text is populated so this run can be
-                        // selected as the anchor; no slots are pushed,
-                        // because a slot is a per-code EDIT handle and
-                        // `ShowSlot::code` is a `u8` that cannot hold a
-                        // 2-byte CID. Making it editable is the rest of Pass
-                        // 21.1 and a change to the whole encoding seam.
+                        // selected as the anchor; NO SLOTS ARE PUSHED.
+                        //
+                        // The original reason was that `ShowSlot::code` was a
+                        // `u8` and could not hold a 2-byte CID. That is no
+                        // longer true — it is a `u32` with a `width` as of
+                        // this Pass — so the honest reasons now are two, and
+                        // the second is the one that would be easy to get
+                        // wrong:
+                        //
+                        // 1. The re-encode and splice paths downstream are
+                        //    still single-byte, so a slot here would be a
+                        //    handle nothing can use.
+                        //
+                        // 2. Pushing slots would WEAKEN the regression test
+                        //    that pins the composite refusal's reachability
+                        //    (`tests/composite_refusal_reachable.rs`). That
+                        //    test catches someone moving the font
+                        //    classification back below `match_run` — it works
+                        //    because, without slots, `match_run` fails and
+                        //    the wrong `NoMatch` surfaces. Give composite
+                        //    runs slots and `match_run` would SUCCEED, so the
+                        //    refusal would still fire from `classify_font`
+                        //    and the test would pass on the broken ordering.
+                        //    The guard would go quiet while the defect it
+                        //    guards became reachable again.
+                        //
+                        // So slots arrive in the same change that makes the
+                        // encoder multi-byte, and that change owes the
+                        // regression test a new way to detect the ordering —
+                        // asserting the refusal fires BEFORE any match work,
+                        // rather than relying on match failing.
                         //
                         // The point of decoding at all is that the run must
                         // be REACHABLE for the composite refusal to fire on
@@ -1350,7 +1398,16 @@ pub(crate) fn plan_edit(
     let inverse = InverseEncoding::build(&font.base_font, glyph_names);
 
     // The R-INV-5 tie-break seed: codes already used in this run.
-    let prefer: BTreeSet<u8> = anchor.slots.iter().map(|s| s.code).collect();
+    // Narrowed to `u8` deliberately: this is the "prefer codes already in
+    // use" hint for the SINGLE-BYTE inverse encoder, and a composite code
+    // has no meaning to it. `filter_map` rather than a cast, so a
+    // multi-byte code is dropped rather than silently truncated into a
+    // different, valid, wrong code.
+    let prefer: BTreeSet<u8> = anchor
+        .slots
+        .iter()
+        .filter_map(|s| u8::try_from(s.code).ok())
+        .collect();
     let encoded = inverse
         .encode_str(&req.replace, &prefer)
         .map_err(EditError::Refused)?;
@@ -1591,12 +1648,29 @@ pub(crate) fn match_run(anchor: &ShowData, find: &str) -> Result<MatchRun, EditE
     // Simple font ⇒ one byte per code, so the matched byte range is
     // contiguous from the first matched code to just past the last.
     let b_lo = matched.iter().map(|s| s.byte_in_elem).min().unwrap_or(0);
+    // `+ width`, not `+ 1`: the end of a code is its start plus however many
+    // bytes it occupied. Those were the same number for every code that
+    // could reach here before Pass 21.1, which is exactly why the constant
+    // looked correct.
     let b_hi = matched
         .iter()
-        .map(|s| s.byte_in_elem + 1)
+        .map(|s| s.byte_in_elem + usize::from(s.width))
         .max()
         .unwrap_or(b_lo);
-    let old_codes = matched.iter().map(|s| s.code).collect();
+    // `MatchRun::old_codes` stays `Vec<u8>`: its consumers are the
+    // single-byte re-encode paths (14.1 replace, 14.2 format), which have no
+    // representation for a multi-byte code. Narrowed with `filter_map`
+    // rather than a cast — a truncated code is a DIFFERENT, VALID code, and
+    // would be spliced back into the page as confidently wrong text.
+    //
+    // A composite run never reaches here: `classify_font` refuses it above
+    // `match_run` (Pass 21.1). This narrowing is therefore belt to that
+    // brace, and it is the belt that will still be holding if the ordering
+    // is ever changed back.
+    let old_codes = matched
+        .iter()
+        .filter_map(|s| u8::try_from(s.code).ok())
+        .collect();
     Ok(MatchRun {
         elem,
         b_lo,
@@ -1615,7 +1689,15 @@ pub(crate) fn carried_codes(recs: &[OpRec], font_name: &[u8]) -> BTreeSet<u8> {
             && s.font_name == font_name
         {
             for slot in &s.slots {
-                set.insert(slot.code);
+                // Same narrowing rationale as `prefer`: this set answers the
+                // SIMPLE-font embedded-subset floor ("is this one-byte code
+                // already carried on the page"), so a multi-byte code is
+                // dropped rather than truncated. Truncating would add a
+                // code the page does not actually carry, which would let
+                // R-INV-1 pass on a glyph that is not there.
+                if let Ok(b) = u8::try_from(slot.code) {
+                    set.insert(b);
+                }
             }
         }
     }
