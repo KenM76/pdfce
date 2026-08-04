@@ -5832,6 +5832,25 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 - Both indexed already (edits to existing files, not new ones) — no `index.md` change needed this filing.
 - No `personal_rag/pdf` entry this continuation — the fsType semantics are canonical OpenType-spec content (spec-librarian's territory, already sourced), and the Identity-H-prevalence honest-limit note above is a restated existing observation, not a new empirically-verified finding from this session (no fresh census was run to back it).
 
+**Continuation 78 (2026-08-04) build log — substrate for editability landed (three commits), WIRING DELIBERATELY NOT STARTED. Still In progress, still not shippable.**
+
+- **`31d2fdc`** — `ShowSlot` widened: `code: u8` → `code: u32`, plus a per-slot `width: u8` (1 = simple, 2 = Identity-H). This is the specific type that made a composite run UNREPRESENTABLE, not merely unimplemented — `match_run`'s `+ 1` advance became `+ width`, the same number for every code that could reach it before the widening, which is exactly why the old constant looked correct. Three narrowings back to `u8` (`prefer`, `carried_codes`, `MatchRun::old_codes`) all go through `filter_map`, never a bare cast — a truncated code is a DIFFERENT, VALID code (not an error value), so a silent truncation would splice confidently wrong text or tell R-INV-1 the page carries a glyph it does not. Landed ALONE and re-verified: all 1801 tests passed unchanged, which is the entire claim for this commit — the type widened, nothing downstream yet reads the new range.
+  - **Near-miss worth recording as its own finding, not a footnote (see RAG escalation, below):** with the type widened, the obvious next move is to start pushing slots for composite runs. It compiles and every existing test passes — and it would have SILENTLY DISARMED `tests/composite_refusal_reachable.rs` (the continuation-76 regression test). That test catches someone moving font classification back below `match_run`, and it works BECAUSE composite runs currently produce no slots (the match fails, the wrong `NoMatch` surfaces, the test's assertion holds for the wrong reason). Give composite runs slots and the match starts succeeding — `classify_font` still refuses correctly, so the test's assertion (an error occurs) still passes, but now on the CORRECT ordering, meaning the test would stay green even if a future edit silently moved classification back below matching. The guard goes quiet at the exact moment the defect it guards against becomes reachable again.
+- **`b98589a`** — `CompositeEncoding`: character → CID, constructed ONLY from a verified-injective `/ToUnicode` (goes through `injective_inverse()`, the R110 primitive shipped continuation 76) — a ligature table or a colliding map never yields an encoder at all, so the refusal happens where the evidence already lives (R110), not later at encode time when the caller has already committed to an edit. A SEPARATE type from `InverseEncoding` (the existing simple-font encoder), not a mode flag on it — the simple encoder reasons about glyph names, `/Differences`, ligature components, and code-occupancy, none of which exist for a CIDFont; forcing one type to cover both would mean half its fields are `None` for every composite call and vice versa. **The load-bearing test is byte order:** `Identity-H` codes are big-endian per §9.7.6.2 — reversing the two bytes yields a DIFFERENT, VALID code pointing at a different glyph; nothing errors, the page just silently says something else. `to_bytes()` therefore lives on the encoder's result type, giving exactly one place in the codebase that has to get this right. A CID above 16 bits is REFUSED, not truncated — same reasoning as the `u32`→`u8` narrowings above, a truncated CID is a different valid CID, not an error sentinel.
+- **HEAD (unhashed at filing time — see note below)** — `composite-editable.pdf` fixture (`/Type0`, three CIDs, injective `/ToUnicode`, extracts "ABC") built BEFORE the wiring code that will need it, deliberately, so the fixture is not shaped around what that code happens to do. Then the wiring survey (see below) was written directly into the code as specific, actionable notes — not a bare "TODO: wire it up" — and the session stopped there.
+
+**Why the session stopped here, recorded because it is a decision, not a stall:** wiring `ShowSlot`/`CompositeEncoding` into the actual edit path surveyed as FOUR coupled changes, not one, all touching the shipped in-place-editing path every existing document's edits rely on:
+  1. `glyph_names()` returns `None` for a composite font, so the composite branch must be checked and handled BEFORE the existing `Unsupported` bail, not folded into it.
+  2. `glyph_advance` currently reads simple-font widths (`/Widths`); composite advances come from `/W`/`/DW` per §9.7.4.3 — a DIFFERENT table, keyed differently, not a wider argument to the same lookup.
+  3. `emit_edited_operator` currently writes a literal `( … )` PDF string; a composite run needs a HEX string (`< … >`) with `CompositeEncoding::to_bytes()`'s big-endian pairs inside it — a different operand syntax, not a different byte source into the same syntax.
+  4. `carried_codes`' subset-floor accounting assumes single-byte codes; it needs to become width-aware or it will misreport which codes a re-subset must retain.
+  A half-applied version of these four is worse than none — an operator could accept an edit that types correctly but writes the wrong operand syntax, or advances glyphs using the wrong table, and nothing would visibly fail. Substrate complete and tested; wiring is the entire remaining scope of Pass 21.1.
+  **Discriminator recorded for whoever resumes, needed once slots exist:** the composite-refusal regression test must be rewritten to ask `edit-text` for text that is NOT present on the page. Correct ordering (classify-before-match) still returns the R-INV-4 composite refusal even for absent text, because the refusal is a property of the FONT, never of whether the sought text is findable. Broken ordering (match-before-classify) returns `NoMatch` instead. This discriminator survives the slot-pushing change that disarms the current test's mechanism — see the near-miss note on `31d2fdc`, above.
+
+**RAG escalation, continuation 78:**
+- New file: `D:\dev\rag\rust\regression_test_guard_via_incidental_property_disarms_silently.md` — the `composite_refusal_reachable.rs` near-miss, generalized: a regression test that detects a fault via a SECOND, incidental property (here: "composite runs currently produce no slots") silently stops detecting the fault the moment that incidental property changes for an unrelated reason (here: adding slot support for a legitimate feature) — the test keeps passing throughout, so nothing reports the loss of coverage. Fix is to assert the SUBJECT directly (here: that font classification precedes text matching, provable with a search for absent text), not a symptom that happens to correlate with it today. Indexed in `D:\dev\rag\rust\index.md` this continuation.
+- No `personal_rag/pdf` entry — nothing PDF-domain empirical this continuation; the `Identity-H` byte-order requirement is canonical §9.7.6.2 content, already the spec-librarian's territory.
+
 ### GUI redaction-apply flow — **SHIPPED as Pass 8.1 (`9a68999`), 2026-08-03. See the Pass 8.1 Shipped entry (top of Shipped) for the full build record.** Retained below as the historical framing (append-only discipline).
 
 **Promoted from Backlog the same continuation decision 019/FF-H
@@ -10237,6 +10256,29 @@ exercises neither):**
   Flag carried forward rather than silently fixed: a fresh
   `git bundle create` + `git bundle verify` pass is owed before the
   next natural checkpoint.
+  **UPDATED (continuation 77, 2026-08-04): 79 commits, unchanged count
+  (librarian-only filing, no code shipped).** Backup bundle refreshed
+  to `D:\Dev\pdfce-backups\pdfce-20260804-0325.bundle`, `git bundle
+  verify`-clean, current to `6b69956` — discharges continuation 76's
+  staleness flag.
+  **UPDATED (continuation 78, 2026-08-04, SESSION-ENDING FILING): 82
+  commits, still no remote.** Three new commits landed this
+  continuation (`31d2fdc`, `b98589a`, and the fixture/survey commit at
+  HEAD — the first two independently `git cat-file -t` verified by the
+  operator as `commit` objects; the third is recorded as "HEAD at
+  session end," not a specific hash string, per the operator's own
+  instruction — the count was confirmed, a hash for that one commit
+  was not separately verified this filing). Backup bundle refreshed to
+  `D:\Dev\pdfce-backups\pdfce-20260804-final.bundle`, `git bundle
+  verify`-clean, current to HEAD — supersedes `...0325.bundle`. Test
+  suite: 1806 tests passing; `cargo fmt --check`, `cargo clippy -- -D
+  warnings`, `tools/check-ui-strings.sh`, `tools/check-ledger-numbers.py`
+  all clean; `cargo tree -p pdfce-core` / `-p pdfce-render` still
+  GUI-free. Same standing caveat as every prior refresh: a point-in-time
+  snapshot, will drift behind again with the next commit, not a
+  substitute for an actual push decision — **this is the session-ending
+  filing; the next session should re-verify the bundle is still current
+  before assuming it covers whatever it finds on disk.**
 - Encryption (Pass 5 / decision 007)'s `/R 6` sourcing method and the
   `LEGAL.md` §2 Adobe-supplement contradiction — both still gate its
   scoping when it activates.
@@ -11754,13 +11796,43 @@ exercises neither):**
   stay invisible to this decode path exactly as they were before this
   fix — narrowed, not regressed.
 
-  **STILL OWED — composite runs are LOCATABLE-BUT-REFUSED, not yet
-  EDITABLE.** `ShowSlot::code` must widen past `u8` and the operand
-  writer must learn multi-byte codes before an injective-`/ToUnicode`
-  composite run can actually be rewritten — R110's conditional lift is
-  real but has nothing to attach to yet. Pass 21.0 alone remains a
-  capability regression (pdfce can add text it cannot edit) until this
-  lands.
+  **Substrate SHIPPED (continuation 78, 2026-08-04, `31d2fdc` +
+  `b98589a`) — still NOT wired in, composite runs remain LOCATABLE-BUT-
+  REFUSED, not yet EDITABLE.** `ShowSlot::code` widened `u8`→`u32` with
+  a per-slot `width` (1 simple / 2 Identity-H) — landed alone, all 1801
+  tests unchanged, since nothing downstream yet reads the new range.
+  `CompositeEncoding` (character→CID via `injective_inverse()`, a
+  SEPARATE type from the simple-font `InverseEncoding`, big-endian
+  `to_bytes()`, CIDs above 16 bits refused rather than truncated) gives
+  the encode side something to call once wiring lands. New fixture
+  `composite-editable.pdf` (`/Type0`, 3 CIDs, injective `/ToUnicode`,
+  "ABC") built ahead of the wiring code, deliberately. **A near-miss is
+  on permanent record here, not just in the RAG:** widening the slot
+  type made it POSSIBLE to push slots for composite runs before the
+  rest of the wiring existed, and doing so would have silently disarmed
+  `tests/composite_refusal_reachable.rs` (continuation 76) — that test
+  currently passes BECAUSE composite runs produce no slots (match
+  fails, wrong-but-caught `NoMatch` surfaces), not because it directly
+  asserts the ordering it exists to guard. See the RAG escalation on
+  the Pass 21.1 In-progress entry (continuation 78 build log, above)
+  for the general framing and the discriminator (ask for ABSENT text —
+  correct ordering still refuses, broken ordering returns `NoMatch`)
+  that any future re-armed version of that test needs to use instead.
+
+  **STILL OWED — the actual wiring, surveyed as FOUR coupled changes,
+  not one** (continuation 78): `glyph_names()` returning `None` for
+  composite must be checked before the existing `Unsupported` bail;
+  `glyph_advance` must read `/W`/`/DW` (§9.7.4.3) for composite runs,
+  a different table than `/Widths`, not a wider argument to the same
+  lookup; `emit_edited_operator` must emit a hex string (`< … >`) with
+  `CompositeEncoding::to_bytes()`'s bytes inside it for composite runs,
+  not the literal `( … )` string it always writes today; `carried_codes`'
+  subset-floor accounting must become width-aware. Deliberately NOT
+  started this continuation — a half-applied version is worse than none,
+  since all four touch the shipped in-place-editing path every existing
+  edit relies on. R110's conditional lift is real but still has nothing
+  to attach to. Pass 21.0 alone remains a capability regression (pdfce
+  can add composite text it cannot edit) until all four land.
 
   **Ceiling is now R110** (was R106 before this entry).
 

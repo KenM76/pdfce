@@ -1,6 +1,6 @@
 ---
 name: project-uncommitted-repo-worktree-risk
-description: RESOLVED 2026-08-01 (commit d8b3903, then 79d1c6f + e13f3e6) — pdfce's crates/ tree is no longer uncommitted, and the engineer now commits in logical per-Pass/per-decision chunks. Branch pass-8-redaction at 79 commits as of continuation 77 (2026-08-04), still no remote. Backup bundle current (pdfce-20260804-0325.bundle, verify-clean, to 6b69956) as of continuation 77. This librarian has no shell tool — commit counts/hashes are engineer-reported/operator-reported, not self-verified, unless noted otherwise.
+description: RESOLVED 2026-08-01 (commit d8b3903, then 79d1c6f + e13f3e6) — pdfce's crates/ tree is no longer uncommitted, and the engineer now commits in logical per-Pass/per-decision chunks. Branch pass-8-redaction at 82 commits as of continuation 78 (2026-08-04, SESSION-ENDING FILING), still no remote. Backup bundle current (pdfce-20260804-final.bundle, verify-clean, to HEAD) as of continuation 78. This librarian has no shell tool — commit counts/hashes are engineer-reported/operator-reported, not self-verified, unless noted otherwise.
 metadata:
   type: project
 ---
@@ -359,3 +359,26 @@ publish authorization remains the sole open gate, unchanged in kind
 since continuation 50. As always, verify tip/count with `git log
 --oneline -1` / `git rev-list --count HEAD` before trusting any number
 in this file past its filing date.
+
+**UPDATE — continuation 78 (2026-08-04, SESSION-ENDING FILING).** Three
+new commits this continuation: `31d2fdc` (`ShowSlot::code` widened
+`u8`→`u32` + per-slot `width`) and `b98589a` (`CompositeEncoding`
+shipped) — both independently `git cat-file -t` verified by the
+operator as `commit` objects — plus a third commit at HEAD (fixture
+`composite-editable.pdf` + the four-item wiring survey written into the
+code), which is recorded as **"HEAD at session end," not a specific
+hash string** — the operator confirmed the commit COUNT (82) but did
+not separately verify a hash for that one commit this filing, and this
+librarian has no shell tool to self-verify. **Branch `pass-8-redaction`
+now 82 commits, still no remote.** Backup bundle refreshed to
+`D:\Dev\pdfce-backups\pdfce-20260804-final.bundle`, `git bundle
+verify`-clean, current to HEAD — supersedes `...0325.bundle`
+(continuation 77). Full test/lint state also re-confirmed this
+continuation: 1806 tests passing; `cargo fmt --check`, `cargo clippy --
+-D warnings`, `tools/check-ui-strings.sh`, `tools/check-ledger-
+numbers.py` all clean; `cargo tree` GUI-free on both `pdfce-core` and
+`pdfce-render`. Push/publish authorization remains the sole open gate,
+unchanged in kind since continuation 50. **This is the session-ending
+filing** — the next session should re-verify tip/count/bundle currency
+before trusting any of these numbers, per the standing discipline in
+every prior update in this file.

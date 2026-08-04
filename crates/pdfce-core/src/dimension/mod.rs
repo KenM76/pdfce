@@ -51,6 +51,9 @@
 pub mod author;
 pub mod fit;
 pub mod group;
+/// Parse a real-world length written the way a drawing writes it
+/// (`55 5/8"`, `4'-7 1/2"`), for the scale-by-known-dimension workflow.
+pub mod length_parse;
 pub mod measure_dict;
 pub mod sidecar;
 pub mod units;
@@ -61,6 +64,7 @@ pub use fit::{FitCircle, fit_circle_taubin, fit_circle_taubin_refined};
 pub use group::{
     DEFAULT_GROUP_ID, DimensionId, DimensionKind, DimensionModel, DimensionRecord, Group, GroupId,
 };
+pub use length_parse::{LengthParseError, ParsedLength, parse_length};
 pub use measure_dict::{build_measure_dict, build_ocg, build_ocproperties};
 pub use sidecar::{SIDECAR_VERSION, deserialize_model, serialize_model};
 pub use units::{

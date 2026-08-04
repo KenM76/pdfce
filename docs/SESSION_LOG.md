@@ -10680,3 +10680,200 @@ defect found.**
   its queued scope note (refusal paths count as operator-visible
   behavior too) at the same time — it is written and waiting, not a
   separate follow-up task.
+
+**Same-day continuation 78 (real date 2026-08-04) — SESSION-ENDING
+FILING. Pass 21.1 substrate for composite-run editability SHIPPED
+(`31d2fdc`, `b98589a`); wiring itself DELIBERATELY NOT STARTED and
+surveyed as four coupled changes. New RAG finding filed to
+`D:\dev\rag\rust\`. Repo at 82 commits, backup bundle refreshed and
+verify-clean to HEAD. `ROADMAP.md` and `D:\dev\rag\rust\index.md`
+updated; no `ARCHITECTURE.md` change this continuation (no new
+architectural decision).**
+
+**Shipped:**
+- No new Pass entry — all three commits this continuation land inside
+  the already-open Pass 21.1 (In progress, unchanged status). Pass
+  21.1 is closer to shippable than at continuation 77's filing but
+  still NOT shippable: substrate is complete and tested; the actual
+  edit-path wiring is unbuilt.
+
+**Decisions made this session:**
+- **Stopped deliberately after substrate, before wiring — recorded as
+  a decision, not a stall.** The wiring survey found FOUR coupled
+  changes to the shipped in-place-editing path (composite branch must
+  precede the `Unsupported` bail in `glyph_names()`; `glyph_advance`
+  needs `/W`/`/DW` per §9.7.4.3, a different table than `/Widths`, not
+  a wider argument to the same lookup; `emit_edited_operator` needs a
+  hex-string operand for composite runs instead of the literal
+  `( … )` string it always writes; `carried_codes`' subset-floor
+  accounting needs to become width-aware). A half-applied version of
+  any one of these four, landed alone, risks an edit that types
+  correctly but writes the wrong operand syntax or advances glyphs
+  from the wrong table, with nothing visibly failing — judged worse
+  than leaving the Pass open one more continuation. The survey is
+  recorded IN THE CODE with these specifics (file, table, syntax), not
+  as a bare "TODO: wire it up," so a resuming session does not have to
+  re-derive the shape of the remaining work.
+- **No new `ROADMAP.md` standing-rule number assigned this
+  continuation** — R110 remains the ceiling; this continuation's work
+  is filed as substrate additions on R110's existing bullet, consistent
+  with how continuations 75–77 have kept rule-adoption calls off this
+  librarian's own authority.
+
+**Findings + decisions:**
+- **`ShowSlot` widened `code: u8` → `code: u32`, plus a per-slot
+  `width: u8` (1 simple, 2 Identity-H) (`31d2fdc`).** This was the
+  SPECIFIC thing that made a composite run unrepresentable, not merely
+  unimplemented. Landed alone; all 1801 tests passed unchanged — the
+  entire claim for this commit is that the type widened and nothing
+  downstream yet reads the new range. `match_run`'s `+ 1` advance
+  became `+ width`, the same number for every code able to reach it
+  before the widening (which is exactly why the old constant looked
+  correct and no test caught its narrowness). Three narrowings back to
+  `u8` (`prefer`, `carried_codes`, `MatchRun::old_codes`) all go
+  through `filter_map`, never a bare cast, because a truncated code is
+  a DIFFERENT, VALID code — a silent truncation would splice
+  confidently wrong text or falsely tell R-INV-1 the page carries a
+  glyph it does not.
+- **The near-miss worth recording as a finding, not a footnote: the
+  widened type made it possible to silently disarm the continuation-76
+  regression test.** The obvious next move after widening the type is
+  to start pushing slots for composite runs — it compiles, every test
+  passes, and it would have silently disarmed
+  `tests/composite_refusal_reachable.rs`. That test currently passes
+  BECAUSE composite runs produce zero slots today (the match fails,
+  the wrong-but-caught `NoMatch` surfaces, the test's assertion holds
+  for the wrong reason) — not because it directly asserts the ordering
+  it exists to guard. Give composite runs slots and the match starts
+  succeeding; `classify_font` still refuses correctly, so the test's
+  assertion (an error variant occurs) STILL PASSES, now on the correct
+  ordering, meaning it would stay green even if a future edit silently
+  moved classification back below matching. **Generalized and
+  escalated:** a regression test that detects a fault via a SECOND,
+  incidental property silently stops detecting it the moment that
+  property changes for an unrelated, individually-correct reason —
+  nothing in the test run reports the coverage loss. Fix: assert the
+  SUBJECT directly, immune to the incidental property — here, ask
+  `edit-text` for text known ABSENT from the page; correct ordering
+  still returns the R-INV-4 refusal (a property of the font, never of
+  whether the sought text is findable), broken ordering returns
+  `NoMatch`. Written up in full and filed to
+  `D:\dev\rag\rust\regression_test_guard_via_incidental_property_disarms_silently.md`
+  (new file, indexed in `D:\dev\rag\rust\index.md` this continuation).
+- **`CompositeEncoding` shipped (`b98589a`): character→CID, built ONLY
+  from a verified-injective `/ToUnicode`.** Construction goes through
+  `injective_inverse()` (the R110 primitive, continuation 76) — a
+  ligature table or a colliding map never yields an encoder at all, so
+  the refusal happens where the evidence already lives, not later at
+  encode time when the caller has already committed. A SEPARATE type
+  from the existing simple-font `InverseEncoding`, not a mode on it —
+  the simple encoder reasons about glyph names, `/Differences`,
+  ligature components, and code-occupancy, none of which exist for a
+  CIDFont. **The load-bearing test is byte order:** `Identity-H` codes
+  are big-endian per §9.7.6.2 — reversing the two bytes yields a
+  different, VALID code pointing at a different glyph; nothing errors,
+  the page just silently says something else. `to_bytes()` lives on
+  the encoder's result type, one place to get this right. A CID above
+  16 bits is refused, not truncated, same reasoning as the `u32`→`u8`
+  narrowings.
+- **New fixture `composite-editable.pdf`** (`/Type0`, three CIDs,
+  injective `/ToUnicode`, extracts "ABC") built at HEAD, before the
+  wiring code that will need it, deliberately, so the fixture is not
+  shaped around what that code happens to do.
+
+**Still in flight:**
+- **Pass 21.1 — still In progress, closer but not shippable.**
+  Substrate complete and tested (`ShowSlot` widened, `CompositeEncoding`
+  shipped, `injective_inverse()` from continuation 76, editable
+  fixture built). Composite runs remain LOCATABLE-BUT-REFUSED with an
+  honest, specific, disclosed reason — not yet rewritable. The four
+  coupled wiring changes surveyed above are the entire remaining scope.
+  Pass 21.0's capability-regression warning (pdfce can add composite
+  text it cannot edit) is unchanged by this continuation.
+- Open operator questions (r) [interim default live for two of three
+  sub-cases, formally still open] and (s) [unchanged] — still await
+  Ken; see the consolidated list below.
+- **Repo status: 82 commits, still no remote.** `31d2fdc` and
+  `b98589a` independently `git cat-file -t` verified by the operator as
+  `commit` objects; the third commit (fixture + wiring survey, at HEAD)
+  is recorded as "HEAD at session end" rather than a specific hash
+  string — its count was confirmed, its hash was not separately
+  verified this filing (this librarian has no shell tool and cannot
+  self-verify hashes). Backup bundle refreshed to
+  `D:\Dev\pdfce-backups\pdfce-20260804-final.bundle`, `git bundle
+  verify`-clean, current to HEAD — supersedes `...0325.bundle`
+  (continuation 77).
+- Test suite: 1806 tests passing; `cargo fmt --check`, `cargo clippy
+  -- -D warnings`, `tools/check-ui-strings.sh`,
+  `tools/check-ledger-numbers.py` all clean; `cargo tree -p pdfce-core`
+  / `-p pdfce-render` still GUI-free — all re-confirmed this
+  continuation, not carried over unverified.
+
+**Operator decisions owed — CONSOLIDATED, priority order (Ken has been
+away the whole session; this list exists so the next reader does not
+have to re-derive it by grepping five separate continuations):**
+
+1. **Font-EULA policy (Open operator question (r)) — a LEGAL call, not
+   an engineering one.** Two sub-cases currently ship an interim
+   disclose-and-proceed default, neither a resolution: (a) donor
+   `OS/2` `fsType` ABSENT or UNPARSEABLE — proceeds, disclosed as
+   unknown; the trap named repeatedly across this project's record is
+   that `fsType == 0` means Installable, the MOST permissive value, so
+   "absent" must never be silently modelled as `0`. (b) `fsType == 4`
+   (Preview & Print) — proceeds; this value permits the embed itself
+   but additionally obliges the *document* stay read-only thereafter,
+   an obligation on every future reader that pdfce has no PDF field to
+   express and cannot enforce, so "proceed" here is pragmatic, not a
+   claim the obligation is satisfied. R109 is written to accept
+   whichever policy Ken picks for either sub-case (refuse outright /
+   disclose-and-require-acknowledgement / disclose-and-proceed as
+   currently shipped).
+2. **Complex-script posture (Open operator question (s)).** FF-C plus
+   standing rule R17 (no shaping, ever) means Arabic/Devanagari/Thai
+   text would EMBED but RENDER WRONG (glyphs placed by advance, no
+   GSUB/GPOS). Engineer recommendation on record: refuse by name —
+   painting confident nonsense is the rule-4 (fuzzy-never-sneaky)
+   failure — but this caps a headline capability (FF-C's non-Latin
+   story becomes "CJK/Cyrillic/Greek/Hebrew yes, Arabic/Devanagari/Thai
+   no"), so it is filed as Ken's call, not a solo engineering decision.
+3. **Sequencing — form-building tools remain unstarted.** Decision
+   020's item #4 (Ken's stated ★★★★ priority-sequence item) is still
+   queued behind FF-C/Pass 21.1, which itself is still queued behind
+   the four-item wiring survey above. FF-B (cross-block/cross-page
+   reflow) also remains unscheduled. This is not itself a question
+   needing an answer — Ken has not objected to the engineer's
+   redaction-apply-first resequencing (item (l), already logged) — but
+   is named here because "text-handling" (priority #3) has now stayed
+   open across five-plus continuations and is worth an explicit status
+   check the next time Ken is present.
+4. **R86's status (Open operator question (e)) — formally PENDING,
+   practically already being followed.** R86 (a Pass does not ship
+   until observed working in the running application, not merely
+   tested headlessly) remains unratified — Ken confirmed the related
+   Pass-17 sequencing question (f) without addressing (e) directly.
+   Worth surfacing plainly: this session's own R86-shaped smoke test
+   (continuation 77, the post-reorder GUI check) and the discipline
+   behind this continuation's regression-test finding above are both
+   examples of the rule already being PRACTISED in substance, even
+   though it has not been formally adopted. Answering (e) would make
+   explicit a habit that is already load-bearing.
+
+**For next session:**
+- Build the four coupled wiring changes surveyed above
+  (`glyph_names()` composite branch, `/W`/`/DW` advance lookup, hex-
+  string operand emission, width-aware `carried_codes`) to actually
+  close Pass 21.1 and retire the capability-regression warning — this
+  is the entire remaining scope, unchanged in kind from continuations
+  76/77's ask but now precisely enumerated rather than a single bullet.
+- When wiring lands, REWRITE `tests/composite_refusal_reachable.rs` (or
+  add a sibling test) to search for text known ABSENT from the page —
+  the discriminator that survives the slot-pushing change that would
+  otherwise disarm the existing version; do not assume the existing
+  test still proves what its name claims once slots exist.
+- Do not describe FF-C or Pass 21.1 as "shipped" or "complete" in any
+  operator-facing summary — composite editability is still unbuilt.
+- The four consolidated operator decisions above are the standing ask
+  for whenever Ken is next present — nothing here blocks further
+  engineering work, but (1) and (2) in particular are legal/product
+  calls this project has been shipping interim engineering defaults
+  around rather than resolving.

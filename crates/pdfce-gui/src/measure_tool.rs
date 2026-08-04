@@ -54,8 +54,8 @@
 //! unaffected (this module is not in core), and it adds no dependency.
 
 use pdfce_core::dimension::{
-    DimensionKind, FitCircle, GroupId, NumberFormat, ScaleEntry, ScalePreview, ScaleState, Unit,
-    fit_circle_taubin, preview_group_scale,
+    DimensionKind, FitCircle, GroupId, LengthParseError, NumberFormat, ScaleEntry, ScalePreview,
+    ScaleState, Unit, fit_circle_taubin, parse_length, preview_group_scale,
 };
 use pdfce_core::vector::{AxisConstraint, Point, constrained_second_point, measured_length};
 
@@ -284,13 +284,27 @@ impl CircularPick {
 /// - **Direct ratio:** `paper : real` on a disclosed paper-unit basis;
 ///   needs no drawn line, so it is the path the group panel uses to set a
 ///   scale by typing alone (ui-spec §7.2 accessibility win).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ScaleEntryFields {
     /// `true` ⇒ the real-length path is selected (the recommended default);
     /// `false` ⇒ the direct-ratio path (ui-spec §4.2 `selectable_value`).
     pub use_real_length: bool,
     /// The typed real-world length for the real-length path, in [`Self::unit`].
+    ///
+    /// Derived from [`Self::real_length_text`] whenever that parses; it is the
+    /// number the scale maths actually uses. Kept as the parsed value rather
+    /// than re-parsing at commit time so that what the operator was SHOWN in
+    /// the preview is definitionally what gets committed.
     pub real_length: f64,
+    /// What the operator literally typed for the real length.
+    ///
+    /// A text field, not a numeric spinner, because the whole point of the
+    /// scale-by-known-dimension workflow is to type the dimension as the
+    /// drawing writes it — `55 5/8"`, `4'-7 1/2"`. A spinner forced the
+    /// operator to convert to a decimal and pick a unit by hand, which is two
+    /// chances to enter a number that is plausible and wrong. Parsed by
+    /// [`pdfce_core::dimension::parse_length`].
+    pub real_length_text: String,
     /// The unit the real length is typed in / the ratio resolves to (becomes
     /// the group's top unit).
     pub unit: Unit,
@@ -309,6 +323,7 @@ impl Default for ScaleEntryFields {
             // Real-length is the recommended, pre-selected path (ui-spec §4.2).
             use_real_length: true,
             real_length: 1.0,
+            real_length_text: "1".to_owned(),
             unit: Unit::Meter,
             ratio_paper: 1.0,
             ratio_real: 100.0,
@@ -318,6 +333,41 @@ impl Default for ScaleEntryFields {
 }
 
 impl ScaleEntryFields {
+    /// Re-read [`Self::real_length_text`], updating the parsed value and
+    /// (when the text named one) the unit.
+    ///
+    /// Returns the parse error for display, or `None` when it parsed. Called
+    /// on every keystroke, so the operator sees what pdfce understood while
+    /// they are still looking at the field rather than after committing.
+    ///
+    /// # Why a failed parse leaves the previous value alone
+    ///
+    /// Mid-typing, `55 5/` is not a length. Zeroing the value on every
+    /// intermediate keystroke would make the live scale preview flicker
+    /// through garbage, and — worse — would leave a *stale* preview looking
+    /// authoritative if the operator stopped typing at that moment. Instead
+    /// the last good value is held and the error is shown, so the preview and
+    /// the message never disagree about whether the input is usable.
+    ///
+    /// # Why the unit dropdown moves only when the text names a unit
+    ///
+    /// Typing `55 5/8"` says inches; the dropdown should follow, or the
+    /// operator has to say the same thing twice. Typing a bare `55.625` says
+    /// nothing about units, and moving the dropdown then would be the tool
+    /// second-guessing a choice the operator already made.
+    pub fn sync_real_length(&mut self) -> Option<LengthParseError> {
+        match parse_length(&self.real_length_text, self.unit) {
+            Ok(p) => {
+                self.real_length = p.value;
+                if p.unit_from_text {
+                    self.unit = p.unit;
+                }
+                None
+            }
+            Err(e) => Some(e),
+        }
+    }
+
     /// Fields seeded for a group-panel editor where NO reference line was
     /// drawn: the ratio path is the only usable one (the real-length path
     /// needs a drawn length), so it is pre-selected (ui-spec §7.2).
@@ -381,7 +431,7 @@ impl ScaleEntryFields {
 /// the SAME [`LinearPick`] mechanic as a linear dimension, then — once both
 /// points are picked — switch to the scale-entry dialog ([`Self::fields`])
 /// keyed on the drawn line's length.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ScalePick {
     /// The reference-line two-point pick (reused verbatim from the linear
     /// tool, ui-spec §4.1 — including H/V/aligned + snapping).

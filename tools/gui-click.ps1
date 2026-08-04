@@ -125,7 +125,9 @@ param(
     [switch]   $MoveOnly,
     [ValidateSet('Shift', 'Ctrl', 'Alt')]
     [string[]] $Modifiers   = @(),
-    [string]   $Type        = ''
+    [string]   $Type        = '',
+    [ValidateSet('Backspace', 'Delete', 'Enter', 'Tab', 'Escape', 'Home', 'End')]
+    [string[]] $PressKeys   = @()
 )
 
 Set-StrictMode -Version Latest
@@ -277,6 +279,42 @@ finally {
 # because every use so far is "click to focus something, then type into it" —
 # and a modifier still held would turn the text into a shortcut sequence.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Control keys, pressed BEFORE any typing.
+#
+# WHY THESE ARE VIRTUAL-KEY CODES WHEN -Type IS DELIBERATELY NOT
+# ---------------------------------------------------------------------------
+# `-Type` uses KEYEVENTF_UNICODE precisely to AVOID virtual keys, because a
+# VK is layout-dependent and would type a different character on AZERTY.
+# Control keys are the exact inverse: Backspace, Enter, Tab and friends have
+# fixed virtual-key codes on every layout and no character to deliver at all.
+# Sending them as Unicode would either do nothing or insert a control
+# character into the text.
+#
+# Added 2026-08-04 after failing twice to clear an egui text field: Ctrl+A
+# typed a literal "a" (the modifier is held across a -Type sequence, so the
+# character path wins), and three separate clicks are too far apart in time
+# for Windows to register a triple-click. Neither was a product bug; both
+# were the harness lacking a way to say "backspace".
+if ($PressKeys.Count -gt 0) {
+    $fgKeys = [PdfceInput.Win32]::GetForegroundWindow()
+    if ($fgKeys -ne $proc.MainWindowHandle) {
+        throw "REFUSING TO SEND KEYS: '$ProcessName' is not the foreground window (foreground is $fgKeys)."
+    }
+    $VKEY = @{
+        Backspace = 0x08; Tab = 0x09; Enter = 0x0D; Escape = 0x1B
+        End       = 0x23; Home = 0x24; Delete = 0x2E
+    }
+    foreach ($k in $PressKeys) {
+        $code = [byte]$VKEY[$k]
+        [PdfceInput.Win32]::keybd_event($code, 0, 0, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 30
+        [PdfceInput.Win32]::keybd_event($code, 0, $KEYEVENTF_KEYUP, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 40
+    }
+    Write-Output "pressed $($PressKeys -join ', ')"
+}
+
 if ($Type) {
     # Re-verify the foreground window. The click loop may have taken a while,
     # and typing into the wrong window is worse than clicking into it: a click

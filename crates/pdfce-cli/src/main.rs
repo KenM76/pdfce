@@ -1616,9 +1616,16 @@ enum Command {
         /// Target group id (0 = default group).
         #[arg(long, default_value_t = 0)]
         group: u32,
-        /// Real-length path: the real-world length of a drawn reference line.
+        /// Real-length path: the real-world length of a drawn reference line,
+        /// written the way a drawing writes it.
+        ///
+        /// Accepts `55 5/8"`, `4'-7 1/2"`, `12'`, `1200mm`, `1.2m`, or a plain
+        /// number (which uses `--unit`). A notation that names a unit sets the
+        /// group's unit too, so `--unit` is only needed for a bare number —
+        /// the same rule the GUI field follows, so a command and a click
+        /// produce the same result from the same text.
         #[arg(long)]
-        real_length: Option<f64>,
+        real_length: Option<String>,
         /// Real-length path: the drawn reference line's length in points.
         #[arg(long)]
         drawn: Option<f64>,
@@ -2444,7 +2451,7 @@ fn run() -> ExitCode {
         } => cmd_group_set_scale(&GroupSetScaleArgs {
             input: &input,
             group,
-            real_length,
+            real_length: real_length.as_deref(),
             drawn,
             ratio: ratio.as_deref(),
             unit: &unit,
@@ -7894,7 +7901,7 @@ appended={} out_bytes={}",
 struct GroupSetScaleArgs<'a> {
     input: &'a Path,
     group: u32,
-    real_length: Option<f64>,
+    real_length: Option<&'a str>,
     drawn: Option<f64>,
     ratio: Option<&'a str>,
     unit: &'a str,
@@ -7908,7 +7915,7 @@ struct GroupSetScaleArgs<'a> {
 /// `group-set-scale` — set a group's scale + units and regenerate members.
 fn cmd_group_set_scale(args: &GroupSetScaleArgs<'_>) -> u8 {
     use pdfce_core::dimension::{
-        GroupId, NumberFormat, ScaleEntry, ScaleState, Unit, preview_group_scale,
+        GroupId, NumberFormat, ScaleEntry, ScaleState, Unit, parse_length, preview_group_scale,
     };
 
     let Some(unit) = Unit::parse(args.unit) else {
@@ -7943,10 +7950,30 @@ fn cmd_group_set_scale(args: &GroupSetScaleArgs<'_>) -> u8 {
                 return exit::EDIT_REFUSED;
             }
         }
-    } else if let (Some(real_length), Some(drawn)) = (args.real_length, args.drawn) {
+    } else if let (Some(real_text), Some(drawn)) = (args.real_length, args.drawn) {
+        // Parsed with the SAME function the GUI field uses, so `55 5/8"` means
+        // one thing in this product rather than two. A second, CLI-local
+        // number parser would be a duplicated predicate and would drift (R92)
+        // — and it would drift silently, because both would keep accepting
+        // plain decimals long after they disagreed about fractions.
+        let parsed = match parse_length(real_text, unit) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("pdfce-cli: --real-length: {e}");
+                return exit::EDIT_REFUSED;
+            }
+        };
+        // A unit named in the text wins over `--unit`, matching the GUI: the
+        // operator said inches by typing `"`, and making them repeat it in a
+        // flag would be asking the same question twice.
+        let unit = if parsed.unit_from_text {
+            parsed.unit
+        } else {
+            unit
+        };
         match preview_group_scale(ScaleEntry::RealLength {
             drawn_pdf_length: drawn,
-            real_length,
+            real_length: parsed.value,
             unit,
         }) {
             Some(p) => ScaleState::Calibrated { scale: p.scale },

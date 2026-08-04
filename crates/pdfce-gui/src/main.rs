@@ -11760,12 +11760,26 @@ fn scale_entry_widget(
             ui_text::scale_entry_real_length_label(),
         );
         if fields.use_real_length {
+            // A TEXT field, not a numeric spinner. The point of this workflow
+            // is to type the dimension exactly as the drawing prints it —
+            // `55 5/8"`, `4'-7 1/2"` — so that reading a number off a drawing
+            // and entering it are the same action. A spinner made the
+            // operator convert to a decimal and set the unit by hand: two
+            // opportunities to enter something plausible and wrong, in a
+            // field that silently rescales every dimension in the group.
+            let mut parse_err = None;
             ui.horizontal(|ui| {
-                ui.add(
-                    egui::DragValue::new(&mut fields.real_length)
-                        .range(0.0..=1.0e9)
-                        .speed(0.1),
+                let resp = ui.add(
+                    egui::TextEdit::singleline(&mut fields.real_length_text)
+                        .desired_width(120.0)
+                        .hint_text(ui_text::scale_entry_real_length_hint()),
                 );
+                // Re-read every frame, not only on `changed()`. The unit
+                // dropdown below can move independently, and a bare number
+                // means "whatever the dropdown says" — so the parsed value
+                // has to follow a dropdown change too, not just typing.
+                let _ = resp;
+                parse_err = fields.sync_real_length();
                 egui::ComboBox::from_id_salt("pdfce-scale-real-unit")
                     .selected_text(ui_text::unit_dropdown_label(fields.unit))
                     .show_ui(ui, |ui| {
@@ -11778,6 +11792,23 @@ fn scale_entry_widget(
                         }
                     });
             });
+            // Show the reading back, or say why there isn't one. Rule 4: the
+            // parser accepts several notations and takes the unit from the
+            // text, so it must show what it understood BEFORE the operator
+            // commits — a calibration silently rescales every dimension in
+            // the group, and "it accepted my input" is not the same as "it
+            // read it the way I meant".
+            match parse_err {
+                None => {
+                    ui.label(ui_text::scale_entry_real_length_echo(
+                        fields.real_length,
+                        ui_text::unit_dropdown_label(fields.unit),
+                    ));
+                }
+                Some(e) => {
+                    ui.colored_label(ui.visuals().warn_fg_color, e.to_string());
+                }
+            }
         }
     } else {
         fields.use_real_length = false; // no line ⇒ ratio only (ui-spec §7.2)

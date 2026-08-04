@@ -1,6 +1,6 @@
 ---
 name: project-mit-license-and-priority-sequence
-description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling (item #3: FF-H DONE, FF-C Pass 21.0 SHIPPED (glyf/TrueType donors, add-only) + R109 fsType-read SHIPPED + R110 primitive SHIPPED + R-INV-4 reachability fix SHIPPED (all continuation 76, 2026-08-04) — Pass 21.1 (composite-run editability, ShowSlot::code widening) still In progress/unbuilt, do NOT call FF-C done; FF-B open) → forms (item #4, still undispatched). Pass 8.1 (GUI redaction-apply) SHIPPED. Decision 021 (FF-C) filed 2026-08-03, add-only re-scope, ceiling now R110. Continuation 77 (2026-08-04): librarian-only session — ARCHITECTURE.md §3/§4 sync for Pass 21.0 discharged, R93/R96 amended (fourth/second occurrence), no new standing rule adopted for the "false comment" pattern.
+description: pdfce's OSS license is DECIDED (MIT, 2026-08-01); operator's four-item priority sequence — dimensioning (DONE) → icons (DONE) → text-handling (item #3: FF-H DONE, FF-C Pass 21.0 SHIPPED (glyf/TrueType donors, add-only) + R109 fsType-read + R110 primitive + R-INV-4 reachability fix all SHIPPED — Pass 21.1 (composite-run editability) substrate SHIPPED continuation 78 (ShowSlot::code widened, CompositeEncoding), WIRING itself deliberately NOT started, surveyed as 4 coupled changes; do NOT call FF-C or Pass 21.1 done; FF-B open) → forms (item #4, still undispatched). Pass 8.1 (GUI redaction-apply) SHIPPED. Decision 021 (FF-C) filed 2026-08-03, add-only re-scope, ceiling still R110. Continuation 78 (2026-08-04, SESSION-ENDING): 82 commits, backup bundle final for the session; a new RAG finding filed (regression test disarmed by an incidental-property change); four operator decisions consolidated into one list in SESSION_LOG for Ken's return.
 metadata:
   type: project
 ---
@@ -441,3 +441,38 @@ refreshed to `...0325.bundle`, verify-clean, current to `6b69956`. Item
 #3's remaining live work is unchanged in kind: `ShowSlot::code`
 widening + multi-byte operand writer to actually close Pass 21.1; item
 #4 (forms) still queued behind it.
+
+**UPDATE — 2026-08-04, SESSION_LOG continuation 78 (SESSION-ENDING
+FILING): Pass 21.1's SUBSTRATE shipped, WIRING deliberately not
+started.** `ShowSlot::code` widened `u8`→`u32` + per-slot `width`
+(`31d2fdc`) and `CompositeEncoding` (character→CID via
+`injective_inverse()`, `b98589a`) both landed, plus a new
+`composite-editable.pdf` fixture. **Composite runs remain
+LOCATABLE-BUT-REFUSED, not editable** — the wiring itself surveyed as
+FOUR coupled changes (composite branch ahead of the `Unsupported` bail
+in `glyph_names()`; `/W`/`/DW` advance lookup per §9.7.4.3, not
+`/Widths`; hex-string operand emission in `emit_edited_operator`
+instead of the literal-string path; width-aware `carried_codes`
+subset-floor accounting) — deliberately not attempted this
+continuation because a half-applied version risks a silent wrong-output
+edit, worse than leaving the Pass open. **Notable near-miss, escalated
+as a new RAG finding
+(`D:\dev\rag\rust\regression_test_guard_via_incidental_property_disarms_silently.md`):**
+the type widening alone would have made it POSSIBLE to silently disarm
+`tests/composite_refusal_reachable.rs` (continuation 76's regression
+test) had slot-pushing been added carelessly — that test currently
+passes because composite runs produce zero slots today, an incidental
+property, not because it directly asserts the ordering it exists to
+guard; the fix for whoever wires this in is to rewrite the test to
+search for text known ABSENT from the page, a discriminator immune to
+slot count. **Branch now 82 commits**, backup bundle refreshed to
+`...final.bundle` — see
+[[project-uncommitted-repo-worktree-risk]]. **Four operator decisions
+outstanding, consolidated into one list in this filing's SESSION_LOG
+entry** (font-EULA policy / complex-script refusal posture / forms
+sequencing status-check / R86 ratification) — Ken has been away the
+entire session; check that consolidated list first the next time he is
+present, rather than re-grepping continuations 73–78 individually. Item
+#3's remaining live work is the four-item wiring survey above,
+unchanged in scope from continuation 77's framing but now precisely
+enumerated; item #4 (forms) still queued behind it.

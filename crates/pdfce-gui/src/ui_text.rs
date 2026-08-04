@@ -3790,6 +3790,27 @@ pub fn scale_entry_paper_basis_caption() -> &'static str {
     "Paper-unit basis: 1 in = 72 pt."
 }
 
+/// Placeholder/hint under the real-length field, showing the notations the
+/// scale-by-known-dimension workflow accepts.
+///
+/// Shown always, not only on error: the whole feature is "type what the
+/// drawing says", and an operator who does not know that is allowed will
+/// convert to a decimal by hand — which is the exact work this removes.
+pub fn scale_entry_real_length_hint() -> &'static str {
+    "Type it as the drawing writes it — 55 5/8\", 4'-7 1/2\", 12', 1200mm, or a plain number"
+}
+
+/// Echo of what pdfce understood the typed length to be.
+///
+/// Rule 4 (fuzzy, never sneaky): the parser accepts several notations and
+/// picks the unit from the text, so it must show its reading back BEFORE the
+/// operator commits. A calibration silently rescales every dimension in the
+/// group, so "I typed something and it accepted it" is not enough confidence
+/// to hand someone.
+pub fn scale_entry_real_length_echo(value: f64, unit_label: &str) -> String {
+    format!("= {value} {unit_label}")
+}
+
 /// The scale-entry live preview (ui-spec §4.2 "→ scale = 1:100"). `ratio` is
 /// the engine-computed `ScalePreview::ratio_label`, rendered verbatim.
 pub fn scale_entry_preview(ratio: &str) -> String {
