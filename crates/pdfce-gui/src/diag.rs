@@ -52,6 +52,23 @@
 
 use std::sync::OnceLock;
 
+/// The tools a script can arm.
+///
+/// A closed set rather than a free-text name: a typo in an environment
+/// variable would otherwise arm nothing and look exactly like a tool whose
+/// dispatch is broken, which is the confusion this whole module exists to
+/// prevent. Deliberately not `CanvasTool` itself — that type lives in
+/// `canvas` and carries variants a script has no way to set up state for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScriptTool {
+    /// Leave every tool.
+    None,
+    /// The object-edit ("Obj") tool.
+    Obj,
+    /// The linear measure tool — the ce-dimension authoring surface.
+    Measure,
+}
+
 /// One step of a scripted input run — see [`Script`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Step {
@@ -72,14 +89,13 @@ pub enum Step {
     Zoom(f32),
     /// Press and release the Delete key.
     Delete,
-    /// Enter the object-edit tool (`tool:obj`) or leave every tool
-    /// (`tool:none`).
+    /// Arm a tool: `tool:none`, `tool:obj`, `tool:measure`.
     ///
     /// Set directly rather than by clicking the toolbar, so a script isolates
     /// the question "does this tool's canvas dispatch work" from the separate
     /// question "is its toolbar button wired up". A harness that could only
     /// reach a tool through its button would confuse the two.
-    Tool(bool),
+    Tool(ScriptTool),
     /// Burn a frame. Used to let a texture, a provider rebuild, or egui's own
     /// click detection settle between steps.
     Wait,
@@ -166,8 +182,9 @@ fn parse_step(s: &str) -> Option<Step> {
         "delete" => Some(Step::Delete),
         "wait" => Some(Step::Wait),
         "tool" => match rest.trim() {
-            "obj" => Some(Step::Tool(true)),
-            "none" => Some(Step::Tool(false)),
+            "none" => Some(Step::Tool(ScriptTool::None)),
+            "obj" => Some(Step::Tool(ScriptTool::Obj)),
+            "measure" => Some(Step::Tool(ScriptTool::Measure)),
             _ => None,
         },
         _ => None,

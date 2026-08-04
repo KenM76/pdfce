@@ -213,6 +213,47 @@ pub fn resolve_drag_placement(
     }
 }
 
+/// Where a tool's floating strip anchors: relative to the canvas **viewport**,
+/// never to the page.
+///
+/// # The defect this removes
+///
+/// The three tool status strips (text-edit, add-text, measure) were positioned
+/// at `image_rect.min.x + 8, image_rect.max.y - 8` — a function of the PAGE's
+/// drawn rectangle. So the Accept/Reject controls moved whenever the page did:
+/// on every zoom step, every scroll, every page change. At high zoom the page
+/// rectangle extends far outside the viewport, which put the anchor off-screen
+/// entirely.
+///
+/// The operator's report, 2026-08-04: *"there is a separate accept / reject box
+/// somewhere on the screen to click - I've never seen any other software
+/// operate that way."* The word doing the work there is **somewhere**.
+/// SolidWorks' PropertyManager has the same ✓/✗ pair on every modal command;
+/// what it does not do is move them, because they belong to the application
+/// frame rather than to the document.
+///
+/// `offset` is measured from the named corner, in points, positive inward.
+#[must_use]
+pub fn tool_strip_anchor(viewport: Rect, corner: StripCorner, offset: f32) -> Pos2 {
+    match corner {
+        StripCorner::TopLeft => Pos2::new(viewport.min.x + offset, viewport.min.y + offset),
+        StripCorner::BottomLeft => Pos2::new(viewport.min.x + offset, viewport.max.y - offset),
+    }
+}
+
+/// Which corner of the canvas viewport a floating tool strip hangs from.
+///
+/// Only the two that are used. A wider enum would be an invitation to scatter
+/// tool controls around all four corners, which is the habit this type exists
+/// to stop.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StripCorner {
+    /// Tool properties — near where a toolbar would be.
+    TopLeft,
+    /// Gesture status and its commit controls — out of the drawing's way.
+    BottomLeft,
+}
+
 /// Which object the operator has **entered**, and which of its subpaths is
 /// selected inside it.
 ///

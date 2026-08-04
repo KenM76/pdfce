@@ -5139,11 +5139,19 @@ impl eframe::App for PdfceApp {
                     modifiers,
                 });
             }
-            diag::Step::Tool(on) => {
-                if let Status::Open(doc) = &mut self.status {
-                    doc.active_tool = on.then_some(CanvasTool::VectorEdit);
-                    doc.vector_drag = None;
-                }
+            diag::Step::Tool(which) => {
+                // Routed through the SAME action the toolbar pushes, so a
+                // scripted tool entry builds exactly the per-tool state a real
+                // entry does. Setting `active_tool` directly would skip
+                // `build_measure_state`, and the measure tool would then be
+                // "armed" with no state — a harness artefact indistinguishable
+                // from a bug.
+                let tool = match which {
+                    diag::ScriptTool::None => None,
+                    diag::ScriptTool::Obj => Some(CanvasTool::VectorEdit),
+                    diag::ScriptTool::Measure => Some(CanvasTool::MeasureLinear),
+                };
+                self.apply(Action::SelectCanvasTool(tool), ctx, ctx.pixels_per_point());
             }
             diag::Step::Delete => {
                 for pressed in [true, false] {
@@ -9078,7 +9086,11 @@ fn run_text_edit_tool(
         egui::Area::new(egui::Id::new("pdfce-text-edit-propbar"))
             .order(egui::Order::Foreground)
             .movable(true)
-            .default_pos(image_rect.min + egui::vec2(8.0, 8.0))
+            .default_pos(canvas::tool_strip_anchor(
+                ui.max_rect(),
+                canvas::StripCorner::TopLeft,
+                8.0,
+            ))
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_max_width(360.0);
@@ -9587,7 +9599,11 @@ fn run_text_edit_tool(
         // §10), not painter-drawn.
         egui::Area::new(egui::Id::new("pdfce-text-edit-status"))
             .order(egui::Order::Foreground)
-            .fixed_pos(egui::pos2(image_rect.min.x + 8.0, image_rect.max.y - 8.0))
+            .fixed_pos(canvas::tool_strip_anchor(
+                ui.max_rect(),
+                canvas::StripCorner::BottomLeft,
+                8.0,
+            ))
             .pivot(egui::Align2::LEFT_BOTTOM)
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
@@ -10344,7 +10360,11 @@ fn run_add_text_tool(
         egui::Area::new(egui::Id::new("pdfce-add-text-propbar"))
             .order(egui::Order::Foreground)
             .movable(true)
-            .default_pos(image_rect.min + egui::vec2(8.0, 8.0))
+            .default_pos(canvas::tool_strip_anchor(
+                ui.max_rect(),
+                canvas::StripCorner::TopLeft,
+                8.0,
+            ))
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     ui.set_max_width(380.0);
@@ -10465,7 +10485,11 @@ fn run_add_text_tool(
         //    panel. Accept/Reject are REAL buttons (accesskit). --
         egui::Area::new(egui::Id::new("pdfce-add-text-status"))
             .order(egui::Order::Foreground)
-            .fixed_pos(egui::pos2(image_rect.min.x + 8.0, image_rect.max.y - 8.0))
+            .fixed_pos(canvas::tool_strip_anchor(
+                ui.max_rect(),
+                canvas::StripCorner::BottomLeft,
+                8.0,
+            ))
             .pivot(egui::Align2::LEFT_BOTTOM)
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
@@ -12104,7 +12128,11 @@ fn run_measure_tool(
         let mut close_tool = false;
         egui::Area::new(egui::Id::new("pdfce-measure-propbar"))
             .order(egui::Order::Foreground)
-            .default_pos(image_rect.min + egui::vec2(8.0, 8.0))
+            .default_pos(canvas::tool_strip_anchor(
+                ui.max_rect(),
+                canvas::StripCorner::TopLeft,
+                8.0,
+            ))
             .movable(true)
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
@@ -12219,7 +12247,11 @@ fn run_measure_tool(
             .map_or_else(|| Unit::Millimeter.default_format(), |g| g.format);
         egui::Area::new(egui::Id::new("pdfce-measure-status"))
             .order(egui::Order::Foreground)
-            .fixed_pos(egui::pos2(image_rect.min.x + 8.0, image_rect.max.y - 8.0))
+            .fixed_pos(canvas::tool_strip_anchor(
+                ui.max_rect(),
+                canvas::StripCorner::BottomLeft,
+                8.0,
+            ))
             .pivot(egui::Align2::LEFT_BOTTOM)
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
