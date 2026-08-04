@@ -497,6 +497,66 @@ def subset_simple_embedded() -> bytes:
     return serialize(objects)
 
 
+def composite_editable() -> bytes:
+    """A `/Type0` + `Identity-H` page whose run is genuinely EDITABLE.
+
+    Pass 21.1 needs a composite fixture with MORE THAN ONE glyph. The
+    sibling `cidfonttype2-with-tounicode.pdf` carries a single CID, so
+    there is no second character to edit *to* — it can prove a refusal and
+    nothing else.
+
+    This one embeds the same three-glyph donor the simple fixtures use, so
+    CID 1/2/3 are A/B/C (glyph order `.notdef, gA, gB, gC`, and
+    `/CIDToGIDMap /Identity` makes CID == GID). The `/ToUnicode` is
+    one-to-one, so it passes R110's injectivity check and an edit like
+    ABC -> CBA exercises the real multi-byte encode and splice.
+
+    Distinguishable glyph heights (A short, B taller, C tallest) mean a
+    reordering edit is visible in a raster without OCR — a wrong-CID bug
+    looks different from a missing-glyph bug.
+    """
+    ttf = build_subset_truetype()
+
+    tounicode = (
+        b"begincmap\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"
+        b"3 beginbfchar\n<0001> <0041>\n<0002> <0042>\n<0003> <0043>\nendbfchar\n"
+        b"endcmap\n"
+    )
+
+    content = b"BT\n/F0 48 Tf\n72 600 Td\n<000100020003> Tj\nET\n"
+
+    objects: dict[int, bytes] = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        2: (
+            f"<< /Type /Pages /Kids [3 0 R] /Count 1 "
+            f"/MediaBox [0 0 {PAGE_WIDTH} {PAGE_HEIGHT}] "
+            f"/Resources << /Font << /F0 5 0 R >> >> >>"
+        ).encode("ascii"),
+        3: b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>",
+        4: raw_stream(content, ""),
+        5: (
+            b"<< /Type /Font /Subtype /Type0 /BaseFont /CMPOSE+pdfceSubsetDemo "
+            b"/Encoding /Identity-H /DescendantFonts [6 0 R] /ToUnicode 10 0 R >>"
+        ),
+        6: (
+            b"<< /Type /Font /Subtype /CIDFontType2 "
+            b"/BaseFont /CMPOSE+pdfceSubsetDemo "
+            b"/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> "
+            b"/FontDescriptor 7 0 R /CIDToGIDMap /Identity /DW 1000 "
+            b"/W [1 [600 600 600]] >>"
+        ),
+        7: (
+            b"<< /Type /FontDescriptor /FontName /CMPOSE+pdfceSubsetDemo "
+            b"/Flags 4 /FontBBox [0 -200 600 800] /ItalicAngle 0 "
+            b"/Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 "
+            b"/FontFile2 9 0 R >>"
+        ),
+        9: raw_stream(ttf, f" /Length1 {len(ttf)}"),
+        10: raw_stream(tounicode, ""),
+    }
+    return serialize(objects)
+
+
 def main() -> int:
     out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else OUT
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -531,6 +591,10 @@ def main() -> int:
     donor = out_dir / "subset-donor.ttf"
     donor.write_bytes(build_subset_truetype())
     print(f"wrote {donor} ({donor.stat().st_size} bytes)")
+
+    ce = out_dir / "composite-editable.pdf"
+    ce.write_bytes(composite_editable())
+    print(f"wrote {ce.name} ({ce.stat().st_size} bytes)  [Type0, 3 CIDs, injective ToUnicode]")
 
     cyc = out_dir / "subset-cycle-donor.ttf"
     cyc.write_bytes(build_cycle_truetype())

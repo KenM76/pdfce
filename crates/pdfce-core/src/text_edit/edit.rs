@@ -1183,7 +1183,46 @@ impl<'a> Walk<'a> {
                         // encoder multi-byte, and that change owes the
                         // regression test a new way to detect the ordering —
                         // asserting the refusal fires BEFORE any match work,
-                        // rather than relying on match failing.
+                        // rather than relying on match failing. The
+                        // discriminator that survives slots: ask to edit text
+                        // that is NOT on the page. Correct ordering still
+                        // yields the composite refusal; broken ordering
+                        // yields `NoMatch`, because the text genuinely is not
+                        // there.
+                        //
+                        // WHAT THE WIRING CHANGE ACTUALLY OWES, surveyed
+                        // rather than guessed (Pass 21.1, 2026-08-04). Four
+                        // coupled pieces, none of them optional:
+                        //
+                        //  1. `font.glyph_names()` returns `None` for a
+                        //     composite font, and `plan_edit` currently
+                        //     treats that as `Unsupported`. The branch has to
+                        //     come before that, choosing
+                        //     `CompositeEncoding::build` (shipped, tested)
+                        //     over `InverseEncoding::build`.
+                        //  2. `glyph_advance` takes a single-byte code and
+                        //     reads simple-font widths. Composite advances
+                        //     come from the CIDFont's `/W`//`/DW`
+                        //     (§9.7.4.3) — a different table, not a wider
+                        //     argument.
+                        //  3. `emit_edited_operator` writes a literal
+                        //     `( … )` string. A composite operand is a HEX
+                        //     string of 2-byte codes; `CompositeEncodeResult
+                        //     ::to_bytes` already produces them big-endian,
+                        //     but the emitter must choose the form.
+                        //  4. `carried_codes`' embedded-subset floor is
+                        //     single-byte. Its composite equivalent asks
+                        //     whether a CID is already shown on the page.
+                        //
+                        // The substrate for all four is in place: `ShowSlot`
+                        // is `u32` + `width`, `CompositeEncoding` is tested,
+                        // and `fixtures/synthetic/text/composite-editable.pdf`
+                        // carries three CIDs with an injective `/ToUnicode`
+                        // so an ABC -> CBA edit can actually be verified.
+                        // Deliberately NOT started at the tail of a long
+                        // session: it puts a shipped, well-tested editing
+                        // path at risk, and a half-applied version of it is
+                        // worse than none.
                         //
                         // The point of decoding at all is that the run must
                         // be REACHABLE for the composite refusal to fire on
