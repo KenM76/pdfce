@@ -45,7 +45,7 @@
 
 use std::collections::BTreeSet;
 
-use eframe::egui::{Color32, Pos2, Rect, Shape, Stroke};
+use eframe::egui::{Color32, PointerButton, Pos2, Rect, Response, Shape, Stroke};
 use pdfce_core::text_edit::{GlyphRef, TextPosition};
 use pdfce_core::vector::{SnapCandidate, SnapKind};
 
@@ -211,6 +211,86 @@ pub fn resolve_drag_placement(
         width,
         height,
     }
+}
+
+/// The scroll offset a middle-drag pan should move to, clamped to what the
+/// canvas can actually show.
+///
+/// # Why the clamp is not optional
+///
+/// The offset is subtracted, so the content follows the hand. Without a clamp
+/// an unscrollable canvas — the page fitted inside the viewport, offset pinned
+/// at zero — still accepts a negative target for one frame, so the page slides
+/// with the pointer and then snaps back the instant the drag ends. Observed
+/// exactly that on 2026-08-04: a 50 px slide and a 50 px jump back. Refusing to
+/// move at all is the honest response to "there is nothing to pan to".
+///
+/// # Known limitation, deliberately left
+///
+/// This clamps to the PAGE, so the page edges cannot be dragged inward past the
+/// viewport edge. The operator asked to "navigate beyond the page's edges",
+/// which needs reserved space around the page rather than a different clamp —
+/// a change to how the canvas reserves its content area, with a visible
+/// consequence (scrollbars present at every zoom). That is a UX call, referred
+/// to `pdfce-ui-specialist` rather than decided here, and this function is the
+/// one place it would need to change.
+#[must_use]
+pub fn pan_offset(
+    last: (f32, f32),
+    pan: (f32, f32),
+    display: (f32, f32),
+    viewport: (f32, f32),
+) -> (f32, f32) {
+    fn axis(last: f32, pan: f32, d: f32, v: f32) -> f32 {
+        if !(last.is_finite() && pan.is_finite() && d.is_finite() && v.is_finite()) {
+            return last;
+        }
+        (last - pan).clamp(0.0, (d - v).max(0.0))
+    }
+    (
+        axis(last.0, pan.0, display.0, viewport.0),
+        axis(last.1, pan.1, display.1, viewport.1),
+    )
+}
+
+/// Whether a canvas gesture is starting — **primary button only**.
+///
+/// # Why every canvas gesture must ask this instead of `drag_started()`
+///
+/// `Response::drag_started()` is button-agnostic: it is true for a middle-drag
+/// and a right-drag as well as a left one. That was harmless while those two
+/// buttons did nothing on the canvas. Once the middle button became the pan
+/// gesture it stopped being harmless — a middle-drag over a selected object
+/// would have been read by the object-edit tool as "move this object", so
+/// panning across a drawing would silently rewrite it.
+///
+/// The right button is reserved for the operator's requested context menus and
+/// is excluded for the same reason, before it can acquire the same defect.
+///
+/// These three helpers exist so the constraint is stated once with its reason,
+/// rather than as a dozen scattered `..._by(PointerButton::Primary)` calls that
+/// a later gesture is free to forget.
+#[must_use]
+pub fn primary_drag_started(r: &Response) -> bool {
+    r.drag_started_by(PointerButton::Primary)
+}
+
+/// Whether a canvas gesture is in flight — primary button only. See
+/// [`primary_drag_started`].
+#[must_use]
+pub fn primary_dragged(r: &Response) -> bool {
+    r.dragged_by(PointerButton::Primary)
+}
+
+/// Whether a canvas gesture just ended — primary button only. See
+/// [`primary_drag_started`].
+///
+/// A gesture that STARTS on the primary button can only stop on it, so in
+/// practice this differs from `drag_stopped()` only for a drag that was never
+/// ours to begin with — which is exactly the case that must not commit an edit.
+#[must_use]
+pub fn primary_drag_stopped(r: &Response) -> bool {
+    r.drag_stopped_by(PointerButton::Primary)
 }
 
 /// Where the canvas must be scrolled to so the page point under the pointer
@@ -1333,6 +1413,44 @@ pub fn snap_marker_shapes(at: Pos2, kind: SnapKind, color: Color32, size: f32) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- middle-drag pan ----------------------------------------------
+
+    #[test]
+    fn panning_moves_the_content_opposite_the_offset_so_the_page_follows_the_hand() {
+        // Page twice the viewport, so there is room to move.
+        let out = pan_offset(
+            (500.0, 500.0),
+            (30.0, -20.0),
+            (1600.0, 1600.0),
+            (800.0, 800.0),
+        );
+        assert_eq!(
+            out,
+            (470.0, 520.0),
+            "dragging right must DECREASE the offset, or the page moves against the hand"
+        );
+    }
+
+    #[test]
+    fn an_unscrollable_canvas_refuses_to_pan_rather_than_rubber_banding() {
+        // The fit-page case: page smaller than the viewport, offset pinned.
+        // Before the clamp this returned -50 and the page visibly slid, then
+        // snapped back when the drag ended.
+        let out = pan_offset((0.0, 0.0), (50.0, 50.0), (600.0, 600.0), (800.0, 800.0));
+        assert_eq!(out, (0.0, 0.0));
+    }
+
+    #[test]
+    fn panning_stops_at_the_far_edge() {
+        let out = pan_offset(
+            (700.0, 0.0),
+            (-500.0, 0.0),
+            (1000.0, 1000.0),
+            (800.0, 800.0),
+        );
+        assert_eq!(out.0, 200.0, "must not scroll past the end of the page");
+    }
 
     // ---- zoom to cursor -----------------------------------------------
 

@@ -61,6 +61,15 @@ pub enum Step {
     Down(f32, f32),
     /// Release the primary button at a position.
     Up(f32, f32),
+    /// Press (`true`) or release (`false`) the MIDDLE button at a position —
+    /// the pan gesture, which the primary-button steps cannot express.
+    Middle(bool, f32, f32),
+    /// A Ctrl+wheel zoom step by this factor, as `egui::Event::Zoom`.
+    ///
+    /// Exists so zoom-to-cursor can be checked in the LIVE application and not
+    /// only in `canvas::zoom_anchor_offset`'s unit tests — the unit tests prove
+    /// the solve, this proves it is wired to the wheel and to the scroll area.
+    Zoom(f32),
     /// Press and release the Delete key.
     Delete,
     /// Enter the object-edit tool (`tool:obj`) or leave every tool
@@ -151,6 +160,9 @@ fn parse_step(s: &str) -> Option<Step> {
         "move" => xy().map(|(x, y)| Step::Move(x, y)),
         "down" => xy().map(|(x, y)| Step::Down(x, y)),
         "up" => xy().map(|(x, y)| Step::Up(x, y)),
+        "zoom" => rest.trim().parse().ok().map(Step::Zoom),
+        "mdown" => xy().map(|(x, y)| Step::Middle(true, x, y)),
+        "mup" => xy().map(|(x, y)| Step::Middle(false, x, y)),
         "delete" => Some(Step::Delete),
         "wait" => Some(Step::Wait),
         "tool" => match rest.trim() {

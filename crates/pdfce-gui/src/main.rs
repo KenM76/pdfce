@@ -1688,6 +1688,15 @@ struct OpenDoc {
     /// is the next frame's own `display_size`. Recording the *inputs* and
     /// solving later avoids predicting a clamp we do not control.
     zoom_anchor: Option<ZoomAnchor>,
+    /// The scroll offset the canvas settled on at the end of the last frame.
+    ///
+    /// Kept because middle-drag panning has to compute "where the view should
+    /// be now" BEFORE the scroll area is built, and the area's own state is
+    /// only readable after. Storing last frame's settled value lets the pan be
+    /// applied in the same frame as the movement rather than a frame late,
+    /// which is the difference between panning that tracks the hand and
+    /// panning that lags it.
+    last_scroll_offset: egui::Vec2,
     /// Which pages are selected for a batch operation, by 0-based index.
     ///
     /// Ordered (a `BTreeSet`) so that "the selected pages" is always a
@@ -1849,6 +1858,7 @@ impl OpenDoc {
             zoom_commit_at: Instant::now(),
             zoom_commanded: false,
             zoom_anchor: None,
+            last_scroll_offset: egui::Vec2::ZERO,
             selected_pages: BTreeSet::new(),
             selection_anchor: None,
             dragged_page: None,
@@ -5023,6 +5033,18 @@ impl eframe::App for PdfceApp {
                     modifiers,
                 });
             }
+            diag::Step::Zoom(factor) => raw_input.events.push(egui::Event::Zoom(factor)),
+            diag::Step::Middle(pressed, x, y) => {
+                raw_input
+                    .events
+                    .push(egui::Event::PointerMoved(egui::pos2(x, y)));
+                raw_input.events.push(egui::Event::PointerButton {
+                    pos: egui::pos2(x, y),
+                    button: egui::PointerButton::Middle,
+                    pressed,
+                    modifiers,
+                });
+            }
             diag::Step::Tool(on) => {
                 if let Status::Open(doc) = &mut self.status {
                     doc.active_tool = on.then_some(CanvasTool::VectorEdit);
@@ -7672,6 +7694,53 @@ impl PdfceApp {
                 anchor.frac,
             );
             scroll_area = scroll_area.scroll_offset(egui::vec2(x, y));
+        } else {
+            // Middle-drag pans the page — the CAD/Inkscape/Illustrator/browser
+            // convention the operator asked for on 2026-08-04 ("middle click -
+            // drag to move the page around on screen").
+            //
+            // Pointer-drag panning has not existed since Pass 9a, which gave
+            // the canvas a marquee instead and moved panning "to the mouse
+            // wheel and the scrollbars". That decision is left standing for the
+            // PRIMARY button: a left-drag on a page of drawing objects should
+            // rubber-band. The middle button was simply never assigned, so this
+            // takes nothing away from anything.
+            //
+            // Implemented against the scroll offset directly rather than by
+            // re-enabling `ScrollSource.drag`, because that knob is
+            // button-agnostic — turning it on would restore left-drag panning
+            // and destroy the marquee. Panning subtracts the pointer delta:
+            // the content follows the hand, so the page moves WITH the pointer
+            // rather than under it.
+            //
+            // Gated on the pointer being over the canvas so a middle-drag that
+            // began on the thumbnail rail or a dock panel does not yank the
+            // page sideways.
+            let pan = ui.input(|i| {
+                let over = i
+                    .pointer
+                    .latest_pos()
+                    .is_some_and(|p| ui.max_rect().contains(p));
+                if i.pointer.middle_down() && over {
+                    i.pointer.delta()
+                } else {
+                    egui::Vec2::ZERO
+                }
+            });
+            if pan != egui::Vec2::ZERO {
+                let vp = ui.available_size();
+                let (x, y) = canvas::pan_offset(
+                    (doc.last_scroll_offset.x, doc.last_scroll_offset.y),
+                    (pan.x, pan.y),
+                    (display_size.x, display_size.y),
+                    (vp.x, vp.y),
+                );
+                scroll_area = scroll_area.scroll_offset(egui::vec2(x, y));
+                // The gesture has to look like what it is. Without a cursor
+                // change a middle-drag that hits the end of the scroll range
+                // is indistinguishable from a middle-drag that is not working.
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            }
         }
         let scroll_output = scroll_area.show(ui, |ui| {
             // Centre the page MANUALLY rather than with
@@ -7734,8 +7803,10 @@ impl PdfceApp {
 
         let (image_response, viewport_size) = scroll_output.inner;
         // The offset the area settled on THIS frame, i.e. the `offset_before`
-        // of any zoom step the operator starts now.
+        // of any zoom step the operator starts now, and the base the next
+        // frame's middle-drag pan moves from.
         let scroll_offset = scroll_output.state.offset;
+        doc.last_scroll_offset = scroll_offset;
 
         // This `image_response` — not the outer ScrollArea's — is the
         // substrate's canonical canvas response; its `.rect` is the
@@ -7747,28 +7818,29 @@ impl PdfceApp {
         // only on a frame where the pointer actually did something, so a run
         // produces a handful of lines rather than one per idle frame.
         if diag::enabled() {
-            let (down, pressed, released) = ui.input(|i| {
+            let (down, pressed, released, zoom_delta) = ui.input(|i| {
                 (
                     i.pointer.any_down(),
                     i.pointer.any_pressed(),
                     i.pointer.any_released(),
+                    i.zoom_delta(),
                 )
             });
-            if pressed || released || down {
+            if pressed || released || down || (zoom_delta - 1.0).abs() > f32::EPSILON {
                 let p = ui.ctx().pointer_latest_pos();
                 diag::trace(|| {
                     format!(
                         "canvas tool={:?} rect={:?} zoom={zoom} hovered={} clicked={} \
                          drag_started={} dragged={} drag_stopped={} pointer={p:?} \
                          interact={:?} down={down} pressed={pressed} released={released} \
-                         provider={} sel={}",
+                         zdelta={zoom_delta} off={scroll_offset:?} provider={} sel={}",
                         doc.active_tool,
                         image_rect,
                         image_response.hovered(),
                         image_response.clicked(),
-                        image_response.drag_started(),
-                        image_response.dragged(),
-                        image_response.drag_stopped(),
+                        canvas::primary_drag_started(&image_response),
+                        canvas::primary_dragged(&image_response),
+                        canvas::primary_drag_stopped(&image_response),
                         image_response.interact_pointer_pos(),
                         doc.object_model.is_some(),
                         doc.canvas_selection.len(),
@@ -7780,7 +7852,7 @@ impl PdfceApp {
         // §1.4: clicking the canvas (or, once a tool drags, drag-starting it)
         // requests focus for the canvas's own id, making it a genuine Tab
         // stop (§6.2) rather than an inert image.
-        if image_response.clicked() || image_response.drag_started() {
+        if image_response.clicked() || canvas::primary_drag_started(&image_response) {
             image_response.request_focus();
         }
 
@@ -7866,7 +7938,7 @@ impl PdfceApp {
             // start in canvas space, draws the in-progress rectangle, and on
             // release asks the provider which objects it fully encloses,
             // folding them into the selection (plain = replace, Shift = add).
-            if image_response.drag_started() {
+            if canvas::primary_drag_started(&image_response) {
                 doc.marquee_start = image_response
                     .interact_pointer_pos()
                     .map(|s| viewer::screen_to_page(s, image_rect, extent, zoom));
@@ -7890,7 +7962,7 @@ impl PdfceApp {
                             egui::Stroke::new(1.0, ui.visuals().selection.stroke.color),
                             egui::StrokeKind::Inside,
                         );
-                        if image_response.drag_stopped() {
+                        if canvas::primary_drag_stopped(&image_response) {
                             let shift = ui.input(|i| i.modifiers.shift);
                             let hits = doc
                                 .target_provider()
@@ -8285,14 +8357,14 @@ fn run_text_edit_tool(
             viewer::canvas_to_pdf_space(canvas, page)
                 .and_then(|pdf| model.hit_test(f64::from(pdf.x), f64::from(pdf.y)))
         };
-        if image_response.drag_started() {
+        if canvas::primary_drag_started(image_response) {
             // §4.1: press sets BOTH ends to the start caret; the drag then moves
             // the focus end (the `dragged()` arm below) while the anchor holds.
             if let Some(sp) = image_response.interact_pointer_pos() {
                 let hit = hit_at(sp);
                 click_result = Some((hit, hit));
             }
-        } else if image_response.dragged() {
+        } else if canvas::primary_dragged(image_response) {
             // §4.1: each drag frame moves the focus caret to the pointer; the
             // anchor (set at drag_started, carried on `state`) is unchanged.
             if let Some(sp) = image_response.interact_pointer_pos()
@@ -9906,10 +9978,10 @@ fn run_add_text_tool(
         //    rotation/zoom-correct via the bridge), degenerate drag→point at the
         //    drag START (canvas::resolve_drag_placement, §3.2's deliberate
         //    divergence from Pass 6.1's discard rule). --
-        if image_response.drag_started() {
+        if canvas::primary_drag_started(image_response) {
             state.draft = None;
             state.drag_anchor = image_response.interact_pointer_pos();
-        } else if image_response.drag_stopped() {
+        } else if canvas::primary_drag_stopped(image_response) {
             if let (Some(anchor), Some(end)) = (
                 state.drag_anchor.take(),
                 image_response.interact_pointer_pos(),
@@ -10012,7 +10084,7 @@ fn run_add_text_tool(
 
         // -- Rubber-band while dragging a box (§3.2): a plain dashed amber rect,
         //    the "not yet real" hue at 1.5px; no PREVIEW tag until text exists. --
-        if image_response.dragged()
+        if canvas::primary_dragged(image_response)
             && let (Some(anchor), Some(cur)) =
                 (state.drag_anchor, image_response.interact_pointer_pos())
         {
@@ -11476,7 +11548,7 @@ fn run_vector_edit_tool(
 
         // Drag start: classify as a node grab (near a selected object's
         // anchor) or a whole-object move.
-        if image_response.drag_started()
+        if canvas::primary_drag_started(image_response)
             && let Some(sp) = image_response.interact_pointer_pos()
             && let Some(start) = to_pdf(sp)
             && let Some(idx) = selected
@@ -11509,7 +11581,7 @@ fn run_vector_edit_tool(
                     }
                     painter.circle_stroke(s, 4.0, egui::Stroke::new(1.5, preview_color));
                 }
-                if image_response.drag_stopped() {
+                if canvas::primary_drag_stopped(image_response) {
                     commit = Commit::Node {
                         idx: drag.object_index,
                         node,
@@ -11540,7 +11612,7 @@ fn run_vector_edit_tool(
                         egui::StrokeKind::Inside,
                     );
                 }
-                if image_response.drag_stopped() {
+                if canvas::primary_drag_stopped(image_response) {
                     commit = Commit::Move {
                         idx: drag.object_index,
                         dx,
@@ -11564,7 +11636,7 @@ fn run_vector_edit_tool(
     match commit {
         Commit::None => {
             // A drag that released without a committable target drops its state.
-            if image_response.drag_stopped() {
+            if canvas::primary_drag_stopped(image_response) {
                 doc.vector_drag = None;
             }
         }
