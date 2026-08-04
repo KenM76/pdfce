@@ -1,0 +1,44 @@
+# fontfile-census — measures embedded font-program sizes across the corpus so
+# Pass 21.0's MAX_FONT_PROGRAM_BYTES ceiling is a MEASUREMENT, not a guess.
+#
+# WHY THIS EXISTS. ARCHITECTURE.md §10.1 requires a size ceiling on anything
+# that consumes attacker-influenced bytes, and decision 021 §3.5 puts one on
+# the donor font program FF-C subsets. It also says, in as many words, to
+# corpus-measure the number rather than pick it: this project has THREE
+# recorded cases of a guard chosen by intuition being wrong in production —
+# MAX_TOKEN_LEN at 8 KiB, MAX_XOBJECT_DEPTH at 16, and jpx::MAX_TILES. A
+# ceiling set too low refuses real documents; set too high it guards nothing.
+#
+# Note the ceiling here is INPUT-side, unlike §10.1's decoder ceilings which
+# are output-side. Decoders expand, so their danger is what comes out; a
+# subsetter only ever REMOVES, so len(out) <= len(in) and the input is the
+# correct place to bound.
+#
+# This tool measures. It does not decide. It prints the distribution with
+# denominators spelled out.
+#
+# WHY OUT-OF-TREE (workspace-excluded, same as tools/tw-census, roundtrip,
+# corpus-report, difftest): keeps `cargo test --workspace` fast, keeps the
+# GUI-core-separation `cargo tree` checks unambiguous, and keeps cargo-about's
+# THIRD_PARTY_LICENSES.md a picture of the SHIPPING graph only (LEGAL.md §6.3).
+#
+# ZERO NEW DEPENDENCIES — pdfce-core by path, everything else std. A harness
+# whose numbers gate a product decision should not be able to blame a
+# third-party crate for them.
+#
+# FIXTURE RULE (LEGAL.md §5): reads rights-cleared corpora in place from
+# gitignored scratch space; emits only aggregates and a per-font TSV.
+
+[package]
+name = "fontfile-census"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+pdfce-core = { path = "../../crates/pdfce-core" }
+
+[profile.release]
+opt-level = 3

@@ -68,3 +68,6 @@ tools/observations/
 /fixtures/external/tw-census*.tsv
 /fixtures/external/tw-census*.txt
 /fixtures/external/tw-census*.log
+
+# fontfile-census build artefacts (out-of-tree tool, same as tools/tw-census)
+tools/fontfile-census/target/
