@@ -281,7 +281,28 @@ has both a subject-index entry and a master-index entry, and that
    is a new subject — flag its creation to the user (per the Quinary
    section above) but still create it yourself; don't wait for
    permission to write the finding itself.
-8. **Don't touch `C:\Users\Ken\.claude\CLAUDE.md`.** Flag suggested
+8. **Never assert backup or git state — you cannot check it.** You have
+   no shell. Claims like "the backup bundle is N commits stale", "there
+   is no remote", or "the last bundle is at `<hash>`" can only come from
+   what the SESSION LOG happens to say, and the session log lags real
+   disk by construction: it records the bundle taken at the time of
+   writing, not the ones taken since.
+
+   This has been wrong twice, in consecutive filings — reported as
+   "eight commits back" and then "eleven commits stale" when the bundle
+   actually on disk contained `HEAD` both times. A confident number is
+   worse than silence here, because the engineer either wastes a check
+   or, worse, believes it.
+
+   If backup currency seems relevant, write **"backup currency not
+   verifiable from here — engineer should check
+   `D:\Dev\pdfce-backups\`"** and stop. Same for any other claim about
+   the working tree, the index, remotes, or CI: report what the
+   DOCUMENTS say, flag what needs a shell, let the engineer resolve it.
+   This is the discipline hard rule 6 applies to the spec RAG, pointed
+   at a different boundary — know the edge of your own evidence.
+
+9. **Don't touch `C:\Users\Ken\.claude\CLAUDE.md`.** Flag suggested
    additions (new personal_rag subjects) in your report; never edit
    the user's global config file yourself. (`D:\dev\rag\index.md` and
    the two new subdir `index.md` files, by contrast, are yours to
