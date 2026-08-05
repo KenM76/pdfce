@@ -38,8 +38,12 @@ authoritative.
   advance rather than set by an explicit `Tm`/`Td` — the exact analogue of
   `starts_implicitly`.
 - **Pass 33.0 reflow auto-width.** Four options recorded, none chosen.
-- **Decision 028 items 10/12/13**: breadcrumb, keyboard node navigation,
-  subpath-move as a canvas gesture.
+- **Decision 028 items 10/12/13**: keyboard node navigation, and item 12's
+  *navigation* half. ~~item 9, subpath-move as a canvas gesture~~ **SHIPPED
+  Pass 36.0** — see [[rung-ladder-state]]. Item 12 is **half done**: Pass 36.2
+  discharged its *disclosure* obligation (the rung is named, a failed descent
+  says so) but built no clickable breadcrumb, so Escape-one-rung-at-a-time is
+  still the only way up.
 - **Clip-gate Tier 2 routing** — blocked on operator question (av), not on
   engineering.
 

@@ -20,3 +20,5 @@
 - [Editing arc state](project_editing_arc_state.md) — 2026-08-05 snapshot: composite text/re corners/handles/Node rung shipped; per-run text deletion + reflow width still open, with the fix shape known
 - [Keep the error catching](feedback_keep_the_error_catching.md) — Ken rejects changes that trade error-detection for speed; declined splitting into per-crate sessions for that reason
 - [A refusal can guard more than it says](feedback_refusals_guard_their_callers.md) — re-verify a refusal's stated reason (R143); removing one can un-gate a caller relying on it (R144/R147)
+- [Gates I owe myself](feedback_gates_i_owe_myself.md) — the cargo-fuzz gate is the one I skip; and a harness enumerating a module's entry points goes stale every Pass
+- [Rungs: click-out commits, and the three-rung ladder](project_rung_ladder_state.md) — 2026-08-05: Passes 34.0/36.0/36.1/36.2 shipped; what commits implicitly and what still doesn't

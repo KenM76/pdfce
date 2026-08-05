@@ -1,0 +1,44 @@
+---
+name: gates-i-owe-myself
+description: The fuzz-target gate is the one I skip; and a harness that enumerates a module's entry points goes stale every time the module grows
+metadata:
+  type: feedback
+---
+
+Two gates are easy to declare met without meeting them. Both bit on 2026-08-05.
+
+**1. The cargo-fuzz gate is the one that gets skipped.** ARCHITECTURE.md §10.2
+and the engineer role's "Always" list both require: new code touching
+untrusted-input parsing extends a `cargo-fuzz` target. On Pass 36.1 I shipped
+`plan_delete_node` with 10 fixture tests, ran fmt/clippy/tests/ui-strings/
+ledger/cargo-tree, and reported the Pass complete — **without the fuzz arm.**
+The librarian caught it, not me. Fixture tests feel like enough; they are not
+the gate that was asked for.
+
+**Why:** the other gates are one command with a pass/fail line. Fuzzing needs a
+DLL on PATH ([[fuzz-asan-dll]]), a minute of runtime, and a judgement about
+which branches to drive — so it reads as optional in a way `cargo clippy`
+never does. It is not optional.
+
+**How to apply:** before declaring ANY Pass done that adds a function taking
+parsed-from-file data, grep the fuzz targets for the module. If the module is
+listed and the new entry point is not, that is the gate, unmet.
+
+**2. A fuzz/test harness that enumerates a module's entry points goes stale
+silently.** Adding the owed arm exposed that `fuzz/fuzz_targets/vector_edit.rs`
+still drove only the three Pass 9c-min planners it was written for:
+`plan_delete_subpath` (Pass 25.2), `plan_move_subpath` (Pass 28.0) and
+`plan_move_handle` (Pass 30.1) had **never been fuzzed at all**. Three Passes
+each added a planner beside them and none extended the target.
+
+This is the same family as R151 (a `pub fn` with no caller) and R152 (a caller
+that confirms nothing): the harness has no way to complain about what it does
+not mention. The check is cheap — a planner in the module's public surface that
+appears in no fuzz target is findable by grep.
+
+**How to apply:** when extending a harness, do not just add your own arm — diff
+the harness's list against the module's current public surface. The gap will be
+older than your change.
+
+Related: [[run-the-projects-own-gates]] (the gate set is wider than fmt/clippy/
+tests), [[fuzz-asan-dll]] (why running one is not one command on this machine).
