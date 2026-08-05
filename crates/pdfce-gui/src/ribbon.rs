@@ -86,9 +86,26 @@ pub enum RibbonGroup {
     /// Annotation authoring: notes, free text, stamps.
     Notes,
     /// The three ce-dimension measure tools.
+    ///
+    /// # There is deliberately no `MeasureGroups` beside this
+    ///
+    /// One existed, briefly, and was declared with no widget gated to it —
+    /// the Measure tab promised a "Groups" band that rendered nothing, and
+    /// `every_ribbon_group_is_gated_to_a_widget` caught it on that test's
+    /// first run.
+    ///
+    /// It was deleted rather than given a widget, because the widget already
+    /// exists somewhere better. The ce-dimension group picker and "Groups…"
+    /// button live in the Tool Options pane, which is where Pass 34.1 put
+    /// every armed tool's live controls. Adding a second copy to the ribbon
+    /// would be exactly the two-mental-models duplication decision 024 §1.3
+    /// item 6 names — and the same objection that made 024 reject a Tools tab
+    /// holding batch operations.
+    ///
+    /// The division that came out of this arc, stated once here because it is
+    /// the thing to check the next time a group is proposed: **the ribbon
+    /// picks the activity; the sidebar holds that activity's controls.**
     MeasureTools,
-    /// ce-dimension group selection and management.
-    MeasureGroups,
     /// Batch operations across whole files.
     Batch,
     /// Operator-supplied font folders.
@@ -104,6 +121,38 @@ pub enum RibbonGroup {
 }
 
 impl RibbonGroup {
+    /// Every group.
+    ///
+    /// Exists so a sweep cannot silently miss a variant — the list the
+    /// module's own test walks, and the one `main.rs` walks to check that
+    /// every declared group is gated to a widget. A second hand-written list
+    /// would drift from this one, which is the failure both tests exist to
+    /// prevent.
+    #[allow(
+        dead_code,
+        reason = "the group enumeration; swept by this module's taxonomy test and by main.rs's gated-widget test, and the list any future group-picker must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
+    )]
+    pub const ALL: [Self; 18] = [
+        Self::FileOps,
+        Self::DocumentProperties,
+        Self::Clipboard,
+        Self::LayoutReset,
+        Self::Help,
+        Self::History,
+        Self::Pages,
+        Self::Navigate,
+        Self::ContentTools,
+        Self::Markup,
+        Self::Notes,
+        Self::MeasureTools,
+        Self::Batch,
+        Self::Fonts,
+        Self::Protect,
+        Self::Zoom,
+        Self::Show,
+        Self::Panels,
+    ];
+
     /// The caption printed under the group (R1: through the catalog).
     #[must_use]
     pub fn caption(self) -> &'static str {
@@ -120,7 +169,6 @@ impl RibbonGroup {
             Self::Markup => ui_text::ribbon_group_markup(),
             Self::Notes => ui_text::ribbon_group_notes(),
             Self::MeasureTools => ui_text::ribbon_group_measure_tools(),
-            Self::MeasureGroups => ui_text::ribbon_group_measure_groups(),
             Self::Batch => ui_text::ribbon_group_batch(),
             Self::Fonts => ui_text::ribbon_group_fonts(),
             Self::Protect => ui_text::ribbon_group_protect(),
@@ -278,7 +326,7 @@ impl RibbonTab {
                 RibbonGroup::Pages,
             ],
             Self::Review => &[RibbonGroup::Markup, RibbonGroup::Notes],
-            Self::Measure => &[RibbonGroup::MeasureTools, RibbonGroup::MeasureGroups],
+            Self::Measure => &[RibbonGroup::MeasureTools],
             Self::Tools => &[RibbonGroup::Batch, RibbonGroup::Fonts, RibbonGroup::Protect],
             Self::View => &[
                 RibbonGroup::Navigate,
@@ -367,27 +415,7 @@ mod tests {
     /// Zero tabs claiming one would make it unreachable, which is worse.
     #[test]
     fn every_group_belongs_to_exactly_one_tab() {
-        for group in [
-            RibbonGroup::FileOps,
-            RibbonGroup::DocumentProperties,
-            RibbonGroup::Clipboard,
-            RibbonGroup::LayoutReset,
-            RibbonGroup::Help,
-            RibbonGroup::History,
-            RibbonGroup::Pages,
-            RibbonGroup::Navigate,
-            RibbonGroup::ContentTools,
-            RibbonGroup::Markup,
-            RibbonGroup::Notes,
-            RibbonGroup::MeasureTools,
-            RibbonGroup::MeasureGroups,
-            RibbonGroup::Batch,
-            RibbonGroup::Fonts,
-            RibbonGroup::Protect,
-            RibbonGroup::Zoom,
-            RibbonGroup::Show,
-            RibbonGroup::Panels,
-        ] {
+        for group in RibbonGroup::ALL {
             let owners: Vec<RibbonTab> = RibbonTab::ALL
                 .into_iter()
                 .filter(|t| t.shows(group))

@@ -1601,10 +1601,6 @@ pub fn ribbon_group_measure_tools() -> &'static str {
     "Measure"
 }
 /// See [`ribbon_group_file_ops`].
-pub fn ribbon_group_measure_groups() -> &'static str {
-    "Groups"
-}
-/// See [`ribbon_group_file_ops`].
 pub fn ribbon_group_batch() -> &'static str {
     "Across files"
 }

@@ -2655,11 +2655,12 @@ enum Action {
     /// **command**, not a widget state flip: it must run in `apply()` with
     /// every other command, after the frame's drawing is finished and the
     /// real tree has been restored from the borrow-dance swap.
-    ResetPanelLayout,
     /// Open the reset-layout chooser (Pass 24.1).
     OpenResetLayout,
     /// Close the chooser without resetting anything.
     CancelResetLayout,
+    /// Open the panel on the Font-folders tool (Pass 24.1 follow-up).
+    OpenFontFolders,
     /// Apply the chooser's selection.
     ApplyResetLayout(ribbon::ResetScope),
     /// Switch the visible ribbon tab (Pass 24.1).
@@ -5065,6 +5066,15 @@ impl PdfceApp {
                 self.ribbon_tab = tab;
                 return;
             }
+            Action::OpenFontFolders => {
+                // Both halves, because either alone is a no-op the operator
+                // would read as a dead button: select the tool AND make sure
+                // the panel that shows it is open.
+                self.tools_selected = Some(Tool::FontFolders);
+                self.tools_open = true;
+                dock::activate(&mut self.dock, DockPanel::BatchTools);
+                return;
+            }
             Action::CancelResetLayout => {
                 self.pending_reset = None;
                 return;
@@ -5090,17 +5100,6 @@ impl PdfceApp {
                     self.tools_open = true;
                 }
                 self.pending_reset = None;
-                return;
-            }
-            Action::ResetPanelLayout => {
-                // Wholesale replacement, not a repair: the operator reached
-                // for this because the arrangement is wrong in some way they
-                // could not undo by dragging, and a partial fix that left
-                // some of the damage would send them straight back to the
-                // button. `default_tree` is also the single definition of
-                // "where the panels start", so reset and startup cannot
-                // drift apart.
-                self.dock = dock::default_tree();
                 return;
             }
             Action::ApplyProperties => {
@@ -5427,9 +5426,9 @@ impl PdfceApp {
             | Action::ToggleAnnotations
             | Action::ToggleShowPoints
             | Action::ToggleProperties
-            | Action::ResetPanelLayout
             | Action::OpenResetLayout
             | Action::CancelResetLayout
+            | Action::OpenFontFolders
             | Action::ApplyResetLayout(_)
             | Action::SelectRibbonTab(_)
             | Action::ApplyProperties
@@ -7722,6 +7721,35 @@ impl PdfceApp {
                     actions.push(Action::ToggleTools);
                 }
             }
+
+            // Fonts — Tools ▸ Fonts (Pass 24.1 follow-up).
+            //
+            // `RibbonGroup::Fonts` was declared on the Tools tab and gated to
+            // NO widget, so the tab promised a group that rendered nothing.
+            // That is the same shape as R151 (a capability with no caller) and
+            // R152 (a caller that confirms nothing), one layer out: a
+            // declaration with no implementation, and the ribbon's own tests
+            // could not catch it — they assert that every group has exactly
+            // one owning TAB, which says nothing about whether any widget
+            // asks for it. Found by reading the gate list against the
+            // taxonomy, not by a test, which is worth knowing.
+            //
+            // Opens the panel with Font folders already selected, rather than
+            // opening it on whatever the operator last had open: a control
+            // named "Font folders…" that lands somewhere else is a control
+            // that lied.
+            if Self::ribbon_group(ui, tab, RG::Fonts)
+                && ui
+                    .add(Self::icon_text(
+                        ui,
+                        icons::Icon::FontFolders,
+                        ui_text::tool_font_folders_label(),
+                    ))
+                    .on_hover_text(ui_text::font_folders_intro())
+                    .clicked()
+            {
+                actions.push(Action::OpenFontFolders);
+            }
             // Reset layout… — File ▸ Layout (Pass 24.1). Opens the chooser
             // rather than acting immediately: it is the one control here whose
             // effect the operator cannot see until after it happens, and
@@ -8073,12 +8101,21 @@ impl PdfceApp {
     /// decision 012 set the precedent against for the font-folders setting.
     fn dock_header(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         ui.horizontal(|ui| {
+            // Pass 24.1: opens the CHOOSER, the same one File ▸ Layout opens.
+            //
+            // This used to push `Action::ResetPanelLayout`, which rebuilt the
+            // right dock and nothing else. Pass 34.1 added a left dock and
+            // that action never learned about it, so this button silently did
+            // half its job. Leaving it pushing the old action once the chooser
+            // existed would have been worse than the original defect: two
+            // controls labelled "reset the layout", one of them correct, with
+            // nothing on screen to say which.
             if ui
                 .button(ui_text::dock_reset_layout_button())
                 .on_hover_text(ui_text::dock_reset_layout_tooltip())
                 .clicked()
             {
-                actions.push(Action::ResetPanelLayout);
+                actions.push(Action::OpenResetLayout);
             }
         });
         ui.label(
@@ -15451,6 +15488,44 @@ fn run_dimension_groups_panel(doc: &mut OpenDoc, ui: &mut egui::Ui) {
 
 #[cfg(test)]
 mod tests {
+    /// Every declared ribbon group is actually GATED to some widget
+    /// (Pass 24.1 follow-up).
+    ///
+    /// # The defect this exists to catch, which it did not catch
+    ///
+    /// `RibbonGroup::Fonts` shipped declared on the Tools tab and gated to no
+    /// widget at all, so the tab promised a group that rendered nothing. The
+    /// ribbon module's own tests could not see it: they assert every group has
+    /// exactly one owning TAB, which says nothing about whether any widget
+    /// ever asks for that group. It was found by reading the gate list against
+    /// the taxonomy by hand.
+    ///
+    /// # Why this scans source text, which is unusual and deliberate
+    ///
+    /// The taxonomy is data in `ribbon.rs`; the widgets are calls in this
+    /// file. Nothing in the type system connects the two — a group with no
+    /// `RG::` gate compiles perfectly. So the connection has to be checked the
+    /// only way it exists: textually. That is the same mechanical check
+    /// R151 (a `pub fn` with no caller), R154 (a decision naming a type that
+    /// should be greppable) and `check-ui-strings.sh` all use, and this
+    /// project keeps re-learning that the cheap grep is the one that finds
+    /// these.
+    ///
+    /// A false PASS is possible (a `RG::X` inside a comment would satisfy it)
+    /// and is the right way to be wrong: the failure mode this guards is a
+    /// group nobody wired up at all, not one wired up in an odd place.
+    #[test]
+    fn every_ribbon_group_is_gated_to_a_widget() {
+        let src = include_str!("main.rs");
+        for group in ribbon::RibbonGroup::ALL {
+            let needle = format!("RG::{group:?}");
+            assert!(
+                src.contains(&needle),
+                "{group:?} is declared in ribbon.rs but no widget in main.rs is gated on                  `{needle}` — the tab shows a caption with nothing under it"
+            );
+        }
+    }
+
     use super::*;
 
     // ---- Pass 19.3: the spacing & style property surface ----
