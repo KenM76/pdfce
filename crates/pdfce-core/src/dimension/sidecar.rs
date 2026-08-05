@@ -59,13 +59,45 @@ pub fn serialize_model(model: &DimensionModel) -> Object {
 /// Parse a [`DimensionModel`] back from a stored sidecar `Object`. `None` if
 /// the object is not a dict, is not the recognised schema, or is missing the
 /// group/dimension arrays (the caller then starts a fresh model).
+/// The schema version a sidecar object declares, or `None` if it is not a
+/// recognisable sidecar at all.
+///
+/// Exists so the write side can tell "this file has no pdfce sidecar" (fine,
+/// start one) from "this file's sidecar was written by a newer pdfce than this
+/// one" (refuse to overwrite it). Those two look identical to
+/// [`deserialize_model`], and treating the second as the first is how an
+/// operator's calibrated scales get silently destroyed by an older build.
+#[must_use]
+pub fn sidecar_version(obj: &Object) -> Option<i64> {
+    obj.as_dict()?.get(b"Version").and_then(Object::as_int)
+}
+
 #[must_use]
 pub fn deserialize_model(obj: &Object) -> Option<DimensionModel> {
     let d = obj.as_dict()?;
-    // Version gate: only recognise what we wrote (forward-compat: a newer
-    // major would be a different, unhandled version → None → fresh model).
-    if d.get(b"Version").and_then(Object::as_int) != Some(SIDECAR_VERSION) {
-        return None;
+    // Version gate — a RANGE, not an equality.
+    //
+    // This used to demand exact equality and answer `None` on any mismatch,
+    // which the caller turns into a FRESH model. That is silent data loss in
+    // both directions: an older sidecar would be discarded on the first
+    // version bump, and a sidecar written by a NEWER pdfce is discarded today,
+    // taking every group, every calibrated scale and every membership with it
+    // — while the `/Line` annotations keep rendering perfectly, so nothing
+    // looks wrong until the next save makes it permanent.
+    //
+    // Older is readable because every key this schema has ever gained is
+    // OPTIONAL with a default (see `/Offset`, `/TextAlong`), so an old
+    // document is simply one that used the defaults.
+    //
+    // NEWER is a different problem and is NOT solved here: this returns the
+    // groups and dimensions it can understand, and [`sidecar_version`] lets
+    // the session refuse to WRITE over a file it cannot fully represent
+    // (`EditError::SidecarWrittenByNewerBuild`). Reading is safe; writing is
+    // what would destroy the parts this build does not know about.
+    let version = d.get(b"Version").and_then(Object::as_int)?;
+    if version > SIDECAR_VERSION {
+        // Still parsed, not refused — a reader should show what it can. The
+        // write-side guard is the session's.
     }
     let mut model = DimensionModel::empty();
     if let Some(groups) = d.get(b"Groups").and_then(Object::as_array) {

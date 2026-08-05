@@ -27,8 +27,16 @@ use pdfce_core::writer::SaveOptions;
 
 /// Build a minimal one-page PDF: catalog(1) → pages(2) → page(3).
 fn minimal_pdf() -> Vec<u8> {
+    minimal_pdf_with_catalog("<< /Type /Catalog /Pages 2 0 R >>")
+}
+
+/// The same one-page PDF with an arbitrary catalog body — so a test can plant
+/// a sidecar the writer would never produce (a newer schema version) without
+/// duplicating the byte-offset bookkeeping, which is the part that is easy to
+/// get subtly wrong and hard to notice.
+fn minimal_pdf_with_catalog(catalog: &str) -> Vec<u8> {
     let bodies = [
-        "<< /Type /Catalog /Pages 2 0 R >>",
+        catalog,
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 400] /Resources << >> >>",
     ];
@@ -604,6 +612,57 @@ fn a_sidecar_without_the_offset_key_still_loads_every_group_and_dimension() {
             Some(ScaleState::Calibrated { .. })
         ),
         "and so must the calibrated scale — losing it is the failure mode this pins"
+    );
+}
+
+/// **A sidecar from a newer pdfce is refused for writing, never overwritten.**
+///
+/// This is the other half of the version-gate hazard, and the dangerous half.
+/// The gate used to demand exact equality and answer `None` on a mismatch,
+/// which the session turns into a FRESH model — so an older build opening a
+/// newer file would start empty and the next save would write that emptiness
+/// over the operator's groups, calibrated scales and memberships. Nothing
+/// would look wrong in between: the `/Line` annotations keep rendering
+/// perfectly, so the loss is invisible until it is permanent.
+///
+/// The assertion that matters is the second one: after the refusal, nothing
+/// has been staged, so there is no emptiness waiting to be written.
+#[test]
+fn a_sidecar_from_a_newer_build_refuses_writes_instead_of_discarding_it() {
+    let doc = Document::from_bytes(minimal_pdf_with_catalog(
+        "<< /Type /Catalog /Pages 2 0 R /PieceInfo << /pdfce << /LastModified (D:20260804000000Z) /Private << /Version 999 /Groups [] /Dimensions [] >> >> >> >>",
+    ))
+    .unwrap();
+    let mut s = EditSession::new(doc);
+
+    for (what, result) in [
+        ("add", s.add_dimension(0, DEFAULT_GROUP_ID, linear()).err()),
+        (
+            "scale",
+            s.set_group_scale(
+                DEFAULT_GROUP_ID,
+                ScaleState::Calibrated { scale: 0.01 },
+                NumberFormat::decimal(Unit::Meter, 2),
+            )
+            .err(),
+        ),
+        (
+            "delete",
+            s.delete_dimension(pdfce_core::dimension::DimensionId(0))
+                .err(),
+        ),
+    ] {
+        assert!(
+            matches!(
+                result,
+                Some(pdfce_core::edit::EditError::SidecarWrittenByNewerBuild { found: 999, .. })
+            ),
+            "the {what} path must refuse a newer sidecar by name, got {result:?}"
+        );
+    }
+    assert!(
+        !s.is_modified(),
+        "every refusal happens BEFORE any mutation — nothing is staged to overwrite the sidecar"
     );
 }
 

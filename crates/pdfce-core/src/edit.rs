@@ -577,6 +577,28 @@ pub enum EditError {
         /// The dimension id that was asked for.
         id: u32,
     },
+    /// This document's ce-dimension sidecar was written by a **newer** pdfce
+    /// than this build understands, so writing to it would destroy what this
+    /// build cannot represent (Pass 27.2).
+    ///
+    /// The alternative is what used to happen and is far worse: the sidecar
+    /// failed an exact-equality version check, the session silently started a
+    /// FRESH model, and the next save wrote that empty model over the
+    /// operator's groups, calibrated scales and memberships. Nothing looked
+    /// wrong in the meantime — the `/Line` annotations kept rendering — so the
+    /// loss would not be noticed until it was permanent.
+    ///
+    /// Reading is unaffected: the dimensions this build understands are still
+    /// listed and still render. Only ce-dimension WRITES are refused.
+    #[error(
+        "this document's measurement data was written by a newer version of pdfce (format {found}, this build understands {supported}); editing measurements here would discard what this version cannot read, so it is refused"
+    )]
+    SidecarWrittenByNewerBuild {
+        /// The schema version found in the document.
+        found: i64,
+        /// The newest schema version this build understands.
+        supported: i64,
+    },
     /// A placement operation named a ce dimension that is not linear
     /// (Pass 27.1).
     ///
@@ -6072,6 +6094,7 @@ impl EditSession {
             return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
         }
 
+        self.check_dimension_sidecar()?;
         let mut model = self.read_dimension_model();
         let dim_id = model.add_dimension(group, kind);
         let gid = model
@@ -6178,6 +6201,7 @@ impl EditSession {
             return Err(EditError::DocumentEncrypted);
         }
         self.check_certification()?;
+        self.check_dimension_sidecar()?;
         let mut model = self.read_dimension_model();
         let id = model.add_group(name, unit);
         let catalog_write = self.catalog_dimension_write(&model)?;
@@ -6209,6 +6233,7 @@ impl EditSession {
         }
         self.check_certification()?;
 
+        self.check_dimension_sidecar()?;
         let mut model = self.read_dimension_model();
         model.set_group_scale(group, scale, format);
 
@@ -6257,6 +6282,7 @@ impl EditSession {
             return Err(EditError::DocumentEncrypted);
         }
         self.check_certification()?;
+        self.check_dimension_sidecar()?;
         let mut model = self.read_dimension_model();
         let result = model.set_group_visible(group, visible);
         let catalog_write = self.catalog_dimension_write(&model)?;
@@ -6368,6 +6394,7 @@ impl EditSession {
         }
         self.check_certification()?;
 
+        self.check_dimension_sidecar()?;
         let mut model = self.read_dimension_model();
         let record = model
             .dimension(dimension)
@@ -6429,6 +6456,7 @@ impl EditSession {
         }
         self.check_certification()?;
 
+        self.check_dimension_sidecar()?;
         let mut model = self.read_dimension_model();
         let record = model
             .dimension(dimension)
@@ -6531,6 +6559,7 @@ impl EditSession {
         }
         self.check_certification()?;
 
+        self.check_dimension_sidecar()?;
         let mut model = self.read_dimension_model();
         let record = model
             .dimension(dimension)
@@ -6637,6 +6666,40 @@ impl EditSession {
     /// disclose-and-start-fresh posture: a malformed sidecar never panics).
     fn read_dimension_model(&self) -> DimensionModel {
         self.try_read_dimension_model().unwrap_or_default()
+    }
+
+    /// Refuse a ce-dimension WRITE when the document's sidecar came from a
+    /// newer pdfce than this build understands (Pass 27.2).
+    ///
+    /// Called by every ce-dimension mutation, in the same position as
+    /// [`Self::check_certification`] — before any object is touched, so a
+    /// refusal leaves the document exactly as it was (rule 4).
+    ///
+    /// A document with NO sidecar is not a newer document; it is a document
+    /// that has never been dimensioned, and starting one is the whole point.
+    /// Only a sidecar that declares a version this build cannot fully
+    /// represent is refused.
+    fn check_dimension_sidecar(&self) -> Result<(), EditError> {
+        let Some(cid) = self.graph().catalog_id() else {
+            return Ok(());
+        };
+        let found = self
+            .value(cid)
+            .and_then(Object::as_dict)
+            .cloned()
+            .and_then(|catalog| self.deref_dict(catalog.get(b"PieceInfo")))
+            .and_then(|piece| self.deref_dict(piece.get(b"pdfce")))
+            .and_then(|pdfce| self.deref_value(pdfce.get(b"Private")))
+            .and_then(|private| crate::dimension::sidecar_version(&private));
+        match found {
+            Some(v) if v > crate::dimension::SIDECAR_VERSION => {
+                Err(EditError::SidecarWrittenByNewerBuild {
+                    found: v,
+                    supported: crate::dimension::SIDECAR_VERSION,
+                })
+            }
+            _ => Ok(()),
+        }
     }
 
     fn try_read_dimension_model(&self) -> Option<DimensionModel> {
