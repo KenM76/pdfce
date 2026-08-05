@@ -12202,7 +12202,18 @@ fn run_vector_edit_tool(
                 .as_ref()
                 .map(|p| p.object_sample_points(idx))
                 .unwrap_or_default();
-            new_drag = Some(Some(vector_edit_tool::classify_drag(idx, start, &anchors)));
+            // Zoom-converted at the moment of the press, like every other
+            // canvas tolerance. A page-space constant here made the grab
+            // radius swell with zoom, which on an object holding 6,681
+            // anchors means sweeping up nodes from subpaths the operator is
+            // not pointing at.
+            let tol_page = canvas::screen_tolerance_to_page(
+                vector_edit_tool::NODE_GRAB_SCREEN_TOLERANCE_PX,
+                zoom,
+            );
+            new_drag = Some(Some(vector_edit_tool::classify_drag(
+                idx, start, &anchors, tol_page,
+            )));
         }
 
         // Live preview + commit-on-release for an in-flight drag.
