@@ -569,6 +569,22 @@ struct PdfceApp {
     /// decision 003's single-folder-portable posture) or R15's user-state
     /// partition, which does not exist yet.
     dock: DockTree,
+    /// The LEFT dock's pane tree — Pages | Tool Options (Pass 34.1).
+    ///
+    /// A second, independent `egui_tiles` tree rather than another root inside
+    /// [`Self::dock`]. Two trees cannot exchange panes, which is the property
+    /// wanted: the left dock holds what you are working ON (the pages) and
+    /// what you are working WITH (the armed tool's options); the right holds
+    /// what you are working on the CONTENTS of. Letting a pane cross between
+    /// them would blur a distinction the layout exists to draw.
+    left_dock: DockTree,
+    /// The frame's `pixels_per_point`, stashed for the left dock (Pass 34.1).
+    ///
+    /// `thumbnail_rail` needs it to size its rasters, and `panel_body` — the
+    /// one dispatcher every pane goes through — takes no such argument and
+    /// should not grow one per pane's private needs. Written immediately
+    /// before the left dock draws, read inside it, same frame.
+    left_dock_pixels_per_point: f32,
     /// The outcome of the most recent save, kept until the next one so
     /// the operator gets a persistent answer rather than a toast they
     /// might miss.
@@ -933,6 +949,8 @@ impl Default for PdfceApp {
             // separate questions, and conflating them is what made the old
             // `properties_open` flag able to lie.
             dock: dock::default_tree(),
+            left_dock: dock::default_left_tree(),
+            left_dock_pixels_per_point: 1.0,
             save_result: None,
             // The dock starts CLOSED: progressive disclosure, and the
             // status quo before decision 017 — an operator who wants it
@@ -5023,6 +5041,25 @@ impl PdfceApp {
             // no-ops this Pass but are the live dispatch every future tool
             // Pass routes through (spec §3.2).
             Action::SelectCanvasTool(tool) => {
+                // Pass 34.1: arming a tool raises Tool Options, and opens the
+                // rail if it was closed, so the options the operator just
+                // summoned are actually on screen.
+                //
+                // ONE-WAY, deliberately. Disarming does NOT push the pane back
+                // to Pages: an operator who switched to Pages on purpose
+                // should not have the panel yanked out from under them by a
+                // tool they just put down. Raising on arm is answering a
+                // request; restoring on disarm would be overruling one.
+                //
+                // Not a focus steal: it changes which tab of an already-open
+                // dock is in front, and takes no keyboard focus, so a
+                // half-typed value elsewhere is undisturbed.
+                if tool.is_some() {
+                    self.rail_expanded = true;
+                    let mut tree = std::mem::replace(&mut self.left_dock, dock::left_swap_tree());
+                    dock::activate(&mut tree, DockPanel::ToolOptions);
+                    self.left_dock = tree;
+                }
                 // Pass 16.2 §5.1: the default add-text font is read BEFORE
                 // borrowing `doc` (it lives on `self`), so tool entry can seed
                 // the property bar without a second borrow.
@@ -6201,11 +6238,17 @@ impl eframe::App for PdfceApp {
         egui::Panel::bottom("status")
             .exact_size(STATUS_PANEL_HEIGHT_PTS)
             .show(ui, |ui| self.status_bar(ui));
+        // Pass 34.1: the left dock replaces the hand-rolled thumbnail panel.
+        // Same position, same toggle, same add-order (it must still precede
+        // the CentralPanel and follow the full-width status bar) — what
+        // changed is that the rail is now a PANE, so Tool Options can be a tab
+        // beside it, which is the operator's literal request.
         if self.rail_expanded {
-            egui::Panel::left("thumbnails")
+            egui::Panel::left("dock-left")
                 .default_size(raster::THUMBNAIL_WIDTH_PTS + 40.0)
                 .show(ui, |ui| {
-                    self.thumbnail_rail(ui, &mut actions, pixels_per_point)
+                    self.left_dock_pixels_per_point = pixels_per_point;
+                    self.left_dock_body(ui, &mut actions);
                 });
         }
         // The panel dock claims RIGHT space, so like the rail it must be
@@ -7511,6 +7554,129 @@ impl PdfceApp {
         self.dock = tree;
     }
 
+    /// The **Tool Options** pane (Pass 34.1) — the armed tool's own controls
+    /// and its disclosure surfaces, in a fixed place that does not move.
+    ///
+    /// # What this pane is for
+    ///
+    /// Every tool used to carry two floating `egui::Area`s: a property bar at
+    /// the canvas's top-left and a status/commit strip at its bottom-left.
+    /// Before decision 024 those were anchored to the PAGE, so they moved on
+    /// every zoom, scroll and page change, and at high zoom left the viewport
+    /// entirely. That is what the operator reported as *"there is a separate
+    /// accept / reject box somewhere on the screen to click — I've never seen
+    /// any other software operate that way."* Decision 024 stopped them
+    /// moving by anchoring them to the viewport; this stops them floating at
+    /// all, which is the half he asked for next: *"all of the options should
+    /// be shown in a side bar tab docked with the page navigation tab."*
+    ///
+    /// # Why the empty state says something
+    ///
+    /// A dock tab that is blank when you open it reads as broken rather than
+    /// as idle. With no tool armed this states what the pane is for and where
+    /// tools are armed from, which also makes the pane a discovery surface
+    /// for operators who have not found the tool buttons.
+    ///
+    /// # Migration status, stated so it is not mistaken for the finished shape
+    ///
+    /// This Pass moves the pane into existence and hosts the parts of each
+    /// tool's surface that live in STORED state — the tool's identity, its
+    /// commit/discard contract, its refusals and its disclosures. The
+    /// property-bar controls (font, size, colour, spacing) are still drawn by
+    /// the floating Areas, because they are built from values derived inside
+    /// each `run_*_tool`'s phase A, which runs during the CentralPanel — after
+    /// this pane has already drawn. Moving them needs those values cached on
+    /// the tool state so this pane can read the previous frame's, which is the
+    /// next slice, not a thing to fake here.
+    fn tool_options_panel(&mut self, ui: &mut egui::Ui, _actions: &mut Vec<Action>) {
+        let Status::Open(doc) = &self.status else {
+            ui.label(ui_text::tool_options_no_document());
+            return;
+        };
+        let Some(tool) = doc.active_tool else {
+            ui.label(ui_text::tool_options_empty());
+            return;
+        };
+        ui.heading(ui_text::tool_options_heading(tool));
+        ui.separator();
+
+        // The commit contract, stated where the Accept/Reject pair used to be
+        // (Pass 34.0 + decision 031). Shown only while something is actually
+        // uncommitted, so it is not permanent furniture — but shown at exactly
+        // the moment it is actionable, which for a first-session operator is
+        // the first character they type.
+        if self.committable_gesture() {
+            ui.label(ui_text::tool_options_commit_hint());
+        }
+
+        // Refusals and disclosures, verbatim from core (R20/R1). These are the
+        // surfaces it would be worst to lose in the move: a refusal that is
+        // not read is an edit the operator believes happened.
+        let mut any = false;
+        if let Some(state) = doc.text_edit.as_ref() {
+            let refusal = state
+                .pending
+                .as_ref()
+                .and_then(|p| p.last_refusal.clone())
+                .or_else(|| state.last_refusal.clone());
+            if let Some(text) = refusal {
+                ui.separator();
+                ui.label(ui_text::refusal_strip_title());
+                ui.colored_label(ui.visuals().error_fg_color, ui_text::refusal_line(&text));
+                any = true;
+            }
+            for d in &state.last_disclosures {
+                ui.label(ui_text::disclosure_bullet(d));
+                any = true;
+            }
+        }
+        if let Some(state) = doc.add_text.as_ref() {
+            if let Some(text) = state.draft.as_ref().and_then(|d| d.last_refusal.clone()) {
+                ui.separator();
+                ui.label(ui_text::refusal_strip_title());
+                ui.colored_label(ui.visuals().error_fg_color, ui_text::refusal_line(&text));
+                any = true;
+            }
+            for d in &state.last_disclosures {
+                ui.label(ui_text::disclosure_bullet(d));
+                any = true;
+            }
+        }
+        if let Some(state) = doc.measure.as_ref() {
+            for d in &state.last_disclosures {
+                ui.label(ui_text::disclosure_bullet(d));
+                any = true;
+            }
+        }
+        let _ = any;
+    }
+
+    /// Draw the LEFT dock (Pages | Tool Options), Pass 34.1.
+    ///
+    /// A sibling of [`Self::dock_body`] rather than a parameterised version of
+    /// it: the two differ in exactly one thing worth abstracting (which tree)
+    /// and one thing that must NOT be shared (the left dock has no header —
+    /// the reset command and the session-only disclosure are properties of the
+    /// dock system as a whole and are stated once, on the right). Threading a
+    /// `show_header: bool` through would be a flag that means "am I the left
+    /// one", which is a worse way to say the same thing.
+    ///
+    /// Uses the SAME `DockBehavior` and therefore the same `panel_body`
+    /// dispatcher, so R80's "one dispatcher" holds across both docks and a
+    /// panel cannot behave differently depending on which side it was dragged
+    /// to.
+    fn left_dock_body(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let active = self.left_dock.active_tiles();
+        let mut tree = std::mem::replace(&mut self.left_dock, dock::left_swap_tree());
+        let mut behavior = dock::DockBehavior {
+            app: self,
+            actions,
+            active,
+        };
+        tree.ui(&mut behavior, ui);
+        self.left_dock = tree;
+    }
+
     /// The dock's header strip: the layout-reset command and the
     /// session-only disclosure.
     ///
@@ -7562,20 +7728,43 @@ impl PdfceApp {
     /// tree scrolled to row 900 would leave the properties form scrolled off
     /// its own top.
     fn panel_body(&mut self, panel: DockPanel, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        // Statement arms, not expression arms: `Pages` hosts a body that
+        // scrolls itself, so it must NOT be wrapped in a `ScrollArea` — two
+        // nested scroll areas give the operator two scrollbars for one list
+        // and make the inner one unreachable at the panel's edge. Requiring
+        // every arm to yield the same `ScrollAreaOutput` forced the odd one
+        // to fabricate a value it does not have.
         match panel {
-            DockPanel::Objects => egui::ScrollArea::vertical()
-                .id_salt("dock-objects")
-                .show(ui, |ui| self.objects_panel(ui)),
-            DockPanel::Properties => egui::ScrollArea::vertical()
-                .id_salt("dock-properties")
-                .show(ui, |ui| self.properties_panel(ui, actions)),
-            DockPanel::BatchTools => egui::ScrollArea::vertical()
-                .id_salt("dock-batch-tools")
-                .show(ui, |ui| self.tools_dock(ui, actions)),
-            DockPanel::Redact => egui::ScrollArea::vertical()
-                .id_salt("dock-redact")
-                .show(ui, |ui| self.redact_panel(ui, actions)),
-        };
+            DockPanel::Objects => {
+                egui::ScrollArea::vertical()
+                    .id_salt("dock-objects")
+                    .show(ui, |ui| self.objects_panel(ui));
+            }
+            DockPanel::Properties => {
+                egui::ScrollArea::vertical()
+                    .id_salt("dock-properties")
+                    .show(ui, |ui| self.properties_panel(ui, actions));
+            }
+            DockPanel::BatchTools => {
+                egui::ScrollArea::vertical()
+                    .id_salt("dock-batch-tools")
+                    .show(ui, |ui| self.tools_dock(ui, actions));
+            }
+            DockPanel::Redact => {
+                egui::ScrollArea::vertical()
+                    .id_salt("dock-redact")
+                    .show(ui, |ui| self.redact_panel(ui, actions));
+            }
+            DockPanel::Pages => {
+                let ppp = self.left_dock_pixels_per_point;
+                self.thumbnail_rail(ui, actions, ppp);
+            }
+            DockPanel::ToolOptions => {
+                egui::ScrollArea::vertical()
+                    .id_salt("dock-tool-options")
+                    .show(ui, |ui| self.tool_options_panel(ui, actions));
+            }
+        }
     }
 
     /// The document-properties panel — the body that used to live in the

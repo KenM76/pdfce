@@ -557,9 +557,17 @@ in the file. Applying a field you have edited replaces its stored value with wha
 // Thumbnail rail
 // ---------------------------------------------------------------------------
 
-/// Tooltip on the thumbnail-rail toggle.
+/// Tooltip on the left-dock toggle.
+///
+/// **Amended Pass 34.1.** It read "Show or hide the page thumbnail rail",
+/// which stopped being true the moment the rail became one tab of a dock that
+/// also holds Tool Options — a control that hides two panels while naming one
+/// is the same class of stale claim as `entered_object_tooltip`'s
+/// "moving an individual part is not available yet" (Pass 36.2). Names the
+/// side rather than the contents, so adding a third tab does not falsify it
+/// again.
 pub fn rail_toggle_tooltip() -> &'static str {
-    "Show or hide the page thumbnail rail"
+    "Show or hide the left panel — page thumbnails and the active tool's options"
 }
 
 // ---------------------------------------------------------------------------
@@ -1473,6 +1481,83 @@ pub fn dock_panel_batch_tools_tooltip() -> &'static str {
     "Combine, split or insert pages across whole files, and manage the font folders pdfce \
 draws missing typefaces from. Tools that act on pages you can already see — delete, reorder, \
 rotate, extract — live on the page thumbnails instead."
+}
+
+/// Tab label of the page-navigation panel (Pass 34.1).
+///
+/// "Pages", not "Thumbnails": the operator navigates PAGES, and the thumbnail
+/// is the representation, not the subject. It also matches the noun the rest
+/// of the app already uses everywhere else — page number, page range, page
+/// operations.
+pub fn dock_panel_pages_label() -> &'static str {
+    "Pages"
+}
+
+/// Purpose tooltip / accessible name for the Pages tab.
+pub fn dock_panel_pages_tooltip() -> &'static str {
+    "Move between pages, and select pages to delete, reorder, rotate or extract them. Drag a thumbnail to move that page within the document."
+}
+
+/// Tab label of the tool-options panel (Pass 34.1).
+///
+/// "Tool Options" rather than "Options": bare "Options" in a desktop
+/// application means application preferences, and an operator looking for
+/// their settings would open this and find a font size for the tool they
+/// happen to have armed.
+pub fn dock_panel_tool_options_label() -> &'static str {
+    "Tool Options"
+}
+
+/// Purpose tooltip / accessible name for the Tool Options tab.
+pub fn dock_panel_tool_options_tooltip() -> &'static str {
+    "The settings for whichever tool you have armed, and anything pdfce needs to tell you about what it just did. Empty until you pick a tool."
+}
+
+// ---------------------------------------------------------------------------
+// Tool Options pane body (Pass 34.1)
+// ---------------------------------------------------------------------------
+
+/// Body text when no document is open.
+pub fn tool_options_no_document() -> &'static str {
+    "Open a document to use the editing tools."
+}
+
+/// Body text when a document is open but no tool is armed.
+///
+/// Says where tools are armed FROM, not just that none is. A pane that only
+/// reports its own emptiness teaches nothing; this one doubles as the answer
+/// to "where are the tools" for an operator who has not found the toolbar
+/// buttons yet.
+pub fn tool_options_empty() -> &'static str {
+    "No tool is active. Pick one from the toolbar — Edit Text, Add Text, Obj or Measure — and its settings will appear here."
+}
+
+/// Heading naming the armed tool.
+///
+/// The tool's own name, matching its toolbar control exactly, so an operator
+/// can tell at a glance that the pane is describing the thing they just
+/// clicked rather than something else.
+pub fn tool_options_heading(tool: crate::canvas::CanvasTool) -> &'static str {
+    use crate::canvas::CanvasTool;
+    match tool {
+        CanvasTool::TextEdit => "Edit Text",
+        CanvasTool::AddText => "Add Text",
+        CanvasTool::MeasureLinear => "Measure — linear",
+        CanvasTool::MeasureCircular => "Measure — radius / diameter",
+        CanvasTool::MeasureScale => "Measure — set scale",
+        CanvasTool::VectorEdit => "Obj — edit objects",
+    }
+}
+
+/// The commit contract, shown only while something is uncommitted (Pass 34.1,
+/// decision 031).
+///
+/// Replaces the Accept/Reject button pair for the tools that now commit
+/// implicitly. Both halves are stated because only one of them is
+/// discoverable: clicking elsewhere is what an operator does naturally, and
+/// Escape is what they need to be told.
+pub fn tool_options_commit_hint() -> &'static str {
+    "Click anywhere else to keep this change. Press Esc to discard it."
 }
 
 /// Fallback tab title for a CONTAINER tab — a tab group the operator built

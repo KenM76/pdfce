@@ -199,6 +199,24 @@ pub enum DockPanel {
     /// the dock for width) is not — it would be the float-OR-dock dual mode
     /// decision 017 A.4 #2 deliberately retired.
     Redact,
+    /// The page-navigation thumbnails (Pass 34.1).
+    ///
+    /// Was `Panel::left("thumbnails")`, a hand-rolled side panel with its own
+    /// toggle, sitting OUTSIDE the dock. It moved in so that Tool Options
+    /// could be a tab beside it, which is the operator's literal request:
+    /// *"all of the options should be shown in a side bar tab docked with the
+    /// page navigation tab."* R80 wanted this anyway — a surface reachable
+    /// only outside the dock is the defect that rule names.
+    Pages,
+    /// The armed tool's own options (Pass 34.1).
+    ///
+    /// Every tool's property bar and status strip, in a fixed, dockable place.
+    /// They used to be floating `egui::Area`s pinned to canvas corners; before
+    /// decision 024 they were pinned to the PAGE and moved on every zoom and
+    /// scroll, which is what the operator reported as *"a separate accept /
+    /// reject box somewhere on the screen"*. Anchoring them to the viewport
+    /// stopped them moving; this stops them floating.
+    ToolOptions,
 }
 
 impl DockPanel {
@@ -221,11 +239,13 @@ impl DockPanel {
         dead_code,
         reason = "the panel enumeration; swept by this module's tests today, and the list any future panel-picker or fail-soft remount must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 6] = [
         Self::Objects,
         Self::Properties,
         Self::BatchTools,
         Self::Redact,
+        Self::Pages,
+        Self::ToolOptions,
     ];
 
     /// The panel's tab label (decision 002 R1: through the catalog).
@@ -235,6 +255,8 @@ impl DockPanel {
             Self::Properties => ui_text::dock_panel_properties_label(),
             Self::BatchTools => ui_text::dock_panel_batch_tools_label(),
             Self::Redact => ui_text::dock_panel_redact_label(),
+            Self::Pages => ui_text::dock_panel_pages_label(),
+            Self::ToolOptions => ui_text::dock_panel_tool_options_label(),
         }
     }
 
@@ -247,6 +269,8 @@ impl DockPanel {
             Self::Properties => ui_text::dock_panel_properties_tooltip(),
             Self::BatchTools => ui_text::dock_panel_batch_tools_tooltip(),
             Self::Redact => ui_text::dock_panel_redact_tooltip(),
+            Self::Pages => ui_text::dock_panel_pages_tooltip(),
+            Self::ToolOptions => ui_text::dock_panel_tool_options_tooltip(),
         }
     }
 }
@@ -307,10 +331,66 @@ pub fn default_tree() -> DockTree {
     Tree::new(DOCK_TREE_ID, root, tiles)
 }
 
+/// The `egui::Id` of the LEFT dock tree (Pass 34.1).
+///
+/// A second, independent tree rather than a second root inside
+/// [`DOCK_TREE_ID`]'s: `egui_tiles` stores per-tile state under ids derived
+/// from the tree id, and two trees cannot exchange panes — which is exactly
+/// the property wanted here. A pane dragged out of the left dock must not be
+/// droppable into the right one, because the two sides mean different things
+/// (what you are working ON, versus what you are working WITH).
+const LEFT_TREE_ID: &str = "pdfce-dock-left";
+
+/// The throwaway tree used for the left borrow dance.
+const LEFT_SWAP_TREE_ID: &str = "pdfce-dock-left-swap";
+
+/// Build the default LEFT dock layout: **Pages | Tool Options**, one tab group
+/// (Pass 34.1).
+///
+/// ```text
+/// tabs [ Pages | Tool Options ]
+/// ```
+///
+/// # Why one group and not a vertical split
+///
+/// The right dock splits vertically because A.3 requires the object tree and
+/// the properties form to be visible at the same time — you select above and
+/// edit below. Nothing here has that relationship: an operator reads page
+/// thumbnails to navigate, and reads tool options while working the canvas,
+/// and they are never doing both in the same second. Splitting would halve
+/// both for a simultaneity nobody needs.
+///
+/// Two labels, which keeps the A.3 narrow-column invariant (no default tab
+/// group holds more than two) intact on this side as well — `egui_tiles`
+/// 0.16.0 answers an overflowing tab bar by hiding tabs behind scroll arrows,
+/// and a hidden Tool Options tab would recreate the "somewhere on the screen"
+/// problem this Pass exists to end.
+///
+/// **Pages is the front tab**, not Tool Options. With no tool armed, Tool
+/// Options has nothing to say, and a dock that opens on an empty pane reads as
+/// broken. Arming a tool raises Tool Options ([`PdfceApp`]'s tool-arm path);
+/// disarming deliberately does NOT push it back, because an operator who
+/// switched to Pages on purpose should not have the panel yanked out from
+/// under them by a tool they just put down.
+#[must_use]
+pub fn default_left_tree() -> DockTree {
+    let mut tiles = egui_tiles::Tiles::default();
+    let pages = tiles.insert_pane(DockPanel::Pages);
+    let tools = tiles.insert_pane(DockPanel::ToolOptions);
+    let root = tiles.insert_tab_tile(vec![pages, tools]);
+    Tree::new(LEFT_TREE_ID, root, tiles)
+}
+
 /// The throwaway tree used for the borrow dance (module docs, gotcha 1).
 #[must_use]
 pub fn swap_tree() -> DockTree {
     Tree::empty(SWAP_TREE_ID)
+}
+
+/// The left dock's throwaway tree, for the same borrow dance.
+#[must_use]
+pub fn left_swap_tree() -> DockTree {
+    Tree::empty(LEFT_SWAP_TREE_ID)
 }
 
 /// Whether `panel` is currently the ACTIVE tab of its container.
@@ -473,15 +553,58 @@ mod tests {
     /// The default layout must mount EVERY panel — a variant with no mount
     /// point would be unreachable, which is worse than R80's
     /// floating-window-only case it exists to prevent.
+    ///
+    /// **Spans BOTH trees since Pass 34.1.** The invariant was always "every
+    /// panel is reachable", and it was expressible as "mounted in
+    /// `default_tree`" only while there was one tree. Adding the left dock
+    /// made that phrasing wrong rather than the invariant wrong — and it
+    /// failed loudly the moment `Pages` and `ToolOptions` landed, which is
+    /// what a sweep over `ALL` is for.
     #[test]
     fn the_default_layout_mounts_every_panel() {
-        let tree = default_tree();
+        let right = default_tree();
+        let left = default_left_tree();
         for panel in DockPanel::ALL {
             assert!(
-                tree.tiles.find_pane(&panel).is_some(),
-                "{panel:?} is not mounted in the default layout"
+                right.tiles.find_pane(&panel).is_some() || left.tiles.find_pane(&panel).is_some(),
+                "{panel:?} is not mounted in either default layout"
             );
         }
+    }
+
+    /// No panel is mounted in BOTH default layouts (Pass 34.1).
+    ///
+    /// Two independent `egui_tiles` trees cannot exchange panes, so a panel
+    /// present in both would be two live copies of one surface, each with its
+    /// own scroll position and its own idea of which tab is active — and
+    /// `activate` would raise whichever it found first. That is a state-drift
+    /// bug with no visible cause, so it is cheaper to forbid than to debug.
+    #[test]
+    fn no_panel_is_mounted_in_both_docks() {
+        let right = default_tree();
+        let left = default_left_tree();
+        for panel in DockPanel::ALL {
+            assert!(
+                !(right.tiles.find_pane(&panel).is_some()
+                    && left.tiles.find_pane(&panel).is_some()),
+                "{panel:?} is mounted in both docks"
+            );
+        }
+    }
+
+    /// The left dock opens on **Pages**, not on Tool Options (Pass 34.1).
+    ///
+    /// With no tool armed Tool Options has nothing to say, and a dock that
+    /// opens on an empty pane reads as broken. Asserted rather than trusted
+    /// because it is a one-word change in `default_left_tree`'s insert order
+    /// and nothing else would catch it.
+    #[test]
+    fn the_left_dock_opens_on_pages() {
+        let left = default_left_tree();
+        assert!(
+            panel_is_active(&left, DockPanel::Pages),
+            "the left dock does not open on the page thumbnails"
+        );
     }
 
     /// Decision 017 A.3's surviving requirement, asserted rather than
