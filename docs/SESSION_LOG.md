@@ -13837,6 +13837,174 @@ needed to any other ledger.
 | Decision records | none | **031** (**032** next free, unchanged) |
 | Operator questions | none | **(aw)**, unchanged |
 
+**Same-day continuation 90 (real date 2026-08-05) — TWO MORE PASSES
+SHIPPED (36.1, 36.2), FAMILY 36 NOW FULLY SHIPPED, ONE STANDING RULE
+MINTED (R152):**
+
+### Shipped
+
+- **Pass 36.2** — *"say which rung you are standing on — and stop
+  claiming a shipped feature is missing"* — `e5ce824`. Three surfaces
+  had conspired to tell the operator that working node editing did not
+  exist: (1) `entered_object_readout` had no words for the Point rung —
+  fixed with a third branch, ordered **deepest-rung-first** because Node
+  implies Subpath in `EnteredObject`'s own nesting; (2) a double-click
+  that missed every anchor said nothing — now reports the miss under
+  decision 023 §1.3, verified to fire exactly once on a miss and zero
+  times on a hit; (3) `entered_object_tooltip` asserted *"moving an
+  individual part is not available yet,"* stale the same calendar day
+  Pass 36.0 falsified it — rewritten to describe all three rungs. Gates:
+  `fmt`/`clippy` clean, 44/44 test binaries green, `check-ui-strings`
+  clean, `cargo tree` GUI-dependency-free for `pdfce-core`/`pdfce-render`.
+  **Discharge against decision 028's items 12/13/14 assessed explicitly,
+  not assumed:** item 14 (tooltip) — discharged. Item 12 (the literal
+  clickable `Page › Path › Part › Point` breadcrumb) — **NOT built on
+  the evidence in this report**; the hazard it exists to prevent is
+  closed by fixes 1+2, but the widget itself is not confirmed, marked
+  ◐ partly addressed by substitution. Item 13 (readout-row corrections:
+  handle-presence clause, subpath descent-disclosure) — **confirmed
+  still owed**, not merely unverified; fix 1 is a different correction
+  than either half of item 13 asks for. Full detail and the decision-028
+  table update in the `ROADMAP.md` Shipped entry (now at the very top of
+  that section).
+- **Pass 36.1** — *"delete a point — the verb the Node rung never
+  had"* (core + CLI + GUI) — `23f8f8e`. New
+  `pdfce_core::vector::plan_delete_node` + `EditSession::delete_node` +
+  `CommandKind::DeleteNode`: deleting an anchor deletes the operator that
+  produced it, joining neighbours directly; deleting the subpath's FIRST
+  anchor promotes the following operator into the new `m` instead
+  (`l`→`m` exact; a curve→`m` **loses the curve into a straight jump**,
+  disclosed per CLAUDE.md rule 4). Four named refusals:
+  `NodeDeleteWouldEmptySubpath` (would leave <2 anchors — the exact
+  whole-part-promotion surprise Pass 36.0 fixed one rung up, not
+  reintroduced here), `NodeDeleteRectangleCorner` (no per-corner operand
+  on `re`; contrast recorded against `plan_move_node`, which CAN expand
+  `re` because a moved corner is still a quadrilateral and a deleted one
+  is not), `NodeDeleteImplicitStart` (coordinates live in the previous
+  subpath), `ClippingPath` (borrowed from `plan_delete_subpath`'s
+  existing precedent). `pdfce-cli node-delete` shipped same session
+  (CLAUDE.md rule 11). GUI steps back to the Part rung on delete,
+  deliberately not to a neighbouring point (deletion renumbers every
+  later anchor). 10 new branch tests green; CLI verified against
+  `fixtures/synthetic/vector/paths.pdf` with the other five subpaths
+  byte-verbatim; GUI verified both success (`commit-delete-node
+  object=0 node=1 err=None`) and refusal (verbatim message surfaced to
+  the operator). Gates: `fmt`/`clippy` clean, 44/44 green,
+  `check-ui-strings`/`check-ledger-numbers` clean, `cargo tree`
+  GUI-dependency-free. **One scope item not confirmed either way: the
+  "cargo-fuzz target consideration."** Flagged for the engineer to
+  confirm at next session whether one was added, deferred, or judged
+  unnecessary. **ARCHITECTURE.md §4 debt noted, not synced:**
+  `delete_node` is one more `pub fn` added to `EditSession`'s
+  undocumented surface (last count: 63 `pub fn`s, ~7 described) — this
+  filing does not attempt the §4 sync, only records the count grew.
+
+### Ledger irregularity from the prior filing, now closed
+
+Both Passes shipped as ordinary discharges of the *Next up* entries this
+librarian filed at continuation 89 — no new irregularity. Both Next-up
+scope entries retained below their own headers with a struck-through
+title and a "SHIPPED — see entry above" pointer, same convention as the
+Pass 27.2 precedent, per append-only discipline. Pass 36.0's Shipped
+entry carried two forward pointers into *Next up* ("Pass 36.1, below,
+*Next up*" / "Pass 36.2, below, *Next up*") that went stale the moment
+36.1 and 36.2 moved to *Shipped* above it — both amended in place with a
+dated `[Amended 2026-08-05 — …]` footer rather than rewritten, per hard
+rule 1.
+
+### Decisions made this session
+
+- **No new `ARCHITECTURE.md` §12 decision record.** Neither Pass redrew
+  a crate boundary, library choice, or invariant; both are additive
+  surgery/UI-feedback work inside the already-decided Node-rung design
+  (decision 025/028).
+- **R152 minted, deliberately kept distinct from R151.** Pass 36.0 wired
+  a correct, tested caller for `move_node` — R151's own concern (a
+  caller exists) was satisfied — and an operator STILL reported the
+  capability as missing, because the caller's own gesture gave no
+  feedback on success or failure. R151 is a call-graph-audit rule
+  ("is there a caller"); R152 is a run-the-app rule ("does the caller's
+  interaction confirm anything"), one layer further out. **R152 claims
+  the number ahead of R150's three still-unminted contingent
+  candidates** (decision 030 §6.2(a), §4.5, the "date and label"
+  observation), which now move to **R153** if/when any of them is
+  accepted — same transfer mechanism R150's own text used to hand R151
+  to a fourth candidate ahead of its own three. Full text under
+  *Standing rules*.
+
+### Findings + decisions
+
+- **The "reachable but invisible" pattern, now named (R152).** Two
+  distinct ways a shipped capability reads as missing to an operator:
+  no caller anywhere (R151, Pass 36.0's `move_subpath` finding), or a
+  caller that confirms nothing (R152, Pass 36.0's `move_node`/Node-rung
+  finding, fixed by Pass 36.2). Same operator-visible symptom, different
+  mechanical check — one is a grep, the other is a hands-on-keyboard
+  pass with R86 discipline.
+- **Terminology discipline held throughout this filing.** Per CLAUDE.md
+  rule 15, every mention of paths/subpaths/nodes in both Shipped entries
+  and the R152 text is explicitly **neither** a ce dimension **nor** a
+  pdf dimension; no bare "dimension" appears anywhere in this filing.
+- **Decision-028's 14-item plan is now fully resolved to a status**:
+  items 1–9 and 14 shipped, item 12 partly addressed by substitution,
+  items 10/11/13 confirmed still owed. No item remains in the
+  "unreported either way" limbo this librarian flagged at continuation
+  89 for item 13 — that ambiguity is now a confirmed OWED, not merely an
+  unverified one.
+
+### Still in flight
+
+- **Decision-028 items 10/11 (Tab/Shift+Tab object-scoped cycle; arrow-
+  key nudge) — untouched, still `⬜ OWED`.**
+- **Decision-028 item 13 (readout-row corrections: Node row's
+  handle-presence clause, Subpath row's descent disclosure) — confirmed
+  still owed**, not discharged by Pass 36.2's different readout fix.
+- **Decision-028 item 12's literal breadcrumb widget — status
+  unconfirmed.** Flagged for the engineer: either it was built and not
+  mentioned in the dispatch, or it remains open behind the
+  readout/tooltip substitution that closes its underlying hazard. Do
+  not treat as shipped until the engineer confirms one way or the other.
+- **Pass 36.1's cargo-fuzz-target consideration — status unconfirmed.**
+  Same flag: confirm added, deferred, or judged unnecessary.
+- **Pass families 34.1/34.2/35.0/35.1 remain open**, unaffected by this
+  filing.
+- **Continuation 88's still-open items remain open**, unaffected:
+  `ARCHITECTURE.md` §7 (CLI) sync, Pass 33.0's unchosen fix option, the
+  `CompositeEncoding` re-export question, operator questions (au)/(av).
+- **`ARCHITECTURE.md` §4's `EditSession` documentation debt grew by one**
+  (`delete_node`) — noted in the Pass 36.1 Shipped entry, not addressed
+  here.
+
+### For next session
+
+1. **Confirm decision-028 item 12's true status** — literal breadcrumb
+   widget built separately, or substitution accepted as sufficient
+   closure? Update the ROADMAP table's ◐ marker to ✅ or leave it, per
+   the engineer's answer.
+2. **Confirm Pass 36.1's fuzz-target consideration** — built, deferred,
+   or judged unnecessary?
+3. **Build decision-028 items 10/11** (keyboard nudge/cycle) and item 13
+   (readout-row corrections) — all three confirmed still owed.
+4. **Resume continuation 88's still-open items**: `ARCHITECTURE.md` §7
+   sync, Pass 33.0's fix choice, the `CompositeEncoding` re-export
+   question — untouched by this filing.
+5. **Re-run `tools/check-ledger-numbers.py --stats` after committing
+   these docs** — this filing moved the standing-rule ceiling (R151 →
+   R152, next free R153); Pass-family, decision-record, and
+   operator-question ceilings are unchanged (37 / 032 / (aw)).
+6. **Backup currency not verifiable from here** — engineer should check
+   `D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is
+   made in this entry.
+
+### Ledger discipline (R106)
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | none (36.1, 36.2 moved *Next up* → *Shipped*) | family **36** fully Shipped; **37** still next free |
+| Standing rules | **R152** | **R152** (**R153** next free) |
+| Decision records | none | **031** (**032** next free, unchanged) |
+| Operator questions | none | **(aw)**, unchanged |
+
 **This librarian has no shell and did not run
 `tools/check-ledger-numbers.py` itself** — the engineer should re-run it
 per item 5 above before minting on top of this filing.

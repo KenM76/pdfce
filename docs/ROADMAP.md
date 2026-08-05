@@ -81,6 +81,183 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 36.2 — say which rung you are standing on — and stop claiming a shipped feature is missing (GUI) — 2026-08-05, committed `e5ce824`
+
+**Three surfaces conspired to tell the operator that working node editing
+did not exist** — the exact "third impression" Pass 36.0 (below) named
+but did not itself fix: node-drag already commits fine through
+`move_node` (Pass 26.0/26.1); what fails is *finding* the Node rung, with
+no breadcrumb and no failure signal when a double-click misses.
+
+1. **`entered_object_readout` had no words for the Point rung.** It took
+   `subpath` and not `node` as its discriminator, so descending from
+   Subpath to Node changed the canvas outline and changed *nothing* in
+   the status line — it kept reading "part #0 is selected … press Delete
+   to remove it," and by Pass 36.0's ship that sentence was doubly false:
+   the rung was actually Point, and Delete at that rung no longer removed
+   the part (Pass 36.0 made it refuse instead). Fixed with a third
+   branch, deliberately ordered **deepest-rung-first**: at the Point
+   rung, `subpath` is *also* `Some` (per `EnteredObject`'s own nesting —
+   Node implies Subpath), so a naive `if subpath.is_some() { … } else if
+   node.is_some() { … }` ordering would still report "Part" while the
+   operator stands on "Point." Testing `node` before `subpath` is not a
+   style preference; it is the only ordering the nesting permits to be
+   correct.
+2. **A double-click that missed every anchor said nothing.**
+   `depth_after_click` already correctly leaves the entered state
+   unchanged on a miss — but silently. An operator double-clicking the
+   middle of a straight segment, missing both endpoints, would see
+   nothing happen and reasonably conclude points are not editable —
+   precisely the conclusion Pass 36.0's operator report reached about a
+   rung that, in fact, works. Decision 023 §1.3 already required this
+   class of no-op to be disclosed; this Pass applies that requirement to
+   the one place it was missing. Conditions are narrow by design (already
+   at the Part rung, same object, no anchor within grab range) so the
+   note fires only on a genuine miss, never on an ordinary click that
+   simply selects something else. **Verified:** fires exactly once on a
+   miss, zero times on a hit.
+3. **`entered_object_tooltip` asserted a claim that was already false
+   when read.** It closed with *"Moving an individual part is not
+   available yet"* — true when that string was first written, and
+   falsified the same calendar day by Pass 36.0's `move_subpath` wiring,
+   while sitting on the exact readout an operator opens BECAUSE they are
+   confused about the rungs. Rewritten to describe all three rungs
+   (Object / Part / Point) instead of asserting an absence that no longer
+   held.
+
+**Gates.** `cargo fmt --check` clean; `cargo clippy --workspace
+--all-targets` clean; 44/44 test binaries green, 0 failures;
+`check-ui-strings` clean. **Invariant checks:** `cargo tree -p
+pdfce-core` / `-p pdfce-render` show no egui/eframe/winit/wgpu
+dependency.
+
+**Discharge against decision 028's items 12/13/14 — assessed here, not
+assumed.** Continuation 89's filing left item 13 explicitly flagged for
+re-verification at build time rather than assumed discharged by 36.2;
+that caution held. Reading the three fixes above against the three
+items:
+
+- **Item 14 (toolbar tooltip correction) — discharged.** Fix 3 is
+  exactly this item: the tooltip now names the rung structure before an
+  operator tries anything, closing the "discoverable before trying
+  anything" requirement directly.
+- **Item 12 (the clickable `Page › Path #5870 › Part #667 › Point
+  #1,204` breadcrumb) — NOT literally built, on the evidence in this
+  report.** Fixes 1 and 2 close the *hazard* item 12 exists to prevent
+  (silent, unconfirmed rung state), but neither is the specified
+  breadcrumb widget with per-segment click-to-ascend. **Marked ◐ partly
+  addressed by substitution, not ✅ shipped** — flag to the engineer:
+  confirm whether a breadcrumb control was built separately and simply
+  not mentioned in this dispatch, or whether item 12's literal form
+  remains open behind the readout/tooltip fixes that discharge its
+  underlying hazard.
+- **Item 13 (readout-row corrections: Node row's handle-presence clause;
+  Subpath row's descent disclosure) — STILL OWED, not discharged by this
+  Pass.** Fix 1 adds a Point-rung branch to the readout, which is a
+  different correction than either half of item 13 asks for
+  (handle-presence at the Node row; descent-disclosure at the Subpath
+  row). Carried forward, unverified, to the next session — see the
+  decision-028 table update (*Next up*, below the ★ Pass 26.0/26.1
+  entry).
+
+**Decision-028 plan table updated in place** (the 14-item ordered list
+under the ★ Pass 26.0/26.1 entry, *Next up*): item **14** moves from `⬜
+OWED` to `✅ SHIPPED — Pass 36.2, e5ce824`; item **12** annotated `◐
+PARTLY ADDRESSED BY SUBSTITUTION — Pass 36.2, e5ce824` rather than
+closed; item **13** stays `⬜ OWED`, now annotated **CONFIRMED still
+open** rather than merely unverified.
+
+### Pass 36.1 — delete a point — the verb the Node rung never had (core + CLI + GUI) — 2026-08-05, committed `23f8f8e`
+
+**Core.** New `pdfce_core::vector::plan_delete_node` +
+`EditSession::delete_node` + `CommandKind::DeleteNode`. Deleting an
+anchor deletes the OPERATOR that produced it — removing the segment
+arriving at that anchor and joining its neighbours directly. The
+subpath's FIRST anchor is the one structural exception: it is carried by
+the `m` operator, not by a segment, so deleting it means rewriting the
+FOLLOWING operator into the new `m`, at its own endpoint (`l x y` → `m x
+y`; a `c`/`v`/`y` curve → `m` at its endpoint). Both rewrites are exact —
+the discarded piece is exactly the segment that arrived at the deleted
+point — but the curve case additionally **drops two control points and
+turns a curve into a straight jump**, an inference the operator did not
+directly request and which CLAUDE.md rule 4 requires to be disclosed,
+not silently absorbed as "the anchor moved."
+
+Four refusals, each by name, decided before any byte is produced:
+- **`NodeDeleteWouldEmptySubpath`** — fewer than two anchors would
+  remain. Quietly promoting this to a whole-part delete is the exact
+  surprise Pass 36.0 fixed one rung up (Defect 2); this Pass does not
+  reintroduce it one rung down.
+- **`NodeDeleteRectangleCorner`** — no operand on an `re` operator names
+  a single corner to excise, and the honest result of removing one would
+  be a triangle, not a smaller rectangle. Recorded contrast in the code:
+  `plan_move_node` CAN expand `re` into explicit `m/l/l/l` operators and
+  move a corner, because a MOVED corner is still a quadrilateral —
+  deletion deliberately does not borrow that expansion, because a
+  deleted corner is not.
+- **`NodeDeleteImplicitStart`** — the coordinates live in the PREVIOUS
+  subpath (the one that implicitly reopens via `h`), which the operator
+  did not select.
+- **`ClippingPath`** — same reason `plan_delete_subpath` already refuses
+  this; not re-derived, borrowed from the existing precedent.
+
+`CommandKind::DeleteNode` is a distinct command kind from
+`DeleteSubpath`, for the same reason `DeleteSubpath` is distinct from
+`DeleteObject`: "removed a point" and "removed a line" must not read
+alike in an undo history.
+
+**CLI.** `pdfce-cli node-delete` (CLAUDE.md rule 11 — shipped the same
+session as the core and the GUI, not deferred), with the same refusal
+vocabulary and exit codes as the GUI; disclosures print to stderr so
+stdout stays machine-parseable.
+
+**GUI.** Delete at the Node rung now performs the deletion and steps
+back OUT to the Part rung — deliberately not to a neighbouring point.
+Removing an anchor renumbers every anchor after it, and "keep the
+selection near where it was" would leave the highlight sitting on a
+point the operator never chose. A refusal surfaces as an ordinary note,
+not a save failure — the document is untouched, and the operator is told
+why in the refusal's own words.
+
+**Verification, in the running application and at the core level (R86 —
+not by code inspection).** 10 new branch tests green on first run:
+interior anchor, terminal anchor, first-anchor promotion,
+curve-loses-its-curve disclosure on both curve operator forms, each of
+the four refusals, and out-of-range node index reporting the subpath's
+actual count. CLI, against `fixtures/synthetic/vector/paths.pdf`: `20 20
+m 100 40 l 60 120 l S` → `20 20 m 60 120 l S`, every other subpath
+byte-verbatim, `undo_verified=1 undo_identical=1`. GUI success:
+`commit-delete-node object=0 node=1 err=None`. GUI refusal on a
+two-anchor subpath: `err=Some("removing this point would leave part 0
+with 1 point(s) … delete the whole part instead")`, surfaced verbatim to
+the operator.
+
+**Against the Next-up scope as filed — checked, not assumed.** All named
+acceptance criteria are accounted for in the report above
+(interior/terminal deletion, first-anchor promotion with disclosure,
+sub-two-anchor refusal, `re`-corner refusal, implicit-start handling,
+CLI subcommand, GUI wiring), plus one refusal (`ClippingPath`) beyond the
+original list. **One item in the original scope is not confirmed either
+way by this report: "a `cargo-fuzz` target consideration."** The scope
+asked that this be *considered*, not necessarily built — but the
+dispatch does not say which way that consideration went. Flag for the
+engineer to confirm at next session whether a fuzz target was added,
+deferred, or judged unnecessary, so this doesn't silently read as done.
+
+**Gates.** `cargo fmt --check` clean; `cargo clippy --workspace
+--all-targets` clean; 44/44 test binaries green, 0 failures;
+`check-ui-strings` clean; `check-ledger-numbers` clean. **Invariant
+checks:** `cargo tree -p pdfce-core` / `-p pdfce-render` show no
+egui/eframe/winit/wgpu dependency.
+
+**ARCHITECTURE.md §4 API-contract debt — recorded, not synced.**
+`EditSession::delete_node` is a new `pub` method on the crate's largest
+undocumented public surface (§4's known gap, as of the last count: 63
+`pub fn`s on `EditSession`, ~7 described). This Pass adds one more to
+that count without closing any of the backlog; recorded here only so
+the eventual §4 sync's scope statement starts from an accurate number
+rather than the last-synced one.
+
 ### Pass 36.0 — dragging one part moves ONE part; Delete on a point stops eating the line (defect-fix pair, filed as a Pass; core + GUI) — 2026-08-05, committed `25ff9d1`
 
 **Operator report, 2026-08-05, verbatim:** *"when I double click and have
@@ -120,6 +297,9 @@ destroying the whole part instead of the one anchor. **Fixed:** Delete
 at the Node rung now refuses aloud (`ui_text::node_delete_unsupported`)
 and changes nothing — Pass 36.1 (below, *Next up*) is the real
 node-delete capability this refusal stands in for until it ships.
+**[Amended 2026-08-05 — Pass 36.1 shipped `23f8f8e` the same day; the
+refusal named above has been replaced by real node-delete. See the Pass
+36.1 Shipped entry above (top of *Shipped*), not *Next up*.]**
 
 **Third impression, corrected rather than fixed — node editing already
 WORKS.** The operator's "still don't seem to have a way to edit... nodes"
@@ -131,6 +311,10 @@ decision 028 plan item **12**, already on record and still open, not a
 new finding — promoted in urgency here because an operator has now
 reported the exact symptom it exists to prevent. See Pass 36.2 (below,
 *Next up*).
+**[Amended 2026-08-05 — Pass 36.2 shipped `e5ce824` the same day; see
+its Shipped entry above (top of *Shipped*). Its own text records that
+item 12's literal breadcrumb is only partly addressed by substitution,
+not fully closed — see that entry's discharge assessment.]**
 
 **Decision-028 plan table updated in place** (the 14-item ordered list
 under the ★ Pass 26.0/26.1 entry, above): item **9** moves from `⬜
@@ -10012,9 +10196,9 @@ plan and its delivery state read wrong when they are two documents.
 | **9** | **Pass 28.0's subpath move gets its GUI gesture: a plain drag on the entered subpath's body** | **✅ SHIPPED — Pass 36.0, `25ff9d1` (2026-08-05).** Closed as a defect fix, not a scoped Pass — see the Pass 36.0 Shipped entry: the drag classifier's fall-through arm was whole-object move even at the Subpath rung, so `move_subpath` (built and tested since `d8b9735`) had a caller for the first time here. Same fix incidentally surfaced a second defect (Delete on a selected node deleting the whole part) — see that entry and standing rule **R151** |
 | **10** | **Tab / Shift+Tab** cycle nodes in **OBJECT-scoped** order | **⬜ OWED.** **R92.** So that what Tab lands on and what `node-move --node N` addresses **never disagree** — the subpath rung filters which anchors are shown, it does not renumber them (025 §1.3(b)). **Pass 26.0 already made `EnteredObject::node` object-scoped**, so the numbering half of this item is done and only the key handling remains |
 | **11** | **Arrows nudge 1 pt; Shift+arrow 10 pt** | **⬜ OWED.** R122's family — the keyboard route to the same edit |
-| **12** | **Breadcrumb** — `Page › Path #5870 › Part #667 › Point #1,204`, each segment clickable to ascend | **⬜ OWED — filed as Pass 36.2 (*Next up*, 2026-08-05).** ★ **Its growth after the first double-click is itself the confirmation that the gesture did something** — descent is otherwise a state change with no visible mark, which is the *"inside-with-nothing-selected looks identical to outside"* hazard 025 §3.5 named and promised the breadcrumb would discharge. **Promoted from "owed" to a real Pass because an operator report (2026-08-05) reproduced exactly this symptom** — see the Pass 36.0 Shipped entry's "third impression" note |
-| **13** | **Readout rows corrected** — Node row gains the **handle-presence clause** (defect 1); Subpath row gains the **descent disclosure** the Object row has (defect 3) | **⬜ NOT REPORTED EITHER WAY — treat as OWED and UNVERIFIED.** Defect 1's clause is an **R83** obligation now that Pass 26.1 has shipped visible handles: it is the only way an operator learns handles are there |
-| **14** | **Toolbar tooltip correction**, so the rung is **discoverable before trying anything** | **⬜ OWED.** Today the gesture's success is invisible until item 12 exists; discoverability cannot be left to experiment |
+| **12** | **Breadcrumb** — `Page › Path #5870 › Part #667 › Point #1,204`, each segment clickable to ascend | **◐ PARTLY ADDRESSED BY SUBSTITUTION — Pass 36.2, `e5ce824` (2026-08-05).** Pass 36.2 shipped a readout branch naming the Point rung and a double-click-miss disclosure — closing the *hazard* this item exists to prevent (a rung change with no visible confirmation) — but NOT the literal clickable breadcrumb widget specified here. **Flag to the engineer:** confirm whether a breadcrumb control was built separately and simply not reported, or whether the substitution is judged sufficient and this item should be retired rather than left open |
+| **13** | **Readout rows corrected** — Node row gains the **handle-presence clause** (defect 1); Subpath row gains the **descent disclosure** the Object row has (defect 3) | **⬜ STILL OWED — CONFIRMED, not merely unverified, after Pass 36.2 (`e5ce824`, 2026-08-05).** Pass 36.2's readout fix added a Point-rung branch, a different correction than either half of this item asks for. Defect 1's clause remains an **R83** obligation — still the only way an operator learns handles are there |
+| **14** | **Toolbar tooltip correction**, so the rung is **discoverable before trying anything** | **✅ SHIPPED — Pass 36.2, `e5ce824` (2026-08-05).** `entered_object_tooltip` rewritten to describe all three rungs (Object / Part / Point), replacing a claim ("moving an individual part is not available yet") that had gone stale the same calendar day it was falsified by Pass 36.0's `move_subpath` wiring |
 
 **Conditional 15th item, gated on Ken's answer to (av)** — the
 clip-gate mechanism, §5.4 of the record: route clip-gated drags to the
@@ -10036,7 +10220,7 @@ recorded as an amendment to the existing **(av)**, because the question
 it answers is (av)'s question, narrowed. **It also spends no Pass
 family** — 26 was already claimed by 025.
 
-### Pass 36.1 — Delete a node (core + CLI + GUI)
+### ~~Pass 36.1~~ — Delete a node (core + CLI + GUI) — **SHIPPED 2026-08-05, commit `23f8f8e`. See the Pass 36.1 Shipped entry (top of *Shipped*, above Pass 36.0).** Retained below as the pre-build scope (append-only discipline)
 
 **Filed 2026-08-05, family 36 (Pass 36.0 shipped same day; see
 *Shipped*).** No `plan_delete_node` exists anywhere in `pdfce-core`
@@ -10078,7 +10262,7 @@ surgery family (`plan_move_subpath`, `plan_delete_subpath`,
   built; the refusal Pass 36.0 shipped is the interim, correctly-named
   placeholder this Pass replaces.
 
-### Pass 36.2 — Say which rung you are standing on (GUI)
+### ~~Pass 36.2~~ — Say which rung you are standing on (GUI) — **SHIPPED 2026-08-05, commit `e5ce824`. See the Pass 36.2 Shipped entry (top of *Shipped*). Discharge against items 12/13/14 assessed there: item 14 closed, item 12 only partly addressed by substitution, item 13 confirmed still owed.** Retained below as the pre-build scope (append-only discipline)
 
 **Filed 2026-08-05, family 36.** Decision 028's plan item **12**
 (the breadcrumb), promoted out of the bare-list "owed" state into a
@@ -17166,6 +17350,71 @@ decision 025, (aq)–(au) from decision 026:**
   **`tools/check-ledger-numbers.py --stats` should be re-run after this
   commit**, per the same discipline as every prior ceiling-moving filing —
   this librarian has no shell and has not run it itself.
+
+- **R152 — A wired call site is necessary but not sufficient; the
+  gesture that reaches a capability must also confirm its own outcome,
+  on BOTH the success path and the miss path, or "unsupported" and
+  "nothing happened" are the same thing from the operator's chair
+  (2026-08-05; librarian-assigned number; claims the number ahead of
+  R150's three still-unminted contingent candidates, which move to
+  R153 — see the transfer note below, the same mechanism R150's own
+  text used to hand R151 to a fourth candidate).** Pass 36.0 wired
+  `move_node`'s caller correctly — the gesture commits, the document
+  changes, the tests pass. An operator still reported *"I still don't
+  seem to have a way to edit/delete nodes,"* because descending to the
+  Node rung produced no visible confirmation of success and, on a miss,
+  no visible confirmation of failure either (fixed by Pass 36.2, see
+  *Shipped*, above). **This is a distinct defect from R151's, one layer
+  further out.** R151 catches a capability with NO caller anywhere — the
+  mechanical check is a call-graph audit. This rule catches a capability
+  WITH a caller that gives no feedback about what the caller did — the
+  mechanical check is neither a call-graph audit (the caller exists) nor
+  a code-inspection audit (the code runs and does the right thing): it
+  is **operating the running application with your eyes on the screen
+  and nothing else** (R86), asking whether a rung transition, a commit,
+  or a miss produced ANY observable change. If the answer is no on
+  either the success path or the miss path, the capability reads as
+  absent regardless of what the call graph or the test suite says.
+  **Cross-references.** **R83** (no affordance without the capability)
+  is this rule's mirror image, not its sibling — R83 forbids showing a
+  control for something that doesn't exist; this rule forbids a control
+  existing with nothing shown for it. **R151** (the call-graph audit) is
+  the layer this rule sits one step outside of — R151 asks "is there a
+  caller"; this rule asks "does the caller's own interaction confirm
+  anything." **Decision 025 §3.5** already named the specific hazard
+  this rule generalizes (*"inside-with-nothing-selected looks identical
+  to outside"*) for the Node rung specifically; this rule states it as a
+  checkable property for any state-changing gesture, not only that one.
+  **Decision 023 §1.3** already required a no-op click to be disclosed;
+  Pass 36.2 is the first fix filed explicitly against this rule's shape,
+  closing the exact miss-path silence this rule names.
+  **The mechanical check, stated so it is checkable at review time.**
+  For any gesture that changes rung, mode, or selection state: drive the
+  gesture to both a hit and a miss with no other feedback available (a
+  scripted diag run or a manual pass), and confirm each produces an
+  operator-visible signal distinct from the other. A gesture with only
+  ONE observable outcome across both hit and miss fails this check even
+  if its own commit path is fully correct.
+  **Numbering note, so the next filing does not double-mint.** R151's
+  own entry left R152 as the next free number for whichever of three
+  contingent candidates (decision 030 §6.2(a), decision 030 §4.5, the
+  "date and label every contract statement" observation, ★ Pass 33.0
+  entry) is accepted or promoted first — **none of those three had
+  minted as of this filing**, so this finding claims R152 for itself,
+  being filed first against the live ceiling (R106/R133: read the
+  ceiling, don't assume a reservation) — the same transfer mechanism
+  R150's own text used to hand R151 to a fourth, previously-unlisted
+  candidate ahead of its own three. **The three original contingent
+  candidates now take R153**, not R152, if and when any of them is
+  accepted or promoted.
+  **Ceiling is now R152** (was R151 at the Pass-36.0 filing). **No new
+  Pass family, decision record, or operator question minted by this
+  filing**: Pass-family ceiling stays **37 next free** (unchanged — all
+  of family 36 is now Shipped); decision-record ceiling stays **031**
+  (**032** next free, unchanged); operator-question ceiling stays
+  **(aw)**, unchanged. **`tools/check-ledger-numbers.py --stats` should
+  be re-run after this commit** — this librarian has no shell and has
+  not run it itself.
 
 ## Update protocol
 
