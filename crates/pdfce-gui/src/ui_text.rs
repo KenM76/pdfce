@@ -335,17 +335,6 @@ pub fn properties_tooltip() -> &'static str {
 
 // -- Pass 6.1 markup authoring (minimal affordance) -------------------
 
-/// Label of the toolbar's markup-authoring menu button.
-pub fn markup_menu_button() -> &'static str {
-    "Markup"
-}
-
-/// Tooltip on the markup menu button.
-pub fn markup_menu_tooltip() -> &'static str {
-    "Add a shape or highlight to the current page. This changes the document and is saved with \
-it — use Undo to reverse it."
-}
-
 /// A one-line hint at the top of the markup menu.
 pub fn markup_menu_hint() -> &'static str {
     "Adds the shape at the centre of the current page. Drawing-on-canvas tools are coming."
@@ -384,25 +373,6 @@ pub fn markup_added(label: &str) -> String {
 }
 
 // -- Pass 6.2 text-bearing annotations (minimal affordance) -----------
-
-/// Label of the toolbar's text-annotation menu button.
-pub fn text_menu_button() -> &'static str {
-    "Text"
-}
-
-/// Tooltip on the text menu button.
-///
-/// Pass 16.2 §1.1/§10 disambiguation (R78, bidirectional): now that a distinct
-/// "Add Text" tool authors REAL page content, this annotation menu's tooltip
-/// names the difference so an operator reaching for "add a text box to the
-/// page" is pointed at the right control — a removable annotation here vs.
-/// permanent page text there.
-pub fn text_menu_tooltip() -> &'static str {
-    "Add a text box, sticky note, or stamp to the current page. This is a removable annotation, \
-not page content — for text that becomes a real, permanent part of the page itself (like the \
-text already on it), use Add Text instead. This changes the document and is saved with it — use \
-Undo to reverse it."
-}
 
 /// A one-line hint at the top of the text menu.
 ///
@@ -2953,21 +2923,6 @@ pub fn insert_cli_command() -> &'static str {
 //     warn-colour treatment and the headline, matching how
 //     `diagnostics_summary` handles unsupported render items.
 
-/// Label of the toolbar's Copy-text button.
-///
-/// The trailing chevron says it opens a menu rather than acting
-/// immediately — the operator must choose a scope, and a button that
-/// copied *something* without saying which would be exactly the guess
-/// this feature exists not to make.
-pub fn copy_text_button() -> &'static str {
-    "Copy"
-}
-
-/// Tooltip for the Copy-text toolbar button.
-pub fn copy_text_tooltip() -> &'static str {
-    "Copy text — this page (Ctrl+Shift+C) or the whole document"
-}
-
 /// Menu item: copy the page currently on screen.
 pub fn copy_page_text_menu_item() -> &'static str {
     "Copy this page's text"
@@ -4117,51 +4072,11 @@ pub fn measure_tool_name_scale() -> &'static str {
     "Set Scale"
 }
 
-/// Appended to a menu button's ACCESSIBLE NAME (not its visible label) so a
-/// screen-reader user learns the control opens a menu rather than performing
-/// an action: "Markup, opens a menu".
-///
-/// # Why this string has to exist
-///
-/// egui's `WidgetType` has no menu/has-popup role, and `Ui::menu_button` sets
-/// no `WidgetInfo` override, so "this opens a menu" cannot reach assistive
-/// technology structurally — only as literal text.
-///
-/// Sighted users used to get that meaning from a `▾` appended to the label.
-/// That glyph (U+25BE) is in none of the fonts in egui's default Proportional
-/// chain, so it rendered as a tofu box; it is now drawn as a real chevron icon
-/// instead (`icons::menu_chevron`). But an image is decorative and announces
-/// nothing — so simply deleting the glyph and drawing a picture would have
-/// made the control *less* accessible than the bug it fixed, since a tofu box
-/// at least carries a Unicode name some readers speak aloud.
-///
-/// The visible cue and the announced cue are therefore supplied separately and
-/// deliberately: the chevron for the eye, this suffix for the ear. See
-/// `docs/ui_specs/menu-affordance-and-glyph-coverage.md` §3.
-pub fn menu_button_accessible_suffix() -> &'static str {
-    "opens a menu"
-}
-
-/// A menu button's full accessible name: its visible label plus
-/// [`menu_button_accessible_suffix`].
-pub fn menu_button_accessible_name(label: &str) -> String {
-    format!("{label}, {}", menu_button_accessible_suffix())
-}
-
 /// The Measure menu's dynamic-label prefix shown when a measure tool is active
 /// (ui-spec §1.2): "Measure: Linear ▾" etc., so the active tool is never hidden
 /// by the menu's closed state.
 pub fn measure_menu_active_label(tool_name: &str) -> String {
     format!("Measure: {tool_name}")
-}
-
-/// Tooltip on the Measure menu (§1.2 / §7.1) — states what it does and when to
-/// reach for it versus the annotation-authoring Markup menu.
-pub fn measure_menu_tooltip() -> &'static str {
-    "Add scaled measurement dimensions — linear distances, radius/diameter from a best-fit \
-circle, and per-group scale calibration. Dimensions are additive annotations on their own \
-toggleable layer; the value updates when you change the group's scale. This is measurement, \
-not drawing — for shapes and callouts use Markup."
 }
 
 /// The Measure menu's Linear-Dimension row (§1.2).

@@ -1621,42 +1621,6 @@ pub fn image_tinted(
         .tint(tint)
 }
 
-/// The logical-point size of the menu-disclosure chevron.
-///
-/// Deliberately SMALLER than [`ICON_PTS`] (10pt vs 16pt) — see the
-/// menu-affordance ui-spec §2.4. Two reasons, both load-bearing:
-///
-/// 1. **It is subordinate, and should read that way.** A dropdown marker is
-///    not a feature icon; it modifies the control it sits on. Drawn at the
-///    same weight and size as the leading icon it would compete with it for
-///    attention and make every menu button look like it had two commands.
-/// 2. **Toolbar width is no longer free.** The toolbar now WRAPS rather than
-///    clipping (Pass 18.3), so every point added to a control can cost a whole
-///    extra row at narrow widths. A 16pt chevron on four buttons is 64pt of
-///    width buying nothing over 40pt.
-pub const MENU_CHEVRON_PTS: f32 = 10.0;
-
-/// The menu-disclosure chevron, sized at [`MENU_CHEVRON_PTS`].
-///
-/// Replaces the `▾` text glyph that could not render (module docs / the
-/// menu-affordance ui-spec). It is **decorative**: it carries no accessible
-/// name of its own, because the "opens a menu" meaning is supplied through the
-/// button's accessible name instead — egui's `WidgetType` has no
-/// menu/has-popup role, so that meaning can only reach assistive tech as text.
-/// Drawing this image without also setting that name would make the control
-/// LESS accessible than the broken glyph it replaces, since a tofu box at
-/// least carries a Unicode name some readers announce.
-pub fn menu_chevron(ui: &egui::Ui) -> egui::Image<'static> {
-    let ctx = ui.ctx();
-    let px = (MENU_CHEVRON_PTS * ctx.pixels_per_point()).round().max(1.0) as u32;
-    let handle = with_cache(|cache| cache.texture(ctx, Icon::ChevronDown, px, IconWeight::Regular));
-    let sized =
-        egui::load::SizedTexture::new(handle.id(), egui::vec2(MENU_CHEVRON_PTS, MENU_CHEVRON_PTS));
-    egui::Image::from_texture(sized)
-        .fit_to_exact_size(egui::vec2(MENU_CHEVRON_PTS, MENU_CHEVRON_PTS))
-        .tint(ui.visuals().text_color())
-}
-
 /// An icon in the ordinary (non-selected) state.
 ///
 /// The tint is `ui.visuals().text_color()` read from the CALLER's `Ui`,
