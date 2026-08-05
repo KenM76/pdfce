@@ -399,6 +399,21 @@ const ICON_BUTTON_SIZE: egui::Vec2 = egui::vec2(28.0, 24.0);
 /// starts.
 const DOCK_DEFAULT_WIDTH_PTS: f32 = 380.0;
 
+/// Default width of the LEFT dock, points (Pass 34.1 slice 2).
+///
+/// Sized for **Tool Options**, not for the page thumbnails, and that is the
+/// deliberate part. The thumbnail rail is happy at
+/// `THUMBNAIL_WIDTH_PTS + 40` (180) and was given exactly that before the
+/// dock existed; the migrated property bars were built inside a floating
+/// `Area` with `set_max_width(360.0)` and truncate below it — measured on
+/// 2026-08-05, an 180 pt pane cut "Apply size" to "Apply siz" and the colour
+/// and font Apply buttons to "Ap".
+///
+/// A too-wide thumbnail rail is cosmetic and the operator can drag it back; a
+/// clipped Apply button is a control they cannot press. So the shared default
+/// is set by whichever pane has a hard minimum, which is this one.
+const LEFT_DOCK_DEFAULT_WIDTH_PTS: f32 = 380.0;
+
 /// Maximum height, in points, the status bar's body may occupy before it
 /// becomes internally scrollable (P0-4).
 ///
@@ -1246,6 +1261,21 @@ struct TextEditState {
     /// The most recent ACCEPTED edit's disclosures, rendered verbatim in the
     /// strip until the next accept or tool exit (§8.1). Never auto-dismissed.
     last_disclosures: Vec<String>,
+    /// The caret's block under the RELAXED recognition (§1.2), cached from the
+    /// canvas pass so the LEFT DOCK's Tool Options pane can read it (Pass 34.1
+    /// slice 2).
+    ///
+    /// The pane draws before the `CentralPanel` that derives this, so it reads
+    /// the PREVIOUS frame's value. That is a one-frame lag on whether the
+    /// "Reflow paragraph…" button is enabled — imperceptible, and strictly
+    /// better than the alternative of deriving the block a second time in the
+    /// pane and having two recognitions disagree about which paragraph the
+    /// caret is in.
+    derived_reflow_target: Option<usize>,
+    /// What the Tool Options pane asked for THIS frame, waiting for phase C
+    /// (Pass 34.1 slice 2). Always drained by `run_text_edit_tool`; never
+    /// carried across a frame boundary.
+    queued_intents: TextEditIntents,
     /// Whether the read-only block-boundary review overlay is shown (§9).
     show_block_overlay: bool,
     /// Property-bar working values (§7), applied through
@@ -2109,6 +2139,8 @@ impl OpenDoc {
         let view = self.session.view();
         self.text_edit = match text_extract::extract_pages_view(&view, &[page_index], &options) {
             Ok(mut extracted) if !extracted.pages.is_empty() => Some(TextEditState {
+                derived_reflow_target: None,
+                queued_intents: TextEditIntents::default(),
                 page_index,
                 page_text: extracted.pages.remove(0),
                 caret: None,
@@ -6245,7 +6277,7 @@ impl eframe::App for PdfceApp {
         // beside it, which is the operator's literal request.
         if self.rail_expanded {
             egui::Panel::left("dock-left")
-                .default_size(raster::THUMBNAIL_WIDTH_PTS + 40.0)
+                .default_size(LEFT_DOCK_DEFAULT_WIDTH_PTS)
                 .show(ui, |ui| {
                     self.left_dock_pixels_per_point = pixels_per_point;
                     self.left_dock_body(ui, &mut actions);
@@ -7597,8 +7629,50 @@ impl PdfceApp {
             ui.label(ui_text::tool_options_empty());
             return;
         };
-        ui.heading(ui_text::tool_options_heading(tool));
-        ui.separator();
+        // The pane heading is drawn ONLY for tools whose body does not already
+        // carry its own title (Pass 34.1 slice 2). The migrated property bars
+        // open with `*_propbar_title()`, and stacking a pane heading above an
+        // identical body title reads as a rendering bug, not as hierarchy.
+        //
+        // Deliberately keeping the body's title rather than the pane's: it is
+        // the string that shipped, it is what the operator has been reading
+        // since Pass 14.3, and the move is supposed to change where the
+        // controls are and nothing else.
+        if !canvas::tool_builds_text_edit(Some(tool)) {
+            ui.heading(ui_text::tool_options_heading(tool));
+            ui.separator();
+        }
+
+        // Pass 34.1 slice 2: the Edit-Text tool's own controls, drawn HERE
+        // rather than in a floating Area over the canvas.
+        //
+        // The font list is built first, while only immutable borrows of `self`
+        // are live, because it needs `session.graph()` and `font_env` — and
+        // `text_edit_options_ui` needs `doc.text_edit` mutably. Two disjoint
+        // fields, borrowed in sequence rather than at once.
+        if canvas::tool_builds_text_edit(Some(tool)) {
+            let page_index = doc.view.page_index;
+            let font_entries = doc
+                .pages
+                .get(page_index)
+                .map(|page| page_font_entries(&doc.session.graph(), page, &self.font_env))
+                .unwrap_or_default();
+            if let Status::Open(doc) = &mut self.status
+                && let Some(state) = doc.text_edit.as_mut()
+            {
+                let target = state.derived_reflow_target;
+                let intents = text_edit_options_ui(state, target, &font_entries, ui);
+                // Merged, not overwritten: two Apply buttons cannot be clicked
+                // in one frame, but a stale queue that phase C has not drained
+                // (the tool was armed and the canvas has not run yet) must not
+                // be silently dropped by a frame that produced nothing.
+                if intents != TextEditIntents::default() {
+                    diag::trace(|| format!("tool-options-intent {intents:?}"));
+                    state.queued_intents = intents;
+                }
+            }
+            return;
+        }
 
         // The commit contract, stated where the Accept/Reject pair used to be
         // (Pass 34.0 + decision 031). Shown only while something is actually
@@ -9193,7 +9267,7 @@ impl PdfceApp {
             // The click/drag belonged to a ce dimension. Nothing below runs, so
             // the drawing underneath is neither selected nor moved by it.
         } else if doc.active_tool == Some(CanvasTool::TextEdit) {
-            run_text_edit_tool(doc, ui, &image_response, image_rect, extent, zoom, font_env);
+            run_text_edit_tool(doc, ui, &image_response, image_rect, extent, zoom);
         } else if doc.active_tool == Some(CanvasTool::AddText) {
             // Pass 16.2: the Add-Page-Text tool owns the canvas — click places a
             // point caret, drag rubber-bands a wrap box, typing composes a live
@@ -9648,13 +9722,11 @@ fn run_text_edit_tool(
     image_rect: egui::Rect,
     extent: (f32, f32),
     zoom: f32,
-    font_env: &pdfce_render::FontEnvironment,
 ) {
     use pdfce_core::text_edit::{
-        AlignmentSource, BlockAlignment, BlockRecognitionOptions, EditableTextModel, FillModel,
-        FontSelector, FormatOptions, FormatRequest, GlyphRef, MetricSpec, NewFill, ReflowEngine,
-        ReflowRequest, ScriptPosition, StyleResolution, StyleSynthesis, TextPosition,
-        reflow_recognition_options,
+        BlockAlignment, BlockRecognitionOptions, EditableTextModel, FontSelector, FormatOptions,
+        FormatRequest, GlyphRef, MetricSpec, NewFill, ReflowEngine, ReflowRequest, ScriptPosition,
+        StyleResolution, StyleSynthesis, TextPosition, reflow_recognition_options,
     };
 
     let page_index = doc.view.page_index;
@@ -10112,11 +10184,8 @@ fn run_text_edit_tool(
     // a font dict to the page's `/Resources /Font`; reading the base made the
     // ComboBox omit the very family the operator had just applied. See
     // `page_font_entries`' own doc comment.
-    let font_entries = doc
-        .pages
-        .get(page_index)
-        .map(|page| page_font_entries(&doc.session.graph(), page, font_env))
-        .unwrap_or_default();
+    // Pass 34.1 slice 2: the font list moved to the Tool Options pane with the
+    // ComboBox that consumes it. Nothing in the canvas pass reads it now.
 
     // Pass 19.3 §1.1 "Option B": what WOULD a synthetic-style request resolve
     // to for the caret's run — a real face, or synthesis?
@@ -10301,6 +10370,12 @@ fn run_text_edit_tool(
             }
         }
 
+        // Pass 34.1 slice 2: publish the phase-A derivation the Tool Options
+        // pane needs. The pane draws before this pass, so it reads the value
+        // stored here on the PREVIOUS frame — see the field's own docs for why
+        // a one-frame lag beats a second recognition that could disagree.
+        state.derived_reflow_target = reflow_target;
+
         // Pass 19.3: refresh the caret run's ambient text state and, on a move
         // to a different run, re-seed the spacing/baseline fields from it.
         // Placed AFTER the click and the arrow navigation have both landed, so
@@ -10308,516 +10383,32 @@ fn run_text_edit_tool(
         seed_spacing_props(state);
 
         // Property bar (§7): a floating top panel, appearing with the tool.
-        egui::Area::new(egui::Id::new("pdfce-text-edit-propbar"))
-            .order(egui::Order::Foreground)
-            .movable(true)
-            .default_pos(canvas::tool_strip_anchor(
-                ui.max_rect(),
-                canvas::StripCorner::TopLeft,
-                8.0,
-            ))
-            .show(ui.ctx(), |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_max_width(360.0);
-                    // Pass 15.2 §4: two mutually-exclusive bodies. `r`'s borrow
-                    // ends with its arm, so the shared block-overlay checkbox
-                    // below can take `&mut state.show_block_overlay` freely.
-                    if let Some(r) = state.reflow.as_mut() {
-                        // §4.2 reflow body (replaces the size/colour/font rows).
-                        ui.label(ui_text::reflow_body_title());
-                        // §6.2 alignment caption — from the FIXED detected value
-                        // vs the live pick, never paraphrasing core's disclosure.
-                        let caption = if r.alignment_is_override {
-                            ui_text::reflow_overridden_caption(
-                                r.detected_alignment.alignment.as_str(),
-                                r.alignment.as_str(),
-                            )
-                        } else {
-                            match r.detected_alignment.source {
-                                AlignmentSource::Detected => {
-                                    ui_text::reflow_detected_caption(r.alignment.as_str())
-                                }
-                                AlignmentSource::SingleLineDefault
-                                | AlignmentSource::AmbiguousDefault => {
-                                    ui_text::reflow_ambiguous_caption().to_owned()
-                                }
-                                _ => ui_text::reflow_detected_caption(r.alignment.as_str()),
-                            }
-                        };
-                        ui.label(caption);
-                        // §4.4/§6.1 width — DragValue is primary + keyboard-
-                        // complete; the canvas handle (Phase A) is the mouse
-                        // convenience layered on top.
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::reflow_width_label());
-                            if ui
-                                .add(
-                                    egui::DragValue::new(&mut r.width)
-                                        .range(MIN_WRAP_WIDTH_PT..=100_000.0)
-                                        .speed(0.5),
-                                )
-                                .changed()
-                            {
-                                reflow_changed = true;
-                            }
-                        });
-                        // §4.3 alignment picker — real selectable_values,
-                        // pre-filled with the detected value. Override is decided
-                        // on the CLICK from the clicked value (§6.2), so
-                        // AlignmentSource stays honest.
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::reflow_alignment_label());
-                            for (val, label) in [
-                                (BlockAlignment::Left, "Left"),
-                                (BlockAlignment::Center, "Center"),
-                                (BlockAlignment::Right, "Right"),
-                                (BlockAlignment::Justified, "Justify"),
-                            ] {
-                                if ui.selectable_value(&mut r.alignment, val, label).clicked() {
-                                    r.alignment_is_override = reflow_alignment_is_override(
-                                        r.detected_alignment.alignment,
-                                        val,
-                                    );
-                                    reflow_changed = true;
-                                }
-                            }
-                        });
-                        // §4.5/§6.3 leading — a plain DragValue, no canvas handle.
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::reflow_leading_label());
-                            if ui
-                                .add(
-                                    egui::DragValue::new(&mut r.leading)
-                                        .range(0.1..=10_000.0)
-                                        .speed(0.2),
-                                )
-                                .changed()
-                            {
-                                reflow_changed = true;
-                            }
-                        });
-                    } else {
-                        // §4.1 normal body — 14.3's shipped layout, with the
-                        // reflow entry button + divergence caption appended.
-                        ui.label(ui_text::text_edit_propbar_title());
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::format_size_label());
-                            ui.add(egui::DragValue::new(&mut state.prop_size).range(1.0..=1000.0));
-                            if ui.button(ui_text::format_apply_size()).clicked() {
-                                apply_size = Some(state.prop_size);
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::format_color_model_label());
-                            ui.selectable_value(&mut state.prop_model, FillModel::Rgb, "RGB");
-                            ui.selectable_value(&mut state.prop_model, FillModel::Cmyk, "CMYK");
-                            ui.selectable_value(&mut state.prop_model, FillModel::Gray, "Gray");
-                        });
-                        ui.horizontal(|ui| {
-                            for i in 0..state.prop_model.arity() {
-                                if let Some(c) = state.prop_components.get_mut(i) {
-                                    ui.add(egui::DragValue::new(c).range(0.0..=1.0).speed(0.01));
-                                }
-                            }
-                            if ui.button(ui_text::format_apply_color()).clicked() {
-                                let comps: Vec<f64> = state
-                                    .prop_components
-                                    .iter()
-                                    .take(state.prop_model.arity())
-                                    .copied()
-                                    .collect();
-                                apply_fill = NewFill::new(state.prop_model, comps).ok();
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::format_font_label());
-                            let selected = state.prop_font.clone().unwrap_or_default();
-                            egui::ComboBox::from_id_salt("pdfce-te-font")
-                                .selected_text(selected)
-                                .show_ui(ui, |ui| {
-                                    for (key, label) in &font_entries {
-                                        let is_sel =
-                                            state.prop_font.as_deref() == Some(key.as_str());
-                                        if ui.selectable_label(is_sel, label).clicked() {
-                                            state.prop_font = Some(key.clone());
-                                        }
-                                    }
-                                });
-                            if ui.button(ui_text::format_apply_font()).clicked() {
-                                apply_font = state.prop_font.clone();
-                            }
-                        });
-                        // ---- Pass 19.3: the spacing & style rows ----
-                        //
-                        // Collapsed by default, for the same reason Pass 18.4's
-                        // status readout put its detail behind one: Size/Colour/
-                        // Font are always relevant, these are occasionally
-                        // relevant, and permanently growing the panel for the
-                        // occasional ones is the ribbon-overload failure mode.
-                        // `CollapsingHeader`'s open state is egui `Id`-keyed and
-                        // persists across frames with no state of ours.
-                        egui::CollapsingHeader::new(ui_text::format_spacing_section_title())
-                            .id_salt("pdfce-te-spacing")
-                            .show(ui, |ui| {
-                                // The caret run's ambient state (Copy), read once.
-                                // `None` means "no provenance for this run", which
-                                // is said out loud rather than shown as a zero.
-                                let amb = state.prop_ambient;
-
-                                // -- Row 1: character spacing (Tc) --
-                                ui.label(ui_text::format_char_spacing_label())
-                                    .on_hover_text(ui_text::format_char_spacing_tooltip());
-                                ui.label(match amb {
-                                    Some(a) => {
-                                        let mut c = ui_text::format_ambient_caption(
-                                            &ui_text::format_ambient_char_spacing_value(
-                                                a.per_mille(a.char_spacing),
-                                                a.char_spacing,
-                                            ),
-                                        );
-                                        if a.tc_at_default {
-                                            c.push_str(ui_text::format_ambient_default_suffix());
-                                        }
-                                        c
-                                    }
-                                    None => no_ambient_caption(state.caret.is_some()).to_owned(),
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.add(
-                                        egui::DragValue::new(&mut state.prop_char_spacing)
-                                            .speed(0.05),
-                                    );
-                                    // Switching the unit RE-DERIVES the number so
-                                    // it keeps meaning what its visible unit says
-                                    // — it never silently reinterprets the digits
-                                    // already in the box under a new meaning.
-                                    if let Some(unit) = unit_toggle(ui, state.prop_tc_unit)
-                                        && unit != state.prop_tc_unit
-                                    {
-                                        if let Some(a) = amb {
-                                            state.prop_char_spacing = match unit {
-                                                MetricUnit::Absolute => {
-                                                    a.per_mille_to_operand(state.prop_char_spacing)
-                                                }
-                                                MetricUnit::Relative => {
-                                                    a.per_mille(state.prop_char_spacing)
-                                                }
-                                            };
-                                        }
-                                        state.prop_tc_unit = unit;
-                                    }
-                                    if ui.button(ui_text::format_apply_char_spacing()).clicked() {
-                                        apply_char_spacing = Some(metric_spec(
-                                            state.prop_tc_unit,
-                                            state.prop_char_spacing,
-                                        ));
-                                    }
-                                });
-
-                                // -- Row 2: horizontal scaling (Tz) --
-                                ui.label(ui_text::format_h_scale_label())
-                                    .on_hover_text(ui_text::format_h_scale_tooltip());
-                                ui.label(match amb {
-                                    Some(a) => {
-                                        let mut c = ui_text::format_ambient_caption(
-                                            &ui_text::format_ambient_h_scale_value(a.h_scale),
-                                        );
-                                        if a.tz_at_default {
-                                            c.push_str(ui_text::format_ambient_default_suffix());
-                                        }
-                                        c
-                                    }
-                                    None => no_ambient_caption(state.caret.is_some()).to_owned(),
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.add(
-                                        egui::DragValue::new(&mut state.prop_h_scale)
-                                            .range(1.0..=1000.0)
-                                            .speed(0.5)
-                                            .suffix(ui_text::percent_suffix()),
-                                    );
-                                    if ui.button(ui_text::format_apply_h_scale()).clicked() {
-                                        apply_h_scale = Some(state.prop_h_scale);
-                                    }
-                                });
-
-                                // -- Row 3: baseline — ONE control, four
-                                // positions, exactly one live. This is where the
-                                // super/subscript-vs-free-rise mutual exclusion
-                                // lives: both write `Ts`, and core refuses a
-                                // request carrying both (`ConflictingRise`), so
-                                // the UI is built so that request cannot be
-                                // spelled rather than catching it at runtime.
-                                ui.label(ui_text::format_baseline_label())
-                                    .on_hover_text(ui_text::format_baseline_tooltip());
-                                ui.label(match amb {
-                                    Some(a) if a.rise.abs() < f64::EPSILON => {
-                                        let mut c = ui_text::format_ambient_caption(
-                                            ui_text::format_ambient_baseline_normal(),
-                                        );
-                                        if a.rise_at_default {
-                                            c.push_str(ui_text::format_ambient_default_suffix());
-                                        }
-                                        c
-                                    }
-                                    Some(a) => ui_text::format_ambient_caption(
-                                        &ui_text::format_ambient_baseline_value(
-                                            a.rise,
-                                            a.per_mille(a.rise),
-                                        ),
-                                    ),
-                                    None => no_ambient_caption(state.caret.is_some()).to_owned(),
-                                });
-                                ui.horizontal(|ui| {
-                                    for (choice, label) in [
-                                        (BaselineChoice::Normal, ui_text::format_baseline_normal()),
-                                        (
-                                            BaselineChoice::Superscript,
-                                            ui_text::format_baseline_superscript(),
-                                        ),
-                                        (
-                                            BaselineChoice::Subscript,
-                                            ui_text::format_baseline_subscript(),
-                                        ),
-                                        (BaselineChoice::Custom, ui_text::format_baseline_custom()),
-                                    ] {
-                                        let sel = state.prop_baseline == choice;
-                                        // R84: NOT a bare `selectable_value` —
-                                        // egui's only built-in selected signal is
-                                        // a background fill, i.e. colour alone.
-                                        // Pairing with `toggle_label` makes the
-                                        // live option BOLD as well.
-                                        if ui
-                                            .selectable_label(
-                                                sel,
-                                                PdfceApp::toggle_label(sel, label),
-                                            )
-                                            .clicked()
-                                        {
-                                            state.prop_baseline = choice;
-                                        }
-                                    }
-                                });
-                                // The free-form field is HIDDEN, not disabled,
-                                // for the other three positions: there is no
-                                // capability to combine a script position with a
-                                // custom rise, so R83 says draw no control that
-                                // implies there is.
-                                if state.prop_baseline == BaselineChoice::Custom {
-                                    ui.horizontal(|ui| {
-                                        ui.label(ui_text::format_rise_label());
-                                        ui.add(
-                                            egui::DragValue::new(&mut state.prop_rise).speed(0.1),
-                                        );
-                                        if let Some(unit) = unit_toggle(ui, state.prop_rise_unit)
-                                            && unit != state.prop_rise_unit
-                                        {
-                                            if let Some(a) = amb {
-                                                state.prop_rise = match unit {
-                                                    MetricUnit::Absolute => {
-                                                        a.per_mille_to_operand(state.prop_rise)
-                                                    }
-                                                    MetricUnit::Relative => {
-                                                        a.per_mille(state.prop_rise)
-                                                    }
-                                                };
-                                            }
-                                            state.prop_rise_unit = unit;
-                                        }
-                                    });
-                                }
-                                if ui.button(ui_text::format_apply_baseline()).clicked() {
-                                    // EITHER a script position OR a free rise —
-                                    // never both, by construction.
-                                    match state.prop_baseline {
-                                        BaselineChoice::Normal => {
-                                            apply_script = Some(ScriptPosition::Normal);
-                                        }
-                                        BaselineChoice::Superscript => {
-                                            apply_script = Some(ScriptPosition::Superscript);
-                                        }
-                                        BaselineChoice::Subscript => {
-                                            apply_script = Some(ScriptPosition::Subscript);
-                                        }
-                                        BaselineChoice::Custom => {
-                                            apply_rise = Some(metric_spec(
-                                                state.prop_rise_unit,
-                                                state.prop_rise,
-                                            ));
-                                        }
-                                    }
-                                }
-
-                                // -- Row 4: synthetic bold / italic (R90) --
-                                ui.label(ui_text::format_style_label())
-                                    .on_hover_text(ui_text::format_style_tooltip());
-                                ui.horizontal(|ui| {
-                                    ui.checkbox(&mut state.prop_bold, ui_text::format_style_bold());
-                                    ui.checkbox(
-                                        &mut state.prop_italic,
-                                        ui_text::format_style_italic(),
-                                    );
-                                });
-                                // The pre-Apply resolution, from the core query
-                                // computed at the top of this frame. When the
-                                // checkboxes just changed, the cached answer is
-                                // for the previous combination — so ask for one
-                                // more frame rather than showing a stale caption.
-                                let key_now = state
-                                    .caret
-                                    .map(|c| (c.run, state.prop_bold, state.prop_italic));
-                                let fresh = key_now.is_some() && state.style_preview_key == key_now;
-                                let row = if fresh {
-                                    match state.style_preview.as_ref() {
-                                        Some(Ok(res)) => style_row_text(res),
-                                        // The query could not answer. Say so,
-                                        // in the same ✖ shape as any refusal,
-                                        // rather than rendering nothing and
-                                        // letting Apply look unremarkable.
-                                        Some(Err(e)) => {
-                                            Some((ui_text::refusal_line(e), Some(e.clone())))
-                                        }
-                                        None => None,
-                                    }
-                                } else {
-                                    ui.ctx().request_repaint();
-                                    None
-                                };
-                                if let Some((caption, _)) = row.as_ref() {
-                                    ui.label(caption);
-                                }
-                                if ui.button(ui_text::format_apply_style()).clicked() {
-                                    let want =
-                                        StyleSynthesis::new(state.prop_bold, state.prop_italic);
-                                    match row.as_ref().and_then(|(_, r)| r.clone()) {
-                                        // A combination pdfce refuses locally
-                                        // (a real face exists for one axis but
-                                        // not the other). Refuse BY NAME instead
-                                        // of submitting something core would
-                                        // accept but that would discard a real
-                                        // face the operator can have.
-                                        Some(refusal) => local_refusal = Some(refusal),
-                                        None if !want.is_none() => {
-                                            apply_synthetic = Some(want);
-                                        }
-                                        None => {}
-                                    }
-                                }
-                                // -- Row 5: word spacing (Tw) — LIVE on a simple
-                                // font, a read-only disclosure on a composite one
-                                // (Pass 19.4).
-                                //
-                                // This is the one row in the panel whose SHAPE
-                                // depends on the run, and R83 is why: §9.3.3 makes
-                                // Tw void for multi-byte codes, so on a composite
-                                // run there is no capability and therefore no
-                                // affordance — not even a greyed-out spinner,
-                                // which is still an affordance. The value is shown
-                                // either way (an inert number with no explanation
-                                // invites "this looks broken") and the reason is
-                                // stated by name.
-                                //
-                                // The gate reads `AmbientSnapshot::composite`,
-                                // which comes straight from
-                                // `GlyphProvenance::composite` — the SAME
-                                // `ExtractFont::is_simple` answer core's own R91
-                                // refusal uses. Nothing about font models is
-                                // re-derived here (R74), so the affordance the GUI
-                                // draws and the request core accepts cannot
-                                // disagree.
-                                ui.separator();
-                                ui.label(ui_text::format_word_spacing_label())
-                                    .on_hover_text(ui_text::format_word_spacing_tooltip());
-                                match amb {
-                                    None => {
-                                        ui.label(no_ambient_caption(state.caret.is_some()));
-                                    }
-                                    Some(a) if a.composite => {
-                                        ui.colored_label(
-                                            ui.visuals().weak_text_color(),
-                                            ui_text::format_word_spacing_readonly(a.word_spacing),
-                                        );
-                                        ui.label(
-                                            ui_text::format_word_spacing_explanation_composite(),
-                                        );
-                                    }
-                                    Some(a) => {
-                                        let mut c = ui_text::format_ambient_caption(
-                                            &ui_text::format_ambient_word_spacing_value(
-                                                a.per_mille(a.word_spacing),
-                                                a.word_spacing,
-                                            ),
-                                        );
-                                        if a.tw_at_default {
-                                            c.push_str(ui_text::format_ambient_default_suffix());
-                                        }
-                                        ui.label(c);
-                                        ui.horizontal(|ui| {
-                                            ui.add(
-                                                egui::DragValue::new(&mut state.prop_word_spacing)
-                                                    .speed(0.5),
-                                            );
-                                            // Same re-derive-on-unit-switch rule as
-                                            // the tracking row: the digits in the
-                                            // box keep meaning what their visible
-                                            // unit says.
-                                            if let Some(unit) = unit_toggle(ui, state.prop_tw_unit)
-                                                && unit != state.prop_tw_unit
-                                            {
-                                                state.prop_word_spacing = match unit {
-                                                    MetricUnit::Absolute => a.per_mille_to_operand(
-                                                        state.prop_word_spacing,
-                                                    ),
-                                                    MetricUnit::Relative => {
-                                                        a.per_mille(state.prop_word_spacing)
-                                                    }
-                                                };
-                                                state.prop_tw_unit = unit;
-                                            }
-                                            if ui
-                                                .button(ui_text::format_apply_word_spacing())
-                                                .clicked()
-                                            {
-                                                apply_word_spacing = Some(metric_spec(
-                                                    state.prop_tw_unit,
-                                                    state.prop_word_spacing,
-                                                ));
-                                            }
-                                        });
-                                    }
-                                }
-                            });
-                        // §1.3 reflow entry button (grey-not-hidden) — targets the
-                        // caret's block; §3 divergence caption when a target
-                        // resolves (fuzzy-never-sneaky about the two recognitions).
-                        ui.separator();
-                        let enabled = reflow_button_enabled(reflow_target, state.pending.is_some());
-                        let resp = ui.add_enabled(
-                            enabled,
-                            egui::Button::new(ui_text::reflow_button_label()),
-                        );
-                        if resp.clicked() {
-                            enter_reflow = true;
-                        }
-                        resp.on_hover_text(if enabled {
-                            ui_text::reflow_button_tooltip()
-                        } else if state.pending.is_some() {
-                            ui_text::reflow_disabled_pending_tooltip()
-                        } else {
-                            ui_text::reflow_disabled_no_block_tooltip()
-                        });
-                        if reflow_target.is_some() {
-                            ui.label(ui_text::reflow_recognition_note());
-                        }
-                    }
-                    // Common to both bodies (§4.2 keeps it unchanged).
-                    ui.checkbox(
-                        &mut state.show_block_overlay,
-                        ui_text::block_overlay_toggle(),
-                    )
-                    .on_hover_text(ui_text::block_overlay_toggle_tooltip());
-                });
-            });
+        // Pass 34.1 slice 2: the property bar is no longer drawn here.
+        //
+        // It draws in the LEFT DOCK's Tool Options pane (`tool_options_panel`),
+        // which egui resolves BEFORE this `CentralPanel` — so the intents it
+        // produced this frame are already waiting, and phase C below consumes
+        // them microseconds after the click, not a frame later.
+        //
+        // Drained rather than read: leaving them in place would re-apply the
+        // same Apply on every subsequent frame until the operator clicked
+        // something else.
+        let queued = std::mem::take(&mut state.queued_intents);
+        if queued != TextEditIntents::default() {
+            diag::trace(|| format!("tool-options-drain {queued:?}"));
+        }
+        enter_reflow |= queued.enter_reflow;
+        reflow_changed |= queued.reflow_changed;
+        apply_size = apply_size.or(queued.apply_size);
+        apply_fill = apply_fill.or(queued.apply_fill);
+        apply_font = apply_font.or(queued.apply_font);
+        apply_char_spacing = apply_char_spacing.or(queued.apply_char_spacing);
+        apply_word_spacing = apply_word_spacing.or(queued.apply_word_spacing);
+        apply_h_scale = apply_h_scale.or(queued.apply_h_scale);
+        apply_script = apply_script.or(queued.apply_script);
+        apply_rise = apply_rise.or(queued.apply_rise);
+        apply_synthetic = apply_synthetic.or(queued.apply_synthetic);
+        local_refusal = local_refusal.or(queued.local_refusal);
 
         // Accept/Reject (§6.4) + the disclosure/refusal strip (§8): a floating
         // bottom panel. Accept/Reject are REAL `ui.button`s (accesskit win,
@@ -12196,6 +11787,557 @@ fn seed_spacing_props(state: &mut TextEditState) {
 /// cross-run selection never reaches here: the typing loop is suppressed for
 /// `cross_run`, §4.4.) The font-on-edit gate is unaffected — a replacement char
 /// the run's font cannot provide is still refused at Accept time (§8.2).
+/// Everything the Edit-Text options surface can ask phase C to do, in one
+/// value (Pass 34.1 slice 2).
+///
+/// # Why a struct and not nine loose `Option`s
+///
+/// These used to be nine `let mut` locals in `run_text_edit_tool`, written by
+/// a closure a few lines below and read a few hundred lines further down. That
+/// works while the writer and the reader are in the same function. They are no
+/// longer: the widgets now draw in the LEFT DOCK, which egui resolves *before*
+/// the `CentralPanel` the canvas lives in, so the intents have to survive the
+/// gap between two panels of the same frame. A named struct is what crosses
+/// that gap without nine fields being added to `TextEditState` one at a time
+/// and drifting apart.
+///
+/// **Same-frame, not next-frame.** Panel order is load-bearing here in a way
+/// that happens to be free: the dock is added before the `CentralPanel`, so an
+/// Apply clicked in the dock is consumed by phase C microseconds later, in the
+/// same frame the operator clicked it. Had the pane been on the right of the
+/// canvas in add-order, this would have been a one-frame lag on every edit.
+#[derive(Debug, Default, Clone, PartialEq)]
+struct TextEditIntents {
+    /// Enter the reflow sub-mode for the caret's block (§1.3).
+    enter_reflow: bool,
+    /// A reflow parameter (width / leading / alignment) was adjusted, so the
+    /// preview must be recomputed (§6).
+    reflow_changed: bool,
+    apply_size: Option<f64>,
+    apply_fill: Option<pdfce_core::text_edit::NewFill>,
+    apply_font: Option<String>,
+    apply_char_spacing: Option<pdfce_core::text_edit::MetricSpec>,
+    apply_word_spacing: Option<pdfce_core::text_edit::MetricSpec>,
+    apply_h_scale: Option<f64>,
+    apply_script: Option<pdfce_core::text_edit::ScriptPosition>,
+    apply_rise: Option<pdfce_core::text_edit::MetricSpec>,
+    apply_synthetic: Option<pdfce_core::text_edit::StyleSynthesis>,
+    /// A refusal pdfce decided WITHOUT calling core (the mixed
+    /// real-face/synthesis request), routed to the SAME strip as every core
+    /// refusal rather than to a second disclosure surface.
+    local_refusal: Option<String>,
+}
+
+/// Draw the Edit-Text tool's options and return what the operator asked for
+/// (Pass 34.1 slice 2).
+///
+/// # What moved, and what did not
+///
+/// The body is the Pass 14.3/15.2/19.x property bar **verbatim** — same rows,
+/// same order, same strings, same two mutually-exclusive bodies (the reflow
+/// review replaces the size/colour/font rows, §4.2). What changed is only
+/// where it draws: it used to be an `egui::Area` floating over the canvas, and
+/// it is now the body of a dock pane. The operator's request was about the
+/// container, not the contents, and rewriting the contents while moving them
+/// would have made a regression indistinguishable from the move.
+///
+/// `reflow_target` is the caret's block under the RELAXED recognition
+/// (§1.2), derived during the canvas pass and cached on the state, because
+/// this pane draws before that pass runs — see
+/// [`TextEditState::derived_reflow_target`].
+fn text_edit_options_ui(
+    state: &mut TextEditState,
+    reflow_target: Option<usize>,
+    font_entries: &[(String, String)],
+    ui: &mut egui::Ui,
+) -> TextEditIntents {
+    use pdfce_core::text_edit::{
+        AlignmentSource, BlockAlignment, FillModel, MetricSpec, NewFill, ScriptPosition,
+        StyleSynthesis,
+    };
+    let mut enter_reflow = false;
+    let mut reflow_changed = false;
+    let mut apply_size: Option<f64> = None;
+    let mut apply_fill: Option<NewFill> = None;
+    let mut apply_font: Option<String> = None;
+    let mut apply_char_spacing: Option<MetricSpec> = None;
+    let mut apply_word_spacing: Option<MetricSpec> = None;
+    let mut apply_h_scale: Option<f64> = None;
+    let mut apply_script: Option<ScriptPosition> = None;
+    let mut apply_rise: Option<MetricSpec> = None;
+    let mut apply_synthetic: Option<StyleSynthesis> = None;
+    let mut local_refusal: Option<String> = None;
+    let _ = (
+        &AlignmentSource::Detected,
+        BlockAlignment::Left,
+        FillModel::Gray,
+    );
+
+    // Pass 15.2 §4: two mutually-exclusive bodies. `r`'s borrow
+    // ends with its arm, so the shared block-overlay checkbox
+    // below can take `&mut state.show_block_overlay` freely.
+    if let Some(r) = state.reflow.as_mut() {
+        // §4.2 reflow body (replaces the size/colour/font rows).
+        ui.label(ui_text::reflow_body_title());
+        // §6.2 alignment caption — from the FIXED detected value
+        // vs the live pick, never paraphrasing core's disclosure.
+        let caption = if r.alignment_is_override {
+            ui_text::reflow_overridden_caption(
+                r.detected_alignment.alignment.as_str(),
+                r.alignment.as_str(),
+            )
+        } else {
+            match r.detected_alignment.source {
+                AlignmentSource::Detected => ui_text::reflow_detected_caption(r.alignment.as_str()),
+                AlignmentSource::SingleLineDefault | AlignmentSource::AmbiguousDefault => {
+                    ui_text::reflow_ambiguous_caption().to_owned()
+                }
+                _ => ui_text::reflow_detected_caption(r.alignment.as_str()),
+            }
+        };
+        ui.label(caption);
+        // §4.4/§6.1 width — DragValue is primary + keyboard-
+        // complete; the canvas handle (Phase A) is the mouse
+        // convenience layered on top.
+        ui.horizontal(|ui| {
+            ui.label(ui_text::reflow_width_label());
+            if ui
+                .add(
+                    egui::DragValue::new(&mut r.width)
+                        .range(MIN_WRAP_WIDTH_PT..=100_000.0)
+                        .speed(0.5),
+                )
+                .changed()
+            {
+                reflow_changed = true;
+            }
+        });
+        // §4.3 alignment picker — real selectable_values,
+        // pre-filled with the detected value. Override is decided
+        // on the CLICK from the clicked value (§6.2), so
+        // AlignmentSource stays honest.
+        ui.horizontal(|ui| {
+            ui.label(ui_text::reflow_alignment_label());
+            for (val, label) in [
+                (BlockAlignment::Left, "Left"),
+                (BlockAlignment::Center, "Center"),
+                (BlockAlignment::Right, "Right"),
+                (BlockAlignment::Justified, "Justify"),
+            ] {
+                if ui.selectable_value(&mut r.alignment, val, label).clicked() {
+                    r.alignment_is_override =
+                        reflow_alignment_is_override(r.detected_alignment.alignment, val);
+                    reflow_changed = true;
+                }
+            }
+        });
+        // §4.5/§6.3 leading — a plain DragValue, no canvas handle.
+        ui.horizontal(|ui| {
+            ui.label(ui_text::reflow_leading_label());
+            if ui
+                .add(
+                    egui::DragValue::new(&mut r.leading)
+                        .range(0.1..=10_000.0)
+                        .speed(0.2),
+                )
+                .changed()
+            {
+                reflow_changed = true;
+            }
+        });
+    } else {
+        // §4.1 normal body — 14.3's shipped layout, with the
+        // reflow entry button + divergence caption appended.
+        ui.label(ui_text::text_edit_propbar_title());
+        ui.horizontal(|ui| {
+            ui.label(ui_text::format_size_label());
+            ui.add(egui::DragValue::new(&mut state.prop_size).range(1.0..=1000.0));
+            if ui.button(ui_text::format_apply_size()).clicked() {
+                apply_size = Some(state.prop_size);
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(ui_text::format_color_model_label());
+            ui.selectable_value(&mut state.prop_model, FillModel::Rgb, "RGB");
+            ui.selectable_value(&mut state.prop_model, FillModel::Cmyk, "CMYK");
+            ui.selectable_value(&mut state.prop_model, FillModel::Gray, "Gray");
+        });
+        ui.horizontal(|ui| {
+            for i in 0..state.prop_model.arity() {
+                if let Some(c) = state.prop_components.get_mut(i) {
+                    ui.add(egui::DragValue::new(c).range(0.0..=1.0).speed(0.01));
+                }
+            }
+            if ui.button(ui_text::format_apply_color()).clicked() {
+                let comps: Vec<f64> = state
+                    .prop_components
+                    .iter()
+                    .take(state.prop_model.arity())
+                    .copied()
+                    .collect();
+                apply_fill = NewFill::new(state.prop_model, comps).ok();
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(ui_text::format_font_label());
+            let selected = state.prop_font.clone().unwrap_or_default();
+            egui::ComboBox::from_id_salt("pdfce-te-font")
+                .selected_text(selected)
+                .show_ui(ui, |ui| {
+                    for (key, label) in font_entries {
+                        let is_sel = state.prop_font.as_deref() == Some(key.as_str());
+                        if ui.selectable_label(is_sel, label).clicked() {
+                            state.prop_font = Some(key.clone());
+                        }
+                    }
+                });
+            if ui.button(ui_text::format_apply_font()).clicked() {
+                apply_font = state.prop_font.clone();
+            }
+        });
+        // ---- Pass 19.3: the spacing & style rows ----
+        //
+        // Collapsed by default, for the same reason Pass 18.4's
+        // status readout put its detail behind one: Size/Colour/
+        // Font are always relevant, these are occasionally
+        // relevant, and permanently growing the panel for the
+        // occasional ones is the ribbon-overload failure mode.
+        // `CollapsingHeader`'s open state is egui `Id`-keyed and
+        // persists across frames with no state of ours.
+        egui::CollapsingHeader::new(ui_text::format_spacing_section_title())
+            .id_salt("pdfce-te-spacing")
+            .show(ui, |ui| {
+                // The caret run's ambient state (Copy), read once.
+                // `None` means "no provenance for this run", which
+                // is said out loud rather than shown as a zero.
+                let amb = state.prop_ambient;
+
+                // -- Row 1: character spacing (Tc) --
+                ui.label(ui_text::format_char_spacing_label())
+                    .on_hover_text(ui_text::format_char_spacing_tooltip());
+                ui.label(match amb {
+                    Some(a) => {
+                        let mut c = ui_text::format_ambient_caption(
+                            &ui_text::format_ambient_char_spacing_value(
+                                a.per_mille(a.char_spacing),
+                                a.char_spacing,
+                            ),
+                        );
+                        if a.tc_at_default {
+                            c.push_str(ui_text::format_ambient_default_suffix());
+                        }
+                        c
+                    }
+                    None => no_ambient_caption(state.caret.is_some()).to_owned(),
+                });
+                ui.horizontal(|ui| {
+                    ui.add(egui::DragValue::new(&mut state.prop_char_spacing).speed(0.05));
+                    // Switching the unit RE-DERIVES the number so
+                    // it keeps meaning what its visible unit says
+                    // — it never silently reinterprets the digits
+                    // already in the box under a new meaning.
+                    if let Some(unit) = unit_toggle(ui, state.prop_tc_unit)
+                        && unit != state.prop_tc_unit
+                    {
+                        if let Some(a) = amb {
+                            state.prop_char_spacing = match unit {
+                                MetricUnit::Absolute => {
+                                    a.per_mille_to_operand(state.prop_char_spacing)
+                                }
+                                MetricUnit::Relative => a.per_mille(state.prop_char_spacing),
+                            };
+                        }
+                        state.prop_tc_unit = unit;
+                    }
+                    if ui.button(ui_text::format_apply_char_spacing()).clicked() {
+                        apply_char_spacing =
+                            Some(metric_spec(state.prop_tc_unit, state.prop_char_spacing));
+                    }
+                });
+
+                // -- Row 2: horizontal scaling (Tz) --
+                ui.label(ui_text::format_h_scale_label())
+                    .on_hover_text(ui_text::format_h_scale_tooltip());
+                ui.label(match amb {
+                    Some(a) => {
+                        let mut c = ui_text::format_ambient_caption(
+                            &ui_text::format_ambient_h_scale_value(a.h_scale),
+                        );
+                        if a.tz_at_default {
+                            c.push_str(ui_text::format_ambient_default_suffix());
+                        }
+                        c
+                    }
+                    None => no_ambient_caption(state.caret.is_some()).to_owned(),
+                });
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::DragValue::new(&mut state.prop_h_scale)
+                            .range(1.0..=1000.0)
+                            .speed(0.5)
+                            .suffix(ui_text::percent_suffix()),
+                    );
+                    if ui.button(ui_text::format_apply_h_scale()).clicked() {
+                        apply_h_scale = Some(state.prop_h_scale);
+                    }
+                });
+
+                // -- Row 3: baseline — ONE control, four
+                // positions, exactly one live. This is where the
+                // super/subscript-vs-free-rise mutual exclusion
+                // lives: both write `Ts`, and core refuses a
+                // request carrying both (`ConflictingRise`), so
+                // the UI is built so that request cannot be
+                // spelled rather than catching it at runtime.
+                ui.label(ui_text::format_baseline_label())
+                    .on_hover_text(ui_text::format_baseline_tooltip());
+                ui.label(match amb {
+                    Some(a) if a.rise.abs() < f64::EPSILON => {
+                        let mut c = ui_text::format_ambient_caption(
+                            ui_text::format_ambient_baseline_normal(),
+                        );
+                        if a.rise_at_default {
+                            c.push_str(ui_text::format_ambient_default_suffix());
+                        }
+                        c
+                    }
+                    Some(a) => ui_text::format_ambient_caption(
+                        &ui_text::format_ambient_baseline_value(a.rise, a.per_mille(a.rise)),
+                    ),
+                    None => no_ambient_caption(state.caret.is_some()).to_owned(),
+                });
+                ui.horizontal(|ui| {
+                    for (choice, label) in [
+                        (BaselineChoice::Normal, ui_text::format_baseline_normal()),
+                        (
+                            BaselineChoice::Superscript,
+                            ui_text::format_baseline_superscript(),
+                        ),
+                        (
+                            BaselineChoice::Subscript,
+                            ui_text::format_baseline_subscript(),
+                        ),
+                        (BaselineChoice::Custom, ui_text::format_baseline_custom()),
+                    ] {
+                        let sel = state.prop_baseline == choice;
+                        // R84: NOT a bare `selectable_value` —
+                        // egui's only built-in selected signal is
+                        // a background fill, i.e. colour alone.
+                        // Pairing with `toggle_label` makes the
+                        // live option BOLD as well.
+                        if ui
+                            .selectable_label(sel, PdfceApp::toggle_label(sel, label))
+                            .clicked()
+                        {
+                            state.prop_baseline = choice;
+                        }
+                    }
+                });
+                // The free-form field is HIDDEN, not disabled,
+                // for the other three positions: there is no
+                // capability to combine a script position with a
+                // custom rise, so R83 says draw no control that
+                // implies there is.
+                if state.prop_baseline == BaselineChoice::Custom {
+                    ui.horizontal(|ui| {
+                        ui.label(ui_text::format_rise_label());
+                        ui.add(egui::DragValue::new(&mut state.prop_rise).speed(0.1));
+                        if let Some(unit) = unit_toggle(ui, state.prop_rise_unit)
+                            && unit != state.prop_rise_unit
+                        {
+                            if let Some(a) = amb {
+                                state.prop_rise = match unit {
+                                    MetricUnit::Absolute => a.per_mille_to_operand(state.prop_rise),
+                                    MetricUnit::Relative => a.per_mille(state.prop_rise),
+                                };
+                            }
+                            state.prop_rise_unit = unit;
+                        }
+                    });
+                }
+                if ui.button(ui_text::format_apply_baseline()).clicked() {
+                    // EITHER a script position OR a free rise —
+                    // never both, by construction.
+                    match state.prop_baseline {
+                        BaselineChoice::Normal => {
+                            apply_script = Some(ScriptPosition::Normal);
+                        }
+                        BaselineChoice::Superscript => {
+                            apply_script = Some(ScriptPosition::Superscript);
+                        }
+                        BaselineChoice::Subscript => {
+                            apply_script = Some(ScriptPosition::Subscript);
+                        }
+                        BaselineChoice::Custom => {
+                            apply_rise = Some(metric_spec(state.prop_rise_unit, state.prop_rise));
+                        }
+                    }
+                }
+
+                // -- Row 4: synthetic bold / italic (R90) --
+                ui.label(ui_text::format_style_label())
+                    .on_hover_text(ui_text::format_style_tooltip());
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut state.prop_bold, ui_text::format_style_bold());
+                    ui.checkbox(&mut state.prop_italic, ui_text::format_style_italic());
+                });
+                // The pre-Apply resolution, from the core query
+                // computed at the top of this frame. When the
+                // checkboxes just changed, the cached answer is
+                // for the previous combination — so ask for one
+                // more frame rather than showing a stale caption.
+                let key_now = state
+                    .caret
+                    .map(|c| (c.run, state.prop_bold, state.prop_italic));
+                let fresh = key_now.is_some() && state.style_preview_key == key_now;
+                let row = if fresh {
+                    match state.style_preview.as_ref() {
+                        Some(Ok(res)) => style_row_text(res),
+                        // The query could not answer. Say so,
+                        // in the same ✖ shape as any refusal,
+                        // rather than rendering nothing and
+                        // letting Apply look unremarkable.
+                        Some(Err(e)) => Some((ui_text::refusal_line(e), Some(e.clone()))),
+                        None => None,
+                    }
+                } else {
+                    ui.ctx().request_repaint();
+                    None
+                };
+                if let Some((caption, _)) = row.as_ref() {
+                    ui.label(caption);
+                }
+                if ui.button(ui_text::format_apply_style()).clicked() {
+                    let want = StyleSynthesis::new(state.prop_bold, state.prop_italic);
+                    match row.as_ref().and_then(|(_, r)| r.clone()) {
+                        // A combination pdfce refuses locally
+                        // (a real face exists for one axis but
+                        // not the other). Refuse BY NAME instead
+                        // of submitting something core would
+                        // accept but that would discard a real
+                        // face the operator can have.
+                        Some(refusal) => local_refusal = Some(refusal),
+                        None if !want.is_none() => {
+                            apply_synthetic = Some(want);
+                        }
+                        None => {}
+                    }
+                }
+                // -- Row 5: word spacing (Tw) — LIVE on a simple
+                // font, a read-only disclosure on a composite one
+                // (Pass 19.4).
+                //
+                // This is the one row in the panel whose SHAPE
+                // depends on the run, and R83 is why: §9.3.3 makes
+                // Tw void for multi-byte codes, so on a composite
+                // run there is no capability and therefore no
+                // affordance — not even a greyed-out spinner,
+                // which is still an affordance. The value is shown
+                // either way (an inert number with no explanation
+                // invites "this looks broken") and the reason is
+                // stated by name.
+                //
+                // The gate reads `AmbientSnapshot::composite`,
+                // which comes straight from
+                // `GlyphProvenance::composite` — the SAME
+                // `ExtractFont::is_simple` answer core's own R91
+                // refusal uses. Nothing about font models is
+                // re-derived here (R74), so the affordance the GUI
+                // draws and the request core accepts cannot
+                // disagree.
+                ui.separator();
+                ui.label(ui_text::format_word_spacing_label())
+                    .on_hover_text(ui_text::format_word_spacing_tooltip());
+                match amb {
+                    None => {
+                        ui.label(no_ambient_caption(state.caret.is_some()));
+                    }
+                    Some(a) if a.composite => {
+                        ui.colored_label(
+                            ui.visuals().weak_text_color(),
+                            ui_text::format_word_spacing_readonly(a.word_spacing),
+                        );
+                        ui.label(ui_text::format_word_spacing_explanation_composite());
+                    }
+                    Some(a) => {
+                        let mut c = ui_text::format_ambient_caption(
+                            &ui_text::format_ambient_word_spacing_value(
+                                a.per_mille(a.word_spacing),
+                                a.word_spacing,
+                            ),
+                        );
+                        if a.tw_at_default {
+                            c.push_str(ui_text::format_ambient_default_suffix());
+                        }
+                        ui.label(c);
+                        ui.horizontal(|ui| {
+                            ui.add(egui::DragValue::new(&mut state.prop_word_spacing).speed(0.5));
+                            // Same re-derive-on-unit-switch rule as
+                            // the tracking row: the digits in the
+                            // box keep meaning what their visible
+                            // unit says.
+                            if let Some(unit) = unit_toggle(ui, state.prop_tw_unit)
+                                && unit != state.prop_tw_unit
+                            {
+                                state.prop_word_spacing = match unit {
+                                    MetricUnit::Absolute => {
+                                        a.per_mille_to_operand(state.prop_word_spacing)
+                                    }
+                                    MetricUnit::Relative => a.per_mille(state.prop_word_spacing),
+                                };
+                                state.prop_tw_unit = unit;
+                            }
+                            if ui.button(ui_text::format_apply_word_spacing()).clicked() {
+                                apply_word_spacing =
+                                    Some(metric_spec(state.prop_tw_unit, state.prop_word_spacing));
+                            }
+                        });
+                    }
+                }
+            });
+        // §1.3 reflow entry button (grey-not-hidden) — targets the
+        // caret's block; §3 divergence caption when a target
+        // resolves (fuzzy-never-sneaky about the two recognitions).
+        ui.separator();
+        let enabled = reflow_button_enabled(reflow_target, state.pending.is_some());
+        let resp = ui.add_enabled(enabled, egui::Button::new(ui_text::reflow_button_label()));
+        if resp.clicked() {
+            enter_reflow = true;
+        }
+        resp.on_hover_text(if enabled {
+            ui_text::reflow_button_tooltip()
+        } else if state.pending.is_some() {
+            ui_text::reflow_disabled_pending_tooltip()
+        } else {
+            ui_text::reflow_disabled_no_block_tooltip()
+        });
+        if reflow_target.is_some() {
+            ui.label(ui_text::reflow_recognition_note());
+        }
+    }
+    // Common to both bodies (§4.2 keeps it unchanged).
+    ui.checkbox(
+        &mut state.show_block_overlay,
+        ui_text::block_overlay_toggle(),
+    )
+    .on_hover_text(ui_text::block_overlay_toggle_tooltip());
+
+    TextEditIntents {
+        enter_reflow,
+        reflow_changed,
+        apply_size,
+        apply_fill,
+        apply_font,
+        apply_char_spacing,
+        apply_word_spacing,
+        apply_h_scale,
+        apply_script,
+        apply_rise,
+        apply_synthetic,
+        local_refusal,
+    }
+}
+
 fn text_edit_insert(state: &mut TextEditState, t: &str) {
     consume_selection_into_pending(state);
     ensure_pending(state);

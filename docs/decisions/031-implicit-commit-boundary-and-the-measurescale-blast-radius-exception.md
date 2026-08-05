@@ -278,3 +278,87 @@ mechanism* (the `Behavior` shape) is shared.
   classification and the empty-AddText-draft exception), §C (out of
   scope for this record — the ce-dimension property surface is Pass
   34.2/35.0/35.1's territory, not a commit-boundary question).
+
+## 7. CORRECTION 2026-08-05 — §4's decided mechanism is not implementable, and §4 contradicts itself twice over stating so
+
+**Filed by:** `pdfce-librarian`, on `pdfce-engineer`'s explicit correction
+dispatch (mints standing rule **R154**, below — see `ROADMAP.md`).
+**Original §4 text is left unedited above** — the inconsistency is itself
+the lesson, not just the correction.
+
+**The mechanism §4 headlines cannot compile.** `Tree<LeftPanel>` requires
+`impl egui_tiles::Behavior<LeftPanel>`. `DockBehavior` is declared
+`impl Behavior<DockPanel> for DockBehavior<'_>` (`crates/pdfce-gui/src/
+dock.rs:447`). "The SAME `DockBehavior` mechanism reused as-is" against a
+`Tree` of a *different* pane type, with "not genericized" and "not
+duplicated as an independent trait implementation" all true at once, is
+four mutually exclusive properties — a new pane enum, the same impl
+reused, no generic parameter, no second impl. Any three are buildable;
+not all four.
+
+**§4 does not merely fail to flag this — it contradicts itself in three
+separate places, independently of the code:**
+
+1. **The section's own header (line 203)** — "one `DockPanel` enum, two
+   `Tree` instances, one `DockBehavior`" — already states the *coherent*
+   shape (and the one that shipped). The body below it decides something
+   else.
+2. **The headline decision's bullet 3** ("Two small `Behavior` impls...
+   cost less than one generic one") asserts duplication, directly against
+   the headline's own "not duplicated as an independent trait
+   implementation" two paragraphs above it.
+3. **§5's recap** ("Does not authorize genericizing `DockBehavior` — §4
+   decides the opposite (two small, independent `Behavior` impls)")
+   independently repeats the bullet-3 claim, and **"What this decision
+   does NOT do" (§4, above §5) explicitly rules out "widen `DockPanel` to
+   cover `Pages`/`Tool Options`"** — which is exactly what shipped.
+
+So there are at least three distinct textual disagreements inside one
+decision record, not one typo, and the section header had the right
+answer the whole time.
+
+**What actually shipped (Pass 34.1 slice 1, commit `e15f55b`), verified
+against source:** no `LeftPanel` type exists anywhere under `crates/`
+(`grep -rn "LeftPanel" crates/` — no matches). `DockPanel`
+(`crates/pdfce-gui/src/dock.rs:165`) gained two variants, `Pages` and
+`ToolOptions` (`ALL: [Self; 6]`, line 242). A second `Tree<DockPanel>` is
+built by `dock::default_left_tree()` (line 376) under its own tree id
+`LEFT_TREE_ID = "pdfce-dock-left"` (line 342), with `left_swap_tree()`
+(line 392) for the borrow dance. **One `DockBehavior`, genuinely reused
+unchanged**, drives both trees — `panel_body`'s single `match` remains
+the one dispatcher, across both docks, exactly as R80 requires. The
+type-level guarantee a dedicated `LeftPanel` enum would have given
+instead comes from a **test**: `no_panel_is_mounted_in_both_docks` (line
+583) sweeps `DockPanel::ALL` against both default trees.
+
+**This is the coherent version of what §4 was reaching for.** It
+delivers §4's own stated *reasoning* in full — independent trees, no
+genericization, `panel_body`'s match reused verbatim, cheap over a
+generic bound of uncertain fit — while its stated *mechanism* (a
+dedicated `LeftPanel` type, a second `Behavior` impl) was never
+buildable as literally written, and its header already said so.
+
+**Provenance, stated without asserting a cause.** The engineer's dispatch
+requesting this correction states that the original filing dispatch for
+this decision specified "one `DockPanel` enum, TWO `Tree<DockPanel>`
+instances (left and right), one shared `DockBehavior`" — i.e., the shape
+the section header still carries and the shape that shipped. Whether §4's
+body diverged from that dispatch by transcription drift or by a
+deliberate, undocumented revision is not determinable from the documents
+on disk, and is not asserted either way here.
+
+**Corrected downstream (2026-08-05, same filing):** `ARCHITECTURE.md` §12
+(two occurrences), `ROADMAP.md` Pass 34.1's Next-up entry (three
+occurrences), `SESSION_LOG.md` (a new dated continuation note; continuation
+92's own text is not rewritten, per append-only discipline). See each
+file's own correction bracket for the exact wording used there.
+
+**Mints R154** (`ROADMAP.md` Standing rules): a decision record naming a
+concrete Rust type or mechanism is prose, not code — nothing type-checks
+it, so it can specify something that does not compile, get filed, get
+cited by three other documents, and go uncaught until an implementer
+either hits the wall or (as here) silently does the coherent thing
+instead. R154's mechanical check: once a Pass ships against a decision
+record naming a concrete type, that identifier should be greppable under
+`crates/`, or the record should carry an explicit "not built as
+specified" note.

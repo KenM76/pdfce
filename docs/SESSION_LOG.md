@@ -14164,3 +14164,265 @@ a third occurrence.
 **This librarian has no shell and did not run
 `tools/check-ledger-numbers.py` itself** — the engineer should re-run it
 per item 2 above before minting on top of this filing.
+
+**Same-day continuation 92 (real date 2026-08-05) — TWO PASSES FILED
+(one fully shipped, one partially shipped and named as such), ONE
+STANDING-RULE AMENDMENT, ONE NEW EGUI RAG FINDING, ONE RUST RAG
+AMENDMENT, and A RULE CONFLICT FLAGGED FOR THE OPERATOR — not resolved
+by this filing, and not resolvable by any agent below him:**
+
+### Shipped
+
+- **Pass 36.3 — the node marks were never invisible, they were drawn in
+  the wrong place (GUI), committed `32f15d0`.** Three stacked defects on
+  node-editing visibility: (1) point marks were gated behind
+  `entered.node.is_some()`, a bootstrapping deadlock — you could only see
+  a mark after selecting the point the mark exists to help you select;
+  (2) ★ **the process-lesson defect** — `subpath_node_points`/
+  `subpath_handle_points` return PDF page space (y-up), `subpath_bounds_
+  canvas` three lines away returns canvas space (y-down), and all four
+  point-drawing call sites fed page-space points straight into
+  `page_to_screen`, under a comment claiming the outline above "uses the
+  same conversion for its corners" — false, and the falseness is exactly
+  why nothing caught it; hit-testing (a separate code path) stayed
+  correct throughout, so the bug was invisible to anyone who happened to
+  click the TRUE position and to every headless test; (3) marks were
+  stroked in the outline's own color, so a 6 px mark sat invisibly on a
+  same-hue 2 px line. New capability: a "Show points" view toggle (the
+  operator's own ask), budget-shared with `MAX_DRAWN_NODES`. Also: the
+  three pure view toggles now preserve an in-progress gesture — this had
+  always been missing from `action_preserves_gesture`'s coverage, and was
+  harmless (fell through to `Discard`) until Pass 34.0 flipped the
+  fallback to `Commit`, at which point the identical omission started
+  silently committing drafts on a show/hide click. Filed as R144's second
+  confirmed instance (Standing rules, amended). Verified on a real
+  screenshot: all 12 points across 6 parts land exactly on their line
+  endpoints. Gates: fmt/clippy clean, 44/44 test binaries green,
+  `check-ui-strings`/`check-ledger-numbers` clean, `cargo tree` clean.
+- **Pass 34.1 (slice 1 of 2) — a left dock: Pages | Tool Options (GUI),
+  committed `e15f55b`. FILED AS A PARTIAL SHIP, NOT A COMPLETE ONE —**
+  per R141 and the Pass 27.0 cautionary precedent, this Pass is NOT
+  marked fully shipped. What landed: a second, independent
+  `egui_tiles::Tree<LeftPanel>` with tabs `Pages | Tool Options`, the
+  page rail becoming `DockPanel::Pages`, the new `DockPanel::ToolOptions`
+  reusing the existing `DockBehavior`/`panel_body` dispatcher (per
+  decision 031's own pre-recorded design — see `ARCHITECTURE.md` §12
+  build-confirmation entry, added this filing); auto-raise on tool-arm,
+  no forced return to Pages on disarm; a corrected `rail_toggle_tooltip`
+  (same drifted-claim shape Pass 36.2 fixed). What did NOT ship: the
+  actual tool property-bar/status-strip content (font, size, colour,
+  spacing) is still in the old floating `egui::Area` strips — moving it
+  needs the tool state to cache its phase-A-derived values so the dock
+  pane can read the PREVIOUS frame's, since the pane draws before
+  `CentralPanel` computes them this frame. That is slice 2, unchanged in
+  scope, and is the literal remainder of the operator's own words ("all
+  of the options should be shown in a side bar tab"). `ROADMAP.md`'s
+  Next-up Pass 34.1 entry is annotated in place (not moved) to show
+  exactly which acceptance bullets are done and which remain.
+  Gates: as above; pdfce-gui tests 248 → 251.
+
+### Decisions made this session
+
+- **ARCHITECTURE.md §12 gets a BUILD CONFIRMATION entry for decision
+  031, not a new decision record.** The dock-mechanism choice (separate
+  `Tree<LeftPanel>`, not a genericized `DockBehavior<'a>`) was already
+  decided at continuation 89, ahead of the build; this filing records
+  that Pass 34.1 slice 1 actually built it as decided, same pattern as
+  the continuation-58 build-confirmation entry for decision 017
+  Amendment A. Decision-record ceiling stays 031 (032 next free).
+- **No new standing-rule number minted.** The Pass 36.3 view-toggle
+  finding is filed as R144's second amendment (a third confirmed
+  instance of that rule's shape overall — the original instance plus the
+  continuation-85 amendment are the first two), not a new R-number.
+  R153's reservation of R154 for decision 030's three still-unminted
+  contingent candidates is unaffected.
+
+### Findings + decisions
+
+- **The y-flip coordinate-space bug is the sixth confirmed occurrence
+  of the "trust but verify doc comments" pattern on this project** —
+  `D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`
+  amended in place (not a new file — grepped and confirmed the pattern
+  file already existed before writing). New egui-specific finding filed
+  as its own file:
+  `D:\dev\rag\egui\page_space_vs_canvas_space_y_flip_mismatched_between_sibling_converters.md`
+  — generalized for any app overlaying a y-up model space on a y-down
+  canvas/screen space via two sibling conversion helpers. Both subdirs'
+  `index.md` updated this filing.
+- **`docs/UI_PREFERENCES.md` is a new document** (written by
+  `pdfce-ui-specialist` at the operator's direction, following a
+  design-philosophy handoff he supplied). It is pdfce's design system in
+  egui terms: named palette, type scale, mechanism translations,
+  component patterns. **Its governing finding, worth carrying forward as
+  a CANDIDATE standing rule, not yet minted:** chrome colors must be
+  theme-aware (route through `ui.visuals()`, never a bare `Color32`
+  literal), but canvas-OVERLAY colors (node marks, selection highlights,
+  anything painted on top of the rendered PDF page) are correctly
+  **theme-invariant BY DESIGN** — the page itself is near-white
+  regardless of the app's chrome theme, so a bare named `Color32` is the
+  RIGHT mechanism for an overlay color, not a bug to fix. This was
+  already implicit in `NODE_MARK_FILL`'s own doc comment (written hours
+  earlier, Pass 36.3) — the document's contribution is naming the
+  distinction explicitly before a future pass "fixes" an overlay color
+  into theme-awareness and makes it vanish against a still-white page
+  under a dark chrome theme. **Deliberately NOT minted as a standing
+  rule this filing** — the specialist's own recommendation is to route
+  it once the token module (§3/§4 of the new document) actually ships
+  and is battle-tested, not from a document alone; recorded here as a
+  pending candidate so it is not lost, not as an accepted rule.
+- **★ RULE CONFLICT flagged, not resolved — see `ROADMAP.md` open
+  question (ax).** The operator's `UI_PREFERENCES.md` handoff (Part 2
+  §2, Part 4 Q4) recommends auditing Acrobat Pro's ribbon/panel/GUI
+  structure and suggests dispatching `pdfce-acrobat-librarian` for it.
+  `CLAUDE.md` rule 12 and that agent's own definition both forbid exactly
+  this — the Acrobat feature-parity RAG catalogs capability only and must
+  never inform copying Acrobat's GUI structure. **This is not a call the
+  engineer, either specialist, or this librarian can make** — it requires
+  the operator to explicitly amend rule 12 himself. Filed as (ax), with
+  the underlying differentiation goal noted as possibly reachable without
+  the RAG at all. Two further, related but separate, open items also
+  filed from the same handoff: **(ay)** ribbon specificity (no default
+  stated — a genuine product-identity call) and **(az)** font-asset
+  bundling/licensing (default: don't bundle a custom font until
+  answered).
+- **Terminology discipline held throughout this filing** (CLAUDE.md rule
+  15) — every mention of paths/subpaths/nodes in this entry and in the
+  `ROADMAP.md` edits it describes is explicitly neither a ce dimension
+  nor a pdf dimension; no bare "dimension" appears anywhere.
+- **Backup currency not verifiable from here** — engineer should check
+  `D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is
+  made in this entry.
+
+### Still in flight
+
+- **Pass 34.1 slice 2** — property-bar/status-strip relocation into the
+  new dock, plus deletion of the floating `egui::Area` strips. Named,
+  scoped, unchanged from the original Next-up acceptance text; not
+  started.
+- **Pass families 34.2/35.0/35.1** — unchanged, still open, unaffected by
+  this filing.
+- **Decision-028 items 10/11/13** — unchanged since continuation 91.
+- **Open operator question (ax) — the rule-12/Acrobat-GUI-audit
+  conflict** is the highest-priority item in this filing for the
+  operator specifically, since no agent below him can resolve it either
+  way.
+- **The `UI_PREFERENCES.md` theme-invariance finding** — a pending
+  candidate standing rule, explicitly not minted; whoever next touches
+  the token module should revisit whether it has "battle-tested" enough
+  to promote.
+
+### For next session
+
+1. **Build Pass 34.1 slice 2** (property-bar migration + floating-Area
+   deletion) to actually close the operator's literal ask.
+2. **Get an operator answer on (ax)** before dispatching
+   `pdfce-acrobat-librarian` for anything resembling a GUI-structure
+   audit — the default until then is rule 12 stands, unchanged.
+3. Re-run `tools/check-ledger-numbers.py --stats` — this filing moved the
+   operator-question ceiling ((aw) → (az), (ba) next free); Pass-family
+   and decision-record ceilings unchanged (37 / 032).
+
+### Ledger discipline (R106)
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | none (34.1, 36.3 are existing IDs) | family **36** fully Shipped; **37** still next free, unchanged |
+| Standing rules | none (R144 amended, not a new number) | **R153** (**R154** next free), unchanged |
+| Decision records | none (031 build-confirmed, not superseded) | **031** (**032** next free, unchanged) |
+| Operator questions | **(ax)**, **(ay)**, **(az)** | **(az)** (**(ba)** next free) |
+
+**This librarian has no shell and did not run
+`tools/check-ledger-numbers.py` itself** — the engineer should re-run it
+per item 3 above before minting on top of this filing.
+
+**Same-day continuation 93 (real date 2026-08-05) — DOCK-MECHANISM
+CORRECTION (corrects `Tree<LeftPanel>` claims made at continuation 92,
+above; continuation 92's own text is NOT rewritten, per append-only
+discipline — this is a new dated note, not an edit).**
+
+Continuation 92 (and decision 031 §4, and both of its `ARCHITECTURE.md`
+§12 citations, and three `ROADMAP.md` Pass 34.1 acceptance-bullet
+citations) described Pass 34.1 slice 1 as having shipped a new
+`LeftPanel` enum and an `egui_tiles::Tree<LeftPanel>`. **No `LeftPanel`
+type was ever built** — `grep -rn "LeftPanel" crates/` returns no
+matches. The error originates in decision 031 §4 itself, which is
+internally self-contradictory in three separate places (its own headline
+says `DockBehavior` is "reused as-is... not duplicated as an independent
+trait implementation"; its own bullet 3 says "two small `Behavior`
+impls"; its own "does NOT do" list rules out widening `DockPanel`, which
+is exactly what shipped) — continuation 92 faithfully propagated §4's
+headline text when filing the build confirmation, without independently
+re-deriving it against `crates/pdfce-gui/src/dock.rs`.
+
+**What actually shipped, verified against source (`e15f55b`):** the
+existing `DockPanel` enum (`crates/pdfce-gui/src/dock.rs:165`) widened
+with two variants, `Pages` and `ToolOptions` (`ALL: [Self; 6]`); a second
+`Tree<DockPanel>` built by `dock::default_left_tree()` under tree id
+`"pdfce-dock-left"`, with `left_swap_tree()` for the borrow dance; and
+**one `DockBehavior`, genuinely reused unchanged**, driving both trees —
+`panel_body`'s single `match` remains the one dispatcher across both
+docks, exactly as R80 requires. The type-level guarantee a dedicated
+`LeftPanel` enum would have given is instead a test,
+`no_panel_is_mounted_in_both_docks`, sweeping `DockPanel::ALL` against
+both default trees. This is the coherent version of what decision 031 §4
+was reaching for — it delivers §4's own stated reasoning (independent
+trees, no genericization, `panel_body` reused verbatim) in full, even
+though §4's stated mechanism (a dedicated `LeftPanel` type, a second
+`Behavior` impl) was never buildable as literally written.
+
+**Provenance, stated without asserting a cause** (per the engineer's own
+correction dispatch): the original filing dispatch for decision 031
+specified "one `DockPanel` enum, TWO `Tree<DockPanel>` instances (left
+and right), one shared `DockBehavior`" — the shape that shipped, and the
+shape decision 031 §4's own section header still names. Whether §4's body
+diverged from that dispatch by transcription drift or a deliberate,
+undocumented revision is not determinable from the documents on disk and
+is not asserted either way here.
+
+**Corrected this filing, all append-only (no prior text rewritten):**
+
+- `docs/decisions/031-...md` — new §7, recording the three-way internal
+  contradiction, the actual shipped shape, and the provenance note above.
+  Original §4 text untouched.
+- `ARCHITECTURE.md` §12 — bracketed `[CORRECTED 2026-08-05]` notes
+  inserted immediately after both `Tree<LeftPanel>` mentions (the
+  continuation-89 decision entry and the continuation-92 build-
+  confirmation entry). Original text untouched.
+- `ROADMAP.md` Pass 34.1's Next-up entry — bracketed correction notes
+  after all three `Tree<LeftPanel>` mentions (the slice-1 banner, the
+  first acceptance bullet's "e.g. `LeftPanel`" example, and the
+  implementation-shape-decided bullet). Original text untouched.
+- `ROADMAP.md` Standing rules — **new rule R154** (below), the fourth
+  sibling in the R151/R152/R153 family: a check on whether a decision
+  record's PROSE (naming a concrete Rust type) matches CODE once a Pass
+  ships, distinct from R151–R153's code-against-code audits. Mechanical
+  check: grep the named type under `crates/` at ship time; if absent,
+  the record needs an explicit "not built as specified" note or a
+  correction. R154 claims the number R153 reserved for a fourth,
+  previously-unlisted candidate (same transfer mechanism R150→R153 each
+  used); **decision 030's three original contingent candidates now take
+  R155**, not R154.
+- This file — this note (continuation 93), rather than an edit to
+  continuation 92's text.
+
+**Backup currency not verifiable from here** — engineer should check
+`D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is made
+in this entry.
+
+### Ledger discipline (R106)
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | none | family **36** fully Shipped; **37** still next free, unchanged |
+| Standing rules | **R154** | **R154** (**R155** next free) |
+| Decision records | none (031 §7 is a correction appended to the existing record, not a new one) | **031** (**032** next free, unchanged) |
+| Operator questions | none | **(az)** (**(ba)** next free), unchanged |
+
+**This librarian has no shell and did not run
+`tools/check-ledger-numbers.py` itself** — the engineer reported
+`--stats` showing 92 (section, Pass ID) pairs, 153 standing rules, 31
+decision files, `ledger-numbers: clean` **before** this filing minted
+R154 — re-run after this commit to confirm 154 standing rules, still 31
+decision files (this filing added a correction section to an existing
+file, not a new one), and 92 (section, Pass ID) pairs (unchanged — no new
+Pass entry).

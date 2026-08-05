@@ -81,6 +81,176 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 36.3 — the node marks were never invisible — they were drawn in the wrong place (GUI) — 2026-08-05, committed `32f15d0`
+
+**Operator report, verbatim:** *"node editing is still very hard to
+accomplish. there is no visual cue on screen that shows me the nodes when
+I've clicked down to individual features. ideally we'd have a view option
+to also show them as well."* Filed as a defect record as well as a Shipped
+entry — three stacked defects, found together.
+
+**Defect 1 — gated behind having already selected a node.** Point marks
+drew only `if entered.node.is_some()`, so a mark appeared only AFTER a
+point was selected, and selecting one requires double-clicking within
+grab range of a point that was never drawn — a bootstrapping deadlock.
+The defending comment argued drawing at the Part rung would put 6,681
+marks on a CAD object "with no gesture to use them"; both halves of that
+argument were already false: `MAX_DRAWN_NODES` caps exactly that (with a
+disclosure when the cap is hit), and decision 028 §Q1 — which the comment
+itself cited — says the opposite of what it was used to justify.
+
+**Defect 2 (★ the one that matters most for the process lesson) — painted
+at the VERTICALLY MIRRORED position, in a way reading the code could not
+have caught.** `subpath_node_points`/`subpath_handle_points` return PDF
+**page** space (y-up); `subpath_bounds_canvas`, three lines away in the
+same file, returns **canvas** space (y-down) — the space `page_to_screen`
+actually expects. All four point-drawing call sites fed page-space points
+straight into `page_to_screen`, skipping the flip, under a doc comment
+asserting *"the outline above uses the same conversion for its
+corners"* — which was precisely the error: the outline's conversion and
+the point-drawing call sites were NOT the same conversion, and the
+comment's confident cross-reference is exactly the failure mode
+`D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`
+already catalogs (this is that file's sixth occurrence on this project —
+see RAG escalations, below). Measured against a real screenshot: on a 400
+pt page, the anchors of a line at PDF y=340 painted **~680 screen px
+below** their true position. **Hit-testing was never affected** —
+`nearest_node` converts the CLICK into PDF space and compares there,
+correctly — so the pointer and the paint disagreed about where a node
+was, and only the paint was wrong. That is why descending into the Node
+rung worked whenever the operator happened to aim at the TRUE position
+rather than the drawn one, and why every headless check passed: nothing
+headless ever asked "where did this get PAINTED."
+
+**Defect 3 — painted in the same colour as the outline they sit on.**
+Stroked in `SUBPATH_OUTLINE_COLOR`, the part outline's own hue. Most CAD
+subpaths degenerate to a single straight line, so the outline is a thin
+band and the anchors land exactly on its ends — a 6 px amber square on
+the corner of a 2 px amber rectangle. Now filled near-white with a
+cool-blue border: separated from the outline in both hue and lightness.
+
+**New capability, the operator's own ask: a "Show points" view toggle.**
+Off by default; when on, draws every part's anchors (at a smaller size
+than the selected-part marks) so the next point can be aimed at BEFORE
+its subpath is selected — directly closing the bootstrapping deadlock in
+Defect 1. Budget is SHARED with the existing `MAX_DRAWN_NODES` cap, not
+additional to it; the remainder past the cap is disclosed, not silently
+dropped.
+
+**Also shipped: the three pure view toggles (`ToggleAnnotations`,
+`ToggleShowPoints`, `ToggleRail`) now preserve an in-progress gesture
+instead of discarding or committing it implicitly.** They belonged on
+`action_preserves_gesture` by that predicate's own stated rule and always
+did — but **the cost of the omission changed sign at Pass 34.0.** Before
+Pass 34.0, toggling annotation visibility mid-edit silently DISCARDED the
+in-progress draft (harmless — an omission, not a corruption). After Pass
+34.0's `GestureInterrupt::Commit` wiring, the identical omission means the
+same toggle now silently COMMITS the draft — so pressing a show/hide
+button wrote to the document. **This is R144's own shape** (lifting/
+changing one side of a mechanism can turn a previously-harmless omission
+into an active hazard, because the omission's cost was never named, only
+its absence was) **— recorded here as a second confirmed instance of that
+rule, on a different mechanism than either of R144's original two.** See
+R144's Standing-rules entry, amended below, for the full three-instance
+text.
+
+**Harness.** A `view:points` diagnostic step for the new toggle; a new
+`node-marks` trace line — needed because `node: None` is the state BOTH
+when marks were never drawn (the bug) and when marks are drawn with none
+selected (the fix's own idle state), so the existing depth trace could
+not distinguish the defect from the fix without it.
+
+**Verification.** A real-screen screenshot (the operator was away and had
+already offered the machine for this) shows all 12 points across 6 parts
+landing exactly on their line endpoints with the toggle on; with the
+toggle off, only the selected part's two points appear. Also: the first
+draft of the new `show-points.svg` toolbar icon was REJECTED by the
+existing `redaction_is_the_only_filled_icon` test for borrowing redact's
+own semantic fill — the invariant was kept and the icon redrawn, not the
+test loosened.
+
+**RAG escalation.** `D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`
+extended with a sixth occurrence (see file for the full text) — a comment
+asserting two call sites use "the same conversion" when they used two
+DIFFERENT, correctly-named-but-not-cross-checked coordinate-space
+converters. New file
+`D:\dev\rag\egui\page_space_vs_canvas_space_y_flip_mismatched_between_sibling_converters.md`
+— the coordinate-space finding itself, generalized for any 2D canvas app
+with a y-up model space and a y-down screen space. Both indexed in their
+subdir's `index.md` this filing.
+
+Gates: `cargo fmt --check` clean; `cargo clippy --workspace --all-targets`
+clean; 44/44 test binaries green; `check-ui-strings` clean;
+`check-ledger-numbers` clean; `cargo tree -p pdfce-core` / `-p
+pdfce-render` show no GUI deps.
+
+---
+
+### Pass 34.1 (slice 1 of 2) — a left dock: Pages | Tool Options (GUI) — 2026-08-05, committed `e15f55b`
+
+**Filed as a PARTIAL ship, deliberately — do not read this entry as Pass
+34.1 complete.** Per R141 (a Pass is not shipped until its acceptance
+criteria are met) and the Pass 27.0 entry's own cautionary precedent
+(declared fully shipped when it wasn't), this entry names exactly what
+landed and exactly what remains, rather than closing the Pass. **Slice 2
+(the tool property-bar content actually relocating into this dock) is
+still open** — see the annotated Next-up entry, below, for its remaining
+scope.
+
+**What shipped.** A second, independent `egui_tiles::Tree` mounted on the
+left, tabs **`Pages | Tool Options`** — the existing page-thumbnail rail
+becomes `DockPanel::Pages`; `DockPanel::ToolOptions` is new. Same
+`DockBehavior`/`panel_body` dispatcher pattern as the existing right-hand
+dock (R80's one-dispatcher rule holds across both trees — decision 031's
+own reasoning for reusing rather than genericizing `DockBehavior`, see
+`ARCHITECTURE.md` §12). One tab group, not a vertical split — nothing on
+this side needs simultaneity, and two labels keeps §A.3's narrow-column
+invariant. Pages is the front tab by default; arming a tool raises Tool
+Options and opens the rail; disarming deliberately does NOT push the view
+back to Pages (an empty-state caption shows instead, naming which tools
+populate the panel).
+
+**What the panel currently hosts.** Not yet the property-bar controls
+(font, size, colour, spacing — those still draw in floating `egui::Area`s
+built from values derived during each `run_*_tool`'s phase A, which runs
+AFTER the dock draws — see "What did NOT ship," below). Tool Options
+today hosts what already lived in STORED state: the armed tool's
+identity, its commit/discard contract (Pass 34.0 + decision 031, which
+replaced the old Accept/Reject pair), and every refusal/disclosure
+verbatim.
+
+**Test fallout, one pre-existing test failed the moment the second dock
+landed.** `the_default_layout_mounts_every_panel` was phrased as "mounted
+in `default_tree`" — correct while there was exactly one tree, false the
+moment a second one existed. Rewritten to span both trees. Two NEW
+invariants added alongside it: no panel is mounted in BOTH docks at once
+(two live copies of one surface would each keep independent scroll state,
+and `activate` would raise whichever `Tree` it found first — a silent
+desync), and the left dock opens on `Pages` by default.
+
+**Also fixed:** `rail_toggle_tooltip` read *"Show or hide the page
+thumbnail rail"* — stale the moment the control started hiding TWO
+docked panels while naming only one — the same class of drifted-claim
+defect Pass 36.2 fixed on the rung tooltip. Corrected to name both panels
+the toggle now affects.
+
+**★ What did NOT ship, recorded explicitly because it is the literal gap
+against the operator's ask.** The operator's words were *"all of the
+options should be shown in a side bar tab"* — that is **not yet true**.
+The container exists; the options have not moved into it. Moving them
+requires caching each tool's phase-A-derived values on the tool's own
+state so the new pane can read the PREVIOUS frame's values (the pane
+draws before `CentralPanel` runs phase A this frame). That caching + the
+actual relocation of the TextEdit/AddText/Measure property-bar and
+status-strip content, plus deletion of the floating `egui::Area` strips
+they currently live in, is **slice 2** — unchanged in scope from the
+original Next-up acceptance criteria's second bullet, now annotated below
+as the piece still open.
+
+Gates: as above; pdfce-gui tests 248 → 251.
+
+---
+
 ### Pass 36.2 — say which rung you are standing on — and stop claiming a shipped feature is missing (GUI) — 2026-08-05, committed `e5ce824`
 
 **Three surfaces conspired to tell the operator that working node editing
@@ -9283,6 +9453,26 @@ re-derived.
 
 ### Pass 34.1 — Tool options live in a docked sidebar tab beside page navigation (GUI)
 
+> **✅ SLICE 1 (dock scaffold) SHIPPED 2026-08-05 (`e15f55b`) — see the
+> "Pass 34.1 (slice 1 of 2)" Shipped entry, above.** The first, fourth,
+> and fifth bullets below are DONE (dock exists on the correct side with
+> the correct tabs; auto-raise/no-forced-return-to-Pages behavior;
+> `DockBehavior` reused via a separate `Tree<LeftPanel>`, per decision
+> 031). **The second bullet (property-bar/status-strip relocation +
+> floating-Area deletion) and the third and sixth bullets (empty-state
+> caption content, refusal badging) are SLICE 2 — still open, unchanged
+> in scope from the acceptance text below.** Do not read this Pass as
+> fully shipped; the operator's literal ask ("all of the options should
+> be shown in a side bar tab") is not yet met.
+>
+> **[CORRECTED 2026-08-05 — pdfce-librarian.]** No `LeftPanel` type was
+> ever built (`grep -rn "LeftPanel" crates/` — no matches). What shipped:
+> `DockPanel` widened with two variants (`Pages`, `ToolOptions`), a second
+> `Tree<DockPanel>` (`dock::default_left_tree()`), and the same
+> `DockBehavior` genuinely reused unchanged across both trees. Decision
+> 031 §4's `LeftPanel` mechanism could not compile as specified — see
+> decision 031 §7 and `ARCHITECTURE.md` §12's matching correction.
+
 **Acceptance** (`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md` §A):
 
 - A second, independent left-hand `egui_tiles::Tree` (its own small pane
@@ -9293,6 +9483,15 @@ re-derived.
   (wrong side of the window) or hand-rolling a second, differently-styled
   tab convention (reintroducing exactly the "doesn't match anything I've
   seen" inconsistency decision 017 replaced) (§A.1).
+  **[CORRECTED 2026-08-05 — pdfce-librarian.]** Shipped as marked DONE
+  above, but not via a new pane enum: the ui-spec's "e.g." here was an
+  example, not a binding requirement, and what shipped instead was the
+  existing `DockPanel` enum widened with `Pages`/`ToolOptions` variants
+  plus a second `Tree<DockPanel>` — no `LeftPanel` type exists under
+  `crates/`. This bullet's acceptance (second independent left `Tree`,
+  correct tabs) is still genuinely met; only decision 031 §4's stronger,
+  non-example claim of a dedicated `LeftPanel` type was wrong — see
+  decision 031 §7.
 - Every tool's property-bar and status-strip content (TextEdit, AddText,
   Measure) relocates into the docked pane; the floating `egui::Area`
   strips (`pdfce-{text-edit,add-text,measure}-{propbar,status}`) are
@@ -9321,7 +9520,21 @@ re-derived.
   the same relocation).
 - Whether the new left `Tree` genericizes `DockBehavior<'a>` over its pane
   type or duplicates a sibling `Behavior` impl is the engineer's
-  implementation-shape call, not decided by the ui-spec (§A.1).
+  implementation-shape call, not decided by the ui-spec (§A.1). **DECIDED
+  (slice 1): a separate `Tree<LeftPanel>`, not a genericized
+  `DockBehavior<'a>` — see decision 031, `ARCHITECTURE.md` §12.**
+  **[CORRECTED 2026-08-05 — pdfce-librarian.]** The decided-and-shipped
+  shape is a separate `Tree<DockPanel>` (not `Tree<LeftPanel>` — that type
+  was never built, `grep -rn "LeftPanel" crates/` is empty) carrying the
+  SAME `DockBehavior`, unchanged and ungenericized, across both trees —
+  i.e. neither of this bullet's two named alternatives (genericize
+  `DockBehavior<'a>`, or duplicate a sibling `Behavior` impl) is what
+  shipped; a third option neither alternative names — reuse the existing
+  impl unchanged against a widened existing enum — is what actually
+  happened. Decision 031 §4's own header already named this shape ("one
+  `DockPanel` enum, two `Tree` instances, one `DockBehavior`"); its body
+  decided something else and could not have compiled as written. See
+  decision 031 §7.
 
 ### Pass 34.2 — A selected ce dimension has properties you can reach (GUI)
 
@@ -14533,6 +14746,61 @@ decision 025, (aq)–(au) from decision 026:**
   operator actually objected to (decision 024 §4.1's own diagnosis of the
   original complaint).
 
+**New this session (2026-08-05, `docs/UI_PREFERENCES.md` handoff) —
+three items, filed by `pdfce-librarian` at the engineer's dispatch. The
+first is a RULE CONFLICT and is not resolvable by the engineer, the
+specialist, or this librarian — it needs the operator's own amendment,
+not a judgment call:**
+
+- **(ax) ★ RULE CONFLICT, for the operator only. The operator's
+  `docs/UI_PREFERENCES.md` design handoff (Part 2 §2, Part 4 Q4)
+  recommends auditing Adobe Acrobat Pro's ribbon/panel/GUI structure, and
+  suggests dispatching `pdfce-acrobat-librarian` to do it.** `CLAUDE.md`
+  rule 12 and `pdfce-acrobat-librarian`'s own agent definition both
+  forbid exactly that: the Acrobat feature-parity RAG catalogs
+  capability/behavior/edge-cases/limits **only** and "must never describe
+  or inform copying Acrobat's GUI structure (menu paths, panels,
+  dialogs); pdfce's UI is designed independently by
+  `pdfce-ui-specialist`." **Neither the engineer nor either specialist
+  agent can route around this by relabeling the output "reference
+  material"** — granting the handoff's recommendation requires the
+  operator to explicitly amend rule 12 himself. `pdfce-ui-specialist`'s
+  own recommendation, endorsed here: **do not dispatch the Acrobat RAG
+  for this purpose** until/unless rule 12 is amended. The underlying
+  goal the handoff is actually reaching for — differentiating pdfce's UI
+  from Acrobat's DELIBERATELY rather than by accident — may well be
+  reachable without ever cataloging Acrobat's GUI structure at all (e.g.
+  a competitor/prior-art survey scoped to "what should pdfce's ribbon NOT
+  resemble," sourced from public screenshots the engineer looks at
+  directly, never written into the feature-parity RAG). **Default: rule
+  12 stands, the Acrobat RAG is not dispatched for GUI-structure
+  auditing, unless and until Ken amends the rule himself.**
+- **(ay) Ribbon specificity — how close to Acrobat's actual ribbon layout
+  should pdfce's toolbar/ribbon get, versus a deliberately independent
+  design?** Asked directly by the handoff document (Part 4 Q4) and not
+  yet answered. This is a product-identity call, not an engineering one —
+  a ribbon that reads as "familiar to an Acrobat user" and one that reads
+  as "obviously its own thing" are both legitimate product strategies
+  with different onboarding/differentiation tradeoffs. *No default
+  stated* — this is squarely a call only Ken can make, unlike most of
+  this section's questions, which carry a stated fallback. Related to,
+  but distinct from, (ax): even fully resolving (ax) in the operator's
+  favor (permitting an Acrobat GUI audit) would not by itself answer HOW
+  close to imitate — that remains a separate, second decision.
+- **(az) Font-asset bundling/licensing — is a bundled custom font file in
+  scope, and if so under what license?** `pdfce-gui` installs zero custom
+  fonts today (egui's bundled defaults only); the handoff raises bundling
+  a font for the ribbon/UI chrome. `CLAUDE.md` rule 13's dependency-
+  licensing discipline is written around Cargo dependencies and would
+  need to be read as applying to a bundled font FILE too, even though
+  `cargo-about` (the rule's generation tool) has no visibility into a
+  font asset at all — a font's license (open like OFL, or a commercial
+  EULA) would need its own manual classification and its own line in
+  `THIRD_PARTY_LICENSES.md` or an equivalent, not something the existing
+  tooling would catch by default. *Default if unanswered:* do not bundle
+  a custom font; keep egui's shipped defaults until this question is
+  answered.
+
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
   not-yet-granted authorization (see "In progress" GIT STATUS above).
@@ -16907,6 +17175,37 @@ decision 025, (aq)–(au) from decision 026:**
   look for it.** See the ⚠ block at the head of *Shipped* and decision
   **028** §2.3.
 
+  **⚠ AMENDMENT 2026-08-05 (Pass 36.3) — A SECOND CONFIRMED INSTANCE, ON A
+  DIFFERENT MECHANISM THAN EITHER OF THE FIRST TWO.** The three pure view
+  toggles (`ToggleAnnotations`, `ToggleShowPoints`, `ToggleRail`) had
+  always been missing from `action_preserves_gesture`'s coverage — an
+  omission present since the predicate was first written. Before Pass
+  34.0, that omission was **harmless**: an action absent from
+  `action_preserves_gesture` fell through to the old
+  `GestureInterrupt::Discard` default, so toggling a view option mid-edit
+  silently threw away the in-progress draft — an annoyance, never a
+  document-state change. **Pass 34.0 flipped that default to
+  `GestureInterrupt::Commit`** (the operator's own click-out-commits ask,
+  filed the same session), and the identical omission now means the
+  identical toggle **silently commits** the in-progress draft instead —
+  pressing a show/hide button became a write to the document. Nothing in
+  the toggles changed; the mechanism they were never registered with
+  changed underneath them. **Same shape as the original instance and the
+  first amendment: a refusal/default's removal or change can strip an
+  UNRELATED protection that nobody named, because the protection was
+  never a decision, only an absence.** Here the "protection" was a
+  discard default nobody had opted these three actions out of on purpose
+  — it looked like dead code (unreachable while `Discard` was the global
+  default) until the global default moved. Fixed by adding all three to
+  `action_preserves_gesture` explicitly, restoring the discard-safe
+  behavior these toggles always should have had. **Corollary worth
+  stating alongside R147's own cross-reference:** whenever a shared
+  default's VALUE changes (not just when a per-case refusal is lifted),
+  audit every caller that was relying on the OLD default by omission —
+  R144's original instance and its first amendment were both about
+  lifting a refusal; this one is about a bystander default changing sign
+  under a set of callers that never opted in or out.
+
 - **R145 — A planner that can produce operator-visible information
   RETURNS it; `Result<(), E>` is a shape that drops it by default
   (2026-08-05, continuation 83; librarian-assigned; API-design rule,
@@ -17505,6 +17804,105 @@ decision 025, (aq)–(au) from decision 026:**
   ceiling stays **(aw)**, unchanged. **`tools/check-ledger-numbers.py
   --stats` should be re-run after this commit** — this librarian has no
   shell and has not run it itself.
+
+  **⚠ LEDGER UPDATE, same-day continuation 92 filing (Pass 36.3 +
+  Pass 34.1 slice 1 shipped; UI_PREFERENCES.md handoff triaged).** No new
+  standing-rule number minted this filing — the Pass 36.3 view-toggle
+  finding is filed as a second amendment to the EXISTING **R144** (see its
+  entry, above), not a new R-number, and R153's own reservation of R154
+  for the three still-unminted contingent candidates is unaffected.
+  **Operator-question ceiling moves from (aw) to (az)** — three new items
+  filed this session: **(ax)** (the Acrobat-GUI-audit rule conflict,
+  unresolved and not resolvable below the operator), **(ay)** (ribbon
+  specificity), **(az)** (font-asset bundling/licensing). **(ba) is next
+  free**, continuing the existing spreadsheet-column convention
+  (…, az, ba, bb, …) rather than starting a new prefix. Pass-family
+  ceiling stays **37 next free** (Pass 34.1 is an existing ID, not a new
+  one — its slice 1/slice 2 split does not consume a new family number).
+  Decision-record ceiling stays **031** (**032** next free) — no new
+  decision record filed this session; the dock-mechanism decision Pass
+  34.1 slice 1 actually built was already recorded at decision 031
+  (continuation 89), and this filing's `ARCHITECTURE.md` §12 addition is
+  a BUILD CONFIRMATION of that existing record, not a new one (same
+  pattern as the continuation-58 entry for decision 017 Amendment A).
+  `tools/check-ledger-numbers.py --stats` should be re-run after this
+  commit — this librarian has no shell and has not run it itself.
+
+- **R154 — A decision record can specify a mechanism that does not
+  compile, and nothing checks it until an implementer hits the wall (or
+  silently does the coherent thing instead) (2026-08-05; librarian-
+  originated, on the engineer's explicit correction dispatch; promoted
+  from decision 031 §4's own internal self-contradiction, corrected in
+  `docs/decisions/031-...md` §7).** Decision 031 §4 decided "a new, small
+  `LeftPanel` enum, a SEPARATE `Tree<LeftPanel>` instance, and the SAME
+  `DockBehavior` mechanism reused as-is — not genericized, not duplicated
+  as an independent trait implementation." That is four properties that
+  cannot all be true at once: `Tree<LeftPanel>` requires
+  `impl egui_tiles::Behavior<LeftPanel>`, and `DockBehavior` is declared
+  `impl Behavior<DockPanel> for DockBehavior<'_>` — reusing it unchanged
+  against a different pane type without genericizing is not possible.
+  §4 did not just fail to catch this; it contradicted itself twice more
+  independently of the code — its own bullet 3 claimed "two small
+  `Behavior` impls" against its own headline's "not duplicated," and §5's
+  recap repeated the bullet-3 claim while §4's "does NOT do" list ruled
+  out the one thing (widening `DockPanel`) that actually shipped. The
+  section's own header, written before the body, already had the
+  coherent answer: "one `DockPanel` enum, two `Tree` instances, one
+  `DockBehavior`." Pass 34.1 slice 1 (`e15f55b`) built the header's
+  version, not the body's — no `LeftPanel` type exists in `crates/` —
+  and three other documents (`ARCHITECTURE.md` §12 twice,
+  `ROADMAP.md` here three times, `SESSION_LOG.md` continuation 92 twice)
+  faithfully propagated the wrong body text before the contradiction was
+  noticed, none of them catching it, because none of them compile prose.
+  **Why this is a distinct rule from R151/R152/R153, not an amendment to
+  any of them.** R151 audits whether a shipped `pub fn` has a production
+  caller; R152 audits whether a caller confirms anything to the operator;
+  R153 audits whether a fuzz harness's dispatch tracks a module's current
+  surface. All three are checks on CODE against CODE. This rule is a
+  check on a DECISION RECORD's PROSE against the type system — a
+  fundamentally different graph, because the artifact being audited
+  (a Markdown sentence naming a Rust type) was never run through
+  `rustc` or `cargo check` in the first place, and won't be until
+  someone tries to build it.
+  **The mechanical check, stated so it is checkable at review time.**
+  Once a Pass ships against a decision record that names a concrete Rust
+  type or mechanism, `grep` that identifier under `crates/`. If it is not
+  there, the record needs either an explicit "not built as specified"
+  note (this is a legitimate outcome — engineers deviate from decisions
+  for good reasons) or a correction, before a second document cites the
+  unbuilt name as if it shipped. This is cheap: one grep per named type,
+  once per Pass, at ship time — the same cost class as R151's call-graph
+  grep.
+  **Cross-references.** **R151** (production call-graph audit — the
+  sibling this rule is not an instance of). **R152** (confirmed-caller
+  audit — same non-overlap reason). **R153** (fuzz-harness-coverage audit
+  — same family, same non-overlap reason, closest sibling in spirit since
+  both are "audit an artifact against a CURRENT surface, not the surface
+  at authoring time"). **R106** (verify the ledger against the live
+  document, don't assume a reservation — the same discipline this entry
+  applies to number-claiming below). Decision 031 §7 (the correction this
+  rule is minted from).
+  **Numbering note, so the next filing does not double-mint.** R153's own
+  entry reserved **R154** for whichever of decision 030's THREE still-
+  unminted contingent candidates (§6.2(a), §4.5, and the "date and label
+  every contract statement" documentation observation) is accepted or
+  promoted first. This finding — the decision-record-does-not-compile
+  pattern — is a **fourth**, previously unlisted candidate, filed first
+  against the live ceiling (R106/R133: read the ceiling, don't assume a
+  reservation), so it is the one that claims **R154**, the same transfer
+  mechanism R150/R151/R152/R153 each used in turn to hand their reserved
+  slot to a fourth, previously-unlisted candidate ahead of their own
+  three. **Decision 030's three original contingent candidates now take
+  R155**, not R154, if and when any of them is accepted or promoted.
+  **Ceiling is now R154** (was R153 at the Pass-34.1/36.3 filing). **No
+  new Pass family minted by this filing** (Pass-family ceiling stays **37
+  next free**, unchanged). **No new decision record minted** — this is a
+  correction appended to the existing decision 031 (§7), not a new
+  record; decision-record ceiling stays **031** (**032** next free,
+  unchanged). **No new operator question minted**; ceiling stays
+  unchanged. `tools/check-ledger-numbers.py --stats` should be re-run
+  after this commit — this librarian has no shell and has not run it
+  itself.
 
 ## Update protocol
 

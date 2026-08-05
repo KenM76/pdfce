@@ -6904,6 +6904,18 @@ with a forward pointer.
   dispatcher pattern already survived one prior library-adoption change
   verbatim (the continuation-57 entry above), which two small dispatchers
   extend rather than risk against `egui_tiles`'s own generic trait bounds.
+  **[CORRECTED 2026-08-05 — pdfce-librarian.]** `Tree<LeftPanel>` names a
+  type that does not exist and was never buildable as decision 031 §4
+  specified it (`Tree<LeftPanel>` needs `impl Behavior<LeftPanel>`; the
+  same `DockBehavior` cannot be "reused as-is" against a different pane
+  type without genericizing it — decision 031 §4's own header already
+  said the coherent thing: "one `DockPanel` enum, two `Tree` instances,
+  one `DockBehavior`"). What shipped (Pass 34.1 slice 1, `e15f55b`): no
+  `LeftPanel` type anywhere in `crates/`; `DockPanel` widened with two
+  variants (`Pages`, `ToolOptions`); a second `Tree<DockPanel>`
+  (`dock::default_left_tree()`, tree id `"pdfce-dock-left"`); the SAME
+  `DockBehavior` genuinely reused, unchanged, across both trees. See
+  decision 031 §7 for the full correction.
   **Numbering consequence for decision 030's still-unminted rule
   proposals:** decision 030 §9 items 3–4 remain pending the operator's
   acceptance, and are not the only contingent candidate on record — the
@@ -6917,3 +6929,39 @@ with a forward pointer.
   by this entry beyond what Pass 34.x's own shipping will do — this is a
   classification governing acceptance criteria, not yet an implemented
   change. Reference: `docs/decisions/031-implicit-commit-boundary-and-the-measurescale-blast-radius-exception.md`.
+
+- **2026-08-05 (same-day continuation 92) — Decision 031, BUILD
+  CONFIRMATION: Pass 34.1 (slice 1 of 2) SHIPPED (`e15f55b`), the left
+  dock mechanism decided above is now real, not yet fully populated.**
+  A second, independent `egui_tiles::Tree<LeftPanel>` mounts on the left
+  with tabs `Pages | Tool Options`, exactly the SEPARATE-tree-not-
+  genericized-`DockBehavior` shape this decision recorded ahead of the
+  build (continuation 89, above) — the existing right-hand dock's
+  `DockPanel`/`panel_body` dispatcher pattern is reused verbatim for the
+  new tree, confirming R80's one-dispatcher rule holds across two
+  independent `egui_tiles::Tree` instances, not just within one.
+  **[CORRECTED 2026-08-05 — pdfce-librarian.]** No `LeftPanel` type was
+  built; `grep -rn "LeftPanel" crates/` returns nothing. The "second
+  `egui_tiles::Tree<LeftPanel>`" above is actually a second
+  `Tree<DockPanel>` (`dock::default_left_tree()`) — `DockPanel` itself
+  was widened with the `Pages`/`ToolOptions` variants rather than a new
+  pane enum being introduced, and the type-level per-tree guarantee a
+  dedicated enum would have given is instead a test,
+  `no_panel_is_mounted_in_both_docks`, sweeping `DockPanel::ALL` against
+  both default trees. Decision 031 §4's `LeftPanel` mechanism was not
+  implementable as specified; see decision 031 §7. The page-thumbnail
+  rail is now `DockPanel::Pages`; `DockPanel::ToolOptions`
+  is new and currently surfaces the armed tool's identity, its Pass-34.0
+  commit/discard contract, and refusal/disclosure text — **not yet** the
+  property-bar controls (font/size/colour/spacing), which still draw in
+  the pre-existing floating `egui::Area` strips. That relocation is
+  slice 2, unshipped, and is the literal remainder of the operator's
+  original ask; see `ROADMAP.md`'s annotated Pass 34.1 Next-up entry for
+  the itemized gap. **No further body-section change required** — as
+  with the continuation-58 (decision 017 Amendment A) build-confirmation
+  entry, pdfce's GUI-dock architecture is documented in this decision log
+  rather than in a dedicated numbered `ARCHITECTURE.md` section, so this
+  entry IS the body-section update for this decision. `cargo tree -p
+  pdfce-core` / `-p pdfce-render` re-verified clean (no GUI deps pulled
+  in by the second `Tree`). Full record: `ROADMAP.md`'s "Pass 34.1
+  (slice 1 of 2)" Shipped entry.
