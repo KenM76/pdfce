@@ -763,6 +763,17 @@ pub struct MeasureState {
     /// The most recent ACCEPT's disclosures, rendered verbatim until the next
     /// Accept or tool exit (ui-spec §6, the standing verbatim-disclosure rule).
     pub last_disclosures: Vec<String>,
+    /// The Tool Options pane asked to put the tool away (Pass 34.1 slice 3).
+    ///
+    /// The Close button draws in the LEFT DOCK, which egui resolves before the
+    /// `CentralPanel` the canvas pass runs in — so this is set and consumed in
+    /// the same frame. Drained by `run_measure_tool`; never crosses a frame
+    /// boundary.
+    pub queued_close_tool: bool,
+    /// The Tool Options pane asked to open the ce-dimension Group Manager
+    /// (Pass 34.1 slice 3). Same one-frame contract as
+    /// [`Self::queued_close_tool`].
+    pub queued_open_groups: bool,
 }
 
 impl MeasureState {
@@ -781,6 +792,8 @@ impl MeasureState {
             scale: ScalePick::new(),
             pending: None,
             last_disclosures: Vec::new(),
+            queued_close_tool: false,
+            queued_open_groups: false,
         }
     }
 

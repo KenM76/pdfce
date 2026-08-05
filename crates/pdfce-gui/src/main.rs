@@ -7638,7 +7638,13 @@ impl PdfceApp {
         // the string that shipped, it is what the operator has been reading
         // since Pass 14.3, and the move is supposed to change where the
         // controls are and nothing else.
-        if !canvas::tool_builds_text_edit(Some(tool)) {
+        // Generalised in slice 3 from the text-edit-only special case: EVERY
+        // migrated property bar opens with its own `*_propbar_title()` (Edit
+        // Text, Add Text, and the measure bodies' "Linear Dimension" /
+        // "Radius / Diameter" / "Set Scale"), so the pane heading would stack a
+        // second title above it in all three. Only the Obj tool, which never
+        // had a property bar to move, needs the pane to name it.
+        if !migrated_options_tool(tool) {
             ui.heading(ui_text::tool_options_heading(tool));
             ui.separator();
         }
@@ -7674,6 +7680,48 @@ impl PdfceApp {
             return;
         }
 
+        // Add Text (Pass 34.1 slice 3). No intent plumbing — every control
+        // here writes a `prop_*` field or queues a placement, both of which
+        // already survive to the canvas pass on their own.
+        //
+        // `self.font_env` and `self.status` are DISJOINT fields, so one may be
+        // borrowed immutably while the other is borrowed mutably; the compiler
+        // does that analysis per-field within a function body.
+        if canvas::tool_builds_add_text(Some(tool)) {
+            let font_env = &self.font_env;
+            if let Status::Open(doc) = &mut self.status
+                && let Some(state) = doc.add_text.as_mut()
+            {
+                add_text_options_ui(state, font_env, ui);
+            }
+            return;
+        }
+
+        // The three Measure tools (Pass 34.1 slice 3). One body serves all
+        // three; `active` decides which rows appear, exactly as it did in the
+        // float.
+        //
+        // The ce-dimension model is cloned out FIRST: `measure_options_ui`
+        // needs it to populate the group picker, and it needs `doc.measure`
+        // mutably at the same time. `dimension_model()` returns an owned
+        // value, so its read borrow of `doc.session` ends before the mutable
+        // one begins.
+        if tool.is_measure() {
+            if let Status::Open(doc) = &mut self.status {
+                let model = doc.session.dimension_model();
+                if let Some(st) = doc.measure.as_mut() {
+                    let (close_tool, open_groups) = measure_options_ui(st, &model, Some(tool), ui);
+                    // Handed to the canvas pass rather than acted on here: it
+                    // owns the "putting the tool away also discards the
+                    // in-progress pick" rule, and splitting that across two
+                    // panels is how a half-finished gesture survives a close.
+                    st.queued_close_tool |= close_tool;
+                    st.queued_open_groups |= open_groups;
+                }
+            }
+            return;
+        }
+
         // The commit contract, stated where the Accept/Reject pair used to be
         // (Pass 34.0 + decision 031). Shown only while something is actually
         // uncommitted, so it is not permanent furniture — but shown at exactly
@@ -7683,46 +7731,20 @@ impl PdfceApp {
             ui.label(ui_text::tool_options_commit_hint());
         }
 
-        // Refusals and disclosures, verbatim from core (R20/R1). These are the
-        // surfaces it would be worst to lose in the move: a refusal that is
-        // not read is an edit the operator believes happened.
-        let mut any = false;
-        if let Some(state) = doc.text_edit.as_ref() {
-            let refusal = state
-                .pending
-                .as_ref()
-                .and_then(|p| p.last_refusal.clone())
-                .or_else(|| state.last_refusal.clone());
-            if let Some(text) = refusal {
-                ui.separator();
-                ui.label(ui_text::refusal_strip_title());
-                ui.colored_label(ui.visuals().error_fg_color, ui_text::refusal_line(&text));
-                any = true;
-            }
-            for d in &state.last_disclosures {
-                ui.label(ui_text::disclosure_bullet(d));
-                any = true;
-            }
-        }
-        if let Some(state) = doc.add_text.as_ref() {
-            if let Some(text) = state.draft.as_ref().and_then(|d| d.last_refusal.clone()) {
-                ui.separator();
-                ui.label(ui_text::refusal_strip_title());
-                ui.colored_label(ui.visuals().error_fg_color, ui_text::refusal_line(&text));
-                any = true;
-            }
-            for d in &state.last_disclosures {
-                ui.label(ui_text::disclosure_bullet(d));
-                any = true;
-            }
-        }
-        if let Some(state) = doc.measure.as_ref() {
-            for d in &state.last_disclosures {
-                ui.label(ui_text::disclosure_bullet(d));
-                any = true;
-            }
-        }
-        let _ = any;
+        // Refusals and disclosures are NOT drawn here (Pass 34.1 slice 3).
+        //
+        // Slice 1 rendered them in this pane, because at that point the tools'
+        // own status strips were the only other surface and the pane would
+        // otherwise have been nearly empty. Slice 3 moved the OPTIONS in, and
+        // the status strips still float and still carry the same refusals and
+        // disclosures verbatim — so rendering them here as well would put the
+        // same refusal on screen twice, in two places, with no way for the
+        // operator to tell whether they were looking at one event or two.
+        //
+        // One surface per fact. The strips keep them until slice 4 moves the
+        // strips too, at which point this pane takes them back and the floats
+        // go away entirely. Nothing is suppressed in the meantime: every
+        // refusal and disclosure is exactly where it was before this Pass.
     }
 
     /// Draw the LEFT dock (Pages | Tool Options), Pass 34.1.
@@ -10806,6 +10828,133 @@ fn std14_combo_label(
     ui_text::font_entry_label(name, trust)
 }
 
+/// Draw the Add-Text tool's options (Pass 34.1 slice 3).
+///
+/// Moved verbatim out of the floating `pdfce-add-text-propbar` Area, same as
+/// the Edit-Text bar before it.
+///
+/// # Why this returns nothing, unlike its Edit-Text sibling
+///
+/// The Edit-Text bar produces nine deferred Apply intents that phase C has to
+/// consume, so its move needed a `TextEditIntents` value to cross the gap
+/// between two panels. This bar has none: every control here either writes a
+/// `state.prop_*` field the next commit reads, or calls
+/// `install_add_placement`, which already queues through
+/// `AddTextState::queued_placement` (Pass 34.0). So the move is a relocation
+/// and nothing more — which is the honest reason it is 110 lines and the
+/// other was 500.
+fn add_text_options_ui(
+    state: &mut AddTextState,
+    font_env: &pdfce_render::FontEnvironment,
+    ui: &mut egui::Ui,
+) {
+    use pdfce_core::text_edit::BlockAlignment;
+    ui.label(ui_text::add_text_propbar_title());
+    ui.label(ui_text::add_text_hint());
+
+    // §3.3 keyboard-complete placement (point AND box halves) —
+    // a genuine keyboard path to the SAME draft a click/drag
+    // reaches, not a lesser fallback.
+    ui.horizontal(|ui| {
+        ui.label(ui_text::add_text_origin_label());
+        ui.add(egui::DragValue::new(&mut state.manual_origin[0]).speed(1.0));
+        ui.add(egui::DragValue::new(&mut state.manual_origin[1]).speed(1.0));
+    });
+    ui.checkbox(&mut state.use_box, ui_text::add_text_use_box_checkbox());
+    if state.use_box {
+        ui.horizontal(|ui| {
+            ui.label(ui_text::add_text_box_size_label());
+            ui.add(
+                egui::DragValue::new(&mut state.manual_box[0])
+                    .range(1.0..=100_000.0)
+                    .speed(1.0),
+            );
+            ui.add(
+                egui::DragValue::new(&mut state.manual_box[1])
+                    .range(1.0..=100_000.0)
+                    .speed(1.0),
+            );
+        });
+        if ui
+            .add(egui::Button::new(ui_text::add_text_place_box_button()).min_size(ICON_BUTTON_SIZE))
+            .clicked()
+        {
+            let [x, y] = state.manual_origin;
+            let [w, h] = state.manual_box;
+            install_add_placement(
+                state,
+                canvas::AddTextPlacement::Box {
+                    llx: x,
+                    lly: y,
+                    width: w,
+                    height: h,
+                },
+            );
+        }
+    } else if ui
+        .add(egui::Button::new(ui_text::add_text_place_point_button()).min_size(ICON_BUTTON_SIZE))
+        .clicked()
+    {
+        let [x, y] = state.manual_origin;
+        install_add_placement(state, canvas::AddTextPlacement::Point { x, y });
+    }
+
+    ui.separator();
+    // §5.2 font — the 14 Std-14 faces + Bundled/Supplied trust
+    // (the SAME classify_nonembedded the diagnostics use), from
+    // the spec-frozen Std14::ALL.
+    ui.horizontal(|ui| {
+        ui.label(ui_text::format_font_label());
+        let current = std14_combo_label(state.prop_font, font_env);
+        egui::ComboBox::from_id_salt("pdfce-add-text-font")
+            .selected_text(current)
+            .show_ui(ui, |ui| {
+                for face in pdfce_core::fontdata::Std14::ALL {
+                    let label = std14_combo_label(face, font_env);
+                    ui.selectable_value(&mut state.prop_font, face, label);
+                }
+            });
+    });
+    ui.horizontal(|ui| {
+        ui.label(ui_text::format_size_label());
+        ui.add(egui::DragValue::new(&mut state.prop_size).range(1.0..=1000.0));
+    });
+    // §5.2 colour — the honest two-state surface (black default /
+    // custom RGB); core has no Gray/CMYK for Add-Text.
+    ui.horizontal(|ui| {
+        ui.label(ui_text::markup_color_label());
+        ui.color_edit_button_srgba(&mut state.prop_color);
+    });
+    // §5.2 alignment + leading — box mode only (a fresh box has
+    // no glyphs to auto-detect from; default Left).
+    let is_box = state.use_box
+        || matches!(
+            state.draft.as_ref().map(|d| &d.placement),
+            Some(AddPlacement::Box { .. })
+        );
+    if is_box {
+        ui.horizontal(|ui| {
+            ui.label(ui_text::add_text_align_label());
+            for (val, label) in [
+                (BlockAlignment::Left, "Left"),
+                (BlockAlignment::Center, "Center"),
+                (BlockAlignment::Right, "Right"),
+                (BlockAlignment::Justified, "Justify"),
+            ] {
+                ui.selectable_value(&mut state.prop_alignment, val, label);
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label(ui_text::add_text_leading_label());
+            ui.add(
+                egui::DragValue::new(&mut state.prop_leading)
+                    .range(0.0..=10_000.0)
+                    .speed(0.2),
+            );
+        });
+    }
+}
+
 /// Read the operator's chosen fill colour back as core's `NewTextColor`
 /// (Pass 16.2 §5.2). Core's Add-Text colour is only Black/Rgb (no Gray/CMYK),
 /// so the honest surface is: pure black → `Black`, anything else → `Rgb` — no
@@ -10949,7 +11098,7 @@ fn run_add_text_tool(
     zoom: f32,
     font_env: &pdfce_render::FontEnvironment,
 ) {
-    use pdfce_core::text_edit::{BlockAlignment, preview_wrap};
+    use pdfce_core::text_edit::preview_wrap;
 
     let page_index = doc.view.page_index;
     // (Re)point state on page navigation while the tool stays active (§2.1):
@@ -11223,129 +11372,10 @@ fn run_add_text_tool(
 
         // -- Property bar (§3.3/§5.2): a floating top panel. Every control is a
         //    REAL egui widget (accesskit), never painter-drawn. --
-        egui::Area::new(egui::Id::new("pdfce-add-text-propbar"))
-            .order(egui::Order::Foreground)
-            .movable(true)
-            .default_pos(canvas::tool_strip_anchor(
-                ui.max_rect(),
-                canvas::StripCorner::TopLeft,
-                8.0,
-            ))
-            .show(ui.ctx(), |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_max_width(380.0);
-                    ui.label(ui_text::add_text_propbar_title());
-                    ui.label(ui_text::add_text_hint());
-
-                    // §3.3 keyboard-complete placement (point AND box halves) —
-                    // a genuine keyboard path to the SAME draft a click/drag
-                    // reaches, not a lesser fallback.
-                    ui.horizontal(|ui| {
-                        ui.label(ui_text::add_text_origin_label());
-                        ui.add(egui::DragValue::new(&mut state.manual_origin[0]).speed(1.0));
-                        ui.add(egui::DragValue::new(&mut state.manual_origin[1]).speed(1.0));
-                    });
-                    ui.checkbox(&mut state.use_box, ui_text::add_text_use_box_checkbox());
-                    if state.use_box {
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::add_text_box_size_label());
-                            ui.add(
-                                egui::DragValue::new(&mut state.manual_box[0])
-                                    .range(1.0..=100_000.0)
-                                    .speed(1.0),
-                            );
-                            ui.add(
-                                egui::DragValue::new(&mut state.manual_box[1])
-                                    .range(1.0..=100_000.0)
-                                    .speed(1.0),
-                            );
-                        });
-                        if ui
-                            .add(
-                                egui::Button::new(ui_text::add_text_place_box_button())
-                                    .min_size(ICON_BUTTON_SIZE),
-                            )
-                            .clicked()
-                        {
-                            let [x, y] = state.manual_origin;
-                            let [w, h] = state.manual_box;
-                            install_add_placement(
-                                state,
-                                canvas::AddTextPlacement::Box {
-                                    llx: x,
-                                    lly: y,
-                                    width: w,
-                                    height: h,
-                                },
-                            );
-                        }
-                    } else if ui
-                        .add(
-                            egui::Button::new(ui_text::add_text_place_point_button())
-                                .min_size(ICON_BUTTON_SIZE),
-                        )
-                        .clicked()
-                    {
-                        let [x, y] = state.manual_origin;
-                        install_add_placement(state, canvas::AddTextPlacement::Point { x, y });
-                    }
-
-                    ui.separator();
-                    // §5.2 font — the 14 Std-14 faces + Bundled/Supplied trust
-                    // (the SAME classify_nonembedded the diagnostics use), from
-                    // the spec-frozen Std14::ALL.
-                    ui.horizontal(|ui| {
-                        ui.label(ui_text::format_font_label());
-                        let current = std14_combo_label(state.prop_font, font_env);
-                        egui::ComboBox::from_id_salt("pdfce-add-text-font")
-                            .selected_text(current)
-                            .show_ui(ui, |ui| {
-                                for face in pdfce_core::fontdata::Std14::ALL {
-                                    let label = std14_combo_label(face, font_env);
-                                    ui.selectable_value(&mut state.prop_font, face, label);
-                                }
-                            });
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label(ui_text::format_size_label());
-                        ui.add(egui::DragValue::new(&mut state.prop_size).range(1.0..=1000.0));
-                    });
-                    // §5.2 colour — the honest two-state surface (black default /
-                    // custom RGB); core has no Gray/CMYK for Add-Text.
-                    ui.horizontal(|ui| {
-                        ui.label(ui_text::markup_color_label());
-                        ui.color_edit_button_srgba(&mut state.prop_color);
-                    });
-                    // §5.2 alignment + leading — box mode only (a fresh box has
-                    // no glyphs to auto-detect from; default Left).
-                    let is_box = state.use_box
-                        || matches!(
-                            state.draft.as_ref().map(|d| &d.placement),
-                            Some(AddPlacement::Box { .. })
-                        );
-                    if is_box {
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::add_text_align_label());
-                            for (val, label) in [
-                                (BlockAlignment::Left, "Left"),
-                                (BlockAlignment::Center, "Center"),
-                                (BlockAlignment::Right, "Right"),
-                                (BlockAlignment::Justified, "Justify"),
-                            ] {
-                                ui.selectable_value(&mut state.prop_alignment, val, label);
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::add_text_leading_label());
-                            ui.add(
-                                egui::DragValue::new(&mut state.prop_leading)
-                                    .range(0.0..=10_000.0)
-                                    .speed(0.2),
-                            );
-                        });
-                    }
-                });
-            });
+        // Pass 34.1 slice 3: the property bar draws in the LEFT DOCK's Tool
+        // Options pane now (`tool_options_panel`), not in a floating Area over
+        // the canvas. No intent plumbing was needed — see
+        // `add_text_options_ui`.
 
         // -- Accept/Reject + disclosure/refusal strip (§6/§7): a floating bottom
         //    panel. Accept/Reject are REAL buttons (accesskit). --
@@ -11826,6 +11856,19 @@ struct TextEditIntents {
     /// real-face/synthesis request), routed to the SAME strip as every core
     /// refusal rather than to a second disclosure surface.
     local_refusal: Option<String>,
+}
+
+/// Whether this tool's options have been migrated into the Tool Options pane
+/// and therefore carry their own title (Pass 34.1 slice 3).
+///
+/// One predicate rather than the condition spelled out at each of the four
+/// sites that care: the pane's heading suppression, and the three per-tool
+/// draw arms. A tool added to one list and not the others is exactly the
+/// silent inconsistency this project keeps finding one Pass later.
+fn migrated_options_tool(tool: CanvasTool) -> bool {
+    canvas::tool_builds_text_edit(Some(tool))
+        || canvas::tool_builds_add_text(Some(tool))
+        || tool.is_measure()
 }
 
 /// Draw the Edit-Text tool's options and return what the operator asked for
@@ -14099,6 +14142,122 @@ fn run_dimension_drag(
     consumed
 }
 
+/// Draw the Measure tools' options and return `(close_tool, open_groups)`
+/// (Pass 34.1 slice 3).
+///
+/// Moved verbatim out of the floating `pdfce-measure-propbar` Area. One body
+/// serves all three measure tools; which rows appear is decided by `active`,
+/// exactly as before.
+///
+/// # The Close button survives the move, and is worth keeping
+///
+/// It was added because the floating box could sit over the very geometry the
+/// operator was trying to pick, and switching tools to escape also discarded
+/// the gesture. In a dock the covering problem is gone — so the button's
+/// original justification is spent. It stays because its ACTION was never
+/// "hide this box": it puts the TOOL away, which is a real thing to want and
+/// which the rail toggle does not do (that would hide the controls and leave
+/// canvas clicks doing something the operator can no longer see the settings
+/// for — the hazard the button's own comment names).
+fn measure_options_ui(
+    st: &mut measure_tool::MeasureState,
+    model: &pdfce_core::dimension::DimensionModel,
+    active: Option<CanvasTool>,
+    ui: &mut egui::Ui,
+) -> (bool, bool) {
+    use pdfce_core::vector::AxisConstraint;
+    let mut close_tool = false;
+    let mut open_groups = false;
+    ui.horizontal(|ui| {
+        // Right-aligned so it cannot be hit while reaching for
+        // the tool's own first control.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .button(ui_text::tool_panel_close())
+                .on_hover_text(ui_text::tool_panel_close_tooltip())
+                .clicked()
+            {
+                close_tool = true;
+            }
+        });
+    });
+    if canvas::tool_builds_measure_linear(active) {
+        ui.label(ui_text::measure_linear_menu_item());
+        ui.label(ui_text::measure_linear_hint());
+    } else if canvas::tool_builds_measure_circular(active) {
+        ui.label(ui_text::measure_circular_menu_item());
+        ui.label(ui_text::measure_circular_hint());
+    } else {
+        ui.label(ui_text::measure_set_scale_menu_item());
+        ui.label(ui_text::measure_scale_hint());
+    }
+    ui.separator();
+    // Active-group picker + the group-panel opener (ui-spec §2.6).
+    ui.horizontal(|ui| {
+        ui.label(ui_text::measure_group_label());
+        let cur = model
+            .group(st.group)
+            .map_or_else(String::new, |g| g.name.clone());
+        egui::ComboBox::from_id_salt("pdfce-measure-group")
+            .selected_text(cur)
+            .show_ui(ui, |ui| {
+                for g in model.groups() {
+                    ui.selectable_value(&mut st.group, g.id, g.name.clone());
+                }
+            });
+        if ui.button(ui_text::measure_open_groups_button()).clicked() {
+            open_groups = true;
+        }
+    });
+    ui.checkbox(&mut st.snap_master, ui_text::snap_toggle_label())
+        .on_hover_text(ui_text::snap_toggle_tooltip());
+    // H/V/aligned constraint (linear + scale, ui-spec §2.5).
+    if canvas::tool_builds_measure_linear(active) || canvas::tool_builds_measure_scale(active) {
+        ui.horizontal(|ui| {
+            ui.label(ui_text::measure_alignment_label());
+            for c in [
+                AxisConstraint::Aligned,
+                AxisConstraint::Horizontal,
+                AxisConstraint::Vertical,
+            ] {
+                let label = ui_text::axis_constraint_label(c);
+                if canvas::tool_builds_measure_linear(active) {
+                    ui.selectable_value(&mut st.linear.constraint, c, label);
+                } else {
+                    ui.selectable_value(&mut st.scale.line.constraint, c, label);
+                }
+            }
+        });
+    }
+    // Radius/diameter display toggle (circular, ui-spec §3.4).
+    if canvas::tool_builds_measure_circular(active) {
+        ui.horizontal(|ui| {
+            ui.label(ui_text::measure_display_label());
+            ui.selectable_value(
+                &mut st.circular.show_diameter,
+                false,
+                ui_text::measure_radius_option(),
+            );
+            ui.selectable_value(
+                &mut st.circular.show_diameter,
+                true,
+                ui_text::measure_diameter_option(),
+            );
+        });
+    }
+    // The scale-entry dialog once the reference line is drawn
+    // (ui-spec §4.2), via the SHARED scale-entry widget.
+    if canvas::tool_builds_measure_scale(active) && st.scale.dialog_open() {
+        ui.separator();
+        let drawn = st.scale.drawn_pdf_length;
+        if let Some(len) = drawn {
+            ui.label(ui_text::scale_entry_drawn_length(len));
+        }
+        scale_entry_widget(ui, &mut st.scale.fields, drawn);
+    }
+    (close_tool, open_groups)
+}
+
 fn run_measure_tool(
     doc: &mut OpenDoc,
     ui: &mut egui::Ui,
@@ -14110,7 +14269,7 @@ fn run_measure_tool(
     use pdfce_core::dimension::{
         DEFAULT_GROUP_ID, DimensionKind, ScaleState, Unit, format_measurement,
     };
-    use pdfce_core::vector::{AxisConstraint, Point, SnapConfig, SnapKind, snap_candidates};
+    use pdfce_core::vector::{Point, SnapConfig, SnapKind, snap_candidates};
 
     let active = doc.active_tool;
     let page_index = doc.view.page_index;
@@ -14333,114 +14492,21 @@ fn run_measure_tool(
         // is trying to pick — and the only escape was to switch tools, which
         // also throws away the gesture in progress.
         //
-        // `default_pos` + `movable` keeps the same opening position (nothing
-        // moves for anyone who was happy with it) while letting it be dragged
-        // off the work. Close puts the TOOL away, not merely the box: leaving
-        // a tool armed with its controls hidden would keep canvas clicks
-        // doing something the operator can no longer see the settings for.
-        let mut close_tool = false;
-        egui::Area::new(egui::Id::new("pdfce-measure-propbar"))
-            .order(egui::Order::Foreground)
-            .default_pos(canvas::tool_strip_anchor(
-                ui.max_rect(),
-                canvas::StripCorner::TopLeft,
-                8.0,
-            ))
-            .movable(true)
-            .show(ui.ctx(), |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_max_width(440.0);
-                    ui.horizontal(|ui| {
-                        // Right-aligned so it cannot be hit while reaching for
-                        // the tool's own first control.
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui
-                                .button(ui_text::tool_panel_close())
-                                .on_hover_text(ui_text::tool_panel_close_tooltip())
-                                .clicked()
-                            {
-                                close_tool = true;
-                            }
-                        });
-                    });
-                    if canvas::tool_builds_measure_linear(active) {
-                        ui.label(ui_text::measure_linear_menu_item());
-                        ui.label(ui_text::measure_linear_hint());
-                    } else if canvas::tool_builds_measure_circular(active) {
-                        ui.label(ui_text::measure_circular_menu_item());
-                        ui.label(ui_text::measure_circular_hint());
-                    } else {
-                        ui.label(ui_text::measure_set_scale_menu_item());
-                        ui.label(ui_text::measure_scale_hint());
-                    }
-                    ui.separator();
-                    // Active-group picker + the group-panel opener (ui-spec §2.6).
-                    ui.horizontal(|ui| {
-                        ui.label(ui_text::measure_group_label());
-                        let cur = model
-                            .group(st.group)
-                            .map_or_else(String::new, |g| g.name.clone());
-                        egui::ComboBox::from_id_salt("pdfce-measure-group")
-                            .selected_text(cur)
-                            .show_ui(ui, |ui| {
-                                for g in model.groups() {
-                                    ui.selectable_value(&mut st.group, g.id, g.name.clone());
-                                }
-                            });
-                        if ui.button(ui_text::measure_open_groups_button()).clicked() {
-                            open_groups = true;
-                        }
-                    });
-                    ui.checkbox(&mut st.snap_master, ui_text::snap_toggle_label())
-                        .on_hover_text(ui_text::snap_toggle_tooltip());
-                    // H/V/aligned constraint (linear + scale, ui-spec §2.5).
-                    if canvas::tool_builds_measure_linear(active)
-                        || canvas::tool_builds_measure_scale(active)
-                    {
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::measure_alignment_label());
-                            for c in [
-                                AxisConstraint::Aligned,
-                                AxisConstraint::Horizontal,
-                                AxisConstraint::Vertical,
-                            ] {
-                                let label = ui_text::axis_constraint_label(c);
-                                if canvas::tool_builds_measure_linear(active) {
-                                    ui.selectable_value(&mut st.linear.constraint, c, label);
-                                } else {
-                                    ui.selectable_value(&mut st.scale.line.constraint, c, label);
-                                }
-                            }
-                        });
-                    }
-                    // Radius/diameter display toggle (circular, ui-spec §3.4).
-                    if canvas::tool_builds_measure_circular(active) {
-                        ui.horizontal(|ui| {
-                            ui.label(ui_text::measure_display_label());
-                            ui.selectable_value(
-                                &mut st.circular.show_diameter,
-                                false,
-                                ui_text::measure_radius_option(),
-                            );
-                            ui.selectable_value(
-                                &mut st.circular.show_diameter,
-                                true,
-                                ui_text::measure_diameter_option(),
-                            );
-                        });
-                    }
-                    // The scale-entry dialog once the reference line is drawn
-                    // (ui-spec §4.2), via the SHARED scale-entry widget.
-                    if canvas::tool_builds_measure_scale(active) && st.scale.dialog_open() {
-                        ui.separator();
-                        let drawn = st.scale.drawn_pdf_length;
-                        if let Some(len) = drawn {
-                            ui.label(ui_text::scale_entry_drawn_length(len));
-                        }
-                        scale_entry_widget(ui, &mut st.scale.fields, drawn);
-                    }
-                });
-            });
+        // Close puts the TOOL away, not merely the panel: leaving a tool armed
+        // with its controls hidden would keep canvas clicks doing something the
+        // operator can no longer see the settings for.
+        //
+        // (The paragraph that used to stand here explained `default_pos` +
+        // `movable` — the floating box could sit over the geometry being
+        // picked, and dragging it aside was the fix. Pass 34.1 slice 3 removed
+        // the box, so the reasoning is spent; the ACTION it justified is not.)
+        //
+        // Pass 34.1 slice 3: the property bar draws in the LEFT DOCK's Tool
+        // Options pane now (`tool_options_panel`). `close_tool`/`open_groups`
+        // come back from there through the measure state, the same way the
+        // Edit-Text intents do.
+        let close_tool = std::mem::take(&mut st.queued_close_tool);
+        open_groups |= std::mem::take(&mut st.queued_open_groups);
 
         // Closing the box puts the TOOL away, and the in-progress pick with
         // it. Keeping a half-finished two-point gesture alive behind a

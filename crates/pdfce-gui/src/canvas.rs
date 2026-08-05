@@ -236,7 +236,6 @@ pub fn resolve_drag_placement(
 #[must_use]
 pub fn tool_strip_anchor(viewport: Rect, corner: StripCorner, offset: f32) -> Pos2 {
     match corner {
-        StripCorner::TopLeft => Pos2::new(viewport.min.x + offset, viewport.min.y + offset),
         StripCorner::BottomLeft => Pos2::new(viewport.min.x + offset, viewport.max.y - offset),
     }
 }
@@ -246,10 +245,19 @@ pub fn tool_strip_anchor(viewport: Rect, corner: StripCorner, offset: f32) -> Po
 /// Only the two that are used. A wider enum would be an invitation to scatter
 /// tool controls around all four corners, which is the habit this type exists
 /// to stop.
+/// # Pass 34.1 slice 3 retired `TopLeft`
+///
+/// Every tool's PROPERTY bar now draws in the left dock's Tool Options pane,
+/// so nothing anchors to the top-left corner any more and the compiler said
+/// so (`variant TopLeft is never constructed`). The variant is removed rather
+/// than `#[allow(dead_code)]`-ed: a corner nothing hangs from is an invitation
+/// to hang something from it, which is the habit this type's own docs say it
+/// exists to stop.
+///
+/// `BottomLeft` remains until slice 4 moves the three status/commit strips
+/// into the pane as well; at that point this type goes with them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StripCorner {
-    /// Tool properties — near where a toolbar would be.
-    TopLeft,
     /// Gesture status and its commit controls — out of the drawing's way.
     BottomLeft,
 }
