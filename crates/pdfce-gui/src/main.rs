@@ -15968,9 +15968,25 @@ fn dimension_groups_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
         .open(doc.dimension_groups_open.then_some(true))
         .show(ui, |ui| {
             // -- New group (ui-spec §5.2). --
+            //
+            // TWO rows, not one. This was a single `ui.horizontal` while the
+            // panel was a floating `egui::Window` with `default_width(520.0)`,
+            // and it fitted there. In the dock pane — roughly 370 pt — it does
+            // NOT: the first screenshot after the move showed the unit dropdown
+            // clipped at the pane edge and the "+ New Group" button pushed off
+            // the pane entirely, i.e. an operator could type a group name and
+            // then have no way to create the group.
+            //
+            // Worth recording how that was caught, because the headless trace
+            // said everything worked: `dim-props`/`show-pane-subject` proved the
+            // pane drew and the controls were reached, and a clipped widget is
+            // invisible to every one of those assertions. A layout defect has
+            // exactly one oracle and it is a picture.
             ui.horizontal(|ui| {
                 ui.label(ui_text::group_new_group_name_label());
                 ui.text_edit_singleline(&mut doc.group_new_name);
+            });
+            ui.horizontal(|ui| {
                 egui::ComboBox::from_id_salt("pdfce-newgroup-unit")
                     .selected_text(ui_text::unit_dropdown_label(doc.group_new_unit))
                     .show_ui(ui, |ui| {
@@ -15982,8 +15998,21 @@ fn dimension_groups_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
                             );
                         }
                     });
-                if ui.button(ui_text::group_new_group_button()).clicked()
-                    && !doc.group_new_name.trim().is_empty()
+                // Disabled rather than silently inert when the name is empty.
+                // The old code took the click and then dropped it on the
+                // `!trim().is_empty()` guard, which from the operator's side is
+                // a button that does nothing and says nothing — the exact
+                // defect the `GroupAction::Create` reporting fix below this
+                // closure was written to remove for the OTHER failure path.
+                let named = !doc.group_new_name.trim().is_empty();
+                if ui
+                    .add_enabled(named, egui::Button::new(ui_text::group_new_group_button()))
+                    .on_hover_text(if named {
+                        ui_text::group_new_group_tooltip()
+                    } else {
+                        ui_text::group_new_group_unnamed_tooltip()
+                    })
+                    .clicked()
                 {
                     actions.push(measure_tool::GroupAction::Create {
                         name: doc.group_new_name.trim().to_owned(),

@@ -4504,6 +4504,22 @@ pub fn group_new_group_name_label() -> &'static str {
     "Name:"
 }
 
+/// Tooltip on an enabled "+ New Group" button (Pass 34.2).
+pub fn group_new_group_tooltip() -> &'static str {
+    "Create a group with this name and unit. Dimensions you draw next go into whichever group \
+the Measure tool has selected."
+}
+
+/// Tooltip on the "+ New Group" button while the name box is empty (Pass 34.2).
+///
+/// The button used to be always-enabled and silently drop the click when the
+/// name was blank — a control that does nothing and says nothing. Naming the
+/// precondition is the same discipline
+/// [`properties_apply_unchanged_tooltip`] follows for its disabled Apply.
+pub fn group_new_group_unnamed_tooltip() -> &'static str {
+    "Type a name first — a group is identified by its name, so it cannot be created without one."
+}
+
 /// One group row's summary line (ui-spec §5.2): name, its scale summary, and
 /// its member count.
 pub fn group_row_summary(name: &str, scale_summary: &str, count: usize) -> String {
