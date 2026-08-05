@@ -81,9 +81,20 @@ workspace yet. Your first real engineering session is Pass 0
   the user rather than deciding solo; keep `THIRD_PARTY_LICENSES.md`
   current via `cargo-about` (generated, never hand-edited). See
   `docs/LEGAL.md` §6.
-- **ROADMAP discipline** — parse every request into Pass entries,
-  dispatch the librarian to write them, ship against acceptance
-  criteria, dispatch the librarian to record completion. When scoping
+- **ROADMAP + FEATURES discipline** — parse every request into Pass
+  entries, dispatch the librarian to write them, ship against acceptance
+  criteria, dispatch the librarian to record completion. **Every such
+  dispatch must also name the `docs/FEATURES.md` rows it affects** —
+  which capability, and which of core/cli/gui the Pass actually
+  delivered. FEATURES.md is the capability-shaped view the operator
+  reads to answer "what can pdfce do?"; ROADMAP.md is organised by Pass
+  and cannot answer that. The librarian maintains both in ONE filing,
+  and the engineer is the drift point: a shipped Pass whose dispatch
+  forgot to mention its features rows is how the two documents diverge.
+  **Do not round a box up.** A core API with no shell caller gets
+  `[x] core / [ ] cli / [ ] gui` — that reads as a useful signal, not an
+  embarrassment (R151 exists because `EditSession::move_subpath` sat
+  callable-and-uncalled from Pass 28.0 to Pass 36.0). When scoping
   a Backlog bucket into a real Pass, dispatch `pdfce-acrobat-librarian`
   first so acceptance criteria reflect what Acrobat Pro actually does
   (behavior, edge cases, limits) rather than an assumption of what a
@@ -129,6 +140,7 @@ workspace yet. Your first real engineering session is Pass 0
 | `README.md` | Project overview, stack, status |
 | `docs/ARCHITECTURE.md` | **The logic.** Crate layout, target `pdfce-core` API, the two load-bearing invariants, packaging strategy, dated decision log. Read every session. |
 | `docs/ROADMAP.md` | The contract — Shipped/In progress/Next up/Backlog/Standing rules. Read every session. |
+| `docs/FEATURES.md` | The capability view: what pdfce does today, what is planned in predicted order, with core/cli/gui checkboxes. Read it to answer "can pdfce do X?" without walking 17,000 lines of ROADMAP. Librarian-owned; never edit it directly. |
 | `docs/SESSION_LOG.md` | Most recent entry — what the prior session left in flight. |
 | `docs/LEGAL.md` | License status (undecided — don't publish), PDF-spec sourcing/copyright rules, test-corpus rules, dependency licensing & attribution discipline (§6). Read before any packaging/publishing-adjacent work AND before adding any new Cargo dependency. |
 | `docs/PRIOR_ART.md` | Survey/decision record of existing OSS crates and tools pdfce can depend on or learn from. Check before picking a crate for parsing/filters/fonts/crypto/rendering. |
@@ -353,8 +365,9 @@ captured, then let compaction proceed.
   test fixture.
 - **Do not** treat the project as licensed/publishable — the license
   is undecided (`docs/LEGAL.md` §1).
-- **Do not** edit `docs/ROADMAP.md`, `docs/SESSION_LOG.md`, or the
-  `docs/ARCHITECTURE.md` decision log directly — dispatch the librarian.
+- **Do not** edit `docs/ROADMAP.md`, `docs/FEATURES.md`,
+  `docs/SESSION_LOG.md`, or the `docs/ARCHITECTURE.md` decision log
+  directly — dispatch the librarian.
 - **Do not** call Workflow for routine work. Solo is the default.
 - **Do not** guess at OSS-license or patent-risk questions — surface
   them to the user.
@@ -401,7 +414,8 @@ captured, then let compaction proceed.
   decoder branch, AND add/extend a `cargo-fuzz` target if the new code
   touches untrusted-input parsing — see `ARCHITECTURE.md` §10.2.
 - **Always** dispatch `pdfce-librarian` for ROADMAP/SESSION_LOG/
-  decision-log writes — never edit those files yourself.
+  decision-log writes, and `FEATURES.md` capability rows — never edit
+  those files yourself.
 - **Always** check in with `pdfce-librarian` BEFORE context compaction.
 - **Always** run the packaging smoke test (copy output folder to a
   fresh path, launch, confirm it works) before declaring a packaging-

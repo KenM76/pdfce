@@ -14688,3 +14688,97 @@ engineer's own re-run is the requested confirmation step; per the
 engineer's report, everything except the now-fixed duplicate was already
 clean (92 (section, Pass ID) pairs, 155 standing rules, 31 decision
 files, Pass-family ceiling 36, R156 next free, decision 032 next free).
+
+**Same-day continuation 96 (real date 2026-08-05) — Pass 24.1 SHIPPED and
+filed; two `FEATURES.md` rows the engineer had verified as under- or
+over-cautious corrected in the same filing.**
+
+**Shipped:**
+- Pass 24.1 — the ribbon: six tabs (File · Edit · Review · Measure ·
+  Tools · View) replacing the single wrapping toolbar row, plus a
+  reset-layout chooser that now covers both docks (`RG::` gate scan test
+  caught two ungated groups, one fixed with a widget, one — `MeasureGroups`
+  — deleted as a would-be ribbon duplicate of the Tool Options dock's
+  ce-dimension group picker). Chain `6449859` → `2b12efe`. Filed under
+  `ROADMAP.md` *Shipped* (new top entry); the *Next up* ★ Pass 24.0–24.5
+  entry is annotated in place (not rewritten) to record the split — 24.0
+  and 24.2–24.5 remain NOT STARTED.
+
+**Decisions made this session:** none — this filing records decisions
+already made (decision 024, continuation 94's Family A supersession); it
+mints no new ones.
+
+**Findings + decisions:**
+- **`docs/FEATURES.md` existed before this continuation with no
+  `SESSION_LOG.md` entry of its own** — the file's own header states it
+  was "Created 2026-08-05 at the operator's request," and the
+  `pdfce-librarian` agent file documents the maintenance contract, but no
+  prior continuation in this log names its creation. Recorded here for
+  the gap alone, not to relitigate it: a future session grepping this log
+  for "FEATURES.md" before continuation 96 will find nothing, and that is
+  accurate — the creation genuinely predates this entry and is otherwise
+  undocumented here.
+- **Two `FEATURES.md` rows the librarian had left unticked out of
+  caution were checked by the engineer against running code and both
+  needed correction — in opposite directions.** This is the reason the
+  file's own "never tick a box you cannot substantiate" rule is stated as
+  a floor, not a ceiling: an unticked box the engineer can substantiate is
+  still a features-list defect, just a safer-shaped one than a wrongly
+  ticked box.
+  - **Page management** was too pessimistic. Rotate/delete/reorder pages
+    and merge/combine files all have real GUI verbs (`main.rs`:
+    `rotate_selection`, `delete_pages` call, `apply_reorder`/
+    `move_pages_keyboard`, `merge_tool`) and are now ticked `[x][x][x]`,
+    split into separate rows. Split-document and insert-pages-from-file
+    genuinely have no GUI verb — the GUI panel literally names the CLI
+    command (`split_cli_command()`, `insert_cli_command()`) instead of
+    performing the operation — and stay `[x][x][ ]`; that the app's own
+    text agrees with the features list is the point of leaving them
+    unticked. Extract-pages likewise has no GUI surface; the
+    `extract_pages_view` hits in `main.rs` are TEXT extraction, an
+    unrelated feature, and would have been a false-positive tick had the
+    grep result been trusted without reading what it matched.
+  - **Text copy** was a real gap, but a narrower one than the row implied.
+    `enum CopyScope` (`main.rs` ~L813) has exactly two variants, `Page`
+    and `Document`, reached from the ribbon's Copy ▾ menu — so page/
+    document clipboard copy is a genuine `[x][x][x]` and is now split out
+    as its own row. Separately, on-canvas text *selection* does exist
+    (Edit Text tool: `triple_clicked()`, `text_caret_after_click`, a live
+    caret/anchor pair) but there is no `CopyScope::Selection` and no verb
+    copies it — that half stays `[ ]` for cli and gui, with the `cli`
+    column argued as `—` rather than `[ ]` (mouse-selecting a range has no
+    batch shape; the page/document row above already covers the CLI
+    case). The two original findings ("no confirmed GUI page-management
+    surface," "no confirmed on-canvas select-and-copy") were both correct
+    observations; the correction is in how finely the underlying
+    capability needed to be split before ticking anything.
+- **Process point worth keeping:** both corrections came from the
+  engineer reading the actual source (`main.rs` line-level grep for the
+  named functions/enum) rather than from a re-derivation. This is exactly
+  the verification path `FEATURES.md`'s "never tick a box you cannot
+  substantiate" rule is designed to force before a tick — it just also
+  works in reverse, to un-stick an over-cautious blank.
+
+**Still in flight:**
+- Everything carried forward unchanged from continuation 95 — Pass 34.1
+  slice 4 (status/commit strips into the Tool Options pane), Pass 24.0/
+  24.2–24.5 (ribbon remainder, still NOT STARTED), Pass 34.2/35.0/35.1
+  untouched, the `Pages`/`Tool Options` icon-less-tab item still
+  unverified.
+- **`FEATURES.md`'s creation itself is now flagged rather than fixed** —
+  this librarian did not attempt to reconstruct a "session" retroactively
+  for it; the finding above is the complete record.
+
+**For next session:**
+- Re-run `tools/check-ledger-numbers.py` (still outstanding from
+  continuation 95 — unrelated to this filing, which touches no Pass ID,
+  standing rule, decision record, or operator question).
+- If further `FEATURES.md` rows are suspected stale, the same
+  read-the-actual-source discipline applied here (grep the named
+  function/enum in `main.rs`, don't infer from the Pass description
+  alone) is the one that already caught two real discrepancies this
+  continuation.
+
+**Backup currency not verifiable from here** — engineer should check
+`D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is made
+in this entry.

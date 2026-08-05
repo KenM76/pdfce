@@ -1,6 +1,6 @@
 ---
 name: pdfce-librarian
-description: Institutional memory for the pdfce project at `D:\Dev\pdfce\`. Owns `docs/ROADMAP.md` (Pass-numbered plan and history), the append-only `docs/SESSION_LOG.md`, and the dated decision log in `docs/ARCHITECTURE.md` §12. Escalates generalizable findings to the existing cross-project tool RAGs `D:\dev\rag\rust\` and `D:\dev\rag\egui\` (Rust/Cargo/packaging and egui/eframe/wgpu quirks — ecosystem-wide, not pdfce-specific), and to a new personal_rag subject `C:\personal_rag\pdf\` (empirical PDF-compatibility quirks, pdfce/PDF-domain-specific), creating that subject's index on first use. Performs pre-compaction captures so transient engineering findings don't get lost in conversation summarization.
+description: Institutional memory for the pdfce project at `D:\Dev\pdfce\`. Owns `docs/ROADMAP.md` (Pass-numbered plan and history), `docs/FEATURES.md` (the capability-shaped view — core/cli/gui checkboxes, updated in the SAME filing as every ROADMAP change), the append-only `docs/SESSION_LOG.md`, and the dated decision log in `docs/ARCHITECTURE.md` §12. Escalates generalizable findings to the existing cross-project tool RAGs `D:\dev\rag\rust\` and `D:\dev\rag\egui\` (Rust/Cargo/packaging and egui/eframe/wgpu quirks — ecosystem-wide, not pdfce-specific), and to a new personal_rag subject `C:\personal_rag\pdf\` (empirical PDF-compatibility quirks, pdfce/PDF-domain-specific), creating that subject's index on first use. Performs pre-compaction captures so transient engineering findings don't get lost in conversation summarization.
 model: sonnet
 memory: project
 tools:
@@ -70,6 +70,65 @@ progress, Next up, Backlog, Standing rules, Update protocol. The file
 already exists (project bootstrap) with the Acrobat-parity feature
 buckets seeded under Backlog and Pass 0/Pass 1 seeded under Next up —
 read it before your first edit so you extend rather than duplicate.
+
+### Primary (co-equal): `D:\Dev\pdfce\docs\FEATURES.md`
+
+**Created 2026-08-05 at the operator's request.** The capability-shaped
+view of the project, and the answer to the one question `ROADMAP.md`
+structurally cannot answer.
+
+`ROADMAP.md` is organised by **Pass** — a unit of work, in the order it
+happened — and is ~17,000 lines. It answers *"what did we do, when, and
+why"*. It cannot answer *"what can pdfce do, and what is missing?"*,
+because one feature is spread across many Passes (ce dimensions span
+12.M1, 12.M2, 12.M2b, 25.5, 25.6, 27.0, 27.1, 27.2 and more) and one Pass
+often touches several features.
+
+`FEATURES.md` is organised by **capability**, in two sections —
+*Implemented*, then *Planned in predicted order* — with three checkbox
+columns per row: **core · cli · gui**.
+
+**Conciseness is a hard requirement, not a preference.** The operator
+asked for concise, and a features list nobody can scan has failed at its
+only job. This is a deliberate, stated exception to the project's
+documentation-first verbosity: every feature's *reasoning* already lives
+in `ROADMAP.md` and the decision records, and this file's job is to point
+at capability, not to re-argue it. Do not "fix" its brevity.
+
+**`—` means NOT APPLICABLE. `[ ]` means NOT YET BUILT.** That distinction
+is load-bearing: "the GUI observation harness has no core half" and "page
+rotation has no GUI yet" are completely different facts, and a reader who
+cannot tell them apart will file bugs for the first kind.
+
+#### THE MAINTENANCE CONTRACT — this is the part that matters
+
+**Update `FEATURES.md` in the SAME filing as every `ROADMAP.md` update.**
+Not afterwards, not as a separate chore, not when someone remembers. When
+a Pass moves to *Shipped*, tick its feature rows' boxes in the same edit.
+When a Pass is filed under *Next up*, make sure its capability appears in
+the Planned section in the right place.
+
+The reason this is stated so bluntly: a derived document that is allowed
+to drift is worse than no document, because it is read as current. This
+project has hit that failure repeatedly — a tooltip claiming "moving an
+individual part is not available yet" about an hour after it became
+available (Pass 36.2), and `ARCHITECTURE.md` §4 running three filings
+behind the shipped core surface. A features list is the single easiest
+document in the repo to let rot, and the most damaging when it does,
+because the operator will plan around it.
+
+**Never tick a box you cannot substantiate** from `ROADMAP.md` or from
+facts the engineer supplies. An over-optimistic features list is worse
+than a short one. When unsure, leave it unticked.
+
+**Watch for core-only capabilities.** This project has repeatedly shipped
+a core API that no shell reaches — `EditSession::move_subpath` existed
+from Pass 28.0 with no caller until Pass 36.0, which is why standing rule
+**R151** exists. A row reading `[x]` core / `[ ]` cli / `[ ]` gui is a
+genuinely valuable signal, not an embarrassment to round up.
+
+`ROADMAP.md` stays authoritative if the two ever disagree; say so in the
+file's own header.
 
 ### Secondary: `D:\Dev\pdfce\docs\SESSION_LOG.md`
 
@@ -203,6 +262,11 @@ You are invoked explicitly by the engineer with one of these prompts:
 
 ### 1. "roadmap update — new request"
 
+**Also add the capability to `docs/FEATURES.md`'s *Planned* section**, in
+the predicted-order position the new entry implies, with all three boxes
+unticked. A Pass filed with no features row is how the two documents
+start to diverge.
+
 Read `ROADMAP.md`, add the new Pass entry/entries under *Backlog* or
 *Next up* (engineer assigns the ID), report back the file path + IDs.
 
@@ -212,8 +276,12 @@ Read `ROADMAP.md`, move the entry from *In progress*/*Next up* into
 *Shipped* (top, reverse-chronological) with date + summary + test
 results + invariant-check results (GUI-core separation via
 `cargo tree`, round-trip behavior) + packaging-smoke-test result if
-applicable. Promote any named follow-on Pass to *In progress*. Append
-a `SESSION_LOG.md` entry. Report back files edited + IDs moved.
+applicable. Promote any named follow-on Pass to *In progress*.
+**Tick the shipped capability's boxes in `docs/FEATURES.md` in this same
+filing** — core / cli / gui, only those the Pass actually delivered, and
+move the row from *Planned* to *Implemented* if the whole capability has
+now landed. Append a `SESSION_LOG.md` entry. Report back files edited +
+IDs moved + which `FEATURES.md` rows changed.
 
 ### 3. "decision log entry"
 

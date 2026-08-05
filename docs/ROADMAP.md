@@ -81,6 +81,102 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 24.1 — the ribbon: six tabs instead of one crowded row (decision 024 §6, Family A superseded per continuation 94; GUI) — 2026-08-05, chain `6449859` → `2b12efe`
+
+**What shipped.** Replaced a single wrapping toolbar row (~thirty controls
+across nine unrelated activities) with six ribbon tabs — **File · Edit ·
+Review · Measure · Tools · View**. The organising axis is pdfce's own:
+`main.rs` already separated commands that "govern what is on screen
+rather than the document" from ones that change it. **Not** any other
+product's menu structure — the Acrobat feature-parity RAG was not
+consulted for this Pass (`CLAUDE.md` rule 12 / R123 hold: it catalogs
+capability, never GUI mechanics).
+
+Two apparent contradictions with decision 024, resolved rather than
+overridden: (a) decision 024 §3.2 rejected a Tools tab because
+"duplicating their entry points is exactly the two-mental-models
+problem" — that objection was to **duplication**; the operator asked for
+a **move**, not a duplicate entry point. (b) Decision 024 §3.5 made File a
+menu; the operator listed File among the tabs he wanted. Neither is a
+reversal of the decision record — both are the record's own "make the
+groupings make sense" instruction, applied. **Measure is the one tab not
+named by the operator**, promoted to its own fixed tab (rather than a
+group under Insert) because it is his primary activity and its surface —
+the linear/radius/diameter tool trio plus ce-dimension group management —
+earns a tab on its own.
+
+**Reset-layout gained checkboxes and fixed a real defect in the same
+motion.** `Action::ResetPanelLayout` rebuilt the RIGHT dock only and had
+never been taught about Pass 34.1's LEFT dock — so an operator who
+disliked their left-dock arrangement had no way back to the default. It
+is now a chooser: left panels / right panels / visibility, all ticked by
+default, with Confirm disabled when every option is cleared.
+
+**Architectural choice worth flagging for future customization work:**
+`RibbonGroup` is a **stable identity**, not a source-order position. This
+is what makes the operator's stated future ("customizable like SolidWorks
+and MS Office") a *data* change later rather than a widget-moving
+exercise now. Reorder/hide UI and any persistence of a custom layout are
+**deliberately not built** in this Pass — `docs/ui_specs/ribbon-groupings-
+and-customization-architecture.md` (`pdfce-ui-specialist`, cited in the
+*Next up* entry below) recommends against building that surface yet, and
+this Pass follows that recommendation.
+
+**Known limit, documented in the code, not hidden by it.** `groups()`
+enforces group **membership** (a test asserts one owning tab per group)
+but does not yet drive tab-band **order** — the band renders in
+`main.rs`'s own source order. The declared File-tab order was already
+wrong once and caught only by a screenshot; this is an honest gap, not a
+silent one.
+
+**`2b12efe` — fix: three loose ends the ribbon Pass left, two of them
+found by a new test, filed same day.**
+
+1. The dock header's own Reset button still pushed the *old*
+   right-dock-only action — so for a window the app briefly had **two**
+   controls both labelled "reset the layout," one of them narrower than
+   the other and neither obviously authoritative. Worse than the original
+   defect. Rerouted to the new chooser; `Action::ResetPanelLayout` deleted
+   outright rather than left as dead code.
+2. `RibbonGroup::Fonts` was declared and gated to **no widget** — the
+   Tools tab promised a band that rendered nothing. It now opens the
+   panel on Font folders.
+3. The test written to catch (2), `every_ribbon_group_is_gated_to_a_widget`
+   — a mechanical scan of `main.rs`'s own source text for an `RG::` gate
+   per declared group, because the taxonomy lives as data in `ribbon.rs`
+   while the widgets are calls in `main.rs` and nothing in the type
+   system connects the two — **failed on its first run**, and found a
+   second offender: `MeasureGroups`. That one was **deleted rather than
+   given a widget**, because the ce-dimension group picker already lives
+   in the Tool Options dock pane (Pass 34.1), and a ribbon copy of it
+   would be exactly the two-mental-models duplication decision 024 §3.2
+   already ruled out.
+
+This mechanical-scan-of-source-text test is the same family as R151's
+`EditSession`-mutation-site scan, R154's dock-shape grep, and
+`check-ui-strings.sh` — a recurring pattern in this project: whenever a
+taxonomy is declared as data in one file and consumed as code in another,
+with no type-level link between them, a grep-based test is what actually
+catches drift, and a unit test over the data alone would not.
+
+**A principle worth recording where a future reader will hit it — now
+written into `ribbon.rs` itself:** *the ribbon picks the activity; the
+sidebar holds its controls.*
+
+**Gates.** `cargo fmt --check` clean; `cargo clippy --workspace
+--all-targets` clean, 0 warnings; 44/44 test binaries green (255 of them
+in `pdfce-gui`); `check-ui-strings` clean; `check-ledger-numbers` clean.
+**Invariant checks:** `cargo tree -p pdfce-core` shows no GUI dependency
+— GUI-core separation holds (this Pass touches only `pdfce-gui`). No
+writer/round-trip surface touched, so no round-trip byte-diff applies.
+
+**Ledger note.** Pass 24.1 was named and reserved by decision 024's own
+family numbering (filed 2026-08-04) — not a new ID; the next free Pass
+family remains unchanged by this filing. The remaining Passes in the
+same family — 24.0, 24.2–24.5 — are unaffected and still NOT STARTED; see
+the *Next up* entry, below, updated in this same filing to reflect the
+split.
+
 ### Pass 34.1 — the tool options move into a docked sidebar tab beside page navigation (GUI) — THREE slices of four — 2026-08-05, chain `e15f55b` (slice 1, the left dock) → `fae916d` (slice 2, Edit Text) → `13f3c0b` (slice 3, Add Text + Measure)
 
 **Librarian correction, continuation 95 — this heading merges two prior
@@ -10246,7 +10342,29 @@ which is the Pass 8.0 advance-preserving-surgery problem, not the Pass
 > own drawing **one text object holds all 237 pdf-dimension labels**, so
 > deleting *"a label"* today deletes **all of them**.
 
-### ★ Pass 24.0–24.5 — Ribbon command surface + the end of the floating Accept/Reject box (decision 024, filed 2026-08-04, DECIDED — NOT STARTED)
+### ★ Pass 24.0–24.5 — Ribbon command surface + the end of the floating Accept/Reject box (decision 024, filed 2026-08-04, DECIDED — Pass 24.1 SHIPPED, remainder NOT STARTED)
+
+> **⚠ UPDATE 2026-08-05 — Pass 24.1 (ribbon shell) SHIPPED, chain
+> `6449859` → `2b12efe`. Filed by `pdfce-librarian`.** See *Shipped* (top
+> of that section) for the full record: six tabs — File · Edit · Review ·
+> Measure · Tools · View — a reset-layout chooser that now covers both
+> docks, and `RibbonGroup` established as a stable identity rather than a
+> source-order position. **Family A's supersession, immediately below,
+> already accounted for this**: what Pass 24.1 built is the tab *shell*
+> only, and the shell was never the superseded half — the superseded half
+> was Family A's plan to carry each armed tool's *live controls* on a
+> contextual ribbon tab, which stays in `DockPanel::ToolOptions` (Pass
+> 34.1) as this banner's neighbor already says. No contradiction between
+> this filing and the continuation-94 banner below; read them together.
+> **24.0, 24.2–24.5 are unaffected by this filing and remain NOT
+> STARTED** — in particular Pass 24.0 (the fixed-anchor confirm strip)
+> has **not** shipped under that name; the operator-visible fix for the
+> *floating Accept/Reject box* complaint that named this whole family
+> arrived instead via Pass 34.0 (`GestureInterrupt::Commit`, a defect fix)
+> and Pass 34.1 (the dock relocation) — see those Shipped entries.
+> `docs/FEATURES.md`'s Planned row for "Pass 24.0, 24.2–24.5" is updated
+> in this same filing to drop 24.1 from that list (it already excluded
+> 24.1, so no change was needed there).
 
 > **⚠ UPDATE 2026-08-05 (continuation 94) — §3.3 Family A SUPERSEDED for
 > tool-options content; §3.3 Family B UNAFFECTED; two open questions
