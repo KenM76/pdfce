@@ -37,8 +37,9 @@ substantive.
 - **`docs/ROADMAP.md`** — the contract. Read every session.
 - **`docs/SESSION_LOG.md`** — most recent entry, for what the prior
   session left in flight.
-- **`docs/LEGAL.md`** — license status (undecided — don't publish),
-  PDF-spec sourcing/copyright rules, test-corpus rules.
+- **`docs/LEGAL.md`** — license status (**MIT**, decided 2026-08-01 —
+  but publishing still needs a go-ahead, rule 8), PDF-spec
+  sourcing/copyright rules, test-corpus rules.
 
 ## Project-specific rules (binding)
 
@@ -207,8 +208,9 @@ glossary entry and "Feature-fidelity discipline" standing rule.
 Before adding any Cargo dependency, classify its license (permissive /
 weak-copyleft / strong-copyleft — see `LEGAL.md` §6.1) and check
 `docs/PRIOR_ART.md`. Copyleft dependencies are always flagged to the
-user, never decided solo — pdfce's own license is still undecided
-(rule 8), and that decision gates what's even usable. Attribution is
+user, never decided solo. pdfce is **MIT** (rule 8), so GPL/AGPL is not
+merely discouraged — it cannot be linked at all, and weak-copyleft
+(LGPL/MPL) needs the operator's call on the linking terms. Attribution is
 **generated** via `cargo-about` into `THIRD_PARTY_LICENSES.md`, never
 hand-maintained; regenerate it whenever the dependency set changes and
 before any packaging pass. See `LEGAL.md` §6 and `ARCHITECTURE.md` §9.
