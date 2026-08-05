@@ -5860,9 +5860,14 @@ with a forward pointer.
   disclosure possible at all.** Filed by `pdfce-librarian` at the
   engineer's referral on Pass 30.0's ship (`a56bdd7`); scope is the
   **vector-edit planner surface** in `pdfce-core`, with consequences for
-  `pdfce-cli` and `pdfce-gui`. No separate `docs/decisions/027-*.md` file
-  — the reasoning fits here, and the Pass 30.0 roadmap entry carries the
-  build record.
+  `pdfce-cli` and `pdfce-gui`. Full record:
+  **`docs/decisions/027-refuse-what-has-no-good-reading-disclose-what-has-one.md`**
+  — filed **post-hoc against shipped code** and **not** consultant
+  output, which that file states up front; it exists because
+  `tools/check-ledger-numbers.py` derives the live decision ceiling from
+  `docs/decisions/NNN-*.md` **only**, so a decision recorded solely here
+  would be invisible to the R133 guard and the next session would be told
+  `next free is 027`.
 
   - **The decision, in one line.** Moving a clipping path is **disclosed,
     not refused**; deleting part of one **stays refused**. The
@@ -5936,3 +5941,23 @@ with a forward pointer.
     the second consecutive filing to name the §4 debt without clearing
     it; the next §3/§4 sync should be scheduled as work, not assumed to
     happen incidentally.
+  - **Same-day follow-up (Pass 30.1, `d025c1a`), appended here rather
+    than filed as a new decision, because it changes nothing — it
+    CONFIRMS.** Pass 30.1's Bézier-handle drag re-spells a `v`/`y`
+    segment as the `c` that states both control points (§8.5.2.1
+    Table 59's implicit control points cannot both stay implicit and
+    move) and **discloses it through this decision's channel unchanged**
+    — the first consumer beyond clipping paths, and the evidence that
+    `PlannedEdit::disclosures` was an API-shape fix rather than a
+    one-off. It refuses a straight segment (`NoHandleHere`) on the same
+    discriminator: an intent exists for reshaping a curve, none for
+    silently promoting a line the operator never drew as a curve. **One
+    cost recorded:** the `# Returns` blocks added by this decision's
+    signature change landed **above** each summary line on all five
+    methods, making *"# Returns"* the rustdoc one-liner for the family;
+    fixed in `d025c1a`. A uniform mechanical edit across a verb family
+    fails uniformly — worth expecting next time. **§4 is therefore also
+    behind on `plan_move_handle`, the `Handle` enum and
+    `VectorEditError::NoHandleHere`**, i.e. the debt named above grew in
+    the same hour it was recorded. Full text: the amendment section of
+    `docs/decisions/027-refuse-what-has-no-good-reading-disclose-what-has-one.md`.

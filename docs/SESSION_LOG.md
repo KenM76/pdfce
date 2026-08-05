@@ -12182,3 +12182,104 @@ added a canvas gesture and changed five `EditSession` signatures.
    remote** — these bundles are the only backup, and continuation 82's
    own lesson was that 27 commits can accumulate between two filings on
    the same day. **Commit the docs, then re-bundle.**
+
+---
+
+**AMENDMENT to continuation 83, written the same hour, before the entry
+above was committed — A THIRD PASS SHIPPED WHILE THIS FILING WAS BEING
+WRITTEN, AND IT COLLIDED WITH THE FILING.**
+
+Nothing above is rewritten. Everything above was true when written; two
+of its statements were overtaken by events within minutes, and the
+overtaking is itself the finding.
+
+**1. Pass 30.1 (`d025c1a`) — "Bézier handles: curves have an editable
+shape" — shipped mid-filing, and swept this filing's own uncommitted
+`ROADMAP.md` / `SESSION_LOG.md` edits into its commit.** The librarian
+discovered it by re-running `git status` at the end of the filing and
+finding its own edits gone from the working tree.
+
+**What it delivered** (sourced from the commit message, which is a full
+build report; **not** relayed as a ship report, and labelled as such in
+the roadmap entry): `plan_move_handle` moves control points while the
+on-curve node stays put, so a curve's **shape** is editable for the first
+time. Handles are addressed as `Incoming`/`Outgoing` — *"first-and-second
+are properties of an OPERATOR, and an operator says nothing about which
+node a front end has selected."* A `v` or `y` handle drag **re-spells the
+segment as `c`** (§8.5.2.1 Table 59's implicit control points) — *"the
+same materialize-rather-than-refuse move Pass 30.0 makes for `re`
+corners, disclosed for the same reason"*, making it the **first consumer
+of decision 027's disclosure channel beyond clipping paths**. A straight
+segment is **refused** (`NoHandleHere`), not curved. New CLI
+`handle-move --side incoming|outgoing`; `undo_identical=1` including the
+promotion, which restores a **shorter** operator than it undoes. **Gates
+as reported: 1,912 tests / 0 failing; fmt, clippy, check-ui-strings,
+check-ledger-numbers clean; no GUI dependency in core or render.**
+
+**★ Its own headline finding — a third occurrence of a pattern this
+project keeps producing.** The test
+`the_outgoing_handle_of_a_subpaths_last_node_does_not_reach_the_next_subpath`
+guards a real hazard (anchor indices are **object-scoped** and run across
+subpath boundaries, so "the next anchor" can belong to the next subpath).
+Its `is_start` filter **cannot fire** — every subpath-opening anchor
+carries `m`, `re`, or no keyword at all, and the **keyword match refuses
+all three first** — so **deleting the filter leaves the test passing**.
+Found by delete-it-and-rerun, not by reading. The filter was **kept and
+labelled** rather than quietly removed, because *"the KEYWORD MATCH is
+the load-bearing guard. Anyone weakening it on the belief that `is_start`
+is a backstop would open exactly the cross-subpath edit the test is named
+for, and the test would not notice."* Escalated as a **third** occurrence
+on `D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`
+(after R91/`Tw` and R-INV-4/`edit-text`).
+
+**Also in it: a rustdoc regression caused by decision 027's own signature
+change** — the five `EditSession` vector methods had their `# Returns`
+block inserted **above** their summary lines, making *"# Returns"* the
+one-line summary rustdoc showed for all five. Fixed in the same commit.
+Recorded so it is not read later as unrelated churn.
+
+**2. ⚠ PASS-ID COLLISION — `31.0` is BURNED.** The entry above filed this
+work under *Next up* as **Pass 31.0**, minted by the librarian from the
+uncommitted substrate in the working tree and flagged *"engineer to
+confirm."* The engineer had already committed it as **Pass 30.1**. The
+engineer's ID governs (update protocol). **31.0 must not be reused** —
+hard rule 2 makes IDs stable, and a minted-then-superseded ID is
+**retired, not recycled**, because readers and `check-ledger-numbers.py`
+have already seen 31.0 attached to handle editing. **Next free Pass
+family is 33** (32.0, per-run text deletion, is live and unbuilt).
+
+**The process lesson, and it is genuinely reusable.** A librarian filing
+that reads the **working tree** is reading state the engineer may commit
+at any moment. Reading it was still correct — it is the only reason the
+gate-figure caveat and this scope were captured at all — but: **mint an
+ID from tree state only after checking `git log` at the moment of
+writing**, and expect that work seen uncommitted may already exist under
+another number. **This single session produced both failure directions**:
+the ⚠ five-commit gap (commits with no filing) and this collision (a
+filing racing a commit). They have the same root: engineer and librarian
+writing to the same branch without a handshake on what is being numbered.
+
+**3. Two statements above are now superseded, corrected here rather than
+edited:**
+
+- *"Pass 31.0 (Bézier handles) is partly written and uncommitted"* under
+  **Still in flight** — it is **shipped**, as 30.1.
+- *"Pass 31.0 will make it worse again"* (the node-rung R117 argument) —
+  it **already did**. **Three** CLI-only vector capabilities now stack
+  behind the missing node rung: node move, `re`/reused-start node move,
+  and handle move. The engineer's stated reason for shipping no gesture
+  — *"wiring a handle gesture before there is a node rung to hang it on
+  would be building the second storey first"* — is correct **and** is the
+  argument for raising the node rung's priority, not for deferring it.
+
+**4. The gate figures now read, in order:** 1,878 at `9a0c093`
+(continuation 82) → **1,902** at the 29.0/30.0 stack tip *with the
+unfinished handle work in the tree* → **1,912** at `d025c1a`. The middle
+figure remains unpinned to a clean tree, as the entry above states; the
+`d025c1a` figure is pinned to a commit and is the current one.
+
+**5. Backup exposure is unchanged and one commit worse.** `d025c1a` is
+now the tip; the last recorded bundle is at `9a0c093`, **eight commits
+back**, and this amendment plus the ARCHITECTURE §12 decision-027 entry
+and `docs/decisions/027-*.md` are **uncommitted** at the time of writing.
+**Commit the docs, then re-bundle.**

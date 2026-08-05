@@ -146,18 +146,136 @@ again after that run.
   `crates/pdfce-core/src/vector/edit.rs` and
   `crates/pdfce-core/src/vector/mod.rs` **modified and uncommitted**
   (+248 lines — a `Handle` enum, a `NoHandleHere` refusal and a
-  `plan_move_handle`, i.e. **in-flight Pass 31.0 work**, see *Next up*).
-  So the tree the numbers were taken from is not reconstructable from
-  `a56bdd7` alone. Per this log's own standing discipline — *a test
-  count without a commit hash beside it is not a measurement* — treat
-  **1,902** as "the count at the tip of the 29.0/30.0 stack, with Pass
-  31.0 work in the tree," and re-measure on a clean tree before the
-  next ship.
+  `plan_move_handle`). So the tree the numbers were taken from is not
+  reconstructable from `a56bdd7` alone. Per this log's own standing
+  discipline — *a test count without a commit hash beside it is not a
+  measurement* — treat **1,902** as "the count at the tip of the
+  29.0/30.0 stack, with unfinished handle work in the tree," and
+  re-measure on a clean tree before the next ship.
+  **[AMENDED minutes later, same filing: that uncommitted work shipped
+  as `d025c1a`, Pass 30.1 — see its own Shipped entry directly below,
+  with its own gate figure of 1,912. The original text said "in-flight
+  Pass 31.0 work"; the engineer assigned it 30.1, not the librarian's
+  31.0. Corrected here rather than rewritten, and the burned 31.0 ID is
+  recorded under *Next up*.]**
 - **The count spans the unfiled window too.** The prior verified figure
   is **1,878 at `9a0c093`**; the +24 difference covers Passes 27.2, 28.0
   and the two hardening commits as well as 29.0/30.0. It is a
   branch-level figure and must not be split across Passes after the
   fact.
+
+### Pass 30.1 — Bézier handles: curves have an editable SHAPE (decision 027's materialize-rather-than-refuse pattern, applied one level down; core + CLI) — 2026-08-05, committed `d025c1a`
+
+**★ SOURCING CAVEAT, stated first.** This entry is written from
+`d025c1a`'s **own commit message**, which is unusually complete (a full
+build report, gates included). It was **not** relayed to the librarian as
+a ship report — the commit landed while this very filing was in progress,
+sweeping the librarian's in-flight `ROADMAP.md`/`SESSION_LOG.md` edits
+into itself. Everything below is either quoted from that message or
+verified directly against the repository. **Nothing is inferred.** If any
+of it is wrong, the correction belongs in a dated amendment here.
+
+**What shipped.** `plan_move_node` moves **on-curve anchors**, so every
+point it could move was a point the curve **passes through** — a curve's
+**curvature was not editable at all**. In the commit's own words: *"you
+could drag the ends of an arc anywhere on the page and never change how
+it bows between them."* **`plan_move_handle`** moves the control points,
+leaving the node itself exactly where it is.
+
+**Handles are addressed by direction of travel**, `Incoming` / `Outgoing`
+— not "first/second". The stated reason is a naming principle worth
+keeping: *"first-and-second are properties of an OPERATOR, and an
+operator says nothing about which node a front end has selected."*
+
+**The implicit control points — the same Pass 30.0 pattern, one level
+down.** Two of the three cubic spellings omit a control point (ISO
+32000-1 §8.5.2.1 Table 59): **`v`** makes its **first** control point the
+current point; **`y`** makes its **second** the endpoint. Such a handle
+cannot both stay implicit and move, so dragging it **re-spells the
+segment as the `c` that states both** — *"the same materialize-rather-
+than-refuse move Pass 30.0 makes for `re` corners, disclosed for the same
+reason."* That disclosure rides the channel decision 027 created
+(`PlannedEdit::disclosures`, R145) — the first consumer of it beyond
+clipping paths.
+
+**★ The test design here is the transferable part.** The failure mode of
+a `v`/`y` promotion is *"operands in the wrong order: it parses, it
+renders, and it draws a different curve."* So every `v`/`y` test **reads
+the resulting control points back through the decomposition** rather than
+comparing bytes — *"which would only compare my mistake to itself."*
+Verified by **planting the swap**; caught. `v` and `y` get **separate**
+tests rather than one plus an appeal to symmetry, because the spec RAG
+calls them *"the single most-confused pair in the operator set."*
+
+**A straight segment is REFUSED, not curved** (`VectorEditError::NoHandleHere`).
+Turning a line into a curve is a different operation with a different
+name; inferring it from a drag on a handle that was never drawn is the
+silent reinterpretation CLAUDE.md rule 4 forbids. (A rectangle edge is an
+`l` after Pass 30.0's expansion, so the same refusal covers it.)
+
+**★★ A TEST THAT DID NOT TEST WHAT IT CLAIMED — kept and corrected
+rather than quietly fixed.** The test
+`the_outgoing_handle_of_a_subpaths_last_node_does_not_reach_the_next_subpath`
+guards a real hazard: **anchor indices are object-scoped and run straight
+across subpath boundaries**, so "the next anchor" after a subpath's last
+node belongs to the **next subpath**, and reshaping its segment would
+edit geometry the operator never selected. An `is_start` filter was
+written for it, and a test named after it.
+
+**Deleting the filter leaves the test passing.** The filter **cannot
+fire**: every subpath-opening anchor carries `m`, `re`, or — after an
+`h`-reopen — **no keyword at all**, and the **keyword match refuses all
+three first**. Found by *"the same delete-it-and-rerun check used on the
+rest of this Pass, not by reading."* Both the code comment and the test
+doc now say so, *"because the consequence outlives the detail: the
+KEYWORD MATCH is the load-bearing guard. Anyone weakening it on the
+belief that `is_start` is a backstop would open exactly the cross-subpath
+edit the test is named for, and the test would not notice."* The filter
+**stays, as intent, explicitly labelled as unable to fire.** This is the
+**third** occurrence on this project of the dead-guard-behind-a-filter
+pattern (after R91/`Tw` and R-INV-4/`edit-text`) — escalated to
+`D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`.
+
+**Also fixed in the same commit — a rustdoc regression from Pass 30.0.**
+The five `EditSession` vector methods got their `# Returns` doc block
+inserted **above** their summary lines when decision 027's signature
+change landed, which makes *"# Returns"* the one-line summary rustdoc
+shows for all five. Moved to the end of each block. Recorded because it
+is a **direct side effect of decision 027's API change** and would
+otherwise look like unrelated churn.
+
+**New CLI surface:** `pdfce-cli handle-move --side incoming|outgoing`.
+Exercised end to end on a generated curve — plain rewrite; promotion
+(**disclosure printed, curve visibly reshaped in the render**); and the
+straight-segment refusal (**exit 9**). `undo_identical=1` on both edits,
+**including the promotion, which restores a SHORTER operator than the one
+it undoes.**
+
+**No GUI gesture, and the reason is a scheduling principle worth
+quoting:** *"the node rung of decision 025's ladder has not shipped, so
+node-move is CLI-only too. Wiring a handle gesture before there is a node
+rung to hang it on would be building the second storey first."* This is
+the **third** capability now stacked behind the node rung — see the ★
+priority note on the Pass 26.0–26.2 entry under *Next up*.
+
+**Gates, as reported in the commit message (not independently re-run at
+this filing):**
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | **1,912 passing, 0 failing** (+10 over the 29.0/30.0 figure) |
+| `cargo fmt` | clean |
+| `cargo clippy -- -D warnings` | clean |
+| `tools/check-ui-strings.sh` | clean |
+| `tools/check-ledger-numbers.py` | clean |
+| GUI-core separation | no GUI dependency in `pdfce-core` or `pdfce-render` |
+
+**Pass-ID note.** The librarian had filed this work under *Next up* as
+**Pass 31.0** minutes earlier, from the uncommitted substrate in the
+working tree. The engineer assigned **30.1**, and per the update protocol
+the engineer's ID governs. **31.0 is therefore BURNED and must not be
+reused** (hard rule 2 — IDs are stable; a minted-then-superseded ID is
+retired, not recycled). See the retired *Next up* entry.
 
 ### Pass 30.0 — Node-edit anchors whose coordinates the file never wrote: `re` corners, the reused subpath start, and the clipping-path disclosure (decision 027; core + CLI + GUI) — 2026-08-05, committed `a56bdd7`
 
@@ -255,9 +373,12 @@ explicit):** deleting part of a `W`/`W*` clip
 disagreement between the operator bytes and the decomposition
 (`SubpathStructureMismatch`); an out-of-range subpath or node index.
 
-**Not in this Pass:** Bézier control-point ("handle") editing — see
-**Pass 31.0** under *Next up*, which was in the working tree at filing
-time but is **not** in `a56bdd7`.
+**Not in this Pass:** Bézier control-point ("handle") editing — it was in
+the working tree at filing time but is **not** in `a56bdd7`. **[AMENDED
+same filing: it shipped as Pass 30.1, `d025c1a` — see the entry above.
+This originally pointed at *Next up*'s "Pass 31.0", an ID the librarian
+minted and the engineer's own 30.1 superseded within the hour; 31.0 is
+burned.]**
 
 ### Pass 29.0 — Composite (`/Type0` / CIDFont) text is EDITABLE: the R110 conditional lift, delivered (decision 021 R110; completes the outstanding scope of Pass 21.1; core + CLI) — **THE OPERATOR'S OWN DRAWINGS CAN NOW HAVE THEIR TEXT EDITED** — 2026-08-05, committed `a104536`
 
@@ -7810,7 +7931,40 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
-### Pass 31.0 — Bézier control-point ("handle") editing: a curve's SHAPE, not just its endpoints (named fast-follow to Pass 30.0; core + CLI, GUI gesture depends on the node rung — see Pass 26.0) — **PARTIALLY IN THE WORKING TREE AT FILING TIME, NOT COMMITTED**
+### ~~Pass 31.0~~ — Bézier control-point ("handle") editing — **ID BURNED, SUPERSEDED SAME HOUR. This work SHIPPED as Pass 30.1 (`d025c1a`); see its Shipped entry.** Retained below as the historical framing (append-only discipline)
+
+> **★ RESOLUTION, 2026-08-05, minutes after this entry was written.** The
+> librarian minted **31.0** for this work from the uncommitted substrate
+> sitting in the working tree, flagging it *"engineer to confirm"* per
+> the update protocol. The engineer had in fact already built it and
+> committed it as **Pass 30.1** (`d025c1a`) — a same-hour collision
+> between a librarian filing and an engineer commit, on the same branch,
+> on the same code.
+>
+> **The engineer's ID governs** (update protocol: the engineer assigns
+> Pass IDs). **31.0 is BURNED and must not be reused** — hard rule 2 says
+> IDs are stable and never reused for a different feature, and the safe
+> reading of that for a minted-then-superseded ID is *retired*, not
+> *recycled*: `check-ledger-numbers.py` and every reader of this file
+> will have seen 31.0 attached to handle editing, and reattaching it to
+> something else is precisely the drift R133 exists to prevent. **Next
+> free Pass family is 33** (32.0 below is live).
+>
+> **The process lesson, recorded because it will recur:** a librarian
+> filing that reads the *working tree* is reading state the engineer may
+> commit at any moment. Reading uncommitted work is still the right
+> call — it is how the gate-figure caveat and this scope got captured at
+> all — but **mint an ID from it only after checking `git log` at the
+> moment of writing**, and expect that a Pass built from tree state may
+> already exist under another number. See also the ⚠ FILING GAP block at
+> the top of *Shipped*: the same session produced both failure
+> directions, work filed without a commit and commits without a filing.
+>
+> Everything below described the work accurately; Pass 30.1's Shipped
+> entry supersedes it with what actually landed, including the parts this
+> scope did not anticipate (the cross-subpath `is_start` dead-filter
+> finding, and the rustdoc regression decision 027's signature change
+> introduced).
 
 **Pass ID librarian-assigned 2026-08-05** (next free after 30.0; engineer
 to confirm). **Referred to in Pass 30.0's code as *"a named fast-follow,
@@ -7994,11 +8148,19 @@ answer is here.
 > are now draggable, so **every** anchor on a page is addressable by the
 > core planner and **none** of it is addressable by hand. **This is an
 > R117 instance** — a shipped capability reachable from no surface is a
-> defect, not a gap — and it will get worse, not better, when **Pass
-> 31.0** (Bézier handles, above) lands, because a handle drag is
-> *inherently* a pointing gesture with no reasonable CLI ergonomics.
-> Node-rung GUI selection should be treated as the **head** of Pass 26.0,
-> not one of its parts.
+> defect, not a gap — and it **already got worse**, within the hour:
+> **Pass 30.1** (`d025c1a`, Bézier handles) shipped `plan_move_handle`
+> and `pdfce-cli handle-move`, and a handle drag is *inherently* a
+> pointing gesture with no reasonable CLI ergonomics. **[AMENDED —
+> originally read "it will get worse … when Pass 31.0 lands"; that ID was
+> burned and the work landed as 30.1. See the Pass 30.1 Shipped entry.]**
+> The engineer's own stated reason for shipping no gesture is the right
+> one and is the argument for this priority raise, not against it:
+> *"wiring a handle gesture before there is a node rung to hang it on
+> would be building the second storey first."* **Three** CLI-only vector
+> capabilities are now stacked behind the node rung (node move, `re`/
+> reused-start node move, handle move). Node-rung GUI selection should be
+> treated as the **head** of Pass 26.0, not one of its parts.
 
 **The answer, in one sentence:** the **subpath is a genuine rung** and it
 goes exactly where the measurement put it — between object and node —
