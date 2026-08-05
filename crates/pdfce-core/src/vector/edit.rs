@@ -214,6 +214,23 @@ pub enum VectorEditError {
         /// Subpaths the geometric decomposition reports.
         from_decomposition: usize,
     },
+    /// A handle drag named a node with no Bézier control point on that side.
+    ///
+    /// Either the neighbouring segment is straight (`l`, or a rectangle edge),
+    /// or there is no segment there at all (the end of an open subpath, or the
+    /// far side of a subpath boundary). Refused rather than converted: turning
+    /// a straight segment into a curve is a different operation with a
+    /// different name, and inferring it from a drag on a handle that was never
+    /// drawn is the silent reinterpretation rule 4 forbids.
+    #[error(
+        "node {index} has no {handle:?} curve handle — the segment on that side is straight or absent, and pdfce will not turn a straight line into a curve without being asked"
+    )]
+    NoHandleHere {
+        /// The node whose handle was asked for.
+        index: usize,
+        /// Which side was asked for.
+        handle: Handle,
+    },
     /// A node-drag named an anchor index past the object's anchor count.
     #[error("node index {index} is out of range (the object has {count} anchor(s))")]
     NodeOutOfRange {
@@ -980,6 +997,230 @@ pub fn plan_move_node(
     }
 }
 
+/// Which of a node's two Bézier control points ("handles") to move.
+///
+/// An on-curve anchor sits between at most two segments, and each contributes
+/// one control point to it: the segment arriving contributes its SECOND
+/// control point, the segment leaving its FIRST. They are the two levers that
+/// shape the curve on either side of the point without moving the point.
+///
+/// Named for direction of travel along the path rather than "first/second",
+/// because first-and-second are properties of an *operator* while an operator
+/// says nothing about which node a front end has selected.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Handle {
+    /// The control point governing the curve as it ARRIVES at the node — the
+    /// second control point of the segment that ends here.
+    Incoming,
+    /// The control point governing the curve as it LEAVES the node — the
+    /// first control point of the segment that starts here.
+    Outgoing,
+}
+
+/// Plan a **handle drag**: move one Bézier control point of `node_index`,
+/// leaving the on-curve node itself exactly where it is.
+///
+/// This is the operation that changes a curve's SHAPE. Without it
+/// [`plan_move_node`] can only move the points a curve passes through, so a
+/// curve's curvature was not editable at all.
+///
+/// # Implicit control points, and why a `v`/`y` drag rewrites the operator
+///
+/// Table 59 (§8.5.2.1) gives cubic segments three spellings, and two of them
+/// omit a control point by making it equal to a point they already have:
+///
+/// | operator | operands | first control | second control |
+/// |---|---|---|---|
+/// | `c` | `x1 y1 x2 y2 x3 y3` | `(x1,y1)` | `(x2,y2)` |
+/// | `v` | `x2 y2 x3 y3` | **the current point** | `(x2,y2)` |
+/// | `y` | `x1 y1 x3 y3` | `(x1,y1)` | **the endpoint** |
+///
+/// So dragging `v`'s incoming-side handle or `y`'s outgoing-side handle is
+/// an in-place operand rewrite, while dragging the OTHER one asks to move a
+/// point whose whole definition is "equal to that other point". It cannot
+/// stay implicit and also move, so the segment is re-spelled as the `c` that
+/// states both control points — the same materialize-rather-than-refuse move
+/// Pass 30.0 makes for `re` corners, and disclosed for the same reason.
+///
+/// # What is refused, and why not silently converted
+///
+/// A straight segment (`l`, or a rectangle edge) has no handles. Dragging one
+/// could only mean "turn this line into a curve", which is a different
+/// operation with a different name: it changes the object's shape vocabulary
+/// rather than adjusting a curve that already exists. Guessing it from a drag
+/// on a control point that was never drawn would be exactly the silent
+/// reinterpretation rule 4 forbids, so it is refused by name and a caller that
+/// wants the conversion asks for it.
+///
+/// # Errors
+///
+/// [`VectorEditError::NodeOutOfRange`], [`VectorEditError::NoHandleHere`]
+/// (the neighbouring segment is straight, absent, or across a subpath
+/// boundary), [`VectorEditError::DegenerateCtm`], or
+/// [`VectorEditError::MalformedOperand`].
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::content::ContentStream;
+/// use pdfce_core::vector::{decompose, NoXObjects, Matrix, Point, VectorObject};
+/// use pdfce_core::vector::edit::{plan_move_handle, Handle};
+///
+/// let cs = ContentStream::parse(b"0 0 m 10 40 60 40 70 0 c S".to_vec()).unwrap();
+/// let model = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+/// let VectorObject::Path(path) = &model.objects[0] else { unreachable!() };
+/// // Node 0 is the `m`; its OUTGOING handle is the `c`'s first control point.
+/// let plan = plan_move_handle(&cs, path, 0, Handle::Outgoing, Point::new(5.0, 90.0)).unwrap();
+/// assert_eq!(plan.content, b"0 0 m 5 90 60 40 70 0 c S");
+/// ```
+pub fn plan_move_handle(
+    content: &ContentStream,
+    obj: &PathObject,
+    node_index: usize,
+    handle: Handle,
+    to_page: Point,
+) -> Result<PlannedEdit, VectorEditError> {
+    let inv = obj.ctm.inverse().ok_or(VectorEditError::DegenerateCtm)?;
+    let to_user = inv.map_point(to_page);
+    let clip = clip_disclosure(content, obj);
+
+    let anchors = enumerate_anchors(content, obj.tokens.start, obj.tokens.end);
+    let count = anchors.len();
+    if node_index >= count {
+        return Err(VectorEditError::NodeOutOfRange {
+            index: node_index,
+            count,
+        });
+    }
+
+    // WHICH operator carries the handle:
+    //
+    // - Incoming: the operator that ENDS at this node — the node's own site.
+    // - Outgoing: the operator that ends at the NEXT node, since that is the
+    //   segment leaving here.
+    //
+    // Anchor indices are object-scoped and run straight across subpath
+    // boundaries, so "the next anchor" after a subpath's last node is the NEXT
+    // SUBPATH's first node — and reshaping its segment would edit geometry the
+    // operator never selected.
+    //
+    // What actually prevents that is the KEYWORD match below: every anchor
+    // that opens a subpath carries `m`, `re`, or (for an `h`-reopen) no
+    // keyword at all, none of which is a curve, so all three fall through to
+    // `NoHandleHere`. The `is_start` filter here is a second line of defence
+    // that cannot fire today. It is kept because it states the intent
+    // structurally rather than as a consequence of which keywords happen to
+    // exist — but it is NOT the thing to rely on when touching the keyword
+    // match, and the test that covers this boundary passes with this filter
+    // deleted. That was verified, not assumed.
+    let site = match handle {
+        Handle::Incoming => anchors.get(node_index),
+        Handle::Outgoing => anchors.get(node_index + 1).filter(|next| !next.is_start),
+    }
+    .ok_or(VectorEditError::NoHandleHere {
+        index: node_index,
+        handle,
+    })?;
+
+    // Which operand pair holds the requested control point, per Table 59 —
+    // `None` where the spelling leaves it implicit and the operator has to be
+    // promoted to `c`.
+    let pair: Option<usize> = match (site.keyword.as_slice(), handle) {
+        (b"c", Handle::Outgoing) => Some(0),
+        (b"c", Handle::Incoming) => Some(1),
+        // `v`'s second control point is explicit; its first IS the current
+        // point, so it can only move by becoming a `c`.
+        (b"v", Handle::Incoming) => Some(0),
+        (b"v", Handle::Outgoing) => None,
+        // `y` mirrors it: first explicit, second equals the endpoint.
+        (b"y", Handle::Outgoing) => Some(0),
+        (b"y", Handle::Incoming) => None,
+        // `m`, `l`, `re`, or an implicit start: no curve on that side.
+        _ => {
+            return Err(VectorEditError::NoHandleHere {
+                index: node_index,
+                handle,
+            });
+        }
+    };
+
+    let (bytes, disclosures) = match pair {
+        // In-place operand rewrite: the control point is already written down.
+        Some(p) => {
+            let mut nums = site.operands.clone();
+            let (xs, ys) = (p * 2, p * 2 + 1);
+            if ys >= nums.len() {
+                return Err(VectorEditError::MalformedOperand);
+            }
+            if let Some(x) = nums.get_mut(xs) {
+                *x = to_user.x;
+            }
+            if let Some(y) = nums.get_mut(ys) {
+                *y = to_user.y;
+            }
+            (emit_op(&nums, &site.keyword), clip)
+        }
+        // Promotion: re-spell the segment as the `c` that states BOTH control
+        // points, so the one that was implicit can hold its own value.
+        None => {
+            let promoted = promote_to_cubic(site, handle, to_user)?;
+            (
+                promoted,
+                [
+                    clip,
+                    vec![
+                        "This curve was written in a short form that left one of its \
+                         shaping handles implied by another point, so it could not be \
+                         moved on its own. The curve has been rewritten in the long \
+                         form that states both handles. It draws identically."
+                            .to_owned(),
+                    ],
+                ]
+                .concat(),
+            )
+        }
+    };
+
+    let mut edits = vec![(site.byte_start, site.byte_end, bytes)];
+    Ok(PlannedEdit {
+        content: splice(&content.buf, &mut edits),
+        operators_touched: 1,
+        disclosures,
+    })
+}
+
+/// Re-spell a `v` or `y` segment as the equivalent `c`, with the previously
+/// implicit control point set to `to_user`.
+///
+/// The two spellings are shorthands for a cubic whose omitted control point
+/// duplicates a point the operator already carries (Table 59), so the `c` form
+/// is exactly equivalent when it repeats that point — which is what makes this
+/// a re-spelling rather than a change of shape.
+///
+/// `v`'s implicit FIRST control point is the current point, which is not in
+/// the operator's own operands; it is the previous node, which the caller
+/// resolves. Here the value being written is the operator's new position, so
+/// the old one is not needed at all — the point is being replaced, not copied.
+fn promote_to_cubic(
+    site: &AnchorSite,
+    handle: Handle,
+    to_user: Point,
+) -> Result<Vec<u8>, VectorEditError> {
+    let &[a, b, c, d] = site.operands.as_slice() else {
+        return Err(VectorEditError::MalformedOperand);
+    };
+    let nums = match (site.keyword.as_slice(), handle) {
+        // `x2 y2 x3 y3 v` → `NEW x2 y2 x3 y3 c`: the dragged first control
+        // point takes the lead, the explicit second and the endpoint follow.
+        (b"v", Handle::Outgoing) => [to_user.x, to_user.y, a, b, c, d],
+        // `x1 y1 x3 y3 y` → `x1 y1 NEW x3 y3 c`: the explicit first control
+        // point stays, the dragged second takes the middle, endpoint last.
+        (b"y", Handle::Incoming) => [a, b, to_user.x, to_user.y, c, d],
+        _ => return Err(VectorEditError::MalformedOperand),
+    };
+    Ok(emit_op(&nums, b"c"))
+}
+
 /// The number of node-draggable and non-draggable anchors an object
 /// exposes, in decomposition order — the count a front end validates a node
 /// index against, and the value [`VectorEditError::NodeOutOfRange`] reports.
@@ -1163,6 +1404,15 @@ struct AnchorSite {
     /// Which operand **pair** carries the anchor's coordinates (`m`/`l` → 0,
     /// `v`/`y` → 1, `c` → 2). Ignored for non-editable anchors.
     pair_index: usize,
+    /// Whether this anchor OPENS its subpath (an `m`, an `re` corner, or an
+    /// implicit `h`-reopen) rather than ending a segment.
+    ///
+    /// Needed by handle editing to tell "the next anchor is the far end of my
+    /// outgoing segment" from "the next anchor belongs to the next subpath
+    /// entirely" — indices are object-scoped and run straight across the
+    /// boundary, so without this a handle drag on a subpath's last node would
+    /// silently reshape the following subpath's first segment.
+    is_start: bool,
 }
 
 /// Enumerate the object's anchors in the SAME order
@@ -1191,6 +1441,7 @@ fn enumerate_anchors(content: &ContentStream, start: usize, end: usize) -> Vec<A
                         operands: nums,
                         keyword: keyword.to_vec(),
                         pair_index: 0,
+                        is_start: true,
                     });
                     w.open_ends.clear();
                     w.current = true;
@@ -1212,6 +1463,7 @@ fn enumerate_anchors(content: &ContentStream, start: usize, end: usize) -> Vec<A
                             operands: nums.clone(),
                             keyword: keyword.to_vec(),
                             pair_index: 0,
+                            is_start: true,
                         });
                     }
                     w.current = true;
@@ -1292,6 +1544,7 @@ impl AnchorWalk {
                 operands: Vec::new(),
                 keyword: Vec::new(),
                 pair_index: 0,
+                is_start: true,
             });
             self.open_ends.clear();
             self.needs_move = false;
@@ -1303,6 +1556,7 @@ impl AnchorWalk {
             operands: nums.to_vec(),
             keyword: keyword.to_vec(),
             pair_index: anchor_pair,
+            is_start: false,
         });
     }
 }

@@ -5854,3 +5854,85 @@ with a forward pointer.
   that would ship a false claim on the operator's own files — and
   narrows two more. Decision 023 remains authoritative for its
   **container half**, which decision 025 adopts unchanged.
+
+- **2026-08-05 (continuation 83) — Decision 027: REFUSE what has no good
+  reading; DISCLOSE what has one. Plus the API change that makes
+  disclosure possible at all.** Filed by `pdfce-librarian` at the
+  engineer's referral on Pass 30.0's ship (`a56bdd7`); scope is the
+  **vector-edit planner surface** in `pdfce-core`, with consequences for
+  `pdfce-cli` and `pdfce-gui`. No separate `docs/decisions/027-*.md` file
+  — the reasoning fits here, and the Pass 30.0 roadmap entry carries the
+  build record.
+
+  - **The decision, in one line.** Moving a clipping path is **disclosed,
+    not refused**; deleting part of one **stays refused**. The
+    distinguishing test is **whether a legitimate operator intent
+    exists** for the gesture — not how dangerous it is, and not whether
+    the consequence is local.
+  - **Why that test and not "danger".** Both gestures are dangerous in
+    the same way: a `W`/`W*` clip governs what **other** content is
+    visible, so editing it changes the page **somewhere other than where
+    the operator is looking**. Ranking by danger gives no separation.
+    Ranking by intent does: **resizing a crop region is a real task** a
+    draughtsman performs on purpose, and refusing it leaves clip geometry
+    **permanently uneditable** — a refusal with no path to "yes", which
+    is a capability hole disguised as safety. **"Delete part of a clip"
+    has no reading worth guessing at** — there is no operation the
+    operator could have meant that pdfce could then perform correctly.
+    Refuse the one with no good reading; disclose the one that has one.
+  - **How this sits with rule 4, precisely.** The narrowed rule 4
+    (decision 024 §4.4) removes the confirm step from **direct
+    manipulations the operator performed** whose result is visible and
+    reversible in one undo. A clip drag is a direct manipulation, so the
+    narrowing applies — but it is the case where the narrowing's own
+    premise (*"fully visible on the canvas"*) is **weakest**, because the
+    visible result and the material result are in different places. That
+    tension is not resolved by fiat: it is **open operator question
+    (av)**, with disclose-and-proceed as the shipped default and a
+    **fixed-anchor confirm** (R121) named as the alternative if the
+    operator disagrees. A refusal is explicitly **not** among the
+    alternatives, for the permanent-uneditability reason above.
+  - **★ The API change, which is the durable half.**
+    `vector::PlannedEdit` gained **`disclosures: Vec<String>`**, and five
+    `EditSession` methods — `move_object`, `delete_object`,
+    `move_subpath`, `delete_subpath`, `move_node` — changed from
+    `Result<(), EditError>` to **`Result<Vec<String>, EditError>`**.
+    **The rationale generalizes past clipping paths and is why this is a
+    decision rather than a bug fix:** `Result<(), _>` has **no channel**
+    for "succeeded, *and* here is what you need to know." With no
+    channel, every caller drops that information **by default rather
+    than by decision**, and no review catches it because there is nothing
+    at the call site to see. This is the **same** failure `pending_note`
+    was added to the GUI to fix — now confirmed in two layers. Recorded
+    as **standing rule R145**.
+  - **Routing, both halves load-bearing.** CLI prints disclosures to
+    **stderr**, keeping the stdout record machine-parseable (**pinned by
+    a test**); GUI routes them through **`pending_note`**. A disclosure
+    only a human at a terminal can see is not delivered to a batch
+    caller; a disclosure on stdout breaks every script that parses it.
+  - **Two error variants REMOVED as a consequence:**
+    `VectorEditError::RectangleNode` and `::ImplicitNode` have no
+    remaining producers — Pass 30.0 materializes the operands whose
+    absence they reported (`re` → `m`/`l`/`l`/`l`/`h` per ISO 32000-1
+    §8.5.2.1 Table 59; an inherited subpath start → an explicit `m`).
+    Their tests were **rewritten, not deleted**; the rectangle one became
+    an **undo** test and is the stronger case, because undo must restore
+    a stream **shorter** than the one it undoes (five operators back to
+    one) — a length change a same-length rewrite never exercises.
+  - **Two standing rules originate here besides R145: R143** (a refusal's
+    stated reason is re-verified before it is used to scope work — from
+    Pass 29.0's self-justifying R-INV-4) and **R144** (removing a refusal
+    can remove an unrelated protection the refusal was incidentally
+    providing — from this Pass's clipping-path discovery, and the reason
+    a newly-lifted gesture is run against a **real file**, not only a
+    fixture, before shipping).
+  - **§4 body-section obligation — now THREE deep, and named again.**
+    §4's API contract is behind on: Pass 25.x's vector surface and the
+    ce-dimension model (`DimensionKind::Linear`'s `offset`/`text_along`,
+    `EditError::SidecarWrittenByNewerBuild` — both owed since decision
+    026), **plus** this decision's `PlannedEdit::disclosures`, the five
+    changed `EditSession` signatures, and the two removed
+    `VectorEditError` variants. All are **shipped core surface**. This is
+    the second consecutive filing to name the §4 debt without clearing
+    it; the next §3/§4 sync should be scheduled as work, not assumed to
+    happen incidentally.

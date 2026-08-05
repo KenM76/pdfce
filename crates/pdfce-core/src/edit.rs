@@ -408,6 +408,16 @@ pub enum CommandKind {
     /// command; undo restores the byte-identical pre-drag content stream.
     /// See [`EditSession::move_node`].
     MoveNode,
+    /// One Bézier **handle** (control point) of a path object was dragged
+    /// (Pass 30.1): one control-point pair was rewritten, or a `v`/`y`
+    /// segment re-spelled as the equivalent `c` so a control point it left
+    /// implicit could hold its own value (surgery, R46/§5.7). ONE undoable
+    /// command; undo restores the byte-identical pre-drag content stream.
+    /// Distinct from [`CommandKind::MoveNode`] because it changes a curve's
+    /// SHAPE while the on-curve node stays put — a front end labelling its
+    /// Undo control from the kind alone must not call it "move point".
+    /// See [`EditSession::move_handle`].
+    MoveHandle,
     /// ONE **subpath** of a path object was deleted (Pass 25.2): its
     /// construction operators were removed from the content stream while the
     /// object's other subpaths kept their exact bytes (surgery, R46/§5.7).
@@ -2125,16 +2135,6 @@ impl EditSession {
 
     // -- basic vector editing (Pass 9c-min, decision 011 §2.5) --------
 
-    /// # Returns
-    ///
-    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
-    /// the surgery owes — **empty** unless it had to change the *form* of an
-    /// operator to express the request (expanding an `re` rectangle whose
-    /// corner was dragged out of square, materializing the `m` an
-    /// implicitly-started subpath never had). The caller must surface them:
-    /// the drawing is unchanged but the bytes are not recoverable by
-    /// reversing the gesture, and rule 4 forbids letting the operator find
-    /// that out from a diff.
     /// **Move** the object at paint-order `object_index` on page
     /// `page_index` by the page-space displacement `(dx, dy)`, as one
     /// undoable command (decision 011 §2.5 operation 1).
@@ -2156,6 +2156,17 @@ impl EditSession {
     /// (undecodable page), [`EditError::DocumentEncrypted`],
     /// or [`EditError::CertificationForbidsChange`]. Every refusal happens
     /// **before** any mutation (rule 4).
+    ///
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — **empty** unless it had to change the *form* of an
+    /// operator to express the request (expanding an `re` rectangle whose
+    /// corner was dragged out of square, materializing the `m` an
+    /// implicitly-started subpath never had). The caller must surface them:
+    /// the drawing is unchanged but the bytes are not recoverable by
+    /// reversing the gesture, and rule 4 forbids letting the operator find
+    /// that out from a diff.
     pub fn move_object(
         &mut self,
         page_index: usize,
@@ -2176,16 +2187,6 @@ impl EditSession {
         })
     }
 
-    /// # Returns
-    ///
-    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
-    /// the surgery owes — **empty** unless it had to change the *form* of an
-    /// operator to express the request (expanding an `re` rectangle whose
-    /// corner was dragged out of square, materializing the `m` an
-    /// implicitly-started subpath never had). The caller must surface them:
-    /// the drawing is unchanged but the bytes are not recoverable by
-    /// reversing the gesture, and rule 4 forbids letting the operator find
-    /// that out from a diff.
     /// **Delete** the object at paint-order `object_index` on page
     /// `page_index`, as one undoable command (decision 011 §2.5 operation
     /// 2).
@@ -2205,6 +2206,17 @@ impl EditSession {
     /// [`EditError::DocumentEncrypted`], or
     /// [`EditError::CertificationForbidsChange`]. Every refusal happens
     /// before any mutation (rule 4).
+    ///
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — **empty** unless it had to change the *form* of an
+    /// operator to express the request (expanding an `re` rectangle whose
+    /// corner was dragged out of square, materializing the `m` an
+    /// implicitly-started subpath never had). The caller must surface them:
+    /// the drawing is unchanged but the bytes are not recoverable by
+    /// reversing the gesture, and rule 4 forbids letting the operator find
+    /// that out from a diff.
     pub fn delete_object(
         &mut self,
         page_index: usize,
@@ -2222,16 +2234,6 @@ impl EditSession {
         })
     }
 
-    /// # Returns
-    ///
-    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
-    /// the surgery owes — **empty** unless it had to change the *form* of an
-    /// operator to express the request (expanding an `re` rectangle whose
-    /// corner was dragged out of square, materializing the `m` an
-    /// implicitly-started subpath never had). The caller must surface them:
-    /// the drawing is unchanged but the bytes are not recoverable by
-    /// reversing the gesture, and rule 4 forbids letting the operator find
-    /// that out from a diff.
     /// **Delete one subpath** of the path object at paint-order `object_index`
     /// on page `page_index`, as one undoable command (Pass 25.2).
     ///
@@ -2274,6 +2276,17 @@ impl EditSession {
     /// [`EditError::DocumentEncrypted`], or
     /// [`EditError::CertificationForbidsChange`]. Every refusal happens before
     /// any mutation (rule 4).
+    ///
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — **empty** unless it had to change the *form* of an
+    /// operator to express the request (expanding an `re` rectangle whose
+    /// corner was dragged out of square, materializing the `m` an
+    /// implicitly-started subpath never had). The caller must surface them:
+    /// the drawing is unchanged but the bytes are not recoverable by
+    /// reversing the gesture, and rule 4 forbids letting the operator find
+    /// that out from a diff.
     pub fn delete_subpath(
         &mut self,
         page_index: usize,
@@ -2297,16 +2310,6 @@ impl EditSession {
         })
     }
 
-    /// # Returns
-    ///
-    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
-    /// the surgery owes — **empty** unless it had to change the *form* of an
-    /// operator to express the request (expanding an `re` rectangle whose
-    /// corner was dragged out of square, materializing the `m` an
-    /// implicitly-started subpath never had). The caller must surface them:
-    /// the drawing is unchanged but the bytes are not recoverable by
-    /// reversing the gesture, and rule 4 forbids letting the operator find
-    /// that out from a diff.
     /// **Move one subpath** of the path object at paint-order `object_index`
     /// on page `page_index` by a page-space `(dx, dy)`, as one undoable
     /// command (Pass 28.0).
@@ -2325,6 +2328,17 @@ impl EditSession {
     /// (a subpath whose start is inherited rather than written cannot be
     /// translated without tearing it), `MalformedOperand` or `DegenerateCtm`;
     /// plus the page/encryption/certification guards.
+    ///
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — **empty** unless it had to change the *form* of an
+    /// operator to express the request (expanding an `re` rectangle whose
+    /// corner was dragged out of square, materializing the `m` an
+    /// implicitly-started subpath never had). The caller must surface them:
+    /// the drawing is unchanged but the bytes are not recoverable by
+    /// reversing the gesture, and rule 4 forbids letting the operator find
+    /// that out from a diff.
     pub fn move_subpath(
         &mut self,
         page_index: usize,
@@ -2352,16 +2366,6 @@ impl EditSession {
         })
     }
 
-    /// # Returns
-    ///
-    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
-    /// the surgery owes — **empty** unless it had to change the *form* of an
-    /// operator to express the request (expanding an `re` rectangle whose
-    /// corner was dragged out of square, materializing the `m` an
-    /// implicitly-started subpath never had). The caller must surface them:
-    /// the drawing is unchanged but the bytes are not recoverable by
-    /// reversing the gesture, and rule 4 forbids letting the operator find
-    /// that out from a diff.
     /// **Drag** the anchor node `node_index` of the path object at paint-order
     /// `object_index` on page `page_index` to the page-space point `to`, as
     /// one undoable command (decision 011 §2.5 operation 3).
@@ -2388,6 +2392,17 @@ impl EditSession {
     /// [`EditError::DocumentEncrypted`],
     /// or [`EditError::CertificationForbidsChange`]. Every refusal happens
     /// before any mutation (rule 4).
+    ///
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — **empty** unless it had to change the *form* of an
+    /// operator to express the request (expanding an `re` rectangle whose
+    /// corner was dragged out of square, materializing the `m` an
+    /// implicitly-started subpath never had). The caller must surface them:
+    /// the drawing is unchanged but the bytes are not recoverable by
+    /// reversing the gesture, and rule 4 forbids letting the operator find
+    /// that out from a diff.
     pub fn move_node(
         &mut self,
         page_index: usize,
@@ -2405,6 +2420,66 @@ impl EditSession {
             )?;
             let path = vector_object_as_path(obj, object_index)?;
             Ok(crate::vector::plan_move_node(stream, path, node_index, to)?)
+        })
+    }
+
+    /// **Drag a Bézier handle** of the path object at paint-order
+    /// `object_index` on page `page_index`: move one control point of node
+    /// `node_index` to the page-space point `to`, leaving the on-curve node
+    /// itself exactly where it is (Pass 30.1).
+    ///
+    /// This is what makes a curve's SHAPE editable. [`Self::move_node`] can
+    /// only move points the curve passes THROUGH, so without this the
+    /// curvature between two anchors could not be changed at all.
+    ///
+    /// Content-stream surgery via [`crate::vector::plan_move_handle`]: one
+    /// control-point pair is rewritten in place, or — where the segment is a
+    /// `v`/`y` whose requested handle is implied by another point
+    /// (§8.5.2.1 Table 59) — that segment is re-spelled as the equivalent `c`
+    /// so the handle can hold its own value. Either way exactly one operator's
+    /// bytes change; every other object stays byte-verbatim. Lands as one
+    /// [`CommandKind::MoveHandle`]; undo restores the byte-identical pre-drag
+    /// stream.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::VectorEdit`] — including
+    /// [`VectorEditError::NoHandleHere`](crate::vector::VectorEditError::NoHandleHere)
+    /// when the segment on that side is straight or absent, which is refused
+    /// rather than converted (turning a line into a curve is a different
+    /// operation and is not inferred from a drag) — plus
+    /// [`EditError::PageOutOfRange`], [`EditError::VectorEditNoContents`],
+    /// [`EditError::VectorEditContent`], [`EditError::DocumentEncrypted`], or
+    /// [`EditError::CertificationForbidsChange`]. Every refusal happens
+    /// before any mutation (rule 4).
+    ///
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — **empty** unless a `v`/`y` had to be re-spelled as
+    /// `c`. The curve draws identically, but the bytes are not recoverable by
+    /// dragging back, and rule 4 forbids letting the operator find that out
+    /// from a diff.
+    pub fn move_handle(
+        &mut self,
+        page_index: usize,
+        object_index: usize,
+        node_index: usize,
+        handle: crate::vector::Handle,
+        to: crate::vector::Point,
+    ) -> Result<Vec<String>, EditError> {
+        self.vector_surgery(CommandKind::MoveHandle, page_index, |stream, model| {
+            let count = model.objects.len();
+            let obj = model.objects.get(object_index).ok_or(
+                crate::vector::VectorEditError::ObjectOutOfRange {
+                    index: object_index,
+                    count,
+                },
+            )?;
+            let path = vector_object_as_path(obj, object_index)?;
+            Ok(crate::vector::plan_move_handle(
+                stream, path, node_index, handle, to,
+            )?)
         })
     }
 

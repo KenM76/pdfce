@@ -2046,6 +2046,79 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Drag a curve handle** of a path object (Pass 30.1): move one Bézier
+    /// control point, leaving the on-curve node itself where it is. This is
+    /// the operation that changes a curve's SHAPE — `node-move` can only move
+    /// the points a curve passes through.
+    ///
+    /// `--side incoming` is the control point governing the curve as it
+    /// ARRIVES at the node, `--side outgoing` as it LEAVES. A straight
+    /// segment has no handle and is refused rather than silently turned into
+    /// a curve. `v` and `y` operators leave one control point implied by
+    /// another point (§8.5.2.1 Table 59); dragging that one re-spells the
+    /// segment as `c` and discloses it on stderr.
+    HandleMove {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// 0-based paint-order object index on the page.
+        #[arg(long)]
+        object: usize,
+        /// 0-based anchor node index (decomposition order).
+        #[arg(long)]
+        node: usize,
+        /// Which of the node's two handles to move.
+        #[arg(long, value_enum)]
+        side: HandleArg,
+        /// New control-point x, page space (points).
+        #[arg(long, allow_hyphen_values = true)]
+        x: f64,
+        /// New control-point y, page space (points).
+        #[arg(long, allow_hyphen_values = true)]
+        y: f64,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+}
+
+/// Which of a node's two Bézier handles [`Command::HandleMove`] moves.
+///
+/// A `clap`-side mirror of [`pdfce_core::vector::Handle`] rather than a
+/// re-export: the core type is not a `ValueEnum`, and making it one would put
+/// a CLI-parsing concern into the GUI-free core crate.
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum HandleArg {
+    /// The handle shaping the curve as it ARRIVES at the node.
+    Incoming,
+    /// The handle shaping the curve as it LEAVES the node.
+    Outgoing,
+}
+
+impl HandleArg {
+    /// The core enum this stands for.
+    const fn to_core(self) -> pdfce_core::vector::Handle {
+        match self {
+            HandleArg::Incoming => pdfce_core::vector::Handle::Incoming,
+            HandleArg::Outgoing => pdfce_core::vector::Handle::Outgoing,
+        }
+    }
+
+    /// A stable token for CLI output.
+    const fn token(self) -> &'static str {
+        match self {
+            HandleArg::Incoming => "incoming", // ui-text-exempt: stable output token
+            HandleArg::Outgoing => "outgoing", // ui-text-exempt: stable output token
+        }
+    }
 }
 
 /// Which dimension kind [`Command::DimensionAdd`] authors. Radius and diameter
@@ -2803,6 +2876,29 @@ fn run() -> ExitCode {
             page,
             object,
             node,
+            x,
+            y,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::HandleMove {
+            input,
+            page,
+            object,
+            node,
+            side,
+            x,
+            y,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_handle_move(&HandleMoveArgs {
+            input: &input,
+            page,
+            object,
+            node,
+            side,
             x,
             y,
             output: &output,
@@ -9423,6 +9519,77 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
         args.page,
         args.object,
         args.node,
+        args.x,
+        args.y,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// Grouped arguments for `handle-move` (Pass 30.1).
+struct HandleMoveArgs<'a> {
+    input: &'a Path,
+    page: u32,
+    object: usize,
+    node: usize,
+    side: HandleArg,
+    x: f64,
+    y: f64,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `handle-move` — move one Bézier control point, leaving its on-curve node
+/// where it is (Pass 30.1).
+///
+/// The operation that changes a curve's SHAPE; `node-move` can only move the
+/// points a curve passes through. A `v`/`y` segment whose requested handle is
+/// implied by another point is re-spelled as `c`, disclosed on stderr so the
+/// stdout record stays machine-parseable.
+fn cmd_handle_move(args: &HandleMoveArgs<'_>) -> u8 {
+    use pdfce_core::vector::Point;
+    let page_index = (args.page.max(1) - 1) as usize;
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    match session.move_handle(
+        page_index,
+        args.object,
+        args.node,
+        args.side.to_core(),
+        Point::new(args.x, args.y),
+    ) {
+        Err(err) => return report_edit_error(args.input, &err),
+        Ok(disclosures) => report_disclosures(&disclosures),
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "handle-move {} page {} object={} node={} side={} to=({},{}) mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.page,
+        args.object,
+        args.node,
+        args.side.token(),
         args.x,
         args.y,
         args.mode.name(),

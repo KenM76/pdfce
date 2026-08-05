@@ -81,6 +81,269 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ⚠ FILING GAP — five commits between `9a0c093` and `a104536` are SHIPPED CODE WITH NO ROADMAP ENTRY (noticed 2026-08-05 while filing Passes 29.0/30.0)
+
+**This is a ledger defect, recorded rather than quietly patched.** The
+librarian was dispatched for Passes 29.0 and 30.0 only, and has no build
+details for the commits below beyond their own subject lines — so no
+entries are invented for them here. What is on record is that they
+exist, are ancestors of everything filed below them, and are **not**
+described anywhere in this file:
+
+| Commit | Subject line (verbatim from `git log`) | Ledger state |
+|---|---|---|
+| `cf8caf7` | `Pass 27.2: ANSI and ISO drafting standards for ce dimensions` | **Pass 27.2 is still listed under *Next up* as "NOT STARTED"** |
+| `5536452` | `Pass 27.2 (GUI): the drafting standard is reachable without the CLI` | same entry, same problem |
+| `3a23694` | `harden: file-supplied ce dimension geometry is validated before it is drawn` | unfiled |
+| `328f5c2` | `fix: ISO text read upside down on a straight-down aligned ce dimension` | unfiled |
+| `d8b9735` | `Pass 28.0: subpath spans make move expressible; Escape pops one rung; panels report` | **Pass 28.0 appears nowhere in `docs/`** — the ID is otherwise unused, so no collision, but *Next up*'s "Subpath-level edit verbs — DELETE SHIPPED as Pass 25.2; MOVE still owed" is now stale |
+
+Two further docs-only commits in the same window (`87b237b`, `5e573b3`)
+amended `CLAUDE.md` — rule 4's narrowing and the stale-licence
+corrections — and **those** are reflected downstream (rule 4's amended
+wording and rule 8's MIT correction are live in `CLAUDE.md`), so they
+need no roadmap entry.
+
+**Action owed by the engineer, not by this filing:** dispatch the
+librarian with build details for `cf8caf7` / `5536452` (Pass 27.2, both
+halves) and `d8b9735` (Pass 28.0), plus the two hardening commits, so
+*Next up*'s Pass 27.2 entry can be moved to *Shipped* and Pass 28.0 can
+be entered at all. Until then, **treat this file as under-reporting the
+branch by five commits** — the exact failure mode R141's corollary
+warns about, one layer up: the roadmap says work is not done when it is.
+
+### Gate record for Passes 29.0 and 30.0 — measured at the tip of `pass-8-redaction` after `a56bdd7` — 2026-08-05
+
+**One block for two Passes, same reasoning as continuation 82's block:**
+the suite was run once, at the end, against the stack; no per-Pass
+before/after deltas were taken, so none are claimed.
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | **1,902 passing, 0 failing** |
+| `cargo fmt --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `tools/check-ui-strings.sh` | **clean — first verified run since `31d2fdc`** |
+| `tools/check-ledger-numbers.py` | **clean — first verified run since `31d2fdc`** |
+| `cargo tree -p pdfce-core -p pdfce-render` | zero `egui` / `eframe` / `winit` / `wgpu` matches |
+| Round-trip / minimal-diff | `--verify-undo` reports `undo_identical=1` on a synthetic fixture **and** on a real 272 KB linearized PDF |
+| Packaging smoke test | **not owed** — no packaging change |
+
+**The two gates continuation 82 explicitly refused to claim are now
+green.** `tools/check-ui-strings.sh` and `tools/check-ledger-numbers.py`
+had been unverified since `31d2fdc`; both ran clean here. That matters
+for `check-ledger-numbers.py` in particular, which is the R133 guard
+against Pass-family / standing-rule / question-letter ceiling drift —
+and this filing mints new Pass IDs (29.0, 30.0, and the librarian-
+assigned 31.0/32.0) and new rules (R143–R145), so the ceiling moved
+again after that run.
+
+**Two honest limits on this record, stated rather than glossed:**
+
+- **The measurement is not pinned to a hash.** The gates were reported
+  as covering "both Passes"; `a56bdd7` is the last commit of the pair.
+  At filing time `git status --short` showed
+  `crates/pdfce-core/src/vector/edit.rs` and
+  `crates/pdfce-core/src/vector/mod.rs` **modified and uncommitted**
+  (+248 lines — a `Handle` enum, a `NoHandleHere` refusal and a
+  `plan_move_handle`, i.e. **in-flight Pass 31.0 work**, see *Next up*).
+  So the tree the numbers were taken from is not reconstructable from
+  `a56bdd7` alone. Per this log's own standing discipline — *a test
+  count without a commit hash beside it is not a measurement* — treat
+  **1,902** as "the count at the tip of the 29.0/30.0 stack, with Pass
+  31.0 work in the tree," and re-measure on a clean tree before the
+  next ship.
+- **The count spans the unfiled window too.** The prior verified figure
+  is **1,878 at `9a0c093`**; the +24 difference covers Passes 27.2, 28.0
+  and the two hardening commits as well as 29.0/30.0. It is a
+  branch-level figure and must not be split across Passes after the
+  fact.
+
+### Pass 30.0 — Node-edit anchors whose coordinates the file never wrote: `re` corners, the reused subpath start, and the clipping-path disclosure (decision 027; core + CLI + GUI) — 2026-08-05, committed `a56bdd7`
+
+**Three refusals removed, one root cause.** `plan_move_node` refused
+`re` rectangle corners (`VectorEditError::RectangleNode`) and the
+implicit reused start of a subpath reopened after `h`
+(`::ImplicitNode`); `plan_move_subpath` refused that same inherited
+start. All three were the same problem wearing three names: **the anchor
+the operator grabbed has no operand of its own to overwrite.** All three
+have the same fix: **materialize the missing operand.**
+
+1. **`re` corners are now draggable.** `re x y w h` carries an origin
+   and a **size**, so three of the four corners appear in no operand at
+   all, and the fourth cannot move alone — editing `x y` slides all four.
+   Worse, the shape a dragged corner produces is in general **not a
+   box**, and `re` cannot spell a non-box. Fixed by expanding to the
+   equivalence **ISO 32000-1 §8.5.2.1 Table 59 states itself**:
+   `x y m` / `x+w y l` / `x+w y+h l` / `x y+h l` / `h`. Five operators
+   where there was one, each corner now its own editable operand.
+2. **The reused subpath start is now draggable.** A subpath reopened
+   after `h` inherits the previous subpath's start point (§8.5.2.1)
+   rather than restating it. It now **gets the `m` the file omitted**,
+   inserted immediately **before** the segment that inherited it.
+3. **`plan_move_subpath` refused the same inherited start** — same fix.
+   This one is not a convenience: translating only the operands that
+   **exist** moves every point of the subpath **except the first**, which
+   **shears** the shape instead of moving it. The refusal was standing in
+   for a correctness bug.
+
+**★ The critical spec detail: the trailing `h` in the `re` expansion is
+load-bearing, and only one test can see it.** `re` appends a **closed**
+subpath. Four line segments **without** the `h` leave it **open** — which
+is **invisible on a fill** and **wrong on a stroke** (two line caps where
+there should be a corner join). Every geometric assertion in the new test
+file — corner positions, operand counts, bbox, round-trip — **passes
+without the `h`**. Only the dedicated `closed` test fails. Verified by
+planting the bug, not by reasoning about it.
+
+**Differential testing, three planted bugs, three exact catches.** Each
+defect was introduced deliberately and caught by exactly the test
+claiming to catch it, and no other: (a) dropped trailing `h`, (b) corner
+order rotated by one, (c) the materialized `m` emitted **after** the
+inherited segment instead of before it. (Filed as a further occurrence of
+the existing `D:\dev\rag\rust\prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`
+finding — see RAG escalations in the session log.)
+
+**★★ THE FINDING THAT MATTERS MOST — a lifted refusal removed an
+unrelated protection nobody had written down.** Clipping paths in real
+PDFs are overwhelmingly `re` rectangles (§8.5.4's canonical `re W n`
+page-clip idiom). While `re` corners were refused as un-draggable, that
+**accident** was the **only** thing preventing a node drag from silently
+changing which **other** content is visible — `plan_delete_subpath` was
+the only planner that ever checked for `W`/`W*`. Found by running the new
+drag against a **real** PDF instead of a fixture: the first closed
+4-anchor object on the first page of the first real file tried **was a
+full-page clip**. Dragging its corner rendered correctly, and made an
+unrelated drawing **elsewhere on the page vanish**, with nothing at all
+changing at the cursor. Fixture-only testing would not have surfaced it —
+the finding is filed to `C:\personal_rag\pdf\` and generalized as **new
+standing rule R144**.
+
+**Posture decision (decision 027): moving a clipping path is DISCLOSED,
+not refused; deleting part of one stays REFUSED.** The distinguishing
+test is **whether a legitimate intent exists**. Resizing a crop region is
+a real task, and refusing it would leave clip geometry **permanently**
+uneditable — a refusal with no path to "yes". "Delete part of a clip" has
+no reading worth guessing at. **Refuse the one with no good reading;
+disclose the one that has one.** Filed to `ARCHITECTURE.md` §12 as
+**decision 027**.
+
+**API change — `PlannedEdit` gained `disclosures`, and five `EditSession`
+signatures changed with it.** `vector::PlannedEdit` gained
+`disclosures: Vec<String>`, and `move_object`, `delete_object`,
+`move_subpath`, `delete_subpath` and `move_node` now return
+`Result<Vec<String>, EditError>` instead of `Result<(), EditError>`.
+**The rationale is worth more than the mechanics:** the old
+`Result<(), _>` shape is precisely **why every caller dropped this class
+of information by default rather than by decision** — there was nothing
+in the type to drop. Same failure `pending_note` was added to the GUI to
+fix. Generalized as **new standing rule R145**. CLI prints disclosures to
+**stderr**, keeping the stdout record machine-parseable (**pinned by a
+test**); the GUI routes them through `pending_note`.
+
+**Two error variants REMOVED, their tests REWRITTEN not deleted.**
+`VectorEditError::RectangleNode` and `::ImplicitNode` have no remaining
+producers and are gone. The rectangle variant's test became an **undo**
+test, and it is the **stronger** case: undo must restore a stream
+**shorter** than the one it undoes (five operators back to one), which a
+same-length rewrite never exercises. `undo_identical=1` confirmed on a
+real file as well as in fixtures.
+
+**Still refused after this Pass (unchanged, named so the boundary is
+explicit):** deleting part of a `W`/`W*` clip
+(`VectorEditError::ClippingPath`, Pass 25.2); a subpath-structure
+disagreement between the operator bytes and the decomposition
+(`SubpathStructureMismatch`); an out-of-range subpath or node index.
+
+**Not in this Pass:** Bézier control-point ("handle") editing — see
+**Pass 31.0** under *Next up*, which was in the working tree at filing
+time but is **not** in `a56bdd7`.
+
+### Pass 29.0 — Composite (`/Type0` / CIDFont) text is EDITABLE: the R110 conditional lift, delivered (decision 021 R110; completes the outstanding scope of Pass 21.1; core + CLI) — **THE OPERATOR'S OWN DRAWINGS CAN NOW HAVE THEIR TEXT EDITED** — 2026-08-05, committed `a104536`
+
+**In-place text editing now works on composite (`/Type0` / CIDFont)
+fonts.** Previously **every** composite run was refused by name
+(R-INV-4). This is not an edge case for this operator: his SolidWorks
+drawing `SW41177.pdf` is set in a **subset CenturyGothic `/Type0` font**,
+so **no text edit on his real file was possible at all** — the shipped
+text-editing feature (Passes 14.0–14.3, 19.x) did not apply to the files
+he actually works on.
+
+**Verified on the real file, from the SAVED bytes:**
+`edit-text SW41177.pdf --find "FAR SLOT" --replace "NEAR SLOT"` took the
+page from **3 FAR + 1 NEAR to 2 FAR + 2 NEAR**, confirmed by
+**re-extracting text from the saved file** (not from in-memory state);
+render reported **`notdef=0 substituted=0 unsupported=0`**. Synthetic
+fixture `composite-editable.pdf` round-trips `ABC` → `CBA`.
+
+**★★ THE FINDING WORTH RECORDING — the refusal had become
+SELF-JUSTIFYING.** R-INV-4's comment cited the encoding path being
+"single-byte end to end" as the reason composite could not be supported.
+The three narrowings that **made** it single-byte — `MatchRun::old_codes`,
+`glyph_advance`, `carried_codes` — **each cited the refusal as their own
+justification.** The reasoning was a closed loop: the limitation was
+being derived from its own consequences. A prior session's survey
+(continuation 78, recorded verbatim on the Pass 21.1 In-progress entry)
+estimated **four coupled pieces of work**. **Re-surveying before starting,
+most was already built:**
+
+- `ExtractFont::width` **already** read `Widths::Composite` (`/W`, `/DW`,
+  ISO 32000-1 §9.7.4.3) — survey item 2 was done.
+- `emit_literal_string` **already** octal-escaped arbitrary bytes
+  (§7.3.4.2), so **no hex-string emitter was needed at all** — survey
+  item 3 was based on a false premise.
+- `CompositeEncoding` **existed, was tested, and was called by nothing**
+  (shipped `b98589a`, continuation 78).
+- `ShowSlot` **already** carried `code: u32` plus a per-slot width
+  (shipped `31d2fdc`, continuation 78).
+
+**Generalized as new standing rule R143:** a limitation can outlive its
+cause and then be re-derived from its own consequences; **a refusal's
+stated reason is re-verified before it is used to scope work.**
+
+**★ Spec detail worth keeping, easy to get silently wrong — §9.3.3.**
+Word spacing (`Tw`) applies to the **single-byte code 32 ONLY**: *"It
+shall not apply to occurrences of the byte value 32 in multiple-byte
+codes."* `glyph_advance` therefore takes an **explicit `single_byte`
+flag** rather than testing `code == 32`. Getting this wrong mis-spaces
+composite text **silently** — nothing errors, the page just says
+something with the wrong metrics.
+
+**What is still refused, and now ONLY this:** a font with **no
+`/ToUnicode`**, or one whose `/ToUnicode` is **non-injective** (two codes
+→ one character, so writing that character back has no single answer).
+**Both are properties of the FONT that no pdfce work can fix** — which
+makes decision 021's **R110 "permanent vs not-yet" distinction
+load-bearing** rather than merely descriptive, for the first time.
+
+**New fixture, and why it had to be built:**
+`fixtures/synthetic/text/cidfonttype2-noninjective-tounicode.pdf`
+(2,178 bytes) — two CIDs mapping to `U+0041`. **Neither existing
+composite fixture could carry that test once editing worked:** the
+injective one now **edits**, and the no-`/ToUnicode` one **never
+decodes**, so no anchor is found and `NoMatch` is the honest answer — the
+test would have **passed without ever reaching the refusal**. Same class
+of vacuity the continuation-78 near-miss recorded.
+
+**Test REWRITTEN, not deleted — `composite_refusal_reachable.rs`.** It
+asserted *"every composite run refuses"*, which is **no longer a
+guarantee but a limitation**. It also worked by relying on `match_run`
+**failing for want of slots**, so giving composite runs slots would have
+made it pass **on the very defect it existed to catch** — the exact
+disarming mechanism flagged at continuation 78 and filed to
+`D:\dev\rag\rust\regression_test_guard_via_incidental_property_disarms_silently.md`.
+The discriminator that survives (search for text **known absent**) was
+recorded then and used here.
+
+**Ledger note on the Pass ID.** This Pass delivers what the *In progress*
+entry **Pass 21.1** was opened for (decision 021's R110 conditional lift
+of R-INV-4). The engineer assigned **29.0**, and per hard rule 2 that ID
+stands. Pass 21.1's In-progress entry is annotated as **scope discharged
+by Pass 29.0** and retained in place (append-only) — its continuation-76
+and continuation-78 build logs remain the record of how the substrate
+got built. See the flag in the report/session log: whether 21.1 should be
+formally retired or kept open for any residue is the engineer's call.
+
 ### Gate record for the seven Passes filed in continuation 82 (25.2, 25.3, 25.4, 25.5, 25.6, 27.0, 27.1) — measured ONCE, at `9a0c093` — 2026-08-04
 
 **Why this is a session-level block and not seven per-Pass lines.** All
@@ -6535,7 +6798,25 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 
 ## In progress
 
-### Pass 21.1 — FF-C composite-run editability under verified-injective `/ToUnicode` (decision 021 R110; promoted from ★ Pass 21.x's Next-up slice list, 2026-08-04, on Pass 21.0's ship)
+### Pass 21.1 — FF-C composite-run editability under verified-injective `/ToUnicode` (decision 021 R110; promoted from ★ Pass 21.x's Next-up slice list, 2026-08-04, on Pass 21.0's ship) — **SCOPE DISCHARGED 2026-08-05 by Pass 29.0 (`a104536`). See the Pass 29.0 Shipped entry (top of Shipped) for the delivery record.** Retained below in place (append-only discipline) because its continuation-76 and continuation-78 build logs ARE the record of how 29.0's substrate got built
+
+**Why this entry is annotated rather than moved.** Pass 21.1's remaining
+scope at continuation 78 was, verbatim below, *"wiring is the entire
+remaining scope of Pass 21.1."* That wiring shipped as **Pass 29.0**, a
+separate engineer-assigned ID (hard rule 2: IDs are stable and never
+reused, so 29.0 is not a renumbering of 21.1 — it is a second Pass that
+finished the first one's work). Everything 21.1 itself landed —
+`58fe3f6` (R109 `fsType`), `c0ed638` (`injective_inverse()`, the R110
+primitive), `8e08e80`/`87d3cb0`/`6b69956` (the unreachable-refusal fix),
+`31d2fdc` (`ShowSlot` widening), `b98589a` (`CompositeEncoding`) — is
+shipped code and is described here and nowhere else.
+
+**Open for the engineer, not resolved by this filing:** whether 21.1 is
+now formally RETIRED, or stays open for residue. The one candidate
+residue named in its own text is the **`Identity-H`-only decode limit** —
+other CMap encodings on a composite run remain invisible to the decode
+path, unchanged by Pass 29.0. Also unresolved: open question **(r)**, the
+two interim `fsType` disclose-and-proceed defaults from `58fe3f6`.
 
 **Promoted the same session Pass 21.0 shipped (`48c6b77`), per decision 021's own instruction not to call FF-C done without it.** See the Pass 21.0 Shipped entry (top of Shipped) and the ★ Pass 21.x entry (Next up, below) for full framing. Scope: core + CLI. `/ToUnicode` verified injective (every CID maps to exactly one scalar, no two CIDs share a scalar) per font, per session, before a composite run FF-C authored becomes editable (R110); conditionally lifts R-INV-4 for that font only. Non-injective, absent, or partial `/ToUnicode` keeps refusing — `Identity-H` with no `/ToUnicode` remains R65's permanent hard skip, untouched by this Pass. **Also owed alongside 21.1, named at Pass 21.0's ship and not yet assigned its own slice number:** R109's `fsType` donor-permission read, which decision 021 scoped into 21.0 but did not ship there (see the Pass 21.0 Shipped entry's "NOT yet implemented" note) — whoever picks up 21.1 should confirm with the engineer whether to fold the fsType read in here or open it as a small standalone slice before 21.2.
 
@@ -7529,6 +7810,75 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
+### Pass 31.0 — Bézier control-point ("handle") editing: a curve's SHAPE, not just its endpoints (named fast-follow to Pass 30.0; core + CLI, GUI gesture depends on the node rung — see Pass 26.0) — **PARTIALLY IN THE WORKING TREE AT FILING TIME, NOT COMMITTED**
+
+**Pass ID librarian-assigned 2026-08-05** (next free after 30.0; engineer
+to confirm). **Referred to in Pass 30.0's code as *"a named fast-follow,
+decision 011 §2.5."***
+
+**The gap, stated precisely.** `plan_move_node` moves **on-curve anchors
+only**. A curve's endpoints can be dragged; **its shape cannot be changed
+at all**. Every curved subpath in every document is, today, shape-frozen.
+
+**Scope:**
+
+- Dragging the handle of a `v` or `y` operator requires **promoting it to
+  `c`** — `v` and `y` have one **implicit** control point each (ISO
+  32000-1 §8.5.2.1 Table 59), so the handle the operator grabs has **no
+  operand of its own to overwrite**. This is exactly Pass 30.0's root
+  cause and exactly Pass 30.0's fix (materialize the missing operand),
+  applied one level down, from anchors to control points.
+- A straight `l` segment **has no handle** and must **stay refused**
+  rather than silently becoming a curve — the fuzzy-never-sneaky boundary
+  (CLAUDE.md rule 4): "turn this line into a curve" is a **different
+  operation with a different name**, and inferring it from a drag on a
+  handle that was never drawn is a silent reinterpretation.
+- A rectangle edge is an `l` after Pass 30.0's expansion, so the same
+  refusal covers it — no separate case.
+
+**In-flight substrate observed in the working tree at this filing (NOT in
+`a56bdd7`, NOT gated, NOT shipped):** `crates/pdfce-core/src/vector/`
+carries an uncommitted +248 lines adding a `Handle { Incoming, Outgoing }`
+enum, a `VectorEditError::NoHandleHere { index, handle }` refusal, and a
+`plan_move_handle`. Recorded here so a later session does not re-derive
+it, and flagged so the Pass-29.0/30.0 gate figures are read with it in
+mind (see the gate block at the top of *Shipped*).
+
+### Pass 32.0 — Per-RUN text deletion: deleting a label must not delete 236 of its neighbours (core + CLI + GUI)
+
+**Pass ID librarian-assigned 2026-08-05** (next free after 31.0; engineer
+to confirm).
+
+**The defect, measured on the operator's own drawing.** Deleting a text
+object on `SW41177.pdf` removes **all 237 pdf-dimension labels at once**,
+because the producer puts **every** label on the sheet inside **one**
+`BT`…`ET` text object. Deletion is object-granular; the operator's mental
+unit is the **run**.
+
+**This is the text-side twin of Passes 25.0–25.2 + 28.0.** Those Passes
+established that a CAD exporter's "object" boundary reflects its
+graphics-state batching and has no relation to the entity the draughtsman
+drew, and answered it with **subpath**-level hit testing, selection and
+edit verbs for paths. The **same** producer behaviour on the **text**
+side already has its hit-test half shipped (Pass 18.5/18.6 hit-test per
+show-text run, `a4c345b`/`627c807`), but **no delete verb** — so a run can
+be selected and cannot be removed. Both producer behaviours are recorded
+empirically in `C:\personal_rag\pdf\`
+(`lesson_20260804_cad_export_one_text_object_holds_every_dimension_label.md`,
+`lesson_20260804_cad_export_one_path_object_per_drawing_view.md`).
+
+**Expected shape, by analogy to `plan_delete_subpath` (Pass 25.2) — to be
+confirmed at scoping, not assumed:** remove exactly one run's show
+operator and re-emit everything else byte-verbatim; deleting the only run
+deletes the text object; a structure-mismatch guard, because a silent
+disagreement between the operator bytes and the run decomposition would
+delete a **different label** from the one picked and be **undetectable
+afterwards** (the result is well-formed and round-trips). Advance
+accounting is the live open question the path-side twin did not have:
+removing a run leaves the following runs' positioning to be preserved,
+which is the Pass 8.0 advance-preserving-surgery problem, not the Pass
+25.2 operator-span problem.
+
 ### ★ Pass 24.0–24.5 — Ribbon command surface + the end of the floating Accept/Reject box (decision 024, filed 2026-08-04, DECIDED — NOT STARTED)
 
 **Source:** `docs/decisions/024-ribbon-command-surface-and-the-accept-reject-problem.md`
@@ -7632,6 +7982,23 @@ confirmation stays (R98).
 (1,744 lines). **This record resolves the flag filed at continuation 81
 and retained below** — the flag stays for the append-only history, the
 answer is here.
+
+> **★ PRIORITY RAISED 2026-08-05 — the NODE rung is now the only thing
+> standing between a shipped capability and the operator.** Decision 025
+> designed a four-rung ladder (Page → Container → Object → Subpath →
+> Node); only the **subpath** rung shipped (Pass 25.1, `5df8f26`, plus
+> Pass 28.0's spans and Escape handling). **Node-move is reachable from
+> `pdfce-cli` only — there is no GUI gesture for it at all.** As of
+> Pass 30.0 (`a56bdd7`) node editing does substantially more than it did
+> when 26.0 was scoped: `re` rectangle corners and reused subpath starts
+> are now draggable, so **every** anchor on a page is addressable by the
+> core planner and **none** of it is addressable by hand. **This is an
+> R117 instance** — a shipped capability reachable from no surface is a
+> defect, not a gap — and it will get worse, not better, when **Pass
+> 31.0** (Bézier handles, above) lands, because a handle drag is
+> *inherently* a pointing gesture with no reasonable CLI ergonomics.
+> Node-rung GUI selection should be treated as the **head** of Pass 26.0,
+> not one of its parts.
 
 **The answer, in one sentence:** the **subpath is a genuine rung** and it
 goes exactly where the measurement put it — between object and node —
@@ -7794,7 +8161,18 @@ current rung — rather than two descend mechanisms sharing one gesture.
 `pdfce-ui-specialist` should own the gesture question; the engineer owns
 whether decision 023 needs an amendment record.
 
-### Subpath-level edit verbs — **DELETE SHIPPED as Pass 25.2 (`0423179`); MOVE still owed** (follow-on to Pass 25.1)
+### Subpath-level edit verbs — **DELETE SHIPPED as Pass 25.2 (`0423179`); MOVE APPARENTLY SHIPPED as Pass 28.0 (`d8b9735`) BUT UNFILED — see the ⚠ FILING GAP block at the top of *Shipped*** (follow-on to Pass 25.1)
+
+**FLAGGED STALE 2026-08-05.** Commit `d8b9735`'s own subject line reads
+*"Pass 28.0: subpath spans make move expressible; Escape pops one rung;
+panels report"* — which is this entry's outstanding **move** half, plus
+decision 025's Escape behaviour. No build details were supplied to the
+librarian, so nothing is claimed here beyond the subject line and the
+independent corroboration that **Pass 30.0 (`a56bdd7`) modified an
+existing `plan_move_subpath`** — the function this entry says is owed
+already exists. **Do not read this entry's "MOVE still owed" as current.**
+The engineer owes the librarian a filing for `d8b9735`; until then the
+roadmap under-reports the branch.
 
 **UPDATED 2026-08-04 (continuation 82).** The **delete** half of this
 entry **shipped as Pass 25.2** — `plan_delete_subpath`, three refusals
@@ -11761,6 +12139,24 @@ decision 025, (aq)–(au) from decision 026:**
   "ISO 129-1 conformant". A purchasing decision, therefore the
   operator's. *Default:* do not purchase; keep the non-claiming strings.
 
+- **(av) Moving a clipping path — is DISCLOSE the posture you want, or
+  should it be a confirm?** (2026-08-05, decision 027.) Dragging a
+  corner of a `re` clip changes **which other content on the page is
+  visible** — the change the operator sees is at the cursor; the change
+  that matters can be anywhere. pdfce currently **discloses and
+  proceeds** (CLI → stderr, GUI → `pending_note`), on the reasoning that
+  resizing a crop region is a **real task** and refusing it would leave
+  clip geometry permanently uneditable, whereas *deleting part* of a clip
+  has no reading worth guessing at and stays refused. The narrowed rule 4
+  (decision 024 §4.4) supports disclose: this is a **direct manipulation
+  the operator performed**, visible on the canvas and undoable in one
+  step. The counter-argument is that the *consequence* is **not** visible
+  at the point of manipulation, which is the one condition the narrowing
+  assumed away. *Default:* keep disclose-and-proceed as shipped.
+  *Alternative if you disagree:* promote to a **fixed-anchor** confirm
+  (R121) for clip geometry specifically — not a refusal, since that
+  reinstates the permanent-uneditability problem.
+
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
   not-yet-granted authorization (see "In progress" GIT STATUS above).
@@ -14060,12 +14456,99 @@ decision 025, (aq)–(au) from decision 026:**
   artifact of the change*, R142 says *verify that the change has an
   artifact at all.*
 
-  **Ceiling is now R142** (was R129 at continuation 81's filing).
+- **R143 — A refusal's STATED REASON is re-verified before it is used to
+  scope work (2026-08-05, continuation 83; librarian-assigned; process
+  rule, promoted from an instance).** A refusal is a claim about the
+  world at the moment it was written. Code around it keeps changing; the
+  comment does not. Worse, a refusal that has been in place long enough
+  starts to *generate its own evidence* — every narrowing made downstream
+  because "we refuse that case anyway" becomes, on later reading, a
+  reason the case cannot be supported. **The reasoning closes into a
+  loop, and nothing inside the loop is false; it is just circular.**
+  *Instance:* R-INV-4 (composite text is not editable) carried a comment
+  citing the encoding path being *"single-byte end to end."* The three
+  narrowings that **made** it single-byte — `MatchRun::old_codes`,
+  `glyph_advance`, `carried_codes` — **each cited R-INV-4 as their
+  justification.** A continuation-78 survey, reasoning from that comment,
+  estimated **four coupled changes**; a fresh survey at Pass 29.0 found
+  the composite width table already read (`Widths::Composite`), the
+  string emitter already byte-general (`emit_literal_string`'s octal
+  escaping, so the "needs a hex emitter" item rested on a **false
+  premise**), and `CompositeEncoding` **built, tested and called by
+  nothing**. **Rule:** before scoping work against a refusal, (a) read
+  the refusal's reason as a **claim to test**, not a fact; (b) check
+  whether the code it cites still behaves that way; and (c) check whether
+  anything cites the refusal **back** — a mutual citation between a
+  refusal and its own preconditions is the signature of this defect.
+  **Corollary:** the same re-survey is owed to a *deferral*. "Estimated N
+  coupled changes" ages exactly as badly as "we refuse that."
+  Cross-references R93 and
+  `D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`
+  (fifth confirmed occurrence on this project).
+
+- **R144 — Removing a refusal can remove an unrelated PROTECTION the
+  refusal was incidentally providing (2026-08-05, continuation 83;
+  librarian-assigned; safety rule, promoted from an instance).** A
+  refusal blocks a gesture. Whatever else that gesture could have
+  reached is protected **as a side effect**, by nobody's decision and in
+  nobody's notes. Lift the refusal and the side-effect protection goes
+  with it — **silently**, because it was never named, so no test asserts
+  it and no reviewer misses it. *Instance:* while `re` rectangle corners
+  were refused as un-draggable (Pass 25.x), that accident was **the only
+  thing** preventing a node drag from changing which **other** content on
+  the page is visible. Clipping paths in real files are overwhelmingly
+  `re` rectangles (§8.5.4's `re W n` idiom); only `plan_delete_subpath`
+  ever checked for `W`/`W*`. Pass 30.0 lifted the corner refusal, and the
+  **first** closed 4-anchor object on the **first** page of the **first**
+  real file tried was a full-page clip — dragging its corner rendered
+  correctly and made an unrelated drawing **elsewhere on the page**
+  vanish, with nothing at all changing at the cursor. **Rule:** when
+  lifting a refusal, enumerate what the refused gesture could now
+  **reach**, not merely what it can now **do** — the answer lives in the
+  sibling planners' guards (what do the *other* verbs check for on this
+  object kind, and why doesn't this one?). **Corollary, and the reason
+  this is a rule rather than a war story: a fixture cannot surface this
+  class.** Fixtures contain what their author put there; incidental
+  protection is by definition about what the author did not think of.
+  **Run a newly-lifted gesture against a real file before shipping it.**
+
+- **R145 — A planner that can produce operator-visible information
+  RETURNS it; `Result<(), E>` is a shape that drops it by default
+  (2026-08-05, continuation 83; librarian-assigned; API-design rule,
+  promoted from an instance).** `Result<(), E>` says the operation
+  either succeeded or named a reason it did not. It has **no channel for
+  a third thing** — succeeded, **and** here is what the operator needs to
+  know about it. When that channel is absent, every caller drops the
+  information **by default rather than by decision**, and no code review
+  can catch it because there is nothing at the call site to see.
+  *Instance:* Pass 30.0's clipping-path disclosure had nowhere to go
+  until `vector::PlannedEdit` gained `disclosures: Vec<String>` and the
+  five `EditSession` vector methods (`move_object`, `delete_object`,
+  `move_subpath`, `delete_subpath`, `move_node`) changed to
+  `Result<Vec<String>, EditError>`. **This is the same failure
+  `pending_note` was added to the GUI to fix** — twice now, in two
+  layers. **Rule:** an operation governed by CLAUDE.md rule 4 (anything
+  pdfce inferred, corrected, expanded or reinterpreted) returns its
+  disclosures as **data**, never as a log line, never as a doc comment,
+  never as "the GUI will know." **Corollary on routing, both halves
+  load-bearing:** the CLI prints disclosures to **stderr** so the stdout
+  record stays machine-parseable (**assert this with a test** — Pass 30.0
+  does); the GUI routes them to the operator-visible note surface. A
+  disclosure that only a human staring at a terminal can see is not
+  delivered to a batch caller, and a disclosure that pollutes stdout
+  breaks every script that parses it.
+
+  **Ceiling is now R145** (was R142 at continuation 82's filing).
   R130–R134 are decision 025's and R135–R139 are decision 026's, both
   assigned at filing per the R107–R110 precedent; **R136 and R138 were
   filed with broadened scope** and say so in their own text. R140–R142
-  are librarian-originated from this continuation's shipped work and its
-  process failures.
+  are librarian-originated from continuation 82's shipped work and its
+  process failures; **R143–R145 are librarian-originated from Passes
+  29.0/30.0** (continuation 83) — R143 and R144 from the two headline
+  findings, R145 from decision 027's API change. Note for
+  `tools/check-ledger-numbers.py`: it ran **clean at the 29.0/30.0 gate**,
+  i.e. **before** this filing minted R143–R145 and Pass IDs 31.0/32.0 —
+  re-run it after this commit.
 
 ## Update protocol
 
