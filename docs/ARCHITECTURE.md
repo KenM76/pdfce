@@ -5742,6 +5742,20 @@ with a forward pointer.
     25.2's `plan_delete_subpath` **are** shipped core surface and remain
     owed a §4 line at the next §3/§4 sync — carried forward from
     continuation 81, now with more on it.
+  - **★ FORWARD POINTER, added 2026-08-05 (continuation 85): this record
+    is AMENDED by decision 028**
+    (`docs/decisions/028-the-node-rung-marks-handles-hit-priority-and-the-clip-gate.md`).
+    **025 is not edited.** 028 answers the three things 025 §11 left
+    open (the node ceiling, the breadcrumb's design, the node marks) and
+    **finds three defects in 025 as written** — the Node readout row
+    needs a **handle-presence clause** (decision 023 §4.5's *"the
+    node-level readout must not imply handles exist"* went false when
+    Pass 30.1 shipped handle editing); the **already-live, ungated
+    node-drag gesture must be REPLACED AND GATED by the rung, not
+    shipped alongside it** (else the ladder ships the very
+    two-mechanisms failure 025 §2.1 refused for descent); and the
+    **Subpath readout row omits the descent disclosure the Object row
+    has**. **Read 025 and 028 together.**
 
 - **2026-08-04 (continuation 82) — Decision 026 filed: linear
   ce-dimension geometry, the offset model, and drafting standards.**
@@ -5961,3 +5975,176 @@ with a forward pointer.
     `VectorEditError::NoHandleHere`**, i.e. the debt named above grew in
     the same hour it was recorded. Full text: the amendment section of
     `docs/decisions/027-refuse-what-has-no-good-reading-disclose-what-has-one.md`.
+
+- **2026-08-05 (continuation 85) — Decision 028 filed: the node rung made
+  visible — marks, handles, hit priority, the breadcrumb, and the clip
+  gate.** Source:
+  `docs/decisions/028-the-node-rung-marks-handles-hit-priority-and-the-clip-gate.md`.
+  Returned by `pdfce-ui-specialist`, dispatched to design the Node rung
+  before Pass 26.0 is built. **A design REVIEW of decision 025, not a new
+  architectural choice** — 025 §11 explicitly deferred the ceiling value,
+  the breadcrumb's visual design and the operator-facing noun for a node
+  to a specialist. **025 is amended, never edited** (append-only, per
+  `docs/decisions/README.md`); a forward pointer is on 025's own ledger
+  entry above. **No new Pass family** — 26.0–26.2 were already claimed by
+  025. **No new operator question** — the posture recommendation is filed
+  as an amendment to the existing **(av)**.
+  - **★ The one REQUIRED item, and it is a shipping-ORDER requirement,
+    not a cosmetic one.** There is **already a blind, ungated node-drag
+    gesture in the shipped GUI**: `vector_edit_tool::classify_drag` runs
+    over `object_provider::object_sample_points`, **the whole object's
+    flat anchor list**, consulted with no rung state and with no marks
+    drawn beforehand. It **must be REPLACED AND GATED** by the Node rung
+    **in Pass 26.0's head slice** — shipping the rung *alongside* it
+    would give the ladder **a second, unscoped, invisible route to the
+    same edit**, which is precisely the two-mechanisms failure **decision
+    025 §2.1 diagnosed for descent and refused** (*"Two predicates
+    answering 'descend?' is R92's shape"*), reproduced one rung down.
+  - **★ This is R144's SECOND firing, on the same Pass (30.0), and it
+    yields standing rule R147.** `Subpath::anchors()` yields `start`
+    **plus each segment end**, so **`re` corners and `h`-reopened
+    inherited starts have ALWAYS been candidates for that gesture**.
+    Before Pass 30.0 the drag was **refused on release**
+    (`VectorEditError::RectangleNode` / `::ImplicitNode`); after Pass
+    30.0 the **identical drag succeeds**, so **on a clipping path,
+    content elsewhere on the page can now change from a gesture that
+    previously did nothing**. The engineer did not check it **because he
+    was reasoning about the core and the protection lived in the
+    callers** — which is R147 exactly: *when a refusal is removed, audit
+    its CALLERS, not just its own module.* **R144 says the protection can
+    vanish; R147 says where to look for it.**
+  - **A ROADMAP claim is corrected by this, and the correction is
+    recorded rather than quietly patched.** The Pass 26.0–26.2 entry's
+    *"every anchor on a page is addressable by the core planner and
+    **none** of it is addressable by hand"* is **imprecise**: `re`
+    corners and reused starts were already reachable by hand. **Only
+    Bézier handles (Pass 30.1) are genuinely unreachable without the
+    CLI.** The **R117 framing of the priority raise survives intact** —
+    it is *more* justified, not less.
+  - **Two further defects in 025 as written.** (1) **Decision 023 §4.5 is
+    now factually wrong** — *"Nodes ≠ handles … the node-level readout
+    must not imply handles exist"* went false when **Pass 30.1 shipped
+    handle editing the same day** (`d025c1a`). 025's Node readout row
+    needs a **handle-presence clause**, and that clause is the **only way
+    an operator ever learns handles exist**, making it an **R83**
+    obligation. (2) **025's Subpath readout row omits the descent
+    disclosure the Object row has** — at the rung immediately above the
+    node rung, the operator is never told that double-clicking descends.
+  - **The design answers, each reusing an existing vocabulary rather than
+    minting a fourth.** **Node marks:** hollow 6×6 unselected / filled
+    8×8 selected, in **SCREEN** space, `SUBPATH_OUTLINE_COLOR` + the app
+    accent — **square vs. circle carries node-vs-handle without relying
+    on colour (R84 satisfied by construction)**; ceiling **300 nodes per
+    subpath**, **provisional under R86**, with an explicit *"points not
+    shown"* string — **never silent truncation**. **Handles:** hollow
+    5×5 / filled 7×7, shown for **every node of the ENTERED subpath that
+    has one**, not selected-node-only, **because handles are what let the
+    operator decide WHICH node to pick**; tied to their node by a
+    **dashed 1.0 px arm reusing `APPROXIMATE_OUTLINE_DASH`**'s existing
+    *"this is not a measured edge"* signal; a straight segment's
+    **absent** handle is disclosed **in the status line**, never as a
+    ghost widget (R83; the core already refuses by name via
+    `NoHandleHere`). **Hit priority: handle (5 px) → node (6 px) →
+    subpath body → nothing — the SMALLER target first**, because a handle
+    sits close to its node **exactly when the curve is nearly flat**, and
+    node-priority would make it unreachable precisely then; **handle drag
+    is Node-rung only**. **Keyboard:** Tab/Shift+Tab cycle nodes in
+    **OBJECT-scoped** order (**R92** — so what Tab lands on and what
+    `node-move --node N` addresses never disagree), arrows nudge 1 pt,
+    Shift+arrow 10 pt. **Breadcrumb** (net new — nothing exists today):
+    `Page › Path #5870 › Part #667 › Point #1,204`, each segment
+    clickable to ascend; **its growth after the first double-click is
+    itself the confirmation that the gesture did something**, which is
+    how 025 §3.5's *"inside-with-nothing-selected looks identical to
+    outside"* hazard is actually discharged. **Pass 28.0's subpath move
+    gets its GUI gesture here** — a plain drag on the entered subpath's
+    body, which falls out of the hit-priority ladder's third rank for
+    free.
+  - **Recommendation on open question (av) — RECORDED AS A
+    RECOMMENDATION, NOT A RESOLUTION; shipped behaviour is unchanged.**
+    Post-hoc disclosure is **SUFFICIENT** for `re`-corner expansion and
+    `v`/`y` → `c` handle promotion (**Tier 1** — the picture is
+    **byte-identical**, nothing changed where the operator is not
+    looking, Ctrl+Z is a complete escape hatch; **gating these would be
+    decision 024's "Over-application A"**), and **INSUFFICIENT for a clip
+    move** (**Tier 2**). The reasoning is argued from the narrowing's own
+    text: the Tier-1 carve-out is *"a direct manipulation whose result is
+    **fully visible on the canvas**"*, and a clip's consequence **lands
+    elsewhere on the page, possibly outside the viewport**. **★ It meets
+    Tier 2's test even though NOTHING WAS INFERRED in the fuzzy sense** —
+    the uncertainty is about **WHERE THE CONSEQUENCE LANDS**, not about a
+    guessed value, so it is Tier 2's *second* limb (*a disclosure must be
+    read before the result becomes document state*) that is satisfied,
+    not its first. **The mechanism introduces nothing new:** route
+    clip-gated drags to the **EXISTING window-anchored tool strip**
+    (decision 024 §4.2's Tier 2 mechanism), Accept/Reject at its **fixed
+    right anchor** — satisfying the operator's hard constraint (**R121**)
+    that a confirm must not be positioned relative to the page — Enter
+    accepts, **Escape rejects through the existing `resolve_escape`
+    chain** (**R122**), and the strip shows the **CORE-AUTHORED
+    disclosure string verbatim, never a `ui_text` paraphrase**. **One new
+    symbol only:** a read-only provider predicate
+    `object_is_clipping_path(index) -> bool`, **mirroring the core's
+    existing `is_clipping_path` (`edit.rs:595`) rather than re-deriving
+    it** (**R92**).
+  - **No §3/§4 body-section update this filing.** Nothing of the node
+    rung has shipped; the marks, handles, breadcrumb and hit priority are
+    all `pdfce-gui` view state and correctly never reach §4. The **one**
+    §4 obligation this record would create — `object_is_clipping_path` —
+    is a **`pdfce-gui` provider predicate**, not core surface, and it is
+    **conditional on Ken's answer to (av)**, so it is filed as *owed if
+    adopted* rather than written into §4 as if it existed. **The standing
+    §4 debt is unchanged and still unpaid** (Pass 25.x's vector surface,
+    decision 026's ce-dimension model, Pass 28.0's `Subpath` data-model
+    change, decision 027's `disclosures` + five changed signatures + two
+    removed variants, Pass 30.1's `plan_move_handle` / `Handle` /
+    `NoHandleHere`) — **this is the third consecutive filing to name it
+    without clearing it**, and it remains a scheduled *Next up* item that
+    must be dispatched as its own task with its own read of the crates.
+
+- **2026-08-05 (continuation 85) — Two correctness fixes to shipped GUI
+  surface, filed with no Pass ID** (`5b2682b`, `075e8f8`). Recorded in
+  §12 rather than only in `ROADMAP.md` because both carry a reusable
+  finding. **(1) `5b2682b` — a refused page rotation told the operator
+  nothing.** The GUI rotate buttons discarded `rotate_pages`'s `Result`
+  behind a comment asserting *"A refusal is impossible for a ±90 turn on
+  a page the view is already displaying"* — while the same comment named
+  the certification gate. `rotate_pages` opens with
+  `check_certification()?`, so on an enforced DocMDP document
+  (**§12.8.4 Table 258**) it refuses, and the operator got a button that
+  did nothing and said nothing. **The impossibility claim was already
+  contradicted by `pdfce-core`'s own
+  `an_enforced_certification_refuses_structural_edits_by_name`.** Fixed
+  through `pending_note`, **quoting the engine's reason verbatim** — a
+  fixed *"could not rotate"* tells an operator holding a signed document
+  nothing about **why**. **★ The finding: a discard WITH a justification
+  is harder to find than a bare one, and no more correct.** The bare
+  `let _ =` instances were fixed in `d8b9735` **precisely because they
+  looked like shortcuts**; this one **read as considered and survived**.
+  Filed as an audit-methodology corollary to **R145**, not a new rule —
+  its actionable content is **R143**'s (*a stated reason is a claim to
+  test*) pointed at a different construct. **The audit's other candidate
+  was deliberately LEFT**: `refresh_pages`'s
+  `if let Ok(pages) = self.session.pages()` **is a read**, and keeping
+  the previous page list is reasonable refresh degradation — recorded so
+  a future audit does not convert a sound degradation into a spurious
+  error surface. **(2) `075e8f8` — the node-grab radius is a screen
+  measure, not a page measure.** `NODE_GRAB_TOLERANCE` was a fixed `6.0`
+  in **page** space, its own doc comment calling zoom-invariance *"a
+  follow-up refinement"* — the defect was **known, named and deferred in
+  writing**, which is why it did not read as a bug. Renamed
+  `NODE_GRAB_SCREEN_TOLERANCE_PX` and converted through
+  `canvas::screen_tolerance_to_page` like every sibling tolerance;
+  `classify_drag` now **takes the tolerance as an argument** so the pure
+  classifier stays free of view state. **Swelling is the dangerous
+  direction on this project's files**: a measured CAD export holds
+  **6,681 anchors in one path object** and the grab searches the whole
+  object's list, so at high zoom the radius sweeps up anchors from
+  subpaths the operator is not pointing at. **★ A test self-correction
+  worth keeping:** the first fixture placed anchors **10 pt apart** and
+  **failed at zoom 0.25** — **correctly**, because at that zoom they are
+  2.5 screen px apart and a 6 px grab genuinely cannot distinguish them.
+  That is what *"zoomed too far out to aim at individual points"* means.
+  The fixture was corrected to separate the anchors **on screen at every
+  tested zoom**, so the test asserts the **operator-experienced
+  property** rather than restating the implementation.
