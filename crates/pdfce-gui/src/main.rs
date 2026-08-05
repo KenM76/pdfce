@@ -2893,7 +2893,7 @@ impl PdfceApp {
             return;
         };
         match doc.session.delete_object(page_index, object_index) {
-            Ok(()) => {
+            Ok(_) => {
                 doc.canvas_selection.clear();
                 doc.vector_drag = None;
                 // `refresh_pages` FIRST (decision 018 §10 hazard 2 audit,
@@ -2984,7 +2984,7 @@ impl PdfceApp {
             .map_err(std::string::ToString::to_string)
             .err();
         match outcome {
-            Ok(()) => {
+            Ok(_) => {
                 doc.canvas_selection.clear();
                 doc.vector_drag = None;
                 // `refresh_pages` FIRST, for the same reason whole-object
@@ -11848,6 +11848,34 @@ const MAX_SELECTION_BADGES: usize = 48;
 /// measurement (today: every text object).
 const APPROXIMATE_OUTLINE_DASH: (f32, f32) = (6.0, 4.0);
 
+/// Surface the disclosures a vector surgery owes into the narrator.
+///
+/// # Why a note and not silence
+///
+/// Dragging one corner of a rectangle out of square, or moving a shape whose
+/// start point the file never wrote down, forces pdfce to change HOW the shape
+/// is written in order to do what was asked (`re` cannot spell a
+/// non-rectangle; a subpath cannot be moved off a start it inherits). The
+/// picture is unchanged, so nothing on screen would tell the operator — and
+/// dragging back does not restore the original bytes. Rule 4 (fuzzy, never
+/// sneaky) applies to representation, not just to geometry.
+///
+/// Routed through `pending_note` because this runs under the `&mut OpenDoc`
+/// borrow, where `self.edit_note` is unreachable; the app drains it once the
+/// borrow ends. Its neighbours' habit of discarding an outcome to compile is
+/// exactly what that channel exists to stop.
+///
+/// Multiple disclosures are joined rather than overwritten: keeping only the
+/// last is the silent-truncation failure, and no current surgery emits more
+/// than one anyway.
+fn disclose_vector_edit(doc: &mut OpenDoc, disclosures: &[String]) {
+    if disclosures.is_empty() {
+        return;
+    }
+    // ui-text-exempt: a separator between core-authored sentences, not a message
+    doc.pending_note = Some(disclosures.join(" "));
+}
+
 fn draw_selection_outlines(
     doc: &OpenDoc,
     ui: &egui::Ui,
@@ -12283,6 +12311,7 @@ fn run_vector_edit_tool(
         Commit::Move { idx, dx, dy } => {
             let outcome = doc.session.move_object(page_index, idx, dx, dy);
             diag::trace(|| format!("commit-move idx={idx} dx={dx} dy={dy} -> {outcome:?}"));
+            disclose_vector_edit(doc, outcome.as_deref().unwrap_or(&[]));
             doc.vector_drag = None;
             doc.refresh_pages();
             doc.ensure_object_provider();
@@ -12290,6 +12319,7 @@ fn run_vector_edit_tool(
         Commit::Node { idx, node, to } => {
             let outcome = doc.session.move_node(page_index, idx, node, to);
             diag::trace(|| format!("commit-node idx={idx} node={node} to={to:?} -> {outcome:?}"));
+            disclose_vector_edit(doc, outcome.as_deref().unwrap_or(&[]));
             doc.vector_drag = None;
             doc.refresh_pages();
             doc.ensure_object_provider();

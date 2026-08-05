@@ -150,7 +150,9 @@ fn rasterizes(doc: &Document) {
 #[test]
 fn a_moved_object_renders_at_the_moved_geometry() {
     // Move object 0 (the line `50 50 m 150 150 l S`) by +30,-20.
-    let doc = edited(|s| s.move_object(0, 0, 30.0, -20.0).unwrap());
+    let doc = edited(|s| {
+        s.move_object(0, 0, 30.0, -20.0).unwrap();
+    });
     let core = cross_check(&doc);
     // The first path is the moved line: start (80,30), end (180,130) — in
     // BOTH pipelines (cross_check already proved they agree, so checking core
@@ -171,7 +173,9 @@ fn a_moved_object_renders_at_the_moved_geometry() {
 #[test]
 fn a_dragged_node_renders_at_the_new_anchor() {
     // Drag node 1 (the line's endpoint) to (200,100).
-    let doc = edited(|s| s.move_node(0, 0, 1, Point::new(200.0, 100.0)).unwrap());
+    let doc = edited(|s| {
+        s.move_node(0, 0, 1, Point::new(200.0, 100.0)).unwrap();
+    });
     let core = cross_check(&doc);
     assert!(
         (core[0][0].0 - 50.0).abs() < EPS && (core[0][0].1 - 50.0).abs() < EPS,
@@ -192,7 +196,9 @@ fn a_deleted_object_is_gone_and_the_rest_still_renders() {
     // the line leaves two, and they still agree + rasterize.
     let before = cross_check(&Document::from_bytes(edit_fixture_bytes()).unwrap());
     assert_eq!(before.len(), 3);
-    let doc = edited(|s| s.delete_object(0, 0).unwrap());
+    let doc = edited(|s| {
+        s.delete_object(0, 0).unwrap();
+    });
     let after = cross_check(&doc);
     assert_eq!(after.len(), 2, "one path object removed");
     rasterizes(&doc);

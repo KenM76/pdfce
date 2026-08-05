@@ -326,20 +326,27 @@ fn move_node_then_undo_is_byte_identical() {
     assert_eq!(save(&s), base);
 }
 
+/// A rectangle corner is DRAGGABLE (Pass 30.0), and undoing restores the
+/// original `re` operator byte-for-byte.
+///
+/// This test previously asserted the refusal. The undo half is the part worth
+/// keeping and strengthening: the edit replaces one operator with five, so
+/// undo has to restore a *shorter* stream than the one it is undoing — the
+/// case a same-length rewrite would never exercise.
 #[test]
-fn move_node_on_a_rectangle_corner_is_refused_by_name() {
+fn move_node_on_a_rectangle_corner_expands_it_and_undo_restores_the_re() {
     let base = edit_fixture();
     let mut s = session(&base);
     // Object 1 is the `re` rectangle; every corner is a rectangle node.
-    let err = s.move_node(0, 1, 0, Point::new(0.0, 0.0)).unwrap_err();
-    assert!(
-        matches!(
-            err,
-            EditError::VectorEdit(VectorEditError::RectangleNode { .. })
-        ),
-        "got {err:?}"
+    s.move_node(0, 1, 0, Point::new(0.0, 0.0))
+        .expect("a rectangle corner is draggable");
+    assert!(s.is_modified());
+    s.undo();
+    assert_eq!(
+        save(&s),
+        base,
+        "undoing an operator EXPANSION must restore the original bytes"
     );
-    assert!(!s.is_modified(), "a refusal leaves the session untouched");
 }
 
 // ---------------------------------------------------------------------------

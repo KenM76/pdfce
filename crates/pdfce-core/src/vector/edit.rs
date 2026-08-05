@@ -61,12 +61,34 @@
 //! nth anchor a caller sees and the nth anchor this surgery rewrites are the
 //! same anchor by construction (the geometry analogue of the R49/R60 "one
 //! pipeline" discipline), not by two hand-derived orderings kept in sync.
-//! `re`-rectangle corners and the implicit reused start of an `h`-reopened
-//! subpath carry no independently editable operand, so a node-drag targeting
-//! one is refused by name ([`VectorEditError::RectangleNode`] /
-//! [`VectorEditError::ImplicitNode`]) — moving a rectangle corner needs an
-//! `re`→explicit-path decomposition that is out of the 9c-min cut
-//! (decision 011 §2.5 excluded list).
+//!
+//! ## Anchors whose coordinates are written NOWHERE (Pass 30.0)
+//!
+//! Two anchor kinds have no operand of their own to overwrite, and both were
+//! refused for that reason until Pass 30.0:
+//!
+//! - an **`re` rectangle corner**. `re` carries an origin and a *size*, so
+//!   only corner 0 appears literally, and even it cannot move alone — editing
+//!   `x y` slides all four. Worse, the shape a dragged corner produces is in
+//!   general NOT a box, and `re` has no spelling for that shape at all.
+//! - the **implicit reused start** of a subpath reopened after `h`: the
+//!   segment inherits the closed subpath's start point (§8.5.2.1) rather than
+//!   naming it.
+//!
+//! Both are now edited by *materializing the missing operand* rather than by
+//! refusing. The rectangle is expanded to the spec's own stated equivalent —
+//! `x y m`, `x+w y l`, `x+w y+h l`, `x y+h l`, `h` (§8.5.2.1, Table 59) —
+//! whose trailing `h` is load-bearing: a stroked subpath left open takes two
+//! line caps where the closed one takes a corner join, so dropping it would
+//! change the picture. The implicit start gets the `m` the file omitted,
+//! inserted immediately before the segment that inherited it, which no earlier
+//! geometry can observe because `h` has already terminated the subpath before
+//! it.
+//!
+//! Both rewrites leave the anchor COUNT and ORDER unchanged, which is what
+//! lets a front end hold a node index across the drag it just performed.
+//! Both are [disclosed](PlannedEdit::disclosures): the drawing is identical,
+//! the bytes are not, and dragging back does not restore the original form.
 //!
 //! ## Panic-free / adversarial input (ARCHITECTURE.md §10)
 //!
@@ -84,7 +106,7 @@ use crate::text_edit::edit::splice;
 use crate::writer::content::emit_number;
 
 use super::decompose::{PathObject, VectorObject};
-use super::geometry::Point;
+use super::geometry::{Point, rect_corners};
 
 /// Why a vector-edit surgery could not be planned.
 ///
@@ -200,30 +222,6 @@ pub enum VectorEditError {
         /// How many anchors the object has, in decomposition order.
         count: usize,
     },
-    /// A node-drag targeted a corner of an `re` rectangle. A rectangle's
-    /// four corners are one atomic operator; moving one independently would
-    /// require rewriting the `re` as an explicit `m`/`l` path, which is
-    /// outside the 9c-min cut (decision 011 §2.5). Move the whole rectangle
-    /// instead, or (fast-follow) convert it to a path first.
-    #[error(
-        "node {index} is a corner of an `re` rectangle, which 9c-min cannot node-edit independently (move the whole object instead)"
-    )]
-    RectangleNode {
-        /// The offending node index.
-        index: usize,
-    },
-    /// A node-drag targeted the **implicit reused start** of a subpath
-    /// reopened after `h` (§8.5.2.1): that anchor's coordinates are inherited
-    /// from the closed subpath's start, not carried by an operand, so there
-    /// is nothing to rewrite in place. Refused by name (a fast-follow could
-    /// materialize an explicit `m`).
-    #[error(
-        "node {index} is an implicit reopened-subpath start with no operand of its own, so it cannot be node-edited in place"
-    )]
-    ImplicitNode {
-        /// The offending node index.
-        index: usize,
-    },
 }
 
 /// The result of a successful surgery plan: the **new decoded content
@@ -240,6 +238,23 @@ pub struct PlannedEdit {
     /// every construction operator; node-drag: exactly one; delete: the
     /// object's whole operator run counts as one removal).
     pub operators_touched: usize,
+    /// What the operator must be told about HOW the edit was expressed, in
+    /// operator-facing prose — empty for the common case.
+    ///
+    /// Populated when the surgery had to change the *form* of an operator to
+    /// express the requested change, because some shapes in PDF cannot say
+    /// what the operator just asked for. Dragging one corner of an `re`
+    /// rectangle is the canonical case: `re` carries an origin and a size, so
+    /// a four-sided shape that is not a box has no `re` spelling at all and
+    /// the operator must be expanded to four lines (§8.5.2.1). The drawing is
+    /// unchanged — but the bytes are not recoverable by dragging back, and an
+    /// operator who cares about minimal diffs (R46) is owed that fact rather
+    /// than left to find it in a diff.
+    ///
+    /// This is rule 4 (fuzzy, never sneaky) applied to *representation*: pdfce
+    /// may reshape how a thing is written in order to do what was asked, and
+    /// says so when it does.
+    pub disclosures: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -325,6 +340,7 @@ pub fn plan_move(
     Ok(PlannedEdit {
         content: splice(&content.buf, &mut edits),
         operators_touched: touched,
+        disclosures: clip_disclosure(content, obj),
     })
 }
 
@@ -360,6 +376,7 @@ pub fn plan_delete(
     Ok(PlannedEdit {
         content: splice(&content.buf, &mut edits),
         operators_touched: 1,
+        disclosures: Vec::new(),
     })
 }
 
@@ -389,8 +406,13 @@ pub fn plan_delete(
 /// PDF starts implicitly — a segment operator after `h`, which reopens at the
 /// closed subpath's start point (§8.5.2.1) — has no operator of its own to
 /// remove cleanly, so its presence trips the count guard and the whole edit is
-/// refused rather than approximated. This is the same posture
-/// [`VectorEditError::ImplicitNode`] takes for node drags.
+/// refused rather than approximated. Note the asymmetry with MOVING such a
+/// subpath (and with node-dragging its start), both of which now succeed by
+/// materializing the `m` the file omitted: an insertion can supply a missing
+/// coordinate, but a DELETION has nowhere to put one — removing the operators
+/// before an implicit start changes where it begins, and there is no operand
+/// to pin it with because the subpath being deleted is the one that would
+/// have carried it.
 ///
 /// # Clipping paths are refused
 ///
@@ -455,6 +477,7 @@ pub fn plan_delete_subpath(
         return Ok(PlannedEdit {
             content: splice(&content.buf, &mut edits),
             operators_touched: 1,
+            disclosures: Vec::new(),
         });
     }
 
@@ -511,6 +534,7 @@ pub fn plan_delete_subpath(
     Ok(PlannedEdit {
         content: splice(&content.buf, &mut edits),
         operators_touched: 1,
+        disclosures: Vec::new(),
     })
 }
 
@@ -560,6 +584,43 @@ fn is_clipping_path(content: &ContentStream, start: usize, end: usize) -> bool {
     })
 }
 
+/// The disclosure a *move* of a clipping path owes the operator, if the object
+/// is one — otherwise nothing.
+///
+/// # Why this discloses where subpath-DELETE refuses
+///
+/// Both edits change what OTHER content is visible rather than changing a mark
+/// the operator can see, which is the condition rule 4 exists for. They differ
+/// in whether a legitimate intent exists. Deleting one subpath of a clip has
+/// none worth guessing at — it changes the region's topology, and the operator
+/// asking to "delete this line" cannot have meant "reveal whatever is under
+/// that part of the page." Moving one does: resizing a crop region is a real
+/// task, and refusing it would leave clip geometry permanently uneditable.
+///
+/// So: refuse the one with no good reading, disclose the one that has one.
+///
+/// # Why this was easy to miss
+///
+/// Until Pass 30.0 a clip rectangle's corners were unreachable — clips are
+/// overwhelmingly `re` rectangles (§8.5.4's canonical `re W n` idiom), and
+/// `re` corners were refused as un-draggable. Making them draggable removed
+/// that accidental cover, so the gap had to be closed in the same change.
+/// Found by running the new node drag against a real file rather than a
+/// fixture: the first closed 4-anchor object on its first page was a
+/// full-page clip.
+fn clip_disclosure(content: &ContentStream, obj: &PathObject) -> Vec<String> {
+    if is_clipping_path(content, obj.tokens.start, obj.tokens.end) {
+        vec![
+            "This shape is a clipping region: it draws nothing itself, it controls \
+             which OTHER content on the page is visible. Moving it changes what shows \
+             through elsewhere on the page, not here."
+                .to_owned(),
+        ]
+    } else {
+        Vec::new()
+    }
+}
+
 /// Plan a **subpath move**: translate ONE subpath's construction operands by a
 /// page-space `(dx, dy)`, leaving the object's other subpaths byte-verbatim
 /// (Pass 28.0).
@@ -578,14 +639,17 @@ fn is_clipping_path(content: &ContentStream, start: usize, end: usize) -> bool {
 /// - A subpath that **starts implicitly** (a segment after `h`, §8.5.2.1): its
 ///   start point is inherited and carried by no operand, so translating the
 ///   operands that ARE written would move the rest of the subpath away from a
-///   start that stayed put — tearing it. Refused by name.
+///   start that stayed put — tearing it. Since Pass 30.0 this is HANDLED, not
+///   refused: an explicit `m` at the moved start is inserted ahead of the
+///   segment that inherited it, and the translation is then uniform. Disclosed
+///   via [`PlannedEdit::disclosures`].
 /// - A **malformed operand run**, for the same reason `plan_move` refuses one:
 ///   a partially-moved subpath is worse than an unmoved one.
 /// - A **singular CTM**, which has no unambiguous user-space pre-image.
 ///
 /// # Errors
 ///
-/// [`VectorEditError::SubpathOutOfRange`], [`VectorEditError::ImplicitNode`],
+/// [`VectorEditError::SubpathOutOfRange`],
 /// [`VectorEditError::MalformedOperand`], [`VectorEditError::DegenerateCtm`].
 /// Every refusal happens before any byte is produced.
 ///
@@ -618,19 +682,47 @@ pub fn plan_move_subpath(
             index: subpath_index,
             count,
         })?;
-    if subpath.starts_implicitly {
-        return Err(VectorEditError::ImplicitNode {
-            index: subpath_index,
-        });
-    }
-
     // Page-space delta to user-space delta: the LINEAR inverse, translation
     // excluded — the same conversion `plan_move` makes, for the same reason.
     let inv = obj.ctm.inverse().ok_or(VectorEditError::DegenerateCtm)?;
     let d = inv.map_vector(Point::new(dx, dy));
 
     let mut edits: Vec<(usize, usize, Vec<u8>)> = Vec::new();
+    let mut disclosures: Vec<String> = clip_disclosure(content, obj);
     let mut touched = 0usize;
+
+    // An implicitly-started subpath (§8.5.2.1: a segment after `h` with no `m`
+    // of its own) INHERITS its start from the closed subpath before it. Its
+    // segment operands can be translated like any other, but its start point
+    // is written nowhere, so translating the operands alone would move every
+    // point of the subpath EXCEPT the first — shearing the shape rather than
+    // moving it.
+    //
+    // This used to refuse for that reason. Materializing the `m` the file
+    // omitted, at the inherited start plus the delta, removes the cause: after
+    // it the subpath's start is its own, and the translation is uniform. The
+    // insertion touches nothing before it, because `h` has already terminated
+    // the previous subpath.
+    // Prepended to the FIRST rewritten operator's bytes rather than pushed as
+    // its own zero-width edit at the same offset: `splice` silently skips an
+    // edit that starts before its cursor, so two edits sharing a start offset
+    // would drop one of the pair, chosen by sort order. Prepending has no such
+    // race and produces the identical bytes.
+    let mut lead_insert: Option<Vec<u8>> = None;
+    if subpath.starts_implicitly {
+        // `subpath.start` is in USER space (the decomposer records operands
+        // before the CTM), so the user-space delta applies to it directly.
+        let moved = Point::new(subpath.start.x + d.x, subpath.start.y + d.y);
+        let mut lead = emit_op(&[moved.x, moved.y], b"m");
+        lead.push(b' ');
+        lead_insert = Some(lead);
+        disclosures.push(
+            "This shape had no starting point of its own — it re-used the start of the \
+             shape before it. A move instruction naming its start has been added so it \
+             can be moved independently."
+                .to_owned(),
+        );
+    }
     for item in ops_in_range(content, subpath.tokens.start, subpath.tokens.end + 1) {
         let Some(keyword) = item.keyword(&content.buf) else {
             continue;
@@ -656,7 +748,7 @@ pub fn plan_move_subpath(
                 out.push(b' ');
                 emit_number(&mut out, h);
                 out.extend_from_slice(b" re");
-                edits.push((item.byte_start(), item.byte_end(), out));
+                push_edit(&mut edits, &mut lead_insert, &item, out);
                 touched += 1;
                 continue;
             }
@@ -683,14 +775,38 @@ pub fn plan_move_subpath(
         }
         out.push(b' ');
         out.extend_from_slice(keyword);
-        edits.push((item.byte_start(), item.byte_end(), out));
+        push_edit(&mut edits, &mut lead_insert, &item, out);
         touched += 1;
     }
 
     Ok(PlannedEdit {
         content: splice(&content.buf, &mut edits),
         operators_touched: touched,
+        disclosures,
     })
+}
+
+/// Record one operator rewrite, prepending any pending lead-in bytes (an
+/// explicit `m` materialized for an implicitly-started subpath) to the FIRST
+/// rewrite only.
+///
+/// Exists so the insertion never becomes a second edit sharing a start offset
+/// with the rewrite: [`splice`] skips an edit starting before its cursor, so
+/// such a pair silently loses one member depending on sort order.
+fn push_edit(
+    edits: &mut Vec<(usize, usize, Vec<u8>)>,
+    lead_insert: &mut Option<Vec<u8>>,
+    item: &OpItem<'_>,
+    body: Vec<u8>,
+) {
+    let bytes = match lead_insert.take() {
+        Some(mut lead) => {
+            lead.extend_from_slice(&body);
+            lead
+        }
+        None => body,
+    };
+    edits.push((item.byte_start(), item.byte_end(), bytes));
 }
 
 /// Plan a **node drag**: rewrite the single anchor `node_index` of `obj` to
@@ -707,10 +823,10 @@ pub fn plan_move_subpath(
 ///
 /// # Errors
 ///
-/// [`VectorEditError::NodeOutOfRange`], [`VectorEditError::RectangleNode`]
-/// (an `re` corner), [`VectorEditError::ImplicitNode`] (an `h`-reopened
-/// reused start), or [`VectorEditError::DegenerateCtm`] (singular CTM). Each
-/// is raised before any content byte is produced.
+/// [`VectorEditError::NodeOutOfRange`], [`VectorEditError::DegenerateCtm`]
+/// (singular CTM), or [`VectorEditError::MalformedOperand`] (an operator whose
+/// operand count contradicts Table 59). Each is raised before any content byte
+/// is produced.
 ///
 /// # Examples
 ///
@@ -734,6 +850,10 @@ pub fn plan_move_node(
 ) -> Result<PlannedEdit, VectorEditError> {
     let inv = obj.ctm.inverse().ok_or(VectorEditError::DegenerateCtm)?;
     let to_user = inv.map_point(to_page);
+    // Owed regardless of which of the three rewrites runs below, so it is
+    // computed once here rather than in each arm — where the next arm added
+    // would forget it.
+    let clip = clip_disclosure(content, obj);
 
     let anchors = enumerate_anchors(content, obj.tokens.start, obj.tokens.end);
     let count = anchors.len();
@@ -745,43 +865,119 @@ pub fn plan_move_node(
         })?;
 
     match site.kind {
-        AnchorKind::Rectangle => {
-            return Err(VectorEditError::RectangleNode { index: node_index });
+        // ---- (1) The operand exists: overwrite it in place. -------------
+        AnchorKind::Editable => {
+            // Replace the anchor's coordinate pair (operand indices 2k, 2k+1)
+            // with the user-space target, then re-emit that one operator.
+            // Everything else is byte-verbatim.
+            let mut new_nums = site.operands.clone();
+            let x_slot = site.pair_index * 2;
+            let y_slot = x_slot + 1;
+            // The anchor bookkeeping only marks an operator Editable when its
+            // arity matched, so `y_slot` is in range; the guard degrades an
+            // impossible out-of-range to a by-name refusal rather than an
+            // index-panic (crate panic-free policy).
+            if x_slot >= new_nums.len() || y_slot >= new_nums.len() {
+                return Err(VectorEditError::MalformedOperand);
+            }
+            if let Some(x) = new_nums.get_mut(x_slot) {
+                *x = to_user.x;
+            }
+            if let Some(y) = new_nums.get_mut(y_slot) {
+                *y = to_user.y;
+            }
+            let mut edits = vec![(
+                site.byte_start,
+                site.byte_end,
+                emit_op(&new_nums, &site.keyword),
+            )];
+            Ok(PlannedEdit {
+                content: splice(&content.buf, &mut edits),
+                operators_touched: 1,
+                disclosures: clip,
+            })
         }
-        AnchorKind::Implicit => {
-            return Err(VectorEditError::ImplicitNode { index: node_index });
-        }
-        AnchorKind::Editable => {}
-    }
 
-    // Replace the anchor's coordinate pair (operand indices 2k, 2k+1) with
-    // the user-space target, then re-emit that one operator. Everything else
-    // is byte-verbatim.
-    let mut new_nums = site.operands.clone();
-    let x_slot = site.pair_index * 2;
-    let y_slot = x_slot + 1;
-    // The anchor bookkeeping only marks an operator Editable when its arity
-    // matched, so `y_slot` is in range; the guard degrades an impossible
-    // out-of-range to a by-name refusal rather than an index-panic (crate
-    // panic-free policy).
-    if x_slot >= new_nums.len() || y_slot >= new_nums.len() {
-        return Err(VectorEditError::ImplicitNode { index: node_index });
+        // ---- (2) `re` names a size, not four corners: expand it. --------
+        AnchorKind::Rectangle { corner } => {
+            let [x, y, w, h] = site.operands[..] else {
+                return Err(VectorEditError::MalformedOperand);
+            };
+            // The spec's own equivalence (§8.5.2.1, Table 59): `x y w h re`
+            // IS `x y m / x+w y l / x+w y+h l / x y+h l / h`. Emitting that
+            // form changes no pixel — the trailing `h` is load-bearing and
+            // must not be dropped, because a stroked subpath left OPEN gets
+            // two line caps where the closed one gets a corner join.
+            let mut pts = rect_corners(x, y, w, h);
+            let Some(dragged) = pts.get_mut(corner) else {
+                return Err(VectorEditError::NodeOutOfRange {
+                    index: node_index,
+                    count,
+                });
+            };
+            *dragged = to_user;
+
+            let mut out = Vec::new();
+            for (i, p) in pts.iter().enumerate() {
+                if i > 0 {
+                    out.push(b' ');
+                }
+                out.extend_from_slice(&emit_op(&[p.x, p.y], if i == 0 { b"m" } else { b"l" }));
+            }
+            out.extend_from_slice(b" h");
+
+            let mut edits = vec![(site.byte_start, site.byte_end, out)];
+            Ok(PlannedEdit {
+                content: splice(&content.buf, &mut edits),
+                operators_touched: 1,
+                disclosures: [
+                    clip,
+                    vec![
+                        "This shape was stored as a rectangle, which can only describe a \
+                     box with square corners. Moving one corner on its own makes it a \
+                     four-sided shape that is no longer a box, so it has been rewritten \
+                     as four lines. It draws identically; dragging the corner back will \
+                     not restore the original rectangle form."
+                            .to_owned(),
+                    ],
+                ]
+                .concat(),
+            })
+        }
+
+        // ---- (3) Nothing names this point: write the `m` that was left
+        //          implicit, immediately before the segment that inherits it.
+        AnchorKind::Implicit => {
+            // After `h` (or `re`) the current point is the closed subpath's
+            // start, and the next segment operator reopens there with no `m`
+            // of its own (§8.5.2.1). An explicit `m` at the target overrides
+            // exactly that inheritance and nothing else: the closed subpath
+            // is already terminated, so no earlier geometry can see it.
+            let mut m = emit_op(&[to_user.x, to_user.y], b"m");
+            m.push(b' ');
+            m.extend_from_slice(content.buf.get(site.byte_start..site.byte_end).ok_or(
+                VectorEditError::NodeOutOfRange {
+                    index: node_index,
+                    count,
+                },
+            )?);
+            let mut edits = vec![(site.byte_start, site.byte_end, m)];
+            Ok(PlannedEdit {
+                content: splice(&content.buf, &mut edits),
+                operators_touched: 1,
+                disclosures: [
+                    clip,
+                    vec![
+                        "This point had no coordinates of its own — the file re-used the \
+                     start of the shape before it. A move instruction naming the point \
+                     has been added so it can be placed independently."
+                            .to_owned(),
+                    ],
+                ]
+                .concat(),
+            })
+        }
     }
-    if let Some(x) = new_nums.get_mut(x_slot) {
-        *x = to_user.x;
-    }
-    if let Some(y) = new_nums.get_mut(y_slot) {
-        *y = to_user.y;
-    }
-    let mut edits = vec![(
-        site.byte_start,
-        site.byte_end,
-        emit_op(&new_nums, &site.keyword),
-    )];
-    Ok(PlannedEdit {
-        content: splice(&content.buf, &mut edits),
-        operators_touched: 1,
-    })
 }
 
 /// The number of node-draggable and non-draggable anchors an object
@@ -930,16 +1126,30 @@ fn ops_in_range(content: &ContentStream, start: usize, end: usize) -> Vec<OpItem
 // Anchor enumeration (mirrors decompose's subpath bookkeeping)
 // ---------------------------------------------------------------------------
 
-/// Whether an anchor can be node-dragged, and why not when it cannot.
+/// How an anchor's coordinates are carried in the content stream — which
+/// decides HOW a node drag rewrites it, not WHETHER it can.
+///
+/// All three are draggable as of Pass 30.0. The distinction survives because
+/// the three need three different rewrites: one replaces an operand pair, one
+/// expands an operator, one inserts a new operator. See [`plan_move_node`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AnchorKind {
     /// A real operand pair (`m`/`l`/`c`/`v`/`y`) — rewritable in place.
     Editable,
-    /// A corner of an `re` rectangle — one atomic operator, not
-    /// independently editable in 9c-min.
-    Rectangle,
-    /// The reused start of an `h`-reopened subpath — coordinates inherited,
-    /// no operand to rewrite.
+    /// A corner of an `re` rectangle. `re` carries an origin and a *size*, so
+    /// no operand names this corner (only corner 0 appears literally, and
+    /// even it cannot move alone without dragging the other three with it).
+    /// Dragged by expanding the operator to its §8.5.2.1 equivalent.
+    Rectangle {
+        /// Which corner, in [`super::geometry::rect_corners`] order —
+        /// `(x, y)`, `(x+w, y)`, `(x+w, y+h)`, `(x, y+h)` — which is also the
+        /// order of the spec's equivalent `m`/`l`/`l`/`l` sequence, so the
+        /// index means the same thing before and after the expansion.
+        corner: usize,
+    },
+    /// The reused start of an `h`-reopened subpath (§8.5.2.1): its
+    /// coordinates are *inherited* from the closed subpath's start rather
+    /// than written anywhere. Dragged by inserting the `m` the file omitted.
     Implicit,
 }
 
@@ -994,9 +1204,9 @@ fn enumerate_anchors(content: &ContentStream, start: usize, end: usize) -> Vec<A
                 if nums.len() == 4 {
                     // A complete closed subpath of four corners, one operator.
                     w.finalize_open();
-                    for _ in 0..4 {
+                    for corner in 0..4 {
                         w.committed.push(AnchorSite {
-                            kind: AnchorKind::Rectangle,
+                            kind: AnchorKind::Rectangle { corner },
                             byte_start: bs,
                             byte_end: be,
                             operands: nums.clone(),
@@ -1205,14 +1415,16 @@ mod tests {
     }
 
     #[test]
-    fn node_drag_refuses_a_rectangle_corner() {
+    fn node_drag_expands_a_rectangle_corner() {
         let (cs, path) = path_of(b"10 10 80 40 re f");
         // A rectangle has four anchors, all `re` corners.
         assert_eq!(anchor_count(&cs, &path), 4);
-        assert_eq!(
-            plan_move_node(&cs, &path, 0, Point::new(0.0, 0.0)),
-            Err(VectorEditError::RectangleNode { index: 0 })
-        );
+        let plan = plan_move_node(&cs, &path, 0, Point::new(0.0, 0.0)).unwrap();
+        // The spec's own equivalence (Table 59) with corner 0 relocated. The
+        // trailing `h` must survive: without it a stroked box gets caps, not
+        // a corner join.
+        assert_eq!(plan.content, b"0 0 m 90 10 l 90 50 l 10 50 l h f");
+        assert_eq!(plan.disclosures.len(), 1);
     }
 
     #[test]

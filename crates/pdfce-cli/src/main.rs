@@ -2011,11 +2011,13 @@ enum Command {
         verify_undo: bool,
     },
     /// **Drag a node** of a path object (Pass 9c-min, decision 011 §2.5):
-    /// rewrite ONE anchor's coordinate pair to a page-space point via surgery
-    /// (R46/§5.7). `--node` is the anchor's 0-based index in decomposition
-    /// order (start, then each segment endpoint, across subpaths). An `re`
-    /// rectangle corner and an implicit reopened-subpath start are refused —
-    /// move the whole object instead.
+    /// move ONE anchor to a page-space point via surgery (R46/§5.7).
+    /// `--node` is the anchor's 0-based index in decomposition order (start,
+    /// then each segment endpoint, across subpaths). Every anchor is
+    /// draggable, including an `re` rectangle corner and the inherited start
+    /// of a subpath reopened after `h` — each of which has no operand of its
+    /// own, so one is materialized and the change of form is disclosed on
+    /// stderr (Pass 30.0).
     NodeMove {
         /// Input PDF.
         input: PathBuf,
@@ -3891,6 +3893,24 @@ reserialized={} out_bytes={} undo_verified={} undo_identical={}",
         u32::from(outcome.undo_identical),
     );
     finish_edit(input, &outcome)
+}
+
+/// Print the disclosures a vector surgery owes, to stderr.
+///
+/// Stderr, not stdout, because each of these commands prints ONE fixed-shape
+/// record line that scripts parse; interleaving a variable-length prose block
+/// into that stream would break them. The operator still sees it on a
+/// terminal, where both streams land together.
+///
+/// These say the surgery had to change the *form* of an operator to do what
+/// was asked — expand a rectangle whose corner was dragged out of square,
+/// write the `m` an implicitly-started subpath never had. The drawing is
+/// unchanged; the bytes are not recoverable by reversing the gesture, and
+/// rule 4 forbids leaving the operator to discover that from a diff.
+fn report_disclosures(disclosures: &[String]) {
+    for d in disclosures {
+        eprintln!("pdfce-cli: {d}");
+    }
 }
 
 /// Print the fuzzy-never-sneaky disclosures a fill owes (an applied
@@ -9139,8 +9159,9 @@ fn cmd_object_move(args: &ObjectMoveArgs<'_>) -> u8 {
         Ok(pair) => pair,
         Err(code) => return code,
     };
-    if let Err(err) = session.move_object(page_index, args.object, args.dx, args.dy) {
-        return report_edit_error(args.input, &err);
+    match session.move_object(page_index, args.object, args.dx, args.dy) {
+        Err(err) => return report_edit_error(args.input, &err),
+        Ok(disclosures) => report_disclosures(&disclosures),
     }
     let outcome = match save_edited(
         &mut session,
@@ -9242,9 +9263,9 @@ fn cmd_subpath_move(args: &SubpathMoveArgs<'_>) -> u8 {
         Ok(pair) => pair,
         Err(code) => return code,
     };
-    if let Err(err) = session.move_subpath(page_index, args.object, args.subpath, args.dx, args.dy)
-    {
-        return report_edit_error(args.input, &err);
+    match session.move_subpath(page_index, args.object, args.subpath, args.dx, args.dy) {
+        Err(err) => return report_edit_error(args.input, &err),
+        Ok(disclosures) => report_disclosures(&disclosures),
     }
     let outcome = match save_edited(
         &mut session,
@@ -9309,8 +9330,9 @@ fn cmd_subpath_delete(args: &SubpathDeleteArgs<'_>) -> u8 {
         Ok(pair) => pair,
         Err(code) => return code,
     };
-    if let Err(err) = session.delete_subpath(page_index, args.object, args.subpath) {
-        return report_edit_error(args.input, &err);
+    match session.delete_subpath(page_index, args.object, args.subpath) {
+        Err(err) => return report_edit_error(args.input, &err),
+        Ok(disclosures) => report_disclosures(&disclosures),
     }
     let outcome = match save_edited(
         &mut session,
@@ -9356,9 +9378,13 @@ struct NodeMoveArgs<'a> {
     verify_undo: bool,
 }
 
-/// `node-move` — rewrite one anchor's coordinate pair to a page-space point
-/// via surgery (Pass 9c-min, decision 011 §2.5). Refuses an `re` rectangle
-/// corner / implicit reopened start by name.
+/// `node-move` — move one anchor to a page-space point via surgery
+/// (Pass 9c-min, decision 011 §2.5).
+///
+/// An `re` rectangle corner and the implicit reused start of an `h`-reopened
+/// subpath have no operand of their own; both are handled by materializing one
+/// (Pass 30.0) and both DISCLOSE that they did, on stderr so a script's stdout
+/// record stays machine-parseable.
 fn cmd_node_move(args: &NodeMoveArgs<'_>) -> u8 {
     use pdfce_core::vector::Point;
     let page_index = (args.page.max(1) - 1) as usize;
@@ -9366,13 +9392,17 @@ fn cmd_node_move(args: &NodeMoveArgs<'_>) -> u8 {
         Ok(pair) => pair,
         Err(code) => return code,
     };
-    if let Err(err) = session.move_node(
+    match session.move_node(
         page_index,
         args.object,
         args.node,
         Point::new(args.x, args.y),
     ) {
-        return report_edit_error(args.input, &err);
+        Err(err) => return report_edit_error(args.input, &err),
+        // stderr, not stdout: the stdout line is a fixed-shape record other
+        // tools parse, and a variable-length prose block in the middle of it
+        // would break them.
+        Ok(disclosures) => report_disclosures(&disclosures),
     }
     let outcome = match save_edited(
         &mut session,

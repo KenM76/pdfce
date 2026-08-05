@@ -132,11 +132,22 @@ fn node_move_relocates_an_anchor() {
     let _ = std::fs::remove_file(&out_path);
 }
 
+/// A rectangle corner drags (Pass 30.0), and the operator is TOLD that the
+/// rectangle had to be rewritten as four lines to express it.
+///
+/// This test previously asserted the refusal. The disclosure half is the part
+/// that needed a CLI-level test rather than a core one: the core produces the
+/// string, and the only thing that can go wrong from here is the front end
+/// dropping it — which is precisely what every caller of these methods did
+/// before, because the return type let them.
+///
+/// Also pins WHICH stream it lands on. The stdout line is a fixed-shape record
+/// that scripts parse; a prose block spliced into it would break them, and
+/// nothing but a test stops a later edit from moving it there.
 #[test]
-fn node_move_on_a_rectangle_corner_is_refused() {
+fn node_move_on_a_rectangle_corner_expands_it_and_says_so() {
     let out_path = temp_path("rect");
-    // Object 1 is the `re` rectangle; a corner node is not independently
-    // editable in 9c-min.
+    // Object 1 is the `re` rectangle; node 0 is its lower-left corner.
     let out = run(
         "node-move",
         &[
@@ -151,15 +162,26 @@ fn node_move_on_a_rectangle_corner_is_refused() {
             "0",
             "-o",
             out_path.to_str().unwrap(),
+            "--verify-undo",
         ],
     );
-    assert_eq!(
-        out.status.code(),
-        Some(EDIT_REFUSED),
-        "a rectangle-corner node drag must be refused by name"
+    assert!(out.status.success(), "{}", stdout(&out));
+    let text = stdout(&out);
+    assert!(text.contains("node-move"), "{text}");
+    // Undo restores the single `re` from five operators — a shrink, which a
+    // same-length rewrite would never exercise.
+    assert!(text.contains("undo_identical=1"), "{text}");
+
+    let err = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(
+        err.contains("rectangle"),
+        "the operator must be told the rectangle was rewritten: {err:?}"
     );
-    // Refusal writes no output file.
-    assert!(!out_path.exists());
+    assert!(
+        !text.contains("rectangle"),
+        "the disclosure belongs on stderr; stdout is the machine-readable          record: {text}"
+    );
+    let _ = std::fs::remove_file(&out_path);
 }
 
 #[test]

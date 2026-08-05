@@ -2125,6 +2125,16 @@ impl EditSession {
 
     // -- basic vector editing (Pass 9c-min, decision 011 §2.5) --------
 
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — **empty** unless it had to change the *form* of an
+    /// operator to express the request (expanding an `re` rectangle whose
+    /// corner was dragged out of square, materializing the `m` an
+    /// implicitly-started subpath never had). The caller must surface them:
+    /// the drawing is unchanged but the bytes are not recoverable by
+    /// reversing the gesture, and rule 4 forbids letting the operator find
+    /// that out from a diff.
     /// **Move** the object at paint-order `object_index` on page
     /// `page_index` by the page-space displacement `(dx, dy)`, as one
     /// undoable command (decision 011 §2.5 operation 1).
@@ -2152,7 +2162,7 @@ impl EditSession {
         object_index: usize,
         dx: f64,
         dy: f64,
-    ) -> Result<(), EditError> {
+    ) -> Result<Vec<String>, EditError> {
         self.vector_surgery(CommandKind::MoveObject, page_index, |stream, model| {
             let count = model.objects.len();
             let obj = model.objects.get(object_index).ok_or(
@@ -2166,6 +2176,16 @@ impl EditSession {
         })
     }
 
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — **empty** unless it had to change the *form* of an
+    /// operator to express the request (expanding an `re` rectangle whose
+    /// corner was dragged out of square, materializing the `m` an
+    /// implicitly-started subpath never had). The caller must surface them:
+    /// the drawing is unchanged but the bytes are not recoverable by
+    /// reversing the gesture, and rule 4 forbids letting the operator find
+    /// that out from a diff.
     /// **Delete** the object at paint-order `object_index` on page
     /// `page_index`, as one undoable command (decision 011 §2.5 operation
     /// 2).
@@ -2189,7 +2209,7 @@ impl EditSession {
         &mut self,
         page_index: usize,
         object_index: usize,
-    ) -> Result<(), EditError> {
+    ) -> Result<Vec<String>, EditError> {
         self.vector_surgery(CommandKind::DeleteObject, page_index, |stream, model| {
             let count = model.objects.len();
             let obj = model.objects.get(object_index).ok_or(
@@ -2202,6 +2222,16 @@ impl EditSession {
         })
     }
 
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — **empty** unless it had to change the *form* of an
+    /// operator to express the request (expanding an `re` rectangle whose
+    /// corner was dragged out of square, materializing the `m` an
+    /// implicitly-started subpath never had). The caller must surface them:
+    /// the drawing is unchanged but the bytes are not recoverable by
+    /// reversing the gesture, and rule 4 forbids letting the operator find
+    /// that out from a diff.
     /// **Delete one subpath** of the path object at paint-order `object_index`
     /// on page `page_index`, as one undoable command (Pass 25.2).
     ///
@@ -2249,7 +2279,7 @@ impl EditSession {
         page_index: usize,
         object_index: usize,
         subpath_index: usize,
-    ) -> Result<(), EditError> {
+    ) -> Result<Vec<String>, EditError> {
         self.vector_surgery(CommandKind::DeleteSubpath, page_index, |stream, model| {
             let count = model.objects.len();
             let obj = model.objects.get(object_index).ok_or(
@@ -2267,6 +2297,16 @@ impl EditSession {
         })
     }
 
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — **empty** unless it had to change the *form* of an
+    /// operator to express the request (expanding an `re` rectangle whose
+    /// corner was dragged out of square, materializing the `m` an
+    /// implicitly-started subpath never had). The caller must surface them:
+    /// the drawing is unchanged but the bytes are not recoverable by
+    /// reversing the gesture, and rule 4 forbids letting the operator find
+    /// that out from a diff.
     /// **Move one subpath** of the path object at paint-order `object_index`
     /// on page `page_index` by a page-space `(dx, dy)`, as one undoable
     /// command (Pass 28.0).
@@ -2292,7 +2332,7 @@ impl EditSession {
         subpath_index: usize,
         dx: f64,
         dy: f64,
-    ) -> Result<(), EditError> {
+    ) -> Result<Vec<String>, EditError> {
         self.vector_surgery(CommandKind::MoveSubpath, page_index, |stream, model| {
             let count = model.objects.len();
             let obj = model.objects.get(object_index).ok_or(
@@ -2312,6 +2352,16 @@ impl EditSession {
         })
     }
 
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — **empty** unless it had to change the *form* of an
+    /// operator to express the request (expanding an `re` rectangle whose
+    /// corner was dragged out of square, materializing the `m` an
+    /// implicitly-started subpath never had). The caller must surface them:
+    /// the drawing is unchanged but the bytes are not recoverable by
+    /// reversing the gesture, and rule 4 forbids letting the operator find
+    /// that out from a diff.
     /// **Drag** the anchor node `node_index` of the path object at paint-order
     /// `object_index` on page `page_index` to the page-space point `to`, as
     /// one undoable command (decision 011 §2.5 operation 3).
@@ -2344,7 +2394,7 @@ impl EditSession {
         object_index: usize,
         node_index: usize,
         to: crate::vector::Point,
-    ) -> Result<(), EditError> {
+    ) -> Result<Vec<String>, EditError> {
         self.vector_surgery(CommandKind::MoveNode, page_index, |stream, model| {
             let count = model.objects.len();
             let obj = model.objects.get(object_index).ok_or(
@@ -2386,7 +2436,7 @@ impl EditSession {
             &crate::content::ContentStream,
             &crate::vector::PageObjects,
         ) -> Result<crate::vector::PlannedEdit, EditError>,
-    ) -> Result<(), EditError> {
+    ) -> Result<Vec<String>, EditError> {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(EditError::DocumentEncrypted);
         }
@@ -2446,12 +2496,14 @@ impl EditSession {
             };
             let model =
                 crate::vector::decompose(&stream, crate::vector::Matrix::IDENTITY, &resolver);
-            plan(&stream, &model)?.content
+            let planned = plan(&stream, &model)?;
+            (planned.content, planned.disclosures)
         };
+        let (new_content, disclosures) = new_content;
 
         let command = self.text_edit_command(kind, content_id, page, new_content);
         self.commit(command);
-        Ok(())
+        Ok(disclosures)
     }
 
     /// The page's CURRENT decoded content, tokenized: the session's own
