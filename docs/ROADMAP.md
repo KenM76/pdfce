@@ -81,6 +81,140 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 36.0 — dragging one part moves ONE part; Delete on a point stops eating the line (defect-fix pair, filed as a Pass; core + GUI) — 2026-08-05, committed `25ff9d1`
+
+**Operator report, 2026-08-05, verbatim:** *"when I double click and have
+a line selected from within an object, I can delete it, but if I try to
+move it, all the other objects associated with it move as well. Also I
+still don't seem to have a way to edit/delete nodes instead."* Two
+distinct defects in already-shipped work, both reproduced in the running
+application before either was touched.
+
+**Defect 1 — dragging a selected subpath moved the WHOLE object.** The
+drag classifier's fall-through arm was whole-object move, reached
+whenever no node and no handle was grabbed — including at the Subpath
+rung. Reproduced with `entered = EnteredObject { object: 0, subpath:
+Some(0), node: None }` committing `commit-move idx=0 dx=0 dy=-27.28`
+instead of a subpath-scoped move. `EditSession::move_subpath` has
+existed in `pdfce-core`, documented and unit-tested, **since Pass 28.0**
+(`d8b9735`) — and had been **called by nothing** until this Pass. This
+was decision 028's plan item **9**, tracked OWED in that table since
+Pass 26.1; see the table update below. Delete-a-subpath was already
+wired (Pass 25.2), which is exactly why the gap read to the operator as
+"move is broken" rather than "move was never built as a gesture." Fixed
+with a new `Commit::Subpath` drag-classification arm routed to
+`move_subpath`, previewing the SUBPATH's bounds rather than the whole
+object's — the old fall-through had faithfully previewed the wrong
+outcome, so the canvas gave no warning before commit. **Verified in the
+running app:** `commit-subpath idx=0 subpath=0 dx=0 dy=-27.28 ->
+Ok([])`; cross-checked at the core level via `pdfce-cli subpath-move` —
+the file's other five subpaths came back byte-verbatim.
+
+**Defect 2 — Delete on a selected POINT deleted the whole PART.** The
+Delete-key routing tested `entered.subpath.is_some()` to decide "route
+to delete-subpath." `EnteredObject`'s own doc comment states
+`node.is_some()` implies `subpath.is_some()` — so that test was also
+true at the Node rung, and pressing Delete with a node selected
+(`node: Some(0)`) committed `delete-subpath object=0 subpath=0`,
+destroying the whole part instead of the one anchor. **Fixed:** Delete
+at the Node rung now refuses aloud (`ui_text::node_delete_unsupported`)
+and changes nothing — Pass 36.1 (below, *Next up*) is the real
+node-delete capability this refusal stands in for until it ships.
+
+**Third impression, corrected rather than fixed — node editing already
+WORKS.** The operator's "still don't seem to have a way to edit... nodes"
+is not quite the gap: node-drag already commits through `move_node`
+(Pass 26.0/26.1). What fails is *finding* it — descending to the Node
+rung silently no-ops unless the double-click lands within grab range of
+an actual anchor, with no breadcrumb naming the current rung. That is
+decision 028 plan item **12**, already on record and still open, not a
+new finding — promoted in urgency here because an operator has now
+reported the exact symptom it exists to prevent. See Pass 36.2 (below,
+*Next up*).
+
+**Decision-028 plan table updated in place** (the 14-item ordered list
+under the ★ Pass 26.0/26.1 entry, above): item **9** moves from `⬜
+OWED` to `✅ SHIPPED — Pass 36.0, 25ff9d1`; item **12** annotated
+`filed as Pass 36.2` rather than left bare `⬜ OWED`.
+
+**Ledger note on Pass ID assignment.** **36.0 was assigned directly by
+the engineer**, not via a prior librarian *Backlog*/*Next up* filing —
+flagged explicitly by the engineer as outside this librarian's prior
+authorization, and recorded here rather than silently absorbed. Checked
+against the ledger arithmetic on record: family **36** was the
+correctly-computed next-free family after the Pass-34/35 filing
+(`"Pass-family ceiling moves from 34 to 36 next free"`, Standing rules
+below) — so there is **no collision and no gap**, only a reordering
+(the Pass shipped before its own *Next up* entry existed). Pass **36.1**
+and **36.2** are filed under *Next up* below, same family.
+
+**Gate figures:** not itemized in the dispatch beyond the two
+verification commands quoted above; not asserted here (contrast Pass
+34.0's entry, immediately below, which was given explicit
+`fmt`/`clippy`/test-suite figures).
+
+### Pass 34.0 — clicking away KEEPS your edit: `GestureInterrupt::Commit`, wired at last (defect fix, filed as a Pass; GUI) — 2026-08-05, committed `b84fd53`
+
+**The defect.** `commit_active_gesture` (`crates/pdfce-gui/src/main.rs`)
+was a literal empty body — `fn commit_active_gesture(&mut self) {}` —
+from **Pass 12.0** until this Pass; its own doc comment named the Pass
+that was supposed to fill it in, and that Pass shipped without doing so.
+`current_gesture_interrupt` never returned `Commit`, only `Discard` or
+`Nothing`. Because `resolve_gesture_interrupt` runs at the top of
+`apply()` for **every** action, page navigation, Save and Undo — not
+only clicking away on the canvas — all silently discarded a live,
+uncommitted edit. This is CLAUDE.md rule 4's failure mode (an
+operator-authored value lost rather than committed or disclosed)
+arriving through a gesture rather than a dialog. **The process finding
+this produced is standing rule R150** (see *Standing rules*): three
+separate Passes (14.3, 16.2, 12.M2b) each added a new `Discard` disjunct
+to `current_gesture_interrupt` over time, and none of them touched
+`commit_active_gesture` — the stub silently became the answer for all
+three.
+
+**What shipped.** `Commit` is now wired for TextEdit's typed
+replacement, AddText's non-empty draft, and MeasureLinear's completed
+two-point pick. Three commit bodies were lifted out of their
+Accept-button click arms into `Ui`-free free functions
+(`commit_text_edit_draft`, `commit_add_text_draft`,
+`commit_measure_linear_draft`) called by BOTH the Accept button and the
+new interrupt path — R92's single-path discipline, applied at the GUI
+layer. A REFUSED commit retains the draft and abandons the interrupting
+action (the tool does not disarm, focus does not move) until the
+operator resolves it. An EMPTY AddText draft (a point placed, nothing
+typed, click-away) still discards, never commits — auto-committing it
+would add an invisible, zero-content object to the document for no
+operator-visible reason. Three direct-destruction call sites were
+inverted to route through this path instead of discarding directly: the
+canvas click's `state.pending = None`, `install_add_placement`'s draft
+replacement, and the measure tool's `if st.pending.is_none()` guard
+(which had left the operator stuck after the third pick until they
+found the Accept button).
+
+**Harness additions.** `PDFCE_DIAG_SCRIPT` gained `type:<text>`,
+`tool:text`, `tool:addtext` steps. `raw_input.focused` is now asserted
+for a scripted run, because `PDFCE_DIAG_VIEWPORT` creates the window
+inactive and egui refuses all widget keyboard focus in that state — an
+earlier run of this harness reported "typing does nothing" against a
+build where typing worked; the assertion exists so that false negative
+can't recur silently.
+
+**Verification, in the running application (R86 — not by code
+inspection):** click text -> `caret=Some(TextPosition { run: 0,
+byte_offset: 7 })`; type "ZZ" -> `pending=true`; click away ->
+`commit-text-edit -> Committed`, `pending=false`, caret preserved at run
+2 (re-applied after the post-rebuild validity check); Escape instead of
+click-away -> no commit, draft discarded; measure pick/pick/place/click
+-> `commit-measure-linear -> Committed`.
+
+**Gates.** `cargo fmt --check` clean; `cargo clippy --workspace
+--all-targets` clean; 44/44 test binaries green, 0 failures;
+`check-ui-strings` clean; `check-ledger-numbers` clean. **Invariant
+checks:** `cargo tree -p pdfce-core` and `cargo tree -p pdfce-render`
+show no egui/eframe/winit/wgpu dependency — GUI-core separation holds.
+No writer/round-trip surface touched (GUI-only change), so no
+round-trip byte-diff applies.
+
 ### ⚠ R144 FIRED A SECOND TIME — ON THE SAME PASS (30.0), IN THE CALLERS THE ENGINEER DID NOT CHECK — filed 2026-08-05
 
 **Read this before lifting any other refusal.** R144 (*removing a
@@ -8939,66 +9073,10 @@ Acceptance criteria throughout are sourced from
 (`pdfce-ui-specialist`, 2026-08-05, 648 lines) — cited by section, not
 re-derived.
 
-### Pass 34.0 — Click-out commits instead of destroying the edit: `GestureInterrupt::Commit` wired at last (defect fix, filed as a Pass; GUI)
-
-**This is a defect in shipped work, not new scope. `GestureInterrupt::Commit`
-has existed since Pass 12.0 and was never wired.** Engineer-verified from
-source, not inferred:
-
-- `crates/pdfce-gui/src/main.rs:5299` — `fn commit_active_gesture(&mut self) {}`,
-  a literal empty body. Its own doc comment says *"No-op this Pass … Pass 7
-  commits its typed text-field draft here."* Pass 7 shipped; the body was
-  never filled in.
-- `crates/pdfce-gui/src/main.rs:5229` — `current_gesture_interrupt` returns
-  only `Discard` or `Nothing`, never `Commit`.
-- `crates/pdfce-gui/src/main.rs:4679` — `resolve_gesture_interrupt(action)`
-  runs at the top of `apply()` for **every** action.
-
-**Consequence, verified:** an in-progress text edit, add-text draft, or
-measure pick is silently DISCARDED — not only by clicking elsewhere on the
-canvas (`main.rs:9343`, `state.pending = None`), but by **any** action
-outside the `action_preserves_gesture` allow-list, which holds only
-tool-select, cancel, and the pure-camera zoom/fit actions. Page navigation,
-save, and undo all discard a live draft with no warning. This is CLAUDE.md
-rule 4's failure mode arriving through a gesture rather than a dialog — an
-operator-authored value lost rather than committed or disclosed.
-
-**Process note, carried into the Standing-rules candidate filed alongside
-this entry:** the discard half shipped incrementally across three separate
-Passes (14.3, 16.2, 12.M2b), each adding its own disjunct to
-`current_gesture_interrupt` — none of the three touched
-`commit_active_gesture`. The stub silently became the answer for every one
-of them.
-
-**Acceptance** (`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md`
-§B, extending the already-specified but unshipped
-`docs/ui_specs/gesture-commit-and-shell-conventions-audit.md` (2026-08-04)
-§2.2 — that document already designed this half of the fix; this Pass is
-its second, and hopefully final, attempt):
-
-- `commit_active_gesture` commits the active tool's draft through
-  `EditSession` as one undoable command, for TextEdit's plain edit,
-  AddText's authored content, and MeasureLinear's plain two-point pick
-  (ui-spec §B.7's case-(a) table).
-- `current_gesture_interrupt` returns `Commit` for those cases; Escape
-  remains the sole discard chord (unchanged).
-- A mid-gesture state that has not yet formed a complete, committable draft
-  (e.g. one of two MeasureLinear picks taken) still discards — this is not
-  a rule-4 case at all, since nothing has been authored or inferred into
-  committable form yet (ui-spec §B.7's mid-gesture distinction:
-  `pending.is_some()` is the branch condition, not new complexity).
-- A REFUSED commit **retains** the draft and **defers** the interrupting
-  action — the tool does not disarm, focus does not move — until the
-  operator resolves it by fixing-and-committing or an explicit
-  Escape-discard (ui-spec §B.8).
-- An EMPTY AddText draft (a point placed, nothing typed, click-away) stays
-  `Discard`, never `Commit` — auto-committing it would add an invisible,
-  zero-content object to the document for no operator-visible reason
-  (ui-spec §B.10 item 1).
-- VectorEdit's node/subpath/object drag and the Pass 27.x ce-dimension
-  position drag already commit-on-release with no button — cite them as
-  the working precedent this wiring should match (ui-spec §B.7), not a
-  hypothetical.
+> **✅ Pass 34.0 DISCHARGED to *Shipped* 2026-08-05 (`b84fd53`) — see that
+> entry, above *Shipped*'s current head.** Its acceptance-criteria text is
+> removed from here rather than duplicated (the Shipped entry is now the
+> record); **Pass families 34.1/34.2/35.0/35.1 below remain open.**
 
 ### Pass 34.1 — Tool options live in a docked sidebar tab beside page navigation (GUI)
 
@@ -9931,10 +10009,10 @@ plan and its delivery state read wrong when they are two documents.
 | **6** | **Dashed 1.0 px arm** tying each handle to its node, reusing `APPROXIMATE_OUTLINE_DASH` | **✅ SHIPPED — Pass 26.1, `7c45bf8`.** Reuses that pattern's existing *"this is not a measured edge"* signal **rather than inventing a fourth visual language** |
 | **7** | A straight segment's **ABSENT** handle is disclosed **in the status line**, never as a ghost widget | **⬜ NOT REPORTED EITHER WAY — treat as OWED and UNVERIFIED.** R83. The core already refuses by name (`NoHandleHere`, Pass 30.1); the GUI says it in the same words |
 | **8** | **Hit priority: handle (5 px) → node (6 px) → subpath body → nothing** | **◐ PARTLY SHIPPED — Pass 26.1, `7c45bf8`, delivered the first two ranks**: `HANDLE_GRAB_SCREEN_TOLERANCE_PX = 5.0` before the node's `6.0`. **The SUBPATH-BODY rank is NOT shipped and rides with item 9.** **The SMALLER target first**, because a handle sits close to its node **exactly when the curve is nearly flat** — node-priority would make it unreachable precisely then. ★ **The asymmetry's cost function, from the build:** *losing a handle grab costs one retry; stealing a node grab moves a point of the drawing.* **Handle drag is Node-rung only** |
-| **9** | **Pass 28.0's subpath move gets its GUI gesture: a plain drag on the entered subpath's body** | **⬜ OWED.** Falls out of item 8's third rank for free. **Still a live R117 instance** — Pass 28.0's `move_subpath` has shipped core + CLI since `d8b9735` with **no** gesture. Closes a second R117 item |
+| **9** | **Pass 28.0's subpath move gets its GUI gesture: a plain drag on the entered subpath's body** | **✅ SHIPPED — Pass 36.0, `25ff9d1` (2026-08-05).** Closed as a defect fix, not a scoped Pass — see the Pass 36.0 Shipped entry: the drag classifier's fall-through arm was whole-object move even at the Subpath rung, so `move_subpath` (built and tested since `d8b9735`) had a caller for the first time here. Same fix incidentally surfaced a second defect (Delete on a selected node deleting the whole part) — see that entry and standing rule **R151** |
 | **10** | **Tab / Shift+Tab** cycle nodes in **OBJECT-scoped** order | **⬜ OWED.** **R92.** So that what Tab lands on and what `node-move --node N` addresses **never disagree** — the subpath rung filters which anchors are shown, it does not renumber them (025 §1.3(b)). **Pass 26.0 already made `EnteredObject::node` object-scoped**, so the numbering half of this item is done and only the key handling remains |
 | **11** | **Arrows nudge 1 pt; Shift+arrow 10 pt** | **⬜ OWED.** R122's family — the keyboard route to the same edit |
-| **12** | **Breadcrumb** — `Page › Path #5870 › Part #667 › Point #1,204`, each segment clickable to ascend | **⬜ OWED — net new; nothing exists today.** ★ **Its growth after the first double-click is itself the confirmation that the gesture did something** — descent is otherwise a state change with no visible mark, which is the *"inside-with-nothing-selected looks identical to outside"* hazard 025 §3.5 named and promised the breadcrumb would discharge. **Now more owed than when written**: two rungs of descent ship, and neither announces itself except through the readout |
+| **12** | **Breadcrumb** — `Page › Path #5870 › Part #667 › Point #1,204`, each segment clickable to ascend | **⬜ OWED — filed as Pass 36.2 (*Next up*, 2026-08-05).** ★ **Its growth after the first double-click is itself the confirmation that the gesture did something** — descent is otherwise a state change with no visible mark, which is the *"inside-with-nothing-selected looks identical to outside"* hazard 025 §3.5 named and promised the breadcrumb would discharge. **Promoted from "owed" to a real Pass because an operator report (2026-08-05) reproduced exactly this symptom** — see the Pass 36.0 Shipped entry's "third impression" note |
 | **13** | **Readout rows corrected** — Node row gains the **handle-presence clause** (defect 1); Subpath row gains the **descent disclosure** the Object row has (defect 3) | **⬜ NOT REPORTED EITHER WAY — treat as OWED and UNVERIFIED.** Defect 1's clause is an **R83** obligation now that Pass 26.1 has shipped visible handles: it is the only way an operator learns handles are there |
 | **14** | **Toolbar tooltip correction**, so the rung is **discoverable before trying anything** | **⬜ OWED.** Today the gesture's success is invisible until item 12 exists; discoverability cannot be left to experiment |
 
@@ -9957,6 +10035,73 @@ predicate, drifting the first time the core's `W`/`W*` handling changes).
 recorded as an amendment to the existing **(av)**, because the question
 it answers is (av)'s question, narrowed. **It also spends no Pass
 family** — 26 was already claimed by 025.
+
+### Pass 36.1 — Delete a node (core + CLI + GUI)
+
+**Filed 2026-08-05, family 36 (Pass 36.0 shipped same day; see
+*Shipped*).** No `plan_delete_node` exists anywhere in `pdfce-core`
+today — Pass 36.0 ships a REFUSAL (`ui_text::node_delete_unsupported`)
+in the gap this Pass is meant to fill. Acceptance criteria below are
+derived from reading `crates/pdfce-core/src/vector/edit.rs`'s existing
+surgery family (`plan_move_subpath`, `plan_delete_subpath`,
+`plan_move_node`), not invented fresh:
+
+- Removing an **interior or terminal** anchor excises that operator's
+  token span — the ordinary case, structurally identical to the
+  existing subpath-delete surgery one rank down.
+- Removing the **FIRST** anchor must **promote the following operator to
+  the subpath's new `m`**: an `l x y` becomes `m x y`; a `c`/`v`/`y`
+  becomes `m` at its endpoint, **losing the curve into a straight jump
+  to that same point** — this is an inference the operator did not
+  directly request and **must be disclosed** (CLAUDE.md rule 4), not
+  silently absorbed as "the anchor moved."
+- A subpath left with **fewer than two anchors** after the deletion is
+  **REFUSED by name**, directing the operator to delete the whole part
+  instead (`plan_delete_subpath` already exists for that).
+- An **`re`** rectangle's corner is **REFUSED by name** — there is no
+  per-corner operand on an `re` operator to excise; deleting a corner is
+  not expressible without rewriting the primitive into explicit `m l l l
+  h` operators, which this Pass does not do (that rewrite, if ever
+  wanted, is its own decision).
+- An **implicitly-started subpath** (`starts_implicitly: true`, Pass
+  28.0) is refused or materialized per the Pass 30.0 precedent
+  (`ImplicitNode`/materialize-then-edit) — do not re-derive a third
+  policy for the same shape.
+- Fixture tests per branch above (interior, terminal, first-anchor
+  promotion incl. the curve-loses-its-curve disclosure, too-few-anchors
+  refusal, `re`-corner refusal, implicit-start handling), plus a
+  `cargo-fuzz` target consideration since this is untrusted-input
+  parsing-adjacent surgery (`ARCHITECTURE.md` §10.2).
+- A `pdfce-cli node-delete` subcommand, per CLAUDE.md rule 11 (same
+  session as the GUI wiring, not deferred).
+- GUI: Delete at the Node rung routes here instead of refusing, once
+  built; the refusal Pass 36.0 shipped is the interim, correctly-named
+  placeholder this Pass replaces.
+
+### Pass 36.2 — Say which rung you are standing on (GUI)
+
+**Filed 2026-08-05, family 36.** Decision 028's plan item **12**
+(the breadcrumb), promoted out of the bare-list "owed" state into a
+scoped Pass because an operator has now reported the exact symptom it
+exists to prevent (Pass 36.0's "third impression," above: node editing
+already works, but descending to the Node rung silently no-ops with no
+visible feedback unless the double-click lands within grab range of an
+actual anchor).
+
+- The current rung — Object / Part (Subpath) / Point (Node) — is
+  **continuously visible**, not only on demand: `Page › Path #5870 ›
+  Part #667 › Point #1,204` per decision 028's specified shape, each
+  segment clickable to ascend.
+- A double-click that **fails** to descend (misses grab range) **says
+  why** — no anchor within grab range — rather than silently doing
+  nothing, closing the *"inside-with-nothing-selected looks identical to
+  outside"* hazard decision 025 §3.5 named.
+- Discharges decision-028 items 12 AND 14 together (item 14, the
+  toolbar-tooltip correction, is the same discoverability gap one layer
+  up — the rung's existence should be namable before an operator finds
+  it by trial). Items 13's readout-row corrections are related but not
+  automatically discharged by this Pass; re-verify at build time whether
+  the breadcrumb subsumes them or they remain a separate small fix.
 
 ### ~~Pass 27.2~~ — ANSI and ISO drafting standards for ce dimensions — **SHIPPED 2026-08-05 in two commits, `cf8caf7` (core + CLI) and `5536452` (GUI). See the single Pass 27.2 Shipped entry and its two ticks.** Retained below as the pre-build scope (append-only discipline)
 
@@ -16958,6 +17103,69 @@ decision 025, (aq)–(au) from decision 026:**
   moved in this single filing, and per R106/R133 the live ceiling should
   be read, not assumed, before the next number is minted on top of this
   one.
+
+- **R151 — A core capability shipped with a documented, tested public
+  entry point is not "done" until something calls it; audit the call
+  graph, not just the implementation, before crediting a Pass
+  (2026-08-05; librarian-assigned; promoted from Pass 36.0's
+  `move_subpath` finding).** `EditSession::move_subpath` (`pdfce-core`,
+  `crates/pdfce-core/src/vector/edit.rs`) has existed, documented and
+  unit-tested, since **Pass 28.0** (`d8b9735`) — and was **called by
+  nothing** for eight Pass-numbers and roughly two calendar days, until
+  Pass 36.0 (`25ff9d1`) finally wired a GUI drag gesture to it. Nothing
+  was broken in the intervening time; nothing was even wrong at the core
+  layer — `move_subpath`'s own tests passed throughout. **The defect
+  lived entirely OUTSIDE the mechanism**, in the fact that no consumer
+  (GUI classifier, CLI subcommand) had been built to reach it, and that
+  gap produced a real operator-visible symptom (Pass 36.0's Defect 1:
+  the fall-through arm silently substituted whole-object move instead).
+  **Why this is a distinct rule from R150, not an amendment to it.** R150
+  is about a scaffolded TWO-SIDED mechanism (discard/commit, open/close,
+  acquire/release) shipping with one side's own BODY an empty stub — the
+  defect is *inside* the mechanism, in code that runs and does nothing.
+  This rule is about a mechanism that is **fully built and correctly
+  tested end-to-end at its own layer**, with **no caller anywhere** — the
+  defect is *outside* the mechanism, in the layer above it that was
+  supposed to invoke it and never did. Different failure shape: R150 is
+  caught by reading the function body; **this rule is caught by reading
+  the call graph**, which a function's own tests never exercise because
+  the tests call it directly. **The mechanical check, stated so it is
+  checkable at review time:** a `pub fn` on `EditSession` (or any
+  core-layer surgery entry point) with **no GUI call site and no CLI call
+  site** is mechanically findable — a grep/call-graph audit, not a
+  judgment call — and should be run whenever a Pass claims a core
+  capability "ships" without also shipping a gesture or subcommand for
+  it.
+  **Numbering note, so the next filing does not double-mint.** R150's own
+  entry left **R151 as the next free number for whichever of THREE
+  contingent candidates is accepted or promoted first**: decision 030
+  §6.2(a), decision 030 §4.5, and the "date and label every contract
+  statement" documentation observation (★ Pass 33.0 entry, above). **None
+  of those three had been minted as of this filing.** This finding —
+  Pass 36.0's orphaned-capability pattern — is a **fourth**, previously
+  unlisted candidate, and it is the one that claims R151, because it was
+  filed first against the live ceiling (R106/R133: read the ceiling, do
+  not assume a reservation). **The three original contingent candidates
+  now take R152**, not R151, if and when any of them is accepted or
+  promoted — same transfer mechanism R150's own text used when it took
+  the slot the "date and label" observation had provisionally named for
+  itself.
+  Cross-references **R117** (the priority-raise family this closes a
+  second instance of — a capability existing at the core layer with no
+  hand-reachable gesture), **R150** (sibling process rule, distinct shape
+  as argued above), **CLAUDE.md rule 11** (every feature Pass ships its
+  CLI subcommand the same session — the rule this finding is the sharpest
+  argument yet for enforcing literally).
+  **Ceiling is now R151** (was R150 at the Pass-34/35 filing). **This
+  filing also mints Pass family 36's remaining members** — Pass 36.0 is
+  Shipped (see above); Passes 36.1 and 36.2 are filed under *Next up* —
+  so the Pass-family ceiling moves from **36** to **37 next free**.
+  **No decision record and no operator question minted by this filing**:
+  decision-record ceiling stays **031** (**032** next free, unchanged);
+  operator-question ceiling stays **(aw)**, unchanged.
+  **`tools/check-ledger-numbers.py --stats` should be re-run after this
+  commit**, per the same discipline as every prior ceiling-moving filing —
+  this librarian has no shell and has not run it itself.
 
 ## Update protocol
 

@@ -13699,3 +13699,144 @@ than an unfinished part of it.
    confirmation, not discovery.
 7. **Check `D:\Dev\pdfce-backups\` directly** — backup state is not
    assertable from a librarian dispatch (hard rule 8).
+
+**Same-day continuation 89 (real date 2026-08-05) — TWO PASSES SHIPPED
+(34.0, 36.0), TWO NEW PASSES FILED (36.1, 36.2), ONE STANDING RULE
+MINTED (R151), ONE EGUI RAG FINDING WRITTEN:**
+
+### Shipped
+
+- **Pass 34.0** — *"clicking away KEEPS your edit:
+  `GestureInterrupt::Commit`, wired at last"* — `b84fd53`. Discharges the
+  *Next up* entry filed alongside decision 031 and R150 (continuation
+  88's prior filing). `commit_active_gesture` was a literal empty body
+  from Pass 12.0 to this Pass; `Commit` is now wired for TextEdit,
+  AddText and MeasureLinear through three shared, `Ui`-free commit
+  functions called by both the Accept button and the new interrupt path
+  (R92 single-path discipline at the GUI layer). Gates: `fmt`/`clippy`
+  clean, 44/44 test binaries green, `check-ui-strings`/
+  `check-ledger-numbers` clean, `cargo tree -p pdfce-core`/`-p
+  pdfce-render` GUI-dependency-free. Full detail in the `ROADMAP.md`
+  Shipped entry (now at the top of that section, above Pass 36.0).
+- **Pass 36.0** — *"dragging one part moves ONE part; Delete on a point
+  stops eating the line"* — `25ff9d1`. **Two defects in shipped work**,
+  both operator-reported and both reproduced live before being touched:
+  (1) the drag classifier's fall-through arm was whole-object move even
+  at the Subpath rung, so `EditSession::move_subpath` — built and tested
+  since Pass 28.0 (`d8b9735`) — had **no caller anywhere** until today;
+  fixed with a new `Commit::Subpath` classification arm. (2) Delete
+  routing tested `entered.subpath.is_some()`, which `EnteredObject`'s own
+  doc comment says is also true at the Node rung, so Delete on a selected
+  **point** was deleting the whole **part**; fixed by refusing by name at
+  the Node rung (`ui_text::node_delete_unsupported`) pending Pass 36.1's
+  real node-delete. A third impression — "node editing doesn't work" —
+  was corrected rather than fixed: node-drag already commits fine; what
+  fails is *finding* the Node rung with no breadcrumb (decision 028 item
+  12, promoted to Pass 36.2 below).
+
+### Ledger irregularity, recorded rather than absorbed
+
+**Pass ID `36.0` was assigned directly by the engineer**, not via a
+prior librarian *Backlog*/*Next up* filing, and the engineer flagged this
+explicitly as outside this librarian's prior authorization. Checked
+against the arithmetic on record: family **36** was the correctly-
+computed next-free family after the Pass-34/35 filing (continuation 88:
+"Pass-family ceiling moves from 34 to 36 next free") — **no collision,
+no gap**, only a reordering (shipped before its own *Next up* entry
+existed). Filed as ordinary Shipped/Next-up entries; no correction
+needed to any other ledger.
+
+### Decisions made this session
+
+- **No new `ARCHITECTURE.md` §12 decision record.** Both Passes are
+  defect fixes to already-decided behavior (gesture-commit wiring, drag
+  classification, Delete routing) — no crate boundary, library choice or
+  invariant was redrawn.
+- **R151 minted, and deliberately NOT folded into R150.** Pass 36.0's
+  `move_subpath` finding — a core capability shipped complete and tested,
+  called by nothing for 8 Pass-numbers — is judged a **distinct** shape
+  from R150 (a mechanism's own body shipped as a stub): R150 is caught by
+  reading the function; R151 is caught by reading the call graph, which
+  the function's own passing tests never exercise. **R151 was contested**
+  — R150's own text had left it as "next free for whichever of three
+  contingent candidates promotes first" (decision 030 §6.2(a)/§4.5, the
+  "date and label" observation) — **none of those three had minted yet**,
+  so this filing claims it for a fourth, previously-unlisted candidate,
+  and the three original contingents now take **R152** if/when promoted.
+  Full text under *Standing rules*.
+
+### Findings + decisions
+
+- **The orphaned-capability pattern (R151).** A `pub fn` on
+  `EditSession` with no GUI call site and no CLI call site is
+  mechanically findable by a call-graph audit — this is the checkable
+  form of the rule, not a vague "watch for this."
+- **Terminology discipline held throughout this filing.** Per CLAUDE.md
+  rule 15, everything Pass 36.0/36.1/36.2 touch — vector objects,
+  subpaths, nodes — is explicitly **neither** a ce dimension **nor** a
+  pdf dimension, and none of the filed text calls it "dimension" bare.
+- **egui/eframe finding written to the cross-project RAG:** two
+  double-click GESTURES scripted back-to-back (no idle frames between
+  them) coalesce into ONE click burst in egui's disambiguator — the
+  second `double_clicked()` silently reads `false`, indistinguishable
+  from "the feature doesn't support double-click" without knowing this.
+  ~45 idle frames between gestures cleared it in this harness. **Nearly
+  produced a false bug report against the Node rung** before being
+  diagnosed as a scripting-timing gap, not an app defect. Filed as
+  `D:\dev\rag\egui\egui_rapid_successive_double_clicks_coalesce_into_one_burst.md`,
+  indexed in that directory's `index.md`. Not written to
+  `C:\personal_rag\pdf\` (not PDF-domain) or `D:\dev\rag\rust\` (not
+  Rust-toolchain/Cargo — same reasoning continuation 88 gave for keeping
+  the analogous Option-widening finding out of that tree).
+
+### Still in flight
+
+- **Pass 36.1 — Delete a node** (core + CLI + GUI), filed under *Next
+  up*. No `plan_delete_node` exists yet; acceptance criteria derived from
+  the existing `plan_move_subpath`/`plan_delete_subpath`/`plan_move_node`
+  surgery family, including the first-anchor-promotion disclosure
+  obligation (losing a curve into a straight jump is a rule-4 case) and
+  the `re`-corner / implicit-start refusals.
+- **Pass 36.2 — the rung breadcrumb** (GUI), filed under *Next up*.
+  Discharges decision-028 plan items 12 and 14 together if built as
+  scoped; item 13 needs re-verification at build time, not assumed
+  discharged by the same work.
+- **Everything from continuation 88's *OWED WORK* not touched by this
+  filing remains open**: `ARCHITECTURE.md` §7 (CLI) sync, Pass 33.0's
+  unchosen fix option, decision-028 items 10/11/13/14 (14 now tracked
+  under Pass 36.2), the `CompositeEncoding` re-export question, operator
+  questions (au)/(av).
+- **Pass families 34.1/34.2/35.0/35.1 remain open**, unaffected by this
+  filing — only Pass 34.0 discharged from that group.
+
+### For next session
+
+1. Build Pass 36.1 (node delete) — the refusal Pass 36.0 shipped is a
+   correctly-named placeholder, not a design decision to keep.
+2. Build Pass 36.2 (breadcrumb) — highest-value discoverability fix on
+   record for the Node rung; verify against item 13 whether the readout-
+   row corrections come along for free or need their own small fix.
+3. Continue decision 028's plan — items 10/11 (keyboard nudge/cycle),
+   item 14 (folds into 36.2, verify at build time it's actually covered).
+4. Resume continuation 88's still-open items: `ARCHITECTURE.md` §7 sync,
+   Pass 33.0's fix choice, the `CompositeEncoding` re-export question.
+5. **Re-run `tools/check-ledger-numbers.py --stats` after committing
+   these docs** — this filing moved the standing-rule ceiling (R150 →
+   R151, next free R152) and the Pass-family ceiling (36 → 37 next
+   free); decision-record and operator-question ceilings are unchanged.
+6. **Check `D:\Dev\pdfce-backups\` directly** — backup state is not
+   assertable from a librarian dispatch (hard rule 8); no claim about it
+   is made in this entry.
+
+### Ledger discipline (R106)
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | **36.0** (Shipped), **36.1**, **36.2** (*Next up*) | family **36** fully mentioned (**37** next free) |
+| Standing rules | **R151** | **R151** (**R152** next free) |
+| Decision records | none | **031** (**032** next free, unchanged) |
+| Operator questions | none | **(aw)**, unchanged |
+
+**This librarian has no shell and did not run
+`tools/check-ledger-numbers.py` itself** — the engineer should re-run it
+per item 5 above before minting on top of this filing.

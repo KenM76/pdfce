@@ -2010,9 +2010,21 @@ click rows to select objects you cannot see."
 /// The way OUT is stated every time. A mode an operator can enter by accident —
 /// a double-click is easy to produce unintentionally — and cannot obviously
 /// leave is the worst kind, and one line of text is the whole remedy.
+/// # Pass 36.2: the Point rung had no words at all
+///
+/// This function took `subpath` and not `node`, so descending to the Point
+/// rung changed the outline on the canvas and changed **nothing** in the
+/// status line: it still read *"part #0 is selected … press Delete to remove
+/// it"*. Both halves were then wrong — the rung was Point, not Part, and
+/// Delete at the Point rung no longer removes the part (Pass 36.0). An
+/// operator who could not tell which rung they were standing on reported the
+/// consequence as *"I still don't seem to have a way to edit/delete nodes"*,
+/// when node editing in fact worked and they were simply never told they had
+/// arrived.
 pub fn entered_object_readout(
     object: usize,
     subpath: Option<usize>,
+    node: Option<usize>,
     parts: Option<usize>,
     stacked: Option<(usize, usize)>,
 ) -> String {
@@ -2030,16 +2042,46 @@ pub fn entered_object_readout(
         }
         _ => String::new(),
     };
-    match subpath {
-        Some(sp) => format!(
-            "Inside {scope} — part #{sp} is selected{stack}. Click another part to pick it, press \
-Delete to remove it, or press Escape to go back to whole objects."
+    // Ordered deepest-rung-first, because the rungs NEST: at the Point rung
+    // `subpath` is also `Some`, so testing `subpath` first would report "Part"
+    // while the operator was standing on "Point" — which is the exact
+    // confusion this rewrite exists to end, reproduced in the code that
+    // describes it.
+    match (subpath, node) {
+        (Some(sp), Some(n)) => format!(
+            "Inside {scope} — POINT #{n} of part #{sp} is selected. Drag it to move it, click \
+another point to pick it, or press Escape to go back up to the whole part."
         ),
-        None => format!(
+        (Some(sp), None) => format!(
+            "Inside {scope} — PART #{sp} is selected{stack}. Drag it to move just this part, \
+double-click one of its points to work on the points, press Delete to remove the part, or press \
+Escape to go back to whole objects."
+        ),
+        _ => format!(
             "Inside {scope} — no part picked yet. Click one of its parts, or press Escape to go \
 back to whole objects."
         ),
     }
+}
+
+/// Status note when a double-click at the Part rung did NOT descend to the
+/// Point rung, because it landed nowhere near a point (Pass 36.2).
+///
+/// # Why a silent no-op was the wrong answer
+///
+/// Descending to the Point rung requires the double-click to land within grab
+/// range of a real anchor. Miss, and `depth_after_click` returns the state
+/// unchanged — correct, and completely silent. So the operator double-clicks
+/// the middle of a line, nothing happens, and the reasonable conclusion is
+/// that points are not editable. That is the conclusion the operator actually
+/// reached on 2026-08-05, about a rung that works.
+///
+/// Decision 023 §1.3 already required this class of no-op to be reported
+/// rather than swallowed; this is that requirement applied to the rung it was
+/// missing from.
+pub fn node_descent_missed() -> &'static str {
+    "No point close enough to work on, so you are still on the whole part. Points sit at the ends \
+of each segment — double-click right on one to select it."
 }
 
 /// Status note after deleting one part of an object (Pass 25.2).
@@ -2097,11 +2139,19 @@ part, then press Delete."
 /// gesture nobody mentions is a feature nobody finds — and explains WHY the
 /// level exists, in the words of the situation that produces it (a CAD drawing
 /// exported as one object per view).
+/// **Amended Pass 36.2.** This tooltip ended with *"Moving an individual part
+/// is not available yet"* — true when written, and made false by Pass 36.0
+/// the same day it was read. A shipped string that states a capability
+/// boundary is a claim with a shelf life; this one outlived its truth by
+/// about an hour. It now describes all three rungs, which is also what the
+/// operator needed and did not have.
 pub fn entered_object_tooltip() -> &'static str {
     "Double-click an object to work inside it. Drawings exported from CAD often put a whole view \
-into one object, so selecting a single line means going one level down first. Click a part to \
-select it, press Delete to remove it, and Escape to come back out. Moving an individual part is \
-not available yet."
+into one object, so selecting a single line means going one level down first. There are three \
+levels: the whole object, one part of it, and one point of that part. Click a part to select it, \
+drag to move just that part, or press Delete to remove it. Double-click directly on one of its \
+points to go down one more level, where dragging moves that single point. Escape steps back up \
+one level at a time."
 }
 
 /// Plain-language name for a path's painting disposition (§8.5.3, Table 60).

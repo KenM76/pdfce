@@ -2275,6 +2275,29 @@ impl OpenDoc {
 
         let before = self.entered;
         self.entered = canvas::depth_after_click(before, double, object_hit, subpath_hit, node_hit);
+        // Pass 36.2: a double-click that MEANT "descend to the points" and
+        // found none is reported, not swallowed.
+        //
+        // The conditions are narrow on purpose, so this never fires on a
+        // double-click that meant something else: the operator must already be
+        // at the Part rung (`subpath` set, `node` not), the click must be on
+        // the SAME object (a double-click on a different object is an entry
+        // into that one, not a descent), and the descent must actually have
+        // failed to find an anchor.
+        //
+        // Without this the miss is invisible — `depth_after_click` returns the
+        // state unchanged, which is the correct rule and a silent one. The
+        // operator concludes points are not editable, which is what happened.
+        if double
+            && node_hit.is_none()
+            && let Some(e) = before
+            && e.subpath.is_some()
+            && e.node.is_none()
+            && object_hit == Some(e.object)
+        {
+            self.pending_note = Some(ui_text::node_descent_missed().to_owned());
+            diag::trace(|| "node-descent-missed".to_owned());
+        }
         // The cycle belongs to the object actually entered, which a
         // double-click may have just changed. Dropped whenever the click did
         // not land on a part, so a stale "part 2 of 5" can never describe a
@@ -12083,6 +12106,7 @@ fn selection_readout(doc: &OpenDoc, ui: &mut egui::Ui, expanded: &mut bool) {
         ui.label(ui_text::entered_object_readout(
             entered.object,
             entered.subpath,
+            entered.node,
             parts,
             doc.subpath_cycle
                 .filter(|c| Some(c.produced) == entered.subpath)
