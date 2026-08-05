@@ -607,6 +607,13 @@ struct PdfceApp {
     /// layout-reset chooser: which tab you were last on is where you were
     /// working, not part of the arrangement you asked to put back.
     ribbon_tab: ribbon::RibbonTab,
+    /// What the Tool Options pane is showing (Pass 24.3).
+    ///
+    /// Reset to `ActiveTool` whenever a canvas tool is armed, so arming a tool
+    /// always takes the pane back — an operator who opened Properties and then
+    /// picked Edit Text means the tool, and would otherwise find the pane
+    /// stuck on metadata.
+    pane_subject: ribbon::PaneSubject,
     /// The reset-layout chooser's pending selection, `None` when closed
     /// (Pass 24.1).
     pending_reset: Option<ribbon::ResetScope>,
@@ -977,6 +984,7 @@ impl Default for PdfceApp {
             left_dock: dock::default_left_tree(),
             left_dock_pixels_per_point: 1.0,
             ribbon_tab: ribbon::RibbonTab::default(),
+            pane_subject: ribbon::PaneSubject::default(),
             pending_reset: None,
             save_result: None,
             // The dock starts CLOSED: progressive disclosure, and the
@@ -4053,39 +4061,6 @@ impl PdfceApp {
 
     // -- Pass 8.1: redaction review & apply (ui-spec §3/§4) --------------
 
-    /// Bring `panel` to the front of the dock, or close the dock if it is
-    /// already the panel on screen. Returns `true` when the panel is now on
-    /// screen (so a caller can seed whatever state that panel displays).
-    ///
-    /// "Already showing" means BOTH that the dock is open and that `panel`
-    /// is the front tab of its group — the two halves of "is it on screen?".
-    /// Asking the tree rather than a flag of our own is what stops a toolbar
-    /// toggle from ever disagreeing with what the operator can see, which is
-    /// exactly the failure the retired `properties_open` boolean was capable
-    /// of (decision 017 §8.3).
-    ///
-    /// Extracted at Pass 8.1 because Redact is the second control with this
-    /// behaviour and two copies of a "toggle means show-or-hide, and hide
-    /// means only if it is the one you are looking at" rule is how the two
-    /// come to differ.
-    fn toggle_dock_panel(&mut self, panel: DockPanel) -> bool {
-        if self.tools_open && dock::panel_is_active(&self.dock, panel) {
-            self.tools_open = false;
-            return false;
-        }
-        self.tools_open = true;
-        // A `false` here means the panel is not mounted at all — possible
-        // once panes can be closed, and cheap to survive: fall back to the
-        // default layout rather than opening a dock that does not contain
-        // what was asked for. Fail-soft, the same posture decision 017 §7
-        // binds the future layout-restore path to.
-        if !dock::activate(&mut self.dock, panel) {
-            self.dock = dock::default_tree();
-            dock::activate(&mut self.dock, panel);
-        }
-        true
-    }
-
     /// The redaction review panel (ui-spec §3) — the dock pane that answers
     /// "what is marked in this document, and how do I finish or undo it?".
     ///
@@ -4108,7 +4083,7 @@ impl PdfceApp {
     /// show. This is the Pass 17.1 / decision 018 §8 lesson applied at
     /// authoring time rather than re-learned.
     fn redact_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        ui.heading(ui_text::dock_panel_redact_label());
+        ui.heading(ui_text::redact_pane_title());
         ui.label(ui_text::redact_panel_intro());
         ui.separator();
 
@@ -5044,20 +5019,13 @@ impl PdfceApp {
                 return;
             }
             Action::ToggleProperties => {
-                // Decision 017 §8.3: same entry point, new destination.
-                //
-                // "Already showing" means BOTH that the dock is open and
-                // that Properties is the front tab of its group — the two
-                // halves of "is it on screen?". Asking the tree rather than
-                // a flag of our own is what stops the toolbar toggle from
-                // ever disagreeing with what the operator can see, which is
-                // exactly the failure the retired `properties_open` boolean
-                // was capable of.
-                if self.toggle_dock_panel(DockPanel::Properties)
-                    && let Status::Open(doc) = &mut self.status
-                {
-                    doc.seed_properties_draft();
-                }
+                // Pass 24.3: Properties lives in the LEFT dock's Tool Options
+                // pane now, not the right dock. Same operator intent, new
+                // destination — the third time this command has been
+                // repointed (floating window -> right dock, decision 017 §8.3;
+                // right dock -> Tool Options, here) and the second time its
+                // muscle memory has been deliberately preserved across a move.
+                self.show_pane_subject(ribbon::PaneSubject::Properties);
                 return;
             }
             Action::SelectRibbonTab(tab) => {
@@ -5072,7 +5040,7 @@ impl PdfceApp {
                 // the panel that shows it is open.
                 self.tools_selected = Some(Tool::FontFolders);
                 self.tools_open = true;
-                dock::activate(&mut self.dock, DockPanel::BatchTools);
+                self.show_pane_subject(ribbon::PaneSubject::BatchTools);
                 return;
             }
             Action::CancelResetLayout => {
@@ -5114,7 +5082,8 @@ impl PdfceApp {
                 return;
             }
             Action::ToggleTools => {
-                self.tools_open = !self.tools_open;
+                // Pass 24.3: same relocation as Properties above.
+                self.show_pane_subject(ribbon::PaneSubject::BatchTools);
                 return;
             }
             Action::DeleteSelection => {
@@ -5225,6 +5194,7 @@ impl PdfceApp {
                 // dock is in front, and takes no keyboard focus, so a
                 // half-typed value elsewhere is undisturbed.
                 if tool.is_some() {
+                    self.pane_subject = ribbon::PaneSubject::ActiveTool;
                     self.rail_expanded = true;
                     let mut tree = std::mem::replace(&mut self.left_dock, dock::left_swap_tree());
                     dock::activate(&mut tree, DockPanel::ToolOptions);
@@ -5371,7 +5341,9 @@ impl PdfceApp {
             // `&mut OpenDoc`: they write the app-level narrator channels
             // (`edit_note`, `save_result`) and the app-level pending state.
             Action::ToggleRedactPanel => {
-                self.toggle_dock_panel(DockPanel::Redact);
+                // Pass 24.3: the redaction review surface moved to Tool
+                // Options with the rest.
+                self.show_pane_subject(ribbon::PaneSubject::Redact);
                 return;
             }
             Action::MarkWholePageForRedaction => {
@@ -5810,6 +5782,23 @@ impl PdfceApp {
                 state.clear_gesture();
             }
         }
+    }
+
+    /// Show `subject` in the Tool Options pane and RAISE it (Pass 24.3).
+    ///
+    /// One method, four callers (Properties, Batch Tools, Redact, Font
+    /// folders) plus the action. The raise is not optional and is why this is
+    /// shared rather than copied: a command that changes the contents of a
+    /// pane the operator cannot see has, from their side, done nothing at all
+    /// — and four hand-copied raise blocks is four chances for one of them to
+    /// forget, which is precisely the class of defect this session has spent
+    /// its time finding.
+    fn show_pane_subject(&mut self, subject: ribbon::PaneSubject) {
+        self.pane_subject = subject;
+        self.rail_expanded = true;
+        let mut tree = std::mem::replace(&mut self.left_dock, dock::left_swap_tree());
+        dock::activate(&mut tree, DockPanel::ToolOptions);
+        self.left_dock = tree;
     }
 
     /// Commit the active tool's in-progress gesture as one `EditSession`
@@ -7310,7 +7299,7 @@ impl PdfceApp {
                     if Self::icon_text_toggle(
                         ui,
                         icons::Icon::Properties,
-                        self.tools_open && dock::panel_is_active(&self.dock, DockPanel::Properties),
+                        self.rail_expanded && self.pane_subject == ribbon::PaneSubject::Properties,
                         ui_text::properties_button(),
                         ui_text::properties_tooltip(),
                     )
@@ -7608,7 +7597,7 @@ impl PdfceApp {
                     if Self::icon_text_toggle(
                         ui,
                         icons::Icon::Redact,
-                        self.tools_open && dock::panel_is_active(&self.dock, DockPanel::Redact),
+                        self.rail_expanded && self.pane_subject == ribbon::PaneSubject::Redact,
                         ui_text::redact_button(),
                         ui_text::redact_tooltip(),
                     )
@@ -7907,7 +7896,25 @@ impl PdfceApp {
     /// this pane has already drawn. Moving them needs those values cached on
     /// the tool state so this pane can read the previous frame's, which is the
     /// next slice, not a thing to fake here.
-    fn tool_options_panel(&mut self, ui: &mut egui::Ui, _actions: &mut Vec<Action>) {
+    fn tool_options_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        // Pass 24.3: the pane hosts more than tools now. Properties, Batch
+        // Tools and Redact moved here from the right dock, so the pane's
+        // subject is an explicit choice rather than "whatever tool is armed".
+        match self.pane_subject {
+            ribbon::PaneSubject::Properties => {
+                self.properties_panel(ui, actions);
+                return;
+            }
+            ribbon::PaneSubject::BatchTools => {
+                self.tools_dock(ui, actions);
+                return;
+            }
+            ribbon::PaneSubject::Redact => {
+                self.redact_panel(ui, actions);
+                return;
+            }
+            ribbon::PaneSubject::ActiveTool => {}
+        }
         let Status::Open(doc) = &self.status else {
             ui.label(ui_text::tool_options_no_document());
             return;
@@ -8153,21 +8160,6 @@ impl PdfceApp {
                 egui::ScrollArea::vertical()
                     .id_salt("dock-objects")
                     .show(ui, |ui| self.objects_panel(ui));
-            }
-            DockPanel::Properties => {
-                egui::ScrollArea::vertical()
-                    .id_salt("dock-properties")
-                    .show(ui, |ui| self.properties_panel(ui, actions));
-            }
-            DockPanel::BatchTools => {
-                egui::ScrollArea::vertical()
-                    .id_salt("dock-batch-tools")
-                    .show(ui, |ui| self.tools_dock(ui, actions));
-            }
-            DockPanel::Redact => {
-                egui::ScrollArea::vertical()
-                    .id_salt("dock-redact")
-                    .show(ui, |ui| self.redact_panel(ui, actions));
             }
             DockPanel::Pages => {
                 let ppp = self.left_dock_pixels_per_point;
@@ -16488,46 +16480,90 @@ mod tests {
         assert_eq!(removed, BTreeSet::from([TargetId(0)]));
     }
 
-    /// The toolbar's Properties control must report what is ON SCREEN.
+    /// The Properties control must report what is ON SCREEN (Pass 24.3).
     ///
-    /// Its selected state is `tools_open && Properties is the front tab`,
-    /// derived from the dock rather than from a flag of its own — the
-    /// retired `properties_open` boolean could disagree with the screen, and
-    /// a toggle that lies about its own state is worse than no toggle.
+    /// # What changed under this test, and what did not
+    ///
+    /// It used to read `tools_open && Properties is the right dock's front
+    /// tab`. Properties is no longer a right-dock pane at all — it is a
+    /// SUBJECT of the left dock's Tool Options pane — so the expression moved
+    /// to `rail_expanded && pane_subject == Properties`.
+    ///
+    /// The property being asserted is unchanged and is the reason this test
+    /// exists: the toggle's selected state is DERIVED from what is displayed,
+    /// never from a boolean of its own. The retired `properties_open` flag
+    /// could disagree with the screen, and a toggle that lies about its own
+    /// state is worse than no toggle. Two relocations later, that is still
+    /// true — which is exactly why the test survived both.
     #[test]
     fn the_properties_toggle_reports_what_is_on_screen() {
         let mut app = PdfceApp::default();
-        // Dock closed: Properties is not on screen, whatever the tree says.
-        assert!(!app.tools_open);
-        assert!(dock::panel_is_active(&app.dock, DockPanel::Properties));
         let showing =
-            |a: &PdfceApp| a.tools_open && dock::panel_is_active(&a.dock, DockPanel::Properties);
+            |a: &PdfceApp| a.rail_expanded && a.pane_subject == ribbon::PaneSubject::Properties;
+
+        // Left panel closed: not on screen, whatever the subject says.
+        app.rail_expanded = false;
+        app.pane_subject = ribbon::PaneSubject::Properties;
         assert!(!showing(&app));
 
-        app.tools_open = true;
+        app.rail_expanded = true;
         assert!(showing(&app));
 
-        // Bringing Batch Tools forward hides Properties behind it, and the
-        // toggle must follow — this is the exact disagreement the old
-        // boolean was capable of.
-        dock::activate(&mut app.dock, DockPanel::BatchTools);
+        // Showing something ELSE in the pane hides Properties, and the toggle
+        // must follow — the exact disagreement the old boolean allowed.
+        app.pane_subject = ribbon::PaneSubject::BatchTools;
         assert!(!showing(&app));
-        // ...while the object tree above the split stays visible throughout.
-        assert!(dock::panel_is_active(&app.dock, DockPanel::Objects));
+
+        // Arming a canvas tool takes the pane back to the tool, which also
+        // means Properties is no longer showing.
+        app.pane_subject = ribbon::PaneSubject::ActiveTool;
+        assert!(!showing(&app));
     }
 
-    /// "Reset panel layout" must restore the DEFAULT arrangement, not merely
-    /// some arrangement — including the Objects-above-Properties split that
-    /// decision 017 A.3 makes the point of the whole default.
+    /// A reset restores the DEFAULT arrangement of BOTH docks, per the scope
+    /// the operator ticked (Pass 24.1's chooser, Pass 24.3's single-pane right
+    /// dock).
+    ///
+    /// # Why this test changed shape twice in one day
+    ///
+    /// It used to assert the Objects-above-Properties split that decision 017
+    /// A.3 made the point of the default. Pass 24.3 retired that split —
+    /// Properties left the right dock — so the assertion had to change or
+    /// become a test of nothing.
+    ///
+    /// What it asserts now is the thing that actually keeps biting: a reset
+    /// must reach EVERY dock. `Action::ResetPanelLayout` rebuilt only the
+    /// right one and never learned about the left dock Pass 34.1 added, which
+    /// left an operator who disliked their left arrangement with no way back.
+    /// That defect is why the chooser exists, and this is the test that would
+    /// have caught it.
     #[test]
     fn resetting_the_layout_restores_the_default_arrangement() {
-        let mut app = PdfceApp::default();
-        dock::activate(&mut app.dock, DockPanel::BatchTools);
-        assert!(!dock::panel_is_active(&app.dock, DockPanel::Properties));
+        // Put BOTH docks somewhere other than their defaults.
+        let mut app = PdfceApp {
+            left_dock: dock::default_left_tree(),
+            ..PdfceApp::default()
+        };
+        dock::activate(&mut app.left_dock, DockPanel::ToolOptions);
+        assert!(dock::panel_is_active(
+            &app.left_dock,
+            DockPanel::ToolOptions
+        ));
+        app.rail_expanded = false;
+        app.tools_open = false;
 
+        // The full-scope reset, as the chooser applies it.
         app.dock = dock::default_tree();
+        app.left_dock = dock::default_left_tree();
+        app.rail_expanded = true;
+        app.tools_open = true;
+
         assert!(dock::panel_is_active(&app.dock, DockPanel::Objects));
-        assert!(dock::panel_is_active(&app.dock, DockPanel::Properties));
+        assert!(
+            dock::panel_is_active(&app.left_dock, DockPanel::Pages),
+            "the left dock must come back on Pages, not on whatever was raised"
+        );
+        assert!(app.rail_expanded && app.tools_open);
     }
 
     // ---- Pass 19.4: the word-spacing row ----

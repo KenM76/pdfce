@@ -135,6 +135,24 @@ it is worth a direct fetch attempt (not just relying on the snippet),
 since the full thread often contains a more precise quote (e.g. a
 verbatim Acrobat error-message string) than the search snippet alone.
 
+Confirmed an eleventh time (2026-08-05, building the cross-cutting
+`comparison__pdfce_feature_column.md` file — the FEATURES.md "Acrobat"
+column session): the ONE direct `WebFetch` attempted this session
+(`adobe.com/acrobat/pricing/acrobat-pro-vs-standard.html`, the official
+tier-comparison page — exactly the kind of primary source this RAG's
+own rules say to prefer) timed out at 60s, same failure mode as
+`helpx.adobe.com`, extending the pattern to `adobe.com` proper, not just
+the `helpx` subdomain. `WebSearch` itself worked cleanly all session —
+roughly 10 queries run, zero quota exhaustion, a notably better
+WebSearch experience than several prior sessions logged above. Practical
+implication reinforced: for a session that needs MANY quick capability-
+existence checks across unrelated topics (rather than deep-diving one
+feature), lean entirely on `WebSearch` snippets and skip `WebFetch`
+attempts on Adobe-owned domains altogether unless a specific fact
+genuinely requires the full page — the hit rate on Adobe-owned domains
+(helpx AND adobe.com root) has now been consistently poor across eleven
+separate sessions/attempts.
+
 Confirmed a ninth time (2026-08-01, extending `measure__scale_and_calibration.md`
 to try to close the static-vs-associative GAP for decision 011): `WebSearch`
 exhausted at 200/200 before the first query again; the one candidate

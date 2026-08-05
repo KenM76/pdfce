@@ -168,37 +168,6 @@ pub enum DockPanel {
     /// standing). Answers "what am I clicking on", which is the operator's
     /// own stated purpose for it.
     Objects,
-    /// The document's `/Info` metadata form (§14.3.3) — the body that used
-    /// to live in the floating `properties_window`.
-    Properties,
-    /// The historic Tools dock body: Combine / Split / Insert pages / Font
-    /// folders.
-    ///
-    /// Named "Batch Tools" in the UI, deliberately, per decision 017 §8.5
-    /// (still binding under A.4 #4): a row labelled "Tools" inside a
-    /// container an operator calls "the Tools dock" is a real collision they
-    /// trip on.
-    BatchTools,
-    /// The redaction review surface (Pass 8.1, `docs/ui_specs/pass-8-
-    /// redaction.md` §3): the live list of `/Redact` marks on the OPEN
-    /// document, the authoring entry points, and the way to the Apply
-    /// report.
-    ///
-    /// **A dock panel, not the ui-spec's own `SidePanel::right`.** §3.1 was
-    /// written before decision 017 existed and reasoned its way to a
-    /// dedicated side panel because the Tools dock's intro sentence ("These
-    /// tools work with files outside the one you have open") would have been
-    /// falsified by a surface that acts on the open document. That reasoning
-    /// still holds — and the dock it was reasoning about no longer exists in
-    /// that form. Today the dock is a general panel host with per-panel tabs
-    /// and per-panel tooltips, `tools_dock_intro` belongs to
-    /// [`Self::BatchTools`] alone, and R80 states the opposite requirement:
-    /// **no panel is reachable only outside the dock.** So the spec's
-    /// conclusion (Redact is not a Batch-Tools row) is honoured exactly,
-    /// while its mechanism (a second right-hand `SidePanel` competing with
-    /// the dock for width) is not — it would be the float-OR-dock dual mode
-    /// decision 017 A.4 #2 deliberately retired.
-    Redact,
     /// The page-navigation thumbnails (Pass 34.1).
     ///
     /// Was `Panel::left("thumbnails")`, a hand-rolled side panel with its own
@@ -239,22 +208,12 @@ impl DockPanel {
         dead_code,
         reason = "the panel enumeration; swept by this module's tests today, and the list any future panel-picker or fail-soft remount must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 6] = [
-        Self::Objects,
-        Self::Properties,
-        Self::BatchTools,
-        Self::Redact,
-        Self::Pages,
-        Self::ToolOptions,
-    ];
+    pub const ALL: [Self; 3] = [Self::Objects, Self::Pages, Self::ToolOptions];
 
     /// The panel's tab label (decision 002 R1: through the catalog).
     pub fn label(self) -> &'static str {
         match self {
             Self::Objects => ui_text::dock_panel_objects_label(),
-            Self::Properties => ui_text::dock_panel_properties_label(),
-            Self::BatchTools => ui_text::dock_panel_batch_tools_label(),
-            Self::Redact => ui_text::dock_panel_redact_label(),
             Self::Pages => ui_text::dock_panel_pages_label(),
             Self::ToolOptions => ui_text::dock_panel_tool_options_label(),
         }
@@ -266,9 +225,6 @@ impl DockPanel {
     pub fn tooltip(self) -> &'static str {
         match self {
             Self::Objects => ui_text::dock_panel_objects_tooltip(),
-            Self::Properties => ui_text::dock_panel_properties_tooltip(),
-            Self::BatchTools => ui_text::dock_panel_batch_tools_tooltip(),
-            Self::Redact => ui_text::dock_panel_redact_tooltip(),
             Self::Pages => ui_text::dock_panel_pages_tooltip(),
             Self::ToolOptions => ui_text::dock_panel_tool_options_tooltip(),
         }
@@ -320,15 +276,20 @@ impl DockPanel {
 pub fn default_tree() -> DockTree {
     let mut tiles = egui_tiles::Tiles::default();
     let objects = tiles.insert_pane(DockPanel::Objects);
-    let properties = tiles.insert_pane(DockPanel::Properties);
-    let batch = tiles.insert_pane(DockPanel::BatchTools);
-    let redact = tiles.insert_pane(DockPanel::Redact);
-
-    let upper = tiles.insert_tab_tile(vec![objects, redact]);
-    let lower = tiles.insert_tab_tile(vec![properties, batch]);
-    let root = tiles.insert_vertical_tile(vec![upper, lower]);
-
-    Tree::new(DOCK_TREE_ID, root, tiles)
+    // Pass 24.3: ONE pane. Properties, Batch Tools and Redact moved to the
+    // left dock's Tool Options pane on the operator's instruction — *"the only
+    // thing that should be visible in the right side panel is the Objects
+    // tree"* — because a right dock full of controls was a second, competing
+    // home for them, and "where do I configure the thing I just clicked" then
+    // had two answers on opposite sides of the window.
+    //
+    // A.3's vertical-split requirement (select in the tree above, edit
+    // properties below, both visible at once) is retired rather than broken:
+    // it existed to keep a SELECTION-scoped tree and a SELECTION-scoped form
+    // visible together, and the form that pairing was built around is a
+    // DOCUMENT-scoped `/Info` editor that never had anything to do with the
+    // tree's selection. The pairing was reasonable and the premise was wrong.
+    Tree::new(DOCK_TREE_ID, objects, tiles)
 }
 
 /// The `egui::Id` of the LEFT dock tree (Pass 34.1).
@@ -403,6 +364,10 @@ pub fn left_swap_tree() -> DockTree {
 /// `active_tiles` walks from the root through each container's current tab,
 /// so a pane sitting BEHIND another tab correctly reports `false`.
 #[must_use]
+#[allow(
+    dead_code,
+    reason = "the on-screen-truth query; every production caller moved to `PaneSubject` in Pass 24.3, but this remains the only honest way for a test to ask what a tree is actually showing" // ui-text-exempt: clippy lint justification, never displayed
+)]
 pub fn panel_is_active(tree: &DockTree, panel: DockPanel) -> bool {
     tree.active_tiles()
         .into_iter()
@@ -607,61 +572,90 @@ mod tests {
         );
     }
 
-    /// Decision 017 A.3's surviving requirement, asserted rather than
-    /// trusted: Objects and Properties must be visible **at the same time**
-    /// in the DEFAULT layout, not after the operator drags a pane out.
+    /// The RIGHT dock holds Objects and nothing else (Pass 24.3).
     ///
-    /// `active_tiles` is exactly "what is on screen right now", so a
-    /// regression that folded the vertical split into one tab group would
-    /// leave only one of the two active and fail here.
+    /// # What this replaces, and why the old requirement is gone
+    ///
+    /// Two tests stood here. One asserted decision 017 A.3's requirement that
+    /// Objects and Properties be visible AT THE SAME TIME — select in the tree
+    /// above, edit properties below. The other asserted that Batch Tools,
+    /// sharing the lower tab group, could be brought forward without losing
+    /// the tree.
+    ///
+    /// A.3's premise was that the pairing was useful: a SELECTION-scoped tree
+    /// beside a form describing the selection. But the form it was paired with
+    /// is the DOCUMENT's `/Info` editor, which has nothing to do with what the
+    /// tree has selected. The pairing was reasonable and the premise was
+    /// wrong, and the operator's instruction — *"the only thing that should be
+    /// visible in the right side panel is the Objects tree"* — is what made
+    /// that visible.
+    ///
+    /// So the requirement is retired rather than broken, and this asserts the
+    /// rule that replaced it: the right dock answers exactly one question,
+    /// *what is on this page*. Everything that is a CONTROL lives left, in
+    /// Tool Options.
     #[test]
-    fn objects_and_properties_are_simultaneously_visible_by_default() {
+    fn the_right_dock_holds_only_the_object_tree() {
         let tree = default_tree();
         assert!(
             panel_is_active(&tree, DockPanel::Objects),
-            "the object/layer tree is not visible in the default layout"
+            "the object tree is not visible in the default right dock"
         );
-        assert!(
-            panel_is_active(&tree, DockPanel::Properties),
-            "document properties is not visible in the default layout — \
-             decision 017 A.3 requires it beside the tree, not behind a tab"
+        let panes = DockPanel::ALL
+            .into_iter()
+            .filter(|p| tree.tiles.find_pane(p).is_some())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            panes,
+            vec![DockPanel::Objects],
+            "the right dock should hold ONLY the object tree; found {panes:?}"
         );
     }
 
-    /// Batch Tools shares the lower tab group with Properties, so it starts
-    /// BEHIND it. That is deliberate (it is the least-used surface), and it
-    /// must be reachable by activation rather than only by dragging.
+    /// A backgrounded pane can be brought forward by activation, not only by
+    /// dragging.
+    ///
+    /// Retargeted at the LEFT dock in Pass 24.3, because that is where a
+    /// backgrounded pane now lives: Tool Options starts behind Pages, and
+    /// every command that shows something in it (`ShowPaneSubject`, arming a
+    /// tool, Properties, Redact, Batch Tools) depends on `activate` actually
+    /// raising it. A command that changes a hidden pane's contents has, from
+    /// the operator's side, done nothing at all.
     #[test]
     fn a_backgrounded_panel_can_be_brought_forward() {
-        let mut tree = default_tree();
-        assert!(!panel_is_active(&tree, DockPanel::BatchTools));
-        assert!(activate(&mut tree, DockPanel::BatchTools));
-        assert!(panel_is_active(&tree, DockPanel::BatchTools));
-        // Bringing Batch Tools forward must not cost the operator the tree
-        // above it — that is the whole point of the vertical split.
-        assert!(panel_is_active(&tree, DockPanel::Objects));
-        assert!(!panel_is_active(&tree, DockPanel::Properties));
+        let mut tree = default_left_tree();
+        assert!(!panel_is_active(&tree, DockPanel::ToolOptions));
+        assert!(activate(&mut tree, DockPanel::ToolOptions));
+        assert!(panel_is_active(&tree, DockPanel::ToolOptions));
     }
 
-    /// The redaction panel starts behind the object tree and must come
-    /// forward on request WITHOUT costing the operator the properties form
-    /// below it — the vertical split's whole purpose, asserted for the
-    /// panel that was added to the upper group rather than the lower one
-    /// (Pass 8.1, see [`default_tree`]'s placement note).
+    /// Every pane that survives is reachable — no orphan tiles (Pass 24.3).
+    ///
+    /// # What this replaces
+    ///
+    /// A test stood here asserting that opening Redact displaced Objects in
+    /// the upper group without costing the operator the Properties form
+    /// below. All three of those panes have left the right dock: Properties,
+    /// Batch Tools and Redact are now subjects of the left dock's Tool Options
+    /// pane, on the operator's instruction that the right side show only the
+    /// object tree.
+    ///
+    /// The residue worth keeping is smaller and still real: after removing
+    /// three of six variants, nothing may be left mounted in a tree that no
+    /// longer has a tab for it. That is what a botched enum removal produces —
+    /// a pane the layout still holds and no operator can reach.
     #[test]
-    fn the_redaction_panel_comes_forward_without_collapsing_the_split() {
-        let mut tree = default_tree();
-        assert!(!panel_is_active(&tree, DockPanel::Redact));
-        assert!(activate(&mut tree, DockPanel::Redact));
-        assert!(panel_is_active(&tree, DockPanel::Redact));
-        assert!(
-            !panel_is_active(&tree, DockPanel::Objects),
-            "Redact shares the upper group with Objects, so it displaces it"
-        );
-        assert!(
-            panel_is_active(&tree, DockPanel::Properties),
-            "opening Redact must not cost the operator the properties form"
-        );
+    fn every_mounted_pane_is_a_live_variant() {
+        for tree in [default_tree(), default_left_tree()] {
+            for (_, tile) in tree.tiles.iter() {
+                if let Tile::Pane(p) = tile {
+                    assert!(
+                        DockPanel::ALL.contains(p),
+                        "{p:?} is mounted but is not in DockPanel::ALL"
+                    );
+                }
+            }
+        }
     }
 
     /// A.3's narrow-column mitigation, asserted rather than remembered: no
@@ -691,8 +685,8 @@ mod tests {
     #[test]
     fn activating_an_unmounted_panel_reports_failure_instead_of_panicking() {
         let mut tree = swap_tree();
-        assert!(!activate(&mut tree, DockPanel::Properties));
-        assert!(!panel_is_active(&tree, DockPanel::Properties));
+        assert!(!activate(&mut tree, DockPanel::ToolOptions));
+        assert!(!panel_is_active(&tree, DockPanel::ToolOptions));
     }
 
     /// Every panel's tooltip must say something the label does not — the

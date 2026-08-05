@@ -1448,39 +1448,14 @@ the canvas is selecting — and select an object from the list when it is too sm
 hidden to click."
 }
 
-/// Tab label of the document-properties panel.
+/// Heading of the redaction review surface, now a Tool Options subject
+/// rather than a right-dock tab (Pass 24.3).
 ///
-/// Plain "Properties" is now unambiguous: decision 017 §8.3 retired the
-/// floating document-properties window, so there is no second surface in the
-/// app competing for the word. (The ui-spec's §A.2 rename to "Document
-/// Properties" existed to defuse a collision with a *selection* inspector
-/// that §A's superseded design would have added; no such panel ships here.)
-pub fn dock_panel_properties_label() -> &'static str {
-    "Properties"
-}
-
-/// Purpose tooltip / accessible name for the Properties tab.
-pub fn dock_panel_properties_tooltip() -> &'static str {
-    "Read and edit the whole document's title, author, subject and keywords. This is the \
-file's own metadata, not anything about the object you have selected."
-}
-
-/// Tab label of the batch-tools panel.
-///
-/// **Renamed from "Tools" deliberately** (decision 017 §8.5, still binding
-/// under A.4 #4): a row labelled "Tools" inside a container operators call
-/// "the Tools dock" — reached from a toolbar button also labelled "Tools" —
-/// is a three-way collision people trip on. "Batch" also says the true
-/// scope: these act on files, mostly ones that are not even open.
-pub fn dock_panel_batch_tools_label() -> &'static str {
-    "Batch Tools"
-}
-
-/// Purpose tooltip / accessible name for the Batch Tools tab.
-pub fn dock_panel_batch_tools_tooltip() -> &'static str {
-    "Combine, split or insert pages across whole files, and manage the font folders pdfce \
-draws missing typefaces from. Tools that act on pages you can already see — delete, reorder, \
-rotate, extract — live on the page thumbnails instead."
+/// Kept when the other five retired dock-panel strings went, because this one
+/// still names something on screen: the pane needs a title, and the operator
+/// has been reading this word for it since Pass 8.1.
+pub fn redact_pane_title() -> &'static str {
+    "Redact"
 }
 
 // ---------------------------------------------------------------------------
@@ -4729,18 +4704,6 @@ pub fn redact_button() -> &'static str {
 pub fn redact_tooltip() -> &'static str {
     "Review the redaction marks in this document and permanently remove what they cover. \
 Marking is reversible; applying is not."
-}
-
-/// Dock tab label for the redaction review panel.
-pub fn dock_panel_redact_label() -> &'static str {
-    "Redact"
-}
-
-/// Dock tab tooltip — says WHEN to reach for the panel (decision 017 §8.6),
-/// and doubles as the tab's AccessKit name.
-pub fn dock_panel_redact_tooltip() -> &'static str {
-    "Open when you need to see every region marked for redaction in this document, remove a \
-mark you did not mean, or permanently remove the marked content."
 }
 
 /// Panel intro line. States the whole two-phase model in one sentence,

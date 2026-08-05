@@ -403,6 +403,41 @@ impl ResetScope {
     }
 }
 
+/// What the Tool Options pane is currently showing (Pass 24.3).
+///
+/// # Why this exists
+///
+/// The operator, 2026-08-05: *"the only thing that should be visible in the
+/// right side panel is the Objects tree. Clicking for those other items should
+/// bring up the options and dialogus in the Tool Options tab."*
+///
+/// Before this, the right dock held four panes — Objects, Properties, Batch
+/// Tools, Redact — which made it a second, competing home for controls. That
+/// split the answer to "where do I configure the thing I just clicked" across
+/// two sides of the window, which is the two-mental-models failure decision
+/// 024 §1.3 item 6 names.
+///
+/// The rule the whole arc converged on, now applied to the last exception:
+/// **the ribbon picks the activity; the sidebar holds its controls.** The
+/// right dock keeps exactly one job — *what is on this page* — and everything
+/// that is a control moves left.
+///
+/// `ActiveTool` is the default and the one that follows `doc.active_tool`;
+/// the others are pinned by a ribbon command until something else replaces
+/// them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PaneSubject {
+    /// Whatever canvas tool is armed, or the empty state when none is.
+    #[default]
+    ActiveTool,
+    /// The document's `/Info` metadata form.
+    Properties,
+    /// Batch operations across whole files, and the font folders.
+    BatchTools,
+    /// The redaction review surface.
+    Redact,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
