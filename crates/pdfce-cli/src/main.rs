@@ -1602,6 +1602,41 @@ enum Command {
         /// Input PDF.
         input: PathBuf,
     },
+    /// **Place a ce dimension** (Pass 27.1): set how far its dimension line
+    /// stands off the geometry and where its value sits along that line.
+    ///
+    /// This is the batch form of dragging a dimension in the GUI, and like the
+    /// drag it does NOT re-measure: the measured points stay where they were,
+    /// the extension lines stretch, and the printed value is unchanged. Read
+    /// the current values from `dimension-list`.
+    ///
+    /// Refused by name for a circular dimension, which has no axis to stand
+    /// off from or slide along.
+    DimensionOffset {
+        /// Input PDF.
+        input: PathBuf,
+        /// The ce dimension id, as printed by `dimension-list`.
+        #[arg(long)]
+        dimension: u32,
+        /// Standoff from the first measured point, in points, perpendicular to
+        /// the measured axis. Positive is up for a horizontal dimension, right
+        /// for a vertical one.
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        offset: f64,
+        /// Where the value sits along the dimension line, in points from its
+        /// midpoint. 0 is centred.
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        text_along: f64,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Delete a ce dimension** (Pass 25.6): remove its `/Annots` reference,
     /// its annotation dictionary, its `/AP` appearance stream and its
     /// `/PieceInfo` sidecar record, together, as one undoable command.
@@ -2534,6 +2569,23 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_dimension_delete(&input, dimension, &output, mode, verify_undo),
+        Command::DimensionOffset {
+            input,
+            dimension,
+            offset,
+            text_along,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_dimension_offset(&DimensionOffsetArgs {
+            input: &input,
+            dimension,
+            offset,
+            text_along,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
         Command::GroupAdd {
             input,
             name,
@@ -7933,6 +7985,70 @@ undo_verified={} undo_identical={}",
 }
 
 /// `dimension-list` — inventory the stored dimension model (read-only).
+/// Grouped arguments for `dimension-offset` (clippy arg-count).
+struct DimensionOffsetArgs<'a> {
+    input: &'a Path,
+    dimension: u32,
+    offset: f64,
+    text_along: f64,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `dimension-offset` — set a ce dimension's placement (Pass 27.1).
+///
+/// ## Contract
+///
+/// - Emits one `dimension-offset …` line with the usual save-report fields,
+///   then defers the exit code to [`finish_edit`].
+/// - The measured value is unchanged by construction: this writes only the
+///   placement fields, which the value function does not read.
+/// - A circular target, or an unknown id, is refused through
+///   [`report_edit_error`] before any mutation — the same message and exit
+///   code the GUI surfaces.
+fn cmd_dimension_offset(args: &DimensionOffsetArgs<'_>) -> u8 {
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    if let Err(err) = session.place_dimension(
+        pdfce_core::dimension::DimensionId(args.dimension),
+        args.offset,
+        args.text_along,
+    ) {
+        return report_edit_error(args.input, &err);
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "dimension-offset {} dimension={} offset={} text_along={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.dimension,
+        args.offset,
+        args.text_along,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
 /// `dimension-delete` — remove one ce dimension and every trace of it.
 ///
 /// ## Contract
@@ -8022,8 +8138,19 @@ fn cmd_dimension_list(input: &Path) -> u8 {
             } => "diameter",
             DimensionKind::Circular { .. } => "radius",
         };
+        // The placement, for a linear dimension. Printed because it is
+        // otherwise invisible from the CLI — an operator scripting
+        // `subpath-delete`-style batch work cannot see WHERE a ce dimension
+        // sits, only what it says, and `dimension-offset` below needs the
+        // current values to adjust from.
+        let placement = match d.kind {
+            DimensionKind::Linear {
+                offset, text_along, ..
+            } => format!(" offset={offset} text_along={text_along}"),
+            DimensionKind::Circular { .. } => String::new(),
+        };
         println!(
-            "  dim {} group={} kind={kind} value=\"{value}\"",
+            "  dim {} group={} kind={kind} value=\"{value}\"{placement}",
             d.id.0, d.group.0
         );
     }
