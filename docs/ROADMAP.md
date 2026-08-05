@@ -18334,6 +18334,104 @@ not a judgment call:**
   `tools/check-ledger-numbers.py --stats` should be re-run after this
   commit — this librarian has no shell and has not run it itself.
 
+- **R156 — When auditing whether a capability reaches a shell, do not
+  cross-check by grepping one shell's name in the other shell's source;
+  audit the `Action` enum (or equivalent dispatch surface) and its push
+  sites instead (2026-08-05; librarian-assigned; promoted from two
+  `FEATURES.md` mis-verifications in one day, in opposite directions).**
+  The engineer told this librarian, on the strength of a name-based grep,
+  that "Extract pages" had no GUI verb — `grep "extract_pages\b"` in
+  `main.rs` returned only `extract_pages_view`, which is TEXT extraction
+  (Pass 4), not page extraction. The grep was accurate; the inference
+  from it was not. The GUI has carried the capability since at least
+  Pass 17.1, under a name that shares no substring with the CLI's
+  `extract-pages` subcommand: `PdfceApp::extract_selection`
+  (`crates/pdfce-gui/src/main.rs` ~L3601), reached from a real
+  thumbnail-rail button (~L8936) via `Action::ExtractSelection`. The
+  engineer found it only by accident, mid-way through writing a
+  duplicate of it, when the compiler collided on
+  `ui_text::suggested_extract_name`. The **same day**, the same
+  technique produced the mirror-image error one row down: "Edit
+  composite/CID text runs" was marked "no GUI yet" on the strength of
+  no composite-specific hits in a GUI grep, when the real answer is
+  that the GUI's Edit-Text commit path (`commit_text_edit_draft`) calls
+  `EditSession::edit_text` directly with **no composite gate of its
+  own** — it inherited the capability the moment Pass 29.0 lifted the
+  core-layer refusal, and never needed a GUI-side name to prove it.
+  (The only composite-specific refusal actually present is a narrower
+  one — `Tw`/word-spacing on a composite run, R91 — which is a real,
+  distinct gate the row must still note.)
+  **The failure shape, stated generally.** The CLI names capabilities
+  for its own operator (`extract-pages`, a noun); the GUI names them for
+  its own call sites (`extract_selection`, a verb tied to "the current
+  selection," because the GUI always has one). Nothing connects those
+  two names, and nothing ever will, because each shell's naming is
+  correct **for that shell** — a name-based cross-check between them is
+  not a weaker version of the right test, it is the wrong test, and it
+  fails in both directions: false "no GUI surface" (extract-pages) and
+  false "no GUI surface" again by a different mechanism (composite
+  edit, where the truth was "no GUI-side gate needed," not "no GUI-side
+  wiring built"). Two failures from one technique, same day, opposite
+  rows, is what promotes this from a one-off correction to a standing
+  rule.
+  **The mechanical check, stated so it is checkable at review time.**
+  To determine whether the GUI reaches a core/CLI capability, grep the
+  `Action` enum for a variant that plausibly maps to it, then grep for
+  that variant's push site(s) (a button, a menu item, a keyboard
+  binding) and its match arm in the dispatch loop. Every GUI-reachable
+  capability must be an `Action` variant with a real push site — that
+  is structural, not lexical, and does not depend on the GUI's verb
+  resembling the CLI's noun. Where a capability is inherited rather
+  than newly wired (the composite case), the check is the *absence* of
+  a gate at the relevant commit path, not the presence of a
+  capability-specific call site — read the function the commit path
+  actually calls, not just its name.
+  **Why this is a distinct rule from R151, not a restatement of it.**
+  R151 audits whether a shipped `pub fn` has **any** caller at all,
+  anywhere — its failure mode is a capability with zero consumers. This
+  rule assumes a caller may well exist and audits a **verification
+  technique** — cross-shell name matching — that produces false
+  negatives even when a caller does exist, because the two shells are
+  not obligated to (and should not) share vocabulary. R151 is a
+  call-graph audit; this is a naming-independence caution one step
+  upstream of it, about how the call-graph audit itself must be
+  performed. Same family as R151's `EditSession`-mutation-site scan and
+  R154's dock-shape grep (Standing rules, above, "This mechanical-scan-
+  of-source-text test is the same family as...") — a taxonomy declared
+  in one file and consumed in another, with nothing in the type system
+  (or in this case, nothing in either shell's naming convention)
+  connecting the two, so only a structural grep of the actual dispatch
+  surface catches drift; a lexical grep does not.
+  Cross-references: **R151** (call-graph audit this rule is one layer
+  upstream of — same family, distinct failure mode, argued above).
+  **R154** (dock-shape grep — the nearest sibling in the
+  declared-as-data/consumed-as-code family). `FEATURES.md`'s own "never
+  tick a box you cannot substantiate" rule (Legend/maintenance
+  contract) — this rule is what "substantiate" should mean in practice
+  for the `gui` column specifically, going forward.
+  **Numbering note, so the next filing does not double-mint.** R155's
+  own entry reserved **R156** for whichever of decision 030's three
+  still-unminted contingent candidates (§6.2(a), §4.5, and the "date
+  and label every contract statement" documentation observation) is
+  accepted or promoted first. This finding — the cross-shell lexical-
+  grep mis-verification, now caught twice in one day — is filed first
+  against the live ceiling (R106/R133: read the ceiling, don't assume a
+  reservation), so it is the one that claims **R156**, the same
+  transfer mechanism R150→R151→R152→R153→R154→R155 each used in turn to
+  hand their reserved slot to a new, previously-unlisted candidate ahead
+  of the accumulating queue. **Decision 030's three original contingent
+  candidates now take R157**, not R156, if and when any of them is
+  accepted or promoted.
+  **Ceiling is now R156** (was R155 at the pre-dispatch-search-
+  discipline filing). **No new Pass family minted by this filing**
+  (Pass-family ceiling stays **37 next free**, unchanged — this filing
+  corrects `FEATURES.md` rows only, ships no Pass). **No new decision
+  record minted** — decision-record ceiling stays **031** (**032** next
+  free, unchanged). **No new operator question minted** — question
+  ceiling stays **(az)** (**(ba)** next free), unchanged.
+  `tools/check-ledger-numbers.py --stats` should be re-run after this
+  commit — this librarian has no shell and has not run it itself.
+
 ## Update protocol
 
 - New operator request → engineer parses into Pass entry/entries →

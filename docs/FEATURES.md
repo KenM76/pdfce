@@ -55,7 +55,7 @@ next filing.
 | [x] | [x] | [x] | Merge / combine multiple files into one (Pass 3.2 core/CLI; GUI `merge_tool` add-files button in `main.rs`) |
 | [x] | [x] | [ ] | Split a document into multiple files (Pass 3.2 core/CLI) — GUI panel names `split_cli_command()` rather than performing the split; the app tells the operator to use the CLI |
 | [x] | [x] | [ ] | Insert pages from another file (Pass 3.2 core/CLI) — same shape as split: GUI panel names `insert_cli_command()`, no GUI verb yet |
-| [x] | [x] | [ ] | Extract pages to a new file (Pass 3.2 core/CLI) — no GUI surface; grepping `extract_pages` in the GUI only hits `extract_pages_view`, which is TEXT extraction (see Text section), a different feature |
+| [x] | [x] | [x] | Extract pages to a new file (Pass 3.2 core/CLI; GUI `PdfceApp::extract_selection`, `main.rs` ~L3601, reached via `Action::ExtractSelection` from a thumbnail-rail button ~L8936 — the GUI names it "extract selection," not "extract pages," which is why a name-based grep for `extract_pages` missed it; see R156) |
 | [x] | [x] | [x] | Edit document metadata (`/Info` dict) (Pass 3.2 `set-info`; GUI Properties dock panel) |
 | [x] | — | [x] | Undo/redo command log (Pass 3.1 core; wired into the GUI at Pass 14.3) |
 | [x] | [x] | [x] | Save (incremental-by-default or full-rewrite); **"Save a copy" only — no true in-place overwrite yet** (see *Planned*) |
@@ -70,7 +70,7 @@ next filing.
 | [x] | [x] | [x] | Text formatting: size/colour/font-family-style, char/word spacing, horizontal scale, super/subscript, synthetic bold/italic (Pass 19.x, FF-H — complete end-to-end) |
 | [x] | [x] | [x] | Within-block reflow incl. justified alignment (Pass 15.x, FF-A) — open defect: auto-detected wrap width can inherit a prior edit's overflow (Pass 33.0, disclosed but not yet fixed) |
 | [x] | [x] | [x] | Add new page text: point insert + wrapped multi-line box (Pass 16.x, FF-D) |
-| [x] | [x] | [ ] | Edit composite/CID (`/Type0`) text runs (Pass 29.0) — no GUI yet |
+| [x] | [x] | [x] | Edit composite/CID (`/Type0`) text runs (Pass 29.0) — the GUI's Edit-Text commit path (`commit_text_edit_draft`) calls `EditSession::edit_text` directly with no composite gate of its own, so it inherited the capability the moment core lifted the refusal; no GUI-side wiring was needed (see R156). **Exception:** word spacing (`Tw`) on a composite run is still refused (R91) — that gate is real and distinct from text-edit itself |
 | [x] | [x] | [ ] | Add non-Latin text via a subsetted, embedded donor font (Pass 21.0, FF-C P0, glyf/TrueType donors only) — GUI slice not started |
 
 ### Vector objects (Inkscape-style editing)

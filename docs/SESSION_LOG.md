@@ -14782,3 +14782,81 @@ mints no new ones.
 **Backup currency not verifiable from here** — engineer should check
 `D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is made
 in this entry.
+
+**Same-day continuation 97 (real date 2026-08-05) — two more `FEATURES.md`
+rows corrected by the operator, both from the SAME verification technique
+that continuation 96 had just used to fix the previous two; R156 minted.**
+
+**Shipped:** none — this filing corrects `FEATURES.md` rows only, ships
+no Pass.
+
+**Decisions made this session:** none.
+
+**Findings + decisions:**
+- **"Extract pages to a new file" corrected `[x][x][ ]` → `[x][x][x]`.**
+  The operator had told this librarian, on the strength of a name-based
+  grep, that the GUI had no verb for it —
+  `grep "extract_pages\b"` in `main.rs` hits only `extract_pages_view`,
+  which is TEXT extraction (Pass 4), a different feature. That grep was
+  accurate; the conclusion drawn from it was not. The capability has
+  existed since at least Pass 17.1 under a name sharing no substring
+  with the CLI's `extract-pages`: `PdfceApp::extract_selection`
+  (`main.rs` ~L3601), reached via `Action::ExtractSelection` from a real
+  thumbnail-rail button (~L8936). The operator found it by accident,
+  mid-way through starting to write a duplicate, when the compiler
+  collided on `ui_text::suggested_extract_name`.
+- **"Edit composite/CID (`/Type0`) text runs" corrected `[x][x][ ]` →
+  `[x][x][x]`, with a narrow exception noted on the row.** The GUI's
+  Edit-Text commit path (`commit_text_edit_draft`) calls
+  `EditSession::edit_text` directly with no composite-specific gate of
+  its own, so it inherited the capability the instant Pass 29.0 lifted
+  the core-layer refusal — no GUI-side wiring was ever needed, which is
+  exactly why a GUI-side grep for anything composite-specific found
+  nothing and was misread as "not built." The one real, narrower
+  refusal that does exist and belongs on the row: word spacing (`Tw`)
+  on a composite run is still gated (R91) — `Tw` has no effect on a
+  composite run per R83/R91, so that specific control refuses while
+  text-edit itself does not.
+- **R156 minted** (`ROADMAP.md` Standing rules) — "when auditing
+  whether the GUI reaches a capability, do not cross-check by
+  name-matching one shell's identifier in the other shell's source;
+  audit the `Action` enum and its push sites instead." Both corrections
+  above came from the identical mistake, in opposite directions, inside
+  one calendar day: continuation 96 already corrected page-management
+  rows from the same technique producing a false "no GUI" on the strength
+  of an absent name match. Two independent misses from one technique,
+  same day, is what promotes this from "a mistake to fix" to "a standing
+  rule to check against next time." Full reasoning, the mechanical check,
+  and the R151/R154 distinction are in the ROADMAP entry itself — not
+  duplicated here.
+  - **Numbering:** R156 claims the slot R155's own entry had reserved for
+    decision 030's three still-unminted contingent candidates
+    (§6.2(a), §4.5, "date and label every contract statement"), per the
+    same first-filed-against-the-live-ceiling transfer mechanism
+    R150→…→R155 each used in turn. **Decision 030's three candidates now
+    take R157**, not R156, if and when any is accepted or promoted.
+    Ceiling is now **R156** (was R155). No new Pass family, decision
+    record, or operator question minted this filing — Pass-family
+    ceiling stays **37 next free**; decision-record ceiling stays **031**
+    (**032** next free); operator-question ceiling stays **(az)**
+    (**(ba)** next free) — all unchanged.
+
+**Still in flight:** unchanged from continuation 96 — Pass 34.1 slice 4,
+Pass 24.0/24.2–24.5, Pass 34.2/35.0/35.1, the `Pages`/`Tool Options`
+icon-less-tab item, all still untouched by this filing.
+
+**For next session:**
+- **`FEATURES.md`'s `gui` column deserves one systematic re-verification
+  pass against `Action` variants and their push sites, per R156, rather
+  than continued spot checks** — the operator flagged, and this
+  librarian agrees, that several rows were filed on ground truth
+  supplied under time pressure using the now-discredited lexical
+  technique. This is owed, not merely suggested; recording it here so it
+  is found rather than rediscovered.
+- Re-run `tools/check-ledger-numbers.py --stats` (outstanding since
+  continuation 95, and now again after R156's mint) — this librarian has
+  no shell and has not run it itself.
+
+**Backup currency not verifiable from here** — engineer should check
+`D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is made
+in this entry.
