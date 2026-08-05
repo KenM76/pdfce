@@ -12,7 +12,8 @@
 - [Decision 012 supplied fonts](project_decision012_supplied_fonts.md) — first cut shipped (render/CLI/GUI); R61–R65 collide with existing R61 (renumber before filing); GlyphSource migration; skrifa face-name API
 - [Decision 013 Pass B xref recovery](project_decision013_pass_b_xref_recovery.md) — rebuild-by-scan shipped; 566/1109 real-world converted, 0 regressions; standing-rule ~R62 flag; gen-65536 recover-anyway deviation flagged
 - [Run the project's own gates](feedback_run_the_projects_own_gates.md) — fmt/clippy/tests is NOT the full set; check-ui-strings.sh + check-ledger-numbers.py are gates too
-- [GUI diag harness](reference_gui_diag_harness.md) — PDFCE_DIAG/_SCRIPT/_VIEWPORT drive + trace pdfce-gui headlessly; settles GUI defects without taking Ken's screen
+- [GUI diag harness](reference_gui_diag_harness.md) — PDFCE_DIAG/_SCRIPT/_VIEWPORT drive + trace pdfce-gui headlessly; note: it drives the RELEASE binary
+- [No oracle? extract and test](feedback_no_oracle_extract_and_test.md) — a GUI rule the harness can't reach becomes a pure function + tests, and the substitution is stated, not glossed
 - [CAD exports are one object per view](project_cad_export_structure.md) — SolidWorks emits a whole view as ONE path with 1194 subpaths; sub-object selection is required, not a refinement
 - [Engineer does the observing](feedback_engineer_does_the_observing.md) — Ken won't beta-test; verify operator-facing behavior in the running app yourself, never stall waiting on him
 - [Librarian needs exact hashes](feedback_librarian_needs_exact_hashes.md) — doc agents have no shell; paste real commit hashes, never placeholders or "see git log"

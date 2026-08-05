@@ -14928,3 +14928,501 @@ substantiated edits.
 **Backup currency not verifiable from here** — engineer should check
 `D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is made
 in this entry.
+
+**Same-day continuation 99 (real date 2026-08-05) — Pass 34.2 SHIPPED:
+a selected ce dimension has properties you can reach, and R81's LAST
+floating window is gone. Scope label corrected from "(GUI)" to core + CLI
++ GUI, with the reason recorded.**
+
+**Terminology (CLAUDE.md rule 15, binding on this whole entry):** every
+dimension object below is a **ce dimension** — the `/Line` + `/IT
+/LineDimension` annotation family pdfce itself authors
+(`crates/pdfce-core/src/dimension/`). Nothing here concerns **pdf
+dimensions** (CAD-exported callouts already in the page content).
+
+**Shipped:**
+- **Pass 34.2 — committed `63a711d`, branch `pass-8-redaction`.** Filed
+  to `ROADMAP.md` *Shipped* as the new head entry; the *Next up* Pass
+  34.2 heading is removed and replaced with a discharge blockquote,
+  following the Pass 34.0 precedent and keeping one heading per (section,
+  Pass ID) pair for `tools/check-ledger-numbers.py`.
+  - **core** — `EditSession::set_dimension_display(dimension,
+    show_diameter)`, one undoable command
+    (`CommandKind::SetDimensionDisplay { show_diameter }`), flipping a
+    **placed** circular ce dimension between the radius and diameter
+    reading. Value-preserving **by construction**: the stored `FitCircle`
+    (centre, radius, fit residual) is untouched because the command
+    writes only a field the value function does not read — the same
+    structural guarantee `place_dimension` has, and why decision 022
+    §4.2's anti-silent-re-measure argument does not apply. Exactly ONE
+    `/AP` regenerates, through the single shared
+    `regenerate_dimension_writes` path (**R92**), because this is a
+    per-ce-dimension property, unlike the group-wide `set_group_scale` /
+    `set_group_standard`. New `EditError::NotACircularDimension { id }` —
+    the deliberate mirror of `NotALinearDimension`; a linear target is
+    refused **by name**, not ignored.
+  - **CLI** — `pdfce-cli dimension-display --dimension N --show
+    radius|diameter` (CLAUDE.md rule 11), with its **own**
+    `DisplayReading` value-enum rather than a reuse of `DimKindArg`
+    (which carries a `Linear` variant — precisely the case this verb
+    refuses, so reuse would let `--show linear` parse cleanly and fail at
+    runtime instead of clap refusing it at the argument boundary).
+  - **GUI** — the Properties pane grows from one section to three, each
+    naming its own scope: the selected ce dimension (per-object), the ce
+    dimension groups (per-group, affects every member), and the
+    document's `/Info` form (per-file). Per-ce-dimension editing lives in
+    Properties, **not** Tool Options, because it has to work with no tool
+    armed, exactly like the Pass 25.5 position drag already does.
+    Circular ce dimensions get the radius/diameter control that
+    previously existed only in the tool-armed propbar at draw time;
+    linear ones get numeric standoff / value-position spinners that
+    **mirror** the canvas drag (same `place_dimension` call) rather than
+    replace it.
+  - **The floating "Dimension Groups" `egui::Window` is DELETED — R81's
+    last named holdout is closed.** Its controls (new group, unit,
+    scale/number format, drafting standard, layer visibility) now draw
+    inside the Properties pane as a `CollapsingHeader`. All three former
+    entry points — the `Action::ToggleDimensionGroups` toolbar toggle,
+    the Measure tool's own "Dimension Groups" button, and the
+    `panel:groups` diag script step — route through
+    `PdfceApp::show_pane_subject`, which also **raises** the pane.
+  - **Three doc/copy corrections in the same change**, because this Pass
+    made them false: `PaneSubject::Properties`' doc comment,
+    `ui_text::properties_tooltip`,
+    `ui_text::properties_dock_no_document_hint` — all three named ONE of
+    what are now THREE contents of the pane.
+
+**Gate numbers, as relayed by the engineer (R87 — nothing here is
+inferred or rounded):**
+- `cargo test --workspace`: **1960 passed, 0 failed** (was **1955**
+  before the GUI tests were added; 1955 was itself already up from the
+  session's opening baseline).
+- 5 new `pdfce-core` integration tests in
+  `crates/pdfce-core/tests/dimension_roundtrip.rs`; 5 new `pdfce-gui`
+  unit tests for `place_draft_commit`.
+- `cargo fmt --all --check` clean; `cargo clippy --workspace
+  --all-targets -- -D warnings` clean; `tools/check-ui-strings.sh` clean
+  — **and it BIT during this Pass**, catching a bare `" pt"` `DragValue`
+  suffix, now `ui_text::points_suffix()`.
+- **Invariant check:** `cargo tree -p pdfce-core` and `cargo tree -p
+  pdfce-render` — **zero** egui/eframe/winit/wgpu/glow matches.
+- **No new dependencies**, so `THIRD_PARTY_LICENSES.md` is unchanged and
+  was not regenerated. **Packaging untouched**, so no packaging smoke
+  test was run.
+
+**Decisions made this session:**
+- **Setting a ce dimension's display to what it already is STILL
+  COMMITS** — a deliberate core-API choice, and the opposite of the
+  obvious one. An early return on `show_diameter == current` would make
+  an undo stack that sometimes gains an entry from a control press and
+  sometimes does not, **with nothing on screen to distinguish the two
+  cases**. Callers that want to suppress a no-op press compare before
+  calling; the GUI's selectable pair does exactly that, and *can*,
+  because it already reads the current value to decide which half to
+  highlight. The suppression belongs where the information already is.
+- **`Action::ToggleDimensionGroups` deliberately stopped being a toggle
+  in the flip-a-boolean sense.** A second press that hid the whole
+  Properties pane would be a surprising amount of collateral for one
+  control — the operator pressed a button about ce-dimension groups and
+  would lose the `/Info` form and the per-ce-dimension section with it.
+  The name is kept; the semantics are "show me this," not "flip a bit."
+- **Group-level fields stay GROUP-ONLY for v1** (unit, decimal places /
+  fraction, decimal marker, drafting standard, scale, layer visibility) —
+  no per-ce-dimension override. Because v1 offers no override, there is
+  **no inheritance ambiguity to disclose** for them (rule 4 has nothing
+  to report where nothing can be inherited-or-overridden). ui-spec
+  §C.11.1's P2 deferral, held.
+- **No decision record minted** — these are all in-Pass engineering calls
+  recorded on the Shipped entry, not architecture-level changes needing
+  their own numbered file.
+
+**Findings + decisions:**
+- **★ The Pass 34.2 scope label "(GUI)" was WRONG, and the reason
+  generalizes.** The entry's second acceptance bullet — *"the
+  radius/diameter toggle becomes reachable AFTER placement"* — had **no
+  `pdfce-core` verb behind it at all**. The tool-armed propbar chose the
+  reading at DRAW time, before the ce dimension existed; there was no
+  command to change the reading of one that already did, and a GUI
+  control cannot be wired to a verb that has not been written. The Pass
+  therefore built a new core command **and** a new CLI subcommand and
+  shipped **core + CLI + GUI**. **The generalization, worth checking next
+  time a scope label is assigned:** an acceptance bullet phrased as "make
+  X reachable" is only a GUI Pass if a core verb for X already exists.
+- **An acceptance bullet was discharged by ABSENCE, and that is recorded
+  rather than left to look like an unmet criterion.** The last bullet
+  required correcting `dock.rs:173`'s doc comment asserting "nothing else
+  competed for the word Properties." **That string no longer exists
+  anywhere under `crates/`** — Pass 24.3's right-dock consolidation had
+  already removed it, before this Pass ran. The three live claims that
+  *did* still assert the false thing were corrected instead (listed
+  above). A reader comparing the acceptance list to the diff would
+  otherwise find one bullet with no matching change.
+- **★★ THE COMMIT-ON-RELEASE RULE, AND WHY IT MATTERS MORE THAN IT
+  LOOKS.** The numeric spinners commit on the **END** of the interaction
+  (`drag_stopped` / `lost_focus`), not on `changed`. `egui::DragValue`
+  reports `changed` **every frame** of a drag, and `place_dimension`
+  pushes an undo entry per call — so committing on `changed` would turn a
+  one-second drag into roughly **sixty** undo entries and **sixty** `/AP`
+  regenerations appended to the incremental save. A control that quietly
+  makes the file bigger and the undo stack unusable, with no error and
+  nothing on screen to indicate it. New `OpenDoc` field
+  `dimension_place_draft: Option<(DimensionId, f64, f64)>` holds the
+  in-flight value and **carries its own `DimensionId`**, so a stale draft
+  can never be committed onto whichever ce dimension is selected next —
+  the failure that would otherwise be invisible (an edit lands, on the
+  wrong object, silently).
+- **`pending_pane_subject` is the exact sibling of the existing
+  `pending_note`**, for the same borrow reason: the Measure tool's button
+  runs under `&mut OpenDoc` and cannot reach `show_pane_subject`, which
+  lives on the app. A deferred-request field is the established shape
+  here, not a new invention.
+- **`doc.dimension_groups_open` survives with a NARROWED meaning** — no
+  longer "is the window on screen," now a one-shot request to expand the
+  section, cleared each frame so the operator can still collapse it and a
+  request cannot latch it open against them.
+- **R86 verification was done headlessly** via `tools/gui-drive.ps1` (the
+  operator was working at the machine, so the screen was not
+  commandeered). Observed in order: `dim-rects` → clicking the ce
+  dimension selects it and Properties reports `dim-props-draw
+  sel=Some(DimensionId(0))`; `panel:groups` → `show-pane-subject
+  Properties`; `dim-props id=0 circular=true show_diameter=false
+  group="Default"`; a driven click on the **traced** Diameter control
+  rect → `dim-props id=0 circular=true show_diameter=true
+  group="Default"`; a second click on the already-selected half changes
+  nothing, as designed; selecting the **linear** ce dimension →
+  `dim-props id=1 circular=false …`, so the standoff / value-position
+  spinners are what draws.
+- **New PERMANENT diag instrumentation**, gated on pointer activity to
+  match the existing `dim-rects` line's anti-spam discipline:
+  `dim-props-draw`, `dim-props`, `dim-props-display-btn … rect=…`, and
+  `show-pane-subject`. **The `rect=` is the load-bearing part** — it is
+  what makes the control drivable from the harness without GUESSING a
+  screen point, and `gui-drive.ps1`'s own notes already warn that a
+  guessed point which misses reads **exactly** like a control that does
+  not work.
+- **★ THE ONE HONEST GAP IN THIS PASS'S R86 VERIFICATION, stated rather
+  than glossed.** The spinners' commit-on-release rule has **NO in-app
+  oracle**: injected pointer events do not produce an egui drag (the
+  recorded finding in
+  `D:/dev/rag/egui/eframe_035_raw_input_hook_synthetic_event_injection.md`),
+  so `drag_stopped()` never fires under `gui-drive.ps1`. The rule was
+  extracted as a pure function `place_draft_commit` and unit tested (5
+  tests). **That is a substitute for in-app verification, not an
+  equivalent to it** — recorded in the Shipped entry too, so five green
+  tests do not read as R86 satisfaction to a future reader.
+- **★★ `tools/gui-shot.ps1` PHOTOGRAPHED SOLIDWORKS.** A capture returned
+  a pixel-perfect screenshot of an entirely different application. pdfce
+  had started, run its whole script, and traced correctly — but its
+  window was created **behind** an already-running maximised application,
+  so `CopyFromScreen` at the window's nominal rect photographed whatever
+  owned those pixels. Same failure class the script's own existing
+  comment warns about (an image that looks like real evidence and is
+  not), arriving through a mechanism the comment did not anticipate. Fix:
+  raise the window before capturing. `SetForegroundWindow` is
+  **best-effort by Windows' own rules**, so the script **warns when it
+  has no main window handle** rather than silently capturing anyway.
+- **The settle is 2500 ms, not 700 ms — and the number was measured.** At
+  700 ms after the raise, the first raised capture came back a **uniform
+  WHITE client area under a CORRECT pdfce title bar**: the raise had
+  happened, DWM had not recomposited. It looked like a rendering bug in
+  the application and was not. Same *symptom* as the existing
+  client-rect-guard finding, different *cause*.
+
+**Still in flight** (all carried forward unchanged, and explicitly **NOT
+touched by this session**):
+- **Pass 34.1 slice 4** — move the status/commit strips
+  (`StripCorner::BottomLeft`: refusal text, disclosure text, the kept
+  case-(b) Accept/Reject pairs) into the Tool Options pane. Still the
+  literal remainder of the operator's "all of the options should be shown
+  in a side bar tab" ask. **Pass 34.2 shipping does NOT close it.**
+- **Pass 24.0 and 24.2–24.5** — remaining ribbon slices, DECIDED, NOT
+  STARTED.
+- **Pass 35.0 and 35.1** — ce-dimension tolerance & tolerance types, and
+  extension-line drag. Both still open in `ROADMAP.md` *Next up*.
+- The **`Pages`/`Tool Options` icon-less-tab item** — still unverified,
+  still needs a running-app look.
+- **The owed systematic `FEATURES.md` `gui`-column re-verification
+  against `Action` variants and their push sites (R156)** — outstanding
+  since continuation 97, untouched again. Rows corrected under time
+  pressure with the now-discredited lexical technique have not been
+  re-audited.
+- The **`EditSession::insert_pages`** Backlog item (filed continuation
+  98) — true in-place page insertion; would let GUI Insert stop always
+  writing a new file.
+- **`ARCHITECTURE.md` §4's sync — now SIX filings behind.** This Pass
+  adds **`set_dimension_display`**, **`CommandKind::SetDimensionDisplay`**
+  and **`EditError::NotACircularDimension`** to the component list §4 owes.
+  Not attempted here; named so it is found rather than rediscovered.
+- **Pass 32.0** — delete one text run without deleting every run sharing
+  its text object.
+- **The `/FD` half** — unchanged, untouched.
+- **Open operator questions (au) and (av)** — unchanged, unanswered.
+
+**For next session:**
+- **★ Pass 35.0 — ce-dimension tolerance and tolerance types — is the
+  natural next step, and the sequencing is not this librarian's
+  invention.** It is the remaining half of the operator's own 2026-08-05
+  verbatim ask (*"…fractions, tolerance and tolerance types like
+  solidworks has…"*), and **Pass 34.2 has just built the
+  per-ce-dimension property surface that Pass 35.0's tolerance controls
+  need to live in** — its `ROADMAP.md` entry says so in its own
+  sequencing note. Read that entry before starting: the tolerance-type
+  list is sourced from `swTolType_e` in
+  `C:\sw_api_docs\rag_optimized\swconst_enums.txt`, the three FIT
+  variants are explicitly OUT of the first cut and must be **named as
+  excluded** rather than silently dropped, and ISO 32000 has **no**
+  tolerance representation to conform to — so the `/PieceInfo`-sidecar-
+  plus-baked-`/AP` hybrid is the only available home, and the naming must
+  stay honest (pdfce draws SolidWorks-**STYLE** notation, never claims
+  SolidWorks-conformant).
+- **Decide the proposed standing rule** filed with this Pass (see
+  `ROADMAP.md` *Standing rules* → "PROPOSED, NOT MINTED"). The engineer
+  dispatched with "standing rules minted: none by the engineer" and
+  handed the adoption call to this librarian to propose; it is proposed,
+  and the acceptance is the engineer's. It would claim **R157** if
+  accepted, or fold into R86's queued scope note instead — both options
+  are argued in the block.
+- **`tools/check-ledger-numbers.py --stats` remains OUTSTANDING since
+  continuation 95**, and this librarian has no shell and has not run it.
+  Per the engineer's own dispatch, **the engineer will run it after this
+  filing is committed and report the result**. No claim about its current
+  state is made here — a clean ledger is not something this filing can
+  observe.
+
+**Backup currency not verifiable from here** — engineer should check
+`D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is made
+in this entry.
+
+### Ledger discipline (R106)
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | **none** — 34.2 was already claimed by the 2026-08-05 operator-request entry; this filing MOVES it, it does not name it | family **37** still next free, unchanged |
+| Standing rules | **none minted.** One **PROPOSED** (no number, not in force): "no in-app oracle ⇒ extract the rule as a pure function, unit-test it, and STATE the substitution." R81 **amended** in place (its named floating-window holdout is now closed) — an amendment, not a mint | **R156** (**R157** next free), **unchanged** |
+| Decision records | **none** | **031** (**032** next free), unchanged |
+| Operator questions | **none** | **(az)** (**(ba)** next free), unchanged |
+
+**`tools/check-ledger-numbers.py --stats` has NOT been run by this
+librarian** — no shell, and it has been outstanding since continuation
+95. The engineer will run it after this filing is committed and report
+the result. This entry asserts **no** ledger-clean state it cannot
+observe.
+
+### RAG escalations, continuation 99 — TWO filed to `D:\dev\rag\egui\`, and the not-filed cases are reasoned rather than assumed
+
+**Filed:**
+1. **`D:\dev\rag\egui\screen_capture_photographs_the_occluding_window_not_the_target.md`** (NEW file) —
+   a `CopyFromScreen`-style capture of a window's screen rect silently
+   photographs whatever application owns those pixels when the target is
+   not foreground, and the resulting image is **indistinguishable from
+   real evidence**. Checked the existing index first (hard rule 4): the
+   two nearest files —
+   `blank_capture_guard_must_sample_client_rect_not_window_rect.md`
+   (which rect to SAMPLE) and
+   `eframe_blank_until_first_input_reactive_repaint.md` (an unpresented
+   frame) — both concern *whether the target drew anything*. **Neither
+   covers z-order/foreground at all**, so this is a genuinely new axis,
+   not a duplicate.
+2. **An AMENDMENT to the existing
+   `blank_capture_guard_must_sample_client_rect_not_window_rect.md`**,
+   not a second new file — the ~2.5 s post-raise DWM settle. That file
+   already owns the *"uniform WHITE client area under a normally-painted
+   title bar"* symptom; this finding is a **second, independent cause**
+   of the identical symptom (a raise that has happened but not yet
+   recomposited), so a future reader chasing the symptom lands on one
+   file carrying both causes rather than two files each carrying half.
+   Extending was the correct call under hard rule 4.
+
+**NOT escalated, with the reasoning stated rather than assumed:**
+- **Nothing `C:\personal_rag\pdf\`-worthy.** No real-world producer
+  behaviour was learned this session — the ce-dimension display flag is
+  pdfce's own model over its own annotations, not an observation about
+  how some other tool writes PDFs.
+- **Nothing `D:\Dev\Rag-Specialized\PDF_Spec\`-worthy.** ISO 32000 has no
+  radius-versus-diameter display concept to conform to — the same "no
+  spec representation exists" finding already recorded on the Pass 35.0
+  entry for tolerance. And that RAG is `pdfce-spec-librarian`'s
+  exclusively (hard rule 6), not this librarian's to write regardless.
+- **Nothing `D:\dev\rag\rust\`-worthy** this filing — no toolchain,
+  Cargo, packaging, or crate-API finding surfaced.
+
+**Same-day continuation 100 (real date 2026-08-05) — two engineer rulings
+recorded, no code: the ledger checker HAS NOW BEEN RUN (clean, and the
+item outstanding since continuation 95 is discharged), and the proposed
+standing rule is ACCEPTED AS TO SUBSTANCE, REFUSED AS TO NUMBER — folded
+into R86's scope, ceiling stays R156.**
+
+This is a short follow-up filing to continuation 99, not a rewrite of it.
+It ships no Pass and touches no code. Both items are engineer rulings the
+continuation-99 filing explicitly asked for and left open.
+
+**Shipped:** nothing. No Pass, no code, no `FEATURES.md` row changed —
+this filing changes only the record.
+
+**Item 1 — `tools/check-ledger-numbers.py --stats` HAS NOW BEEN RUN, and
+the item OUTSTANDING SINCE CONTINUATION 95 IS DISCHARGED.**
+
+Run **by the engineer**, at the tip of `pass-8-redaction`, with the
+continuation-99 doc edits **present in the working tree but NOT yet
+committed**. That is recorded as such deliberately, because it is not a
+weakness of the check: `check-ledger-numbers.py` reads the **document
+text**, and the document text is exactly what continuation 99 changed. A
+run against the committed tree would have checked the *previous* filing.
+Verbatim output, unedited (**R87** — this librarian has no shell and did
+not run it; the output is recorded on the engineer's authority):
+
+```
+LIVE CEILINGS (read these before assigning any new number):
+  Pass families with headings : up to 36 (highest ID 36.3)
+  Pass families MENTIONED     : up to 36 (highest ID 36.3)
+  CLAIMED BUT NOT YET HEADED  : 5, 9, 9c, 10, 13, 20, 22, 23, 31, 33  <- already spoken for; do NOT reuse
+  standing rules      : R156  -> next free is R157
+  decision records    : 031 -> next free is 032
+
+PARSE STATS (a sudden drop means the conventions moved):
+  distinct (section, Pass ID) pairs : 95
+  standing rules defined            : 156
+  decision files                    : 31
+  allowlisted rule amendments       : 1
+
+ledger-numbers: clean - no duplicate Pass, rule, or decision numbers.
+```
+
+What it confirms, and what it does not:
+- **Confirmed by the tool rather than asserted by this librarian:**
+  standing-rule ceiling **R156** (R157 next free), decision-record
+  ceiling **031** (032 next free), and **no duplicate** Pass, rule, or
+  decision number anywhere. Those are precisely the three numbers the
+  continuation-99 ledger table claimed, so the table is now backed by an
+  observation instead of by bookkeeping.
+- **The parse stats matter as much as the ceilings.** **156 rules defined
+  against a ceiling of R156**, and **31 decision files against ceiling
+  031**, mean the tool's definition-matching is still seeing every rule
+  bullet and every decision file. A silent drop in either count is the
+  "gate that covers less than it appears to" failure this tool exists to
+  prevent — it once parsed 101 of 106 rules and left R53–R57 unguarded,
+  which is why `--stats` prints the counts alongside the ceilings.
+- **The Pass-family line reading 36, not 37, is expected** and does not
+  contradict the standing "family 37 next free" entry: the tool reports
+  the highest family that **exists**; "next free" is that plus one.
+- **`CLAIMED BUT NOT YET HEADED: 5, 9, 9c, 10, 13, 20, 22, 23, 31, 33`**
+  is the R106/R133 trap the tool exists to expose — IDs spoken for in
+  prose that own no heading yet. A future filing reading only the heading
+  ceiling would happily re-issue one of them. **Do not reuse these.**
+
+Recorded in `ROADMAP.md` as a dated **UPDATE blockquote appended
+directly beneath** the continuation-99 ledger note that said the check
+was outstanding. The original paragraph was **left standing rather than
+replaced**: it was true when written, the Shipped section is append-only
+(hard rule 1), and the project's established shape for this is a dated
+amendment adjacent to the superseded text. A reader reaches the
+resolution in the same breath as the claim it resolves.
+
+**Item 2 — ENGINEER'S RULING on the proposed standing rule: ACCEPTED AS
+TO SUBSTANCE, REFUSED AS TO NUMBER.**
+
+The proposal — *"no in-app oracle ⇒ extract the rule as a pure function,
+unit-test it, and STATE the substitution"* — is **adopted as a second
+queued scope note on R86**, alongside the existing "a refusal is
+operator-facing behaviour too" one. **R157 was NOT minted. The
+standing-rule ceiling stays R156** (R157 still next free). **Nothing was
+renumbered**, and decision 030's three still-unminted contingent
+candidates (§6.2(a), §4.5, "date and label every contract statement")
+are **NOT pushed** — they remain candidates for R157 exactly as before.
+
+The engineer's four reasons, recorded because the ruling turns on the
+argument the proposal itself expected to lose:
+1. **The rule has no independent life.** Its entire content is "what to
+   do when R86 cannot be satisfied." A reader who has not accepted R86
+   has nothing to attach it to. A rule meaningful only as an exception to
+   another rule belongs inside that rule's scope — not beside it in the
+   same numbered list, **where the numbering implies they are peers**.
+2. **R86 is still OPERATOR SIGN-OFF PENDING** (open question **(e)**).
+   Minting R157 would ask Ken to accept a numbered rule whose meaning
+   depends on a rule he has not accepted. Folding it in means that when
+   he rules on (e) he rules on the **whole shape at once** — a fairer
+   question than two whose answers are not independent.
+3. **A number would add no enforcement here.** The discipline is already
+   in three places a future session actually reads: the Pass 34.2
+   *Shipped* entry, `place_draft_commit`'s doc comment in
+   `crates/pdfce-gui/src/main.rs`, and the engineer's agent memory
+   (`feedback_no_oracle_extract_and_test.md`). The failure guarded
+   against is a **REPORTING** failure, and reporting discipline here is
+   carried by the Shipped-entry convention, not by rule-number count.
+4. **The two-occurrence promotion bar IS genuinely cleared** — the R156
+   comparison was sound, which is exactly why the substance is accepted.
+   The disagreement was only ever about **where it lives**.
+
+Filed in `ROADMAP.md` as: the `### PROPOSED, NOT MINTED` block converted
+**in place** to `### RESOLVED 2026-08-05 — … ACCEPTED AS TO SUBSTANCE,
+REFUSED AS TO NUMBER; FOLDED INTO R86'S SCOPE`, with the ruling and the
+four reasons at its head and **the original proposal text kept unedited
+beneath a divider** (append-only spirit — the argument that produced the
+ruling is part of the record). The proposal's closing "Numbering, if
+accepted" paragraph now carries an explicit **SUPERSEDED** note so no
+future reader mistakes it for live numbering guidance. R86's own entry
+gains the **SECOND scope note queued for activation**, worded to activate
+*with* R86 and never before it, and stating plainly that whoever
+activates R86 must fold in **both** queued scope notes.
+
+**Findings + decisions:**
+- **A rule that is only an exception to another rule is a scope note, not
+  a peer rule.** That is the generalizable shape of item 2, and it is
+  worth having stated once: the standing-rules list is read as a list of
+  independent obligations, so putting a dependent clause in it as a
+  numbered sibling misrepresents the dependency to every future reader.
+  This is the second time this project has chosen fold-in over mint (the
+  first: R86's own refusal scope note, continuation 77) — **not yet a
+  third occurrence, so no promotion to a numbered rule of its own is
+  proposed here**, which would be a slightly absurd thing to do in the
+  same filing that refused one.
+- **A ceiling reported before an edit is not a ceiling verified after
+  it.** The run above happened before these continuation-100 edits
+  existed. R86 gaining a scope note is exactly the kind of edit that can
+  disturb the rule parse — the definition regex matches `- **R<n> — `
+  bullets inside `## Standing rules`, and this filing added indented
+  continuation lines to one such bullet and re-headed a `###` block in
+  the same section. **The engineer will re-run
+  `tools/check-ledger-numbers.py --stats` after committing these edits**,
+  and the number to watch is `standing rules defined : 156` — if it moves
+  in either direction, this filing disturbed the parse.
+
+**Ledger for THIS filing:** **nothing minted.** No Pass IDs, no standing
+rules, no decision records, no operator questions.
+
+**Still in flight** and **For next session:** **unchanged from
+continuation 99 — see that entry**, not restated here. **Pass 35.0**
+(ce-dimension tolerance and tolerance types) is still the named next
+step. Continuation 99's own "decide the proposed standing rule" bullet is
+the one item now **discharged** by item 2 above, and its
+`check-ledger-numbers` bullet is discharged by item 1.
+
+**Backup currency not verifiable from here** — engineer should check
+`D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is made
+in this entry.
+
+### Ledger discipline (R106) — continuation 100
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | **none** — this filing ships no Pass | family **37** still next free, unchanged |
+| Standing rules | **none.** The proposed rule was **REFUSED as to number** and folded into **R86**'s scope as its SECOND queued scope note — an amendment, not a mint | **R156** (**R157** next free), **unchanged**; decision 030's three contingent candidates still hold the claim on R157 |
+| Decision records | **none** | **031** (**032** next free), unchanged |
+| Operator questions | **none** | **(az)** (**(ba)** next free), unchanged |
+
+**Ledger-checker state:** run by the engineer **before** these edits (see
+item 1 — clean, verbatim output recorded). **Not** re-run by this
+librarian, which has no shell. The re-run **after** committing these
+edits is owed, and is named in "Findings + decisions" above with the
+specific number to watch.
+
+### RAG escalations, continuation 100 — none, with the reasoning stated
+
+- **Nothing `D:\dev\rag\egui\`- or `D:\dev\rag\rust\`-worthy.** This
+  filing produced no egui, eframe, wgpu, Cargo, toolchain, or packaging
+  finding — it recorded two rulings about this project's own documentary
+  conventions, which generalize to no other Rust or egui project.
+- **Nothing `C:\personal_rag\pdf\`-worthy.** No real-world PDF-producer
+  behaviour was observed; no PDF was touched.
+- **Nothing `D:\Dev\Rag-Specialized\PDF_Spec\`-worthy**, and that RAG is
+  `pdfce-spec-librarian`'s exclusively regardless (hard rule 6).

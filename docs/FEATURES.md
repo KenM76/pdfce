@@ -91,9 +91,11 @@ next filing.
 | core | cli | gui | Feature |
 |:----:|:---:|:---:|---------|
 | [x] | [x] | [x] | Author a ce dimension with snapping: linear/radius/diameter (Pass 12.M1, 12.M2, 12.M2b) |
-| [x] | [x] | [x] | ce-dimension groups: scale, number format (decimal/fraction), ANSI/ISO drafting standard (Pass 12.M2, 27.2) |
+| [x] | [x] | [x] | ce-dimension groups: scale, number format (decimal/fraction), ANSI/ISO drafting standard (Pass 12.M2, 27.2; GUI controls in the Properties dock pane since Pass 34.2) — group-wide: a change regenerates every member's `/AP` |
+| [x] | [x] | [x] | Change a PLACED circular ce dimension between the radius and diameter reading (Pass 34.2, `EditSession::set_dimension_display` / `pdfce-cli dimension-display`) — **circular only**; a linear target is refused by name (`EditError::NotACircularDimension`). Per-object: regenerates exactly one `/AP` |
 | [x] | [x] | [x] | Drag to reposition a ce dimension (Pass 25.5) |
-| [x] | [x] | [x] | Toggle a ce-dimension group's OCG layer visibility (Group Manager — currently a floating window, dock relocation planned) |
+| [x] | [x] | [x] | Edit a placed ce dimension's placement NUMERICALLY — standoff / value-position (Pass 27.1 core+CLI `dimension-offset`; Pass 34.2 GUI spinners, which mirror the drag rather than replace it) |
+| [x] | [x] | [x] | Toggle a ce-dimension group's OCG layer visibility (Properties dock pane since Pass 34.2 — the floating Group Manager window is gone, closing R81's last named holdout) |
 | [x] | [x] | [x] | Delete a ce dimension: annotation + `/AP` + `/PieceInfo` sidecar, together (Pass 25.6) |
 
 ### Annotations & markup
@@ -133,7 +135,7 @@ next filing.
 |:----:|:---:|:---:|---------|
 | [x] | [x] | [x] | Live-edit canvas: renders the edited revision, not a static page image (Pass 17.x) |
 | — | — | [x] | Interactive canvas: pan, zoom-to-cursor, marquee select (Pass 12.0, 18.8) |
-| — | — | [x] | Dockable panel shell: Pages / Tool Options / Properties / Object-Layer tree (Pass 18.1, 34.1) |
+| — | — | [x] | Dockable panel shell: Pages / Tool Options / Properties / Object-Layer tree (Pass 18.1, 34.1, 34.2) — Properties holds three scope-named sections (selected ce dimension · ce-dimension groups · document `/Info`); no persistent floating window remains (R81) |
 | — | — | [x] | Ribbon command surface — File/Edit/Review/Measure/Tools/View tabs, reset-layout chooser covering both docks (Pass 24.1, chain `6449859`→`2b12efe`) |
 | — | — | [x] | Implicit gesture-commit: clicking away accepts an in-progress edit instead of requiring a separate Accept/Reject click (Pass 34.0; slice 4 of the related Pass 34.1 dock-relocation work still owed, see *Planned*) |
 | [x] | [x] | [x] | ScripTree-style SVG icon set for every GUI feature (Pass 18.3) |
@@ -152,8 +154,7 @@ worth knowing when scoping the work.
 | core | cli | gui | Feature |
 |:----:|:---:|:---:|---------|
 | — | — | [ ] | Pass 34.1 slice 4 — move the last floating status/disclosure strips into the Tool Options dock |
-| [x] | [x] | [ ] | Pass 34.2 — per-ce-dimension property panel, docked (position/radius-diameter reachable after placement; Group Manager moves out of its floating window) |
-| [ ] | [ ] | [ ] | Pass 35.0 — ce-dimension tolerance & tolerance types, SolidWorks-style (None/Basic/Bilateral/Symmetric/Limit/Min/Max) — zero existing representation today |
+| [ ] | [ ] | [ ] | Pass 35.0 — ce-dimension tolerance & tolerance types, SolidWorks-style (None/Basic/Bilateral/Symmetric/Limit/Min/Max) — zero existing representation today. **Next up**: Pass 34.2 built the per-ce-dimension property surface its controls need to live in |
 | [ ] | [ ] | [ ] | Pass 35.1 — drag a ce dimension's extension lines to extend/retract |
 | [ ] | [ ] | [ ] | Pass 33.0 — real fix for reflow's auto-detected wrap width inheriting a prior edit's overflow (disclosure ships today; the fix itself — clamp / median-width / refuse — is undecided) |
 | [ ] | [ ] | [ ] | Pass 32.0 — delete one text run without deleting every run sharing its text object (fixes: deleting one CAD label deletes all 237 sharing a `BT`…`ET` block on the operator's own drawing) |
