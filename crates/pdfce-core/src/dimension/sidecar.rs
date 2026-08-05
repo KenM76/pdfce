@@ -311,11 +311,8 @@ fn deserialize_dimension(obj: &Object) -> Option<DimensionRecord> {
             constraint: parse_constraint(&name_of(d.get(b"Constraint"))?)?,
             // Absent in every sidecar written before Pass 27.0. The 0.0
             // default is what makes that migration free rather than lossy.
-            offset: d.get(b"Offset").and_then(Object::as_number).unwrap_or(0.0),
-            text_along: d
-                .get(b"TextAlong")
-                .and_then(Object::as_number)
-                .unwrap_or(0.0),
+            offset: placement_of(d.get(b"Offset")),
+            text_along: placement_of(d.get(b"TextAlong")),
         },
         b"circular" => DimensionKind::Circular {
             fit: FitCircle {
@@ -345,11 +342,58 @@ fn point_array(p: Point) -> Object {
     Object::Array(vec![Object::Real(p.x), Object::Real(p.y)])
 }
 
+/// The largest page-space magnitude a sidecar value may claim (Pass 27.3).
+///
+/// PDF's own architectural limit for a page dimension is 14,400 units (200
+/// inches, Annex C.1), so a coordinate or standoff three orders past that is
+/// not geometry — it is corruption, a hand edit, or another product's bug.
+/// The ceiling is deliberately generous rather than tight: the job here is to
+/// stop absurdity reaching the writer, not to second-guess an unusual drawing.
+const MAX_PAGE_VALUE: f64 = 1.0e7;
+
+/// Whether a file-supplied page-space number is usable.
+///
+/// # Why this guard exists
+///
+/// These values come out of the FILE, and everything downstream of them is
+/// geometry that ends up in `/Rect` and `/L`. Measured on 2026-08-05, with no
+/// guard:
+///
+/// - `/Offset 1e308` wrote a **300-digit decimal** into `/Rect`, far past
+///   PDF's ~3.4e38 architectural limit for a real;
+/// - `/Offset inf` made the dimension **silently vanish** — `/Rect [-2 -2 3
+///   3]`, `/L [0 0 0 0]` — while `/Contents` still read "200.00 pt". A
+///   measurement that disappears while still claiming a value is the worst of
+///   the available outcomes, because nothing on screen says anything is wrong.
+///
+/// The bounds accumulator already drops non-finite points, which is what makes
+/// the failure quiet rather than loud. This stops it upstream instead.
+fn usable_page_value(v: f64) -> bool {
+    v.is_finite() && v.abs() <= MAX_PAGE_VALUE
+}
+
+/// A file-supplied placement scalar, or the 0.0 default if it is unusable.
+///
+/// Defaulting rather than dropping the record: a standoff is a presentation
+/// detail with a meaningful zero, so a corrupt one costs the operator the
+/// dimension's POSITION, not the dimension. The measured points are held to a
+/// stricter standard below, because a dimension whose geometry is corrupt has
+/// no meaning to preserve.
+fn placement_of(obj: Option<&Object>) -> f64 {
+    obj.and_then(Object::as_number)
+        .filter(|v| usable_page_value(*v))
+        .unwrap_or(0.0)
+}
+
 fn point_of(obj: &Object) -> Option<Point> {
     let a = obj.as_array()?;
     let x = a.first()?.as_number()?;
     let y = a.get(1)?.as_number()?;
-    Some(Point::new(x, y))
+    // `None` drops the whole dimension record — the sidecar's existing
+    // malformed-entry posture. A measured point that is infinite or absurd
+    // does not describe anything, and keeping the record would mean drawing a
+    // dimension between coordinates nobody chose.
+    (usable_page_value(x) && usable_page_value(y)).then(|| Point::new(x, y))
 }
 
 const fn constraint_token(c: AxisConstraint) -> &'static [u8] {

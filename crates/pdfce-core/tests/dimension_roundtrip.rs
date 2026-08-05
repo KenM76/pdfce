@@ -816,6 +816,102 @@ fn the_drafting_standard_round_trips_and_defaults_to_ansi() {
     );
 }
 
+/// **A corrupt sidecar cannot make a ce dimension vanish, or write nonsense
+/// into `/Rect`.**
+///
+/// `/Offset` and `/TextAlong` come out of the FILE and feed geometry that ends
+/// up in the annotation. Measured on 2026-08-05 before the guard:
+///
+/// - `/Offset 1e308` wrote a **300-digit decimal** into `/Rect`, far past
+///   PDF's ~3.4e38 architectural limit for a real (Annex C.1);
+/// - `/Offset inf` produced `/Rect [-2 -2 3 3]` and `/L [0 0 0 0]` — the
+///   measurement gone from the page while `/Contents` still read "200.00 pt".
+///
+/// The second is the worse one: the bounds accumulator drops non-finite points
+/// by design, which is exactly what made the failure quiet. A dimension that
+/// disappears while still claiming a value tells the operator nothing.
+#[test]
+fn hostile_placement_values_in_a_sidecar_are_refused_not_drawn() {
+    use pdfce_core::dimension::{DimensionModel, serialize_model};
+    use pdfce_core::object::{Dict, Name};
+
+    for bad in [f64::INFINITY, f64::NAN, 1e308, -1e308] {
+        let mut model = DimensionModel::new();
+        let id = model.add_dimension(DEFAULT_GROUP_ID, linear());
+        let _ = id;
+        let obj = serialize_model(&model);
+        let mut d: Dict = obj.as_dict().unwrap().clone();
+        let dims: Vec<Object> = d
+            .get(b"Dimensions")
+            .and_then(Object::as_array)
+            .unwrap()
+            .iter()
+            .map(|dim| {
+                let mut c = dim.as_dict().unwrap().clone();
+                c.insert(Name::from(b"Offset"), Object::Real(bad));
+                c.insert(Name::from(b"TextAlong"), Object::Real(bad));
+                Object::Dict(c)
+            })
+            .collect();
+        d.insert(Name::from(b"Dimensions"), Object::Array(dims));
+
+        let recovered = deserialize_model(&Object::Dict(d)).expect("the sidecar still loads");
+        let rec = recovered
+            .dimensions()
+            .first()
+            .expect("the dimension survives");
+        let DimensionKind::Linear {
+            offset, text_along, ..
+        } = rec.kind
+        else {
+            panic!("expected linear")
+        };
+        assert_eq!(
+            (offset, text_along),
+            (0.0, 0.0),
+            "a placement of {bad} must fall back to the default, not reach the geometry"
+        );
+    }
+}
+
+/// A corrupt MEASURED POINT drops the whole record, rather than drawing a
+/// dimension between coordinates nobody chose.
+///
+/// Stricter than the placement guard on purpose: a standoff has a meaningful
+/// zero, so a bad one costs the dimension's position. A measured point does
+/// not — a dimension whose geometry is corrupt has no meaning to preserve.
+#[test]
+fn a_hostile_measured_point_drops_the_record() {
+    use pdfce_core::dimension::{DimensionModel, serialize_model};
+    use pdfce_core::object::{Dict, Name};
+
+    let mut model = DimensionModel::new();
+    model.add_dimension(DEFAULT_GROUP_ID, linear());
+    let obj = serialize_model(&model);
+    let mut d: Dict = obj.as_dict().unwrap().clone();
+    let dims: Vec<Object> = d
+        .get(b"Dimensions")
+        .and_then(Object::as_array)
+        .unwrap()
+        .iter()
+        .map(|dim| {
+            let mut c = dim.as_dict().unwrap().clone();
+            c.insert(
+                Name::from(b"A"),
+                Object::Array(vec![Object::Real(f64::INFINITY), Object::Real(0.0)]),
+            );
+            Object::Dict(c)
+        })
+        .collect();
+    d.insert(Name::from(b"Dimensions"), Object::Array(dims));
+
+    let recovered = deserialize_model(&Object::Dict(d)).expect("the sidecar still loads");
+    assert!(
+        recovered.dimensions().is_empty(),
+        "a dimension with a non-finite measured point must not survive"
+    );
+}
+
 /// Undo of a move restores the dimension exactly.
 #[test]
 fn undoing_a_ce_dimension_move_restores_it() {
