@@ -49,6 +49,37 @@ $env:PDFCE_DIAG_SCRIPT = $Script + (";wait" * 4000)
 $proc = Start-Process -FilePath $Exe -ArgumentList $Pdf -PassThru -RedirectStandardError $Log
 Start-Sleep -Seconds $CaptureAfterSeconds
 
+# RAISE THE WINDOW BEFORE CAPTURING. Added 2026-08-05 (Pass 34.2) after a
+# capture returned a pixel-perfect screenshot of SOLIDWORKS: pdfce had started,
+# run its whole script and traced correctly, but its window was created behind
+# an already-running maximised application, so `CopyFromScreen` at the window's
+# nominal rect photographed whatever owned those pixels instead.
+#
+# This is the same failure class the comment below warns about — an image that
+# looks like real evidence and is not — so it gets the same treatment: make it
+# impossible rather than remember to check. `SetForegroundWindow` is best-effort
+# by Windows' own rules (a process without foreground rights may be refused),
+# which is why the capture is still verified by eye and not trusted blindly.
+if (-not ('Win32Fg' -as [type])) {
+    Add-Type -Namespace Win32Fg -Name U -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+'@ -PassThru | Out-Null
+}
+$proc.Refresh()
+if ($proc.MainWindowHandle -ne [IntPtr]::Zero) {
+    [Win32Fg.U]::ShowWindow($proc.MainWindowHandle, 5) | Out-Null   # SW_SHOW
+    [Win32Fg.U]::SetForegroundWindow($proc.MainWindowHandle) | Out-Null
+    # 2.5 s, not 0.7 s: at 0.7 s the first capture came back a uniform WHITE
+    # client area under a correct pdfce title bar — the raise had happened but
+    # DWM had not recomposited the GPU surface yet. A blank capture is the
+    # precise failure the harness hardening of 2026-08-03 exists to refuse, so
+    # it is given room rather than raced.
+    Start-Sleep -Milliseconds 2500
+} else {
+    Write-Warning "gui-shot: no main window handle — the capture may photograph another app."
+}
+
 # Capture the screen region the window occupies rather than the window's own
 # device context: a GPU-composited (wgpu/glow) surface is frequently blank in a
 # PrintWindow/BitBlt of the window DC, which would silently produce an empty

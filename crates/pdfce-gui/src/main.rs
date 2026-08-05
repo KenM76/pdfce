@@ -1908,6 +1908,26 @@ struct OpenDoc {
     /// An in-flight ce-dimension drag: where the pointer went down, in PDF
     /// page space. The move commits on release as ONE undoable command.
     dimension_drag: Option<(pdfce_core::dimension::DimensionId, egui::Pos2)>,
+    /// Pass 34.2: the Properties pane's standoff / value-position spinners edit
+    /// THIS, and commit to the session only when the spinner interaction ends.
+    ///
+    /// # Why a draft rather than calling `place_dimension` on every change
+    ///
+    /// `egui::DragValue` reports `changed()` on **every frame** of a drag, and
+    /// `EditSession::place_dimension` pushes an undo entry per call. Wiring one
+    /// straight to the other would turn a one-second drag into sixty undo
+    /// entries, so `Ctrl+Z` would have to be held down to reverse one gesture —
+    /// and each of those entries also regenerates the `/AP` and appends to the
+    /// incremental save. The canvas drag already solves this by previewing and
+    /// committing once on release; this is the same contract for the numeric
+    /// route, which is what makes the two mirror each other rather than merely
+    /// coexist (the ROADMAP's own wording for this bullet: "mirroring, not
+    /// replacing, the drag").
+    ///
+    /// Carries its own [`DimensionId`](pdfce_core::dimension::DimensionId) so a
+    /// draft cannot outlive the selection it belongs to and be committed onto
+    /// whichever ce dimension is selected next.
+    dimension_place_draft: Option<(pdfce_core::dimension::DimensionId, f64, f64)>,
     /// A status note produced deep inside the canvas/panel code, drained into
     /// the app's narrator once the `&mut doc` borrow ends.
     ///
@@ -1918,6 +1938,11 @@ struct OpenDoc {
     /// This is the channel that does not require choosing between reporting
     /// and compiling.
     pending_note: Option<String>,
+    /// Pass 34.2: a pane-raise request from code running under `&mut OpenDoc`,
+    /// drained by the app into [`PdfceApp::show_pane_subject`] on the next
+    /// frame — the exact sibling of [`Self::pending_note`], for exactly the
+    /// same borrow reason.
+    pending_pane_subject: Option<ribbon::PaneSubject>,
     /// Which pages are selected for a batch operation, by 0-based index.
     ///
     /// Ordered (a `BTreeSet`) so that "the selected pages" is always a
@@ -2099,7 +2124,9 @@ impl OpenDoc {
             subpath_cycle: None,
             selected_dimension: None,
             dimension_drag: None,
+            dimension_place_draft: None,
             pending_note: None,
+            pending_pane_subject: None,
             selected_pages: BTreeSet::new(),
             selection_anchor: None,
             dragged_page: None,
@@ -5475,10 +5502,18 @@ impl PdfceApp {
                 return;
             }
             Action::ToggleDimensionGroups => {
-                // Pass 12.M2b ui-spec §5: flip the modeless group-panel window.
+                // Pass 34.2: the group controls are no longer a floating window
+                // to flip — they are a section of the Properties pane. So this
+                // action now REVEALS them: raise the pane, show Properties, and
+                // request the section expand. It is no longer a toggle in the
+                // "flip a boolean" sense, and deliberately so — an operator who
+                // presses "Dimension Groups" wants to see dimension groups, and
+                // a second press that hid the whole Properties pane would be a
+                // surprising amount of collateral for one control.
                 if let Status::Open(doc) = &mut self.status {
-                    doc.dimension_groups_open = !doc.dimension_groups_open;
+                    doc.dimension_groups_open = true;
                 }
+                self.show_pane_subject(ribbon::PaneSubject::Properties);
                 return;
             }
             Action::CancelToolGesture => {
@@ -6019,6 +6054,7 @@ impl PdfceApp {
     /// forget, which is precisely the class of defect this session has spent
     /// its time finding.
     fn show_pane_subject(&mut self, subject: ribbon::PaneSubject) {
+        diag::trace(|| format!("show-pane-subject {subject:?}"));
         self.pane_subject = subject;
         self.rail_expanded = true;
         let mut tree = std::mem::replace(&mut self.left_dock, dock::left_swap_tree());
@@ -6439,9 +6475,10 @@ impl eframe::App for PdfceApp {
                 });
             }
             diag::Step::Groups => {
-                if let Status::Open(doc) = &mut self.status {
-                    doc.dimension_groups_open = true;
-                }
+                // Through the SAME action a real press takes (Pass 34.2), so a
+                // scripted run cannot diverge from the operator's path — the
+                // failure mode the ShowPoints step below already names.
+                self.apply(Action::ToggleDimensionGroups, ctx, ctx.pixels_per_point());
             }
             diag::Step::ShowPoints => {
                 // Through the SAME action the toolbar toggle pushes, so a
@@ -6548,6 +6585,17 @@ impl eframe::App for PdfceApp {
             && let Some(note) = doc.pending_note.take()
         {
             self.edit_note = Some(note);
+        }
+        // Pass 34.2: same channel, same reason, for a pane-raise request. The
+        // Measure tool's "Dimension Groups" button runs under `&mut OpenDoc`
+        // and cannot reach `show_pane_subject`, which lives on the app — and
+        // raising the pane is not optional (see that method's own doc: a
+        // command that changes a pane the operator cannot see has, from their
+        // side, done nothing).
+        if let Status::Open(doc) = &mut self.status
+            && let Some(subject) = doc.pending_pane_subject.take()
+        {
+            self.show_pane_subject(subject);
         }
 
         let canvas_delete_target = match &self.status {
@@ -8365,6 +8413,16 @@ impl PdfceApp {
             ui.label(ui_text::properties_dock_no_document_hint());
             return;
         };
+        // Pass 34.2: the pane's THREE tiers, outermost-scope last. The selected
+        // ce dimension comes first because it is the thing the operator was
+        // just looking at on the canvas; the document's `/Info` form, which is
+        // the least frequently touched, is at the bottom where it has always
+        // been.
+        selected_dimension_section(doc, ui);
+        ui.separator();
+        dimension_groups_section(doc, ui);
+        ui.separator();
+        ui.heading(ui_text::properties_document_heading());
         if doc.properties_lossy {
             // Honesty over tidiness: some stored bytes could not be decoded
             // with certainty, so the operator is told before they overwrite
@@ -9937,11 +9995,10 @@ impl PdfceApp {
             );
         } // end: non-text-edit-tool object-selection path (Pass 14.3 gate)
 
-        // Pass 12.M2b ui-spec §5: the modeless "Dimension Groups" panel. Drawn
-        // here (inside the open-doc scope) so it is available with or without a
-        // measure tool active — a scale can be set / a layer toggled by typing,
-        // no line required (ui-spec §7.2). A no-op when closed.
-        run_dimension_groups_panel(doc, ui);
+        // Pass 34.2: the "Dimension Groups" surface used to be drawn here, as a
+        // floating `egui::Window` over the canvas. It now lives in the
+        // Properties pane (`dimension_groups_section`) — R81's last named
+        // floating-window holdout, closed. Nothing is drawn here any more.
 
         // Ctrl+wheel over the canvas: multiply the zoom. Gated on hover
         // so a ctrl+wheel aimed at the thumbnail rail does not zoom the
@@ -15352,7 +15409,12 @@ fn run_measure_tool(
         return;
     }
     if open_groups {
+        // Pass 34.2: expand the section AND request the pane raise. Setting the
+        // flag alone would expand a section inside a pane the operator is not
+        // looking at (they are looking at Measure's own Tool Options, which is
+        // where the button they just pressed lives).
         doc.dimension_groups_open = true;
+        doc.pending_pane_subject = Some(ribbon::PaneSubject::Properties);
     }
     // Pass 34.0: click-out commit for the linear ce-dimension tool. Runs
     // before the explicit-Accept arm and through the SAME
@@ -15613,27 +15675,298 @@ fn scale_entry_widget(
     }
 }
 
-/// The modeless "Dimension Groups" panel (ui-spec §5): create groups, set a
-/// group's scale + units, and toggle its layer — each mapping onto exactly ONE
-/// shipped `EditSession` command (one undo step, ui-spec §5.4). Available with
-/// or without a measure tool active (ui-spec §7.2). A no-op when closed.
-fn run_dimension_groups_panel(doc: &mut OpenDoc, ui: &mut egui::Ui) {
-    if !doc.dimension_groups_open {
-        return;
+/// Should the standoff / value-position draft be written to the session yet?
+///
+/// Extracted from [`selected_dimension_section`] so the rule can be TESTED. It
+/// is three conditions that all have to hold, and every one of them is a defect
+/// if it is dropped:
+///
+/// 1. **`ended`** — the spinner interaction is over (`drag_stopped` or
+///    `lost_focus`), not merely `changed`. `egui::DragValue` reports `changed`
+///    on every frame of a drag, and `place_dimension` pushes an undo entry per
+///    call, so committing on `changed` turns a one-second drag into ~60 undo
+///    entries and ~60 `/AP` regenerations appended to the incremental save.
+/// 2. **the draft belongs to `id`** — a draft left over from a
+///    previously-selected ce dimension must never be committed onto whichever
+///    one is selected now.
+/// 3. **the value actually differs from the document** — otherwise a click that
+///    focused and unfocused a spinner without moving it writes a command whose
+///    only effect is an undo entry the operator did not earn.
+///
+/// Returns the `(offset, text_along)` to commit, or `None`.
+///
+/// # Why a free function and not a closure
+///
+/// It cannot be reached by the scripted-input harness: injected pointer events
+/// do not produce an egui drag (recorded in
+/// `D:/dev/rag/egui/eframe_035_raw_input_hook_synthetic_event_injection.md`),
+/// so `drag_stopped()` never fires under `tools/gui-drive.ps1` and the rule has
+/// no in-app oracle. A pure function with a unit test is the honest substitute,
+/// and is stated as such rather than left looking like full verification.
+fn place_draft_commit(
+    ended: bool,
+    draft: Option<(pdfce_core::dimension::DimensionId, f64, f64)>,
+    id: pdfce_core::dimension::DimensionId,
+    current: (f64, f64),
+) -> Option<(f64, f64)> {
+    if !ended {
+        return None;
     }
+    let (did, o, t) = draft?;
+    if did != id || (o == current.0 && t == current.1) {
+        return None;
+    }
+    Some((o, t))
+}
+
+/// The Properties pane's **selected ce dimension** section (Pass 34.2).
+///
+/// # The gap it closes, in the operator's own words
+///
+/// > *"the ce dimensions i add need to be editable as well."*
+///
+/// Before this section, a placed ce dimension had exactly one editable
+/// property reachable from the GUI: its position, by dragging it. Everything
+/// else was fixed at draw time by whatever the measure tool's property bar
+/// happened to say when the operator drew it. Wanting a diameter where a radius
+/// was drawn meant deleting the ce dimension and drawing it again — which also
+/// discards its id and its group membership.
+///
+/// # Why HERE and not in Tool Options
+///
+/// Per-ce-dimension editing has to work with **no tool armed**, exactly like
+/// the position drag already does: an operator who has finished dimensioning
+/// and is reviewing the drawing should not have to re-arm the Measure tool to
+/// change a number's format. Tool Options is, by construction, about the armed
+/// tool. Properties is about the selected thing. This is the selected thing.
+///
+/// # What is deliberately NOT here (v1)
+///
+/// Unit, decimal places, fraction denominator, decimal marker, drafting
+/// standard and scale stay **group-level only** — they are drawn by
+/// [`dimension_groups_section`] below. There is no per-ce-dimension override,
+/// which means there is also no inheritance ambiguity to disclose: a field is
+/// either group-scoped (and lives in the group section) or ce-dimension-scoped
+/// (and lives here), never both with a precedence rule the operator has to
+/// learn. Per-ce-dimension overrides are a real ask and a real design problem;
+/// deferring them whole is honest, and half-shipping them is not.
+fn selected_dimension_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
+    use pdfce_core::dimension::DimensionKind;
+
+    ui.heading(ui_text::dimension_props_heading());
+    // Traced on every draw the pointer is active for, including the
+    // nothing-selected case. Tracing only the POPULATED case would make "the
+    // pane is not drawing" and "nothing is selected" produce the same empty
+    // trace, which is exactly the ambiguity that cost a debugging round the day
+    // this shipped. Gated on pointer activity rather than fired every frame,
+    // the same way the `dim-rects` line above it is — an unconditional
+    // per-frame line drowns the events worth grepping for.
+    let pointer_active =
+        diag::enabled() && ui.input(|i| i.pointer.any_down() || i.pointer.any_released());
+    if pointer_active {
+        diag::trace(|| format!("dim-props-draw sel={:?}", doc.selected_dimension));
+    }
+    let Some(id) = doc.selected_dimension else {
+        // Stated, not hidden — see `dimension_props_none_selected`'s own doc.
+        ui.label(ui_text::dimension_props_none_selected());
+        // A stale draft from a previously-selected ce dimension is dropped the
+        // moment the selection clears, so it can never be committed onto
+        // something else later.
+        doc.dimension_place_draft = None;
+        return;
+    };
+    let model = doc.session.dimension_model();
+    let Some(record) = model.dimension(id) else {
+        // The selection outlived the ce dimension (an undo of its authoring, a
+        // delete from elsewhere). Say so rather than drawing controls that
+        // would refuse; the canvas prune runs a frame later.
+        ui.label(ui_text::dimension_props_none_selected());
+        doc.selected_dimension = None;
+        doc.dimension_place_draft = None;
+        return;
+    };
+    let group_name = model
+        .group(record.group)
+        .map_or_else(String::new, |g| g.name.clone());
+    let (circular, show_diameter) = match record.kind {
+        DimensionKind::Circular { show_diameter, .. } => (true, show_diameter),
+        DimensionKind::Linear { .. } => (false, false),
+    };
+    ui.label(ui_text::dimension_props_summary(
+        id.0,
+        ui_text::dimension_kind_label(circular, show_diameter),
+        &group_name,
+    ));
+    // Permanent instrumentation, not a temporary probe (see `diag`'s own
+    // contract: off unless asked, so a call site costs nothing). This is the
+    // ONLY way to observe what this section drew without commandeering the
+    // operator's screen — the exact constraint R86 and the diag module were
+    // written for, and the one that made a screenshot unavailable on the day
+    // this Pass shipped.
+    if pointer_active {
+        diag::trace(|| {
+            format!(
+                "dim-props id={} circular={circular} show_diameter={show_diameter} group={group_name:?}",
+                id.0
+            )
+        });
+    }
+
+    // Captured, applied after the `model` borrow ends — the same discipline
+    // `dimension_groups_section` uses for its `GroupAction`s.
+    let mut set_display: Option<bool> = None;
+    let mut commit_place: Option<(f64, f64)> = None;
+
+    match record.kind {
+        DimensionKind::Circular { .. } => {
+            // THE bullet the ROADMAP names as the concrete gap: this control
+            // existed only in the tool-armed property bar, at draw time.
+            ui.horizontal(|ui| {
+                ui.label(ui_text::dimension_props_display_label());
+                for (wants_diameter, text) in [
+                    (false, ui_text::measure_radius_option()),
+                    (true, ui_text::measure_diameter_option()),
+                ] {
+                    let r = ui
+                        .selectable_label(show_diameter == wants_diameter, text)
+                        .on_hover_text(ui_text::dimension_props_display_tooltip());
+                    // The control's own rect, traced. Without it, driving this
+                    // button from the scripted-input harness means GUESSING a
+                    // screen point — and a guessed point that misses reads
+                    // exactly like a control that does not work, which is the
+                    // confusion `tools/gui-drive.ps1`'s own notes warn about
+                    // ("do not guess them, and do not reuse them across a
+                    // layout change").
+                    if pointer_active {
+                        diag::trace(|| {
+                            format!(
+                                "dim-props-display-btn diameter={wants_diameter} rect={:?}",
+                                r.rect
+                            )
+                        });
+                    }
+                    if r.clicked() && show_diameter != wants_diameter {
+                        // Pressing the half that is ALREADY selected is dropped
+                        // here rather than in `pdfce-core`: the engine
+                        // deliberately commits a no-op set (so its undo
+                        // behaviour is uniform), and this is the caller that
+                        // can cheaply tell — it already read the current value
+                        // to decide which half to highlight.
+                        set_display = Some(wants_diameter);
+                    }
+                }
+            });
+        }
+        DimensionKind::Linear {
+            offset, text_along, ..
+        } => {
+            // Seed the draft from the DOCUMENT whenever it is absent or belongs
+            // to another ce dimension, so the spinners always open showing the
+            // real current placement — including after a canvas drag, which
+            // writes the session without going through this draft.
+            let draft = match doc.dimension_place_draft {
+                Some((did, o, t)) if did == id => (o, t),
+                _ => (offset, text_along),
+            };
+            let (mut o, mut t) = draft;
+            let mut ended = false;
+            let mut changed = false;
+            ui.horizontal(|ui| {
+                ui.label(ui_text::dimension_props_standoff_label());
+                let r = ui
+                    .add(
+                        egui::DragValue::new(&mut o)
+                            .speed(0.5)
+                            .suffix(ui_text::points_suffix()),
+                    )
+                    .on_hover_text(ui_text::dimension_props_standoff_tooltip());
+                changed |= r.changed();
+                ended |= r.drag_stopped() || r.lost_focus();
+            });
+            ui.horizontal(|ui| {
+                ui.label(ui_text::dimension_props_text_along_label());
+                let r = ui
+                    .add(
+                        egui::DragValue::new(&mut t)
+                            .speed(0.5)
+                            .suffix(ui_text::points_suffix()),
+                    )
+                    .on_hover_text(ui_text::dimension_props_text_along_tooltip());
+                changed |= r.changed();
+                ended |= r.drag_stopped() || r.lost_focus();
+            });
+            if changed {
+                doc.dimension_place_draft = Some((id, o, t));
+            }
+            commit_place =
+                place_draft_commit(ended, doc.dimension_place_draft, id, (offset, text_along));
+        }
+    }
+    drop(model);
+
+    if let Some(wants_diameter) = set_display {
+        doc.pending_note = Some(
+            match doc.session.set_dimension_display(id, wants_diameter) {
+                Ok(()) => {
+                    doc.refresh_pages();
+                    ui_text::dimension_display_applied(wants_diameter)
+                }
+                // Reported, never swallowed: a certified document, an encrypted
+                // one, or a sidecar from a newer build all refuse here, and
+                // silence would look exactly like the click missing.
+                Err(err) => err.to_string(),
+            },
+        );
+    }
+    if let Some((o, t)) = commit_place {
+        doc.dimension_place_draft = None;
+        match doc.session.place_dimension(id, o, t) {
+            Ok(()) => doc.refresh_pages(),
+            Err(err) => doc.pending_note = Some(err.to_string()),
+        }
+    }
+}
+
+/// The "Dimension Groups" surface (ui-spec §5): create groups, set a group's
+/// scale + units, and toggle its layer — each mapping onto exactly ONE shipped
+/// `EditSession` command (one undo step, ui-spec §5.4). Available with or
+/// without a measure tool active (ui-spec §7.2).
+///
+/// # Pass 34.2: this used to be a floating `egui::Window`
+///
+/// It was the LAST named floating-window holdout R81 had been carrying, and it
+/// had every problem that rule names. It appeared over the canvas at a position
+/// egui chose, it could sit on top of the very drawing whose dimensions it was
+/// editing, and — worst for an operator learning the app — it was reachable
+/// only from a toolbar toggle, so "where are the dimension settings" had an
+/// answer that existed nowhere in the dock.
+///
+/// It now draws **inside the Properties pane**, below the selected-ce-dimension
+/// section, as the per-GROUP tier of the same properties story. `doc
+/// .dimension_groups_open` survives the move with a narrowed meaning: it is no
+/// longer "is the window on screen", it is "is this section expanded", so
+/// everything that used to open the window (the toolbar toggle, the Measure
+/// tool's own button, the diag script step) still lands the operator on these
+/// controls — via [`PdfceApp::show_pane_subject`], which also raises the pane.
+///
+/// # Why a `&mut egui::Ui` and not a pane of its own
+///
+/// A fourth `PaneSubject` would have made group settings and the selected ce
+/// dimension's settings two different places, and the first thing an operator
+/// does after changing a group's units is look at what it did to the dimension
+/// they have selected. Keeping them in one pane keeps that in one view.
+fn dimension_groups_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
     use pdfce_core::dimension::{DEFAULT_GROUP_ID, Unit};
     let model = doc.session.dimension_model();
     // Engine intents + editor-close captured in the closure, applied after it
     // (so `doc.session`/`refresh_pages` are touched with no field borrow live).
     let mut actions: Vec<measure_tool::GroupAction> = Vec::new();
     let mut close_editor = false;
-    let mut open = doc.dimension_groups_open;
 
-    egui::Window::new(ui_text::group_manager_title())
-        .open(&mut open)
-        .resizable(true)
-        .default_width(520.0)
-        .show(ui.ctx(), |ui| {
+    egui::CollapsingHeader::new(ui_text::group_manager_title())
+        .id_salt("pdfce-dimension-groups-section")
+        .open(doc.dimension_groups_open.then_some(true))
+        .show(ui, |ui| {
             // -- New group (ui-spec §5.2). --
             ui.horizontal(|ui| {
                 ui.label(ui_text::group_new_group_name_label());
@@ -15760,7 +16093,12 @@ fn run_dimension_groups_panel(doc: &mut OpenDoc, ui: &mut egui::Ui) {
             }
         });
 
-    doc.dimension_groups_open = open;
+    // The flag is a one-shot REQUEST to expand, not a mirror of the header's
+    // state. `CollapsingHeader::open(Some(true))` forces open every frame it is
+    // passed, which would make the header impossible to collapse again — the
+    // operator would click it shut and watch it spring open. Clearing it here
+    // hands control back to egui's own persisted state after one frame.
+    doc.dimension_groups_open = false;
     if close_editor {
         doc.group_scale_edit = None;
     }
@@ -17005,5 +17343,71 @@ mod tests {
             ui_text::edit_generic_hint(),
             "this refusal must not fall through to the generic hint"
         );
+    }
+
+    // -----------------------------------------------------------------
+    // Pass 34.2 — the standoff / value-position commit rule.
+    // -----------------------------------------------------------------
+
+    /// Shorthand for the two ce-dimension ids these tests use.
+    fn did(n: u32) -> pdfce_core::dimension::DimensionId {
+        pdfce_core::dimension::DimensionId(n)
+    }
+
+    /// Mid-drag (`ended == false`) NEVER commits — the whole reason the draft
+    /// exists. Committing here would push one undo entry and one `/AP`
+    /// regeneration per frame of the drag.
+    #[test]
+    fn a_place_draft_does_not_commit_until_the_interaction_ends() {
+        assert_eq!(
+            place_draft_commit(false, Some((did(0), 12.0, 3.0)), did(0), (0.0, 0.0)),
+            None
+        );
+    }
+
+    /// The end of the interaction commits the drafted value.
+    #[test]
+    fn a_place_draft_commits_when_the_interaction_ends() {
+        assert_eq!(
+            place_draft_commit(true, Some((did(0), 12.0, 3.0)), did(0), (0.0, 0.0)),
+            Some((12.0, 3.0))
+        );
+    }
+
+    /// A draft belonging to a DIFFERENT ce dimension is never committed onto
+    /// the selected one. Without this the panel would silently move a
+    /// dimension the operator is no longer looking at.
+    #[test]
+    fn a_place_draft_for_another_ce_dimension_is_not_committed() {
+        assert_eq!(
+            place_draft_commit(true, Some((did(7), 12.0, 3.0)), did(0), (0.0, 0.0)),
+            None
+        );
+    }
+
+    /// A draft equal to what the document already says writes nothing — a
+    /// click that focused and unfocused a spinner is not an edit, and an undo
+    /// entry with no visible effect is worse than no entry at all.
+    #[test]
+    fn a_place_draft_equal_to_the_document_commits_nothing() {
+        assert_eq!(
+            place_draft_commit(true, Some((did(0), 12.0, 3.0)), did(0), (12.0, 3.0)),
+            None
+        );
+        // ...but a change in EITHER component alone is still a change.
+        assert_eq!(
+            place_draft_commit(true, Some((did(0), 12.0, 4.0)), did(0), (12.0, 3.0)),
+            Some((12.0, 4.0))
+        );
+        assert_eq!(
+            place_draft_commit(true, Some((did(0), 13.0, 3.0)), did(0), (12.0, 3.0)),
+            Some((13.0, 3.0))
+        );
+    }
+
+    /// No draft at all commits nothing, even at the end of an interaction.
+    #[test]
+    fn no_place_draft_commits_nothing() {
+        assert_eq!(place_draft_commit(true, None, did(0), (0.0, 0.0)), None);
     }
 }

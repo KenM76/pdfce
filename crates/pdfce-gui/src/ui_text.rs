@@ -328,9 +328,16 @@ pub fn properties_button() -> &'static str {
     "Properties"
 }
 
-/// Tooltip on the document-properties toggle.
+/// Tooltip on the Properties toggle.
+///
+/// **Widened at Pass 34.2.** It used to promise only the document's `/Info`
+/// metadata, which was true when the pane held nothing else. The pane now also
+/// holds the selected ce dimension's own properties and the ce-dimension group
+/// settings, and a tooltip that names one of three contents is a tooltip that
+/// hides the other two from anyone reading it to decide whether to open the
+/// pane.
 pub fn properties_tooltip() -> &'static str {
-    "Show or hide the document's title, author, subject and keywords"
+    "The properties of whatever is selected on the page, the dimension groups, and the document's own title, author, subject and keywords"
 }
 
 // -- Pass 6.1 markup authoring (minimal affordance) -------------------
@@ -471,6 +478,119 @@ pub fn info_field_label(field: InfoField) -> &'static str {
 /// are the same result, and neither is obvious from a blank box.
 pub fn info_field_hint() -> &'static str {
     "not set — leave empty to remove"
+}
+
+// ---------------------------------------------------------------------------
+// Pass 34.2 — the Properties pane's THREE sections.
+//
+// The pane used to hold exactly one thing (the document's `/Info` form), so it
+// needed no section headings: the panel's own tab label was the heading. It now
+// holds three tiers of "properties", and an unheaded stack of them would read
+// as one long form in which the scope of each control is a guess:
+//
+//   1. the SELECTED ce dimension's own properties (per-object),
+//   2. the ce dimension GROUPS' properties (per-group, affects every member),
+//   3. the DOCUMENT's `/Info` metadata (per-file).
+//
+// Naming the scope is the point. A "Standoff" spinner and a "Set Scale" button
+// look alike and are three orders of magnitude apart in blast radius — decision
+// 031's own concern — so each section says out loud what it acts on.
+// ---------------------------------------------------------------------------
+
+/// Heading over the Properties pane's `/Info` form (Pass 34.2).
+///
+/// Says **document** explicitly. Before this Pass the form stood alone and the
+/// tab label carried the scope; with a ce-dimension section above it, an
+/// unlabelled form invites the reading "these are the selected thing's
+/// properties", which is exactly wrong for `/Title` and `/Author`.
+pub fn properties_document_heading() -> &'static str {
+    "Document properties"
+}
+
+/// Heading over the selected-ce-dimension section (Pass 34.2).
+///
+/// "ce dimension" is the project's own term (CLAUDE.md rule 15) for a
+/// dimension **pdfce authored**, as opposed to a pdf dimension already printed
+/// on a CAD drawing. The operator-facing wording deliberately says
+/// "dimension you added" rather than the internal jargon — the distinction it
+/// carries is provenance, and "you added it" is how provenance reads to the
+/// person who added it.
+pub fn dimension_props_heading() -> &'static str {
+    "Dimension you added"
+}
+
+/// The selected ce dimension's identity line: id, reading, group name.
+///
+/// The id is shown because it is the handle `pdfce-cli dimension-list`,
+/// `dimension-offset`, `dimension-display` and `dimension-delete` all take —
+/// so an operator who wants to script the same change on fifty files can read
+/// the argument straight off the panel.
+pub fn dimension_props_summary(id: u32, kind: &str, group: &str) -> String {
+    format!("#{id} — {kind} — group “{group}”")
+}
+
+/// Shown in the ce-dimension section when nothing is selected.
+///
+/// States the precondition rather than hiding the section, on the same
+/// reasoning as [`properties_dock_no_document_hint`]: a section that vanishes
+/// teaches nothing, and an operator looking for "where do I edit a dimension"
+/// finds an answer instead of an absence.
+pub fn dimension_props_none_selected() -> &'static str {
+    "Click a dimension on the page to edit it here."
+}
+
+/// Label on the placed-ce-dimension radius/diameter control (Pass 34.2).
+pub fn dimension_props_display_label() -> &'static str {
+    "Reads as:"
+}
+
+/// Tooltip on the placed-ce-dimension radius/diameter control.
+///
+/// Says the measurement does not change, because that is the operator's real
+/// question when a control offers to double a number on their drawing.
+pub fn dimension_props_display_tooltip() -> &'static str {
+    "Switch between the radius and the diameter of the same fitted circle. The circle itself is \
+not re-measured — only which of the two readings is printed."
+}
+
+/// Label on the standoff (perpendicular placement) spinner.
+pub fn dimension_props_standoff_label() -> &'static str {
+    "Standoff:"
+}
+
+/// Tooltip on the standoff spinner.
+pub fn dimension_props_standoff_tooltip() -> &'static str {
+    "How far the dimension line stands off the geometry, in points, measured from the first \
+picked point. Positive is up for a horizontal dimension, right for a vertical one. Dragging \
+the dimension on the page sets the same value."
+}
+
+/// Label on the value-position (along-the-line placement) spinner.
+pub fn dimension_props_text_along_label() -> &'static str {
+    "Value position:"
+}
+
+/// Tooltip on the value-position spinner.
+pub fn dimension_props_text_along_tooltip() -> &'static str {
+    "Where the number sits along the dimension line, in points from its midpoint. 0 is centred."
+}
+
+/// Confirmation after a radius↔diameter switch.
+pub fn dimension_display_applied(show_diameter: bool) -> String {
+    if show_diameter {
+        "Dimension now reads as a diameter.".to_owned()
+    } else {
+        "Dimension now reads as a radius.".to_owned()
+    }
+}
+
+/// The ce dimension's reading, for [`dimension_props_summary`]'s middle field.
+pub fn dimension_kind_label(circular: bool, show_diameter: bool) -> &'static str {
+    match (circular, show_diameter) {
+        (false, _) => "Linear",
+        (true, false) => "Radius",
+        (true, true) => "Diameter",
+    }
 }
 
 /// Explanatory line under the properties fields.
@@ -1870,7 +1990,7 @@ pub fn dock_layout_session_only_note() -> &'static str {
 /// The panel is never blanked: a blank region is indistinguishable from a
 /// broken one, so the honest answer is a sentence naming the precondition.
 pub fn properties_dock_no_document_hint() -> &'static str {
-    "Open a document to read or edit its title, author, subject and keywords."
+    "Open a document to edit what is selected on the page, its dimension groups, or its own title, author, subject and keywords."
 }
 
 // ---------------------------------------------------------------------------
@@ -3393,6 +3513,16 @@ pub fn format_unit_relative_tooltip() -> &'static str {
 /// is rendered to the operator, short as it is.
 pub fn percent_suffix() -> &'static str {
     "%"
+}
+
+/// The ` pt` suffix on a spinner whose value is in PDF user-space points
+/// (Pass 34.2). Same reasoning as [`percent_suffix`]: rendered, therefore
+/// catalogued.
+///
+/// Leading space included, because it is a unit following a number rather than
+/// a symbol attached to one — `12 pt`, not `12pt`.
+pub fn points_suffix() -> &'static str {
+    " pt"
 }
 
 /// Tooltip on the "fixed" unit choice.

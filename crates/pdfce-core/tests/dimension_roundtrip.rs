@@ -16,7 +16,7 @@
 )]
 
 use pdfce_core::dimension::{
-    DEFAULT_GROUP_ID, DimensionKind, NumberFormat, ScaleState, Unit, deserialize_model,
+    DEFAULT_GROUP_ID, DimensionKind, FitCircle, NumberFormat, ScaleState, Unit, deserialize_model,
 };
 use pdfce_core::document::Document;
 use pdfce_core::edit::EditSession;
@@ -1049,4 +1049,180 @@ fn undo_of_a_dimension_removes_everything() {
     // A save now is byte-identical to the original (nothing was written).
     let out = save(&s);
     assert_eq!(out, original, "after undo, the file is byte-identical");
+}
+
+// ---------------------------------------------------------------------------
+// Pass 34.2 — `set_dimension_display`: radius↔diameter AFTER placement.
+// ---------------------------------------------------------------------------
+
+/// A circular ce dimension over a unit-friendly circle: centre (200, 400),
+/// radius 50 pt, exact fit. Radius display, so a flipped one is visibly `2×`.
+fn circular(show_diameter: bool) -> DimensionKind {
+    DimensionKind::Circular {
+        fit: FitCircle {
+            center: Point::new(200.0, 400.0),
+            radius: 50.0,
+            residual: 0.0,
+        },
+        show_diameter,
+    }
+}
+
+/// The whole point of the Pass: the choice made at draw time is not final.
+///
+/// Asserts the MODEL flips and — separately — that the baked `/AP` label
+/// changes with it, because a model that flips while the drawn appearance does
+/// not is exactly the "half-applied" failure R92's single-regeneration-path
+/// rule exists to prevent.
+#[test]
+fn a_placed_circular_ce_dimension_can_be_switched_to_diameter_after_the_fact() {
+    let (_orig, mut s) = session();
+    let (annot_id, dim_id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, circular(false))
+        .unwrap();
+
+    // Both readings are checked through a SAVED, REOPENED document, so the
+    // assertion covers what a third-party reader would see rather than a
+    // session-internal value.
+    let label_and_ap = |s: &EditSession| -> (String, String) {
+        let reloaded = Document::from_bytes(save(s)).unwrap();
+        let Object::Dict(annot) = &reloaded.get(annot_id).unwrap().value else {
+            panic!("annotation is not a dict");
+        };
+        let contents = match annot.get(b"Contents").unwrap() {
+            Object::String(bytes) => String::from_utf8_lossy(bytes).into_owned(),
+            other => panic!("/Contents is not a string: {other:?}"),
+        };
+        let ap_id = annot
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .and_then(Object::as_reference)
+            .expect("/AP /N reference");
+        let Some(Object::Stream(ap)) = reloaded.get(ap_id).map(|io| &io.value) else {
+            panic!("/AP /N is not a stream");
+        };
+        let ap =
+            String::from_utf8_lossy(ap.data_span.slice(reloaded.bytes()).unwrap()).into_owned();
+        (contents, ap)
+    };
+
+    let (before_label, before_ap) = label_and_ap(&s);
+    s.set_dimension_display(dim_id, true).unwrap();
+    let (after_label, after_ap) = label_and_ap(&s);
+
+    // 50 pt radius under the default group's never-set scale prints as the
+    // radius; the diameter reading is exactly twice it. Asserted as a real
+    // doubling rather than "the strings differ", because a regeneration that
+    // changed the label for the wrong reason would still differ.
+    assert_ne!(
+        before_label, after_label,
+        "the /Contents label must report the new reading"
+    );
+    assert_ne!(
+        before_ap, after_ap,
+        "the baked /AP must be regenerated, not left drawing the old reading"
+    );
+    let number = |s: &str| -> f64 {
+        s.chars()
+            .filter(|c| c.is_ascii_digit() || *c == '.')
+            .collect::<String>()
+            .parse()
+            .unwrap_or_else(|_| panic!("no number in label {s:?}"))
+    };
+    assert!(
+        (number(&after_label) - 2.0 * number(&before_label)).abs() < 1e-6,
+        "the diameter reading must be exactly twice the radius one          (radius {before_label:?} -> diameter {after_label:?})"
+    );
+
+    let model = s.dimension_model();
+    let DimensionKind::Circular { fit, show_diameter } = model.dimension(dim_id).unwrap().kind
+    else {
+        panic!("the ce dimension stopped being circular");
+    };
+    assert!(show_diameter, "the display flag must have flipped");
+    // The measured geometry is untouched — the guarantee that makes this a
+    // display change rather than a silent re-measure.
+    assert!((fit.radius - 50.0).abs() < 1e-9, "the fitted radius moved");
+    assert!(
+        (fit.center.x - 200.0).abs() < 1e-9 && (fit.center.y - 400.0).abs() < 1e-9,
+        "the fitted centre moved"
+    );
+}
+
+/// The refusal is by NAME, not a silent no-op — the mirror of
+/// `NotALinearDimension`, and the reason a GUI can report why a control it
+/// offered did nothing.
+#[test]
+fn setting_the_display_of_a_linear_ce_dimension_is_refused_by_name() {
+    let (_orig, mut s) = session();
+    let (_annot, dim_id) = s.add_dimension(0, DEFAULT_GROUP_ID, linear()).unwrap();
+    let err = s
+        .set_dimension_display(dim_id, true)
+        .expect_err("a linear ce dimension has no radius/diameter reading");
+    assert!(
+        matches!(err, pdfce_core::edit::EditError::NotACircularDimension { id } if id == dim_id.0),
+        "expected NotACircularDimension, got {err:?}"
+    );
+}
+
+/// An unknown id is refused before anything is written.
+#[test]
+fn setting_the_display_of_an_unknown_ce_dimension_is_refused_by_name() {
+    let (_orig, mut s) = session();
+    let err = s
+        .set_dimension_display(pdfce_core::dimension::DimensionId(4242), true)
+        .expect_err("no such ce dimension");
+    assert!(
+        matches!(err, pdfce_core::edit::EditError::DimensionNotFound { id } if id == 4242),
+        "expected DimensionNotFound, got {err:?}"
+    );
+}
+
+/// One undo step, and it restores the previous reading — not a partially
+/// reverted state where the model says radius and the drawing says diameter.
+#[test]
+fn undoing_a_display_change_restores_the_previous_reading() {
+    let (_orig, mut s) = session();
+    let (_annot, dim_id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, circular(false))
+        .unwrap();
+    s.set_dimension_display(dim_id, true).unwrap();
+    s.undo().expect("undo the display change");
+    let model = s.dimension_model();
+    let DimensionKind::Circular { show_diameter, .. } = model.dimension(dim_id).unwrap().kind
+    else {
+        panic!("the ce dimension stopped being circular");
+    };
+    assert!(
+        !show_diameter,
+        "one undo must put the reading back to radius"
+    );
+}
+
+/// The display choice survives save-and-reopen through the `/PieceInfo`
+/// sidecar, which is what makes it an EDITABLE property rather than a
+/// session-only one.
+#[test]
+fn a_display_change_round_trips_through_the_sidecar() {
+    let (_orig, mut s) = session();
+    let (_annot, dim_id) = s
+        .add_dimension(0, DEFAULT_GROUP_ID, circular(false))
+        .unwrap();
+    s.set_dimension_display(dim_id, true).unwrap();
+    let bytes = save(&s);
+
+    let doc = Document::from_bytes(bytes).unwrap();
+    let reopened = EditSession::new(doc);
+    let model = reopened.dimension_model();
+    let DimensionKind::Circular { show_diameter, .. } = model.dimension(dim_id).unwrap().kind
+    else {
+        panic!("the reopened ce dimension is not circular");
+    };
+    assert!(
+        show_diameter,
+        "the diameter choice must survive save-and-reopen"
+    );
 }

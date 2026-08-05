@@ -1669,6 +1669,40 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Set a placed ce dimension's radius/diameter display** (Pass 34.2).
+    ///
+    /// Radius-versus-diameter used to be a draw-time choice only: whatever was
+    /// picked when the ce dimension was authored was permanent, and the only
+    /// way to change it was to delete and redraw — which also loses the
+    /// dimension's id, its group and its placement. This changes the reading
+    /// on an already-placed ce dimension.
+    ///
+    /// It does NOT re-measure: the fitted circle's centre, radius and fit
+    /// residual are untouched, and only the flag deciding whether the label
+    /// prints `r` or `2r` moves. Read the current reading from
+    /// `dimension-list`.
+    ///
+    /// Refused by name for a LINEAR ce dimension, which has no circle and so
+    /// no radius or diameter to choose between.
+    DimensionDisplay {
+        /// Input PDF.
+        input: PathBuf,
+        /// The ce dimension id, as printed by `dimension-list`.
+        #[arg(long)]
+        dimension: u32,
+        /// Which reading the label should print.
+        #[arg(long, value_enum)]
+        show: DisplayReading,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Delete a ce dimension** (Pass 25.6): remove its `/Annots` reference,
     /// its annotation dictionary, its `/AP` appearance stream and its
     /// `/PieceInfo` sidecar record, together, as one undoable command.
@@ -2178,6 +2212,41 @@ impl DimKindArg {
             DimKindArg::Linear => "linear",
             DimKindArg::Radius => "radius",
             DimKindArg::Diameter => "diameter",
+        }
+    }
+}
+
+/// Which reading [`Command::DimensionDisplay`] switches a placed circular ce
+/// dimension to (Pass 34.2).
+///
+/// # Why this is a SECOND enum rather than a reuse of [`DimKindArg`]
+///
+/// [`DimKindArg`] answers "what kind of ce dimension am I authoring", and its
+/// `Linear` variant is a legitimate answer to that question. Here `Linear` is
+/// precisely the case being refused — the verb only applies to a circular ce
+/// dimension. Reusing the wider enum would make `--show linear` parse cleanly
+/// and then fail at runtime, which is a worse experience than clap refusing it
+/// at the argument boundary with the two valid values listed.
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum DisplayReading {
+    /// Print the fitted radius.
+    Radius,
+    /// Print the diameter (2×radius) of the same fitted circle.
+    Diameter,
+}
+
+impl DisplayReading {
+    /// `true` when the label should print the diameter — the shape
+    /// [`pdfce_core::edit::EditSession::set_dimension_display`] takes.
+    const fn show_diameter(self) -> bool {
+        matches!(self, DisplayReading::Diameter)
+    }
+
+    /// A stable token for CLI output.
+    const fn token(self) -> &'static str {
+        match self {
+            DisplayReading::Radius => "radius",
+            DisplayReading::Diameter => "diameter",
         }
     }
 }
@@ -2778,6 +2847,14 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         }),
+        Command::DimensionDisplay {
+            input,
+            dimension,
+            show,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_dimension_display(&input, dimension, show, &output, mode, verify_undo),
         Command::GroupAdd {
             input,
             name,
@@ -8411,6 +8488,68 @@ fn cmd_dimension_offset(args: &DimensionOffsetArgs<'_>) -> u8 {
         u32::from(outcome.undo_identical),
     );
     finish_edit(args.input, &outcome)
+}
+
+/// `dimension-display` — switch a placed circular ce dimension between the
+/// radius and the diameter reading (Pass 34.2).
+///
+/// ## Contract
+///
+/// - Emits one `dimension-display …` line with the usual save-report fields,
+///   then defers the exit code to [`finish_edit`].
+/// - An unknown id, **or a LINEAR ce dimension**, is refused through
+///   [`report_edit_error`] before any mutation, with the same message and exit
+///   code the GUI surfaces. The linear refusal is the interesting one: it is
+///   how a script learns it aimed the verb at the wrong ce dimension rather
+///   than writing a file in which nothing changed.
+/// - Six parameters rather than a borrowed args struct: the sibling
+///   `dimension-offset` needed one to stay under clippy's arg-count ceiling
+///   because it carries two extra `f64`s; this one has the same shape as
+///   `dimension-delete`, which takes them plainly.
+fn cmd_dimension_display(
+    input: &Path,
+    dimension: u32,
+    show: DisplayReading,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    if let Err(err) = session.set_dimension_display(
+        pdfce_core::dimension::DimensionId(dimension),
+        show.show_diameter(),
+    ) {
+        return report_edit_error(input, &err);
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "dimension-display {} dimension={dimension} show={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        show.token(),
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
 }
 
 /// `dimension-delete` — remove one ce dimension and every trace of it.

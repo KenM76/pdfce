@@ -364,6 +364,19 @@ pub enum CommandKind {
     /// value function does not read. ONE undoable command. See
     /// [`EditSession::place_dimension`].
     PlaceDimension,
+    /// A ce dimension's radius-versus-diameter DISPLAY changed (Pass 34.2):
+    /// the label now reports `2r` where it reported `r`, or the reverse, and
+    /// the baked `/AP` was regenerated to say so. ONE undoable command.
+    ///
+    /// The fitted circle itself — centre, radius, fit residual — is untouched.
+    /// This is a display property layered over immutable measured geometry,
+    /// exactly like [`Self::SetGroupScale`]'s number format is, which is why
+    /// changing it can never change what the ce dimension measures. See
+    /// [`EditSession::set_dimension_display`].
+    SetDimensionDisplay {
+        /// The resulting display: `true` ⇒ diameter, `false` ⇒ radius.
+        show_diameter: bool,
+    },
     /// A ce dimension GROUP's drafting standard changed (Pass 27.2) and every
     /// wired member was regenerated to it. ONE undoable command. See
     /// [`EditSession::set_group_standard`].
@@ -642,6 +655,21 @@ pub enum EditError {
         "ce dimension {id} is circular, and only a linear one has a standoff and a text position"
     )]
     NotALinearDimension {
+        /// The dimension id.
+        id: u32,
+    },
+    /// A display-mode operation named a ce dimension that is not circular
+    /// (Pass 34.2) — the mirror of [`Self::NotALinearDimension`].
+    ///
+    /// Radius-versus-diameter is a property of a fitted CIRCLE: it asks
+    /// whether the label reports `r` or `2r` for the same stored geometry. A
+    /// linear ce dimension has no circle and no radius, so there is nothing
+    /// for the flag to select between. Refused by name rather than ignored, on
+    /// the same reasoning [`Self::NotALinearDimension`] gives: a caller that
+    /// aimed the verb at the wrong kind should learn that, not watch a control
+    /// appear to do nothing.
+    #[error("ce dimension {id} is linear, and only a circular one has a radius/diameter display")]
+    NotACircularDimension {
         /// The dimension id.
         id: u32,
     },
@@ -6673,6 +6701,95 @@ impl EditSession {
         objects.push(self.catalog_dimension_write(&model)?);
         self.commit(Command {
             kind: CommandKind::PlaceDimension,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(())
+    }
+
+    /// **Set a placed ce dimension's radius-versus-diameter display** — as one
+    /// undoable command (Pass 34.2).
+    ///
+    /// # The gap this closes, in the operator's own words
+    ///
+    /// > *"the ce dimensions i add need to be editable as well."*
+    ///
+    /// Before this verb, radius-versus-diameter existed **only as a tool
+    /// setting read at draw time**: the measure tool's property bar carried the
+    /// toggle, [`Self::add_dimension`] baked the operator's choice into
+    /// [`DimensionKind::Circular::show_diameter`], and nothing could ever
+    /// change it again. An operator who placed a radius and wanted a diameter
+    /// had exactly one route: delete the ce dimension and draw it a second
+    /// time — which also loses its group membership, its placement, and its
+    /// id. That is not an editing model, it is a redraw.
+    ///
+    /// # Value-preserving by construction, like `place_dimension`
+    ///
+    /// The stored [`FitCircle`](crate::dimension::FitCircle) is not touched:
+    /// same centre, same radius, same fit residual. Only the flag that decides
+    /// whether the label prints `r` or `2r` moves. So this cannot silently
+    /// re-measure anything — the same structural guarantee
+    /// [`Self::place_dimension`] gets from writing only fields the value
+    /// function does not read, and the reason decision 022 §4.2's
+    /// anti-silent-re-measure argument does not bite here.
+    ///
+    /// # Exactly ONE `/AP` regenerates (R92)
+    ///
+    /// Unlike [`Self::set_group_scale`] and [`Self::set_group_standard`],
+    /// which are group-wide and regenerate every member, this is a
+    /// per-ce-dimension property, so `regenerate_dimension_writes` is handed a
+    /// single-element slice. It goes through that one shared regeneration path
+    /// rather than a second appearance builder (R92) — a second one is how the
+    /// baked `/AP` and the `/Contents` string start disagreeing about what the
+    /// same ce dimension says.
+    ///
+    /// # Setting it to what it already is still commits
+    ///
+    /// Deliberate, and stated because the alternative looks tidier: an
+    /// early-return on `show_diameter == current` would make an undo stack that
+    /// sometimes gains an entry from a control press and sometimes does not,
+    /// with nothing on screen to distinguish the two. Callers that want to
+    /// suppress a no-op press should compare before calling — the GUI's
+    /// selectable pair does exactly that, and can, because it already reads the
+    /// current value to show which half is selected.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionNotFound`] for an unknown id;
+    /// [`EditError::NotACircularDimension`] for a linear target (which has no
+    /// circle, so neither reading exists); plus the encryption,
+    /// enforced-certification and newer-sidecar guards every ce-dimension
+    /// mutation carries.
+    pub fn set_dimension_display(
+        &mut self,
+        dimension: DimensionId,
+        show_diameter: bool,
+    ) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        self.check_dimension_sidecar()?;
+
+        let mut model = self.read_dimension_model();
+        let record = model
+            .dimension(dimension)
+            .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
+        // Read the fit out BEFORE taking the mutable borrow, and refuse a
+        // linear target here rather than inside the mutation — so a refusal
+        // never leaves a half-written model behind.
+        let DimensionKind::Circular { fit, .. } = record.kind else {
+            return Err(EditError::NotACircularDimension { id: dimension.0 });
+        };
+        if let Some(d) = model.dimension_mut(dimension) {
+            d.kind = DimensionKind::Circular { fit, show_diameter };
+        }
+
+        let mut objects = self.regenerate_dimension_writes(&model, &[dimension])?;
+        objects.push(self.catalog_dimension_write(&model)?);
+        self.commit(Command {
+            kind: CommandKind::SetDimensionDisplay { show_diameter },
             objects,
             removals: Vec::new(),
             trailer: None,
