@@ -190,6 +190,7 @@ fn serialize_dimension(dim: &DimensionRecord) -> Object {
             b,
             constraint,
             offset,
+            text_along,
         } => {
             d.insert(Name::from(b"Kind"), Object::Name(Name::from(b"linear")));
             d.insert(Name::from(b"A"), point_array(a));
@@ -214,6 +215,11 @@ fn serialize_dimension(dim: &DimensionRecord) -> Object {
             // output.
             if offset != 0.0 {
                 d.insert(Name::from(b"Offset"), Object::Real(offset));
+            }
+            // Same optional-key discipline as /Offset: absent means centred,
+            // which is where every pre-27.1 label sits.
+            if text_along != 0.0 {
+                d.insert(Name::from(b"TextAlong"), Object::Real(text_along));
             }
         }
         DimensionKind::Circular { fit, show_diameter } => {
@@ -245,6 +251,10 @@ fn deserialize_dimension(obj: &Object) -> Option<DimensionRecord> {
             // Absent in every sidecar written before Pass 27.0. The 0.0
             // default is what makes that migration free rather than lossy.
             offset: d.get(b"Offset").and_then(Object::as_number).unwrap_or(0.0),
+            text_along: d
+                .get(b"TextAlong")
+                .and_then(Object::as_number)
+                .unwrap_or(0.0),
         },
         b"circular" => DimensionKind::Circular {
             fit: FitCircle {
@@ -351,6 +361,7 @@ mod tests {
                 b: Point::new(3.0, 4.0),
                 constraint: AxisConstraint::Horizontal,
                 offset: 0.0,
+                text_along: 0.0,
             },
         );
         // Wire fake object handles to prove they round-trip.

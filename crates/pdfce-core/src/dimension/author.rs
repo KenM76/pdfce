@@ -139,6 +139,7 @@ pub struct AuthoredDimension {
 ///     b: Point::new(200.0, 100.0),
 ///     constraint: AxisConstraint::Horizontal,
 ///     offset: 0.0,
+///     text_along: 0.0,
 /// };
 /// let authored = author_dimension(
 ///     &kind,
@@ -188,8 +189,12 @@ pub fn author_dimension(
         }
     }
 
-    // The value label, centred near the leader midpoint, drawn horizontally.
-    let mid = l0.midpoint(l1);
+    // The value label. Anchored where the operator DROPPED it along the
+    // dimension line (`label_anchor`), not unconditionally at the midpoint —
+    // SolidWorks stores a dimension's placement as a point, and sliding the
+    // number along its own line is half of what that point expresses. Falls
+    // back to the midpoint for a circular dimension, which has no such axis.
+    let mid = kind.label_anchor().unwrap_or_else(|| l0.midpoint(l1));
     let text_w = estimate_text_width(&label, LABEL_SIZE);
     let tx = mid.x - text_w / 2.0;
     let ty = mid.y + LABEL_SIZE * 0.4; // just above the leader
@@ -516,6 +521,7 @@ mod tests {
             b: Point::new(200.0, 100.0),
             constraint: AxisConstraint::Horizontal,
             offset: 0.0,
+            text_along: 0.0,
         }
     }
 

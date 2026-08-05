@@ -1572,6 +1572,20 @@ enum Command {
         /// Linear alignment constraint.
         #[arg(long, value_enum, default_value_t = ConstraintArg::Aligned)]
         constraint: ConstraintArg,
+        /// Standoff of the dimension line from the first point, in points,
+        /// perpendicular to the measured axis (Pass 27.1).
+        ///
+        /// Positive is up for a horizontal dimension, right for a vertical
+        /// one, and the sign does not depend on which point you gave first.
+        /// 0 (the default) draws the dimension line through the first point,
+        /// which is rarely what a drawing wants — a real drawing stands its
+        /// dimensions off the geometry so the extension lines are visible.
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        offset: f64,
+        /// Where the value text sits along the dimension line, in points from
+        /// its midpoint (Pass 27.1). 0 is centred.
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        text_along: f64,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -2494,6 +2508,8 @@ fn run() -> ExitCode {
             points,
             group,
             constraint,
+            offset,
+            text_along,
             output,
             mode,
             verify_undo,
@@ -2504,6 +2520,8 @@ fn run() -> ExitCode {
             points: &points,
             group,
             constraint,
+            offset,
+            text_along,
             output: &output,
             mode,
             verify_undo,
@@ -7799,6 +7817,8 @@ struct DimensionAddArgs<'a> {
     points: &'a str,
     group: u32,
     constraint: ConstraintArg,
+    offset: f64,
+    text_along: f64,
     output: &'a Path,
     mode: SaveMode,
     verify_undo: bool,
@@ -7814,6 +7834,8 @@ fn cmd_dimension_add(args: &DimensionAddArgs<'_>) -> u8 {
         points,
         group,
         constraint,
+        offset,
+        text_along,
         output,
         mode,
         verify_undo,
@@ -7836,10 +7858,13 @@ fn cmd_dimension_add(args: &DimensionAddArgs<'_>) -> u8 {
                 return exit::EDIT_REFUSED;
             };
             DimensionKind::Linear {
-                // Pass 27.0: no standoff by default — the dimension line runs
-                // through the first picked point, which is exactly what the
-                // tool's own preview draws.
-                offset: 0.0,
+                // Pass 27.1: the placement the operator asked for. Defaults to
+                // 0.0/0.0 — the dimension line through the first picked point,
+                // text centred — which is what the GUI's own neutral placement
+                // produces, so the two surfaces still author identical bytes
+                // for identical inputs.
+                offset,
+                text_along,
                 a: *a,
                 b: *b,
                 constraint: constraint.to_core(),

@@ -57,6 +57,7 @@ fn linear() -> DimensionKind {
         b: Point::new(300.0, 200.0),
         constraint: AxisConstraint::Horizontal,
         offset: 0.0,
+        text_along: 0.0,
     }
 }
 
@@ -199,6 +200,7 @@ fn changing_group_scale_regenerates_all_member_labels() {
                 b: Point::new(100.0, 0.0),
                 constraint: AxisConstraint::Horizontal,
                 offset: 0.0,
+                text_along: 0.0,
             },
         )
         .unwrap();
@@ -459,6 +461,7 @@ fn the_drawn_line_is_exactly_as_long_as_the_number_printed_on_it() {
                 b: Point::new(*bx, *by),
                 constraint,
                 offset,
+                text_along: 0.0,
             };
             let Some((dim_a, dim_b, ext_a, ext_b)) = kind.linear_geometry() else {
                 continue; // degenerate aligned pick: no axis, refused by design
@@ -495,6 +498,7 @@ fn a_constrained_dimension_line_runs_along_its_constraint() {
         b: Point::new(300.0, 260.0),
         constraint: AxisConstraint::Horizontal,
         offset: 0.0,
+        text_along: 0.0,
     };
     let (a, b, _, _) = h.linear_geometry().unwrap();
     assert!(
@@ -507,6 +511,7 @@ fn a_constrained_dimension_line_runs_along_its_constraint() {
         b: Point::new(160.0, 400.0),
         constraint: AxisConstraint::Vertical,
         offset: 0.0,
+        text_along: 0.0,
     };
     let (a, b, _, _) = v.linear_geometry().unwrap();
     assert!(
@@ -530,12 +535,14 @@ fn the_standoff_direction_does_not_depend_on_pick_order() {
         b: Point::new(300.0, 200.0),
         constraint: AxisConstraint::Horizontal,
         offset: 30.0,
+        text_along: 0.0,
     };
     let backward = DimensionKind::Linear {
         a: Point::new(300.0, 200.0),
         b: Point::new(100.0, 200.0),
         constraint: AxisConstraint::Horizontal,
         offset: 30.0,
+        text_along: 0.0,
     };
     let (fa, _, _, _) = forward.linear_geometry().unwrap();
     let (ba, _, _, _) = backward.linear_geometry().unwrap();

@@ -12335,42 +12335,87 @@ fn run_dimension_drag(
         consumed = true;
     }
 
-    // Live outline + commit on release.
+    // Live preview + commit on release.
+    //
+    // Both halves compute the SAME placement from the same pointer, so what is
+    // previewed is what commits (R85). An earlier draft previewed a translated
+    // bounding box while committing a placement — the two disagree the moment
+    // the drag has any component along the dimension's own axis, and the
+    // operator would have been shown a box sliding sideways while the saved
+    // result only moved the number.
     if let Some((id, start_pdf)) = doc.dimension_drag {
         consumed = true;
         let cur = image_response.interact_pointer_pos().and_then(|sp| {
             viewer::canvas_to_pdf_space(viewer::screen_to_page(sp, image_rect, extent, zoom), page)
         });
-        if let Some(cur) = cur {
-            let (dx, dy) = (
+        // The dimension's current placement, and its own frame. The drag is
+        // applied as a DELTA in that frame rather than by snapping the
+        // placement onto the pointer, so the dimension keeps the grip the
+        // operator took hold of instead of jumping under the cursor.
+        let current = doc
+            .session
+            .dimension_model()
+            .dimension(id)
+            .map(|d| d.kind)
+            .filter(|k| matches!(k, pdfce_core::dimension::DimensionKind::Linear { .. }));
+        let placed = current.and_then(|kind| {
+            let cur = cur?;
+            let (u, n) = kind.axis_frame()?;
+            let pdfce_core::dimension::DimensionKind::Linear {
+                a,
+                b,
+                constraint,
+                offset,
+                text_along,
+            } = kind
+            else {
+                return None;
+            };
+            let (mx, my) = (
                 f64::from(cur.x - start_pdf.x),
                 f64::from(cur.y - start_pdf.y),
             );
-            if let Some((_, rect)) = rects.iter().find(|(rid, _)| *rid == id) {
-                // The page-space delta as a screen vector: map the delta and
-                // the origin through the same transform and subtract, exactly
-                // as the object-move preview does.
-                let d_screen = viewer::pdf_space_to_canvas(
-                    egui::pos2(cur.x - start_pdf.x, cur.y - start_pdf.y),
-                    page,
-                )
-                .zip(viewer::pdf_space_to_canvas(egui::pos2(0.0, 0.0), page))
-                .map(|(a, b)| (a - b) * zoom)
-                .unwrap_or(egui::Vec2::ZERO);
-                let min = viewer::page_to_screen(rect.min, image_rect, extent, zoom) + d_screen;
-                let max = viewer::page_to_screen(rect.max, image_rect, extent, zoom) + d_screen;
-                ui.painter_at(image_rect).rect_stroke(
-                    egui::Rect::from_two_pos(min, max),
-                    0.0,
-                    egui::Stroke::new(2.0, DIMENSION_DRAG_COLOR),
-                    egui::StrokeKind::Outside,
-                );
+            Some(pdfce_core::dimension::DimensionKind::Linear {
+                a,
+                b,
+                constraint,
+                offset: offset + mx * n.x + my * n.y,
+                text_along: text_along + mx * u.x + my * u.y,
+            })
+        });
+
+        if let Some(kind) = placed {
+            if let Some((dim_a, dim_b, ext_a, ext_b)) = kind.linear_geometry() {
+                let painter = ui.painter_at(image_rect);
+                let stroke = egui::Stroke::new(2.0, DIMENSION_DRAG_COLOR);
+                let to_screen = |pt: pdfce_core::vector::Point| -> Option<egui::Pos2> {
+                    viewer::pdf_space_to_canvas(egui::pos2(pt.x as f32, pt.y as f32), page)
+                        .map(|c| viewer::page_to_screen(c, image_rect, extent, zoom))
+                };
+                for (p0, p1) in [(dim_a, dim_b), (ext_a, dim_a), (ext_b, dim_b)] {
+                    if let (Some(s0), Some(s1)) = (to_screen(p0), to_screen(p1)) {
+                        painter.line_segment([s0, s1], stroke);
+                    }
+                }
             }
             if canvas::primary_drag_stopped(image_response) {
-                let outcome = doc.session.move_dimension(id, dx, dy);
+                // SOLIDWORKS SEMANTICS (operator, 2026-08-04: "dimensioning and
+                // moving dimensions should work how it does in SolidWorks
+                // Drawings GUI"). Dragging never re-measures: the attachment
+                // points stay on the geometry and the extension lines stretch.
+                // Only the placement — standoff perpendicular, text position
+                // along — changes, which is the two components of the placement
+                // POINT SolidWorks' own API takes (`AddDimension2(x, y, z)`).
+                let pdfce_core::dimension::DimensionKind::Linear {
+                    offset, text_along, ..
+                } = kind
+                else {
+                    return consumed;
+                };
+                let outcome = doc.session.place_dimension(id, offset, text_along);
                 diag::trace(|| {
                     format!(
-                        "commit-move-dimension id={id:?} dx={dx} dy={dy} -> {:?}",
+                        "commit-place-dimension id={id:?} offset={offset} along={text_along}                          -> {:?}",
                         outcome.as_ref().map_err(std::string::ToString::to_string)
                     )
                 });
@@ -12381,8 +12426,8 @@ fn run_dimension_drag(
                 }
             }
         } else if canvas::primary_drag_stopped(image_response) {
-            // The pointer left the window mid-drag: abandon rather than commit
-            // a move to a position that was never shown.
+            // The pointer left the window, or the target is not a linear
+            // dimension: abandon rather than commit a placement never shown.
             doc.dimension_drag = None;
         }
     }
@@ -12553,6 +12598,21 @@ fn run_measure_tool(
         if canvas::tool_builds_measure_linear(active) {
             if let Some(DimensionKind::Linear { a, b, .. }) = st.pending {
                 draw_seg(a, b);
+            } else if st.linear.is_placing()
+                && let Some(ptr) = pointer_pdf
+                && let Some(kind) = st.linear.placing_preview(ptr)
+                && let Some((dim_a, dim_b, ext_a, ext_b)) = kind.linear_geometry()
+            {
+                // Pass 27.1: while placing, preview the DIMENSION — its line
+                // where it would land, and both extension lines reaching the
+                // measured points. Previewing the A-B segment here instead
+                // would show the operator the thing they already picked while
+                // hiding the only thing the third click decides, and would
+                // break preview-equals-saved (R85) at the moment it matters
+                // most.
+                draw_seg(dim_a, dim_b);
+                draw_seg(ext_a, dim_a);
+                draw_seg(ext_b, dim_b);
             } else if let Some(ptr) = pointer_pdf
                 && let Some((a, b)) = st.linear.preview_segment(ptr)
             {

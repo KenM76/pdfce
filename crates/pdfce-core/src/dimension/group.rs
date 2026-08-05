@@ -120,6 +120,28 @@ pub enum DimensionKind {
         /// identical to how it looked before the field existed, and the
         /// sidecar migration costs nothing.
         offset: f64,
+        /// Signed position of the value TEXT along the dimension line,
+        /// measured from its midpoint, in points (Pass 27.1).
+        ///
+        /// # Why this is a second field and not folded into `offset`
+        ///
+        /// SolidWorks stores a dimension's placement as a POINT — its API
+        /// takes one (`AddDimension2(x, y, z)`, "the text-placement point").
+        /// In the dimension's own frame that point has two components: how far
+        /// the line stands off the drawing (perpendicular, [`Self::Linear`]'s
+        /// `offset`) and where the number sits along it (parallel, this). One
+        /// drag sets both, which is what makes a SolidWorks dimension drag feel
+        /// like moving an object rather than operating two controls.
+        ///
+        /// Keeping them as separate scalars rather than storing the raw point
+        /// means neither can drift out of the frame when the picks or the
+        /// constraint change — the point would have to be re-projected, and a
+        /// re-projection that ever disagreed with the geometry would put the
+        /// text somewhere the operator never dropped it.
+        ///
+        /// 0.0 is centred, which is where every dimension authored before this
+        /// field existed puts its label.
+        text_along: f64,
     },
     /// A radius/diameter dimension over a best-fit circle. Stores the fit
     /// (centre + radius + residual — the residual surfaced per decision 011
@@ -203,6 +225,50 @@ impl DimensionKind {
     /// while its label said `dx` — a line that disagreed with its own caption,
     /// which is the specific thing an operator cannot be expected to catch.
     ///
+    /// Where the value TEXT is anchored: the midpoint of the dimension line,
+    /// slid along it by `text_along` (Pass 27.1).
+    ///
+    /// `None` for a non-linear or degenerate dimension.
+    #[must_use]
+    pub fn label_anchor(&self) -> Option<Point> {
+        let Self::Linear { text_along, .. } = *self else {
+            return None;
+        };
+        let (u, _) = self.axis_frame()?;
+        let (dim_a, dim_b, _, _) = self.linear_geometry()?;
+        let mid = dim_a.midpoint(dim_b);
+        Some(Point::new(
+            mid.x + text_along * u.x,
+            mid.y + text_along * u.y,
+        ))
+    }
+
+    /// Set the placement from a pointer position in page space — the
+    /// SolidWorks drag, resolved into this dimension's own frame (Pass 27.1).
+    ///
+    /// Returns the `(offset, text_along)` pair the point implies. The picked
+    /// points are NOT touched: in SolidWorks, dragging a dimension never
+    /// re-measures it, it only decides where the dimension is drawn. That
+    /// separation is what makes the gesture safe enough to be the default —
+    /// it writes fields the value function does not read, so the number cannot
+    /// change no matter where the operator drops it.
+    ///
+    /// `None` for a non-linear or degenerate dimension.
+    #[must_use]
+    pub fn placement_from_point(&self, p: Point) -> Option<(f64, f64)> {
+        let Self::Linear { a, b, .. } = *self else {
+            return None;
+        };
+        let (u, n) = self.axis_frame()?;
+        // Perpendicular component, measured from `a` — the standoff.
+        let offset = (p.x - a.x) * n.x + (p.y - a.y) * n.y;
+        // Parallel component, measured from the MIDPOINT of the measured
+        // extent, because that is where a centred label sits.
+        let t = (b.x - a.x) * u.x + (b.y - a.y) * u.y;
+        let along = ((p.x - a.x) * u.x + (p.y - a.y) * u.y) - t / 2.0;
+        Some((offset, along))
+    }
+
     /// `None` for a non-linear or degenerate dimension.
     #[must_use]
     pub fn linear_geometry(&self) -> Option<(Point, Point, Point, Point)> {
@@ -242,13 +308,16 @@ impl DimensionKind {
                 b,
                 constraint,
                 offset,
+                text_along,
             } => Self::Linear {
                 a: Point::new(a.x + dx, a.y + dy),
                 b: Point::new(b.x + dx, b.y + dy),
                 constraint,
-                // The standoff is relative to `a`, which moved with it, so a
-                // translation leaves it untouched.
+                // Both placement components are relative to the picked points,
+                // which moved with the dimension, so a translation leaves them
+                // untouched.
                 offset,
+                text_along,
             },
             Self::Circular { fit, show_diameter } => Self::Circular {
                 fit: FitCircle {
@@ -548,6 +617,7 @@ mod tests {
             b: Point::new(b.0, b.1),
             constraint: c,
             offset: 0.0,
+            text_along: 0.0,
         }
     }
 

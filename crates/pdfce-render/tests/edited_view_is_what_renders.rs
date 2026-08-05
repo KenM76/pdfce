@@ -109,6 +109,7 @@ fn linear_dimension() -> DimensionKind {
         b: Point::new(300.0, 200.0),
         constraint: AxisConstraint::Horizontal,
         offset: 0.0,
+        text_along: 0.0,
     }
 }
 

@@ -358,6 +358,12 @@ pub enum CommandKind {
     /// translated and its annotation + baked `/AP` regenerated from it. ONE
     /// undoable command. See [`EditSession::move_dimension`].
     MoveDimension,
+    /// A ce dimension was PLACED (Pass 27.1): its standoff and/or its text
+    /// position along the dimension line changed, and its appearance was
+    /// regenerated. What it MEASURES is untouched — this writes only fields the
+    /// value function does not read. ONE undoable command. See
+    /// [`EditSession::place_dimension`].
+    PlaceDimension,
     /// A ce dimension was DELETED (Pass 25.6): its `/Annots` reference, its
     /// annotation dictionary, its `/AP` stream and its sidecar record were all
     /// removed together. ONE undoable command. See
@@ -569,6 +575,20 @@ pub enum EditError {
     #[error("no ce dimension with id {id} exists in this document")]
     DimensionNotFound {
         /// The dimension id that was asked for.
+        id: u32,
+    },
+    /// A placement operation named a ce dimension that is not linear
+    /// (Pass 27.1).
+    ///
+    /// A circular dimension has no axis to stand off from or slide along, so
+    /// there is nothing for `offset`/`text_along` to mean. Refused by name
+    /// rather than ignored, so a caller learns its assumption was wrong
+    /// instead of watching a drag do nothing.
+    #[error(
+        "ce dimension {id} is circular, and only a linear one has a standoff and a text position"
+    )]
+    NotALinearDimension {
+        /// The dimension id.
         id: u32,
     },
     /// A ce-dimension operation named a group the sidecar model does not
@@ -6307,6 +6327,76 @@ impl EditSession {
                 ))
             })
             .collect()
+    }
+
+    /// **Place a ce dimension** — set where its line stands off and where its
+    /// number sits along that line — as one undoable command (Pass 27.1).
+    ///
+    /// # This, not `move_dimension`, is what dragging a dimension does
+    ///
+    /// The operator asked for SolidWorks behaviour, and SolidWorks stores a
+    /// dimension's placement as a POINT (its API takes one:
+    /// `AddDimension2(x, y, z)`, "the text-placement point"). Dragging a
+    /// dimension there never moves what it measures — the attachment points
+    /// stay on the geometry and the extension lines stretch. Only where the
+    /// dimension is DRAWN changes.
+    ///
+    /// So this writes two fields the value function does not read, which makes
+    /// it **value-preserving by construction** rather than by care: no
+    /// placement, however far it is dragged, can change the number. That is a
+    /// stronger guarantee than [`Self::move_dimension`] offers — that one
+    /// translates the measured points too, and while a rigid motion preserves
+    /// the distance, it does take the dimension off the feature it was
+    /// measuring.
+    ///
+    /// Both are kept. Placement is the drag; translation is for moving a
+    /// dimension bodily with the thing it annotates.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionNotFound`], [`EditError::NotALinearDimension`]
+    /// for a circular target (which has no axis to place along), plus the
+    /// encryption and enforced-certification guards.
+    pub fn place_dimension(
+        &mut self,
+        dimension: DimensionId,
+        offset: f64,
+        text_along: f64,
+    ) -> Result<(), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        let mut model = self.read_dimension_model();
+        let record = model
+            .dimension(dimension)
+            .ok_or(EditError::DimensionNotFound { id: dimension.0 })?;
+        let DimensionKind::Linear {
+            a, b, constraint, ..
+        } = record.kind
+        else {
+            return Err(EditError::NotALinearDimension { id: dimension.0 });
+        };
+        if let Some(d) = model.dimension_mut(dimension) {
+            d.kind = DimensionKind::Linear {
+                a,
+                b,
+                constraint,
+                offset,
+                text_along,
+            };
+        }
+
+        let mut objects = self.regenerate_dimension_writes(&model, &[dimension])?;
+        objects.push(self.catalog_dimension_write(&model)?);
+        self.commit(Command {
+            kind: CommandKind::PlaceDimension,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(())
     }
 
     /// **Delete a ce dimension**, as one undoable command (Pass 25.6).

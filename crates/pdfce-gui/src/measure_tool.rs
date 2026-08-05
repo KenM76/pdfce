@@ -83,6 +83,28 @@ use pdfce_core::vector::{AxisConstraint, Point, constrained_second_point, measur
 pub struct LinearPick {
     /// Point A (page space) once picked; `None` while awaiting the first pick.
     pub first: Option<Point>,
+    /// Point B, once picked — the tool is then in its PLACING state, waiting
+    /// for the third click that decides where the dimension is drawn (Pass
+    /// 27.1).
+    ///
+    /// # Why a third click
+    ///
+    /// The operator asked for SolidWorks behaviour, and SolidWorks dimensions
+    /// in three: what, to what, and where. The third is not ceremony — it is
+    /// the only chance to say how far off the drawing the dimension sits, and
+    /// without it every dimension lands on top of the geometry it measures and
+    /// has to be dragged off afterwards. pdfce committed on the second click
+    /// with a zero standoff, which is exactly that.
+    pub second: Option<Point>,
+    /// Whether this pick needs the third, PLACING click.
+    ///
+    /// True for a real ce dimension, which has to be told where to sit. False
+    /// for [`ScalePick`]'s reference line, which is a measurement aid that is
+    /// never drawn as a dimension — asking the operator where to place
+    /// something that is about to disappear would be ceremony with no meaning.
+    /// One flag rather than two pick types, because every other transition is
+    /// identical and duplicating them is how they drift (R92).
+    pub place_after: bool,
     /// The H/V/aligned constraint the property-bar segmented control sets
     /// (ui-spec §2.5). Applied to the SECOND point's projection + measured
     /// length; the stored `b` remains the raw pick (module docs).
@@ -101,6 +123,8 @@ impl LinearPick {
     pub fn new() -> Self {
         Self {
             first: None,
+            second: None,
+            place_after: true,
             constraint: AxisConstraint::Aligned,
         }
     }
@@ -110,22 +134,87 @@ impl LinearPick {
     /// this authors a [`DimensionKind::Linear`] with the RAW `b = p` and the
     /// current constraint (module docs), resets to awaiting-A, and returns it.
     pub fn commit_point(&mut self, p: Point) -> Option<DimensionKind> {
-        match self.first {
-            None => {
+        match (self.first, self.second) {
+            (None, _) => {
                 self.first = Some(p);
                 None
             }
-            Some(a) => {
-                self.first = None;
-                Some(DimensionKind::Linear {
-                    // Pass 27.0: no standoff by default, so what commits is
-                    // what `preview_segment` drew.
-                    offset: 0.0,
-                    a,
-                    b: p,
-                    constraint: self.constraint,
-                })
+            // Second pick: what is being measured is now known, but not where
+            // the dimension goes. Enter the placing state rather than commit —
+            // unless this pick does not need placing (a scale reference line),
+            // in which case the second click still commits, exactly as before.
+            (Some(a), None) => {
+                if self.place_after {
+                    self.second = Some(p);
+                    None
+                } else {
+                    self.first = None;
+                    Some(DimensionKind::Linear {
+                        a,
+                        b: p,
+                        constraint: self.constraint,
+                        offset: 0.0,
+                        text_along: 0.0,
+                    })
+                }
             }
+            // Third pick: where. The pointer resolves into the dimension's own
+            // frame — perpendicular is the standoff, parallel is where the
+            // number sits along the line — the two components of the placement
+            // point SolidWorks' own API takes.
+            (Some(a), Some(b)) => {
+                let kind = self.placing_kind(a, b, p);
+                self.first = None;
+                self.second = None;
+                Some(kind)
+            }
+        }
+    }
+
+    /// The dimension a placing click at `p` would author. Shared by
+    /// [`Self::commit_point`] and [`Self::placing_preview`] so what the
+    /// operator SEES while placing is definitionally what commits (R85).
+    fn placing_kind(&self, a: Point, b: Point, p: Point) -> DimensionKind {
+        let probe = DimensionKind::Linear {
+            a,
+            b,
+            constraint: self.constraint,
+            offset: 0.0,
+            text_along: 0.0,
+        };
+        let (offset, text_along) = probe.placement_from_point(p).unwrap_or((0.0, 0.0));
+        DimensionKind::Linear {
+            a,
+            b,
+            constraint: self.constraint,
+            offset,
+            text_along,
+        }
+    }
+
+    /// While placing, the dimension exactly as it would commit if the operator
+    /// clicked at `p` right now — for the live preview.
+    ///
+    /// `None` unless both points are picked.
+    #[must_use]
+    pub fn placing_preview(&self, p: Point) -> Option<DimensionKind> {
+        let (a, b) = (self.first?, self.second?);
+        Some(self.placing_kind(a, b, p))
+    }
+
+    /// Whether the tool is waiting for the placing click.
+    #[must_use]
+    pub fn is_placing(&self) -> bool {
+        self.first.is_some() && self.second.is_some()
+    }
+
+    /// A pick for a **reference line** rather than a ce dimension: two clicks,
+    /// no placing step. Used by [`ScalePick`].
+    #[must_use]
+    pub fn reference_line() -> Self {
+        Self {
+            place_after: false,
+            ..Self::new()
         }
     }
 
@@ -133,6 +222,7 @@ impl LinearPick {
     /// §1.3): stay in the tool, forget point A.
     pub fn clear(&mut self) {
         self.first = None;
+        self.second = None;
     }
 
     /// Whether a first point is placed (the tool is mid-gesture — a
@@ -486,7 +576,7 @@ impl ScalePick {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            line: LinearPick::new(),
+            line: LinearPick::reference_line(),
             drawn_pdf_length: None,
             fields: ScaleEntryFields::default(),
         }
@@ -811,24 +901,74 @@ mod tests {
 
     // ---- LinearPick A→B state machine (ui-spec §2.1) --------------------
 
+    /// **Three clicks: what, to what, WHERE** (Pass 27.1).
+    ///
+    /// This test previously asserted that the SECOND click authored and reset.
+    /// It changed because the operator asked for SolidWorks behaviour, and
+    /// SolidWorks dimensions in three steps — the third is what says how far
+    /// off the drawing the dimension sits. Committing on the second click
+    /// meant every ce dimension landed on top of the geometry it measured,
+    /// with a zero standoff, and had to be dragged clear afterwards.
     #[test]
-    fn linear_pick_authors_on_the_second_point_and_resets() {
+    fn linear_pick_needs_a_third_placing_click_then_resets() {
         let mut lp = LinearPick::new();
-        // First pick: sets A, authors nothing, gesture now in progress.
-        assert_eq!(lp.commit_point(p(10.0, 20.0)), None);
+        assert_eq!(lp.commit_point(p(10.0, 20.0)), None, "first: what");
         assert!(lp.in_progress());
-        // Second pick: authors Linear{a, b(raw), constraint} and resets.
-        let kind = lp.commit_point(p(50.0, 20.0)).unwrap();
-        assert_eq!(
-            kind,
-            DimensionKind::Linear {
-                a: p(10.0, 20.0),
-                b: p(50.0, 20.0),
-                constraint: AxisConstraint::Aligned,
-                offset: 0.0,
-            }
+        assert_eq!(lp.commit_point(p(50.0, 20.0)), None, "second: to what");
+        assert!(lp.is_placing(), "both points known, awaiting placement");
+
+        // Third: where. 15 above the measured line, and 5 right of its middle.
+        let kind = lp.commit_point(p(35.0, 35.0)).unwrap();
+        let DimensionKind::Linear {
+            a,
+            b,
+            offset,
+            text_along,
+            ..
+        } = kind
+        else {
+            panic!("expected a linear dimension")
+        };
+        assert_eq!((a, b), (p(10.0, 20.0), p(50.0, 20.0)), "the picks are kept");
+        assert!(
+            (offset - 15.0).abs() < 0.001,
+            "the placing click's perpendicular component is the standoff, got {offset}"
+        );
+        assert!(
+            (text_along - 5.0).abs() < 0.001,
+            "and its parallel component is where the number sits, got {text_along}"
         );
         assert!(!lp.in_progress(), "the pick resets, ready for the next dim");
+    }
+
+    /// What is previewed while placing is what commits (R85).
+    #[test]
+    fn the_placing_preview_is_exactly_what_the_placing_click_authors() {
+        let mut lp = LinearPick::new();
+        lp.commit_point(p(10.0, 20.0));
+        lp.commit_point(p(50.0, 20.0));
+        let previewed = lp.placing_preview(p(35.0, 35.0)).expect("previewing");
+        let committed = lp.commit_point(p(35.0, 35.0)).expect("commits");
+        assert_eq!(
+            previewed, committed,
+            "the operator must not be shown one dimension and given another"
+        );
+    }
+
+    /// A scale reference line still commits on the SECOND click.
+    ///
+    /// `ScalePick` reuses this state machine for a line that is never drawn as
+    /// a dimension, so asking where to place it would be ceremony with no
+    /// meaning. The opt-out is what keeps one state machine serving both.
+    #[test]
+    fn a_reference_line_pick_still_commits_on_the_second_click() {
+        let mut lp = LinearPick::reference_line();
+        assert_eq!(lp.commit_point(p(10.0, 20.0)), None);
+        assert!(
+            lp.commit_point(p(50.0, 20.0)).is_some(),
+            "a reference line must not wait for a placing click"
+        );
+        assert!(!lp.in_progress());
     }
 
     #[test]
@@ -840,16 +980,23 @@ mod tests {
         let mut lp = LinearPick::new();
         lp.constraint = AxisConstraint::Horizontal;
         lp.commit_point(p(10.0, 20.0));
-        let kind = lp.commit_point(p(50.0, 80.0)).unwrap();
+        lp.commit_point(p(50.0, 80.0));
+        // Placed on the measured line itself, so the placement is neutral and
+        // this test stays about the STORED points.
+        let kind = lp.commit_point(p(30.0, 20.0)).unwrap();
+        let DimensionKind::Linear {
+            a, b, constraint, ..
+        } = kind
+        else {
+            panic!("expected a linear dimension")
+        };
+        assert_eq!(a, p(10.0, 20.0));
         assert_eq!(
-            kind,
-            DimensionKind::Linear {
-                a: p(10.0, 20.0),
-                b: p(50.0, 80.0), // RAW, not (50,20)
-                constraint: AxisConstraint::Horizontal,
-                offset: 0.0,
-            }
+            b,
+            p(50.0, 80.0),
+            "the stored b is the RAW pick, not (50,20)"
         );
+        assert_eq!(constraint, AxisConstraint::Horizontal);
         // The measured value still honours the constraint (|Δx| = 40).
         assert_eq!(kind.measured_points(), 40.0);
     }
@@ -890,20 +1037,25 @@ mod tests {
         let b = p(216.0, 144.0);
         let constraint = AxisConstraint::Horizontal;
 
-        // GUI path: two snapped picks through the state machine.
+        // GUI path: two snapped picks, then the Pass 27.1 placing click.
+        // Placed at the midpoint of the measured line, which is the NEUTRAL
+        // placement — zero standoff, centred text — so this test still compares
+        // the two paths' DEFAULTS rather than accidentally comparing a placed
+        // dimension against an unplaced one.
         let mut lp = LinearPick::new();
         lp.constraint = constraint;
         lp.commit_point(a);
-        let gui_kind = lp.commit_point(b).unwrap();
+        lp.commit_point(b);
+        let gui_kind = lp.commit_point(p(144.0, 144.0)).unwrap();
 
-        // CLI path: the exact construction from pdfce-cli/src/main.rs.
-        // Pass 27.0: the CLI's own default standoff is also 0.0, so the
-        // GUI/CLI byte-equivalence this test pins is unchanged by the field.
+        // CLI path: the exact construction from pdfce-cli/src/main.rs with its
+        // default --offset/--text-along.
         let cli_kind = DimensionKind::Linear {
             a,
             b,
             constraint,
             offset: 0.0,
+            text_along: 0.0,
         };
 
         assert_eq!(gui_kind, cli_kind);
