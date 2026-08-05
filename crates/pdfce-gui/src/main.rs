@@ -2245,8 +2245,26 @@ impl OpenDoc {
         let ordinal = canvas::cycle_ordinal(alt, resume, hits.len());
         let subpath_hit = hits.get(ordinal).copied();
 
+        // The Node rung's pick set: the anchors of the part the operator is
+        // standing in (or about to descend into), NEVER the whole object's
+        // flat list — see `subpath_node_points` for why that distinction is
+        // the whole point of the rung.
+        //
+        // Computed for the part this click resolves to rather than the one
+        // already selected, so a double-click that descends into a DIFFERENT
+        // part picks a node of that part rather than of the one being left.
+        let node_scope = self
+            .entered
+            .filter(|e| e.object == object_hit.unwrap_or(e.object))
+            .and_then(|e| subpath_hit.or(e.subpath).map(|sp| (e.object, sp)));
+        let node_hit = node_scope.and_then(|(obj, sp)| {
+            self.object_model
+                .as_ref()
+                .and_then(|p| p.nearest_node(obj, sp, canvas_pos, tol))
+        });
+
         let before = self.entered;
-        self.entered = canvas::depth_after_click(before, double, object_hit, subpath_hit);
+        self.entered = canvas::depth_after_click(before, double, object_hit, subpath_hit, node_hit);
         // The cycle belongs to the object actually entered, which a
         // double-click may have just changed. Dropped whenever the click did
         // not land on a part, so a stale "part 2 of 5" can never describe a
@@ -11930,6 +11948,70 @@ fn draw_selection_outlines(
             egui::Stroke::new(2.0, SUBPATH_OUTLINE_COLOR),
             egui::StrokeKind::Outside,
         );
+
+        // ---- Node rung: the part's anchors, drawn as squares -----------
+        //
+        // Only once the operator has DESCENDED to points. Drawing them at the
+        // Subpath rung would put up to 6,681 marks on a CAD object with no
+        // gesture to use them, and the rung's whole purpose is that the points
+        // you can grab are the points you can see (decision 028 §Q1).
+        //
+        // SQUARE, and sized in SCREEN pixels. Square so that the node/handle
+        // distinction, when handles land, is carried by shape rather than by
+        // colour alone (R84). Screen-sized so a node is the same target at
+        // every zoom — the same correction `NODE_GRAB_SCREEN_TOLERANCE_PX`
+        // just received, and it must match, or the mark and the grab radius
+        // would disagree about where a point is.
+        if entered.node.is_some() {
+            let nodes = provider.subpath_node_points(entered.object, sp);
+            if nodes.len() > canvas::MAX_DRAWN_NODES {
+                // Never a silent first-N: an operator shown 300 of 1,200
+                // points would reasonably believe the part has 300.
+                //
+                // Painted ON the part rather than sent to the status line,
+                // because it is a statement about what this outline does and
+                // does not contain — putting it where the operator is already
+                // looking beats a note elsewhere that competes with every
+                // other note. (Drawing must not mutate session state either;
+                // this function holds `doc` by shared reference.)
+                painter.text(
+                    rect.left_top() + egui::vec2(4.0, -18.0),
+                    egui::Align2::LEFT_TOP,
+                    ui_text::subpath_node_view_off(nodes.len(), canvas::MAX_DRAWN_NODES),
+                    egui::FontId::proportional(12.0),
+                    SUBPATH_OUTLINE_COLOR,
+                );
+            } else {
+                for (index, p) in nodes {
+                    // `subpath_node_points` is in PDF page space; the outline
+                    // above uses the same conversion for its corners.
+                    #[allow(clippy::cast_possible_truncation)]
+                    let c = viewer::page_to_screen(
+                        egui::pos2(p.x as f32, p.y as f32),
+                        image_rect,
+                        extent,
+                        zoom,
+                    );
+                    let selected = entered.node == Some(index);
+                    let half = if selected {
+                        canvas::NODE_MARK_SELECTED_PX
+                    } else {
+                        canvas::NODE_MARK_PX
+                    } / 2.0;
+                    let r = egui::Rect::from_center_size(c, egui::vec2(half * 2.0, half * 2.0));
+                    if selected {
+                        painter.rect_filled(r, 0.0, ui.visuals().selection.stroke.color);
+                    } else {
+                        painter.rect_stroke(
+                            r,
+                            0.0,
+                            egui::Stroke::new(1.5, SUBPATH_OUTLINE_COLOR),
+                            egui::StrokeKind::Middle,
+                        );
+                    }
+                }
+            }
+        }
     }
 
     let outlines = canvas::selection_outline_bounds(
@@ -12197,10 +12279,53 @@ fn run_vector_edit_tool(
             && let Some(start) = to_pdf(sp)
             && let Some(idx) = selected
         {
-            let anchors = doc
-                .object_model
-                .as_ref()
-                .map(|p| p.object_sample_points(idx))
+            // THE PICK SET IS THE ENTERED SUBPATH'S ANCHORS, OR NOTHING.
+            //
+            // This used to be `object_sample_points(idx)` — the whole object's
+            // flat anchor list — with no rung gate at all, so ANY selected
+            // path object could have a node dragged, chosen as "nearest of up
+            // to 6,681 anchors" with nothing drawn beforehand to say which one
+            // was about to move. Decision 028 calls that an R83 hazard already
+            // in production and requires the Node rung to REPLACE it rather
+            // than sit beside it: two routes to the same edit, one invisible,
+            // is the failure decision 025 §2.1 diagnosed for descent.
+            //
+            // It also silently widened its own blast radius when Pass 30.0
+            // landed. `Subpath::anchors()` has always included `re` corners
+            // and inherited subpath starts, so before 30.0 such a drag
+            // classified and was then REFUSED on release; after 30.0 the same
+            // drag succeeds — on a clipping path, changing what is visible
+            // elsewhere on the page. That is R144's second firing, and this
+            // gate is what closes it.
+            //
+            // Outside the Node rung the drag now classifies as a whole-object
+            // move (empty pick set ⇒ `node: None`), which is the honest
+            // behaviour: the operator has not descended to points, so they are
+            // not pointing at one.
+            let anchors: Vec<Point> = doc
+                .entered
+                .filter(|e| e.object == idx && e.node.is_some())
+                .and_then(|e| e.subpath.map(|sp| (e.object, sp)))
+                .and_then(|(obj, sp)| {
+                    doc.object_model
+                        .as_ref()
+                        .map(|p| p.subpath_node_points(obj, sp))
+                })
+                .map(|pts| pts.into_iter().map(|(_, p)| p).collect())
+                .unwrap_or_default();
+            // The object-scoped indices for the same set, in the same order,
+            // so a grab's position in `anchors` maps back to the index
+            // `move_node` addresses (decision 025 §1.3(b) — one numbering).
+            let node_indices: Vec<usize> = doc
+                .entered
+                .filter(|e| e.object == idx && e.node.is_some())
+                .and_then(|e| e.subpath.map(|sp| (e.object, sp)))
+                .and_then(|(obj, sp)| {
+                    doc.object_model
+                        .as_ref()
+                        .map(|p| p.subpath_node_points(obj, sp))
+                })
+                .map(|pts| pts.into_iter().map(|(i, _)| i).collect())
                 .unwrap_or_default();
             // Zoom-converted at the moment of the press, like every other
             // canvas tolerance. A page-space constant here made the grab
@@ -12211,9 +12336,10 @@ fn run_vector_edit_tool(
                 vector_edit_tool::NODE_GRAB_SCREEN_TOLERANCE_PX,
                 zoom,
             );
-            new_drag = Some(Some(vector_edit_tool::classify_drag(
-                idx, start, &anchors, tol_page,
-            )));
+            let mut drag = vector_edit_tool::classify_drag(idx, start, &anchors, tol_page);
+            // Translate the position-in-pick-set into the object-scoped index.
+            drag.node = drag.node.and_then(|k| node_indices.get(k).copied());
+            new_drag = Some(Some(drag));
         }
 
         // Live preview + commit-on-release for an in-flight drag.

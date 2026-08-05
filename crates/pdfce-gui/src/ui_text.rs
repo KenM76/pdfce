@@ -3656,6 +3656,21 @@ pub fn rotation_refused(reason: &str) -> String {
     format!("The page could not be rotated. {reason}")
 }
 
+/// Shown when an entered part has too many points to draw them all.
+///
+/// # Why a message and not a silent first-N
+///
+/// Drawing the first 300 of 1,200 points looks exactly like a part that has
+/// 300 points. The operator would then edit confidently against a picture
+/// that is wrong about the thing they are editing — and nothing on screen
+/// would ever correct them. Stating the real count is the whole content of
+/// the disclosure; the ceiling is secondary.
+pub fn subpath_node_view_off(count: usize, limit: usize) -> String {
+    format!(
+        "Points are not shown — this part has {count} points, more than the {limit} pdfce draws at once. It is too complex to edit point by point."
+    )
+}
+
 /// The transient note shown after a canvas object is deleted (Pass 9c-min).
 pub fn vector_object_deleted() -> &'static str {
     "Deleted the selected object. This is undoable, and is NOT redaction — to securely remove \

@@ -208,6 +208,88 @@ impl ObjectModelProvider {
         }
     }
 
+    /// The anchors of ONE subpath, each paired with its **object-scoped**
+    /// index — the Node rung's pick set (decision 028 §Q1).
+    ///
+    /// # Why not `object_sample_points`, which already returns anchors
+    ///
+    /// That one returns the whole object's flat list, and using it as a node
+    /// pick set is the R83 hazard decision 028 found already shipped: on a
+    /// measured CAD export one path object holds 6,681 anchors, so "the
+    /// nearest anchor to the press" can easily belong to a subpath the
+    /// operator is not pointing at, and nothing is drawn beforehand to say
+    /// which. Scoping the pick set to the ENTERED subpath is what makes the
+    /// grab predictable — the operator can only hit points they descended
+    /// into and can see.
+    ///
+    /// # Why the index is object-scoped even though the set is subpath-scoped
+    ///
+    /// Decision 025 §1.3(b): the number pdfce shows and the number
+    /// `pdfce-cli node-move --node N` addresses must be the same number.
+    /// `vector::anchor_count` counts across the whole object, so the running
+    /// offset is added here rather than letting the GUI invent a second
+    /// numbering that would disagree with every other consumer (R92).
+    ///
+    /// Returns empty for a non-path object or an out-of-range index — the same
+    /// exclusion `object_sample_points` applies, for the same reason (text and
+    /// image objects are not node-editable, decision 011 §2.1).
+    pub(crate) fn subpath_node_points(&self, index: usize, subpath: usize) -> Vec<(usize, Point)> {
+        let Some(VectorObject::Path(path)) = self.objects.objects.get(index) else {
+            return Vec::new();
+        };
+        let subpaths = path.page_subpaths();
+        // The running offset IS the object-scoped index of the target
+        // subpath's first anchor, because `anchor_count` flattens the same
+        // walk in the same order.
+        let mut offset = 0usize;
+        for (i, sp) in subpaths.iter().enumerate() {
+            let anchors: Vec<Point> = sp.anchors().collect();
+            if i == subpath {
+                return anchors
+                    .into_iter()
+                    .enumerate()
+                    .map(|(k, p)| (offset + k, p))
+                    .collect();
+            }
+            offset += anchors.len();
+        }
+        Vec::new()
+    }
+
+    /// The object-scoped index of the anchor of `subpath` nearest `point`
+    /// within `tolerance`, or `None` — the Node rung's pick.
+    ///
+    /// Takes canvas space and converts internally, exactly as
+    /// [`Self::subpath_hits`] does, so the canvas→PDF frame conversion stays
+    /// in the one place that owns it rather than being re-derived by each
+    /// caller (R92). `tolerance` is in PDF units, already converted from
+    /// screen pixels by [`canvas::screen_tolerance_to_page`](crate::canvas::screen_tolerance_to_page).
+    ///
+    /// Ties resolve to the lower index, matching
+    /// [`vector_edit_tool::nearest_anchor`](crate::vector_edit_tool::nearest_anchor),
+    /// so a point equidistant from two anchors picks the same one whether it
+    /// was reached by clicking or by dragging.
+    pub(crate) fn nearest_node(
+        &self,
+        object: usize,
+        subpath: usize,
+        point: Pos2,
+        tolerance: f64,
+    ) -> Option<usize> {
+        let pdf = self.canvas_to_pdf(point)?;
+        let mut best: Option<(usize, f64)> = None;
+        for (index, p) in self.subpath_node_points(object, subpath) {
+            if !p.is_finite() {
+                continue;
+            }
+            let d = p.distance(pdf);
+            if d <= tolerance && best.is_none_or(|(_, bd)| d < bd) {
+                best = Some((index, d));
+            }
+        }
+        best.map(|(index, _)| index)
+    }
+
     /// Map a canvas-space point into PDF user space (the object model's
     /// frame), or `None` on a degenerate page.
     fn canvas_to_pdf(&self, p: Pos2) -> Option<Point> {

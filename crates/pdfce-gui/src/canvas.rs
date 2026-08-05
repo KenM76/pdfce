@@ -270,6 +270,33 @@ pub struct EnteredObject {
     /// object, nothing picked yet" — a real state, reached by entering an
     /// object at a point where no subpath is close enough.
     pub subpath: Option<usize>,
+    /// The selected anchor within `subpath`, if the operator has descended one
+    /// rung further — the **Node** rung (decision 025's `k+3`, designed in
+    /// decision 028).
+    ///
+    /// # The index is OBJECT-scoped, not subpath-scoped
+    ///
+    /// Decision 025 §1.3(b) settled this and it is load-bearing rather than a
+    /// convention: it is the space `vector::anchor_count` reports and the space
+    /// `pdfce-cli node-move --node N` addresses. A subpath-scoped index would
+    /// be a second numbering for the same points, and the number pdfce shows
+    /// the operator would then disagree with the number they can act on.
+    ///
+    /// `Some` implies `subpath.is_some()` — there is no way to select a point
+    /// without being inside the part that holds it. Nothing in the type
+    /// enforces that; [`depth_after_click`] is the only constructor that
+    /// matters and it maintains it.
+    ///
+    /// # Why this exists as a rung rather than as a free gesture
+    ///
+    /// A node drag was ALREADY reachable before this field existed, from any
+    /// selected path object, against that object's whole flat anchor list — up
+    /// to 6,681 anchors on one measured CAD object, with nothing drawn before
+    /// the grab to say which one was about to move. Decision 028 calls that an
+    /// R83 hazard already in production and requires the rung to REPLACE it,
+    /// not sit beside it: two routes to the same edit, one of them invisible,
+    /// is the failure decision 025 §2.1 diagnosed for descent.
+    pub node: Option<usize>,
 }
 
 /// What a canvas click does to the selection **depth**.
@@ -297,25 +324,81 @@ pub struct EnteredObject {
 ///   double-click is also a click.
 /// - **Entering a DIFFERENT object** replaces the entry rather than nesting.
 ///   PDF path objects do not nest, so a stack would be depth for its own sake.
+/// - **Double-click while at the Subpath rung → enter the Node rung**, per
+///   decision 025's table row `k+2`. The anchors of the entered subpath
+///   become selectable, and `node_hit` picks one.
+/// - **Single click at the Node rung → re-pick a point**; a click that misses
+///   every point but lands on a part ascends one rung and re-picks that part.
+///   That is the table's `k+3` "ascend to Subpath and re-pick".
+/// - **Double-click at the Node rung does nothing** — there is nothing below a
+///   point. The state is returned unchanged; disclosing that to the operator
+///   is the caller's job (023 §1.3 disclosure 2 — reported, never a silent
+///   no-op).
+///
+/// # One deliberate deviation from 025's table
+///
+/// The table says a click outside at the Node rung ascends "to Object". This
+/// returns `None` (leave entirely), matching what the Subpath rung has always
+/// done for the same gesture. Making the two rungs disagree about what
+/// clicking-nothing means would be a worse inconsistency than the deviation,
+/// and the full `LevelPath`/`Rung` type 025 §3.2 specifies — which gives
+/// "Object rung" its own representable state instead of encoding it as
+/// `Some { subpath: None }` — is where that is properly resolved.
 #[must_use]
 pub fn depth_after_click(
     entered: Option<EnteredObject>,
     double: bool,
     object_hit: Option<usize>,
     subpath_hit: Option<usize>,
+    node_hit: Option<usize>,
 ) -> Option<EnteredObject> {
     match (entered, double) {
+        // ---- At the NODE rung ------------------------------------------
+        // Nothing is below a point, so a double-click changes no depth.
+        (Some(e), true) if e.node.is_some() => Some(e),
+        // Ordinary click: re-pick a point, else fall back one rung onto a
+        // part, else leave.
+        (Some(e), false) if e.node.is_some() => match (node_hit, subpath_hit) {
+            (Some(n), _) => Some(EnteredObject { node: Some(n), ..e }),
+            // Missed every point but landed on a part: ascend one rung and
+            // re-pick, rather than stranding the operator at a rung whose
+            // targets they keep missing.
+            (None, Some(sp)) => Some(EnteredObject {
+                object: e.object,
+                subpath: Some(sp),
+                node: None,
+            }),
+            (None, None) => None,
+        },
+
+        // ---- At the SUBPATH rung, double-click: descend to NODE ---------
+        // Only when the click stayed inside the SAME object. A double-click on
+        // a different object is an entry into that object (below), not a
+        // descent — PDF path objects do not nest, so carrying a node index
+        // across would address a point in a different anchor space.
+        (Some(e), true) if e.subpath.is_some() && object_hit == Some(e.object) => {
+            Some(EnteredObject {
+                object: e.object,
+                // Descend into the part under the pointer if there is one,
+                // else the part already selected.
+                subpath: subpath_hit.or(e.subpath),
+                node: node_hit,
+            })
+        }
+
         // Already inside an object, ordinary click: re-pick within it, or
         // leave if the click landed on nothing in it.
         (Some(e), false) => subpath_hit.map(|sp| EnteredObject {
             object: e.object,
             subpath: Some(sp),
+            node: None,
         }),
         // Double-click: enter whatever object is under the pointer (possibly a
         // different one), or leave if there is none.
         (_, true) => object_hit.map(|object| EnteredObject {
             object,
             subpath: subpath_hit,
+            node: None,
         }),
         // Not inside anything, ordinary click: nothing to do at this level.
         (None, false) => None,
@@ -1393,6 +1476,31 @@ pub const SNAP_SCREEN_TOLERANCE_PX: f32 = 10.0;
 /// zoom level.
 pub const SELECT_SCREEN_TOLERANCE_PX: f32 = 6.0;
 
+/// The side length, in SCREEN pixels, of an unselected node mark at the Node
+/// rung (decision 028 §Q1).
+///
+/// Screen-space, not page-space, for the same reason
+/// [`SELECT_SCREEN_TOLERANCE_PX`] is — and here it is not merely consistency:
+/// the mark and `NODE_GRAB_SCREEN_TOLERANCE_PX` must agree about where a point
+/// is, or the operator aims at a square and grabs something else.
+pub const NODE_MARK_PX: f32 = 6.0;
+
+/// The side length of the SELECTED node mark — larger and filled, so selection
+/// is carried by size and fill rather than by colour alone (R84).
+pub const NODE_MARK_SELECTED_PX: f32 = 8.0;
+
+/// The most anchors drawn for one entered subpath before the Node rung stops
+/// drawing them and says so.
+///
+/// **Provisional (R86 — only looking proves it.)** The reasoning is recorded
+/// so it can be revised rather than re-derived: decision 025's own measurement
+/// puts the common case at ~6 anchors per part, and 300 six-pixel squares is
+/// still legible on a typical canvas view, while the pathological case this
+/// project actually has — 6,681 anchors in one object — is nowhere near
+/// drawable. Above the ceiling nothing is drawn and the count is disclosed;
+/// a silent first-N would let an operator believe a 1,200-point part has 300.
+pub const MAX_DRAWN_NODES: usize = 300;
+
 /// Convert a fixed SCREEN-space pixel tolerance into a **page-space** snap
 /// tolerance for `zoom` (device px per PDF user-space unit) — the
 /// zoom-invariance mechanism (decision 011 §2.2; the page-space value
@@ -1694,13 +1802,26 @@ mod tests {
     /// Shorthand so the table below reads as rules rather than as struct
     /// literals.
     fn ent(object: usize, subpath: Option<usize>) -> Option<EnteredObject> {
-        Some(EnteredObject { object, subpath })
+        Some(EnteredObject {
+            object,
+            subpath,
+            node: None,
+        })
+    }
+
+    /// The same shorthand for the Node rung.
+    fn nod(object: usize, subpath: usize, node: usize) -> Option<EnteredObject> {
+        Some(EnteredObject {
+            object,
+            subpath: Some(subpath),
+            node: Some(node),
+        })
     }
 
     #[test]
     fn a_double_click_enters_the_object_under_the_pointer() {
         assert_eq!(
-            depth_after_click(None, true, Some(5870), Some(667)),
+            depth_after_click(None, true, Some(5870), Some(667), None),
             ent(5870, Some(667)),
             "double-clicking a many-subpath object must descend into it"
         );
@@ -1711,28 +1832,158 @@ mod tests {
         // A real state: inside the object, nothing picked. Collapsing this to
         // "not entered" would make a double-click near the middle of a sparse
         // view silently do nothing.
-        assert_eq!(depth_after_click(None, true, Some(3), None), ent(3, None));
+        assert_eq!(
+            depth_after_click(None, true, Some(3), None, None),
+            ent(3, None)
+        );
     }
 
     #[test]
     fn once_inside_an_ordinary_click_re_picks_within_the_same_object() {
         assert_eq!(
-            depth_after_click(ent(5870, Some(667)), false, Some(5870), Some(12)),
+            depth_after_click(ent(5870, Some(667)), false, Some(5870), Some(12), None),
             ent(5870, Some(12)),
             "a second pick inside must not require a second double-click"
+        );
+    }
+
+    // ---- the Node rung (decision 028) --------------------------------
+
+    /// **Descend Subpath → Node.** A double-click inside the entered object
+    /// selects a point.
+    #[test]
+    fn a_double_click_at_the_subpath_rung_descends_to_the_node_rung() {
+        assert_eq!(
+            depth_after_click(
+                ent(5870, Some(667)),
+                true,
+                Some(5870),
+                Some(667),
+                Some(1204)
+            ),
+            nod(5870, 667, 1204),
+            "double-clicking inside the entered part must reach its points"
+        );
+    }
+
+    /// Descending into a DIFFERENT part of the same object picks a node of
+    /// THAT part.
+    ///
+    /// The bug this rules out is carrying the old part forward while taking
+    /// the new part's node index — which would select a point that is not on
+    /// the part the operator is looking at.
+    #[test]
+    fn descending_into_a_different_part_takes_that_parts_node() {
+        assert_eq!(
+            depth_after_click(ent(5870, Some(667)), true, Some(5870), Some(12), Some(40)),
+            nod(5870, 12, 40)
+        );
+    }
+
+    /// **A double-click on a DIFFERENT object enters that object — it does not
+    /// descend.**
+    ///
+    /// PDF path objects do not nest, so a node index means nothing across the
+    /// boundary: anchor numbering is per-object. Carrying one over would
+    /// address a point in a different space entirely.
+    #[test]
+    fn a_double_click_on_another_object_enters_it_rather_than_descending() {
+        assert_eq!(
+            depth_after_click(ent(5870, Some(667)), true, Some(11), Some(3), Some(99)),
+            ent(11, Some(3)),
+            "entering a different object must not carry a node index across"
+        );
+    }
+
+    /// **Nothing is below a point.** A double-click at the Node rung is a
+    /// no-op on depth, not a descent into nowhere and not an exit.
+    ///
+    /// Returned unchanged so the caller can SAY so (023 §1.3 disclosure 2 —
+    /// reported, never a silent no-op).
+    #[test]
+    fn a_double_click_at_the_node_rung_changes_nothing() {
+        assert_eq!(
+            depth_after_click(nod(5870, 667, 1204), true, Some(5870), Some(667), Some(9)),
+            nod(5870, 667, 1204),
+            "there is nothing below a point, so depth must not move"
+        );
+    }
+
+    /// Once at the Node rung, an ordinary click re-picks a point.
+    #[test]
+    fn an_ordinary_click_at_the_node_rung_re_picks_a_point() {
+        assert_eq!(
+            depth_after_click(
+                nod(5870, 667, 1204),
+                false,
+                Some(5870),
+                Some(667),
+                Some(1205)
+            ),
+            nod(5870, 667, 1205),
+            "picking a second point must not require a second double-click"
+        );
+    }
+
+    /// **Missing every point but hitting a part ascends one rung**, rather
+    /// than stranding the operator at a rung whose targets they keep missing.
+    #[test]
+    fn missing_every_point_but_hitting_a_part_ascends_one_rung() {
+        assert_eq!(
+            depth_after_click(nod(5870, 667, 1204), false, Some(5870), Some(12), None),
+            ent(5870, Some(12)),
+            "a missed point that lands on a part falls back to the part"
+        );
+    }
+
+    /// Clicking nothing at the Node rung leaves, exactly as it does at the
+    /// Subpath rung.
+    ///
+    /// A documented deviation from decision 025's table (which says "ascend to
+    /// Object"): the two rungs disagreeing about what clicking-nothing means
+    /// would be a worse inconsistency, and the `LevelPath` type 025 §3.2
+    /// specifies is where "Object rung" gets its own representable state.
+    #[test]
+    fn clicking_nothing_at_the_node_rung_leaves() {
+        assert_eq!(
+            depth_after_click(nod(5870, 667, 1204), false, None, None, None),
+            None
+        );
+    }
+
+    /// **Re-picking a part clears the node.** Ascending must not leave a stale
+    /// point selected on a part that no longer holds it — the index is
+    /// object-scoped, so it would still resolve, to the wrong point.
+    #[test]
+    fn re_picking_a_part_clears_the_selected_point() {
+        assert_eq!(
+            depth_after_click(nod(5870, 667, 1204), false, Some(5870), Some(12), None)
+                .and_then(|e| e.node),
+            None
+        );
+    }
+
+    /// Entering an object fresh never starts at the Node rung — descent is one
+    /// rung per double-click, with no shortcut.
+    #[test]
+    fn entering_an_object_never_lands_directly_on_a_point() {
+        assert_eq!(
+            depth_after_click(None, true, Some(5870), Some(667), Some(1204)).and_then(|e| e.node),
+            None,
+            "the first double-click reaches parts, never points"
         );
     }
 
     #[test]
     fn clicking_nothing_while_inside_leaves_rather_than_stranding_the_operator() {
         assert_eq!(
-            depth_after_click(ent(5870, Some(667)), false, None, None),
+            depth_after_click(ent(5870, Some(667)), false, None, None, None),
             None
         );
         // Even if some OTHER object is under the pointer: it is not a subpath
         // of the entered one, so the click is outside, and outside means out.
         assert_eq!(
-            depth_after_click(ent(5870, Some(667)), false, Some(11), None),
+            depth_after_click(ent(5870, Some(667)), false, Some(11), None, None),
             None
         );
     }
@@ -1740,7 +1991,7 @@ mod tests {
     #[test]
     fn a_double_click_on_a_different_object_replaces_rather_than_nests() {
         assert_eq!(
-            depth_after_click(ent(5870, Some(667)), true, Some(42), Some(0)),
+            depth_after_click(ent(5870, Some(667)), true, Some(42), Some(0), None),
             ent(42, Some(0)),
             "PDF path objects do not nest, so neither should the entry"
         );
@@ -1749,15 +2000,15 @@ mod tests {
     #[test]
     fn a_double_click_on_empty_space_leaves() {
         assert_eq!(
-            depth_after_click(ent(5870, Some(667)), true, None, None),
+            depth_after_click(ent(5870, Some(667)), true, None, None, None),
             None
         );
-        assert_eq!(depth_after_click(None, true, None, None), None);
+        assert_eq!(depth_after_click(None, true, None, None, None), None);
     }
 
     #[test]
     fn an_ordinary_click_at_object_level_changes_no_depth() {
-        assert_eq!(depth_after_click(None, false, Some(7), Some(1)), None);
+        assert_eq!(depth_after_click(None, false, Some(7), Some(1), None), None);
     }
 
     // ---- middle-drag pan ----------------------------------------------
