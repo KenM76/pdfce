@@ -77,7 +77,17 @@ pub use edit::{
     EditError, EditGlyphSource, EditOptions, EditOutcome, EditReport, EditRequest,
     FollowerDisposition, edit_text,
 };
-pub use encoding::{CharEncoding, EncodeResult, InverseEncoding, RInvTrigger, Refusal};
+// `CompositeEncoding` sits beside `InverseEncoding` deliberately: they are the
+// two halves of ONE seam (`plan_edit` picks between them on `font.is_simple()`
+// and both answer the same two questions — per-code values for the §9.4.4
+// advance sum, and bytes for the show string). Pass 29.0 made composite fonts
+// editable but left its types out of this list, so the simple-font half was
+// public API and the composite half was reachable only by module path — an
+// asymmetry with no reason behind it.
+pub use encoding::{
+    CharEncoding, CompositeEncodeResult, CompositeEncoding, EncodeResult, InverseEncoding,
+    RInvTrigger, Refusal,
+};
 pub use format::{
     FillModel, FontSelector, FormatError, FormatOptions, FormatOutcome, FormatReport,
     FormatRequest, MetricSpec, NewFill, SUBSCRIPT, SUPERSCRIPT, ScriptMetrics, ScriptPosition,

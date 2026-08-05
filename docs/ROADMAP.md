@@ -136,6 +136,22 @@ diagnosed for descent and refused.
 rung — it read the **shipped drag handler** rather than the decision
 record. Same review that produced `075e8f8`.
 
+> **✅ THE GATE LANDED 2026-08-05 in `c62c4d0` — Pass 26.0's head slice.
+> Appended, not rewritten (append-only); the block above stays because
+> the MECHANISM it describes is the reusable part, and R147 is what it
+> exists to carry.** The drag's candidate set is now the **entered
+> subpath's** anchors **or nothing** — `object_provider::object_sample_points`'s
+> whole-object flat list is no longer consulted by `classify_drag`, and
+> **outside the Node rung a drag classifies as a whole-object move**. So
+> the ungated hand route to an `re`-corner / reused-start edit is closed,
+> and the operator must now **descend two rungs deliberately** to reach
+> it. **One honest limit carried forward:** the gating is covered **by
+> construction and by unit test**, not by a driven drag — the offscreen
+> diag harness could not produce egui drag events for the sequence (see
+> the Pass 26.0 entry's verification section). **The clip-gate half of
+> the hazard — Tier 2 routing for a clip-path move — is still open**,
+> blocked on operator question **(av)**.
+
 ### ✅ FILING GAP — CLOSED 2026-08-05, same day it was opened. All five commits are now filed below. The defect record is retained (append-only); read it for the process lesson, not for current ledger state
 
 **CLOSURE, written at the head rather than at the foot so nobody acts on
@@ -207,6 +223,385 @@ halves) and `d8b9735` (Pass 28.0), plus the two hardening commits, so
 be entered at all. Until then, **treat this file as under-reporting the
 branch by five commits** — the exact failure mode R141's corollary
 warns about, one layer up: the roadmap says work is not done when it is.
+
+### Pass 26.1 — Bézier handles are VISIBLE and GRABBABLE: the GUI half of Pass 30.1, and the first manipulator pdfce deliberately refuses to snap (decision 028 items 5–8; GUI) — 2026-08-05, committed `7c45bf8`
+
+**Context.** Pass 30.1 (`d025c1a`) shipped `plan_move_handle` and
+`pdfce-cli handle-move` with **no gesture at all**, on the stated
+principle that *"wiring a handle gesture before there is a node rung to
+hang it on would be building the second storey first."* Pass 26.0 built
+the storey; **this is the gesture.** It closes the one genuinely
+CLI-only vector capability the R144 second-firing correction identified
+(see the ⚠ block at the head of *Shipped*: `re` corners and reused
+starts were always hand-reachable; **handles were not**).
+
+**New provider surface (`pdfce-gui`, read-only over the core
+decomposition):**
+
+- **`subpath_handle_points(object, subpath) -> Vec<(usize, Handle, Point)>`**
+  — every control point of the entered part, each tagged with the
+  **node it belongs to** and which side (`Incoming`/`Outgoing`, Pass
+  30.1's direction-of-travel naming).
+- **`nearest_handle(...)`** — the hit query.
+
+**★ `nearest_handle` takes PDF PAGE space, where its sibling
+`nearest_node` takes CANVAS space, and the asymmetry is deliberate
+rather than an oversight.** Its **only** caller is the drag classifier,
+which has **already converted the press origin** (`press_origin()`, per
+the egui finding that `drag_started()` fires after the threshold).
+Converting back so the signature could match its sibling would add a
+round trip whose only purpose is cosmetic symmetry. Recorded here
+because the next reader will otherwise "fix" it.
+
+**★★ THE FINDING WORTH KEEPING — WHICH HANDLE BELONGS TO WHICH NODE. A
+cubic's two control points belong to DIFFERENT nodes.** Segment *k* runs
+from anchor *k* to anchor *k+1*, so:
+
+| Control point | Shapes | Belongs to |
+|---|---|---|
+| `c1` | the curve **LEAVING** anchor *k* | anchor **k** (its *outgoing* handle) |
+| `c2` | the curve **ARRIVING** at anchor *k+1* | anchor **k+1** (its *incoming* handle) |
+
+**Assigning both to one node is the plausible-looking wrong answer.** It
+draws two handles in roughly the right place — near the segment, near
+the curve, at plausible distances — and then makes **every handle drag
+move the wrong end of the curve**. There is no rendering artefact, no
+error, no refusal: the picture just deforms at the far end from where
+the operator is pulling. **Verified by planting the swap: three tests
+catch it.** (Same oracle discipline as Pass 30.1's `v`/`y` tests —
+*plant the mistake and check something notices*, rather than comparing
+an implementation to itself.)
+
+**No core work was needed for `v` and `y`, and the reason is
+structural.** The decomposition **already resolves their implicit
+control points into explicit `c1`/`c2`** (Pass 30.1 built that), so the
+GUI **never has to know the short spellings exist** — which is exactly
+where the classic confusion in that operator family lives (the spec RAG
+calls `v`/`y` *"the single most-confused pair in the operator set"*).
+**Pinned by a test anyway**, so a future decomposition change that
+started leaking the short spellings upward would fail here rather than
+silently in the GUI.
+
+**★ HIT PRIORITY: handles BEFORE nodes, at a TIGHTER radius.**
+`HANDLE_GRAB_SCREEN_TOLERANCE_PX = 5.0` against the node's `6.0` (both
+screen measures, converted at query time per `075e8f8`).
+
+- **When do they overlap?** Precisely when the **curve is nearly flat at
+  that node** — the handle collapses toward its anchor. **Which is
+  exactly the moment the operator is reaching for the handle**, because
+  a flat spot is what you grab a handle to un-flatten. Node-priority
+  would make the handle unreachable at the only time it matters.
+- **The asymmetry is on purpose, and the cost function is the argument:**
+  **losing a handle grab costs one retry; stealing a node grab MOVES A
+  POINT OF THE DRAWING.** The smaller, more-specific target wins the
+  tie, and the error mode is biased toward the recoverable side.
+
+**Drawn so the distinction survives without colour (R84 by
+construction):** **circles for handles, squares for nodes** — and
+**handles are painted UNDER the node marks**, because on a flat curve
+the two nearly coincide and **the node is the one that must stay
+legible**. Each handle is tied to its node by a **dashed arm reusing
+`APPROXIMATE_OUTLINE_DASH`**, borrowing that pattern's existing *"this
+is not a measured edge"* meaning **rather than inventing a fourth visual
+language** (decision 028 item 6).
+
+**Handles are shown for EVERY node of the entered part that has one —
+not only the selected node.** The reasoning is an ordering argument, and
+it is the non-obvious call of the Pass: **handles are how an operator
+decides WHICH node to pick.** Revealing them only after the pick
+inverts the order in which the information is needed. (Decision 028 item
+5 called this out; it survived contact with the implementation.)
+
+**★★ A HANDLE DRAG IS NOT SNAPPED, WHERE A NODE DRAG IS — and this is a
+design rule, not an omission.** A **node is a point OF the drawing**, so
+snapping it to other geometry is help. A **control point is a shaping
+lever, not a location**: it is off-curve, it has no counterpart in the
+rendered picture, and snapping it would **tie the curve's shape to a
+coordinate the operator never aimed at** — a value pdfce chose,
+presented as one the operator chose. Filed as standing rule **R149**,
+because it is **predictive for every future off-curve manipulator**
+(gradient stops, rotation pivots, dimension leader elbows, clip-path
+control frames).
+
+**New GUI plumbing:** a **`Commit::Handle`** arm routing to
+`EditSession::move_handle`.
+
+**Gates:** **no figures were relayed for this commit, so none are
+claimed** (R87 — a test count without a measurement behind it is not a
+measurement). The last verified workspace figure on this branch remains
+**1,912 at `d025c1a`**. Re-measure before the next ship.
+
+> **✅ GATE FIGURES SUPPLIED 2026-08-05 (continuation 88) — appended, not
+> rewritten.** The engineer **re-verified at the END of the session**, at
+> this commit, with only memory files added since: **1,933 tests / 0
+> failing**; `cargo fmt --check` clean; `cargo tree` clean (**0 GUI
+> matches in `pdfce-core` or `pdfce-render`**); `check-ui-strings` and
+> `check-ledger-numbers` clean. **This supersedes "1,912 at `d025c1a`" as
+> the LATEST VERIFIED workspace measurement on this branch** — the
+> paragraph above is left standing because it was true when written and
+> because R87's reasoning (*claim nothing that was not relayed*) is the
+> part worth preserving. The earlier session-close capture also carried
+> **Pass 26.0 (`c62c4d0`) at 1,926** — see that entry.
+
+### Pass 26.0 — The Node rung: points are ENTERED, DRAWN, and SCOPED — and the ungated node-drag gesture is REPLACED (decision 025's ladder + decision 028's REQUIRED head slice; GUI) — 2026-08-05, committed `c62c4d0`
+
+**Decision 028's head slice. Its REQUIRED item closed a HAZARD rather
+than adding a feature** — see the ⚠ R144-second-firing block at the head
+of *Shipped*, and R147.
+
+**The state change.** `EnteredObject` gained **`node: Option<usize>`**,
+**object-scoped** per decision 025 §1.3(b). The scoping is the whole
+point: **the number shown on screen and the number `node-move --node N`
+addresses must be ONE number.** The subpath rung filters *which* anchors
+are drawn; it does **not renumber** them. (R92's shape — two numbering
+schemes for one thing is two definitions of it.)
+
+**The transitions.** `depth_after_click` gained a **`node_hit`**
+parameter and the Node-rung arms:
+
+| Gesture | Result |
+|---|---|
+| double-click **inside the SAME object** at the Subpath rung | **descend** Subpath → Node |
+| single click at the Node rung | **re-pick** the node |
+| click that **misses every point but lands on a part** | **ascend one rung** (Node → Subpath) |
+| double-click **at** the Node rung | **nothing — returned UNCHANGED** |
+
+**The last row is a disclosure design, not a no-op.** The state is
+returned **unchanged so the CALLER can SAY SO** — decision 023 §1.3
+disclosure 2: the bottom of the ladder announces itself rather than
+silently absorbing the gesture. (Compare `075e8f8`'s finding one layer
+over: a gesture that does nothing and says nothing is indistinguishable
+from a missed click.)
+
+**★ Entering a DIFFERENT object NEVER carries a node index across, and
+the reason is structural, not defensive.** **PDF path objects do not
+nest.** Anchor numbering is therefore **per-object**, and a carried
+index would address *a point in a different space* — index 4 of object A
+has no relationship whatever to index 4 of object B. The node is
+dropped on any object change.
+
+**★★ THE GATE — decision 028's REQUIRED item, and the actual content of
+this Pass.** The drag's pick set is now **the ENTERED subpath's anchors,
+or nothing**. It **replaces** `object_provider::object_sample_points`'s
+**whole-object flat anchor list**, which `classify_drag` had been
+consulting **with no rung state and no marks drawn**. **Outside the Node
+rung, a drag classifies as a whole-object move.**
+
+This is what makes the ladder have **one** route to a node edit instead
+of two. Shipping the rung *beside* the old gesture would have left a
+**second, unscoped, invisible** route — precisely the two-mechanisms
+failure decision **025 §2.1** diagnosed for descent and refused,
+reproduced one rung down.
+
+**New provider accessor:** **`subpath_node_points(object, subpath) -> Vec<(usize, Point)>`**,
+returning **object-scoped indices** — i.e. carrying the **running offset**
+that `anchor_count`'s flatten implies, rather than restarting at 0 per
+part. Same one-number invariant as above, enforced at the source.
+
+**Node marks are SCREEN-space squares** — **6 px** hollow unselected,
+**8 px** filled selected — **matching the grab radius that `075e8f8`
+converted to screen space hours earlier.** That match is load-bearing:
+**if the mark and the radius disagreed about where a point is, the
+operator would aim at a square and grab something else** — R111's
+paint/select symmetry, at the rung where it is least forgiving.
+
+**★ The ceiling, and why it is NOT a first-N.** `MAX_DRAWN_NODES = 300`
+per part (**provisional under R86** — a value to be re-judged against a
+running app, not a derived constant), **with the REAL count painted on
+the part above it.** New string **`ui_text::subpath_node_view_off`**.
+
+> **300 of 1,200 points LOOKS EXACTLY LIKE a part that HAS 300, and
+> nothing on screen would correct that.** A silently truncated mark set
+> is an affordance that **lies about what is selectable** — the operator
+> concludes the other 900 points do not exist, which is a worse failure
+> than not drawing marks at all. The count is the disclosure that makes
+> the truncation honest.
+
+**★ The marks shipped in the SAME commit as the gate, deliberately.**
+The gate alone would have traded **an invisible dangerous gesture** for
+**an invisible unusable one** — the operator would descend to a rung
+whose targets are undrawn and whose old whole-object fallback is gone.
+Neither half is shippable without the other; recorded because the
+temptation to split a "core change" from its "UI change" is exactly what
+produces that state.
+
+**★★ DOCUMENTED DEVIATION FROM DECISION 025's TRANSITION TABLE —
+recorded as a deviation, not absorbed.** Clicking **nothing at all**
+(missing every point *and* every part) at the Node rung **LEAVES** —
+exiting the entered object — where 025's table specifies **ascending to
+the Object rung**. The shipped behaviour instead **matches what the
+Subpath rung has always done**.
+
+> **The argument for the deviation:** two rungs disagreeing about what
+> *clicking nothing* means is worse than the deviation itself. An
+> operator learns one gesture's meaning per rung; making the same empty
+> click mean *leave* at one rung and *ascend* at the next is the kind of
+> inconsistency that is discovered by accident and never trusted again.
+>
+> **Where it resolves properly:** the **`LevelPath` / `Rung` type
+> decision 025 §3.2 specifies** — which gives *"Object rung"* its own
+> **representable state** instead of encoding it as
+> `Some { subpath: None }`. Until that type exists, "ascend to Object"
+> has no clean destination to ascend *to*, which is why the deviation
+> exists at all. **Tracked on the Pass 26.0–26.2 *Next up* entry so it
+> does not vanish with this filing.**
+
+**VERIFICATION — stated precisely, because the LIMIT is the part that
+matters.**
+
+- **What WAS driven:** the **two-level descent**, through the offscreen
+  diag harness, **on a real curve**, reaching
+  **`EnteredObject { object: 0, subpath: Some(0), node: Some(1) }`** —
+  **node 1 being the `c` endpoint actually clicked**, not merely *a*
+  node. So the descent, the object scoping and the hit resolution are
+  observed working in the running app (R86).
+- **★ What was NOT driven: the DRAG GESTURE ITSELF, end to end.** The
+  harness **produces no egui drag events for that sequencing** —
+  **`drag_started=false` throughout**. **The gating is therefore covered
+  BY CONSTRUCTION AND BY UNIT TEST, not by a driven drag.** This is a
+  **known verification gap**, recorded as one rather than rounded up to
+  a completed check: the very gesture whose hazard motivated the
+  REQUIRED item is the one the harness cannot exercise.
+- **★ The harness limitation is a finding in its own right** — it
+  blocked end-to-end verification **twice this session** and will block
+  it again. **Escalated** as a dated amendment to
+  `D:\dev\rag\egui\eframe_035_raw_input_hook_synthetic_event_injection.md`,
+  which had claimed `.dragged()` / `.drag_started_by(..)` fire for
+  injected events. See *RAG escalations* in the session log.
+
+**Gates:** **no figures were relayed for this commit, so none are
+claimed** (R87). The last verified workspace figure on this branch
+remains **1,912 at `d025c1a`**.
+
+> **✅ GATE FIGURE SUPPLIED 2026-08-05 (continuation 88) — appended, not
+> rewritten.** The session-close capture recorded **1,926 tests / 0
+> failing at this commit (`c62c4d0`)**. Relayed as a per-Pass figure by
+> the engineer; the *latest* verified workspace measurement on the branch
+> is **1,933 at `7c45bf8`** (Pass 26.1), which supersedes `d025c1a`'s
+> 1,912 for "current state" purposes.
+
+### fix — reflow disclosed only the AXIS IT OBVIOUSLY THREATENED: horizontal page overflow is now disclosed on the same footing as vertical (no Pass ID — a correctness fix to shipped Pass 15.x; implements **option (c) ONLY** of Pass 33.0, which STAYS OPEN; core) — 2026-08-05, committed `82228b1`
+
+> **★★ READ THIS FIRST, BECAUSE IT IS THE POINT OF THE ENTRY. This commit
+> fixes the SILENCE, not the INFERENCE.** The auto-detected wrap width is
+> **still wrong** — a 156 pt block whose box a prior `edit-text` widened
+> to 930 pt still re-wraps to 930 pt on a 612 pt page. What changed is
+> that pdfce now **says so**. **An operator who does not read stderr
+> still gets a re-wrap to a width they never chose.**
+>
+> **Therefore Pass 33.0 is NOT discharged and remains under *Next up*.**
+> Options **(a) clamp**, **(b) median-line width** and **(d) mark the box
+> untrustworthy** are all still live and still unchosen. **Do not read
+> "disclosure shipped" as "defect fixed."**
+
+**Provenance.** Found by **running a test the operator proposed**, after
+he was handed a third-party guess about how pdfce works and asked whether
+it was true. The architectural rebuttal answered the question that was
+asked; **only running the test answered the question that mattered**
+(R86). The full measured sequence, the four candidate fixes and the
+generalizable shape are recorded on the **Pass 33.0** *Next up* entry and
+in **R148** — not repeated here.
+
+**What the commit did, precisely.**
+
+- **`PageOverflow` gained `past_right_pt: f64`** — how far the new block
+  box extends past the cropbox RIGHT edge, `0.0` when it does not.
+  **Additive and non-breaking: the struct is `#[non_exhaustive]`**, so
+  no downstream struct literal existed to break.
+- **The overflow check in `reflow.rs` was purely vertical**
+  (`crop.lly - new_bbox.lly`). It now computes **both axes** —
+  `past_bottom = (crop.lly - new_bbox.lly).max(0.0)` and
+  `past_right = (new_bbox.urx - crop.urx).max(0.0)` — and returns `Some`
+  when **EITHER** overflows.
+- **★ Why option (c) turned out to be the cheap one: `req.page_cropbox`
+  was ALREADY IN HAND at that point.** The right edge was simply never
+  compared to `block_llx + wrap_width`. No new state, no new parameter,
+  no new cross-operation plumbing — which is exactly why it was the
+  right thing to ship first and the wrong thing to mistake for the fix.
+- **The disclosure names the mechanism and the remedy**, not just the
+  number: *"That width was measured from the block's own box, which an
+  earlier edit may have widened past the margin — pass an explicit width
+  to wrap to the original margin."*
+
+**★ Why nothing caught it, kept because the trap is reusable.**
+`overflowing_words` **sounds like** it covers this and **does not** — it
+counts unbreakable words **WIDER THAN** the wrap width, which says
+nothing about whether **the width itself** fits the page. And the
+vertical-only check **reads as complete**, because a re-wrap grows
+**downward**: vertical is the axis the operation obviously threatens.
+The horizontal axis is threatened by a **different mechanism entirely** —
+not the re-wrap, but the **width it was handed**. (**R143**: a stated
+reason is re-verified, not inherited.)
+
+**★★ A SECOND DEFECT, INTRODUCED BY THE FIRST FIX AND CAUGHT BY READING
+THE OUTPUT — this is the more useful half of the record.**
+
+Making `overflow` `Some` for a **right-edge-only** case **broke the apply
+path's unstated assumption that `Some` meant the BOTTOM overflowed.** The
+first version of the fix therefore:
+
+1. emitted **"the re-wrap grows the block 0.0pt past the page bottom"** —
+   **false in its letter**, a disclosure about an overflow that did not
+   happen; **and**
+2. **left the TRUE horizontal disclosure unsaid**, because the apply
+   stage **filters out preview notes containing "not applied"**
+   (correct — at apply time it DID write) and the new preview wording
+   **contained that phrase**.
+
+**So the fix's first version made the disclosure worse in BOTH directions
+at once**: it added a false statement and swallowed a true one. Each axis
+is now **guarded independently**, and the **apply stage words its own
+note** rather than carrying the preview's — exactly as the vertical case
+already did.
+
+> **The lesson, stated plainly because it generalizes past this module:**
+> **widening what a `Some` MEANS silently invalidates every reader that
+> had narrowed it by convention.** `Option<PageOverflow>` carried an
+> undocumented invariant — *"present ⇒ bottom overflowed"* — that lived
+> **in the callers, not in the type**. Nothing in the compiler, and
+> nothing in the tests, was watching it. And the **string-content filter**
+> (`contains("not applied")`) is a **coupling between two modules through
+> prose**, which is precisely the kind of link that no signature records.
+> **It was found by READING THE CLI OUTPUT — the tests passed** (R86,
+> again, in the same commit that R86 produced).
+
+**Tests added — differentially verified, not assumed.** Two, in
+`reflow_apply.rs`:
+
+| Test | What it pins |
+|---|---|
+| `a_wrap_width_past_the_page_right_edge_is_disclosed` | a 400 pt wrap on a 100 pt page from `x=20` reports **~320 pt past the right edge** and discloses it as **`EMITTED`, not clipped** |
+| `a_right_only_overflow_does_not_claim_a_bottom_overflow` | on a tall page, `past_bottom_pt == 0.0` and **no note mentions the page bottom** — the second defect, pinned |
+
+**Both fail when the check is removed** — verified by removal, not by
+inspection. (Same oracle discipline as Pass 30.1's `v`/`y` tests and Pass
+26.1's handle-swap tests: *plant the mistake and check something
+notices*.)
+
+**Round-trip / invariant posture unchanged.** This is a **disclosure-only**
+change: nothing about what gets written moved. **R76**'s posture (*state
+what was derived; never silently clip, drop or reshape the operator's
+content*) is what the commit extends to a second axis — **R148's first
+corollary made concrete**: *a disclosure that covers one axis is not a
+disclosure.*
+
+**Gates at this commit (relayed, therefore claimed):** **1,917 tests / 0
+failing**; `cargo fmt` clean; `cargo clippy -- -D warnings` clean;
+`check-ui-strings` clean; `check-ledger-numbers` clean; **`cargo tree`
+shows no GUI dependency in `pdfce-core` or `pdfce-render`**.
+
+**Ledger:** **no Pass ID minted.** Same reasoning as `3a23694` /
+`328f5c2` / `5b2682b` / `075e8f8` — a correctness fix to shipped surface
+that adds no operator-facing capability. **Family 33 was not spent by
+this entry; 33.0 is still Pass 33.0 and family 34 is still next free.**
+
+**References:** `crates/pdfce-core/src/text_edit/reflow.rs`
+(`PageOverflow::past_right_pt`, the two-axis overflow block);
+`crates/pdfce-core/src/text_edit/reflow_apply.rs` (`plan_reflow`'s
+per-axis apply notes + the two tests); Pass **33.0** *Next up* entry (the
+open defect and its four options); **R148**, **R76**, **R75**, **R86**,
+**R143**; `docs/decisions/015-ffa-within-block-offline-reflow.md` §3.3,
+§3.5.
 
 ### fix — the node-grab radius is a SCREEN measure, not a page measure (no Pass ID — a correctness fix to the shipped Obj-tool drag classifier) — 2026-08-05, committed `075e8f8`
 
@@ -8518,6 +8913,59 @@ defect in SHIPPED work** (Pass 15.0 `ReflowEngine`, 15.1 surgery, 15.2
 GUI), not new scope. **It is filed with NO FIX CHOSEN** — see *Options*
 below; the choice is deliberately left open.
 
+> **⚠ STALENESS FLAG, 2026-08-05 (continuation 87) — THIS ENTRY MAY
+> ALREADY BE PARTLY OR WHOLLY DISCHARGED, AND THIS LIBRARIAN CANNOT TELL.**
+> The session-close handoff lists a commit **`82228b1` — "reflow
+> horizontal overflow disclosure"** among this session's shipped work. It
+> postdates continuation 86's filing of this defect, and its subject line
+> matches **option (c)** below (*disclose that the detected width puts
+> content off the page*) — the engineer's own stated minimum leaning.
+> **No build details were relayed for it, so NO Shipped entry was
+> written and none is invented here** (**R87** — a commit's subject line
+> is not a build record). **Owed:** a librarian dispatch with
+> `82228b1`'s details, plus an explicit statement of **which of the four
+> options below it implements and what remains**. Until then, treat this
+> entry as **possibly over-reporting an open defect** — the mirror image
+> of the ⚠ FILING GAP block's failure mode at the head of *Shipped*.
+
+> **✅ STALENESS FLAG RESOLVED 2026-08-05 (continuation 88). THE ANSWER
+> IS: THE LEDGER UNDER-REPORTED A COMMIT, AND DID *NOT* OVER-REPORT THIS
+> DEFECT. `82228b1` IS NOW FILED UNDER *Shipped*; THIS ENTRY STAYS OPEN.**
+>
+> **`82228b1` implements option (c) — and ONLY option (c).** It discloses;
+> it does not clamp, does not change the auto-detection, and does not add
+> the cross-operation state option (d) would need. **The auto-detected
+> wrap width is still wrong.** A block whose box a prior `edit-text`
+> widened from 156 pt to 930 pt still re-wraps to 930 pt on a 612 pt page;
+> what changed is that pdfce now **says so on stderr instead of reporting
+> unqualified success**. **An operator who does not read the disclosure
+> still gets a re-wrap to a width they never chose.**
+>
+> **What therefore REMAINS OPEN in this Pass — the live choice, unchanged:**
+> **(a) clamp**, **(b) median/majority line width**, **(d) mark the box
+> untrustworthy and refuse to auto-detect.** The engineer's filed leaning
+> was *"(c) at minimum, possibly with (b)"*; **(c) has landed, so what is
+> now on the table is whether to ADD (b), or to take (a) or (d) instead**.
+> **(b) composes with the shipped (c)**; (a) and (d) do not compose with
+> each other.
+>
+> **What the acceptance criteria below have and have not absorbed.** The
+> clause *"the horizontal case is disclosed on the same footing as the
+> vertical one (R76)"* is **MET** by `82228b1`. Every other clause —
+> notably *"the measured sequence no longer reports unqualified
+> success"* in the sense of producing a **usable default**, and the
+> `--width 156` and no-prior-edit regression clauses — **is still the
+> acceptance bar for whichever of (a)/(b)/(d) is chosen.**
+>
+> **Two process notes, kept because both were load-bearing.** (1) The
+> flag above was written **without build details and correctly refused to
+> guess** which option had landed (**R87**); guessing would have produced
+> exactly the wrong answer *"defect fixed"*, since the subject line
+> matches (c) and (c) is not the fix. (2) `82228b1` **introduced a second
+> defect while fixing the first**, caught by **reading the CLI output**
+> after the tests passed — see its *Shipped* entry, which records that
+> half in full.
+
 **★ How it was found, because the provenance is part of the record.** The
 operator asked whether pdfce's text reflow *really* works or only appears
 to. He had been handed a third-party guess that pdfce is a **"twin-layer"
@@ -8663,7 +9111,59 @@ auto-width, `:661-704` `overflowing_words`, `:745-764` the vertical-only
 (overflow discloses, never disappears), **R75** (reflow is explicit);
 Pass 15.0/15.1/15.2 Shipped entries; `fixtures/synthetic/reflow/reflow.pdf`.
 
-### ★ `docs/ARCHITECTURE.md` §4 is THREE FILINGS BEHIND the shipped core surface — scheduled here rather than left to happen incidentally (docs-only; no Pass ID needed, but it is real work with a real backlog)
+### ★ `docs/ARCHITECTURE.md` §4 is THREE FILINGS BEHIND the shipped core surface — scheduled here rather than left to happen incidentally (docs-only; no Pass ID needed, but it is real work with a real backlog) — **DONE 2026-08-05, in the dedicated dispatch this entry asked for; SEE THE RESIDUE BELOW, which is NOT discharged**
+
+> **✅ DISCHARGED 2026-08-05 (continuation 88) — and it took the dedicated
+> dispatch this entry insisted on, which was the right call.** New
+> subsection **`ARCHITECTURE.md` §4.1**, produced by **reading the `pub`
+> items in `crates/pdfce-core/src/`**, not by reconstructing them from
+> this file. A `§12` entry records the sync as an audit-trail marker.
+>
+> **The entry's own suspicion was correct, and worse than stated.** §4 was
+> not merely three (then five) filings behind — **its opening bullet list
+> was a Pass-0 TARGET from 2026-07-23 that had never been re-labelled**,
+> and drifted from **every** shipped name: `ObjectId` → `ObjId`,
+> `Object::Bool` → `Boolean`, `StreamData` → *does not exist*,
+> `Document::open`/`save` → `load`/`from_bytes`/`save_full`. **A reader
+> treating §4's head as the API would not compile.** §4.1(A) tabulates it.
+>
+> **All five enumerated components filed, plus two the list did not have:**
+> (1) Pass 25.x vector surface → §4.1(E); (2) decision 026 ce-dimension
+> model → §4.1(H); (3) **BREAKING** `Subpath` + `tokens`/`starts_implicitly`
+> → §4.1(B); (4) **BREAKING** decision 027 `disclosures` + five changed
+> `EditSession` signatures + two removed variants → §4.1(C); (5) Pass 30.1
+> handles → §4.1(D); **(6) Pass 29.0 composite editability + the R-INV-4
+> narrowing → §4.1(F)**; **(7) `82228b1`'s `PageOverflow::past_right_pt`
+> → §4.1(G)**. **Nothing was deleted** — superseded claims carry inline
+> `[SUPERSEDED]` notes, so the acceptance criterion *"recorded as changes,
+> not silently overwritten"* is met.
+>
+> **★ THE RESIDUE, WHICH IS REAL WORK AND IS NOT DISCHARGED — §4.1(I)
+> names six unaudited edges deliberately.** In value order: **(i) §7 (CLI
+> capabilities) has NEVER been synced and is presumed to lag by the same
+> several Passes §4 did** — CLAUDE.md rule 11 means every feature Pass
+> since 21.0 added subcommands, and rule 10 puts the CLI's argument/output
+> surface under the same API-guidelines check. **It needs its own dispatch,
+> for the same reason this one did.** (ii) **`EditSession`'s other 57
+> `pub fn`s** — the crate exposes 63; this sync verified 7. **§4 has never
+> enumerated them and still does not.** (iii) an open API-guidelines
+> question: `CompositeEncoding`/`CompositeEncodeResult`/`NotInjective` are
+> `pub` but **not re-exported** from `text_edit` while their simple-font
+> siblings are — **oversight or deliberate staging could not be determined
+> from the source, and was not guessed**; owed to the engineer.
+>
+> **★ The generalizable finding, promoted out of the sync because it is
+> not about this file: a section written as a TARGET and never re-labelled
+> becomes indistinguishable from a section written as a RECORD.** The
+> dated `IMPLEMENTED (date, Pass, commit)` blocks below §4's bullets are
+> self-locating and did not rot; **the undated bullets above them rotted
+> for six weeks unnoticed.** **Date and label every contract statement, or
+> it will be read as current.** Not minted as a standing rule — it is a
+> documentation-discipline observation, and CLAUDE.md rule 6 plus the
+> global documentation-first directive already carry the obligation; **if
+> a future session wants it enforceable, it is R150's to claim.**
+
+**The original scheduling entry follows, unaltered.**
 
 **Filed 2026-08-05 by the librarian, deliberately as a scheduled item
 rather than as a same-dispatch fix.** The gap was flagged during the
@@ -8840,6 +9340,32 @@ removing a run leaves the following runs' positioning to be preserved,
 which is the Pass 8.0 advance-preserving-surgery problem, not the Pass
 25.2 operator-span problem.
 
+> **★ SCOPING NOTE APPENDED 2026-08-05 (continuation 87), from the
+> session-close handoff — this is the concrete substrate work, named so
+> whoever takes the Pass does not rediscover it.** **Pass 32.0 is the
+> SAME SHAPE as Pass 28.0's subpath work**, and it needs the same two
+> things:
+>
+> 1. **Per-run TOKEN SPANS on `TextObject`.** Today `TextObject` carries
+>    only **`runs: Vec<Bounds>`** — geometry for hit-testing — plus a
+>    **whole-`BT`…`ET` token range**. Neither addresses a single show
+>    operator's bytes, so *"delete this run"* is **not expressible against
+>    today's model**, exactly as `move_subpath` was not expressible before
+>    Pass 28.0 gave `Subpath` its span. **The span is the enabling
+>    change; the verb is downstream of it.**
+> 2. **A guard for runs whose position is INHERITED.** A run positioned by
+>    the **previous run's advance** rather than by an explicit `Tm`/`Td`
+>    has no coordinates of its own — deleting its predecessor moves it.
+>    **This is the exact analogue of `starts_implicitly` for subpaths**
+>    (Pass 30.0's reused-start case), and it is the reason the advance
+>    accounting above is a **refusal-or-materialize** decision rather
+>    than a bookkeeping detail. Decision 027's *refuse-what-has-no-good-
+>    reading / disclose-what-has-one* posture is the precedent to apply.
+>
+> **The operator-facing stake is unchanged and worth restating:** on his
+> own drawing **one text object holds all 237 pdf-dimension labels**, so
+> deleting *"a label"* today deletes **all of them**.
+
 ### ★ Pass 24.0–24.5 — Ribbon command surface + the end of the floating Accept/Reject box (decision 024, filed 2026-08-04, DECIDED — NOT STARTED)
 
 **Source:** `docs/decisions/024-ribbon-command-surface-and-the-accept-reject-problem.md`
@@ -8936,7 +9462,48 @@ side panels; the ribbon carries commands, the dock carries state you keep
 looking at, and R81 already draws that line); redaction apply's blocking
 confirmation stays (R98).
 
-### ★ Pass 26.0–26.2 — The unified level ladder (decision 025, filed 2026-08-04, DECIDED — NOT STARTED; SUPERSEDES the "Level-model reconciliation" FLAG below, which is RESOLVED)
+### ★ Pass 26.0–26.2 — The unified level ladder (decision 025, filed 2026-08-04; **26.0 SHIPPED `c62c4d0` and 26.1 SHIPPED `7c45bf8`, both 2026-08-05 — see their Shipped entries. 26.2 AND SEVEN OF DECISION 028's FOURTEEN PLAN ITEMS ARE STILL OWED**; SUPERSEDES the "Level-model reconciliation" FLAG below, which is RESOLVED)
+
+> **✅ STATUS AMENDMENT 2026-08-05 (continuation 87). Appended, not
+> rewritten.** The heading said **"NOT STARTED"** until this filing;
+> the ladder's **Node rung now exists**.
+>
+> | | State |
+> |---|---|
+> | **Pass 26.0** — the Node rung + **the REQUIRED gate** | **SHIPPED `c62c4d0`** |
+> | **Pass 26.1** — handles visible and grabbable in the GUI | **SHIPPED `7c45bf8`** |
+> | **Pass 26.2** — level survival across an edit | **UNBUILT** |
+> | decision 028 plan items **9, 10, 11, 12, 13, 14** + the conditional 15th | **UNBUILT** — see the annotated table below |
+>
+> **★ WHAT IS STILL OWED, in the operator's own words from the
+> session-close handoff** — the breadcrumb (item 12, *net new, nothing
+> exists today*), keyboard node navigation (items 10 + 11), the
+> **subpath-move canvas gesture** (item 9 — Pass 28.0's core verb still
+> has **no** gesture, a live R117 instance), the **clip-gate Tier 2
+> routing** (the conditional 15th, **BLOCKED on operator question
+> (av)**), and the **Obj-tool toolbar tooltip correction** (item 14).
+> **Item 13 (readout rows) and item 7 (absent-handle status-line
+> disclosure) were not reported either way** — treat both as **owed and
+> unverified**, not as done.
+>
+> **★ ALSO OWED — the Node-rung DEVIATION Pass 26.0 shipped with, tracked
+> here so it does not vanish with that filing.** Clicking **nothing** at
+> the Node rung **LEAVES** rather than **ascending to Object** as
+> decision 025's transition table specifies; the shipped behaviour
+> matches what the Subpath rung has always done, on the argument that two
+> rungs disagreeing about *clicking nothing* is worse than the deviation.
+> **It resolves when the `LevelPath` / `Rung` type of 025 §3.2 lands** —
+> that type gives *"Object rung"* its own **representable state** instead
+> of encoding it as `Some { subpath: None }`, which is the reason
+> "ascend to Object" has no clean destination today. **Whoever builds
+> `LevelPath` must re-decide this row deliberately**, not inherit it.
+>
+> **★ AND — the gate is verified BY CONSTRUCTION, not by a driven drag.**
+> The offscreen diag harness produces **no egui drag events**
+> (`drag_started=false` throughout), so the one gesture whose hazard
+> motivated decision 028's REQUIRED item is the one that could not be
+> exercised end to end. See the Pass 26.0 Shipped entry's verification
+> section and the egui RAG amendment.
 
 **Source:**
 `docs/decisions/025-the-subpath-rung-and-the-unified-level-ladder.md`
@@ -9088,24 +9655,28 @@ and 028 answers those. In answering them it found **three defects in
    operator is never told that double-clicking a point descends.
 
 **The ordered change list (14 items).** Item numbering is the
-specialist's order; the two annotations are ours.
+specialist's order; the two annotations are ours. **Delivery status
+annotated 2026-08-05 (continuation 87) from Passes 26.0 (`c62c4d0`) and
+26.1 (`7c45bf8`)** — the `✅`/`⬜`/`◐` markers in the Note column are
+that annotation, added in place rather than as a second table, because a
+plan and its delivery state read wrong when they are two documents.
 
 | # | Item | Note |
 |---|---|---|
-| **1** | **Gate the existing ungated node-drag gesture behind the Node rung** — `classify_drag` consults the rung; candidates are the **entered subpath's** anchors, not the whole object's list | **REQUIRED — head slice.** R111 (paint/select symmetry) at the node rung: what is drawn is what can be grabbed |
+| **1** | **Gate the existing ungated node-drag gesture behind the Node rung** — `classify_drag` consults the rung; candidates are the **entered subpath's** anchors, not the whole object's list | **✅ SHIPPED — Pass 26.0, `c62c4d0`.** **REQUIRED — head slice.** R111 (paint/select symmetry) at the node rung: what is drawn is what can be grabbed. The pick set is now the entered subpath's anchors **or nothing**; outside the Node rung a drag classifies as a **whole-object move**. **Verified by construction + unit test, NOT by a driven drag** — the diag harness emits no egui drag events |
 | **2** | Node-grab tolerance becomes a **screen** measure, converted at query time | **✅ ALREADY DONE — `075e8f8`.** `NODE_GRAB_SCREEN_TOLERANCE_PX`; `classify_drag` takes the tolerance as an argument so the pure classifier stays free of view state |
-| **3** | **Node marks** — hollow **6×6** unselected / filled **8×8** selected, in **SCREEN** space, `SUBPATH_OUTLINE_COLOR` + app accent | **Square vs. circle carries node-vs-handle without relying on colour — R84 satisfied by construction** |
-| **4** | **Ceiling 300 nodes per subpath**, with an explicit **"points not shown"** string | **Provisional under R86.** **Never silent truncation** — a silently truncated mark set is an affordance that lies about what is selectable |
-| **5** | **Handle marks** — hollow **5×5** / filled **7×7**, shown for **every node of the ENTERED subpath that has one**, not selected-node-only | **The non-obvious call:** handles are what let the operator decide **WHICH node to pick**; revealing them only after selection inverts the order of the decision |
-| **6** | **Dashed 1.0 px arm** tying each handle to its node, reusing `APPROXIMATE_OUTLINE_DASH` | Reuses that pattern's existing *"this is not a measured edge"* signal **rather than inventing a fourth visual language** |
-| **7** | A straight segment's **ABSENT** handle is disclosed **in the status line**, never as a ghost widget | R83. The core already refuses by name (`NoHandleHere`, Pass 30.1); the GUI says it in the same words |
-| **8** | **Hit priority: handle (5 px) → node (6 px) → subpath body → nothing** | **The SMALLER target first**, because a handle sits close to its node **exactly when the curve is nearly flat** — node-priority would make it unreachable precisely then. **Handle drag is Node-rung only** |
-| **9** | **Pass 28.0's subpath move gets its GUI gesture: a plain drag on the entered subpath's body** | Falls out of item 8's third rank for free. Closes a second R117 item |
-| **10** | **Tab / Shift+Tab** cycle nodes in **OBJECT-scoped** order | **R92.** So that what Tab lands on and what `node-move --node N` addresses **never disagree** — the subpath rung filters which anchors are shown, it does not renumber them (025 §1.3(b)) |
-| **11** | **Arrows nudge 1 pt; Shift+arrow 10 pt** | R122's family — the keyboard route to the same edit |
-| **12** | **Breadcrumb** — `Page › Path #5870 › Part #667 › Point #1,204`, each segment clickable to ascend | **Net new; nothing exists today.** ★ **Its growth after the first double-click is itself the confirmation that the gesture did something** — descent is otherwise a state change with no visible mark, which is the *"inside-with-nothing-selected looks identical to outside"* hazard 025 §3.5 named and promised the breadcrumb would discharge |
-| **13** | **Readout rows corrected** — Node row gains the **handle-presence clause** (defect 1); Subpath row gains the **descent disclosure** the Object row has (defect 3) | |
-| **14** | **Toolbar tooltip correction**, so the rung is **discoverable before trying anything** | Today the gesture's success is invisible until item 12 exists; discoverability cannot be left to experiment |
+| **3** | **Node marks** — hollow **6×6** unselected / filled **8×8** selected, in **SCREEN** space, `SUBPATH_OUTLINE_COLOR` + app accent | **✅ SHIPPED — Pass 26.0, `c62c4d0`.** 6 px / 8 px selected, **screen** space. **The mark size matching `NODE_GRAB_SCREEN_TOLERANCE_PX` is load-bearing, not cosmetic** — if mark and radius disagreed about where a point is, the operator would aim at a square and grab something else (R111). **Square vs. circle carries node-vs-handle without relying on colour — R84 satisfied by construction** |
+| **4** | **Ceiling 300 nodes per subpath**, with an explicit **"points not shown"** string | **✅ SHIPPED — Pass 26.0, `c62c4d0`.** `MAX_DRAWN_NODES = 300` per part, **provisional under R86**, with **the REAL count painted on the part**; new string `ui_text::subpath_node_view_off`. **Never a first-N**: *300 of 1,200 looks exactly like a part that HAS 300, and nothing on screen would correct that* — a silently truncated mark set is an affordance that lies about what is selectable |
+| **5** | **Handle marks** — hollow **5×5** / filled **7×7**, shown for **every node of the ENTERED subpath that has one**, not selected-node-only | **✅ SHIPPED — Pass 26.1, `7c45bf8`.** **Circles** (nodes are squares), drawn **UNDER** the node marks — on a flat curve the two nearly coincide and the **node** is the one that must stay legible. Shown for **every** node of the entered part that has one, as specified. Exact mark sizes were not relayed; not claimed. **The non-obvious call held:** handles are what let the operator decide **WHICH node to pick**; revealing them only after selection inverts the order of the decision |
+| **6** | **Dashed 1.0 px arm** tying each handle to its node, reusing `APPROXIMATE_OUTLINE_DASH` | **✅ SHIPPED — Pass 26.1, `7c45bf8`.** Reuses that pattern's existing *"this is not a measured edge"* signal **rather than inventing a fourth visual language** |
+| **7** | A straight segment's **ABSENT** handle is disclosed **in the status line**, never as a ghost widget | **⬜ NOT REPORTED EITHER WAY — treat as OWED and UNVERIFIED.** R83. The core already refuses by name (`NoHandleHere`, Pass 30.1); the GUI says it in the same words |
+| **8** | **Hit priority: handle (5 px) → node (6 px) → subpath body → nothing** | **◐ PARTLY SHIPPED — Pass 26.1, `7c45bf8`, delivered the first two ranks**: `HANDLE_GRAB_SCREEN_TOLERANCE_PX = 5.0` before the node's `6.0`. **The SUBPATH-BODY rank is NOT shipped and rides with item 9.** **The SMALLER target first**, because a handle sits close to its node **exactly when the curve is nearly flat** — node-priority would make it unreachable precisely then. ★ **The asymmetry's cost function, from the build:** *losing a handle grab costs one retry; stealing a node grab moves a point of the drawing.* **Handle drag is Node-rung only** |
+| **9** | **Pass 28.0's subpath move gets its GUI gesture: a plain drag on the entered subpath's body** | **⬜ OWED.** Falls out of item 8's third rank for free. **Still a live R117 instance** — Pass 28.0's `move_subpath` has shipped core + CLI since `d8b9735` with **no** gesture. Closes a second R117 item |
+| **10** | **Tab / Shift+Tab** cycle nodes in **OBJECT-scoped** order | **⬜ OWED.** **R92.** So that what Tab lands on and what `node-move --node N` addresses **never disagree** — the subpath rung filters which anchors are shown, it does not renumber them (025 §1.3(b)). **Pass 26.0 already made `EnteredObject::node` object-scoped**, so the numbering half of this item is done and only the key handling remains |
+| **11** | **Arrows nudge 1 pt; Shift+arrow 10 pt** | **⬜ OWED.** R122's family — the keyboard route to the same edit |
+| **12** | **Breadcrumb** — `Page › Path #5870 › Part #667 › Point #1,204`, each segment clickable to ascend | **⬜ OWED — net new; nothing exists today.** ★ **Its growth after the first double-click is itself the confirmation that the gesture did something** — descent is otherwise a state change with no visible mark, which is the *"inside-with-nothing-selected looks identical to outside"* hazard 025 §3.5 named and promised the breadcrumb would discharge. **Now more owed than when written**: two rungs of descent ship, and neither announces itself except through the readout |
+| **13** | **Readout rows corrected** — Node row gains the **handle-presence clause** (defect 1); Subpath row gains the **descent disclosure** the Object row has (defect 3) | **⬜ NOT REPORTED EITHER WAY — treat as OWED and UNVERIFIED.** Defect 1's clause is an **R83** obligation now that Pass 26.1 has shipped visible handles: it is the only way an operator learns handles are there |
+| **14** | **Toolbar tooltip correction**, so the rung is **discoverable before trying anything** | **⬜ OWED.** Today the gesture's success is invisible until item 12 exists; discoverability cannot be left to experiment |
 
 **Conditional 15th item, gated on Ken's answer to (av)** — the
 clip-gate mechanism, §5.4 of the record: route clip-gated drags to the
@@ -15887,6 +16458,26 @@ decision 025, (aq)–(au) from decision 026:**
   rule says *never silently drops content*, check it holds on **every**
   axis, direction and boundary the operation can cross — a half-covered
   invariant reads as covered at every call site.
+  **[AMENDED 2026-08-05, continuation 88 — the corollary now has a
+  SHIPPED instance, and a second lesson came out of closing it.**
+  `82228b1` added `PageOverflow::past_right_pt` and disclosed the
+  horizontal axis, so *"the cropbox right edge is never compared"* is
+  **no longer true of the code**; it stays in the text above because it
+  is the **diagnosis**, and the diagnosis is the reusable part. **The
+  new lesson: widening what an `Option` MEANS silently invalidates every
+  reader that had narrowed it by convention.** `Option<PageOverflow>`
+  carried an undocumented invariant — *present ⇒ the BOTTOM overflowed* —
+  that lived **in the callers, not in the type**. Making it `Some` for a
+  right-only case produced *"grows the block 0.0pt past the page
+  bottom"*, false in its letter, **while the true disclosure was
+  swallowed** by a downstream filter keyed on the **prose** of the note
+  (`contains("not applied")`). **A coupling expressed as string content
+  is invisible to every signature and every type check.** So: when a
+  sum/option type's inhabited case gains a new cause, **audit each
+  reader for the narrower meaning it had assumed**, and **guard each
+  cause independently** rather than at the `Some`. **This fix does NOT
+  close Pass 33.0** — it implements option (c) only; the inference is
+  still wrong, only no longer silent.**]**
   **★ Second corollary — this rule is NOT an argument for making the
   inference automatic.** The seam exists because reflow is deliberately an
   **explicit** operator action (**R75**, decision 015 §3.3), and closing
@@ -15913,6 +16504,79 @@ decision 025, (aq)–(au) from decision 026:**
   free**. This filing mints Pass **33.0**, so **family 34 is now the next
   free family**. Re-run `tools/check-ledger-numbers.py` after this commit
   — the rule ceiling and the Pass-family ceiling both moved.
+  **[SUPERSEDED IN ONE PARTICULAR, 2026-08-05, continuation 87: decision
+  **029** was subsequently minted for the crate-partitioned-sessions
+  question. A Pass 33.0 fix record, if one is written, takes **030**.
+  Nothing else in this entry changes.]**
+
+- **R149 — A manipulator that is not a LOCATION on the drawing must not
+  be snapped to the drawing (2026-08-05, continuation 87;
+  librarian-assigned; UX/correctness rule, promoted from Pass 26.1's
+  handle-drag design).** pdfce snaps a drag when the thing being dragged
+  is **a point OF the document** — an anchor, a dimension witness point,
+  a placed object's origin. Snapping is *help* there: the operator is
+  trying to land on geometry, and the engine says which geometry. **A
+  manipulator that has no counterpart in the rendered picture is a
+  different kind of object and gets the opposite treatment.** A Bézier
+  **control point is a shaping lever, not a location**: it is off-curve,
+  nothing in the drawing is *at* it, and no other geometry is *meant* to
+  coincide with it. Snapping it would **tie the curve's SHAPE to a
+  coordinate the operator never aimed at** — a value pdfce chose,
+  delivered as though the operator chose it, which is CLAUDE.md **rule
+  4**'s failure mode (an inference becoming document state without ever
+  being disclosed as an inference) arriving through a gesture rather
+  than through a dialog.
+  *Instance (Pass 26.1, `7c45bf8`):* a **node** drag is snapped; a
+  **handle** drag is **not** — same tool, same rung, marks feet apart on
+  screen. **The inconsistency IS the rule, not an oversight**, and it is
+  recorded here so a later reader does not "finish the job" by snapping
+  handles too.
+  **The test to apply to any new manipulator:** *is there something in
+  the rendered document AT this point that another object could
+  meaningfully coincide with?* If yes, snap. **If the manipulator only
+  parameterises something else — a control point, a gradient stop, a
+  rotation pivot, a leader elbow, a clip-frame corner handle, a
+  perspective vanishing point — do not snap it.**
+  **★ Corollary — the asymmetry must be VISIBLE, or it reads as a bug.**
+  Where a snapped and an unsnapped manipulator coexist in one tool, the
+  snap indicator's **absence** is the only signal the operator gets that
+  the rules changed. That is **R83**'s territory: if an operator can be
+  surprised by which manipulator snapped, the surprise is the design's
+  problem, not theirs. Pass 26.1 already distinguishes the two by shape
+  (**circles vs. squares**, **R84**), which is the cheapest available
+  carrier for the distinction.
+  Cross-references CLAUDE.md **rule 4** (fuzzy, never sneaky — as
+  narrowed by decision 024 §4.4), **R148** (name the provenance of any
+  value pdfce derived rather than received), **R84** and **R83**.
+
+  **Ceiling is now R149** (was R148 at continuation 86's filing; R147 at
+  85's). **R149 is librarian-originated from continuation 87's
+  session-close handoff**, promoted from a Pass 26.1 design choice at the
+  engineer's explicit suggestion, on the judgement that it is
+  **predictive** — it decides the question for manipulators that do not
+  exist yet, which is what separates a rule from Pass rationale.
+  **This filing also mints decision record `029`** — the
+  crate-partitioned-sessions question; see
+  `docs/decisions/029-single-session-vs-crate-partitioned-sessions.md`
+  and `ARCHITECTURE.md` §12 — **so `030` is now the next free decision
+  number**. **No new Pass ID and no new operator question were minted**:
+  Passes 26.0 and 26.1 were already claimed by decision 025, so the Pass
+  ceiling stays **33.0** (family **34** next free) and the question
+  ceiling stays **(av)**.
+  **`tools/check-ledger-numbers.py --stats` WAS run at write time, AFTER
+  these edits, and reported `clean`** —
+  `standing rules: R149 -> next free is R150`,
+  `decision records: 029 -> next free is 030`,
+  `Pass families MENTIONED: up to 33`, with `31` and `33` listed under
+  *claimed but not yet headed*. Parse stats: **82** distinct
+  (section, Pass ID) pairs, **149** rules, **29** decision files. **The
+  numbers minted here are therefore verified unique, not merely read off
+  a recorded ceiling.** *(Disclosure, because this librarian's hard rule
+  8 says disk state is not its to assert: the checker is a **pure
+  Markdown parse of `docs/`** — it observes no git, backup or
+  working-tree state. It was runnable in this filing's harness; that does
+  not extend to anything hard rule 8 covers, and no claim about the
+  repository is made here.)*
 
 ## Update protocol
 

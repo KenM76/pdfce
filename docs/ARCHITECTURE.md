@@ -390,6 +390,561 @@ locatable and correctly refused (R-INV-4), not yet rewritable. Do not
 read this §4 entry as FF-C being complete; see `ROADMAP.md`'s Pass
 21.1 In-progress entry.
 
+> **[SUPERSEDED 2026-08-05 by §4.1(F) below — read the two together.**
+> `ShowSlot::code` has been **`u32` since Pass 21.1**, and **Pass 29.0
+> (`a104536`) lifted the blanket composite refusal entirely**. The
+> paragraph above is retained because it states *why* the narrowing
+> existed, and because §4.1(F) records that the reason had become
+> **self-justifying** — the refusal was cited as the ground for keeping
+> the types single-byte, and the single-byte types were cited as the
+> ground for keeping the refusal. **R-INV-4 still exists and still
+> fires**, but only on the two font properties no amount of pdfce work
+> can fix. **]**
+
+---
+
+## 4.1 §4 SYNC — the ACTUAL `pdfce-core` surface, read from the crate on 2026-08-05
+
+**Why this subsection exists, and what it supersedes.** Everything above
+in §4 is a chain of dated *target* and *IMPLEMENTED* blocks, last extended
+at **Pass 21.0 (2026-08-03)**. Between then and 2026-08-05 the crate
+shipped Passes **25.0–25.6, 26.0–26.1, 27.0–27.2, 28.0, 29.0, 30.0,
+30.1**, decisions **026** and **027**, and the fix `82228b1` — and **two
+of those changed contracts §4 had already documented**, so §4 was not
+merely incomplete, it was **wrong as written** for anyone reading it as
+the current API.
+
+**This subsection was produced by reading the `pub` items in
+`crates/pdfce-core/src/`, not by reconstructing them from `ROADMAP.md`.**
+That distinction is the method, and it is deliberate: **the roadmap
+records intent; the crate records truth**, and where they disagree the
+crate wins. Where a statement below could not be verified in the source
+it is marked **UNVERIFIED** rather than asserted or quietly dropped.
+
+**How to read the two halves of §4.** Everything above §4.1 is the
+**audit trail** — what was targeted, when, and why. §4.1 is the **living
+truth**. When they conflict, §4.1 governs, and every conflict this sync
+found is named below rather than papered over.
+
+---
+
+### (A) ★★ BREAKING — the ORIGINAL §4 bullet list is a Pass-0 TARGET, and the shipped names differ
+
+The bullets near the head of §4 (`ObjectId`, `Object::Bool`, `StreamData`,
+`Document::open`, `Document::save`) were written on **2026-07-23 as a
+north star before any of it existed**. They were never renamed as the code
+landed. **A reader treating them as the API will not compile.** The
+correspondence, verified in `object.rs` / `document.rs`:
+
+| §4 target bullet (2026-07-23) | What actually ships (2026-08-05) | Where |
+|---|---|---|
+| `ObjectId(u32, u16)` — tuple struct | **`ObjId { num: u32, generation: u16 }`** — named fields | `object.rs:62` |
+| `Object::Bool` | **`Object::Boolean(bool)`** | `object.rs:260` |
+| `Object::String(Str)` | **`Object::String(Vec<u8>)`** — raw bytes, escapes/hex already applied; §7.9.2 text interpretation is a later layer | `object.rs` |
+| `Object::Dict(Dictionary)` | **`Object::Dict(Dict)`** | `object.rs` |
+| `Object::Stream(Dictionary, StreamData)` — two fields | **`Object::Stream(Stream)`** — one aggregate | `object.rs` |
+| `Object::Reference(ObjectId)` | **`Object::Reference(ObjId)`** | `object.rs` |
+| **`StreamData`** — the named lazy-decode type | **does not exist under that name.** The lazy/cached decode contract it described is real and honoured; it is not carried by a type called `StreamData` | — |
+| `Document::open(path)` | **`Document::load(&Path) -> Result<Self, DocError>`** and **`Document::from_bytes(Vec<u8>) -> Result<Self, DocError>`** | `document.rs:251`, `:261` |
+| `Document::save(path)` — full rewrite | **`Document::save_full(..)`** | `document.rs:770` |
+| `Document::save_incremental(path)` | **`Document::save_incremental(..)`** — name survives; **still the default save mode**, per §5 | `document.rs:739` |
+| `PdfError` | **`DocError`** on the document surface. **UNVERIFIED whether `PdfError` still exists elsewhere as the Pass-0 header-probe error** — not re-derived in this sync, and not asserted either way | — |
+
+**The `Page` bullet is substantially right and its shape is confirmed:**
+`page_tree::Page` carries `id: ObjId` plus resolved inherited attributes
+(§7.7.3.4). **Not field-by-field audited in this sync** — flagged as
+partially verified rather than claimed complete.
+
+> **★ The lesson worth keeping, because it is the general case, not this
+> file's accident: a section written as a TARGET and never re-labelled
+> becomes indistinguishable from a section written as a RECORD.** Both
+> read as statements of fact to someone who arrives after the fact. The
+> five *IMPLEMENTED (date, Pass, commit)* blocks that follow the bullets
+> are dated and therefore self-locating; the **bullets are not**, which
+> is exactly why they drifted for six weeks without anyone noticing. Date
+> and label every contract statement, or it will be read as current.
+
+---
+
+### (B) ★★ BREAKING — `Subpath` gained two fields (Pass 28.0, `d8b9735`)
+
+**This is a data-model change, so §4's prior description of `Subpath` is
+wrong, not merely short.** Verified in `vector/decompose.rs:224`:
+
+```rust
+pub struct Subpath {
+    pub start: Point,
+    pub segments: Vec<Segment>,
+    pub closed: bool,
+    pub tokens: TokenRange,          // NEW — Pass 28.0
+    pub starts_implicitly: bool,     // NEW — Pass 28.0
+}
+```
+
+- **`tokens: TokenRange`** — the content-token range of the operators
+  that construct this subpath: its opening `m`/`re` through its last
+  segment, including a closing `h`. `TokenRange { start: usize, end:
+  usize }` with `as_range() -> std::ops::Range<usize>`
+  (`decompose.rs:323`).
+
+  **Why it is the load-bearing addition.** Without it, per-subpath
+  **editing is not expressible**: an editor had to re-walk the operator
+  bytes and *hope* its walk agreed with the decomposer's about how many
+  subpaths there are. `plan_delete_subpath` shipped exactly that, with a
+  count guard (`SubpathStructureMismatch`) that refused the **whole
+  object** whenever the two walks disagreed. Recording the range on the
+  walk that already knows it makes the agreement **structural instead of
+  checked** — the same shape as R92 (two derivations of one fact are two
+  definitions of it).
+
+- **`starts_implicitly: bool`** — true when the subpath was opened by a
+  segment operator **after `h`**, which reopens at the closed subpath's
+  start point (ISO 32000-1 §8.5.2.1) **with no operator of its own saying
+  where**.
+
+  **Why it must be RECORDED rather than inferred at edit time.** Such a
+  subpath's start is **inherited and carried by no operand**, with two
+  consequences that are otherwise silent: (1) it **cannot be moved** —
+  there is no coordinate pair to rewrite; (2) **the subpath BEFORE it
+  cannot be deleted** — excising those operators changes the current point
+  the implicit one starts from, so *a byte-minimal edit that passes every
+  round-trip check still moves a line the operator never touched*. That
+  second case is the `DeleteWouldMoveNextSubpath` refusal.
+
+**Migration note for a reader of an older checkout:** a `Subpath` struct
+literal written before Pass 28.0 will not compile. **UNVERIFIED whether
+`Subpath` is `#[non_exhaustive]`** — not checked in this sync; assume it
+is not and treat the addition as breaking.
+
+---
+
+### (C) ★★ BREAKING — decision 027: `PlannedEdit::disclosures`, five changed `EditSession` signatures, two REMOVED error variants
+
+**Three separate breaking changes, all from decision 027, all verified.**
+
+**(C.1) `vector::PlannedEdit` gained `disclosures: Vec<String>`**
+(`vector/edit.rs:249`). Full struct as shipped:
+
+```rust
+pub struct PlannedEdit {
+    pub content: Vec<u8>,          // rewritten decoded content-stream bytes
+    pub operators_touched: usize,
+    pub disclosures: Vec<String>,  // NEW — decision 027
+}
+```
+
+`disclosures` is *"what the operator must be told about **HOW** the edit
+was expressed"*, in operator-facing prose, **empty in the common case**.
+It is populated when the surgery had to change **the FORM of an operator**
+to express what was asked, because **some shapes in PDF cannot say what
+the operator just asked for**. The canonical case: dragging one corner of
+an `re` rectangle. `re` carries an origin **and a size**, so a
+four-sided shape that is not a box **has no `re` spelling at all**
+(§8.5.2.1) and the operator must be expanded to four lines. The **drawing
+is unchanged** — but the bytes are **not recoverable by dragging back**,
+and an operator who cares about minimal diffs (**R46**) is owed that fact
+rather than left to find it in a diff.
+
+> **This is CLAUDE.md rule 4 applied to REPRESENTATION rather than to
+> value.** pdfce may reshape *how* a thing is written in order to do what
+> was asked — and says so when it does. Nothing about the rendered page
+> changed; something about the file's recoverability did, and that is
+> exactly the class of fact rule 4 exists to surface.
+
+**(C.2) The five `EditSession` vector methods changed return type** —
+from `Result<(), EditError>` to **`Result<Vec<String>, EditError>`**,
+propagating (C.1)'s disclosures to the caller. Verified in `edit.rs`:
+
+| Method | Line | Signature as shipped |
+|---|---|---|
+| `move_object` | `2170` | `(&mut self, page_index: usize, object_index: usize, dx: f64, dy: f64) -> Result<Vec<String>, EditError>` |
+| `delete_object` | `2220` | `(&mut self, page_index: usize, object_index: usize) -> Result<Vec<String>, EditError>` |
+| `delete_subpath` | `2290` | `(&mut self, page_index: usize, object_index: usize, subpath_index: usize) -> Result<Vec<String>, EditError>` |
+| `move_subpath` | `2342` | `(&mut self, page_index: usize, object_index: usize, subpath_index: usize, dx: f64, dy: f64) -> Result<Vec<String>, EditError>` |
+| `move_node` | `2406` | `(&mut self, page_index: usize, object_index: usize, node_index: usize, to: vector::Point) -> Result<Vec<String>, EditError>` |
+
+All five route through one private `vector_surgery(CommandKind, page_index, ..)`
+helper, which is why the change landed as one edit across five methods
+rather than five independent ones.
+
+**A `let _ = session.move_object(..)?;` written before decision 027 still
+compiles and silently discards the disclosures.** That is the migration
+hazard worth naming: **the breakage is not uniformly a compile error**.
+Call sites that bound the result (`let () = ...`) break loudly; call sites
+that ignored it break **silently and lose a rule-4 disclosure**.
+
+**(C.3) TWO `VectorEditError` variants were REMOVED** —
+`VectorEditError::RectangleNode` and `VectorEditError::ImplicitNode`.
+Verified **absent** from `vector/edit.rs:120`'s enum as of this read.
+Decision 027's pattern is **materialize rather than refuse**: instead of
+refusing to move an `re` corner or an implicitly-started subpath's anchor,
+the planner now **materializes the missing operand** (expanding `re` to
+four lines; writing an explicit `m`) and **discloses** it via (C.1).
+
+> **★ The removal had a consequence in a crate this section does not
+> cover, and it is recorded here because §4 is where a reader will look
+> for the blast radius.** R144 fired a second time on exactly this: **the
+> refusals were incidentally GATING a `pdfce-gui` drag gesture** that ran
+> over the whole object's flat anchor list with no rung state. Removing
+> them turned a drag that was *refused on release* into a drag that
+> *succeeds and edits the drawing*. **The protection a refusal provides is
+> felt where it is INVOKED, and core-side reasoning cannot see it**
+> (**R147**). Closed in Pass 26.0 (`c62c4d0`). See `ROADMAP.md`'s ⚠ block
+> at the head of *Shipped*.
+
+**The current `VectorEditError` variant set, verified in full**
+(`vector/edit.rs:120`, `thiserror`, one variant per refusable condition):
+`ObjectOutOfRange { index, count }`, `NotAPath { .. }`, `DegenerateCtm`,
+`MalformedOperand`, `DeleteWouldMoveNextSubpath { .. }`,
+`SubpathOutOfRange { index, count }`, `ClippingPath`,
+`SubpathStructureMismatch { .. }`, `NoHandleHere { .. }`,
+`NodeOutOfRange { index, count }`.
+
+---
+
+### (D) Pass 30.1 / 26.1 — Bézier handles: `plan_move_handle`, `Handle`, `NoHandleHere`, `EditSession::move_handle`
+
+**Additive; nothing previously documented changed.**
+
+- **`vector::Handle`** (`vector/edit.rs:1011`) — a two-variant, `Copy`,
+  `Hash` enum: **`Incoming`** (the control point governing the curve as it
+  **ARRIVES** at the node — the *second* control point of the segment that
+  ends there) and **`Outgoing`** (the curve as it **LEAVES** — the *first*
+  control point of the segment that starts there).
+
+  > **★ Named for DIRECTION OF TRAVEL, not "first/second", and the
+  > reasoning is an API-design argument worth preserving:** first-and-second
+  > are properties of an **operator**, and an operator says nothing about
+  > which node a front end has selected. A caller holding a node index
+  > needs to name a handle *relative to that node*; `First`/`Second` would
+  > have forced every caller to re-derive which operator the node sits in.
+  >
+  > **The corollary that bit in `pdfce-gui` (Pass 26.1): a cubic's two
+  > control points belong to DIFFERENT nodes.** Segment *k* runs anchor *k*
+  > → anchor *k+1*, so `c1` is anchor **k**'s *outgoing* handle and `c2`
+  > is anchor **k+1**'s *incoming* handle. **Assigning both to one node is
+  > the plausible-looking wrong answer** — it draws two handles in roughly
+  > the right place and then makes every handle drag deform the *far* end
+  > of the curve, with no artefact, no error and no refusal to signal it.
+
+- **`vector::plan_move_handle(content, obj, node_index, handle, to_page)
+  -> Result<PlannedEdit, VectorEditError>`** (`vector/edit.rs:1076`) —
+  moves one control point, **leaving the on-curve node exactly where it
+  is**. This is the operation that changes a curve's **SHAPE**; without it
+  `plan_move_node` could only move the points a curve passes *through*, so
+  **curvature was not editable at all**.
+
+  **The `v`/`y` promotion, which is the spec-governed part.** ISO 32000-1
+  §8.5.2.1 Table 59 gives cubic segments three spellings, two of which
+  **omit a control point by making it equal to a point they already
+  have**. So the handle the operator grabs on a `v` or `y` **has no
+  operand of its own to overwrite**, and the operator must be **promoted
+  to `c`** before it can be moved. Same root cause and same remedy as Pass
+  30.0's (C.3) materialization.
+
+- **`VectorEditError::NoHandleHere { .. }`** — the refusal for a node
+  whose requested side has no curve at all (a line endpoint has no
+  handles).
+
+- **`EditSession::move_handle(&mut self, page_index, object_index,
+  node_index, handle: vector::Handle, to: vector::Point) ->
+  Result<Vec<String>, EditError>`** (`edit.rs:2463`) — **the sixth member
+  of (C.2)'s family**, `Vec<String>`-returning from birth rather than
+  migrated, routing through the same `vector_surgery` helper with
+  `CommandKind::MoveHandle`.
+
+**Also verified present, and previously undocumented in §4:**
+`vector::anchor_count(content, obj) -> usize` (`edit.rs:1232`) — the
+flattened per-object anchor total that the GUI's object-scoped node
+numbering is defined against.
+
+---
+
+### (E) Pass 25.x — the subpath-level vector surface (`hit_test_subpaths`, `subpath_bounds`, `plan_delete_subpath`, `plan_move_subpath`)
+
+**Additive.** Verified in `vector/hit.rs` and `vector/edit.rs`:
+
+| Item | Signature | Notes |
+|---|---|---|
+| `hit_test_subpaths` | `(model: &PageObjects, object_index: usize, point: Point, tolerance: f64) -> Vec<usize>` | `hit.rs:277`. Returns **every** matching subpath index, not just the front one — the plural query, per the R92/`hit_test_point` head-of-plural invariant already recorded in §4's Pass 18.5 block |
+| `subpath_bounds` | `(model: &PageObjects, object_index: usize, subpath: usize) -> Option<Bounds>` | `hit.rs:329`. `None` for a non-path object or an out-of-range index; a subpath whose every vertex is non-finite yields the `EMPTY` seed rather than a garbage box |
+| `plan_delete_subpath` | `(content, obj: &PathObject, subpath_index: usize) -> Result<PlannedEdit, VectorEditError>` | `edit.rs:473`. **Three refusals that ARE the design:** `ClippingPath` (checked first — deleting part of a clip changes what is painted *elsewhere*), `SubpathOutOfRange`, `SubpathStructureMismatch` |
+| `plan_move_subpath` | `(content, obj: &PathObject, subpath_index: usize, dx: f64, dy: f64) -> Result<PlannedEdit, VectorEditError>` | `edit.rs:687`. Pass 28.0; expressible **only because** (B)'s `tokens` range exists |
+
+**Full current `vector` re-export surface** (`vector/mod.rs:61-83`), given
+in full because the module's public face is what a §4 reader is looking
+for and it is now much wider than any prior block described:
+
+- from **`centerline`**: `CENTERLINE_ASPECT_THRESHOLD`,
+  `CenterlineCandidate`, `derive_from_path`, `page_candidates`
+- from **`decompose`**: `DecomposeDiagnostics`, `DocumentFonts`,
+  `DocumentXObjects`, `FillRule`, `FontResolver`, `ImageObject`,
+  `ImageSource`, `MAX_FONT_NAME_BYTES`, `MAX_NODES`, `MAX_OBJECTS`,
+  `MAX_TEXT_PREVIEW_CHARS`, `NoFonts`, `NoXObjects`, `PageObjects`,
+  `PaintStyle`, `PathObject`, `Segment`, `Subpath`, `TextBoundsBasis`,
+  `TextFont`, `TextObject`, `TextPreview`, `TokenRange`, `VectorObject`,
+  `XObjectResolver`, `XObjectShape`, `decompose`, `decompose_page`,
+  `decompose_with_fonts`
+- from **`edit`**: `Handle`, `PlannedEdit`, `VectorEditError`,
+  `anchor_count`, `plan_delete`, `plan_delete_subpath`, `plan_move`,
+  `plan_move_handle`, `plan_move_node`, `plan_move_subpath`
+- from **`geometry`**: `Bounds`, `Matrix`, `Point`, `Rgb`,
+  `cubic_from_v`, `cubic_from_y`, `rect_corners`
+- from **`hit`**: `FLATTEN_STEPS`, `MarqueeMode`, `hit_test_point`,
+  `hit_test_point_all`, `hit_test_rect`, `hit_test_subpaths`,
+  `subpath_bounds`
+- from **`snap`**: `AxisConstraint`, `MAX_CANDIDATES`,
+  `MAX_NEIGHBOURHOOD_SEGMENTS`, `SNAP_FLATTEN_STEPS`, `SnapCandidate`,
+  `SnapConfig`, `SnapKind`, `constrained_second_point`,
+  `measured_length`, `snap_candidates`
+
+---
+
+### (F) Pass 29.0 — composite (`/Type0` / CIDFont) text is EDITABLE; R-INV-4 narrowed to two font properties
+
+**This supersedes the Pass 21.0 block's closing paragraph** (see the
+inline `[SUPERSEDED]` note there).
+
+- **`ShowSlot::code` is `u32`, not `u8`** — since **Pass 21.1**
+  (`text_edit/edit.rs:498`). It is `pub(crate)`, so this is an **internal**
+  correction to a claim §4 made, not a change to the public surface. A
+  simple font's code **is** one byte and always will be (§9.4.3); the
+  width is carried **per slot** as `width: u8` (1 for simple, 2 for
+  `Identity-H`) because *a code's value does not tell you how many bytes
+  it occupied*, and every byte-range calculation needs that (**R92** —
+  deriving it twice would drift).
+
+- **`text_edit::encoding::CompositeEncoding`** — the multi-byte sibling of
+  `InverseEncoding`. Where that one inverts a simple font's
+  code→glyph-name table, this inverts a **`/ToUnicode` CMap**, and only
+  where doing so is **sound**. Public API: `build(base_font: &str, cmap:
+  &ToUnicodeCMap) -> Result<Self, NotInjective>`, `encode_str(&self,
+  target: &str) -> Result<CompositeEncodeResult, Refusal>`,
+  `covers(&self, ch: char) -> bool`.
+
+  **`CompositeEncodeResult { pub cids: Vec<u16> }`** with
+  **`to_bytes(&self) -> Vec<u8>`** — big-endian per §9.7.6.2, because
+  `Identity-H` codes are two bytes most-significant-first. *"Producing the
+  bytes here rather than at the splice keeps the byte order in one place —
+  the failure mode for getting it wrong is not a crash but a page of
+  plausible, entirely different glyphs."*
+
+  > **★ API-GUIDELINES OBSERVATION, flagged not fixed (CLAUDE.md rule 10).**
+  > `CompositeEncoding`, `CompositeEncodeResult` and `NotInjective` are
+  > `pub` in their modules but are **NOT in `text_edit/mod.rs`'s
+  > `pub use encoding::{...}` list**, which re-exports only
+  > `CharEncoding`, `EncodeResult`, `InverseEncoding`, `RInvTrigger`,
+  > `Refusal`. So a caller reaches them at
+  > `pdfce_core::text_edit::encoding::CompositeEncoding` while their
+  > simple-font siblings are available at `pdfce_core::text_edit::`. **The
+  > asymmetry is real and is either an oversight or a deliberate
+  > staging — this sync could not determine which, and does not guess.**
+  > Owed: an engineer decision to re-export or to document the omission.
+  > (`NotInjective` additionally lives in `text_extract::cmap`, so a
+  > `text_edit` re-export would also be a cross-module lift.)
+
+- **`RInvTrigger::Composite` (R-INV-4) now fires ONLY on two font
+  properties** (`text_edit/edit.rs:1810`), where it previously refused
+  **every** composite run:
+  1. **`/ToUnicode` absent** — nothing in the file says which code
+     produces a given character;
+  2. **`/ToUnicode` non-injective** — a ligature destination or a
+     collision, so the inverse **is not a function**.
+
+  **Both are properties of the FONT, and no amount of pdfce work fixes
+  them** — the information is not in the file. That is R110's distinction,
+  now load-bearing rather than descriptive.
+
+  > **★ The finding worth carrying, because it is a REVIEW HEURISTIC, not
+  > a fact about fonts.** The old blanket refusal was justified on the
+  > grounds that *"the re-encoding path is single-byte end to end."*
+  > Surveyed again before starting, that was **substantially untrue**, and
+  > the parts that were true **were already built**: `ExtractFont::width`
+  > already read `Widths::Composite` (`/W`, `/DW`, §9.7.4.3);
+  > `emit_literal_string` already escaped arbitrary bytes as three-digit
+  > octal, so a two-byte code needs no hex-string emitter (§7.3.4.2);
+  > `CompositeEncoding` was already written and tested **and nothing
+  > called it**; `ShowSlot` already carried `code: u32` + `width`.
+  >
+  > **The refusal had become SELF-JUSTIFYING**: it was cited as the reason
+  > those types could stay single-byte, and their being single-byte was
+  > cited as the reason the refusal had to stay. **When a limitation's
+  > stated cause is a second limitation, check whether either is still
+  > true independently** (**R143**).
+
+- **Full current `text_edit` re-export surface** (`text_edit/mod.rs:72-99`),
+  previously not enumerated in §4 at all: `addtext::{AddTextError,
+  AddTextOutcome, AddTextReport, AddTextRequest, AddTextWrapPreview,
+  FontProvenance, NewTextColor, WrapPreviewLine, add_text, preview_wrap}`;
+  `edit::{EditError, EditGlyphSource, EditOptions, EditOutcome,
+  EditReport, EditRequest, FollowerDisposition, edit_text}`;
+  `encoding::{CharEncoding, EncodeResult, InverseEncoding, RInvTrigger,
+  Refusal}`; `format::{FillModel, FontSelector, FormatError,
+  FormatOptions, FormatOutcome, FormatReport, FormatRequest, MetricSpec,
+  NewFill, SUBSCRIPT, SUPERSCRIPT, ScriptMetrics, ScriptPosition,
+  StyleOutcome, StyleResolution, set_format}`; `model::{Block,
+  BlockDiagnostics, BlockKind, BlockRecognitionOptions, EditableTextModel,
+  GlyphRef, Line, TextPosition}`; `reflow::{AlignmentSource,
+  BlockAlignment, DetectedAlignment, PageOverflow, ReflowDiagnostics,
+  ReflowEngine, ReflowError, ReflowLine, ReflowPreview, ReflowRequest,
+  reflow_recognition_options}`; `reflow_apply::{ReflowApplyError,
+  ReflowApplyReport, ReflowOutcome, apply_reflow}`;
+  `synth::{BOLD_STROKE_RATIO, OBLIQUE_TAN, StyleSynthesis, SynthesisOffer,
+  SynthesisPath, bold_stroke_width, detect as detect_style_synthesis}`.
+
+---
+
+### (G) `82228b1` — `text_edit::reflow::PageOverflow::past_right_pt`
+
+**Additive and non-breaking: `PageOverflow` is `#[non_exhaustive]`**, so
+no downstream struct literal existed to break. Current shape
+(`text_edit/reflow.rs:303`):
+
+```rust
+#[non_exhaustive]
+pub struct PageOverflow {
+    pub past_bottom_pt: f64,
+    pub lines_outside: usize,
+    pub past_right_pt: f64,   // NEW — 82228b1
+}
+```
+
+`past_right_pt` is how far the new block box extends past the cropbox
+**RIGHT** edge, `0.0` when it does not. **Disclosed, never clamped** —
+matching the module's existing posture for the vertical case (decision 015
+§3.5, **R76**).
+
+> **★★ THE CONTRACT CHANGE THAT IS NOT VISIBLE IN THE STRUCT, and is the
+> reason this item is in §4 at all.** `Option<PageOverflow>` carried an
+> **undocumented invariant that lived in its CALLERS, not in its type**:
+> *present ⇒ the BOTTOM overflowed*. Making it `Some` for a
+> right-edge-only case invalidated every reader that had narrowed it by
+> convention — the apply stage began emitting *"grows the block 0.0pt past
+> the page bottom"*, **false in its letter**, while the true horizontal
+> disclosure was **swallowed** by a downstream filter keyed on the
+> **prose** of the note (`contains("not applied")`).
+>
+> **A coupling expressed as string content is invisible to every
+> signature and every type check.** The rule this yields for any future
+> §4 contract: **when a sum/option type's inhabited case gains a new
+> cause, audit each reader for the narrower meaning it had assumed, and
+> guard each cause independently rather than at the `Some`.** Recorded as
+> an amendment to **R148**.
+>
+> **This does NOT close Pass 33.0.** It implements option **(c)** —
+> disclose — **only**. The auto-detected wrap width is still measured from
+> a bounding box a prior `edit-text` may have widened, so the *inference*
+> is still wrong; it is merely no longer silent.
+
+---
+
+### (H) Decision 026 — the ce-dimension model (`pdfce_core::dimension`)
+
+**Terminology, binding per CLAUDE.md rule 15: everything in this
+subsection is about *ce dimensions* — the `/Line` + `/IT /LineDimension`
+annotations pdfce AUTHORS, with their baked `/AP`, groups, scale,
+`/Measure` dict and `/PieceInfo` sidecar. It says nothing about *pdf
+dimensions* (dimensions a CAD tool already exported into the file), which
+pdfce reads and measures against but must not silently alter.**
+
+Full current re-export surface (`dimension/mod.rs:62-76`), verified:
+
+- **`author::{AUTHORED_ANNOT_KEYS, AUTHORED_MEASURE_KEY,
+  AuthoredDimension, DimensionStyle, author_dimension}`**
+- **`fit::{FitCircle, fit_circle_taubin, fit_circle_taubin_refined}`**
+- **`group::{DEFAULT_GROUP_ID, DimStandard, DimensionId, DimensionKind,
+  DimensionModel, DimensionRecord, Group, GroupId}`**
+- **`length_parse::{LengthParseError, ParsedLength, parse_length}`**
+- **`measure_dict::{build_measure_dict, build_ocg, build_ocproperties}`**
+- **`sidecar::{SIDECAR_VERSION, deserialize_model, serialize_model,
+  sidecar_version}`** — `SIDECAR_VERSION: i64 = 1`
+- **`units::{DecimalMarker, FractionMode, MeasurementDisplay,
+  NO_SCALE_DISCLOSURE, NumberFormat, ScaleEntry, ScalePreview, ScaleState,
+  Unit, format_measurement, preview_group_scale}`**
+
+**`DimStandard`** (`group.rs:96`) — the drafting standard a ce-dimension
+group is authored to. **ANSI is the factory default** (operator,
+2026-08-04: *"My default is ANSI, but ISO should be an option too"*).
+Recorded in the type's own doc comment and worth repeating here because it
+is routinely miscited: the ANSI line/arrowhead/lettering conventions are
+**ASME Y14.2**, **not Y14.5** — Y14.5 is the GD&T/tolerancing standard.
+
+**`EditSession::set_group_standard(&mut self, group: GroupId, standard:
+DimStandard) -> Result<usize, EditError>`** (`edit.rs:6645`) — sets a
+group's standard and returns the count of affected ce dimensions.
+**Refuses with `EditError::DocumentEncrypted` when the trailer carries
+`/Encrypt`**, checked first.
+
+**`NumberFormat`** (`units.rs:178`) — `{ unit: Unit, fraction:
+FractionMode, .. }` plus the **Pass 27.2 decimal-marker field**.
+**`DecimalMarker`** (`units.rs:205`) is `Point` (default — `1.5`, ANSI
+practice) or `Comma` (`1,5` — **mandated by ISO 129-1:2018 cl. 4.1.1, and
+widely violated in practice, which is why it is overridable rather than
+implied**). **`FractionMode::Decimal { places: u32 }`** shows fixed full
+precision so `3.10 m` reads consistently.
+
+**The `/RD` + `/RT` half of the §12.9 `/Measure` mirror is closed; the
+`/FD` half is NOT.** pdfce prints a fixed number of decimal places in its
+**baked** label (`3.10 m`) while the mirrored `/Measure` dict **omits
+`/FD`**, whose spec default of `false` **permits a conforming reader to
+print `3.1 m`**. Any doc comment claiming the two *"agree by
+construction"* is **wrong as written**. Tracked as an open item under
+`ROADMAP.md` *Next up*.
+
+> **★ Why pdfce cannot see this failure from inside itself, which is the
+> generalizable part:** **pdfce's label is baked into the appearance
+> stream, and the dict is what everyone ELSE computes from.** A test that
+> asserts on pdfce's own rendering will always agree with itself. Any real
+> fix needs **a reader that is not pdfce**, or a test that asserts on the
+> **dict's semantics** rather than on pdfce's rendering of it.
+
+**Sidecar validation (`3a23694`) — a behavioural contract with no public
+symbol.** `dimension/sidecar.rs` validates every file-supplied placement
+scalar before it is drawn: `usable_page_value(v) = v.is_finite() &&
+v.abs() <= MAX_PAGE_VALUE` with `MAX_PAGE_VALUE = 1.0e7`. **Both are
+PRIVATE** (`sidecar.rs:352`, `:371`) — so this is not a `pub` item to
+document, but it **is** a contract on `deserialize_model`: an unusable
+scalar **defaults to `0.0` rather than dropping the record**, on the
+ground that a standoff is a presentation detail and losing the whole ce
+dimension over one bad number is the worse failure. Recorded here because
+a §4 reader needs the *behaviour* even though there is no signature to
+point at.
+
+---
+
+### (I) What this sync did NOT cover — stated so the edges are honest
+
+**A partial sync that names its edges is worth more than a
+complete-looking one that does not.** Not audited in this pass, and
+therefore **neither claimed current nor claimed stale**:
+
+1. **`pdfce-cli`'s argument/output surface.** CLAUDE.md rule 10 puts it
+   under the same API-guidelines check as `pdfce-core`'s `pub` items, and
+   rule 11 means every Pass since 21.0 added subcommands. **§7 (CLI
+   capabilities) has not been synced and is presumed to lag by the same
+   several Passes §4 did.** Owed: its own dispatch.
+2. **`EditSession`'s other 57 `pub fn`s.** The crate exposes **63** at
+   `edit.rs`; this sync verified the **six** vector methods and
+   `set_group_standard`. The rest — text editing, annotations, redaction,
+   forms, page ops, undo/redo — are **not** enumerated in §4 anywhere, and
+   that gap predates this sync.
+3. **`Page`'s field list** — shape confirmed, fields not audited (see (A)).
+4. **Whether `PdfError` still exists** alongside `DocError` (see (A)).
+5. **Whether `Subpath` is `#[non_exhaustive]`** (see (B)).
+6. **The `pub` surfaces of `annot`, `forms`, `redact`, `signature`,
+   `recover`, `writer`, `pageops`, `view`, `text_extract`, `filters`,
+   `image_codec`, `fontdata`, `linearization`, `objstm`, `vartext`,
+   `text_state`, `span`, `graph`, `lexer`, `parser`, `page_tree`,
+   `xref`** — 27 `pub mod`s exist in `lib.rs`; §4 describes a handful.
+   **§4 has never been a complete API index and this sync did not make it
+   one.** It brought the *changed and breaking* surface current, which was
+   the dispatch's stated priority.
+
+**Recommended follow-on, in the order the value falls:** (1) sync **§7**
+for the CLI; (2) decide the **`CompositeEncoding` re-export** question in
+(F); (3) enumerate **`EditSession`** — the single largest undocumented
+`pub` surface in the crate.
+
 ## 5. Round-trip / non-destructive-editing invariant
 
 Analogous to the tail-bytes / lazy-round-trip discipline the user's
@@ -6148,3 +6703,121 @@ with a forward pointer.
   The fixture was corrected to separate the anchors **on screen at every
   tested zoom**, so the test asserts the **operator-experienced
   property** rather than restating the implementation.
+
+- **2026-08-05 (continuation 87) — decision 029: development stays ONE
+  session over the whole workspace; sessions are NOT partitioned by
+  crate.** Source:
+  `docs/decisions/029-single-session-vs-crate-partitioned-sessions.md`.
+  **The outcome is NO CHANGE**, and it is recorded anyway because a
+  "no change" with reasoning behind it is the easiest thing to lose —
+  **the next person to notice the clean crate split will propose the same
+  thing.** The operator proposed **three parallel sessions, one per crate
+  (`pdfce-core` / `pdfce-cli` / `pdfce-gui`)**, to keep a usable GUI while
+  features were built; the engineer argued against; **the operator agreed
+  to keep things as they are, on his own stated ground: he did not want
+  to do anything that reduces the ability to catch errors.**
+  - **★ The load-bearing distinction: a crate boundary is a DEPENDENCY
+    DIRECTION, not a work boundary.** §3's layout says what may reference
+    what; it says nothing about who works where. **The work crosses it by
+    rule** — CLAUDE.md rule 11 requires each feature Pass to ship its
+    `pdfce-cli` subcommand alongside the GUI flow in the same session —
+    and **crosses it in fact**: measured on this session's commits
+    (engineer's figures), the substantive feature Passes were
+    **cross-crate** (Pass 30.0 touched **all four crates in one commit**,
+    30.1 touched two) while the **single-crate commits were mostly
+    fixes**. The proposal would partition sessions along an axis the work
+    does not follow.
+  - **★ The decisive argument, and it answers the operator's own
+    criterion: this session's three most valuable findings were all
+    BETWEEN crates.** (1) **R144's second firing** — a refusal removed in
+    `pdfce-core` silently un-gated a `pdfce-gui` drag that relied on it,
+    which is **R147** exactly (*the protection is felt where it is
+    INVOKED*). (2) The **clipping-path gap**, whose consequence lands on
+    page content the operator may not be able to see. (3) The **reflow
+    auto-width defect** (Pass 33.0 / **R148**) — a composition of **two
+    individually-correct operations** that **neither module's tests can
+    catch**, because each is correct by its own lights. **All three are
+    seam defects, and a crate-partitioned setup optimises for exactly
+    that blindness** — a complete view of one module, no view of the
+    composition.
+  - **The ledger argument.** Four hand-maintained numbered ledgers (Pass
+    IDs, standing rules, decision records, operator questions) are
+    primary keys. **Pass ID 31.0 was burned this session by ONE librarian
+    racing ONE engineer**; five collisions were found on 2026-08-03 alone
+    (the reason **R106** and `tools/check-ledger-numbers.py` exist).
+    Three concurrent number-minting sessions would make collisions
+    routine, and the checker detects them **after** the fact.
+  - **The single-writer argument.** `ROADMAP.md` and `SESSION_LOG.md` are
+    the highest-churn files in the repo (**5 of the last 12 commits**,
+    engineer's figure), are **append-only by rule**, and have **one
+    writer by deliberate design**. Three sessions means three concurrent
+    writers to append-only history.
+  - **★ The better answer to the operator's ACTUAL goal, recorded as an
+    OPTION and explicitly NOT as a decision.** The goal was *"a GUI in a
+    stable state I can use"* — a statement about having a working build,
+    not about session topology. **A release build to its own folder**
+    (§6's single-folder-portable target, already a project requirement)
+    **decouples "usable app" from "how many sessions are running"
+    entirely.** The operator **declined for now**; it is recorded so it
+    is available, not so a future session treats it as authorised work.
+  - **No §3 body change.** The crate split, its dependency direction and
+    its `cargo tree` verification are **unchanged and unchallenged** by
+    this decision — what was decided is who works where, not what depends
+    on what.
+  - **Ledger note:** this record spends decision **029**, which
+    continuation 86 had deliberately left free for a possible Pass 33.0
+    fix record. **That record, if written, takes 030.** The superseding
+    note is appended to R148 in `ROADMAP.md`. The checker was not run at
+    filing time (librarian hard rule 8); **re-run it after committing.**
+
+- **2026-08-05 (continuation 88) — §4 SYNCED against the crate for the
+  first time since Pass 21.0, and it was WRONG rather than merely
+  incomplete. NOT a decision — a correction, logged here because §12 is
+  the audit trail and a body section that changes this much should be
+  findable from it.** New subsection **§4.1**, produced by reading the
+  `pub` items in `crates/pdfce-core/src/` rather than reconstructing them
+  from `ROADMAP.md` — **the roadmap records intent, the crate records
+  truth, and where they disagree the crate wins.** No prior text was
+  deleted; the superseded claims carry inline `[SUPERSEDED]` notes so a
+  reader of an older checkout can still tell what moved.
+  - **Three BREAKING contract changes are now recorded AS changes**, per
+    the scheduled item's own acceptance criterion: **§4.1(B)** `Subpath`
+    gained `tokens: TokenRange` + `starts_implicitly: bool` (Pass 28.0);
+    **§4.1(C)** decision 027's `PlannedEdit::disclosures`, the five
+    `EditSession` vector methods moving from `Result<(), EditError>` to
+    `Result<Vec<String>, EditError>`, and the **removal** of
+    `VectorEditError::RectangleNode` / `::ImplicitNode`; **§4.1(D)** Pass
+    30.1/26.1's `plan_move_handle` / `Handle` / `NoHandleHere` /
+    `EditSession::move_handle` (additive, but the sixth member of the
+    changed family).
+  - **★ The migration hazard worth surfacing at §12 level, because it is
+    not a compile error: (C.2)'s return-type change breaks LOUDLY only at
+    call sites that BOUND the result.** A pre-027
+    `session.move_object(..)?;` that discarded `()` still compiles and now
+    **silently drops a rule-4 disclosure**. A breaking change that some
+    callers absorb silently is worse than one that breaks all of them.
+  - **★ The finding that generalizes past this file: a section written as
+    a TARGET and never re-labelled becomes indistinguishable from a
+    section written as a RECORD.** §4's opening bullets were a Pass-0
+    north star from 2026-07-23 (`ObjectId`, `Object::Bool`, `StreamData`,
+    `Document::open`/`save`) and had drifted from every shipped name
+    (`ObjId`, `Boolean`, no `StreamData`, `load`/`from_bytes`/`save_full`)
+    for six weeks without anyone noticing — **because, unlike the dated
+    `IMPLEMENTED` blocks below them, they carried no date to locate them
+    in time.** §4.1(A) tabulates the correspondence. **Date and label
+    every contract statement, or it will be read as current.**
+  - **The sync is deliberately PARTIAL and says so** — §4.1(I) enumerates
+    six things it did not audit, chief among them **§7 (CLI capabilities),
+    which is presumed to lag by the same several Passes** and needs its
+    own dispatch, and **`EditSession`'s other 57 `pub fn`s**, which §4 has
+    never enumerated at all. **A partial sync honest about its edges is
+    worth more than a complete-looking one that is not.**
+  - **One open API-guidelines question raised, not answered** (CLAUDE.md
+    rule 10): `CompositeEncoding` / `CompositeEncodeResult` /
+    `NotInjective` are `pub` but **absent from `text_edit`'s re-export
+    list** while their simple-font siblings are re-exported. Oversight or
+    deliberate staging could not be determined from the source; flagged
+    for an engineer decision rather than guessed.
+  - **No `ROADMAP.md` Pass ID, standing rule, decision number or operator
+    question was minted by this sync** — it is documentation catching up
+    to shipped code, not new scope.

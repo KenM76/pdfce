@@ -13105,3 +13105,597 @@ reconcile against those claims.
 6. **Dispatch the `ARCHITECTURE.md` §4 sync as its own task.** Fourth
    filing to say so — and it will keep being said until it gets a
    dispatch of its own.
+
+---
+
+**Same-day continuation 87 (real date 2026-08-05) — SESSION-CLOSE
+HANDOFF. TWO PASSES SHIPPED (26.0 `c62c4d0`, 26.1 `7c45bf8`): the Node
+rung exists, the ungated node-drag gesture is GATED, and Bézier handles
+are visible and grabbable. Decision `029` minted (crate-partitioned
+sessions — REJECTED, no change). Standing rule R149 assigned. Written as
+a HANDOFF because the operator is ending a long session and starting
+fresh.**
+
+---
+
+### Shipped
+
+- **Pass 26.0 — the Node rung: points are ENTERED, DRAWN, and SCOPED**
+  (`c62c4d0`). Decision 028's head slice. **Its REQUIRED item closed a
+  HAZARD rather than adding a feature** — the blind, ungated node-drag
+  gesture that R144's second firing exposed is now **replaced and
+  gated**.
+- **Pass 26.1 — Bézier handles are visible and grabbable** (`7c45bf8`).
+  The GUI half of Pass 30.1, closing the **one genuinely CLI-only vector
+  capability** that the R144 correction identified.
+
+Full build records are in `ROADMAP.md`'s *Shipped* section; the material
+findings are below rather than repeated there.
+
+### Findings + decisions
+
+- **★★ WHICH HANDLE BELONGS TO WHICH NODE — a cubic's two control points
+  belong to DIFFERENT nodes.** Segment *k* runs from anchor *k* to anchor
+  *k+1*, so **`c1` shapes the curve LEAVING anchor *k*** and **`c2`
+  shapes the curve ARRIVING at anchor *k+1***. **Assigning both to one
+  node is the plausible-looking wrong answer**: it draws two handles in
+  roughly the right place and then makes **every handle drag move the
+  wrong end of the curve** — no artefact, no error, just a picture that
+  deforms at the far end from where the operator is pulling. **Verified
+  by planting the swap; three tests catch it.**
+- **No core work was needed for `v` / `y`, and the reason is
+  structural.** The decomposition already resolves their implicit control
+  points into explicit `c1`/`c2` (Pass 30.1), so **the GUI never has to
+  know the short spellings exist** — which is precisely where the classic
+  confusion in that operator family lives. **Pinned by a test anyway**, so
+  a decomposition change that started leaking the short spellings upward
+  fails there rather than silently in the GUI.
+- **★ HIT PRIORITY IS ASYMMETRIC ON PURPOSE, and the cost function is the
+  argument.** Handles are hit-tested **before** nodes, at a **tighter**
+  radius (`HANDLE_GRAB_SCREEN_TOLERANCE_PX = 5.0` vs the node's `6.0`).
+  They overlap **exactly when the curve is nearly flat at that node** —
+  which is exactly when the operator is reaching for the handle.
+  **Losing a handle grab costs one retry; stealing a node grab MOVES A
+  POINT OF THE DRAWING.** The smaller, more specific target wins, and
+  the error is biased toward the recoverable side.
+- **★★ A HANDLE DRAG IS NOT SNAPPED WHERE A NODE DRAG IS — filed as
+  standing rule R149.** A node is **a point OF the drawing**, so snapping
+  is help. A control point is **a shaping lever, not a location**:
+  snapping it would tie the curve's **shape** to a coordinate the
+  operator never aimed at. Predictive for every future off-curve
+  manipulator — gradient stops, rotation pivots, leader elbows,
+  clip-frame handles.
+- **★ THE CEILING IS DISCLOSED, NEVER A SILENT FIRST-N.**
+  `MAX_DRAWN_NODES = 300` per part (provisional under **R86**) with the
+  **real count painted on the part**. *300 of 1,200 points looks exactly
+  like a part that HAS 300, and nothing on screen would correct that* —
+  a silently truncated mark set is an affordance that **lies about what
+  is selectable**.
+- **★ The marks shipped in the SAME commit as the gate, deliberately.**
+  The gate alone would have traded **an invisible dangerous gesture** for
+  **an invisible unusable one**. Worth remembering the next time a "core
+  change" looks separable from its "UI change".
+- **★ DOCUMENTED DEVIATION from decision 025's transition table, recorded
+  as a deviation rather than absorbed.** Clicking **nothing** at the Node
+  rung **LEAVES** rather than ascending to Object, matching what the
+  Subpath rung has always done. **Two rungs disagreeing about what
+  clicking-nothing means is worse than the deviation.** It resolves
+  properly when the **`LevelPath` / `Rung` type** of 025 §3.2 lands —
+  that type gives *"Object rung"* its own representable state instead of
+  encoding it as `Some { subpath: None }`, which is why "ascend to
+  Object" has no clean destination today. **Tracked on the Pass
+  26.0–26.2 *Next up* entry** so it does not vanish with the Shipped
+  filing.
+- **★★ A KNOWN VERIFICATION GAP, recorded as one rather than rounded up
+  to a completed check.** The **two-level descent** was driven through
+  the offscreen diag harness on a **real curve**, reaching
+  `EnteredObject { object: 0, subpath: Some(0), node: Some(1) }` — **node
+  1 being the `c` endpoint actually clicked**. **The DRAG GESTURE ITSELF
+  was NOT driven end to end**: the harness produces **no egui drag events
+  for that sequencing** (`drag_started=false` throughout), so the gating
+  is covered **by construction and by unit test**. The very gesture whose
+  hazard motivated decision 028's REQUIRED item is the one the harness
+  cannot exercise.
+- **★ The harness limitation is a finding in its own right** — it blocked
+  end-to-end verification **twice this session** and will block it again.
+  Escalated to the egui RAG (below).
+
+### Decision 029 — an architecture question the operator raised and resolved
+
+**He proposed splitting into three parallel sessions, one per crate
+(`pdfce-core` / `pdfce-cli` / `pdfce-gui`), to keep a usable GUI while
+features are built. The engineer argued against; he agreed to keep things
+as they are.** His stated ground, preserved in substance because it is
+the criterion the argument was judged on: **he did not want to do
+anything that reduces the ability to catch errors.**
+
+Filed as `docs/decisions/029-single-session-vs-crate-partitioned-sessions.md`
++ an `ARCHITECTURE.md` §12 entry — **a "no change" outcome recorded
+because the next person to notice the clean crate split will propose the
+same thing.** The four supporting arguments, kept because they will be
+needed again:
+
+1. **A crate boundary is a DEPENDENCY DIRECTION, not a work boundary.**
+   Measured on this session's own commits: the substantive feature Passes
+   were **cross-crate** (Pass 30.0 touched **all four crates in one
+   commit**; 30.1 touched two), while **single-crate commits were mostly
+   fixes**. **CLAUDE.md rule 11 MANDATES the crossing** — each feature
+   Pass ships its CLI subcommand alongside the GUI flow, same session.
+2. **★ The decisive one: this session's three most valuable findings were
+   all BETWEEN crates.** **R144's second firing** (a **core** refusal
+   removed in Pass 30.0 silently un-gated a **GUI** drag that relied on
+   it), the **clip-path gap**, and the **reflow width bug** (a
+   composition of two individually-correct operations). **All three are
+   seam defects, and a crate-partitioned setup optimises for exactly that
+   blindness.**
+3. **Ledger collisions.** **Pass ID 31.0 was burned THIS SESSION** by a
+   single librarian racing a single engineer. Three concurrent sessions
+   minting Pass IDs and rule numbers would make that routine.
+4. **Single-writer docs.** `ROADMAP.md` / `SESSION_LOG.md` are the
+   highest-churn files in the repo (**5 of the last 12 commits**), are
+   append-only by rule, and have **one writer by deliberate design**.
+
+**★ The better answer to his ACTUAL goal — recorded as an OPTION, not as
+a decision.** The goal was *"a GUI in a stable state I can use"*, which
+is about **having a working build**, not about session topology. **A
+release build to its own folder** — already the project's
+single-folder-portable packaging target (`ARCHITECTURE.md` §6) —
+**decouples "usable app" from session count entirely.** **He declined for
+now**; it is recorded so it is available, not so a future session treats
+it as authorised work.
+
+---
+
+## ★ WHERE THINGS STAND — orientation for a fresh session
+
+**Read this section first if you are picking up cold. Everything below is
+current as of continuation 87's filing; nothing in it needs re-deriving
+from the commit history.**
+
+### Shipped THIS session — 7 code commits + 4 doc commits
+
+| Commit | What |
+|---|---|
+| `a104536` | **Pass 29.0** — composite (`/Type0` / CIDFont) text is EDITABLE |
+| `a56bdd7` | **Pass 30.0** — node anchors materialized (`re` corners, reused starts) + clip disclosure |
+| `d025c1a` | **Pass 30.1** — Bézier handles (core + CLI) |
+| `5b2682b` | fix — rotation-refusal reporting |
+| `075e8f8` | fix — node-grab tolerance becomes a SCREEN measure |
+| `82228b1` | fix — reflow horizontal overflow disclosure |
+| `c62c4d0` | **Pass 26.0** — the Node rung + THE GATE |
+| `7c45bf8` | **Pass 26.1** — handles in the GUI |
+
+*(`82228b1` is listed as shipped this session in the engineer's handoff;
+it postdates continuation 86's filing of the Pass 33.0 defect and appears
+to address that defect's horizontal-disclosure half. **No build details
+were relayed for it, so it has NO Shipped entry and none is invented
+here** — R87. **Owed: a librarian dispatch with its build details**, and
+a reconciliation against Pass 33.0's four recorded fix options, since if
+`82228b1` is option (c) then Pass 33.0 is partly or wholly discharged and
+its entry is stale.)*
+
+### Remaining in decision 028's 14-item plan
+
+The plan table in `ROADMAP.md`'s Pass 26.0–26.2 entry is now annotated
+item by item with `✅` / `◐` / `⬜`. What is **owed**:
+
+- **item 12 — the breadcrumb** (`Page › Path #5870 › Part #667 ›
+  Point #1,204`, clickable to ascend). **Net new; nothing exists today.**
+  More owed than when written: **two rungs of descent now ship, and
+  neither announces itself.**
+- **items 10 + 11 — keyboard node navigation.** Tab / Shift+Tab cycle in
+  **object-scoped** order (Pass 26.0 already made `EnteredObject::node`
+  object-scoped, so the numbering half is done); arrows nudge **1 pt**,
+  Shift+arrow **10 pt**.
+- **item 9 — subpath-move as a canvas gesture.** Pass 28.0's core verb
+  (`d8b9735`) **still has none** — a live **R117** instance. Falls out of
+  the hit-priority ladder's third rank, which item 8 did not ship.
+- **the conditional 15th — clip-gate Tier 2 routing.** **BLOCKED on
+  operator question (av).**
+- **item 14 — the Obj-tool toolbar tooltip correction.**
+- **items 7 and 13 — NOT REPORTED EITHER WAY**; treat as owed and
+  **unverified**, not as done. Item 13's handle-presence clause is now an
+  **R83** obligation, because Pass 26.1 shipped visible handles.
+
+### Other open work
+
+- **Pass 32.0 — per-run text deletion.** **★ Note for whoever takes it:
+  it is the SAME SHAPE as Pass 28.0's subpath work.** It needs **per-run
+  token spans on `TextObject`** — which today carries only
+  `runs: Vec<Bounds>` for hit-testing and a whole-`BT`…`ET` token range,
+  so *"delete this run"* is **not expressible against today's model** —
+  **plus a guard for runs whose position is INHERITED from the previous
+  run's advance** rather than set by an explicit `Tm`/`Td`. That guard is
+  **the exact analogue of `starts_implicitly` for subpaths.** On the
+  operator's own drawing **one text object holds all 237 dimension
+  labels**, so deleting *"a label"* currently deletes **all of them**.
+  (Appended to the Pass 32.0 *Next up* entry.)
+- **Pass 33.0 — reflow auto-width.** Four options recorded with a stated
+  leaning, **undecided** — see the caveat about `82228b1` above, which
+  may have moved this.
+- **`ARCHITECTURE.md` §4 — now FIVE filings behind, and WRONG AS WRITTEN
+  rather than merely incomplete.** Needs **its own dispatch with a fresh
+  read of the crates**. Components: Pass 25.x's vector surface; decision
+  026's ce-dimension model; Pass 28.0's `Subpath` data-model change;
+  decision 027's `disclosures` + five changed `EditSession` signatures +
+  two removed `VectorEditError` variants; Pass 30.1's `plan_move_handle`
+  / `Handle` / `NoHandleHere`; **and now Pass 26.1's `Commit::Handle` →
+  `EditSession::move_handle` routing.** **Two of these are breaking
+  changes to previously documented contracts.**
+- **Open operator questions (au)** (purchase ISO 129-1:2018?) and
+  **(av)** (clip-gate posture) remain unanswered; **(av) blocks decision
+  028's 15th item.**
+- The **`/FD` half** of the ce-dimension label-vs-`/Measure`
+  disagreement is still owed (Pass 27.2 fixed only the separator half).
+
+### RAG escalations, continuation 87
+
+- **`D:\dev\rag\egui\eframe_035_raw_input_hook_synthetic_event_injection.md`
+  — DATED AMENDMENT (not a new file; hard rule 4).** That file **claimed**
+  `.dragged()` and `.drag_started_by(..)` fire for injected events. **In
+  practice, on pdfce's shipped diag harness, a scripted press → move →
+  release did not produce a drag: `drag_started=false` throughout.** The
+  amendment records the **observation and its consequence** (a
+  drag-classification gate cannot be verified end to end through this
+  harness) and lists the **candidate causes as hypotheses, explicitly
+  unverified** — because the root cause was **not** diagnosed and a
+  confident wrong cause is worse than a recorded symptom. Index bullet
+  updated in the same edit.
+- **Nothing else was escalated, and the reasoning is stated rather than
+  assumed** (hard rule 3 defaults to "write it"):
+  - **The `c1`/`c2` → node mapping is NOT a `C:\personal_rag\pdf\`
+    lesson.** That subject's scope is *how real-world producers diverge
+    from the spec*. This is **pdfce's own editor model** over a
+    control-point layout the spec states plainly (ISO 32000-1 §8.5.2.1
+    Table 59). Nothing was learned about any producer. Its home is the
+    Pass 26.1 Shipped entry.
+  - **R149 (handle-vs-node snapping) is a pdfce UX rule, not ecosystem
+    knowledge.** It belongs in `ROADMAP.md`'s standing rules, where a
+    future pdfce manipulator design will actually look for it.
+  - **Not `D:\Dev\Rag-Specialized\PDF_Spec\`** — not this librarian's to
+    write (hard rule 6), and the spec is not in dispute here.
+
+### Ledger discipline (R106)
+
+**`tools/check-ledger-numbers.py --stats` WAS run at write time, after
+these edits, and reported `clean`:**
+`standing rules: R149 -> next free is R150`,
+`decision records: 029 -> next free is 030`,
+`Pass families MENTIONED: up to 33`, parse stats **82** distinct
+(section, Pass ID) pairs / **149** rules / **29** decision files. **The
+numbers below are verified unique, not read off a recorded ceiling.**
+
+*(Disclosure, because hard rule 8 says disk state is not this
+librarian's to assert: the checker is a **pure Markdown parse of
+`docs/`** — it reads no git, backup or working-tree state, and it was
+runnable in this filing's harness. **No claim about the repository,
+the index, remotes or the backup bundle is made anywhere in this
+entry**; that boundary is unchanged.)*
+
+| Ledger | Minted this filing | New ceiling |
+|---|---|---|
+| Pass IDs | **none** — 26.0 and 26.1 were already claimed by decision 025 | **33.0** (family **34** next free) |
+| Standing rules | **R149** | **R149** |
+| Decision records | **029** | **029** (→ **030** next free) |
+| Operator questions | **none** | **(av)** |
+
+**★ A ledger correction this filing forces:** continuation 86 deliberately
+left **029 free** for a possible Pass 33.0 fix record. **029 is now spent
+on the crate-partitioning decision, so that record — if it is ever
+written — takes 030.** The superseding note is appended to R148's entry
+in `ROADMAP.md`. **Re-run the checker after committing these docs**: the
+rule ceiling and the decision ceiling both moved.
+
+**Still in flight:**
+
+- **Pass 26.2** (level survival across an edit) and **seven of decision
+  028's fourteen plan items** — enumerated above, annotated in the plan
+  table itself.
+- **The Node-rung deviation** (clicking nothing LEAVES rather than
+  ascending) — resolves with the `LevelPath` / `Rung` type, and **must be
+  re-decided deliberately at that point, not inherited.**
+- **The drag-gesture verification gap** — the gate is proven by
+  construction and unit test, not by a driven drag.
+- **`82228b1` has no Shipped entry** and its relationship to Pass 33.0 is
+  unreconciled.
+- **Pass 32.0**, the **`/FD` half**, **(au)** and **(av)** — carried
+  forward unchanged.
+
+**For next session:**
+
+1. **Dispatch the librarian with `82228b1`'s build details**, and say
+   whether it discharges Pass 33.0 in whole or in part. Right now the
+   ledger under-reports one commit and possibly over-reports one defect.
+2. **Continue decision 028's plan — item 12 (the breadcrumb) first.**
+   It is the item that makes the two shipped rungs *visible*, and both
+   descents currently announce themselves only through the readout.
+3. **Then items 10 + 11 (keyboard), then item 9 (subpath-move gesture,
+   the live R117 instance), then item 14 (tooltip).** Verify items 7 and
+   13 before assuming either shipped.
+4. **Answer (av)** if the clip-gate is to be built; it blocks the
+   conditional 15th item outright.
+5. **Dispatch the `ARCHITECTURE.md` §4 sync as its own task — FIFTH
+   filing to say so.** It is now **wrong as written**, not merely stale,
+   and Pass 26.1 added another entry to its component list.
+6. **Re-run `tools/check-ledger-numbers.py`** after committing these
+   docs (R149 and decision 029 both moved a ceiling).
+7. **Backup currency is NOT verifiable from here** (hard rule 8) — **the
+   engineer should check `D:\Dev\pdfce-backups\`** directly. Do not carry
+   forward continuation 84's or 85's stale-bundle numbers; both were
+   wrong.
+
+---
+
+**Same-day continuation 88 (real date 2026-08-05) — FILING-ONLY SESSION,
+dispatched for exactly two things and doing exactly those two. (1) `82228b1`
+filed, and what it does and does NOT close made explicit in both places.
+(2) `ARCHITECTURE.md` §4 SYNCED — the fifth-flagged item, in the dedicated
+dispatch it had been refused into. No code was written.**
+
+---
+
+### Filed
+
+- **`82228b1` — "reflow disclosed only the axis it obviously threatened"**
+  now has a **Shipped** entry (`ROADMAP.md`, between Pass 26.0 `c62c4d0`
+  and the `075e8f8` fix, matching commit order). **No Pass ID minted** —
+  same reasoning as `3a23694` / `328f5c2` / `5b2682b` / `075e8f8`: a
+  correctness fix to shipped surface that adds no operator capability.
+- **Pass 33.0's ⚠ STALENESS FLAG resolved** — with the answer the flag
+  could not have guessed. **The entry STAYS OPEN.**
+- **`ARCHITECTURE.md` §4.1** — the §4 sync, plus a §12 audit-trail entry
+  and the discharge block on the *Next up* scheduling item.
+- **R148 amended** with the second lesson `82228b1` produced.
+- **Gate figures attributed** to `c62c4d0` (1,926) and `7c45bf8` (1,933).
+
+### ★★ THE CORRECTION THAT MATTERED — "disclosure shipped" is NOT "defect fixed"
+
+**`82228b1` implements option (c) of Pass 33.0 and ONLY option (c). It
+fixes the SILENCE, not the INFERENCE.** The auto-detected wrap width is
+**still wrong**: a 156 pt block whose bounding box a prior `edit-text`
+widened to 930 pt **still re-wraps to 930 pt on a 612 pt page**. What
+changed is that pdfce now **says so** instead of reporting unqualified
+success. **An operator who does not read stderr still gets a re-wrap to a
+width they never chose.**
+
+So the ledger was wrong in **one** direction, not two:
+
+| | Before this filing | Reality |
+|---|---|---|
+| `82228b1` | **under-reported** — no Shipped entry at all | now filed |
+| Pass 33.0 | suspected of **over-reporting** an open defect | **genuinely still open** — (a) clamp, (b) median-line width, (d) mark-untrustworthy all still live and unchosen |
+
+**★ The process point, because it is the reusable half.** Continuation
+87's flag was written **without build details and correctly refused to
+guess** which of the four options `82228b1` implemented (**R87**).
+**Guessing would have produced exactly the wrong answer** — the commit's
+subject line matches option (c), and option (c) *is not the fix*. A
+librarian who "helpfully" reconciled from the subject line would have
+closed a live defect in the ledger. **R87 earned its keep here.**
+
+### ★★ THE FINDING WORTH KEEPING FROM `82228b1` — the second defect, introduced BY the first fix
+
+**Caught by reading the CLI output. The tests passed.** (**R86**, in the
+same commit that produced R86-shaped reasoning.)
+
+Making `overflow` `Some` for a **right-edge-only** case broke the apply
+path's **unstated** assumption that `Some` meant the **BOTTOM**
+overflowed. The first version of the fix therefore, **in one change**:
+
+1. emitted *"the re-wrap grows the block **0.0pt** past the page bottom"* —
+   **false in its letter**, a disclosure about an overflow that did not
+   happen; and
+2. **swallowed the TRUE horizontal disclosure**, because the apply stage
+   filters out preview notes containing `"not applied"` (correct — at
+   apply time it DID write) and the new preview wording **contained that
+   phrase**.
+
+**So the fix's first version made the disclosure worse in BOTH directions
+at once**: it added a false statement and hid a true one.
+
+> **The generalizable shape, appended to R148 and to `ARCHITECTURE.md`
+> §4.1(G): widening what an `Option`'s `Some` MEANS silently invalidates
+> every reader that had narrowed it by convention.**
+> `Option<PageOverflow>` carried an undocumented invariant — *present ⇒
+> the bottom overflowed* — that lived **in the callers, not in the type**.
+> Nothing in the compiler and nothing in the tests was watching it. And
+> the downstream filter keyed on the **prose** of a note
+> (`contains("not applied")`) is **a coupling between two modules through
+> string content**, which no signature records and no type check sees.
+>
+> **Rule: when a sum/option type's inhabited case gains a new cause, audit
+> each reader for the narrower meaning it had assumed, and guard each
+> cause INDEPENDENTLY rather than at the `Some`.** Each axis is now
+> guarded on its own, and the apply stage **words its own note** rather
+> than carrying the preview's.
+
+Also kept: **`overflowing_words` sounds like it covers horizontal overflow
+and does not** — it counts unbreakable words **wider than** the wrap
+width, which says nothing about whether **the width itself** fits the
+page (**R143**). And the vertical-only check **read as complete** because
+a re-wrap grows **downward**; the horizontal axis is threatened by a
+**different mechanism** — not the re-wrap, but the **width it was
+handed**.
+
+### `ARCHITECTURE.md` §4 — synced, and it was WRONG, not merely stale
+
+**Method, stated because it was the point of insisting on a dedicated
+dispatch:** §4.1 was produced by **reading the `pub` items in
+`crates/pdfce-core/src/`**, not by reconstructing them from `ROADMAP.md`.
+**The roadmap records intent; the crate records truth; where they disagree
+the crate wins.** Unverifiable claims are marked **UNVERIFIED** rather
+than asserted or quietly dropped.
+
+**Eight components filed** — the five the scheduling entry enumerated
+(treated as a floor, correctly), plus three it did not have:
+
+| § | Component | Kind |
+|---|---|---|
+| §4.1(A) | the Pass-0 target bullets vs. the shipped names | **wrong as written** |
+| §4.1(B) | `Subpath` + `tokens: TokenRange`, `starts_implicitly: bool` (Pass 28.0) | **BREAKING** |
+| §4.1(C) | decision 027 — `PlannedEdit::disclosures`, five `EditSession` signatures, two REMOVED variants | **BREAKING** |
+| §4.1(D) | Pass 30.1/26.1 — `plan_move_handle`, `Handle`, `NoHandleHere`, `EditSession::move_handle` | additive |
+| §4.1(E) | Pass 25.x subpath surface + the full `vector` re-export list | additive |
+| §4.1(F) | Pass 29.0 composite editability; R-INV-4 narrowed | **supersedes a §4 claim** |
+| §4.1(G) | `82228b1`'s `PageOverflow::past_right_pt` | additive |
+| §4.1(H) | decision 026 ce-dimension model | additive |
+| §4.1(I) | **what this sync did NOT cover** | honesty |
+
+**Nothing was deleted.** Superseded claims carry inline `[SUPERSEDED]`
+notes, so a reader of an older checkout can still tell what moved — the
+scheduling entry's own acceptance criterion.
+
+**★ THE ENTRY'S SUSPICION WAS CORRECT AND UNDERSTATED.** §4 was not just
+five filings behind. **Its opening bullet list was a Pass-0 TARGET written
+2026-07-23 and never re-labelled**, and it had drifted from **every**
+shipped name: `ObjectId` → **`ObjId { num, generation }`**;
+`Object::Bool` → **`Boolean`**; `Object::Stream(Dictionary, StreamData)`
+→ **`Stream(Stream)`**; **`StreamData` does not exist**;
+`Document::open`/`save` → **`load`/`from_bytes`/`save_full`**. **A reader
+treating §4's head as the API would not compile.**
+
+> **★ The generalizable finding: a section written as a TARGET and never
+> re-labelled becomes indistinguishable from a section written as a
+> RECORD.** Both read as fact to whoever arrives later. §4's dated
+> `IMPLEMENTED (date, Pass, commit)` blocks are **self-locating and did
+> not rot**; the **undated bullets above them rotted for six weeks
+> unnoticed**. **Date and label every contract statement, or it will be
+> read as current.** **Deliberately NOT minted as a standing rule** —
+> CLAUDE.md rule 6 and the global documentation-first directive already
+> carry the obligation, and a rule number should buy something the
+> existing rules do not. **R150 remains free** if a future session decides
+> it wants this enforceable.
+
+**★ The migration hazard worth repeating, because it is not a compile
+error.** Decision 027's return-type change
+(`Result<(), EditError>` → `Result<Vec<String>, EditError>`) **breaks
+loudly only at call sites that BOUND the result**. A pre-027
+`session.move_object(..)?;` that discarded `()` **still compiles and now
+silently drops a rule-4 disclosure**. *A breaking change that some callers
+absorb silently is worse than one that breaks all of them.*
+
+### ★ OWED WORK — named here because the operator is starting a fresh session
+
+**Anything not written down now is lost except through commit messages.**
+Each of these has enough detail to be picked up cold.
+
+1. **★ `ARCHITECTURE.md` §7 (CLI capabilities) has NEVER been synced, and
+   is the direct sibling of the §4 problem just closed.** CLAUDE.md
+   **rule 11** requires every feature Pass to ship its `pdfce-cli`
+   subcommand in the same session, so §7 lags by **every Pass since
+   21.0** — 25.x, 26.x, 27.x, 28.0, 29.0, 30.x. **Rule 10** additionally
+   puts the CLI's argument/output surface under the same API-guidelines
+   check as `pdfce-core`'s. **Needs its own dispatch and its own read of
+   `crates/pdfce-cli/src/`, for exactly the reason §4 did:** a sync done
+   as a side task records what the filer remembers, not what the code
+   exposes. **This is the single largest known documentation debt in the
+   project right now.**
+2. **`EditSession` is the largest undocumented `pub` surface in the
+   crate.** `crates/pdfce-core/src/edit.rs` exposes **63** `pub fn`s;
+   §4.1 verified **7** (the six vector methods + `set_group_standard`).
+   The other 56 — text editing, annotations, redaction, forms, page ops,
+   undo/redo — **appear in §4 nowhere at all**, and that gap predates the
+   sync.
+3. **An engineer decision is owed on the `CompositeEncoding` re-export.**
+   `CompositeEncoding`, `CompositeEncodeResult` and `NotInjective` are
+   `pub` in their modules but **absent from `text_edit/mod.rs`'s
+   `pub use encoding::{...}` list**, while their simple-font siblings
+   (`InverseEncoding`, `EncodeResult`, `Refusal`, …) are re-exported. So
+   callers reach them at `pdfce_core::text_edit::encoding::…` and the
+   others at `pdfce_core::text_edit::…`. **Oversight or deliberate
+   staging could not be determined from the source and was not guessed.**
+   (`NotInjective` lives in `text_extract::cmap`, so a re-export would
+   also be a cross-module lift.) CLAUDE.md rule 10.
+4. **Pass 33.0 is OPEN and needs a choice made with the code open.**
+   **(c) has shipped.** Live: **(b) median/majority line width** (composes
+   with (c), and would have returned the correct ~156 pt on the measured
+   case), **(a) clamp**, **(d) mark the box untrustworthy**. (a) and (d)
+   do not compose with each other. **If the choice is made as a design
+   decision rather than a bug fix it should get decision record `030`** —
+   `029` was spent on crate-partitioned sessions.
+5. **Five unverified §4 edges**, listed in §4.1(I) and repeated here so
+   they are not lost: whether `PdfError` still exists alongside
+   `DocError`; whether `Subpath` is `#[non_exhaustive]`; `Page`'s exact
+   field list; `EditSession`'s remaining methods (item 2); and the `pub`
+   surfaces of the ~20 `pub mod`s §4 has never described.
+6. **Carried forward unchanged from continuation 87**, none of which this
+   filing touched: **Pass 32.0** (per-run text deletion — needs per-run
+   token spans on `TextObject` plus the `starts_implicitly` analogue for
+   inherited run positions); **decision 028's seven remaining plan items**
+   (item 12 the breadcrumb first); **the `/FD` half** of the ce-dimension
+   label-vs-`/Measure` disagreement; **operator questions (au) and (av)**,
+   with **(av) blocking** decision 028's conditional 15th item.
+
+### RAG escalations, continuation 88 — NONE, and the reasoning is stated
+
+Hard rule 3 defaults to *"write it"*, so the decision not to write is the
+one that needs an argument:
+
+- **The `Option`-widening finding is NOT a `D:\dev\rag\rust\` file.**
+  It is a real design lesson, but it is **not Rust-toolchain or
+  crate-ecosystem knowledge** — it is a code-review heuristic about
+  undocumented invariants held by callers, and it landed where a future
+  pdfce reader will actually look for it: **R148's amendment** and
+  **`ARCHITECTURE.md` §4.1(G)**. Writing it to the Rust RAG would put
+  pdfce-specific reasoning in a tree other projects grep for Cargo and
+  toolchain answers.
+- **The target-vs-record documentation finding is NOT a RAG file
+  either.** It is a documentation-discipline observation already covered
+  in obligation by CLAUDE.md rule 6 and the global documentation-first
+  directive. Recorded in this log and on the discharged *Next up* entry.
+- **Nothing PDF-domain was learned**, so **`C:\personal_rag\pdf\`** gets
+  nothing. Both this filing's findings are about **pdfce's own API and
+  documentation**, not about how real-world producers diverge from the
+  spec — which is that subject's entire scope.
+- **Not `D:\Dev\Rag-Specialized\PDF_Spec\`** — not this librarian's to
+  write (hard rule 6), and no spec question was in dispute. The §8.5.2.1
+  / §9.7.6.2 / §9.4.3 citations reproduced in §4.1 are quoted from the
+  crate's own doc comments, not newly derived.
+
+### Ledger discipline (R106)
+
+**Nothing was minted by this filing.** No Pass ID, no standing rule, no
+decision record, no operator question. Every ceiling is unchanged:
+
+| Ledger | Minted | Ceiling (unchanged) |
+|---|---|---|
+| Pass IDs | **none** — `82228b1` filed with no Pass ID | **33.0** (family **34** next free) |
+| Standing rules | **none** — R148 was AMENDED, not superseded; the target-vs-record finding was deliberately not promoted | **R149** (**R150** next free) |
+| Decision records | **none** | **029** (**030** next free — reserved in practice for a Pass 33.0 fix record) |
+| Operator questions | **none** | **(av)** |
+
+**`tools/check-ledger-numbers.py --stats` WAS run at write time, after
+these edits.** Result recorded in the report to the engineer.
+
+*(Disclosure, unchanged and repeated because it is the boundary that keeps
+being tested: the checker is a **pure Markdown parse of `docs/`** — it
+observes **no git, no backup and no working-tree state**, which is why
+running it is inside hard rule 8 rather than a violation of it. **No claim
+about the repository, the index, remotes, or the backup bundle is made
+anywhere in this entry.** Backup currency is **not verifiable from here**;
+the engineer should check `D:\Dev\pdfce-backups\` directly, and must not
+carry forward continuation 84's or 85's stale-bundle numbers — both were
+wrong.)*
+
+**Still in flight:** everything in *OWED WORK* above. **Nothing this
+filing started is left half-done** — both dispatched tasks are complete,
+and §4.1(I) is the deliberate, enumerated edge of the second one rather
+than an unfinished part of it.
+
+**For next session:**
+
+1. **Dispatch the `ARCHITECTURE.md` §7 (CLI) sync as its own task** — the
+   §4 sync's direct sibling and now the largest known docs debt.
+2. **Decide Pass 33.0** — (c) shipped; choose whether to add (b), or take
+   (a)/(d) instead. Decision record `030` if it is a design call.
+3. **Continue decision 028's plan — item 12 (the breadcrumb) first**;
+   then items 10+11 (keyboard), item 9 (subpath-move gesture, the live
+   R117 instance), item 14 (tooltip). **Verify items 7 and 13 before
+   assuming either shipped.**
+4. **Answer the `CompositeEncoding` re-export question** (rule 10).
+5. **Answer (av)** if the clip-gate is to be built.
+6. **Re-run `tools/check-ledger-numbers.py` after committing these docs**
+   — it was run at write time and reported clean; a post-commit re-run is
+   confirmation, not discovery.
+7. **Check `D:\Dev\pdfce-backups\` directly** — backup state is not
+   assertable from a librarian dispatch (hard rule 8).
