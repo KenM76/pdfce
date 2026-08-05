@@ -8510,6 +8510,159 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
+### ★ Pass 33.0 — Reflow's AUTO-DETECTED wrap width inherits the damage a prior `edit-text` did to the block's bbox, and reports success while running text off the page (a DEFECT in shipped Pass 15.x; core + CLI + GUI)
+
+**Pass ID librarian-assigned 2026-08-05** (family 33, the next free
+family — 31.0 is burned, 32.0 is live; engineer to confirm). **This is a
+defect in SHIPPED work** (Pass 15.0 `ReflowEngine`, 15.1 surgery, 15.2
+GUI), not new scope. **It is filed with NO FIX CHOSEN** — see *Options*
+below; the choice is deliberately left open.
+
+**★ How it was found, because the provenance is part of the record.** The
+operator asked whether pdfce's text reflow *really* works or only appears
+to. He had been handed a third-party guess that pdfce is a **"twin-layer"
+GUI** — an invisible grid of native text widgets floating over a static
+page image, scraped into JSON and handed to a CLI engine on Accept. **That
+guess is wrong on every count, and the corrections are worth stating
+because they are the architecture's load-bearing claims:**
+
+- The canvas **rasterizes `session.view()` — the EDITED revision —
+  through `pdfce-render`**. It is not a static page image with widgets on
+  top; what the operator sees is the document as edited (Pass 17.x,
+  decision 018).
+- **`pdfce-gui` and `pdfce-cli` are SIBLINGS over `pdfce-core`.** There is
+  **no subprocess and no JSON** between them. The GUI does not shell out
+  to the CLI; both call the same in-process core API.
+- **There is no on-canvas caret at all.** Text entry is a **panel field**,
+  not an overlaid editable widget — so the "invisible grid of text
+  widgets" has no counterpart in the code.
+
+**But the operator also proposed a concrete TEST, and the test found a
+real bug.** *Insert a large amount of text mid-paragraph, then reflow, and
+see whether the paragraph re-wraps at the margin and pushes the following
+lines down rather than overlapping or running off the page.* This is the
+kind of finding R86 exists for: an architectural rebuttal answered the
+question that was asked, and **only running the test answered the question
+that mattered**.
+
+**Measured on `fixtures/synthetic/reflow/reflow.pdf`:**
+
+1. `edit-text --find "lazy dog and then" --replace "<the same text + 20×
+   'alpha ' + and then>"` **succeeds and discloses** that the edited line
+   may now overflow the right margin and that block re-wrap is deferred
+   (FF-A). **Correct and honest** — this is Pass 14.1's documented
+   single-line-relayout-plus-disclosure behaviour working exactly as
+   decision 015 §3.3 says it should.
+2. `reflow --page 1 --block 0` with **no explicit `--width`** reports
+   **"block 0 re-wrapped from 4 to 2 line(s)"** — and produces text
+   **running off a 612 pt page**. The preview names the cause outright:
+   **`width=930.0`**.
+3. `reflow --page 1 --block 0 --width 156` — the block's **TRUE original
+   width** — re-wraps **4 → 8 lines correctly**: wrapped at the margin,
+   following content pushed down, **no overlap, nothing off the page**.
+   Verified by rendering the page and reading it.
+
+**The defect, precisely.** `crates/pdfce-core/src/text_edit/reflow.rs`
+**line 605**:
+
+```rust
+let wrap_width = req.wrap_width.unwrap_or_else(|| old_bbox.width());
+```
+
+The auto-detected wrap width is the block's **CURRENT** bounding-box
+width. A prior overflowing `edit-text` has **already widened that box**
+(156 → 930 pt), because the block bbox is a **derived union over the
+block's lines** and the surgical edit legitimately made one line very
+long. Reflow then faithfully re-wraps to **a width the operator never
+chose and that does not fit the page** — and reports success.
+
+**★ Why nothing caught it, and this is the sharper half of the finding.**
+`ReflowDiagnostics::overflowing_words` means *"words wider than the wrap
+width"* — **unbreakable single words**. It does **not** mean "the wrap
+width is wider than the page." And the page-overflow check that **does**
+exist is **purely vertical**: `reflow.rs:745-764` computes
+`past_bottom = crop.lly - new_bbox.lly` and counts `lines_outside`, and
+`PageOverflow` carries exactly two fields, `past_bottom_pt` and
+`lines_outside`. **`req.page_cropbox` is already in hand at that point and
+its RIGHT edge is never compared to `block_llx + wrap_width`.** So the
+**vertical** overflow case is disclosed per **R76** ("never silently clips
+or drops content") while the **horizontal** case is **not disclosed at
+all**. R76's posture is right; its coverage is one axis short.
+
+**★ The generalizable shape — this is why it is a finding and not just a
+ticket. An inferred default measured from CURRENT state inherits the
+damage a previous operation did to that state.** Both operations are
+**individually correct**: `edit-text` honestly discloses that it may have
+overflowed the margin, and `reflow` honestly uses the block's own box
+width (decision 015 §3.3 says the wrap width **is** the block bbox width,
+and that was the right call for a block nobody had edited). **The defect
+lives ONLY in their composition** — neither module can see it from inside
+itself, and neither module's tests can either, because each is correct in
+isolation. Expect this **anywhere pdfce auto-detects a parameter from
+geometry a prior edit could have moved.** Filed as standing rule **R148**.
+
+**★ The composition only bites because reflow is DELIBERATELY not
+automatic, and that design is NOT in question.** Decision 015 §3.3
+(TR-explicit) makes reflow an explicit, reviewable operator action
+precisely because a re-wrap invents line breaks the file never stated
+(§14.8 S1–S9, rule 4). The gap between the `edit-text` and the `reflow` is
+what lets the bbox go stale — but closing it by making reflow automatic
+would trade a disclosed bad default for a **silent** derived re-layout,
+which is strictly worse and is exactly what **R75** forbids. **This is a
+defect in the DEFAULT PARAMETER, not in the posture.**
+
+**Options — NONE CHOSEN. Recorded with the engineer's stated leaning, not
+as a decision.** A real choice here **may warrant its own decision
+record** and **should be made with the code in front of whoever makes
+it**:
+
+- **(a) Clamp** the auto-width so the block's right edge stays inside the
+  page, **and disclose the clamp.** Bounded and obvious; but it silently
+  picks a width that is *neither* the original *nor* what was measured,
+  and a clamped width still is not 156.
+- **(b) Derive the auto-width from the block's MAJORITY/MEDIAN line
+  width** rather than its bounding box, so **one overflowing line cannot
+  set it**. Attacks the actual mechanism — the bbox is a union, and a
+  union is maximally sensitive to the single worst member. Would have
+  returned ~156 on the measured case. Costs a heuristic, and a heuristic
+  is itself a rule-4 inference that must be disclosed and overridable.
+- **(c) Leave the width alone but DISCLOSE that the detected width puts
+  content off the page** — consistent with **R76**'s existing posture for
+  the vertical case, and the data is **already in the request**
+  (`page_cropbox`), so it is the **smallest** change. Does not stop the
+  operator getting a bad re-wrap; it stops them getting one **silently**.
+- **(d) Have `edit-text` MARK the block as having an untrustworthy box**,
+  so reflow **refuses to auto-detect** and requires an explicit
+  `--width`. The most honest about provenance and the most invasive:
+  needs a new piece of cross-operation state, and a refusal is a worse
+  operator experience than a disclosed default when the block is fine.
+
+**Engineer's leaning as filed: (c) at minimum** — the smallest change
+consistent with the existing disclosure posture — **possibly with (b)**.
+**(c) and (b) compose** (a better default, still disclosed when it fails);
+(a) and (d) do not compose with each other.
+
+**Acceptance (a floor, not a ceiling — re-derive at scoping):** the
+measured sequence above (`edit-text` overflow → `reflow` with no
+`--width`) no longer reports unqualified success; whatever the chosen fix,
+the horizontal case is **disclosed on the same footing as the vertical
+one** (R76); `--width 156` continues to produce the correct 8-line
+re-wrap; **`reflow` with no prior `edit-text` is unchanged** — this must
+not regress the ordinary case decision 015 §3.3 was designed around; the
+`pdfce-cli reflow` and GUI reflow surfaces carry the same disclosure
+(rule 11); Pass 15.0/15.1/15.2 tests stay green; fmt/clippy clean.
+
+**Non-goals:** making reflow automatic (R75, decision 015 §3.3 — see
+above); FF-B cross-block/cross-page reflow; Knuth-Plass; hyphenation;
+changing 14.1's default post-edit behaviour.
+
+**References:** `crates/pdfce-core/src/text_edit/reflow.rs` (`:605`
+auto-width, `:661-704` `overflowing_words`, `:745-764` the vertical-only
+`PageOverflow`); `docs/decisions/015-ffa-within-block-offline-reflow.md`
+§3.3 (wrap width = block bbox width, operator-adjustable), §3.5 + **R76**
+(overflow discloses, never disappears), **R75** (reflow is explicit);
+Pass 15.0/15.1/15.2 Shipped entries; `fixtures/synthetic/reflow/reflow.pdf`.
+
 ### ★ `docs/ARCHITECTURE.md` §4 is THREE FILINGS BEHIND the shipped core surface — scheduled here rather than left to happen incidentally (docs-only; no Pass ID needed, but it is real work with a real backlog)
 
 **Filed 2026-08-05 by the librarian, deliberately as a scheduled item
@@ -15694,6 +15847,72 @@ decision 025, (aq)–(au) from decision 026:**
   continuation 84's "re-run it after this commit" item is **discharged**;
   re-run again after **this** commit, which moves the rule and decision
   ceilings once more.
+
+- **R148 — An auto-detected parameter measured from document geometry is
+  not trustworthy once a prior edit in the same session could have moved
+  that geometry (2026-08-05, continuation 86; librarian-assigned;
+  correctness rule, promoted from the shipped-reflow defect filed as Pass
+  33.0).** When pdfce **infers** a parameter by **measuring the document's
+  current state** — a box width, a baseline spacing, a bounding extent, a
+  detected alignment, a snapped origin — that measurement carries whatever
+  a **previous operation** did to the state it measured. **The inference
+  and the earlier edit can each be individually correct and the
+  composition still wrong**, which is why neither module's own tests can
+  catch it: each is correct by its own lights, and the defect exists only
+  in the seam.
+  *Instance (Pass 33.0):* `reflow.rs:605` auto-detects the wrap width as
+  `old_bbox.width()`. A block bbox is a **derived union over the block's
+  lines**, so a prior Pass 14.1 `edit-text` that legitimately overflowed
+  **one** line widened the union from **156 pt to 930 pt**. Reflow then
+  re-wrapped to 930 pt **on a 612 pt page** and **reported success** —
+  *block 0 re-wrapped from 4 to 2 line(s)* — while running the text off
+  the page. Passing the true width (`--width 156`) produced the correct
+  4 → 8 re-wrap. **Both operations behaved exactly as their decision
+  records specify**; only their composition failed.
+  **Rule, in three parts.** (1) **Name the provenance.** Any auto-detected
+  parameter's doc comment states *what it is measured from* and *which
+  operations can move that thing* — a reader must be able to see the seam
+  without running the sequence. (2) **A union is the worst thing to
+  measure from.** A bounding box, an extent, an envelope is **maximally
+  sensitive to its single worst member**; prefer a **majority/median**
+  statistic over a union when the union's members are independently
+  editable. (3) **Bound the inference against something the document did
+  NOT derive** — the cropbox, the media box, the original recorded value —
+  and **disclose when the bound fires** (rule 4). A disclosed bad default
+  is recoverable; a silent one is the defect.
+  **★ Corollary — a disclosure that covers one AXIS is not a disclosure.**
+  Reflow already disclosed **vertical** page overflow per **R76**
+  (`past_bottom_pt`, `lines_outside`) and had `page_cropbox` **in hand**,
+  yet **never compared the cropbox right edge to the wrap width**. When a
+  rule says *never silently drops content*, check it holds on **every**
+  axis, direction and boundary the operation can cross — a half-covered
+  invariant reads as covered at every call site.
+  **★ Second corollary — this rule is NOT an argument for making the
+  inference automatic.** The seam exists because reflow is deliberately an
+  **explicit** operator action (**R75**, decision 015 §3.3), and closing
+  the seam by re-wrapping on every edit would trade a **disclosed bad
+  default** for a **silent derived re-layout**, which R75 forbids outright.
+  **Fix the parameter, not the posture.**
+  Cross-references **R76** (the half-covered invariant), **R75** (why the
+  seam is deliberate), **R136** (a preview and its commit compute from the
+  SAME input — the sibling failure, where two computations disagree; R148
+  is where **one** computation reads stale input), **R86** (only looking
+  proves it — this was found by rendering the page, not by a test), and
+  **R143** (a stated reason is re-verified — `overflowing_words` *sounds*
+  like an overflow guard and is not one).
+
+  **Ceiling is now R148** (was R147 at continuation 85's filing; R146 at
+  84's). **R148 is librarian-originated from continuation 86's operator
+  test** — promoted from the Pass 33.0 defect, found by **running the
+  test the operator proposed**, not by reading the code. **No new decision
+  record and no new operator question were minted by this filing**: the
+  four candidate fixes for Pass 33.0 are recorded **as options with a
+  stated leaning, deliberately unresolved**, because the choice belongs to
+  whoever has the code open — and if it is made as a design choice rather
+  than a bug fix it should get its own record, so **decision 029 remains
+  free**. This filing mints Pass **33.0**, so **family 34 is now the next
+  free family**. Re-run `tools/check-ledger-numbers.py` after this commit
+  — the rule ceiling and the Pass-family ceiling both moved.
 
 ## Update protocol
 

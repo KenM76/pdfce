@@ -303,6 +303,31 @@ pub struct PageOverflow {
     pub past_bottom_pt: f64,
     /// How many preview lines have their box below the cropbox bottom.
     pub lines_outside: usize,
+    /// How far the new block box extends past the cropbox RIGHT edge, points
+    /// (`0.0` when it does not).
+    ///
+    /// # Why this axis was missing, and why its absence looked complete
+    ///
+    /// Only the bottom was ever checked, which reads as thorough because a
+    /// re-wrap grows DOWNWARD — vertical is the axis the operation obviously
+    /// threatens. The horizontal axis is threatened by something else: the
+    /// WRAP WIDTH, which is auto-detected from the block's bounding box
+    /// whenever the caller does not override it.
+    ///
+    /// That box is not a fixed property of the paragraph. An `edit-text` whose
+    /// replacement was longer than the original pushes its line past the right
+    /// margin and widens the box — measured on a 612 pt page, 156 pt became
+    /// 930 pt — and the next reflow then wraps faithfully to a width the
+    /// operator never chose, running text off the page while reporting a
+    /// successful re-wrap. Both operations are individually correct; the
+    /// damage lives only in their composition (R148).
+    ///
+    /// Disclosed rather than clamped, matching this module's existing posture
+    /// for the vertical case (decision 015 §3.5, R76): pdfce states what it
+    /// derived and never silently reshapes the operator's content. Which
+    /// corrective default to adopt instead is a separate open question
+    /// (Pass 33.0).
+    pub past_right_pt: f64,
 }
 
 /// The derived-inference counters + disclosures for one preview — the
@@ -742,24 +767,48 @@ impl<'m, 'a> ReflowEngine<'m, 'a> {
             ));
         }
 
-        // Page-bottom overflow (§3.5 / R76): disclosed, never applied.
+        // Page overflow on BOTH axes (§3.5 / R76): disclosed, never applied.
+        //
+        // The bottom check is the obvious one — a re-wrap grows downward, so
+        // that is the axis the operation plainly threatens. The right edge is
+        // threatened by something else: the wrap WIDTH itself. When the caller
+        // does not override it, it is measured from the block's current
+        // bounding box, and a prior `edit-text` whose replacement ran past the
+        // margin has already widened that box. Without this check such a
+        // reflow reports a successful re-wrap while putting text off the page
+        // (R148).
         let overflow = req.page_cropbox.and_then(|crop| {
-            let past_bottom = crop.lly - new_bbox.lly;
-            if past_bottom <= EPS {
+            let past_bottom = (crop.lly - new_bbox.lly).max(0.0);
+            let past_right = (new_bbox.urx - crop.urx).max(0.0);
+            // Either axis alone is an overflow. Returning early when only the
+            // bottom was clear is exactly what hid the horizontal case.
+            if past_bottom <= EPS && past_right <= EPS {
                 return None;
             }
             let lines_outside = lines
                 .iter()
                 .filter(|l| l.baseline_y - descent < crop.lly - EPS)
                 .count();
-            diagnostics.disclose(format!(
-                "reflow: re-wrap grows the block {past_bottom:.1}pt past the page bottom \
-                 (cropbox); {lines_outside} line(s) fall outside the visible page — DISCLOSED, \
-                 not applied (decision 015 §3.5, R76)"
-            ));
+            if past_bottom > EPS {
+                diagnostics.disclose(format!(
+                    "reflow: re-wrap grows the block {past_bottom:.1}pt past the page bottom \
+                     (cropbox); {lines_outside} line(s) fall outside the visible page — \
+                     DISCLOSED, not applied (decision 015 §3.5, R76)"
+                ));
+            }
+            if past_right > EPS {
+                diagnostics.disclose(format!(
+                    "reflow: the wrap width puts the block {past_right:.1}pt past the page right \
+                     edge (cropbox), so the re-wrapped text runs off the page. That width was \
+                     measured from the block's own box, which an earlier edit may have widened \
+                     past the margin — pass an explicit width to wrap to the original margin \
+                     — DISCLOSED, not applied (R148, R76)"
+                ));
+            }
             Some(PageOverflow {
                 past_bottom_pt: past_bottom,
                 lines_outside,
+                past_right_pt: past_right,
             })
         });
 

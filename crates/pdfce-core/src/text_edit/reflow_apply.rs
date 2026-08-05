@@ -530,13 +530,35 @@ pub(crate) fn plan_reflow(
             disclosures.push(note.clone());
         }
     }
+    // Each axis is disclosed only if it actually overflowed. `overflow` being
+    // `Some` no longer implies the BOTTOM overflowed: it is `Some` when either
+    // axis does, so an unguarded note here reported "grows the block 0.0pt
+    // past the page bottom" for a block that only ran off the RIGHT edge —
+    // a disclosure that is false in the letter while a true one goes unsaid.
     if let Some(ov) = preview.overflow {
-        disclosures.push(format!(
-            "reflow: the re-wrap grows the block {:.1}pt past the page bottom (cropbox); {} \
-             line(s) fall outside the visible page — the content was EMITTED at its true off-page \
-             position, NOT clipped or dropped (decision 015 §3.5, R76)",
-            ov.past_bottom_pt, ov.lines_outside,
-        ));
+        if ov.past_bottom_pt > 0.0 {
+            disclosures.push(format!(
+                "reflow: the re-wrap grows the block {:.1}pt past the page bottom (cropbox); {} \
+                 line(s) fall outside the visible page — the content was EMITTED at its true \
+                 off-page position, NOT clipped or dropped (decision 015 §3.5, R76)",
+                ov.past_bottom_pt, ov.lines_outside,
+            ));
+        }
+        // Worded for the apply stage rather than carried over from the
+        // preview, for the same reason the bottom note is: the preview says
+        // "not applied", which is true there and false here — and the filter
+        // above drops any preview note containing that phrase, so a carried
+        // note would silently vanish rather than merely read oddly.
+        if ov.past_right_pt > 0.0 {
+            disclosures.push(format!(
+                "reflow: the wrap width put the block {:.1}pt past the page RIGHT edge (cropbox), \
+                 so the re-wrapped text runs off the page — EMITTED at its true off-page \
+                 position, NOT clipped. The width was measured from the block's own box, which \
+                 an earlier edit may have widened past the margin; re-run with an explicit width \
+                 to wrap to the original margin (R148, R76)",
+                ov.past_right_pt,
+            ));
+        }
     }
     if let Some(mcid) = prov.mcid {
         disclosures.push(format!(
@@ -1512,6 +1534,88 @@ mod tests {
     }
 
     // -- page overflow: content EMITTED off-page, not clipped -----------
+
+    /// **A wrap width wider than the page is disclosed** (R148).
+    ///
+    /// The composition this catches: `edit-text` pushes a replacement past the
+    /// right margin — honestly disclosing that it may have — which WIDENS the
+    /// block's bounding box. Reflow's wrap width defaults to that box, so the
+    /// next re-wrap faithfully honours a width the operator never chose and
+    /// puts text off the page, while reporting a successful re-wrap.
+    ///
+    /// Measured on a real run before the fix: a 156 pt block became 930 pt on
+    /// a 612 pt page, and reflow reported "re-wrapped from 4 to 2 lines" with
+    /// no mention that the result was off the page.
+    ///
+    /// Nothing caught it because the only overflow check was
+    /// `crop.lly - new_bbox.lly` — purely vertical. That reads as complete,
+    /// because a re-wrap grows DOWNWARD; the horizontal axis is threatened by
+    /// the wrap width instead, which is a different mechanism entirely.
+    #[test]
+    fn a_wrap_width_past_the_page_right_edge_is_disclosed() {
+        let src = build_pdf(
+            "BT /F1 10 Tf 20 40 Td (aa bb cc dd ee) Tj ET
+",
+            &[courier()],
+            &[(
+                3,
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 60] /Contents 4 0 R >>".to_vec(),
+            )],
+        );
+        let doc = load(&src);
+        // Wrap to 400 pt on a 100 pt-wide page: the block starts at x=20, so
+        // it ends 320 pt past the right edge.
+        let out = apply_reflow(&doc, 0, 0, &ReflowRequest::new().with_wrap_width(400.0)).unwrap();
+
+        let ov = out.report.overflow.expect("overflow computed");
+        assert!(
+            (ov.past_right_pt - 320.0).abs() < 0.5,
+            "expected ~320pt past the right edge, got {}",
+            ov.past_right_pt
+        );
+        assert!(
+            out.report
+                .disclosures
+                .iter()
+                .any(|d| d.contains("RIGHT edge") && d.contains("EMITTED")),
+            "the horizontal overflow must be disclosed as emitted, not clipped: {:?}",
+            out.report.disclosures
+        );
+    }
+
+    /// **And the vertical note must not fire at 0.0pt.**
+    ///
+    /// `overflow` being `Some` no longer implies the BOTTOM overflowed — it is
+    /// `Some` when EITHER axis does. An unguarded note therefore reported
+    /// "grows the block 0.0pt past the page bottom" for a block that only ran
+    /// off the right, which is a disclosure false in its letter while the true
+    /// one went unsaid. Caught by reading the CLI output of the very run this
+    /// fix was written for, not by a test.
+    #[test]
+    fn a_right_only_overflow_does_not_claim_a_bottom_overflow() {
+        let src = build_pdf(
+            "BT /F1 10 Tf 20 40 Td (aa bb) Tj ET
+",
+            &[courier()],
+            &[(
+                3,
+                b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 200] /Contents 4 0 R >>".to_vec(),
+            )],
+        );
+        let doc = load(&src);
+        // Tall page (no vertical overflow), very wide wrap (horizontal only).
+        let out = apply_reflow(&doc, 0, 0, &ReflowRequest::new().with_wrap_width(400.0)).unwrap();
+        let ov = out.report.overflow.expect("overflow computed");
+        assert_eq!(ov.past_bottom_pt, 0.0, "nothing overflowed the bottom");
+        assert!(
+            !out.report
+                .disclosures
+                .iter()
+                .any(|d| d.contains("past the page bottom")),
+            "must not claim a bottom overflow that did not happen: {:?}",
+            out.report.disclosures
+        );
+    }
 
     #[test]
     fn overflow_emits_all_lines_below_the_page_and_discloses() {
