@@ -1481,6 +1481,69 @@ pub fn split_written(parts: usize, dir: &std::path::Path) -> String {
     format!("{parts} file(s) written to {}.", dir.display())
 }
 
+// --- Insert-pages tool (Pass 3.5, GUI) -------------------------------------
+
+/// Intro. States the two things an operator would otherwise discover by
+/// surprise: the whole source goes in, and the open document is NOT changed.
+pub fn insert_tool_intro() -> &'static str {
+    "Put every page of another PDF into the open one and save the result as a new file. The document you have open is not changed."
+}
+
+/// Shown when the tool is opened with nothing loaded.
+pub fn insert_needs_document() -> &'static str {
+    "Open a document first — this inserts pages INTO the one you have open."
+}
+
+/// The source-file picker.
+pub fn insert_pick_source_button() -> &'static str {
+    "Choose file…"
+}
+
+/// The chosen source, named. A path the operator picked minutes ago is worth
+/// showing back: "Choose file…" with no answer beside it looks unfinished.
+pub fn insert_source_chosen(path: &std::path::Path) -> String {
+    path.file_name().map_or_else(
+        || path.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    )
+}
+
+/// Placeholder before a source is chosen.
+pub fn insert_no_source() -> &'static str {
+    "no file chosen"
+}
+
+/// Position choices.
+pub fn insert_at_start() -> &'static str {
+    "Before the first page"
+}
+
+/// See [`insert_at_start`].
+pub fn insert_at_end() -> &'static str {
+    "After the last page"
+}
+
+/// Names the position that is NOT offered, so its absence is a statement.
+pub fn insert_other_positions_note() -> &'static str {
+    "Inserting at a chosen page is available in the command-line tool but not here yet."
+}
+
+/// The run control.
+pub fn insert_run_button() -> &'static str {
+    "Insert and save as…"
+}
+
+/// Why the run control is disabled — a dead button that does not say why is
+/// the R83 hazard, not the disabling.
+pub fn insert_needs_source() -> &'static str {
+    "Choose the PDF you want to insert first."
+}
+
+/// Status note after a successful insert.
+pub fn insert_written(pages: usize, path: &std::path::Path) -> String {
+    format!("{pages} page(s) inserted; saved as {}.", path.display())
+}
+
 // ---------------------------------------------------------------------------
 // Ribbon tabs and groups (Pass 24.1)
 // ---------------------------------------------------------------------------
@@ -2622,21 +2685,6 @@ pub fn font_folder_note_registered(path: &dyn std::fmt::Display, names: &str) ->
     format!("Using {path} for: {names}")
 }
 
-/// Body text for a dock entry whose graphical form has not shipped yet,
-/// naming the command-line equivalent that has.
-///
-/// A placeholder that says "coming soon" wastes the operator's time; one
-/// that hands them a working command does not. `command` is a literal
-/// command line and is deliberately **not** translated — it is syntax,
-/// not prose.
-pub fn tool_available_in_cli(command: &str) -> String {
-    format!(
-        "This tool does not have a window yet. It works today from the command \
-line, which does exactly the same thing:\n\n    {command}\n\nRun it with --help \
-for every option."
-    )
-}
-
 // ---------------------------------------------------------------------------
 // Combine files (Pass 3.2)
 // ---------------------------------------------------------------------------
@@ -2927,12 +2975,6 @@ pub fn merge_input_failed(path: &Path, message: &str) -> String {
 /// control that decides what a Delete button acts on.
 pub fn selection_check_glyph() -> &'static str {
     "✔"
-}
-
-/// The command line the Tools dock shows for inserting pages. Never
-/// translated — see [`split_cli_command`].
-pub fn insert_cli_command() -> &'static str {
-    "pdfce-cli insert-pages <file.pdf> --source <other.pdf> --after 1 -o <out.pdf>"
 }
 
 // ---------------------------------------------------------------------------

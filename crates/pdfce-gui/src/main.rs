@@ -644,6 +644,16 @@ struct PdfceApp {
     /// as a complete thought. The other two are named in the panel rather than
     /// implied by their absence.
     split_every_n: usize,
+    /// The Insert tool's chosen source file, `None` until one is picked
+    /// (Pass 3.5, GUI).
+    insert_source: Option<PathBuf>,
+    /// Where the source's pages land: `false` = before page 1, `true` = after
+    /// the last page. Two positions, not four.
+    ///
+    /// `InsertPosition` also has `Before(n)`/`After(n)`, which need a page
+    /// picker. Start and End need nothing and are the two an operator asks for
+    /// without thinking; the panel names the third rather than hiding it.
+    insert_at_end: bool,
     /// The Combine tool's ordered input list.
     merge_inputs: Vec<PathBuf>,
     /// Whether Combine generates one bookmark per source. On by default,
@@ -1013,6 +1023,8 @@ impl Default for PdfceApp {
             tools_open: false,
             tools_selected: None,
             split_every_n: 1,
+            insert_source: None,
+            insert_at_end: true,
             merge_inputs: Vec::new(),
             merge_bookmarks: true,
             // decision 012: no supplied font folders at startup — the
@@ -4655,9 +4667,7 @@ impl PdfceApp {
             // "coming soon", which is information the operator can act on
             // instead of an apology.
             Some(Tool::Split) => self.split_tool(ui),
-            Some(Tool::Insert) => {
-                ui.label(ui_text::tool_available_in_cli(ui_text::insert_cli_command()));
-            }
+            Some(Tool::Insert) => self.insert_tool(ui),
             Some(Tool::FontFolders) => self.font_folders_tool(ui),
         }
     }
@@ -4748,6 +4758,125 @@ impl PdfceApp {
             }
         }
         self.edit_note = Some(ui_text::split_written(parts.len(), &dir));
+    }
+
+    /// The Insert-pages tool (Pass 3.5, GUI).
+    ///
+    /// # Why this WRITES A NEW FILE rather than editing the open document
+    ///
+    /// The obvious shape is "insert these pages into what I have open". It is
+    /// not what ships, and the reason is structural rather than a shortcut.
+    ///
+    /// `pageops::insert` returns the bytes of a whole new document. It is not
+    /// an `EditSession` command, so there is no `CommandKind` for it, no undo
+    /// entry, and no dirty-set entry — an in-place insert would change the
+    /// operator's document in a way Ctrl+Z could not reverse. That breaks the
+    /// undo contract `ARCHITECTURE.md` §11.4 makes for every edit, and the one
+    /// thing worse than a missing feature is one that silently exempts itself
+    /// from undo.
+    ///
+    /// So it behaves like Merge and Split, which have the same property: pick
+    /// inputs, choose an output, write a new file, leave the open document
+    /// untouched. In-place insert is a real follow-up and needs an
+    /// `EditSession::insert_pages` first; it is a core Pass, not a GUI one.
+    ///
+    /// # All source pages, and only two positions
+    ///
+    /// The CLI takes `--source-pages 1,3,5-7`; this inserts the source in
+    /// full. A page-range box here would be a third page-selection model in
+    /// one application — after the thumbnail rail's and the CLI's — and it
+    /// would be selecting pages of a document that is not on screen, which is
+    /// the case where a range box helps least and misleads most.
+    ///
+    /// `InsertPosition::Before(n)`/`After(n)` are likewise absent: they need a
+    /// picker pointing at the TARGET document, which the rail can supply, and
+    /// that is worth doing properly rather than as a spinner. Named in the
+    /// panel, not hidden.
+    fn insert_tool(&mut self, ui: &mut egui::Ui) {
+        ui.label(ui_text::insert_tool_intro());
+        if !matches!(self.status, Status::Open(_)) {
+            ui.label(ui_text::insert_needs_document());
+            return;
+        }
+        ui.horizontal(|ui| {
+            if ui.button(ui_text::insert_pick_source_button()).clicked()
+                && let Some(path) = rfd::FileDialog::new()
+                    .add_filter(ui_text::open_dialog_filter_label(), &["pdf"])
+                    .pick_file()
+            {
+                self.insert_source = Some(path);
+            }
+            match self.insert_source.as_ref() {
+                Some(p) => ui.label(ui_text::insert_source_chosen(p)),
+                None => ui.label(ui_text::insert_no_source()),
+            };
+        });
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.insert_at_end, false, ui_text::insert_at_start());
+            ui.selectable_value(&mut self.insert_at_end, true, ui_text::insert_at_end());
+        });
+        ui.label(ui_text::insert_other_positions_note());
+
+        let ready = self.insert_source.is_some();
+        let resp = ui.add_enabled(ready, egui::Button::new(ui_text::insert_run_button()));
+        if !ready {
+            resp.on_hover_text(ui_text::insert_needs_source());
+            return;
+        }
+        if !resp.clicked() {
+            return;
+        }
+        let Some(source_path) = self.insert_source.clone() else {
+            return;
+        };
+        let Status::Open(doc) = &self.status else {
+            return;
+        };
+        let suggested = ui_text::suggested_save_name(&doc.path);
+        let Some(out) = rfd::FileDialog::new()
+            .add_filter(ui_text::open_dialog_filter_label(), &["pdf"])
+            .set_file_name(suggested)
+            .save_file()
+        else {
+            return; // cancelled — nothing written
+        };
+        let source_doc = match pdfce_core::document::Document::load(&source_path) {
+            Ok(d) => d,
+            Err(err) => {
+                self.save_result = Some(SaveOutcome::Failed(err.to_string()));
+                return;
+            }
+        };
+        let source_pages: Vec<usize> = match pdfce_core::page_tree::pages(&source_doc) {
+            Ok(p) => (0..p.len()).collect(),
+            Err(err) => {
+                self.save_result = Some(SaveOutcome::Failed(err.to_string()));
+                return;
+            }
+        };
+        let source_view = pdfce_core::pageops::DocumentView::new(
+            &source_doc,
+            source_doc.bytes(),
+            source_doc.version(),
+        );
+        // SESSION view for the TARGET (Pass 17.1): pages the operator has
+        // deleted or reordered this session must be absent or moved in the
+        // result, exactly as they see them.
+        let target_view = doc.session.view();
+        let position = if self.insert_at_end {
+            pdfce_core::pageops::InsertPosition::End
+        } else {
+            pdfce_core::pageops::InsertPosition::Start
+        };
+        match pdfce_core::pageops::insert(&target_view, &source_view, &source_pages, position) {
+            Ok((bytes, _)) => match std::fs::write(&out, &bytes) {
+                Ok(()) => {
+                    self.edit_note = Some(ui_text::insert_written(source_pages.len(), &out));
+                }
+                Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
+            },
+            Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
+        }
     }
 
     /// The Font-folders tool (decision 012): manage the operator-supplied
