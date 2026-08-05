@@ -14025,7 +14025,7 @@ fn run_vector_edit_tool(
             let mut drag = vector_edit_tool::classify_drag(idx, start, &anchors, tol_page);
             diag::trace(|| {
                 format!(
-                    "drag-start obj={idx} start={start:?} interact={:?} anchors={} tol={tol_page} node={:?}",
+                    "drag-start obj={idx} sp={sp:?} rect={image_rect:?} zoom={zoom} start={start:?} interact={:?} anchors={} tol={tol_page} node={:?}",
                     image_response.interact_pointer_pos().and_then(to_pdf),
                     anchors.len(),
                     drag.node
