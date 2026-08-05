@@ -15,7 +15,7 @@
 //! and the snap engine share), plain `f64` — egui-free, so the drag
 //! classification is unit-tested here.
 
-use pdfce_core::vector::Point;
+use pdfce_core::vector::{Handle, Point};
 
 /// The radius **in screen pixels** within which a drag beginning near a
 /// selected object's anchor is treated as a **node drag** rather than a
@@ -56,6 +56,14 @@ pub struct VectorDrag {
     /// `Some(node)` when this is a node drag (the anchor's index in
     /// decomposition order); `None` for a whole-object move.
     pub node: Option<usize>,
+    /// `Some((node, side))` when this drag grabbed a Bézier HANDLE rather than
+    /// the on-curve node — it moves a control point and leaves the node put.
+    ///
+    /// Set independently of [`Self::node`] and takes precedence over it: the
+    /// two grab zones overlap, and a handle is closest to its own node exactly
+    /// when the curve is nearly flat there, so a node-wins rule would make the
+    /// handle unreachable precisely when it is most wanted (decision 028 §Q3).
+    pub handle: Option<(usize, Handle)>,
     /// The page-space point the drag started at (for the move delta, or a
     /// node drag's reference).
     pub start: Point,
@@ -93,6 +101,7 @@ pub fn classify_drag(
     VectorDrag {
         object_index,
         node,
+        handle: None,
         start,
     }
 }

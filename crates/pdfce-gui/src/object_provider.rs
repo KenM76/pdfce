@@ -41,7 +41,7 @@
 use eframe::egui::{Pos2, Rect};
 use pdfce_core::page_tree::Page;
 use pdfce_core::vector::{
-    Bounds, MarqueeMode, Matrix, PageObjects, Point, VectorObject, decompose_page,
+    Bounds, Handle, MarqueeMode, Matrix, PageObjects, Point, Segment, VectorObject, decompose_page,
     hit_test_point_all, hit_test_rect,
 };
 use pdfce_core::view::DocumentView;
@@ -254,6 +254,97 @@ impl ObjectModelProvider {
             offset += anchors.len();
         }
         Vec::new()
+    }
+
+    /// The Bézier control points ("handles") of one subpath, each tagged with
+    /// the **object-scoped index of the node it belongs to** and which side of
+    /// that node it shapes.
+    ///
+    /// # Which handle belongs to which node
+    ///
+    /// A cubic segment carries two control points, and they belong to
+    /// *different* nodes — this is the part that is easy to get backwards.
+    /// Segment `k` runs from anchor `k` to anchor `k+1`, so its `c1` shapes
+    /// the curve LEAVING anchor `k` and its `c2` shapes the curve ARRIVING at
+    /// anchor `k+1`. That is exactly the split
+    /// [`pdfce_core::vector::Handle`] names, and it is why the enum is worded
+    /// by direction of travel rather than "first/second": first-and-second are
+    /// properties of an operator, and an operator says nothing about which
+    /// node the operator of the program has selected.
+    ///
+    /// Straight segments contribute nothing. pdfce refuses to invent a handle
+    /// for a line — turning a line into a curve is a different operation with
+    /// a different name — so a node with no curve on a side simply has no mark
+    /// there, and the absence is stated in the readout rather than drawn as a
+    /// ghost (decision 028 §Q2).
+    ///
+    /// `v`/`y` implicit control points need no special handling here: the
+    /// decomposition already resolves them into explicit `c1`/`c2`
+    /// (`Segment::Cubic`'s own doc comment), so this sees one uniform shape
+    /// and the promotion-to-`c` happens far downstream in the planner.
+    pub(crate) fn subpath_handle_points(
+        &self,
+        object: usize,
+        subpath: usize,
+    ) -> Vec<(usize, Handle, Point)> {
+        let Some(VectorObject::Path(path)) = self.objects.objects.get(object) else {
+            return Vec::new();
+        };
+        let subpaths = path.page_subpaths();
+        let mut offset = 0usize;
+        for (i, sp) in subpaths.iter().enumerate() {
+            let anchors = sp.anchors().count();
+            if i != subpath {
+                offset += anchors;
+                continue;
+            }
+            let mut out = Vec::new();
+            for (k, seg) in sp.segments.iter().enumerate() {
+                if let Segment::Cubic { c1, c2, .. } = *seg {
+                    // `c1` shapes the curve leaving anchor k …
+                    out.push((offset + k, Handle::Outgoing, c1));
+                    // … and `c2` shapes the curve arriving at anchor k+1.
+                    out.push((offset + k + 1, Handle::Incoming, c2));
+                }
+            }
+            return out;
+        }
+        Vec::new()
+    }
+
+    /// The handle of `subpath` nearest `point` within `tolerance`, as
+    /// `(node index, side)` — the Node rung's handle pick.
+    ///
+    /// # Why handles are hit-tested BEFORE nodes
+    ///
+    /// A handle sits close to its own node exactly when the curve is nearly
+    /// flat there. If the node won ties, the handle would be unreachable
+    /// precisely in the case where the operator most wants it — to pull a flat
+    /// segment into a curve. Checking the smaller target first is the standard
+    /// resolution and the one decision 028 §Q3 specifies.
+    /// `point` is in **PDF page space**, unlike [`Self::nearest_node`]'s
+    /// canvas-space input: the only caller is the drag classifier, which has
+    /// already converted the press origin to page space to compute the drag's
+    /// reference point. Converting back to canvas just to convert forward
+    /// again would be two chances to disagree with itself for no benefit.
+    pub(crate) fn nearest_handle(
+        &self,
+        object: usize,
+        subpath: usize,
+        pdf: Point,
+        tolerance: f64,
+    ) -> Option<(usize, Handle)> {
+        let mut best: Option<((usize, Handle), f64)> = None;
+        for (index, side, p) in self.subpath_handle_points(object, subpath) {
+            if !p.is_finite() {
+                continue;
+            }
+            let d = p.distance(pdf);
+            if d <= tolerance && best.is_none_or(|(_, bd)| d < bd) {
+                best = Some(((index, side), d));
+            }
+        }
+        best.map(|(hit, _)| hit)
     }
 
     /// The object-scoped index of the anchor of `subpath` nearest `point`
@@ -567,5 +658,157 @@ mod tests {
         let cands = snap_candidates(Point::new(11.0, 21.0), &SnapConfig::new(5.0), model);
         assert_eq!(cands[0].kind, SnapKind::Endpoint);
         assert_eq!(cands[0].point, Point::new(10.0, 20.0));
+    }
+}
+
+/// The Node rung's pick sets: which points belong to which part, and which
+/// handle belongs to which node.
+///
+/// Separate from the module's main test block because these answer a
+/// different question — not "does a click find the object" but "does the
+/// index the operator sees mean what `node-move --node N` means".
+#[cfg(test)]
+mod node_rung_tests {
+    use super::*;
+    use pdfce_core::content::ContentStream;
+    use pdfce_core::vector::{NoXObjects, decompose};
+
+    fn provider(src: &[u8]) -> ObjectModelProvider {
+        let cs = ContentStream::parse(src.to_vec()).expect("parse");
+        let objects = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+        ObjectModelProvider::from_parts(0, objects, Transform::identity())
+    }
+
+    /// **Node indices stay OBJECT-scoped across a subpath boundary.**
+    ///
+    /// This is decision 025 §1.3(b) made testable. The pick set is scoped to
+    /// one part, but the numbering is not — because the number pdfce shows and
+    /// the number `pdfce-cli node-move --node N` addresses have to be the same
+    /// number. A subpath-scoped index would restart at 0 on the second part
+    /// and quietly address a point in the first.
+    #[test]
+    fn the_second_parts_points_keep_counting_from_the_first() {
+        // Two parts of two anchors each: indices 0,1 then 2,3.
+        let p = provider(b"0 0 m 10 0 l 100 5 m 110 5 l S");
+        let first: Vec<usize> = p
+            .subpath_node_points(0, 0)
+            .into_iter()
+            .map(|(i, _)| i)
+            .collect();
+        let second: Vec<usize> = p
+            .subpath_node_points(0, 1)
+            .into_iter()
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(first, vec![0, 1]);
+        assert_eq!(
+            second,
+            vec![2, 3],
+            "the second part must continue the object's numbering, not restart"
+        );
+    }
+
+    /// The pick set contains ONLY the named part's points.
+    ///
+    /// The whole reason the rung exists: a measured CAD object holds 6,681
+    /// anchors, and offering all of them as a grab target is what made the
+    /// old ungated gesture unpredictable.
+    #[test]
+    fn a_parts_pick_set_excludes_every_other_part() {
+        let p = provider(b"0 0 m 10 0 l 100 5 m 110 5 l S");
+        let pts: Vec<Point> = p
+            .subpath_node_points(0, 1)
+            .into_iter()
+            .map(|(_, q)| q)
+            .collect();
+        assert_eq!(pts.len(), 2);
+        assert!(
+            pts.iter().all(|q| q.x >= 100.0),
+            "part 1's pick set must not contain part 0's points: {pts:?}"
+        );
+    }
+
+    /// **A cubic's two control points belong to DIFFERENT nodes** — the thing
+    /// most likely to be implemented backwards.
+    ///
+    /// Segment k runs from anchor k to anchor k+1, so `c1` shapes the curve
+    /// LEAVING anchor k and `c2` shapes the curve ARRIVING at anchor k+1.
+    /// Assigning both to one node would look plausible, draw two handles in
+    /// roughly the right place, and make every handle drag move the wrong end
+    /// of the curve.
+    #[test]
+    fn a_cubics_two_handles_belong_to_the_nodes_at_its_two_ends() {
+        // m(0,0) then c with c1=(10,40) c2=(60,40) to=(70,0).
+        // Anchors: 0 -> (0,0), 1 -> (70,0).
+        let p = provider(b"0 0 m 10 40 60 40 70 0 c S");
+        let hs = p.subpath_handle_points(0, 0);
+        assert_eq!(hs.len(), 2, "one cubic contributes exactly two handles");
+
+        let outgoing = hs
+            .iter()
+            .find(|(_, s, _)| *s == Handle::Outgoing)
+            .expect("c1");
+        assert_eq!(outgoing.0, 0, "c1 shapes the curve LEAVING anchor 0");
+        assert_eq!(outgoing.2, Point::new(10.0, 40.0));
+
+        let incoming = hs
+            .iter()
+            .find(|(_, s, _)| *s == Handle::Incoming)
+            .expect("c2");
+        assert_eq!(incoming.0, 1, "c2 shapes the curve ARRIVING at anchor 1");
+        assert_eq!(incoming.2, Point::new(60.0, 40.0));
+    }
+
+    /// **A straight segment contributes no handle, and none is invented.**
+    ///
+    /// pdfce refuses to turn a line into a curve without being asked, so the
+    /// absence must show up as nothing drawn — not as a placeholder sitting on
+    /// the node, which would advertise an edit that will be refused.
+    #[test]
+    fn a_straight_part_has_no_handles_at_all() {
+        let p = provider(b"0 0 m 10 0 l 20 0 l S");
+        assert!(p.subpath_handle_points(0, 0).is_empty());
+    }
+
+    /// `v` and `y` resolve to explicit control points before they get here.
+    ///
+    /// Worth pinning because the GUI would otherwise need to know about the
+    /// short spellings, and getting `v` (first control = current point) and
+    /// `y` (second control = endpoint) confused is the classic error in this
+    /// operator family.
+    #[test]
+    fn the_short_curve_spellings_still_yield_two_handles() {
+        // `v`: c1 is implicitly the current point (0,0), c2 = (60,40).
+        let p = provider(b"0 0 m 60 40 70 0 v S");
+        let hs = p.subpath_handle_points(0, 0);
+        assert_eq!(hs.len(), 2, "`v` is a cubic and has both handles resolved");
+        let outgoing = hs
+            .iter()
+            .find(|(_, s, _)| *s == Handle::Outgoing)
+            .expect("c1");
+        assert_eq!(
+            outgoing.2,
+            Point::new(0.0, 0.0),
+            "`v`'s first control point IS the current point"
+        );
+    }
+
+    /// A handle grab resolves to the node it belongs to, not to the nearest
+    /// node in space.
+    #[test]
+    fn grabbing_a_handle_names_its_own_node() {
+        let p = provider(b"0 0 m 10 40 60 40 70 0 c S");
+        // Press right on c2 = (60,40), which is far nearer anchor 1 (70,0)
+        // than anchor 0 — and is c2, so it must report node 1 / Incoming.
+        let hit = p.nearest_handle(0, 0, Point::new(60.0, 40.0), 2.0);
+        assert_eq!(hit, Some((1, Handle::Incoming)));
+    }
+
+    /// An out-of-range part yields nothing rather than panicking or wrapping.
+    #[test]
+    fn an_out_of_range_part_yields_no_points_or_handles() {
+        let p = provider(b"0 0 m 10 0 l S");
+        assert!(p.subpath_node_points(0, 9).is_empty());
+        assert!(p.subpath_handle_points(0, 9).is_empty());
     }
 }

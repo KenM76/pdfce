@@ -1489,6 +1489,27 @@ pub const NODE_MARK_PX: f32 = 6.0;
 /// is carried by size and fill rather than by colour alone (R84).
 pub const NODE_MARK_SELECTED_PX: f32 = 8.0;
 
+/// The diameter, in SCREEN pixels, of an unselected Bézier handle mark.
+///
+/// Smaller than [`NODE_MARK_PX`] on purpose, and hit-tested FIRST for the same
+/// reason: a handle sits closest to its node exactly when the curve is nearly
+/// flat there, so if the node won that contest the handle would be
+/// unreachable precisely when the operator most wants it — to pull a flat
+/// segment into a curve (decision 028 §Q3).
+pub const HANDLE_MARK_PX: f32 = 5.0;
+
+/// The diameter of the SELECTED handle mark.
+pub const HANDLE_MARK_SELECTED_PX: f32 = 7.0;
+
+/// The grab radius, in SCREEN pixels, for a Bézier handle.
+///
+/// Deliberately tighter than [`NODE_GRAB_SCREEN_TOLERANCE_PX`](crate::vector_edit_tool::NODE_GRAB_SCREEN_TOLERANCE_PX):
+/// handles are checked first, so a generous handle radius would start eating
+/// presses meant for the node underneath. The asymmetry is the point — losing
+/// a handle grab costs one retry, while stealing a node grab moves a point of
+/// the drawing.
+pub const HANDLE_GRAB_SCREEN_TOLERANCE_PX: f32 = 5.0;
+
 /// The most anchors drawn for one entered subpath before the Node rung stops
 /// drawing them and says so.
 ///

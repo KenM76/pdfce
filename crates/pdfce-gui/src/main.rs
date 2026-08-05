@@ -11982,7 +11982,69 @@ fn draw_selection_outlines(
                     SUBPATH_OUTLINE_COLOR,
                 );
             } else {
-                for (index, p) in nodes {
+                // ---- Bézier handles, drawn UNDER the node marks ----------
+                //
+                // Under, because a handle can sit almost on top of its own
+                // node when the curve is nearly flat there, and in that case
+                // the node is the thing that must stay legible — it is the
+                // point the curve actually passes through.
+                //
+                // Shown for EVERY node of the entered part that has one, not
+                // only the selected node: handles are how an operator decides
+                // WHICH node to pick, so hiding them until after the pick
+                // inverts the order the information is needed in
+                // (decision 028 §Q2).
+                for (index, side, h) in provider.subpath_handle_points(entered.object, sp) {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let hc = viewer::page_to_screen(
+                        egui::pos2(h.x as f32, h.y as f32),
+                        image_rect,
+                        extent,
+                        zoom,
+                    );
+                    // The node this handle belongs to, so the arm can be drawn
+                    // between them. Skipped rather than guessed if the node is
+                    // not in the drawn set.
+                    let Some(anchor) = nodes.iter().find(|(i, _)| *i == index).map(|(_, p)| *p)
+                    else {
+                        continue;
+                    };
+                    #[allow(clippy::cast_possible_truncation)]
+                    let ac = viewer::page_to_screen(
+                        egui::pos2(anchor.x as f32, anchor.y as f32),
+                        image_rect,
+                        extent,
+                        zoom,
+                    );
+                    let selected = entered.node == Some(index);
+                    // A DASHED arm ties the handle to its node. Dashing is
+                    // already this project's signal for "this line is not a
+                    // measured edge of the drawing" (APPROXIMATE_OUTLINE_DASH),
+                    // so it reuses a meaning the operator has already met
+                    // rather than inventing a fourth (decision 028 §Q2).
+                    painter.add(egui::Shape::dashed_line(
+                        &[ac, hc],
+                        egui::Stroke::new(1.0, SUBPATH_OUTLINE_COLOR),
+                        3.0,
+                        3.0,
+                    ));
+                    let r = if selected {
+                        canvas::HANDLE_MARK_SELECTED_PX
+                    } else {
+                        canvas::HANDLE_MARK_PX
+                    } / 2.0;
+                    // CIRCLE, where a node is a SQUARE — the node/handle
+                    // distinction is carried by shape, so it survives for an
+                    // operator who cannot separate the two colours (R84).
+                    if selected {
+                        painter.circle_filled(hc, r, ui.visuals().selection.stroke.color);
+                    } else {
+                        painter.circle_stroke(hc, r, egui::Stroke::new(1.5, SUBPATH_OUTLINE_COLOR));
+                    }
+                    let _ = side;
+                }
+                for (index, p) in &nodes {
+                    let (index, p) = (*index, *p);
                     // `subpath_node_points` is in PDF page space; the outline
                     // above uses the same conversion for its corners.
                     #[allow(clippy::cast_possible_truncation)]
@@ -12160,8 +12222,24 @@ fn run_vector_edit_tool(
     // provider rebuild do not fight the page/object-model borrows).
     enum Commit {
         None,
-        Move { idx: usize, dx: f64, dy: f64 },
-        Node { idx: usize, node: usize, to: Point },
+        Move {
+            idx: usize,
+            dx: f64,
+            dy: f64,
+        },
+        Node {
+            idx: usize,
+            node: usize,
+            to: Point,
+        },
+        /// A Bézier handle drag: one control point moves, the on-curve node
+        /// it belongs to stays where it is.
+        Handle {
+            idx: usize,
+            node: usize,
+            side: pdfce_core::vector::Handle,
+            to: Point,
+        },
     }
     let mut commit = Commit::None;
     let mut new_selection: Option<std::collections::BTreeSet<TargetId>> = None;
@@ -12339,6 +12417,26 @@ fn run_vector_edit_tool(
             let mut drag = vector_edit_tool::classify_drag(idx, start, &anchors, tol_page);
             // Translate the position-in-pick-set into the object-scoped index.
             drag.node = drag.node.and_then(|k| node_indices.get(k).copied());
+            // HANDLES ARE CHECKED FIRST and override a node grab. They overlap
+            // exactly when the curve is nearly flat at that node, which is
+            // precisely when the operator is reaching for the handle — so a
+            // node-wins rule would make it unreachable in its most-wanted case
+            // (decision 028 §Q3). Losing a handle grab costs one retry;
+            // stealing a node grab moves a point of the drawing, so the
+            // handle radius is the tighter of the two.
+            if let Some(e) = doc.entered.filter(|e| e.object == idx && e.node.is_some())
+                && let Some(sp_i) = e.subpath
+                && let Some(provider) = doc.object_model.as_ref()
+                && let Some(hit) = provider.nearest_handle(
+                    e.object,
+                    sp_i,
+                    start,
+                    canvas::screen_tolerance_to_page(canvas::HANDLE_GRAB_SCREEN_TOLERANCE_PX, zoom),
+                )
+            {
+                drag.handle = Some(hit);
+                drag.node = None;
+            }
             new_drag = Some(Some(drag));
         }
 
@@ -12347,7 +12445,28 @@ fn run_vector_edit_tool(
             && let Some(sp) = image_response.interact_pointer_pos()
             && let Some(ptr) = to_pdf(sp)
         {
-            if let Some(node) = drag.node {
+            if let Some((node, side)) = drag.handle {
+                // Handle drag. Deliberately NOT snapped: a control point is
+                // not a location on the drawing, it is a shaping lever, and
+                // snapping it to nearby geometry would tie the curve's shape
+                // to a coordinate the operator was not aiming at. Nodes snap
+                // because they ARE points of the drawing; handles are not.
+                if let Some(s) = to_screen(ptr) {
+                    painter.circle_stroke(
+                        s,
+                        canvas::HANDLE_MARK_SELECTED_PX / 2.0,
+                        egui::Stroke::new(1.5, preview_color),
+                    );
+                }
+                if canvas::primary_drag_stopped(image_response) {
+                    commit = Commit::Handle {
+                        idx: drag.object_index,
+                        node,
+                        side,
+                        to: ptr,
+                    };
+                }
+            } else if let Some(node) = drag.node {
                 // Node drag: snap the target and draw the snap marker (shown
                 // pre-commit — fuzzy-never-sneaky) plus a preview handle.
                 let (target, snapped) = snap(ptr);
@@ -12462,6 +12581,23 @@ fn run_vector_edit_tool(
         Commit::Move { idx, dx, dy } => {
             let outcome = doc.session.move_object(page_index, idx, dx, dy);
             diag::trace(|| format!("commit-move idx={idx} dx={dx} dy={dy} -> {outcome:?}"));
+            disclose_vector_edit(doc, outcome.as_deref().unwrap_or(&[]));
+            doc.vector_drag = None;
+            doc.refresh_pages();
+            doc.ensure_object_provider();
+        }
+        Commit::Handle {
+            idx,
+            node,
+            side,
+            to,
+        } => {
+            let outcome = doc.session.move_handle(page_index, idx, node, side, to);
+            diag::trace(|| {
+                format!(
+                    "commit-handle idx={idx} node={node} side={side:?} to={to:?} -> {outcome:?}"
+                )
+            });
             disclose_vector_edit(doc, outcome.as_deref().unwrap_or(&[]));
             doc.vector_drag = None;
             doc.refresh_pages();
