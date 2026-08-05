@@ -31,8 +31,10 @@ use crate::object::{Dict, Name, Object};
 use crate::vector::{AxisConstraint, Point};
 
 use super::fit::FitCircle;
-use super::group::{DimensionId, DimensionKind, DimensionModel, DimensionRecord, Group, GroupId};
-use super::units::{FractionMode, NumberFormat, ScaleState, Unit};
+use super::group::{
+    DimStandard, DimensionId, DimensionKind, DimensionModel, DimensionRecord, Group, GroupId,
+};
+use super::units::{DecimalMarker, FractionMode, NumberFormat, ScaleState, Unit};
 
 /// The sidecar schema version pdfce writes (bumped only on a breaking layout
 /// change; readers ignore unknown extra keys, §14.5 forward-compat).
@@ -147,6 +149,17 @@ fn serialize_group(g: &Group) -> Object {
         Name::from(b"Unit"),
         Object::String(g.format.unit.token().as_bytes().to_vec()),
     );
+    // Written only when NOT the default, so a document that never left ANSI
+    // point-decimal keeps byte-identical sidecar output.
+    if g.standard != DimStandard::Ansi {
+        d.insert(Name::from(b"Standard"), Object::Name(Name::from(b"iso")));
+    }
+    if g.format.decimal_marker != DecimalMarker::Point {
+        d.insert(
+            Name::from(b"DecimalMarker"),
+            Object::Name(Name::from(b"comma")),
+        );
+    }
     match g.format.fraction {
         FractionMode::Decimal { places } => {
             d.insert(Name::from(b"Frac"), Object::Name(Name::from(b"decimal")));
@@ -201,9 +214,25 @@ fn deserialize_group(obj: &Object) -> Option<Group> {
         id,
         name,
         scale,
-        format: NumberFormat { unit, fraction },
+        format: NumberFormat {
+            unit,
+            fraction,
+            // Both OPTIONAL keys at the existing schema version, absent
+            // meaning the pre-27.2 behaviour — the same additive discipline
+            // `/Offset` and `/TextAlong` use, and for the same reason: a
+            // version bump would trip the write-side refusal on every existing
+            // dimensioned file.
+            decimal_marker: match name_of(d.get(b"DecimalMarker")).as_deref() {
+                Some(b"comma") => DecimalMarker::Comma,
+                _ => DecimalMarker::Point,
+            },
+        },
         ocg,
         visible,
+        standard: match name_of(d.get(b"Standard")).as_deref() {
+            Some(b"iso") => DimStandard::Iso,
+            _ => DimStandard::Ansi,
+        },
     })
 }
 

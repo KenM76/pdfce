@@ -61,6 +61,50 @@ pub struct Group {
     /// The layer's **default visibility** (the `/D` config state): `true` ⇒
     /// the OCG is ON by default; `false` ⇒ registered in `/D /OFF` (hidden).
     pub visible: bool,
+    /// The drafting standard this group's ce dimensions are DRAWN to
+    /// (Pass 27.2): terminator form, whether the dimension line is broken for
+    /// the text, text orientation, and whether the extension-line gap and
+    /// overshoot are absolute or line-width-relative.
+    ///
+    /// # Why per group
+    ///
+    /// The group already owns every other display-governing property — scale,
+    /// unit, number format, layer — and the standard is the same class of
+    /// thing. Per ce dimension would be a foot-gun with no use case (nobody
+    /// wants dimension #3 ISO and #4 ANSI); per document would mean inventing
+    /// a document tier, and merge semantics for it, for one field. The unit
+    /// interaction settles it: the standards' decimal conventions are
+    /// unit-dependent, and the unit is per group.
+    ///
+    /// Changing it regenerates every member, exactly like a scale change — a
+    /// group exists so its members agree.
+    pub standard: DimStandard,
+}
+
+/// The drafting standard governing how ce dimensions are DRAWN (Pass 27.2).
+///
+/// Does not govern the numeric string, with one researched exception: ISO
+/// 129-1:2018 cl. 4.1.1 mandates a comma decimal marker, which lives on
+/// [`NumberFormat`] and is SET from this as a disclosed side effect rather
+/// than implied by it.
+///
+/// **pdfce draws "ISO-style", never "ISO 129-1 conformant".** ISO 129-1's
+/// normative Annex A (symbol proportions against lettering height, ISO 3098
+/// class B) is paywalled and was not obtained, so conformance cannot honestly
+/// be claimed — only the practice that was verifiable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DimStandard {
+    /// ANSI/ASME practice — the factory default (operator, 2026-08-04: "My
+    /// default is ANSI, but ISO should be an option too").
+    ///
+    /// Line/arrowhead and lettering conventions are **ASME Y14.2**, not
+    /// Y14.5: Y14.5 is the GD&T/tolerancing standard and is routinely
+    /// miscited for this. No clause number is given here because the document
+    /// is paywalled and was not obtained.
+    #[default]
+    Ansi,
+    /// ISO 129-1 practice.
+    Iso,
 }
 
 impl Group {
@@ -75,6 +119,7 @@ impl Group {
             format: unit.default_format(),
             ocg: None,
             visible: true,
+            standard: DimStandard::default(),
         }
     }
 

@@ -27,7 +27,7 @@
 //!
 //! ## Deterministic regeneration (the scale-change story)
 //!
-//! [`author_dimension`] is a **pure function of** `(kind, scale, format)`, so
+//! [`author_dimension`] is a **pure function of** `(kind, style)`, so
 //! changing a group's scale re-runs it for every member and replaces each
 //! member's `/AP` stream object + `/Contents` + `/Measure` (the Pass 7.1
 //! regenerate-appearances pattern, decision 011 §2.3).
@@ -39,7 +39,7 @@ use crate::vartext::standard14_font_dict;
 use crate::vector::Point;
 use crate::writer::content::{ContentBuilder, LineCap, LineJoin, Paint};
 
-use super::group::DimensionKind;
+use super::group::{DimStandard, DimensionKind};
 use super::measure_dict::build_measure_dict;
 use super::units::{NumberFormat, ScaleState, format_measurement};
 
@@ -56,22 +56,83 @@ const LINE_WIDTH: f64 = 0.75;
 /// Arrowhead length (points).
 const ARROW_LEN: f64 = 7.0;
 
-/// Gap left between the measured point and the start of its extension line.
-///
-/// **Convention, not mandated.** ANSI/ASME practice is about 1.5 mm in
-/// mechanical drawing (1.6-3 mm architectural); ISO 129-1 requires a gap but
-/// leaves the value to the field, expressing related distances as multiples of
-/// the line width. 4 pt is about 1.4 mm. Decision 026 records the sourcing and
-/// the confidence behind both of these numbers; neither is a standard's
-/// requirement and neither should be cited as one.
-const EXT_GAP: f64 = 4.0;
+/// Padding either side of the value where it interrupts an ANSI dimension
+/// line, in points. **Convention, not mandated** — see
+/// [`DimensionStyle::extension_metrics`].
+const TEXT_BREAK_PAD: f64 = 3.0;
 
-/// How far an extension line continues PAST the dimension line.
+/// How far an ISO value sits above its (unbroken) dimension line, in points.
+/// **Convention, not mandated.**
+const TEXT_ABOVE_GAP: f64 = 3.0;
+
+/// Everything the appearance of one ce dimension depends on besides its
+/// geometry (Pass 27.2).
 ///
-/// **Convention, not mandated** — see [`EXT_GAP`]. ~1 mm mechanical, ~3 mm
-/// architectural under ANSI practice; 8x line width under ISO. 3 pt is about
-/// 1 mm.
-const EXT_OVERSHOOT: f64 = 3.0;
+/// A struct rather than three positional parameters: `author_dimension` had
+/// reached four arguments, three of them same-shaped, which is exactly the
+/// call site the Rust API guidelines warn about
+/// (`author_dimension(&k, s, f, std)` — good luck spotting a swap). The purity
+/// contract is strengthened, not weakened: the function is now a pure function
+/// of `(kind, style)`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DimensionStyle {
+    /// The group's scale.
+    pub scale: ScaleState,
+    /// The group's number format, including its decimal marker.
+    pub format: NumberFormat,
+    /// The drafting standard the dimension is drawn to.
+    pub standard: DimStandard,
+}
+
+impl From<&super::group::Group> for DimensionStyle {
+    /// Every regeneration path derives the style from the group, so this keeps
+    /// those call sites to one line and makes "the group is the authority"
+    /// structural rather than a convention each caller re-implements.
+    fn from(g: &super::group::Group) -> Self {
+        Self {
+            scale: g.scale,
+            format: g.format,
+            standard: g.standard,
+        }
+    }
+}
+
+impl DimensionStyle {
+    /// The extension-line gap and overshoot, in points, for this standard.
+    ///
+    /// # The one structural difference between the two traditions
+    ///
+    /// ANSI expresses these as ABSOLUTE lengths (~1.5 mm gap, ~1 mm overshoot
+    /// in mechanical practice); ISO expresses them as MULTIPLES OF THE LINE
+    /// WIDTH (ISO 129-1 gives "approximately 8 x the line width"). Modelling
+    /// that split is what lets one set of geometry reproduce both, rather than
+    /// two drawing paths that drift.
+    ///
+    /// **Every number here is drafting CONVENTION, not a standard's
+    /// requirement.** ISO 129-1 requires a gap without fixing its value; the
+    /// ANSI figures are practice, and ASME Y14.2 is paywalled and was not
+    /// obtained. Decision 026 records the sourcing and confidence for each.
+    #[must_use]
+    pub fn extension_metrics(self) -> (f64, f64) {
+        match self.standard {
+            // ~1.4 mm and ~1 mm at 72 dpi.
+            DimStandard::Ansi => (4.0, 3.0),
+            // 8x the stroke width, per ISO's line-width-relative convention.
+            DimStandard::Iso => (LINE_WIDTH * 8.0, LINE_WIDTH * 8.0),
+        }
+    }
+
+    /// Whether the dimension line is BROKEN to make room for the value.
+    ///
+    /// ANSI interrupts the line and centres the value in the gap; ISO places
+    /// the value **above an unbroken line** (ISO 129-1:2018 cl. 4.1.1, *"shall
+    /// be indicated above the dimension line and read from the bottom"* —
+    /// verified).
+    #[must_use]
+    pub const fn breaks_line_for_text(self) -> bool {
+        matches!(self.standard, DimStandard::Ansi)
+    }
+}
 
 /// The annotation-dictionary keys [`author_dimension`] OWNS — the ones a
 /// regeneration must overwrite, and must REMOVE when the new state does not
@@ -131,7 +192,9 @@ pub struct AuthoredDimension {
 /// # Examples
 ///
 /// ```
-/// use pdfce_core::dimension::{author_dimension, DimensionKind, NumberFormat, ScaleState, Unit};
+/// use pdfce_core::dimension::{
+///     author_dimension, DimStandard, DimensionKind, DimensionStyle, NumberFormat, ScaleState, Unit,
+/// };
 /// use pdfce_core::vector::{AxisConstraint, Point};
 ///
 /// let kind = DimensionKind::Linear {
@@ -143,8 +206,11 @@ pub struct AuthoredDimension {
 /// };
 /// let authored = author_dimension(
 ///     &kind,
-///     ScaleState::Calibrated { scale: 0.01 },
-///     NumberFormat::decimal(Unit::Meter, 2),
+///     DimensionStyle {
+///         scale: ScaleState::Calibrated { scale: 0.01 },
+///         format: NumberFormat::decimal(Unit::Meter, 2),
+///         standard: DimStandard::Ansi,
+///     },
 /// );
 /// // 100 pt at 0.01 m/pt = 1.00 m.
 /// assert_eq!(authored.label, "1.00 m");
@@ -153,11 +219,12 @@ pub struct AuthoredDimension {
 /// assert!(authored.annot.get(b"Measure").is_some()); // scale mirror
 /// ```
 #[must_use]
-pub fn author_dimension(
-    kind: &DimensionKind,
-    scale: ScaleState,
-    format: NumberFormat,
-) -> AuthoredDimension {
+pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> AuthoredDimension {
+    let DimensionStyle {
+        scale,
+        format,
+        standard: _,
+    } = style;
     let display = format_measurement(kind.measured_points(), scale, format);
     let label = format!("{}{}", kind.caption_prefix(), display.text);
 
@@ -173,6 +240,12 @@ pub fn author_dimension(
     b.set_line_cap(LineCap::Butt);
     b.set_line_join(LineJoin::Miter);
 
+    // The label's metrics are needed BEFORE the line is stroked, because under
+    // ANSI the line is broken to make room for it. Computing them here rather
+    // than after drawing is what lets one function serve both standards.
+    let text_w = estimate_text_width(&label, LABEL_SIZE);
+    let anchor = kind.label_anchor().unwrap_or_else(|| l0.midpoint(l1));
+
     match *kind {
         DimensionKind::Linear { .. } => {
             // The measured points, for the extension lines. `linear_geometry`
@@ -182,7 +255,22 @@ pub fn author_dimension(
             let (ext_a, ext_b) = kind
                 .linear_geometry()
                 .map_or((l0, l1), |(_, _, pa, pb)| (pa, pb));
-            draw_linear(&mut b, &mut bounds, l0, l1, ext_a, ext_b);
+            // ANSI interrupts the dimension line and centres the value in the
+            // gap; ISO runs the line unbroken with the value above it (ISO
+            // 129-1:2018 cl. 4.1.1, verified). One geometry, one flag.
+            let brk = style
+                .breaks_line_for_text()
+                .then(|| (anchor, text_w / 2.0 + TEXT_BREAK_PAD));
+            draw_linear(
+                &mut b,
+                &mut bounds,
+                LinearDraw {
+                    dim: (l0, l1),
+                    ext: (ext_a, ext_b),
+                    style,
+                    text_break: brk,
+                },
+            );
         }
         DimensionKind::Circular { fit, .. } => {
             draw_circular(&mut b, &mut bounds, fit.center, fit.radius, l1);
@@ -194,15 +282,49 @@ pub fn author_dimension(
     // SolidWorks stores a dimension's placement as a point, and sliding the
     // number along its own line is half of what that point expresses. Falls
     // back to the midpoint for a circular dimension, which has no such axis.
-    let mid = kind.label_anchor().unwrap_or_else(|| l0.midpoint(l1));
-    let text_w = estimate_text_width(&label, LABEL_SIZE);
-    let tx = mid.x - text_w / 2.0;
-    let ty = mid.y + LABEL_SIZE * 0.4; // just above the leader
-    bounds.add(Point::new(tx, ty - LABEL_SIZE));
-    bounds.add(Point::new(tx + text_w, ty + LABEL_SIZE));
+    // Text placement and orientation, both standard-dependent.
+    //
+    // ANSI is UNIDIRECTIONAL: every value reads horizontally regardless of the
+    // dimension's direction, and sits in the break in the line. ISO is
+    // ALIGNED: the value runs parallel to its dimension line and sits above it
+    // (cl. 4.1.1, *"shall be indicated above the dimension line and read from
+    // the bottom"* — verified). For a horizontal dimension the two coincide,
+    // which is why the difference only becomes visible on an aligned one.
+    let (ux, uy) = match (style.standard, kind.axis_frame()) {
+        // Aligned text, flipped where it would otherwise read upside down —
+        // cl. 4.1.1's "read from the bottom".
+        (DimStandard::Iso, Some((u, _))) if u.x < 0.0 => (-u.x, -u.y),
+        (DimStandard::Iso, Some((u, _))) => (u.x, u.y),
+        _ => (1.0, 0.0),
+    };
+    // Perpendicular to the text direction, for the ISO standoff.
+    let (px, py) = (-uy, ux);
+    let lift = if style.breaks_line_for_text() {
+        // Centred ON the line: drop the baseline by roughly half a cap height
+        // so the glyphs straddle it rather than sit on it.
+        -LABEL_SIZE * 0.35
+    } else {
+        TEXT_ABOVE_GAP
+    };
+    let tx = anchor.x - ux * text_w / 2.0 + px * lift;
+    let ty = anchor.y - uy * text_w / 2.0 + py * lift;
+    // Bounds from the rotated box's four corners, not an axis-aligned guess —
+    // an under-sized /Rect clips the value in every conforming reader.
+    for (du, dv) in [
+        (0.0, 0.0),
+        (text_w, 0.0),
+        (0.0, LABEL_SIZE),
+        (text_w, LABEL_SIZE),
+    ] {
+        bounds.add(Point::new(tx + ux * du + px * dv, ty + uy * du + py * dv));
+        bounds.add(Point::new(
+            tx + ux * du - px * LABEL_SIZE * 0.3,
+            ty + uy * du - py * LABEL_SIZE * 0.3,
+        ));
+    }
     b.begin_text();
     b.set_font(FONT_RESOURCE, LABEL_SIZE);
-    b.set_text_matrix(1.0, 0.0, 0.0, 1.0, tx, ty);
+    b.set_text_matrix(ux, uy, -uy, ux, tx, ty);
     b.show_text(label.as_bytes());
     b.end_text();
 
@@ -290,20 +412,59 @@ fn leader_endpoints(kind: &DimensionKind) -> (Point, Point) {
 /// OPPOSITE directions (picks straddling the dimension line), so each takes
 /// its own direction from its own endpoints rather than from the sign of the
 /// standoff.
-fn draw_linear(
-    b: &mut ContentBuilder,
-    bounds: &mut BoundsAcc,
-    a: Point,
-    c: Point,
-    ext_a: Point,
-    ext_b: Point,
-) {
+struct LinearDraw {
+    /// The dimension line's two ends.
+    dim: (Point, Point),
+    /// The two measured points the extension lines reach back to.
+    ext: (Point, Point),
+    /// The group's style, which decides the extension metrics.
+    style: DimensionStyle,
+    /// Where the value interrupts the line, as `(centre, half-width)` — `None`
+    /// under a standard that does not break the line.
+    text_break: Option<(Point, f64)>,
+}
+
+fn draw_linear(b: &mut ContentBuilder, bounds: &mut BoundsAcc, d: LinearDraw) {
+    let LinearDraw {
+        dim: (a, c),
+        ext: (ext_a, ext_b),
+        style,
+        text_break,
+    } = d;
+    let (ext_gap, ext_overshoot) = style.extension_metrics();
     let (ux, uy) = unit_vector(a, c);
 
-    // The dimension line.
-    b.move_to(a.x, a.y);
-    b.line_to(c.x, c.y);
-    b.paint(Paint::Stroke);
+    // The dimension line — in two pieces when the value interrupts it.
+    //
+    // The break is expressed as a centre and a half-width along the line, so a
+    // value sitting off-centre (a dragged `text_along`) breaks the line where
+    // it actually is rather than in the middle. If the break would consume the
+    // whole line, the line is omitted and the terminators still mark the
+    // extent, which is what a drafter does in cramped space.
+    match text_break {
+        Some((centre, half)) => {
+            let (ux, uy) = unit_vector(a, c);
+            let t_centre = (centre.x - a.x) * ux + (centre.y - a.y) * uy;
+            let total = ((c.x - a.x).powi(2) + (c.y - a.y).powi(2)).sqrt();
+            let seg1 = (t_centre - half).min(total).max(0.0);
+            let seg2 = (t_centre + half).min(total).max(0.0);
+            if seg1 > 0.0 {
+                b.move_to(a.x, a.y);
+                b.line_to(a.x + ux * seg1, a.y + uy * seg1);
+                b.paint(Paint::Stroke);
+            }
+            if seg2 < total {
+                b.move_to(a.x + ux * seg2, a.y + uy * seg2);
+                b.line_to(c.x, c.y);
+                b.paint(Paint::Stroke);
+            }
+        }
+        None => {
+            b.move_to(a.x, a.y);
+            b.line_to(c.x, c.y);
+            b.paint(Paint::Stroke);
+        }
+    }
     bounds.add(a);
     bounds.add(c);
 
@@ -317,16 +478,16 @@ fn draw_linear(
     for (point, dim_end) in [(ext_a, a), (ext_b, c)] {
         let (dx, dy) = (dim_end.x - point.x, dim_end.y - point.y);
         let len = dx.hypot(dy);
-        if !len.is_finite() || len <= EXT_GAP + EXT_OVERSHOOT {
+        if !len.is_finite() || len <= ext_gap + ext_overshoot {
             // Too short to draw as a witness line: the dimension line is
             // already at (or through) the point.
             continue;
         }
         let (nx, ny) = (dx / len, dy / len);
-        let start = Point::new(point.x + nx * EXT_GAP, point.y + ny * EXT_GAP);
+        let start = Point::new(point.x + nx * ext_gap, point.y + ny * ext_gap);
         let end = Point::new(
-            point.x + nx * (len + EXT_OVERSHOOT),
-            point.y + ny * (len + EXT_OVERSHOOT),
+            point.x + nx * (len + ext_overshoot),
+            point.y + ny * (len + ext_overshoot),
         );
         b.move_to(start.x, start.y);
         b.line_to(end.x, end.y);
@@ -529,8 +690,11 @@ mod tests {
     fn linear_dimension_bakes_a_line_it_and_measure() {
         let d = author_dimension(
             &linear(),
-            ScaleState::Calibrated { scale: 0.01 },
-            NumberFormat::decimal(Unit::Meter, 2),
+            DimensionStyle {
+                scale: ScaleState::Calibrated { scale: 0.01 },
+                format: NumberFormat::decimal(Unit::Meter, 2),
+                standard: DimStandard::Ansi,
+            },
         );
         assert_eq!(d.label, "1.00 m");
         assert_eq!(
@@ -562,8 +726,11 @@ mod tests {
         // renders it; a malformed stream would fail render).
         let d = author_dimension(
             &linear(),
-            ScaleState::Calibrated { scale: 0.01 },
-            NumberFormat::decimal(Unit::Meter, 2),
+            DimensionStyle {
+                scale: ScaleState::Calibrated { scale: 0.01 },
+                format: NumberFormat::decimal(Unit::Meter, 2),
+                standard: DimStandard::Ansi,
+            },
         );
         ContentStream::parse(d.ap_content.clone()).expect("baked /AP must reparse");
         // The label text is shown, and a font is set.
@@ -576,8 +743,11 @@ mod tests {
     fn never_set_scale_bakes_raw_units_and_no_measure() {
         let d = author_dimension(
             &linear(),
-            ScaleState::NeverSet,
-            NumberFormat::decimal(Unit::Meter, 2),
+            DimensionStyle {
+                scale: ScaleState::NeverSet,
+                format: NumberFormat::decimal(Unit::Meter, 2),
+                standard: DimStandard::Ansi,
+            },
         );
         assert_eq!(d.label, "100.00 pt");
         assert!(d.annot.get(b"Measure").is_none());
@@ -595,8 +765,11 @@ mod tests {
                 fit,
                 show_diameter: false,
             },
-            ScaleState::Calibrated { scale: 0.05 },
-            NumberFormat::decimal(Unit::Centimeter, 2),
+            DimensionStyle {
+                scale: ScaleState::Calibrated { scale: 0.05 },
+                format: NumberFormat::decimal(Unit::Centimeter, 2),
+                standard: DimStandard::Ansi,
+            },
         );
         assert!(r.label.starts_with("R "), "{}", r.label);
         let dia = author_dimension(
@@ -604,8 +777,11 @@ mod tests {
                 fit,
                 show_diameter: true,
             },
-            ScaleState::Calibrated { scale: 0.05 },
-            NumberFormat::decimal(Unit::Centimeter, 2),
+            DimensionStyle {
+                scale: ScaleState::Calibrated { scale: 0.05 },
+                format: NumberFormat::decimal(Unit::Centimeter, 2),
+                standard: DimStandard::Ansi,
+            },
         );
         assert!(dia.label.starts_with("DIA "), "{}", dia.label);
         // Diameter reads twice the radius.
@@ -618,13 +794,19 @@ mod tests {
         // Same inputs → byte-identical appearance (regeneration-safe).
         let a = author_dimension(
             &linear(),
-            ScaleState::OneToOne,
-            NumberFormat::decimal(Unit::Inch, 2),
+            DimensionStyle {
+                scale: ScaleState::OneToOne,
+                format: NumberFormat::decimal(Unit::Inch, 2),
+                standard: DimStandard::Ansi,
+            },
         );
         let b = author_dimension(
             &linear(),
-            ScaleState::OneToOne,
-            NumberFormat::decimal(Unit::Inch, 2),
+            DimensionStyle {
+                scale: ScaleState::OneToOne,
+                format: NumberFormat::decimal(Unit::Inch, 2),
+                standard: DimStandard::Ansi,
+            },
         );
         assert_eq!(a, b);
     }

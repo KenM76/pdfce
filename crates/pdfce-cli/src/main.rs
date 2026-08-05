@@ -1602,6 +1602,38 @@ enum Command {
         /// Input PDF.
         input: PathBuf,
     },
+    /// **Set a ce dimension group's drafting standard** (Pass 27.2) and
+    /// regenerate every member to it.
+    ///
+    /// ANSI (the default) breaks the dimension line and centres the value in
+    /// the gap, with all text horizontal. ISO runs the line unbroken with the
+    /// value above it, aligned to the line, and uses a comma decimal marker —
+    /// mandated by ISO 129-1:2018 cl. 4.1.1 — which is also mirrored into the
+    /// portable `/Measure` dict so a conforming reader computes the same
+    /// string pdfce drew.
+    ///
+    /// pdfce draws **ISO-style**, not "ISO 129-1 conformant": that standard's
+    /// normative Annex A is paywalled and was not obtained, so the claim would
+    /// be broader than the evidence.
+    GroupSetStandard {
+        /// Input PDF.
+        input: PathBuf,
+        /// Group id, as printed by `dimension-list`.
+        #[arg(long, default_value_t = 0)]
+        group: u32,
+        /// The drafting standard.
+        #[arg(long, value_enum)]
+        standard: StandardArg,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Place a ce dimension** (Pass 27.1): set how far its dimension line
     /// stands off the geometry and where its value sits along that line.
     ///
@@ -2569,6 +2601,14 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_dimension_delete(&input, dimension, &output, mode, verify_undo),
+        Command::GroupSetStandard {
+            input,
+            group,
+            standard,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_group_set_standard(&input, group, standard, &output, mode, verify_undo),
         Command::DimensionOffset {
             input,
             dimension,
@@ -7985,6 +8025,86 @@ undo_verified={} undo_identical={}",
 }
 
 /// `dimension-list` — inventory the stored dimension model (read-only).
+/// The drafting standard, as a CLI value.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum StandardArg {
+    /// ANSI/ASME practice — broken dimension line, horizontal text, point
+    /// decimal marker. pdfce's default.
+    Ansi,
+    /// ISO 129-1 practice — unbroken line, value above and aligned, comma
+    /// decimal marker.
+    Iso,
+}
+
+impl StandardArg {
+    fn to_core(self) -> pdfce_core::dimension::DimStandard {
+        match self {
+            Self::Ansi => pdfce_core::dimension::DimStandard::Ansi,
+            Self::Iso => pdfce_core::dimension::DimStandard::Iso,
+        }
+    }
+}
+
+/// `group-set-standard` — set a group's drafting standard, regenerating every
+/// member (Pass 27.2).
+///
+/// ## Contract
+///
+/// - Emits one `group-set-standard …` line naming the group, the standard and
+///   the MEMBER COUNT regenerated, then defers the exit code to
+///   [`finish_edit`]. The count is reported because this changes the SHAPE of
+///   every member, which is a larger visible change than a scale edit.
+/// - An unknown group is refused before any mutation.
+fn cmd_group_set_standard(
+    input: &Path,
+    group: u32,
+    standard: StandardArg,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let members = match session
+        .set_group_standard(pdfce_core::dimension::GroupId(group), standard.to_core())
+    {
+        Ok(n) => n,
+        Err(err) => return report_edit_error(input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "group-set-standard {} group={group} standard={} members_regenerated={members} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        if matches!(standard, StandardArg::Iso) {
+            "iso"
+        } else {
+            "ansi"
+        },
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
+}
+
 /// Grouped arguments for `dimension-offset` (clippy arg-count).
 struct DimensionOffsetArgs<'a> {
     input: &'a Path,

@@ -180,6 +180,46 @@ pub struct NumberFormat {
     pub unit: Unit,
     /// How the fractional part is shown.
     pub fraction: FractionMode,
+    /// The character separating the whole and fractional parts (Pass 27.2).
+    ///
+    /// # Why this lives on the format and not on the drafting standard
+    ///
+    /// ISO 129-1:2018 cl. 4.1.1 **mandates** a comma (*"shall use a comma as
+    /// the decimal marker"*), so the numeric string is not standard-independent
+    /// after all. But putting the marker on [`super::DimStandard`] would make
+    /// every value-formatting path depend on a drawing convention.
+    ///
+    /// `NumberFormat` is exactly what `measure_dict` projects into a §12.9
+    /// NumberFormat dict, and `/RD` is exactly that dict's decimal-marker key —
+    /// so the marker's home in pdfce mirrors its home in the spec, and the two
+    /// agree by construction rather than by remembering to keep them in step.
+    ///
+    /// Setting a group's standard to ISO sets this as a **disclosed** side
+    /// effect the operator may then override; it is not welded to the standard.
+    pub decimal_marker: DecimalMarker,
+}
+
+/// The character between the whole and fractional parts of a measurement
+/// (§12.9 Table 263 `/RD`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DecimalMarker {
+    /// `1.5` — ANSI/ASME practice and pdfce's default.
+    #[default]
+    Point,
+    /// `1,5` — mandated by ISO 129-1:2018 cl. 4.1.1, and widely violated in
+    /// practice, which is why it is overridable rather than implied.
+    Comma,
+}
+
+impl DecimalMarker {
+    /// The marker as it is written.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Point => ".",
+            Self::Comma => ",",
+        }
+    }
 }
 
 impl NumberFormat {
@@ -189,6 +229,7 @@ impl NumberFormat {
         Self {
             unit,
             fraction: FractionMode::Decimal { places },
+            decimal_marker: DecimalMarker::Point,
         }
     }
 
@@ -201,6 +242,7 @@ impl NumberFormat {
                 denominator,
                 reduce: false,
             },
+            decimal_marker: DecimalMarker::Point,
         }
     }
 
@@ -215,6 +257,7 @@ impl NumberFormat {
                 denominator,
                 reduce,
             },
+            decimal_marker: DecimalMarker::Point,
         }
     }
 
@@ -460,14 +503,56 @@ pub fn format_measurement(
 ) -> MeasurementDisplay {
     match scale_state.effective_scale(format.unit) {
         None => MeasurementDisplay {
-            text: format!("{measured_points:.2} pt"),
+            // The raw-points branch takes the marker too. It is a disclosure
+            // state rather than a dimensioned value, but it is still a number
+            // shown under a drafting standard — and a document that writes
+            // "2,00 m" everywhere except where it falls back to points would
+            // look like a bug, not like a distinction.
+            text: apply_decimal_marker(format!("{measured_points:.2} pt"), format.decimal_marker),
             raw_page_units: true,
         },
         Some(scale) => MeasurementDisplay {
-            text: format.format(measured_points * scale),
+            // The decimal marker is applied HERE, once, on the finished
+            // string, rather than threaded through every numeric branch of
+            // `NumberFormat::format` (decimal, fraction, feet-inches). Those
+            // branches all emit a point today; substituting at the end is one
+            // place to be right instead of three, and a fraction like `5/8`
+            // has no decimal point to disturb.
+            text: apply_decimal_marker(
+                format.format(measured_points * scale),
+                format.decimal_marker,
+            ),
             raw_page_units: false,
         },
     }
+}
+
+/// Replace the decimal points in a formatted measurement with `marker`.
+///
+/// Only characters BETWEEN two ASCII digits are touched. That is what keeps a
+/// unit abbreviation containing a point (none today, but the unit table is not
+/// frozen) and a trailing sentence period out of it — the substitution has to
+/// be about the number, not about the string.
+fn apply_decimal_marker(text: String, marker: DecimalMarker) -> String {
+    if matches!(marker, DecimalMarker::Point) {
+        return text;
+    }
+    let bytes: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    for (i, &c) in bytes.iter().enumerate() {
+        let between_digits = c == '.'
+            && i > 0
+            && i.checked_sub(1)
+                .and_then(|p| bytes.get(p))
+                .is_some_and(char::is_ascii_digit)
+            && bytes.get(i + 1).is_some_and(char::is_ascii_digit);
+        if between_digits {
+            out.push_str(marker.as_str());
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// One of the two co-equal scale-entry paths (ui-spec §4.2). Exactly one shape
@@ -644,6 +729,7 @@ mod tests {
                 denominator: 8,
                 reduce: true,
             },
+            decimal_marker: DecimalMarker::Point,
         };
         assert_eq!(f.format(6.5), "6 1/2 in");
     }

@@ -59,15 +59,18 @@ pub mod sidecar;
 pub mod units;
 
 // Re-export the everyday surface at `crate::dimension::…`.
-pub use author::{AUTHORED_ANNOT_KEYS, AUTHORED_MEASURE_KEY, AuthoredDimension, author_dimension};
+pub use author::{
+    AUTHORED_ANNOT_KEYS, AUTHORED_MEASURE_KEY, AuthoredDimension, DimensionStyle, author_dimension,
+};
 pub use fit::{FitCircle, fit_circle_taubin, fit_circle_taubin_refined};
 pub use group::{
-    DEFAULT_GROUP_ID, DimensionId, DimensionKind, DimensionModel, DimensionRecord, Group, GroupId,
+    DEFAULT_GROUP_ID, DimStandard, DimensionId, DimensionKind, DimensionModel, DimensionRecord,
+    Group, GroupId,
 };
 pub use length_parse::{LengthParseError, ParsedLength, parse_length};
 pub use measure_dict::{build_measure_dict, build_ocg, build_ocproperties};
 pub use sidecar::{SIDECAR_VERSION, deserialize_model, serialize_model, sidecar_version};
 pub use units::{
-    FractionMode, MeasurementDisplay, NO_SCALE_DISCLOSURE, NumberFormat, ScaleEntry, ScalePreview,
-    ScaleState, Unit, format_measurement, preview_group_scale,
+    DecimalMarker, FractionMode, MeasurementDisplay, NO_SCALE_DISCLOSURE, NumberFormat, ScaleEntry,
+    ScalePreview, ScaleState, Unit, format_measurement, preview_group_scale,
 };

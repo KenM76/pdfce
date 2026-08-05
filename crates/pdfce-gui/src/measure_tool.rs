@@ -535,6 +535,9 @@ impl ScaleEntryFields {
             Some(fraction) => NumberFormat {
                 unit: preview.unit,
                 fraction,
+                // The marker follows the group's standard, set by
+                // `set_group_standard`, not by this dialog.
+                decimal_marker: preview.unit.default_format().decimal_marker,
             },
             None => preview.unit.default_format(),
         };

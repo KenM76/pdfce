@@ -127,9 +127,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use crate::annot::AnnotFlags;
 use crate::annot_author::{self, MarkupSpec, TextAnnotSpec};
 use crate::dimension::{
-    AUTHORED_ANNOT_KEYS, AUTHORED_MEASURE_KEY, DEFAULT_GROUP_ID, DimensionId, DimensionKind,
-    DimensionModel, GroupId, NumberFormat, ScaleState, Unit, author_dimension, build_ocg,
-    build_ocproperties, deserialize_model, serialize_model,
+    AUTHORED_ANNOT_KEYS, AUTHORED_MEASURE_KEY, DEFAULT_GROUP_ID, DimStandard, DimensionId,
+    DimensionKind, DimensionModel, DimensionStyle, GroupId, NumberFormat, ScaleState, Unit,
+    author_dimension, build_ocg, build_ocproperties, deserialize_model, serialize_model,
 };
 use crate::document::Document;
 use crate::fontdata::Std14;
@@ -364,6 +364,13 @@ pub enum CommandKind {
     /// value function does not read. ONE undoable command. See
     /// [`EditSession::place_dimension`].
     PlaceDimension,
+    /// A ce dimension GROUP's drafting standard changed (Pass 27.2) and every
+    /// wired member was regenerated to it. ONE undoable command. See
+    /// [`EditSession::set_group_standard`].
+    SetGroupStandard {
+        /// How many members were regenerated.
+        members: usize,
+    },
     /// A ce dimension was DELETED (Pass 25.6): its `/Annots` reference, its
     /// annotation dictionary, its `/AP` stream and its sidecar record were all
     /// removed together. ONE undoable command. See
@@ -6121,13 +6128,20 @@ impl EditSession {
                 id
             }
         };
-        let (scale, format) = model.group(gid).map_or(
-            (ScaleState::NeverSet, Unit::Millimeter.default_format()),
-            |g| (g.scale, g.format),
+        // The group is the authority for every display property — scale,
+        // format and (Pass 27.2) drafting standard — so the style is derived
+        // from it in one step rather than assembled field by field.
+        let style = model.group(gid).map_or(
+            DimensionStyle {
+                scale: ScaleState::NeverSet,
+                format: Unit::Millimeter.default_format(),
+                standard: DimStandard::default(),
+            },
+            DimensionStyle::from,
         );
 
-        // Author the /Line + baked /AP from the geometry and the group scale.
-        let authored = author_dimension(&kind, scale, format);
+        // Author the /Line + baked /AP from the geometry and the group style.
+        let authored = author_dimension(&kind, style);
         let ap_id = ObjId::new(self.alloc_number()?, 0);
         let annot_id = ObjId::new(self.alloc_number()?, 0);
 
@@ -6426,6 +6440,71 @@ impl EditSession {
         Ok(())
     }
 
+    /// **Set a ce dimension group's drafting standard** and regenerate every
+    /// member, as one undoable command (Pass 27.2). Returns how many members
+    /// were regenerated.
+    ///
+    /// # Why every member, immediately
+    ///
+    /// Exactly the precedent [`Self::set_group_scale`] set: a group exists so
+    /// that its members agree. A group whose members are drawn to two
+    /// different standards is not a group with a setting, it is a group with a
+    /// history — and the operator would have to remember which dimensions
+    /// predate the change. This is a LARGER visible change than a scale edit
+    /// (a scale edit changes numbers; this changes shapes), so the member
+    /// count is what a UI should disclose before applying it.
+    ///
+    /// # The decimal marker rides along, disclosed
+    ///
+    /// ISO 129-1:2018 cl. 4.1.1 mandates a comma decimal marker (a verified
+    /// "shall", and widely violated in practice). Switching to ISO therefore
+    /// sets `format.decimal_marker` as a side effect — but it is a normal
+    /// field the operator can set back afterwards, not something welded to the
+    /// standard. Switching to ANSI restores the point for the same reason.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::DimensionGroupNotFound`], plus the encryption,
+    /// certification and newer-sidecar guards.
+    pub fn set_group_standard(
+        &mut self,
+        group: GroupId,
+        standard: DimStandard,
+    ) -> Result<usize, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        self.check_dimension_sidecar()?;
+
+        let mut model = self.read_dimension_model();
+        let Some(g) = model.group_mut(group) else {
+            return Err(EditError::DimensionGroupNotFound { id: group.0 });
+        };
+        g.standard = standard;
+        g.format.decimal_marker = match standard {
+            DimStandard::Ansi => crate::dimension::DecimalMarker::Point,
+            DimStandard::Iso => crate::dimension::DecimalMarker::Comma,
+        };
+
+        let members: Vec<DimensionId> = model
+            .members(group)
+            .filter(|d| d.annot.is_some() && d.ap.is_some())
+            .map(|d| d.id)
+            .collect();
+        let mut objects = self.regenerate_dimension_writes(&model, &members)?;
+        objects.push(self.catalog_dimension_write(&model)?);
+        self.commit(Command {
+            kind: CommandKind::SetGroupStandard {
+                members: members.len(),
+            },
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(members.len())
+    }
+
     /// **Delete a ce dimension**, as one undoable command (Pass 25.6).
     ///
     /// Removes three things together, because leaving any one of them is a
@@ -6610,7 +6689,7 @@ impl EditSession {
             let group = model
                 .group(record.group)
                 .ok_or(EditError::DimensionGroupNotFound { id: record.group.0 })?;
-            let authored = author_dimension(&record.kind, group.scale, group.format);
+            let authored = author_dimension(&record.kind, DimensionStyle::from(group));
 
             let mut ap_dict = authored.ap_dict;
             ap_dict.insert(

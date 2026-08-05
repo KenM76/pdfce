@@ -32,7 +32,7 @@
 
 use crate::object::{Dict, Name, ObjId, Object};
 
-use super::units::{FractionMode, NumberFormat, Unit};
+use super::units::{DecimalMarker, FractionMode, NumberFormat, Unit};
 
 /// Build a `/Measure` dict (`/Type /Measure /Subtype /RL`) for a group whose
 /// scale is `scale` real-display-units-per-point in `format.unit`
@@ -92,7 +92,7 @@ fn number_format_array(format: NumberFormat, first_c: f64) -> Object {
                 reduce,
             },
         ) => Object::Array(vec![
-            nf_dict(b"ft", first_c, None),
+            nf_dict(b"ft", first_c, None, format.decimal_marker),
             nf_dict(
                 b"in",
                 12.0,
@@ -101,6 +101,7 @@ fn number_format_array(format: NumberFormat, first_c: f64) -> Object {
                     d: i64::from(denominator.max(1)),
                     fd: !reduce,
                 }),
+                format.decimal_marker,
             ),
         ]),
         (Unit::FeetInches, FractionMode::Decimal { places }) => Object::Array(vec![nf_dict(
@@ -111,6 +112,7 @@ fn number_format_array(format: NumberFormat, first_c: f64) -> Object {
                 d: pow10(places),
                 fd: false,
             }),
+            format.decimal_marker,
         )]),
         // Single-element decimal units.
         (unit, FractionMode::Decimal { places }) => Object::Array(vec![nf_dict(
@@ -121,6 +123,7 @@ fn number_format_array(format: NumberFormat, first_c: f64) -> Object {
                 d: pow10(places),
                 fd: false,
             }),
+            format.decimal_marker,
         )]),
         // Single-element fractional unit (inch fraction).
         (
@@ -137,6 +140,7 @@ fn number_format_array(format: NumberFormat, first_c: f64) -> Object {
                 d: i64::from(denominator.max(1)),
                 fd: !reduce,
             }),
+            format.decimal_marker,
         )]),
     }
 }
@@ -154,7 +158,7 @@ struct FracKeys {
 
 /// One NumberFormat dict (§12.9 Table 263): `/Type /NumberFormat /U /C`, plus
 /// `/F /D /FD` on the last element.
-fn nf_dict(u: &[u8], c: f64, frac: Option<FracKeys>) -> Object {
+fn nf_dict(u: &[u8], c: f64, frac: Option<FracKeys>, marker: DecimalMarker) -> Object {
     let mut d = Dict::new();
     d.insert(
         Name::from(b"Type"),
@@ -171,6 +175,18 @@ fn nf_dict(u: &[u8], c: f64, frac: Option<FracKeys>) -> Object {
         if f.fd {
             d.insert(Name::from(b"FD"), Object::Boolean(true));
         }
+    }
+    // §12.9 Table 263 `/RD` — the decimal separator (Pass 27.2). Written only
+    // for a comma, since the spec default is already a point.
+    //
+    // `/RT` MUST be written alongside it. Table 263 gives `/RT` (the thousands
+    // separator) a spec default of COMMA, so setting `/RD` to a comma without
+    // pinning `/RT` yields `1,234,56` in a conforming reader — a number that
+    // is wrong in a way pdfce's own label would not show, because the label is
+    // baked into the `/AP` and the dict is what everyone ELSE computes from.
+    if matches!(marker, DecimalMarker::Comma) {
+        d.insert(Name::from(b"RD"), Object::String(b",".to_vec()));
+        d.insert(Name::from(b"RT"), Object::String(b" ".to_vec()));
     }
     Object::Dict(d)
 }

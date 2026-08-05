@@ -666,6 +666,156 @@ fn a_sidecar_from_a_newer_build_refuses_writes_instead_of_discarding_it() {
     );
 }
 
+/// **The two standards actually draw differently** (Pass 27.2).
+///
+/// Asserted on the appearance BYTES rather than on a flag, because a
+/// `DimStandard` field that nothing reads would satisfy every other test in
+/// this file. The specific difference checked is the one ISO 129-1:2018
+/// cl. 4.1.1 mandates and that is visible at a glance: ANSI breaks the
+/// dimension line and centres the value in the gap, ISO runs the line unbroken
+/// with the value above it — so the ANSI appearance strokes the dimension line
+/// in TWO pieces and the ISO one in a single piece.
+#[test]
+fn ansi_breaks_the_dimension_line_for_the_value_and_iso_does_not() {
+    use pdfce_core::dimension::{DimStandard, DimensionStyle, author_dimension};
+
+    let kind = linear();
+    let style = |standard| DimensionStyle {
+        scale: ScaleState::Calibrated { scale: 0.01 },
+        format: NumberFormat::decimal(Unit::Meter, 2),
+        standard,
+    };
+    let ansi = author_dimension(&kind, style(DimStandard::Ansi));
+    let iso = author_dimension(&kind, style(DimStandard::Iso));
+
+    assert_ne!(
+        ansi.ap_content, iso.ap_content,
+        "the two standards must produce different appearances, or the setting is inert"
+    );
+    // `m` begins a subpath. The dimension line plus two extension lines is
+    // three under ISO; ANSI's broken line makes it four.
+    let subpaths = |c: &[u8]| c.windows(3).filter(|w| w == b" m\n" || w == b" m ").count();
+    assert!(
+        subpaths(&ansi.ap_content) > subpaths(&iso.ap_content),
+        "ANSI must stroke the dimension line in two pieces around the value, ISO in one: \
+         ansi={} iso={}",
+        subpaths(&ansi.ap_content),
+        subpaths(&iso.ap_content)
+    );
+}
+
+/// **ISO's mandated comma reaches both the label and the portable dict.**
+///
+/// The label and the `/Measure` dict are computed by different code, and a
+/// reader that trusts `/Measure` computes its own string — so a comma in one
+/// and a point in the other is a document that contradicts itself depending on
+/// who reads it.
+///
+/// The `/RT` assertion is the subtle half: §12.9 Table 263 gives the thousands
+/// separator a spec default of COMMA, so setting `/RD` to a comma without
+/// pinning `/RT` yields `1,234,56` in a conforming reader — wrong in a way
+/// pdfce's own baked label would never reveal.
+#[test]
+fn switching_a_group_to_iso_sets_the_comma_in_the_label_and_the_measure_dict() {
+    let (_orig, mut s) = session();
+    s.set_group_scale(
+        DEFAULT_GROUP_ID,
+        ScaleState::Calibrated { scale: 0.01 },
+        NumberFormat::decimal(Unit::Meter, 2),
+    )
+    .unwrap();
+    let (annot_id, _dim) = s.add_dimension(0, DEFAULT_GROUP_ID, linear()).unwrap();
+
+    let members = s
+        .set_group_standard(DEFAULT_GROUP_ID, pdfce_core::dimension::DimStandard::Iso)
+        .expect("the group switches to ISO");
+    assert_eq!(members, 1, "the member regenerates in the same command");
+
+    let reloaded = Document::from_bytes(save(&s)).unwrap();
+    let Object::Dict(annot) = &reloaded.get(annot_id).unwrap().value else {
+        panic!("annotation is not a dict")
+    };
+    let label = match annot.get(b"Contents").unwrap() {
+        Object::String(b) => String::from_utf8_lossy(b).into_owned(),
+        _ => panic!("contents not a string"),
+    };
+    assert_eq!(label, "2,00 m", "ISO mandates a comma decimal marker");
+
+    // And the portable dict agrees.
+    let view = reloaded.view();
+    let measure = view
+        .resolve(annot.get(b"Measure").expect("/Measure"))
+        .as_dict()
+        .expect("measure dict")
+        .clone();
+    let x = view.resolve(measure.get(b"X").unwrap()).clone();
+    let first = x.as_array().unwrap().first().unwrap().clone();
+    let nf = view.resolve(&first).as_dict().unwrap().clone();
+    assert_eq!(
+        nf.get(b"RD").and_then(|o| match o {
+            Object::String(b) => Some(b.clone()),
+            _ => None,
+        }),
+        Some(b",".to_vec()),
+        "/RD must carry the comma"
+    );
+    assert!(
+        nf.get(b"RT").is_some(),
+        "/RT must be pinned too — its spec default is ALSO a comma, so /RD alone yields 1,234,56"
+    );
+
+    // Switching back restores the point, so the marker is not welded to ISO.
+    s.set_group_standard(DEFAULT_GROUP_ID, pdfce_core::dimension::DimStandard::Ansi)
+        .unwrap();
+    let back = Document::from_bytes(save(&s)).unwrap();
+    let Object::Dict(annot) = &back.get(annot_id).unwrap().value else {
+        panic!()
+    };
+    match annot.get(b"Contents").unwrap() {
+        Object::String(b) => assert_eq!(String::from_utf8_lossy(b), "2.00 m"),
+        _ => panic!(),
+    }
+}
+
+/// A group's standard survives the sidecar round trip, and its absence means
+/// ANSI — the additive-key discipline again.
+#[test]
+fn the_drafting_standard_round_trips_and_defaults_to_ansi() {
+    let (_orig, mut s) = session();
+    s.add_dimension(0, DEFAULT_GROUP_ID, linear()).unwrap();
+    assert_eq!(
+        s.dimension_model()
+            .group(DEFAULT_GROUP_ID)
+            .unwrap()
+            .standard,
+        pdfce_core::dimension::DimStandard::Ansi,
+        "ANSI is the factory default (operator, 2026-08-04)"
+    );
+    s.set_group_standard(DEFAULT_GROUP_ID, pdfce_core::dimension::DimStandard::Iso)
+        .unwrap();
+
+    let reloaded = Document::from_bytes(save(&s)).unwrap();
+    let catalog = reloaded.catalog().unwrap();
+    let view = reloaded.view();
+    let piece = view
+        .resolve(catalog.get(b"PieceInfo").unwrap())
+        .as_dict()
+        .unwrap()
+        .clone();
+    let pdfce = view
+        .resolve(piece.get(b"pdfce").unwrap())
+        .as_dict()
+        .unwrap()
+        .clone();
+    let private = view.resolve(pdfce.get(b"Private").unwrap()).clone();
+    let model = deserialize_model(&private).expect("sidecar");
+    assert_eq!(
+        model.group(DEFAULT_GROUP_ID).unwrap().standard,
+        pdfce_core::dimension::DimStandard::Iso,
+        "the standard must survive the round trip"
+    );
+}
+
 /// Undo of a move restores the dimension exactly.
 #[test]
 fn undoing_a_ce_dimension_move_restores_it() {
