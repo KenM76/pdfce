@@ -81,7 +81,48 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
-### ⚠ FILING GAP — five commits between `9a0c093` and `a104536` are SHIPPED CODE WITH NO ROADMAP ENTRY (noticed 2026-08-05 while filing Passes 29.0/30.0)
+### ✅ FILING GAP — CLOSED 2026-08-05, same day it was opened. All five commits are now filed below. The defect record is retained (append-only); read it for the process lesson, not for current ledger state
+
+**CLOSURE, written at the head rather than at the foot so nobody acts on
+a stale warning.** The engineer dispatched the librarian with build
+details for all five commits in a dedicated filing session. Every one now
+has a Shipped entry:
+
+| Commit | Filed as | Where |
+|---|---|---|
+| `cf8caf7` | **Pass 27.2 (core + CLI half)** | *Shipped*, below Pass 29.0 |
+| `5536452` | **Pass 27.2 (GUI half)** | *Shipped*, below Pass 29.0 |
+| `3a23694` | **no Pass ID** — hardening of Passes 12.M2 / 27.0 / 27.1 | *Shipped*, below Pass 29.0 |
+| `328f5c2` | **no Pass ID** — correctness fix to `cf8caf7` | *Shipped*, below Pass 29.0 |
+| `d8b9735` | **Pass 28.0** | *Shipped*, below Pass 29.0 |
+
+**Both stale *Next up* entries are cleared:** Pass 27.2's entry is
+discharged, and "Subpath-level edit verbs" is annotated as fully
+discharged (delete by Pass 25.2, move by Pass 28.0).
+
+**The two no-Pass-ID choices are deliberate and are argued in their own
+entries.** Neither commit adds operator-facing capability — one hardens
+shipped surface, one fixes a defect introduced hours earlier by
+`cf8caf7`. Minting a Pass family for either would misreport a fix as
+scope and inflate the ledger `tools/check-ledger-numbers.py` polices.
+**Pass family 33 was not spent; it remains the next free family.**
+
+**★ THE PROCESS LESSON SURVIVED THE CLOSURE, and is now standing rule
+R146.** The gap took a **separate session** to reconstruct, and the
+reconstruction was **only possible because the commit messages were
+thorough** — they carried full build reports, measured figures and stated
+reasoning. **Had they been terse, the record would have been
+unrecoverable**, because the working tree had already moved on by seven
+commits. See R146 under *Standing rules*.
+
+**One correction to the dispatch that produced this closure, recorded for
+accuracy:** it referred to *"the three hardening/fix commits"*. There are
+**two** (`3a23694`, `328f5c2`); the other three carry Pass IDs 27.2 (×2)
+and 28.0.
+
+---
+
+**The original defect record follows, unaltered.**
 
 **This is a ledger defect, recorded rather than quietly patched.** The
 librarian was dispatched for Passes 29.0 and 30.0 only, and has no build
@@ -464,6 +505,370 @@ by Pass 29.0** and retained in place (append-only) — its continuation-76
 and continuation-78 build logs remain the record of how the substrate
 got built. See the flag in the report/session log: whether 21.1 should be
 formally retired or kept open for any residue is the engineer's call.
+
+### Pass 28.0 — `Subpath` carries its token range, which makes MOVE expressible; Escape pops one rung; the group panel reports its outcomes (core + CLI + GUI) — 2026-08-05, committed `d8b9735`
+
+**★ SOURCING NOTE.** This entry and the four below it are **back-filled
+2026-08-05 from the commits' own messages**, dispatched to the librarian
+in a dedicated filing session after the ⚠ block at the top of *Shipped*
+recorded that they existed with no roadmap entry. The commit messages
+were unusually complete — full build reports with measured figures — and
+that is the only reason this reconstruction was possible at all (see
+**R146**). Nothing here is inferred; where a figure was not in the commit
+message it is absent rather than estimated.
+
+**Three items the engineer had named outstanding and could close without
+an operator decision.** They shipped together because none of them needed
+anything from the operator, and the operator was away.
+
+**1. The Dimension Groups panel reports its outcomes.** `add_dimension_group`
+was called as `let _ = …`; `set_group_scale` and `toggle_dimension_layer`
+were called as `.is_ok()`. **A refused create — certified document,
+encrypted file, sidecar written by a newer build — was indistinguishable
+from the button not registering the click**, and the operator's only
+available response was to press it again. All three now route their
+outcome through `OpenDoc::pending_note` (introduced in `5536452`, below).
+Hiding the **default** group's layer is declined by the engine **by
+design**, and that refusal now says so in words instead of looking like a
+dead button.
+
+This is the **same root cause R145 names one layer down** — a
+`Result<(), E>`-shaped call whose outcome the call site drops to compile.
+Three call sites, three silent failures, one fix.
+
+**2. `Subpath` carries its token range — and that is what made
+`move_subpath` expressible.** This was the blocker decision 025 §5.2 had
+stated precisely: `move_subpath` was **not merely unbuilt, it could not
+be written**. `PathObject` carried `tokens: TokenRange` and `bytes:
+ByteSpan`; `Subpath` carried `start`, `segments`, `closed` and nothing
+else. `plan_delete_subpath` had worked around the missing span by
+**re-walking the operators** and refusing whenever its walk disagreed in
+**count** with the geometry — enough to excise a byte range, **not**
+enough to rewrite operands **inside** one, because a move must know which
+operator each coordinate pair belongs to.
+
+`Subpath` now records the token range **on the decomposition walk that
+already knew it**, plus **`starts_implicitly`** for a subpath opened by a
+segment after `h` (ISO 32000-1 §8.5.2.1) whose start point is **inherited
+and carried by no operand**. Three consequences, all measured:
+
+- **`plan_move_subpath` exists.** Verified on the operator's own file:
+  **part 667 of object 5870** moved by exactly **(+40, +25)** — bbox
+  `606.88,519.41` → `646.88,544.41` — with **`undo_identical=1`**. An
+  `re` moves its **origin only**, since width and height are a *size*
+  rather than a *position*.
+- **The delete refusal became PRECISE.** Decision 026 named
+  `DeleteWouldMoveNextSubpath`; it **now exists by that name** and fires
+  only for the one deletion that would actually move an implicit
+  follower. **Previously a single `h`-reopen anywhere in an object made
+  EVERY subpath in that object undeletable** — a real cost the
+  count-based guard had been paying quietly, on exactly the CAD exports
+  the operator works with.
+- **The implicit subpath itself became deletable**, which the old guard
+  had denied outright.
+
+The rival second walk, `enumerate_subpath_sites`, is **deleted** rather
+than left in place as a competing definition of *"where is subpath i"* —
+**R96**.
+
+**★ FORWARD CROSS-REFERENCE, load-bearing for anyone reading Passes
+30.0/30.1:** `starts_implicitly`, introduced here, is **exactly what
+those two Passes build on**. Pass 30.0's inherited-start materialization
+and Pass 30.1's handle work both depend on it. Pass 28.0 is their
+substrate, not a sibling.
+
+**3. Escape pops ONE rung** (decision 025's ladder behaviour, the third
+item in the commit's subject line).
+
+**Ledger note.** This is the **move** half of the *Next up* entry
+"Subpath-level edit verbs" (whose **delete** half shipped as Pass 25.2).
+That entry is now fully discharged and annotated as such.
+
+**Claims:** discharges decision 025 §5.2's stated blocker and proposed
+rule **R134**; the panel-reporting half is a pre-echo of **R145**.
+
+### fix — ISO ce-dimension text read upside down on a straight-down aligned dimension; plus a six-structure subpath sweep that found nothing, which is itself the finding (no Pass ID — a correctness fix to `cf8caf7`, same day) — 2026-08-05, committed `328f5c2`
+
+**No Pass ID, deliberately** — see the ledger note at the foot of this
+entry, and the precedent set by the `/Contents`-defect fix, the
+`ui-strings` CI gate and the observation-harness fixes further down this
+section.
+
+**The bug.** ISO 129-1:2018 cl. 4.1.1 requires aligned dimension text to
+**read from the bottom**, and Pass 27.2's appearance stream flips text
+direction when it would otherwise invert. The condition tested only
+**`u.x < 0.0`**. That **misses an aligned ce dimension pointing straight
+down**: there `u = (0, -1)`, `u.x` is **exactly zero**, no flip fires,
+and the value reads top-to-bottom — **the one orientation the clause
+names**.
+
+**★ GENERALIZABLE, and escalated:** *a sign test that omits the zero case
+is invisible to any fixture that avoids the axis.* Both directions that
+had originally been tested pass **either way**, which is precisely why
+the defect shipped looking correct. Found by exercising **all four
+cardinal directions** instead of the two that happened to be convenient.
+Escalated to
+`D:\dev\rag\rust\sign_test_omitting_the_zero_case_is_invisible_to_off_axis_fixtures.md`.
+
+**How it is asserted, and why that is the only option.** The test reads
+back the **text matrix (`Tm`) operands from the appearance stream**,
+because **that is the only place orientation exists** — there is no flag
+to check, no field to read. The assertion requires the text direction
+never to run downward.
+
+**★ THE SUBPATH SWEEP FOUND NOTHING, AND THAT IS THE FINDING.** Six
+content-stream structures were probed against Pass 28.0's fresh subpath
+indexing: `re` mixed with drawn subpaths; a lone `moveto`; `h` followed
+by an explicit `m`; a trailing `h`; a Bézier subpath; and a bare paint
+operator with **no path at all**. All six **index, hit-test, bound and
+delete correctly**; the empty case produces **no path object** rather
+than a degenerate one. A negative result, recorded because an unrecorded
+negative result gets re-derived.
+
+**★★ Two of the six are pinned as permanent tests, and the reason is the
+transferable part.** The interesting property is **not that the structure
+guard fires** — it is that the guard is **NARROW**. `h` is entirely
+legitimate when the next subpath opens with its own `m`, and **a guard
+that refused every path containing `h` would make delete unavailable on
+most real drawings while passing the refusal test unchanged.** Same
+discipline as differentially testing a checker exclusion: *"refuses the
+bad case"* and *"permits the good case"* are **two claims**, and testing
+only the first is how a guard quietly becomes a wall.
+
+**Gates at this commit (from the commit message):**
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | **1,886 passing, 0 failing** |
+| `cargo fmt --check` | clean |
+| `cargo clippy -- -D warnings` | clean |
+| `tools/check-ui-strings.sh` | clean |
+| `tools/check-ledger-numbers.py` | clean |
+
+**Ledger note — why no Pass ID.** This is a same-day correctness fix to
+Pass 27.2's own appearance stream plus a verification sweep over Pass
+28.0's substrate. Minting a Pass family for it would misreport a bug fix
+as new operator-facing scope and would inflate the Pass ledger that
+`tools/check-ledger-numbers.py` polices. The project already has four
+Shipped entries with no Pass ID for exactly this class of work. **Pass
+family 33 remains the next free family; it was not spent here.**
+
+### harden — file-supplied ce-dimension geometry is validated before it is drawn (no Pass ID — a robustness fix across Passes 12.M2 / 27.0 / 27.1) — 2026-08-05, committed `3a23694`
+
+**★ A PRIORITISATION DECISION, recorded as such.** This was a deliberate
+bug hunt over the seven Passes shipped that day, undertaken **instead of
+starting the level-ladder work**. The engineer's stated reason: the
+ladder is queued **from a decision record the engineer commissioned**,
+not from anything the operator asked for, and **a large unrequested
+interaction change is not what to build while the operator is away.**
+Recorded because the reasoning generalises past this instance.
+
+**The exposure.** `/Offset` and `/TextAlong` (Passes 27.0 / 27.1) and the
+measured points all come **out of the file** and feed geometry that lands
+in `/Rect` and `/L`. **Nothing validated them.** Two failure modes,
+**measured, not theorised**:
+
+| Input | Result |
+|---|---|
+| `/Offset 1e308` | `/Rect [98.0 202.0 302.0 1000000000000000010979…]` — a **300-digit decimal**, far past PDF's ~3.4e38 architectural limit for a real (ISO 32000-1 Annex C.1) |
+| `/Offset inf` | `/Rect [-2 -2 3 3]`, `/L [0 0 0 0]` — **the measurement gone from the page while `/Contents` still read `"200.00 pt"`** |
+
+**★ The second is worse, and it is quiet BECAUSE A SAFETY MECHANISM IS
+WORKING AS DESIGNED.** `BoundsAcc::union_point` drops non-finite points,
+so an infinite standoff **collapses** the bounding box instead of
+poisoning it. Safe — and **silent**. A ce dimension that vanishes from
+the page while still claiming a value in `/Contents` tells the operator
+nothing at all.
+
+**GENERALIZABLE FINDING, escalated:** *a guard that degrades safely can
+convert a loud failure into a silent one.* The guard is not wrong; its
+**observability** is. Escalated to
+`D:\dev\rag\rust\a_safely_degrading_guard_converts_a_loud_failure_into_a_silent_one.md`.
+
+**The fix.** `usable_page_value` gates both inputs with a **deliberately
+generous 1e7 ceiling**. The sizing argument is explicit: PDF's own
+architectural limit for a page dimension is **14,400 units (200 in)**, so
+1e7 is **three orders past any legal page and thirty orders inside the
+real limit**. *The job is to stop absurdity reaching the writer, not to
+second-guess an unusual drawing.*
+
+**★ The two corrupt cases are treated DIFFERENTLY, on purpose — and the
+asymmetry is the design:**
+
+- A corrupt **placement** falls back to `0.0`. A standoff **has a
+  meaningful zero**, so the operator loses the ce dimension's *position*,
+  not the ce dimension.
+- A corrupt **measured point** drops the **whole record**. A ce dimension
+  whose geometry is corrupt **has nothing to preserve**, and keeping it
+  would mean drawing between coordinates **nobody chose**.
+
+**Coverage extended backwards.** The point guard also covers `/A` and
+`/B`, **unvalidated since Pass 12.M2**.
+
+**The writer was checked and is already clean** — no exponential
+notation, no `inf`, no `NaN` reaches the bytes. **The 300-digit number
+was legal PDF**, which is exactly why nothing downstream caught it.
+
+**Ledger note — why no Pass ID.** Same reasoning as `328f5c2` above: this
+hardens shipped surface from Passes 12.M2 / 27.0 / 27.1 rather than
+adding operator-facing capability. **Family 33 was not spent here
+either.**
+
+### Pass 27.2 — ANSI and ISO drafting standards for ce dimensions (decision 026 §5/§6; core + CLI + GUI) — **ONE Pass, TWO ticks** — 2026-08-05, committed `cf8caf7` (core + CLI) then `5536452` (GUI)
+
+**Ledger note, first, because it explains this entry's shape.** Pass 27.2
+shipped in **two commits with separate findings**, so both are written up
+below as separate ticks under **one heading**. They are **not** two Pass
+IDs: same operator request, same decision-026 sections, core half and GUI
+half. Hard rule 2 makes IDs stable; it does not require one commit per
+ID, and this project has shipped multi-commit Passes before (Pass 21.0's
+six-commit chain, Pass 27.0's two-commit chain). The ticks are ordered
+**newest first**, matching this section.
+
+**Both ticks were back-filled 2026-08-05** from the commits' own messages
+— see the ✅ FILING GAP block at the top of *Shipped* and **R146**.
+
+#### Tick 2 (GUI, `5536452`) — the drafting standard is reachable without the CLI; `OpenDoc::pending_note` introduced — **A REVERSED DECISION, recorded as one**
+
+**★ THE REVERSAL, stated first because it is the point of this tick.**
+The prior tick **deferred** the ANSI/ISO picker to decision 024's ribbon
+work, reasoning that Pass 24.2 moves property bars to contextual tabs and
+the picker's home should therefore be decided **once**. **The reasoning
+was sound and the conclusion was wrong.** The operator asked for ISO **as
+an option**, and *an option reachable only from the command line is not
+one*. Deferring a **requested capability** behind a refactor that **has
+not started** leaves the operator unable to use what he asked for.
+
+This is an **R117-class instance** — CLI-only capability stacking behind
+unstarted UI work — and it is the **first one this project caught and
+reversed inside the same day**, rather than discovering it three Passes
+later.
+
+**What shipped.** An ANSI/ISO choice now sits in the **Dimension Groups
+panel beside scale and units** — the same class of thing, a **per-group
+display property that regenerates its members on change**. It will move
+with its neighbours when the ribbon lands; siting it beside them is what
+makes that move a single relocation rather than a redesign.
+
+**The tooltip names the MEMBER COUNT**, because changing the standard
+**redraws every measurement in the group** rather than renumbering them,
+and an operator about to restyle forty of them **should know before
+clicking**. The string says **"ISO-style"**, never "ISO 129-1", for the
+same evidence reason as the core half below.
+
+**★ `OpenDoc::pending_note` INTRODUCED HERE — and it is the same root
+cause R145 later names.** The group panel runs as a **free function over
+`&mut OpenDoc`** and therefore **cannot reach `self.edit_note` while that
+borrow is live**. Its neighbours had resolved that borrow conflict by
+**discarding their outcome** — `let _ = add_dimension_group`,
+`set_group_scale(..).is_ok()` — so **a failed group create or scale
+change told the operator nothing**. `pending_note` is a field the panel
+writes and the shell **drains into the narrator next frame**.
+
+Two forward cross-references, both load-bearing:
+
+- **Pass 28.0** (above) routes all three previously-discarded group-panel
+  outcomes through this channel.
+- **Pass 30.0's disclosure plumbing reuses it** for decision 027's
+  `PlannedEdit::disclosures` on the GUI side. `pending_note` is the GUI
+  half of the pattern R145 generalises; `disclosures` is the core half.
+  Same defect — `Result<(), E>` and discard-to-compile — **fixed twice,
+  in two layers, before it was named as a rule**.
+
+**★ THE VERIFICATION METHOD, recorded because it is reusable.** The
+on-screen capture came back **blank** — the window painted its title bar
+and nothing else, a **sleeping display**; the operator was away. **Rather
+than claim an unperformed check**, the picker was driven through the
+**offscreen diag harness** with a **click sweep over the panel** and a
+**trace on the dispatch**, yielding:
+
+```
+pdfce-diag group-set-standard group=GroupId(0) standard=Iso
+```
+
+This is **display-independent**, and it proves three separate things: the
+button **exists**, it is **hit-testable at that position**, and it
+**reaches the core method**. It does not prove the pixels look right, and
+the commit did not claim it did.
+
+#### Tick 1 (core + CLI, `cf8caf7`) — the ANSI/ISO geometry split, the decimal marker, and two claims pdfce refuses to make
+
+**Answers the operator's own request, verbatim:** *"These should be able
+to follow ANSI and ISO standards. My default is ANSI, but ISO should be
+an option too."*
+
+**★ THE STRUCTURAL SPLIT — one geometry, two traditions.** ANSI **breaks
+the dimension line and centres the value in the gap**, with all text
+horizontal. ISO **runs the line unbroken with the value above it and
+aligned to it** (ISO 129-1:2018 cl. 4.1.1 — *"shall be indicated above
+the dimension line and read from the bottom"*, **verified as a `shall`,
+not inferred**), flipped where it would otherwise read upside down.
+
+Extension **gap** and **overshoot** are **ABSOLUTE under ANSI** and
+**MULTIPLES OF LINE WIDTH under ISO**. This is decision 026's observation
+delivered: **one structural split reproduces both traditions from a
+single geometry**, rather than two drawing paths that drift apart over
+time.
+
+**★ CITATION CORRECTION, worth carrying forward.** Line and arrowhead
+conventions are **ASME Y14.2**, **not Y14.5**. **Y14.5 is the
+GD&T/tolerancing standard and is routinely miscited for this** — the
+misattribution is common enough in training data and in secondary sources
+that it is the *expected* wrong answer. Escalated to
+`C:\personal_rag\pdf\lesson_20260805_asme_y142_not_y145_for_drafting_line_conventions.md`.
+
+**Provenance on every constant.** Every numeric gap / overshoot / padding
+value carries **"convention, not mandated"** in **its own doc comment**
+(E11). ISO 129-1 **requires a gap without fixing its size**; the ANSI
+figures are **practice**; **ASME Y14.2 is paywalled and was NOT
+obtained**, and the code says so where it matters.
+
+**★ CLAIM DISCIPLINE — the global claim-bearing-copy rule applied to a
+standards claim.** pdfce says **"ISO-STYLE"**, never **"ISO 129-1
+conformant"**, because **Annex A is paywalled** and the broader claim
+would **exceed the evidence actually in hand**. Asserted against
+`ui_text` so a copy edit cannot reintroduce the stronger claim.
+
+**★★ THE DECIMAL MARKER IS NOT COSMETIC, AND ITS HOME IS THE POINT.**
+ISO 129-1 cl. 4.1.1 **MANDATES a comma** as the decimal marker. It lives
+on **`NumberFormat`**, **not** on `DimStandard`, and the reason is
+structural rather than tidy: **`NumberFormat` is what `measure_dict`
+projects into an ISO 32000-1 §12.9 NumberFormat dict, and `/RD` is that
+dict's decimal-marker key.** Putting it there makes **pdfce's home for
+the setting mirror the spec's home for it**, which turns *"the baked
+label and the portable dict agree"* from an **aspiration** into a
+**structural property**. Switching to ISO sets it as a **disclosed side
+effect** the operator can override — CLAUDE.md rule 4, applied to a
+setting rather than a geometry.
+
+**★★ `/RT` IS PINNED ALONGSIDE `/RD`, AND OMITTING IT WOULD BE INVISIBLE
+FROM INSIDE PDFCE.** Table 263 gives the **thousands separator (`/RT`) a
+spec default of COMMA**. Writing `/RD (,)` alone therefore yields
+**`1,234,56`** in a conforming reader — **wrong in a way pdfce's own
+output would never reveal**, because **pdfce's label is baked into the
+appearance stream and the dict is what everyone ELSE computes from**.
+This is the general hazard of a mirrored representation: the mirror is
+consumed by software you are not running. Escalated to
+`C:\personal_rag\pdf\lesson_20260805_measure_numberformat_rd_without_rt_yields_wrong_separators.md`.
+
+**Scope and default.** Per **group**; **ANSI is the factory default**
+(operator, 2026-08-04, asserted in a test so a refactor cannot flip it
+silently). Changing the standard **regenerates every member
+immediately** — the precedent `set_group_scale` set.
+
+**Two claims decision 026 refused to let pdfce make, still refused:** the
+**"30° ambiguous zone"** for text orientation is **folklore from ISO
+129:1985** and is not in the 2018 edition; and the operator-facing
+strings read **"ANSI / ASME (US)"** and **"ISO (international)"**, never
+a numbered standard and never "conformant". Whether to **purchase** ISO
+129-1:2018 remains open question **(au)**.
+
+**Claims (whole Pass, both ticks):** standing rules **R135–R139**; open
+operator questions **(aq)–(au)**, of which **(au)** — whether to purchase
+ISO 129-1:2018 — **remains live** and is the one item of Pass 27.2's
+scope not discharged by shipping. Pass 27.2's *Next up* entry is
+discharged; the `/FD` residue it carried is lifted into its own *Next up*
+item so it does not vanish with it.
 
 ### Gate record for the seven Passes filed in continuation 82 (25.2, 25.3, 25.4, 25.5, 25.6, 27.0, 27.1) — measured ONCE, at `9a0c093` — 2026-08-04
 
@@ -7931,6 +8336,81 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
+### ★ `docs/ARCHITECTURE.md` §4 is THREE FILINGS BEHIND the shipped core surface — scheduled here rather than left to happen incidentally (docs-only; no Pass ID needed, but it is real work with a real backlog)
+
+**Filed 2026-08-05 by the librarian, deliberately as a scheduled item
+rather than as a same-dispatch fix.** The gap was flagged during the
+five-commit back-fill; the dispatch that produced that back-fill
+explicitly instructed **not** to sync §4 in the same pass. That is the
+right call — a §4 sync is an audit of the **actual** current public
+surface against the document, and an audit done as a side task during a
+filing session is the kind that silently records what the filer
+remembers rather than what the code exposes. **It needs its own dispatch
+and its own read of the source.**
+
+**Why this matters more than a normal docs lag.** §4 is the **API
+contract** section — the one a reader consults to learn what
+`pdfce-core` offers without reading the crate. CLAUDE.md rule 6 and the
+global documentation-first directive both set the bar at *"a competent
+engineer could rebuild the module from the docs alone."* A three-filing
+lag on the API contract section fails that bar **specifically for the
+newest surface**, which is exactly the surface a reader is most likely
+to be looking §4 up for.
+
+**Known backlog, enumerated so the sync is scoped rather than
+open-ended.** This list is what was observed; **the dispatch should
+treat it as a floor, not a ceiling**, and re-derive from the crates:
+
+1. **Pass 25.x vector surface** — `hit_test_subpaths`, `subpath_bounds`,
+   `plan_delete_subpath` and its three refusals
+   (`SubpathStructureMismatch`, `ClippingPath`, `SubpathOutOfRange`).
+2. **Decision 026's ce-dimension model** — `DimStandard`,
+   `set_group_standard`, the `NumberFormat` decimal-marker/`/RD`+`/RT`
+   surface, and `usable_page_value`'s validation contract from
+   `3a23694`.
+3. **Pass 28.0's subpath model change** — `Subpath` gaining its token
+   range and `starts_implicitly`, `plan_move_subpath`, and the
+   `DeleteWouldMoveNextSubpath` refusal. **This one is a data-model
+   change, not just an addition**, so §4's description of `Subpath` is
+   not merely incomplete, it is **wrong as written**.
+4. **Decision 027** — `PlannedEdit::disclosures`, the **five changed
+   `EditSession` signatures** (`move_object`, `delete_object`,
+   `move_subpath`, `delete_subpath`, `move_node`, all now
+   `Result<Vec<String>, EditError>`), and the **two removed variants**.
+   **Also a breaking change to documented signatures**, same category as
+   (3).
+5. **Pass 30.1** — `plan_move_handle`, the `Handle` enum
+   (`Incoming`/`Outgoing`), and the `NoHandleHere` refusal.
+
+**Acceptance:** §4 describes the current surface; every `pub` item added
+since the last sync is checked against
+`D:\dev\rag\rust\rust-style-guide-and-api-guidelines.md` per CLAUDE.md
+rule 10; items (3) and (4) are recorded as **changes** to previously
+documented contracts, not silently overwritten, so a reader of an older
+checkout can tell what moved.
+
+### `/FD` — the ce-dimension label and its own `/Measure` mirror can still disagree (the residue Pass 27.2 did NOT close)
+
+**Filed 2026-08-05, lifted out of the discharged Pass 27.2 *Next up*
+entry so it does not vanish with it.** Pass 27.2 closed the
+**separator** half of this family — `/RD` written together with a
+non-comma `/RT`, so a conforming reader does not render `1,234,56`. The
+**`/FD` half is untouched**.
+
+**The defect, as decision 026 recorded it:** pdfce prints a fixed number
+of decimal places in its **baked** ce-dimension label — e.g. `3.10 m` —
+while the mirrored §12.9 `/Measure` dict **omits `/FD`**, whose spec
+default of `false` **permits a conforming reader to print `3.1 m`**. The
+doc comment claiming the two *"agree by construction"* is **wrong as
+written** and should be corrected in the same change.
+
+**Same hazard class as the `/RD`/`/RT` finding, and worth stating
+generally:** pdfce cannot see this failure from inside itself, because
+**pdfce's label is baked into the appearance stream and the dict is what
+everyone ELSE computes from.** Any fix needs a reader that is not pdfce,
+or a test that asserts on the dict's semantics rather than on pdfce's
+rendering of it.
+
 ### ~~Pass 31.0~~ — Bézier control-point ("handle") editing — **ID BURNED, SUPERSEDED SAME HOUR. This work SHIPPED as Pass 30.1 (`d025c1a`); see its Shipped entry.** Retained below as the historical framing (append-only discipline)
 
 > **★ RESOLUTION, 2026-08-05, minutes after this entry was written.** The
@@ -8227,7 +8707,36 @@ Escape fix, readout matrix and node rung are untouched and unbuilt.
 **Claims:** standing rules **R130–R134**; open operator questions
 **(ak)–(ap)**.
 
-### Pass 27.2 — ANSI and ISO drafting standards for ce dimensions (decision 026 §5/§6, core + CLI + GUI, NOT STARTED) — **the unbuilt half of the operator's 2026-08-04 report**
+### ~~Pass 27.2~~ — ANSI and ISO drafting standards for ce dimensions — **SHIPPED 2026-08-05 in two commits, `cf8caf7` (core + CLI) and `5536452` (GUI). See the single Pass 27.2 Shipped entry and its two ticks.** Retained below as the pre-build scope (append-only discipline)
+
+> **DISCHARGED 2026-08-05.** This entry said **"NOT STARTED"** for a full
+> day after the work had shipped — one of the two stale entries the ⚠
+> FILING GAP block at the top of *Shipped* named. It is cleared here.
+>
+> **What shipped matched this scope**, including the parts that mattered
+> most: the **ASME Y14.2-not-Y14.5** correction, the **`/RD` + `/RT`
+> pairing** (criterion E10), the **"ISO-style" never "ISO 129-1"** claim
+> discipline, the **per-group ANSI default asserted in a test**, and the
+> refusal to repeat the **30°-ambiguous-zone folklore**.
+>
+> **What this scope did not anticipate, and the Shipped entries carry:**
+> the decision to put the decimal marker on **`NumberFormat` rather than
+> `DimStandard`** so pdfce's home for it mirrors the spec's; the
+> **reversal** of the deferral that would have left the picker CLI-only
+> (an R117-class instance caught and undone the same day); the
+> introduction of **`OpenDoc::pending_note`**; and the **straight-down
+> aligned-text flip defect** (`328f5c2`) that the ISO half shipped with.
+>
+> **Still live from this entry:** open question **(au)** — whether to
+> purchase ISO 129-1:2018 so the paywalled Annex A stops constraining
+> what pdfce may claim.
+>
+> **Also still live and NOT delivered by Pass 27.2:** the side-finding
+> two paragraphs below — that pdfce's ce-dimension label and its own
+> `/Measure` mirror **can already disagree today** over `/FD`. Pass 27.2
+> fixed the *separator* half of the mirror-disagreement family (`/RD` +
+> `/RT`); the **`/FD` half is untouched and still owed.** It is filed as
+> its own *Next up* item below so it does not vanish with this entry.
 
 **Source:**
 `docs/decisions/026-linear-ce-dimension-geometry-offset-and-drafting-standards.md`
@@ -8323,18 +8832,34 @@ current rung — rather than two descend mechanisms sharing one gesture.
 `pdfce-ui-specialist` should own the gesture question; the engineer owns
 whether decision 023 needs an amendment record.
 
-### Subpath-level edit verbs — **DELETE SHIPPED as Pass 25.2 (`0423179`); MOVE APPARENTLY SHIPPED as Pass 28.0 (`d8b9735`) BUT UNFILED — see the ⚠ FILING GAP block at the top of *Shipped*** (follow-on to Pass 25.1)
+### ~~Subpath-level edit verbs~~ — **FULLY DISCHARGED. DELETE shipped as Pass 25.2 (`0423179`); MOVE shipped as Pass 28.0 (`d8b9735`), now filed.** Retained below as the historical framing (append-only discipline)
 
-**FLAGGED STALE 2026-08-05.** Commit `d8b9735`'s own subject line reads
-*"Pass 28.0: subpath spans make move expressible; Escape pops one rung;
-panels report"* — which is this entry's outstanding **move** half, plus
-decision 025's Escape behaviour. No build details were supplied to the
-librarian, so nothing is claimed here beyond the subject line and the
-independent corroboration that **Pass 30.0 (`a56bdd7`) modified an
-existing `plan_move_subpath`** — the function this entry says is owed
-already exists. **Do not read this entry's "MOVE still owed" as current.**
-The engineer owes the librarian a filing for `d8b9735`; until then the
-roadmap under-reports the branch.
+> **DISCHARGED 2026-08-05.** Both verbs this entry was opened for exist
+> and are filed. The second of the two stale *Next up* entries named by
+> the ⚠ FILING GAP block; cleared here.
+>
+> **The blocker this entry stated — and it was stated correctly — is
+> gone.** `Subpath` carried `start`, `segments`, `closed` and nothing
+> else, so a move was **not expressible**, not merely unbuilt. Pass 28.0
+> gave `Subpath` its **token range**, recorded on the decomposition walk
+> that already knew it, plus **`starts_implicitly`** for a subpath opened
+> by a segment after `h`. That discharges proposed rule **R134** and the
+> reduced scope of **Pass 26.1**.
+>
+> **Two things Pass 28.0 delivered that this entry did not ask for:** the
+> count-based delete guard was replaced by the **precise**
+> `DeleteWouldMoveNextSubpath` refusal (previously **one `h`-reopen
+> anywhere made every subpath in the object undeletable**), and the
+> **implicit subpath itself became deletable**. The rival second walk
+> `enumerate_subpath_sites` was **deleted** rather than left as a
+> competing definition of *"where is subpath i"* (**R96**).
+>
+> **Level 2 (nodes) was never this entry** and is not discharged by it —
+> node selection / multi-node move / node delete remain **Pass 23.3**,
+> and the **node rung of decision 025's ladder is still unbuilt**, which
+> is why **three** vector capabilities are now CLI-only (node move,
+> `re`/reused-start node move, handle move). See the ★ priority note on
+> the Pass 26.0–26.2 entry.
 
 **UPDATED 2026-08-04 (continuation 82).** The **delete** half of this
 entry **shipped as Pass 25.2** — `plan_delete_subpath`, three refusals
@@ -14700,17 +15225,65 @@ decision 025, (aq)–(au) from decision 026:**
   delivered to a batch caller, and a disclosure that pollutes stdout
   breaks every script that parses it.
 
-  **Ceiling is now R145** (was R142 at continuation 82's filing).
+- **R146 — Shipping code without a same-session filing is a ledger
+  defect, and the commit message is the only thing that makes it
+  recoverable (2026-08-05, continuation 84; librarian-assigned; process
+  rule, promoted from an instance).** A Pass that ships without a
+  librarian dispatch does not merely arrive late in `ROADMAP.md` — for
+  as long as it is unfiled, **the roadmap actively asserts the work is
+  not done**, and downstream entries reason from that assertion. *Instance:*
+  five commits (`cf8caf7`, `5536452`, `3a23694`, `328f5c2`, `d8b9735`)
+  shipped on 2026-08-05 with no filing. Pass 27.2's *Next up* entry read
+  **"NOT STARTED"** for a full day after it had shipped in two commits;
+  "Subpath-level edit verbs" read **"MOVE still owed"** after
+  `plan_move_subpath` existed and had been verified on the operator's
+  own file. Closing the gap took a **separate, dedicated session**.
+  **Rule:** a Pass is not shipped until it is filed — the dispatch is
+  part of shipping, not a follow-up to it, and the engineer dispatches
+  it in the **same session** as the commit.
+  **★ Corollary, and the reason this rule is stated with the commit
+  message rather than only with the dispatch: the reconstruction was
+  possible ONLY because the commit messages were thorough.** Each
+  carried a full build report — measured figures (`/Offset 1e308` →
+  a 300-digit `/Rect`; part 667 of object 5870 moved by exactly
+  (+40, +25) with `undo_identical=1`), stated reasoning (why a corrupt
+  placement falls back to `0.0` but a corrupt measured point drops the
+  whole record), and named findings (the ASME Y14.2-not-Y14.5
+  correction, the `/RD`-without-`/RT` separator hazard). **Had they been
+  terse — "fix dimension bug", "add ISO support" — the record would have
+  been unrecoverable**, because by the time the gap was noticed the tree
+  had moved on by seven commits and the reasoning existed nowhere else.
+  **Write the commit message as though it is the only surviving record,
+  because when the filing is skipped, it is.** Cross-references **R141**
+  (the roadmap under-reporting the branch) and the ⚠/✅ FILING GAP block
+  at the top of *Shipped*, which is this rule's worked instance.
+  **Second corollary, from the same session's other failure direction:**
+  the inverse defect — a librarian filing racing an engineer commit,
+  which burned Pass ID 31.0 — has the **same root cause**, engineer and
+  librarian writing to one branch with no handshake on what is being
+  numbered. R146 covers the "no filing" direction; the burned-31.0 note
+  under *Next up* covers the "filing ahead of the commit" direction.
+  **A same-session dispatch fixes both**, because it collapses the
+  window in which the two records can disagree.
+
+  **Ceiling is now R146** (was R145 at continuation 83's filing; R142 at
+  continuation 82's).
   R130–R134 are decision 025's and R135–R139 are decision 026's, both
   assigned at filing per the R107–R110 precedent; **R136 and R138 were
   filed with broadened scope** and say so in their own text. R140–R142
   are librarian-originated from continuation 82's shipped work and its
   process failures; **R143–R145 are librarian-originated from Passes
   29.0/30.0** (continuation 83) — R143 and R144 from the two headline
-  findings, R145 from decision 027's API change. Note for
+  findings, R145 from decision 027's API change. **R146 is
+  librarian-originated from continuation 84's five-commit back-fill** —
+  a process rule, promoted from the gap itself. Note for
   `tools/check-ledger-numbers.py`: it ran **clean at the 29.0/30.0 gate**,
-  i.e. **before** this filing minted R143–R145 and Pass IDs 31.0/32.0 —
-  re-run it after this commit.
+  i.e. **before** continuation 83's filing minted R143–R145 and Pass IDs
+  31.0/32.0, **and before this filing minted R146** — re-run it after
+  this commit. **No new Pass ID was minted by this filing**: 27.2 and
+  28.0 already existed, and the two hardening/fix commits were
+  deliberately filed with no Pass ID, so **family 33 is still the next
+  free family**.
 
 ## Update protocol
 
