@@ -101,6 +101,12 @@ pub enum Step {
     /// question "is its toolbar button wired up". A harness that could only
     /// reach a tool through its button would confuse the two.
     Tool(ScriptTool),
+    /// Open the Dimension Groups panel (`panel:groups`).
+    ///
+    /// Scripted directly rather than by clicking through the Measure menu, for
+    /// the same reason `tool:` is: it isolates "does this panel work" from
+    /// "is the button that opens it wired up".
+    Groups,
     /// Burn a frame. Used to let a texture, a provider rebuild, or egui's own
     /// click detection settle between steps.
     Wait,
@@ -188,6 +194,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "mup" => xy().map(|(x, y)| Step::Middle(false, x, y)),
         "delete" => Some(Step::Delete),
         "wait" => Some(Step::Wait),
+        "panel" if rest.trim() == "groups" => Some(Step::Groups),
         "tool" => match rest.trim() {
             "none" => Some(Step::Tool(ScriptTool::None)),
             "obj" => Some(Step::Tool(ScriptTool::Obj)),

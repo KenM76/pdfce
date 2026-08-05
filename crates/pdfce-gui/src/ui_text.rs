@@ -4963,6 +4963,50 @@ pub fn dimension_deleted() -> &'static str {
     "Measurement deleted — press Ctrl+Z to undo."
 }
 
+/// Label for the drafting-standard choice in the Dimension Groups panel
+/// (Pass 27.2).
+pub fn group_standard_label() -> &'static str {
+    "Drawn to:"
+}
+
+/// The ANSI choice.
+pub fn group_standard_ansi() -> &'static str {
+    "ANSI"
+}
+
+/// The ISO choice.
+pub fn group_standard_iso() -> &'static str {
+    "ISO"
+}
+
+/// Tooltip on the drafting-standard choice.
+///
+/// Names the member count because changing the standard redraws every
+/// measurement in the group — a bigger visible change than a scale edit,
+/// which only changes numbers. An operator who is about to restyle 40
+/// measurements should know that before clicking, not after.
+///
+/// Says "ISO-style" rather than claiming conformance: ISO 129-1's normative
+/// annex is paywalled and was not obtained, so the stronger word would be a
+/// claim pdfce cannot back (the claim-bearing-copy rule).
+pub fn group_standard_tooltip(members: usize) -> String {
+    format!(
+        "How this group's measurements are drawn. ANSI breaks the dimension line and puts the value in the gap, reading horizontally. ISO-style runs the line unbroken with the value above it, aligned to the line, and writes decimals with a comma. Changing this redraws all {members} measurement(s) in the group."
+    )
+}
+
+/// Status note after a group's drafting standard changed.
+pub fn group_standard_applied(
+    standard: pdfce_core::dimension::DimStandard,
+    members: usize,
+) -> String {
+    let name = match standard {
+        pdfce_core::dimension::DimStandard::Ansi => "ANSI",
+        pdfce_core::dimension::DimStandard::Iso => "ISO-style",
+    };
+    format!("Redrew {members} measurement(s) to {name} — press Ctrl+Z to undo.")
+}
+
 #[cfg(test)]
 mod glyph_coverage_tests {
     use super::scan_string_literal_chars;

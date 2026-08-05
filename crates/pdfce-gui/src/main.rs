@@ -1759,6 +1759,16 @@ struct OpenDoc {
     /// An in-flight ce-dimension drag: where the pointer went down, in PDF
     /// page space. The move commits on release as ONE undoable command.
     dimension_drag: Option<(pdfce_core::dimension::DimensionId, egui::Pos2)>,
+    /// A status note produced deep inside the canvas/panel code, drained into
+    /// the app's narrator once the `&mut doc` borrow ends.
+    ///
+    /// The panels run as free functions over `&mut OpenDoc` — they cannot
+    /// reach `self.edit_note` while that borrow is live. Its neighbours
+    /// resolved that by DISCARDING their outcome (`let _ =`, `.is_ok()`), so a
+    /// failed group create or scale change tells the operator nothing at all.
+    /// This is the channel that does not require choosing between reporting
+    /// and compiling.
+    pending_note: Option<String>,
     /// Which pages are selected for a batch operation, by 0-based index.
     ///
     /// Ordered (a `BTreeSet`) so that "the selected pages" is always a
@@ -1925,6 +1935,7 @@ impl OpenDoc {
             subpath_cycle: None,
             selected_dimension: None,
             dimension_drag: None,
+            pending_note: None,
             selected_pages: BTreeSet::new(),
             selection_anchor: None,
             dragged_page: None,
@@ -5351,6 +5362,11 @@ impl eframe::App for PdfceApp {
                     modifiers,
                 });
             }
+            diag::Step::Groups => {
+                if let Status::Open(doc) = &mut self.status {
+                    doc.dimension_groups_open = true;
+                }
+            }
             diag::Step::Tool(which) => {
                 // Routed through the SAME action the toolbar pushes, so a
                 // scripted tool entry builds exactly the per-tool state a real
@@ -5425,6 +5441,15 @@ impl eframe::App for PdfceApp {
         // armed — see the binding in `collect_keyboard_actions`. Only the
         // object-edit tool qualifies: the text tools own Delete as a character
         // operation, and with no tool armed the key is collected anyway.
+        // Drain any note a panel produced last frame into the narrator. Done
+        // here, before the frame's own `&mut doc` borrows begin, so the panels
+        // never have to choose between reporting an outcome and compiling.
+        if let Status::Open(doc) = &mut self.status
+            && let Some(note) = doc.pending_note.take()
+        {
+            self.edit_note = Some(note);
+        }
+
         let canvas_delete_target = match &self.status {
             Status::Open(doc) if doc.active_tool == Some(CanvasTool::VectorEdit) => {
                 doc.selected_dimension.is_some()
@@ -13218,6 +13243,42 @@ fn run_dimension_groups_panel(doc: &mut OpenDoc, ui: &mut egui::Ui) {
                             Some((g.id, measure_tool::ScaleEntryFields::for_group_panel()));
                     }
                 });
+                // Pass 27.2: the drafting standard, as a two-way choice rather
+                // than a menu — there are exactly two and both fit inline.
+                //
+                // It lives HERE, beside scale and units, because it is the
+                // same class of thing: a per-group display property that
+                // regenerates every member when changed. Decision 024's ribbon
+                // will move all of these together; leaving it CLI-only until
+                // then would mean the operator asked for ISO and got an option
+                // they cannot reach.
+                ui.horizontal(|ui| {
+                    ui.label(ui_text::group_standard_label());
+                    for (std, text) in [
+                        (
+                            pdfce_core::dimension::DimStandard::Ansi,
+                            ui_text::group_standard_ansi(),
+                        ),
+                        (
+                            pdfce_core::dimension::DimStandard::Iso,
+                            ui_text::group_standard_iso(),
+                        ),
+                    ] {
+                        if ui
+                            .selectable_label(g.standard == std, text)
+                            .on_hover_text(ui_text::group_standard_tooltip(
+                                model.member_count(g.id),
+                            ))
+                            .clicked()
+                            && g.standard != std
+                        {
+                            actions.push(measure_tool::GroupAction::SetStandard {
+                                group: g.id,
+                                standard: std,
+                            });
+                        }
+                    }
+                });
                 // The inline scale editor for the expanded group (ui-spec §5.2).
                 if let Some((gid, fields)) = doc.group_scale_edit.as_mut()
                     && *gid == g.id
@@ -13263,6 +13324,19 @@ fn run_dimension_groups_panel(doc: &mut OpenDoc, ui: &mut egui::Ui) {
                 if doc.session.set_group_scale(group, scale, format).is_ok() {
                     doc.refresh_pages();
                 }
+            }
+            measure_tool::GroupAction::SetStandard { group, standard } => {
+                diag::trace(|| format!("group-set-standard group={group:?} standard={standard:?}"));
+                doc.pending_note = Some(match doc.session.set_group_standard(group, standard) {
+                    Ok(members) => {
+                        doc.refresh_pages();
+                        ui_text::group_standard_applied(standard, members)
+                    }
+                    // Reported, not swallowed. A refusal here is real — a
+                    // certified document, or a sidecar from a newer build —
+                    // and silence would look like the click missing.
+                    Err(err) => err.to_string(),
+                });
             }
             measure_tool::GroupAction::ToggleLayer { group, visible } => {
                 if doc.session.toggle_dimension_layer(group, visible).is_ok() {

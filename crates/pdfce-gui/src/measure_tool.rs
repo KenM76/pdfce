@@ -54,8 +54,9 @@
 //! unaffected (this module is not in core), and it adds no dependency.
 
 use pdfce_core::dimension::{
-    DimensionKind, FitCircle, FractionMode, GroupId, LengthParseError, NumberFormat, ScaleEntry,
-    ScalePreview, ScaleState, Unit, fit_circle_taubin, parse_length, preview_group_scale,
+    DimStandard, DimensionKind, FitCircle, FractionMode, GroupId, LengthParseError, NumberFormat,
+    ScaleEntry, ScalePreview, ScaleState, Unit, fit_circle_taubin, parse_length,
+    preview_group_scale,
 };
 use pdfce_core::vector::{AxisConstraint, Point, constrained_second_point, measured_length};
 
@@ -679,6 +680,16 @@ pub enum GroupAction {
         scale: ScaleState,
         /// The number format (carries the display unit + precision).
         format: NumberFormat,
+    },
+    /// Set a group's drafting standard →
+    /// `EditSession::set_group_standard(group, standard)` (Pass 27.2;
+    /// regenerates every member's baked `/AP`, exactly as a scale change
+    /// does — a group exists so its members agree).
+    SetStandard {
+        /// The group to restyle.
+        group: GroupId,
+        /// ANSI or ISO.
+        standard: DimStandard,
     },
     /// Toggle a group's optional-content layer visibility →
     /// `EditSession::toggle_dimension_layer(group, visible)` (the default
