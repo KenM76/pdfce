@@ -635,6 +635,15 @@ struct PdfceApp {
     tools_open: bool,
     /// Which Tools-dock entry is expanded, if any.
     tools_selected: Option<Tool>,
+    /// Pages per output for the Split tool (Pass 3.4, GUI).
+    ///
+    /// `EveryN` only, deliberately. `SplitCriterion` also offers explicit
+    /// break points and one-part-per-top-level-bookmark, and both are real —
+    /// but "every N pages" is the criterion that needs no page picking, no
+    /// outline, and no second selection model, so it is the one that can ship
+    /// as a complete thought. The other two are named in the panel rather than
+    /// implied by their absence.
+    split_every_n: usize,
     /// The Combine tool's ordered input list.
     merge_inputs: Vec<PathBuf>,
     /// Whether Combine generates one bookmark per source. On by default,
@@ -1003,6 +1012,7 @@ impl Default for PdfceApp {
             // effect of a layout-engine change.
             tools_open: false,
             tools_selected: None,
+            split_every_n: 1,
             merge_inputs: Vec::new(),
             merge_bookmarks: true,
             // decision 012: no supplied font folders at startup — the
@@ -4644,14 +4654,100 @@ impl PdfceApp {
             // dock names the exact command rather than showing a dead
             // "coming soon", which is information the operator can act on
             // instead of an apology.
-            Some(Tool::Split) => {
-                ui.label(ui_text::tool_available_in_cli(ui_text::split_cli_command()));
-            }
+            Some(Tool::Split) => self.split_tool(ui),
             Some(Tool::Insert) => {
                 ui.label(ui_text::tool_available_in_cli(ui_text::insert_cli_command()));
             }
             Some(Tool::FontFolders) => self.font_folders_tool(ui),
         }
+    }
+
+    /// The Split tool (Pass 3.4, GUI) — every N pages into a chosen folder.
+    ///
+    /// # The gap this closes
+    ///
+    /// `pageops::split` and `pdfce-cli split` have existed since Pass 3.2 and
+    /// the GUI said so out loud, printing "this is available in the CLI as
+    /// …". That was the honest thing to show while it was true — better than a
+    /// dead "coming soon" — and the operator asked to "continue adding the
+    /// missing features to the gui", so it stops being true here.
+    ///
+    /// # Why only `EveryN`
+    ///
+    /// `SplitCriterion` also offers explicit break points and one part per
+    /// top-level bookmark. Both are real capabilities and neither ships here:
+    /// break points need a page-picking surface that would be a second
+    /// selection model competing with the thumbnail rail's, and the bookmark
+    /// criterion needs an outline the operator can see before they trust it.
+    /// "Every N pages" needs neither, so it is the criterion that can ship as
+    /// a complete thought rather than a half one. The panel NAMES the other
+    /// two rather than leaving the operator to infer they do not exist.
+    ///
+    /// # The collision check is not optional
+    ///
+    /// The CLI refuses to overwrite existing parts unless `--force` is passed.
+    /// The GUI has no `--force` to offer, so it refuses and says which files
+    /// are in the way. A split writes many files at once; discovering
+    /// afterwards that it flattened a previous run's output is not a mistake
+    /// an operator can undo.
+    fn split_tool(&mut self, ui: &mut egui::Ui) {
+        ui.label(ui_text::split_tool_intro());
+        let Status::Open(doc) = &self.status else {
+            ui.label(ui_text::split_needs_document());
+            return;
+        };
+        let total = doc.pages.len();
+        ui.horizontal(|ui| {
+            ui.label(ui_text::split_every_n_label());
+            ui.add(egui::DragValue::new(&mut self.split_every_n).range(1..=total.max(1)));
+        });
+        ui.label(ui_text::split_other_criteria_note());
+
+        if !ui.button(ui_text::split_run_button()).clicked() {
+            return;
+        }
+        let Some(dir) = rfd::FileDialog::new().pick_folder() else {
+            return; // cancelled — nothing written
+        };
+        let stem = doc
+            .path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "document".to_owned());
+        // `EditSession::view`, not the base — a split must cut the document as
+        // the operator currently sees it, unsaved page edits included (the
+        // Pass 17.1 session-read rule).
+        let view = doc.session.view();
+        let criterion = pdfce_core::pageops::SplitCriterion::EveryN(self.split_every_n);
+        let parts = match pdfce_core::pageops::split(
+            &view,
+            &criterion,
+            ui_text::SPLIT_NAME_TEMPLATE,
+            &stem,
+        ) {
+            Ok(parts) => parts,
+            Err(err) => {
+                self.save_result = Some(SaveOutcome::Failed(err.to_string()));
+                return;
+            }
+        };
+        // Collision check BEFORE anything is written — see the doc comment.
+        let clashes: Vec<String> = parts
+            .iter()
+            .filter(|(part, _, _)| dir.join(&part.name).exists())
+            .map(|(part, _, _)| part.name.clone())
+            .collect();
+        if !clashes.is_empty() {
+            self.edit_note = Some(ui_text::split_would_overwrite(&clashes));
+            return;
+        }
+        for (part, bytes, _) in &parts {
+            if let Err(err) = std::fs::write(dir.join(&part.name), bytes) {
+                self.save_result = Some(SaveOutcome::Failed(err.to_string()));
+                return;
+            }
+        }
+        self.edit_note = Some(ui_text::split_written(parts.len(), &dir));
     }
 
     /// The Font-folders tool (decision 012): manage the operator-supplied

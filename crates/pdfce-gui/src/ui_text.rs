@@ -1428,6 +1428,59 @@ pub fn redact_pane_title() -> &'static str {
     "Redact"
 }
 
+// --- Split tool (Pass 3.4, GUI) --------------------------------------------
+
+/// Output filename template for a GUI split.
+///
+/// Matches the CLI's own default so a document split from either shell lands
+/// with the same names — two shells producing differently-named parts from one
+/// document would make the outputs impossible to talk about.
+pub const SPLIT_NAME_TEMPLATE: &str = "{stem}-{n:03}.pdf";
+
+/// Intro: says what the tool does and, importantly, that it writes MANY files.
+pub fn split_tool_intro() -> &'static str {
+    "Cut the open document into several files, every N pages. You choose a folder; each part is written there as its own PDF. The open document is not changed."
+}
+
+/// Shown when the tool is opened with nothing loaded.
+pub fn split_needs_document() -> &'static str {
+    "Open a document first — this tool splits the one you have open, not a file on disk."
+}
+
+/// Label for the pages-per-part control.
+pub fn split_every_n_label() -> &'static str {
+    "Pages per file:"
+}
+
+/// Names the criteria that are NOT offered, so their absence is a statement
+/// rather than something the operator has to infer.
+pub fn split_other_criteria_note() -> &'static str {
+    "Splitting at chosen page breaks, or one file per bookmark, is available in the command-line tool but not here yet."
+}
+
+/// The run control.
+pub fn split_run_button() -> &'static str {
+    "Split into folder…"
+}
+
+/// Refusal when parts would overwrite existing files.
+///
+/// Lists the names. "Some files would be overwritten" tells the operator they
+/// have a problem without telling them which, and a split writes many files at
+/// once — the one thing they need is to know what is in the way.
+pub fn split_would_overwrite(names: &[String]) -> String {
+    format!(
+        "Nothing was written: {} file(s) of that name are already in the folder — {}. Choose an empty folder, or move those files first.",
+        names.len(),
+        names.join(", ")
+    )
+}
+
+/// Status note after a successful split.
+pub fn split_written(parts: usize, dir: &std::path::Path) -> String {
+    format!("{parts} file(s) written to {}.", dir.display())
+}
+
 // ---------------------------------------------------------------------------
 // Ribbon tabs and groups (Pass 24.1)
 // ---------------------------------------------------------------------------
@@ -2874,17 +2927,6 @@ pub fn merge_input_failed(path: &Path, message: &str) -> String {
 /// control that decides what a Delete button acts on.
 pub fn selection_check_glyph() -> &'static str {
     "✔"
-}
-
-/// The command line the Tools dock shows for splitting.
-///
-/// A literal command, and therefore **never translated** even when the
-/// rest of this catalog is: it is syntax the operator types, and a
-/// localized flag name would not run. It lives here anyway so the R1
-/// grep has nothing to find outside the catalog, and so that a future
-/// localizer sees it and knows to leave it alone.
-pub fn split_cli_command() -> &'static str {
-    "pdfce-cli split <file.pdf> --out-dir <folder> --every 1"
 }
 
 /// The command line the Tools dock shows for inserting pages. Never
