@@ -70,7 +70,7 @@ pub use decompose::{
 };
 pub use edit::{
     PlannedEdit, VectorEditError, anchor_count, plan_delete, plan_delete_subpath, plan_move,
-    plan_move_node,
+    plan_move_node, plan_move_subpath,
 };
 pub use geometry::{Bounds, Matrix, Point, Rgb, cubic_from_v, cubic_from_y, rect_corners};
 pub use hit::{

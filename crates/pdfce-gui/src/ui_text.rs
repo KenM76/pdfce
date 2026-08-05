@@ -5007,6 +5007,30 @@ pub fn group_standard_applied(
     format!("Redrew {members} measurement(s) to {name} — press Ctrl+Z to undo.")
 }
 
+/// Status note after a ce dimension group is created.
+pub fn group_created(name: &str) -> String {
+    format!("Created measurement group \"{name}\".")
+}
+
+/// Status note after a group's scale is applied to its members.
+///
+/// Names the member count for the same reason the standard change does: the
+/// operator is calibrating one thing and every measurement in the group moves
+/// with it, which is the point of a group and is worth confirming happened.
+pub fn group_scale_applied(members: usize) -> String {
+    format!("Scale applied — {members} measurement(s) in the group updated.")
+}
+
+/// Shown when hiding a group's layer was declined.
+///
+/// The default group cannot be hidden: it is the fallback every measurement
+/// falls back to, and hiding the only such group would leave an operator with
+/// measurements they cannot see and no obvious way to bring them back. Saying
+/// so beats a button that visibly does nothing.
+pub fn group_layer_refused() -> &'static str {
+    "The default group's layer can't be hidden — it's the group every measurement falls back to. Create another group and move them there to hide them."
+}
+
 #[cfg(test)]
 mod glyph_coverage_tests {
     use super::scan_string_literal_chars;

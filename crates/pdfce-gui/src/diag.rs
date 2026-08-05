@@ -92,6 +92,8 @@ pub enum Step {
     /// only in `canvas::zoom_anchor_offset`'s unit tests — the unit tests prove
     /// the solve, this proves it is wired to the wheel and to the scroll area.
     Zoom(f32),
+    /// Press and release the Escape key.
+    Escape,
     /// Press and release the Delete key.
     Delete,
     /// Arm a tool: `tool:none`, `tool:obj`, `tool:measure`.
@@ -193,6 +195,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "mdown" => xy().map(|(x, y)| Step::Middle(true, x, y)),
         "mup" => xy().map(|(x, y)| Step::Middle(false, x, y)),
         "delete" => Some(Step::Delete),
+        "escape" => Some(Step::Escape),
         "wait" => Some(Step::Wait),
         "panel" if rest.trim() == "groups" => Some(Step::Groups),
         "tool" => match rest.trim() {

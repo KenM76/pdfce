@@ -419,6 +419,10 @@ pub enum CommandKind {
     /// an operator scanning what they did. See
     /// [`EditSession::delete_subpath`].
     DeleteSubpath,
+    /// ONE **subpath** of a path object was moved (Pass 28.0): its
+    /// construction operands were translated while the object's other
+    /// subpaths kept their exact bytes. See [`EditSession::move_subpath`].
+    MoveSubpath,
 }
 
 /// Which geometric-markup subtype [`EditSession::add_markup`] authored,
@@ -2259,6 +2263,51 @@ impl EditSession {
                 stream,
                 path,
                 subpath_index,
+            )?)
+        })
+    }
+
+    /// **Move one subpath** of the path object at paint-order `object_index`
+    /// on page `page_index` by a page-space `(dx, dy)`, as one undoable
+    /// command (Pass 28.0).
+    ///
+    /// The companion to [`Self::delete_subpath`], and the operation the
+    /// roadmap has owed since Pass 25.2: on a CAD export where one path object
+    /// holds a whole drawing view, moving "this line" means moving one of its
+    /// subpaths, not the view.
+    ///
+    /// `subpath_index` is into the object's subpaths in decomposition order —
+    /// the order [`crate::vector::hit_test_subpaths`] returns.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::VectorEdit`] wrapping `SubpathOutOfRange`, `ImplicitNode`
+    /// (a subpath whose start is inherited rather than written cannot be
+    /// translated without tearing it), `MalformedOperand` or `DegenerateCtm`;
+    /// plus the page/encryption/certification guards.
+    pub fn move_subpath(
+        &mut self,
+        page_index: usize,
+        object_index: usize,
+        subpath_index: usize,
+        dx: f64,
+        dy: f64,
+    ) -> Result<(), EditError> {
+        self.vector_surgery(CommandKind::MoveSubpath, page_index, |stream, model| {
+            let count = model.objects.len();
+            let obj = model.objects.get(object_index).ok_or(
+                crate::vector::VectorEditError::ObjectOutOfRange {
+                    index: object_index,
+                    count,
+                },
+            )?;
+            let path = vector_object_as_path(obj, object_index)?;
+            Ok(crate::vector::plan_move_subpath(
+                stream,
+                path,
+                subpath_index,
+                dx,
+                dy,
             )?)
         })
     }

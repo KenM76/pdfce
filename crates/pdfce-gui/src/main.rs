@@ -2489,6 +2489,10 @@ enum Action {
     /// set, different Escape-precedence tier. Unreachable this Pass — the
     /// canvas selection is always empty — but wired so Pass 9a gets it free.
     ClearCanvasSelection,
+    /// Leave the entered object, returning to the level above (Pass 28.0,
+    /// decision 025's `LeaveLevel`). Escape's second-highest precedence: one
+    /// press, one rung, with the selection and the armed tool left alone.
+    LeaveLevel,
     /// Remove the selected pages from the document.
     DeleteSelection,
     /// Turn the selected pages by a quarter turn (±90).
@@ -5085,6 +5089,14 @@ impl PdfceApp {
             // Pass 12.0 substrate: clear the canvas selection (spec §3.5
             // step 3). A view-state change, never an edit. Always a no-op
             // this Pass (the set is always empty); wired for Pass 9a.
+            // Pass 28.0: pop ONE rung. The object selection and the armed
+            // tool are deliberately untouched — that is what makes this a
+            // level pop rather than the "clear everything" Escape shipped in
+            // 25.1, which sent an operator two rungs deep back to the page.
+            Action::LeaveLevel => {
+                doc.entered = None;
+                doc.subpath_cycle = None;
+            }
             Action::ClearCanvasSelection => {
                 doc.canvas_selection.clear();
                 // Escape also LEAVES an entered object. It is the universal
@@ -5381,6 +5393,17 @@ impl eframe::App for PdfceApp {
                 };
                 self.apply(Action::SelectCanvasTool(tool), ctx, ctx.pixels_per_point());
             }
+            diag::Step::Escape => {
+                for pressed in [true, false] {
+                    raw_input.events.push(egui::Event::Key {
+                        key: egui::Key::Escape,
+                        physical_key: None,
+                        pressed,
+                        repeat: false,
+                        modifiers,
+                    });
+                }
+            }
             diag::Step::Delete => {
                 for pressed in [true, false] {
                     raw_input.events.push(egui::Event::Key {
@@ -5458,16 +5481,22 @@ impl eframe::App for PdfceApp {
             }
             _ => false,
         };
+        // Whether the operator is INSIDE an object — the rung Escape pops
+        // before it touches the tool or the selection (Pass 28.0).
+        let inside_object = matches!(&self.status, Status::Open(doc) if doc.entered.is_some());
         let canvas_gesture_discardable =
             matches!(self.current_gesture_interrupt(), GestureInterrupt::Discard);
         collect_keyboard_actions(
             &ctx,
             &mut actions,
-            canvas_tool_active,
-            add_text_active,
-            canvas_gesture_discardable,
-            canvas_selection_nonempty,
-            canvas_delete_target,
+            CanvasKeys {
+                tool_active: canvas_tool_active,
+                add_text_active,
+                gesture_discardable: canvas_gesture_discardable,
+                selection_nonempty: canvas_selection_nonempty,
+                delete_target: canvas_delete_target,
+                inside_object,
+            },
         );
 
         // P0-5: drop-to-open. Read the frame's dropped files (set by the
@@ -5636,15 +5665,38 @@ impl eframe::App for PdfceApp {
 /// focused-widget key handling (typing must not also fire a global chord);
 /// reconciling the two is explicitly Pass 7's decision, named here so it is
 /// not rediscovered as a surprise.
-fn collect_keyboard_actions(
-    ctx: &egui::Context,
-    actions: &mut Vec<Action>,
+/// The canvas state a keyboard binding may depend on.
+///
+/// A struct rather than six positional `bool`s: at that count a call site is
+/// `collect_keyboard_actions(&ctx, &mut a, true, false, false, true, true,
+/// false)`, where a transposition compiles cleanly and changes which key does
+/// what. The fields also carry the reason each one exists, which a parameter
+/// list cannot.
+#[derive(Debug, Clone, Copy, Default)]
+struct CanvasKeys {
+    /// Any canvas tool is armed — most global bindings yield to a tool.
     tool_active: bool,
+    /// The add-text tool specifically, which owns typing.
     add_text_active: bool,
+    /// A tool gesture is in flight and can be thrown away.
     gesture_discardable: bool,
-    canvas_selection_nonempty: bool,
-    canvas_delete_target: bool,
-) {
+    /// Something is selected on the canvas.
+    selection_nonempty: bool,
+    /// The canvas has something Delete should remove while a tool is armed.
+    delete_target: bool,
+    /// The operator is INSIDE an object — the rung Escape pops first.
+    inside_object: bool,
+}
+
+fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys: CanvasKeys) {
+    let CanvasKeys {
+        tool_active,
+        add_text_active,
+        gesture_discardable,
+        selection_nonempty: canvas_selection_nonempty,
+        delete_target: canvas_delete_target,
+        inside_object,
+    } = keys;
     use egui::{Key, Modifiers};
 
     let mut pressed = |modifiers: Modifiers, key: Key, action: Action| {
@@ -5779,10 +5831,15 @@ fn collect_keyboard_actions(
     // the computed outcome can be pushed directly. Consumed centrally so a
     // widget underneath cannot also act on it.
     if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
-        let outcome =
-            canvas::resolve_escape(tool_active, gesture_discardable, canvas_selection_nonempty);
+        let outcome = canvas::resolve_escape(
+            tool_active,
+            gesture_discardable,
+            canvas_selection_nonempty,
+            inside_object,
+        );
         actions.push(match outcome {
             EscapeOutcome::CancelGesture => Action::CancelToolGesture,
+            EscapeOutcome::LeaveLevel => Action::LeaveLevel,
             EscapeOutcome::ExitTool => Action::SelectCanvasTool(None),
             EscapeOutcome::ClearCanvasSelection => Action::ClearCanvasSelection,
             EscapeOutcome::FallThroughToRailClear => Action::ClearSelection,
@@ -13314,16 +13371,28 @@ fn run_dimension_groups_panel(doc: &mut OpenDoc, ui: &mut egui::Ui) {
     for action in actions {
         match action {
             measure_tool::GroupAction::Create { name, unit } => {
-                let _ = doc.session.add_dimension_group(&name, unit);
+                // Reported, not discarded. This used to be `let _ =`, so a
+                // refused create — a certified document, an encrypted one, a
+                // sidecar from a newer build — looked exactly like the button
+                // not registering the click, and the operator's only recourse
+                // was to press it again and watch nothing happen again.
+                doc.pending_note = Some(match doc.session.add_dimension_group(&name, unit) {
+                    Ok(_) => ui_text::group_created(&name),
+                    Err(err) => err.to_string(),
+                });
             }
             measure_tool::GroupAction::SetScale {
                 group,
                 scale,
                 format,
             } => {
-                if doc.session.set_group_scale(group, scale, format).is_ok() {
-                    doc.refresh_pages();
-                }
+                doc.pending_note = Some(match doc.session.set_group_scale(group, scale, format) {
+                    Ok(members) => {
+                        doc.refresh_pages();
+                        ui_text::group_scale_applied(members)
+                    }
+                    Err(err) => err.to_string(),
+                });
             }
             measure_tool::GroupAction::SetStandard { group, standard } => {
                 diag::trace(|| format!("group-set-standard group={group:?} standard={standard:?}"));
@@ -13339,8 +13408,22 @@ fn run_dimension_groups_panel(doc: &mut OpenDoc, ui: &mut egui::Ui) {
                 });
             }
             measure_tool::GroupAction::ToggleLayer { group, visible } => {
-                if doc.session.toggle_dimension_layer(group, visible).is_ok() {
-                    doc.refresh_pages();
+                // The default group is deliberately un-hideable and the engine
+                // enforces it, so a `false` here is a refusal the operator
+                // should see rather than a click that appeared to do nothing.
+                match doc.session.toggle_dimension_layer(group, visible) {
+                    Ok(resulting) => {
+                        doc.refresh_pages();
+                        // The engine returns the RESULTING visibility, which
+                        // differs from the request when it declined — the
+                        // default group is un-hideable by design. That is a
+                        // refusal the operator should read, not a click that
+                        // appeared to do nothing.
+                        if resulting != visible {
+                            doc.pending_note = Some(ui_text::group_layer_refused().to_owned());
+                        }
+                    }
+                    Err(err) => doc.pending_note = Some(err.to_string()),
                 }
             }
         }

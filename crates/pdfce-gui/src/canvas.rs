@@ -621,6 +621,10 @@ pub enum GestureInterrupt {
 /// Escape already does (spec §3.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EscapeOutcome {
+    /// Leave the object the operator has entered, returning to the level
+    /// above it — WITHOUT clearing the selection or exiting the tool
+    /// (Pass 28.0). One press, one rung.
+    LeaveLevel,
     /// A tool has an in-progress, discardable gesture → cancel the gesture,
     /// STAY in the tool. (Highest precedence.)
     CancelGesture,
@@ -648,9 +652,22 @@ pub fn resolve_escape(
     tool_active: bool,
     gesture_discardable: bool,
     canvas_selection_nonempty: bool,
+    inside_object: bool,
 ) -> EscapeOutcome {
     if tool_active && gesture_discardable {
         EscapeOutcome::CancelGesture
+    } else if inside_object {
+        // Pass 28.0, decision 025's L1: one Escape pops ONE rung, never
+        // several. Placed ABOVE `ExitTool` deliberately — with the object tool
+        // armed and the operator two levels inside a drawing, Escape used to
+        // exit the tool outright, discarding the level AND the tool in a single
+        // press, which is the collapse decision 025 named.
+        //
+        // Pass 25.1 shipped Escape as "clear everything", which had the same
+        // effect from the other direction: leaving a part also left the object,
+        // so an operator who descended two rungs to reach a line and pressed
+        // Escape once found themselves back at the page.
+        EscapeOutcome::LeaveLevel
     } else if tool_active {
         EscapeOutcome::ExitTool
     } else if canvas_selection_nonempty {
@@ -1582,6 +1599,39 @@ pub fn snap_marker_shapes(at: Pos2, kind: SnapKind, color: Color32, size: f32) -
 mod tests {
     use super::*;
 
+    /// **One Escape, one rung** (Pass 28.0, decision 025's L1).
+    ///
+    /// Being inside an object outranks both exit-tool and clear-selection. Two
+    /// separate bugs collapse into this: with a tool armed, Escape used to exit
+    /// the TOOL while the operator was two levels inside a drawing; with no
+    /// tool, Pass 25.1's Escape cleared the entered object AND the selection in
+    /// one press. Either way a single press dropped more than one rung.
+    #[test]
+    fn escape_leaves_the_entered_object_before_it_touches_the_tool_or_selection() {
+        // Inside an object, tool armed: the LEVEL goes, the tool stays.
+        assert_eq!(
+            resolve_escape(true, false, true, true),
+            EscapeOutcome::LeaveLevel
+        );
+        // Inside an object, no tool, selection present: the level still wins.
+        assert_eq!(
+            resolve_escape(false, false, true, true),
+            EscapeOutcome::LeaveLevel
+        );
+        // An in-flight GESTURE still outranks it — a half-drawn dimension is
+        // more transient than a navigation level, and losing it silently to a
+        // level pop would be the worse trade.
+        assert_eq!(
+            resolve_escape(true, true, true, true),
+            EscapeOutcome::CancelGesture
+        );
+        // And once out, the chain behaves exactly as before.
+        assert_eq!(
+            resolve_escape(false, false, true, false),
+            EscapeOutcome::ClearCanvasSelection
+        );
+    }
+
     // ---- click-through ordinal ----------------------------------------
 
     #[test]
@@ -1894,26 +1944,29 @@ mod tests {
     fn escape_precedence_is_gesture_then_tool_then_selection_then_rail() {
         // Priority 1: a discardable gesture wins over everything.
         assert_eq!(
-            resolve_escape(true, true, true),
+            resolve_escape(true, true, true, false),
             EscapeOutcome::CancelGesture
         );
         // Priority 2: tool active, no gesture → exit the tool.
-        assert_eq!(resolve_escape(true, false, true), EscapeOutcome::ExitTool);
+        assert_eq!(
+            resolve_escape(true, false, true, false),
+            EscapeOutcome::ExitTool
+        );
         // Priority 3: no tool, non-empty canvas selection → clear it.
         assert_eq!(
-            resolve_escape(false, false, true),
+            resolve_escape(false, false, true, false),
             EscapeOutcome::ClearCanvasSelection
         );
         // Priority 4: nothing else → the existing rail-clear (this Pass's
         // only live outcome).
         assert_eq!(
-            resolve_escape(false, false, false),
+            resolve_escape(false, false, false, false),
             EscapeOutcome::FallThroughToRailClear
         );
         // A discardable-gesture flag with no active tool is meaningless and
         // must not fire CancelGesture.
         assert_eq!(
-            resolve_escape(false, true, false),
+            resolve_escape(false, true, false, false),
             EscapeOutcome::FallThroughToRailClear
         );
     }

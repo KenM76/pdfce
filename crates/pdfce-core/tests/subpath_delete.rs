@@ -160,37 +160,64 @@ fn a_clipping_path_is_refused_rather_than_silently_changing_what_is_visible() {
     );
 }
 
-/// **The load-bearing guard.** A structure the byte walk cannot model exactly
-/// is refused, not approximated.
+/// **The refusal is now PRECISE, not conservative** (Pass 28.0).
 ///
 /// `h` closes a subpath; a following segment operator reopens at the closed
-/// subpath's start point (§8.5.2.1) WITHOUT an `m` of its own. That subpath has
-/// no "a subpath starts here" operator to remove, so the byte walk does not
-/// count it — and the count then disagrees with the geometry. Deleting by
-/// index in that state could remove a different line from the one the operator
-/// clicked, which nothing downstream could detect.
+/// subpath's start point (§8.5.2.1) with no `m` of its own — so its start is
+/// INHERITED, carried by no operand. Excising the subpath BEFORE it changes
+/// where it begins: a byte-minimal edit that passes `--verify-undo` and every
+/// content-identity check, and still moves a line the operator never touched.
+///
+/// This test previously asserted `SubpathStructureMismatch` — a refusal of the
+/// WHOLE OBJECT whenever an implicit reopen appeared anywhere in it, which came
+/// from re-deriving the subpaths in a second walk and giving up when the counts
+/// disagreed. Now that each subpath carries the token range the decomposition
+/// recorded, only the one genuinely unsafe deletion is refused, and the rest of
+/// the object stays editable.
 #[test]
-fn an_implicitly_reopened_subpath_makes_the_whole_edit_refuse() {
+fn deleting_before_an_implicitly_reopened_subpath_is_refused_by_name() {
     // `m … l h l …`: the trailing `l` starts a subpath with no `m`.
     let cs = ContentStream::parse(b"0 0 m 10 0 l h 20 20 l 30 30 l S".to_vec()).expect("parses");
     let path = only_path(&cs);
     assert!(
         path.subpaths.len() >= 2,
-        "the fixture must actually produce an implicit subpath, or this tests \
-         nothing: got {} subpath(s)",
+        "the fixture must actually produce an implicit subpath, or this tests          nothing: got {} subpath(s)",
         path.subpaths.len()
     );
+    assert!(
+        path.subpaths[1].starts_implicitly,
+        "the second subpath must be the implicit one"
+    );
+
     let err = plan_delete_subpath(&cs, &path, 0).expect_err("must refuse");
     match err {
-        VectorEditError::SubpathStructureMismatch {
-            from_operators,
-            from_decomposition,
-        } => assert_ne!(
-            from_operators, from_decomposition,
-            "the refusal must report a genuine disagreement"
-        ),
-        other => panic!("expected SubpathStructureMismatch, got {other:?}"),
+        VectorEditError::DeleteWouldMoveNextSubpath { index } => assert_eq!(index, 0),
+        other => panic!("expected DeleteWouldMoveNextSubpath, got {other:?}"),
     }
+    // The message has to name the CONSEQUENCE, not just decline.
+    assert!(
+        err.to_string().contains("move"),
+        "the refusal must say what it is preventing: {err}"
+    );
+}
+
+/// **And the implicit subpath itself IS deletable** — the capability the old
+/// conservative guard denied.
+///
+/// Removing its own segments moves nothing: it has no successor inheriting
+/// from it here, and its own start was inherited rather than written, so there
+/// is no operand to orphan. Under the previous guard this whole object was
+/// undeletable; that is the cost the count-based approach was quietly paying.
+#[test]
+fn the_implicitly_reopened_subpath_itself_can_be_deleted() {
+    let cs = ContentStream::parse(b"0 0 m 10 0 l h 20 20 l 30 30 l S".to_vec()).expect("parses");
+    let plan = plan_delete_subpath(&cs, &only_path(&cs), 1).expect("the implicit subpath deletes");
+    let after = ContentStream::parse(plan.content).expect("re-parses");
+    assert_eq!(
+        first_xs(&after),
+        vec![0.0],
+        "only the first subpath survives"
+    );
 }
 
 /// An out-of-range index refuses and names the real count.

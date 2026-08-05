@@ -229,6 +229,32 @@ pub struct Subpath {
     pub segments: Vec<Segment>,
     /// Whether the subpath is closed (a closing edge back to `start`).
     pub closed: bool,
+    /// The content-token range of the operators that construct this subpath
+    /// (Pass 28.0) — its opening `m`/`re` through its last segment, including
+    /// a closing `h`.
+    ///
+    /// This is what makes per-subpath EDITING expressible. Without it, an
+    /// editor had to re-walk the operator bytes and hope its walk agreed with
+    /// this one about how many subpaths there are; `plan_delete_subpath`
+    /// shipped exactly that, with a count guard that refused the whole object
+    /// whenever the two disagreed. Recording the range on the walk that
+    /// already knows it makes the agreement structural instead of checked.
+    pub tokens: TokenRange,
+    /// Whether this subpath was started IMPLICITLY — by a segment operator
+    /// after `h`, which reopens at the closed subpath's start point (§8.5.2.1)
+    /// with no operator of its own saying where.
+    ///
+    /// # Why this must be recorded rather than inferred
+    ///
+    /// Such a subpath's start point is INHERITED and carried by no operand. Two
+    /// consequences, both silent if unchecked:
+    ///
+    /// - it cannot be MOVED, because there is no coordinate pair to rewrite;
+    /// - the subpath BEFORE it cannot be deleted, because excising those
+    ///   operators changes the current point the implicit one starts from, so
+    ///   a byte-minimal edit that passes every round-trip check still moves a
+    ///   line the operator never touched.
+    pub starts_implicitly: bool,
 }
 
 impl Subpath {
@@ -236,6 +262,10 @@ impl Subpath {
     #[must_use]
     pub fn transformed(&self, m: Matrix) -> Self {
         Self {
+            // The token range and the implicit flag describe the SOURCE
+            // operators, which a coordinate transform does not move.
+            tokens: self.tokens,
+            starts_implicitly: self.starts_implicitly,
             start: m.map_point(self.start),
             segments: self.segments.iter().map(|s| s.transformed(m)).collect(),
             closed: self.closed,
@@ -1523,12 +1553,12 @@ impl<'a> Decomposer<'a> {
             // ---- path construction (Table 59) ----
             b"m" => {
                 if let &[x, y] = nums.as_slice() {
-                    self.move_to(Point::new(x, y), first);
+                    self.move_to(Point::new(x, y), first, op_index);
                 }
             }
             b"l" => {
                 if let &[x, y] = nums.as_slice() {
-                    self.line_to(Point::new(x, y), first);
+                    self.line_to(Point::new(x, y), first, op_index);
                 }
             }
             b"c" => {
@@ -1538,31 +1568,32 @@ impl<'a> Decomposer<'a> {
                         Point::new(x2, y2),
                         Point::new(x3, y3),
                         first,
+                        op_index,
                     );
                 }
             }
             b"v" => {
                 // First control = current point (shared primitive).
                 if let &[x2, y2, x3, y3] = nums.as_slice()
-                    && let Some(cur) = self.current_for_segment(first)
+                    && let Some(cur) = self.current_for_segment(first, op_index)
                 {
                     let (c1, c2, end) = cubic_from_v(cur, x2, y2, x3, y3);
-                    self.append_cubic(c1, c2, end);
+                    self.append_cubic(c1, c2, end, op_index);
                 }
             }
             b"y" => {
                 // Second control = endpoint (shared primitive).
                 if let &[x1, y1, x3, y3] = nums.as_slice()
-                    && self.current_for_segment(first).is_some()
+                    && self.current_for_segment(first, op_index).is_some()
                 {
                     let (c1, c2, end) = cubic_from_y(x1, y1, x3, y3);
-                    self.append_cubic(c1, c2, end);
+                    self.append_cubic(c1, c2, end, op_index);
                 }
             }
-            b"h" => self.close_subpath(),
+            b"h" => self.close_subpath(op_index),
             b"re" => {
                 if let &[x, y, w, h] = nums.as_slice() {
-                    self.rect(x, y, w, h, first);
+                    self.rect(x, y, w, h, first, op_index);
                 }
             }
 
@@ -1781,7 +1812,7 @@ impl<'a> Decomposer<'a> {
         }
     }
 
-    fn move_to(&mut self, p: Point, first: usize) {
+    fn move_to(&mut self, p: Point, first: usize, op_index: usize) {
         self.ensure_path(first);
         finalize_open(self.path.as_mut());
         if let Some(pa) = self.path.as_mut() {
@@ -1789,6 +1820,11 @@ impl<'a> Decomposer<'a> {
                 start: p,
                 segments: Vec::new(),
                 closed: false,
+                tokens: TokenRange {
+                    start: first,
+                    end: op_index,
+                },
+                starts_implicitly: false,
             });
             pa.current = Some(p);
             pa.subpath_start = Some(p);
@@ -1800,7 +1836,7 @@ impl<'a> Decomposer<'a> {
     /// after `h`/`re` (`needs_move`) it opens a new subpath at the current
     /// point. Returns the current point, or `None` (skip + count) if there
     /// is no current point.
-    fn current_for_segment(&mut self, first: usize) -> Option<Point> {
+    fn current_for_segment(&mut self, first: usize, op_index: usize) -> Option<Point> {
         // A segment with no path at all AND no current point is a
         // §8.5.2.1 error.
         let cur = self.path.as_ref().and_then(|p| p.current);
@@ -1816,6 +1852,13 @@ impl<'a> Decomposer<'a> {
                 start: cur,
                 segments: Vec::new(),
                 closed: false,
+                tokens: TokenRange {
+                    start: first,
+                    end: op_index,
+                },
+                // No `m` of its own: the start point is inherited from the
+                // subpath that `h` just closed.
+                starts_implicitly: true,
             });
             pa.subpath_start = Some(cur);
             pa.needs_move = false;
@@ -1823,23 +1866,23 @@ impl<'a> Decomposer<'a> {
         Some(cur)
     }
 
-    fn line_to(&mut self, p: Point, first: usize) {
-        if self.current_for_segment(first).is_some() {
-            self.push_segment(Segment::Line { to: p }, p);
+    fn line_to(&mut self, p: Point, first: usize, op_index: usize) {
+        if self.current_for_segment(first, op_index).is_some() {
+            self.push_segment(Segment::Line { to: p }, p, op_index);
         }
     }
 
-    fn curve_to(&mut self, c1: Point, c2: Point, end: Point, first: usize) {
-        if self.current_for_segment(first).is_some() {
-            self.append_cubic(c1, c2, end);
+    fn curve_to(&mut self, c1: Point, c2: Point, end: Point, first: usize, op_index: usize) {
+        if self.current_for_segment(first, op_index).is_some() {
+            self.append_cubic(c1, c2, end, op_index);
         }
     }
 
-    fn append_cubic(&mut self, c1: Point, c2: Point, end: Point) {
-        self.push_segment(Segment::Cubic { c1, c2, to: end }, end);
+    fn append_cubic(&mut self, c1: Point, c2: Point, end: Point, op_index: usize) {
+        self.push_segment(Segment::Cubic { c1, c2, to: end }, end, op_index);
     }
 
-    fn push_segment(&mut self, seg: Segment, new_current: Point) {
+    fn push_segment(&mut self, seg: Segment, new_current: Point, op_index: usize) {
         if self.total_nodes >= MAX_NODES {
             self.diag.nodes_dropped += 1;
             return;
@@ -1848,6 +1891,10 @@ impl<'a> Decomposer<'a> {
             && let Some(open) = pa.open.as_mut()
         {
             open.segments.push(seg);
+            // Grow the subpath's token range to cover this operator. Recorded
+            // here, on the walk that already knows it, rather than re-derived
+            // later by a second walk that might disagree.
+            open.tokens.end = open.tokens.end.max(op_index);
             pa.current = Some(new_current);
             self.total_nodes += 1;
         }
@@ -1856,10 +1903,14 @@ impl<'a> Decomposer<'a> {
     /// `h` (§8.5.2.1): close the current subpath; the current point
     /// becomes the subpath start, and the next segment op opens a new
     /// subpath there.
-    fn close_subpath(&mut self) {
+    fn close_subpath(&mut self, op_index: usize) {
         if let Some(pa) = self.path.as_mut() {
             if let Some(open) = pa.open.as_mut() {
                 open.closed = true;
+                // `h` belongs to the subpath it closes, so the span must
+                // include it — otherwise deleting the subpath would leave an
+                // orphan `h` that closes whatever precedes it.
+                open.tokens.end = open.tokens.end.max(op_index);
             }
             finalize_open_pa(pa);
             pa.current = pa.subpath_start;
@@ -1869,7 +1920,7 @@ impl<'a> Decomposer<'a> {
 
     /// `re x y w h` (Table 59): a complete closed subpath, expanded via the
     /// shared [`rect_corners`] primitive.
-    fn rect(&mut self, x: f64, y: f64, w: f64, h: f64, first: usize) {
+    fn rect(&mut self, x: f64, y: f64, w: f64, h: f64, first: usize, op_index: usize) {
         self.ensure_path(first);
         finalize_open(self.path.as_mut());
         if self.total_nodes.saturating_add(4) > MAX_NODES {
@@ -1886,6 +1937,12 @@ impl<'a> Decomposer<'a> {
                     Segment::Line { to: c[3] },
                 ],
                 closed: true,
+                // A whole closed subpath in ONE operator.
+                tokens: TokenRange {
+                    start: first,
+                    end: op_index,
+                },
+                starts_implicitly: false,
             });
             pa.current = Some(c[0]);
             pa.subpath_start = Some(c[0]);

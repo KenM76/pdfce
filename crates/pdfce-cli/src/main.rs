@@ -1928,6 +1928,45 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Move one subpath** of a path object (Pass 28.0): translate a single
+    /// subpath's construction operands, leaving the object's other subpaths
+    /// byte-verbatim.
+    ///
+    /// The companion to `subpath-delete`, for the same CAD-export case: when
+    /// one path object holds a whole drawing view, moving "this line" means
+    /// moving one of its subpaths.
+    ///
+    /// Refused for a subpath that starts implicitly (a segment after `h`,
+    /// whose start point is inherited rather than written) — translating the
+    /// operands that exist would tear it away from a start that stayed put.
+    SubpathMove {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// 0-based paint-order object index.
+        #[arg(long)]
+        object: usize,
+        /// 0-based subpath index within that object.
+        #[arg(long)]
+        subpath: usize,
+        /// Page-space x displacement, in points.
+        #[arg(long, allow_hyphen_values = true)]
+        dx: f64,
+        /// Page-space y displacement, in points.
+        #[arg(long, allow_hyphen_values = true)]
+        dy: f64,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Delete one subpath** of a path object (Pass 25.2): remove a single
     /// subpath's construction operators via surgery (R46/§5.7), leaving the
     /// object's other subpaths byte-verbatim.
@@ -2709,6 +2748,27 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_object_delete(&input, page, object, &output, mode, verify_undo),
+        Command::SubpathMove {
+            input,
+            page,
+            object,
+            subpath,
+            dx,
+            dy,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_subpath_move(&SubpathMoveArgs {
+            input: &input,
+            page,
+            object,
+            subpath,
+            dx,
+            dy,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
         Command::SubpathDelete {
             input,
             page,
@@ -9160,6 +9220,62 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
         u32::from(outcome.undo_identical),
     );
     finish_edit(input, &outcome)
+}
+
+/// Grouped arguments for `subpath-move` (Pass 28.0).
+struct SubpathMoveArgs<'a> {
+    input: &'a Path,
+    page: u32,
+    object: usize,
+    subpath: usize,
+    dx: f64,
+    dy: f64,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `subpath-move` — translate ONE subpath of a path object.
+fn cmd_subpath_move(args: &SubpathMoveArgs<'_>) -> u8 {
+    let page_index = (args.page.max(1) - 1) as usize;
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    if let Err(err) = session.move_subpath(page_index, args.object, args.subpath, args.dx, args.dy)
+    {
+        return report_edit_error(args.input, &err);
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "subpath-move {} page {} object={} subpath={} dx={} dy={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.page,
+        args.object,
+        args.subpath,
+        args.dx,
+        args.dy,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
 }
 
 /// Grouped arguments for `subpath-delete` (Pass 25.2) — a struct to keep the
