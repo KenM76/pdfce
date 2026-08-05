@@ -228,6 +228,7 @@ mod object_provider;
 mod object_summary;
 mod raster;
 mod redact_apply;
+mod ribbon;
 mod ui_text;
 mod vector_edit_tool;
 mod viewer;
@@ -600,6 +601,15 @@ struct PdfceApp {
     /// should not grow one per pane's private needs. Written immediately
     /// before the left dock draws, read inside it, same frame.
     left_dock_pixels_per_point: f32,
+    /// The ribbon tab currently on screen (Pass 24.1).
+    ///
+    /// Session state, not persisted, and deliberately NOT reset by the
+    /// layout-reset chooser: which tab you were last on is where you were
+    /// working, not part of the arrangement you asked to put back.
+    ribbon_tab: ribbon::RibbonTab,
+    /// The reset-layout chooser's pending selection, `None` when closed
+    /// (Pass 24.1).
+    pending_reset: Option<ribbon::ResetScope>,
     /// The outcome of the most recent save, kept until the next one so
     /// the operator gets a persistent answer rather than a toast they
     /// might miss.
@@ -966,6 +976,8 @@ impl Default for PdfceApp {
             dock: dock::default_tree(),
             left_dock: dock::default_left_tree(),
             left_dock_pixels_per_point: 1.0,
+            ribbon_tab: ribbon::RibbonTab::default(),
+            pending_reset: None,
             save_result: None,
             // The dock starts CLOSED: progressive disclosure, and the
             // status quo before decision 017 — an operator who wants it
@@ -2644,6 +2656,14 @@ enum Action {
     /// every other command, after the frame's drawing is finished and the
     /// real tree has been restored from the borrow-dance swap.
     ResetPanelLayout,
+    /// Open the reset-layout chooser (Pass 24.1).
+    OpenResetLayout,
+    /// Close the chooser without resetting anything.
+    CancelResetLayout,
+    /// Apply the chooser's selection.
+    ApplyResetLayout(ribbon::ResetScope),
+    /// Switch the visible ribbon tab (Pass 24.1).
+    SelectRibbonTab(ribbon::RibbonTab),
     /// Commit the properties panel's draft text as one undoable edit.
     ApplyProperties,
     /// Write the document (with its unsaved edits) to a path the
@@ -3925,6 +3945,75 @@ impl PdfceApp {
     /// keyboard. The property is enforced instead by the pending gate at
     /// the top of [`PdfceApp::apply`] — see its docs for the collision
     /// this closes.
+    /// The reset-layout chooser (Pass 24.1).
+    ///
+    /// # Why a chooser and not a button
+    ///
+    /// The operator asked for *"reset layout option with checkboxes of what to
+    /// reset"*, and the request uncovered a defect. `Action::ResetPanelLayout`
+    /// rebuilt `self.dock` — the RIGHT dock — and nothing else. Pass 34.1
+    /// added a second, LEFT dock and the reset never learned about it: an
+    /// operator who had dragged the left dock somewhere they disliked had no
+    /// way back, and a control labelled "reset the panel layout" silently did
+    /// half its job.
+    ///
+    /// Widening it made the checkboxes necessary rather than merely nice.
+    /// "Reset the layout" now reaches further than it did, and an operator who
+    /// only wanted the right dock back must not lose their left one to a
+    /// definition that grew under them.
+    ///
+    /// Not modal, deliberately — unlike the save/copy/redaction confirmations,
+    /// nothing here is destructive to the DOCUMENT. It is a window the
+    /// operator can leave open while they look at what they are about to
+    /// change, which is the honest weight for an action that moves furniture.
+    fn reset_layout_chooser(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        let Some(mut scope) = self.pending_reset else {
+            return;
+        };
+        let mut open = true;
+        egui::Window::new(ui_text::reset_layout_title())
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut open)
+            .show(ctx, |ui| {
+                // States what is NOT touched as well as what is. An operator
+                // reaching for anything called "reset" wants to know it will
+                // not cost them their edits.
+                ui.label(ui_text::reset_layout_intro());
+                ui.separator();
+                ui.checkbox(&mut scope.left_panels, ui_text::reset_layout_left_panels());
+                ui.checkbox(
+                    &mut scope.right_panels,
+                    ui_text::reset_layout_right_panels(),
+                );
+                ui.checkbox(&mut scope.visibility, ui_text::reset_layout_visibility());
+                ui.separator();
+                ui.horizontal(|ui| {
+                    // Disabled rather than hidden when nothing is ticked, and
+                    // the tooltip says why — a dead control that does not
+                    // explain itself is the R83 hazard, not the disablement.
+                    let can = !scope.is_empty();
+                    let resp =
+                        ui.add_enabled(can, egui::Button::new(ui_text::reset_layout_apply()));
+                    if resp.clicked() {
+                        actions.push(Action::ApplyResetLayout(scope));
+                    }
+                    if !can {
+                        resp.on_hover_text(ui_text::reset_layout_apply_disabled_tooltip());
+                    }
+                    if ui.button(ui_text::reset_layout_cancel()).clicked() {
+                        actions.push(Action::CancelResetLayout);
+                    }
+                });
+            });
+        // The window's own close button is a cancel, so the two paths agree.
+        if open {
+            self.pending_reset = Some(scope);
+        } else {
+            self.pending_reset = None;
+        }
+    }
+
     fn signature_confirmation(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let Some(pending) = self.pending_save else {
             return;
@@ -4970,6 +5059,39 @@ impl PdfceApp {
                 }
                 return;
             }
+            Action::SelectRibbonTab(tab) => {
+                // Pure chrome: which band is drawn. No document is touched, so
+                // it needs no open-document guard and produces no undo entry.
+                self.ribbon_tab = tab;
+                return;
+            }
+            Action::CancelResetLayout => {
+                self.pending_reset = None;
+                return;
+            }
+            Action::OpenResetLayout => {
+                // Opens with everything ticked — the common case is "put it
+                // all back" — but the choice is on screen before it applies.
+                self.pending_reset = Some(ribbon::ResetScope::default());
+                return;
+            }
+            Action::ApplyResetLayout(scope) => {
+                // Each arm rebuilds from the SAME `default_*` constructor the
+                // application starts with, so "reset" and "startup" cannot
+                // drift into meaning different arrangements.
+                if scope.right_panels {
+                    self.dock = dock::default_tree();
+                }
+                if scope.left_panels {
+                    self.left_dock = dock::default_left_tree();
+                }
+                if scope.visibility {
+                    self.rail_expanded = true;
+                    self.tools_open = true;
+                }
+                self.pending_reset = None;
+                return;
+            }
             Action::ResetPanelLayout => {
                 // Wholesale replacement, not a repair: the operator reached
                 // for this because the arrangement is wrong in some way they
@@ -5306,6 +5428,10 @@ impl PdfceApp {
             | Action::ToggleShowPoints
             | Action::ToggleProperties
             | Action::ResetPanelLayout
+            | Action::OpenResetLayout
+            | Action::CancelResetLayout
+            | Action::ApplyResetLayout(_)
+            | Action::SelectRibbonTab(_)
             | Action::ApplyProperties
             | Action::Save
             | Action::ToggleTools
@@ -5542,6 +5668,10 @@ impl PdfceApp {
                 | Action::ToggleAnnotations
                 | Action::ToggleShowPoints
                 | Action::ToggleRail
+                // Switching ribbon tab is chrome, not a document action
+                // (Pass 24.1) — it must not commit or discard an edit in
+                // flight any more than scrolling does.
+                | Action::SelectRibbonTab(_)
         )
     }
 
@@ -6320,6 +6450,7 @@ impl eframe::App for PdfceApp {
         // and there is deliberately NO float-OR-dock dual mode.)
         // The signature confirmation is the one blocking question in this
         // Pass, so it draws over everything including the dock.
+        self.reset_layout_chooser(&ctx, &mut actions);
         self.signature_confirmation(&ctx, &mut actions);
         // And the copy confirmation alongside it: the same blocking
         // treatment, because a clipboard write is destructive to
@@ -6875,15 +7006,45 @@ impl PdfceApp {
     /// as controls were added, which is the exact drift the original
     /// right-alignment comment was written to prevent.
     fn toolbar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        let summary = self.status_summary();
+        // ---- Row 1: the tab strip (Pass 24.1) -------------------------
+        //
+        // Selectable labels rather than buttons, so the active tab carries
+        // egui's own selected background AND — per R84, which forbids state
+        // carried by colour alone — a bold weight, the same pairing the dock's
+        // tab titles use.
+        let active = self.ribbon_tab;
         ui.horizontal(|ui| {
+            for tab in ribbon::RibbonTab::ALL {
+                let selected = tab == active;
+                let text = if selected {
+                    egui::RichText::new(tab.label()).strong()
+                } else {
+                    egui::RichText::new(tab.label())
+                };
+                if ui
+                    .add(egui::Button::selectable(selected, text))
+                    .on_hover_text(tab.tooltip())
+                    .clicked()
+                {
+                    actions.push(Action::SelectRibbonTab(tab));
+                }
+            }
+            // The document summary stays at the far right of the strip, where
+            // it has always been — it describes the file, not the tab, so it
+            // must not move when the tab does.
+            let summary = self.status_summary();
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(summary);
-                ui.with_layout(
-                    egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true),
-                    |ui| self.toolbar_controls(ui, actions),
-                );
             });
+        });
+        ui.separator();
+
+        // ---- Row 2: the active tab's band ------------------------------
+        ui.horizontal(|ui| {
+            ui.with_layout(
+                egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true),
+                |ui| self.toolbar_controls(ui, actions),
+            );
         });
     }
 
@@ -6896,7 +7057,32 @@ impl PdfceApp {
     /// from before the icon swap (the ui-spec explicitly does not
     /// reorder or regroup anything — it only assigns an image to each
     /// existing control).
+    /// Whether `group` shows on `tab`, emitting its caption when it does
+    /// (Pass 24.1).
+    ///
+    /// One call site per group, replacing a bare `tab.shows(..)` test, so a
+    /// group cannot appear without its caption — which is the difference
+    /// between a ribbon and a toolbar someone filtered. The caption is the
+    /// only thing telling an operator that "Aa" and "I⁺ Aa" are two members of
+    /// **Content** rather than two unrelated buttons.
+    ///
+    /// Emits a separator BEFORE the caption rather than after, so the band
+    /// never ends with a trailing divider and the first group never starts
+    /// with one.
+    fn ribbon_group(ui: &mut egui::Ui, tab: ribbon::RibbonTab, group: ribbon::RibbonGroup) -> bool {
+        if !tab.shows(group) {
+            return false;
+        }
+        if tab.groups().first() != Some(&group) {
+            ui.separator();
+        }
+        ui.label(egui::RichText::new(group.caption()).weak().small());
+        true
+    }
+
     fn toolbar_controls(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        use ribbon::RibbonGroup as RG;
+        let tab = self.ribbon_tab;
         // Never let a control's OWN label wrap.
         //
         // Without this, a wrapping row hands each widget only the width
@@ -6914,595 +7100,651 @@ impl PdfceApp {
         // sensible unit to break a toolbar on.
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
         {
-            // Group: file.
-            if ui
-                .add(Self::icon_text(
-                    ui,
-                    icons::Icon::Open,
-                    ui_text::open_button(),
-                ))
-                .on_hover_text(ui_text::open_tooltip())
-                .clicked()
-            {
-                actions.push(Action::Open);
-            }
-            // Save is in the file group, next to Open, and is hidden
-            // rather than disabled when nothing is open — there is
-            // nothing to discover about saving with no document.
-            if matches!(self.status, Status::Open(_))
-                && ui
+            if Self::ribbon_group(ui, tab, RG::FileOps) {
+                // Group: file.
+                if ui
                     .add(Self::icon_text(
                         ui,
-                        icons::Icon::Save,
-                        ui_text::save_button(),
+                        icons::Icon::Open,
+                        ui_text::open_button(),
                     ))
-                    .on_hover_text(ui_text::save_tooltip())
-                    .clicked()
-            {
-                actions.push(Action::Save);
-            }
-            ui.separator();
-
-            // Group: view (rail toggle, annotation-visibility). These
-            // govern what is on screen rather than the document, per the
-            // placement taxonomy (view-state → toolbar view group).
-            if Self::icon_button(ui, icons::Icon::Sidebar, ui_text::rail_toggle_tooltip()).clicked()
-            {
-                actions.push(Action::ToggleRail);
-            }
-            // Annotation-visibility toggle (Pass 6.0). A `SelectableLabel`
-            // rather than a plain button: on a lightly-annotated page,
-            // flipping it can produce no visible canvas change, so the
-            // control must itself carry and announce its on/off state
-            // (the ui-specialist's Rule-6 note) — the highlight, the
-            // state-stating tooltip and, since the icon swap left no text
-            // to embolden (P1-1), the bold glyph + outline ring
-            // [`Self::icon_toggle`] adds are the non-colour cues. It
-            // honours the same click-target minimum as every other
-            // icon-only control (P0-6) and carries an explicit accessible
-            // name (P1-6), which matters MORE after the swap: an image
-            // button publishes no usable name of its own. Shown only with
-            // a document open: unlike the rail, it acts on the current
-            // page's canvas.
-            if let Status::Open(doc) = &self.status {
-                let visible = doc.annotations_visible;
-                let tooltip = if visible {
-                    ui_text::annotations_toggle_tooltip_shown()
-                } else {
-                    ui_text::annotations_toggle_tooltip_hidden()
-                };
-                if Self::icon_toggle(ui, icons::Icon::Comment, visible, tooltip).clicked() {
-                    actions.push(Action::ToggleAnnotations);
-                }
-                // "Show points" (Pass 36.3), beside the annotation toggle
-                // because it is the same kind of control: it changes what is
-                // drawn over the page, never the page. A `SelectableLabel` for
-                // the same Rule-6 reason — on an object whose points are all
-                // off-screen, flipping it can produce no visible change, so the
-                // control has to carry its own state.
-                let points_on = doc.show_all_points;
-                let points_tooltip = if points_on {
-                    ui_text::show_points_toggle_tooltip_on()
-                } else {
-                    ui_text::show_points_toggle_tooltip_off()
-                };
-                if Self::icon_toggle(ui, icons::Icon::ShowPoints, points_on, points_tooltip)
+                    .on_hover_text(ui_text::open_tooltip())
                     .clicked()
                 {
-                    actions.push(Action::ToggleShowPoints);
+                    actions.push(Action::Open);
                 }
+                // Save is in the file group, next to Open, and is hidden
+                // rather than disabled when nothing is open — there is
+                // nothing to discover about saving with no document.
+                if matches!(self.status, Status::Open(_))
+                    && ui
+                        .add(Self::icon_text(
+                            ui,
+                            icons::Icon::Save,
+                            ui_text::save_button(),
+                        ))
+                        .on_hover_text(ui_text::save_tooltip())
+                        .clicked()
+                {
+                    actions.push(Action::Save);
+                }
+                ui.separator();
             }
-            ui.separator();
+
+            if tab.shows(RG::Show) || tab.shows(RG::Panels) {
+                // Group: view (rail toggle, annotation-visibility). These
+                // govern what is on screen rather than the document, per the
+                // placement taxonomy (view-state → toolbar view group).
+                if Self::icon_button(ui, icons::Icon::Sidebar, ui_text::rail_toggle_tooltip())
+                    .clicked()
+                {
+                    actions.push(Action::ToggleRail);
+                }
+                // Annotation-visibility toggle (Pass 6.0). A `SelectableLabel`
+                // rather than a plain button: on a lightly-annotated page,
+                // flipping it can produce no visible canvas change, so the
+                // control must itself carry and announce its on/off state
+                // (the ui-specialist's Rule-6 note) — the highlight, the
+                // state-stating tooltip and, since the icon swap left no text
+                // to embolden (P1-1), the bold glyph + outline ring
+                // [`Self::icon_toggle`] adds are the non-colour cues. It
+                // honours the same click-target minimum as every other
+                // icon-only control (P0-6) and carries an explicit accessible
+                // name (P1-6), which matters MORE after the swap: an image
+                // button publishes no usable name of its own. Shown only with
+                // a document open: unlike the rail, it acts on the current
+                // page's canvas.
+                if let Status::Open(doc) = &self.status {
+                    let visible = doc.annotations_visible;
+                    let tooltip = if visible {
+                        ui_text::annotations_toggle_tooltip_shown()
+                    } else {
+                        ui_text::annotations_toggle_tooltip_hidden()
+                    };
+                    if Self::icon_toggle(ui, icons::Icon::Comment, visible, tooltip).clicked() {
+                        actions.push(Action::ToggleAnnotations);
+                    }
+                    // "Show points" (Pass 36.3), beside the annotation toggle
+                    // because it is the same kind of control: it changes what is
+                    // drawn over the page, never the page. A `SelectableLabel` for
+                    // the same Rule-6 reason — on an object whose points are all
+                    // off-screen, flipping it can produce no visible change, so the
+                    // control has to carry its own state.
+                    let points_on = doc.show_all_points;
+                    let points_tooltip = if points_on {
+                        ui_text::show_points_toggle_tooltip_on()
+                    } else {
+                        ui_text::show_points_toggle_tooltip_off()
+                    };
+                    if Self::icon_toggle(ui, icons::Icon::ShowPoints, points_on, points_tooltip)
+                        .clicked()
+                    {
+                        actions.push(Action::ToggleShowPoints);
+                    }
+                }
+                ui.separator();
+            }
 
             // Groups: navigation and zoom. Both are meaningless without
             // a document, so they are hidden rather than shown disabled
             // — there is nothing to discover about a page control when
             // no pages exist.
             if let Status::Open(doc) = &self.status {
-                let count = doc.pages.len();
-                let current = doc.view.page_index + 1;
+                if Self::ribbon_group(ui, tab, RG::Navigate) {
+                    let count = doc.pages.len();
+                    let current = doc.view.page_index + 1;
 
-                ui.add_enabled_ui(doc.view.page_index > 0, |ui| {
-                    if Self::icon_button(ui, icons::Icon::ChevronLeft, ui_text::prev_page_tooltip())
+                    ui.add_enabled_ui(doc.view.page_index > 0, |ui| {
+                        if Self::icon_button(
+                            ui,
+                            icons::Icon::ChevronLeft,
+                            ui_text::prev_page_tooltip(),
+                        )
                         .clicked()
-                    {
-                        actions.push(Action::PrevPage);
-                    }
-                });
-                ui.label(ui_text::page_nav_label(current, count));
-                ui.add_enabled_ui(current < count, |ui| {
-                    if Self::icon_button(
-                        ui,
-                        icons::Icon::ChevronRight,
-                        ui_text::next_page_tooltip(),
-                    )
-                    .clicked()
-                    {
-                        actions.push(Action::NextPage);
-                    }
-                });
-                ui.separator();
-
-                if Self::icon_button(ui, icons::Icon::ZoomOut, ui_text::zoom_out_tooltip())
-                    .clicked()
-                {
-                    actions.push(Action::ZoomOut);
-                }
-                ui.label(ui_text::zoom_percent_label(doc.view.zoom_percent()));
-                if Self::icon_button(ui, icons::Icon::ZoomIn, ui_text::zoom_in_tooltip()).clicked()
-                {
-                    actions.push(Action::ZoomIn);
-                }
-                // Fit modes are shown as selectable, because they are
-                // modes: the operator can see at a glance whether the
-                // view is currently *being kept* fitted or is pinned.
-                let fit_page = doc.view.fit == FitMode::Page;
-                if Self::icon_text_toggle(
-                    ui,
-                    icons::Icon::FitPage,
-                    fit_page,
-                    ui_text::fit_page_button(),
-                    ui_text::fit_page_tooltip(),
-                )
-                .clicked()
-                {
-                    actions.push(Action::Fit(FitMode::Page));
-                }
-                let fit_width = doc.view.fit == FitMode::Width;
-                if Self::icon_text_toggle(
-                    ui,
-                    icons::Icon::FitWidth,
-                    fit_width,
-                    ui_text::fit_width_button(),
-                    ui_text::fit_width_tooltip(),
-                )
-                .clicked()
-                {
-                    actions.push(Action::Fit(FitMode::Width));
-                }
-                // Deliberately the ONE un-iconified control (ui-spec
-                // §3.2): "100%" read at a glance already says "I am at
-                // exactly true size", and every candidate glyph (a
-                // magnifier with a "1" badge, a "1:1" pictograph) adds a
-                // decode step a bare percentage does not need. Iconifying
-                // it to satisfy "icons for all features" would be worse,
-                // not better, so it stays plain text.
-                if ui
-                    .button(ui_text::zoom_100_button())
-                    .on_hover_text(ui_text::zoom_100_tooltip())
-                    .clicked()
-                {
-                    actions.push(Action::ZoomActualSize);
-                }
-                ui.separator();
-
-                // Group: edit. A new group rather than additions to an
-                // existing one, exactly as the module docs anticipated:
-                // rotation acts on the document, whereas everything to
-                // its left acts on the view, and mixing the two would
-                // make "does this button change my file?" unanswerable
-                // at a glance.
-                ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    if Self::icon_button(ui, icons::Icon::RotateCcw, ui_text::rotate_left_tooltip())
-                        .clicked()
-                    {
-                        actions.push(Action::RotateLeft);
-                    }
-                    if Self::icon_button(ui, icons::Icon::RotateCw, ui_text::rotate_right_tooltip())
-                        .clicked()
-                    {
-                        actions.push(Action::RotateRight);
-                    }
-                });
-                // Decision 017 §8.3 keeps this control and its shortcut as
-                // the Properties entry point and changes only where they
-                // lead. Its selected state is now DERIVED from the dock —
-                // "the dock is open AND Properties is its front tab" — so
-                // the toggle reports what is on screen rather than a
-                // separate boolean that could disagree with it.
-                if Self::icon_text_toggle(
-                    ui,
-                    icons::Icon::Properties,
-                    self.tools_open && dock::panel_is_active(&self.dock, DockPanel::Properties),
-                    ui_text::properties_button(),
-                    ui_text::properties_tooltip(),
-                )
-                .clicked()
-                {
-                    actions.push(Action::ToggleProperties);
-                }
-                // Pass 6.1 markup authoring — an edit tool, so it lives in
-                // the toolbar edit group per the settled placement taxonomy
-                // (edit → toolbar; ARCHITECTURE.md §12 continuation-23). A
-                // menu rather than one button per subtype, because four
-                // (eventually ten) shape tools would swamp the group. The
-                // canvas drawing tools of the ui-spec are a follow-up slice;
-                // this minimal affordance authors a default-placed shape on
-                // the current page through the same command path.
-                ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    Self::menu_button_labeled(
-                        ui,
-                        icons::Icon::Markup,
-                        ui_text::markup_menu_button().to_owned(),
-                        |ui| {
-                            ui.label(ui_text::markup_menu_hint());
-                            // The current pen colour: changing it is not an
-                            // edit (ui-spec §1.1), only authoring is.
-                            ui.horizontal(|ui| {
-                                ui.label(ui_text::markup_color_label());
-                                ui.color_edit_button_srgba(&mut self.markup_color);
-                            });
-                            ui.separator();
-                            for kind in [
-                                GuiMarkupKind::Square,
-                                GuiMarkupKind::Circle,
-                                GuiMarkupKind::Line,
-                                GuiMarkupKind::Highlight,
-                            ] {
-                                // Icon + text, never icon alone: a menu row is
-                                // read, not scanned, so the words stay the
-                                // primary label and the glyph is a recognition
-                                // aid beside them (ui-spec §3.3).
-                                let row = (
-                                    icons::image(ui, kind.icon()),
-                                    egui::RichText::new(kind.label()),
-                                );
-                                if ui.add(egui::Button::new(row)).clicked() {
-                                    actions.push(Action::AddMarkupShape(kind));
-                                }
-                            }
-                        },
-                    )
-                    .response
-                    .on_hover_text(ui_text::markup_menu_tooltip());
-                });
-
-                // Pass 6.2 text-bearing authoring — the same edit-group,
-                // same minimal-affordance approach as Markup. A menu opens
-                // the text-entry popup; the actual authoring happens on
-                // confirm (see the popup below). A full canvas text editor
-                // is the named follow-up slice.
-                ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    Self::menu_button_labeled(
-                        ui,
-                        icons::Icon::Text,
-                        ui_text::text_menu_button().to_owned(),
-                        |ui| {
-                            ui.label(ui_text::text_menu_hint());
-                            // P1-3b: surface the same pen-colour control the
-                            // Markup menu has, plus an honest note that it
-                            // applies to the text box only — a FreeText box
-                            // authored without ever opening Markup otherwise
-                            // takes an unexplained default colour, and sticky
-                            // notes/stamps deliberately ignore it.
-                            ui.horizontal(|ui| {
-                                ui.label(ui_text::markup_color_label());
-                                ui.color_edit_button_srgba(&mut self.markup_color);
-                            });
-                            ui.label(ui_text::text_menu_color_note());
-                            ui.separator();
-                            for kind in [
-                                GuiTextKind::FreeText,
-                                GuiTextKind::Sticky,
-                                GuiTextKind::Stamp,
-                            ] {
-                                let row = (
-                                    icons::image(ui, kind.icon()),
-                                    egui::RichText::new(kind.label()),
-                                );
-                                if ui.add(egui::Button::new(row)).clicked() {
-                                    actions.push(Action::OpenTextEntry(kind));
-                                }
-                            }
-                        },
-                    )
-                    .response
-                    .on_hover_text(ui_text::text_menu_tooltip());
-                });
-
-                // Pass 14.3 in-place page-text editing — a DISTINCT control
-                // from Markup/Text (decision 014 §1 draws a hard line between
-                // editing words already on the page and authoring new
-                // annotations; conflating them re-introduces the confusion the
-                // decision resolved). The first real `CanvasTool` occupant
-                // (spec §1.1): a selectable toggle, same widget as the
-                // annotation-visibility toggle above, greyed when there are no
-                // pages to edit (§1.2). The tooltip's second sentence is the
-                // required disambiguator from Markup/Text.
-                ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    let active = doc.active_tool == Some(CanvasTool::TextEdit);
-                    let response = Self::icon_text_toggle(
-                        ui,
-                        icons::Icon::EditText,
-                        active,
-                        ui_text::edit_text_tool_button(),
-                        ui_text::edit_text_tool_tooltip(),
-                    );
-                    if response.clicked() {
-                        actions.push(Action::SelectCanvasTool(if active {
-                            None
-                        } else {
-                            Some(CanvasTool::TextEdit)
-                        }));
-                    }
-                });
-
-                // Pass 16.2 Add-Page-Text — the THIRD occupant of the page-text
-                // family, immediately after Edit Text and inside the SAME visual
-                // group (the adjacency signals "the page-content-editing pair,"
-                // distinct from the Text ▾/Markup ▾ annotation cluster — spec
-                // §1.2). A bare toggle, IDENTICAL widget/sizing to Edit Text; a
-                // distinct "+ Aa" glyph (add, not the "✎" modify); greyed (not
-                // hidden) with no pages. The tooltip is the R78 disambiguator
-                // naming the competing Text ▾ and Edit Text controls (§1.1/§10).
-                ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    let active = doc.active_tool == Some(CanvasTool::AddText);
-                    let response = Self::icon_text_toggle(
-                        ui,
-                        icons::Icon::AddText,
-                        active,
-                        ui_text::add_text_tool_button(),
-                        ui_text::add_text_tool_tooltip(),
-                    );
-                    if response.clicked() {
-                        actions.push(Action::SelectCanvasTool(if active {
-                            None
-                        } else {
-                            Some(CanvasTool::AddText)
-                        }));
-                    }
-                });
-
-                // Pass 9c-min Edit Objects — a bare toggle for the vector-edit
-                // tool (move / drag-node / delete). Same widget/sizing as the
-                // page-text toggles; greyed (not hidden) with no pages. The
-                // tooltip names the three gestures and the "not redaction"
-                // caveat for delete (decision 011 §2.5).
-                ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    let active = doc.active_tool == Some(CanvasTool::VectorEdit);
-                    let response = Self::icon_text_toggle(
-                        ui,
-                        icons::Icon::EditObjects,
-                        active,
-                        ui_text::vector_edit_tool_button(),
-                        ui_text::vector_edit_tool_tooltip(),
-                    );
-                    if response.clicked() {
-                        actions.push(Action::SelectCanvasTool(if active {
-                            None
-                        } else {
-                            Some(CanvasTool::VectorEdit)
-                        }));
-                    }
-                });
-
-                // Pass 12.M2 Measure ▾ — a menu (not four toolbar icons) for the
-                // three dimension tools (ui-spec §1.2, rule 3: dimensioning is
-                // used in short deliberate bursts, so it earns a menu, not
-                // primary-icon creep). The widget is Markup ▾'s `menu_button`,
-                // but the dispatch is Edit Text/Add Text's `SelectCanvasTool`
-                // toggle (a NEW combination, ui-spec §1.2). The label is dynamic
-                // so the active tool is never hidden by the closed menu.
-                ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                    let active_name = match doc.active_tool {
-                        Some(CanvasTool::MeasureLinear) => {
-                            Some(ui_text::measure_tool_name_linear())
+                        {
+                            actions.push(Action::PrevPage);
                         }
-                        Some(CanvasTool::MeasureCircular) => {
-                            Some(ui_text::measure_tool_name_circular())
+                    });
+                    ui.label(ui_text::page_nav_label(current, count));
+                    ui.add_enabled_ui(current < count, |ui| {
+                        if Self::icon_button(
+                            ui,
+                            icons::Icon::ChevronRight,
+                            ui_text::next_page_tooltip(),
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::NextPage);
                         }
-                        Some(CanvasTool::MeasureScale) => Some(ui_text::measure_tool_name_scale()),
-                        _ => None,
-                    };
-                    let label = match active_name {
-                        Some(name) => ui_text::measure_menu_active_label(name),
-                        None => ui_text::measure_menu_button().to_owned(),
-                    };
-                    // The menu BUTTON's glyph goes bold whenever any
-                    // measure sub-tool is active, so the active state is
-                    // carried by weight as well as by the dynamic label —
-                    // the same "never colour alone" discipline the
-                    // icon-only toggles get, applied to a menu.
-                    Self::menu_button_atoms(
+                    });
+                }
+                if Self::ribbon_group(ui, tab, RG::Zoom) {
+                    if Self::icon_button(ui, icons::Icon::ZoomOut, ui_text::zoom_out_tooltip())
+                        .clicked()
+                    {
+                        actions.push(Action::ZoomOut);
+                    }
+                    ui.label(ui_text::zoom_percent_label(doc.view.zoom_percent()));
+                    if Self::icon_button(ui, icons::Icon::ZoomIn, ui_text::zoom_in_tooltip())
+                        .clicked()
+                    {
+                        actions.push(Action::ZoomIn);
+                    }
+                    // Fit modes are shown as selectable, because they are
+                    // modes: the operator can see at a glance whether the
+                    // view is currently *being kept* fitted or is pinned.
+                    let fit_page = doc.view.fit == FitMode::Page;
+                    if Self::icon_text_toggle(
                         ui,
-                        icons::toggle_image(ui, icons::Icon::Measure, active_name.is_some()),
-                        Self::toggle_label(active_name.is_some(), &label),
-                        &label,
-                        |ui| {
-                            let mut row = |ui: &mut egui::Ui, tool: CanvasTool, text: &str| {
-                                let is_active = doc.active_tool == Some(tool);
-                                if ui.selectable_label(is_active, text).clicked() {
-                                    actions.push(Action::SelectCanvasTool(if is_active {
-                                        None
-                                    } else {
-                                        Some(tool)
-                                    }));
+                        icons::Icon::FitPage,
+                        fit_page,
+                        ui_text::fit_page_button(),
+                        ui_text::fit_page_tooltip(),
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::Fit(FitMode::Page));
+                    }
+                    let fit_width = doc.view.fit == FitMode::Width;
+                    if Self::icon_text_toggle(
+                        ui,
+                        icons::Icon::FitWidth,
+                        fit_width,
+                        ui_text::fit_width_button(),
+                        ui_text::fit_width_tooltip(),
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::Fit(FitMode::Width));
+                    }
+                    // Deliberately the ONE un-iconified control (ui-spec
+                    // §3.2): "100%" read at a glance already says "I am at
+                    // exactly true size", and every candidate glyph (a
+                    // magnifier with a "1" badge, a "1:1" pictograph) adds a
+                    // decode step a bare percentage does not need. Iconifying
+                    // it to satisfy "icons for all features" would be worse,
+                    // not better, so it stays plain text.
+                    if ui
+                        .button(ui_text::zoom_100_button())
+                        .on_hover_text(ui_text::zoom_100_tooltip())
+                        .clicked()
+                    {
+                        actions.push(Action::ZoomActualSize);
+                    }
+                }
+
+                if Self::ribbon_group(ui, tab, RG::Pages) {
+                    // Group: edit. A new group rather than additions to an
+                    // existing one, exactly as the module docs anticipated:
+                    // rotation acts on the document, whereas everything to
+                    // its left acts on the view, and mixing the two would
+                    // make "does this button change my file?" unanswerable
+                    // at a glance.
+                    ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                        if Self::icon_button(
+                            ui,
+                            icons::Icon::RotateCcw,
+                            ui_text::rotate_left_tooltip(),
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::RotateLeft);
+                        }
+                        if Self::icon_button(
+                            ui,
+                            icons::Icon::RotateCw,
+                            ui_text::rotate_right_tooltip(),
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::RotateRight);
+                        }
+                    });
+                    // Decision 017 §8.3 keeps this control and its shortcut as
+                    // the Properties entry point and changes only where they
+                    // lead. Its selected state is now DERIVED from the dock —
+                }
+                if Self::ribbon_group(ui, tab, RG::DocumentProperties) {
+                    // "the dock is open AND Properties is its front tab" — so
+                    // the toggle reports what is on screen rather than a
+                    // separate boolean that could disagree with it.
+                    if Self::icon_text_toggle(
+                        ui,
+                        icons::Icon::Properties,
+                        self.tools_open && dock::panel_is_active(&self.dock, DockPanel::Properties),
+                        ui_text::properties_button(),
+                        ui_text::properties_tooltip(),
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::ToggleProperties);
+                    }
+                }
+                if Self::ribbon_group(ui, tab, RG::Markup) {
+                    // Pass 6.1 markup authoring — an edit tool, so it lives in
+                    // the toolbar edit group per the settled placement taxonomy
+                    // (edit → toolbar; ARCHITECTURE.md §12 continuation-23). A
+                    // menu rather than one button per subtype, because four
+                    // (eventually ten) shape tools would swamp the group. The
+                    // canvas drawing tools of the ui-spec are a follow-up slice;
+                    // this minimal affordance authors a default-placed shape on
+                    // the current page through the same command path.
+                    ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                        Self::menu_button_labeled(
+                            ui,
+                            icons::Icon::Markup,
+                            ui_text::markup_menu_button().to_owned(),
+                            |ui| {
+                                ui.label(ui_text::markup_menu_hint());
+                                // The current pen colour: changing it is not an
+                                // edit (ui-spec §1.1), only authoring is.
+                                ui.horizontal(|ui| {
+                                    ui.label(ui_text::markup_color_label());
+                                    ui.color_edit_button_srgba(&mut self.markup_color);
+                                });
+                                ui.separator();
+                                for kind in [
+                                    GuiMarkupKind::Square,
+                                    GuiMarkupKind::Circle,
+                                    GuiMarkupKind::Line,
+                                    GuiMarkupKind::Highlight,
+                                ] {
+                                    // Icon + text, never icon alone: a menu row is
+                                    // read, not scanned, so the words stay the
+                                    // primary label and the glyph is a recognition
+                                    // aid beside them (ui-spec §3.3).
+                                    let row = (
+                                        icons::image(ui, kind.icon()),
+                                        egui::RichText::new(kind.label()),
+                                    );
+                                    if ui.add(egui::Button::new(row)).clicked() {
+                                        actions.push(Action::AddMarkupShape(kind));
+                                    }
+                                }
+                            },
+                        )
+                        .response
+                        .on_hover_text(ui_text::markup_menu_tooltip());
+                    });
+                }
+
+                if Self::ribbon_group(ui, tab, RG::Notes) {
+                    // Pass 6.2 text-bearing authoring — the same edit-group,
+                    // same minimal-affordance approach as Markup. A menu opens
+                    // the text-entry popup; the actual authoring happens on
+                    // confirm (see the popup below). A full canvas text editor
+                    // is the named follow-up slice.
+                    ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                        Self::menu_button_labeled(
+                            ui,
+                            icons::Icon::Text,
+                            ui_text::text_menu_button().to_owned(),
+                            |ui| {
+                                ui.label(ui_text::text_menu_hint());
+                                // P1-3b: surface the same pen-colour control the
+                                // Markup menu has, plus an honest note that it
+                                // applies to the text box only — a FreeText box
+                                // authored without ever opening Markup otherwise
+                                // takes an unexplained default colour, and sticky
+                                // notes/stamps deliberately ignore it.
+                                ui.horizontal(|ui| {
+                                    ui.label(ui_text::markup_color_label());
+                                    ui.color_edit_button_srgba(&mut self.markup_color);
+                                });
+                                ui.label(ui_text::text_menu_color_note());
+                                ui.separator();
+                                for kind in [
+                                    GuiTextKind::FreeText,
+                                    GuiTextKind::Sticky,
+                                    GuiTextKind::Stamp,
+                                ] {
+                                    let row = (
+                                        icons::image(ui, kind.icon()),
+                                        egui::RichText::new(kind.label()),
+                                    );
+                                    if ui.add(egui::Button::new(row)).clicked() {
+                                        actions.push(Action::OpenTextEntry(kind));
+                                    }
+                                }
+                            },
+                        )
+                        .response
+                        .on_hover_text(ui_text::text_menu_tooltip());
+                    });
+                }
+
+                if Self::ribbon_group(ui, tab, RG::ContentTools) {
+                    // Pass 14.3 in-place page-text editing — a DISTINCT control
+                    // from Markup/Text (decision 014 §1 draws a hard line between
+                    // editing words already on the page and authoring new
+                    // annotations; conflating them re-introduces the confusion the
+                    // decision resolved). The first real `CanvasTool` occupant
+                    // (spec §1.1): a selectable toggle, same widget as the
+                    // annotation-visibility toggle above, greyed when there are no
+                    // pages to edit (§1.2). The tooltip's second sentence is the
+                    // required disambiguator from Markup/Text.
+                    ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                        let active = doc.active_tool == Some(CanvasTool::TextEdit);
+                        let response = Self::icon_text_toggle(
+                            ui,
+                            icons::Icon::EditText,
+                            active,
+                            ui_text::edit_text_tool_button(),
+                            ui_text::edit_text_tool_tooltip(),
+                        );
+                        if response.clicked() {
+                            actions.push(Action::SelectCanvasTool(if active {
+                                None
+                            } else {
+                                Some(CanvasTool::TextEdit)
+                            }));
+                        }
+                    });
+
+                    // Pass 16.2 Add-Page-Text — the THIRD occupant of the page-text
+                    // family, immediately after Edit Text and inside the SAME visual
+                    // group (the adjacency signals "the page-content-editing pair,"
+                    // distinct from the Text ▾/Markup ▾ annotation cluster — spec
+                    // §1.2). A bare toggle, IDENTICAL widget/sizing to Edit Text; a
+                    // distinct "+ Aa" glyph (add, not the "✎" modify); greyed (not
+                    // hidden) with no pages. The tooltip is the R78 disambiguator
+                    // naming the competing Text ▾ and Edit Text controls (§1.1/§10).
+                    ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                        let active = doc.active_tool == Some(CanvasTool::AddText);
+                        let response = Self::icon_text_toggle(
+                            ui,
+                            icons::Icon::AddText,
+                            active,
+                            ui_text::add_text_tool_button(),
+                            ui_text::add_text_tool_tooltip(),
+                        );
+                        if response.clicked() {
+                            actions.push(Action::SelectCanvasTool(if active {
+                                None
+                            } else {
+                                Some(CanvasTool::AddText)
+                            }));
+                        }
+                    });
+
+                    // Pass 9c-min Edit Objects — a bare toggle for the vector-edit
+                    // tool (move / drag-node / delete). Same widget/sizing as the
+                    // page-text toggles; greyed (not hidden) with no pages. The
+                    // tooltip names the three gestures and the "not redaction"
+                    // caveat for delete (decision 011 §2.5).
+                    ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                        let active = doc.active_tool == Some(CanvasTool::VectorEdit);
+                        let response = Self::icon_text_toggle(
+                            ui,
+                            icons::Icon::EditObjects,
+                            active,
+                            ui_text::vector_edit_tool_button(),
+                            ui_text::vector_edit_tool_tooltip(),
+                        );
+                        if response.clicked() {
+                            actions.push(Action::SelectCanvasTool(if active {
+                                None
+                            } else {
+                                Some(CanvasTool::VectorEdit)
+                            }));
+                        }
+                    });
+                }
+
+                if Self::ribbon_group(ui, tab, RG::MeasureTools) {
+                    // Pass 12.M2 Measure ▾ — a menu (not four toolbar icons) for the
+                    // three dimension tools (ui-spec §1.2, rule 3: dimensioning is
+                    // used in short deliberate bursts, so it earns a menu, not
+                    // primary-icon creep). The widget is Markup ▾'s `menu_button`,
+                    // but the dispatch is Edit Text/Add Text's `SelectCanvasTool`
+                    // toggle (a NEW combination, ui-spec §1.2). The label is dynamic
+                    // so the active tool is never hidden by the closed menu.
+                    ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                        let active_name = match doc.active_tool {
+                            Some(CanvasTool::MeasureLinear) => {
+                                Some(ui_text::measure_tool_name_linear())
+                            }
+                            Some(CanvasTool::MeasureCircular) => {
+                                Some(ui_text::measure_tool_name_circular())
+                            }
+                            Some(CanvasTool::MeasureScale) => {
+                                Some(ui_text::measure_tool_name_scale())
+                            }
+                            _ => None,
+                        };
+                        let label = match active_name {
+                            Some(name) => ui_text::measure_menu_active_label(name),
+                            None => ui_text::measure_menu_button().to_owned(),
+                        };
+                        // The menu BUTTON's glyph goes bold whenever any
+                        // measure sub-tool is active, so the active state is
+                        // carried by weight as well as by the dynamic label —
+                        // the same "never colour alone" discipline the
+                        // icon-only toggles get, applied to a menu.
+                        Self::menu_button_atoms(
+                            ui,
+                            icons::toggle_image(ui, icons::Icon::Measure, active_name.is_some()),
+                            Self::toggle_label(active_name.is_some(), &label),
+                            &label,
+                            |ui| {
+                                let mut row = |ui: &mut egui::Ui, tool: CanvasTool, text: &str| {
+                                    let is_active = doc.active_tool == Some(tool);
+                                    if ui.selectable_label(is_active, text).clicked() {
+                                        actions.push(Action::SelectCanvasTool(if is_active {
+                                            None
+                                        } else {
+                                            Some(tool)
+                                        }));
+                                        ui.close();
+                                    }
+                                };
+                                row(
+                                    ui,
+                                    CanvasTool::MeasureLinear,
+                                    ui_text::measure_linear_menu_item(),
+                                );
+                                row(
+                                    ui,
+                                    CanvasTool::MeasureCircular,
+                                    ui_text::measure_circular_menu_item(),
+                                );
+                                row(
+                                    ui,
+                                    CanvasTool::MeasureScale,
+                                    ui_text::measure_set_scale_menu_item(),
+                                );
+                                ui.separator();
+                                // "Manage Dimension Groups…" — opens the §5 modeless
+                                // window; does NOT change active_tool (ui-spec §1.2).
+                                if ui
+                                    .button(ui_text::measure_manage_groups_menu_item())
+                                    .clicked()
+                                {
+                                    actions.push(Action::ToggleDimensionGroups);
                                     ui.close();
                                 }
-                            };
-                            row(
-                                ui,
-                                CanvasTool::MeasureLinear,
-                                ui_text::measure_linear_menu_item(),
-                            );
-                            row(
-                                ui,
-                                CanvasTool::MeasureCircular,
-                                ui_text::measure_circular_menu_item(),
-                            );
-                            row(
-                                ui,
-                                CanvasTool::MeasureScale,
-                                ui_text::measure_set_scale_menu_item(),
-                            );
-                            ui.separator();
-                            // "Manage Dimension Groups…" — opens the §5 modeless
-                            // window; does NOT change active_tool (ui-spec §1.2).
+                            },
+                        )
+                        .response
+                        .on_hover_text(ui_text::measure_menu_tooltip());
+                    });
+                }
+
+                if Self::ribbon_group(ui, tab, RG::Protect) {
+                    // Pass 8.1 redaction (ui-spec §3.1) — the entry point to the
+                    // dock's Redact panel.
+                    //
+                    // ## Placement, and how it reconciles two rules that pull
+                    // opposite ways
+                    //
+                    // Standing rule 3 names redaction as an example of what
+                    // should stay OFF the primary toolbar (progressive
+                    // disclosure). Rule 7 wants destructive actions
+                    // DISCOVERABLE — and a security feature that is too well
+                    // hidden fails its own purpose in a specific, documented
+                    // way: an operator who cannot find how to redact improvises
+                    // with the Highlight tool, which is the overlay-only
+                    // false-redaction failure this whole feature exists to
+                    // prevent.
+                    //
+                    // One icon+label control at the END of the edit group is the
+                    // minimum weight that satisfies both: present, but not a new
+                    // group and not a menu. The edit group is its correct home —
+                    // it acts on the open document's own bytes, which is the
+                    // group's organising question, and the Properties toggle
+                    // above it already establishes that a panel toggle belongs
+                    // here when the panel is about the open document.
+                    //
+                    // The ui-spec argued for an UNGROUPED control instead. That
+                    // argument was against putting Redact in the Tools dock's
+                    // "files outside the one you have open" list, and it is
+                    // honoured — Redact is its own dock panel, not a Batch-Tools
+                    // row. What it did not anticipate is that the dock became a
+                    // general panel host with per-panel tabs, which removes the
+                    // framing collision the ungrouped placement was avoiding.
+                    //
+                    // Selected state is DERIVED from the dock (dock open AND
+                    // Redact the front tab), never a boolean of our own, so the
+                    // toggle cannot disagree with what is on screen.
+                    if Self::icon_text_toggle(
+                        ui,
+                        icons::Icon::Redact,
+                        self.tools_open && dock::panel_is_active(&self.dock, DockPanel::Redact),
+                        ui_text::redact_button(),
+                        ui_text::redact_tooltip(),
+                    )
+                    .clicked()
+                    {
+                        actions.push(Action::ToggleRedactPanel);
+                    }
+                    ui.separator();
+                }
+
+                if Self::ribbon_group(ui, tab, RG::History) {
+                    // Group: history. Disabled rather than hidden, because
+                    // the *absence* of an Undo control and a greyed-out one
+                    // say different things — the second confirms there is
+                    // nothing to undo, which is information.
+                    // The tooltips name the specific operation rather than
+                    // saying "undo" twice: `EditSession` hands out a
+                    // structured `CommandKind` precisely so a front end can
+                    // say "Undo delete 3 pages" instead.
+                    ui.add_enabled_ui(doc.session.can_undo(), |ui| {
+                        if Self::icon_button(
+                            ui,
+                            icons::Icon::Undo,
+                            ui_text::undo_tooltip_for(doc.session.undo_kind()),
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::Undo);
+                        }
+                    });
+                    ui.add_enabled_ui(doc.session.can_redo(), |ui| {
+                        if Self::icon_button(
+                            ui,
+                            icons::Icon::Redo,
+                            ui_text::redo_tooltip_for(doc.session.redo_kind()),
+                        )
+                        .clicked()
+                        {
+                            actions.push(Action::Redo);
+                        }
+                    });
+                    ui.separator();
+                }
+            }
+
+            if Self::ribbon_group(ui, tab, RG::Clipboard) {
+                // P1-4: a fixed space before the ungrouped-utility cluster,
+                // emitted unconditionally so the cluster starts from the same
+                // offset whether or not a document is open (Copy-text only
+                // shows with a document open, so without this the gap before
+                // the cluster shifted with document state). A plain space, not
+                // a `ui.separator()`: a separator would visually promote the
+                // utility controls to a seventh "group", which the placement
+                // taxonomy explicitly says not to do.
+                ui.add_space(6.0);
+
+                // Pass 4's only toolbar growth, and it takes the SAME
+                // ungrouped-utility slot the Tools toggle established rather
+                // than opening a seventh group. Copy-text belongs to neither
+                // the view group (it changes nothing on screen) nor the edit
+                // group (it structurally cannot touch the file), and forcing
+                // it into either would make that group's own organizing
+                // question unanswerable at a glance. It opens a menu because
+                // the operator must choose a scope: a Copy button that
+                // silently picked one would be exactly the guess this
+                // feature exists not to make.
+                if self.status_is_open() {
+                    Self::menu_button_labeled(
+                        ui,
+                        icons::Icon::Copy,
+                        ui_text::copy_text_button().to_owned(),
+                        |ui| {
                             if ui
-                                .button(ui_text::measure_manage_groups_menu_item())
+                                .button(ui_text::copy_page_text_menu_item())
+                                .on_hover_text(ui_text::copy_page_text_tooltip())
                                 .clicked()
                             {
-                                actions.push(Action::ToggleDimensionGroups);
+                                actions.push(Action::CopyText(CopyScope::Page));
+                                ui.close();
+                            }
+                            if ui
+                                .button(ui_text::copy_document_text_menu_item())
+                                .on_hover_text(ui_text::copy_document_text_tooltip())
+                                .clicked()
+                            {
+                                actions.push(Action::CopyText(CopyScope::Document));
                                 ui.close();
                             }
                         },
                     )
                     .response
-                    .on_hover_text(ui_text::measure_menu_tooltip());
-                });
-
-                // Pass 8.1 redaction (ui-spec §3.1) — the entry point to the
-                // dock's Redact panel.
-                //
-                // ## Placement, and how it reconciles two rules that pull
-                // opposite ways
-                //
-                // Standing rule 3 names redaction as an example of what
-                // should stay OFF the primary toolbar (progressive
-                // disclosure). Rule 7 wants destructive actions
-                // DISCOVERABLE — and a security feature that is too well
-                // hidden fails its own purpose in a specific, documented
-                // way: an operator who cannot find how to redact improvises
-                // with the Highlight tool, which is the overlay-only
-                // false-redaction failure this whole feature exists to
-                // prevent.
-                //
-                // One icon+label control at the END of the edit group is the
-                // minimum weight that satisfies both: present, but not a new
-                // group and not a menu. The edit group is its correct home —
-                // it acts on the open document's own bytes, which is the
-                // group's organising question, and the Properties toggle
-                // above it already establishes that a panel toggle belongs
-                // here when the panel is about the open document.
-                //
-                // The ui-spec argued for an UNGROUPED control instead. That
-                // argument was against putting Redact in the Tools dock's
-                // "files outside the one you have open" list, and it is
-                // honoured — Redact is its own dock panel, not a Batch-Tools
-                // row. What it did not anticipate is that the dock became a
-                // general panel host with per-panel tabs, which removes the
-                // framing collision the ungrouped placement was avoiding.
-                //
-                // Selected state is DERIVED from the dock (dock open AND
-                // Redact the front tab), never a boolean of our own, so the
-                // toggle cannot disagree with what is on screen.
-                if Self::icon_text_toggle(
-                    ui,
-                    icons::Icon::Redact,
-                    self.tools_open && dock::panel_is_active(&self.dock, DockPanel::Redact),
-                    ui_text::redact_button(),
-                    ui_text::redact_tooltip(),
-                )
-                .clicked()
-                {
-                    actions.push(Action::ToggleRedactPanel);
+                    .on_hover_text(ui_text::copy_text_tooltip());
                 }
-                ui.separator();
+            }
 
-                // Group: history. Disabled rather than hidden, because
-                // the *absence* of an Undo control and a greyed-out one
-                // say different things — the second confirms there is
-                // nothing to undo, which is information.
-                // The tooltips name the specific operation rather than
-                // saying "undo" twice: `EditSession` hands out a
-                // structured `CommandKind` precisely so a front end can
-                // say "Undo delete 3 pages" instead.
-                ui.add_enabled_ui(doc.session.can_undo(), |ui| {
-                    if Self::icon_button(
+            if Self::ribbon_group(ui, tab, RG::Batch) {
+                // The whole of Pass 3.2's toolbar growth: ONE toggle. Every
+                // other new capability lives on the thumbnails (page-scoped)
+                // or in the dock this opens (file-scoped). The toolbar is
+                // capped at its existing six groups plus this.
+                if ui
+                    .add(Self::icon_text(
                         ui,
-                        icons::Icon::Undo,
-                        ui_text::undo_tooltip_for(doc.session.undo_kind()),
-                    )
+                        icons::Icon::Tools,
+                        ui_text::tools_button(),
+                    ))
+                    .on_hover_text(ui_text::tools_tooltip())
                     .clicked()
-                    {
-                        actions.push(Action::Undo);
-                    }
-                });
-                ui.add_enabled_ui(doc.session.can_redo(), |ui| {
-                    if Self::icon_button(
-                        ui,
-                        icons::Icon::Redo,
-                        ui_text::redo_tooltip_for(doc.session.redo_kind()),
-                    )
+                {
+                    actions.push(Action::ToggleTools);
+                }
+            }
+            // Reset layout… — File ▸ Layout (Pass 24.1). Opens the chooser
+            // rather than acting immediately: it is the one control here whose
+            // effect the operator cannot see until after it happens, and
+            // "reset the layout" now means more than it used to.
+            if tab.shows(RG::LayoutReset)
+                && ui
+                    .button(ui_text::reset_layout_button())
+                    .on_hover_text(ui_text::reset_layout_tooltip())
                     .clicked()
-                    {
-                        actions.push(Action::Redo);
-                    }
-                });
-                ui.separator();
-            }
-
-            // P1-4: a fixed space before the ungrouped-utility cluster,
-            // emitted unconditionally so the cluster starts from the same
-            // offset whether or not a document is open (Copy-text only
-            // shows with a document open, so without this the gap before
-            // the cluster shifted with document state). A plain space, not
-            // a `ui.separator()`: a separator would visually promote the
-            // utility controls to a seventh "group", which the placement
-            // taxonomy explicitly says not to do.
-            ui.add_space(6.0);
-
-            // Pass 4's only toolbar growth, and it takes the SAME
-            // ungrouped-utility slot the Tools toggle established rather
-            // than opening a seventh group. Copy-text belongs to neither
-            // the view group (it changes nothing on screen) nor the edit
-            // group (it structurally cannot touch the file), and forcing
-            // it into either would make that group's own organizing
-            // question unanswerable at a glance. It opens a menu because
-            // the operator must choose a scope: a Copy button that
-            // silently picked one would be exactly the guess this
-            // feature exists not to make.
-            if self.status_is_open() {
-                Self::menu_button_labeled(
-                    ui,
-                    icons::Icon::Copy,
-                    ui_text::copy_text_button().to_owned(),
-                    |ui| {
-                        if ui
-                            .button(ui_text::copy_page_text_menu_item())
-                            .on_hover_text(ui_text::copy_page_text_tooltip())
-                            .clicked()
-                        {
-                            actions.push(Action::CopyText(CopyScope::Page));
-                            ui.close();
-                        }
-                        if ui
-                            .button(ui_text::copy_document_text_menu_item())
-                            .on_hover_text(ui_text::copy_document_text_tooltip())
-                            .clicked()
-                        {
-                            actions.push(Action::CopyText(CopyScope::Document));
-                            ui.close();
-                        }
-                    },
-                )
-                .response
-                .on_hover_text(ui_text::copy_text_tooltip());
-            }
-
-            // The whole of Pass 3.2's toolbar growth: ONE toggle. Every
-            // other new capability lives on the thumbnails (page-scoped)
-            // or in the dock this opens (file-scoped). The toolbar is
-            // capped at its existing six groups plus this.
-            if ui
-                .add(Self::icon_text(
-                    ui,
-                    icons::Icon::Tools,
-                    ui_text::tools_button(),
-                ))
-                .on_hover_text(ui_text::tools_tooltip())
-                .clicked()
             {
-                actions.push(Action::ToggleTools);
+                actions.push(Action::OpenResetLayout);
             }
-            // Keyboard-shortcuts reference (P1-2), the other ungrouped
-            // utility control: a disclosure surface, not an edit or a
-            // document-scoped tool, so it sits beside Tools rather than in
-            // any group. Shown always (its content is document-independent
-            // — the chords work the same with or without a file open).
-            if Self::icon_button(ui, icons::Icon::Keyboard, ui_text::shortcuts_tooltip()).clicked()
-            {
-                self.shortcuts_open = !self.shortcuts_open;
+            if Self::ribbon_group(ui, tab, RG::Help) {
+                // Keyboard-shortcuts reference (P1-2), the other ungrouped
+                // utility control: a disclosure surface, not an edit or a
+                // document-scoped tool, so it sits beside Tools rather than in
+                // any group. Shown always (its content is document-independent
+                // — the chords work the same with or without a file open).
+                if Self::icon_button(ui, icons::Icon::Keyboard, ui_text::shortcuts_tooltip())
+                    .clicked()
+                {
+                    self.shortcuts_open = !self.shortcuts_open;
+                }
             }
             // The status summary is NOT emitted here — it is pinned to
             // the row's right edge by [`Self::toolbar`]'s outer

@@ -1483,6 +1483,207 @@ draws missing typefaces from. Tools that act on pages you can already see — de
 rotate, extract — live on the page thumbnails instead."
 }
 
+// ---------------------------------------------------------------------------
+// Ribbon tabs and groups (Pass 24.1)
+// ---------------------------------------------------------------------------
+
+/// Ribbon tab labels. Single words wherever a single word is honest — the tab
+/// strip is horizontal and every character spent is a character the next tab
+/// does not have.
+pub fn ribbon_tab_file() -> &'static str {
+    "File"
+}
+
+/// See [`ribbon_tab_file`].
+pub fn ribbon_tab_edit() -> &'static str {
+    "Edit"
+}
+
+/// See [`ribbon_tab_file`].
+pub fn ribbon_tab_review() -> &'static str {
+    "Review"
+}
+
+/// See [`ribbon_tab_file`].
+pub fn ribbon_tab_measure() -> &'static str {
+    "Measure"
+}
+
+/// See [`ribbon_tab_file`].
+pub fn ribbon_tab_tools() -> &'static str {
+    "Tools"
+}
+
+/// See [`ribbon_tab_file`].
+pub fn ribbon_tab_view() -> &'static str {
+    "View"
+}
+
+/// Tab tooltips. Each states the QUESTION the tab answers, never a list of
+/// its contents — a list goes stale the first time a group moves, and the
+/// question is what lets an operator find an unfamiliar command without
+/// hunting through every tab.
+pub fn ribbon_tab_file_tooltip() -> &'static str {
+    "What you do with the file as a whole, and with pdfce itself: open, save a copy, copy text out, the document's own details, and putting the panels back."
+}
+
+/// See [`ribbon_tab_file_tooltip`].
+pub fn ribbon_tab_edit_tooltip() -> &'static str {
+    "Changing what is already in the document — its text, its drawn objects, the way its pages sit — and undoing any of it."
+}
+
+/// See [`ribbon_tab_file_tooltip`].
+pub fn ribbon_tab_review_tooltip() -> &'static str {
+    "Adding markup for someone to read: shapes, highlights, notes and stamps. These sit on top of the document rather than becoming part of it."
+}
+
+/// See [`ribbon_tab_file_tooltip`].
+pub fn ribbon_tab_measure_tooltip() -> &'static str {
+    "Measuring the drawing and adding dimensions to it, and setting the scale those measurements are read against."
+}
+
+/// See [`ribbon_tab_file_tooltip`].
+pub fn ribbon_tab_tools_tooltip() -> &'static str {
+    "Jobs that run across whole files rather than the page in front of you, the font folders pdfce draws missing typefaces from, and redaction."
+}
+
+/// See [`ribbon_tab_file_tooltip`].
+pub fn ribbon_tab_view_tooltip() -> &'static str {
+    "What is on your screen. Nothing in here changes the document — it changes how much of it you can see and what is drawn over it."
+}
+
+/// Ribbon group captions, printed under each band.
+pub fn ribbon_group_file_ops() -> &'static str {
+    "File"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_document_properties() -> &'static str {
+    "Document"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_clipboard() -> &'static str {
+    "Clipboard"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_layout_reset() -> &'static str {
+    "Layout"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_help() -> &'static str {
+    "Help"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_history() -> &'static str {
+    "History"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_pages() -> &'static str {
+    "Pages"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_navigate() -> &'static str {
+    "Go to"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_content_tools() -> &'static str {
+    "Content"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_markup() -> &'static str {
+    "Markup"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_notes() -> &'static str {
+    "Notes"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_measure_tools() -> &'static str {
+    "Measure"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_measure_groups() -> &'static str {
+    "Groups"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_batch() -> &'static str {
+    "Across files"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_fonts() -> &'static str {
+    "Fonts"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_protect() -> &'static str {
+    "Protect"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_zoom() -> &'static str {
+    "Zoom"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_show() -> &'static str {
+    "Show"
+}
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_panels() -> &'static str {
+    "Panels"
+}
+
+// --- Reset-layout dialog (Pass 24.1) ---------------------------------------
+
+/// The button that opens the reset-layout chooser.
+pub fn reset_layout_button() -> &'static str {
+    "Reset layout…"
+}
+
+/// Its tooltip. Names the defect it also fixes, because an operator who tried
+/// the old one and found their left panel untouched needs to know that
+/// changed.
+pub fn reset_layout_tooltip() -> &'static str {
+    "Put the panels back where they started. You choose which ones — the left panel, the right panel, or just whether they are open."
+}
+
+/// Title of the reset chooser.
+pub fn reset_layout_title() -> &'static str {
+    "Reset layout"
+}
+
+/// Intro line: says what reset means and, importantly, what it does NOT touch.
+pub fn reset_layout_intro() -> &'static str {
+    "Choose what to put back. Nothing here changes your document — only where the panels sit and whether they are showing."
+}
+
+/// Checkbox: the right dock's arrangement.
+pub fn reset_layout_right_panels() -> &'static str {
+    "Right panel arrangement (Objects, Properties, Redact)"
+}
+
+/// Checkbox: the left dock's arrangement.
+pub fn reset_layout_left_panels() -> &'static str {
+    "Left panel arrangement (Pages, Tool Options)"
+}
+
+/// Checkbox: whether the panels are open at all.
+pub fn reset_layout_visibility() -> &'static str {
+    "Whether each panel is open"
+}
+
+/// The confirm control.
+pub fn reset_layout_apply() -> &'static str {
+    "Reset"
+}
+
+/// Tooltip on the confirm control when every box is cleared, so a disabled
+/// button says why it is disabled rather than merely being dead (R83).
+pub fn reset_layout_apply_disabled_tooltip() -> &'static str {
+    "Tick at least one thing to reset."
+}
+
+/// Cancel.
+pub fn reset_layout_cancel() -> &'static str {
+    "Cancel"
+}
+
 /// Tab label of the page-navigation panel (Pass 34.1).
 ///
 /// "Pages", not "Thumbnails": the operator navigates PAGES, and the thumbnail
