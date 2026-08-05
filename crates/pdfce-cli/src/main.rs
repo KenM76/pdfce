@@ -2010,6 +2010,44 @@ enum Command {
         #[arg(long)]
         verify_undo: bool,
     },
+    /// **Delete a node** of a path object (Pass 36.1): remove ONE anchor via
+    /// surgery (R46/§5.7), joining its neighbours directly. `--node` is the
+    /// anchor's 0-based index in decomposition order — the same numbering
+    /// `node-move` takes.
+    ///
+    /// The segment operator that produced the anchor is excised. When the
+    /// anchor is its subpath's FIRST, the following operator is rewritten into
+    /// the new `m` instead; if that follower was a curve, its control points
+    /// go with it and the loss is disclosed on stderr.
+    ///
+    /// Refused, by name and before any mutation, when the removal would leave
+    /// a part with fewer than two points (delete the part instead), when the
+    /// anchor is a corner of an `re` rectangle (no operand names it, and the
+    /// result would be a triangle), when it is the inherited start of an
+    /// `h`-reopened subpath (its coordinates belong to the part before it),
+    /// and when the path defines a clipping region.
+    NodeDelete {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// 0-based paint-order object index on the page.
+        #[arg(long)]
+        object: usize,
+        /// 0-based anchor node index (decomposition order).
+        #[arg(long)]
+        node: usize,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Save mode.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Reload and verify the edit undoes byte-identically.
+        #[arg(long)]
+        verify_undo: bool,
+    },
     /// **Drag a node** of a path object (Pass 9c-min, decision 011 §2.5):
     /// move ONE anchor to a page-space point via surgery (R46/§5.7).
     /// `--node` is the anchor's 0-based index in decomposition order (start,
@@ -2857,6 +2895,23 @@ fn run() -> ExitCode {
             page,
             object,
             subpath,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::NodeDelete {
+            input,
+            page,
+            object,
+            node,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_node_delete(&NodeDeleteArgs {
+            input: &input,
+            page,
+            object,
+            node,
             output: &output,
             mode,
             verify_undo,
@@ -9462,6 +9517,72 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
         args.page,
         args.object,
         args.subpath,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// Grouped arguments for `node-delete` (Pass 36.1).
+struct NodeDeleteArgs<'a> {
+    input: &'a Path,
+    page: u32,
+    object: usize,
+    node: usize,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `node-delete` — remove ONE anchor of a path object via content-stream
+/// surgery, leaving every other object and every sibling subpath
+/// byte-verbatim (Pass 36.1).
+///
+/// ## Contract
+///
+/// - Emits one `node-delete …` line naming the page, object, node and the
+///   usual save-report fields, then defers the exit code to [`finish_edit`]
+///   like every other editing subcommand.
+/// - Disclosures — currently "a curve went with the point" — go to **stderr**
+///   via [`report_disclosures`], so a script's stdout record stays
+///   machine-parseable while the operator-facing consequence is still stated.
+/// - Every refusal happens before any mutation and is reported through
+///   [`report_edit_error`], so the refusal vocabulary and exit codes match the
+///   GUI's exactly. Same core, same answer, whichever shell asked.
+fn cmd_node_delete(args: &NodeDeleteArgs<'_>) -> u8 {
+    let page_index = (args.page.max(1) - 1) as usize;
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    match session.delete_node(page_index, args.object, args.node) {
+        Err(err) => return report_edit_error(args.input, &err),
+        Ok(disclosures) => report_disclosures(&disclosures),
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "node-delete {} page {} object={} node={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.page,
+        args.object,
+        args.node,
         args.mode.name(),
         args.output.display(),
         outcome.changed,

@@ -3011,6 +3011,92 @@ impl PdfceApp {
         });
     }
 
+    /// Delete the selected POINT (Pass 36.1) — the verb the Node rung was
+    /// missing.
+    ///
+    /// # What this replaces
+    ///
+    /// Pass 36.0 stopped Delete at this rung from destroying the whole part
+    /// and put a refusal in its place, because `pdfce-core` had no
+    /// point-removal surgery to call. `plan_delete_node` now exists, so the
+    /// keystroke does what it says.
+    ///
+    /// # Where the operator is left afterwards
+    ///
+    /// **Back at the Part rung**, deliberately, rather than on some
+    /// neighbouring point. Removing an anchor renumbers every anchor after it,
+    /// so a "keep the selection near where it was" rule would leave the
+    /// highlight on a point the operator never chose — and the whole reason
+    /// this rung exists is that pointing at the right thing is hard. Stepping
+    /// out one rung is the honest answer, and it is stated in the note.
+    ///
+    /// Refusals surface **as a note, not as a save failure**. A refused point
+    /// delete is an ordinary, expected answer here — a two-point line and a
+    /// rectangle corner are both common — so it belongs in the same place the
+    /// successful outcome is reported, not in the surface reserved for "your
+    /// document could not be written".
+    fn delete_selected_node(&mut self) {
+        let (page_index, object_index, node_index) = {
+            let Status::Open(doc) = &self.status else {
+                return;
+            };
+            let Some(entered) = doc.entered else {
+                return;
+            };
+            let Some(node) = entered.node else {
+                return;
+            };
+            (doc.view.page_index, entered.object, node)
+        };
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        let outcome = doc
+            .session
+            .delete_node(page_index, object_index, node_index);
+        let reported = outcome
+            .as_ref()
+            .map_err(std::string::ToString::to_string)
+            .err();
+        match outcome {
+            Ok(disclosures) => {
+                // Step back out to the Part rung — see the doc comment.
+                if let Some(e) = doc.entered.as_mut() {
+                    e.node = None;
+                }
+                doc.vector_drag = None;
+                // `refresh_pages` FIRST, for the same reason every other
+                // surgery arm needs it (decision 018 §10 hazard 2): the cached
+                // raster still pictures the point that just went, and
+                // `ensure_object_provider` alone early-returns while
+                // `provider_page` still equals the current page.
+                doc.refresh_pages();
+                doc.ensure_object_provider();
+                // The core's own disclosure (a discarded curve) is appended
+                // VERBATIM rather than paraphrased — it states a shape change
+                // the operator cannot undo by re-adding a point.
+                let mut note = ui_text::node_deleted(node_index);
+                for d in disclosures {
+                    note.push(' ');
+                    note.push_str(&d);
+                }
+                self.edit_note = Some(note);
+            }
+            Err(err) => {
+                self.edit_note = Some(ui_text::node_delete_refused(&err.to_string()));
+            }
+        }
+        // Traced AFTER the outcome is applied, carrying what the operator will
+        // actually be told (R93: the trace reports the real outcome, not the
+        // intent).
+        diag::trace(|| {
+            format!(
+                "commit-delete-node object={object_index} node={node_index} err={reported:?} note={:?}",
+                self.edit_note
+            )
+        });
+    }
+
     fn delete_selected_subpath(&mut self) {
         let (page_index, object_index, subpath_index) = {
             let Status::Open(doc) = &self.status else {
@@ -4829,13 +4915,12 @@ impl PdfceApp {
                 if delete_dimension {
                     self.delete_selected_dimension();
                 } else if delete_node {
-                    // Refuse ALOUD and change nothing. Checked BEFORE the
-                    // subpath branch: the two conditions overlap by design and
-                    // the more specific rung must win, which is the whole
-                    // shape of the defect this fixes.
-                    if let Status::Open(doc) = &mut self.status {
-                        doc.pending_note = Some(ui_text::node_delete_unsupported().to_owned());
-                    }
+                    // Checked BEFORE the subpath branch: the two conditions
+                    // overlap by design (a selected point implies a selected
+                    // part) and the more specific rung must win, which is the
+                    // whole shape of the Pass 36.0 defect. Pass 36.1 turned
+                    // this from a refusal into the real deletion.
+                    self.delete_selected_node();
                 } else if delete_subpath {
                     self.delete_selected_subpath();
                 } else if delete_object {

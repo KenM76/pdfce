@@ -2127,10 +2127,35 @@ double-click the object to work inside it again."
 /// So this says the true thing — pdfce cannot do it yet — and names the two
 /// operations that ARE available at this rung, rather than silently doing the
 /// larger of them. Rule 4: the operator finds out from pdfce, not from a diff.
-pub fn node_delete_unsupported() -> &'static str {
-    "Deleting a single point is not built yet, so nothing was removed. You can still drag this \
-point to move it. To remove the whole part instead, press Escape once to step back out to the \
-part, then press Delete."
+/// Status note after deleting one point (Pass 36.1).
+///
+/// Says where the operator has been left, because a point delete renumbers
+/// every point after it and the selection therefore cannot honestly stay
+/// "near where it was". Names undo in the same sentence as the loss, for the
+/// same reason [`subpath_deleted`] does.
+///
+/// Any disclosure `pdfce-core` returned — currently "a curve went with it" —
+/// is appended verbatim by the caller, never folded into this sentence: it
+/// states a shape change the operator cannot reverse by re-adding a point.
+pub fn node_deleted(index: usize) -> String {
+    format!(
+        "Point #{index} was removed and the shape now joins its neighbours directly. You are back \
+to the whole part — press Ctrl+Z to undo."
+    )
+}
+
+/// Status note when `pdfce-core` REFUSED a point delete (Pass 36.1).
+///
+/// The core message is passed through verbatim (R1/R20): each refusal already
+/// names the specific reason and the way forward — a two-point part, an `re`
+/// rectangle corner, an inherited start, a clipping path. Paraphrasing here
+/// would give the operator a second, vaguer vocabulary for the same event.
+///
+/// Rendered as an ordinary note rather than as a save failure: a refused point
+/// delete is an expected answer at this rung, not a document that could not be
+/// written.
+pub fn node_delete_refused(reason: &str) -> String {
+    format!("That point was not removed: {reason}")
 }
 
 /// Tooltip on the inside-an-object readout.

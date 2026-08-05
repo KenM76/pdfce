@@ -433,6 +433,17 @@ pub enum CommandKind {
     /// construction operands were translated while the object's other
     /// subpaths kept their exact bytes. See [`EditSession::move_subpath`].
     MoveSubpath,
+    /// ONE **anchor** was removed from a path object (Pass 36.1): the segment
+    /// operator that produced it was excised (or, for a subpath's first
+    /// anchor, its follower was promoted to the new `m`), joining its
+    /// neighbours directly.
+    ///
+    /// A distinct kind from [`CommandKind::DeleteSubpath`] for the same reason
+    /// that one is distinct from `DeleteObject`: "removed a point" and
+    /// "removed a line" must not read alike in a history. The operator who
+    /// pressed Delete meant exactly one of them, and before Pass 36.0 the GUI
+    /// gave them the wrong one.
+    DeleteNode,
 }
 
 /// Which geometric-markup subtype [`EditSession::add_markup`] authored,
@@ -2287,6 +2298,59 @@ impl EditSession {
     /// the drawing is unchanged but the bytes are not recoverable by
     /// reversing the gesture, and rule 4 forbids letting the operator find
     /// that out from a diff.
+    /// **Delete one anchor** of the path object at paint-order `object_index`
+    /// on page `page_index`, as one undoable command (Pass 36.1).
+    ///
+    /// Content-stream surgery via [`crate::vector::plan_delete_node`]: the one
+    /// segment operator that produced the anchor is excised — or, when the
+    /// anchor is its subpath's first, the following operator is rewritten into
+    /// the new `m` — and every other object stays byte-verbatim (R46/§5.7
+    /// named exception). Lands as one [`CommandKind::DeleteNode`]; undo
+    /// restores the byte-identical pre-delete stream.
+    ///
+    /// `node_index` is the anchor's 0-based index in decomposition order, the
+    /// same numbering [`Self::move_node`] takes.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::VectorEdit`] wrapping
+    /// [`NodeOutOfRange`](crate::vector::VectorEditError::NodeOutOfRange),
+    /// [`NodeDeleteWouldEmptySubpath`](crate::vector::VectorEditError::NodeDeleteWouldEmptySubpath),
+    /// [`NodeDeleteRectangleCorner`](crate::vector::VectorEditError::NodeDeleteRectangleCorner),
+    /// [`NodeDeleteImplicitStart`](crate::vector::VectorEditError::NodeDeleteImplicitStart)
+    /// or [`ClippingPath`](crate::vector::VectorEditError::ClippingPath);
+    /// `NotAPath` for a text/image target; plus
+    /// [`EditError::PageOutOfRange`], [`EditError::VectorEditNoContents`],
+    /// [`EditError::VectorEditContent`], [`EditError::DocumentEncrypted`], or
+    /// [`EditError::CertificationForbidsChange`]. Every refusal happens before
+    /// any mutation (rule 4).
+    ///
+    /// # Returns
+    ///
+    /// The operator-facing [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// the surgery owes — non-empty when a **curve** was discarded along with
+    /// the point, which is a shape change the operator cannot reverse by
+    /// re-adding a point. Rule 4 forbids letting them find that out from a
+    /// diff, so the caller must surface these.
+    pub fn delete_node(
+        &mut self,
+        page_index: usize,
+        object_index: usize,
+        node_index: usize,
+    ) -> Result<Vec<String>, EditError> {
+        self.vector_surgery(CommandKind::DeleteNode, page_index, |stream, model| {
+            let count = model.objects.len();
+            let obj = model.objects.get(object_index).ok_or(
+                crate::vector::VectorEditError::ObjectOutOfRange {
+                    index: object_index,
+                    count,
+                },
+            )?;
+            let path = vector_object_as_path(obj, object_index)?;
+            Ok(crate::vector::plan_delete_node(stream, path, node_index)?)
+        })
+    }
+
     pub fn delete_subpath(
         &mut self,
         page_index: usize,

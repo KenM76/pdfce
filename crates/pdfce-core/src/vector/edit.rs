@@ -172,6 +172,53 @@ pub enum VectorEditError {
         /// The subpath whose deletion was refused.
         index: usize,
     },
+    /// Deleting this point would leave the part with fewer than two points —
+    /// which is not a shorter line, it is not a line (Pass 36.1).
+    ///
+    /// Refused rather than silently promoted to a whole-part delete. Removing
+    /// a part is an operation the operator can name and already has
+    /// ([`plan_delete_subpath`]); doing it *for* them, under a keystroke that
+    /// said "remove this point", is the class of surprise rule 4 exists to
+    /// forbid — and it is the same mistake, one rung down, that the GUI made
+    /// before Pass 36.0 when Delete on a point deleted the part.
+    #[error(
+        "removing this point would leave part {subpath} with {remaining} point(s), which no longer draws anything — delete the whole part instead"
+    )]
+    NodeDeleteWouldEmptySubpath {
+        /// The subpath the point belongs to.
+        subpath: usize,
+        /// How many points would remain.
+        remaining: usize,
+    },
+    /// The point belongs to an `re` rectangle, which has no operand naming it
+    /// (Pass 36.1).
+    ///
+    /// `re x y w h` writes an origin and a *size*, so three of the four
+    /// corners appear nowhere in the bytes. [`plan_move_node`] handles a
+    /// rectangle corner by EXPANDING the operator to its §8.5.2.1
+    /// `m`/`l`/`l`/`l` equivalent and disclosing the change of form — a
+    /// rectangle whose corner moved is still a closed quadrilateral, so the
+    /// expansion preserves what the operator sees.
+    ///
+    /// Deleting a corner does not have that property: the result is a
+    /// triangle. That is not a change of *form*, it is a change of *shape*,
+    /// and pdfce will not make one under a request to remove a point. Named
+    /// rather than silently expanded.
+    #[error(
+        "this point is a corner of a rectangle, which is written as an origin and a size rather than as four corners — removing one corner would turn it into a triangle, so it is not done automatically"
+    )]
+    NodeDeleteRectangleCorner,
+    /// The point is the INHERITED start of an `h`-reopened subpath
+    /// (§8.5.2.1), carried by no operand of its own (Pass 36.1).
+    ///
+    /// [`plan_move_node`] materializes the missing `m` and moves it, which is
+    /// a pure addition. Deletion cannot borrow that trick: the coordinates
+    /// being removed are *the previous subpath's* start point, so honouring
+    /// the request means reaching into a part the operator did not select.
+    #[error(
+        "this point is inherited from the part before it rather than written down, so removing it would change that other part instead"
+    )]
+    NodeDeleteImplicitStart,
     /// A subpath delete named an index past the object's subpath count.
     #[error("subpath index {index} is out of range (the object has {count} subpath(s))")]
     SubpathOutOfRange {
@@ -801,6 +848,198 @@ pub fn plan_move_subpath(
         operators_touched: touched,
         disclosures,
     })
+}
+
+/// Plan a **node delete**: remove ONE anchor from a path object, leaving every
+/// other object and every other subpath byte-verbatim (Pass 36.1).
+///
+/// `node_index` is object-scoped, in decomposition order — the same numbering
+/// [`plan_move_node`] takes, [`anchor_count`](super::anchor_count) reports and
+/// `pdfce-cli node-move --node` addresses. One numbering for a point, whatever
+/// is being done to it.
+///
+/// # What removing an anchor actually means in a content stream
+///
+/// A path is a sequence of *segment operators*, each of which contributes its
+/// endpoint as an anchor: `l x y` contributes one, `c x1 y1 x2 y2 x3 y3`
+/// contributes its endpoint `(x3, y3)` and carries two control points that
+/// belong to the segment, not to the endpoint. So deleting an anchor is
+/// deleting **the operator that produced it** — which also removes the segment
+/// arriving at it, and joins its neighbours directly. That is what an operator
+/// means by "delete this point": the line should now run from the point before
+/// to the point after.
+///
+/// The subpath's FIRST anchor is the exception, because it is carried by `m`
+/// rather than by a segment. Removing the `m` alone would leave the subpath
+/// with no start, so the operator that follows is rewritten INTO the new `m`
+/// at its own endpoint: `l x y` becomes `m x y`, and `c x1 y1 x2 y2 x3 y3`
+/// becomes `m x3 y3`. Both are exact — the segment being discarded is the one
+/// that arrived at the deleted point — but the curve case drops two control
+/// points with it, so it is disclosed rather than left to be discovered.
+///
+/// # What is refused, and why each
+///
+/// - A **clipping path** (`W`/`W*`, §8.5.4), for the identical reason
+///   [`plan_delete_subpath`] refuses one: the visible change would be to
+///   *other* content showing through, somewhere the operator was not looking.
+/// - A subpath that would be left with **fewer than two anchors**
+///   ([`VectorEditError::NodeDeleteWouldEmptySubpath`]) — the remainder draws
+///   nothing, and quietly promoting the request to a whole-part delete is the
+///   exact surprise Pass 36.0 removed one rung up.
+/// - An **`re` rectangle corner**
+///   ([`VectorEditError::NodeDeleteRectangleCorner`]) — no operand names it,
+///   and the honest result would be a triangle.
+/// - The **inherited start of an `h`-reopened subpath**
+///   ([`VectorEditError::NodeDeleteImplicitStart`]) — the coordinates live in
+///   the previous subpath, which the operator did not select.
+///
+/// Every refusal happens before any byte is produced (rule 4).
+///
+/// # Errors
+///
+/// [`VectorEditError::NodeOutOfRange`],
+/// [`VectorEditError::NodeDeleteWouldEmptySubpath`],
+/// [`VectorEditError::NodeDeleteRectangleCorner`],
+/// [`VectorEditError::NodeDeleteImplicitStart`],
+/// [`VectorEditError::ClippingPath`], [`VectorEditError::MalformedOperand`].
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::content::ContentStream;
+/// use pdfce_core::vector::{decompose, NoXObjects, Matrix, VectorObject};
+/// use pdfce_core::vector::edit::plan_delete_node;
+///
+/// // A three-point polyline; remove the middle point.
+/// let cs = ContentStream::parse(b"0 0 m 10 0 l 20 0 l S".to_vec()).unwrap();
+/// let model = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+/// let VectorObject::Path(path) = &model.objects[0] else { unreachable!() };
+/// let plan = plan_delete_node(&cs, path, 1).unwrap();
+/// assert_eq!(plan.content, b"0 0 m 20 0 l S");
+///
+/// // Removing the FIRST point promotes the next operator to the new start.
+/// let plan = plan_delete_node(&cs, path, 0).unwrap();
+/// assert_eq!(plan.content, b"10 0 m 20 0 l S");
+/// ```
+pub fn plan_delete_node(
+    content: &ContentStream,
+    obj: &PathObject,
+    node_index: usize,
+) -> Result<PlannedEdit, VectorEditError> {
+    if is_clipping_path(content, obj.tokens.start, obj.tokens.end) {
+        return Err(VectorEditError::ClippingPath);
+    }
+
+    let anchors = enumerate_anchors(content, obj.tokens.start, obj.tokens.end);
+    let count = anchors.len();
+    let site = anchors
+        .get(node_index)
+        .ok_or(VectorEditError::NodeOutOfRange {
+            index: node_index,
+            count,
+        })?;
+
+    // Which subpath holds this anchor, and how many anchors that subpath has.
+    // Derived by walking `obj.subpaths` and accumulating, because the geometry
+    // and `enumerate_anchors` flatten in the SAME order by construction (the
+    // module docs' one-numbering rule) — so the running offset is the
+    // object-scoped index of each subpath's first anchor.
+    let mut offset = 0usize;
+    let mut found: Option<(usize, usize)> = None; // (subpath index, its anchor count)
+    for (i, sp) in obj.subpaths.iter().enumerate() {
+        let n = sp.anchors().count();
+        if node_index < offset + n {
+            found = Some((i, n));
+            break;
+        }
+        offset += n;
+    }
+    let (subpath_index, subpath_anchors) = found.ok_or(VectorEditError::NodeOutOfRange {
+        index: node_index,
+        count,
+    })?;
+
+    if subpath_anchors < 3 {
+        return Err(VectorEditError::NodeDeleteWouldEmptySubpath {
+            subpath: subpath_index,
+            remaining: subpath_anchors.saturating_sub(1),
+        });
+    }
+
+    match site.kind {
+        AnchorKind::Rectangle { .. } => return Err(VectorEditError::NodeDeleteRectangleCorner),
+        AnchorKind::Implicit => return Err(VectorEditError::NodeDeleteImplicitStart),
+        AnchorKind::Editable => {}
+    }
+
+    let mut disclosures = clip_disclosure(content, obj);
+
+    // ---- (a) Not the subpath's start: excise the segment operator. -------
+    if !site.is_start {
+        let end = extend_over_whitespace(&content.buf, site.byte_end, obj.bytes.end());
+        let mut edits = vec![(site.byte_start, end, Vec::new())];
+        if is_curve_keyword(&site.keyword) {
+            disclosures.push(
+                "The curve that ran into this point was removed along with it, so the shape now \
+                 goes straight from the point before to the point after."
+                    .to_owned(),
+            );
+        }
+        return Ok(PlannedEdit {
+            content: splice(&content.buf, &mut edits),
+            operators_touched: 1,
+            disclosures,
+        });
+    }
+
+    // ---- (b) The subpath's start: promote the NEXT operator to `m`. ------
+    //
+    // Guaranteed to exist: the subpath has at least three anchors (checked
+    // above), so the anchor after the start is in the same subpath.
+    let next = anchors
+        .get(node_index + 1)
+        .ok_or(VectorEditError::MalformedOperand)?;
+    // A rectangle or an implicit start immediately after an `m` would mean the
+    // walk disagreed with itself about subpath boundaries; refuse rather than
+    // rewrite an operator whose operand layout is not the one assumed below.
+    if !matches!(next.kind, AnchorKind::Editable) {
+        return Err(VectorEditError::MalformedOperand);
+    }
+    let x_slot = next.pair_index * 2;
+    let (Some(&nx), Some(&ny)) = (next.operands.get(x_slot), next.operands.get(x_slot + 1)) else {
+        return Err(VectorEditError::MalformedOperand);
+    };
+
+    // Two edits, applied by one `splice`: drop the old `m` (with its trailing
+    // whitespace, so no widening gap is left behind — the same reasoning
+    // `plan_delete_subpath` documents), and rewrite the follower as the new
+    // `m`. They never overlap: `site` ends before `next` begins.
+    let m_end = extend_over_whitespace(&content.buf, site.byte_end, next.byte_start);
+    let mut edits = vec![
+        (site.byte_start, m_end, Vec::new()),
+        (next.byte_start, next.byte_end, emit_op(&[nx, ny], b"m")),
+    ];
+    if is_curve_keyword(&next.keyword) {
+        disclosures.push(
+            "This was the part's starting point, so the curve that led away from it was removed \
+             too and the part now starts at the next point."
+                .to_owned(),
+        );
+    }
+    Ok(PlannedEdit {
+        content: splice(&content.buf, &mut edits),
+        operators_touched: 2,
+        disclosures,
+    })
+}
+
+/// Whether a path-construction keyword draws a Bézier segment (§8.5.2.2).
+///
+/// Its own function because "did removing this operator also remove curvature
+/// the operator can see" is a disclosure question asked from two arms of
+/// [`plan_delete_node`], and a missed arm would be a silent shape change.
+fn is_curve_keyword(keyword: &[u8]) -> bool {
+    matches!(keyword, b"c" | b"v" | b"y")
 }
 
 /// Record one operator rewrite, prepending any pending lead-in bytes (an
@@ -1621,6 +1860,125 @@ mod tests {
             plan_move(&cs, &path, 1.0, 1.0),
             Err(VectorEditError::DegenerateCtm)
         );
+    }
+
+    // ---- Pass 36.1: node deletion ------------------------------------
+
+    /// The ordinary case: an interior anchor's segment operator is excised and
+    /// its neighbours join directly. Every other byte is verbatim.
+    #[test]
+    fn node_delete_excises_the_interior_segment_operator() {
+        let (cs, path) = path_of(b"0 0 m 10 0 l 20 0 l 30 0 l S");
+        let plan = plan_delete_node(&cs, &path, 2).unwrap();
+        assert_eq!(plan.content, b"0 0 m 10 0 l 30 0 l S");
+        assert_eq!(plan.operators_touched, 1);
+        assert!(
+            plan.disclosures.is_empty(),
+            "a straight segment owes nothing"
+        );
+    }
+
+    /// The terminal anchor is the same excision — nothing special about being
+    /// last, which is worth pinning because the FIRST is special.
+    #[test]
+    fn node_delete_handles_the_last_anchor() {
+        let (cs, path) = path_of(b"0 0 m 10 0 l 20 0 l S");
+        let plan = plan_delete_node(&cs, &path, 2).unwrap();
+        assert_eq!(plan.content, b"0 0 m 10 0 l S");
+    }
+
+    /// Deleting a subpath's FIRST anchor promotes the follower to the new `m`.
+    #[test]
+    fn node_delete_promotes_the_follower_to_the_new_start() {
+        let (cs, path) = path_of(b"0 0 m 10 0 l 20 0 l S");
+        let plan = plan_delete_node(&cs, &path, 0).unwrap();
+        assert_eq!(plan.content, b"10 0 m 20 0 l S");
+        assert_eq!(plan.operators_touched, 2);
+    }
+
+    /// Promotion across a CURVE keeps the endpoint and drops the control
+    /// points — correct, and disclosed, because re-adding a point would not
+    /// bring the curvature back.
+    #[test]
+    fn node_delete_promoting_a_curve_discloses_the_lost_curvature() {
+        let (cs, path) = path_of(b"0 0 m 1 1 2 2 10 0 c 20 0 l S");
+        let plan = plan_delete_node(&cs, &path, 0).unwrap();
+        assert_eq!(plan.content, b"10 0 m 20 0 l S");
+        assert_eq!(
+            plan.disclosures.len(),
+            1,
+            "the discarded curve is disclosed"
+        );
+    }
+
+    /// Excising an interior CURVE discloses it too — same obligation, other arm.
+    /// This is the arm `is_curve_keyword` exists to keep in step.
+    #[test]
+    fn node_delete_of_an_interior_curve_discloses() {
+        let (cs, path) = path_of(b"0 0 m 1 1 2 2 10 0 c 20 0 l S");
+        let plan = plan_delete_node(&cs, &path, 1).unwrap();
+        assert_eq!(plan.content, b"0 0 m 20 0 l S");
+        assert_eq!(plan.disclosures.len(), 1);
+    }
+
+    /// A two-anchor subpath has no shorter form: refused BY NAME rather than
+    /// silently promoted to a whole-part delete.
+    #[test]
+    fn node_delete_refuses_to_empty_a_subpath() {
+        let (cs, path) = path_of(b"0 0 m 10 0 l S");
+        assert_eq!(
+            plan_delete_node(&cs, &path, 1),
+            Err(VectorEditError::NodeDeleteWouldEmptySubpath {
+                subpath: 0,
+                remaining: 1,
+            })
+        );
+    }
+
+    /// An `re` corner is named by no operand, and the honest result would be a
+    /// triangle. Refused by name.
+    #[test]
+    fn node_delete_refuses_a_rectangle_corner() {
+        let (cs, path) = path_of(b"10 10 80 40 re f");
+        assert_eq!(
+            plan_delete_node(&cs, &path, 0),
+            Err(VectorEditError::NodeDeleteRectangleCorner)
+        );
+    }
+
+    /// A clipping path is refused for the same reason `plan_delete_subpath`
+    /// refuses one: the visible change would be to OTHER content.
+    #[test]
+    fn node_delete_refuses_a_clipping_path() {
+        let (cs, path) = path_of(b"0 0 m 10 0 l 20 0 l W n");
+        assert_eq!(
+            plan_delete_node(&cs, &path, 1),
+            Err(VectorEditError::ClippingPath)
+        );
+    }
+
+    /// An index past the object's anchor count reports the count, so a caller
+    /// can say how many there actually are.
+    #[test]
+    fn node_delete_reports_an_out_of_range_index() {
+        let (cs, path) = path_of(b"0 0 m 10 0 l 20 0 l S");
+        assert_eq!(
+            plan_delete_node(&cs, &path, 99),
+            Err(VectorEditError::NodeOutOfRange {
+                index: 99,
+                count: 3,
+            })
+        );
+    }
+
+    /// Deleting inside ONE subpath leaves its siblings byte-verbatim — the
+    /// property that makes this usable on a CAD export where a single object
+    /// holds hundreds of parts.
+    #[test]
+    fn node_delete_leaves_sibling_subpaths_verbatim() {
+        let (cs, path) = path_of(b"0 0 m 10 0 l 20 0 l 0 5 m 10 5 l 20 5 l S");
+        let plan = plan_delete_node(&cs, &path, 4).unwrap();
+        assert_eq!(plan.content, b"0 0 m 10 0 l 20 0 l 0 5 m 20 5 l S");
     }
 
     #[test]
