@@ -1522,6 +1522,18 @@ pub const HANDLE_GRAB_SCREEN_TOLERANCE_PX: f32 = 5.0;
 /// a silent first-N would let an operator believe a 1,200-point part has 300.
 pub const MAX_DRAWN_NODES: usize = 300;
 
+/// The side length, in SCREEN pixels, of a node mark belonging to a part the
+/// operator has NOT selected — drawn only while the "show points" view option
+/// is on (Pass 36.3).
+///
+/// Smaller than [`NODE_MARK_PX`] deliberately. These marks answer "where would
+/// I aim if I wanted that other line", so they must be visible; they are not
+/// aim-able targets right now, because a click at the Node rung picks within
+/// the selected part. Size is the cue that separates the two populations, and
+/// it is a cue that survives a colourblind operator and a greyscale screenshot
+/// alike (R84) — both populations share the part-outline hue.
+pub const NODE_MARK_OTHER_PART_PX: f32 = 4.0;
+
 /// Convert a fixed SCREEN-space pixel tolerance into a **page-space** snap
 /// tolerance for `zoom` (device px per PDF user-space unit) — the
 /// zoom-invariance mechanism (decision 011 §2.2; the page-space value

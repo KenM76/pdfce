@@ -581,6 +581,48 @@ pub fn annotations_toggle_tooltip_hidden() -> &'static str {
 in this document."
 }
 
+// ---------------------------------------------------------------------------
+// "Show points" view toggle (Pass 36.3)
+// ---------------------------------------------------------------------------
+
+/// Tooltip when "show points" is ON.
+///
+/// States the current state as well as the action, for the same reason the
+/// annotation toggle's tooltips do: on an object whose points sit outside the
+/// viewport, flipping this produces no visible change, and the operator needs
+/// the control itself to confirm what it did.
+///
+/// Names the cap out loud. A part with more points than pdfce will draw
+/// reports a count instead of marks, and an operator who turned the option on
+/// and saw a sentence where they expected squares should learn why from the
+/// control, not only from the canvas.
+pub fn show_points_toggle_tooltip_on() -> &'static str {
+    "Points are shown for every part of the object you are working inside. Click to show them \
+only for the part you have selected. A part with more points than pdfce will draw says so on \
+the page instead of drawing them."
+}
+
+/// Disclosure when "show points" is on but some parts' points exceeded the
+/// drawing budget (Pass 36.3).
+///
+/// The budget is SHARED with the selected part's own cap, not additional to
+/// it, so a dense object spends it quickly. Saying the count out loud is the
+/// same rule [`subpath_node_view_off`] follows one level down: an operator
+/// shown some of the points must never be left believing they were shown all
+/// of them.
+pub fn other_parts_points_not_drawn(count: usize) -> String {
+    format!(
+        "{count} more point(s) on other parts are not drawn — there are too many to show at once. Select a part to see its own points full size."
+    )
+}
+
+/// Tooltip when "show points" is OFF.
+pub fn show_points_toggle_tooltip_off() -> &'static str {
+    "Show the editable points of every part of the object you are working inside, not just the \
+part you have selected — so you can see where to double-click before picking one. Points always \
+appear for the selected part."
+}
+
 /// Caption under each thumbnail, and the text shown inside a
 /// placeholder for a page that has not been drawn yet. `number` is
 /// 1-based.

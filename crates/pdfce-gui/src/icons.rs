@@ -294,6 +294,16 @@ pub enum Icon {
     Tools,
     /// Keyboard-shortcuts window (§2 #23, §3.1 "keyboard").
     Keyboard,
+    /// "Show points" view toggle (Pass 36.3) — draws every anchor of the
+    /// object being worked inside, so the points can be aimed at BEFORE one is
+    /// selected.
+    ///
+    /// Deliberately close to, and deliberately distinct from,
+    /// [`Icon::EditObjects`]: both show square node marks, because both are
+    /// about the same points. That one puts two on a Bezier (shape editing);
+    /// this one puts three on a straight run with the middle one filled (the
+    /// points themselves, and the canvas's selected-node vocabulary).
+    ShowPoints,
     /// Markup → Rectangle (§3.3).
     ShapeRect,
     /// Markup → Ellipse (§3.3).
@@ -372,6 +382,7 @@ impl Icon {
         Icon::Copy,
         Icon::Tools,
         Icon::Keyboard,
+        Icon::ShowPoints,
         Icon::ShapeRect,
         Icon::ShapeEllipse,
         Icon::ShapeArrow,
@@ -415,6 +426,7 @@ impl Icon {
             Icon::EditText => include_str!("../assets/icons/edit.svg"),
             Icon::AddText => include_str!("../assets/icons/add-text.svg"),
             Icon::EditObjects => include_str!("../assets/icons/edit-objects.svg"),
+            Icon::ShowPoints => include_str!("../assets/icons/show-points.svg"),
             Icon::Measure => include_str!("../assets/icons/ruler.svg"),
             Icon::Undo => include_str!("../assets/icons/undo.svg"),
             Icon::Redo => include_str!("../assets/icons/redo.svg"),
@@ -463,6 +475,7 @@ impl Icon {
             Icon::EditText => "edit-text",
             Icon::AddText => "add-text",
             Icon::EditObjects => "edit-objects",
+            Icon::ShowPoints => "show-points",
             Icon::Measure => "measure",
             Icon::Undo => "undo",
             Icon::Redo => "redo",

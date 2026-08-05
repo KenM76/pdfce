@@ -277,6 +277,43 @@ const STATUS_PANEL_HEIGHT_PTS: f32 = 92.0;
 /// working state rather than a committed one.
 const SUBPATH_OUTLINE_COLOR: egui::Color32 = egui::Color32::from_rgb(210, 140, 40);
 
+/// Outline colour of a node (anchor) mark — deliberately NOT
+/// [`SUBPATH_OUTLINE_COLOR`] (Pass 36.3).
+///
+/// # The defect this constant exists to fix
+///
+/// The node marks used to be stroked in `SUBPATH_OUTLINE_COLOR`: the same hue
+/// as the part outline they are drawn on top of. That is invisible in exactly
+/// the case that matters most. Most subpaths of a CAD drawing are single
+/// straight lines, so the part outline degenerates to a thin band
+/// (`MIN_OUTLINE_EXTENT_PX`) and the part's two anchors sit precisely on that
+/// band's left and right ends — a 6 px amber square centred on the corner of a
+/// 2 px amber rectangle.
+///
+/// Confirmed by screenshot on 2026-08-05, not by reading: with the marks
+/// un-gated and the trace reporting `node-marks part=0 count=2 drawn=true`, a
+/// 160×90 crop of the selected part showed the outline and no discernible
+/// node. The marks were being drawn correctly and could not be seen, which is
+/// the same outcome for the operator as not drawing them — and is why his
+/// report survived the first half of this Pass.
+///
+/// A cool blue against the amber outline: separated in hue, and separated in
+/// lightness too, so the pair survives a greyscale screenshot and a
+/// colour-vision difference alike. Shape still does the primary work (R84) —
+/// squares for nodes, circles for handles, rectangles for outlines — this
+/// makes the shape legible rather than replacing it.
+const NODE_MARK_COLOR: egui::Color32 = egui::Color32::from_rgb(30, 110, 220);
+
+/// Fill colour of an UNSELECTED node mark (Pass 36.3).
+///
+/// Opaque, near-white, and not the theme background: a node mark sits on top of
+/// the drawing it belongs to, so an unfilled square is a square with a black
+/// line through it, and a square filled with the *panel* colour is invisible
+/// the moment the operator turns on a dark theme while viewing a white page.
+/// The page under a node is white in every document pdfce has drawn, and where
+/// it is not, the [`NODE_MARK_COLOR`] border is what carries the mark.
+const NODE_MARK_FILL: egui::Color32 = egui::Color32::from_rgb(250, 250, 252);
+
 /// Outline colour for a SELECTED ce dimension (Pass 25.5).
 ///
 /// A ce dimension is pdfce's own annotation rather than page content, and its
@@ -1805,6 +1842,21 @@ struct OpenDoc {
     /// entry), threaded into the canvas raster and used as a texture
     /// staleness key so flipping it re-renders the current page.
     annotations_visible: bool,
+    /// "Show points": draw the anchors of EVERY part of the object being
+    /// worked inside, not only the part currently selected (Pass 36.3).
+    ///
+    /// The operator asked for it as a view option — *"ideally we'd have a view
+    /// option to also show them as well"* — after Pass 36.3's headline fix
+    /// (points visible at the Part rung) still left the points of the object's
+    /// OTHER parts invisible until each was selected in turn. On a CAD export
+    /// where one object is a whole drawing view, seeing only the current part's
+    /// points is still working through a keyhole.
+    ///
+    /// Off by default. On a 1194-part object this asks for a great many marks,
+    /// and `MAX_DRAWN_NODES` answers by disclosing a count instead of drawing —
+    /// so the toggle is honest at any scale, but it earns its place as a
+    /// deliberate act rather than as a default that mostly reports a refusal.
+    show_all_points: bool,
     /// A monotonic counter of markup/text annotations authored this
     /// session, used only to jitter each successive default-placed shape
     /// (P1-3c) so two clicks of the same menu item do not stack exactly
@@ -1950,6 +2002,7 @@ impl OpenDoc {
             dragged_page: None,
             drop_target: None,
             annotations_visible: true,
+            show_all_points: false,
             author_jitter: 0,
             // Pass 12.0 substrate: no tool active, an empty selection, and
             // the shippable no-op provider. Every one of these is a
@@ -2473,6 +2526,8 @@ enum Action {
     /// §12.5). A **view-state** control: changes pixels, not bytes, so it
     /// carries no undo entry — it only re-rasterizes the current page.
     ToggleAnnotations,
+    /// Flip the "show points" view option (Pass 36.3).
+    ToggleShowPoints,
     /// Turn the current page a quarter turn counter-clockwise.
     RotateLeft,
     /// Turn the current page a quarter turn clockwise.
@@ -4821,6 +4876,16 @@ impl PdfceApp {
                 }
                 return;
             }
+            Action::ToggleShowPoints => {
+                // View-state only, like the annotation toggle above: the marks
+                // are painted by `draw_selection_outlines` from live state, not
+                // baked into the page texture, so nothing needs re-rasterizing
+                // and no undo entry is owed — no bytes change.
+                if let Status::Open(doc) = &mut self.status {
+                    doc.show_all_points = !doc.show_all_points;
+                }
+                return;
+            }
             Action::ToggleProperties => {
                 // Decision 017 §8.3: same entry point, new destination.
                 //
@@ -5152,6 +5217,7 @@ impl PdfceApp {
             Action::Open
             | Action::ToggleRail
             | Action::ToggleAnnotations
+            | Action::ToggleShowPoints
             | Action::ToggleProperties
             | Action::ResetPanelLayout
             | Action::ApplyProperties
@@ -5376,6 +5442,20 @@ impl PdfceApp {
                 | Action::ZoomBy(_)
                 | Action::ZoomActualSize
                 | Action::Fit(_)
+                // Pure VIEW toggles — what is drawn over the page, never the
+                // page (Pass 36.3).
+                //
+                // These belong here by this list's own stated rule and always
+                // did, but the cost of their absence changed sign at Pass 34.0.
+                // Before it, toggling annotation visibility mid-edit DISCARDED
+                // the draft — bad. After it, the same toggle COMMITTED the
+                // draft: pressing a show/hide button wrote to the document.
+                // That is worse, and it is the shape R144 warns about — making
+                // one side of a mechanism live can turn a harmless omission
+                // elsewhere into a harmful one.
+                | Action::ToggleAnnotations
+                | Action::ToggleShowPoints
+                | Action::ToggleRail
         )
     }
 
@@ -5933,6 +6013,11 @@ impl eframe::App for PdfceApp {
                 if let Status::Open(doc) = &mut self.status {
                     doc.dimension_groups_open = true;
                 }
+            }
+            diag::Step::ShowPoints => {
+                // Through the SAME action the toolbar toggle pushes, so a
+                // scripted flip takes the identical path a real one does.
+                self.apply(Action::ToggleShowPoints, ctx, ctx.pixels_per_point());
             }
             diag::Step::Tool(which) => {
                 // Routed through the SAME action the toolbar pushes, so a
@@ -6796,6 +6881,23 @@ impl PdfceApp {
                 };
                 if Self::icon_toggle(ui, icons::Icon::Comment, visible, tooltip).clicked() {
                     actions.push(Action::ToggleAnnotations);
+                }
+                // "Show points" (Pass 36.3), beside the annotation toggle
+                // because it is the same kind of control: it changes what is
+                // drawn over the page, never the page. A `SelectableLabel` for
+                // the same Rule-6 reason — on an object whose points are all
+                // off-screen, flipping it can produce no visible change, so the
+                // control has to carry its own state.
+                let points_on = doc.show_all_points;
+                let points_tooltip = if points_on {
+                    ui_text::show_points_toggle_tooltip_on()
+                } else {
+                    ui_text::show_points_toggle_tooltip_off()
+                };
+                if Self::icon_toggle(ui, icons::Icon::ShowPoints, points_on, points_tooltip)
+                    .clicked()
+                {
+                    actions.push(Action::ToggleShowPoints);
                 }
             }
             ui.separator();
@@ -12517,8 +12619,42 @@ fn draw_selection_outlines(
         && let Some(sp) = entered.subpath
         && let Some(provider) = doc.object_model.as_ref()
         && let Some(b) = provider.subpath_bounds_canvas(entered.object, sp)
+        && let Some(page) = doc.pages.get(doc.view.page_index)
     {
         let painter = ui.painter_at(image_rect);
+        // PDF page space -> canvas space -> screen (Pass 36.3).
+        //
+        // # The bug this closure replaces, at three call sites
+        //
+        // `subpath_node_points` and `subpath_handle_points` return PDF **page
+        // space** (y-up, origin bottom-left). `subpath_bounds_canvas`, three
+        // lines below, returns **canvas space** (y-down, origin top-left), and
+        // `page_to_screen` takes canvas space. All three point-drawing sites
+        // fed their PDF-space points straight into `page_to_screen`, skipping
+        // the flip — carrying a comment that asserted "the outline above uses
+        // the same conversion for its corners", which was exactly the mistake:
+        // the outline goes through `_canvas`, these did not.
+        //
+        // The marks were therefore drawn at the VERTICALLY MIRRORED position.
+        // Measured on 2026-08-05 with a real screenshot: on a 400 pt page, the
+        // anchors of a line at PDF y=340 were painted ~680 screen px below it,
+        // near the bottom of the page. Nothing was missing and nothing was
+        // invisible — the marks were somewhere else, which is why the operator
+        // reported "there is no visual cue on screen that shows me the nodes"
+        // even for a part whose points were being drawn.
+        //
+        // Hit-testing was never affected: `nearest_node` converts the CLICK
+        // into PDF space and compares there, which is correct. So the pointer
+        // and the paint disagreed about where a node was, and only the paint
+        // was wrong — the reason descending onto a node worked whenever the
+        // operator happened to aim at the true position rather than the drawn
+        // one, and the reason this survived every headless check.
+        let pdf_to_screen = |p: pdfce_core::vector::Point| -> Option<egui::Pos2> {
+            #[allow(clippy::cast_possible_truncation)]
+            let q = egui::pos2(p.x as f32, p.y as f32);
+            viewer::pdf_space_to_canvas(q, page)
+                .map(|c| viewer::page_to_screen(c, image_rect, extent, zoom))
+        };
         let min = viewer::page_to_screen(b.min, image_rect, extent, zoom);
         let max = viewer::page_to_screen(b.max, image_rect, extent, zoom);
         // The same degenerate-box treatment the object outlines get: most
@@ -12535,21 +12671,55 @@ fn draw_selection_outlines(
             egui::StrokeKind::Outside,
         );
 
-        // ---- Node rung: the part's anchors, drawn as squares -----------
+        // ---- The part's anchors, drawn as squares ----------------------
         //
-        // Only once the operator has DESCENDED to points. Drawing them at the
-        // Subpath rung would put up to 6,681 marks on a CAD object with no
-        // gesture to use them, and the rung's whole purpose is that the points
-        // you can grab are the points you can see (decision 028 §Q1).
+        // # Pass 36.3: this used to require `entered.node.is_some()`
+        //
+        // That is, the point marks appeared only AFTER a point had been
+        // selected — and the only way to select one is to double-click within
+        // grab range of it. The marks that tell you where the points are were
+        // gated behind having already hit one. A bootstrapping deadlock:
+        // aim blind, and you are rewarded with the aiming aid.
+        //
+        // The operator, 2026-08-05: *"node editing is still very hard to
+        // accomplish. there is no visual cue on screen that shows me the nodes
+        // when I've clicked down to individual features."*
+        //
+        // The original reasoning was that drawing them at the Part rung would
+        // put up to 6,681 marks on a CAD object "with no gesture to use them".
+        // Both halves were wrong by the time they were written. The count is
+        // what `MAX_DRAWN_NODES` already caps — with a disclosure, not a
+        // silent first-N — so the CAD case was handled here and nowhere else
+        // needed to be. And the gesture that uses them is the descending
+        // double-click itself, which is performed FROM the Part rung: the
+        // points have to be visible exactly one rung before the code was
+        // showing them.
+        //
+        // It also inverted the principle it cited. Decision 028 §Q1 says the
+        // points you can grab are the points you can see; the grab happens at
+        // the Part rung, so that is where they must be seen.
         //
         // SQUARE, and sized in SCREEN pixels. Square so that the node/handle
-        // distinction, when handles land, is carried by shape rather than by
-        // colour alone (R84). Screen-sized so a node is the same target at
-        // every zoom — the same correction `NODE_GRAB_SCREEN_TOLERANCE_PX`
-        // just received, and it must match, or the mark and the grab radius
+        // distinction is carried by shape rather than by colour alone (R84).
+        // Screen-sized so a node is the same target at every zoom — matching
+        // `NODE_GRAB_SCREEN_TOLERANCE_PX`, or the mark and the grab radius
         // would disagree about where a point is.
-        if entered.node.is_some() {
+        {
             let nodes = provider.subpath_node_points(entered.object, sp);
+            // Pass 36.3 observability. "Are the point marks on screen" is the
+            // exact question the operator's report turned on, and it is not
+            // answerable from the depth trace: `node: None` is the state BOTH
+            // when the marks were never drawn (the defect) and when they are
+            // drawn and simply none is selected (the fix). One line tells the
+            // two apart without a screenshot.
+            diag::trace(|| {
+                format!(
+                    "node-marks part={sp} count={} drawn={} selected={:?}",
+                    nodes.len(),
+                    nodes.len() <= canvas::MAX_DRAWN_NODES,
+                    entered.node
+                )
+            });
             if nodes.len() > canvas::MAX_DRAWN_NODES {
                 // Never a silent first-N: an operator shown 300 of 1,200
                 // points would reasonably believe the part has 300.
@@ -12581,13 +12751,9 @@ fn draw_selection_outlines(
                 // inverts the order the information is needed in
                 // (decision 028 §Q2).
                 for (index, side, h) in provider.subpath_handle_points(entered.object, sp) {
-                    #[allow(clippy::cast_possible_truncation)]
-                    let hc = viewer::page_to_screen(
-                        egui::pos2(h.x as f32, h.y as f32),
-                        image_rect,
-                        extent,
-                        zoom,
-                    );
+                    let Some(hc) = pdf_to_screen(h) else {
+                        continue;
+                    };
                     // The node this handle belongs to, so the arm can be drawn
                     // between them. Skipped rather than guessed if the node is
                     // not in the drawn set.
@@ -12595,13 +12761,9 @@ fn draw_selection_outlines(
                     else {
                         continue;
                     };
-                    #[allow(clippy::cast_possible_truncation)]
-                    let ac = viewer::page_to_screen(
-                        egui::pos2(anchor.x as f32, anchor.y as f32),
-                        image_rect,
-                        extent,
-                        zoom,
-                    );
+                    let Some(ac) = pdf_to_screen(anchor) else {
+                        continue;
+                    };
                     let selected = entered.node == Some(index);
                     // A DASHED arm ties the handle to its node. Dashing is
                     // already this project's signal for "this line is not a
@@ -12631,15 +12793,9 @@ fn draw_selection_outlines(
                 }
                 for (index, p) in &nodes {
                     let (index, p) = (*index, *p);
-                    // `subpath_node_points` is in PDF page space; the outline
-                    // above uses the same conversion for its corners.
-                    #[allow(clippy::cast_possible_truncation)]
-                    let c = viewer::page_to_screen(
-                        egui::pos2(p.x as f32, p.y as f32),
-                        image_rect,
-                        extent,
-                        zoom,
-                    );
+                    let Some(c) = pdf_to_screen(p) else {
+                        continue;
+                    };
                     let selected = entered.node == Some(index);
                     let half = if selected {
                         canvas::NODE_MARK_SELECTED_PX
@@ -12647,17 +12803,107 @@ fn draw_selection_outlines(
                         canvas::NODE_MARK_PX
                     } / 2.0;
                     let r = egui::Rect::from_center_size(c, egui::vec2(half * 2.0, half * 2.0));
-                    if selected {
-                        painter.rect_filled(r, 0.0, ui.visuals().selection.stroke.color);
-                    } else {
-                        painter.rect_stroke(
-                            r,
-                            0.0,
-                            egui::Stroke::new(1.5, SUBPATH_OUTLINE_COLOR),
-                            egui::StrokeKind::Middle,
-                        );
-                    }
+                    // FILLED in both states, differing in fill colour and size
+                    // — never fill-vs-outline (Pass 36.3). An outline-only mark
+                    // is the line it sits on showing through its middle, which
+                    // on a 1 px CAD stroke reads as a slightly thicker bit of
+                    // line rather than as a handle. Filling makes the square a
+                    // square; size and fill colour then carry selection, and
+                    // both survive greyscale (R84).
+                    painter.rect_filled(
+                        r,
+                        0.0,
+                        if selected {
+                            ui.visuals().selection.stroke.color
+                        } else {
+                            NODE_MARK_FILL
+                        },
+                    );
+                    painter.rect_stroke(
+                        r,
+                        0.0,
+                        egui::Stroke::new(1.5, NODE_MARK_COLOR),
+                        egui::StrokeKind::Middle,
+                    );
                 }
+            }
+        }
+
+        // ---- "Show points": the OTHER parts' anchors (Pass 36.3) --------
+        //
+        // The block above draws the SELECTED part's points, which is what an
+        // operator needs to pick one within that part. It leaves every other
+        // part of the same object dark — and on a CAD export where the object
+        // is a whole drawing view, that is still working through a keyhole:
+        // you cannot see where the points of the next line are until you have
+        // selected that line.
+        //
+        // Drawn smaller and stroke-only, never filled, so the two populations
+        // are told apart by SIZE at a glance and the selected part keeps
+        // visual priority. That is a shape/size cue, not a colour one (R84),
+        // which matters because these share the part outline's hue.
+        //
+        // The budget is shared with, not additional to, `MAX_DRAWN_NODES`: the
+        // question the cap answers is "how many marks can be on screen before
+        // they stop being marks", and that does not get a second allowance
+        // because a different code path is drawing them. Parts are taken in
+        // order until the budget is spent, and the remainder is DISCLOSED
+        // rather than silently dropped — the same rule the single-part path
+        // follows, for the same reason.
+        if doc.show_all_points
+            && let Some(provider) = doc.object_model.as_ref()
+        {
+            let painter = ui.painter_at(image_rect);
+            let part_count = provider.subpath_count(entered.object);
+            diag::trace(|| format!("show-points object={} parts={part_count}", entered.object));
+            let mut budget = canvas::MAX_DRAWN_NODES;
+            let mut undrawn = 0usize;
+            for other in 0..part_count {
+                if other == sp {
+                    continue; // already drawn, at full size, above
+                }
+                let pts = provider.subpath_node_points(entered.object, other);
+                if pts.len() > budget {
+                    undrawn = undrawn.saturating_add(pts.len());
+                    continue;
+                }
+                budget -= pts.len();
+                for (_, p) in &pts {
+                    let Some(c) = pdf_to_screen(*p) else {
+                        continue;
+                    };
+                    let half = canvas::NODE_MARK_OTHER_PART_PX / 2.0;
+                    let r = egui::Rect::from_center_size(c, egui::vec2(half * 2.0, half * 2.0));
+                    // Same fill-then-stroke treatment as the selected part's
+                    // marks, for the same legibility reason; smaller, so the
+                    // two populations are told apart by SIZE rather than by
+                    // presence-of-fill (which is what selection means).
+                    painter.rect_filled(r, 0.0, NODE_MARK_FILL);
+                    painter.rect_stroke(
+                        r,
+                        0.0,
+                        egui::Stroke::new(1.0, NODE_MARK_COLOR),
+                        egui::StrokeKind::Middle,
+                    );
+                }
+            }
+            if undrawn > 0 {
+                let b =
+                    provider
+                        .subpath_bounds_canvas(entered.object, sp)
+                        .map_or(image_rect, |bb| {
+                            egui::Rect::from_two_pos(
+                                viewer::page_to_screen(bb.min, image_rect, extent, zoom),
+                                viewer::page_to_screen(bb.max, image_rect, extent, zoom),
+                            )
+                        });
+                painter.text(
+                    b.left_top() + egui::vec2(4.0, -32.0),
+                    egui::Align2::LEFT_TOP,
+                    ui_text::other_parts_points_not_drawn(undrawn),
+                    egui::FontId::proportional(12.0),
+                    SUBPATH_OUTLINE_COLOR,
+                );
             }
         }
     }

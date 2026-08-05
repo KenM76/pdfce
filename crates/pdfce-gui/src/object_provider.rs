@@ -233,6 +233,21 @@ impl ObjectModelProvider {
     /// Returns empty for a non-path object or an out-of-range index — the same
     /// exclusion `object_sample_points` applies, for the same reason (text and
     /// image objects are not node-editable, decision 011 §2.1).
+    /// How many parts (subpaths) the path object at paint-order `index` has,
+    /// or `0` for a non-path object (Pass 36.3).
+    ///
+    /// Exists so the "show points" draw can iterate an object's parts without
+    /// reaching into `objects.objects` and re-doing the `VectorObject::Path`
+    /// match at a call site whose job is painting. `0` for a non-path is the
+    /// honest answer rather than an `Option`: a text run has no parts, and a
+    /// loop over none of them is exactly the right amount of drawing.
+    pub(crate) fn subpath_count(&self, index: usize) -> usize {
+        match self.objects.objects.get(index) {
+            Some(VectorObject::Path(path)) => path.page_subpaths().len(),
+            _ => 0,
+        }
+    }
+
     pub(crate) fn subpath_node_points(&self, index: usize, subpath: usize) -> Vec<(usize, Point)> {
         let Some(VectorObject::Path(path)) = self.objects.objects.get(index) else {
             return Vec::new();

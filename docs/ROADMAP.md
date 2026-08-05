@@ -244,6 +244,25 @@ dispatch does not say which way that consideration went. Flag for the
 engineer to confirm at next session whether a fuzz target was added,
 deferred, or judged unnecessary, so this doesn't silently read as done.
 
+**[Amended 2026-08-05 — the fuzz-target consideration is now CONFIRMED
+built, not deferred and not judged unnecessary. Commit `2523860` added a
+`plan_delete_node` arm to `fuzz/fuzz_targets/vector_edit.rs` per
+`ARCHITECTURE.md` §10.2, and doing so exposed that the target had drifted
+three Passes behind its own module — `plan_delete_subpath` (Pass 25.2),
+`plan_move_subpath` (Pass 28.0), and `plan_move_handle` (Pass 30.1) had
+**never been fuzzed at all**, despite all three doing index arithmetic
+and byte splicing over attacker-controlled token ranges, exactly §10.2's
+stated concern. All three planner arms were added in the same commit
+rather than deferred. `plan_delete_node` itself is driven across a node
+range overrunning the anchor count by two, exercising the out-of-range
+path, the two-anchor guard, the rectangle/implicit-start/clipping-path
+refusals, and the index-0 branch that reads the FOLLOWING operator's
+operands to re-emit them as the new `m` (the only place this planner
+indexes into a neighbouring operator). **Result: 492,950 runs in 61 s, 0
+crashes, empty artifacts directory.** (An earlier 1,011,859-run session
+was also clean; its exit 143 was an external timeout outliving
+`-max_total_time`, not a fuzz failure.) See standing rule **R153**.]**
+
 **Gates.** `cargo fmt --check` clean; `cargo clippy --workspace
 --all-targets` clean; 44/44 test binaries green, 0 failures;
 `check-ui-strings` clean; `check-ledger-numbers` clean. **Invariant
@@ -17415,6 +17434,77 @@ decision 025, (aq)–(au) from decision 026:**
   **(aw)**, unchanged. **`tools/check-ledger-numbers.py --stats` should
   be re-run after this commit** — this librarian has no shell and has
   not run it itself.
+
+- **R153 — A shipped fuzz/test harness that enumerates a module's entry
+  points goes stale silently every time the module grows; audit harness
+  coverage against the module's CURRENT public surface, not against the
+  harness's own commit history (2026-08-05; librarian-assigned; promoted
+  from Pass 36.1's fuzz-target-consideration finding, resolved in commit
+  `2523860`).** `fuzz/fuzz_targets/vector_edit.rs` was written to drive
+  the three `vector::edit` planners that existed at Pass 9c-min. Three
+  Passes later shipped three MORE planners into that same module
+  (`plan_delete_subpath`, Pass 25.2; `plan_move_subpath`, Pass 28.0;
+  `plan_move_handle`, Pass 30.1) and none of the three ever gained a
+  fuzz-target arm — the target kept building and kept passing, because
+  nothing about adding a new planner function touches the target file.
+  Pass 36.1's own `cargo-fuzz` consideration (adding a `plan_delete_node`
+  arm, per `ARCHITECTURE.md` §10.2) is what surfaced the gap: writing the
+  fourth arm required re-reading the target's dispatch and noticing the
+  other three were missing. **Why this is a distinct rule from R151 and
+  R152, not an amendment to either.** R151 catches a `pub fn` with no
+  production caller anywhere (GUI or CLI); R152 catches a caller that
+  exists but confirms nothing to the operator. Both are about the
+  PRODUCTION call graph. This rule is about a TEST/FUZZ harness's own
+  coverage of a module's surface, which is a different graph entirely —
+  a planner can have a fully-wired, fully-confirmed GUI gesture and CLI
+  subcommand (satisfying both R151 and R152) and still never once run
+  under the fuzzer, because the fuzz target is its own hand-maintained
+  dispatch list that nothing forces to track the module it drives. The
+  failure shape is also different: R151/R152 are caught by tracing
+  callers forward from the function; this rule is caught by tracing
+  fuzz-target dispatch arms forward against the module's `pub fn` list
+  and asking which ones have no arm — the inverse direction, and a check
+  that has nothing to do with the GUI or CLI at all.
+  **The mechanical check, stated so it is checkable at review time.** For
+  any module documented as fuzz-covered under `ARCHITECTURE.md` §10.2
+  (`vector::edit` and siblings), grep the module's `pub fn` planner list
+  against the corresponding `fuzz/fuzz_targets/*.rs` file's dispatch arms
+  (`match`/`if` branches selecting which planner to drive). A planner
+  with no arm is mechanically findable, not a judgment call — and should
+  be checked whenever ANY new arm is added to an existing fuzz target,
+  not only when a fuzz target is first created, because that is exactly
+  the moment (as here) when the drift becomes visible without a
+  deliberate audit.
+  **Cross-references.** **R151** (production call-graph audit — the
+  sibling this rule is NOT an instance of, see above). **R152** (feedback
+  on a wired production gesture — same family, same non-overlap reason).
+  **`ARCHITECTURE.md` §10.2** (the fuzz-target requirement this rule
+  polices the maintenance of, not just the initial creation of). **CLAUDE.md
+  rule 11 / R151's own cross-reference to it** — the CLI-parity discipline
+  that, applied strictly, would have made each new planner's CLI
+  subcommand land the same session as a fuzz-arm audit, catching this
+  drift at the source rather than three Passes downstream.
+  **Numbering note.** Continuation 90's R152 entry left **R153 as the
+  next free number for whichever of THREE contingent candidates is
+  accepted or promoted first**: decision 030 §6.2(a), decision 030 §4.5,
+  and the "date and label every contract statement" documentation
+  observation (★ Pass 33.0 entry, above). **None of those three had been
+  minted as of this filing.** This finding — the fuzz-harness-drift
+  pattern — is a **fourth**, previously unlisted candidate, and it is the
+  one that claims R153, filed first against the live ceiling (R106/R133:
+  read the ceiling, don't assume a reservation) — the same transfer
+  mechanism R150's and R151's own text used to hand their slots to a
+  fourth, previously-unlisted candidate ahead of each's own three. **The
+  three original contingent candidates now take R154**, not R153, if and
+  when any of them is accepted or promoted.
+  **Ceiling is now R153** (was R152 at the Pass-36.1/36.2 filing). **No
+  new Pass family, decision record, or operator question minted by this
+  filing**: Pass-family ceiling stays **37 next free** (unchanged — all
+  of family 36 was already Shipped as of the prior filing); decision-record
+  ceiling stays **031** (**032** next free, unchanged); operator-question
+  ceiling stays **(aw)**, unchanged. **`tools/check-ledger-numbers.py
+  --stats` should be re-run after this commit** — this librarian has no
+  shell and has not run it itself.
 
 ## Update protocol
 

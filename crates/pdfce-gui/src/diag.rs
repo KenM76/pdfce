@@ -110,6 +110,14 @@ pub enum Step {
     /// question "is its toolbar button wired up". A harness that could only
     /// reach a tool through its button would confuse the two.
     Tool(ScriptTool),
+    /// Flip the "show points" view option (`view:points`), Pass 36.3.
+    ///
+    /// Scripted directly rather than by clicking the toolbar toggle, for the
+    /// same reason `tool:` and `panel:` are: it isolates "does this view
+    /// option change what is drawn" from "is the button that flips it wired
+    /// up". Two questions, two failures, and a harness that could only reach
+    /// the option through its button would confuse them.
+    ShowPoints,
     /// Open the Dimension Groups panel (`panel:groups`).
     ///
     /// Scripted directly rather than by clicking through the Measure menu, for
@@ -225,6 +233,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "escape" => Some(Step::Escape),
         "wait" => Some(Step::Wait),
         "panel" if rest.trim() == "groups" => Some(Step::Groups),
+        "view" if rest.trim() == "points" => Some(Step::ShowPoints),
         // NOT `rest.trim()`: leading and trailing spaces are legitimate text.
         "type" if !rest.is_empty() => Some(Step::Text(rest.to_owned())),
         "tool" => match rest.trim() {

@@ -14008,3 +14008,159 @@ rule 1.
 **This librarian has no shell and did not run
 `tools/check-ledger-numbers.py` itself** — the engineer should re-run it
 per item 5 above before minting on top of this filing.
+
+**Same-day continuation 91 (real date 2026-08-05) — TWO FLAGS RESOLVED,
+ONE STANDING RULE MINTED (R153), ONE OVERDUE RAG ESCALATION FILED. NO
+NEW PASS SHIPPED — a filing-only session, same shape as continuation 88:**
+
+### Flag 1 resolved — decision-028 item 12 stays ◐, split made explicit
+
+The engineer confirmed the literal clickable `Page › Path › Part › Point`
+breadcrumb was **not** built; Pass 36.2 built three different things (a
+status readout naming the current rung, deepest-first for the Point
+branch; a disclosure on a double-click miss; a corrected tooltip) — none
+clickable, none a breadcrumb. The ◐ marker in decision-028's plan table
+(`ROADMAP.md`, item 12) is confirmed correct and **stays ◐**, edited in
+place (this table's own established convention — see items 9/14's prior
+in-place annotations) to make the split the engineer named explicit,
+rather than leaving a future reader to re-derive it from the surrounding
+prose: **item 12 bundles two distinct obligations.** The **disclosure**
+obligation (an operator can tell which rung they are standing on) is
+**discharged**. The **navigation** obligation (click a rung to jump to
+it) is **not** — Escape-one-rung-at-a-time remains the only way up. The
+prior "flag to the engineer, confirm one way or the other" language is
+retired now that the confirmation is on record; the row states the
+resolved split instead of an open question.
+
+### Flag 2 resolved — Pass 36.1's fuzz-target consideration: DONE, and it found a three-Pass-old gap
+
+Commit **`2523860`** (*"fuzz: the vector-edit target had drifted three
+Passes behind its own module"*) added a `plan_delete_node` arm to
+`fuzz/fuzz_targets/vector_edit.rs` per `ARCHITECTURE.md` §10.2. Doing so
+exposed that the target had only ever driven the three `vector::edit`
+planners it was originally written against (Pass 9c-min) — so three
+**already-shipped** planners had never been fuzzed at all:
+`plan_delete_subpath` (Pass 25.2), `plan_move_subpath` (Pass 28.0),
+`plan_move_handle` (Pass 30.1). All three do index arithmetic and byte
+splicing over attacker-controlled token ranges — exactly §10.2's stated
+concern — and all three were added to the target in the same commit
+rather than deferred, since the dispatch loop that reaches them already
+existed.
+
+`plan_delete_node` itself is driven across a node range overrunning the
+anchor count by two, so the out-of-range path, the two-anchor guard, and
+the rectangle/implicit-start/clipping-path refusals are all reachable —
+plus, at index 0 of any subpath, the branch that reads the FOLLOWING
+operator's operands and re-emits them as the new `m`, the only place this
+planner indexes into a neighbouring operator.
+
+**Result: 492,950 runs in 61 s, 0 crashes, empty artifacts directory.**
+(An earlier 1,011,859-run session was also clean; its exit 143 was an
+external timeout outliving `-max_total_time`, not a fuzz failure — noted
+so it does not misread as a fuzz-tooling defect on top of this filing.)
+
+The Pass 36.1 Shipped entry in `ROADMAP.md` carried this exact flag
+verbatim ("one item in the original scope is not confirmed either way…");
+resolved with a dated `[Amended 2026-08-05 — …]` footer on that entry
+(append-only discipline — Shipped entries get amendment footers, not
+rewrites), not a rewrite of the original text.
+
+### R153 minted — the fuzz-harness-staleness pattern is a genuine third sibling, not an R151 amendment
+
+Judged this a new standing rule, not an amendment to R151. **R151** audits
+the PRODUCTION call graph (does a `pub fn` have a GUI/CLI caller at all).
+**R152** audits a wired production gesture's OWN feedback (does the
+caller confirm anything). Both are about the graph from `pdfce-gui`/
+`pdfce-cli` inward to `pdfce-core`. **R153** is about a different graph
+entirely — a fuzz target's own hand-maintained dispatch list against the
+module's current `pub fn` surface — and nothing about a planner having a
+perfectly-wired, perfectly-confirmed GUI gesture (satisfying both R151
+and R152) makes it appear in that dispatch list. The mechanical check is
+also inverted in direction from R151/R152: trace fuzz-target arms forward
+against the module's planner list and ask which planners have no arm,
+rather than tracing callers forward from a function. Distinct enough on
+both counts (which graph, which direction) to earn its own number rather
+than ride on R151's.
+
+Per the transfer mechanism R150 and R151 each used before it: continuation
+90's R152 entry left R153 reserved for whichever of THREE contingent
+candidates (decision 030 §6.2(a), decision 030 §4.5, the "date and label
+every contract statement" observation) is accepted or promoted first —
+none of those three had minted as of this filing, so this finding (a
+fourth, previously-unlisted candidate, filed first against the live
+ceiling per R106/R133) claims **R153** for itself. **The three original
+contingent candidates now take R154**, not R153, if and when any of them
+is accepted or promoted. Full text filed under `ROADMAP.md` Standing
+rules, immediately after R152.
+
+### Overdue RAG escalation filed — Windows cargo-fuzz ASan DLL finding, second confirmation recorded
+
+`D:\dev\rag\rust\cargo_fuzz_windows_msvc_asan_dll_path.md` already existed
+(filed 2026-07-31, Pass 6.1's `annot_author` target) — grepped before
+writing, per the no-duplicate rule, and it did. Not a new file: `
+last_verified` bumped to 2026-08-05, and a confirmation paragraph appended
+recording the second occurrence — same fix, different fuzz target
+(`vector_edit`, this session's 492,950-run clean campaign), same root
+cause (the rustup sysroot never ships `clang_rt.asan_dynamic-x86_64.dll`
+on either channel; only a VS Build Tools install does), same
+misleading shape (the build always succeeds without the PATH fix; only
+`fuzz run` fails). `D:\dev\rag\rust\index.md`'s existing bullet for this
+file updated in place with the two-confirmation note. This was sitting in
+the engineer's own memory since 2026-07-31 with a note that the prior
+session was directed not to dispatch librarians; that restriction no
+longer applied this session, and the finding was live knowledge (used
+again today), not archaeology, so it was filed rather than left pending
+a third occurrence.
+
+### Findings + decisions
+
+- **Terminology discipline held throughout this filing.** Every mention
+  of paths/subpaths/nodes is explicitly neither a ce dimension nor a pdf
+  dimension (CLAUDE.md rule 15); no bare "dimension" appears anywhere in
+  this entry or in the ROADMAP.md edits it describes.
+- **No new `ARCHITECTURE.md` §12 decision record.** Neither flag
+  resolution nor R153 redraws a crate boundary, library choice, or
+  invariant — R153 is a process/audit rule, same category as R150–R152,
+  which the standing-rules ledger tracks separately from the decision-log
+  ledger.
+
+### Still in flight
+
+- **Decision-028 items 10/11/13 — unchanged, still owed.** This filing
+  touched only items 12 (annotation clarified, no code) and 14/9 (already
+  resolved in prior filings); items 10 (Tab/Shift+Tab cycle), 11 (arrow-key
+  nudge), and 13 (readout-row corrections: Node handle-presence clause,
+  Subpath descent disclosure) remain exactly as continuation 90 left them.
+- **R154's three contingent candidates (decision 030 §6.2(a), §4.5, the
+  "date and label" observation) remain unminted**, now one slot further
+  out than at continuation 90's filing.
+- **Continuation 88's still-open items remain open, unaffected**:
+  `ARCHITECTURE.md` §7 (CLI) sync, Pass 33.0's unchosen fix option, the
+  `CompositeEncoding` re-export question, operator questions (au)/(av).
+- **Backup currency not verifiable from here** — engineer should check
+  `D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is
+  made in this entry.
+
+### For next session
+
+1. **Build decision-028 items 10/11/13** — all three confirmed still
+   owed, unaffected by this filing's flag resolutions.
+2. **Re-run `tools/check-ledger-numbers.py --stats`** after committing
+   these docs — this filing moved the standing-rule ceiling (R152 → R153,
+   next free R154); Pass-family, decision-record, and operator-question
+   ceilings are unchanged (37 / 032 / (aw)).
+3. Resume continuation 88's still-open items: `ARCHITECTURE.md` §7 sync,
+   Pass 33.0's fix choice, the `CompositeEncoding` re-export question.
+
+### Ledger discipline (R106)
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | none | family **36** fully Shipped; **37** still next free, unchanged |
+| Standing rules | **R153** | **R153** (**R154** next free) |
+| Decision records | none | **031** (**032** next free, unchanged) |
+| Operator questions | none | **(aw)**, unchanged |
+
+**This librarian has no shell and did not run
+`tools/check-ledger-numbers.py` itself** — the engineer should re-run it
+per item 2 above before minting on top of this filing.
