@@ -292,8 +292,16 @@ pub fn author_dimension(kind: &DimensionKind, style: DimensionStyle) -> Authored
     // which is why the difference only becomes visible on an aligned one.
     let (ux, uy) = match (style.standard, kind.axis_frame()) {
         // Aligned text, flipped where it would otherwise read upside down —
-        // cl. 4.1.1's "read from the bottom".
-        (DimStandard::Iso, Some((u, _))) if u.x < 0.0 => (-u.x, -u.y),
+        // cl. 4.1.1's "read from the bottom", and "from the right" for a
+        // vertical one.
+        //
+        // The tie-break on `u.y` is load-bearing, not defensive: an ALIGNED
+        // dimension pointing straight down has `u = (0, -1)`, where `u.x` is
+        // exactly zero. Testing `u.x < 0` alone let that case through and the
+        // value read top-to-bottom — the one orientation ISO names. Found by
+        // exercising all four cardinal directions rather than the two that
+        // happened to be convenient.
+        (DimStandard::Iso, Some((u, _))) if u.x < 0.0 || (u.x == 0.0 && u.y < 0.0) => (-u.x, -u.y),
         (DimStandard::Iso, Some((u, _))) => (u.x, u.y),
         _ => (1.0, 0.0),
     };

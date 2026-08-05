@@ -912,6 +912,65 @@ fn a_hostile_measured_point_drops_the_record() {
     );
 }
 
+/// **ISO text never reads upside down, including straight down.**
+///
+/// ISO 129-1:2018 cl. 4.1.1 requires aligned text to read from the bottom
+/// (and vertical text from the right). The appearance flips the text direction
+/// when it would otherwise be inverted — but the original condition tested
+/// only `u.x < 0`, which misses an ALIGNED dimension pointing straight down,
+/// where `u = (0, -1)`: `u.x` is exactly zero, no flip fires, and the value
+/// reads top-to-bottom.
+///
+/// Asserted on the text matrix in the appearance stream, because that is the
+/// only place the orientation exists — there is no flag to check.
+#[test]
+fn iso_text_never_reads_upside_down_in_any_direction() {
+    use pdfce_core::dimension::{DimStandard, DimensionStyle, author_dimension};
+
+    // The text matrix is emitted as `a b c d e f Tm`. For our rotation the
+    // first two are the text direction; `b < 0` means it runs downward.
+    let direction = |content: &[u8]| -> (f64, f64) {
+        let text = String::from_utf8_lossy(content).into_owned();
+        let tm = text
+            .lines()
+            .find(|l| l.trim_end().ends_with(" Tm"))
+            .expect("the appearance sets a text matrix");
+        let n: Vec<f64> = tm
+            .split_whitespace()
+            .filter_map(|t| t.parse().ok())
+            .collect();
+        (n[0], n[1])
+    };
+
+    for (name, bx, by) in [
+        ("down", 100.0, 0.0), // straight down: u = (0, -1)
+        ("up", 100.0, 400.0), // straight up
+        ("left", 0.0, 200.0), // right-to-left
+        ("right", 300.0, 200.0),
+    ] {
+        let kind = DimensionKind::Linear {
+            a: Point::new(100.0, 200.0),
+            b: Point::new(bx, by),
+            constraint: AxisConstraint::Aligned,
+            offset: 20.0,
+            text_along: 0.0,
+        };
+        let authored = author_dimension(
+            &kind,
+            DimensionStyle {
+                scale: ScaleState::Calibrated { scale: 0.01 },
+                format: NumberFormat::decimal(Unit::Meter, 2),
+                standard: DimStandard::Iso,
+            },
+        );
+        let (dx, dy) = direction(&authored.ap_content);
+        assert!(
+            dy >= -0.0001 && (dy > 0.0001 || dx > 0.0),
+            "{name}: ISO text must never run downward or right-to-left —              direction was ({dx}, {dy})"
+        );
+    }
+}
+
 /// Undo of a move restores the dimension exactly.
 #[test]
 fn undoing_a_ce_dimension_move_restores_it() {

@@ -215,3 +215,44 @@ fn a_rectangle_subpath_deletes_as_one_operator() {
     let plan = plan_delete_subpath(&cs, &only_path(&cs), 0).expect("deletable");
     assert_eq!(plan.content, b"50 50 10 10 re S");
 }
+
+/// **The structure guard must not OVER-refuse.**
+///
+/// `an_implicitly_reopened_subpath_makes_the_whole_edit_refuse` proves the
+/// guard fires. This proves it is narrow: `h` is perfectly legitimate when the
+/// next subpath opens with its own `m`, and a guard that refused every path
+/// containing `h` would make delete unavailable on most real drawings while
+/// looking correct in the refusal test.
+///
+/// Same discipline as differentially testing an exclusion added to a checker —
+/// "it refuses the bad case" and "it permits the good case" are two different
+/// claims, and only testing the first is how a guard quietly becomes a wall.
+#[test]
+fn a_closed_subpath_followed_by_an_explicit_move_still_deletes() {
+    let cs = ContentStream::parse(b"0 0 m 10 0 l h 50 50 m 60 60 l S".to_vec()).expect("parses");
+    let path = only_path(&cs);
+    assert_eq!(
+        path.subpaths.len(),
+        2,
+        "an `h` followed by an explicit `m` is two ordinary subpaths"
+    );
+    let plan = plan_delete_subpath(&cs, &path, 0).expect("this structure IS deletable");
+    let after = ContentStream::parse(plan.content).expect("re-parses");
+    assert_eq!(
+        first_xs(&after),
+        vec![50.0],
+        "the closed first subpath goes, the second survives"
+    );
+}
+
+/// A rectangle mixed with a hand-drawn subpath deletes by index correctly.
+#[test]
+fn a_rectangle_and_a_drawn_subpath_index_independently() {
+    let cs = ContentStream::parse(b"0 0 10 10 re 50 50 m 60 60 l S".to_vec()).expect("parses");
+    assert_eq!(only_path(&cs).subpaths.len(), 2);
+    let plan = plan_delete_subpath(&cs, &only_path(&cs), 0).expect("deletable");
+    assert_eq!(
+        plan.content, b"50 50 m 60 60 l S",
+        "removing the `re` must leave the drawn subpath byte-verbatim"
+    );
+}
