@@ -2060,6 +2060,37 @@ double-click the object to work inside it again."
     )
 }
 
+/// Status note when Delete is pressed while a POINT is selected (Pass 36.0).
+///
+/// # The defect this replaces
+///
+/// Until Pass 36.0, Delete at the Node rung ran `delete_selected_subpath` —
+/// because that branch tested `entered.subpath.is_some()`, which is true at
+/// the Node rung too (a point cannot be selected without being inside the part
+/// that holds it). So an operator who selected a single point and pressed
+/// Delete lost **the whole line**. Verified in the running application on
+/// 2026-08-05: with `entered = { object: 0, subpath: Some(0), node: Some(0) }`
+/// the app committed `delete-subpath object=0 subpath=0` and reported "Part #0
+/// was deleted".
+///
+/// # Why this refuses rather than deleting the point
+///
+/// There is no point-deletion surgery in `pdfce-core` to call — no
+/// `plan_delete_node` exists. Removing an anchor is not a small edit: the
+/// first anchor of a subpath carries the `m` that every later segment is
+/// relative to, a two-anchor subpath has no meaningful remainder, and an `re`
+/// rectangle has no per-corner operand to remove at all. Those are decisions
+/// with disclosures owed, not a guess to make under a keypress.
+///
+/// So this says the true thing — pdfce cannot do it yet — and names the two
+/// operations that ARE available at this rung, rather than silently doing the
+/// larger of them. Rule 4: the operator finds out from pdfce, not from a diff.
+pub fn node_delete_unsupported() -> &'static str {
+    "Deleting a single point is not built yet, so nothing was removed. You can still drag this \
+point to move it. To remove the whole part instead, press Escape once to step back out to the \
+part, then press Delete."
+}
+
 /// Tooltip on the inside-an-object readout.
 ///
 /// Names the gesture that gets here, because a feature reachable only by a

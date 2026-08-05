@@ -4781,9 +4781,21 @@ impl PdfceApp {
                     &self.status,
                     Status::Open(doc) if doc.selected_dimension.is_some()
                 );
+                // Pass 36.0: `node.is_none()` is load-bearing, not defensive.
+                // `EnteredObject::node` is documented as implying
+                // `subpath.is_some()` — a point cannot be selected without
+                // being inside the part that holds it — so this test WITHOUT
+                // the node clause was also true at the Node rung, and Delete
+                // on a selected point deleted the entire part. See
+                // `ui_text::node_delete_unsupported`.
+                let delete_node = matches!(
+                    &self.status,
+                    Status::Open(doc) if doc.entered.is_some_and(|e| e.node.is_some())
+                );
                 let delete_subpath = matches!(
                     &self.status,
-                    Status::Open(doc) if doc.entered.is_some_and(|e| e.subpath.is_some())
+                    Status::Open(doc)
+                        if doc.entered.is_some_and(|e| e.subpath.is_some() && e.node.is_none())
                 );
                 let delete_object = matches!(
                     &self.status,
@@ -4793,6 +4805,14 @@ impl PdfceApp {
                 );
                 if delete_dimension {
                     self.delete_selected_dimension();
+                } else if delete_node {
+                    // Refuse ALOUD and change nothing. Checked BEFORE the
+                    // subpath branch: the two conditions overlap by design and
+                    // the more specific rung must win, which is the whole
+                    // shape of the defect this fixes.
+                    if let Status::Open(doc) = &mut self.status {
+                        doc.pending_note = Some(ui_text::node_delete_unsupported().to_owned());
+                    }
                 } else if delete_subpath {
                     self.delete_selected_subpath();
                 } else if delete_object {
@@ -12697,6 +12717,32 @@ fn run_vector_edit_tool(
             side: pdfce_core::vector::Handle,
             to: Point,
         },
+        /// Translate ONE subpath of an object, leaving its siblings where they
+        /// are (Pass 36.0 — decision 028 item 9, the last unbuilt rung verb).
+        ///
+        /// # The defect this variant is
+        ///
+        /// Until Pass 36.0 this variant did not exist, and a drag that started
+        /// while the operator was standing at the Subpath rung fell through to
+        /// [`Commit::Move`] — a whole-object move. On a CAD export that is
+        /// catastrophic rather than merely wrong: one measured SolidWorks
+        /// object holds 1194 subpaths, so "drag the line I selected" dragged
+        /// the entire drawing view. The operator reported it on 2026-08-05:
+        /// *"if I try to move it, all the other objects associated with it
+        /// move as well."*
+        ///
+        /// `EditSession::move_subpath` had existed in `pdfce-core` since Pass
+        /// 28.0, fully documented and tested, **called by nothing**. Pass 28.0
+        /// shipped the capability; the gesture that reaches it was decision
+        /// 028's item 9 and was never built. Delete-a-subpath was wired, which
+        /// is exactly why the gap read as "move is broken" rather than "move
+        /// is missing" — the rung plainly worked for the other verb.
+        Subpath {
+            idx: usize,
+            subpath: usize,
+            dx: f64,
+            dy: f64,
+        },
     }
     let mut commit = Commit::None;
     let mut new_selection: Option<std::collections::BTreeSet<TargetId>> = None;
@@ -12945,6 +12991,49 @@ fn run_vector_edit_tool(
                         to: target,
                     };
                 }
+            } else if let Some(sp_i) = doc
+                .entered
+                .filter(|e| e.object == drag.object_index && e.node.is_none())
+                .and_then(|e| e.subpath)
+            {
+                // Pass 36.0: the operator is standing INSIDE the object at the
+                // Subpath rung, so the drag moves that part alone.
+                //
+                // Gated on `node.is_none()` as well as on the object matching:
+                // at the Node rung a drag that grabbed no node is not "move the
+                // part", it is a miss, and silently promoting it to a part move
+                // would be the same class of surprise this variant exists to
+                // remove — one rung up instead of one rung down.
+                //
+                // Previews the SUBPATH's bounds, not the object's. Under the
+                // old fall-through the preview rectangle was the whole object,
+                // which meant the wrong outcome was faithfully previewed and an
+                // operator watching the canvas still had no warning.
+                let (dx, dy) = drag.delta(ptr);
+                if let Some(prov) = doc.object_model.as_ref()
+                    && let Some(r) = prov.subpath_bounds_canvas(drag.object_index, sp_i)
+                {
+                    let d_screen = to_screen(Point::new(dx, dy))
+                        .zip(to_screen(Point::new(0.0, 0.0)))
+                        .map(|(a, b)| a - b)
+                        .unwrap_or(egui::Vec2::ZERO);
+                    let min = viewer::page_to_screen(r.min, image_rect, extent, zoom) + d_screen;
+                    let max = viewer::page_to_screen(r.max, image_rect, extent, zoom) + d_screen;
+                    painter.rect_stroke(
+                        egui::Rect::from_two_pos(min, max),
+                        0.0,
+                        egui::Stroke::new(2.0, preview_color),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+                if canvas::primary_drag_stopped(image_response) {
+                    commit = Commit::Subpath {
+                        idx: drag.object_index,
+                        subpath: sp_i,
+                        dx,
+                        dy,
+                    };
+                }
             } else {
                 // Whole-object move: preview the object's bbox offset by the
                 // raw page-space delta (no snap — a move never snaps to the
@@ -13063,6 +13152,25 @@ fn run_vector_edit_tool(
         Commit::Node { idx, node, to } => {
             let outcome = doc.session.move_node(page_index, idx, node, to);
             diag::trace(|| format!("commit-node idx={idx} node={node} to={to:?} -> {outcome:?}"));
+            disclose_vector_edit(doc, outcome.as_deref().unwrap_or(&[]));
+            doc.vector_drag = None;
+            doc.refresh_pages();
+            doc.ensure_object_provider();
+        }
+        Commit::Subpath {
+            idx,
+            subpath,
+            dx,
+            dy,
+        } => {
+            // The `EditSession` entry point that existed since Pass 28.0 with
+            // no caller. Same post-commit sequence as its siblings — the
+            // decision 018 §10 hazard 2 audit applies identically, because
+            // this is a real content-stream rewrite.
+            let outcome = doc.session.move_subpath(page_index, idx, subpath, dx, dy);
+            diag::trace(|| {
+                format!("commit-subpath idx={idx} subpath={subpath} dx={dx} dy={dy} -> {outcome:?}")
+            });
             disclose_vector_edit(doc, outcome.as_deref().unwrap_or(&[]));
             doc.vector_drag = None;
             doc.refresh_pages();
