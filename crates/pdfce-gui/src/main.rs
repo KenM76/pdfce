@@ -9694,7 +9694,22 @@ impl PdfceApp {
             // §5.1 live-preview overlay: painted above the raster via the
             // painter, NEVER a re-raster. A selection outline is a 2px SHAPE,
             // not a tint (rule 6): a real boundary.
-            draw_selection_outlines(doc, ui, image_rect, extent, zoom);
+            draw_selection_outlines(
+                doc,
+                ui,
+                image_rect,
+                extent,
+                zoom,
+                image_response.hover_pos().and_then(|sp| {
+                    doc.pages.get(doc.view.page_index).and_then(|page| {
+                        viewer::canvas_to_pdf_space(
+                            viewer::screen_to_page(sp, image_rect, extent, zoom),
+                            page,
+                        )
+                        .map(|p| pdfce_core::vector::Point::new(f64::from(p.x), f64::from(p.y)))
+                    })
+                }),
+            );
         } // end: non-text-edit-tool object-selection path (Pass 14.3 gate)
 
         // Pass 12.M2b ui-spec §5: the modeless "Dimension Groups" panel. Drawn
@@ -13268,6 +13283,12 @@ fn draw_selection_outlines(
     image_rect: egui::Rect,
     extent: (f32, f32),
     zoom: f32,
+    // The pointer in PDF page space, when it is over the canvas (Pass 26.2).
+    // Used to HIGHLIGHT the node the operator is about to grab, BEFORE they
+    // press — *"they should highlight when I hover the mouse over them."*
+    // Without it, the only feedback that a press will hit a node is the
+    // geometry moving afterwards, which arrives one step too late to help.
+    hover_pdf: Option<pdfce_core::vector::Point>,
 ) {
     // The entered object's selected subpath, drawn FIRST and in its own hue.
     //
@@ -13372,6 +13393,24 @@ fn draw_selection_outlines(
         // would disagree about where a point is.
         {
             let nodes = provider.subpath_node_points(entered.object, sp);
+            // Which node the pointer is over, resolved with the SAME radius the
+            // grab uses (Pass 26.2). If the highlight and the grab disagreed,
+            // the highlight would be a promise the press does not keep — which
+            // is worse than no highlight, because the operator would learn to
+            // distrust it.
+            let hover_index = hover_pdf.and_then(|h| {
+                let tol = canvas::screen_tolerance_to_page(
+                    vector_edit_tool::NODE_GRAB_SCREEN_TOLERANCE_PX,
+                    zoom,
+                );
+                nodes
+                    .iter()
+                    .filter(|(_, p)| p.is_finite())
+                    .map(|(i, p)| (*i, p.distance(h)))
+                    .filter(|(_, d)| *d <= tol)
+                    .min_by(|a, b| a.1.total_cmp(&b.1))
+                    .map(|(i, _)| i)
+            });
             // Pass 36.3 observability. "Are the point marks on screen" is the
             // exact question the operator's report turned on, and it is not
             // answerable from the depth trace: `node: None` is the state BOTH
@@ -13463,7 +13502,15 @@ fn draw_selection_outlines(
                         continue;
                     };
                     let selected = entered.node == Some(index);
-                    let half = if selected {
+                    // Pass 26.2: HOVER is a third state, between unselected and
+                    // selected, and it is drawn at the SELECTED size so the
+                    // operator sees the target grow under the pointer before
+                    // they commit to pressing. It keeps the unselected FILL, so
+                    // the three states stay distinguishable: small+pale,
+                    // large+pale (about to be grabbed), large+accent (grabbed).
+                    // Size and fill, never colour alone (R84).
+                    let hovered = hover_index == Some(index) && !selected;
+                    let half = if selected || hovered {
                         canvas::NODE_MARK_SELECTED_PX
                     } else {
                         canvas::NODE_MARK_PX
@@ -13900,13 +13947,33 @@ fn run_vector_edit_tool(
             // elsewhere on the page. That is R144's second firing, and this
             // gate is what closes it.
             //
-            // Outside the Node rung the drag now classifies as a whole-object
-            // move (empty pick set ⇒ `node: None`), which is the honest
-            // behaviour: the operator has not descended to points, so they are
-            // not pointing at one.
+            // PASS 26.2 WIDENED THE GATE FROM `node.is_some()` TO
+            // `subpath.is_some()` — and the paragraphs above still hold.
+            //
+            // Read what they actually protect against: a pick set of the WHOLE
+            // OBJECT's anchors, unscoped, with nothing drawn to say which of
+            // 6,681 was about to move. Every word of that is about SCOPE, not
+            // about which rung the operator stands on. Scoping to the entered
+            // part is what makes the set small (two anchors on a CAD line, not
+            // thousands) and Pass 36.3's marks are what make it visible. Both
+            // survive this change untouched; only the extra descent goes.
+            //
+            // The R144 clipping-path concern likewise survives: `re` corners
+            // and inherited starts are still in `Subpath::anchors()`, and are
+            // still refused or materialized by core's own surgery on release.
+            // What changed is that the operator no longer has to double-click
+            // exactly onto a point before they may drag it — a requirement the
+            // operator retracted by name, and one Pass 36.3 had already made
+            // incoherent by drawing the points one rung ABOVE where they could
+            // be grabbed.
+            //
+            // Outside an entered part the drag still classifies as a
+            // whole-object move (empty pick set ⇒ `node: None`), which remains
+            // the honest reading: the operator has not gone inside the object,
+            // so they are not pointing at one of its points.
             let anchors: Vec<Point> = doc
                 .entered
-                .filter(|e| e.object == idx && e.node.is_some())
+                .filter(|e| e.object == idx && e.subpath.is_some())
                 .and_then(|e| e.subpath.map(|sp| (e.object, sp)))
                 .and_then(|(obj, sp)| {
                     doc.object_model
@@ -13918,9 +13985,26 @@ fn run_vector_edit_tool(
             // The object-scoped indices for the same set, in the same order,
             // so a grab's position in `anchors` maps back to the index
             // `move_node` addresses (decision 025 §1.3(b) — one numbering).
+            // Pass 26.2: available once the operator is INSIDE the object with
+            // a part selected — `subpath.is_some()` — not only after they have
+            // descended to the Point rung.
+            //
+            // The old gate was `node.is_some()`, which meant a point could only
+            // be dragged after it had already been selected, and the only way
+            // to select one was a double-click landing within grab range of it.
+            // The operator retracted that requirement directly: *"I was wrong
+            // about the double clicking to select those too … they should be
+            // moveable when I click once and hold."*
+            //
+            // This also removes an inconsistency Pass 36.3 created and did not
+            // finish. That Pass made the marks VISIBLE at the Part rung,
+            // because the descent needs something to aim at. So the points
+            // have been on screen, at the exact rung where they could not be
+            // grabbed, ever since — visible and inert, which is the R83 hazard
+            // pointing the other way.
             let node_indices: Vec<usize> = doc
                 .entered
-                .filter(|e| e.object == idx && e.node.is_some())
+                .filter(|e| e.object == idx && e.subpath.is_some())
                 .and_then(|e| e.subpath.map(|sp| (e.object, sp)))
                 .and_then(|(obj, sp)| {
                     doc.object_model
@@ -13939,6 +14023,14 @@ fn run_vector_edit_tool(
                 zoom,
             );
             let mut drag = vector_edit_tool::classify_drag(idx, start, &anchors, tol_page);
+            diag::trace(|| {
+                format!(
+                    "drag-start obj={idx} start={start:?} interact={:?} anchors={} tol={tol_page} node={:?}",
+                    image_response.interact_pointer_pos().and_then(to_pdf),
+                    anchors.len(),
+                    drag.node
+                )
+            });
             // Translate the position-in-pick-set into the object-scoped index.
             drag.node = drag.node.and_then(|k| node_indices.get(k).copied());
             // HANDLES ARE CHECKED FIRST and override a node grab. They overlap
@@ -13948,7 +14040,9 @@ fn run_vector_edit_tool(
             // (decision 028 §Q3). Losing a handle grab costs one retry;
             // stealing a node grab moves a point of the drawing, so the
             // handle radius is the tighter of the two.
-            if let Some(e) = doc.entered.filter(|e| e.object == idx && e.node.is_some())
+            if let Some(e) = doc
+                .entered
+                .filter(|e| e.object == idx && e.subpath.is_some())
                 && let Some(sp_i) = e.subpath
                 && let Some(provider) = doc.object_model.as_ref()
                 && let Some(hit) = provider.nearest_handle(
@@ -13975,6 +14069,35 @@ fn run_vector_edit_tool(
                 // snapping it to nearby geometry would tie the curve's shape
                 // to a coordinate the operator was not aiming at. Nodes snap
                 // because they ARE points of the drawing; handles are not.
+                // Pass 26.2: the ARM, live — a dashed line from the node the
+                // handle belongs to out to where the handle is being dragged.
+                //
+                // Same complaint as the node drag ("the display doesn't live
+                // update when they or the spline handles are moved"), and a
+                // narrower answer, deliberately. A handle does not move any
+                // point the curve passes THROUGH, so there is no anchor
+                // polyline to redraw; what changes is the curve's bulge, and
+                // previewing that faithfully means re-evaluating the Bézier
+                // every frame. The arm is what the operator is actually
+                // manipulating — its direction and length ARE the shaping
+                // lever — so drawing it live gives the feedback that was
+                // missing without pretending to render the curve.
+                if let Some(prov) = doc.object_model.as_ref()
+                    && let Some(e) = doc.entered.filter(|e| e.object == drag.object_index)
+                    && let Some(sp_i) = e.subpath
+                    && let Some((_, anchor)) = prov
+                        .subpath_node_points(drag.object_index, sp_i)
+                        .into_iter()
+                        .find(|(i, _)| *i == node)
+                    && let (Some(a), Some(h)) = (to_screen(anchor), to_screen(ptr))
+                {
+                    painter.add(egui::Shape::dashed_line(
+                        &[a, h],
+                        egui::Stroke::new(1.0, preview_color),
+                        4.0,
+                        4.0,
+                    ));
+                }
                 if let Some(s) = to_screen(ptr) {
                     painter.circle_stroke(
                         s,
@@ -13994,6 +14117,44 @@ fn run_vector_edit_tool(
                 // Node drag: snap the target and draw the snap marker (shown
                 // pre-commit — fuzzy-never-sneaky) plus a preview handle.
                 let (target, snapped) = snap(ptr);
+                // Pass 26.2: draw the SHAPE as it would be, not just a marker
+                // where the pointer is.
+                //
+                // The operator: *"the display doesn't live update when they or
+                // the spline handles are moved."* Until now a node drag drew a
+                // circle following the cursor and left the line where it was,
+                // so the only way to see the result was to let go — and the
+                // only way to undo a wrong one was Ctrl+Z. Dragging a point of
+                // a drawing without seeing the drawing move is not really
+                // dragging it.
+                //
+                // Drawn as a POLYLINE through the part's anchors with the
+                // dragged one displaced. That is an approximation for a curved
+                // segment: it shows where the anchors go, not the curve they
+                // will produce. Stated rather than hidden, and it is the
+                // honest trade — the alternative is re-flattening Béziers
+                // every frame of a drag on an object that may hold thousands
+                // of them. The committed result comes from core's own surgery
+                // either way, so the preview can only ever be a guide.
+                if let Some(prov) = doc.object_model.as_ref()
+                    && let Some(e) = doc.entered.filter(|e| e.object == drag.object_index)
+                    && let Some(sp_i) = e.subpath
+                {
+                    let pts = prov.subpath_node_points(drag.object_index, sp_i);
+                    let path: Vec<egui::Pos2> = pts
+                        .iter()
+                        .filter_map(|(i, p)| {
+                            let q = if *i == node { target } else { *p };
+                            to_screen(q)
+                        })
+                        .collect();
+                    if path.len() >= 2 {
+                        painter.add(egui::Shape::line(
+                            path,
+                            egui::Stroke::new(1.5, preview_color),
+                        ));
+                    }
+                }
                 if let Some(s) = to_screen(target) {
                     if snapped {
                         painter.extend(canvas::snap_marker_shapes(
@@ -14203,7 +14364,22 @@ fn run_vector_edit_tool(
     // any commit have been applied, so the outline reflects the state the
     // operator just produced rather than the previous frame's. Without this the
     // object-edit tool selects silently — see `draw_selection_outlines`.
-    draw_selection_outlines(doc, ui, image_rect, extent, zoom);
+    draw_selection_outlines(
+        doc,
+        ui,
+        image_rect,
+        extent,
+        zoom,
+        image_response.hover_pos().and_then(|sp| {
+            doc.pages.get(doc.view.page_index).and_then(|page| {
+                viewer::canvas_to_pdf_space(
+                    viewer::screen_to_page(sp, image_rect, extent, zoom),
+                    page,
+                )
+                .map(|p| pdfce_core::vector::Point::new(f64::from(p.x), f64::from(p.y)))
+            })
+        }),
+    );
 }
 
 /// Select and drag ce dimensions on the canvas (Pass 25.5).

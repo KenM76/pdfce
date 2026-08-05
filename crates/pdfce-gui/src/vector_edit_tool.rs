@@ -40,11 +40,31 @@ use pdfce_core::vector::{Handle, Point};
 /// and the nearest silently wins with nothing drawn beforehand to say which one
 /// is about to move.
 ///
-/// Matched to `SELECT_SCREEN_TOLERANCE_PX` rather than being larger: a node
-/// grab that loses to an object move costs one undo, while a node grab that
-/// wins when the operator meant to move the object edits geometry they were
-/// not looking at.
-pub const NODE_GRAB_SCREEN_TOLERANCE_PX: f32 = 6.0;
+/// # Widened 6 → 10 px in Pass 26.2, and why that is now the safe direction
+///
+/// It was matched to `SELECT_SCREEN_TOLERANCE_PX` (6 px) on the argument that
+/// "a node grab that loses to an object move costs one undo, while a node grab
+/// that wins when the operator meant to move the object edits geometry they
+/// were not looking at."
+///
+/// That argument was sound when a node grab could fire from ANY selected path
+/// object, against its whole flat anchor list, with nothing drawn to say which
+/// point was about to move. Two things have changed since. The grab is now
+/// scoped to the anchors of the ONE part the operator has entered, not the
+/// object's 6,681. And Pass 36.3 draws every one of those points, so the
+/// operator can see exactly what they are aiming at before they press.
+///
+/// With the target visible and the candidate set small, the risk the tight
+/// radius was protecting against is largely gone, and what remains is the
+/// operator's actual complaint: *"it is still hard to pick endpoints."* A grab
+/// radius slightly LARGER than the 6 px mark is the ordinary vector-editor
+/// arrangement — you aim at a square and are forgiven for missing it by a
+/// pixel or two.
+///
+/// Still deliberately smaller than a fingertip: at 10 px two adjacent anchors
+/// of a dense CAD subpath can both be in range, and `classify_drag` takes the
+/// nearest, which is the one under the pointer.
+pub const NODE_GRAB_SCREEN_TOLERANCE_PX: f32 = 10.0;
 
 /// An in-progress vector-edit drag (session/view state, exactly like the
 /// measure tool's per-page state — never itself an edit; the edit is the one
