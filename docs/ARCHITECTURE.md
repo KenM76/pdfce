@@ -6821,3 +6821,99 @@ with a forward pointer.
   - **No `ROADMAP.md` Pass ID, standing rule, decision number or operator
     question was minted by this sync** — it is documentation catching up
     to shipped code, not new scope.
+
+- **2026-08-05 — Decision 030: preserving the option of a future plugin
+  system — build nothing, name what would foreclose it. Logged here for
+  the first time; the record itself was filed earlier the same day and
+  owed this entry (`docs/decisions/030-preserving-the-option-of-a-future-plugin-system.md`
+  §9 item 1).** Filed by `autonomous-builder` (KenAgent), dispatched by
+  `pdfce-engineer`, at the operator's request that decisions taken now
+  not foreclose an *optional, bulky* plugin add-on later. **Outcome: no
+  plugin system is built. No host, no ABI, no `[features]`, no new trait,
+  no new `pub` item.** The record's value is almost entirely in what it
+  found would DESTROY the option if built carelessly, not in anything it
+  built. Three properties currently keep the option open, each verified
+  in-tree and each true for reasons **unrelated** to plugins: (1)
+  `EditSession::undo` is data-driven, not type-driven — `CommandKind` is
+  popped and never inspected (`edit.rs:1304-1318`); (2) `CommandKind` is
+  `#[non_exhaustive]`, though this is weaker than it looks — the
+  `Command`/`ObjectWrite`/`Removal` types around it are private, and a
+  plugin cannot construct an authored `Stream` at all (`stage_bytes` is
+  private); (3) `pdfce-core` is deliberately WASM-portable, so a plugin
+  host must live in a shell crate, never in core, on pain of nested WASM.
+  **The inversion that changes the framing:** the request assumed the
+  `EditSession` road was the only mutation path and it was closed. It
+  is not the only one — `DirtySet` (`writer/mod.rs:214`) and
+  `writer::save_full`/`save_incremental` are **fully `pub`** today, so an
+  external crate can already mutate a `Document` with no undo, no
+  disclosure (R145), and no save-mode obligation. **The greater risk is
+  not foreclosure of a future plugin system; it is that the open,
+  undisciplined road gets used by default because it is the only one
+  available**, before anyone decides that on purpose. Recommended
+  guardrail (not yet accepted or acted on): one standing rule naming
+  `EditSession`-bypass as a named exception (redaction is the only
+  sanctioned traveller, R35) plus a small grep gate
+  (`tools/check-bypass-paths.sh`) on the five `DirtySet`/`writer::save_*`
+  symbols — **not built by this record**, and its two candidate standing-
+  rule numbers (§6.2(a), §4.5's core/shell plugin-host analogue to
+  CLAUDE.md rule 2) remain **unminted pending the operator's acceptance**
+  (see the continuation-89 entry below for the numbering consequence).
+  Position on Cargo `[features]`: **not now** — would encode `[cfg]`
+  boundaries that do not match where the real coupling lives (`edit.rs`'s
+  8,880-line, 67-method convergence point), and would trade error
+  detection for an unbuilt-combination risk, the same tradeoff the
+  operator already declined for parallel sessions (decision 029). No
+  licence question arises from this record; the one that would (an
+  in-process dynamic-library plugin host vs. a WASM-sandboxed one) is
+  named for later, not resolved now. **No body-section change required**
+  — nothing in `pdfce-core`'s actual public surface changed; this is a
+  preservation-of-optionality analysis, not an implemented decision.
+  Reference: `docs/decisions/030-preserving-the-option-of-a-future-plugin-system.md`
+  (full text, all measurements and the four foreclosure-risk scenarios in
+  §5).
+
+- **2026-08-05 (continuation 89) — Decision 031: where implicit commit
+  stops — operator manipulation commits, pdfce inference stays reviewed,
+  and `MeasureScale` is a named exception on a third, blast-radius axis.**
+  Filed by `pdfce-engineer`'s classification, confirmed and extended (one
+  addition) by `pdfce-ui-specialist`, recorded by `pdfce-librarian` at the
+  engineer's explicit dispatch, alongside `ROADMAP.md` Pass 34.0's
+  `GestureInterrupt::Commit` wiring. **Restates CLAUDE.md rule 4 as
+  narrowed by decision 024 §4.4 against the full 2026-08-05 gesture
+  inventory** (TextEdit, AddText, MeasureLinear, VectorEdit, ce-dimension
+  position drag — all operator-authored, all commit implicitly on
+  click-out; Reflow, MeasureCircular best-fit, derived-centerline —
+  all pdfce-inferred, all keep an explicit Accept). **Adds one
+  classification decision 024 did not need to make:** `MeasureScale`'s
+  back-calculated scale is authored, not inferred, and would read as an
+  ordinary implicit-commit case by rule 4's letter alone — recommended to
+  keep its explicit confirm anyway on a **third axis, blast radius**: a
+  scale commit changes the displayed value of every other ce dimension in
+  the group at once, including ones off-screen, which is a materially
+  different risk from any other single-object case-(a) commit
+  (`main.rs:13413`'s own comment already names this). **This is a
+  deviation from the operator's own literal instruction** ("this goes the
+  same with all tools") and is surfaced rather than decided silently — see
+  `ROADMAP.md` open operator question **(aw)**. Also decided: the new
+  left-hand Tool Options dock (`ROADMAP.md` Pass 34.1) reuses the existing
+  `DockBehavior` mechanism via a SEPARATE `Tree<LeftPanel>` instance rather
+  than genericizing `DockBehavior` over a pane type or writing an
+  independent sibling `Behavior` impl — `egui_tiles::Tree` instances are
+  independent with no cross-tree pane migration wanted, so there is no
+  cross-tree behavior to unify, and the existing `DockPanel`/`panel_body`
+  dispatcher pattern already survived one prior library-adoption change
+  verbatim (the continuation-57 entry above), which two small dispatchers
+  extend rather than risk against `egui_tiles`'s own generic trait bounds.
+  **Numbering consequence for decision 030's still-unminted rule
+  proposals:** decision 030 §9 items 3–4 remain pending the operator's
+  acceptance, and are not the only contingent candidate on record — the
+  continuation-88 documentation-discipline observation was floated as
+  "R150's to claim" but never itself minted. **R150 was spent this same
+  filing on the unrelated `GestureInterrupt::Commit` gesture-asymmetry
+  process finding** (`ROADMAP.md` standing rules), filed first, so R151
+  is next free for whichever of the three contingent candidates is
+  accepted or promoted first — not pre-allocated among them here. No
+  `pdfce-core`/`pdfce-render`/`pdfce-gui` body-section text is corrected
+  by this entry beyond what Pass 34.x's own shipping will do — this is a
+  classification governing acceptance criteria, not yet an implemented
+  change. Reference: `docs/decisions/031-implicit-commit-boundary-and-the-measurescale-blast-radius-exception.md`.

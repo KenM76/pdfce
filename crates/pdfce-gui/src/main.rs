@@ -1591,6 +1591,15 @@ struct AddTextState {
     /// The most recent ACCEPTED add's disclosures, rendered verbatim until the
     /// next Accept or tool exit (§6.1) — never auto-dismissed.
     last_disclosures: Vec<String>,
+    /// Pass 34.0: a placement the operator asked for while a NON-EMPTY draft
+    /// was still in flight, held until phase C can commit that draft first.
+    ///
+    /// Exists because [`install_add_placement`] runs with `doc.add_text`
+    /// borrowed and therefore cannot reach `doc.session`. Never `Some` across
+    /// a frame boundary: phase C always consumes it (committing and installing
+    /// on success, dropping it on a refusal so the refusal is not buried under
+    /// a fresh placement).
+    queued_placement: Option<AddPlacement>,
 }
 
 /// A fixed origin/box plus the operator's in-progress new text (§2) — created
@@ -1990,6 +1999,7 @@ impl OpenDoc {
             drag_anchor: None,
             draft: None,
             last_disclosures: Vec::new(),
+            queued_placement: None,
         });
     }
 
@@ -4674,9 +4684,15 @@ impl PdfceApp {
         // active tool's own gesture state and discards or commits it before
         // proceeding — a single place the question is ever asked, so Pass
         // 6.1 (discard) and Pass 7 (commit) each replace only the *result*,
-        // never add a second enforcement point. This Pass has no tool and
-        // hence no gesture, so it is always a no-op (proven below).
-        self.resolve_gesture_interrupt(action);
+        // never add a second enforcement point.
+        //
+        // Pass 34.0: the commit arm is now real, so this can FAIL. A refused
+        // commit abandons the incoming action — see
+        // `resolve_gesture_interrupt`'s own docs for why proceeding would be
+        // worse than not.
+        if !self.resolve_gesture_interrupt(action) {
+            return;
+        }
         match action {
             Action::Open => {
                 self.open_dialog();
@@ -5163,13 +5179,27 @@ impl PdfceApp {
     /// `current_gesture_interrupt` always returns
     /// [`GestureInterrupt::Nothing`] and this is a no-op — the discard/commit
     /// arms exist for Pass 6.1/7 to fill, never reached today.
-    fn resolve_gesture_interrupt(&mut self, incoming: Action) {
+    ///
+    /// # Returns (Pass 34.0)
+    ///
+    /// `true` when the incoming action may proceed. `false` only when a
+    /// commit was **refused** by `pdfce-core`: the draft is kept, the refusal
+    /// is on screen, and the interrupting action is abandoned. Letting the
+    /// action through would move the operator to another page — or another
+    /// tool, or a saved file — while the reason their edit did not land was
+    /// still unread. That is the one case where doing what was asked is worse
+    /// than refusing it, and it follows the same shape as the three
+    /// pending-confirmation guards at the top of [`Self::apply`].
+    fn resolve_gesture_interrupt(&mut self, incoming: Action) -> bool {
         if Self::action_preserves_gesture(incoming) {
-            return;
+            return true;
         }
         match self.current_gesture_interrupt() {
-            GestureInterrupt::Nothing => {}
-            GestureInterrupt::Discard => self.discard_active_gesture(),
+            GestureInterrupt::Nothing => true,
+            GestureInterrupt::Discard => {
+                self.discard_active_gesture();
+                true
+            }
             GestureInterrupt::Commit => self.commit_active_gesture(),
         }
     }
@@ -5222,31 +5252,68 @@ impl PdfceApp {
     }
 
     /// What the active tool's in-progress gesture would do if interrupted
-    /// right now (spec §3.3). **Always [`GestureInterrupt::Nothing`] this
-    /// Pass** — no tool exists to hold a gesture. Pass 6.1 replaces this
-    /// body with a query against its `DrawState` (returns `Discard`); Pass 7
-    /// with a query against its text-field draft flag (returns `Commit`).
+    /// right now (spec §3.3).
+    ///
+    /// # Pass 34.0: this finally returns `Commit`, and why that is a bug fix
+    ///
+    /// From Pass 12.0 until Pass 34.0 this returned only `Discard` or
+    /// `Nothing`, and [`Self::commit_active_gesture`] was a literal empty
+    /// body. Three separate Passes (14.3's `PendingEdit`, 16.2's add-text
+    /// draft, 12.M2b's measure gesture) each added a `Discard` disjunct here
+    /// and none of them filled in the commit side — so the scaffolded
+    /// two-sided mechanism shipped with one side live and the other side
+    /// silently answering for every case.
+    ///
+    /// Because [`Self::resolve_gesture_interrupt`] runs at the top of
+    /// [`Self::apply`] for **every** action, the consequence was not merely
+    /// "click-away does not accept": page navigation, Save and Undo also
+    /// threw away typed work with no warning and no disclosure. The operator
+    /// reported the visible half of this on 2026-08-05 — *"if I click out of
+    /// where I am editing that should just accept the edits"* — and the
+    /// invisible half (Save discarding a draft) was worse.
+    ///
+    /// # The line between Commit and Discard
+    ///
+    /// Decision 031, which is CLAUDE.md rule 4 as narrowed on 2026-08-05
+    /// (decision 024 §4.4) applied to interruption rather than to widgets:
+    ///
+    /// - **Operator-authored direct manipulation commits.** The operator
+    ///   typed these characters or picked these two points; the result is
+    ///   fully visible on the canvas and is one Ctrl+Z away. Rule 4's
+    ///   disclosure obligation is on what pdfce *guessed*, and pdfce guessed
+    ///   nothing here.
+    /// - **pdfce-inferred results keep their explicit review.** A reflow
+    ///   preview and a Taubin best-fit circle are both named by rule 4 in so
+    ///   many words ("reflow results", "best-fit geometry"). Auto-committing
+    ///   an inference on click-away is exactly the sneaky this project
+    ///   forbids.
+    /// - **Blast radius is a third axis, new in decision 031 and not in rule
+    ///   4.** `MeasureScale` is not an inference — the operator drew the
+    ///   reference line and typed its real length — but committing it
+    ///   re-values *every other ce dimension in the group*. A consequence
+    ///   that wide is not something to trigger by clicking somewhere else.
+    ///   Flagged to the operator as the one deviation from "this goes the
+    ///   same with all tools", open question in `ROADMAP.md`.
+    /// - **An incomplete gesture cannot commit** and so discards: one of two
+    ///   measure picks taken forms no dimension, and an add-text draft with
+    ///   no characters would author a real but invisible zero-content run
+    ///   (ui-spec §B.10) — a foot-gun a click-out-accepts design must not
+    ///   create.
     fn current_gesture_interrupt(&self) -> GestureInterrupt {
-        // Pass 14.3 §6.2: an uncommitted text edit IS this tool's discardable
-        // gesture. Nothing has been written to the `EditSession` yet, so any
-        // unrelated action (Undo, Save, page nav, opening a panel) discards it
-        // — the same Discard policy as Pass 6.1's half-drawn shape, NOT Pass
-        // 7's Commit policy (a text edit's whole design is its separate Accept
-        // gesture, so Discard-on-interrupt is what makes "operator-accepted,
-        // never silent" mean something).
+        if self.committable_gesture() {
+            return GestureInterrupt::Commit;
+        }
         match &self.status {
-            // Pass 15.2 §1.4: an in-progress reflow review is the SAME class of
-            // discardable, never-yet-written gesture as a `PendingEdit` — one
-            // more disjunct on this existing query, not a second enforcement
-            // point.
+            // Pass 15.2 §1.4: an in-progress reflow review is a
+            // never-yet-written gesture, and (Pass 34.0) an INFERRED one — it
+            // discards on interrupt rather than committing.
             Status::Open(doc)
                 if doc
                     .text_edit
                     .as_ref()
                     .is_some_and(|s| s.pending.is_some() || s.reflow.is_some())
-                    // Pass 16.2 §8: an in-progress add-text draft is the SAME
-                    // class of discardable, never-yet-written gesture — one more
-                    // disjunct on this ONE query, not a second enforcement point.
+                    // Pass 16.2 §8: an add-text draft. Reached here only when
+                    // it is EMPTY (a non-empty one is committable above).
                     || doc.add_text.as_ref().is_some_and(|s| s.draft.is_some())
                     // Pass 12.M2b §8: an in-progress measure gesture (a pick, a
                     // circular fit-set, a scale line/dialog, a linear pending)
@@ -5259,6 +5326,37 @@ impl PdfceApp {
             }
             _ => GestureInterrupt::Nothing,
         }
+    }
+
+    /// Whether some tool holds a draft that an interruption should COMMIT
+    /// rather than throw away (Pass 34.0, decision 031).
+    ///
+    /// Split out of [`Self::current_gesture_interrupt`] so the Commit-vs-
+    /// Discard classification is one named predicate that
+    /// [`Self::commit_active_gesture`] can agree with by construction. Two
+    /// functions each re-deriving "is this committable" from the raw state is
+    /// precisely how the discard/commit asymmetry this Pass fixes came about.
+    fn committable_gesture(&self) -> bool {
+        let Status::Open(doc) = &self.status else {
+            return false;
+        };
+        // A text edit the operator typed. `reflow` is mutually exclusive with
+        // `pending` (14.3 §1.4) and is INFERRED, so it is deliberately absent.
+        let text = doc
+            .text_edit
+            .as_ref()
+            .is_some_and(|s| s.pending.is_some() && s.reflow.is_none());
+        // New text the operator typed. Empty drafts are NOT committable
+        // (ui-spec §B.10) — they would author invisible content.
+        let add = doc
+            .add_text
+            .as_ref()
+            .is_some_and(|s| s.draft.as_ref().is_some_and(|d| !d.draft_text.is_empty()));
+        // A complete linear ce-dimension pick pair. Circular (best-fit =
+        // inferred) and scale (blast radius) are deliberately excluded.
+        let measure = doc.active_tool == Some(CanvasTool::MeasureLinear)
+            && doc.measure.as_ref().is_some_and(|s| s.pending.is_some());
+        text || add || measure
     }
 
     /// Discard the active tool's in-progress gesture (spec §3.3). No-op this
@@ -5292,11 +5390,289 @@ impl PdfceApp {
     }
 
     /// Commit the active tool's in-progress gesture as one `EditSession`
-    /// command (spec §3.3). No-op this Pass — reached only via
-    /// [`GestureInterrupt::Commit`], which [`Self::current_gesture_interrupt`]
-    /// never returns until a real tool exists. Pass 7 commits its typed
-    /// text-field draft here.
-    fn commit_active_gesture(&mut self) {}
+    /// command (spec §3.3, Pass 34.0).
+    ///
+    /// Reached only via [`GestureInterrupt::Commit`], i.e. only when
+    /// [`Self::committable_gesture`] is true — so every draft this touches is
+    /// operator-authored, complete, and safe to write without asking again
+    /// (decision 031).
+    ///
+    /// # Returns
+    ///
+    /// `true` when the gesture is resolved and the interrupting action may
+    /// proceed; `false` when `pdfce-core` **refused** the commit. On a
+    /// refusal the draft is deliberately RETAINED — the operator's work is
+    /// not thrown away because the first attempt was rejected — and the
+    /// caller ([`Self::resolve_gesture_interrupt`]) abandons the interrupting
+    /// action so the refusal cannot scroll past unread while the app moves on
+    /// to another page or another tool (ui-spec §B.8).
+    ///
+    /// # Why this delegates rather than inlining the three commits
+    ///
+    /// Each tool's Accept button already builds and commits its own request,
+    /// deep inside a `run_*_tool` function that needs an `&mut egui::Ui`.
+    /// Writing a second copy here would recreate — at the level of *what gets
+    /// written to the document* — exactly the two-implementations-drift
+    /// failure that `pdfce-core`'s R92 single-regeneration-path rule exists
+    /// to prevent. So the commit bodies were lifted out into free functions
+    /// that need no `Ui`, and BOTH the Accept button and this interrupt path
+    /// call them.
+    fn commit_active_gesture(&mut self) -> bool {
+        let font_env = &self.font_env;
+        let Status::Open(doc) = &mut self.status else {
+            return true;
+        };
+        let mut ok = true;
+        // Text edit and add-text are separate states that can in principle
+        // both be non-empty (the tool changed without the other being torn
+        // down), so both are asked. Each is a no-op when it holds nothing.
+        if commit_text_edit_draft(doc) == CommitOutcome::Refused {
+            ok = false;
+        }
+        if commit_add_text_draft(doc, font_env) == CommitOutcome::Refused {
+            ok = false;
+        }
+        if commit_measure_linear_draft(doc) == CommitOutcome::Refused {
+            ok = false;
+        }
+        // Anything left in flight that was NOT committable — an inferred
+        // reflow preview, a best-fit circle, a half-picked pair — is discarded
+        // exactly as it was before this Pass. `discard_active_gesture` is
+        // idempotent over already-cleared state, so calling it after a
+        // successful commit clears the leftovers without undoing the write.
+        if ok {
+            self.discard_active_gesture();
+        }
+        ok
+    }
+}
+
+/// What a commit attempt did, so an interrupt can tell "nothing to do" from
+/// "written" from "core said no" (Pass 34.0).
+///
+/// A three-state enum rather than `bool` or `Result<(), _>`: the caller's
+/// decision (may the interrupting action proceed?) genuinely has three
+/// inputs, and collapsing `Nothing` into `Committed` would make "there was no
+/// draft" indistinguishable from "a draft was written" in the one place that
+/// difference decides whether an undo entry now exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommitOutcome {
+    /// No draft of this kind was in flight.
+    Nothing,
+    /// One `EditSession` command was written; the draft is cleared.
+    Committed,
+    /// `pdfce-core` refused. The draft is RETAINED with the refusal attached.
+    Refused,
+}
+
+/// Commit the Edit-Text tool's typed replacement as one `EditSession` command
+/// (Pass 34.0; the body lifted out of the Accept button's arm in
+/// [`run_text_edit_tool`], which now calls this).
+///
+/// Needs no `&mut egui::Ui`, which is the whole point: the same commit is
+/// reachable from the Accept button and from an interruption
+/// ([`PdfceApp::commit_active_gesture`]) without two copies of "what gets
+/// written."
+///
+/// `pinned_span` is RE-DERIVED here from the state's own `page_text` rather
+/// than carried on the draft. It is a pure function of `(page_text, run)` and
+/// both are already stored; storing a copy on [`PendingEdit`] would be a
+/// second source of truth that can go stale when the page is rebuilt.
+///
+/// A draft whose text is byte-identical to the original is treated as
+/// [`CommitOutcome::Nothing`], not as a write. Under Pass 34.0 an
+/// interruption commits automatically, so without this an operator who typed
+/// a character and deleted it again would silently accumulate a no-op entry
+/// on the undo stack every time they clicked away.
+fn commit_text_edit_draft(doc: &mut OpenDoc) -> CommitOutcome {
+    use pdfce_core::text_edit::{
+        BlockRecognitionOptions, EditOptions, EditRequest, EditableTextModel, GlyphRef,
+    };
+
+    let Some(state) = doc.text_edit.as_ref() else {
+        return CommitOutcome::Nothing;
+    };
+    // Mutual exclusion (14.3 §1.4) is an invariant, not an assumption worth
+    // betting a document write on: if a reflow review is somehow live, this
+    // is not the operator-authored case and must not auto-commit.
+    if state.reflow.is_some() {
+        return CommitOutcome::Nothing;
+    }
+    let Some(pending) = state.pending.as_ref() else {
+        return CommitOutcome::Nothing;
+    };
+    if pending.draft_text == pending.original_text {
+        return CommitOutcome::Nothing;
+    }
+
+    let page_index = state.page_index;
+    let pinned_span =
+        EditableTextModel::recognize(&state.page_text, &BlockRecognitionOptions::default())
+            .provenance(GlyphRef::new(pending.run, 0))
+            .map(|p| p.operator_span);
+
+    let mut req =
+        EditRequest::find_replace(page_index, &pending.original_text, &pending.draft_text);
+    req.pinned_span = pinned_span;
+
+    let outcome = match doc.session.edit_text(&req, &EditOptions::default()) {
+        Ok(report) => {
+            doc.refresh_pages();
+            // Content changed: rebuild the extraction for the SAME page so the
+            // caret model describes what is now on it (14.3 §2.1). This also
+            // clears `pending`, since the state is rebuilt from scratch.
+            doc.build_text_edit_state();
+            if let Some(state) = doc.text_edit.as_mut() {
+                state.last_disclosures = report.disclosures;
+            }
+            CommitOutcome::Committed
+        }
+        Err(err) => {
+            let msg = ui_text::refusal_with_hint(&err.to_string(), edit_refusal_hint(&err));
+            if let Some(p) = doc.text_edit.as_mut().and_then(|s| s.pending.as_mut()) {
+                p.last_refusal = Some(msg);
+            }
+            CommitOutcome::Refused
+        }
+    };
+    // Observable without a screen (`PDFCE_DIAG=1`). The whole class of defect
+    // this Pass fixes was invisible from outside — a draft that silently went
+    // nowhere looks exactly like a draft that was never typed.
+    diag::trace(|| format!("commit-text-edit -> {outcome:?}"));
+    outcome
+}
+
+/// Commit the Add-Text tool's draft as one `CommandKind::AddText` (Pass 34.0;
+/// lifted out of the Accept arm of [`run_add_text_tool`], which now calls
+/// this).
+///
+/// An EMPTY draft returns [`CommitOutcome::Nothing`] and is never written
+/// (ui-spec §B.10). Under click-out-commits this is load-bearing rather than
+/// tidy: arming the tool and clicking a point creates a draft immediately, so
+/// without the guard, arming the tool and then clicking anywhere else would
+/// author a zero-content run into the document that the operator can neither
+/// see nor account for.
+fn commit_add_text_draft(
+    doc: &mut OpenDoc,
+    font_env: &pdfce_render::FontEnvironment,
+) -> CommitOutcome {
+    use pdfce_core::text_edit::{AddTextRequest, FontProvenance};
+
+    let Some(state) = doc.add_text.as_ref() else {
+        return CommitOutcome::Nothing;
+    };
+    let Some(draft) = state.draft.as_ref() else {
+        return CommitOutcome::Nothing;
+    };
+    if draft.draft_text.is_empty() {
+        return CommitOutcome::Nothing;
+    }
+    let page_index = state.page_index;
+
+    let base = match draft.placement {
+        AddPlacement::Point { x, y } => {
+            AddTextRequest::new(page_index, (x, y), draft.draft_text.clone())
+        }
+        AddPlacement::Box {
+            llx,
+            lly,
+            width,
+            height,
+        } => AddTextRequest::new(page_index, (0.0, 0.0), draft.draft_text.clone())
+            .with_box(llx, lly, width, height)
+            .with_alignment(state.prop_alignment)
+            .with_leading((state.prop_leading > 0.0).then_some(state.prop_leading)),
+    };
+    // §0.4 provenance: Bundled/Supplied is a preview-fidelity fact; the dict
+    // written is identical either way (R79).
+    let provenance = match font_env
+        .classify_nonembedded(pdfce_core::fontdata::std14_base_font_name(state.prop_font))
+    {
+        pdfce_render::GlyphSource::Supplied => FontProvenance::Supplied,
+        _ => FontProvenance::Bundled,
+    };
+    let req = base
+        .with_font(state.prop_font)
+        .with_provenance(provenance)
+        .with_size(state.prop_size)
+        .with_color(add_text_color(state.prop_color));
+
+    let outcome = match doc.session.add_text(&req) {
+        Ok(report) => {
+            doc.refresh_pages();
+            // The tool stays armed and keeps the operator's font/size choices
+            // (§7.2) — only the draft is consumed.
+            if let Some(state) = doc.add_text.as_mut() {
+                state.draft = None;
+                state.drag_anchor = None;
+                state.last_disclosures = report.disclosures;
+            }
+            CommitOutcome::Committed
+        }
+        Err(err) => {
+            let msg = ui_text::refusal_with_hint(&err.to_string(), add_text_refusal_hint(&err));
+            if let Some(d) = doc.add_text.as_mut().and_then(|s| s.draft.as_mut()) {
+                d.last_refusal = Some(msg);
+            }
+            CommitOutcome::Refused
+        }
+    };
+    diag::trace(|| format!("commit-add-text -> {outcome:?}"));
+    outcome
+}
+
+/// Commit a completed LINEAR ce-dimension pick pair (Pass 34.0).
+///
+/// Deliberately linear-only. The other two measure tools are excluded by
+/// decision 031 and each for its own reason, recorded here because "why does
+/// clicking away not finish my circle" is the question a future reader will
+/// arrive with:
+///
+/// - **Circular** authors a Taubin **best-fit** circle through the picked
+///   set. CLAUDE.md rule 4 names "best-fit geometry" in its own list of
+///   things pdfce inferred, so the fit stays a reviewable hint the operator
+///   accepts — clicking elsewhere is not review.
+/// - **Scale** is not inferred (the operator drew the line and typed its real
+///   length) but committing it silently re-values **every other ce dimension
+///   in the group**. Decision 031 treats that blast radius as its own reason
+///   to keep an explicit confirm, and flags it to the operator as the single
+///   deviation from "this goes the same with all tools".
+fn commit_measure_linear_draft(doc: &mut OpenDoc) -> CommitOutcome {
+    if doc.active_tool != Some(CanvasTool::MeasureLinear) {
+        return CommitOutcome::Nothing;
+    }
+    let Some(state) = doc.measure.as_ref() else {
+        return CommitOutcome::Nothing;
+    };
+    let Some(kind) = state.pending else {
+        return CommitOutcome::Nothing;
+    };
+    let (page_index, group) = (state.page_index, state.group);
+    let group_name = doc
+        .session
+        .dimension_model()
+        .group(group)
+        .map_or_else(String::new, |g| g.name.clone());
+
+    let outcome = match doc.session.add_dimension(page_index, group, kind) {
+        Ok(_) => {
+            doc.refresh_pages(); // the page's `/Annots` changed
+            if let Some(st) = doc.measure.as_mut() {
+                st.pending = None;
+                st.circular.clear();
+                st.last_disclosures = vec![ui_text::measure_dimension_authored(&group_name)];
+            }
+            CommitOutcome::Committed
+        }
+        Err(err) => {
+            if let Some(st) = doc.measure.as_mut() {
+                st.last_disclosures = vec![ui_text::refusal_line(&err.to_string())];
+            }
+            CommitOutcome::Refused
+        }
+    };
+    diag::trace(|| format!("commit-measure-linear -> {outcome:?}"));
+    outcome
 }
 
 /// Whether a load failure is a *named pdfce capability gap* rather than
@@ -5353,6 +5729,25 @@ impl eframe::App for PdfceApp {
         // would stall between steps. Ask for the next frame unconditionally
         // while it runs.
         ctx.request_repaint();
+        // Pass 34.0: assert window focus for the duration of a scripted run.
+        //
+        // `PDFCE_DIAG_VIEWPORT` creates the window with `active: false` (that
+        // is what keeps it from stealing the operator's foreground window), so
+        // the backend reports `focused: false` and egui refuses to give any
+        // widget keyboard focus. Measured 2026-08-05: a scripted click placed
+        // the caret correctly — `caret=Some(TextPosition { run: 0,
+        // byte_offset: 7 })` — and then every `type:` step was swallowed,
+        // because the Edit-Text composer is gated on
+        // `image_response.has_focus()`.
+        //
+        // This is a HARNESS artefact, not a property of the application: a
+        // real operator's window is focused whenever they are typing into it.
+        // Leaving it unset would have made the harness report "typing does
+        // nothing" for a build in which typing works — the exact
+        // indistinguishable-from-a-bug failure `Step::Tool`'s own docs warn
+        // about. Scoped to a scripted run only; there is no path to this line
+        // without `PDFCE_DIAG_SCRIPT` set.
+        raw_input.focused = true;
         let Some(step) = script.advance() else {
             // Finished: ask the window to close, so a run lasts exactly as
             // long as its script rather than a guessed timeout.
@@ -5422,6 +5817,8 @@ impl eframe::App for PdfceApp {
                     diag::ScriptTool::None => None,
                     diag::ScriptTool::Obj => Some(CanvasTool::VectorEdit),
                     diag::ScriptTool::Measure => Some(CanvasTool::MeasureLinear),
+                    diag::ScriptTool::Text => Some(CanvasTool::TextEdit),
+                    diag::ScriptTool::AddText => Some(CanvasTool::AddText),
                 };
                 self.apply(Action::SelectCanvasTool(tool), ctx, ctx.pixels_per_point());
             }
@@ -5446,6 +5843,12 @@ impl eframe::App for PdfceApp {
                         modifiers,
                     });
                 }
+            }
+            // Pass 34.0. One `Event::Text` is what a real keystroke becomes
+            // after the backend's IME/layout translation, so the tool's
+            // composer takes the identical branch it does for a human.
+            diag::Step::Text(ref text) => {
+                raw_input.events.push(egui::Event::Text(text.clone()));
             }
         }
         diag::trace(|| format!("step {step:?}"));
@@ -8829,10 +9232,10 @@ fn run_text_edit_tool(
     font_env: &pdfce_render::FontEnvironment,
 ) {
     use pdfce_core::text_edit::{
-        AlignmentSource, BlockAlignment, BlockRecognitionOptions, EditOptions, EditRequest,
-        EditableTextModel, FillModel, FontSelector, FormatOptions, FormatRequest, GlyphRef,
-        MetricSpec, NewFill, ReflowEngine, ReflowRequest, ScriptPosition, StyleResolution,
-        StyleSynthesis, TextPosition, reflow_recognition_options,
+        AlignmentSource, BlockAlignment, BlockRecognitionOptions, EditableTextModel, FillModel,
+        FontSelector, FormatOptions, FormatRequest, GlyphRef, MetricSpec, NewFill, ReflowEngine,
+        ReflowRequest, ScriptPosition, StyleResolution, StyleSynthesis, TextPosition,
+        reflow_recognition_options,
     };
 
     let page_index = doc.view.page_index;
@@ -8850,6 +9253,11 @@ fn run_text_edit_tool(
 
     // Owned outputs of phase A (computed while the model is borrowed).
     let mut click_result: Option<(Option<TextPosition>, Option<TextPosition>)> = None;
+    // Pass 34.0: a click landed while a typed edit was pending, so the edit
+    // must be COMMITTED (not discarded, as it was before this Pass). Raised
+    // in phase B and acted on in phase C, because committing needs
+    // `doc.session` while phase B still holds `doc.text_edit` borrowed.
+    let mut commit_on_click = false;
     let mut cross_run = false;
     let mut pinned_span: Option<pdfce_core::span::ByteSpan> = None;
     let mut caret_run_text: Option<(usize, String)> = None;
@@ -9337,11 +9745,23 @@ fn run_text_edit_tool(
             state.style_preview = resolved;
             state.style_preview_key = Some(key);
         }
-        // The click resolves AFTER render: an in-progress pending edit is this
-        // tool's discardable GestureInterrupt (§6.2) — a click discards it.
+        // The click resolves AFTER render.
+        //
+        // Pass 34.0 INVERTS what a click does to a pending edit. It used to
+        // read `state.pending = None` — clicking anywhere else on the page
+        // silently destroyed everything the operator had typed, with no
+        // warning and nothing written. The operator's instruction, 2026-08-05:
+        // *"if I click out of where I am editing that should just accept the
+        // edits."* Decision 031: a typed replacement is operator-authored
+        // direct manipulation, so a click commits it.
+        //
+        // The commit itself is NOT done here — it is deferred to `move_caret`
+        // below, which the caller performs against `&mut self` after this
+        // borrow of `doc` ends, because committing needs `doc.session` while
+        // `state` still borrows `doc.text_edit`.
         if let Some((c, a)) = click_result {
             if state.pending.is_some() {
-                state.pending = None;
+                commit_on_click = true;
             }
             state.caret = c;
             state.anchor = a;
@@ -9353,6 +9773,19 @@ fn run_text_edit_tool(
         // Typing is suppressed while a reflow review is active (§1.4) — the
         // exact same "cross-run selection suppresses typing" precedent, one more
         // conjunct. The reflow sub-mode has its own Accept/Reject.
+        // Pass 34.0 observability: the four conditions that decide whether a
+        // keystroke reaches the composer, traced together. When typing "does
+        // nothing" the cause is always one of these, and reading them off a
+        // trace beats guessing which one it was.
+        diag::trace(|| {
+            format!(
+                "text-edit focus={} cross_run={cross_run} reflow={} caret={:?} pending={}",
+                image_response.has_focus(),
+                state.reflow.is_some(),
+                state.caret,
+                state.pending.is_some(),
+            )
+        });
         if image_response.has_focus() && !cross_run && state.reflow.is_none() {
             let events = ui.input(|i| i.events.clone());
             for ev in events {
@@ -10169,32 +10602,48 @@ fn run_text_edit_tool(
         return;
     }
 
-    if do_accept {
-        // Build the request from the pending draft; commit through EditSession.
-        let req = doc.text_edit.as_ref().and_then(|s| {
-            s.pending.as_ref().map(|p| {
-                let mut r = EditRequest::find_replace(page_index, &p.original_text, &p.draft_text);
-                r.pinned_span = pinned_span;
-                r
-            })
-        });
-        if let Some(req) = req {
-            match doc.session.edit_text(&req, &EditOptions::default()) {
-                Ok(report) => {
-                    doc.refresh_pages();
-                    doc.build_text_edit_state();
-                    if let Some(state) = doc.text_edit.as_mut() {
-                        state.last_disclosures = report.disclosures;
-                    }
-                }
-                Err(err) => {
-                    let msg = ui_text::refusal_with_hint(&err.to_string(), edit_refusal_hint(&err));
-                    if let Some(pending) = doc.text_edit.as_mut().and_then(|s| s.pending.as_mut()) {
-                        pending.last_refusal = Some(msg);
-                    }
-                }
-            }
+    // Pass 34.0: the click-out commit. Runs BEFORE the explicit-Accept arm
+    // below, and through the same `commit_text_edit_draft` the interrupt path
+    // uses, so "what a click writes" and "what Accept writes" cannot drift.
+    //
+    // The caret the operator just clicked is re-applied AFTER the commit,
+    // because a successful commit rebuilds the whole extraction (the page
+    // content genuinely changed) and that clears the caret. Without this, an
+    // operator editing label A and clicking label B would have to click B a
+    // second time — friction introduced by the very change meant to remove
+    // some. It is re-applied only when it still addresses a real position in
+    // the REBUILT model: an edit can change how many runs a page has, and a
+    // caret carried across that blindly would point somewhere the operator
+    // never clicked.
+    if commit_on_click {
+        let clicked = doc.text_edit.as_ref().map(|s| (s.caret, s.anchor));
+        let outcome = commit_text_edit_draft(doc);
+        if outcome == CommitOutcome::Committed
+            && let Some((caret, anchor)) = clicked
+            && let Some(state) = doc.text_edit.as_mut()
+        {
+            let valid = |p: Option<TextPosition>| -> Option<TextPosition> {
+                let p = p?;
+                let run = state.page_text.runs.get(p.run)?;
+                (p.byte_offset <= run.text.len() && run.text.is_char_boundary(p.byte_offset))
+                    .then_some(p)
+            };
+            state.caret = valid(caret);
+            state.anchor = valid(anchor);
         }
+        // A refusal leaves `pending` in place with its message attached; the
+        // operator stays where they are and can fix or Escape.
+        return;
+    }
+
+    if do_accept {
+        // Pass 34.0: delegated to the SAME function the click-out path and the
+        // gesture-interrupt path use. This arm used to build and commit its own
+        // `EditRequest` inline; three call sites each constructing what gets
+        // written to the document is the shape `pdfce-core`'s R92 exists to
+        // forbid, and the reason this Pass had a bug to fix in the first place
+        // was an interrupt path that never learned what Accept knew.
+        let _ = commit_text_edit_draft(doc);
         return;
     }
 
@@ -10365,9 +10814,25 @@ fn add_text_color(c: egui::Color32) -> pdfce_core::text_edit::NewTextColor {
 }
 
 /// Convert a resolved canvas placement into an [`AddPlacement`] and install a
-/// FRESH (empty) draft (Pass 16.2 §3). A new placement always discards the
-/// prior draft — a click/drag while composing is this tool's discardable
-/// gesture (§3.1/§8), and the new gesture starts a clean composition.
+/// FRESH (empty) draft (Pass 16.2 §3).
+///
+/// # Pass 34.0 inverted what happens to a draft that already has text
+///
+/// This used to be documented as *"a new placement always discards the prior
+/// draft"*, and it did exactly that: an operator who placed a point, typed a
+/// sentence, then clicked somewhere else to place the next one lost the
+/// sentence, silently, with nothing written. That is the add-text form of the
+/// operator's 2026-08-05 report about the Edit-Text tool, and decision 031
+/// answers it the same way — the typed text is operator-authored direct
+/// manipulation, so a new placement COMMITS the old draft rather than
+/// destroying it.
+///
+/// This function cannot commit: committing needs `doc.session`, and every one
+/// of its four call sites holds `doc.add_text` borrowed. So a non-empty draft
+/// causes the placement to be QUEUED on [`AddTextState::queued_placement`],
+/// and phase C of [`run_add_text_tool`] commits-then-installs. An EMPTY draft
+/// is replaced in place exactly as before — there is nothing to lose, and
+/// making a bare re-click wait a frame would be motion for nothing.
 fn install_add_placement(state: &mut AddTextState, placement: canvas::AddTextPlacement) {
     let placement = match placement {
         canvas::AddTextPlacement::Point { x, y } => AddPlacement::Point { x, y },
@@ -10383,6 +10848,14 @@ fn install_add_placement(state: &mut AddTextState, placement: canvas::AddTextPla
             height,
         },
     };
+    if state
+        .draft
+        .as_ref()
+        .is_some_and(|d| !d.draft_text.is_empty())
+    {
+        state.queued_placement = Some(placement);
+        return;
+    }
     state.draft = Some(AddTextDraft {
         placement,
         draft_text: String::new(),
@@ -10466,7 +10939,7 @@ fn run_add_text_tool(
     zoom: f32,
     font_env: &pdfce_render::FontEnvironment,
 ) {
-    use pdfce_core::text_edit::{AddTextRequest, BlockAlignment, FontProvenance, preview_wrap};
+    use pdfce_core::text_edit::{BlockAlignment, preview_wrap};
 
     let page_index = doc.view.page_index;
     // (Re)point state on page navigation while the tool stays active (§2.1):
@@ -10520,7 +10993,17 @@ fn run_add_text_tool(
         //    drag START (canvas::resolve_drag_placement, §3.2's deliberate
         //    divergence from Pass 6.1's discard rule). --
         if canvas::primary_drag_started(image_response) {
-            state.draft = None;
+            // Pass 34.0: an EMPTY draft is dropped as before; a draft with text
+            // in it is left alone here and committed by the placement this drag
+            // is about to resolve into (`install_add_placement` queues it).
+            // Clearing it here would defeat that commit before it happened.
+            if state
+                .draft
+                .as_ref()
+                .is_some_and(|d| d.draft_text.is_empty())
+            {
+                state.draft = None;
+            }
             state.drag_anchor = image_response.interact_pointer_pos();
         } else if canvas::primary_drag_stopped(image_response) {
             if let (Some(anchor), Some(end)) = (
@@ -10951,66 +11434,40 @@ fn run_add_text_tool(
         doc.add_text = None;
         return;
     }
+    // Pass 34.0: the click-out (or drag-out, or Place-button) commit. A
+    // placement was requested while a non-empty draft was in flight, so commit
+    // that draft and start the new one where the operator asked.
+    //
+    // On a REFUSAL the queued placement is DROPPED and the draft kept: moving
+    // the operator to a fresh, empty composition would hide both the text that
+    // failed to commit and the reason it failed.
+    if let Some(placement) = doc
+        .add_text
+        .as_mut()
+        .and_then(|s| s.queued_placement.take())
+    {
+        if commit_add_text_draft(doc, font_env) != CommitOutcome::Refused
+            && let Some(state) = doc.add_text.as_mut()
+        {
+            state.draft = Some(AddTextDraft {
+                placement,
+                draft_text: String::new(),
+                wrap_preview: None,
+                last_refusal: None,
+            });
+        }
+        return;
+    }
+
     if do_accept {
-        // §7.1: build ONE `AddTextRequest` from the draft (point OR box), commit
+        // §7.1: ONE `AddTextRequest` from the draft (point OR box), committed
         // through the ALREADY-SHIPPED `EditSession::add_text` — one undo-able
         // `CommandKind::AddText`, normal Ctrl+Z.
-        let req = doc.add_text.as_ref().and_then(|s| {
-            s.draft.as_ref().map(|d| {
-                let base = match d.placement {
-                    AddPlacement::Point { x, y } => {
-                        AddTextRequest::new(page_index, (x, y), d.draft_text.clone())
-                    }
-                    AddPlacement::Box {
-                        llx,
-                        lly,
-                        width,
-                        height,
-                    } => AddTextRequest::new(page_index, (0.0, 0.0), d.draft_text.clone())
-                        .with_box(llx, lly, width, height)
-                        .with_alignment(s.prop_alignment)
-                        .with_leading((s.prop_leading > 0.0).then_some(s.prop_leading)),
-                };
-                // §0.4 provenance: the ONE classify_nonembedded call, wrapped —
-                // Bundled/Supplied is a preview-fidelity fact, the WRITTEN dict
-                // is identical either way (R79).
-                let provenance = match font_env
-                    .classify_nonembedded(pdfce_core::fontdata::std14_base_font_name(s.prop_font))
-                {
-                    pdfce_render::GlyphSource::Supplied => FontProvenance::Supplied,
-                    _ => FontProvenance::Bundled,
-                };
-                base.with_font(s.prop_font)
-                    .with_provenance(provenance)
-                    .with_size(s.prop_size)
-                    .with_color(add_text_color(s.prop_color))
-            })
-        });
-        if let Some(req) = req {
-            match doc.session.add_text(&req) {
-                Ok(report) => {
-                    doc.refresh_pages(); // the page's content changed
-                    // Tool STAYS active (§7.2): drop the draft, keep prop-bar
-                    // values, surface the disclosures verbatim (§6.1). No
-                    // rebuild-from-default — that would reset the operator's
-                    // chosen font/size mid-session.
-                    if let Some(state) = doc.add_text.as_mut() {
-                        state.draft = None;
-                        state.drag_anchor = None;
-                        state.last_disclosures = report.disclosures;
-                    }
-                }
-                Err(err) => {
-                    // §6.2: verbatim Display + the fixed hint; the draft stays
-                    // for revision, never a crash (rule 4).
-                    let msg =
-                        ui_text::refusal_with_hint(&err.to_string(), add_text_refusal_hint(&err));
-                    if let Some(d) = doc.add_text.as_mut().and_then(|s| s.draft.as_mut()) {
-                        d.last_refusal = Some(msg);
-                    }
-                }
-            }
-        }
+        //
+        // Pass 34.0 moved the body into `commit_add_text_draft` so this arm and
+        // the click-out/interrupt path write identical content (see
+        // `PdfceApp::commit_active_gesture` for why that matters).
+        let _ = commit_add_text_draft(doc, font_env);
     }
 }
 
@@ -12887,6 +13344,18 @@ fn run_measure_tool(
     let mut do_accept = false;
     let mut do_reject = false;
     let mut open_groups = false;
+    // Pass 34.0: a canvas click landed while a fully-placed linear ce
+    // dimension was waiting to be accepted. Before this Pass the click was
+    // simply IGNORED (`if st.pending.is_none()` gated the whole state
+    // machine), so after the third click the operator was stuck until they
+    // found the Accept control — the measure-tool form of the operator's
+    // 2026-08-05 complaint. Now the click commits what is placed and becomes
+    // the first pick of the next ce dimension, which is how measuring a run
+    // of features actually goes: pick, pick, place, pick, pick, place.
+    //
+    // Carried out of the borrow because committing needs `doc.session` while
+    // this block still holds `doc.measure` borrowed.
+    let mut commit_then_pick: Option<Point> = None;
 
     {
         let page = &doc.pages[page_index];
@@ -12963,9 +13432,11 @@ fn run_measure_tool(
         {
             st.snap_cycle = 0;
             if canvas::tool_builds_measure_linear(active) {
-                if st.pending.is_none()
-                    && let Some(kind) = st.linear.commit_point(point)
-                {
+                if st.pending.is_some() {
+                    // Placed and awaiting acceptance: commit it in Phase C and
+                    // reuse THIS click as the next ce dimension's first pick.
+                    commit_then_pick = Some(point);
+                } else if let Some(kind) = st.linear.commit_point(point) {
                     st.pending = Some(kind);
                 }
             } else if canvas::tool_builds_measure_scale(active) {
@@ -13297,6 +13768,24 @@ fn run_measure_tool(
     if open_groups {
         doc.dimension_groups_open = true;
     }
+    // Pass 34.0: click-out commit for the linear ce-dimension tool. Runs
+    // before the explicit-Accept arm and through the SAME
+    // `commit_measure_linear_draft`, so a ce dimension authored by clicking on
+    // is byte-for-byte the one Accept would have authored.
+    //
+    // On a REFUSAL the click is deliberately dropped rather than started as a
+    // new pick: the refusal is on screen, `pending` is still there to fix or
+    // Escape, and quietly beginning a new measurement underneath an
+    // unresolved one would bury it.
+    if let Some(point) = commit_then_pick {
+        if commit_measure_linear_draft(doc) != CommitOutcome::Refused
+            && let Some(st) = doc.measure.as_mut()
+            && let Some(kind) = st.linear.commit_point(point)
+        {
+            st.pending = Some(kind);
+        }
+        return;
+    }
     if !do_accept {
         return;
     }
@@ -13305,15 +13794,20 @@ fn run_measure_tool(
         .group(group)
         .map_or_else(String::new, |g| g.name.clone());
 
-    if canvas::tool_builds_measure_linear(active) || canvas::tool_builds_measure_circular(active) {
-        // Both author a dimension via the SAME `add_dimension` path the CLI
-        // uses (byte-identical output for the same kind — measure_tool's
-        // equivalence tests). Linear commits its `pending`; circular its fit.
-        let kind = if canvas::tool_builds_measure_linear(active) {
-            doc.measure.as_ref().and_then(|s| s.pending)
-        } else {
-            doc.measure.as_ref().and_then(|s| s.circular.author())
-        };
+    if canvas::tool_builds_measure_linear(active) {
+        // Pass 34.0: the linear arm delegates to `commit_measure_linear_draft`,
+        // the same function the click-out/interrupt path calls, so a linear ce
+        // dimension authored by clicking away and one authored by pressing
+        // Accept are the same write. Circular keeps its own arm below because
+        // it is NOT on the implicit-commit path (decision 031 — a Taubin
+        // best-fit is inferred geometry, and rule 4 keeps inferences
+        // explicitly reviewable).
+        let _ = commit_measure_linear_draft(doc);
+    } else if canvas::tool_builds_measure_circular(active) {
+        // Authors through the SAME `add_dimension` path the CLI uses
+        // (byte-identical output for the same kind — measure_tool's
+        // equivalence tests), from the accepted fit.
+        let kind = doc.measure.as_ref().and_then(|s| s.circular.author());
         if let Some(kind) = kind {
             match doc.session.add_dimension(page_index, group, kind) {
                 Ok(_) => {

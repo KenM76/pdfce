@@ -8905,6 +8905,259 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
+### ★ Operator request 2026-08-05 — GUI usability: docked tool options, implicit gesture-commit, and the ce-dimension property surface (Pass families 34 and 35, decision 031, question (aw))
+
+**Verbatim, 2026-08-05** (operator, relayed through `pdfce-engineer`):
+
+> "let's just focus on making the gui more user friendly for now. When I
+> select a tool like the edit text one all of the options should be shown in
+> a side bar tab docked with the page navigation tab. There should be no
+> separate accept/reject when editing the text - if I click out of where I
+> am editing that should just accept the edits. this goes the same with all
+> tools. the ce dimensions i add need to be editable as well. they should
+> give me an option to change the units, number of decimal places shown,
+> fractions, tolerance and tolerance types like solidworks has, drag to
+> extend and retract the extension lines and the position."
+
+**Terminology (CLAUDE.md rule 15, binding on this whole entry).** Every
+dimensioning object named below is a **ce dimension** — the `/Line`+`/IT
+/LineDimension` annotation family pdfce itself authors
+(`crates/pdfce-core/src/dimension/`), never a **pdf dimension** (a
+pre-existing CAD-exported callout already in the page content). Nothing in
+this entry concerns pdf dimensions.
+
+Filed as five Passes below — **Pass family 34** (dock relocation +
+implicit gesture-commit + a per-ce-dimension property panel, all GUI/
+shell work) and **Pass family 35** (ce-dimension tolerance +
+extension-line drag, both real `pdfce-core` data-model work, deliberately
+scoped as their own family per the ui-spec's own recommendation) — plus
+**decision 031** (Standing rules / decision log, filed alongside; see
+`docs/decisions/031-implicit-commit-boundary-and-the-measurescale-blast-radius-exception.md`)
+and open operator question **(aw)** (Open operator questions, below).
+Acceptance criteria throughout are sourced from
+`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md`
+(`pdfce-ui-specialist`, 2026-08-05, 648 lines) — cited by section, not
+re-derived.
+
+### Pass 34.0 — Click-out commits instead of destroying the edit: `GestureInterrupt::Commit` wired at last (defect fix, filed as a Pass; GUI)
+
+**This is a defect in shipped work, not new scope. `GestureInterrupt::Commit`
+has existed since Pass 12.0 and was never wired.** Engineer-verified from
+source, not inferred:
+
+- `crates/pdfce-gui/src/main.rs:5299` — `fn commit_active_gesture(&mut self) {}`,
+  a literal empty body. Its own doc comment says *"No-op this Pass … Pass 7
+  commits its typed text-field draft here."* Pass 7 shipped; the body was
+  never filled in.
+- `crates/pdfce-gui/src/main.rs:5229` — `current_gesture_interrupt` returns
+  only `Discard` or `Nothing`, never `Commit`.
+- `crates/pdfce-gui/src/main.rs:4679` — `resolve_gesture_interrupt(action)`
+  runs at the top of `apply()` for **every** action.
+
+**Consequence, verified:** an in-progress text edit, add-text draft, or
+measure pick is silently DISCARDED — not only by clicking elsewhere on the
+canvas (`main.rs:9343`, `state.pending = None`), but by **any** action
+outside the `action_preserves_gesture` allow-list, which holds only
+tool-select, cancel, and the pure-camera zoom/fit actions. Page navigation,
+save, and undo all discard a live draft with no warning. This is CLAUDE.md
+rule 4's failure mode arriving through a gesture rather than a dialog — an
+operator-authored value lost rather than committed or disclosed.
+
+**Process note, carried into the Standing-rules candidate filed alongside
+this entry:** the discard half shipped incrementally across three separate
+Passes (14.3, 16.2, 12.M2b), each adding its own disjunct to
+`current_gesture_interrupt` — none of the three touched
+`commit_active_gesture`. The stub silently became the answer for every one
+of them.
+
+**Acceptance** (`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md`
+§B, extending the already-specified but unshipped
+`docs/ui_specs/gesture-commit-and-shell-conventions-audit.md` (2026-08-04)
+§2.2 — that document already designed this half of the fix; this Pass is
+its second, and hopefully final, attempt):
+
+- `commit_active_gesture` commits the active tool's draft through
+  `EditSession` as one undoable command, for TextEdit's plain edit,
+  AddText's authored content, and MeasureLinear's plain two-point pick
+  (ui-spec §B.7's case-(a) table).
+- `current_gesture_interrupt` returns `Commit` for those cases; Escape
+  remains the sole discard chord (unchanged).
+- A mid-gesture state that has not yet formed a complete, committable draft
+  (e.g. one of two MeasureLinear picks taken) still discards — this is not
+  a rule-4 case at all, since nothing has been authored or inferred into
+  committable form yet (ui-spec §B.7's mid-gesture distinction:
+  `pending.is_some()` is the branch condition, not new complexity).
+- A REFUSED commit **retains** the draft and **defers** the interrupting
+  action — the tool does not disarm, focus does not move — until the
+  operator resolves it by fixing-and-committing or an explicit
+  Escape-discard (ui-spec §B.8).
+- An EMPTY AddText draft (a point placed, nothing typed, click-away) stays
+  `Discard`, never `Commit` — auto-committing it would add an invisible,
+  zero-content object to the document for no operator-visible reason
+  (ui-spec §B.10 item 1).
+- VectorEdit's node/subpath/object drag and the Pass 27.x ce-dimension
+  position drag already commit-on-release with no button — cite them as
+  the working precedent this wiring should match (ui-spec §B.7), not a
+  hypothetical.
+
+### Pass 34.1 — Tool options live in a docked sidebar tab beside page navigation (GUI)
+
+**Acceptance** (`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md` §A):
+
+- A second, independent left-hand `egui_tiles::Tree` (its own small pane
+  enum, e.g. `LeftPanel::{Pages, ToolOptions}`) with tabs
+  `[ Pages | Tool Options ]` — the page-thumbnail rail becomes a dock
+  panel, meeting the operator's literal ask ("docked with the page
+  navigation tab") rather than merging into the existing right-hand dock
+  (wrong side of the window) or hand-rolling a second, differently-styled
+  tab convention (reintroducing exactly the "doesn't match anything I've
+  seen" inconsistency decision 017 replaced) (§A.1).
+- Every tool's property-bar and status-strip content (TextEdit, AddText,
+  Measure) relocates into the docked pane; the floating `egui::Area`
+  strips (`pdfce-{text-edit,add-text,measure}-{propbar,status}`) are
+  **deleted outright**, not kept as a fallback — precedent directly on
+  point: Pass 18.4 retired `properties_window` the same way once
+  `DockPanel::Properties` existed, and decision 017 Amendment A #2 is
+  explicit that a float-or-dock dual mode is deliberately unsupported
+  (§A.5).
+- Tool Options auto-raises the moment a tool is armed (reusing the
+  existing `dock::activate` mechanism verbatim) and is **never** forced
+  back to `Pages` on disarm — it shows an empty-state caption instead
+  (§A.3).
+- An empty-state caption (through `ui_text`, R1) names which tools
+  populate the panel, so a first-session operator learns the
+  toolbar↔dock pairing before discovering it by trial (§A.3).
+- Every disclosure surface currently living in a floating Area — refusal
+  strip, disclosure strip, the TextEdit cross-run notice, Pass 15.2's live
+  reflow diagnostics, and the kept case-(b) Accept/Reject buttons
+  (MeasureCircular best-fit, derived-centerline confirm, Reflow) — has a
+  named destination in the docked pane; none is silently dropped in the
+  relocation (§A.4, R20).
+- An unresolved refusal badges the Tool Options **tab** itself, paired per
+  R84 (never colour alone) — without it, a refusal in a dock tab the
+  operator switched away from would regress versus the always-foreground
+  floating Area it replaces (§B.8's new finding, folded in here since it's
+  the same relocation).
+- Whether the new left `Tree` genericizes `DockBehavior<'a>` over its pane
+  type or duplicates a sibling `Behavior` impl is the engineer's
+  implementation-shape call, not decided by the ui-spec (§A.1).
+
+### Pass 34.2 — A selected ce dimension has properties you can reach (GUI)
+
+**Acceptance** (`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md` §C.11.1/§C.12):
+
+- A selection-driven per-ce-dimension section inside `DockPanel::Properties`,
+  appearing above the existing `/Info` form whenever
+  `doc.selected_dimension.is_some()` — not a new taxonomy bucket, and not
+  the Tool Options panel (Pass 34.1), since per-ce-dimension editing must
+  work with no tool armed, exactly like the existing position drag
+  already does.
+- The radius/diameter toggle becomes reachable AFTER placement — today it
+  exists only in the tool-armed propbar at draw time (`main.rs:13152-13166`);
+  an operator who placed a Radius ce dimension and wants Diameter
+  currently has no way to change it without deleting and redrawing. This
+  is the concrete, named gap behind the operator's "the ce dimensions I
+  add need to be editable as well."
+- Numeric `offset`/`text_along` `DragValue` fields alongside the existing
+  Pass 25.5/27.x position drag, writing the exact same `place_dimension`
+  call the drag already commits to — mirroring, not replacing, the drag.
+- The Group Manager's already-built unit / decimal-places / fraction /
+  drafting-standard / scale / layer-visibility controls move out of their
+  floating `egui::Window` (`main.rs:13552`) into the dock — closing R81's
+  own named remaining floating-window holdout.
+- Group-level fields (unit, decimal places/fraction, decimal marker,
+  drafting standard, scale, layer visibility) **stay group-only for v1** —
+  no per-ce-dimension override toggle yet (rule 3, progressive disclosure;
+  ui-spec §C.11.1's P2 deferral). Per-ce-dimension fields (position,
+  radius/diameter, and Pass 35.0's tolerance once it ships) get their own
+  controls. Because v1 offers no override for the group-only fields, there
+  is no inheritance ambiguity to disclose for them — nothing to
+  accidentally scope wrong.
+- `dock.rs`'s doc comment currently asserts "nothing else competed for the
+  word Properties" (`dock.rs:173`) — **this Pass makes that false** and
+  must correct both the doc comment and the tab's tooltip to "the
+  document's `/Info` metadata, OR the properties of whatever is currently
+  selected on the canvas" (ui-spec §C.12).
+
+### Pass 35.0 — ce-dimension tolerance and tolerance types (core + CLI + GUI)
+
+**Acceptance:** a new tolerance model in `pdfce-core` — **there is ZERO
+existing representation today**
+(`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md` §C.11
+item 1). Renders into the ce dimension's `/Contents` and baked `/AP`
+through the **one** shared regeneration path `regenerate_dimension_writes`
+(R92) — never a second regenerator; only the ONE affected ce dimension's
+`/AP` regenerates on a tolerance change, unlike a group-wide
+`DimStandard`/scale change, which regenerates every member (ui-spec
+§C.11.1). Persisted in the `/PieceInfo` sidecar (decision 011 §2.4's
+pattern) so it round-trips and stays editable. A `pdfce-cli` subcommand
+per CLAUDE.md rule 11. Lives on `DimensionRecord`, not on the immutable
+`DimensionKind` geometry enum — a display/documentation property layered
+on top of measured geometry, exactly parallel to how `Group` layers
+`NumberFormat` on top of `measured_points` (decision 011 §2.3).
+
+Two grounded facts for the record:
+
+1. **The tolerance-type list is sourced from the SolidWorks API, not
+   memory.** `C:\sw_api_docs\rag_optimized\swconst_enums.txt`'s
+   `swTolType_e` enum: `swTolNONE`, `swTolBASIC`, `swTolBILAT`,
+   `swTolLIMIT`, `swTolSYMMETRIC`, `swTolMIN`, `swTolMAX`, plus
+   `swTolFIT`/`swTolFITWITHTOL`/`swTolFITTOLONLY`, `swTolBLOCK`,
+   `swTolGeneral`. **First cut covers None / Basic / Bilateral (deviation)
+   / Symmetric / Limit / MIN / MAX.** The three FIT variants are
+   explicitly **OUT of the first cut** — they need ISO limits-and-fits
+   tables this project does not have — and must be **named as excluded**,
+   not silently dropped.
+2. **ISO 32000 has no tolerance representation to conform to.** Grepped
+   `iso32000__s__12.9.md` (`/Measure`) and `iso32000__s__12.5.6.7.md` (the
+   `/Line` annotation) for "toleran" — no hits in either. So the
+   sidecar-plus-baked-appearance hybrid is the only available home, the
+   same hybrid-storage pattern Pass 12.M2 established for scale/format.
+   Naming must be honest throughout: **pdfce draws SolidWorks-STYLE
+   tolerance notation, never claims SolidWorks-conformant** — the same
+   epistemic posture `DimStandard`'s own doc comment already takes toward
+   ISO 129-1.
+
+Proposed shape (engineer's to finalize against `pdfce-core`'s own
+conventions):
+
+```text
+enum ToleranceType {
+    None,
+    Symmetric { value: f64 },
+    Deviation { plus: f64, minus: f64 },
+    Limit { upper: f64, lower: f64 },
+}
+```
+
+**Sequencing note, per the ui-spec's own recommendation:** ships as its
+own Pass, independent of Pass 34.x's dock relocation, since it is
+materially larger, `pdfce-core`-touching work rather than GUI relocation
+(ui-spec's "Items for the engineer" list, and P1 item 9).
+
+### Pass 35.1 — Drag a ce dimension's extension lines to extend and retract them (core + CLI + GUI)
+
+**Acceptance:** new per-ce-dimension overshoot fields —
+`ext_a_overshoot: Option<f64>` / `ext_b_overshoot: Option<f64>` — on
+`DimensionKind::Linear`. `None` = today's only behaviour, the
+`DimStandard`-derived default; `Some(v)` = an operator override of this ce
+dimension's own witness-line length. Mirrors `offset`/`text_along`'s
+existing migration-safety pattern exactly (`group.rs:152-167`): a `None`
+default costs nothing on deserialize for every ce dimension authored
+before this field existed
+(`docs/ui_specs/tool-options-dock-and-ce-dimension-properties.md` §C.13).
+Drag handles are a small perpendicular tick/hash mark at the outer
+(overshoot) end of each witness line, in `DIMENSION_DRAG_COLOR` —
+visually distinguishable from the Pass 26.1 Bézier/node handles
+(filled/hollow circles, path-editing colour) and gated the same way the
+existing position drag is (`doc.selected_dimension` set), never colliding
+at the same click since the ce-dimension position drag already takes
+priority over object selection at that point. Once a witness line is
+overridden, a small "custom witness length" caption discloses the
+divergence from the group's `DimStandard`-derived proportion (rule 4;
+same pattern a future per-ce-dimension format override would need). Same
+sequencing note as Pass 35.0 — its own Pass, not folded into Pass 34.x.
+
 ### ★ Pass 33.0 — Reflow's AUTO-DETECTED wrap width inherits the damage a prior `edit-text` did to the block's bbox, and reports success while running text off the page (a DEFECT in shipped Pass 15.x; core + CLI + GUI)
 
 **Pass ID librarian-assigned 2026-08-05** (family 33, the next free
@@ -9162,6 +9415,13 @@ Pass 15.0/15.1/15.2 Shipped entries; `fixtures/synthetic/reflow/reflow.pdf`.
 > documentation-discipline observation, and CLAUDE.md rule 6 plus the
 > global documentation-first directive already carry the obligation; **if
 > a future session wants it enforceable, it is R150's to claim.**
+> **[NUMBER MOVED, 2026-08-05 (same-day filing): R150 was spent on a
+> DIFFERENT finding — the `GestureInterrupt::Commit` two-sided-mechanism
+> asymmetry filed alongside Pass 34.0 (Standing rules, below). This
+> anticipation was never itself a mint (its own text says "not minted as
+> a standing rule"), so nothing is renumbered — but if the "date and
+> label every contract statement" observation above is ever promoted to
+> an enforceable rule, it takes **R151**, not R150.]**
 
 **The original scheduling entry follows, unaltered.**
 
@@ -13898,6 +14158,33 @@ decision 025, (aq)–(au) from decision 026:**
   refusing reinstates the permanent-uneditability problem this entry's
   own default text names.
 
+**New this session (2026-08-05, decision 031) — one item:**
+- **(aw) Is `MeasureScale` allowed to keep an explicit Accept/Reject, as
+  the one named exception to "this goes the same with all tools"?** The
+  operator's request (filed as Pass 34.0 above) asks for click-out-commits
+  on every tool with no exception named. `pdfce-ui-specialist` (ui-spec
+  §B.7's new finding) recommends keeping `MeasureScale`'s explicit confirm
+  anyway — not because a back-calculated scale is inferred (it isn't; it
+  is exactly reproducible from what the operator typed, so by the
+  authored-vs-inferred test alone it would read as an ordinary case-(a)
+  implicit commit) but on a **third, distinct ground: blast radius**. A
+  scale commit changes the DISPLAYED VALUE of every other ce dimension in
+  the group simultaneously, including ones off-screen the operator is not
+  looking at (`main.rs:13413`'s own comment already says this out loud).
+  Auto-committing that on a stray click-out is a materially different
+  risk from auto-committing one text edit or one newly placed ce
+  dimension. See decision 031 for the full three-way classification (case
+  (a) direct manipulation / case (b) pdfce-inferred / the new blast-radius
+  axis) and its cross-reference to CLAUDE.md rule 4 as narrowed by
+  decision 024 §4.4. **Default, per the recommendation: keep
+  `MeasureScale`'s explicit confirm** — this is a deviation from the
+  operator's literal "this goes the same with all tools" and is being
+  surfaced to him rather than decided silently, per the mitigating
+  argument that once the confirm lives in a fixed dock pane (Pass 34.1) it
+  is no longer the "accept/reject box somewhere on the screen" the
+  operator actually objected to (decision 024 §4.1's own diagnosis of the
+  original complaint).
+
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
   not-yet-granted authorization (see "In progress" GIT STATUS above).
@@ -16508,6 +16795,17 @@ decision 025, (aq)–(au) from decision 026:**
   **029** was subsequently minted for the crate-partitioned-sessions
   question. A Pass 33.0 fix record, if one is written, takes **030**.
   Nothing else in this entry changes.]**
+  **[SUPERSEDED AGAIN, 2026-08-05 (this filing): decision 030 was itself
+  minted for the plugin-preservation question, not for Pass 33.0 — and
+  decision 030's own §9 item 2 already moved this reservation once, from
+  030 to 031, for exactly this reason. This filing spends 031 on decision
+  031 (the implicit-commit-boundary / MeasureScale blast-radius question,
+  opened alongside Pass 34.0's defect fix), per the engineer's explicit
+  dispatch — so the reservation moves a second time: a Pass 33.0 fix
+  record, if one is written, now takes **032**. Nothing else in this entry
+  changes. Also owed and not yet done by this filing: decision 030 itself
+  has no `ARCHITECTURE.md` §12 dated ledger entry as of this note — see the
+  §12 entry this filing DOES add, which covers both 030 and 031.]**
 
 - **R149 — A manipulator that is not a LOCATION on the drawing must not
   be snapped to the drawing (2026-08-05, continuation 87;
@@ -16577,6 +16875,89 @@ decision 025, (aq)–(au) from decision 026:**
   working-tree state. It was runnable in this filing's harness; that does
   not extend to anything hard rule 8 covers, and no claim about the
   repository is made here.)*
+
+- **R150 — When a substrate scaffolds a two-sided mechanism and ships one
+  side live with the other as an empty stub, every later Pass that
+  extends the LIVE side must state what the STUB side does for its case —
+  otherwise the stub silently becomes the answer (2026-08-05;
+  librarian-assigned; process/correctness rule, promoted from the
+  `GestureInterrupt::Commit` defect filed as Pass 34.0).** A discard/
+  commit pair, an open/close pair, an acquire/release pair — any mechanism
+  designed with two complementary halves — can ship with only one half
+  wired and the other left as a deliberate, documented placeholder for a
+  later Pass. That is a reasonable way to sequence work. **What is not
+  reasonable is for three separate LATER Passes to each extend the live
+  half and none of them to touch, or even name, the stub half.**
+  *Instance (Pass 34.0):* `commit_active_gesture` (`main.rs:5299`) has been
+  a literal `{}` since Pass 12.0, and its own doc comment named exactly
+  which Pass was supposed to fill it in. Passes 14.3, 16.2 and 12.M2b each
+  added a new disjunct to `current_gesture_interrupt`'s `Discard` side —
+  none added anything to `Commit`. The result was not merely an unfinished
+  feature; it was an operator-authored edit silently destroyed by any
+  action outside a small allow-list (page navigation, save, undo), with no
+  disclosure — CLAUDE.md rule 4's failure mode, arriving through a gesture
+  rather than a dialog, three Passes running.
+  **The rule, stated so it is checkable at review time:** when a Pass's
+  diff touches one arm of a scaffolded two-sided mechanism, the Pass's own
+  acceptance criteria (or its ROADMAP entry, if the librarian is filing
+  after the fact) must say **in words** what the OTHER arm does for the
+  case just added — even if the answer is "nothing yet, tracked as
+  &lt;X&gt;." A silent stub is indistinguishable from a considered decision
+  until someone reads the function body; a stated one is checkable by
+  reading the Pass's own text.
+  **Why this is a distinct rule from the dead-guard-clause finding
+  (`D:\dev\rag\rust\dead_guard_clause_behind_a_filter_the_guarded_case_cannot_pass.md`,
+  R-INV-4/`Tw`).** That finding is about ORDERING — a precondition check
+  placed after a search step never fires for the cases it exists to guard.
+  This rule is about COMPLETENESS of a two-sided mechanism across separate
+  Passes over time — the guard here fires exactly as intended every time;
+  the defect is that its counterpart was simply never built, and nothing
+  in the process required anyone extending the built half to notice or
+  say so. Different shape, so filed as its own rule rather than folded
+  into the existing one.
+  Cross-references CLAUDE.md **rule 4** (fuzzy, never sneaky — the
+  disclosure obligation this rule's instance violated), **R146**
+  (librarian-originated from a five-commit filing gap — the sibling
+  process rule for "documentation forgot to record something," where this
+  rule is "code forgot to finish something"), **R96** (a named refusal
+  must be reachable and tested firing).
+  **Order note against three OTHER contingent rule candidates already on
+  record, none minted by this filing:** decision 030 §6.2(a) (the
+  `EditSession`-bypass exception rule) and §4.5 (the
+  plugin-host-must-live-in-a-shell rule) are both contingent on the
+  operator accepting decision 030's guardrail recommendation; the
+  continuation-88 "date and label every contract statement" documentation-
+  discipline observation (★ Pass 33.0 entry, above) was floated as
+  "R150's to claim" before this filing but was **never itself minted**
+  ("not minted as a standing rule" in its own words). **R150 is spent
+  here, on the gesture-asymmetry finding above** — a librarian-assigned
+  promotion from a filed defect (Pass 34.0), not contingent on anyone's
+  acceptance, and filed first. **R151 is therefore the next free number
+  for WHICHEVER of the three contingent candidates is accepted or
+  promoted first** — this filing does not pre-allocate R151/R152 among
+  them; the ordering is decided at whichever future filing mints first,
+  read against the live ceiling (R106/R133), not fixed in advance here.
+
+  **Ceiling is now R150** (was R149 at continuation 87's filing; R148 at
+  86's). **R150 is librarian-originated from this filing's own Pass
+  34.0 defect record.** **This filing also mints decision record `031`**
+  — the implicit-commit-boundary / MeasureScale blast-radius question;
+  see
+  `docs/decisions/031-implicit-commit-boundary-and-the-measurescale-blast-radius-exception.md`
+  and `ARCHITECTURE.md` §12 — **so `032` is now the next free decision
+  number** (decision 030, minted between continuation 87 and this
+  filing on a separate track, spent 031's prior reservation first — see
+  the R148 amendment above for the full chain). **This filing also mints
+  Pass families 34 and 35** (Passes 34.0/34.1/34.2, 35.0/35.1), so the
+  Pass-family ceiling moves from **34** to **36 next free**. **This
+  filing also mints open operator question `(aw)`** (Open operator
+  questions, below), so the question ceiling moves from **(av)** to
+  **(aw)**.
+  **`tools/check-ledger-numbers.py --stats` should be re-run after this
+  commit** — the rule, decision, Pass-family and question ceilings all
+  moved in this single filing, and per R106/R133 the live ceiling should
+  be read, not assumed, before the next number is minted on top of this
+  one.
 
 ## Update protocol
 

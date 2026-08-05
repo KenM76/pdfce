@@ -67,10 +67,17 @@ pub enum ScriptTool {
     Obj,
     /// The linear measure tool — the ce-dimension authoring surface.
     Measure,
+    /// The Edit-Text tool (Pass 34.0) — in-place editing of existing page text.
+    Text,
+    /// The Add-Text tool (Pass 34.0) — authoring brand-new page content.
+    AddText,
 }
 
 /// One step of a scripted input run — see [`Script`].
-#[derive(Clone, Copy, Debug, PartialEq)]
+// `Copy` was dropped in Pass 34.0 when `Text(String)` landed. Nothing needed
+// it: `Script::advance` clones one step per frame, and that path is off unless
+// `PDFCE_DIAG_SCRIPT` is set.
+#[derive(Clone, Debug, PartialEq)]
 pub enum Step {
     /// Move the pointer to a screen position, in egui points.
     Move(f32, f32),
@@ -112,6 +119,22 @@ pub enum Step {
     /// Burn a frame. Used to let a texture, a provider rebuild, or egui's own
     /// click detection settle between steps.
     Wait,
+    /// Type literal text into whatever has keyboard focus (`type:hello`).
+    ///
+    /// Added by Pass 34.0, because without it the harness could not reach the
+    /// question that Pass exists to answer. "Does clicking away commit what I
+    /// typed" needs three things — arm the text tool, type, click elsewhere —
+    /// and the script could express only the third. A defect about typed text
+    /// that can only be checked by typing on the operator's own keyboard is a
+    /// defect that gets checked by asking him, which is exactly what the
+    /// harness exists to avoid.
+    ///
+    /// Injected as one `egui::Event::Text`, which is what a real keystroke
+    /// produces after IME/layout translation — so this exercises the same
+    /// branch of the tool's composer that a human does. Semicolons cannot
+    /// appear in the payload (they are the step separator); nothing this is
+    /// used for needs one.
+    Text(String),
 }
 
 /// A scripted sequence of input events, one step per frame, injected into
@@ -169,8 +192,12 @@ impl Script {
     }
 
     /// The step for this frame, consuming it. `None` once the script is done.
+    ///
+    /// Clones rather than copies: [`Step::Text`] carries a `String` (Pass
+    /// 34.0), so `Step` is no longer `Copy`. The clone is one short string per
+    /// frame in a diagnostic build path that is off by default.
     pub fn advance(&mut self) -> Option<Step> {
-        let step = self.steps.get(self.next).copied();
+        let step = self.steps.get(self.next).cloned();
         if step.is_some() {
             self.next += 1;
         }
@@ -198,10 +225,14 @@ fn parse_step(s: &str) -> Option<Step> {
         "escape" => Some(Step::Escape),
         "wait" => Some(Step::Wait),
         "panel" if rest.trim() == "groups" => Some(Step::Groups),
+        // NOT `rest.trim()`: leading and trailing spaces are legitimate text.
+        "type" if !rest.is_empty() => Some(Step::Text(rest.to_owned())),
         "tool" => match rest.trim() {
             "none" => Some(Step::Tool(ScriptTool::None)),
             "obj" => Some(Step::Tool(ScriptTool::Obj)),
             "measure" => Some(Step::Tool(ScriptTool::Measure)),
+            "text" => Some(Step::Tool(ScriptTool::Text)),
+            "addtext" => Some(Step::Tool(ScriptTool::AddText)),
             _ => None,
         },
         _ => None,
