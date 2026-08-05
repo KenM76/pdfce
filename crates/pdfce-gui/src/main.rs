@@ -5024,10 +5024,22 @@ impl PdfceApp {
             // *effective* rotation — which may be inherited from an
             // ancestor page-tree node — so two clicks of "turn right"
             // always land 180° from where they started, whatever the
-            // file's structure. A refusal is impossible for a ±90 turn
-            // on a page the view is already displaying, so the result is
-            // deliberately discarded rather than reported through a
-            // channel the operator would never see.
+            // file's structure.
+            //
+            // The result used to be discarded, behind a comment claiming
+            // "a refusal is impossible for a ±90 turn on a page the view
+            // is already displaying". That reasoned about the ANGLE and
+            // the page index and missed the certification gate the very
+            // next sentence of the same comment named: `rotate_pages`
+            // opens with `check_certification()?`, so on a certified
+            // document (enforced DocMDP, §12.8.4 Table 258) it refuses —
+            // and the operator got a button that did nothing and said
+            // nothing, which is indistinguishable from a missed click.
+            //
+            // Found by auditing the R145 pattern (`Result<(), E>` and
+            // discard-to-compile) after three instances of it were fixed
+            // in `d8b9735`. This one had survived because a comment
+            // asserted it could not happen.
             // Rotation now goes through the batch path even for one
             // page: `rotate_pages` is the certification-gated entry
             // point, and having the toolbar bypass a gate the selection
@@ -5043,7 +5055,9 @@ impl PdfceApp {
                 } else {
                     doc.selection()
                 };
-                let _ = doc.session.rotate_pages(&pages, delta);
+                if let Err(err) = doc.session.rotate_pages(&pages, delta) {
+                    doc.pending_note = Some(ui_text::rotation_refused(&err.to_string()));
+                }
                 doc.refresh_pages();
             }
             // Undo/redo can change the page COUNT now, so the selection

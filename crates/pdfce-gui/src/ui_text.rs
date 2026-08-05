@@ -3635,6 +3635,27 @@ a drawing object from the page — it is NOT redaction (it does not securely rem
 use Redact for that)."
 }
 
+/// The note shown when a page rotation is refused.
+///
+/// # Why this string had to exist
+///
+/// The rotate buttons discarded their outcome behind a comment asserting
+/// "a refusal is impossible for a ±90 turn on a page the view is already
+/// displaying" — while the SAME comment named `rotate_pages` as the
+/// certification-gated entry point. Both cannot be true: on a certified
+/// document (an enforced DocMDP transform, §12.8.4 Table 258) the rotation is
+/// refused, and the operator got a button that did nothing and said nothing.
+/// `pdfce-core`'s own `an_enforced_certification_refuses_structural_edits_by_name`
+/// asserts that exact refusal, so the impossibility claim was contradicted by
+/// a test already in the tree.
+///
+/// Quotes the engine's own reason rather than paraphrasing it, so a refusal
+/// this GUI has never seen before still arrives intact instead of being
+/// flattened into "could not rotate".
+pub fn rotation_refused(reason: &str) -> String {
+    format!("The page could not be rotated. {reason}")
+}
+
 /// The transient note shown after a canvas object is deleted (Pass 9c-min).
 pub fn vector_object_deleted() -> &'static str {
     "Deleted the selected object. This is undoable, and is NOT redaction — to securely remove \
@@ -5238,6 +5259,42 @@ box: {}",
                 .map(|c| format!("U+{:04X} {c:?}", *c as u32))
                 .collect::<Vec<_>>()
                 .join(", ")
+        );
+    }
+}
+
+/// Refusal-message contracts.
+///
+/// A separate module from the two above so it needs none of their fixtures
+/// (a font stack, an egui context) to say something about a plain `String`.
+#[cfg(test)]
+mod refusal_tests {
+    /// The rotation refusal must carry the ENGINE's reason through rather than
+    /// flatten it.
+    ///
+    /// The defect this guards is not a typo — it is a later, well-meant
+    /// simplification to a fixed string. `rotate_pages` can refuse for reasons
+    /// this GUI has never enumerated (an enforced DocMDP today, something else
+    /// tomorrow), and a fixed "could not rotate" would tell an operator facing
+    /// a certified document nothing about why, or that the file being signed
+    /// is the cause.
+    ///
+    /// This whole string exists because the call site previously discarded its
+    /// `Err` behind a comment asserting the refusal was impossible — while
+    /// `pdfce-core`'s `an_enforced_certification_refuses_structural_edits_by_name`
+    /// asserted that exact refusal. The claim was already contradicted by a
+    /// test in the tree.
+    #[test]
+    fn a_rotation_refusal_quotes_the_engines_own_reason() {
+        let reason = "this document is certified, and its author did not permit page changes";
+        let msg = super::rotation_refused(reason);
+        assert!(
+            msg.contains("certified"),
+            "the engine's reason must survive into the operator's message: {msg}"
+        );
+        assert!(
+            msg.contains("could not be rotated"),
+            "and it must still say what failed: {msg}"
         );
     }
 }
