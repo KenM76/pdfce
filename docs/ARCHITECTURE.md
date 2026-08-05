@@ -5654,3 +5654,203 @@ with a forward pointer.
     should be active for this selection" is to ask a core type. **It must
     not** — the contextual-tab dispatcher is a pure function in
     `pdfce-gui`.
+
+- **2026-08-04 (continuation 82) — Decision 025 filed: the subpath rung
+  and the unified level ladder.** Source:
+  `docs/decisions/025-the-subpath-rung-and-the-unified-level-ladder.md`
+  (1,744 lines), written against the `ROADMAP.md` "Level-model
+  reconciliation" flag raised at continuation 81. **Resolves that flag.**
+  Extends decision 023 (the Obj tool's level navigation); **corrects
+  five factual statements in it** without editing it (append-only, per
+  `docs/decisions/README.md`); adopts 023's container half unchanged.
+  - **The decision, in one sentence:** the **subpath is a genuine rung**
+    and it goes where the measurement put it — **between object and
+    node** — and the double-click/Escape collision between decision 023
+    and Pass 25.1 **dissolves the moment descent stops being two
+    mechanisms and becomes one state variable**. The ladder is
+    page → container(s) → object → subpath → node, walked by a single
+    `LevelPath` standing position.
+  - **The measurement the argument had to survive, and it is the whole
+    reason the rung exists.** On the operator's own SolidWorks export,
+    page 1 carries ~5,900 objects and object **5870 is one stroked path
+    holding 1,194 subpaths / 6,681 anchors** — a 550 × 500 pt isometric
+    view that is a single object. Per-object hit testing selects a whole
+    drawing view for any click. Decision 023 §0 asserted that a
+    flattened CAD plot has **two** levels below the page (*"objects,
+    nodes — there is nothing to descend into"*); it has **three**, and
+    the omitted one is the only one that makes the file selectable.
+  - **Five statements in decision 023 are now factually WRONG** — not
+    incomplete; wrong in the sense that a reader acting on them would
+    build the wrong thing. Summarised here because the decision log is
+    the audit trail a future session reads first: (1) §1.3's specified
+    readout string *"this object is not inside a group (already at
+    object level)"* and §7.3's criterion **C6** that requires it — C6
+    would **certify a false statement** on the operator's own files;
+    (2) §0's two-levels-on-a-CAD-plot enumeration; (3) §1.3's *"that is
+    the file's structure, not a pdfce limitation"* — it **was** a pdfce
+    limitation, the third instance of the R111 paint/select asymmetry,
+    and Passes 25.0/25.1 removed it; (4) §4.6's node-ceiling arithmetic
+    (superseded rather than wrong in itself — the node rung shows **one**
+    entered subpath's anchors, ≈6 per part on the measured page, not
+    41,208 handles for a whole group); (5) `LeaveGroupLevel` renamed
+    **`LeaveLevel`**, a misnomer at three of five rungs. Two further
+    items are **narrowed rather than wrong**: open question (z)'s "three
+    levels" is four-plus, and §1.2's heuristic-grouping refusal stands
+    and is upheld — the subpath rung passes all three of its own grounds.
+  - **The concrete fix, and it is a deletion.**
+    `Action::ClearCanvasSelection` (`main.rs:4878-4886`) clears the
+    selection set **and** sets `entered = None` — two rungs, or five,
+    collapsed into one Escape press, contradicting decision 023 §3.2's
+    own testable property that *"Escape walks all the way out, one step
+    per press, and never skips a step."* Delete `doc.entered = None`;
+    add `Action::LeaveLevel` at **Escape slot 2**, above `ExitTool`.
+  - **The sharpest new hazard: `DeleteWouldMoveNextSubpath` (§5.5) —
+    decision 023 §1.4's form-aliasing trap, one object space down.**
+    After `h`, `close_subpath` sets `pa.current = pa.subpath_start`; a
+    following `l`/`c`/`v`/`y` then opens a subpath whose `start` is
+    **inherited from the closed subpath and carried by no operand of its
+    own**. Excise the predecessor and the follower's start point
+    **silently moves**. The edit is byte-minimal, byte-verifiable, and
+    passes every round-trip check — **§5's minimal-diff discipline
+    cannot catch it.** Only a named refusal can. Pass 25.2 covers it
+    conservatively via its structure guard; the named refusal is still
+    owed (question (ap)).
+  - **A core-model gap this record names and pdfce has not closed:
+    `Subpath` carries no byte span.** `PathObject` has `tokens:
+    TokenRange` and `bytes: ByteSpan`; `Subpath` has `start`,
+    `segments`, `closed`. So `move_subpath` is **not expressible**
+    against today's core model — not hard, *not expressible*. Filed as
+    standing rule **R134**, with Pass 25.2's re-derivation guard
+    recorded as a deviation that satisfies the intent for excision only.
+  - **Pass plan:** 26.0 (the ladder, node rung, Escape fix, readout
+    matrix, subpath click-cycle), 26.1 (subpath verbs), 26.2 (level
+    survival across an edit). **Pass 23.2 SPLITS** — core+CLI half
+    stands, GUI half superseded by 26.0, criterion C6 amended. **Pass
+    23.3's dependency changes from 23.2 to 26.0**, a genuine unblocking.
+    22.0 still first.
+  - **Standing rules R130–R134; open operator questions (ak)–(ap).**
+  - **Shipped-ahead-of-filing deviation, recorded rather than
+    smoothed:** Passes 25.2 and 25.4 delivered parts of 26.1 and 26.0
+    respectively **before this record was registered** — see the
+    `ROADMAP.md` Pass 26.0–26.2 entry's deviation table.
+  - **No §3/§4 body-section update this filing.** Nothing of the ladder
+    has shipped; `LevelPath` is `pdfce-gui` state and correctly never
+    reaches §4. The one §4 obligation this record creates is R134's span
+    on `Subpath`, filed as **owed** rather than written into §4 as if it
+    existed — §12 is the audit trail, §4 describes shipped reality.
+    Pass 25.0's `vector::hit_test_subpaths`/`subpath_bounds` and Pass
+    25.2's `plan_delete_subpath` **are** shipped core surface and remain
+    owed a §4 line at the next §3/§4 sync — carried forward from
+    continuation 81, now with more on it.
+
+- **2026-08-04 (continuation 82) — Decision 026 filed: linear
+  ce-dimension geometry, the offset model, and drafting standards.**
+  Source:
+  `docs/decisions/026-linear-ce-dimension-geometry-offset-and-drafting-standards.md`
+  (1,529 lines), written against the operator's verbatim 2026-08-04
+  report that a **ce dimension** constrained to Horizontal *"shows at an
+  angle."* Extends decision 011 (the scaled-measurement/dimensioning
+  tool); amends nothing. **Rule 15 applies throughout: this record and
+  this entry concern ce dimensions — the ones pdfce authors — never pdf
+  dimensions.**
+  - **★ The root cause is architecturally interesting and is what R136
+    was written from: a deliberate, documented PREVIEW/COMMIT
+    DIVERGENCE, not a forgotten parameter.**
+    `LinearPick::preview_segment` drew the **constrained** segment while
+    `LinearPick::commit_point` stored the **raw** second pick —
+    justified in the module's own doc comment as byte-equivalence with
+    the CLI. The stored-raw decision is **correct and was kept** (the
+    raw point anchors the second extension line); what was never done is
+    teach the appearance path that `b` is a *measured* point rather than
+    a *dimension-line endpoint*. The operator was shown a horizontal
+    line, clicked, and got a diagonal one. **The justification covered
+    the value; nobody checked the drawing.**
+  - **The model change is one signed scalar, chosen so the migration is
+    free.** `offset: f64` on `DimensionKind::Linear` — signed,
+    page-space points, along a canonicalised normal, based at `a`,
+    default **`0.0`**. `0.0` reproduces the previously committed
+    geometry exactly for an already-axis-aligned pick **and** reproduces
+    the preview the operator was shown for every pick. Pass 27.1 added
+    the parallel half, `text_along`, on the same additive pattern.
+  - **★ A latent DATA-LOSS CLIFF in `dimension/sidecar.rs`, named by the
+    record and initially shipped past by the Pass.** `deserialize_model`
+    gated on `Version == SIDECAR_VERSION` with **exact equality**; any
+    mismatch returned `None`, the caller started a **fresh model**, and
+    every group, every calibrated scale and every membership was
+    **silently gone** — while the `/Line` annotations kept rendering, so
+    nothing looked wrong until the next save made the loss permanent.
+    Reading is now a **range**; writing over a newer version is a
+    **named refusal** (`EditError::SidecarWrittenByNewerBuild`) checked
+    at all seven mutation sites **before** any mutation. Filed as
+    **R138**, with scope generalised past sidecars to any versioned
+    private data pdfce writes. Same family as
+    `DeleteWouldMoveNextSubpath` above: a byte-minimal operation that
+    destroys unrecoverable operator work, catchable only by a named
+    refusal.
+  - **★ A standards misattribution corrected before any code was
+    written.** The natural assumption — **ASME Y14.5** — is **wrong**:
+    Y14.5 is the GD&T/tolerancing standard. Arrowheads, line conventions
+    and lettering live in **ASME Y14.2**. On the ISO side, three rules
+    that could easily have been treated as convention are verified
+    *"shall"* clauses of **ISO 129-1:2018 cl. 4.1.1**: text above an
+    **unbroken** line; vertical text read from the right with
+    orientation determined at the centre of the dimension; and **a comma
+    as the decimal marker**. The widely-taught **"30° ambiguous zone" is
+    NOT in the 2018 edition** — folklore carried from ISO 129:1985.
+  - **The comma forced a design revision, and the fix is the interesting
+    part.** ISO's mandated comma is expressible **portably** via ISO
+    32000-1 §12.9 Table 263's `/RD`, so it can be governed by the
+    drafting standard **without** breaking the `/Measure` agreement
+    contract — provided `/RT` is set alongside it, **because `/RT`'s own
+    spec default is also a comma** and every grouped number would
+    otherwise render `1,234,56`. Generalised into **R139**: the standard
+    governs how a ce dimension is **drawn**, never what it **measures**,
+    and a presentation rule that cannot be projected into Table 263 is
+    not implemented (ANSI inch leading-zero suppression is the live
+    example, question (at)).
+  - **★ Side-finding, same family, otherwise invisible: pdfce's own
+    ce-dimension label and its own `/Measure` mirror can ALREADY
+    disagree.** pdfce prints `3.10 m` (fixed places, `units.rs:283-285`)
+    while the mirrored dict omits `/FD`, whose default `false` permits a
+    conforming reader to print `3.1 m` (`measure_dict.rs:115-123`).
+    `NumberFormat::format`'s doc comment claims the two *"agree by
+    construction."* **They do not** — an instance of R93, found by
+    reading rather than by a failure.
+  - **What pdfce may NOT claim — the claim-bearing-copy discipline
+    applied to a drafting claim.** ISO 129-1:2018's normative **Annex A
+    is paywalled**, so pdfce's ISO geometry is convention-informed.
+    Operator-facing strings read **"ANSI / ASME (US)"** and **"ISO
+    (international)"** — never "ASME Y14.5", "ASME Y14.2", "ISO 129-1",
+    never "conformant" — asserted against `ui_text` so a copy edit
+    cannot reintroduce a claim. Whether to purchase the standard is
+    question (au).
+  - **Pass plan:** 27.0 (geometry + offset + the sidecar gate,
+    **SHIPPED** `5e93bec` → `104162d`), 27.1 (placement drag, **SHIPPED**
+    `7ed90a2`), 27.2 (ANSI/ISO standards, **NOT STARTED — the
+    outstanding half of the report**), 27.3 (text-along, **largely
+    ABSORBED by 27.1**; see question (aq)).
+  - **Standing rules R135–R139; open operator questions (aq)–(au), of
+    which (aq) is ANSWERED — SolidWorks semantics** (both halves of the
+    placement from one drag, measured points pinned; sourced from the
+    operator's own SolidWorks API RAG, `IModelDoc2.AddDimension2`'s
+    *"text-placement point"*).
+  - **A process failure worth the decision log's space, because R141 was
+    written from it:** Pass 27.0 was **declared shipped with criterion
+    C6 unmet** — the very sidecar gate this record had already named as
+    a latent data-loss cliff. Caught by an autonomous post-ship check,
+    not by review; completed the same day (`104162d`) and filed as
+    *"Pass 27.0 completing C6"*, not as a new Pass.
+  - **§4 body-section obligation, owed and named:**
+    `DimensionKind::Linear` has gained `offset` and `text_along`, and
+    `EditError` has gained `SidecarWrittenByNewerBuild` — **shipped core
+    surface**, so §4 is now behind on the dimension model as well as on
+    Pass 25.x's vector surface. Both go in at the next §3/§4 sync.
+
+- **2026-08-04 (continuation 82) — Forward pointer on decision 023's
+  ledger entry (above, continuation 80).** Decision 023's entry is **not
+  edited** (append-only); readers of it must also read **decision 025
+  §9**, which corrects **five** of its statements as factually wrong —
+  including its acceptance criterion **C6** and a specified UI string
+  that would ship a false claim on the operator's own files — and
+  narrows two more. Decision 023 remains authoritative for its
+  **container half**, which decision 025 adopts unchanged.

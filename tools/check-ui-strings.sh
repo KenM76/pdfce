@@ -100,7 +100,36 @@ for file in "$SRC_DIR"/*.rs; do
                 next
             }
 
-            # exclusion 4: comment-only lines, and explicit exemptions.
+            # exclusion 4: the body of a `diag::trace(...)` call.
+            #
+            # These are stderr diagnostics, never operator copy: the `diag` module
+            # own contract says so in as many words, and nothing it emits reaches
+            # the interface. They are excluded as a CATEGORY rather than by
+            # tagging each one, for two reasons: the offending literal sits
+            # inside a multi-line `format!`, where a trailing
+            # `// ui-text-exempt:` cannot reach it and a comment block above
+            # would exempt the `diag::trace(` line rather than the string; and
+            # a rule that has to be re-stated at every call site is a rule that
+            # will be forgotten at the next one.
+            #
+            # Tracked by PAREN depth, so the skip ends exactly where the call
+            # does and a real operator string on the following line is still
+            # caught. Deliberately NOT keyed on `format!` alone, which would
+            # excuse every formatted string in the crate.
+            if (in_diag) {
+                depth_diag += gsub(/\(/, "(", line)
+                depth_diag -= gsub(/\)/, ")", line)
+                if (depth_diag <= 0) { in_diag = 0 }
+                next
+            }
+            if (line ~ /diag::trace\(/) {
+                in_diag = 1
+                depth_diag = gsub(/\(/, "(", line) - gsub(/\)/, ")", line)
+                if (depth_diag <= 0) { in_diag = 0 }
+                next
+            }
+
+            # exclusion 5: comment-only lines, and explicit exemptions.
             #
             # An exemption counts either on the offending line itself, or
             # anywhere in the contiguous comment block immediately above it.

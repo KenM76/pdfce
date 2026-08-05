@@ -81,6 +81,403 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Gate record for the seven Passes filed in continuation 82 (25.2, 25.3, 25.4, 25.5, 25.6, 27.0, 27.1) — measured ONCE, at `9a0c093` — 2026-08-04
+
+**Why this is a session-level block and not seven per-Pass lines.** All
+seven Passes below shipped in one continuation and the suite was run
+**once, at the end**, against `9a0c093` — the tip of `pass-8-redaction`,
+which is the tip of everything filed here. Attributing that single
+measurement to any one Pass would be a small fiction: no per-Pass
+before/after test deltas were taken this session, so none are claimed.
+What is on record is that the whole seven-Pass stack is green together.
+(This amends the original continuation-82 filing, which recorded that
+test and gate results had **not** been reported to the librarian and
+were therefore not written down. They have now been reported and
+independently spot-verified; see the amendment footer on
+`SESSION_LOG.md`'s continuation-82 entry.)
+
+**Measured at `9a0c093` (operator-reported, 2026-08-04):**
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | **1,878 passing, 0 failing, across 42 test binaries** |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `cargo tree -p pdfce-core` | no `egui` / `eframe` / `winit` / `wgpu` |
+| `cargo tree -p pdfce-render` | no `egui` / `eframe` / `winit` / `wgpu` |
+| Packaging smoke test | **not owed** — no packaging change this session |
+
+**The load-bearing invariant (CLAUDE.md rule 2 / `ARCHITECTURE.md` §3)
+is intact**: neither `pdfce-core` nor `pdfce-render` acquired a GUI or
+windowing dependency across seven Passes, five of which touched the GUI
+crate. This matters most for Passes 25.4/25.5/25.6/27.1, which added
+canvas interaction (Alt+click subpath cycling, ce-dimension drag,
+ce-dimension delete, three-click ce-dimension authoring) — the kind of
+work most likely to leak an egui type into core, and it did not.
+
+**Scope limits on this record, stated rather than glossed:**
+
+- **Two gates were NOT reported and are NOT recorded as passing:**
+  `tools/check-ui-strings.sh` and `tools/check-ledger-numbers.py`.
+  Continuation 78 ran both; continuation 82's report covers only the
+  four gates tabled above. Treat the two scripts as **unverified since
+  `31d2fdc`**, not as green.
+- **No per-Pass deltas.** The prior verified count was continuation 78's
+  **1,806 at `31d2fdc`**; the arithmetic difference is **+72 tests over
+  27 commits**, but that is a stack-level figure and must not be split
+  across the seven Passes after the fact.
+- A green suite at `9a0c093` says nothing about any later commit. Re-run
+  before the next ship (R133's sibling discipline: verify against the
+  **branch**, not a worktree — three of the seven Passes were built in
+  pinned worktrees this session, and the refreshed backup bundle records
+  six live `worktree-agent-*` refs — see the running git-status/backup
+  ledger bullet under **Open operator questions**, continuation-82
+  amendment).
+
+### Pass 27.0 — Constrained ce-dimension geometry, real extension lines, and the `offset` field (decision 026 §2/§3; core + CLI) — **DECLARED SHIPPED BEFORE ITS CRITERIA WERE MET; COMPLETED the same day** — 2026-08-04, chain `5e93bec` → `104162d`
+
+**The operator's report, verbatim:** *"when horizontal or vertical is
+selected the dimension line should show in the appropriate direction…
+it shows at an angle."*
+
+**Root cause, verified in the shipped code rather than inferred**
+(decision 026 §1.1): `author.rs::leader_endpoints` returned the two
+picked points **verbatim**, and `draw_linear` stroked straight between
+them. `AxisConstraint` was consumed by `measured_length` and by nothing
+else in the appearance path — so a **ce dimension** could report a
+correct horizontal value on a line drawn diagonally.
+
+**★ The framing decision 026 sharpened, and it is the reusable half:
+this was a PREVIEW/COMMIT DIVERGENCE, not a forgotten parameter.**
+`LinearPick::preview_segment` drew the *constrained* segment while
+`LinearPick::commit_point` stored the **raw** second pick — a divergence
+introduced for a good reason (CLI byte-equivalence), documented honestly
+in the module's own doc comment, and still a bug. Storing the raw `b` is
+**correct and was kept**: `b` anchors the second extension line, which is
+exactly what the fix needed. What was wrong is that the appearance path
+had never been taught that `b` is a *measured* point rather than a
+*dimension-line endpoint*. The operator was shown a horizontal line,
+clicked, and got a diagonal one.
+
+**What shipped.**
+- New `axis_frame` + `linear_geometry` in `dimension/author.rs` — the
+  dimension line is derived in the ce dimension's own frame
+  (direction `d`, normal `n`), not from the raw picks.
+- **INVARIANT, tested as a property over a spread of point pairs ×
+  constraints × offsets:** the drawn dimension-line length equals
+  `kind.measured_points()`. The spread matters — the old code was
+  *correct whenever the picks happened to be axis-aligned*, so a
+  fixture-shaped test would have passed against the defect.
+- **Real extension lines**, replacing the 4-point perpendicular ticks
+  that never reached anything. Each is **omitted** (not clamped, not
+  drawn zero-length) when its span is shorter than the gap.
+- `offset: f64` on `DimensionKind::Linear`, signed, page-space points,
+  along a canonicalised normal, based at `a`, **default `0.0`** —
+  chosen because `0.0` reproduces the committed geometry exactly for an
+  already-axis-aligned pick *and* reproduces the preview the operator
+  was shown for every pick, which is what made the sidecar migration
+  free.
+- Gap and overshoot constants carry **"CONVENTION, NOT MANDATED"** in
+  their doc comments — a reviewer can tell pdfce's taste from a
+  standard's requirement by reading `author.rs` alone (the discipline
+  decision 026 E11 later generalises).
+- CLI: `dimension-add --offset <pt>` (default `0`).
+
+**★ THE PROCESS DEFECT, RECORDED BECAUSE IT IS THE POINT OF ACCEPTANCE
+CRITERIA: `5e93bec` was declared shipped while decision 026's criterion
+C6 was unmet.** C6 requires that a sidecar whose `/Version` **exceeds**
+`SIDECAR_VERSION` produce `SidecarWrittenByNewerBuild` on any write
+attempt, refused **before** any mutation. What `5e93bec` actually
+contained was the additive-key half only. The gap was found by an
+autonomous post-ship check, not by review, and it is the exact hazard
+decision 026 §3.6 had already named as a *latent data-loss cliff*:
+`deserialize_model` gated on **exact version equality** and answered
+`None`, which `read_dimension_model` turns into a **fresh model** — so
+an older build opening a newer file would start empty, and the next save
+would overwrite the operator's groups, calibrated scales and
+memberships. **Invisibly**, because the `/Line` annotations keep
+rendering and nothing on screen looks wrong until the save makes it
+permanent.
+
+**The completion (`104162d`), which is 27.0's own C6 and NOT a new Pass:**
+- **Reading is a range** — an older sidecar loads; a newer one is parsed
+  for what this build understands.
+- **Writing is refused** — `check_dimension_sidecar` is called at **all
+  seven mutation sites**, and new `EditError::SidecarWrittenByNewerBuild`
+  fires before any mutation.
+- Tests cover a hand-built (not serializer-built) older dict, an unknown
+  future key surviving a round trip, and the refusal firing with the
+  existing model left intact.
+
+**Filed this way deliberately.** `104162d` is not a Pass of its own — it
+is Pass 27.0 reaching the criteria it was declared against. See the new
+standing rule **R141**: a Pass is not shipped until its decision
+record's acceptance criteria are met.
+
+---
+
+### Pass 27.1 — SolidWorks dimensioning + placement: three-click authoring, the placement point, and the answer to open question (aq) (decision 026 §4; core + CLI + GUI) — 2026-08-04, committed `7ed90a2`
+
+**The operator's instruction, verbatim:** *"dimensioning and moving
+dimensions should work how it does in SolidWorks Drawings GUI."*
+
+**★ This ANSWERS decision 026's open question (aq), and it answers it in
+a way neither of the record's two readings predicted.** §4.7 asked the
+operator to choose between Reading A (drag constrained **along** the ce
+dimension's own axis — a geometric no-op) and Reading B (drag
+constrained **perpendicular**, setting the offset). SolidWorks does
+**neither exclusively**: it takes **both from one drag**, with the
+measured points pinned. See the (aq) entry under *Open operator
+questions* for the resolution as filed.
+
+**Sourced, not recalled.** The behaviour was confirmed from the
+operator's **own** SolidWorks API RAG rather than from training-data
+memory: `IModelDoc2.AddDimension2(x, y, z)` takes *"the text-placement
+point"* — SolidWorks stores a drawing dimension's placement as a
+**point**, which in the dimension's own frame decomposes into standoff
+(perpendicular) and text position (parallel). Escalated to
+`C:\personal_rag\solidworks\` as a behavioural reference note.
+
+**What shipped.**
+- New `text_along` field on the linear **ce dimension** kind — the
+  parallel half of the placement point, sibling to 27.0's `offset`
+  (perpendicular half). Same additive-at-version-1 sidecar pattern.
+- `place_dimension` — **value-preserving BY CONSTRUCTION**: it writes
+  only fields the value function does not read. This is a structural
+  guarantee, not a test-enforced one.
+- **Drag applies a DELTA in the ce dimension's own frame**, so the grip
+  the operator grabbed is kept rather than the geometry jumping to sit
+  under the cursor.
+- **Authoring is now THREE clicks: what / to what / where.**
+  `ScalePick` opts out of the third click via
+  `LinearPick::reference_line()` — calibrating a scale is not placing a
+  ce dimension and must not acquire a placement step.
+- CLI: `dimension-add --offset --text-along`.
+
+**Two more preview/commit divergences closed — one of them introduced
+in the same hour.** The drag preview drew a *translated bounding box*
+while the commit performed a *placement*. That makes **three** distinct
+instances of the same pattern in this continuation (27.0's constrained
+line, the placing preview, this drag preview) — recorded as a pattern,
+not as three accidents, and generalised into **R136**.
+
+**★ A DEFECT CAUGHT BY OUTPUT, NOT BY THE BUILD — and it is the reason
+R142 exists.** `dimension-add --offset 130` produced a file
+**byte-identical** to `--offset 0`. It compiled. Every test passed. The
+cause was a limited string replace that patched the **wrong
+occurrence** — the new parameter was threaded into a path nothing
+reached. Nothing in the build or the suite could see it; only exercising
+the parameter and observing that the output *changed* could.
+
+**Also fixed here, and it had been shipped since Pass 9c-min:** the
+drag grab used `interact_pointer_pos()` on `drag_started`. See Pass
+25.5, below, for the full diagnosis — both sites now read
+`press_origin`.
+
+---
+
+### Pass 25.6 — Delete a ce dimension: annotation, appearance, `/Annots` reference AND the sidecar record, together (GUI + CLI) — 2026-08-04, committed `b3474b8`
+
+**What the operator gets.** Select an authored **ce dimension**, press
+Delete (GUI) or run `dimension-delete` (CLI), and it is gone — from the
+page and from pdfce's own model of the page.
+
+**The four things a delete has to remove, and the one that is easy to
+forget:**
+
+| # | Removed | Why it cannot be skipped |
+|---|---|---|
+| 1 | the `/Annots` array reference | a dangling reference is the `/Contents`-defect class one array over |
+| 2 | the annotation object | the obvious one |
+| 3 | the baked `/AP` appearance stream | the drawing itself; leaving it orphans bytes |
+| 4 | **the `/PieceInfo` sidecar record** | **the one that is easy to forget and worst to leave** |
+
+Leaving (4) is worse than leaving any of the other three because pdfce
+would *keep believing in a ce dimension that no longer exists*: the next
+group re-format or re-scale walks its membership list and tries to
+**regenerate** a member with no annotation behind it. A stale sidecar
+record is not dead weight, it is an instruction to recreate something
+the operator deleted.
+
+**A group survives its last member on purpose.** A group is calibration
+work — a scale the operator measured against a known length. Deleting
+the last ce dimension in it must not throw that away; the operator
+deletes the group when he means to delete the group.
+
+Reuses `remove_from_annots` rather than open-coding a second removal
+path (R92).
+
+---
+
+### Pass 25.5 — Drag a ce dimension, and choose how it is written: display-format controls + the regeneration consolidation (GUI + core) — 2026-08-04, committed `34787b7`
+
+**What the operator gets.** Drag an authored **ce dimension** to move
+it, and control how its number is written — decimal places, fraction
+denominator, whether fractions reduce.
+
+**`move_dimension` translates and REGENERATES**, it does not nudge.
+Moving a `/Rect` alone would slide the *frame* and leave the *drawing*
+sitting inside it — the annotation rectangle and the baked `/AP` content
+are two representations of one thing, and only regenerating keeps them
+in agreement.
+
+**★ The consolidation that turned a latent bug into an impossible one
+(R92).** `set_group_scale` carried its **own inline** regeneration,
+which touched `/Rect`, `/Contents` and `/Measure` but **not `/L`**.
+That omission is *fine* for a scale change (the endpoints do not move)
+and **silently wrong** for a move (they do). Both callers now go through
+one `regenerate_dimension_writes`. The bug was never shipped — the
+duplication that would have produced it was.
+
+**`AUTHORED_ANNOT_KEYS`** declares the keys pdfce owns, **next to the
+authoring code that writes them**, so ownership is stated where it is
+exercised rather than in a comment somewhere else. **`/C` is
+deliberately NOT owned** — colour is the operator's, and regeneration
+must not reach in and reset it.
+
+**`dimension_rects(page)`** is the overlay-aware hit-test query: it
+answers *"where are the ce dimensions right now,"* which during an edit
+session is not the same question as *"where are they in the file."*
+
+**★★ A SHIPPED BUG FOUND HERE THAT HAD BEEN LIVE SINCE PASS 9c-min.**
+The grab read `interact_pointer_pos()` inside `drag_started`. **egui
+fires `drag_started` AFTER the drag threshold is crossed** — by then the
+pointer has already moved roughly 45 pt from where the operator pressed.
+Consequences, both silent:
+- **`run_vector_edit_tool` has had this since Pass 9c-min**, so *every*
+  object move has been short by the drag threshold.
+- Node grabs were classified against a point **the operator never
+  pressed** — the hit test ran on a position ~45 pt away from the one he
+  aimed at.
+
+Both sites now read `ctx.input(|i| i.pointer.press_origin())`. New rule
+**R140**; escalated to
+`D:\dev\rag\egui\drag_started_fires_after_the_threshold_use_press_origin.md`.
+
+**Display format** (decimal places / fraction denominator / reduce)
+feeds `ScaleEntryFields::fraction` and **survives a unit change** —
+switching units does not silently discard how the operator asked the
+number to be written.
+
+---
+
+### Pass 25.4 — Alt+click cycles through stacked parts: the subpath rung inherits the object rung's cycle (GUI) — 2026-08-04, committed `9462e2f`
+
+**The gap this closes, and decision 025 §1.4.2 had already named it as a
+gap in what Pass 25.0/25.1 shipped.** `hit_test_subpaths` returns hits
+**nearest-first**, and the GUI took `.first()`. On a CAD drawing that
+means **a line underneath another line is unreachable — forever** — and
+it reads to the operator as a hit-test bug rather than as a missing
+feature.
+
+**`cycle_ordinal` extracted, and BOTH levels refactored onto it (R92).**
+The object rung has had `ClickCycle` since Pass 9a; rather than let the
+subpath rung grow a parallel implementation that would drift, the shared
+arithmetic was pulled out and the object rung was moved onto it too.
+
+**`SubpathCycle` is its own type — `ClickCycle` was NOT made generic.**
+The two rungs cycle over different index spaces with different
+invalidation rules; a shared generic would have made them look
+interchangeable when they are not.
+
+**Disclosure, per R83/R84 — the cycle is stated in words:** the readout
+reads *"(2 of 4 here — Alt+click for the next)"*. A cycle nobody can see
+is a cycle nobody uses.
+
+**Verified on the operator's own file** (not a fixture): repeated
+Alt+click at one point walked subpath ordinals `1120 → 1180 → 1138 →
+1178 → 1120` — four stacked parts, cycling back to the first.
+
+---
+
+### Pass 25.3 — Vector edits accumulate: `VectorEditNeedsReopen` was pdfce refusing a mismatch it created itself — 2026-08-04, committed `3edb003`
+
+**The symptom, on record as a known limitation since Pass 9c-min:** a
+**second** vector edit on a page in one session was refused with
+`VectorEditNeedsReopen`, across the whole family —
+`move_object` / `delete_object` / `move_node` / `delete_subpath`. It was
+documented as *"known limitation, not a defect."*
+
+**★ It was backwards.** `vector_surgery` decomposed the **base**
+document, while the GUI's own content provider had moved to
+`session.view()` at **Pass 17.0** (decision 018, live-edit rendering).
+So the surgery was the side that was out of step, and the refusal was
+guarding against a mismatch **pdfce's own core had created**. A guard
+that fires on a disagreement you caused is not a safety property, it is
+a bug with a message.
+
+**The fix is a one-line change of source and a deletion.**
+`vector_surgery` now reads `current_page_content` — the same helper
+`edit_text` has always used. The `VectorEditNeedsReopen` error variant
+is **DELETED as unreachable** (R96: every refusal is reachable and owes
+a firing test; a refusal that cannot fire is dead code that documents a
+constraint that does not exist).
+
+**★ The test that was worth writing, and why the obvious one was not
+enough.** `two_subpath_deletes_in_one_session_remove_the_right_two_parts`
+asserts **geometrically** which parts survive. An undo-depth assertion —
+the obvious test — would have passed **even if the second delete
+misindexed and removed the wrong part**, because the depth is right
+either way. The property under test is *which geometry is gone*, so that
+is what the test measures.
+
+---
+
+### Pass 25.2 — Delete ONE part of an object: `plan_delete_subpath`, and three refusals that are the design (core + CLI + GUI) — 2026-08-04, committed `0423179`
+
+**What the operator gets.** With an object entered (Pass 25.1), select
+one of its parts and delete it. On the measured SolidWorks drawing view
+that is *one line out of 1,194* — the first time pdfce could remove a
+single line from a flattened CAD export at all.
+
+**Mechanism.** `plan_delete_subpath` removes exactly one subpath's
+**construction operators**; every other byte of the content stream is
+re-emitted **verbatim**. Deleting the *only* subpath deletes the object.
+
+**★ THE THREE REFUSALS ARE THE DESIGN, NOT THE LEFTOVERS.**
+
+| Refusal | What it protects | Why a byte-check cannot |
+|---|---|---|
+| **`SubpathStructureMismatch`** | re-derives the subpaths **from the operator bytes** and refuses if the count disagrees with the decomposition | a silent disagreement would delete a *different line* from the one the operator picked, and it would be **undetectable afterwards** — the file is well-formed, round-trips, and is wrong |
+| **`ClippingPath`** | refuses to remove part of a `W`/`W*` clip | removing part of a clip changes **what OTHER content is visible** — a fuzzy-never-sneaky (rule 4) violation, not a geometry edit |
+| **`SubpathOutOfRange`** | the ordinal does not exist | the cheap one; still owed a firing test (R96) |
+
+**The structure guard also covers decision 025 §5.5's
+`DeleteWouldMoveNextSubpath` hazard, conservatively.** That hazard: after
+`h`, a following `l`/`c`/`v`/`y` opens a subpath whose start point is
+**inherited** from the closed subpath and carried by no operand of its
+own — so excising the predecessor **silently moves** the follower's
+start. The edit is byte-minimal, byte-verifiable, passes every
+round-trip check, and moves geometry the operator did not select.
+Minimal-diff discipline cannot catch it; only a named refusal can. Pass
+25.2's re-derivation guard catches this case as a structure disagreement
+rather than by name — **conservative coverage, and a deviation from
+decision 025's proposed R134** ("record the byte span where the ordinal
+is minted"). The *intent* is satisfied by a different mechanism; the
+span is still not stored. Flagged, not silently accepted.
+
+**Two PRE-EXISTING defects fixed in the same Pass:**
+
+1. **★ Whole-object delete by keyboard had been UNREACHABLE since Pass
+   9c-min (R96 — a dead guard).** The Delete key was collected only
+   `if !tool_active`, while the object-delete branch **requires the
+   object tool to be active**. The two conditions are mutually
+   exclusive, so the branch could never run. It had been shipped,
+   documented and untriggerable for the whole life of the feature.
+2. **A defect introduced by this engineer in Pass 25.1.**
+   `apply_click_depth` was written as **one shared method specifically
+   to prevent drift (R92)** — and then wired into only **one** of the
+   two click paths. The consolidation was performed and then half
+   applied, which is the failure mode R92 exists to prevent, committed
+   by the person applying R92.
+
+**Verified on the operator's own file:** 1,194 → 1,193 subpaths,
+`undo_identical=1`.
+
+**CLI:** `subpath-delete`.
+
+---
+
 ### Pass 25.1 — Double-click to work INSIDE an object: `EnteredObject`, subpath outlining, and the depth state machine (GUI half of the subpath-selection pair; **RENUMBERED from the commit's own "24.0a" — see the Pass-number note on Pass 25.0, below**) — 2026-08-04, committed `5df8f26`
 
 **What the operator gets.** Double-click a page object with the Obj tool
@@ -7228,7 +7625,130 @@ side panels; the ribbon carries commands, the dock carries state you keep
 looking at, and R81 already draws that line); redaction apply's blocking
 confirmation stays (R98).
 
-### Level-model reconciliation (decision 023 × Pass 25.x) — FLAG, needs a decision before Pass 23.2 is scheduled
+### ★ Pass 26.0–26.2 — The unified level ladder (decision 025, filed 2026-08-04, DECIDED — NOT STARTED; SUPERSEDES the "Level-model reconciliation" FLAG below, which is RESOLVED)
+
+**Source:**
+`docs/decisions/025-the-subpath-rung-and-the-unified-level-ladder.md`
+(1,744 lines). **This record resolves the flag filed at continuation 81
+and retained below** — the flag stays for the append-only history, the
+answer is here.
+
+**The answer, in one sentence:** the **subpath is a genuine rung** and it
+goes exactly where the measurement put it — between object and node —
+and the gesture collision **dissolves the moment descent stops being two
+mechanisms and becomes one state variable**.
+
+**The ladder:** page → container(s) → object → subpath → node. One
+double-click descends exactly one rung; one Escape ascends exactly one
+rung; **neither ever skips**; and the rung a gesture acts on is read from
+a single standing-position value (`LevelPath`), never inferred from
+what happens to be under the pointer. Rules **L1–L3** (filed as
+R130/R131/R132 under *Standing rules*).
+
+**The concrete fix, stated so it cannot be mis-implemented:** delete
+`main.rs`'s `doc.entered = None` inside `Action::ClearCanvasSelection`,
+and add `Action::LeaveLevel` at **Escape slot 2** (above `ExitTool`).
+Pass 25.1's Escape today collapses two rungs — or five — into one press,
+directly contradicting decision 023 §3.2's own stated, testable property
+that *"Escape walks all the way out, one step per press, and never skips
+a step."* Decision 023's `LeaveGroupLevel` is **renamed `LeaveLevel`** —
+a misnomer at three of five rungs, and on the operator's own files there
+are no groups at all. The name never shipped, so this is not churn.
+
+**Passes:**
+- **Pass 26.0** — the ladder itself: `LevelPath`, the node rung, the
+  fixed Escape chain, the readout matrix, and the subpath click-cycle.
+  Ships on the operator's OWN files.
+- **Pass 26.1** — subpath edit verbs: spans, move, delete, three new
+  refusals, CLI. **PARTLY DELIVERED ALREADY — see the deviation note
+  below.**
+- **Pass 26.2** — level survival across an edit (re-validate and
+  truncate to the nearest surviving ancestor, disclosed) — today every
+  subpath edit ejects the operator from three rungs deep to Page on a
+  ~5,900-object page.
+- **Pass 23.2 SPLITS** (decision 023 §7.3): the **core + CLI half
+  stands unchanged** (containers, marked-content ranges, form
+  sub-models, `object-list --tree/--level`, `ContentPath`); the **GUI
+  half is SUPERSEDED by 26.0** (building double-click/Escape/breadcrumb
+  for containers alone would build the second mechanism this record
+  exists to prevent); and its **criterion C6 is factually wrong** and
+  must be amended.
+- **Pass 23.3's dependency changes and improves** — it depends on
+  **26.0** (the node rung), not on 23.2. A genuine unblocking: 23.3 no
+  longer waits on the larger container-shaped Pass that has no payoff on
+  the operator's own files.
+- **22.0 still first.** Decision 023 §11's *"22.0 ships first, or
+  23.1/23.2 do not start"* extends to 26.x.
+
+**★ DEVIATION AT FILING — Passes 25.2/25.3/25.4 shipped parts of this
+record's plan before the record was registered.** Recorded here rather
+than by editing the record (append-only):
+
+| Decision 025 scopes | Actually shipped |
+|---|---|
+| the **subpath click-cycle** into **Pass 26.0** (criterion F6; open question **(an)**) | **Pass 25.4**, `9462e2f` — including the *"(2 of 4 here — Alt+click for the next)"* disclosure |
+| **subpath delete** + its refusal family + CLI into **Pass 26.1** | **Pass 25.2**, `0423179` — `plan_delete_subpath`, `SubpathStructureMismatch` / `ClippingPath` / `SubpathOutOfRange`, CLI `subpath-delete` |
+| proposed rule 4 (**R134**): *record the byte span where the ordinal is minted* | Pass 25.2 instead **re-derives** subpaths from the operator bytes and refuses on disagreement (`SubpathStructureMismatch`). Intent satisfied by a different mechanism; **`Subpath` still carries no span**, so `move_subpath` remains not-expressible against today's model (§5.2 stands). |
+| `DeleteWouldMoveNextSubpath` as a **named** refusal (§5.5, question **(ap)**) | covered **conservatively** by the structure guard, not by name. The named refusal is still owed if the guard is ever relaxed. |
+
+**Net: Pass 26.1 is reduced to `move_subpath` + the span work; Pass 26.0
+loses its click-cycle criterion (F6) as already met.** 26.0's ladder,
+Escape fix, readout matrix and node rung are untouched and unbuilt.
+
+**Claims:** standing rules **R130–R134**; open operator questions
+**(ak)–(ap)**.
+
+### Pass 27.2 — ANSI and ISO drafting standards for ce dimensions (decision 026 §5/§6, core + CLI + GUI, NOT STARTED) — **the unbuilt half of the operator's 2026-08-04 report**
+
+**Source:**
+`docs/decisions/026-linear-ce-dimension-geometry-offset-and-drafting-standards.md`
+§5, §6, §7.3. Passes 27.0 and 27.1 shipped the geometry and the
+placement; **this is the drafting-standard half and it is still owed.**
+
+**Per-group `standard` field**, factory default **ANSI** (operator,
+2026-08-04, asserted in a test so a refactor cannot flip it silently);
+`DimStandard`; `set_group_standard` regenerating **every** member in one
+undoable command with the member count disclosed before applying. CLI:
+`group-set-standard --group <id> --standard <ansi|iso>`, `group-add
+--standard`, `dimension-list` printing each group's standard.
+
+**★ A standard misattribution corrected before any code was written.**
+The natural assumption — ASME Y14.5 — is **wrong**: Y14.5 is the
+**GD&T/tolerancing** standard. Arrowheads, line conventions and
+lettering live in **ASME Y14.2**. Every geometry constant ships its
+provenance in its doc comment: *which standard, which confidence, and
+"convention, not mandated" where that is the truth* (E11).
+
+**★ ISO 129-1:2018 cl. 4.1.1 MANDATES a comma as the decimal marker** —
+verified as a *"shall"*, not inferred. It is expressible portably via
+ISO 32000-1 §12.9 Table 263's `/RD`, so it can be governed by the
+standard **without** breaking the `/Measure` agreement contract — **with
+the gotcha that `/RT`'s spec default is ALSO a comma**, so ISO must emit
+`/RD (,)` **and** a non-comma `/RT` or every grouped number renders
+`1,234,56` (criterion E10).
+
+**Two things the record refuses to let pdfce claim:**
+- The **"30° ambiguous zone"** for text orientation is **folklore from
+  ISO 129:1985** and is **not in the 2018 edition**.
+- ISO 129-1:2018's normative **Annex A is paywalled**, so pdfce's
+  operator-facing strings read **"ANSI / ASME (US)"** and **"ISO
+  (international)"** — **never** "ASME Y14.5", "ASME Y14.2" or "ISO
+  129-1", and never "conformant". Asserted against `ui_text` so a copy
+  edit cannot reintroduce a claim. Whether to **purchase** the standard
+  is open question **(au)**.
+
+**Side-finding recorded because it would otherwise stay invisible:**
+pdfce's own ce-dimension label and its own `/Measure` mirror **can
+already disagree today** — pdfce prints `3.10 m` (fixed places) while
+the mirrored dict omits `/FD`, whose default `false` permits a
+conforming reader to print `3.1 m`. The doc comment claiming the two
+"agree by construction" is wrong as written.
+
+**Claims:** standing rules **R135–R139**; open operator questions
+**(aq)–(au)**. **Pass 27.3 is largely ABSORBED by Pass 27.1** — see the
+(aq) resolution under *Open operator questions*.
+
+### Level-model reconciliation (decision 023 × Pass 25.x) — **RESOLVED 2026-08-04 by decision 025; see the Pass 26.0–26.2 entry above.** Retained below as the historical framing (append-only discipline)
 
 Decision 023 §1 defines **three** levels — level 1 = the smallest
 structural container (form-XObject invocation or balanced marked-content
@@ -7274,11 +7794,29 @@ current rung — rather than two descend mechanisms sharing one gesture.
 `pdfce-ui-specialist` should own the gesture question; the engineer owns
 whether decision 023 needs an amendment record.
 
-### Subpath-level edit verbs — move a subpath, delete a subpath (follow-on to Pass 25.1, NOT built and NOT offered)
+### Subpath-level edit verbs — **DELETE SHIPPED as Pass 25.2 (`0423179`); MOVE still owed** (follow-on to Pass 25.1)
 
-Pass 25.1 shipped subpath **selection** and deliberately shipped no
-subpath **verbs** — R83, honoured in the UI text, which says so in words
-rather than showing a disabled control. What is owed:
+**UPDATED 2026-08-04 (continuation 82).** The **delete** half of this
+entry **shipped as Pass 25.2** — `plan_delete_subpath`, three refusals
+(`SubpathStructureMismatch`, `ClippingPath`, `SubpathOutOfRange`), GUI
+Delete, CLI `subpath-delete`, verified on the operator's own file
+(1,194 → 1,193 subpaths, `undo_identical=1`). See the Pass 25.2 Shipped
+entry for the full record.
+
+**What remains owed: `move_subpath`** — and decision 025 §5.2 states the
+blocker precisely. `PathObject` carries `tokens: TokenRange` and
+`bytes: ByteSpan`; **`Subpath` carries `start`, `segments`, `closed` and
+nothing else.** A move is therefore **not expressible** against today's
+model — not "hard," *not expressible*. Pass 25.2 got delete out the door
+by **re-deriving** subpaths from the operator bytes and refusing on
+disagreement, which works for excision and does not generalise to
+translation. The span (or the token range) is still owed; that is
+proposed rule **R134** and the reduced scope of **Pass 26.1**.
+
+Original framing, retained (append-only): Pass 25.1 shipped subpath
+**selection** and deliberately shipped no subpath **verbs** — R83,
+honoured in the UI text, which says so in words rather than showing a
+disabled control. What was owed:
 
 - **Move a selected subpath** (translate its construction operators;
   the object's other subpaths untouched).
@@ -11121,6 +11659,108 @@ continuation 81 — (ac)–(aj):**
   while its verbs (re-measure, re-scale, delete) apply only to ce
   dimensions. *Default:* as proposed.
 
+**New this session (continuation 82, 2026-08-04) — (ak)–(ap) from
+decision 025, (aq)–(au) from decision 026:**
+
+- **(ak) Single-part objects: enter the subpath rung and disclose, or
+  skip it?** *Recommended (decision 025 §1.3):* **enter and disclose**
+  (*"drawn as a single part"*). One extra double-click buys a rule that
+  is always true, and an Escape chain with **no skip predicate** — a
+  skip must be duplicated in the ascent direction (R92) and destroys
+  decision 023 §3.2's testable "never skips a step" property. *Default:*
+  as recommended.
+- **(al) A key to leave all rungs at once (Shift+Escape or similar)?**
+  **Not built and not offered** (R83). The breadcrumb already gives a
+  one-click jump to any rung; this asks only whether a keyboard
+  equivalent is wanted. *Default:* not built.
+- **(am) After a part-edit, is being dropped to Page acceptable as an
+  interim** (26.1 ships, 26.2 follows), **or should 26.2 be folded in**
+  so the rung survives from the first release of the verbs? Concretely:
+  on the operator's ~5,900-object page, deleting one part today ejects
+  him from three rungs deep back to Page. *Default:* interim accepted,
+  26.2 follows.
+- **(an) The subpath click-cycle — ★ ANSWERED BY SHIPPING; confirm
+  retroactively.** Decision 025 scoped it into Pass 26.0 and asked
+  whether it was wanted; **Pass 25.4 (`9462e2f`) shipped it** with the
+  *"(2 of 4 here — Alt+click for the next)"* disclosure, verified on the
+  operator's own file. The question survives only as: is repeated
+  Alt+click meaning "the next stacked part" the behaviour you want kept?
+  *Default:* keep.
+- **(ao) `delete_subpaths` is the FOURTH non-confidentiality removal**
+  under R58's literal text (*"every removal/scrub operation rides R35's
+  forced FULL REWRITE"*), after `delete_object`,
+  `delete_redaction_mark` and decision 022's proposed
+  `delete_annotation`. Requiring a full rewrite here would be **wrong**.
+  Does this fold into open question **(v)**'s wording fix? *Default:*
+  fold into (v).
+- **(ap) `DeleteWouldMoveNextSubpath`** — refuse **by name**
+  (recommended), or **also** offer *"materialize the follower's start as
+  an explicit `m`, then delete"* as a reviewable fix-up? Same trade as
+  decision 023 §10 item 3's form un-sharing: it writes bytes you did not
+  ask for in order to enable the edit you did. **Status note:** Pass
+  25.2's structure guard covers the hazard **conservatively** (as a
+  count disagreement), not by name; the named refusal is still owed if
+  that guard is ever relaxed. *Default:* refuse by name, no fix-up.
+
+- **(aq) ★ RESOLVED 2026-08-04 by the operator — ce-dimension drag
+  semantics.** Decision 026 §4.7 asked him to choose between **Reading
+  A** (drag constrained **along** the ce dimension's own axis) and
+  **Reading B** (drag constrained **perpendicular**, setting the
+  offset), because the two halves of his own sentence — *"only be able
+  to drag it horizontally"* and *"so it stays in line with what it is
+  actually measuring"* — point opposite ways, and the record refused to
+  resolve them silently. **His answer: neither — SolidWorks semantics.**
+  Verbatim: *"dimensioning and moving dimensions should work how it does
+  in SolidWorks Drawings GUI."*
+
+  **What that means concretely**, confirmed from his own SolidWorks API
+  RAG rather than from recall: SolidWorks stores a drawing dimension's
+  placement as a **POINT** (`IModelDoc2.AddDimension2(x, y, z)` — *"the
+  text-placement point"*), which in the dimension's own frame decomposes
+  into **standoff** (perpendicular) and **text position** (parallel).
+  **Both halves come from one drag, with the measured points pinned** —
+  dragging never re-measures; the attachment points stay on the geometry
+  and the extension lines stretch.
+
+  **Consequences for the Pass plan, reconciled rather than left
+  dangling:**
+  - **Pass 27.1 (`7ed90a2`) SHIPPED the answer** — `text_along`,
+    `place_dimension`, three-click authoring (what / to what / where),
+    and a drag that applies a delta in the ce dimension's own frame.
+  - **Pass 27.3 as scoped is therefore LARGELY ABSORBED.** Decision 026
+    §7.4 defined 27.3 ("text position along the dimension line") as
+    existing *"only under §4.7 answer (2)"* and left it unscoped. The
+    operator's answer made it **required** for the parity he asked for —
+    and Pass 27.1 then shipped the `text_along` field and its drag in
+    the same commit. **27.3 must not be read as an outstanding Pass.**
+    What genuinely remains of it is small and unbuilt: a dedicated
+    **text grab target** distinct from the line grab, plus whatever
+    `pdfce-ui-specialist` returns on the grab/cursor affordance.
+  - **Pass 27.2 (ANSI/ISO) is unaffected and remains the outstanding
+    half of the report.**
+- **(ar) Default standoff for newly authored ce dimensions** — keep
+  `0.0` (dimension line through the first picked point, matching the
+  preview exactly), or apply a nonzero default and pick a side? The sign
+  **cannot be inferred**, which is why `0.0` is the default rather than
+  a guess. *Default:* keep `0.0`; offer nonzero as a preference.
+- **(as) Is a per-group drafting standard right, or should the standard
+  be forced document-wide?** A mixed-standard document is possible under
+  the per-group design. *Default:* per-group.
+- **(at) ANSI inch number conventions** — implement leading-zero
+  suppression (`.500`) and trailing-zero padding, **accepting a
+  permanent and invisible divergence** between pdfce's printed label and
+  any ISO 32000-1 §12.9-honouring reader's computation of the same file
+  (Table 263 has no key for suppressing a leading zero)? Or keep `0.500`
+  and stay portable? Real US practice is **not uniform** here. *Default:*
+  keep `0.500`; if answered the other way, the divergence gets
+  **disclosed**, not hidden.
+- **(au) Purchase ISO 129-1:2018 (~CHF 150–200)?** Its normative **Annex
+  A** carries the symbol proportions and is paywalled — without it,
+  pdfce's ISO geometry is convention-informed rather than defensibly
+  conformant, and the UI must keep saying **"ISO-style"** rather than
+  "ISO 129-1 conformant". A purchasing decision, therefore the
+  operator's. *Default:* do not purchase; keep the non-claiming strings.
+
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
   not-yet-granted authorization (see "In progress" GIT STATUS above).
@@ -11213,6 +11853,42 @@ continuation 81 — (ac)–(aj):**
   substitute for an actual push decision — **this is the session-ending
   filing; the next session should re-verify the bundle is still current
   before assuming it covers whatever it finds on disk.**
+  **UPDATED (continuation 82 amendment, 2026-08-04): 109 commits, still
+  no remote — and the staleness warning above proved out exactly as
+  written.** `...final.bundle` carried `refs/heads/pass-8-redaction` at
+  `6677a6e`; HEAD is `9a0c093`; `git rev-list --count 6677a6e..9a0c093`
+  = **27**. That is a full continuation's work — the seven Passes filed
+  in continuation 82 — that existed on **one disk only** until the
+  refresh. **Backup bundle refreshed to
+  `D:\Dev\pdfce-backups\pdfce-20260804-2356.bundle`** (`git bundle
+  --all`), `git bundle verify` → *"records a complete history"*,
+  *"is okay"*. It carries **12 refs**, including
+  `refs/heads/pass-8-redaction` at `9a0c093` — **identical to HEAD, so
+  zero unbacked commits** — plus `refs/heads/main` at `67967b2` and six
+  `refs/heads/worktree-agent-*` refs (the pinned worktrees three of this
+  session's Passes were built in; `--all` is what keeps those from being
+  the unbacked half). Commit count, remote-emptiness, both bundle heads
+  and the 27-commit gap were **independently re-run at this amendment**,
+  not relayed. Standing risk, restated because it is now measured rather
+  than asserted: **the repository has no remote** (expected — publishing
+  is gated on the licence decision, `LEGAL.md` §1, now MIT but still
+  awaiting an explicit operator go-ahead), so these bundles are the
+  **only** backup, and their staleness is a real single-disk exposure.
+  **Re-check bundle-vs-HEAD at every filing**, not every session —
+  27 commits accumulated in a single continuation. Gates at the same
+  commit (`9a0c093`: 1,878 tests, `fmt`/`clippy` clean, `cargo tree`
+  GUI-free) are tabled in the **Gate record for the seven Passes filed
+  in continuation 82** block at the head of *Shipped*; continuation 78's
+  **1,806** figure above is now a historical datum meaning *"the count at
+  `31d2fdc`"* and must not be quoted as current.
+  **Caveat on "zero unbacked commits":** a bundle backs up *commits*.
+  At amendment time `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` and
+  `docs/SESSION_LOG.md` are **modified and uncommitted** (~1,495 lines:
+  decisions 025/026, the seven Shipped entries, the continuation-82
+  session entry and this amendment), so the new bundle contains none of
+  them. Zero unbacked commits, but the whole institutional-memory filing
+  for this continuation lives only in one working tree. **Commit the
+  docs, then re-bundle.**
 - Encryption (Pass 5 / decision 007)'s `/R 6` sourcing method and the
   `LEGAL.md` §2 Adobe-supplement contradiction — both still gate its
   scoping when it activates.
@@ -13188,10 +13864,208 @@ continuation 81 — (ac)–(aj):**
   Generalizes past binaries to caches, generated files, deployed
   bundles and RAG snapshots.
 
-  **Ceiling is now R129** (was R120 before this entry). R121–R125 are
-  decision 024's, assigned at filing per the R107–R110 precedent (rules
-  from a filed decision record are adopted at filing, not at ship);
-  R126–R129 are from work shipped this continuation.
+  **Ceiling was R129 at continuation 81** (was R120 before that entry).
+  R121–R125 are decision 024's, assigned at filing per the R107–R110
+  precedent (rules from a filed decision record are adopted at filing,
+  not at ship); R126–R129 are from work shipped in continuation 81.
+  **Superseded by the continuation-82 ceiling note at the end of this
+  section.**
+
+- **R130 — A level ladder is walked by ONE state variable and ONE
+  gesture pair; a second descent mechanism is a defect, not a feature
+  (decision 025 §2, filed 2026-08-04, continuation 82; adopted at
+  filing).** One double-click goes exactly **one rung down**, one Escape
+  exactly **one rung up**, neither ever skips, and **the rung a gesture
+  acts on is read from the single standing-position value** — never
+  inferred from what happens to be under the pointer. *Sourced from a
+  collision that had already happened:* decision 023 specified
+  double-click/Escape for containers, Pass 25.1 shipped double-click/
+  Escape for subpaths, and the two mechanisms answered the same question
+  differently. The collision existed **only** because there were two.
+
+- **R131 — A rung that has no members on this file is REPORTED, never
+  silently skipped and never silently entered (decision 025 §1.3,
+  continuation 82; adopted at filing).** Skipping makes the same gesture
+  mean different things on files the operator cannot tell apart, and it
+  forces the skip predicate to be **duplicated in the ascent direction**
+  (R92). Disclosure at the rung above — *"drawn as a single part"*,
+  *"this page has no groups"* — costs one string and turns the extra
+  press into a **confirmation** rather than a leap.
+
+- **R132 — A finer selection level FILTERS the level below it; it never
+  RENUMBERS it (decision 025 §3, continuation 82; adopted at filing).**
+  Adding a rung must not create a second index space for something
+  already numbered, because the two spaces must then be kept in
+  agreement by hand (R92; decision 011's Z2). *Concretely:* node indices
+  stay **object-scoped**, so `node-move --node N` keeps its meaning when
+  the subpath rung is inserted above it — exactly as decision 023 §2.1
+  kept `object-move --object N` meaningful by refusing to re-parent the
+  flat list.
+
+- **R133 — A checker that reports "the highest number written" must be
+  run against the BRANCH, not against a working tree that can be behind
+  (decision 025 §10 item 5, continuation 82; adopted at filing).** This
+  is the **seventh** numbering hazard on this project and the **second
+  distinct** failure mode of `tools/check-ledger-numbers.py`. R106's
+  known limitation is that an **unlanded draft** is invisible to the
+  checker. This is the other one: a **landed commit** invisible to the
+  checker because the tree is pinned — decision 025's own ledger run,
+  inside a worktree pinned at `5df8f26`, reported stale ceilings for
+  Pass families, standing rules **and** open-question letters
+  *simultaneously*, all three of which `cce2d30` had already moved.
+  Run it as `git show <branch>:docs/ROADMAP.md`, or run it in a tree you
+  have just confirmed is current.
+
+- **R134 — A structural element pdfce SELECTS must record its own byte
+  span where its ordinal is minted (decision 025 §5.2, continuation 82;
+  adopted at filing, with a shipped deviation recorded below).** An
+  ordinal handed out by one traversal and resolved to bytes by a
+  **second** traversal is two derivations that must agree and eventually
+  will not — silently, because the resulting file is well-formed and
+  round-trips. *Sourced:* `hit_test_subpaths` returns subpath ordinals
+  while `Subpath` carries no `tokens`/`bytes`, so the subpath verbs the
+  roadmap owes are **literally not expressible** against the model.
+  **DEVIATION, recorded at filing rather than after:** Pass 25.2 shipped
+  subpath *delete* without the span, by **re-deriving** subpaths from
+  the operator bytes and refusing on disagreement
+  (`SubpathStructureMismatch`). That satisfies the rule's *intent* for
+  an excision and does **not** generalise — `move_subpath` remains
+  not-expressible, and the span is still owed.
+
+- **R135 — A ce dimension's drawn dimension line is exactly as long as
+  its printed value (decision 026 §2, continuation 82; adopted at
+  filing).** `|Pb − Pa| == kind.measured_points()` for every linear **ce
+  dimension**, under every constraint and every offset, and any change
+  to the appearance path carries a **property test** asserting it over a
+  spread of inputs. *Why a spread and not a fixture:* the defect this
+  rule exists to prevent was **correct whenever the picks happened to be
+  axis-aligned**, so a fixture-shaped test would have certified it. A
+  measurement drawing whose line length contradicts its own number is
+  worse than no drawing.
+
+- **R136 — A preview and its commit compute from the SAME input; any
+  divergence between what a tool draws and what it bakes is a defect,
+  not an optimisation (decision 026 §1.2 as filed, GENERALISED at
+  filing from three instances in one session, continuation 82).**
+  Decision 026 stated this as *"what the pick preview shows is what
+  authoring bakes."* It is filed **broader** than that, because the
+  session that produced it contained **three separate instances**, which
+  is a pattern rather than three accidents:
+  1. **The constrained line** — `preview_segment` drew the *constrained*
+     segment while `commit_point` stored the *raw* pick. Introduced for
+     a good reason (CLI byte-equivalence), **documented honestly in the
+     module's own doc comment**, and still shipped a bug: the
+     justification covered the *value* and nobody checked the *drawing*
+     (Pass 27.0).
+  2. **The placing preview** (Pass 27.1).
+  3. **The drag preview** — drew a translated bounding box while the
+     commit performed a placement. **Introduced in the same hour as the
+     fix for (1)**, by the engineer who had just written the rule down.
+  The rule is therefore about *structure*, not vigilance: preview and
+  commit share a derivation, or the divergence is a defect by
+  definition. Justifying the stored representation does not license
+  drawing something else.
+
+- **R137 — Sidecar schema changes are ADDITIVE at the current version by
+  default (decision 026 §3.5, continuation 82; adopted at filing).** A
+  new field goes in as an **optional key with a documented absent-value
+  default**; `SIDECAR_VERSION` is bumped only when a change genuinely
+  cannot be expressed additively. Every such addition ships a test that
+  deserialises a **hand-built** older dict — never one produced by the
+  current serializer, which can only prove the serializer agrees with
+  itself — and asserts nothing else is lost.
+
+- **R138 — A schema written by a NEWER build is a refusal, never a
+  silent reset (decision 026 §3.6, continuation 82; adopted at filing;
+  filed with scope GENERALISED past sidecars).** When a stored version
+  exceeds what this build writes, pdfce **refuses to write** and
+  discloses (`EditError::SidecarWrittenByNewerBuild`), rather than
+  starting a fresh model and overwriting on save. Reading is a
+  **range**; writing over a newer version is a **named refusal**.
+  **Exact-equality-then-start-fresh is the anti-pattern**, and it is
+  uniquely dangerous because it is **invisible**: the annotations keep
+  rendering, nothing on screen looks wrong, and the loss becomes
+  permanent at the next save. Same family as
+  `DeleteWouldMoveNextSubpath` (decision 025 §5.5) — a byte-minimal
+  operation that destroys unrecoverable operator work and is catchable
+  **only** by a named refusal. Generalises to any versioned private
+  data pdfce writes, not only `/PieceInfo`.
+
+- **R139 — The drafting standard governs how a ce dimension is DRAWN,
+  never what it MEASURES; and any presentation rule it does reach must
+  be expressible in the portable `/Measure` projection (decision 026
+  §5.3/§5.4, continuation 82; adopted at filing).** Terminators, text
+  placement and orientation, extension-line gap and overshoot follow
+  `DimStandard`. The **numeric string** stays governed by
+  `NumberFormat` — including ISO 129-1:2018's **mandated comma**, which
+  lives there because that is where ISO 32000-1 §12.9's `/RD` lives, so
+  selecting ISO changes **one** field that feeds *both* the printed
+  label and the portable dict. A presentation rule that **cannot** be
+  expressed in Table 263 (`/U /C /F /D /FD /RT /RD /PS /SS /O`) is **not
+  implemented** — ANSI inch leading-zero suppression is the live
+  example. *Why:* a rule pdfce can print but cannot project makes its
+  own label and its own portable mirror disagree about the same file,
+  permanently and invisibly — and §5.5 shows that has **already
+  happened once**.
+
+- **R140 — An egui drag grab reads `press_origin`, never
+  `interact_pointer_pos()` on `drag_started` (Pass 25.5, 2026-08-04,
+  continuation 82; librarian-assigned; the input-layer sibling of
+  R126).** `Response::drag_started()` fires **after the drag threshold
+  is crossed**, so the pointer position available at that moment is
+  already roughly **45 pt** away from where the operator actually
+  pressed. Anything that must know **where the drag began** — hit-testing
+  the grab, classifying which handle was taken, measuring a delta —
+  reads `ctx.input(|i| i.pointer.press_origin())`. *This was a shipped
+  bug, live since Pass 9c-min, and it was silent in both directions:*
+  `run_vector_edit_tool` moved every object **short by the drag
+  threshold**, and node grabs were classified **against a point the
+  operator never pressed**. Neither produces an error, a refusal, or a
+  visible symptom — only a result slightly wrong in a way that reads as
+  imprecision. Escalated to
+  `D:\dev\rag\egui\drag_started_fires_after_the_threshold_use_press_origin.md`.
+
+- **R141 — A Pass is not SHIPPED until its decision record's acceptance
+  criteria are met (2026-08-04, continuation 82; librarian-assigned;
+  process rule, promoted from an instance).** Acceptance criteria are
+  the contract a Pass is declared against; a Pass declared shipped with
+  an unmet criterion converts a **known** obligation into an **unknown**
+  one, because the roadmap then says the work is done. *Instance:* Pass
+  27.0 (`5e93bec`) was declared shipped with decision 026's criterion
+  **C6 unmet** — the sidecar version gate, whose failure mode the record
+  had *already named as a latent data-loss cliff* in §3.6. It was caught
+  by an autonomous post-ship check, not by review, and completed the
+  same day (`104162d`). **Corollary on filing:** the completion is filed
+  as *"Pass 27.0 completing C6,"* **not** as a new Pass — a Pass reaching
+  its own criteria is not new work, and numbering it as new would erase
+  the fact that it was declared early. **Corollary on partial ships:**
+  if a criterion is deliberately deferred, the Pass ships as *"Pass N
+  (part)"* with the unmet criterion named in the roadmap entry — which
+  is exactly what Pass 24.0 (part) already does.
+
+- **R142 — A new parameter is verified by observing that CHANGING it
+  changes the OUTPUT (2026-08-04, continuation 82; librarian-assigned;
+  the output-side companion to R129).** A compile is not evidence that a
+  parameter is wired, and a passing suite is not evidence that a
+  **new** parameter is wired — the suite predates it. *Instance:*
+  `dimension-add --offset 130` produced a file **byte-identical** to
+  `--offset 0`. It compiled; every test passed; the cause was a limited
+  string replace that patched the **wrong occurrence**, threading the
+  parameter into a path nothing reached. The only check that could see
+  it was running the command twice with different values and comparing
+  the bytes. Rule: every new CLI flag, every new field on an authored
+  object, ships with a **differential** check — two values, two outputs,
+  asserted different (and asserted *how* they differ where the shape of
+  the difference is the point). Where R129 says *verify against the
+  artifact of the change*, R142 says *verify that the change has an
+  artifact at all.*
+
+  **Ceiling is now R142** (was R129 at continuation 81's filing).
+  R130–R134 are decision 025's and R135–R139 are decision 026's, both
+  assigned at filing per the R107–R110 precedent; **R136 and R138 were
+  filed with broadened scope** and say so in their own text. R140–R142
+  are librarian-originated from this continuation's shipped work and its
+  process failures.
 
 ## Update protocol
 

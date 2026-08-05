@@ -11441,3 +11441,437 @@ All four are now Shipped entries at the top of `ROADMAP.md`.
   `vector::hit_test_subpaths`/`subpath_bounds` **is** shipped core
   surface and should be added to §4 on the next §3/§4 sync, whether or
   not 22.0/23.2 have landed by then.
+
+---
+
+**Same-day continuation 82 (real date 2026-08-04) — SEVEN PASSES SHIPPED
+(25.2, 25.3, 25.4, 25.5, 25.6, 27.0, 27.1); decisions 025 and 026
+registered; open question (aq) ANSWERED by the operator; standing rules
+R130–R142 assigned; THREE shipped bugs found that had been live since
+Pass 9c-min; and THREE process failures recorded, one of them a Pass
+declared shipped before its acceptance criteria were met.**
+
+**Terminology note (rule 15), because this continuation is almost
+entirely about dimensions:** everything below that says **ce dimension**
+means the objects **pdfce authors** (`/Line` + `/IT /LineDimension` with
+a baked `/AP`, their groups, scale, `/Measure` dict and `/PieceInfo`
+sidecar). **pdf dimension** appears only where a CAD exporter's own
+existing dimensions are meant. No bare "dimension" is used for either.
+
+**Shipped:**
+
+- **Pass 25.2** (`0423179`) — **delete ONE part of an object.**
+  `plan_delete_subpath` removes exactly one subpath's construction
+  operators; everything else is re-emitted byte-verbatim. Deleting the
+  only subpath deletes the object. **The three refusals are the design,
+  not the leftovers:** `SubpathStructureMismatch` (re-derives the
+  subpaths from the operator bytes and refuses if the count disagrees
+  with the decomposition — a silent disagreement would delete a
+  *different line* from the one the operator picked, and would be
+  **undetectable afterwards** because the result is well-formed and
+  round-trips), `ClippingPath` (removing part of a `W`/`W*` clip changes
+  what **other** content is visible — rule 4, not a geometry edit), and
+  `SubpathOutOfRange`. The structure guard also covers decision 025
+  §5.5's `DeleteWouldMoveNextSubpath` hazard **conservatively**.
+  Verified on the operator's own file: 1,194 → 1,193 subpaths,
+  `undo_identical=1`. CLI `subpath-delete`.
+- **Pass 25.3** (`3edb003`) — **vector edits accumulate.**
+  `VectorEditNeedsReopen` had refused a *second* vector edit on a page
+  per session since Pass 9c-min, across the whole family
+  (`move_object`/`delete_object`/`move_node`/`delete_subpath`),
+  documented as "known limitation, not a defect."
+- **Pass 25.4** (`9462e2f`) — **Alt+click cycles stacked parts.**
+  `cycle_ordinal` extracted and **both** levels refactored onto it
+  (R92); `SubpathCycle` is its own type rather than `ClickCycle` made
+  generic. Readout discloses *"(2 of 4 here — Alt+click for the next)"*.
+  Verified on the operator's own file: `1120 → 1180 → 1138 → 1178 →
+  1120`.
+- **Pass 25.5** (`34787b7`) — **drag a ce dimension + display-format
+  controls.** `move_dimension` translates **and regenerates** the
+  annotation and its baked `/AP`. `AUTHORED_ANNOT_KEYS` declares owned
+  keys next to the authoring; **`/C` is deliberately NOT owned**.
+  `dimension_rects(page)` is the overlay-aware hit-test query. Display
+  format (decimal places / fraction denominator / reduce) feeds
+  `ScaleEntryFields::fraction` and **survives a unit change**.
+- **Pass 25.6** (`b3474b8`) — **delete a ce dimension.** Removes the
+  `/Annots` reference, the annotation, the `/AP` **and the sidecar
+  record**, together. Reuses `remove_from_annots`. A group **survives
+  its last member on purpose** — a group is calibration work. GUI Delete
+  + CLI `dimension-delete`.
+- **Pass 27.0** (`5e93bec`, completed by `104162d`) — **constrained
+  ce-dimension geometry.** New `axis_frame` + `linear_geometry`; real
+  extension lines, **omitted** (not clamped) when shorter than the gap;
+  `offset: f64` defaulting to `0.0`. Gap/overshoot constants labelled
+  **CONVENTION, NOT MANDATED** in their doc comments. CLI
+  `dimension-add --offset`.
+- **Pass 27.1** (`7ed90a2`) — **SolidWorks dimensioning + placement.**
+  New `text_along`; `place_dimension` (value-preserving **by
+  construction** — it writes only fields the value function does not
+  read); the drag applies a **delta in the ce dimension's own frame**, so
+  the grip is kept rather than jumping under the cursor. Authoring is now
+  **three clicks** (what / to what / where); `ScalePick` opts out via
+  `LinearPick::reference_line()`. CLI `dimension-add --offset
+  --text-along`.
+
+All seven are now Shipped entries at the top of `ROADMAP.md`.
+
+**Decisions made this session:**
+
+- **Decisions 025 and 026 registered** (both merged in from worktrees;
+  both now carry `ARCHITECTURE.md` §12 dated entries):
+  - `docs/decisions/025-the-subpath-rung-and-the-unified-level-ladder.md`
+    (1,744 lines) — **resolves the continuation-81 "Level-model
+    reconciliation" flag.** The subpath is a genuine rung, between object
+    and node; the gesture collision dissolves once descent is **one state
+    variable** (`LevelPath`) instead of two mechanisms. Rules L1–L3.
+    Concrete fix: **delete `main.rs`'s `doc.entered = None` in
+    `ClearCanvasSelection`, add `Action::LeaveLevel` at Escape slot 2**;
+    023's `LeaveGroupLevel` renamed `LeaveLevel`. Passes 26.0–26.2;
+    **Pass 23.2 SPLITS** (core/CLI half stands, GUI half superseded,
+    criterion C6 factually wrong); **Pass 23.3's dependency moves from
+    23.2 to 26.0**, a genuine unblocking. Claims R130–R134 and
+    (ak)–(ap).
+  - `docs/decisions/026-linear-ce-dimension-geometry-offset-and-drafting-standards.md`
+    (1,529 lines) — corrected geometry, the offset model, the ANSI-vs-ISO
+    difference table with **per-row confidence**, per-group standard with
+    **ANSI as the factory default**. Passes 27.0–27.3. Claims R135–R139
+    and (aq)–(au).
+- **★ Decision 025 flags FIVE statements in decision 023 as factually
+  WRONG** — not incomplete; wrong such that a reader acting on them
+  builds the wrong thing. Including **acceptance criterion C6** and a
+  specified UI string that would ship a false claim on the operator's own
+  files (*"this object is not inside a group (already at object level)"*
+  — on a file where the object has 1,194 selectable parts and 6,681
+  points below it). Two more are narrowed rather than wrong. 023 is
+  **not edited**; a forward pointer was added to its §12 ledger entry.
+- **★ Question (aq) is ANSWERED by the operator: SolidWorks semantics.**
+  Decision 026 §4.7 had laid out two readings — drag **along** the axis
+  vs drag **perpendicular** — and refused to pick, because the two halves
+  of the operator's own sentence point opposite ways. His answer was
+  **neither**: *"dimensioning and moving dimensions should work how it
+  does in SolidWorks Drawings GUI."* Confirmed from **his own SolidWorks
+  API RAG rather than from recall**: `IModelDoc2.AddDimension2(x,y,z)`
+  takes *"the text-placement point"* — placement is a **POINT**, which in
+  the dimension's own frame decomposes into standoff (perpendicular) and
+  text position (parallel). **Both halves from one drag, measured points
+  pinned.**
+- **Pass 27.3 is largely ABSORBED and must not be read as
+  outstanding.** Decision 026 §7.4 scoped 27.3 ("text position along the
+  dimension line") as existing *"only under §4.7 answer (2)."* The
+  operator's answer made it **required** for the parity he asked for —
+  and **Pass 27.1 then shipped `text_along` and its drag in the same
+  commit**. What genuinely remains is small and unbuilt: a dedicated
+  **text grab target** distinct from the line grab, plus
+  `pdfce-ui-specialist`'s answer on the grab/cursor affordance.
+  Reconciled explicitly rather than left as a Pass that reads as owed.
+- **Standing rules R130–R142 assigned. Ceiling was R129; ceiling is now
+  R142.** R130–R134 (decision 025) and R135–R139 (decision 026) adopted
+  at filing per the R107–R110 precedent. **Two were filed with broadened
+  scope and say so in their own text:** **R136** generalised from "pick
+  preview vs authoring bake" to *any* preview/commit divergence (three
+  instances this session), and **R138** generalised from sidecars to any
+  versioned private data pdfce writes. **R140–R142 are
+  librarian-originated** from this continuation's work: R140
+  (`press_origin`, never `interact_pointer_pos` on `drag_started`), R141
+  (a Pass is not shipped until its decision record's acceptance criteria
+  are met), R142 (a new parameter is verified by observing that changing
+  it changes the output).
+- **Open operator questions (ak)–(au) filed**; letters ran to (ab) before
+  continuation 81 and to (aj) before this one. **(aq) is filed as
+  RESOLVED with its answer**, and **(an) is filed as answered-by-shipping**
+  (Pass 25.4 shipped the subpath click-cycle decision 025 had scoped into
+  Pass 26.0 and asked about).
+
+**Findings + decisions:**
+
+- **★★ THREE SHIPPED BUGS FOUND THAT HAD BEEN LIVE SINCE PASS 9c-min,
+  and none of them had ever been reported.** They are grouped because
+  their common property is the point: **each was silent in a way that
+  reads as imprecision or as a documented limitation rather than as a
+  defect.**
+  1. **The drag grab read `interact_pointer_pos()` on `drag_started`**
+     (found in Pass 25.5). **egui fires `drag_started` AFTER the drag
+     threshold is crossed** — by then the pointer is roughly **45 pt**
+     from where the operator pressed. So `run_vector_edit_tool` has moved
+     **every object short by the drag threshold** for the whole life of
+     the feature, and node grabs were classified **against a point the
+     operator never pressed**. Both sites now use `press_origin`. New
+     rule **R140**; escalated to `D:\dev\rag\egui\`.
+  2. **Whole-object delete by keyboard was UNREACHABLE** (found in Pass
+     25.2). The Delete key was collected only `if !tool_active`, while
+     the object-delete branch **requires the object tool to be active**.
+     Mutually exclusive — the branch could never run. Shipped,
+     documented, and untriggerable. R96's dead-guard class.
+  3. **`VectorEditNeedsReopen` was guarding a mismatch pdfce created
+     itself** (Pass 25.3). `vector_surgery` decomposed the **base**
+     document while the GUI provider moved to `session.view()` at **Pass
+     17.0**. The surgery was the side out of step; the refusal was
+     documented as a "known limitation, not a defect" for four Passes.
+     Now reads `current_page_content` (the helper `edit_text` always
+     used) and **the error variant is deleted as unreachable** (R96).
+- **★ THE PREVIEW/COMMIT DIVERGENCE IS A PATTERN, NOT THREE
+  ACCIDENTS — and that is why R136 was filed broader than decision 026
+  wrote it.** Three separate instances in one continuation:
+  1. **The constrained line** (Pass 27.0) — `preview_segment` drew the
+     *constrained* segment, `commit_point` stored the *raw* pick. This
+     one is the instructive one: it was introduced **for a good reason**
+     (CLI byte-equivalence), **documented honestly in the module's own
+     doc comment**, and still shipped a bug — because *the justification
+     covered the value and nobody checked the drawing.* Storing raw `b`
+     was **correct and was kept**; `b` anchors the second extension line.
+     What was missing is that the appearance path had never been taught
+     that `b` is a **measured** point, not a dimension-line endpoint.
+  2. **The placing preview** (Pass 27.1).
+  3. **The drag preview** (Pass 27.1) — drew a translated bbox while the
+     commit did a placement. **Introduced in the same hour as the fix
+     for (1), by the engineer who had just written the rule down.**
+  The lesson is that vigilance does not close this class: preview and
+  commit either share a derivation or they diverge. Justifying the
+  *stored representation* never licenses drawing something else.
+- **★ THE SIDECAR VERSION GATE — a latent data-loss cliff the record
+  named, the Pass shipped past, and an autonomous check caught.**
+  `deserialize_model` gated on **exact** version equality and answered
+  `None`; `read_dimension_model` turns `None` into a **fresh model**. So
+  an older build opening a newer file would start empty and **the next
+  save would overwrite the operator's groups, calibrated scales and
+  memberships.** The reason it is worse than an ordinary parse failure:
+  **the `/Line` annotations keep rendering**, so nothing looks wrong at
+  any point before the loss becomes permanent. Reading is now a range;
+  **writing is refused** via `check_dimension_sidecar` at **all seven
+  mutation sites** plus new `EditError::SidecarWrittenByNewerBuild`. New
+  rules **R137/R138**; escalated to `C:\personal_rag\pdf\`.
+- **★ A PASS WAS DECLARED SHIPPED BEFORE ITS ACCEPTANCE CRITERIA WERE
+  MET, and this is the first recorded instance.** Pass 27.0 (`5e93bec`)
+  was declared shipped with decision 026's **criterion C6 unmet** — the
+  sidecar gate above, i.e. **the exact hazard the record had already
+  written down as a cliff in §3.6**. It was found by an **autonomous
+  post-ship check**, not by review. Completed the same day (`104162d`)
+  and filed as **"Pass 27.0 completing C6," not as a new Pass** —
+  numbering it as new work would have erased the fact that it was
+  declared early. New rule **R141**, with a corollary for deliberate
+  deferrals: ship as *"Pass N (part)"* with the unmet criterion named,
+  exactly as Pass 24.0 (part) already does.
+- **★ THE `--offset 130` INCIDENT — it compiled, every test passed, and
+  the output was wrong.** `dimension-add --offset 130` produced a file
+  **byte-identical** to `--offset 0`. Cause: a limited string replace
+  patched the **wrong occurrence**, threading the new parameter into a
+  path nothing reached. **Nothing in the build or the suite could see
+  it** — the suite predates the parameter, and a compile proves only that
+  the name resolves. The only check that could catch it was running the
+  command twice with different values and comparing bytes. New rule
+  **R142**: every new flag/field ships a **differential** check (two
+  values, two outputs, asserted different). Where R129 says *verify
+  against the artifact of the change*, R142 says *verify the change has
+  an artifact at all.*
+- **The consolidation-then-half-application failure, twice, both by the
+  engineer applying R92.** (a) Pass 25.1 wrote `apply_click_depth` as one
+  shared method **specifically to prevent drift** and then called it from
+  only one of the two click paths (fixed in 25.2). (b) `set_group_scale`
+  carried its **own inline** regeneration touching `/Rect`/`/Contents`/
+  `/Measure` but **not `/L`** — correct for a scale change, silently
+  wrong for a move — consolidated onto one `regenerate_dimension_writes`
+  in Pass 25.5 before it could ship as a bug. R92 is not satisfied by
+  *writing* the shared helper; it is satisfied by every caller using it.
+- **The test that was worth writing, and why the obvious one was not.**
+  Pass 25.3's `two_subpath_deletes_in_one_session_remove_the_right_two_parts`
+  asserts **geometrically** which parts survive. An undo-depth assertion
+  — the obvious test — **would have passed even if the second delete
+  misindexed and removed the wrong part**, because the depth is right
+  either way. Same family as continuation 81's saturating-zoom test
+  lesson: a test whose failure does not tell you which property broke is
+  a test of the wrong property.
+- **★ A standards misattribution corrected before any code was written.**
+  The natural assumption — **ASME Y14.5** — is **wrong**: Y14.5 is the
+  **GD&T/tolerancing** standard; line and arrowhead conventions are
+  **ASME Y14.2**. On the ISO side, **ISO 129-1:2018 cl. 4.1.1 mandates a
+  COMMA decimal marker** (verified as a *"shall"*), expressible portably
+  via ISO 32000-1 §12.9 Table 263's `/RD` — **with the gotcha that
+  `/RT`'s own spec default is ALSO a comma**, so ISO must emit `/RD (,)`
+  *and* a non-comma `/RT` or every grouped number renders `1,234,56`.
+  The widely-taught **"30° ambiguous zone" is folklore from ISO
+  129:1985** and is not in the 2018 edition. Annex A is **paywalled**, so
+  pdfce must say **"ISO-style"**, never "ISO 129-1 conformant" —
+  asserted against `ui_text` so a copy edit cannot reintroduce a claim.
+  This is the project's claim-bearing-copy discipline applied to a
+  drafting claim.
+- **Side-finding recorded because it would otherwise stay invisible:
+  pdfce's own ce-dimension label and its own `/Measure` mirror can
+  ALREADY disagree.** pdfce prints `3.10 m` (fixed places) while the
+  mirrored dict omits `/FD`, whose default `false` lets a conforming
+  reader print `3.1 m`. `NumberFormat::format`'s doc comment claims they
+  *"agree by construction."* They do not — an R93 instance found by
+  reading, not by a failure.
+- **Deviation recorded rather than smoothed: Passes 25.2/25.4 shipped
+  parts of decision 025's own Pass plan before the record was
+  registered.** 25.4 delivered the subpath click-cycle scoped into **Pass
+  26.0** (criterion F6, question (an)); 25.2 delivered subpath delete +
+  its refusal family + CLI, scoped into **Pass 26.1**. Net: **26.1 is
+  reduced to `move_subpath` + the span work; 26.0 loses F6 as already
+  met.** Also a deviation on **R134** — 25.2 shipped delete **without**
+  the byte span, by re-deriving subpaths and refusing on disagreement.
+  That satisfies the rule's intent for an *excision* and does **not**
+  generalise: `Subpath` still carries no span, so `move_subpath` remains
+  **not expressible** against the core model.
+- **RAG escalations, this filing.** To `D:\dev\rag\egui\` (one new file,
+  indexed): `drag_started_fires_after_the_threshold_use_press_origin.md`.
+  To `C:\personal_rag\pdf\` (one new lesson, in the subject index and the
+  master index):
+  `lesson_20260804_pieceinfo_private_data_version_gate_exact_equality_data_loss.md`.
+  To `C:\personal_rag\solidworks\` (one new lesson, in the subject index
+  and the master index):
+  `lesson_20260804_drawing_dimension_placement_is_a_point_not_a_standoff.md`
+  — filed as a **behavioural reference to SolidWorks' own model**, not as
+  a pdfce finding, and cross-referenced to the existing
+  `lesson_20260610_adddimension2_hangs_automation_modify_dialog.md`
+  rather than duplicating it (hard rule 4).
+
+**Still in flight:**
+- **Pass 27.2 (ANSI/ISO drafting standards) is the outstanding half of
+  the operator's 2026-08-04 report.** 27.0 and 27.1 answered the geometry
+  and the placement; the standard picker, `DimStandard`,
+  `set_group_standard` and the ANSI/ISO drawing rules are unbuilt. It is
+  **not gated** on anything.
+- **Pass 26.0–26.2 (the unified ladder) — decided and filed, zero code.**
+  26.0's ladder, Escape fix, readout matrix and node rung are untouched.
+  Nothing promoted to *In progress*; sequencing is the engineer's and
+  operator's call. **22.0 still first.**
+- **`move_subpath` — not built and correctly not offered** (R83). Blocked
+  on the model, not on effort: `Subpath` has no byte span (R134).
+- **Pass 21.1** — unchanged and untouched for a third continuation.
+  `ShowSlot::code` widening past `u8` and the multi-byte operand writer
+  remain unbuilt; composite runs stay locatable-but-refused, not
+  editable. **Do not describe FF-C or Pass 21.1 as complete.**
+- **Pass 24.0–24.5** — decided and filed, zero code, unchanged.
+- **Canvas overscroll** — unchanged, still referred to
+  `pdfce-ui-specialist`.
+- Open operator questions (r)–(ab), (ac)–(aj) and the new (ak)–(ap),
+  (ar)–(au) all still await Ken. **(aq) is answered.**
+
+**For next session:**
+- **Pass 27.2 is the obvious next build if the priority is "finish what
+  he reported"** — it is unblocked, independent of every open question,
+  and it is the half of the 2026-08-04 report that is still owed.
+- **Answer (ar) before 27.2 lands if you want it to** — the default
+  standoff question is cheap to change now and annoying later, since it
+  affects every newly authored ce dimension.
+- **Re-verify the ledger ceilings against the BRANCH, not a worktree**
+  (R133). Decision 025's own header recorded a run inside a pinned
+  worktree reporting stale ceilings for Pass families, standing rules and
+  question letters **simultaneously**. This is the **seventh** numbering
+  hazard on this project.
+- **`ARCHITECTURE.md` §3/§4 are now behind on TWO subsystems, not one.**
+  Owed at the next sync: Pass 25.0's `vector::hit_test_subpaths`/
+  `subpath_bounds` (carried from continuation 81), Pass 25.2's
+  `plan_delete_subpath`, and now `DimensionKind::Linear`'s `offset` and
+  `text_along` plus `EditError::SidecarWrittenByNewerBuild`. All are
+  shipped core surface.
+- **GIT STATUS, this filing: 109 commits, still no remote**
+  (`git rev-list --count HEAD`, `git remote -v` empty — both run this
+  filing, not relayed). The backup bundle
+  `D:\Dev\pdfce-backups\pdfce-20260804-final.bundle` (continuation 78) is
+  now **STALE by many commits** — it predates all seven Passes filed
+  here. A fresh `git bundle create` + `git bundle verify` is owed. Same
+  standing caveat as every prior refresh: a point-in-time snapshot is not
+  a substitute for an actual push decision.
+  **DISCHARGED by the amendment below (2026-08-04):** refreshed to
+  `pdfce-20260804-2356.bundle` at `9a0c093`, verify-clean, zero unbacked
+  commits. The stale bundle was **exactly 27 commits behind** — the gap
+  was measured, not estimated.
+- **~~Test-suite and gate results were NOT reported to this librarian for
+  this filing and are therefore NOT recorded.~~ CLOSED by the
+  continuation-82 amendment below (2026-08-04)** — the figures were
+  reported after the filing and are now on record. Continuation 78's
+  1,806-test figure is **retired as a current number**; it remains valid
+  only as "the count at `31d2fdc`."
+
+---
+
+**AMENDMENT (2026-08-04, same continuation, filed after the seven-Pass
+entry above) — gates measured, backup bundle refreshed.**
+
+This amendment closes the two gaps the original filing flagged against
+itself. Nothing above is rewritten; both gaps were real at filing time
+and were discharged afterwards.
+
+**1. Test suite and gates — measured ONCE, at `9a0c093`.** `9a0c093` is
+the tip of `pass-8-redaction`, which is the tip of all seven Passes
+filed in this continuation, so this is a stack-level measurement:
+
+- `cargo test --workspace` — **1,878 passing, 0 failing, 42 test
+  binaries**
+- `cargo fmt --all --check` — clean
+- `cargo clippy --workspace --all-targets -- -D warnings` — clean
+- `cargo tree -p pdfce-core` and `cargo tree -p pdfce-render` — **no
+  `egui` / `eframe` / `winit` / `wgpu`**; the GUI-core separation
+  invariant (CLAUDE.md rule 2, `ARCHITECTURE.md` §3) survived seven
+  Passes, five of which touched `pdfce-gui`
+- Packaging smoke test — **not owed**, no packaging change this session
+
+**Recorded at session level, not per Pass, deliberately.** The suite was
+run once at the end; no per-Pass before/after deltas exist, so none are
+invented. The `1,806 → 1,878` difference (**+72 tests over 27 commits**)
+belongs to the seven-Pass stack as a whole. The full table lives in
+`ROADMAP.md`'s Shipped section, in the *"Gate record for the seven Passes
+filed in continuation 82"* block that now heads it.
+
+**Two gates were NOT reported and are NOT claimed:**
+`tools/check-ui-strings.sh` and `tools/check-ledger-numbers.py`.
+Continuation 78 ran both at `31d2fdc`; nothing has verified them since.
+Treat them as unverified, not green — `check-ledger-numbers.py` in
+particular guards exactly the kind of Pass-family/standing-rule/question-
+letter ceiling drift that R133 exists for, and this continuation minted
+new Pass IDs, new rules and new question letters (ak)–(ap), (ar)–(au).
+
+**2. Stale-1,806 warning — RETIRED.** A current number now exists.
+1,806 is henceforth a historical datum meaning "the count at `31d2fdc`,"
+not a fallback to quote when a fresh count is unavailable. The general
+lesson stands and is the reason the warning was written: **a test count
+without a commit hash beside it is not a measurement.** Every count
+recorded in this log carries its hash for that reason.
+
+**3. Backup bundle REFRESHED — the continuation-78 bundle was 27 commits
+stale, i.e. this entire continuation existed on one disk.**
+
+- New bundle: **`D:\Dev\pdfce-backups\pdfce-20260804-2356.bundle`**,
+  created with `git bundle --all`, verified with `git bundle verify` →
+  *"The bundle records a complete history."* / *"is okay."*
+- It carries **12 refs**, including `refs/heads/pass-8-redaction` at
+  **`9a0c093` — identical to `HEAD`, so zero unbacked commits** — plus
+  `refs/heads/main` at `67967b2` and six `refs/heads/worktree-agent-*`
+  refs. Those worktree refs are not incidental: three of this session's
+  seven Passes were built in pinned worktrees, and `--all` (rather than
+  bundling a single branch) is what keeps that work inside the backup.
+- Superseded bundle `pdfce-20260804-final.bundle` carried
+  `pass-8-redaction` at `6677a6e`;
+  `git rev-list --count 6677a6e..9a0c093` = **27**. The staleness flagged
+  in the original entry was not hypothetical — it was one full
+  continuation of unreplicated work.
+- **Verified at this amendment, not relayed:** `git rev-list --count
+  HEAD` = 109, `git remote -v` = empty, `git bundle verify` on the new
+  bundle, `git bundle list-heads` on the old one, and the 27-commit gap
+  were all re-run here.
+
+**Standing risk, now measured rather than asserted: the repository still
+has NO REMOTE.** That is expected, not an oversight — publishing is gated
+on `LEGAL.md` §1 (licence decided MIT, push still awaiting an explicit
+operator go-ahead). The consequence is that these dated bundles are the
+**only** backup this project has, and their staleness is the single-disk
+exposure. **Check bundle-head vs `HEAD` at every filing, not once a
+session** — 27 commits accumulated between two filings on the same day.
+Refreshing a bundle is still a point-in-time snapshot and still not a
+substitute for a push decision.
+
+**4. Caveat the "zero unbacked commits" claim must carry: a bundle backs
+up COMMITS, and the continuation-82 documentation filing is not one
+yet.** At the time of this amendment `git status --short` shows
+`docs/ARCHITECTURE.md`, `docs/ROADMAP.md` and `docs/SESSION_LOG.md`
+**modified and uncommitted** (~1,495 inserted lines across the three —
+decisions 025/026, the seven Shipped entries, this entry and this
+amendment). `pdfce-20260804-2356.bundle` is byte-current with `HEAD`
+and therefore contains **none of it**. So: zero unbacked *commits*, but
+the entire institutional-memory filing for this continuation currently
+exists **only in the working tree of one disk** — the exact exposure
+this amendment was written to close, displaced one layer. The code is
+safe; the record of why the code looks like that is not. **Commit the
+docs, then re-bundle** — or accept that the next bundle is what actually
+protects them.
