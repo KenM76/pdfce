@@ -4377,6 +4377,14 @@ fn cmd_round_trip(
         ProducerArg::Preserve => ProducerPolicy::Preserve,
     });
 
+    // The whole `round-trip` subcommand is an INSTRUMENT, not an editing
+    // feature. Every arm below passes `DirtySet::empty()` or
+    // `identity_reemission` — it mutates nothing, and exists to prove the
+    // writer reproduces a file byte-for-byte (the content-identity harness).
+    // Routing it through `EditSession` would mean opening a session to make no
+    // edit, and would measure the session rather than the writer.
+    //
+    // bypass-exempt: identity re-emission only, mutates nothing (see above)
     let saved = match mode {
         RoundTripMode::Incremental => {
             pdfce_core::writer::save_incremental(&doc, &DirtySet::empty(), &options)
@@ -4385,7 +4393,12 @@ fn cmd_round_trip(
         RoundTripMode::AppendIdentity => {
             // Every object of the base revision, re-emitted unchanged.
             let ids: Vec<_> = doc.objects().map(|io| io.id).collect();
+            // bypass-exempt: round-trip instrument — the `DirtySet` below is
+            // `identity_reemission`, which re-emits every base object
+            // unchanged and mutates nothing. This proves the writer reproduces
+            // a file byte-for-byte; it is an instrument, not an edit.
             pdfce_core::writer::save_incremental(
+                // bypass-exempt: round-trip instrument, identity re-emission
                 &doc,
                 &DirtySet::identity_reemission(ids),
                 &options,
