@@ -143,7 +143,7 @@ pub enum NotInjective {
     MultiCharDestination { code: u32, text: String },
     /// Two codes map to the same character.
     #[error(
-        "codes {first} and {second} both map to {ch:?}, so mapping that character back to a code          has no single answer"
+        "codes {first} and {second} both map to {ch:?}, so mapping that character back to a code has no single answer"
     )]
     Collision { ch: char, first: u32, second: u32 },
     /// A code maps to the empty string.

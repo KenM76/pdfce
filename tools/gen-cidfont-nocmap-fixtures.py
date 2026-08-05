@@ -289,6 +289,72 @@ def cidfont_with_tounicode() -> bytes:
     return serialize(objects)
 
 
+
+def cidfont_noninjective_tounicode() -> bytes:
+    """The same composite font carrying a NON-INJECTIVE `/ToUnicode`.
+
+    Two CIDs map to the SAME character (U+0041), so the inverse is not a
+    function: asked to write 'A' back, pdfce cannot know whether the file
+    means CID 1 or CID 2, and either choice is a guess that renders as a
+    real, wrong glyph.
+
+    This fixture exists because composite editing WORKS as of Pass 29.0.
+    Before that any composite font exercised the R-INV-4 refusal; now the
+    refusal fires only for fonts whose map genuinely cannot be inverted, so
+    testing it needs one of those. Its injective sibling is now the EDITABLE
+    case, and the no-`/ToUnicode` one cannot serve: its text does not decode
+    at all, so no anchor is ever found and `NoMatch` is the honest answer —
+    the test would pass for the wrong reason.
+    """
+    ttf = build_nocmap_truetype()
+    cid_to_gid = bytes([0x00, 0x00, 0x00, 0x01])
+
+    # CID 1 -> U+0041 'A'. One entry, trivially injective.
+    tounicode = (
+        b"/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n"
+        b"/CMapName /pdfce-Identity-UCS def\n/CMapType 2 def\n"
+        b"1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n"
+        b"2 beginbfchar\n<0001> <0041>\n<0002> <0041>\nendbfchar\n"
+        b"endcmap\nend\nend\n"
+    )
+
+    content = b"BT\n/F0 48 Tf\n72 600 Td\n<0001> Tj\nET\n"
+
+    objects: dict[int, bytes] = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        2: (
+            f"<< /Type /Pages /Kids [3 0 R] /Count 1 "
+            f"/MediaBox [0 0 {PAGE_WIDTH} {PAGE_HEIGHT}] "
+            f"/Resources << /Font << /F0 5 0 R >> >> >>"
+        ).encode("ascii"),
+        3: b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>",
+        4: raw_stream(content, ""),
+        5: (
+            b"<< /Type /Font /Subtype /Type0 /BaseFont /ABCDEF+pdfceSyntheticBox "
+            b"/Encoding /Identity-H /DescendantFonts [6 0 R] /ToUnicode 10 0 R >>"
+        ),
+        6: (
+            b"<< /Type /Font /Subtype /CIDFontType2 "
+            b"/BaseFont /ABCDEF+pdfceSyntheticBox "
+            b"/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> "
+            b"/FontDescriptor 7 0 R /CIDToGIDMap 8 0 R /DW 1000 >>"
+        ),
+        7: (
+            b"<< /Type /FontDescriptor /FontName /ABCDEF+pdfceSyntheticBox "
+            b"/Flags 4 /FontBBox [0 -200 1000 800] /ItalicAngle 0 "
+            b"/Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 "
+            b"/FontFile2 9 0 R >>"
+        ),
+        8: raw_stream(cid_to_gid, ""),
+        9: raw_stream(ttf, f" /Length1 {len(ttf)}"),
+        10: raw_stream(tounicode, ""),
+    }
+    return serialize(objects)
+
+
+
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / "cidfonttype2-nocmap-embedded.pdf"
@@ -298,6 +364,10 @@ def main() -> int:
     p2 = OUT / "cidfonttype2-with-tounicode.pdf"
     p2.write_bytes(cidfont_with_tounicode())
     print(f"wrote {p2} ({p2.stat().st_size} bytes)  [injective /ToUnicode]")
+
+    p3 = OUT / "cidfonttype2-noninjective-tounicode.pdf"
+    p3.write_bytes(cidfont_noninjective_tounicode())
+    print(f"wrote {p3} ({p3.stat().st_size} bytes)  [NON-injective /ToUnicode]")
     return 0
 
 

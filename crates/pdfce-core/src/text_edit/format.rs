@@ -1329,8 +1329,14 @@ pub(crate) fn plan_format(
         }
     }
 
-    let new_codes: Vec<u8> = match &font_plan {
-        Some(plan) => plan.new_codes.clone(),
+    // The formatting path is SINGLE-BYTE by construction: it re-encodes into a
+    // target simple font's encoding. `m.old_codes` widened to `u32` in Pass
+    // 29.0 for the composite REPLACE path, so it is converted here rather than
+    // widening this path too — a composite run never reaches formatting
+    // (`classify_font` refuses it first), and pretending otherwise would put
+    // two-byte codes into a single-byte emitter.
+    let new_codes: Vec<u32> = match &font_plan {
+        Some(plan) => plan.new_codes.iter().map(|&c| u32::from(c)).collect(),
         None => m.old_codes.clone(),
     };
     let advance_font: &ExtractFont = font_plan.as_ref().map_or(&orig_font, |p| &p.font);
@@ -1369,12 +1375,13 @@ pub(crate) fn plan_format(
                 anchor.tc(),
                 anchor.tw(),
                 anchor.th(),
+                true,
             )
         })
         .sum();
     let a_new: f64 = new_codes
         .iter()
-        .map(|&c| glyph_advance_with(advance_font, c, emitted_size, eff_tc, eff_tw, eff_th))
+        .map(|&c| glyph_advance_with(advance_font, c, emitted_size, eff_tc, eff_tw, eff_th, true))
         .sum();
     let delta = a_new - a_old;
 
@@ -1585,7 +1592,15 @@ pub(crate) fn plan_format(
         synthetic_italic = Some((tan, rise_offset));
     }
 
-    let mid = vec![ShowElem::Str(new_codes.clone())];
+    // Back to bytes for emission. Every code here fits by construction (the
+    // single-byte re-encode above produced them), and `filter_map` keeps that
+    // assumption from turning into a silent truncation if it ever stops
+    // holding — a truncated code is a different, valid, wrong glyph.
+    let mid_bytes: Vec<u8> = new_codes
+        .iter()
+        .filter_map(|&c| u8::try_from(c).ok())
+        .collect();
+    let mid = vec![ShowElem::Str(mid_bytes)];
     let mut replacement: Vec<u8> = Vec::new();
     let push_seg = |seg: Vec<u8>, out: &mut Vec<u8>| {
         if seg.is_empty() {
@@ -1844,7 +1859,7 @@ fn plan_font(
     if embedded && subset {
         let carried = carried_codes(recs, &resource);
         for (u, &code) in req.find.chars().zip(encoded.codes.iter()) {
-            if !carried.contains(&code) {
+            if !carried.contains(&u32::from(code)) {
                 return Err(FormatError::CoverageFailure(Refusal {
                     trigger: RInvTrigger::TargetAbsent,
                     character: Some(u),
@@ -2527,11 +2542,12 @@ fn plan_synthetic_italic(
                 for &c in bytes {
                     pre_advance += glyph_advance_with(
                         orig_font,
-                        c,
+                        u32::from(c),
                         orig_size,
                         anchor.tc(),
                         anchor.tw(),
                         anchor.th(),
+                        true,
                     );
                 }
             }

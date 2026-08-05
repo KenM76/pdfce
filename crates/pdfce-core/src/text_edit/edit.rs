@@ -85,7 +85,7 @@ use crate::document::Document;
 use crate::object::{Dict, Name, Object, Stream};
 use crate::page_tree::{self, Page, PageTreeError};
 use crate::span::ByteSpan;
-use crate::text_edit::encoding::{InverseEncoding, RInvTrigger, Refusal};
+use crate::text_edit::encoding::{CompositeEncoding, InverseEncoding, RInvTrigger, Refusal};
 use crate::text_extract::font::ExtractFont;
 use crate::text_state::{AmbientTextState, TextStateParam};
 use crate::writer::content::{emit_literal_string, emit_number};
@@ -799,14 +799,18 @@ impl<'a> Walk<'a> {
         for e in elems {
             match e {
                 ShowElem::Str(bytes) => {
+                    // This walker is byte-wise, so it is single-byte by
+                    // construction — a composite run's advance is computed on
+                    // the decoded-slot path, not here.
                     for &code in bytes {
                         tx += glyph_advance_with(
                             font,
-                            code,
+                            u32::from(code),
                             self.gs.tf_size,
                             p.char_spacing,
                             p.word_spacing,
                             p.h_scale,
+                            true,
                         );
                     }
                 }
@@ -1151,106 +1155,56 @@ impl<'a> Walk<'a> {
                             });
                         }
                     } else if let Some(f) = font.as_ref() {
-                        // COMPOSITE: decode far enough to be FINDABLE, and no
-                        // further. Text is populated so this run can be
-                        // selected as the anchor; NO SLOTS ARE PUSHED.
+                        // COMPOSITE: decoded AND slotted (Pass 29.0).
                         //
-                        // The original reason was that `ShowSlot::code` was a
-                        // `u8` and could not hold a 2-byte CID. That is no
-                        // longer true — it is a `u32` with a `width` as of
-                        // this Pass — so the honest reasons now are two, and
-                        // the second is the one that would be easy to get
-                        // wrong:
+                        // Slots were withheld here for two stated reasons.
+                        // The first — "the re-encode and splice paths
+                        // downstream are still single-byte, so a slot would be
+                        // a handle nothing can use" — is now false: they take
+                        // `u32` codes and splice raw bytes.
                         //
-                        // 1. The re-encode and splice paths downstream are
-                        //    still single-byte, so a slot here would be a
-                        //    handle nothing can use.
+                        // The second was subtler and is worth recording,
+                        // because it is why this could not simply be switched
+                        // on. Giving composite runs slots WEAKENS the
+                        // regression test that pins the classification
+                        // ordering (`tests/composite_refusal_reachable.rs`).
+                        // That test worked by asserting a composite edit does
+                        // not surface `NoMatch` — which it could only do while
+                        // `match_run` was guaranteed to fail for want of
+                        // slots. With slots, `match_run` succeeds, so a broken
+                        // ordering would still produce the refusal from
+                        // `classify_font` and the test would pass on the bug
+                        // it exists to catch.
                         //
-                        // 2. Pushing slots would WEAKEN the regression test
-                        //    that pins the composite refusal's reachability
-                        //    (`tests/composite_refusal_reachable.rs`). That
-                        //    test catches someone moving the font
-                        //    classification back below `match_run` — it works
-                        //    because, without slots, `match_run` fails and
-                        //    the wrong `NoMatch` surfaces. Give composite
-                        //    runs slots and `match_run` would SUCCEED, so the
-                        //    refusal would still fire from `classify_font`
-                        //    and the test would pass on the broken ordering.
-                        //    The guard would go quiet while the defect it
-                        //    guards became reachable again.
-                        //
-                        // So slots arrive in the same change that makes the
-                        // encoder multi-byte, and that change owes the
-                        // regression test a new way to detect the ordering —
-                        // asserting the refusal fires BEFORE any match work,
-                        // rather than relying on match failing. The
-                        // discriminator that survives slots: ask to edit text
-                        // that is NOT on the page. Correct ordering still
-                        // yields the composite refusal; broken ordering
-                        // yields `NoMatch`, because the text genuinely is not
-                        // there.
-                        //
-                        // WHAT THE WIRING CHANGE ACTUALLY OWES, surveyed
-                        // rather than guessed (Pass 21.1, 2026-08-04). Four
-                        // coupled pieces, none of them optional:
-                        //
-                        //  1. `font.glyph_names()` returns `None` for a
-                        //     composite font, and `plan_edit` currently
-                        //     treats that as `Unsupported`. The branch has to
-                        //     come before that, choosing
-                        //     `CompositeEncoding::build` (shipped, tested)
-                        //     over `InverseEncoding::build`.
-                        //  2. `glyph_advance` takes a single-byte code and
-                        //     reads simple-font widths. Composite advances
-                        //     come from the CIDFont's `/W`//`/DW`
-                        //     (§9.7.4.3) — a different table, not a wider
-                        //     argument.
-                        //  3. `emit_edited_operator` writes a literal
-                        //     `( … )` string. A composite operand is a HEX
-                        //     string of 2-byte codes; `CompositeEncodeResult
-                        //     ::to_bytes` already produces them big-endian,
-                        //     but the emitter must choose the form.
-                        //  4. `carried_codes`' embedded-subset floor is
-                        //     single-byte. Its composite equivalent asks
-                        //     whether a CID is already shown on the page.
-                        //
-                        // The substrate for all four is in place: `ShowSlot`
-                        // is `u32` + `width`, `CompositeEncoding` is tested,
-                        // and `fixtures/synthetic/text/composite-editable.pdf`
-                        // carries three CIDs with an injective `/ToUnicode`
-                        // so an ABC -> CBA edit can actually be verified.
-                        // Deliberately NOT started at the tail of a long
-                        // session: it puts a shipped, well-tested editing
-                        // path at risk, and a half-applied version of it is
-                        // worse than none.
-                        //
-                        // The point of decoding at all is that the run must
-                        // be REACHABLE for the composite refusal to fire on
-                        // it. Before this, composite runs were invisible to
-                        // the anchor search, so the operator got "not found"
-                        // — a wrong answer — instead of a refusal naming the
-                        // font.
+                        // So that test is rewritten in this same change to use
+                        // a font that is genuinely uneditable (no `/ToUnicode`
+                        // at all), where the refusal is real rather than
+                        // incidental — and the slots arrive here.
                         //
                         // Two bytes per code assumes `Identity-H`, which is
                         // what real-world composite text overwhelmingly uses
                         // and what pdfce itself writes (Pass 21.0). A
-                        // composite font on some other CMap decodes to
-                        // nothing here and stays invisible — the OLD
-                        // behaviour, not a new regression, and narrower than
-                        // it was.
-                        // Slice pattern rather than `pair[0]`/`pair[1]`:
-                        // `chunks_exact(2)` does guarantee the length, but
-                        // `clippy::indexing_slicing` is DENIED crate-wide
-                        // because this crate parses untrusted input, and
-                        // carving out an exception wherever the author can
-                        // see the invariant is how a deny-by-default rule
-                        // becomes advisory. The pattern makes the guarantee
-                        // the compiler's rather than the reader's.
-                        for pair in bytes.chunks_exact(2) {
+                        // composite font on some other CMap decodes to nothing
+                        // and stays unslotted, which is the old behaviour
+                        // rather than a new regression.
+                        //
+                        for (pi, pair) in bytes.chunks_exact(2).enumerate() {
                             let [hi, lo] = pair else { continue };
                             let code = u32::from(*hi) << 8 | u32::from(*lo);
                             let (chars, _) = f.to_unicode(code);
+                            let t0 = text.len();
                             text.push_str(&chars);
+                            let t1 = text.len();
+                            slots.push(ShowSlot {
+                                code,
+                                // TWO, and this is what makes `b_lo`/`b_hi`
+                                // land on code boundaries rather than mid-CID.
+                                width: 2,
+                                elem: ei,
+                                byte_in_elem: pi * 2,
+                                t0,
+                                t1,
+                            });
                         }
                     }
                     elems.push(ShowElem::Str(bytes.clone()));
@@ -1430,26 +1384,55 @@ pub(crate) fn plan_edit(
     // --- map the find text to a contiguous code range in one element ---
     let m = match_run(anchor, &req.find)?;
 
-    // --- build the inverse map and encode the replacement (R-INV-1/5/6/7/8) ---
-    let glyph_names = font.glyph_names().ok_or_else(|| {
-        EditError::Unsupported("the run's font has no invertible encoding".to_owned())
-    })?;
-    let inverse = InverseEncoding::build(&font.base_font, glyph_names);
-
-    // The R-INV-5 tie-break seed: codes already used in this run.
-    // Narrowed to `u8` deliberately: this is the "prefer codes already in
-    // use" hint for the SINGLE-BYTE inverse encoder, and a composite code
-    // has no meaning to it. `filter_map` rather than a cast, so a
-    // multi-byte code is dropped rather than silently truncated into a
-    // different, valid, wrong code.
-    let prefer: BTreeSet<u8> = anchor
-        .slots
-        .iter()
-        .filter_map(|s| u8::try_from(s.code).ok())
-        .collect();
-    let encoded = inverse
-        .encode_str(&req.replace, &prefer)
-        .map_err(EditError::Refused)?;
+    // --- encode the replacement (R-INV-1/5/6/7/8) ---
+    //
+    // Two font families, two encoders, one shape downstream (Pass 29.0). A
+    // COMPOSITE run goes through `CompositeEncoding`, which inverts the
+    // font's `/ToUnicode` and yields CIDs; a SIMPLE run goes through
+    // `InverseEncoding` over glyph names. `EncodedReplacement` is what makes
+    // everything after this point identical for both: the advance loop needs
+    // per-code values, the splice needs bytes, and those are the only two
+    // things the rest of `plan_edit` asks for.
+    let encoded = if font.is_simple() {
+        let glyph_names = font.glyph_names().ok_or_else(|| {
+            EditError::Unsupported("the run's font has no invertible encoding".to_owned())
+        })?;
+        let inverse = InverseEncoding::build(&font.base_font, glyph_names);
+        // The R-INV-5 tie-break seed: codes already used in this run. Narrowed
+        // to `u8` because that is what the single-byte encoder means by a
+        // code; a composite run does not take this path at all.
+        let prefer: BTreeSet<u8> = anchor
+            .slots
+            .iter()
+            .filter_map(|s| u8::try_from(s.code).ok())
+            .collect();
+        let e = inverse
+            .encode_str(&req.replace, &prefer)
+            .map_err(EditError::Refused)?;
+        EncodedReplacement {
+            codes: e.codes.iter().map(|&c| u32::from(c)).collect(),
+            bytes: e.codes,
+            disclosures: e.disclosures,
+        }
+    } else {
+        // Reaching here means `classify_font` already established the map is
+        // invertible — it refuses by name when it is not — so `build` is
+        // re-deriving a known-good inversion rather than gambling.
+        let cmap = font.to_unicode_cmap().ok_or_else(|| {
+            EditError::Unsupported("the run's composite font has no /ToUnicode".to_owned())
+        })?;
+        let composite = CompositeEncoding::build(&font.base_font, cmap).map_err(|e| {
+            EditError::Unsupported(format!("the run's font map cannot be inverted: {e}"))
+        })?;
+        let e = composite
+            .encode_str(&req.replace)
+            .map_err(EditError::Refused)?;
+        EncodedReplacement {
+            codes: e.cids.iter().map(|&c| u32::from(c)).collect(),
+            bytes: e.to_bytes(),
+            disclosures: Vec::new(),
+        }
+    };
 
     // --- embedded-subset floor: a new code the subset does not already
     //     carry is REFUSED by name (the one refusal in the four-case table).
@@ -1491,7 +1474,7 @@ pub(crate) fn plan_edit(
         FollowerDisposition::Pin => compensating_tj(delta, anchor.tf_size, anchor.th()),
         FollowerDisposition::Reflow => None,
     };
-    let new_op_bytes = emit_edited_operator(anchor, &m, &encoded.codes, pin_num);
+    let new_op_bytes = emit_edited_operator(anchor, &m, &encoded.bytes, pin_num);
     let mut edits: Vec<(usize, usize, Vec<u8>)> = vec![(*a_start, *a_end, new_op_bytes)];
 
     // --- reflow: shift following absolute Tm(s) on the same line by ΔA ---
@@ -1654,7 +1637,30 @@ pub(crate) struct MatchRun {
     pub(crate) b_lo: usize,
     pub(crate) b_hi: usize,
     /// The old codes being replaced (for `A_old`).
-    pub(crate) old_codes: Vec<u8>,
+    ///
+    /// `u32`, not `u8` (Pass 29.0): a composite run's CIDs are two bytes, and
+    /// narrowing them here dropped every one — which would have made `A_old`
+    /// zero and the advance compensation wrong by the whole matched run.
+    pub(crate) old_codes: Vec<u32>,
+}
+
+/// A replacement encoded for whichever font family the run uses (Pass 29.0).
+///
+/// The seam that lets one `plan_edit` serve simple and composite runs. Both
+/// encoders answer the same two questions — what are the per-code values (for
+/// the advance sum) and what bytes go into the show string — and differ only
+/// in how they answer them. Keeping the difference here rather than in
+/// branches further down is what stopped composite support from being "a
+/// change to the whole encoding seam".
+struct EncodedReplacement {
+    /// Per-code values, for the §9.4.4 advance sum. `u32` covers a
+    /// single-byte code and a 2-byte CID alike.
+    codes: Vec<u32>,
+    /// The exact bytes to splice into the show string — single bytes for a
+    /// simple font, big-endian pairs for `Identity-H`.
+    bytes: Vec<u8>,
+    /// Encoder-level disclosures (the simple path's R-INV-5 substitutions).
+    disclosures: Vec<String>,
 }
 
 /// Map `find` (a substring of the operator's decoded text) to a contiguous
@@ -1696,20 +1702,14 @@ pub(crate) fn match_run(anchor: &ShowData, find: &str) -> Result<MatchRun, EditE
         .map(|s| s.byte_in_elem + usize::from(s.width))
         .max()
         .unwrap_or(b_lo);
-    // `MatchRun::old_codes` stays `Vec<u8>`: its consumers are the
-    // single-byte re-encode paths (14.1 replace, 14.2 format), which have no
-    // representation for a multi-byte code. Narrowed with `filter_map`
-    // rather than a cast — a truncated code is a DIFFERENT, VALID code, and
-    // would be spliced back into the page as confidently wrong text.
-    //
-    // A composite run never reaches here: `classify_font` refuses it above
-    // `match_run` (Pass 21.1). This narrowing is therefore belt to that
-    // brace, and it is the belt that will still be holding if the ordering
-    // is ever changed back.
-    let old_codes = matched
-        .iter()
-        .filter_map(|s| u8::try_from(s.code).ok())
-        .collect();
+    // Carried at full width (Pass 29.0). This used to narrow to `u8` with a
+    // `filter_map`, which was correct while composite runs were refused above
+    // `match_run` — every code that reached here fitted. Now that they are
+    // editable, narrowing would silently DROP each two-byte CID, leaving
+    // `A_old` at zero and the advance compensation wrong by the width of the
+    // whole matched run: text that reflowed or pinned to the wrong place with
+    // nothing to indicate it.
+    let old_codes = matched.iter().map(|s| s.code).collect();
     Ok(MatchRun {
         elem,
         b_lo,
@@ -1721,7 +1721,7 @@ pub(crate) fn match_run(anchor: &ShowData, find: &str) -> Result<MatchRun, EditE
 /// Every code shown under `font_name` anywhere on the page — the "already
 /// carries" set for the embedded-subset floor (a code in use ⇒ its glyph is
 /// physically present in the subset program).
-pub(crate) fn carried_codes(recs: &[OpRec], font_name: &[u8]) -> BTreeSet<u8> {
+pub(crate) fn carried_codes(recs: &[OpRec], font_name: &[u8]) -> BTreeSet<u32> {
     let mut set = BTreeSet::new();
     for r in recs {
         if let Rec::Show(s) = &r.rec
@@ -1733,10 +1733,13 @@ pub(crate) fn carried_codes(recs: &[OpRec], font_name: &[u8]) -> BTreeSet<u8> {
                 // already carried on the page"), so a multi-byte code is
                 // dropped rather than truncated. Truncating would add a
                 // code the page does not actually carry, which would let
-                // R-INV-1 pass on a glyph that is not there.
-                if let Ok(b) = u8::try_from(slot.code) {
-                    set.insert(b);
-                }
+                // R-INV-1 pass on a glyph that is not there. Recorded at full
+                // width (Pass 29.0): a composite subset carries CIDs, and
+                // narrowing them to `u8` made every composite code look
+                // absent — which would refuse every composite edit under the
+                // embedded-subset floor, for glyphs that are demonstrably on
+                // the page.
+                set.insert(slot.code);
             }
         }
     }
@@ -1771,49 +1774,66 @@ pub(crate) fn classify_font(
         .map(|n| n.as_bytes().to_vec())
         .unwrap_or_default();
 
-    // R-INV-4: composite (Type 0 / CIDFont).
+    // R-INV-4: composite (Type 0 / CIDFont) — now refused ONLY when the
+    // font's own map makes editing impossible (Pass 29.0).
     //
-    // Still refused. The re-encoding path is single-byte end to end —
-    // `InverseEncoding` maps a char to `Vec<u8>` and the operand writer
-    // assumes that width — so making composite runs editable is a change to
-    // the whole encoding seam, not a branch here. That is the rest of Pass
-    // 21.1.
+    // This used to refuse every composite run, on the stated grounds that
+    // "the re-encoding path is single-byte end to end ... making composite
+    // runs editable is a change to the whole encoding seam". Surveyed again
+    // before starting, that turned out to be substantially untrue, and the
+    // parts that were true were already built:
     //
-    // What HAS changed is WHY. This message used to cite glyph subsetting
-    // (FF-C) as a co-blocker. FF-C shipped in Pass 21.0, so that sentence
-    // became false and would have sent anyone reading it to look at the
-    // wrong thing. It also read as a permanent limitation, when standing
-    // rule R110 has since established that composite editability is a
-    // property of the FONT — whether its `/ToUnicode` is injective — rather
-    // than a blanket one.
+    //  - `ExtractFont::width` already read `Widths::Composite` (`/W`//`/DW`,
+    //    §9.7.4.3), so advances needed no new table;
+    //  - `emit_literal_string` already escaped arbitrary bytes as three-digit
+    //    octal, so a two-byte code needs no hex-string emitter — a literal
+    //    string is legal for any bytes (§7.3.4.2);
+    //  - `CompositeEncoding` was already written and tested, and nothing
+    //    called it;
+    //  - `ShowSlot` already carried `code: u32` + `width`, and `b_lo`/`b_hi`
+    //    were already computed from that width.
     //
-    // So the refusal now consults the CMap and says which kind of "no" this
-    // is. A font whose map cannot be inverted will NEVER be editable and
-    // names the specific obstruction; a font whose map inverts cleanly is
-    // waiting on pdfce, and says so. That distinction costs one lookup and
-    // is the difference between an operator fixing their document and an
-    // operator waiting for a release that would not have helped them.
+    // What genuinely remained was widening three narrowings that only existed
+    // BECAUSE composite runs were refused here — `MatchRun::old_codes`,
+    // `glyph_advance`, and `carried_codes` — and choosing an encoder. The
+    // refusal had become self-justifying: it was cited as the reason those
+    // types could stay single-byte, and their being single-byte was cited as
+    // the reason the refusal had to stay.
+    //
+    // What is still refused, by name and for real reasons: a font whose
+    // `/ToUnicode` is absent (nothing says which code produces a character),
+    // or non-injective (a ligature or a collision, so the inverse is not a
+    // function). Those are properties of the FONT and no amount of pdfce work
+    // fixes them — standing rule R110's distinction, now load-bearing rather
+    // than descriptive.
     if subtype.as_slice() == b"Type0" || !font.is_simple() {
-        let why = match font.to_unicode_cmap() {
-            Some(cmap) => match cmap.injective_inverse() {
-                Ok(_) => "This font's character map CAN be inverted, so editing it is possible in principle; pdfce's re-encoding path does not handle multi-byte codes yet."
-                    .to_owned(),
-                Err(e) => format!(
-                    "This font's character map cannot be inverted, so pdfce could not know which code to write back: {e}"
+        let refuse = |why: String| {
+            EditError::Refused(Refusal {
+                trigger: RInvTrigger::Composite,
+                character: None,
+                base_font: font.base_font.clone(),
+                message: format!(
+                    "R-INV-4: font '{}' is a composite (Type 0 / CIDFont) run that pdfce cannot edit in place. {why}",
+                    font.base_font
                 ),
-            },
-            None => "This font declares no /ToUnicode character map, so pdfce cannot tell which code produces a given character."
-                .to_owned(),
+            })
         };
-        return Err(EditError::Refused(Refusal {
-            trigger: RInvTrigger::Composite,
-            character: None,
-            base_font: font.base_font.clone(),
-            message: format!(
-                "R-INV-4: font '{}' is a composite (Type 0 / CIDFont) run, which pdfce cannot edit in place. {why}",
-                font.base_font
-            ),
-        }));
+        match font.to_unicode_cmap() {
+            None => {
+                return Err(refuse(
+                    "This font declares no /ToUnicode character map, so pdfce cannot tell which code produces a given character. Nothing pdfce can do makes this editable — the information is not in the file."
+                        .to_owned(),
+                ));
+            }
+            Some(cmap) => {
+                if let Err(e) = cmap.injective_inverse() {
+                    return Err(refuse(format!(
+                        "This font's character map cannot be inverted, so pdfce could not know which code to write back: {e}"
+                    )));
+                }
+                // Invertible: fall through. The run is editable.
+            }
+        }
     }
 
     let descriptor = font_dict
@@ -1894,8 +1914,16 @@ pub(crate) fn classify_font(
 /// under the run's text state. `Tw` applies only to the single byte `0x20`
 /// (§9.3.3). Width `w0` comes from the SAME `/Widths`/AFM the render path
 /// uses ([`ExtractFont::width`] already scales it to text space).
-fn glyph_advance(font: &ExtractFont, code: u8, s: &ShowData) -> f64 {
-    glyph_advance_with(font, code, s.tf_size, s.tc(), s.tw(), s.th())
+fn glyph_advance(font: &ExtractFont, code: u32, s: &ShowData) -> f64 {
+    glyph_advance_with(
+        font,
+        code,
+        s.tf_size,
+        s.tc(),
+        s.tw(),
+        s.th(),
+        font.is_simple(),
+    )
 }
 
 /// The §9.4.4 advance for one code with **explicit** text-state scalars —
@@ -1906,14 +1934,20 @@ fn glyph_advance(font: &ExtractFont, code: u8, s: &ShowData) -> f64 {
 /// numbers are byte-for-byte what Pass 14.1 always computed.
 pub(crate) fn glyph_advance_with(
     font: &ExtractFont,
-    code: u8,
+    code: u32,
     tf_size: f64,
     tc: f64,
     tw: f64,
     th: f64,
+    single_byte: bool,
 ) -> f64 {
-    let w0 = f64::from(font.width(u32::from(code)));
-    let tw = if code == 0x20 { tw } else { 0.0 };
+    let w0 = f64::from(font.width(code));
+    // The word-spacing rule is SINGLE-BYTE code 32 only (§9.3.3): "Word
+    // spacing shall be applied to every occurrence of the single-byte
+    // character code 32 ... It shall not apply to occurrences of the byte
+    // value 32 in multiple-byte codes." So a composite CID of 32 must NOT
+    // take `Tw`, and testing the numeric code alone would wrongly give it one.
+    let tw = if code == 0x20 && single_byte { tw } else { 0.0 };
     (w0 * tf_size + tc + tw) * th
 }
 

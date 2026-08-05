@@ -1,111 +1,152 @@
-//! Regression: the composite (R-INV-4) refusal must be able to FIRE.
+//! Composite (`/Type0` / CIDFont) runs: what edits, and what is refused.
 //!
-//! # Why this deserves its own file
+//! # What this file used to pin, and why it changed
 //!
-//! The R-INV-4 refusal existed, was carefully worded, and could not be
-//! reached. `edit-text` classified the anchor's font *after* `match_run`, and
-//! `match_run` needs per-code slots that composite runs do not have — so a
-//! composite run died there and reported `NoMatch`. The operator was told
-//! *"text to edit was not found in an editable run on the page"*: their text
-//! was present, in a font pdfce declines to edit, and the message said it was
-//! absent. Two different problems, two different next actions, and only the
-//! wrong one on offer.
+//! It asserted that editing ANY composite run refused by name rather than
+//! reporting `NoMatch`. That was the right test while composite runs were
+//! uneditable: the defect it caught was `edit-text` classifying the font
+//! *after* `match_run`, so an operator whose text was plainly on the page was
+//! told it was absent — two different problems, two different next actions,
+//! and only the wrong one on offer.
 //!
-//! Nothing in the type system says a refusal must be reachable. The code
-//! compiled, every test passed, and the carefully-worded message was dead.
-//! That is the same shape as a guard behind an unpassable filter (R96) and as
-//! an `#[allow]` insisting a dead function is live (R93) — and it is why this
-//! is pinned by a test that asserts the ERROR VARIANT rather than by a
-//! comment asserting the intent.
+//! Composite runs are editable as of Pass 29.0, so "every composite refuses"
+//! is no longer true and the test would have been asserting a limitation
+//! instead of a guarantee. The guarantees worth pinning now are two:
 //!
-//! # What would break it again
+//! 1. a composite font whose `/ToUnicode` **inverts** is genuinely editable,
+//!    end to end, verified by reading the text back rather than by a success
+//!    return;
+//! 2. a composite font whose map **cannot** be inverted is refused BY NAME,
+//!    with the obstruction stated — because that is a property of the font
+//!    that no amount of pdfce work will fix, and an operator needs to know
+//!    which kind of "no" they are looking at (R110).
 //!
-//! Moving the font classification back below `match_run`, or dropping the
-//! composite branch that decodes enough text for the run to be findable.
-//! Either would restore `NoMatch`, and this test is the only thing that would
-//! say so.
+//! # The fixture that had to be built for this
+//!
+//! Neither existing composite fixture could carry test 2 once editing worked.
+//! The injective one now EDITS — it is test 1. The no-`/ToUnicode` one cannot
+//! serve either, and the reason is worth stating because it is not obvious:
+//! its text does not decode at all, so no anchor is ever found and `NoMatch`
+//! is the honest answer — the test would pass without ever reaching the
+//! refusal. So `cidfonttype2-noninjective-tounicode.pdf` exists: two CIDs
+//! mapping to the same character, a map that is present and decodable and
+//! still not a function.
 
 use std::path::{Path, PathBuf};
 
 use pdfce_core::document::Document;
 use pdfce_core::text_edit::{EditError, EditOptions, EditRequest, RInvTrigger, edit_text};
 
-/// A composite (`/Type0`, `Identity-H`) fixture WITH an injective
-/// `/ToUnicode`, so its text is genuinely findable.
-///
-/// The sibling `cidfonttype2-nocmap-embedded.pdf` cannot serve here: with no
-/// character map its text is undecodable, so `NoMatch` is the honest answer
-/// and the test would pass for the wrong reason.
-fn composite_with_tounicode() -> PathBuf {
+fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/synthetic/text/cidfonttype2-with-tounicode.pdf")
+        .join("../../fixtures/synthetic/text")
+        .join(name)
 }
 
-fn load(path: &Path) -> Document {
+fn load(name: &str) -> Document {
+    let path = fixture(name);
     let bytes =
-        std::fs::read(path).unwrap_or_else(|e| panic!("missing fixture {}: {e}", path.display()));
+        std::fs::read(&path).unwrap_or_else(|e| panic!("missing fixture {}: {e}", path.display()));
     Document::from_bytes(bytes).expect("fixture parses")
 }
 
+/// **The capability.** An invertible composite font edits, end to end.
+///
+/// Asserted by reading the text back out of the SAVED document, not by the
+/// call returning `Ok`. A composite edit that wrote the wrong CIDs would
+/// return `Ok` and render confidently wrong glyphs — the failure mode this
+/// whole encoding path exists to avoid — and only a round trip catches it.
 #[test]
-fn editing_a_composite_run_refuses_by_name_rather_than_reporting_no_match() {
-    let doc = load(&composite_with_tounicode());
-    let req = EditRequest::find_replace(0, "A", "B");
-    let err = edit_text(&doc, &req, &EditOptions::default())
-        .expect_err("a composite run must not be editable");
+fn an_invertible_composite_run_is_editable_end_to_end() {
+    let doc = load("composite-editable.pdf");
+    let out = edit_text(
+        &doc,
+        &EditRequest::find_replace(0, "ABC", "CBA"),
+        &EditOptions::default(),
+    )
+    .expect("an invertible composite font must be editable");
+
+    let edited = Document::from_bytes(out.bytes).expect("the edited document re-parses");
+    let pages = pdfce_core::page_tree::pages(&edited).expect("pages");
+    let page = pages.first().expect("one page");
+    let text = pdfce_core::text_extract::extract_page(
+        &edited,
+        page,
+        0,
+        &pdfce_core::text_extract::ExtractOptions::default(),
+    )
+    .expect("the edited page still yields text")
+    .runs
+    .iter()
+    .map(|r| r.text.clone())
+    .collect::<String>();
+    assert!(
+        text.contains("CBA"),
+        "the replacement must be readable back out of the saved file; got {text:?}"
+    );
+    assert!(
+        !text.contains("ABC"),
+        "the original must be gone, not merely overdrawn; got {text:?}"
+    );
+}
+
+/// **The refusal that remains, and must.** A non-injective map is refused by
+/// name, naming the obstruction.
+///
+/// Two codes map to the same character, so writing that character back has no
+/// single answer. Guessing would emit a real, wrong glyph — indistinguishable
+/// from correct output on screen, which is exactly why this refuses instead.
+#[test]
+fn a_non_injective_composite_font_is_refused_by_name() {
+    let doc = load("cidfonttype2-noninjective-tounicode.pdf");
+    let err = edit_text(
+        &doc,
+        &EditRequest::find_replace(0, "A", "A"),
+        &EditOptions::default(),
+    )
+    .expect_err("a font whose map is not a function must not be edited");
 
     match err {
         EditError::Refused(r) => {
-            assert_eq!(
-                r.trigger,
-                RInvTrigger::Composite,
-                "a composite run must refuse with the COMPOSITE trigger, not some other one"
-            );
-            // The message has to distinguish "this font can never be edited"
-            // from "pdfce cannot do it yet" (R110). This fixture's CMap is
-            // injective, so the honest answer is the second — and an
-            // operator told the first would go looking for a different font
-            // they do not need.
+            assert_eq!(r.trigger, RInvTrigger::Composite);
             let msg = r.message;
             assert!(
-                msg.contains("composite"),
-                "the refusal must name what it refused: {msg}"
+                msg.contains("cannot be inverted"),
+                "the refusal must name the obstruction: {msg}"
             );
+            // R110: the operator has to be able to tell "this font can never
+            // be edited" from "pdfce cannot do it yet". This is the first.
             assert!(
-                msg.contains("CAN be inverted"),
-                "this fixture's /ToUnicode is injective, so the refusal must say pdfce is the \
-                 limitation rather than implying the font is: {msg}"
+                !msg.contains("does not handle"),
+                "this refusal is about the FONT, and must not read as a pdfce \
+                 limitation the operator could wait out: {msg}"
+            );
+            // A message with runs of spaces has been shipped three times in
+            // this project from `\`-continuations in format strings.
+            assert!(
+                !msg.contains("  "),
+                "the message must not contain collapsed-continuation whitespace: {msg}"
             );
         }
-        EditError::NoMatch(what) => panic!(
-            "REGRESSION: got NoMatch({what:?}) instead of the composite refusal. The text IS on \
-             the page — reporting it as missing tells the operator to look for something that is \
-             not the problem. This is the exact defect this file exists to pin: the font must be \
-             classified BEFORE match_run, because a font-level refusal is a property of the run \
-             rather than of whether the sought text happens to sit inside it."
-        ),
         other => panic!("expected the composite refusal, got {other:?}"),
     }
 }
 
-/// The positive control: a SIMPLE embedded font must still edit.
+/// The positive control: a SIMPLE embedded font still edits.
 ///
-/// The fix reorders a shared code path, so the way it could go wrong is by
-/// refusing everything — which would satisfy the assertion above completely
-/// while breaking in-place editing for every document that has ever worked.
+/// The change reorders and rewrites a shared code path, so the way it could go
+/// wrong is by breaking the path that has always worked — which would satisfy
+/// both assertions above while breaking in-place editing for every document
+/// that has ever worked.
 #[test]
-fn a_simple_font_run_still_edits_after_the_reorder() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/synthetic/text/subset-simple-embedded.pdf");
-    let doc = load(&path);
-    // Reordering only characters the embedded subset already carries, so
-    // this exercises the edit path rather than the coverage floor (R-INV-1).
-    let req = EditRequest::find_replace(0, "ABC", "ACB");
-    let out = edit_text(&doc, &req, &EditOptions::default())
-        .expect("a simple embedded font must still be editable after the reorder");
-    assert!(
-        !out.bytes.is_empty(),
-        "a successful edit must produce a document"
-    );
+fn a_simple_font_run_still_edits() {
+    let doc = load("subset-simple-embedded.pdf");
+    let out = edit_text(
+        &doc,
+        &EditRequest::find_replace(0, "ABC", "ACB"),
+        &EditOptions::default(),
+    )
+    .expect("a simple embedded font must still be editable");
+    assert!(!out.bytes.is_empty());
     Document::from_bytes(out.bytes).expect("the edited document must re-parse");
 }
