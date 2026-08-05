@@ -646,3 +646,126 @@ future per-dimension format override would need one (§C.11.1).
   and the Tool Options pane's minimum height — a spacing judgment best
   made by looking at the running app, per this agent's own standing
   precedent for not inventing exact numbers from source alone.
+
+---
+
+## Amendment A (2026-08-05) — design-system alignment
+
+**Appended, not rewritten**, following the operator's design-philosophy
+handoff (`C:\Users\Ken\AppData\Local\Temp\claude\D--Dev-KenAgent\
+ede777ff-2525-4b85-b93f-95b9674b0040\scratchpad\pdfce_gui_design_handoff.md`)
+and this agent's resulting `D:\Dev\pdfce\UI_PREFERENCES.md`. Read that
+document first — this amendment only states how its tokens/roles map
+onto the SPECIFIC surfaces §A/§C above already designed; it does not
+revisit any decision already made in §§A–C.
+
+### A.6 Token usage on the new left dock (Pages | Tool Options)
+
+Per `UI_PREFERENCES.md` §1, the left dock is entirely **chrome** — none
+of it draws on top of the rendered page — so every color on it is
+**theme-aware**, never a bare `Color32` literal:
+
+- **Tab strip.** Reuses `DockBehavior::tab_title_for_tile`'s existing
+  bold-on-active mechanism verbatim (§A.1 already specifies reusing
+  `dock.rs`'s exact mechanism) — already R84-compliant, nothing new to
+  add here.
+- **Per-tool title** (§A.3's "body's first line") — `UI_PREFERENCES.md`
+  §6's **Heading** role, followed by one plain `ui.separator()`. No
+  colored accent bar under it — the uniqueness review in that
+  document's §0 specifically named "accent bars on rounded cards" as a
+  generic-default trap to avoid, and a per-tool title is exactly the
+  surface where it would be tempting to add one.
+- **Tool's own controls** (the body of the pane, §A.4) — property-row
+  layout per `UI_PREFERENCES.md` §9: `egui::Grid::new(id)
+  .num_columns(2)`, label column in Body role + `.strong()`, control
+  column filling the remainder. This is the same construct §C.11.1's
+  numeric offset/text_along fields and the tolerance controls (§C.11.1
+  item, P1) should use — one grid convention for every property
+  surface this Pass and the next touch, not a per-tool bespoke layout.
+- **Disclosure/refusal strip** (§A.4's bottom section) — Caption role
+  (`RichText::weak()`) for a plain disclosure line
+  (`measure_dimension_authored`, the cross-run notice, the reflow
+  overflow line); the `CRITICAL` alias (`ui.visuals().error_fg_color`)
+  for an actual refusal, paired with a glyph per R84 — reusing the
+  EXACT convention `main.rs:7625/7637/8204/8851` already use for
+  refusal lines elsewhere in this codebase. No new visual language is
+  being introduced; the same one is gaining a new host.
+- **Case-(b) Accept/Reject buttons** (§A.4's last row) — ordinary
+  buttons, Button role (§6); no change from their current appearance,
+  only their container.
+
+### A.7 The empty state (§A.3), stated in token terms
+
+The "No tool armed" caption is Caption role (`.weak()`), positioned at
+the SAME top-left anchor the per-tool title would occupy once a tool
+is armed — **not centered**. This is a direct instance of
+`UI_PREFERENCES.md` §0's uniqueness-review row on centering: centering
+the empty-state caption and then left-aligning the populated content
+would relocate it the instant a tool arms, which is precisely the kind
+of unrequested motion §A.3 already rejected for the tab-snap-back
+question (citing the "shell should hold still" precedent). Keeping the
+anchor identical in both states means arming a tool changes WHAT is
+there, never WHERE.
+
+### A.8 The refusal tab-badge (§B.8), expressed in the token vocabulary — and a new R1/R2 finding
+
+§B.8 already specifies WHAT the badge does (mark the Tool Options tab
+itself while an unresolved refusal is pending, paired per R84, never
+color alone). This amendment specifies HOW, in `UI_PREFERENCES.md`'s
+terms, and surfaces one thing §B.8 did not: a wording obligation.
+
+- **The redundant, non-color cue is a glyph prefixed to the tab
+  label**, not a background-color change to the tab itself — a
+  background-fill-only badge would be exactly the "colour-fill-only
+  selected state" blind spot the GUI-polish audit already flagged
+  project-wide (`ROADMAP.md` R84's own citation list: "Fit Page/Width,
+  the Properties toggle, the annotations toggle"), reproduced in a new
+  location. The `CRITICAL` alias color (`ui.visuals().error_fg_color`)
+  may reinforce the glyph, but the glyph is what R84 actually requires.
+- **New finding, not in §B.8:** a badged tab label ("⚠ Tool Options" or
+  equivalent) is a DIFFERENT complete string from the unbadged label
+  ("Tool Options"), not the unbadged label with a character
+  concatenated onto it at the call site. `ui_text.rs`'s own authoring
+  rule R2 — *"one entry = one complete message... never assemble a
+  sentence from fragments"* — means this needs its OWN catalog entry
+  (e.g. a `dock_panel_tool_options_label_refusal_pending()` sibling to
+  the existing `label()` return, selected by `DockPanel::label()`'s
+  caller when a refusal is pending, not a `format!` splice of two
+  existing entries at the tab-title call site). Flagged because it is
+  easy to miss — the badge reads like formatting, not new user-facing
+  text, and R1/R2 apply to it exactly the same as any other string.
+
+### C.14 Token usage on the `DockPanel::Properties` per-dimension section (§C.12)
+
+The selection-driven per-ce-dimension section (radius/diameter toggle,
+numeric offset/text_along fields, and — once it ships — tolerance
+controls) is **also entirely chrome** and uses the **identical** Grid/
+label/control convention as A.6 above — deliberately the same
+construct, not a second one, per this agent's own standing "consistency
+compounds" position (§2.2 of this agent's brief). Progressive
+disclosure (rule 3) suggests the tolerance sub-group, once it exists
+(P1, item 9), sits behind an `egui::CollapsingHeader` collapsed by
+default within this section, rather than being permanently expanded
+alongside position/format controls that are relevant far more often.
+
+**The one place this section touches canvas-overlay tokens rather than
+chrome tokens:** §C.13's new extension-line drag handles. Per
+`UI_PREFERENCES.md` §4, these are canvas-overlay, theme-invariant, and
+should draw in the **same named token** as the existing position-drag
+outline — §C.13 already says "matched to the position-drag's own
+colour since they're the same object's furniture," citing
+`DIMENSION_DRAG_COLOR` by its current name. Once the token module in
+`UI_PREFERENCES.md` exists, that instruction resolves to
+`OVERLAY_PREVIEW` (§4's proposed name for the same value) — a fresh
+copy of the literal must not be declared for this new handle family;
+it should reference the one named constant every other live-preview
+surface in the app already uses (or will, once §4's consolidation
+lands).
+
+**Panel doc-comment/tooltip correction (§C.12's own instruction,
+restated for completeness):** when this section ships, `DockPanel::
+Properties`'s doc comment and tooltip need the broadened wording §C.12
+already specifies ("the document's `/Info` metadata, OR the properties
+of whatever is currently selected on the canvas") — unchanged by this
+amendment, repeated here only so the token-usage note above doesn't
+read as though it supersedes that still-open instruction.
