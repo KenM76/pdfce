@@ -81,6 +81,99 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 3.5 — Insert pages has a GUI — and no Batch Tools row sends you to the CLI any more (GUI) — 2026-08-05, committed `dd68cb1`
+
+**Milestone worth recording on its own line:** with this Pass,
+`ui_text::tool_available_in_cli` has zero remaining callers and is
+deleted outright. Every Batch Tools row now performs its own operation in
+the GUI; none of them tells the operator to go use the CLI instead.
+
+**Writes a NEW FILE rather than editing the open document — a structural
+choice, not a scope cut.** `pageops::insert` returns whole-document
+bytes; it is a **producer**, not an `EditSession` command (same shape as
+`merge`/`split`/`extract`, per the Pass 3.2 entry above) — there is no
+`CommandKind` for it, no undo-stack entry, no dirty-set entry. An
+in-place insert would change the open document in a way `Ctrl+Z` could
+not reverse, which would break the undo contract `ARCHITECTURE.md`
+§11.4 makes for every edit. Insert therefore behaves like Merge and
+Split already do: pick source(s), choose an output path, leave the open
+document untouched. **In-place insert needs `EditSession::insert_pages`
+first, and that is a `pdfce-core` Pass, not a GUI one** — filed below
+under *Backlog* as a named follow-up, not left to be rediscovered.
+
+**Three deliberate subtractions, each named in the panel rather than
+silently absent:**
+1. The whole source document is inserted — no page-range box, because a
+   range picker would be a THIRD page-selection model in a document that
+   isn't even the one on screen (the target document's own thumbnail
+   rail already owns page-selection UI for the OPEN file).
+2. Insertion point is Start/End only — `Before(n)`/`After(n)` need a
+   picker pointing at a specific target page, which belongs on the
+   target document's own thumbnail rail rather than a bespoke second
+   picker in this panel; named as future scope, not built here.
+3. Split's `EveryN`-only restriction (Pass 3.4, below) is inherited
+   as-is — not re-litigated in this Pass.
+
+Reads `EditSession::view`, not the base document, for the insertion
+target — the same session-read rule Pass 17.1 established and Pass 3.4
+(below) also follows: an operator inserting pages sees the document as
+they currently have it, mid-edit, not the file as it was opened.
+
+**Gates.** `cargo fmt --check` clean; `cargo clippy --workspace
+--all-targets` clean, 0 warnings; 44/44 test binaries green;
+`check-ui-strings` clean. **Invariant check:** `cargo tree -p
+pdfce-core` shows no GUI dependency — GUI-core separation holds (this
+Pass touches only `pdfce-gui`).
+
+**Ledger note (librarian, this filing).** Pass ID **3.5** assigned by
+the engineer out of band, extending the Pass 3.2 page-operations family
+rather than opening a new one — Pass 3.2 shipped seven page ops but
+deferred both Split's and Insert's GUI half (see that entry's "Engineer
+deviations from the UI spec," item 1, and the P1/P2 spec-priority-ledger
+line). 3.4/3.5 complete that deferred pair in the family it belongs to.
+Checked against the full roadmap text: no prior "Pass 3.4" or "Pass 3.5"
+exists anywhere in this file — no collision, no renumbering needed. Pass
+family ceiling (37 next free, per continuation 97) is a **different**
+counter (next all-new family) and is untouched by this filing.
+
+### Pass 3.4 — Split has a GUI — every N pages, into a folder you choose (GUI) — 2026-08-05, committed `68b6342`
+
+`pageops::split` and `pdfce-cli split` have existed since Pass 3.2; the
+GUI panel previously printed `tool_available_in_cli(split_cli_command())`
+— naming the CLI command it was sending the operator away to run
+instead. That label, and the string it was built from, are deleted by
+this Pass.
+
+**Ships `SplitCriterion::EveryN` only — a deliberate, named scope cut,
+not silently absorbed.** The two other criteria Pass 3.2 deferred each
+need a substrate this Pass does not build: a break-point criterion needs
+a page-picking surface that would compete with the thumbnail rail's own
+selection model for "which pages are the split points," and a bookmark
+criterion needs a visible outline tree the operator can see and trust
+before deciding to split on it — neither exists yet. The panel **names**
+both missing criteria in its own text, rather than leaving their absence
+to be inferred from what isn't there.
+
+**The collision check is the load-bearing part of this Pass.** The CLI
+already refuses to overwrite existing parts without `--force`; the GUI
+has no `--force` flag to offer an operator, so it refuses outright and
+**lists the clashing filenames** rather than a generic "some files would
+be overwritten." A split can write many output files in one action, and
+silently flattening a previous run's output is not something undo can
+fix — naming which files collide turns a vague warning into an
+actionable one.
+
+Reads `EditSession::view`, not the base document — a split cuts the
+document **as the operator currently sees it**, per the Pass 17.1
+session-read rule (same rule Pass 3.5, above, also follows). Uses the
+CLI's own filename-template function, so a split run from either shell
+produces identically-named output parts.
+
+**Gates.** `cargo fmt --check` clean; `cargo clippy --workspace
+--all-targets` clean, 0 warnings; 44/44 test binaries green;
+`check-ui-strings` clean. **Invariant check:** `cargo tree -p
+pdfce-core` shows no GUI dependency — GUI-core separation holds.
+
 ### Pass 24.1 — the ribbon: six tabs instead of one crowded row (decision 024 §6, Family A superseded per continuation 94; GUI) — 2026-08-05, chain `6449859` → `2b12efe`
 
 **What shipped.** Replaced a single wrapping toolbar row (~thirty controls
@@ -13077,6 +13170,19 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **`EditSession::insert_pages` — in-place page insertion, as a real
+  `EditSession` command (filed 2026-08-05, Pass 3.5's ship, no Pass
+  number assigned).** Both GUI Insert (Pass 3.5) and CLI `insert`
+  (Pass 3.2) are **producers** — they consume source documents and
+  write brand-new output bytes, never touching the currently-open
+  document. That is a structural consequence of `pageops::insert`
+  returning whole-document bytes rather than participating in the
+  `CommandKind`/dirty-set/undo-log machinery `ARCHITECTURE.md` §11.4
+  requires for any in-place edit. True in-place insert (drop pages into
+  the open document, with one undo entry, no new file written) needs a
+  new `EditSession::insert_pages` core command first — this is a
+  `pdfce-core` Pass, not a GUI one, and should be scoped as such before
+  any GUI work assumes it already exists.
 - **GUI has no redaction-apply flow at all (filed 2026-08-03, Pass
   17.1/17.2, no Pass number assigned). PROMOTED TO IN PROGRESS
   2026-08-03, then SHIPPED 2026-08-03 as Pass 8.1 (`9a68999`) — see the

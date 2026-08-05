@@ -53,8 +53,8 @@ next filing.
 | [x] | [x] | [x] | Delete pages (Pass 3.2 core/CLI; GUI `delete_pages` call in `main.rs`) |
 | [x] | [x] | [x] | Reorder pages — thumbnail drag or keyboard (Pass 3.2 core/CLI; GUI `apply_reorder`/`move_pages_keyboard` in `main.rs`) |
 | [x] | [x] | [x] | Merge / combine multiple files into one (Pass 3.2 core/CLI; GUI `merge_tool` add-files button in `main.rs`) |
-| [x] | [x] | [ ] | Split a document into multiple files (Pass 3.2 core/CLI) — GUI panel names `split_cli_command()` rather than performing the split; the app tells the operator to use the CLI |
-| [x] | [x] | [ ] | Insert pages from another file (Pass 3.2 core/CLI) — same shape as split: GUI panel names `insert_cli_command()`, no GUI verb yet |
+| [x] | [x] | [x] | Split a document into multiple files, `EveryN` criterion only (Pass 3.2 core/CLI; Pass 3.4 GUI) — break-point and bookmark criteria still unbuilt, named in the panel |
+| [x] | [x] | [x] | Insert pages from another file — whole source, Start/End only (Pass 3.2 core/CLI; Pass 3.5 GUI) — writes a NEW FILE, not an in-place edit; true in-place insert needs `EditSession::insert_pages` (core-only, unbuilt — see *Planned*) |
 | [x] | [x] | [x] | Extract pages to a new file (Pass 3.2 core/CLI; GUI `PdfceApp::extract_selection`, `main.rs` ~L3601, reached via `Action::ExtractSelection` from a thumbnail-rail button ~L8936 — the GUI names it "extract selection," not "extract pages," which is why a name-based grep for `extract_pages` missed it; see R156) |
 | [x] | [x] | [x] | Edit document metadata (`/Info` dict) (Pass 3.2 `set-info`; GUI Properties dock panel) |
 | [x] | — | [x] | Undo/redo command log (Pass 3.1 core; wired into the GUI at Pass 14.3) |
@@ -161,6 +161,7 @@ worth knowing when scoping the work.
 | [ ] | [ ] | [ ] | Pass 22.0 — make ce dimensions and foreign annotations selectable, marqueeable, and deletable from the canvas |
 | [ ] | [ ] | [ ] | Pass 23.0–23.3 — ce-dimension format/units GUI control; re-measure + whole-dimension move; descend into nested form-XObject containers; multi-node select/move/delete |
 | — | — | [ ] | Pass 24.0, 24.2–24.5 — remaining ribbon slices (fixed-anchor confirm strip, contextual tool tabs, selection tabs, overflow/collapse, keyboard & accessibility) |
+| [ ] | [ ] | [ ] | `EditSession::insert_pages` — true in-place page insertion (no Pass number yet; filed 2026-08-05, Pass 3.5's ship) — the core command that would let Insert edit the open document instead of always writing a new file |
 | [ ] | [ ] | [ ] | Form field creation/authoring — text/checkbox/radio/choice/pushbutton, tab order (decision 020, Pass 20.0–20.7 — decided, scoped, not started; **operator's own priority #4, "after, if that makes sense"**) |
 | [x] | [ ] | [ ] | FF-C remainder — apply an embedded/subsetted font to existing text (Pass 21.2, `set-font`) |
 | [ ] | [ ] | [ ] | FF-C remainder — GUI font-embedding surface (Pass 21.3) |

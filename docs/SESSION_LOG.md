@@ -14860,3 +14860,71 @@ icon-less-tab item, all still untouched by this filing.
 **Backup currency not verifiable from here** — engineer should check
 `D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is made
 in this entry.
+
+**Same-day continuation 98 (real date 2026-08-05) — TWO PASSES SHIPPED:
+Split and Insert both get a GUI; `tool_available_in_cli` deleted for
+good.**
+
+**Shipped:**
+- Pass 3.4 — Split has a GUI, `SplitCriterion::EveryN` only; committed
+  `68b6342`. Deletes the `split_cli_command()` label the panel used to
+  print. Collision check refuses an overwrite and lists the clashing
+  filenames (no `--force` for the GUI to offer). Reads `EditSession::view`
+  (Pass 17.1 session-read rule).
+- Pass 3.5 — Insert pages has a GUI, whole-source/Start-End only;
+  committed `dd68cb1`. `ui_text::tool_available_in_cli` now has zero
+  callers and is deleted outright — every Batch Tools row performs its
+  own operation in the GUI, none of them sends the operator to the CLI
+  any more. Writes a NEW FILE, not an in-place edit, because
+  `pageops::insert` is a producer, not an `EditSession` command; true
+  in-place insert needs `EditSession::insert_pages` first (filed to
+  Backlog this session, no Pass number).
+
+**Decisions made this session:** none — both Passes extend Pass 3.2's
+existing scope (its own named deferrals) rather than making a new
+architectural call.
+
+**Findings + decisions:**
+- Pass IDs **3.4**/**3.5** assigned by the engineer out of band,
+  extending the Pass 3.2 page-operations family. Checked against the full
+  `ROADMAP.md` text before filing: no prior "Pass 3.4" or "Pass 3.5"
+  existed anywhere — no collision, no renumbering needed. This is a
+  **different** counter from the Pass-family ceiling (37 next free, per
+  continuation 97); that ceiling is for all-new families and is
+  untouched by this filing.
+- `FEATURES.md` rows for "Split a document into multiple files" and
+  "Insert pages from another file" corrected from `[x][x][ ]` (with a
+  note that the GUI panel named the CLI command) to `[x][x][x]` (with a
+  note on each row's real, named restriction — `EveryN`-only for split;
+  whole-source/Start-End-only and new-file-output for insert). This is
+  the maintenance contract working as designed, not a correction of a
+  prior mistake: the note was true when written and is now stale because
+  the capability shipped, which is exactly the same-filing update the
+  contract exists to guarantee.
+- New `FEATURES.md` *Planned* row added for `EditSession::insert_pages`
+  (all three columns unticked) — a Pass filed to Backlog with no
+  features row is how the two documents start to diverge, per the
+  maintenance contract.
+
+**Still in flight:** unchanged from continuation 97 — Pass 34.1 slice 4,
+Pass 24.0/24.2–24.5, Pass 34.2/35.0/35.1, the `Pages`/`Tool Options`
+icon-less-tab item, the owed systematic `FEATURES.md` `gui`-column
+re-verification against `Action` variants (R156) — **deliberately NOT
+attempted in this filing**, per the engineer's own instruction that this
+is the session's last filing with room only for conservative, well-
+substantiated edits.
+
+**For next session:**
+- The `EditSession::insert_pages` Backlog item (this filing) is a real,
+  scoped `pdfce-core` Pass candidate whenever page-operations work is
+  next picked up — it is what would let GUI Insert stop always writing a
+  new file.
+- The R156 systematic re-verification pass (continuation 97's "for next
+  session" item) remains outstanding and untouched by this filing.
+- Re-run `tools/check-ledger-numbers.py --stats` — outstanding since
+  continuation 95, untouched again this filing; this librarian has no
+  shell and has not run it itself.
+
+**Backup currency not verifiable from here** — engineer should check
+`D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is made
+in this entry.
