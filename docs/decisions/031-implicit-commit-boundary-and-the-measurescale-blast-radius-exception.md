@@ -184,6 +184,22 @@ alone. See open operator question **(aw)**, filed alongside this record in
 `ROADMAP.md`. **Default posture pending his answer: keep the explicit
 confirm.**
 
+> **OPERATOR RATIFICATION 2026-08-05 — question (aw) CLOSED, CONFIRMED.**
+> Operator, verbatim: *"good choice. we need to enter a value for it
+> anyway."* This confirms the recommendation above, but on a **different
+> and stronger ground** than the blast-radius argument this section makes:
+> `MeasureScale` already requires the operator to type a numeric value
+> (the real-world length, or a typed ratio) before its gesture can be
+> considered complete at all, so a natural commit point already exists in
+> the interaction — the explicit confirm costs nothing additional on top
+> of a keystroke the tool demands regardless, unlike a pure direct
+> manipulation (a drag, a click-out) where an explicit Accept would be
+> friction added on top of an already-complete gesture. Blast radius (this
+> section's argument) and typed-value-already-required (the operator's own
+> reason) are independent, non-contradictory justifications for the same
+> outcome; both are now on record — filed by `pdfce-librarian` at the
+> engineer's dispatch, closing `ROADMAP.md` open operator question (aw).
+
 **The mitigating argument, which is why this exception is a smaller ask
 than it would have been a day earlier.** Decision 024 §4.1 diagnosed the
 operator's original complaint as being about *placement* — a confirm box

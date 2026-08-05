@@ -42,7 +42,21 @@ caller audit)/R153 (fuzz-harness-coverage audit) — all three are
 code-against-code; R154 is prose-against-code. **R154 claimed the number
 R153 had reserved for a 4th unlisted candidate; decision 030's three
 original contingent candidates (§6.2(a), §4.5, "date and label every
-contract statement") now take R155**, not R154, when any is promoted.
+contract statement") were bumped to R155**, not R154, when any is
+promoted.
+
+**UPDATE 2026-08-05 (continuation 94, same day) — R155 already spent on
+something else; decision 030's three candidates bumped again, to R156.**
+The same continuation that shipped Pass 34.1 slices 2–3 also superseded
+decision 024 §3.3 Family A (see [[project_decision024_family_a_superseded_and_r155]])
+and, per the same reserved-slot transfer mechanism, minted **R155** for
+that unrelated finding (a pre-dispatch search-discipline rule) instead of
+letting decision 030's queue claim it. **Decision 030's three original
+contingent candidates now take R156**, not R155. If you're reading this
+file to find out what's currently reserved for decision 030's candidates,
+check the live `ROADMAP.md` Standing rules ceiling before citing a
+number — this queue has moved five times in one calendar day (R150→
+R151→R152→R153→R154→R155) and will keep moving.
 
 **How to apply:** if a future session (or a memory file, or a stale
 context summary) says the left dock uses `LeftPanel` or a dedicated pane

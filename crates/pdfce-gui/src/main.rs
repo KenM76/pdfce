@@ -1272,6 +1272,12 @@ struct TextEditState {
     /// pane and having two recognitions disagree about which paragraph the
     /// caret is in.
     derived_reflow_target: Option<usize>,
+    /// Whether the caret's selection spans more than one run (§4.4), cached
+    /// from the canvas pass for the Tool Options pane (Pass 34.1 slice 4).
+    ///
+    /// Same one-frame-stale contract as [`Self::derived_reflow_target`], and
+    /// the same reason: the pane draws before the pass that derives it.
+    derived_cross_run: bool,
     /// What the Tool Options pane asked for THIS frame, waiting for phase C
     /// (Pass 34.1 slice 2). Always drained by `run_text_edit_tool`; never
     /// carried across a frame boundary.
@@ -1685,6 +1691,13 @@ struct AddTextState {
     /// on success, dropping it on a refusal so the refusal is not buried under
     /// a fresh placement).
     queued_placement: Option<AddPlacement>,
+    /// Commit / discard / hop-to-Edit-Text, asked for by the Tool Options pane
+    /// (Pass 34.1 slice 4). Same one-frame contract as every other queued
+    /// field here: set while the dock draws, drained by the canvas pass, never
+    /// carried across a frame.
+    queued_accept: bool,
+    queued_reject: bool,
+    queued_switch_to_edit: bool,
 }
 
 /// A fixed origin/box plus the operator's in-progress new text (§2) — created
@@ -2101,6 +2114,9 @@ impl OpenDoc {
             draft: None,
             last_disclosures: Vec::new(),
             queued_placement: None,
+            queued_accept: false,
+            queued_reject: false,
+            queued_switch_to_edit: false,
         });
     }
 
@@ -2140,6 +2156,7 @@ impl OpenDoc {
         self.text_edit = match text_extract::extract_pages_view(&view, &[page_index], &options) {
             Ok(mut extracted) if !extracted.pages.is_empty() => Some(TextEditState {
                 derived_reflow_target: None,
+                derived_cross_run: false,
                 queued_intents: TextEditIntents::default(),
                 page_index,
                 page_text: extracted.pages.remove(0),
@@ -7667,7 +7684,18 @@ impl PdfceApp {
                 && let Some(state) = doc.text_edit.as_mut()
             {
                 let target = state.derived_reflow_target;
-                let intents = text_edit_options_ui(state, target, &font_entries, ui);
+                let mut intents = text_edit_options_ui(state, target, &font_entries, ui);
+                // The status strip (commit controls, refusals, disclosures)
+                // draws directly under the options, in the same pane — which
+                // is what finally gives the two surfaces one home instead of
+                // two opposite corners of the canvas.
+                ui.separator();
+                let cross_run = state.derived_cross_run;
+                let status = text_edit_status_ui(state, cross_run, ui);
+                intents.do_accept |= status.do_accept;
+                intents.do_reject |= status.do_reject;
+                intents.do_accept_reflow |= status.do_accept_reflow;
+                intents.do_reject_reflow |= status.do_reject_reflow;
                 // Merged, not overwritten: two Apply buttons cannot be clicked
                 // in one frame, but a stale queue that phase C has not drained
                 // (the tool was armed and the canvas has not run yet) must not
@@ -7693,6 +7721,11 @@ impl PdfceApp {
                 && let Some(state) = doc.add_text.as_mut()
             {
                 add_text_options_ui(state, font_env, ui);
+                ui.separator();
+                let (accept, reject, to_edit) = add_text_status_ui(state, ui);
+                state.queued_accept |= accept;
+                state.queued_reject |= reject;
+                state.queued_switch_to_edit |= to_edit;
             }
             return;
         }
@@ -7711,6 +7744,12 @@ impl PdfceApp {
                 let model = doc.session.dimension_model();
                 if let Some(st) = doc.measure.as_mut() {
                     let (close_tool, open_groups) = measure_options_ui(st, &model, Some(tool), ui);
+                    // The status strip — live readout, disclosures, and the
+                    // Accept/Reject pair — directly under the options.
+                    ui.separator();
+                    let (accept, reject) = measure_status_ui(st, &model, Some(tool), ui);
+                    st.queued_accept |= accept;
+                    st.queued_reject |= reject;
                     // Handed to the canvas pass rather than acted on here: it
                     // owns the "putting the tool away also discards the
                     // in-progress pick" rule, and splitting that across two
@@ -10397,6 +10436,7 @@ fn run_text_edit_tool(
         // stored here on the PREVIOUS frame — see the field's own docs for why
         // a one-frame lag beats a second recognition that could disagree.
         state.derived_reflow_target = reflow_target;
+        state.derived_cross_run = cross_run;
 
         // Pass 19.3: refresh the caret run's ambient text state and, on a move
         // to a different run, re-seed the spacing/baseline fields from it.
@@ -10421,6 +10461,10 @@ fn run_text_edit_tool(
         }
         enter_reflow |= queued.enter_reflow;
         reflow_changed |= queued.reflow_changed;
+        do_accept |= queued.do_accept;
+        do_reject |= queued.do_reject;
+        do_accept_reflow |= queued.do_accept_reflow;
+        do_reject_reflow |= queued.do_reject_reflow;
         apply_size = apply_size.or(queued.apply_size);
         apply_fill = apply_fill.or(queued.apply_fill);
         apply_font = apply_font.or(queued.apply_font);
@@ -10435,116 +10479,8 @@ fn run_text_edit_tool(
         // Accept/Reject (§6.4) + the disclosure/refusal strip (§8): a floating
         // bottom panel. Accept/Reject are REAL `ui.button`s (accesskit win,
         // §10), not painter-drawn.
-        egui::Area::new(egui::Id::new("pdfce-text-edit-status"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(canvas::tool_strip_anchor(
-                ui.max_rect(),
-                canvas::StripCorner::BottomLeft,
-                8.0,
-            ))
-            .pivot(egui::Align2::LEFT_BOTTOM)
-            .show(ui.ctx(), |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_max_width(460.0);
-                    if cross_run {
-                        ui.colored_label(
-                            ui.visuals().warn_fg_color,
-                            ui_text::cross_run_selection_notice(),
-                        );
-                    }
-                    if state.pending.is_some() {
-                        ui.horizontal(|ui| {
-                            if ui
-                                .add(
-                                    egui::Button::new(ui_text::accept_edit())
-                                        .min_size(ICON_BUTTON_SIZE),
-                                )
-                                .clicked()
-                            {
-                                do_accept = true;
-                            }
-                            if ui
-                                .add(
-                                    egui::Button::new(ui_text::reject_edit())
-                                        .min_size(ICON_BUTTON_SIZE),
-                                )
-                                .clicked()
-                            {
-                                do_reject = true;
-                            }
-                        });
-                    }
-                    // Pass 15.2 §7: reflow Accept/Reject + live diagnostics —
-                    // mutually exclusive with `pending`, so it shares this strip.
-                    if let Some(r) = state.reflow.as_ref() {
-                        ui.horizontal(|ui| {
-                            if ui
-                                .add(
-                                    egui::Button::new(ui_text::reflow_accept())
-                                        .min_size(ICON_BUTTON_SIZE),
-                                )
-                                .clicked()
-                            {
-                                do_accept_reflow = true;
-                            }
-                            if ui
-                                .add(
-                                    egui::Button::new(ui_text::reflow_reject())
-                                        .min_size(ICON_BUTTON_SIZE),
-                                )
-                                .clicked()
-                            {
-                                do_reject_reflow = true;
-                            }
-                        });
-                        // §8.1 live diagnostics — the engine's own strings
-                        // verbatim, shown WHILE deciding so overflow (R76)
-                        // informs the decision, not follows it. Calm ⓘ bullets,
-                        // never a Pass-8 acknowledgement gate.
-                        match &r.preview {
-                            Ok(pv) => {
-                                for d in &pv.diagnostics.disclosures {
-                                    ui.label(ui_text::disclosure_bullet(d));
-                                }
-                            }
-                            Err(e) => {
-                                ui.colored_label(
-                                    ui.visuals().error_fg_color,
-                                    ui_text::refusal_line(&e.to_string()),
-                                );
-                            }
-                        }
-                        // §7.3 the last Accept attempt's refusal, verbatim + hint.
-                        if let Some(text) = &r.last_refusal {
-                            ui.separator();
-                            ui.label(ui_text::refusal_strip_title());
-                            ui.colored_label(
-                                ui.visuals().error_fg_color,
-                                ui_text::refusal_line(text),
-                            );
-                        }
-                    }
-                    // Refusal (verbatim core Display + the fixed hint, §8.2).
-                    let refusal = state
-                        .pending
-                        .as_ref()
-                        .and_then(|p| p.last_refusal.clone())
-                        .or_else(|| state.last_refusal.clone());
-                    if let Some(text) = refusal {
-                        ui.separator();
-                        ui.label(ui_text::refusal_strip_title());
-                        ui.colored_label(ui.visuals().error_fg_color, ui_text::refusal_line(&text));
-                    }
-                    // Last accepted edit's disclosures (verbatim, §8.1).
-                    if !state.last_disclosures.is_empty() {
-                        ui.separator();
-                        ui.label(ui_text::disclosure_strip_title());
-                        for d in &state.last_disclosures {
-                            ui.label(ui_text::disclosure_bullet(d));
-                        }
-                    }
-                });
-            });
+        // Pass 34.1 slice 4: the status strip draws in the LEFT DOCK's Tool
+        // Options pane now. Nothing floats over the canvas any more.
 
         // ---- Pass 15.2: resolve the reflow view-state intents ----
         // Still inside the `&mut text_edit` borrow; `doc.session`/`doc.pages`
@@ -10826,6 +10762,79 @@ fn std14_combo_label(
         _ => ui_text::font_trust_bundled(),
     };
     ui_text::font_entry_label(name, trust)
+}
+
+/// Draw the Add-Text tool's status strip and return
+/// `(do_accept, do_reject, switch_to_edit)` (Pass 34.1 slice 4).
+///
+/// Moved verbatim out of the floating `pdfce-add-text-status` Area.
+///
+/// `switch_to_edit` is this tool's own third verb (§7.2 P1 continuity): a
+/// just-added run is ordinary page content, so the operator is offered a hop
+/// straight to Edit Text with it selected. It is returned rather than acted on
+/// here because switching tools tears down this tool's state, and doing that
+/// from inside the pane that is currently drawing it is how a use-after-free
+/// of the UI kind happens.
+fn add_text_status_ui(state: &mut AddTextState, ui: &mut egui::Ui) -> (bool, bool, bool) {
+    let mut do_accept = false;
+    let mut do_reject = false;
+    let mut switch_to_edit = false;
+    if let Some(draft) = state.draft.as_ref() {
+        let empty = draft.draft_text.is_empty();
+        ui.horizontal(|ui| {
+            let accept = ui.add_enabled(!empty, egui::Button::new(ui_text::add_text_accept()));
+            let accept = if empty {
+                accept.on_hover_text(ui_text::add_text_empty_tooltip())
+            } else {
+                accept
+            };
+            if accept.clicked() {
+                do_accept = true;
+            }
+            if ui
+                .add(egui::Button::new(ui_text::add_text_reject()))
+                .clicked()
+            {
+                do_reject = true;
+            }
+        });
+        // §4.2/§6: box-mode live derived/overflow disclosures OR
+        // the wrap refusal — verbatim, while deciding (R76).
+        if let Some(preview) = &draft.wrap_preview {
+            match preview {
+                Ok(pv) => {
+                    for d in &pv.disclosures {
+                        ui.label(ui_text::disclosure_bullet(d));
+                    }
+                }
+                Err(e) => {
+                    ui.colored_label(ui.visuals().error_fg_color, ui_text::refusal_line(e));
+                }
+            }
+        }
+        // §6.4: the last Accept attempt's refusal (verbatim +
+        // hint), kept visible for revision — never a dead end.
+        if let Some(text) = &draft.last_refusal {
+            ui.separator();
+            ui.label(ui_text::refusal_strip_title());
+            ui.colored_label(ui.visuals().error_fg_color, ui_text::refusal_line(text));
+        }
+    }
+    // §6.1: the last ACCEPTED add's disclosures, VERBATIM (all
+    // three possible: font provenance R79, /Resources
+    // inheritance §7.7.3.4, tagged-untagged R73). Persist until
+    // the next Accept or tool exit. §7.2 continuity link below.
+    if !state.last_disclosures.is_empty() {
+        ui.separator();
+        ui.label(ui_text::disclosure_strip_title());
+        for d in &state.last_disclosures {
+            ui.label(ui_text::disclosure_bullet(d));
+        }
+        if ui.button(ui_text::edit_this_text_now_button()).clicked() {
+            switch_to_edit = true;
+        }
+    }
+    (do_accept, do_reject, switch_to_edit)
 }
 
 /// Draw the Add-Text tool's options (Pass 34.1 slice 3).
@@ -11379,81 +11388,10 @@ fn run_add_text_tool(
 
         // -- Accept/Reject + disclosure/refusal strip (§6/§7): a floating bottom
         //    panel. Accept/Reject are REAL buttons (accesskit). --
-        egui::Area::new(egui::Id::new("pdfce-add-text-status"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(canvas::tool_strip_anchor(
-                ui.max_rect(),
-                canvas::StripCorner::BottomLeft,
-                8.0,
-            ))
-            .pivot(egui::Align2::LEFT_BOTTOM)
-            .show(ui.ctx(), |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_max_width(460.0);
-                    if let Some(draft) = state.draft.as_ref() {
-                        let empty = draft.draft_text.is_empty();
-                        ui.horizontal(|ui| {
-                            let accept = ui
-                                .add_enabled(!empty, egui::Button::new(ui_text::add_text_accept()));
-                            let accept = if empty {
-                                accept.on_hover_text(ui_text::add_text_empty_tooltip())
-                            } else {
-                                accept
-                            };
-                            if accept.clicked() {
-                                do_accept = true;
-                            }
-                            if ui
-                                .add(egui::Button::new(ui_text::add_text_reject()))
-                                .clicked()
-                            {
-                                do_reject = true;
-                            }
-                        });
-                        // §4.2/§6: box-mode live derived/overflow disclosures OR
-                        // the wrap refusal — verbatim, while deciding (R76).
-                        if let Some(preview) = &draft.wrap_preview {
-                            match preview {
-                                Ok(pv) => {
-                                    for d in &pv.disclosures {
-                                        ui.label(ui_text::disclosure_bullet(d));
-                                    }
-                                }
-                                Err(e) => {
-                                    ui.colored_label(
-                                        ui.visuals().error_fg_color,
-                                        ui_text::refusal_line(e),
-                                    );
-                                }
-                            }
-                        }
-                        // §6.4: the last Accept attempt's refusal (verbatim +
-                        // hint), kept visible for revision — never a dead end.
-                        if let Some(text) = &draft.last_refusal {
-                            ui.separator();
-                            ui.label(ui_text::refusal_strip_title());
-                            ui.colored_label(
-                                ui.visuals().error_fg_color,
-                                ui_text::refusal_line(text),
-                            );
-                        }
-                    }
-                    // §6.1: the last ACCEPTED add's disclosures, VERBATIM (all
-                    // three possible: font provenance R79, /Resources
-                    // inheritance §7.7.3.4, tagged-untagged R73). Persist until
-                    // the next Accept or tool exit. §7.2 continuity link below.
-                    if !state.last_disclosures.is_empty() {
-                        ui.separator();
-                        ui.label(ui_text::disclosure_strip_title());
-                        for d in &state.last_disclosures {
-                            ui.label(ui_text::disclosure_bullet(d));
-                        }
-                        if ui.button(ui_text::edit_this_text_now_button()).clicked() {
-                            switch_to_edit = true;
-                        }
-                    }
-                });
-            });
+        // Pass 34.1 slice 4: the status strip draws in the Tool Options pane.
+        do_accept |= std::mem::take(&mut state.queued_accept);
+        do_reject |= std::mem::take(&mut state.queued_reject);
+        switch_to_edit |= std::mem::take(&mut state.queued_switch_to_edit);
     }
 
     // ---- Phase C: the session mutation (one undo-able command) ----
@@ -11843,6 +11781,19 @@ struct TextEditIntents {
     /// A reflow parameter (width / leading / alignment) was adjusted, so the
     /// preview must be recomputed (§6).
     reflow_changed: bool,
+    /// Commit the pending typed edit (§6.4). Still a BUTTON as well as a
+    /// click-away (Pass 34.0): the implicit commit is the discoverable path,
+    /// this is the deliberate one, and an operator who wants to keep the caret
+    /// where it is has no other way to say so.
+    do_accept: bool,
+    /// Discard the pending typed edit (§6.4).
+    do_reject: bool,
+    /// Accept the reflow preview (§7.2). NOT reachable by clicking away —
+    /// reflow output is inferred, and rule 4 keeps an inference explicitly
+    /// reviewable (decision 031).
+    do_accept_reflow: bool,
+    /// Discard the reflow preview (§7.1).
+    do_reject_reflow: bool,
     apply_size: Option<f64>,
     apply_fill: Option<pdfce_core::text_edit::NewFill>,
     apply_font: Option<String>,
@@ -11856,6 +11807,124 @@ struct TextEditIntents {
     /// real-face/synthesis request), routed to the SAME strip as every core
     /// refusal rather than to a second disclosure surface.
     local_refusal: Option<String>,
+}
+
+/// Draw the Edit-Text tool's status strip — commit controls, refusals and
+/// disclosures — and return what the operator asked for (Pass 34.1 slice 4).
+///
+/// Moved verbatim out of the floating `pdfce-text-edit-status` Area. With this
+/// and its two siblings relocated, **nothing floats over the canvas any more**
+/// and `canvas::StripCorner` retires with them.
+///
+/// # Why the Accept button survives Pass 34.0's implicit commit
+///
+/// Clicking away commits (decision 031), so Accept is no longer the only way
+/// to keep an edit — but it is still the only way to keep an edit *without
+/// moving the caret*. An operator who has typed a replacement and wants to
+/// stay where they are has no gesture that means "keep this, and leave me
+/// here". The button is that gesture. Removing it because a second path now
+/// exists would take away the deliberate one and leave only the incidental.
+///
+/// `cross_run` is derived during the canvas pass and cached on the state, for
+/// the same reason `derived_reflow_target` is — this pane draws first.
+fn text_edit_status_ui(
+    state: &mut TextEditState,
+    cross_run: bool,
+    ui: &mut egui::Ui,
+) -> TextEditIntents {
+    let mut do_accept = false;
+    let mut do_reject = false;
+    let mut do_accept_reflow = false;
+    let mut do_reject_reflow = false;
+    if cross_run {
+        ui.colored_label(
+            ui.visuals().warn_fg_color,
+            ui_text::cross_run_selection_notice(),
+        );
+    }
+    if state.pending.is_some() {
+        ui.horizontal(|ui| {
+            if ui
+                .add(egui::Button::new(ui_text::accept_edit()).min_size(ICON_BUTTON_SIZE))
+                .clicked()
+            {
+                do_accept = true;
+            }
+            if ui
+                .add(egui::Button::new(ui_text::reject_edit()).min_size(ICON_BUTTON_SIZE))
+                .clicked()
+            {
+                do_reject = true;
+            }
+        });
+    }
+    // Pass 15.2 §7: reflow Accept/Reject + live diagnostics —
+    // mutually exclusive with `pending`, so it shares this strip.
+    if let Some(r) = state.reflow.as_ref() {
+        ui.horizontal(|ui| {
+            if ui
+                .add(egui::Button::new(ui_text::reflow_accept()).min_size(ICON_BUTTON_SIZE))
+                .clicked()
+            {
+                do_accept_reflow = true;
+            }
+            if ui
+                .add(egui::Button::new(ui_text::reflow_reject()).min_size(ICON_BUTTON_SIZE))
+                .clicked()
+            {
+                do_reject_reflow = true;
+            }
+        });
+        // §8.1 live diagnostics — the engine's own strings
+        // verbatim, shown WHILE deciding so overflow (R76)
+        // informs the decision, not follows it. Calm ⓘ bullets,
+        // never a Pass-8 acknowledgement gate.
+        match &r.preview {
+            Ok(pv) => {
+                for d in &pv.diagnostics.disclosures {
+                    ui.label(ui_text::disclosure_bullet(d));
+                }
+            }
+            Err(e) => {
+                ui.colored_label(
+                    ui.visuals().error_fg_color,
+                    ui_text::refusal_line(&e.to_string()),
+                );
+            }
+        }
+        // §7.3 the last Accept attempt's refusal, verbatim + hint.
+        if let Some(text) = &r.last_refusal {
+            ui.separator();
+            ui.label(ui_text::refusal_strip_title());
+            ui.colored_label(ui.visuals().error_fg_color, ui_text::refusal_line(text));
+        }
+    }
+    // Refusal (verbatim core Display + the fixed hint, §8.2).
+    let refusal = state
+        .pending
+        .as_ref()
+        .and_then(|p| p.last_refusal.clone())
+        .or_else(|| state.last_refusal.clone());
+    if let Some(text) = refusal {
+        ui.separator();
+        ui.label(ui_text::refusal_strip_title());
+        ui.colored_label(ui.visuals().error_fg_color, ui_text::refusal_line(&text));
+    }
+    // Last accepted edit's disclosures (verbatim, §8.1).
+    if !state.last_disclosures.is_empty() {
+        ui.separator();
+        ui.label(ui_text::disclosure_strip_title());
+        for d in &state.last_disclosures {
+            ui.label(ui_text::disclosure_bullet(d));
+        }
+    }
+    TextEditIntents {
+        do_accept,
+        do_reject,
+        do_accept_reflow,
+        do_reject_reflow,
+        ..TextEditIntents::default()
+    }
 }
 
 /// Whether this tool's options have been migrated into the Tool Options pane
@@ -12368,6 +12437,10 @@ fn text_edit_options_ui(
     TextEditIntents {
         enter_reflow,
         reflow_changed,
+        do_accept: false,
+        do_reject: false,
+        do_accept_reflow: false,
+        do_reject_reflow: false,
         apply_size,
         apply_fill,
         apply_font,
@@ -14142,6 +14215,128 @@ fn run_dimension_drag(
     consumed
 }
 
+/// Draw the Measure tools' status strip and return `(do_accept, do_reject)`
+/// (Pass 34.1 slice 4).
+///
+/// Moved verbatim out of the floating `pdfce-measure-status` Area — the LAST
+/// of the six floating tool strips. With it gone, `canvas::StripCorner` and
+/// `canvas::tool_strip_anchor` have no callers and retire.
+///
+/// Accept stays a real button for all three measure tools and is NOT replaced
+/// by click-away for any of them (decision 031): circular authors an inferred
+/// Taubin best-fit, and scale re-values every ce dimension in its group — the
+/// operator ratified the latter on 2026-08-05 with a better reason than the
+/// record had, namely that the tool already requires a typed value, so a
+/// commit point exists whether or not a button does. Linear DOES also commit
+/// on click-away (Pass 34.0); its button is the deliberate path, as with Edit
+/// Text.
+fn measure_status_ui(
+    st: &measure_tool::MeasureState,
+    model: &pdfce_core::dimension::DimensionModel,
+    active: Option<CanvasTool>,
+    ui: &mut egui::Ui,
+) -> (bool, bool) {
+    use pdfce_core::dimension::{ScaleState, Unit, format_measurement};
+    let mut do_accept = false;
+    let mut do_reject = false;
+    // Derived HERE rather than passed in: all four are pure functions of
+    // arguments this function already has, or of the theme. Threading them
+    // through the signature would be four more places for a caller to get one
+    // wrong (Pass 34.1 slice 4).
+    let warn_color = ui.visuals().warn_fg_color;
+    let gscale = model
+        .group(st.group)
+        .map_or(ScaleState::NeverSet, |g| g.scale);
+    let gformat = model
+        .group(st.group)
+        .map_or_else(|| Unit::Millimeter.default_format(), |g| g.format);
+    // The live pointer, cached by the canvas pass — this pane draws first, so
+    // the readout it shows is the previous frame's pointer. On a value that
+    // updates as the pointer moves, one frame is invisible.
+    let pointer_pdf = st.derived_pointer;
+    let active_is_derived = st.derived_is_derived;
+    let mut can_accept = false;
+
+    if canvas::tool_builds_measure_linear(active) {
+        let raw = st
+            .pending
+            .map(|k| k.measured_points())
+            .or_else(|| pointer_pdf.and_then(|ptr| st.linear.measured(ptr)));
+        if let Some(raw) = raw {
+            let d = format_measurement(raw, gscale, gformat);
+            ui.label(ui_text::measure_length_readout(
+                raw,
+                &d.text,
+                d.raw_page_units,
+            ));
+            if d.raw_page_units {
+                ui.label(pdfce_core::dimension::NO_SCALE_DISCLOSURE);
+            }
+        }
+        can_accept = st.pending.is_some();
+    } else if canvas::tool_builds_measure_circular(active) {
+        if let Some(fit) = st.circular.fit() {
+            ui.label(ui_text::best_fit_circle_disclosure(
+                st.circular.object_count(),
+                fit.radius,
+                fit.residual,
+            ));
+            if fit.residual > fit.radius * 0.1 {
+                ui.colored_label(warn_color, ui_text::best_fit_residual_high());
+            }
+            let raw = if st.circular.show_diameter {
+                2.0 * fit.radius
+            } else {
+                fit.radius
+            };
+            let d = format_measurement(raw, gscale, gformat);
+            ui.label(ui_text::measure_length_readout(
+                raw,
+                &d.text,
+                d.raw_page_units,
+            ));
+            if d.raw_page_units {
+                ui.label(pdfce_core::dimension::NO_SCALE_DISCLOSURE);
+            }
+            can_accept = true;
+        }
+    } else if canvas::tool_builds_measure_scale(active) {
+        if let Some(prev) = st.scale.preview() {
+            ui.label(ui_text::scale_entry_preview(&prev.ratio_label));
+        }
+        can_accept = st.scale.commit().is_some();
+    }
+
+    // The derived-centerline confirm (fuzzy inference, §2.3.1).
+    if active_is_derived {
+        ui.colored_label(warn_color, ui_text::measure_confirm_derived_centerline());
+    }
+
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(can_accept, egui::Button::new(ui_text::measure_accept()))
+            .clicked()
+        {
+            do_accept = true;
+        }
+        if ui
+            .add(egui::Button::new(ui_text::measure_reject()))
+            .clicked()
+        {
+            do_reject = true;
+        }
+    });
+
+    // The last Accept's disclosures, verbatim (ui-spec §6).
+    if !st.last_disclosures.is_empty() {
+        ui.separator();
+        for d in &st.last_disclosures {
+            ui.label(ui_text::disclosure_bullet(d));
+        }
+    }
+    (do_accept, do_reject)
+}
+
 /// Draw the Measure tools' options and return `(close_tool, open_groups)`
 /// (Pass 34.1 slice 3).
 ///
@@ -14266,9 +14461,7 @@ fn run_measure_tool(
     extent: (f32, f32),
     zoom: f32,
 ) {
-    use pdfce_core::dimension::{
-        DEFAULT_GROUP_ID, DimensionKind, ScaleState, Unit, format_measurement,
-    };
+    use pdfce_core::dimension::{DEFAULT_GROUP_ID, DimensionKind};
     use pdfce_core::vector::{Point, SnapConfig, SnapKind, snap_candidates};
 
     let active = doc.active_tool;
@@ -14316,7 +14509,6 @@ fn run_measure_tool(
         let preview_color = egui::Color32::from_rgb(210, 90, 40);
         let snap_color = ui.visuals().selection.stroke.color;
         let text_color = ui.visuals().text_color();
-        let warn_color = ui.visuals().warn_fg_color;
 
         // Coordinate bridges — the 14.3/16.2 canvas↔PDF bridge (rotation/zoom
         // correct), never `screen_to_page` alone.
@@ -14345,6 +14537,9 @@ fn run_measure_tool(
         let alt = ui.input(|i| i.modifiers.alt);
 
         let pointer_pdf = image_response.hover_pos().and_then(to_pdf);
+        // Pass 34.1 slice 4: publish it for the Tool Options pane's readout,
+        // which draws before this pass runs.
+        st.derived_pointer = pointer_pdf;
         let snap_on = canvas::snap_query_enabled(st.snap_master, alt);
         let cands = match (snap_on, pointer_pdf, objects) {
             (true, Some(q), Some(objs)) => {
@@ -14358,6 +14553,7 @@ fn run_measure_tool(
         }
         let active_cand = canvas::active_snap_candidate(&cands, st.snap_cycle);
         let active_is_derived = active_cand.is_some_and(|c| c.kind.is_derived());
+        st.derived_is_derived = active_is_derived;
         // The effective pick point: the snapped candidate, else the raw pointer.
         let effective = active_cand.map(|c| c.point).or(pointer_pdf);
 
@@ -14518,104 +14714,14 @@ fn run_measure_tool(
         }
 
         // -- Status / disclosure strip + Accept/Reject (ui-spec §2.6/§6). --
-        let gscale = model
-            .group(st.group)
-            .map_or(ScaleState::NeverSet, |g| g.scale);
-        let gformat = model
-            .group(st.group)
-            .map_or_else(|| Unit::Millimeter.default_format(), |g| g.format);
-        egui::Area::new(egui::Id::new("pdfce-measure-status"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(canvas::tool_strip_anchor(
-                ui.max_rect(),
-                canvas::StripCorner::BottomLeft,
-                8.0,
-            ))
-            .pivot(egui::Align2::LEFT_BOTTOM)
-            .show(ui.ctx(), |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_max_width(480.0);
-                    let mut can_accept = false;
-
-                    if canvas::tool_builds_measure_linear(active) {
-                        let raw = st
-                            .pending
-                            .map(|k| k.measured_points())
-                            .or_else(|| pointer_pdf.and_then(|ptr| st.linear.measured(ptr)));
-                        if let Some(raw) = raw {
-                            let d = format_measurement(raw, gscale, gformat);
-                            ui.label(ui_text::measure_length_readout(
-                                raw,
-                                &d.text,
-                                d.raw_page_units,
-                            ));
-                            if d.raw_page_units {
-                                ui.label(pdfce_core::dimension::NO_SCALE_DISCLOSURE);
-                            }
-                        }
-                        can_accept = st.pending.is_some();
-                    } else if canvas::tool_builds_measure_circular(active) {
-                        if let Some(fit) = st.circular.fit() {
-                            ui.label(ui_text::best_fit_circle_disclosure(
-                                st.circular.object_count(),
-                                fit.radius,
-                                fit.residual,
-                            ));
-                            if fit.residual > fit.radius * 0.1 {
-                                ui.colored_label(warn_color, ui_text::best_fit_residual_high());
-                            }
-                            let raw = if st.circular.show_diameter {
-                                2.0 * fit.radius
-                            } else {
-                                fit.radius
-                            };
-                            let d = format_measurement(raw, gscale, gformat);
-                            ui.label(ui_text::measure_length_readout(
-                                raw,
-                                &d.text,
-                                d.raw_page_units,
-                            ));
-                            if d.raw_page_units {
-                                ui.label(pdfce_core::dimension::NO_SCALE_DISCLOSURE);
-                            }
-                            can_accept = true;
-                        }
-                    } else if canvas::tool_builds_measure_scale(active) {
-                        if let Some(prev) = st.scale.preview() {
-                            ui.label(ui_text::scale_entry_preview(&prev.ratio_label));
-                        }
-                        can_accept = st.scale.commit().is_some();
-                    }
-
-                    // The derived-centerline confirm (fuzzy inference, §2.3.1).
-                    if active_is_derived {
-                        ui.colored_label(warn_color, ui_text::measure_confirm_derived_centerline());
-                    }
-
-                    ui.horizontal(|ui| {
-                        if ui
-                            .add_enabled(can_accept, egui::Button::new(ui_text::measure_accept()))
-                            .clicked()
-                        {
-                            do_accept = true;
-                        }
-                        if ui
-                            .add(egui::Button::new(ui_text::measure_reject()))
-                            .clicked()
-                        {
-                            do_reject = true;
-                        }
-                    });
-
-                    // The last Accept's disclosures, verbatim (ui-spec §6).
-                    if !st.last_disclosures.is_empty() {
-                        ui.separator();
-                        for d in &st.last_disclosures {
-                            ui.label(ui_text::disclosure_bullet(d));
-                        }
-                    }
-                });
-            });
+        //
+        // Pass 34.1 slice 4: the strip draws in the Tool Options pane, and the
+        // group scale/format it read are derived there from the same model, so
+        // they are no longer computed here.
+        let queued_accept = std::mem::take(&mut st.queued_accept);
+        let queued_reject = std::mem::take(&mut st.queued_reject);
+        do_accept |= queued_accept;
+        do_reject |= queued_reject;
     }
 
     // ---- Phase C: the session mutation (one undoable command) ----

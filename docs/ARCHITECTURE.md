@@ -6965,3 +6965,94 @@ with a forward pointer.
   pdfce-core` / `-p pdfce-render` re-verified clean (no GUI deps pulled
   in by the second `Tree`). Full record: `ROADMAP.md`'s "Pass 34.1
   (slice 1 of 2)" Shipped entry.
+
+- **2026-08-05 (continuation 94) — Pass 34.1 slices 2–3 SHIPPED
+  (`fae916d`, `13f3c0b`); decision 024 §3.3 Family A SUPERSEDED by
+  decision 031 / Pass 34.1, on the operator's own later instruction.**
+  Filed by `pdfce-librarian` at the engineer's dispatch.
+  - **Build confirmation.** `DockPanel::ToolOptions` (`crates/pdfce-gui/
+    src/dock.rs`) now hosts all three tools' full property surfaces:
+    Edit Text's (slice 2, `fae916d`, ~500 lines of plumbing — nine new
+    booleans/queue fields on its edit state, the largest of the three
+    migrations), and Add Text's and Measure's (slice 3, `13f3c0b` — Add
+    Text needed zero new plumbing, every control already wrote a
+    `prop_*` field or queued a placement that survives to the canvas
+    pass; Measure needed two booleans, `queued_close_tool` and
+    `queued_open_groups`, the same one-frame set-in-dock/drain-in-canvas
+    contract Pass 34.0 established). The floating `egui::Area` property
+    bars for all three tools are deleted, not retained as fallback.
+    `StripCorner::TopLeft` is **removed** (not `#[allow(dead_code)]`d) —
+    nothing anchors to the canvas top-left any more; `BottomLeft`
+    remains until the status/commit strips move (slice 4, not yet
+    built — this is a stated, not silent, remainder, per R150). A
+    generalised `migrated_options_tool` heading rule replaces the
+    text-edit-specific one from slice 2, since every migrated bar now
+    carries its own `*_propbar_title()` and a stacked pane heading would
+    duplicate it.
+  - **§3's own body-section note is now superseded in one respect: this
+    IS a `pdfce-gui`-only change** (unchanged crate boundary — `cargo
+    tree -p pdfce-core` / `-p pdfce-render` re-verified clean, no GUI
+    dependency introduced), so no §3/§4 edit beyond this entry is
+    required, consistent with the continuation-89/92/93 disposition for
+    this same dock architecture.
+  - **Decision 024 §3.3 Family A (TOOL contextual ribbon tabs, keyed on
+    `doc.active_tool`) is SUPERSEDED for tool-options content, on the
+    operator's own later, more specific instruction** — not an engineer
+    or specialist judgment call. §3.3's original text is left unedited
+    (append-only); the supersession is recorded as a new §11 in
+    `docs/decisions/024-ribbon-command-surface-and-the-accept-reject-problem.md`,
+    filed at `pdfce-ui-specialist`'s own recommendation
+    (`docs/ui_specs/ribbon-groupings-and-customization-architecture.md`
+    §2). **Family B (SELECTION tabs, keyed on `TargetId` kind) is
+    UNAFFECTED** — still correctly blocked on Passes 22.0/23.2, exactly
+    as decision 024 scoped it. **Consequence for any future Pass 24.2
+    build:** the Measure/Edit/Add-Text/Edit-Objects contextual ribbon
+    tabs, if built, carry *invocation* only (arm the tool, manage
+    ce-dimension groups) — the armed tool's live controls stay in
+    `DockPanel::ToolOptions` and must not be duplicated onto a ribbon
+    tab.
+  - **Open operator questions (ax), (ay), (aw) CLOSED this filing.**
+    (ax) — DISSOLVED, not amended: the operator answered the
+    organising question directly ("make the groupings make sense...
+    if it makes more organizational sense to have them a different
+    way, do so") rather than granting the Acrobat-GUI-audit amendment
+    to `CLAUDE.md` rule 12; rule 12 stands untouched, and
+    `pdfce-acrobat-librarian` was not dispatched. (ay) — CLOSED:
+    "organizational sense governs; resemblance either way is not the
+    goal" is a complete answer, naming no specific closeness on
+    purpose. (aw) — CONFIRMED: the operator ratified keeping
+    `MeasureScale`'s explicit Accept/Reject
+    (*"good choice. we need to enter a value for it anyway"*),
+    appended to decision 031 §3 as a second, independent justification
+    (a typed value is already required, so the commit point is free)
+    alongside the blast-radius argument decision 031 already recorded.
+    Also on record for the future: ribbon groupings are meant to become
+    operator-customizable ("like SolidWorks and MS Office") — not
+    scoped now, but it is why the customization architecture in
+    `docs/ui_specs/ribbon-groupings-and-customization-architecture.md`
+    §5 (a static `RibbonCommandId`/`RibbonCommand`/`RibbonGroupDefault`
+    registry keyed on stable identity, deliberately named
+    `RibbonGroupId` rather than `GroupId` to avoid colliding with
+    `pdfce_core::dimension::GroupId`) is being laid down now, without
+    building reorder/hide/reset UI or persistence yet.
+  - **Process finding, filed as standing rule R155** (`ROADMAP.md`
+    Standing rules): the engineer dispatched a fresh ribbon-grouping
+    design task without first checking that decision 024 already
+    contained a complete, decided taxonomy plus standing rules
+    R121–R125 covering the same territory. The specialist caught this
+    on its own initiative and audited the existing record instead of
+    re-deriving a competing one, so nothing was lost — but the near-miss
+    is the second instance this session of the same recurring shape (a
+    thing already exists, and nothing pointed at it before the dispatch
+    went out; the first was decision 031 §4's `LeftPanel`/`DockBehavior`
+    contradiction, R154). Distinct from R151–R154: those audit an
+    artifact against current reality *after* something has shipped or
+    been written; R155 is upstream of all four — a dispatch-time check,
+    before a design brief is written, against the existing decision log.
+    Full text and numbering note: `ROADMAP.md` Standing rules.
+  - No new decision record minted (031's ratification and 024's §11 are
+    both appended corrections to existing records, not new ones);
+    decision-record ceiling stays **031** (**032** next free). No new
+    Pass family minted (Pass 34.1's slice count is not a family count;
+    ceiling stays **37 next free**). Full record: `ROADMAP.md`'s new
+    Pass 34.1 Shipped entry and `SESSION_LOG.md` continuation 94.

@@ -14426,3 +14426,265 @@ R154 — re-run after this commit to confirm 154 standing rules, still 31
 decision files (this filing added a correction section to an existing
 file, not a new one), and 92 (section, Pass ID) pairs (unchanged — no new
 Pass entry).
+
+**Same-day continuation 94 (real date 2026-08-05) — Pass 34.1 slices 2–3
+SHIPPED; decision 024 §3.3 Family A SUPERSEDED by decision 031 / Pass
+34.1, on the operator's own later instruction; three open operator
+questions CLOSED; standing rule R155 minted.**
+
+**Shipped:**
+- Pass 34.1 (slices 2–3 of 4) — Edit Text's property bar (slice 2,
+  `fae916d`), then Add Text's and Measure's (slice 3, `13f3c0b`), all
+  move out of their floating `egui::Area` strips into the docked Tool
+  Options pane. Plumbing cost varied sharply per tool: Add Text needed
+  none (every control already wrote a surviving field — pure
+  relocation); Measure needed two new booleans on `MeasureState`
+  (`queued_close_tool`, `queued_open_groups`); Edit Text needed nine
+  (~500 lines, the largest migration of the three). `StripCorner::TopLeft`
+  removed outright (not `#[allow(dead_code)]`-ed) — nothing anchors to
+  the canvas top-left corner any more. `migrated_options_tool`
+  generalises the pane-heading rule out of its text-edit special case.
+  **Deliberate non-goal:** refusal/disclosure strips (`StripCorner::
+  BottomLeft`) are NOT yet moved — that is slice 4, still open, and
+  nothing is silently dropped in the meantime. Gates: `cargo fmt
+  --check` clean, `cargo clippy --workspace --all-targets` clean, 44/44
+  test binaries green, `check-ui-strings` clean, `cargo tree -p
+  pdfce-core` GUI-free, R86 screenshot-verified. Filed to `ROADMAP.md`
+  Shipped (top) as neither slice had been filed there before this
+  session, despite slice 2 having already shipped.
+
+**Decisions made this session:**
+- **Decision 024 §3.3 Family A (contextual ribbon tabs per armed tool)
+  is SUPERSEDED for tool-options content**, filed as a new, append-only
+  §11 in `docs/decisions/024-...md`, at `pdfce-ui-specialist`'s own
+  recommendation. Cause: the operator's later, more specific 2026-08-05
+  instruction ("all of the options should be shown in a side bar tab
+  docked with the page navigation tab") produced `DockPanel::ToolOptions`
+  (decision 031 / Pass 34.1) instead, a dock panel doing Family A's job
+  one day before Pass 24.2 (the ribbon build) could have started.
+  **Family B (selection tabs) is explicitly unaffected**, still blocked
+  on Passes 22.0/23.2. **Consequence for any future Pass 24.2:** the
+  Measure/Edit/Add-Text/Edit-Objects ribbon tabs, if built, carry
+  invocation only — never the armed tool's live controls, which stay in
+  the dock. Also updated: `ARCHITECTURE.md` §12 (new continuation-94
+  entry; no §3/§4 body change needed, same disposition as prior dock-
+  architecture filings — the decision log itself is the body-section
+  update for this GUI-shell territory).
+- **Decision 031 §3 gained an appended operator ratification.** The
+  operator confirmed keeping `MeasureScale`'s explicit Accept/Reject
+  ("good choice. we need to enter a value for it anyway") — a SECOND,
+  independent justification alongside decision 031's own blast-radius
+  argument: the tool already requires a typed value to complete its
+  gesture, so the commit point is free, unlike a pure direct
+  manipulation where an explicit Accept would add friction to an
+  already-complete gesture. **Correction note for whoever reads the
+  engineer's dispatch text closely:** the dispatch asked for this to be
+  appended to decision 031's "§4" — §4 is the dock-implementation-shape
+  section, unrelated in content. The ratification is filed in **§3**
+  (the blast-radius section it actually ratifies) instead, since that is
+  where the content belongs; flagged here rather than silently
+  corrected, since the discrepancy could equally be this librarian
+  misreading the dispatch rather than a dispatch typo.
+
+**Findings + decisions:**
+- **Three open operator questions CLOSED**, all from the operator's
+  single 2026-08-05 answer: *"For 1. and 2. just make the ribbon command
+  groupings make sense, they might be similar to acrobat's but if it
+  makes more organizational sense to have them a different way then do
+  so. we might want to make these customizable in the future like you
+  can with solidworks and ms office."* **(ax)** — DISSOLVED, not amended:
+  the operator answered the organising question directly rather than
+  granting the `CLAUDE.md` rule-12 amendment the conflict required; rule
+  12 stands untouched, `pdfce-acrobat-librarian` was not dispatched.
+  **(ay)** — CLOSED: organizational sense governs, no resemblance target
+  either way, a complete answer despite naming no specific closeness.
+  **(aw)** — CONFIRMED (see Decisions, above). Future direction recorded
+  but not scoped: ribbon groupings are meant to become
+  operator-customizable ("like SolidWorks and MS Office"); the
+  static `RibbonCommandId`/`RibbonCommand`/`RibbonGroupDefault` registry
+  in the new ui-spec (below) is architected now, without building
+  reorder/hide/reset UI or persistence yet, so that future ask stays
+  cheap.
+- **New governing spec on disk:**
+  `docs/ui_specs/ribbon-groupings-and-customization-architecture.md`
+  (`pdfce-ui-specialist`, 2026-08-05). Confirms decision 024's six ribbon
+  tabs with named deltas against current shipped state; gives Measure
+  its own fixed tab rather than a group under Insert, cleanly resolved
+  by the Family A supersession leaving that tab's body thin; specifies
+  the future customization architecture, deliberately naming its
+  group-identity type `RibbonGroupId` rather than `GroupId` to avoid
+  colliding with `pdfce_core::dimension::GroupId`. Explicitly recommends
+  NOT building reorder/hide/reset UI or persistence yet.
+- **Standing rule R155 minted** — a pre-dispatch search-discipline rule:
+  before dispatching a fresh design/consultant task, check whether an
+  existing decision record already answers the question. Instance: the
+  engineer dispatched the ribbon-grouping design task without first
+  checking that decision 024 §3.2/§3.3 already contained a complete,
+  decided taxonomy plus R121–R125. The specialist's own opening section
+  caught this ("this is mostly an audit, not a fresh design") and
+  audited rather than re-derived — nothing was lost, but the check
+  happened by one agent's own diligence rather than being built into the
+  dispatch process. Judged **distinct** from R151–R154 (which audit an
+  artifact against current reality AFTER it ships or is written) because
+  this rule fires BEFORE a design brief exists at all, against the
+  decision log rather than code/a caller graph/a fuzz harness/the type
+  system — a search-discipline rule, not a staleness-audit rule. Full
+  text: `ROADMAP.md` Standing rules.
+- **Unverified item, filed as an open flag, not a defect claim:** the
+  specialist reports Pass 34.1's `Pages`/`Tool Options` dock tabs
+  "shipped with no icon at all." Not independently confirmed as a
+  regression — `DockPanel::label()` returns plain text and
+  `tab_title_for_pane` consumes it, so as far as this librarian can tell
+  from the documents alone, every dock tab (including the four that
+  predate this Pass) is text-only. Needs a look at the running app or a
+  `dock.rs` read before it is filed as a gap.
+
+**Still in flight:**
+- **Pass 34.1 slice 4** — move the status/commit strips
+  (`StripCorner::BottomLeft`) into the Tool Options pane; the pane then
+  carries refusal/disclosure text directly, resolving the "one event,
+  shown twice" duplication question slice 3 deliberately left open.
+- **Pass 24.0–24.5** (ribbon) — still DECIDED, NOT STARTED. Family A is
+  now superseded for tool-options content; Family B is still blocked on
+  Passes 22.0/23.2 and still fully live.
+- **Pass 34.2 / 35.0 / 35.1** — per-ce-dimension property surface,
+  tolerance model, extension-line drag — all still open in `ROADMAP.md`
+  Next up, untouched by this filing.
+- The `Pages`/`Tool Options` icon-less-tab item above — unverified,
+  needs a running-app look.
+
+**For next session:**
+- Confirm whether the dock tabs' text-only appearance is the pre-
+  existing norm (all six `DockPanel` tabs) or a Pass 34.1 regression —
+  a five-minute `dock.rs` read or a screenshot settles it either way.
+- If Pass 24.x (ribbon) is ever picked back up, read decision 024's new
+  §11 and the ribbon-groupings ui-spec FIRST — both are now the
+  authoritative scoping for what Family A tabs actually contain
+  (invocation only) versus what stays in the dock.
+- Slice 4 (status-strip relocation) is the literal remainder of the
+  operator's original "all of the options should be shown in a side bar
+  tab" ask; Pass 34.1 should not be described as complete until it
+  ships.
+
+**Backup currency not verifiable from here** — engineer should check
+`D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is made
+in this entry.
+
+### Ledger discipline (R106)
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | none (Pass 34.1 slices 2–3 shipped against an existing ID) | family **36** fully Shipped; **37** still next free, unchanged |
+| Standing rules | **R155** | **R155** (**R156** next free) |
+| Decision records | none (024 §11 and 031's ratification are both appended corrections, not new records) | **031** (**032** next free, unchanged) |
+| Operator questions | none (aw/ax/ay CLOSED, not replaced) | **(az)** (**(ba)** next free), unchanged |
+
+**This librarian has no shell and did not run
+`tools/check-ledger-numbers.py` itself** — re-run after this commit to
+confirm 155 standing rules, still 31 decision files (both edited files
+are corrections to existing records, not new files), and 93
+(section, Pass ID) pairs (one new Shipped entry added this filing).
+
+> **Amendment, continuation 95 (below): the guess in the line above was
+> wrong, the same kind of unverified-number risk hard rule 8 names for
+> backup/git state, here on a ledger count instead.** The 93-pairs figure
+> assumed the two Pass 34.1 headings filed this session were a valid
+> addition; `tools/check-ledger-numbers.py`, run by the engineer after
+> this commit, instead flagged them as a **duplicate** Pass-ID declaration
+> (same Pass ID, same section, twice). Fixed continuation 95 by merging
+> the two headings into one; see that entry for the fix and the corrected
+> pair count.
+
+**Same-day continuation 95 (real date 2026-08-05) — gate fix: the two
+Pass 34.1 Shipped headings from continuation 94 merged into one;
+decision-031-§3/§4 filing discrepancy downgraded from open flag to
+resolved note.**
+
+**Shipped:** none this filing — librarian-only continuation, no code
+touched.
+
+**Decisions made this session:** none.
+
+**Findings + decisions:**
+- **`tools/check-ledger-numbers.py`, run by the engineer after
+  continuation 94's commit, flagged Pass 34.1 declared twice in
+  `ROADMAP.md`'s `Shipped` section** — once as "Pass 34.1 (slice 1 of 2)"
+  (`e15f55b`), once as "Pass 34.1 (slices 2–3 of 4)" (`fae916d`,
+  `13f3c0b`). Root cause: continuation 94 filed the slices-2–3 work as a
+  brand-new Shipped heading rather than recognizing that this project's
+  own convention — already set by **Pass 27.2** ("ONE Pass, TWO ticks")
+  and **Pass 27.0** ("chain `5e93bec` → `104162d`") — is ONE Shipped
+  heading per Pass ID, carrying multiple commits.
+- **Fixed by merging, not deleting.** The two entries are now one
+  `### Pass 34.1` heading in `ROADMAP.md`'s `Shipped` section, with
+  "chain `e15f55b` → `fae916d` → `13f3c0b`" in the byline and two
+  `####` sub-headings ("Slice 1," "Slices 2–3") carrying every word of
+  both original entries' bodies forward — nothing dropped, only
+  re-headed. The merged heading also carries forward the slice-count
+  discrepancy explicitly (slice 1 said "of 2," slices 2–3 said "of 4" —
+  both correct when written; scope grew when the operator asked for Add
+  Text and Measure alongside Edit Text) so a reader comparing the two
+  original entries side by side would not conclude one of them was
+  simply wrong.
+- **Two `Next up` cross-references corrected in the same pass** — the
+  Pass 34.1 `Next up` entry quoted both old heading strings by name
+  ("see the 'Pass 34.1 (slices 2–3 of 4)' Shipped entry, above" and "see
+  the 'Pass 34.1 (slice 1 of 2)' Shipped entry, above"); both now point
+  at the merged entry's "Slices 2–3" / "Slice 1" sub-sections instead,
+  with a bracketed correction note explaining why the old quoted text no
+  longer resolves.
+- **Newest-first Shipped ordering confirmed undisturbed.** The merged
+  entry sits at the position the more-recent slices-2–3 filing occupied
+  (top of `Shipped`, above Pass 36.3); the standalone slice-1 entry that
+  used to sit between Pass 36.3 and Pass 36.2 is removed, with exactly
+  one `---` separator left between Pass 36.3 and Pass 36.2, matching the
+  file's existing separator convention.
+- **Decision-031 §3-vs-§4 filing discrepancy (flagged continuation 94)
+  downgraded from open flag to resolved note.** The engineer confirmed
+  this session that filing the `MeasureScale` ratification in §3 (the
+  blast-radius section it actually ratifies) rather than the dispatch's
+  literal "§4" was the right call, not a misreading needing
+  re-investigation. The continuation-94 bullet is left as written
+  (append-only); this entry is the resolution record so a future session
+  does not re-open a settled question. No document text changes as a
+  result — decision 031 itself was already correct.
+
+**Still in flight:**
+- **Pass 34.1 slice 4** — unchanged: move the status/commit strips
+  (`StripCorner::BottomLeft`) into the Tool Options pane. Still the
+  literal remainder of the operator's "all of the options should be
+  shown in a side bar tab" ask.
+- Everything else carried forward unchanged from continuation 94's
+  "Still in flight" — Pass 24.0–24.5 (ribbon, DECIDED NOT STARTED), Pass
+  34.2/35.0/35.1 (untouched in `ROADMAP.md` Next up), and the
+  `Pages`/`Tool Options` icon-less-tab item (still unverified, still
+  needs a running-app look — untouched by this filing).
+
+**For next session:**
+- **Re-run `tools/check-ledger-numbers.py`** to confirm the duplicate is
+  cleared and the (section, Pass ID) pair count is accurate (this
+  librarian has no shell and could not re-run it after making the fix).
+- Otherwise unchanged from continuation 94's "For next session" —
+  confirm the dock-tab icon question, read decision 024 §11 + the
+  ribbon-groupings ui-spec before any Pass 24.x pickup, and do not
+  describe Pass 34.1 as complete until slice 4 ships.
+
+**Backup currency not verifiable from here** — engineer should check
+`D:\Dev\pdfce-backups\` directly (hard rule 8); no claim about it is
+made in this entry.
+
+### Ledger discipline (R106)
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | none (Pass 34.1's two Shipped headings merged into one existing ID — no new ID, and per the engineer's report, 92 (section, Pass ID) pairs after the fix) | family **36** fully Shipped; **37** still next free, unchanged |
+| Standing rules | none | **R155** (**R156** next free), unchanged |
+| Decision records | none (this filing edits no decision file — the §3-vs-§4 item was a resolution note, not a text change) | **031** (**032** next free), unchanged |
+| Operator questions | none | **(az)** (**(ba)** next free), unchanged |
+
+**This librarian has no shell and did not re-run
+`tools/check-ledger-numbers.py` itself after making this fix** — the
+engineer's own re-run is the requested confirmation step; per the
+engineer's report, everything except the now-fixed duplicate was already
+clean (92 (section, Pass ID) pairs, 155 standing rules, 31 decision
+files, Pass-family ceiling 36, R156 next free, decision 032 next free).

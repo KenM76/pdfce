@@ -774,6 +774,27 @@ pub struct MeasureState {
     /// (Pass 34.1 slice 3). Same one-frame contract as
     /// [`Self::queued_close_tool`].
     pub queued_open_groups: bool,
+    /// Commit / discard the current measure gesture, asked for by the Tool
+    /// Options pane (Pass 34.1 slice 4). Same one-frame contract as the two
+    /// above.
+    pub queued_accept: bool,
+    pub queued_reject: bool,
+    /// The live pointer in PDF page space, cached by the canvas pass for the
+    /// Tool Options pane's readout (Pass 34.1 slice 4).
+    ///
+    /// The pane draws before the pass that computes it, so it shows the
+    /// previous frame's pointer. On a value that follows the mouse, one frame
+    /// is invisible; deriving it in the pane instead is impossible, since the
+    /// canvas transform lives with the canvas.
+    pub derived_pointer: Option<Point>,
+    /// Whether the snap candidate under the pointer is a DERIVED point (a
+    /// midpoint, a centre) rather than one the drawing states — cached by the
+    /// canvas pass for the Tool Options pane (Pass 34.1 slice 4).
+    ///
+    /// The pane uses it for the two-click-confirm disclosure (ui-spec §2.3):
+    /// a derived point is pdfce's inference, so rule 4 requires it to be
+    /// announced before it is picked, not after.
+    pub derived_is_derived: bool,
 }
 
 impl MeasureState {
@@ -794,6 +815,10 @@ impl MeasureState {
             last_disclosures: Vec::new(),
             queued_close_tool: false,
             queued_open_groups: false,
+            queued_accept: false,
+            queued_reject: false,
+            derived_pointer: None,
+            derived_is_derived: false,
         }
     }
 

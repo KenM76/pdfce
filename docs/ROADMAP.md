@@ -81,6 +81,163 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 34.1 — the tool options move into a docked sidebar tab beside page navigation (GUI) — THREE slices of four — 2026-08-05, chain `e15f55b` (slice 1, the left dock) → `fae916d` (slice 2, Edit Text) → `13f3c0b` (slice 3, Add Text + Measure)
+
+**Librarian correction, continuation 95 — this heading merges two prior
+Shipped filings for the same Pass ID.** `tools/check-ledger-numbers.py`
+flagged Pass 34.1 declared twice in the `Shipped` section (one heading per
+slice-1 filing, one per the slices-2–3 filing). This project's own
+convention is ONE Shipped heading per Pass ID, carrying multiple commits —
+already established by **Pass 27.2** ("ONE Pass, TWO ticks — committed
+`cf8caf7` then `5536452`") and **Pass 27.0** ("chain `5e93bec` →
+`104162d`"). The two entries below are merged into that same shape; no
+content from either original filing is dropped, only re-headed under
+slice sub-headings so the chain reads chronologically (slice 1 first).
+
+**Slice-count note.** The slice-1 filing, written first, said "slice 1 of
+**2**" — the plan was two slices at that point. The slices-2–3 filing,
+written after the operator asked for Add Text and Measure alongside Edit
+Text, correctly said "of **4**." Both counts were right when written;
+this merged heading uses the current, larger count. **Slice 4 — moving
+the status/commit strips (refusal text, disclosure text, the kept
+case-(b) Accept/Reject pairs) into the pane — remains open; see the
+`Next up` Pass 34.1 entry.**
+
+---
+
+#### Slice 1 (`e15f55b`) — a left dock: Pages | Tool Options
+
+**Filed as a PARTIAL ship, deliberately — do not read this slice alone as
+Pass 34.1 complete.** Per R141 (a Pass is not shipped until its
+acceptance criteria are met) and the Pass 27.0 entry's own cautionary
+precedent (declared fully shipped when it wasn't), this slice named
+exactly what landed and exactly what remained at the time, rather than
+closing the Pass. **Slice 2 (the tool property-bar content actually
+relocating into this dock) was still open at this commit** — closed by
+slices 2–3, below.
+
+**What shipped.** A second, independent `egui_tiles::Tree` mounted on the
+left, tabs **`Pages | Tool Options`** — the existing page-thumbnail rail
+becomes `DockPanel::Pages`; `DockPanel::ToolOptions` is new. Same
+`DockBehavior`/`panel_body` dispatcher pattern as the existing right-hand
+dock (R80's one-dispatcher rule holds across both trees — decision 031's
+own reasoning for reusing rather than genericizing `DockBehavior`, see
+`ARCHITECTURE.md` §12). One tab group, not a vertical split — nothing on
+this side needs simultaneity, and two labels keeps §A.3's narrow-column
+invariant. Pages is the front tab by default; arming a tool raises Tool
+Options and opens the rail; disarming deliberately does NOT push the view
+back to Pages (an empty-state caption shows instead, naming which tools
+populate the panel).
+
+**What the panel hosted at this commit.** Not yet the property-bar
+controls (font, size, colour, spacing — those still drew in floating
+`egui::Area`s built from values derived during each `run_*_tool`'s phase
+A, which runs AFTER the dock draws — see "What did NOT ship," below).
+Tool Options at this point hosted what already lived in STORED state: the
+armed tool's identity, its commit/discard contract (Pass 34.0 + decision
+031, which replaced the old Accept/Reject pair), and every
+refusal/disclosure verbatim.
+
+**Test fallout, one pre-existing test failed the moment the second dock
+landed.** `the_default_layout_mounts_every_panel` was phrased as "mounted
+in `default_tree`" — correct while there was exactly one tree, false the
+moment a second one existed. Rewritten to span both trees. Two NEW
+invariants added alongside it: no panel is mounted in BOTH docks at once
+(two live copies of one surface would each keep independent scroll state,
+and `activate` would raise whichever `Tree` it found first — a silent
+desync), and the left dock opens on `Pages` by default.
+
+**Also fixed:** `rail_toggle_tooltip` read *"Show or hide the page
+thumbnail rail"* — stale the moment the control started hiding TWO
+docked panels while naming only one — the same class of drifted-claim
+defect Pass 36.2 fixed on the rung tooltip. Corrected to name both panels
+the toggle now affects.
+
+**★ What did NOT ship at slice 1, recorded explicitly because it is the
+literal gap against the operator's ask.** The operator's words were *"all
+of the options should be shown in a side bar tab"* — that was **not yet
+true** at this commit. The container existed; the options had not moved
+into it. Moving them required caching each tool's phase-A-derived values
+on the tool's own state so the new pane could read the PREVIOUS frame's
+values (the pane draws before `CentralPanel` runs phase A this frame).
+That caching + the actual relocation of the TextEdit/AddText/Measure
+property-bar and status-strip content, plus deletion of the floating
+`egui::Area` strips they lived in, was **slice 2** — done by slices 2–3,
+below.
+
+Gates: `cargo fmt --check` clean; `cargo clippy --workspace --all-targets`
+clean; 44/44 test binaries green; `check-ui-strings` clean; `cargo tree
+-p pdfce-core` / `-p pdfce-render` show no GUI deps; pdfce-gui tests
+248 → 251.
+
+---
+
+#### Slices 2–3 (`fae916d`, `13f3c0b`) — Edit Text, Add Text and Measure move into the pane; `StripCorner::TopLeft` retired
+
+**Committed title (slice 3):** *"Pass 34.1 (slice 3): Add Text and Measure
+join the context-sensitive sidebar."* Slice 2's own commit (`fae916d`)
+moved Edit Text's property bar in first; this covers both.
+
+**What moved, and the spread in plumbing cost across the three tools —
+worth recording because "move the property bar" reads as one sentence and
+was three different jobs:**
+
+- **Add Text (slice 3) needed no new plumbing at all.** Every control
+  already wrote a `prop_*` field or queued a placement that already
+  survived to the canvas pass — a 110-line pure relocation out of its
+  floating `egui::Area` into `tool_options_panel`.
+- **Measure (slice 3) needed two new booleans** on `MeasureState` —
+  `queued_close_tool`, `queued_open_groups` — following the exact same
+  one-frame set-in-dock/drain-in-canvas contract Pass 34.0 already
+  established for the commit/discard wiring.
+- **Edit Text (slice 2) needed nine.** ~500 lines of plumbing to carry
+  its formatting/spacing/reflow surface (Pass 19.3's whole surface) into
+  the dock — by a wide margin the largest of the three migrations.
+
+**`StripCorner::TopLeft` removed outright, not `#[allow(dead_code)]`-ed** —
+nothing anchors to the canvas top-left corner any more once all three
+floating property bars are gone, and the compiler confirmed it; its
+`tool_strip_anchor` match arm went with it. `StripCorner::BottomLeft`
+remains — the status/commit strips that still live there are unmoved
+until slice 4 (below).
+
+**The heading rule generalised.** What had been a text-edit-specific
+special case for the pane's heading became `migrated_options_tool`,
+because every migrated bar now supplies its own `*_propbar_title()` and
+the pane's own heading would otherwise stack a second title above it.
+
+**Deliberate non-goal, stated so it reads as a decision and not an
+omission:** refusals and disclosures are **not yet** rendered inside the
+Tool Options pane. The status/commit strips (`StripCorner::BottomLeft`)
+still float and still carry every disclosure string verbatim — nothing is
+suppressed in the meantime, but a refusal is not yet visible from inside
+the dock pane itself. Slice 4 moves those strips into the pane and the
+duplication question (one event, potentially shown in two places) is
+resolved there, not here.
+
+**Gates:** `cargo fmt --check` clean; `cargo clippy --workspace
+--all-targets` clean; 44/44 test binaries green; `check-ui-strings`
+clean; `cargo tree -p pdfce-core` shows no GUI dependency. Verified by
+screenshot (R86) that Add Text and Measure each render their complete
+options surface inside the dock pane with no floating property bar
+remaining on screen.
+
+**Unverified flag, filed as an open item, NOT a defect claim.** The
+specialist reports that Pass 34.1's `Pages` and `Tool Options` dock tabs
+"shipped with no icon at all." This librarian has **not** confirmed that
+is a regression rather than the pre-existing norm — `DockPanel::label()`
+returns plain text and `tab_title_for_pane` consumes it, so as far as can
+be told from the document alone *every* dock tab is text-only, including
+the four panels that predate this Pass. Needs a look at the running app
+(or a `dock.rs` read) before it is filed as a gap; see the SESSION_LOG
+continuation-94 entry's "For next session" note.
+
+**Supersedes decision 024 §3.3 Family A** (the contextual-ribbon-tab plan
+for tool property bars) — see the new §11 appended to
+`docs/decisions/024-ribbon-command-surface-and-the-accept-reject-problem.md`
+and the `ARCHITECTURE.md` §12 continuation-94 entry for the full
+supersession record. Family B (selection tabs) is unaffected.
+
 ### Pass 36.3 — the node marks were never invisible — they were drawn in the wrong place (GUI) — 2026-08-05, committed `32f15d0`
 
 **Operator report, verbatim:** *"node editing is still very hard to
@@ -183,71 +340,6 @@ Gates: `cargo fmt --check` clean; `cargo clippy --workspace --all-targets`
 clean; 44/44 test binaries green; `check-ui-strings` clean;
 `check-ledger-numbers` clean; `cargo tree -p pdfce-core` / `-p
 pdfce-render` show no GUI deps.
-
----
-
-### Pass 34.1 (slice 1 of 2) — a left dock: Pages | Tool Options (GUI) — 2026-08-05, committed `e15f55b`
-
-**Filed as a PARTIAL ship, deliberately — do not read this entry as Pass
-34.1 complete.** Per R141 (a Pass is not shipped until its acceptance
-criteria are met) and the Pass 27.0 entry's own cautionary precedent
-(declared fully shipped when it wasn't), this entry names exactly what
-landed and exactly what remains, rather than closing the Pass. **Slice 2
-(the tool property-bar content actually relocating into this dock) is
-still open** — see the annotated Next-up entry, below, for its remaining
-scope.
-
-**What shipped.** A second, independent `egui_tiles::Tree` mounted on the
-left, tabs **`Pages | Tool Options`** — the existing page-thumbnail rail
-becomes `DockPanel::Pages`; `DockPanel::ToolOptions` is new. Same
-`DockBehavior`/`panel_body` dispatcher pattern as the existing right-hand
-dock (R80's one-dispatcher rule holds across both trees — decision 031's
-own reasoning for reusing rather than genericizing `DockBehavior`, see
-`ARCHITECTURE.md` §12). One tab group, not a vertical split — nothing on
-this side needs simultaneity, and two labels keeps §A.3's narrow-column
-invariant. Pages is the front tab by default; arming a tool raises Tool
-Options and opens the rail; disarming deliberately does NOT push the view
-back to Pages (an empty-state caption shows instead, naming which tools
-populate the panel).
-
-**What the panel currently hosts.** Not yet the property-bar controls
-(font, size, colour, spacing — those still draw in floating `egui::Area`s
-built from values derived during each `run_*_tool`'s phase A, which runs
-AFTER the dock draws — see "What did NOT ship," below). Tool Options
-today hosts what already lived in STORED state: the armed tool's
-identity, its commit/discard contract (Pass 34.0 + decision 031, which
-replaced the old Accept/Reject pair), and every refusal/disclosure
-verbatim.
-
-**Test fallout, one pre-existing test failed the moment the second dock
-landed.** `the_default_layout_mounts_every_panel` was phrased as "mounted
-in `default_tree`" — correct while there was exactly one tree, false the
-moment a second one existed. Rewritten to span both trees. Two NEW
-invariants added alongside it: no panel is mounted in BOTH docks at once
-(two live copies of one surface would each keep independent scroll state,
-and `activate` would raise whichever `Tree` it found first — a silent
-desync), and the left dock opens on `Pages` by default.
-
-**Also fixed:** `rail_toggle_tooltip` read *"Show or hide the page
-thumbnail rail"* — stale the moment the control started hiding TWO
-docked panels while naming only one — the same class of drifted-claim
-defect Pass 36.2 fixed on the rung tooltip. Corrected to name both panels
-the toggle now affects.
-
-**★ What did NOT ship, recorded explicitly because it is the literal gap
-against the operator's ask.** The operator's words were *"all of the
-options should be shown in a side bar tab"* — that is **not yet true**.
-The container exists; the options have not moved into it. Moving them
-requires caching each tool's phase-A-derived values on the tool's own
-state so the new pane can read the PREVIOUS frame's values (the pane
-draws before `CentralPanel` runs phase A this frame). That caching + the
-actual relocation of the TextEdit/AddText/Measure property-bar and
-status-strip content, plus deletion of the floating `egui::Area` strips
-they currently live in, is **slice 2** — unchanged in scope from the
-original Next-up acceptance criteria's second bullet, now annotated below
-as the piece still open.
-
-Gates: as above; pdfce-gui tests 248 → 251.
 
 ---
 
@@ -9453,8 +9545,34 @@ re-derived.
 
 ### Pass 34.1 — Tool options live in a docked sidebar tab beside page navigation (GUI)
 
+> **✅✅ SLICES 2 AND 3 ALSO SHIPPED 2026-08-05 (`fae916d`, `13f3c0b`) —
+> see the "Slices 2–3" sub-section of the merged Pass 34.1 Shipped entry,
+> above. [Filed by `pdfce-librarian`, continuation 94 — the plan below
+> turned out to be four slices, not two; slice 1 was correctly marked "of
+> 2" at the time it shipped and is not itself wrong, just superseded by a
+> revised count. **Corrected continuation 95**: this Shipped entry was
+> originally filed as a second, separate "Pass 34.1 (slices 2–3 of 4)"
+> heading, which `check-ledger-numbers.py` correctly flagged as a
+> duplicate Pass-ID declaration; it is now merged with the slice-1 entry
+> under one "Pass 34.1" heading, per the Pass 27.2/27.0 one-heading-per-
+> Pass-ID convention — same content, new location.]** The second bullet
+> below (property-bar relocation, floating-
+> Area deletion) is now DONE for all three tools — `TextEdit`'s bar
+> (slice 2) and `AddText`'s/`Measure`'s (slice 3). The third bullet
+> (empty-state caption) and sixth bullet (refusal badging on the tab)
+> remain open. **Status-strip relocation is now explicitly slice 4, not
+> folded into "slice 2"** — the status/commit strips (refusal text,
+> disclosure text, the kept case-(b) Accept/Reject pairs) still float in
+> their pre-existing `egui::Area`s; nothing is silently dropped, see the
+> Shipped entry's own "deliberate non-goal" note. Do not read this Pass
+> as fully shipped until slice 4 lands.
+>
 > **✅ SLICE 1 (dock scaffold) SHIPPED 2026-08-05 (`e15f55b`) — see the
-> "Pass 34.1 (slice 1 of 2)" Shipped entry, above.** The first, fourth,
+> "Slice 1" sub-section of the merged Pass 34.1 Shipped entry, above.
+> [Corrected continuation 95 — this was originally its own "Pass 34.1
+> (slice 1 of 2)" heading, now merged with the slices-2–3 entry under one
+> "Pass 34.1" heading per the same fix noted just above; see
+> `check-ledger-numbers.py`'s duplicate-Pass-ID flag.]** The first, fourth,
 > and fifth bullets below are DONE (dock exists on the correct side with
 > the correct tabs; auto-raise/no-forced-return-to-Pages behavior;
 > `DockBehavior` reused via a separate `Tree<LeftPanel>`, per decision
@@ -9500,6 +9618,14 @@ re-derived.
   `DockPanel::Properties` existed, and decision 017 Amendment A #2 is
   explicit that a float-or-dock dual mode is deliberately unsupported
   (§A.5).
+  **[UPDATED 2026-08-05 — pdfce-librarian, continuation 94.]** The
+  **property-bar** half of this bullet is DONE for all three tools
+  (slices 2–3, `fae916d`/`13f3c0b`) — the `-propbar` Areas are deleted.
+  The **status-strip** half (the `-status` Areas: refusal/disclosure
+  text, the case-(b) Accept/Reject pairs) is **not yet moved** — that is
+  now explicitly slice 4, still open. Nothing is silently dropped in the
+  meantime; the status strips still render every disclosure string
+  verbatim from their pre-existing floating position.
 - Tool Options auto-raises the moment a tool is armed (reusing the
   existing `dock::activate` mechanism verbatim) and is **never** forced
   back to `Pages` on disarm — it shows an empty-state caption instead
@@ -10121,6 +10247,55 @@ which is the Pass 8.0 advance-preserving-surgery problem, not the Pass
 > deleting *"a label"* today deletes **all of them**.
 
 ### ★ Pass 24.0–24.5 — Ribbon command surface + the end of the floating Accept/Reject box (decision 024, filed 2026-08-04, DECIDED — NOT STARTED)
+
+> **⚠ UPDATE 2026-08-05 (continuation 94) — §3.3 Family A SUPERSEDED for
+> tool-options content; §3.3 Family B UNAFFECTED; two open questions
+> CLOSED; a new ui-spec governs the grouping and a future customization
+> architecture.** Filed by `pdfce-librarian`. Full record: decision 024's
+> new §11 (append-only — original §3.3 untouched) and `ARCHITECTURE.md`
+> §12's matching continuation-94 entry.
+>
+> - **Family A (contextual ribbon tabs per armed tool, replacing the
+>   floating property bars) is superseded.** That job now belongs to
+>   `DockPanel::ToolOptions` (Pass 34.1, shipped) — a dock panel, not a
+>   ribbon tab — per the operator's own later, more specific instruction
+>   ("all the options should be shown in a side bar tab docked with the
+>   page navigation tab"). **Consequence for Pass 24.2 if it is ever
+>   built:** the Measure/Edit/Add-Text/Edit-Objects contextual tabs carry
+>   *invocation* only (arm the tool, manage ce-dimension groups) — never
+>   the armed tool's live controls, which stay in the dock. **Family B
+>   (selection tabs) is unaffected**, still correctly blocked on Passes
+>   22.0/23.2.
+> - **Operator questions (ax) and (ay), below, are CLOSED** — see Open
+>   operator questions for the resolution text. Answered together,
+>   verbatim: *"For 1. and 2. just make the ribbon command groupings
+>   make sense, they might be similar to acrobat's but if it makes more
+>   organizational sense to have them a different way then do so. we
+>   might want to make these customizable in the future like you can
+>   with solidworks and ms office."* (ax) is DISSOLVED, not amended —
+>   `CLAUDE.md` rule 12 stands untouched, `pdfce-acrobat-librarian` was
+>   not dispatched. (ay) is CLOSED — organizational sense governs, no
+>   resemblance target either way.
+> - **New governing spec:**
+>   `docs/ui_specs/ribbon-groupings-and-customization-architecture.md`
+>   (`pdfce-ui-specialist`, 2026-08-05) confirms this record's six tabs
+>   with named deltas against current shipped state, gives Measure its
+>   own fixed tab (not a group under Insert — cleanly resolved by the
+>   Family A supersession leaving that tab's body thin), and specifies a
+>   static `RibbonCommandId`/`RibbonCommand`/`RibbonGroupDefault`
+>   registry (naming its group-identity type `RibbonGroupId`, not
+>   `GroupId`, to avoid colliding with `pdfce_core::dimension::GroupId`)
+>   as the future-customization architecture the operator's "in the
+>   future" remark asks to keep cheap — **not built now**; the spec
+>   itself recommends against building reorder/hide/reset UI or
+>   persistence yet.
+> - **Process finding filed as standing rule R155** (Standing rules,
+>   below): the engineer dispatched this fresh design task without first
+>   checking that this very record already contained a complete taxonomy
+>   plus R121–R125. The specialist caught it and audited rather than
+>   re-derived — nothing lost this time, but it is the session's second
+>   near-miss of the same shape (the first being decision 031 §4's
+>   `LeftPanel`/`DockBehavior` contradiction, R154).
 
 **Source:** `docs/decisions/024-ribbon-command-surface-and-the-accept-reject-problem.md`
 (1,629 lines), written by `pdfce-ui-specialist`/consultant against the
@@ -14043,6 +14218,19 @@ nothing gets forgotten, not as a commitment to build in this order.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
+**RESOLVED this session (continuation 94, 2026-08-05) — no longer open:**
+- **(aw) `MeasureScale`'s explicit Accept/Reject — RESOLVED, CONFIRMED
+  kept.** Operator, verbatim: *"good choice. we need to enter a value
+  for it anyway."* Full resolution text at the item's own entry, below;
+  ratification appended to decision 031 §3.
+- **(ax) The rule-12 / Acrobat-GUI-audit conflict — RESOLVED, DISSOLVED
+  (not amended).** Operator answered the underlying organising question
+  directly rather than granting the amendment; `CLAUDE.md` rule 12 stands
+  untouched. Full resolution text at the item's own entry, below.
+- **(ay) Ribbon specificity — RESOLVED, CLOSED.** Operator: organizational
+  sense governs, resemblance either way is not the goal. Full resolution
+  text at the item's own entry, below.
+
 **RESOLVED this session (continuation 56) — no longer open:**
 - **(a) Icon SVG pipeline switch — RESOLVED, tiny-skia SVG-path-`d`
   parser CONFIRMED** (no new Cargo dependency, crisp at any DPI/zoom;
@@ -14745,6 +14933,12 @@ decision 025, (aq)–(au) from decision 026:**
   is no longer the "accept/reject box somewhere on the screen" the
   operator actually objected to (decision 024 §4.1's own diagnosis of the
   original complaint).
+  **[RESOLVED 2026-08-05 — CONFIRMED. Operator, verbatim: "good choice.
+  we need to enter a value for it anyway." `MeasureScale` keeps its
+  explicit confirm, on TWO independent grounds now: the blast-radius
+  argument above, plus the operator's own reason — a typed value is
+  already required to complete the gesture, so the commit point is free.
+  See decision 031's appended ratification (§3). No longer open.]**
 
 **New this session (2026-08-05, `docs/UI_PREFERENCES.md` handoff) —
 three items, filed by `pdfce-librarian` at the engineer's dispatch. The
@@ -14775,6 +14969,14 @@ not a judgment call:**
   directly, never written into the feature-parity RAG). **Default: rule
   12 stands, the Acrobat RAG is not dispatched for GUI-structure
   auditing, unless and until Ken amends the rule himself.**
+  **[RESOLVED 2026-08-05 — DISSOLVED, not amended. Operator, verbatim:
+  "just make the ribbon command groupings make sense... if it makes
+  more organizational sense to have them a different way then do so."**
+  He answered the organising question directly instead of granting the
+  rule-12 amendment the conflict required. No amendment was made; rule
+  12 stands untouched; `pdfce-acrobat-librarian` was not dispatched.
+  The conflict is resolved by the question going away, not by the rule
+  changing. No longer open.]**
 - **(ay) Ribbon specificity — how close to Acrobat's actual ribbon layout
   should pdfce's toolbar/ribbon get, versus a deliberately independent
   design?** Asked directly by the handoff document (Part 4 Q4) and not
@@ -14787,6 +14989,16 @@ not a judgment call:**
   but distinct from, (ax): even fully resolving (ax) in the operator's
   favor (permitting an Acrobat GUI audit) would not by itself answer HOW
   close to imitate — that remains a separate, second decision.
+  **[RESOLVED 2026-08-05 — CLOSED. Operator, verbatim: "they might be
+  similar to acrobat's but if it makes more organizational sense to have
+  them a different way then do so."** Organizational sense governs;
+  resemblance either way is not itself the goal. A complete answer even
+  though it names no specific closeness — that is the point. Also on
+  record: ribbon groupings are meant to become operator-customizable in
+  the future ("like SolidWorks and MS Office"); not scoped now, see the
+  ★ Pass 24.0–24.5 entry's update banner and
+  `docs/ui_specs/ribbon-groupings-and-customization-architecture.md` §5.
+  No longer open.]**
 - **(az) Font-asset bundling/licensing — is a bundled custom font file in
   scope, and if so under what license?** `pdfce-gui` installs zero custom
   fonts today (egui's bundled defaults only); the handoff raises bundling
@@ -17903,6 +18115,106 @@ not a judgment call:**
   unchanged. `tools/check-ledger-numbers.py --stats` should be re-run
   after this commit — this librarian has no shell and has not run it
   itself.
+
+- **R155 — Before dispatching a fresh design/consultant task, check
+  whether an existing decision record already answers the question; a
+  specialist catching the overlap after dispatch is not the same as the
+  dispatch process not needing the check (2026-08-05; librarian-
+  originated, on the engineer's explicit dispatch, promoted from a
+  near-miss caught by `pdfce-ui-specialist`'s own audit discipline, not
+  by any mechanical check).** The engineer dispatched
+  `pdfce-ui-specialist` for a fresh ribbon-command-grouping design task
+  (the operator's 2026-08-05 "make the ribbon command groupings make
+  sense" request) without first checking that decision 024 §3.2/§3.3
+  already contained a complete, decided six-tab ribbon taxonomy, a
+  reasoned Measure-tab placement, and standing rules R121–R125 covering
+  the same territory. The specialist's own opening section
+  (`docs/ui_specs/ribbon-groupings-and-customization-architecture.md`
+  §0, "The headline finding: this is mostly an audit, not a fresh
+  design") states plainly that re-deriving any of decision 024's
+  taxonomy from scratch "would be redundant, more expensive than
+  reading it, and risks silently drifting from a document the operator
+  has not been told is wrong" — and then does the audit instead of the
+  redundant re-derivation. **Nothing was lost this time. The near-miss
+  is that the check happened inside the specialist's own discipline,
+  after the dispatch went out, rather than before it was written** —
+  had a less careful specialist simply designed a competing taxonomy
+  from the operator's request alone, the two records would have
+  silently disagreed for whoever read them next, exactly the failure
+  shape decision 025 §0 already named for a different pair of documents
+  (023 vs. 025) and R146 exists to catch on the documentation side.
+  **This is the SECOND instance this session of the same recurring
+  shape — a thing already exists, and nothing pointed at it before
+  work started on a duplicate.** The first was decision 031 §4's
+  `LeftPanel`/`DockBehavior` self-contradiction (**R154**): a decision
+  record named a mechanism nobody checked against the type system
+  before three other documents cited it as shipped. Same underlying
+  species — a check that should have happened before or during
+  authoring did not happen until later (or, here, happened to happen,
+  by one agent's own diligence, and is not guaranteed to next time) —
+  at two different points in the pipeline.
+  **Why this is a distinct rule from R151/R152/R153/R154, not an
+  amendment to any of them, and why it is a SEARCH-discipline rule
+  rather than a STALENESS-audit rule.** R151 audits a shipped `pub fn`
+  against its call graph; R152 audits a caller against whether it
+  confirms anything; R153 audits a fuzz harness against a module's
+  current surface; R154 audits a decision record's prose against the
+  type system. **All four fire AFTER something has already shipped or
+  been written** — they are staleness/correctness audits performed on
+  an existing artifact. This rule fires **BEFORE a design brief is
+  written at all** — at dispatch time, against the existing decision
+  log and `ROADMAP.md`, not against code, a caller graph, a fuzz
+  harness, or the type system. It is the literature-search discipline
+  this project's own `CLAUDE.md`/agent-file RAG-check rules already
+  require for Rust/egui ecosystem findings and PDF-domain findings
+  (grep the relevant RAG before re-deriving); this rule states the same
+  discipline for the project's OWN decision log, which is not
+  optional just because it is closer to home.
+  **The mechanical check, stated so it is checkable at review time.**
+  Before writing (or dispatching someone to write) a design brief for a
+  UI/architecture question, grep `docs/decisions/` and the relevant
+  `ROADMAP.md` entries for the topic's keywords. If an existing decision
+  record already covers the territory — even one filed as "DECIDED —
+  NOT STARTED" — the dispatch should say so explicitly and scope the
+  task as "confirm/extend/audit the existing record against current
+  shipped state," not "propose a design," and the resulting document
+  should open with what it read (as this session's ui-spec in fact did,
+  unprompted) rather than what it invented.
+  Cross-references: **R154** (the sibling this rule is not an instance
+  of, nearest in spirit — both are "a check that should run before
+  propagation didn't"). **R146** (documentation-side filing-gap sibling
+  — five shipped commits with no ROADMAP entry; also a "something
+  already happened and nothing pointed at it" shape, on the filing side
+  rather than the dispatch side). Decision 025 §0's five-item correction
+  of decision 023 (the precedent for two decision records silently
+  disagreeing when a later one does not check the earlier one
+  thoroughly enough). `CLAUDE.md`'s cross-project-RAG-check discipline
+  (the same "check before re-deriving" principle, applied here to the
+  project's own decision log rather than an external RAG).
+  **Numbering note, so the next filing does not double-mint.** R154's
+  own entry reserved **R155** for whichever of decision 030's three
+  still-unminted contingent candidates (§6.2(a), §4.5, and the "date and
+  label every contract statement" documentation observation) is accepted
+  or promoted first. This finding — the pre-dispatch search-discipline
+  near-miss — is a **fifth**, previously unlisted candidate, filed first
+  against the live ceiling (R106/R133: read the ceiling, don't assume a
+  reservation), so it is the one that claims **R155**, the same transfer
+  mechanism R150→R151→R152→R153→R154 each used in turn to hand their
+  reserved slot to a new, previously-unlisted candidate ahead of the
+  accumulating queue. **Decision 030's three original contingent
+  candidates now take R156**, not R155, if and when any of them is
+  accepted or promoted.
+  **Ceiling is now R155** (was R154 at the decision-031-§7-correction
+  filing). **No new Pass family minted by this filing** (Pass-family
+  ceiling stays **37 next free** — Pass 34.1's slices 2–3 are an
+  existing ID, not a new one). **No new decision record minted** — 024's
+  new §11 and 031's appended ratification are both corrections to
+  existing records, not new ones; decision-record ceiling stays **031**
+  (**032** next free, unchanged). **No new operator question minted**
+  this filing — (aw), (ax), (ay) are CLOSED, not replaced; question
+  ceiling stays **(az)** (**(ba)** next free), unchanged.
+  `tools/check-ledger-numbers.py --stats` should be re-run after this
+  commit — this librarian has no shell and has not run it itself.
 
 ## Update protocol
 

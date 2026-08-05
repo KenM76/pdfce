@@ -1626,3 +1626,83 @@ most important acceptance criterion in this record.
   ]
 }
 ```
+
+## 11. SUPERSESSION 2026-08-05 — §3.3 Family A superseded by decision 031 / Pass 34.1; Family B unaffected
+
+**Filed by:** `pdfce-librarian`, on `pdfce-engineer`'s explicit dispatch, following
+`pdfce-ui-specialist`'s recommendation in
+`docs/ui_specs/ribbon-groupings-and-customization-architecture.md` §2 ("This
+is a decision-log-worthy correction... I recommend the engineer dispatch
+`pdfce-librarian` to file it that way"). **Original §3.3 text above is left
+unedited** — the directory is append-only (`docs/decisions/README.md`) and
+the same discipline decision 031 §7 already used for its own correction.
+
+**What §3.3 decided (2026-08-04):** **Family A — TOOL tabs, keyed on
+`doc.active_tool: Option<CanvasTool>`**, one contextual ribbon tab per armed
+tool (Measure Tool / Add Text / Edit Text / Edit Objects), each ending in a
+fixed **Finish** group carrying the Accept/Reject pair, replacing the three
+floating property-bar `egui::Area`s entirely. Pass 24.2 was scoped to build
+it.
+
+**That is not what shipped, on the operator's own later instruction.** On
+2026-08-05 — one day after this record was written — the operator gave a
+*more specific* instruction than the one §3.3 had to work from, verbatim:
+*"When I select a tool like the edit text one all of the options should be
+shown in a side bar tab docked with the page navigation tab,"* and later,
+*"add text and measure tools should integrated into the context sensitive
+sidebar tab."* The result, decided in decision 031 §4 (corrected §7) and
+built as Pass 34.1: a left-hand `egui_tiles::Tree<DockPanel>` with tabs
+`Pages | Tool Options`, and `DockPanel::ToolOptions` — a **dock panel**, not
+a ribbon tab — now hosts each armed tool's live controls and its Pass 34.0
+commit/discard contract. Three slices shipped it: slice 1 (`e15f55b`, the
+dock scaffold), slice 2 (`fae916d`, Edit Text's property bar), slice 3
+(`13f3c0b`, Add Text and Measure). See `ROADMAP.md`'s Shipped entry for the
+full build record.
+
+**Family A (§3.3, this record) is SUPERSEDED for tool-options content.**
+`DockPanel::ToolOptions` already does the job Family A specified — auto-
+raise on tool-arm, no forced return on disarm, a fixed predictable location
+for a tool's live controls and its commit/reject — just on the other side of
+the window, in the dock rather than the ribbon, and already shipped before
+Pass 24.2 (ribbon contextual tabs) was ever started. Building Family A on
+top of an already-shipped, already-working equivalent would be two
+mechanisms doing one job for the same tools — precisely the failure §3.4
+point 4 of this same record already warns against ("two large surfaces
+rewritten at once"). **What survives from Family A is the *principle*** — a
+fixed, predictable home for a tool's live options and its commit/reject,
+never a floating box — realized in the dock instead of the ribbon, because
+that is where the operator's own later, more specific instruction put it.
+
+**Family B (§3.3's second table — SELECTION tabs keyed on `TargetId` kind:
+Object / Dimension (pdfce) / Annotation) is UNAFFECTED and still stands.**
+Nothing in Pass 34.x touches canvas selection; Family B remains correctly
+blocked on Passes 22.0 and 23.2, exactly as this record originally scoped it
+(§3.3, §6.4).
+
+**Consequence, stated plainly for the next reader.** If and when Pass 24.2
+(or its successor) is built, the **Measure** and **Edit** (and Add Text /
+Edit Objects) contextual ribbon tabs it produces are **thinner than this
+record pictured**: their job becomes *invocation* — arming the sub-tool,
+managing ce-dimension groups, document-scope commands available whether or
+not a tool is armed — never the armed tool's live controls, which live in
+`DockPanel::ToolOptions` and must not be duplicated onto a ribbon tab. A
+future session reading §3.3's table alone, without this section, would
+build a second home for controls that already have one.
+
+**Independently confirmed** by
+`docs/ui_specs/ribbon-groupings-and-customization-architecture.md` §2/§3
+(`pdfce-ui-specialist`, 2026-08-05), which also gives Measure its own fixed
+ribbon tab rather than a group under Insert — the tie broken cleanly
+*because* this supersession leaves that tab's body thin (invocation only,
+no live controls competing for the same space) — and specifies the future
+ribbon-customization architecture (`RibbonCommandId`/`RibbonCommand`/
+`RibbonGroupDefault`, deliberately naming the group-identity type
+`RibbonGroupId` rather than `GroupId` to avoid collision with
+`pdfce_core::dimension::GroupId`) that decision 024 §8 explicitly deferred.
+Not yet built; §5.4 of that document recommends against building
+reorder/hide/reset UI or persistence now.
+
+**No standing rule or Pass ID is spent by this section.** It corrects the
+record, not the ledger. See `ROADMAP.md`'s "★ Pass 24.0–24.5" Next-up entry
+and Standing rules for the cross-filed process observation (R155) about how
+this near-miss was caught.

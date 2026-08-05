@@ -213,54 +213,36 @@ pub fn resolve_drag_placement(
     }
 }
 
-/// Where a tool's floating strip anchors: relative to the canvas **viewport**,
-/// never to the page.
-///
-/// # The defect this removes
-///
-/// The three tool status strips (text-edit, add-text, measure) were positioned
-/// at `image_rect.min.x + 8, image_rect.max.y - 8` — a function of the PAGE's
-/// drawn rectangle. So the Accept/Reject controls moved whenever the page did:
-/// on every zoom step, every scroll, every page change. At high zoom the page
-/// rectangle extends far outside the viewport, which put the anchor off-screen
-/// entirely.
-///
-/// The operator's report, 2026-08-04: *"there is a separate accept / reject box
-/// somewhere on the screen to click - I've never seen any other software
-/// operate that way."* The word doing the work there is **somewhere**.
-/// SolidWorks' PropertyManager has the same ✓/✗ pair on every modal command;
-/// what it does not do is move them, because they belong to the application
-/// frame rather than to the document.
-///
-/// `offset` is measured from the named corner, in points, positive inward.
-#[must_use]
-pub fn tool_strip_anchor(viewport: Rect, corner: StripCorner, offset: f32) -> Pos2 {
-    match corner {
-        StripCorner::BottomLeft => Pos2::new(viewport.min.x + offset, viewport.max.y - offset),
-    }
-}
-
-/// Which corner of the canvas viewport a floating tool strip hangs from.
-///
-/// Only the two that are used. A wider enum would be an invitation to scatter
-/// tool controls around all four corners, which is the habit this type exists
-/// to stop.
-/// # Pass 34.1 slice 3 retired `TopLeft`
-///
-/// Every tool's PROPERTY bar now draws in the left dock's Tool Options pane,
-/// so nothing anchors to the top-left corner any more and the compiler said
-/// so (`variant TopLeft is never constructed`). The variant is removed rather
-/// than `#[allow(dead_code)]`-ed: a corner nothing hangs from is an invitation
-/// to hang something from it, which is the habit this type's own docs say it
-/// exists to stop.
-///
-/// `BottomLeft` remains until slice 4 moves the three status/commit strips
-/// into the pane as well; at that point this type goes with them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StripCorner {
-    /// Gesture status and its commit controls — out of the drawing's way.
-    BottomLeft,
-}
+// ---------------------------------------------------------------------------
+// RETIRED — `tool_strip_anchor` / `StripCorner` (Pass 34.1 slice 4)
+// ---------------------------------------------------------------------------
+//
+// The three tools each drew two floating `egui::Area`s: a property bar and a
+// status/commit strip. This function decided where they hung.
+//
+// Its own docs recorded the defect that created it. The strips were originally
+// positioned at `image_rect.min.x + 8, image_rect.max.y - 8` — a function of
+// the PAGE's drawn rectangle — so the Accept/Reject controls moved on every
+// zoom step, every scroll, every page change, and at high zoom left the
+// viewport entirely. The operator, 2026-08-04: *"there is a separate accept /
+// reject box somewhere on the screen to click - I've never seen any other
+// software operate that way."* The word doing the work there is SOMEWHERE.
+//
+// Decision 024 answered it by anchoring to the VIEWPORT instead of the page, so
+// the strips stopped moving. That was the right fix for the position and left
+// the category alone: they still floated over the drawing.
+//
+// Pass 34.1 finished the job the operator actually asked for — *"all of the
+// options should be shown in a side bar tab docked with the page navigation
+// tab"* — by moving all six into `DockPanel::ToolOptions`. Slice 3 emptied the
+// top-left corner and removed `StripCorner::TopLeft`; slice 4 emptied the
+// bottom-left and removes the rest.
+//
+// Deleted rather than kept "in case something floats again". A helper for
+// hanging things off canvas corners is an invitation to hang something off a
+// canvas corner, and the whole point of the dock is that tool controls have
+// one fixed home. If a genuinely transient overlay is ever needed, it should
+// be designed as one, not inherited from the mechanism this replaced.
 
 /// Which object the operator has **entered**, and which of its subpaths is
 /// selected inside it.
