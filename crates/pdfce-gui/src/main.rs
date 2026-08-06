@@ -504,6 +504,13 @@ fn main() -> eframe::Result {
         Box::new(move |cc| {
             configure_context(&cc.egui_ctx);
             let mut app = PdfceApp::default();
+            // `Default` only RECORDS the diag-preloaded folders; walking them
+            // is I/O and does not belong in a `Default` impl. Done here, once,
+            // and only when there is something to walk — so the non-diag path
+            // is byte-for-byte the startup it always was.
+            if !app.font_folders.is_empty() {
+                app.rebuild_font_env();
+            }
             if let Some(path) = initial {
                 app.open_path(path);
             }
@@ -1037,7 +1044,10 @@ impl Default for PdfceApp {
             merge_bookmarks: true,
             // decision 012: no supplied font folders at startup — the
             // bundled deterministic default (R63). Session-only.
-            font_folders: Vec::new(),
+            // Diag-only preload (empty unless `PDFCE_DIAG_FONT_DIR` is set),
+            // because the real add-a-folder route is a native picker the
+            // observation harness cannot drive. See `diag::font_dirs`.
+            font_folders: diag::font_dirs(),
             font_env: pdfce_render::FontEnvironment::bundled(),
             font_env_generation: 0,
             font_notes: Vec::new(),
@@ -1160,6 +1170,7 @@ impl PdfceApp {
             }
         }
 
+        diag::trace(|| format!("font-env-rebuilt named={:?}", env.named_faces()));
         self.font_env = env;
         self.font_notes = notes;
         self.font_env_generation = self.font_env_generation.wrapping_add(1);
@@ -1702,6 +1713,28 @@ struct AddTextState {
     /// Property-bar working values, seeded on tool entry from the operator's
     /// default preference (§5.1), then editable per-use (§5.2).
     prop_font: pdfce_core::fontdata::Std14,
+    /// The operator-supplied DONOR face to embed, by the name it was
+    /// registered under in [`PdfceApp::font_env`], or `None` to write
+    /// [`Self::prop_font`]'s Standard-14 face by name with no embedding.
+    ///
+    /// # Why a separate field and not a widened `prop_font`
+    ///
+    /// The two are not the same KIND of choice, and collapsing them would
+    /// lose that. A Standard-14 face is written by name and adds no bytes
+    /// (R79); a donor is subsetted and embedded, adds real bytes, can be
+    /// REFUSED by name (a CFF donor, an `fsType` that forbids embedding,
+    /// a character the face has no glyph for — R109), and its cost is a
+    /// measurement worth disclosing. Keeping `prop_font` a `Std14` also
+    /// means the Standard-14 path is bit-for-bit what it was: nothing
+    /// about the existing, shipped behaviour is re-expressed through a
+    /// new type to accommodate the new one.
+    ///
+    /// Held as the registered NAME rather than the bytes: the font
+    /// environment is rebuilt whenever a folder is added or removed, and
+    /// a cached `FontData` would go on describing a folder the operator
+    /// has since detached. A name that no longer resolves is a refusal
+    /// the operator can be told about; stale bytes are not.
+    prop_donor: Option<String>,
     /// Font size, points (§5.2).
     prop_size: f64,
     /// Fill colour, read back as [`NewTextColor::Black`] when pure black else
@@ -2181,6 +2214,7 @@ impl OpenDoc {
         self.add_text = Some(AddTextState {
             page_index: self.view.page_index,
             prop_font: default_font,
+            prop_donor: None,
             prop_size: 12.0,
             prop_color: egui::Color32::BLACK,
             prop_alignment: pdfce_core::text_edit::BlockAlignment::Left,
@@ -6330,11 +6364,71 @@ fn commit_add_text_draft(
         pdfce_render::GlyphSource::Supplied => FontProvenance::Supplied,
         _ => FontProvenance::Bundled,
     };
-    let req = base
+    let mut req = base
         .with_font(state.prop_font)
         .with_provenance(provenance)
         .with_size(state.prop_size)
         .with_color(add_text_color(state.prop_color));
+
+    // FF-C (decision 021 / Pass 21.0): an operator-supplied DONOR face is
+    // subsetted and embedded, so the saved file carries its own glyphs. This
+    // is the GUI half of what `pdfce-cli add-text --embed-font` has done since
+    // Pass 21.0 and is what lets the GUI write non-Latin text at all.
+    //
+    // The subset is computed HERE, before anything is written, and its REAL
+    // numbers are reported (R108/R98): subsetting is a pure function, so there
+    // is no reason to describe the outcome in the future tense. "will add
+    // roughly N KB" is a prediction; "added 11,240 bytes for 14 glyph(s)" is a
+    // measurement, and only one of them can be wrong. The CLI's own
+    // `--embed-font` arm makes the identical argument in the identical words —
+    // deliberately, because they are the same operation and must not drift
+    // into describing themselves two ways.
+    let mut donor_note: Option<String> = None;
+    if let Some(name) = state.prop_donor.clone() {
+        let Some(data) = font_env.named(&name) else {
+            // The folder was detached after the choice was made. A named
+            // refusal, not a silent fall back to Helvetica — falling back
+            // would write Latin tofu where the operator asked for their font
+            // and say nothing about it.
+            if let Some(d) = doc.add_text.as_mut().and_then(|s| s.draft.as_mut()) {
+                d.last_refusal = Some(ui_text::add_text_donor_missing(&name));
+            }
+            return CommitOutcome::Refused;
+        };
+        // Deduplicated and ordered: the plan needs each distinct character
+        // once, and `plan_subset` reports coverage gaps against exactly what
+        // it was asked for — passing "AAB" would report 'A' missing twice.
+        let mut wanted: Vec<char> = draft.draft_text.chars().collect();
+        wanted.sort_unstable();
+        wanted.dedup();
+        let tag = pdfce_render::font::subset::subset_tag_for(&name);
+        match pdfce_render::font::subset::plan_subset(data.bytes(), 0, &wanted, &name, &tag) {
+            Ok(plan) => {
+                donor_note = Some(ui_text::add_text_donor_embedded(
+                    &plan.base_name,
+                    plan.glyphs.len(),
+                    plan.program.len(),
+                    wanted.len(),
+                    &plan.subset_tag,
+                ));
+                req = req.with_embedded_face(plan);
+            }
+            Err(err) => {
+                // Every subset refusal is named — a CFF donor at the P0 floor,
+                // an `fsType` that forbids embedding or subsetting (R109), a
+                // donor over the size ceiling, a character the face has no
+                // glyph for. The operator's draft is RETAINED so the refusal
+                // costs them their font choice, not their typing.
+                if let Some(d) = doc.add_text.as_mut().and_then(|s| s.draft.as_mut()) {
+                    d.last_refusal = Some(ui_text::refusal_with_hint(
+                        &err.to_string(),
+                        ui_text::add_text_donor_refusal_hint(),
+                    ));
+                }
+                return CommitOutcome::Refused;
+            }
+        }
+    }
 
     let outcome = match doc.session.add_text(&req) {
         Ok(report) => {
@@ -6345,6 +6439,16 @@ fn commit_add_text_draft(
                 state.draft = None;
                 state.drag_anchor = None;
                 state.last_disclosures = report.disclosures;
+                // Prepended, not appended: the embedding cost is the fact the
+                // operator is least able to predict, so it leads.
+                if let Some(note) = donor_note {
+                    // Traced as well as shown: the measured subset cost is the
+                    // one number in this Pass that a reader cannot derive, and
+                    // it is what proves the GUI's embed path agrees with the
+                    // CLI's rather than merely running.
+                    diag::trace(|| format!("add-text-donor-embedded {note}"));
+                    state.last_disclosures.insert(0, note);
+                }
             }
             CommitOutcome::Committed
         }
@@ -11501,16 +11605,105 @@ fn add_text_options_ui(
     // the spec-frozen Std14::ALL.
     ui.horizontal(|ui| {
         ui.label(ui_text::format_font_label());
-        let current = std14_combo_label(state.prop_font, font_env);
-        egui::ComboBox::from_id_salt("pdfce-add-text-font")
+        // Two groups in ONE list: the fourteen Standard-14 faces, then every
+        // operator-supplied face registered from a font folder (decision 012).
+        //
+        // The supplied half is the Pass 21.0 GUI slice, never started until
+        // now: `pdfce-core` and `pdfce-cli` have been able to subset and embed
+        // a donor face since Pass 21.0, so the CLI could add Greek, Cyrillic
+        // or CJK text to a page and the GUI could not — the Standard-14 faces
+        // have no glyphs for any of it. An operator who added a font folder
+        // watched pdfce RENDER with it while refusing to WRITE with it.
+        //
+        // One combo rather than a second control, because from the operator's
+        // side there is one question ("which font?"). That the two answers are
+        // written into the file by completely different mechanisms — a name
+        // reference versus an embedded subset — is pdfce's problem, and the
+        // group heading plus the disclosure at commit is where it surfaces.
+        let current = match state.prop_donor.as_deref() {
+            Some(name) => name.to_owned(),
+            None => std14_combo_label(state.prop_font, font_env).to_owned(),
+        };
+        let combo = egui::ComboBox::from_id_salt("pdfce-add-text-font")
             .selected_text(current)
             .show_ui(ui, |ui| {
+                // THE OPERATOR'S OWN FONTS GO FIRST when there are any.
+                //
+                // The first build put them after the fourteen built-in faces,
+                // and a screenshot of the open list showed the consequence: the
+                // supplied group sat below the fold, reachable only by
+                // scrolling past fourteen faces the operator did not choose.
+                //
+                // That is backwards for both readings. Someone who went to the
+                // trouble of adding a font folder did it to USE that font — it
+                // is not an exotic fallback, it is the thing they configured.
+                // And it is the ONLY route to text the built-in faces have no
+                // glyphs for, so burying it hides the answer to "why does my
+                // Devanagari come out as blank boxes."
+                //
+                // With no folder added, nothing moves: the empty-state hint
+                // stays at the bottom, where it reads as a footnote rather than
+                // as the first thing in a list of fonts.
+                let supplied = font_env.named_faces();
+                if !supplied.is_empty() {
+                    ui.label(ui_text::add_text_font_group_supplied());
+                    for name in &supplied {
+                        let r = ui
+                            .selectable_label(state.prop_donor.as_deref() == Some(*name), *name)
+                            .on_hover_text(ui_text::add_text_donor_tooltip());
+                        // Rect traced so the harness can pick a donor. Without
+                        // it the whole embed path is undrivable and provable
+                        // only by reading the code, which R86 rejects.
+                        diag::trace(|| {
+                            format!("add-text-donor-item name={name:?} rect={:?}", r.rect)
+                        });
+                        if r.clicked() {
+                            state.prop_donor = Some((*name).to_owned());
+                        }
+                    }
+                    ui.separator();
+                }
+                ui.label(ui_text::add_text_font_group_standard());
                 for face in pdfce_core::fontdata::Std14::ALL {
                     let label = std14_combo_label(face, font_env);
-                    ui.selectable_value(&mut state.prop_font, face, label);
+                    if ui
+                        .selectable_label(
+                            state.prop_donor.is_none() && state.prop_font == face,
+                            label,
+                        )
+                        .clicked()
+                    {
+                        state.prop_font = face;
+                        state.prop_donor = None;
+                    }
+                }
+                if supplied.is_empty() {
+                    // R83: say what would put entries here, rather than
+                    // rendering an empty group that reads as broken.
+                    ui.separator();
+                    ui.label(ui_text::add_text_font_group_supplied_empty());
                 }
             });
+        // Rect traced so the harness can OPEN this list — the technique
+        // Pass 34.2 proved and the Redact panel reused.
+        diag::trace(|| {
+            format!(
+                "add-text-font-combo donor={:?} std14={:?} rect={:?}",
+                state.prop_donor, state.prop_font, combo.response.rect
+            )
+        });
     });
+    if state.prop_donor.is_some() {
+        // Stated while the choice is still changeable, not after the write.
+        // Embedding is the one font choice on this bar that adds bytes to the
+        // operator's file, and the size of that addition is not something a
+        // reasonable person would predict from a font name.
+        ui.label(
+            egui::RichText::new(ui_text::add_text_donor_notice())
+                .small()
+                .weak(),
+        );
+    }
     ui.horizontal(|ui| {
         ui.label(ui_text::format_size_label());
         ui.add(egui::DragValue::new(&mut state.prop_size).range(1.0..=1000.0));

@@ -429,6 +429,59 @@ fn map_subsetter_error(e: subsetter::Error) -> SubsetError {
     }
 }
 
+/// Six uppercase ASCII letters derived from a face name, for the §9.6.4
+/// subset prefix.
+///
+/// Deterministic rather than random. A random tag would be equally valid and
+/// would make two otherwise identical runs produce different bytes, which
+/// breaks byte-comparison — and byte-comparison is how this project proves its
+/// round-trip invariant. Derived from the name so two different faces in one
+/// document are unlikely to collide.
+///
+/// Not a hash with collision guarantees, and does not pretend to be: if two
+/// faces ever do collide, the consequence is two subsets sharing a tag, which
+/// consumers tolerate (the tag is a hint, not an identifier). Spending entropy
+/// here to avoid a harmless collision would cost the determinism, which is the
+/// property actually worth having.
+///
+/// # Why it lives HERE and not in a shell
+///
+/// It was `pdfce-cli`-private until the GUI grew its own embed path (the Pass
+/// 21.0 GUI slice). Two copies of a tag derivation is two chances to change
+/// one of them, after which the CLI and the GUI would write DIFFERENT bytes
+/// for the same document and the same donor — and the round-trip harness
+/// compares bytes. Hoisted for exactly the reason
+/// [`FontEnvironment::subset_stem`](crate::FontEnvironment::subset_stem)
+/// already was: one copy, in the crate both shells already depend on, keeping
+/// `pdfce-render` GUI-dependency-free.
+///
+/// ```
+/// use pdfce_render::font::subset::subset_tag_for;
+/// let tag = subset_tag_for("NotoSans");
+/// assert_eq!(tag.len(), 6);
+/// assert!(tag.bytes().all(|b| b.is_ascii_uppercase()));
+/// // Deterministic: the same name always yields the same tag.
+/// assert_eq!(tag, subset_tag_for("NotoSans"));
+/// ```
+#[must_use]
+pub fn subset_tag_for(name: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in name.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    (0..6)
+        .map(|i| {
+            let k = (h >> (i * 8)) & 0xff;
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "the modulo keeps this inside the 26-letter alphabet"
+            )]
+            char::from(b'A' + (k % 26) as u8)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {

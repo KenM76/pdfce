@@ -178,6 +178,37 @@ impl FontEnvironment {
         self.named.get(base_font)
     }
 
+    /// Every shell-supplied face name, **sorted**, for a shell that needs to
+    /// OFFER them rather than merely resolve one.
+    ///
+    /// # Why this exists
+    ///
+    /// [`Self::named`] answers "do you have this face?", which is all the
+    /// renderer ever needs — it is handed a `/BaseFont` name by the document.
+    /// A shell building a font picker has the opposite problem: it has no name
+    /// to ask about, it needs the list. Before this, `pdfce-gui` could load an
+    /// operator's font folder, register every face in it, render with them —
+    /// and still not enumerate them, so its Add-Text font list was frozen at
+    /// the fourteen Standard-14 faces and the GUI could not embed a donor for
+    /// non-Latin text even though `pdfce-core` and `pdfce-cli` both could
+    /// (Pass 21.0's never-started GUI slice).
+    ///
+    /// # Why sorted, and why owned `&str`s in a `Vec`
+    ///
+    /// The backing store is a `HashMap`, whose iteration order varies run to
+    /// run. An unsorted list would reshuffle a font picker between launches,
+    /// and — worse for this project — would make a scripted GUI run
+    /// non-reproducible, which is exactly what `tools/gui-drive.ps1` depends
+    /// on. A `Vec` rather than an `impl Iterator` because the sort has to
+    /// materialise it anyway, so an iterator return would only hide that cost
+    /// without avoiding it.
+    #[must_use]
+    pub fn named_faces(&self) -> Vec<&str> {
+        let mut names: Vec<&str> = self.named.keys().map(String::as_str).collect();
+        names.sort_unstable();
+        names
+    }
+
     /// Strip a §9.6.4 subset tag (`ABCDEF+Helvetica` → `Helvetica`) for a
     /// name lookup: exactly six uppercase letters then `+`; anything else is
     /// returned unchanged.

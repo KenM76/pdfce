@@ -282,6 +282,43 @@ pub fn trace(f: impl FnOnce() -> String) {
     }
 }
 
+/// Font folders to pre-register at launch, from `PDFCE_DIAG_FONT_DIR`
+/// (`;`-separated on Windows, one path per entry).
+///
+/// # Why this exists
+///
+/// Operator-supplied font folders (decision 012) are added through a NATIVE
+/// FOLDER PICKER, and a native modal dialog is exactly what the scripted-input
+/// harness cannot drive. So the entire supplied-font feature — registering a
+/// face, rendering a non-embedded font with it, and (from the Pass 21.0 GUI
+/// slice) embedding it as a donor for new text — was unobservable from
+/// `tools/gui-drive.ps1`. Every question about it had to be answered by
+/// reading the code, which standing rule R86 says is not an answer.
+///
+/// This is the same argument [`Step::Redact`] and [`Step::Groups`] make: it
+/// isolates "does the feature work" from "is the picker that feeds it wired
+/// up". The picker still has to be verified by hand; everything downstream of
+/// it no longer does.
+///
+/// Off unless asked, like every other member of this module, and never
+/// load-bearing: with the variable unset this returns an empty vector and the
+/// application starts with no supplied folders, exactly as before.
+#[must_use]
+pub fn font_dirs() -> Vec<std::path::PathBuf> {
+    let Ok(raw) = std::env::var("PDFCE_DIAG_FONT_DIR") else {
+        return Vec::new();
+    };
+    // `;` rather than `:` — these are Windows paths and `C:onts` contains a
+    // colon. Splitting on `:` would turn one real path into two broken ones
+    // and report neither as an error, which is the silent-misconfiguration
+    // failure this module exists to avoid producing.
+    raw.split(';')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(std::path::PathBuf::from)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

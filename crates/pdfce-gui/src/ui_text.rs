@@ -4695,6 +4695,88 @@ pub fn add_text_invalid_box_hint() -> &'static str {
     "Draw or type a box with a positive width and height."
 }
 
+// ---------------------------------------------------------------------------
+// Pass 21.0 GUI slice — the operator-supplied DONOR face in the Add-Text
+// font list, and the disclosure of what embedding one costs.
+// ---------------------------------------------------------------------------
+
+/// Group heading over the fourteen Standard-14 faces in the font list.
+pub fn add_text_font_group_standard() -> &'static str {
+    "Built in — no glyphs added to the file"
+}
+
+/// Group heading over the operator-supplied faces in the font list.
+pub fn add_text_font_group_supplied() -> &'static str {
+    "Your fonts — embedded into the file"
+}
+
+/// Shown in place of that group when no font folder has been added.
+///
+/// R83: name what would put entries here. An empty group under a heading
+/// reads as a feature that is broken, not as one that is waiting on you.
+pub fn add_text_font_group_supplied_empty() -> &'static str {
+    "Your fonts — none yet. Add a font folder under Batch Tools to use your own."
+}
+
+/// Tooltip on a supplied face in the font list.
+///
+/// Leads with the capability, because that is the reason to pick one: the
+/// Standard-14 faces have no glyphs for Greek, Cyrillic, CJK or most
+/// symbols, so a donor is not a style preference, it is the difference
+/// between the text appearing and not appearing.
+pub fn add_text_donor_tooltip() -> &'static str {
+    "Use this font and embed the glyphs you actually typed into the file. This is what lets you add text the built-in fonts have no letters for — Greek, Cyrillic, Chinese, Japanese, Korean, most symbols."
+}
+
+/// The standing notice under the font row while a donor is selected.
+///
+/// Says the file will grow BEFORE the write, while the choice is still
+/// changeable. The exact number is not knowable until the text is known, so
+/// this promises a measurement rather than pretending to be one — see
+/// [`add_text_donor_embedded`], which is the measurement.
+pub fn add_text_donor_notice() -> &'static str {
+    "Only the characters you type are embedded, and the exact size added is reported once the text is placed."
+}
+
+/// The disclosure after a donor face was embedded — a MEASUREMENT.
+///
+/// R108/R98: subsetting is a pure function that has already run by the time
+/// this is written, so every number here is observed, not predicted. Worded
+/// to match `pdfce-cli add-text --embed-font`'s own line, deliberately: they
+/// are the same operation and must not drift into describing themselves two
+/// different ways.
+pub fn add_text_donor_embedded(
+    face: &str,
+    glyphs: usize,
+    bytes: usize,
+    chars: usize,
+    tag: &str,
+) -> String {
+    format!(
+        "Embedded a subset of “{face}”: {glyphs} glyph(s), {bytes} byte(s) of font program, covering {chars} character(s) — subset tag {tag}."
+    )
+}
+
+/// Refusal when the chosen donor is no longer registered.
+///
+/// A named refusal rather than a silent fall back to Helvetica: falling back
+/// would write Latin tofu where the operator asked for their own font and say
+/// nothing about it, which is the sneaky half of rule 4.
+pub fn add_text_donor_missing(name: &str) -> String {
+    format!(
+        "The font “{name}” is no longer available — its folder may have been removed. Pick another font, or re-add the folder under Batch Tools."
+    )
+}
+
+/// Remedy line appended to a subset refusal.
+///
+/// Names the four real causes rather than a generic "try another font",
+/// because three of the four are properties of the FILE the operator chose
+/// and are not discoverable by trying again.
+pub fn add_text_donor_refusal_hint() -> &'static str {
+    "This font cannot be embedded: it may use CFF/PostScript outlines (not yet supported), its licence flags may forbid embedding or subsetting, it may be too large, or it may have no glyph for one of the characters you typed. A TrueType/OpenType font with TrueType outlines will work."
+}
+
 /// `AddTextError::NoWordsToWrap` (box mode, whitespace-only).
 pub fn add_text_no_words_hint() -> &'static str {
     "Type at least one non-space word to wrap into the box."

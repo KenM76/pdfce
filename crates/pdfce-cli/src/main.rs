@@ -5553,38 +5553,6 @@ struct AddTextArgs<'a> {
     embed_font: Option<&'a Path>,
 }
 
-/// Six uppercase ASCII letters derived from a face name, for the §9.6.4
-/// subset prefix.
-///
-/// Deterministic rather than random. A random tag would be equally valid and
-/// would make two otherwise identical runs produce different bytes, which
-/// breaks byte-comparison — and byte-comparison is how this project proves
-/// its round-trip invariant. Derived from the name so two different faces in
-/// one document are unlikely to collide.
-///
-/// Not a hash with collision guarantees, and does not pretend to be: if two
-/// faces ever do collide, the consequence is two subsets sharing a tag, which
-/// consumers tolerate (the tag is a hint, not an identifier). Spending
-/// entropy here to avoid a harmless collision would cost the determinism,
-/// which is the property actually worth having.
-fn subset_tag_for(name: &str) -> String {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in name.bytes() {
-        h ^= u64::from(b);
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    (0..6)
-        .map(|i| {
-            let k = (h >> (i * 8)) & 0xff;
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "the modulo keeps this inside the 26-letter alphabet"
-            )]
-            char::from(b'A' + (k % 26) as u8)
-        })
-        .collect()
-}
-
 /// `add-text`: Pass 16.0 add NEW page text (decision 016 / FF-D).
 ///
 /// Synthesizes a single-line `BT…ET` run at `--at "x,y"` in the chosen
@@ -5774,7 +5742,7 @@ fn cmd_add_text(args: &AddTextArgs<'_>) -> u8 {
         // reproducible — a random tag would make byte-comparison of two
         // otherwise identical outputs impossible, which the round-trip
         // harness depends on.
-        let tag = subset_tag_for(&stem);
+        let tag = pdfce_render::font::subset::subset_tag_for(&stem);
 
         let plan = match pdfce_render::font::subset::plan_subset(&donor, 0, &wanted, &stem, &tag) {
             Ok(p) => p,
