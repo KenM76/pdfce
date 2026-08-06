@@ -124,6 +124,15 @@ pub enum Step {
     /// the same reason `tool:` is: it isolates "does this panel work" from
     /// "is the button that opens it wired up".
     Groups,
+    /// Open the redaction review panel (`panel:redact`).
+    ///
+    /// Added by the Pass 37 GUI-gap sweep for the same reason [`Self::Groups`]
+    /// exists: the whole Redact surface — mark-whole-page, search-and-mark,
+    /// the literal/pattern switch, the mark list, apply — was UNREACHABLE from
+    /// the harness, so every question about it had to be answered by reading
+    /// the code. A panel the observation harness cannot open is a panel whose
+    /// defects can only be found by the operator.
+    Redact,
     /// Burn a frame. Used to let a texture, a provider rebuild, or egui's own
     /// click detection settle between steps.
     Wait,
@@ -233,6 +242,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "escape" => Some(Step::Escape),
         "wait" => Some(Step::Wait),
         "panel" if rest.trim() == "groups" => Some(Step::Groups),
+        "panel" if rest.trim() == "redact" => Some(Step::Redact),
         "view" if rest.trim() == "points" => Some(Step::ShowPoints),
         // NOT `rest.trim()`: leading and trailing spaces are legitimate text.
         "type" if !rest.is_empty() => Some(Step::Text(rest.to_owned())),

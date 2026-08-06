@@ -751,6 +751,14 @@ struct PdfceApp {
     /// state, because a query typed against the previous document is stale
     /// narration about the wrong file.
     redact_search_query: String,
+    /// Whether the redaction search box is read as a PATTERN (`#` = any
+    /// digit, `?` = any character) rather than as a literal string.
+    ///
+    /// Session state, not persisted — the same stance as `rail_expanded`.
+    /// Deliberately a mode on the ONE query box rather than a second box:
+    /// the two are mutually exclusive inputs to the same operation, and two
+    /// boxes would raise the question of which wins when both are filled.
+    redact_search_is_pattern: bool,
     /// The narrator line describing the most recent edit — a delete's
     /// dangling-reference disclosure, a reorder's page count.
     ///
@@ -1045,6 +1053,7 @@ impl Default for PdfceApp {
             pending_copy: None,
             pending_redaction_apply: None,
             redact_search_query: String::new(),
+            redact_search_is_pattern: false,
             edit_note: None,
             recovery_note: None,
             // Pass 6.1: a visible red pen and a 2-point stroke — sensible
@@ -4157,20 +4166,72 @@ impl PdfceApp {
             {
                 actions.push(Action::MarkWholePageForRedaction);
             }
+            // Rects traced so the scripted-input harness can DRIVE these
+            // controls instead of guessing a screen point — the technique
+            // Pass 34.2 proved, and the reason `panel:redact` was added to
+            // `diag::Step` in the same change. A guessed point that misses
+            // reads exactly like a control that does not work.
             ui.horizontal(|ui| {
-                ui.text_edit_singleline(&mut self.redact_search_query);
+                let q = ui.text_edit_singleline(&mut self.redact_search_query);
+                diag::trace(|| format!("redact-query-box rect={:?}", q.rect));
                 // The button is dead while the box is empty rather than
                 // silently no-oping on click — the same R83 reading.
                 ui.add_enabled_ui(!self.redact_search_query.trim().is_empty(), |ui| {
-                    if ui.button(ui_text::redact_search_button()).clicked() {
+                    let b = ui.button(ui_text::redact_search_button());
+                    diag::trace(|| format!("redact-search-btn rect={:?}", b.rect));
+                    if b.clicked() {
                         actions.push(Action::SearchAndMarkForRedaction);
                     }
                 });
             });
+            // Literal vs pattern, as a two-way choice on the SAME box rather
+            // than a second box (Pass 37 GUI-gap sweep).
+            //
+            // `EditSession::mark_redactions_by_pattern` has shipped in
+            // `pdfce-core` since Pass 8 and in `pdfce-cli` as
+            // `redact-mark --pattern`, and had NO GUI caller at all — found by
+            // auditing every core verb against the GUI's call sites rather
+            // than by reading the features table, which did not know.
+            //
+            // It is the capability behind the real request "redact every social
+            // security number in this document": `#` matches any ASCII digit,
+            // `?` any single character. Typing `###-##-####` marks every
+            // SSN-shaped run in one action, which is not expressible as a
+            // literal search at all — an operator without it must find and mark
+            // each one by eye, and the failure mode of missing one is shipping
+            // an un-redacted document.
+            //
+            // ONE box with a mode switch, not two boxes: the two are mutually
+            // exclusive inputs to the same operation, and two boxes would ask
+            // the operator which one "wins" when both are filled.
+            ui.horizontal(|ui| {
+                ui.label(ui_text::redact_match_mode_label());
+                for (pattern, text, tip) in [
+                    (
+                        false,
+                        ui_text::redact_match_literal(),
+                        ui_text::redact_match_literal_tooltip(),
+                    ),
+                    (
+                        true,
+                        ui_text::redact_match_pattern(),
+                        ui_text::redact_match_pattern_tooltip(),
+                    ),
+                ] {
+                    let m = ui
+                        .selectable_value(&mut self.redact_search_is_pattern, pattern, text)
+                        .on_hover_text(tip);
+                    diag::trace(|| format!("redact-mode-btn pattern={pattern} rect={:?}", m.rect));
+                }
+            });
             ui.label(
-                egui::RichText::new(ui_text::redact_search_hint())
-                    .small()
-                    .weak(),
+                egui::RichText::new(if self.redact_search_is_pattern {
+                    ui_text::redact_pattern_hint()
+                } else {
+                    ui_text::redact_search_hint()
+                })
+                .small()
+                .weak(),
             );
         });
 
@@ -4329,7 +4390,12 @@ impl PdfceApp {
         // Case-insensitive: an operator searching for a name wants every
         // casing of it marked, and over-marking is the safe direction of
         // error for a feature whose failure mode is leaving content behind.
-        match doc.session.mark_redactions_by_search(&query, true) {
+        let marked = if self.redact_search_is_pattern {
+            doc.session.mark_redactions_by_pattern(&query, true)
+        } else {
+            doc.session.mark_redactions_by_search(&query, true)
+        };
+        match marked {
             Ok(created) if created.is_empty() => {
                 self.edit_note = Some(ui_text::redact_search_no_matches(&query));
             }
@@ -6479,6 +6545,11 @@ impl eframe::App for PdfceApp {
                 // scripted run cannot diverge from the operator's path — the
                 // failure mode the ShowPoints step below already names.
                 self.apply(Action::ToggleDimensionGroups, ctx, ctx.pixels_per_point());
+            }
+            diag::Step::Redact => {
+                // Through the SAME action the toolbar toggle pushes, so a
+                // scripted open takes the identical path a real one does.
+                self.apply(Action::ToggleRedactPanel, ctx, ctx.pixels_per_point());
             }
             diag::Step::ShowPoints => {
                 // Through the SAME action the toolbar toggle pushes, so a

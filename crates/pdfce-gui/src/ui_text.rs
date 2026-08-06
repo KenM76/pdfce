@@ -4966,6 +4966,51 @@ before applying. It can only find text pdfce can extract — on a scanned page w
 layer it will find nothing, which is not the same as there being nothing sensitive there."
 }
 
+/// Label on the literal-vs-pattern switch over the redaction search box.
+pub fn redact_match_mode_label() -> &'static str {
+    "Match:"
+}
+
+/// The literal half of that switch.
+pub fn redact_match_literal() -> &'static str {
+    "Exact text"
+}
+
+/// Tooltip on the literal half.
+pub fn redact_match_literal_tooltip() -> &'static str {
+    "Find this text exactly as typed, ignoring upper/lower case."
+}
+
+/// The pattern half of that switch.
+pub fn redact_match_pattern() -> &'static str {
+    "Pattern"
+}
+
+/// Tooltip on the pattern half.
+///
+/// Leads with the example rather than the syntax: the operator's actual
+/// thought is "redact every social security number", not "I would like a
+/// wildcard language."
+pub fn redact_match_pattern_tooltip() -> &'static str {
+    "Find every run SHAPED like what you type — e.g. ###-##-#### marks every social-security \
+number on every page in one action. Use this when you know the shape but not the values."
+}
+
+/// The hint under the search box while Pattern is selected.
+///
+/// States the whole syntax, because it is two characters long and an operator
+/// who has to go looking for it will instead type a literal and get nothing.
+/// Carries the same scanned-page caveat the literal hint does — the failure
+/// mode of a redaction search finding nothing is identical either way, and
+/// dropping the warning from one of two hints is how it stops being read.
+pub fn redact_pattern_hint() -> &'static str {
+    "# matches any digit, ? matches any single character, everything else is literal. \
+So ###-###-#### finds phone numbers and A?-#### finds A1-2345 or Ax-9876. Marks are added \
+for you to review before applying. It can only find text pdfce can extract — on a scanned \
+page with no text layer it will find nothing, which is not the same as there being nothing \
+sensitive there."
+}
+
 /// Status-bar note after a search-and-mark that found matches.
 pub fn redact_search_marked(count: usize, query: &str) -> String {
     format!(
