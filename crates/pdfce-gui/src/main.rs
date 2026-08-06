@@ -2830,6 +2830,16 @@ enum Action {
     ToggleRedactPanel,
     /// Show the interactive-form field list (`docs/ui_specs/forms-panel.md`).
     ToggleFormsPanel,
+    /// Burn every form field's appearance into page content and remove the
+    /// interactive form (`EditSession::flatten_fields`).
+    FlattenForm,
+    /// Rebuild every field's `/AP` from its value
+    /// (`EditSession::regenerate_appearances`).
+    RegenerateFormAppearances,
+    /// Write the form's values out as FDF or XFDF.
+    ExportFormData,
+    /// Read an FDF/XFDF file into the open document's fields.
+    ImportFormData,
     /// Mark the whole of the current page for redaction (Pass 8.1,
     /// ui-spec §2.4). One `EditSession::add_redaction`; Undo reverses it.
     /// **Marks nothing about content** — it authors a reviewable
@@ -4201,7 +4211,7 @@ impl PdfceApp {
     /// document itself declares, so the list matches the printed form far more
     /// often than an alphabetical sort would. Computed `/Tabs` ordering is a
     /// named P2 residual.
-    fn forms_panel(&mut self, ui: &mut egui::Ui) {
+    fn forms_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let Status::Open(doc) = &mut self.status else {
             ui.label(ui_text::forms_no_document());
             return;
@@ -4264,6 +4274,49 @@ impl PdfceApp {
                 ui_text::forms_javascript_note(scripted),
             );
         }
+
+        // -- Form-wide actions, ABOVE the list. --
+        //
+        // Placed here, not at the bottom, because they act on the WHOLE form:
+        // a control that acts on everything below it belongs above it, and a
+        // Flatten button under a 40-row list is a button an operator scrolls
+        // past without meeting.
+        ui.horizontal(|ui| {
+            let b = ui
+                .button(ui_text::forms_regenerate_button())
+                .on_hover_text(ui_text::forms_regenerate_tooltip());
+            diag::trace(|| format!("forms-btn RegenerateFormAppearances rect={:?}", b.rect));
+            if b.clicked() {
+                actions.push(Action::RegenerateFormAppearances);
+            }
+            // Delete-shaped weight: a rich, honest tooltip and one undo step —
+            // NOT redaction's blocking modal. See `flatten_form`'s own doc
+            // comment for why the two differ, argued against what each
+            // operation actually does rather than by analogy.
+            let b = ui
+                .button(ui_text::forms_flatten_button())
+                .on_hover_text(ui_text::forms_flatten_tooltip());
+            diag::trace(|| format!("forms-btn FlattenForm rect={:?}", b.rect));
+            if b.clicked() {
+                actions.push(Action::FlattenForm);
+            }
+        });
+        ui.horizontal(|ui| {
+            let b = ui
+                .button(ui_text::forms_export_button())
+                .on_hover_text(ui_text::forms_export_tooltip());
+            diag::trace(|| format!("forms-btn ExportFormData rect={:?}", b.rect));
+            if b.clicked() {
+                actions.push(Action::ExportFormData);
+            }
+            let b = ui
+                .button(ui_text::forms_import_button())
+                .on_hover_text(ui_text::forms_import_tooltip());
+            diag::trace(|| format!("forms-btn ImportFormData rect={:?}", b.rect));
+            if b.clicked() {
+                actions.push(Action::ImportFormData);
+            }
+        });
         ui.separator();
 
         // Captured and applied after the `form` borrow ends — the same
@@ -4460,6 +4513,192 @@ impl PdfceApp {
                 }
                 Err(err) => err.to_string(),
             });
+        }
+    }
+
+    /// **Flatten the form** — burn every field's appearance into page content
+    /// and remove the interactive form (`EditSession::flatten_fields`).
+    ///
+    /// # Why a tooltip, and NOT redaction's blocking confirmation
+    ///
+    /// This was argued against the actual shipped mechanisms, not copied from
+    /// precedent. Redaction's Apply earns its modal because it is built around
+    /// exactly two unconditional full rewrites — there is no code path where
+    /// an ordinary save leaves the superseded bytes recoverable.
+    ///
+    /// Flatten does not have that property. It **appends** an overlay content
+    /// stream invoking each widget's existing `/AP` as a page XObject, leaving
+    /// existing content byte-verbatim, so under the default incremental save a
+    /// flattened field's prior `/V` and `/AP` are still present in the previous
+    /// revision (R48, verified at Pass 7.1). Its irreversibility is
+    /// *conditional on the save mode*, not structural — which is exactly the
+    /// line the project draws between "genuinely irreversible once saved" and
+    /// everything else. So it gets a rich, honest tooltip and one undo step,
+    /// the same weight page deletion carries.
+    ///
+    /// A certified document refuses flatten by name where it would still allow
+    /// an ordinary fill: `flatten_fields` uses the STRICT certification gate,
+    /// not fill's `/P`-aware one. That refusal is surfaced, not swallowed.
+    fn flatten_form(&mut self) {
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        diag::trace(|| "forms-flatten requested".to_owned());
+        match doc.session.flatten_fields(None) {
+            Ok(outcome) => {
+                diag::trace(|| {
+                    format!(
+                        "forms-flatten ok fields={} widgets={} pages={}",
+                        outcome.fields_flattened, outcome.widgets_burned, outcome.pages_touched
+                    )
+                });
+                doc.refresh_pages();
+                self.edit_note = Some(ui_text::forms_flattened(
+                    outcome.fields_flattened,
+                    outcome.widgets_burned,
+                    outcome.pages_touched,
+                ));
+            }
+            Err(err) => {
+                diag::trace(|| format!("forms-flatten refused {err}"));
+                self.save_result = Some(SaveOutcome::Failed(err.to_string()));
+            }
+        }
+    }
+
+    /// **Regenerate every field's appearance** from its current value.
+    ///
+    /// The operator-facing answer to the `/NeedAppearances` disclosure the
+    /// Forms panel shows: a document carrying that flag is asking viewers to
+    /// draw field values themselves, and viewers disagree about whether to.
+    /// Regenerating bakes an appearance for every field and clears the flag,
+    /// so every viewer shows the same thing — which is the only way to make a
+    /// filled form look the same everywhere.
+    ///
+    /// Reports what it did, including the two disclosures the engine returns
+    /// that an operator could not otherwise discover: an applied auto-size,
+    /// and characters with no `WinAnsi` code (which will not appear).
+    fn regenerate_form_appearances(&mut self) {
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        match doc.session.regenerate_appearances() {
+            Ok(outcome) => {
+                doc.refresh_pages();
+                self.edit_note = Some(ui_text::forms_appearances_regenerated(
+                    outcome.regenerated,
+                    outcome.need_appearances_cleared,
+                    outcome.applied_autosize,
+                    outcome.unencodable_chars,
+                ));
+            }
+            Err(err) => {
+                self.save_result = Some(SaveOutcome::Failed(err.to_string()));
+            }
+        }
+    }
+
+    /// **Export the form's values** to an FDF or XFDF file.
+    ///
+    /// The format follows the extension the operator types, because that is
+    /// the choice they have already made by naming the file — a second
+    /// format dropdown beside a file dialog that already has a filter is a
+    /// control that can disagree with itself.
+    fn export_form_data(&mut self) {
+        let Status::Open(doc) = &self.status else {
+            return;
+        };
+        let Some(data) = doc.session.export_form_data() else {
+            self.edit_note = Some(ui_text::forms_no_acroform().to_owned());
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter(ui_text::forms_data_filter_label(), &["fdf", "xfdf"])
+            .set_file_name(ui_text::forms_export_default_name())
+            .save_file()
+        else {
+            return;
+        };
+        // The source hint is the document this data came FROM — an FDF that
+        // does not say so is a set of values with no way back to the form it
+        // fills, which is how form data ends up applied to the wrong file.
+        let hint = doc.path.display().to_string();
+        let xfdf = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("xfdf"));
+        let bytes = if xfdf {
+            data.to_xfdf(Some(&hint))
+        } else {
+            data.to_fdf(Some(&hint))
+        };
+        self.edit_note = Some(match std::fs::write(&path, &bytes) {
+            Ok(()) => ui_text::forms_data_exported(data.fields.len(), &path.display().to_string()),
+            Err(err) => ui_text::forms_data_export_failed(&err.to_string()),
+        });
+    }
+
+    /// **Import an FDF/XFDF file** into the open document's fields.
+    ///
+    /// The format is detected from the CONTENT, not the extension — the same
+    /// rule `pdfce-cli import-data` follows. A data file renamed by a mail
+    /// client or a browser download is common enough that trusting the
+    /// extension would refuse files that are perfectly readable.
+    ///
+    /// A partial match is REPORTED, never silently accepted: a data file may
+    /// legitimately name a superset of this document's fields, and the
+    /// operator needs to know how many values did not land, because that is
+    /// the difference between "imported" and "imported the wrong form".
+    fn import_form_data(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter(ui_text::forms_data_filter_label(), &["fdf", "xfdf"])
+            .pick_file()
+        else {
+            return;
+        };
+        let bytes = match std::fs::read(&path) {
+            Ok(b) => b,
+            Err(err) => {
+                self.edit_note = Some(ui_text::forms_data_import_failed(&err.to_string()));
+                return;
+            }
+        };
+        // Content sniff, not extension: XFDF is XML and declares itself.
+        let is_xml = bytes
+            .iter()
+            .position(|b| !b.is_ascii_whitespace())
+            .is_some_and(|i| bytes[i] == b'<');
+        let parsed = if is_xml {
+            pdfce_core::fdf::FormData::parse_xfdf(&bytes)
+        } else {
+            pdfce_core::fdf::FormData::parse_fdf(&bytes)
+        };
+        let data = match parsed {
+            Ok(d) => d,
+            Err(err) => {
+                self.edit_note = Some(ui_text::forms_data_import_failed(&err.to_string()));
+                return;
+            }
+        };
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        match doc.session.import_form_data(&data) {
+            Ok(outcome) => {
+                doc.refresh_pages();
+                // The drafts are cleared, not merged: they hold what the
+                // operator typed BEFORE the import, and leaving them would
+                // show stale text over freshly imported values — the panel
+                // would disagree with the document it is describing.
+                self.form_drafts.clear();
+                self.edit_note = Some(ui_text::forms_data_imported(
+                    outcome.applied,
+                    outcome.skipped,
+                ));
+            }
+            Err(err) => {
+                self.save_result = Some(SaveOutcome::Failed(err.to_string()));
+            }
         }
     }
 
@@ -6020,6 +6259,22 @@ impl PdfceApp {
                 self.show_pane_subject(ribbon::PaneSubject::Forms);
                 return;
             }
+            Action::FlattenForm => {
+                self.flatten_form();
+                return;
+            }
+            Action::RegenerateFormAppearances => {
+                self.regenerate_form_appearances();
+                return;
+            }
+            Action::ExportFormData => {
+                self.export_form_data();
+                return;
+            }
+            Action::ImportFormData => {
+                self.import_form_data();
+                return;
+            }
             Action::MarkWholePageForRedaction => {
                 self.mark_whole_page_for_redaction();
                 return;
@@ -6099,6 +6354,10 @@ impl PdfceApp {
             | Action::CancelPendingCopy
             | Action::ToggleRedactPanel
             | Action::ToggleFormsPanel
+            | Action::FlattenForm
+            | Action::RegenerateFormAppearances
+            | Action::ExportFormData
+            | Action::ImportFormData
             | Action::MarkWholePageForRedaction
             | Action::SearchAndMarkForRedaction
             | Action::RemoveRedactionMark(_)
@@ -8648,7 +8907,7 @@ impl PdfceApp {
                 return;
             }
             ribbon::PaneSubject::Forms => {
-                self.forms_panel(ui);
+                self.forms_panel(ui, actions);
                 return;
             }
             ribbon::PaneSubject::ActiveTool => {}

@@ -81,6 +81,531 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ GUI-gap sweep, 2026-08-05 — the audit method that found Passes 37.0–37.2, and why it is not the method R156 prescribes
+
+**Read this before the three Pass entries beneath it.** The three Passes
+are the outcome; the method is the part that will still be useful when
+the three gaps are long closed, and it is filed first for that reason.
+
+**The operator request, verbatim (Ken, 2026-08-05):** *"zip a backup.
+then add GUI support for all outstanding tools the the other implemented
+core features."* Both halves were performed — the backup is recorded in
+the session log (continuation 101), the GUI work is Passes 37.0–37.2
+below.
+
+#### The method
+
+The engineer **did not read `FEATURES.md` to find the gaps.** That file's
+`gui` column had already been wrong twice inside the same week, in
+opposite directions, which is the whole reason **R156** exists. A
+document that has just been demonstrated unreliable about exactly this
+question cannot be the instrument that answers it.
+
+What was done instead, stated so it is repeatable:
+
+1. **Enumerate every `pub fn` on `EditSession`** — the core mutation
+   surface, the thing that defines what the application can actually do
+   to a document.
+2. **For each one, look for a call site anywhere under
+   `crates/pdfce-gui/src/`.**
+3. **Resolve every unreferenced verb by reading the call path**, not by
+   trusting the list.
+
+That produced **23 unreferenced verbs**. Of those:
+
+- **13 were plumbing** — `dirty_set`, `into_document`, `page_slots` and
+  siblings. Not capabilities; nothing to reach.
+- **2 were FALSE POSITIVES that a name-based check cannot see** (below).
+- **The remainder were real gaps**, and became Passes 37.0, 37.1 and
+  37.2.
+
+#### The two false-positive shapes — the genuinely interesting part
+
+**Shape 1 — the semantic alias.** `rotate_page_by` and
+`set_page_rotation` have no GUI call site, and the GUI is **correct**: it
+calls the certification-gated `rotate_pages` instead. The capability is
+reachable; the enumerated verb is not the one that reaches it. An
+unreferenced `pub fn` therefore means *"nothing calls this name"*, which
+is **not** the same claim as *"this capability is unreachable"* — and
+only reading the wrapping verb distinguishes them.
+
+**Shape 2 — the near-name sibling.** `mark_redactions_by_search` and
+`mark_redactions_by_pattern` differ by one suffix. The GUI had the first
+and not the second. Any check that reasons about the *family* ("redaction
+marking is wired") rather than the *member* reports this as covered. It
+was not covered, and the missing member is the one that marks
+every SSN-shaped run on a page in a single action (Pass 37.0).
+
+#### Why this is a correction to R156's prescribed check, not merely an application of it
+
+R156 says: do not cross-check by grepping one shell's name in the other
+shell's source; **audit the `Action` enum (or equivalent dispatch
+surface) and its push sites instead.** That is right about what NOT to
+do, and this sweep confirms it. But its prescribed replacement
+**enumerates the wrong side of the gap**:
+
+- The `Action` enum enumerates **what the GUI already has**. Sweeping it
+  can find a dead `Action` (a variant with no push site) — it can
+  **never** find a capability the GUI never named at all. Pass 37.2's
+  entire Forms surface had **no `Action` variant, no `PaneSubject`, and
+  no string** anywhere in `pdfce-gui` before this sweep. An
+  `Action`-variant sweep would have returned a clean bill of health on
+  it, truthfully and uselessly.
+- `EditSession`'s `pub fn` list enumerates **what core offers**, which is
+  the side the gap is measured against. It is exhaustive by construction:
+  a capability cannot hide from it, because a capability that is not a
+  `pub fn` on the session type is not a capability.
+
+R156's per-row instruction ("grep the `Action` enum for a variant that
+plausibly maps to it") also requires a row to check and a judgement about
+what "plausibly maps" means. It is a **verification** technique for a
+suspicion you already have. This sweep is a **discovery** technique for
+suspicions you do not.
+
+**An amendment to R156 was proposed on the strength of this sweep and
+has since been RULED ON — see, under *Standing rules*, "RESOLVED
+2026-08-05 — R156 amendment: the audit runs in TWO directions", and the
+binding text inside R156's own entry.** It was **ACCEPTED as an
+amendment in place; R157 was not minted, the ceiling stays R156, nothing
+was renumbered.**
+
+**AMENDED 2026-08-05 (engineer ruling, continuation 102) — the heading
+and framing of this sub-section are CORRECTED.** This sweep is not a
+*correction* to R156's prescribed check; R156 was **BROADENED, not
+corrected**. The `Action` sweep is the **right** instrument for the
+failure R156 was minted from — a capability the GUI **has** under a name
+a grep cannot guess — and is merely **blind to the mirror failure** this
+sweep hit, a capability the GUI does not have at all, because
+**`Action` enumerates what the GUI HAS, so it can prove a capability is
+present under an unexpected name, and can never prove one is absent.**
+Read the two bullets above ("The `Action` enum enumerates what the GUI
+already has…" / "`EditSession`'s `pub fn` list enumerates what core
+offers…") as the **two directions of one audit**, each with its own
+instrument, not as a wrong method and its replacement. The original
+wording is left in place per the append-only rule.
+
+**This also RE-SCOPES the owed R156 follow-up work.** The
+`FEATURES.md` `gui`-column re-verification owed since continuation 97 was
+scoped as an `Action`-variant sweep — direction one only, the half that
+cannot find a missing capability. Per the same ruling it must run in
+**BOTH** directions; this sweep has already performed direction two for
+the three capabilities below.
+
+### Pass 37.0 — pattern redaction reaches the GUI — 2026-08-05, committed `2bceb73`, branch `pass-8-redaction`
+
+**Scope: GUI only.** `EditSession::mark_redactions_by_pattern` shipped in
+`pdfce-core` at Pass 8 and in `pdfce-cli` as `redact-mark --pattern`, and
+had **no GUI caller at all**. The GUI offered literal text search only.
+
+**This is not cosmetic, and the reason is worth stating rather than
+assuming.** In the pattern language `#` matches any digit and `?` matches
+any single character, so `###-##-####` marks **every social-security-
+number-shaped run on the page in one action**. No literal search
+expresses that — a literal search can only find a specific number you
+already know. Without the pattern mode an operator finds and marks each
+one by eye, and the failure mode of missing one is **shipping an
+un-redacted document**. That is the one failure in this application that
+cannot be walked back.
+
+#### The control: a mode switch over the EXISTING query box, not a second box
+
+Shipped as a two-way **`Match: [ Exact text | Pattern ]`** switch above
+the query box the Redact panel already had.
+
+**Deliberately not a second input box.** The two are **mutually exclusive
+inputs to one operation**. Two boxes would immediately raise a question
+with no good answer — *which one wins when both are filled?* — and every
+answer to it is a rule the operator has to learn and cannot see. One box
+with a stated mode has no such question.
+
+The hint line below the box **swaps with the mode and states the whole
+syntax**. The syntax is two characters long; an operator who has to go
+hunting for it will type a literal instead and get nothing back, which
+looks exactly like "there is nothing to redact."
+
+**BOTH hints keep the scanned-page caveat**, and this is a rule-4
+disclosure decision, not duplication for its own sake: a redaction search
+that finds nothing looks **identical** in either mode, and a page that is
+a scanned image has no text to search at all. Dropping the warning from
+one of two hints is precisely how a warning stops being read — the
+operator learns it is sometimes absent, and thereafter its presence
+carries no information.
+
+New GUI state: `redact_search_is_pattern: bool`.
+
+#### Harness — the Redact surface was UNREACHABLE from `tools/gui-drive.ps1`
+
+Added `diag::Step::Redact` (`panel:redact`) plus traced rects for the
+query box, the two mode buttons, and the Find & mark button.
+
+**The whole Redact surface** — mark-whole-page, search-and-mark, the mark
+list, apply — **could not be opened by the scripted harness at all**, so
+every question about it had to be answered by reading code. A panel the
+observation harness cannot open is a panel whose defects **only the
+operator finds**, which is backwards in general and inverted for the one
+operation in this application that is irreversible.
+
+#### Verified in the running application, against the CLI as oracle
+
+Fixture: a page carrying `SSN 123-45-6789 and 987-65-4321` and
+`Tel 555-867-5309 acct A7-1234`.
+
+- **CLI:** `redact-mark --pattern "###-##-####"` → `marks_created=2`.
+- **GUI:** driven click into the query box → `type:###-##-####` → driven
+  click on **Pattern** → driven click on **Find & mark** → *"2 pending
+  redaction mark(s) — the content underneath them is STILL IN THIS FILE
+  until you apply"*, with two Page-1 regions of 81 × 17 pt listed for
+  review.
+
+Both agree, and — the part that makes it an oracle rather than a
+coincidence — **both correctly DECLINE** the phone number (a different
+shape) and `A7-1234`.
+
+### Pass 37.1 — the GUI can embed a donor font in Add Text — 2026-08-05, committed `f81ba89`, branch `pass-8-redaction`
+
+**Scope: `pdfce-render` + `pdfce-gui`.** Pass 21.0 shipped donor
+subsetting and embedding in core + CLI on 2026-08-04; **its GUI slice was
+never started.** The consequence, stated plainly: `pdfce-cli add-text
+--embed-font` could put Devanagari, Greek, Cyrillic or CJK on a page and
+**the GUI could not**, because the Standard-14 faces have no glyphs for
+any of it. An operator who had already added a font folder watched pdfce
+**render** with their font while **refusing to write** with it.
+
+**Relationship to Pass 21.3 — this Pass discharges part of it, and 21.3
+stays OPEN.** Pass 21.3 ("GUI. FINAL SLICE") was scoped as: face picker
+over `--font-dir` faces; refusal→remedy flow; embed confirmation showing
+the real subset size/coverage (R108); trust and licence disclosure. The
+first three shipped here, for the **Add Text** path. **Not shipped, and
+therefore 21.3 is not closed:** the `fsType` trust/licence disclosure
+(**R109**, owed since Pass 21.0's own "NOT yet implemented" note), and
+any picker over **existing** text — which cannot exist until **Pass 21.2**
+(`set-font`, core + CLI) does. 21.3's Pass number was deliberately **not
+consumed** by this Pass, because consuming it would mark a slice shipped
+that is not.
+
+#### `pdfce-render` — two additions, and the invariant check is load-bearing here
+
+**Both additions are on `pdfce-render`, so CLAUDE.md rule 2's
+`cargo tree` check is a real check on this Pass, not a routine one.** It
+was run and is clean (see Gates).
+
+- **`FontEnvironment::named_faces()`** — every supplied face name,
+  **sorted**. The existing `named()` answers *"do you have this face?"*,
+  which is all a **renderer** ever needs, because the document hands it a
+  `/BaseFont` to look up. A **shell building a picker** has the opposite
+  problem: it has no name in hand and needs the list. **Sorted** because
+  the store is a `HashMap`, and unsorted output would reshuffle the
+  picker between launches **and** make a scripted GUI run
+  non-reproducible — which the observation harness depends on.
+  (Cross-reference: `D:\dev\rag\rust\hashmap_iteration_order_drifts_between_runs_of_same_binary.md`.)
+- **`subset_tag_for` HOISTED** out of `pdfce-cli` into `pdfce-render`.
+  Two copies of a subset-tag derivation is two chances to change one,
+  after which **the CLI and the GUI would write DIFFERENT BYTES for the
+  same document and the same donor** — and the round-trip harness
+  compares bytes. Same reasoning that hoisted `FontEnvironment::
+  subset_stem` before it.
+
+#### `pdfce-gui` — `AddTextState::prop_donor: Option<String>`
+
+**Deliberately NOT a widened `prop_font`.** A Standard-14 face is written
+**by name** and adds **no bytes** (R79). A donor face is **subsetted**,
+adds **real bytes** to the file, **can be refused by name**, and its cost
+is worth disclosing. Those are different enough that one field would have
+to carry a discriminant anyway. Keeping `prop_font` a `Std14` also leaves
+the already-shipped Standard-14 path **bit-for-bit unchanged**, which is
+the round-trip invariant's preferred kind of change: none.
+
+**Held as the registered NAME, not as bytes.** The font environment is
+**rebuilt whenever a folder changes**, so cached bytes would describe a
+folder that is no longer attached. A name that no longer resolves is a
+**refusal the operator can be told about**; stale bytes are not — they
+would silently embed a face that is no longer in the environment.
+
+#### Refusals, and what the operator is given instead
+
+Subset refusals surface **by name**, with a remedy that names **all four
+real causes**: CFF outlines, `fsType` licence flags, the size ceiling,
+and a missing glyph. **Three of those four are properties of the chosen
+FILE** and are not discoverable by retrying — an operator told only "that
+failed" will press the button again, which cannot help.
+
+**The draft is RETAINED across a refusal.** A refusal costs the operator
+their font choice, not their typing.
+
+#### The commit disclosure is a MEASUREMENT, not a prediction
+
+Per **R108**/**R98**, the line reports what was actually embedded, after
+embedding it. It is **worded to match the CLI's own line deliberately**:
+it is the same operation, and the two shells must not drift into
+describing it two different ways.
+
+#### A SCREENSHOT CHANGED THE DESIGN — recorded as a process finding
+
+The first build listed the supplied fonts **after** the fourteen
+built-ins. Opening the list in the running application showed the
+supplied group **below the fold**, reachable only by scrolling past
+fourteen faces the operator did not choose.
+
+Backwards twice over: someone who added a font folder did it in order to
+**use that font**, and it is the **only route** to text the built-ins
+cannot render — so burying it hides the answer to *"why is my Devanagari
+blank boxes."*
+
+**Supplied faces now lead when the supplied list is non-empty.** With no
+font folder added, nothing moves.
+
+This is recorded because the defect was **invisible in the source and
+obvious in the screenshot**: the code correctly appended a second group
+to a list, which reads as fine until you see where the fold lands.
+
+#### Harness — `PDFCE_DIAG_FONT_DIR`, and what it unblocks beyond this Pass
+
+Font folders are added through a **native folder picker**, which is
+exactly the class of thing the scripted harness cannot drive. The
+consequence is larger than this slice: **the entire supplied-font feature
+(decision 012, shipped) had been unobservable since it landed** — not
+just this Pass's addition to it.
+
+`PDFCE_DIAG_FONT_DIR` splits on **`;`, not `:`**, because these are
+Windows paths and `C:\fonts` contains a colon.
+
+#### Verified in the running application, against the CLI as oracle
+
+Every link driven rather than inferred:
+
+```
+font-env-rebuilt named=["Noto Sans Devanagari", "Noto Sans Devanagari Regular", "NotoSansDevanagari-Regular"]
+add-text-font-combo donor=Some("NotoSansDevanagari-Regular")
+add-text-donor-embedded Embedded a subset of "NotoSansDevanagari-Regular":
+  6 glyph(s), 2288 byte(s) of font program, covering 6 character(s) - subset tag JXUUYI.
+```
+
+CLI, same donor, same text: **6 glyph(s), 2288 byte(s), subset tag
+JXUUYI.**
+
+Identical, **tag included** — which is also the proof that hoisting
+`subset_tag_for` kept both shells writing **the same bytes**, rather than
+merely compiling.
+
+**Honest limit, unchanged from Pass 21.0 and worth restating here because
+this Pass puts the capability in front of an operator for the first
+time: there is no shaping, ever (R17).** An embedded Devanagari or Arabic
+face places glyphs by advance with no GSUB/GPOS. CJK, Cyrillic, Greek and
+Hebrew-without-vowel-points work; Arabic, Devanagari and Thai embed
+glyphs and the text is **wrong**.
+
+### Pass 37.2 — the Forms panel: a fillable PDF can be filled in the GUI — 2026-08-05, committed `c1158cd`, branch `pass-8-redaction`
+
+**Scope: `pdfce-core` + `pdfce-gui`.** The largest of the three gaps, and
+the only one that left a shipped capability **entirely unreachable**:
+`pdfce-core` has filled text fields, toggled buttons, set choice values,
+flattened, and imported/exported FDF/XFDF **since Pass 7.0/7.1**, and
+`pdfce-cli` exposes all six. The GUI exposed **none**. A fillable PDF
+could be opened in pdfce and not filled.
+
+**Design source: `docs/ui_specs/forms-panel.md`** (`pdfce-ui-specialist`,
+2026-08-05, 752 lines). It **supersedes the never-implemented
+`docs/ui_specs/pass-7-form-fill.md` on placement and architecture** —
+that spec predates four shell changes and specified a **canvas overlay**
+the current shell has **no hit-testing for**. The older spec is left in
+place (append-only spirit) but is no longer the design of record for
+where the surface lives. **This commit ships the new spec's P0.**
+
+#### Placement — a fifth `PaneSubject`, and three rejected alternatives
+
+New **`PaneSubject::Forms`** plus a **`RibbonGroup::Forms`** on the
+**Edit** tab. Each rejected alternative is recorded because each looked
+reasonable:
+
+- **Not `ActiveTool`.** That subject is tied to `doc.active_tool`, and
+  form filling correctly **never sets a tool** — you fill a form with no
+  tool armed, the same way Pass 25.5's ce-dimension position drag works.
+- **Not folded into the Pass-34.2-widened Properties pane.** That pane is
+  *"the selected thing"*. A form is a property of the **document**, and
+  its rows are not a selection.
+- **Not the Tools tab beside Redact.** Redact is on Tools because it is
+  **irreversible**, and that reasoning **does not transfer** to a
+  reversible fill. Grouping by "these are both about field content" would
+  have imported Redact's placement rationale into a surface that does not
+  share it.
+
+#### A LIST, not a canvas overlay — and not merely because it is cheaper
+
+Rows are real **`TextEdit`** / **`Checkbox`** widgets in a panel.
+
+The load-bearing reason is **accessibility, not effort**: real widgets
+get **Tab order and AccessKit exposure directly**. Projected canvas
+overlays get **neither**, and the canvas raster stays **screen-reader-
+illegible** no matter how accurately the overlay is positioned. A canvas
+overlay would have been a surface a screen-reader user could not use at
+all.
+
+**Click-on-the-page-to-edit is named as its own future Pass** (P2 below),
+not quietly dropped.
+
+#### Row content and ordering
+
+- **Rows in the FILE's order** (`/AcroForm /Fields`), not sorted. The
+  file's order matches the printed form more often than any sort would,
+  and the operator is usually reading the page beside the panel.
+- **Visible label prefers `/TU`** — the alternate/tooltip name, which is
+  **what a screen reader announces** — falling back to the fully-
+  qualified name. **The raw field name is always in the tooltip**,
+  because the raw name is what diagnoses an FDF-import mismatch, and that
+  is the moment someone needs it.
+- **Reads the SESSION, not the file** — Pass 17.1's rule. The panel shows
+  the edited revision.
+
+#### Editing behaviour
+
+- **Text fill** with live **`/MaxLen` truncation**, **multiline**, and
+  **password masking** — whose tooltip says **plainly that masking is
+  display-only and the value is stored as plain text**. A masked box
+  reads as *"secure"* to anyone who has not been told otherwise, and that
+  inference is the operator's to make with the facts, not pdfce's to
+  leave standing.
+- **Checkbox toggles immediately.**
+- **`form_field_commit`** — the exact shape Pass 34.2's
+  `place_draft_commit` established, reused rather than reinvented.
+
+  **The equality guard is the one that matters in practice, and the
+  reason is behavioural rather than theoretical: tabbing THROUGH a form
+  is how people read one.** Without the guard, every pass over a 40-field
+  form pushes **40 undo entries** and regenerates **40 appearances** —
+  appended to the incremental save, with no error and nothing on screen
+  to indicate it.
+
+  **4 unit tests**, including the one that guards the tempting shortcut:
+  **clearing a filled field IS a commit.** An early
+  `if draft.is_empty() { return None }` would make a field **impossible
+  to empty once filled**, which is a data-entry trap, not an
+  optimisation.
+
+#### Every unfillable row is DISABLED AND EXPLAINED, never hidden (R83)
+
+Read-only, signature, pushbutton, radio group, choice field — and the
+next item, which is a correctness finding rather than a nicety.
+
+#### ★ CORRECTNESS FINDING — `fill_text_field` does not special-case `RichText`
+
+`EditSession::fill_text_field` does **not** special-case the `RichText`
+flag. On a rich-text field it would **overwrite the value with plain text
+and regenerate a plain appearance**, **silently discarding the stored
+formatting**.
+
+That is a **lossy conversion presented as an ordinary edit** — the
+*sneaky* half of CLAUDE.md rule 4 — waiting for the first real-world
+rich-text field to arrive. **The GUI row now refuses and says why.**
+
+**The check is GATED ON FIELD TYPE FIRST, and must stay that way.**
+`FieldFlags::RICH_TEXT` (bit 26) has the **same bit value** as
+`RADIOS_IN_UNISON`. Testing the bit without first gating on field type
+reports **every radio group as rich text**. This is a property of the
+ISO 32000 field-flag tables, which assign bit meanings **per field type**
+— the same bit position is a different flag on a button field than on a
+text field.
+
+**UNDECIDED, and filed here rather than left in a commit message:
+should `pdfce-core` ALSO refuse, so that `pdfce-cli fill-field` gets the
+same guard?** Today the guard exists only in the GUI, which means the
+CLI can still perform the silent lossy conversion. Arguments both ways:
+core refusing makes the guarantee structural and gives both shells one
+answer; core refusing also makes a currently-succeeding CLI operation
+start failing, which is a behaviour change to a shipped subcommand. **See
+*Next up* → "Rich-text fill: should core refuse too?"**
+
+#### `pdfce-core` — `EditSession::fill_refusal() -> Option<EditError>`
+
+A **pure query** returning the refusal a fill **would** raise, without
+performing one.
+
+**R83 needs the answer before the control is offered** — you cannot
+disable-and-explain a control if the only way to learn the explanation is
+to press it.
+
+**Returns the ERROR, not a bool.** The two refusals —
+`CertificationForbidsChange` and `FieldLockedBySignature` — have
+**different remedies**. A bool would force the shell to **invent wording
+for a distinction core already knows**, which is exactly how an engine's
+message and a shell's message drift apart.
+
+#### Two form-wide disclosures, plus one per-toggle
+
+At the top of the panel:
+
+1. **`/NeedAppearances`** — a filled value may look different, or may not
+   appear at all, depending on the viewer.
+2. **JavaScript-computed fields** — pdfce does not run them (decision
+   009, posture A: **never** execute embedded PDF JavaScript). A field
+   whose value is computed by script will not update.
+
+Per-toggle: when a checkbox's `/AP` has **no sub-stream for the state
+being entered**, the operator is told. Otherwise the value changes and
+**nothing on the page moves**, which reads exactly like the click not
+registering — and the operator's next act is to click again, undoing it.
+
+#### CAUGHT BY THE BUILD — and worth recording which gate caught it
+
+The new helper functions first landed **after `mod tests`**. That is
+legal Rust, and it is the **exact documented blind spot** of
+`tools/check-ui-strings.sh`: that script **truncates at `#[cfg(test)]`**,
+so anything below is invisible to it.
+
+**Clippy's `items after a test module` caught it. The strings gate would
+not have.** This is a live instance of the limitation that script's own
+comment records, and the useful half of the finding is that **clippy is
+what covers it** — the gap is covered, just not by the gate you would
+expect to cover it.
+
+#### Verified in the running application, every link driven
+
+```
+panel:forms  ->  "Form fields / 2 field(s), 2 you can fill here"
+                 rows: "Full name (p. 1)"   (the /TU name, not the raw "FullName")
+                       "Subscribe (p. 1)"
+```
+
+Driven click into the text row → `type:Ken Mantle` → driven click on the
+checkbox (which also drops focus) →
+
+```
+form-row-text  fqn="FullName"  draft="Ken Mantle"  stored="Ken Mantle"
+form-row-check fqn="Subscribe" on=true
+```
+
+**`stored` reading back is the proof of the round trip** through
+`fill_text_field` into the live session — it was **empty before**.
+
+**And the screenshot shows "Ken Mantle" RENDERED ON THE PAGE**, with the
+checkbox's on-appearance drawn: panel → core → regenerated appearance →
+re-rasterized canvas, end to end.
+
+Harness: `diag::Step::Forms` (`panel:forms`) plus traced row rects.
+
+#### Residuals, named rather than hidden
+
+**P1** (the natural continuation of this Pass): radio groups; choice
+fields; flatten; FDF/XFDF import/export in Batch Tools;
+regenerate-appearances; per-row page jump; canvas highlight.
+
+**P2:** click-on-canvas-to-edit; comb cell dividers; `/Tabs` computed tab
+order; rich-text editing.
+
+### Gates for Passes 37.0–37.2 (measured at `c1158cd`; engineer-run and relayed, R87 — this librarian has no shell)
+
+- **`cargo test --workspace`: 1966 passed, 0 failed** — 1960 → 1961 →
+  1966 across the three commits; **9 new tests** total.
+- **`cargo fmt --all --check`** clean.
+- **`cargo clippy --workspace --all-targets -- -D warnings`** clean.
+- **`tools/check-ui-strings.sh`** clean — and **it BIT during Pass
+  37.0**, catching a bare `" pt"` `DragValue` suffix that is now
+  `ui_text::points_suffix()`.
+- **`cargo tree -p pdfce-core`** and **`cargo tree -p pdfce-render`**:
+  **zero** egui/eframe/winit/wgpu/glow matches. Load-bearing on Pass
+  37.1, which adds to `pdfce-render` (CLAUDE.md rule 2).
+- **No new dependencies**, so `THIRD_PARTY_LICENSES.md` is unchanged.
+- **Packaging untouched**; no packaging smoke test run.
+
 ### Pass 34.2 — a selected ce dimension has properties you can reach, and R81's last floating window is gone (core + CLI + GUI — **NOT "(GUI)" as this Pass was filed under *Next up***) — 2026-08-05, committed `63a711d`, branch `pass-8-redaction`
 
 **Terminology (CLAUDE.md rule 15).** Every dimension object in this entry
@@ -10057,6 +10582,50 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
+### ★ Rich-text fill: should `pdfce-core` refuse too, so `pdfce-cli fill-field` gets the same guard? — UNDECIDED, filed 2026-08-05 with Pass 37.2 (no Pass number assigned)
+
+**The finding, restated so this entry stands alone.**
+`EditSession::fill_text_field` does **not** special-case the `RichText`
+field flag. On a rich-text field it overwrites the value with plain text
+and regenerates a plain appearance, **silently discarding the stored
+formatting** — a lossy conversion presented to the operator as an
+ordinary edit, which is the *sneaky* half of CLAUDE.md rule 4.
+
+**What Pass 37.2 shipped:** the **GUI** Forms panel disables the row and
+explains why (R83). **What it did not:** any guard in `pdfce-core`. So
+**`pdfce-cli fill-field` can still perform the silent lossy conversion
+today**, and so could any future shell.
+
+**The decision, with both sides stated:**
+
+- **For core refusing.** It makes the guarantee **structural** rather
+  than per-shell, and gives both shells **one** answer with **one**
+  wording — the same argument that produced
+  `EditSession::fill_refusal()` in this very Pass (return the error, not
+  a bool, so the shell does not invent wording for a distinction core
+  already knows). A guard that lives in only one of two shells is a
+  guard that a third shell will not inherit.
+- **Against core refusing.** It makes a **currently-succeeding CLI
+  operation start failing** — a behaviour change to a shipped
+  subcommand, not merely an addition. Scripts that fill rich-text fields
+  today and accept the flattening would break. If core refuses, the
+  refusal needs an exit code, a named `EditError` variant, and a decision
+  about whether an explicit opt-in override (`--allow-rich-text-loss` or
+  similar) exists at all.
+
+**Implementation trap that must survive into whoever picks this up:**
+**`FieldFlags::RICH_TEXT` (bit 26) has the SAME BIT VALUE as
+`RADIOS_IN_UNISON`.** The check **must** gate on field type **first**;
+testing the bit alone reports **every radio group as rich text**. This is
+a property of the ISO 32000 field-flag tables, which assign bit meanings
+**per field type**. Pass 37.2's GUI check is already written this way and
+is the reference implementation.
+
+**Not scoped to a Pass, and deliberately not given a number** — it is a
+one-verb decision, and whichever Pass next touches the forms subsystem
+(the Pass 37.2 **P1** set is the obvious host) should resolve it rather
+than carry it.
+
 ### ★ Operator request 2026-08-05 — GUI usability: docked tool options, implicit gesture-commit, and the ce-dimension property surface (Pass families 34 and 35, decision 031, question (aw))
 
 **Verbatim, 2026-08-05** (operator, relayed through `pdfce-engineer`):
@@ -18900,6 +19469,74 @@ not a judgment call:**
   a gate at the relevant commit path, not the presence of a
   capability-specific call site — read the function the commit path
   actually calls, not just its name.
+  **AMENDED 2026-08-05 (engineer ruling, continuation 102) — BROADENED,
+  NOT CORRECTED. The audit runs in TWO directions, and each direction
+  has its own instrument.** The paragraph above is **not wrong** and is
+  **not replaced**. It is the *right* prescription for the failure this
+  rule was minted from — "Extract pages" and "composite text" were both
+  cases where the GUI **already had** the capability and a name-based
+  grep said it did not, and for a false negative about something
+  *present*, auditing the `Action` enum is exactly correct, because the
+  capability is in there under a name the grep could not guess. What the
+  2026-08-05 GUI-gap sweep hit is the **mirror** failure: a capability
+  the GUI genuinely does not have. The reason `Action` is structurally
+  blind to that one is the whole insight, and fits in a sentence:
+  **`Action` enumerates what the GUI HAS, so it can prove a capability
+  is present under an unexpected name, and can never prove one is
+  absent.** Pass 37.2's entire Forms surface had no `Action` variant, no
+  `PaneSubject` and no string anywhere in `pdfce-gui` — an `Action`
+  sweep would have returned a clean bill of health on the largest gap in
+  the application. So:
+  - *"Does the GUI already do this?"* → **audit the `Action` enum /
+    dispatch surface** and its push sites. Catches a capability present
+    under a name a grep cannot guess. (This rule as originally written,
+    the paragraph immediately above.)
+  - *"Is any core capability unreachable from the GUI?"* → **enumerate
+    `EditSession`'s `pub fn`s** and check each for a call site anywhere
+    under `crates/pdfce-gui/src/`. Catches a capability that is absent
+    entirely — which the first direction cannot see. `EditSession`'s
+    `pub fn` list is exhaustive by construction: a capability that is
+    not a `pub fn` on the session type is not a capability.
+  **The second direction's two known false-positive shapes**, recorded
+  because a reader who does not expect them will file two phantom gaps.
+  Resolve every unreferenced verb by **reading its call path**, never by
+  trusting the list — an unreferenced `pub fn` means *"nothing calls
+  this name"*, which is not the claim *"this capability is
+  unreachable"*:
+  - **Semantic alias.** `rotate_page_by` / `set_page_rotation` had no
+    GUI call site and the GUI was **correct** — it calls `rotate_pages`,
+    the certification-gated entry, instead. The capability is reachable;
+    the enumerated verb is not the one that reaches it.
+  - **Near-name sibling.** `mark_redactions_by_search` present,
+    `mark_redactions_by_pattern` absent — one real gap sitting beside
+    one non-gap, distinguishable only by reading both. Any check that
+    reasons about the *family* ("redaction marking is wired") rather
+    than the *member* reports the real gap as covered.
+  Also expect plumbing and say so in the report: 13 of the 23
+  unreferenced verbs in the 2026-08-05 sweep were plumbing (`dirty_set`,
+  `into_document`, `page_slots`, …) — not capabilities, nothing to
+  reach. A sweep that does not separate plumbing from capability
+  produces a number nobody can act on.
+  **Why this is an amendment in place and not a peer rule — the
+  deciding argument (engineer, continuation 102).** Both halves answer
+  the SAME question — *"does this capability reach this shell?"* — from
+  opposite ends. If they are two numbered rules, someone looks up the
+  question, finds this rule, follows it alone, and gets a clean bill of
+  health on a missing feature, which is precisely what would have
+  happened to Forms. One rule carrying both directions makes that
+  mistake structurally unavailable. (Same shape as the continuation-100
+  ruling on the no-in-app-oracle proposal; the amendment mechanism is
+  already established — `tools/check-ledger-numbers.py` counts one
+  allowlisted rule amendment today, R26.) **No number was minted:
+  ceiling stays R156, R157 remains next free, and decision 030's three
+  contingent candidates keep their claim on R157. Nothing renumbered.**
+  **Consequence — the owed follow-up is RE-SCOPED, and this is also
+  accepted.** The `FEATURES.md` `gui`-column re-verification owed since
+  continuation 97 was planned as an **`Action`-variant sweep**, which is
+  direction one only — the half that cannot find a missing capability.
+  It must now run in **BOTH** directions. The 2026-08-05 sweep already
+  performed direction two for the three capabilities Passes 37.0–37.2
+  delivered; the remaining rows are still owed.
   **Why this is a distinct rule from R151, not a restatement of it.**
   R151 audits whether a shipped `pub fn` has **any** caller at all,
   anywhere — its failure mode is a capability with zero consumers. This
@@ -18945,6 +19582,208 @@ not a judgment call:**
   ceiling stays **(az)** (**(ba)** next free), unchanged.
   `tools/check-ledger-numbers.py --stats` should be re-run after this
   commit — this librarian has no shell and has not run it itself.
+
+### RESOLVED 2026-08-05 — R156 amendment: the audit runs in TWO directions — ACCEPTED AS AN AMENDMENT TO R156 IN PLACE; R157 NOT MINTED
+
+**RULING (engineer, 2026-08-05, continuation 102): ACCEPTED, AS AN
+AMENDMENT TO R156 IN PLACE.** The adopted text now lives inside **R156's
+own entry** in this section, under *"AMENDED 2026-08-05 (engineer
+ruling, continuation 102) — BROADENED, NOT CORRECTED."* **R157 was NOT
+minted. The standing-rule ceiling stays R156** (R157 still next free).
+**Nothing was renumbered**, and decision 030's three still-unminted
+contingent candidates (§6.2(a), §4.5, "date and label every contract
+statement") **keep their claim on R157**, exactly as before this
+proposal was filed.
+
+**The FRAMING is corrected, and the engineer's correction matters more
+than the verdict.** Record the reasoning as stated here, not as the
+proposal below argued it:
+
+**R156 is NOT WRONG, and the amendment must not say it is.** The
+proposal called the `Action` sweep *"the wrong prescription"*. It is
+not. It is the **right** prescription for the failure R156 was minted
+from, and **incomplete** for the opposite one. Both source incidents —
+"Extract pages" and "composite text" — were cases where the GUI
+**already had** the capability and a name-based grep said it did not.
+For that failure, a false negative about something **present**, auditing
+the `Action` enum is exactly correct, because the capability is in there
+under a name the grep could not guess.
+
+What the 2026-08-05 sweep hit is the **MIRROR** failure: a capability
+the GUI genuinely does not have. For that question `Action` is
+structurally blind, and the reason is the whole insight:
+**`Action` enumerates what the GUI HAS, so it can prove a capability is
+present under an unexpected name, and can never prove one is absent.**
+Pass 37.2's entire Forms surface had no `Action` variant, no
+`PaneSubject` and no string anywhere in `pdfce-gui` — an `Action` sweep
+would have returned a clean bill of health on the largest gap in the
+application.
+
+**So the amendment's content is: the audit runs in TWO directions, and
+each direction has its own instrument.**
+
+- *"Does the GUI already do this?"* → audit the `Action` enum / dispatch
+  surface. Catches a capability present under a name a grep cannot
+  guess. (R156 as originally written.)
+- *"Is any core capability unreachable from the GUI?"* → enumerate
+  `EditSession`'s `pub fn`s and check each for a call site anywhere
+  under `crates/pdfce-gui/src/`. Catches a capability that is absent
+  entirely — which the first direction cannot see.
+
+Plus the second direction's two known false-positive shapes — the
+**semantic alias** (`rotate_pages`, the certification-gated entry, not
+`rotate_page_by`) and the **near-name sibling**
+(`mark_redactions_by_search` present, `mark_redactions_by_pattern`
+absent) — recorded because a reader who does not expect them will file
+two phantom gaps.
+
+**Why an amendment and not a peer rule — the deciding argument.** Both
+halves answer the SAME question ("does this capability reach this
+shell?") from opposite ends. If they are two numbered rules, someone
+looks up the question, finds R156, follows it alone, and gets a clean
+bill of health on a missing feature — which is precisely what would have
+happened to Forms. One rule with both directions makes that mistake
+structurally unavailable. Same shape as the continuation-100 ruling on
+the no-in-app-oracle proposal, and the amendment mechanism is already
+established — `tools/check-ledger-numbers.py` counts one allowlisted
+rule amendment today, R26.
+
+**Also ACCEPTED in the same ruling: the owed R156 `FEATURES.md`
+re-verification is RE-SCOPED to run in BOTH directions.** The
+librarian's flag on this was right — it was planned as an
+`Action`-variant sweep, which is direction one only, and direction one
+is the half that cannot find a missing capability.
+
+**Original proposal text follows, unedited** (append-only spirit: the
+reasoning that produced the ruling is part of the record, not
+scaffolding to delete). Read everything below as the case that was put,
+including its "the wrong prescription" framing which the ruling above
+**corrects** — not as current status. Current status is the ruling
+above, and the binding text is R156's own amended entry.
+
+---
+
+**Status AS FILED: a librarian PROPOSAL, filed 2026-08-05 with Passes
+37.0–37.2 (`2bceb73`, `f81ba89`, `c1158cd`). It had NO number, was NOT
+in force, and amended nothing until the engineer ruled.** The engineer
+minted no standing rule for this sweep and explicitly handed the
+adoption call to this librarian to *propose* and to the engineer to
+*accept* — *"if you propose one, propose it — do not mint it silently"*
+— the same protocol used for the proposal ruled on at continuation 100.
+
+**Recommended disposition: an AMENDMENT to R156, not a new number.**
+Reasoning below, with the case for a number stated too so the engineer
+can weigh it.
+
+#### The proposed text
+
+Amend **R156**'s *"The mechanical check, stated so it is checkable at
+review time"* paragraph as follows.
+
+**(a) Sweep the side the gap is measured against.** To find whether the
+GUI reaches core's capabilities, **enumerate every `pub fn` on
+`EditSession`** (the core mutation surface) and check each for a call
+site under `crates/pdfce-gui/src/`. Do **not** sweep the `Action` enum
+for this purpose. `Action` enumerates **what the shell already has**, so
+sweeping it can find a **dead** `Action` but can **never** find a
+capability the shell **never named** — and "never named" is the exact
+shape of the largest gaps. `EditSession`'s `pub fn` list is exhaustive by
+construction: a capability that is not a `pub fn` on the session type is
+not a capability.
+
+**(b) R156's existing `Action`-grep check is retained for what it is
+good at** — confirming a **suspected** capability is reachable, one row
+at a time. It is a **verification** technique for a suspicion you already
+have. (a) is a **discovery** technique for suspicions you do not. Both
+belong in the rule; neither substitutes for the other.
+
+**(c) Resolve every unreferenced verb by READING ITS CALL PATH, never by
+trusting the list.** An unreferenced `pub fn` means *"nothing calls this
+name"*, which is **not** the claim *"this capability is unreachable"*.
+Two false-positive shapes, both observed in the 2026-08-05 sweep:
+
+- **The semantic alias.** `rotate_page_by` / `set_page_rotation` had no
+  GUI call site and the GUI was **correct** — it calls the
+  certification-gated `rotate_pages` instead. The capability is
+  reachable; the enumerated verb is not the one that reaches it.
+- **The near-name sibling.** `mark_redactions_by_search` vs
+  `mark_redactions_by_pattern` differ by one suffix. The GUI had the
+  first, not the second. Any check that reasons about the **family**
+  ("redaction marking is wired") rather than the **member** reports this
+  as covered. It was not, and the missing member was the one that marks
+  every SSN-shaped run in one action.
+
+**(d) Expect plumbing, and say so in the report.** 13 of the 23
+unreferenced verbs in the 2026-08-05 sweep were plumbing (`dirty_set`,
+`into_document`, `page_slots`, …) — not capabilities, nothing to reach. A
+sweep that does not separate plumbing from capability produces a number
+nobody can act on.
+
+#### Why an AMENDMENT rather than R157 (the recommendation)
+
+1. **It has no independent life.** Its entire content is *"how to perform
+   R156's check correctly."* A reader who has not read R156 has nothing
+   to attach it to. This is the identical shape the engineer ruled on at
+   continuation 100: **a rule that is only a refinement of, or exception
+   to, another rule is a scope note, not a peer** — and putting it in the
+   numbered list as a sibling **misrepresents the dependency to every
+   future reader**, because that list is read as a list of independent
+   obligations.
+2. **Leaving R156's prescribed check unamended is worse than the
+   amendment being unnumbered.** R156 currently prescribes a replacement
+   technique that **cannot find the largest class of gap it exists to
+   find** — Pass 37.2's entire Forms surface had no `Action` variant, no
+   `PaneSubject` and no string in `pdfce-gui`, so an `Action`-variant
+   sweep would have returned a clean bill of health on it, truthfully and
+   uselessly. A rule with an **incomplete prescription** is more
+   dangerous than one with none, because it terminates the audit. That
+   argues for **fixing R156**, which is what an amendment does, and
+   against **adding a second rule beside it**, which leaves the wrong
+   prescription standing.
+3. **`KNOWN_RULE_AMENDMENTS` precedent exists.** `tools/check-ledger-
+   numbers.py` already models a rule amendment as a distinct thing from a
+   rule definition (R26). Amending in place is a shape this project has
+   tooling for.
+
+#### Why it might instead be MINTED as R157 (the case against the recommendation)
+
+The two false-positive shapes in (c) are **not** about cross-shell
+naming, which is R156's actual subject. They are about the **gap between
+a name having no callers and a capability having no route** — a distinct
+epistemic claim that would still be true in a project with only one
+shell. If the engineer reads (c) as the substance and (a)/(b) as the
+delivery mechanism, then the substance is genuinely new and a number is
+defensible.
+
+**Numbering, if minted:** it would claim the next free slot against the
+live ceiling — **R157** at the time of this filing — under the same
+first-filed-against-the-live-ceiling transfer mechanism R150→…→R156 each
+used in turn, pushing decision 030's three still-unminted contingent
+candidates (§6.2(a), §4.5, "date and label every contract statement") to
+**R158**.
+
+**Ceiling is UNCHANGED at R156 by this filing** (**R157** next free)
+because **nothing is minted here**.
+
+#### Consequence either way — the owed R156 follow-up must be re-scoped
+
+The `FEATURES.md` `gui`-column re-verification owed since continuation 97
+was scoped as an **`Action`-variant sweep**. Under (a) that plan is the
+weaker instrument and should be redone as an **`EditSession` `pub fn`
+sweep**. The 2026-08-05 sweep already performed it for the three
+capabilities Passes 37.0–37.2 delivered; the remaining rows are still
+owed.
+
+**— END OF THE PROPOSAL AS FILED. Two corrections from the ruling at the
+head of this block:** (1) the proposal's framing of the `Action` sweep as
+*"the wrong prescription"* is **superseded** — R156 was **BROADENED, not
+corrected**, and the `Action` direction is retained as the right
+instrument for its own direction; (2) the re-scoped `FEATURES.md`
+re-verification runs in **BOTH** directions, not as a straight
+substitution of the `EditSession` sweep for the `Action` sweep. The
+numbering paragraph above stands as filed and is unaffected by the
+ruling: **nothing was minted, the ceiling is R156, R157 is still next
+free, and decision 030's three contingent candidates still take R157.**
 
 ### RESOLVED 2026-08-05 — "no in-app oracle ⇒ extract the rule as a pure function, unit-test it, and STATE the substitution" — ACCEPTED AS TO SUBSTANCE, REFUSED AS TO NUMBER; FOLDED INTO R86'S SCOPE
 

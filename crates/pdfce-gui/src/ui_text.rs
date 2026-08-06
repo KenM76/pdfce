@@ -6138,3 +6138,143 @@ pub fn form_field_no_appearance_for_state(label: &str) -> String {
         "“{label}” changed, but this document has no drawn appearance for that state — the value is set even though the page looks the same."
     )
 }
+
+// -- Form-wide operations (forms-panel.md §6, §7) ---------------------------
+
+/// The regenerate-appearances button.
+pub fn forms_regenerate_button() -> &'static str {
+    "Redraw values"
+}
+
+/// Its tooltip — leads with the problem it solves, not the mechanism.
+pub fn forms_regenerate_tooltip() -> &'static str {
+    "Draw every field's current value into the document, so it looks the same in every viewer \
+instead of depending on each one to render it. Use this if a filled value looks wrong or \
+missing somewhere else."
+}
+
+/// The flatten button.
+pub fn forms_flatten_button() -> &'static str {
+    "Flatten form"
+}
+
+/// Its tooltip — delete-shaped weight, so it has to be honest and complete.
+///
+/// Says what is lost, what survives, and — the part an operator cannot guess —
+/// that under the default incremental save the old values are still present in
+/// the file's previous revision. That last clause is why this is a tooltip and
+/// not a blocking confirmation: flatten is not structurally irreversible the
+/// way applying a redaction is.
+pub fn forms_flatten_tooltip() -> &'static str {
+    "Turn every field's current value into ordinary page content and remove the form. The \
+values stay visible but stop being editable, and anything typed into them can no longer be \
+changed or exported. One undo reverses it. Note: with the normal save, the old field values \
+are still recoverable from the file's earlier revision — flatten is not a way to remove \
+sensitive answers. Use Redact for that."
+}
+
+/// The export-form-data button.
+pub fn forms_export_button() -> &'static str {
+    "Export data…"
+}
+
+/// Its tooltip.
+pub fn forms_export_tooltip() -> &'static str {
+    "Save just the field values to an FDF or XFDF file — the values without the document, so \
+they can be loaded into another copy of the same form. Type a .xfdf extension for XML."
+}
+
+/// The import-form-data button.
+pub fn forms_import_button() -> &'static str {
+    "Import data…"
+}
+
+/// Its tooltip.
+pub fn forms_import_tooltip() -> &'static str {
+    "Load field values from an FDF or XFDF file into this document. Values whose field names \
+this document does not have are counted and skipped, never guessed at."
+}
+
+/// The file-dialog filter label for form data.
+pub fn forms_data_filter_label() -> &'static str {
+    "Form data (FDF, XFDF)"
+}
+
+/// The default filename offered when exporting.
+pub fn forms_export_default_name() -> &'static str {
+    "form-data.fdf"
+}
+
+/// Report after a flatten.
+pub fn forms_flattened(fields: usize, widgets: usize, pages: usize) -> String {
+    format!(
+        "Flattened {fields} field(s): {widgets} appearance(s) drawn into {pages} page(s). \
+Undo reverses this."
+    )
+}
+
+/// Report after regenerating appearances.
+///
+/// Carries the engine's two disclosures rather than dropping them: an applied
+/// auto-size (pdfce CHOSE a font size, which the operator did not) and
+/// characters with no `WinAnsi` code (which simply will not appear). Both are
+/// things a person would otherwise discover by noticing their document looks
+/// wrong.
+pub fn forms_appearances_regenerated(
+    count: usize,
+    cleared: bool,
+    autosize: Option<f64>,
+    unencodable: usize,
+) -> String {
+    let mut out = format!("Redrew {count} field value(s).");
+    if cleared {
+        out.push_str(
+            " Viewers will now show these values as drawn here, rather than \
+each drawing its own.",
+        );
+    }
+    if let Some(size) = autosize {
+        out.push_str(&format!(
+            " One field asked for an automatic size; pdfce chose {size:.1} pt."
+        ));
+    }
+    if unencodable > 0 {
+        out.push_str(&format!(
+            " ⚠ {unencodable} character(s) have no code in this field's font and will not \
+appear — they are still stored in the value."
+        ));
+    }
+    out
+}
+
+/// Report after exporting form data.
+pub fn forms_data_exported(fields: usize, path: &str) -> String {
+    format!("Exported {fields} field value(s) to {path}")
+}
+
+/// Report when writing the export failed.
+pub fn forms_data_export_failed(err: &str) -> String {
+    format!("Could not write the form-data file: {err}")
+}
+
+/// Report when reading or parsing an import failed.
+pub fn forms_data_import_failed(err: &str) -> String {
+    format!("Could not read that form-data file: {err}")
+}
+
+/// Report after importing form data.
+///
+/// The skipped count is stated whenever it is non-zero, because a data file
+/// that names fields this document does not have is the signature of importing
+/// the WRONG form — and a silent partial import looks exactly like a complete
+/// one.
+pub fn forms_data_imported(applied: usize, skipped: usize) -> String {
+    if skipped == 0 {
+        format!("Imported {applied} field value(s).")
+    } else {
+        format!(
+            "Imported {applied} field value(s). {skipped} name(s) in the file are not fields \
+in this document and were skipped — check that this data belongs to this form."
+        )
+    }
+}

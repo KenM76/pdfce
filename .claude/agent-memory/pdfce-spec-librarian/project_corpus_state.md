@@ -707,6 +707,61 @@ and 0.95) ⇒ **refuted arithmetically, not by plausibility.** Three sub-rules:
   the "DISPATCH CONFIRMED" line is useful provenance (same posture as item 19's
   flag-value note). Record confirmations, not just corrections.
 
+**26. A COLLISION/RE-INDEX dispatch — the clause is ALREADY fully covered and the
+finding lives in the JOIN of sibling tables, not in any one of them.** Established
+2026-08-05 on the Pass-37.2 `/Ff` field-flags build. Tables 221/226/228/230 were
+already verbatim on disk (from the Pass-7 build) and **nothing was wrong with
+them**; the hazard (bit 26 = `RadiosInUnison` on `/Btn` vs `RichText` on `/Tx`)
+is invisible when each table is read on its own axis. Deliverable = a derived
+`iso32000__ref__*` consolidator that **re-indexes the existing verbatim material
+on a DIFFERENT KEY** (here: by bit position instead of by field type), plus a
+short axis section in each source file pointing at it. Extends item 8 (new AXIS)
+with a third shape: not read→write, not stage-1→stage-2, but **same facts, new
+index key**. Five sub-rules:
+
+- **When a dispatch names a hazard, ANSWER THE GENERAL QUESTION EXHAUSTIVELY, not
+  the instance.** The dispatch asked "is bit 26 the only multi-meaning position —
+  check rather than assume." Enumerating the union of all four tables by bit
+  position both **confirmed** it and surfaced the near-miss the dispatch didn't
+  know about: **bit 23 `DoNotSpellCheck` is shared by Tables 228 and 230 with the
+  same name and meaning, but only Table 230 gates it** ("shall not be used unless
+  the `Combo` and `Edit` flags are both set"). Same-name-different-precondition is
+  a *third* category between "unique" and "collision" and is worth naming.
+- **Re-indexing an already-ingested table family FINDS ERRORS IN THE DERIVED
+  PROSE around it.** `iso32000__s__12.7.3.md` said "bits 4–14, 18–20, 22–27 are
+  type-specific" — it omitted 15/16/17 and 21 and wrongly included the reserved
+  4–12. Nothing in the verbatim tables was wrong; the *summary sentence* was. Any
+  hand-written "bits X–Y" range next to a verbatim table is a computed claim and
+  should be re-derived from the table, not read.
+- **A KEY NAME can be overloaded across dictionaries, not just a bit within one.**
+  `Ff` is FOUR unrelated flag words in ISO 32000-1: field dict (Tables
+  221/226/228/230), `/SV` seed value (Table 234, bits 1–7 = Filter/SubFilter/V/
+  Reasons/LegalAttestation/AddRevInfo/DigestMethod), `/SV /Cert` (Table 235, bits
+  1–7 = Subject/Issuer/OID/SubjectDN/Reserved/KeyUsage/URL), and FDF field (Table
+  246). **Three of them nest inside a single `/Sig` field dictionary.** When
+  building any key-centric file, `grep -n "^<Key> \|<Key> integer"` the whole
+  source for other definitions of the same key before declaring what it means.
+- **The spec sometimes ENUMERATES its own table family — quote it as closure
+  evidence.** Table 246's FDF `/Ff` row cites "Table 221, Table 226, Table 228,
+  and Table 230", which is the standard's own confirmation that no fifth
+  field-flag table exists. Cheaper and stronger than asserting completeness from
+  a manual sweep.
+- **Two dispatch-hypothesis outcomes in one build (items 15/18/21 discipline):**
+  the dispatch's *bit values* were **all correct** (re-derived via `2^(bit−1)`)
+  but its *table numbers* were **wrong for the first two** — "Table 226 (common)
+  / 227 (button)"; ISO 32000-1:2008 has **221** common, **226** button, and
+  **Table 227 is `/Opt` for check box/radio, not a flag table**. Cheapest possible
+  check: `grep -n "^Table 2[0-9][0-9] – " on the page dump. Do it even when the
+  later numbers in the list are right — a partially-correct list reads as verified.
+
+**Also this build:** the operational deliverable of a decode-hazard file is a
+**function SIGNATURE**, stated as such — `decode_flags(ff: u32, ft: FieldType)`,
+never `decode_flags(ff: u32)`. Naming the wrong signature is what makes the
+finding actionable; a prose warning about bit 26 is not. And when a required
+input (here `/FT`) is itself *inheritable*, say so in the same breath — the
+hazard is the **conjunction** (reused bits + inheritable discriminator), and
+either half alone is harmless.
+
 **16. Under a NO-FALLBACK-SYNTHESIS product rule (pdfce R43), per-subtype spec
 coverage collapses to a binary "AP-vs-fallback map".** Every ISO 32000-1 §12.5.6
 geometry subtype defines a fallback look from its own keys (`L`/`Vertices`/

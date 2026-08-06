@@ -71,7 +71,7 @@ next filing.
 | [x] | [x] | [x] | Within-block reflow incl. justified alignment (Pass 15.x, FF-A) — open defect: auto-detected wrap width can inherit a prior edit's overflow (Pass 33.0, disclosed but not yet fixed) |
 | [x] | [x] | [x] | Add new page text: point insert + wrapped multi-line box (Pass 16.x, FF-D) |
 | [x] | [x] | [x] | Edit composite/CID (`/Type0`) text runs (Pass 29.0) — the GUI's Edit-Text commit path (`commit_text_edit_draft`) calls `EditSession::edit_text` directly with no composite gate of its own, so it inherited the capability the moment core lifted the refusal; no GUI-side wiring was needed (see R156). **Exception:** word spacing (`Tw`) on a composite run is still refused (R91) — that gate is real and distinct from text-edit itself |
-| [x] | [x] | [ ] | Add non-Latin text via a subsetted, embedded donor font (Pass 21.0, FF-C P0, glyf/TrueType donors only) — GUI slice not started |
+| [x] | [x] | [x] | Add non-Latin text via a subsetted, embedded donor font (Pass 21.0 core/CLI; Pass 37.1 GUI — face picker in Add Text, supplied faces listed first, refusal-with-remedy, measured embed disclosure). glyf/TrueType donors only; **no shaping ever (R17)** — CJK/Cyrillic/Greek/Hebrew are right, Arabic/Devanagari/Thai embed and read WRONG. `fsType` licence disclosure (R109) still owed; applying a donor to EXISTING text still unbuilt (Pass 21.2/21.3) |
 
 ### Vector objects (Inkscape-style editing)
 
@@ -110,15 +110,16 @@ next filing.
 
 | core | cli | gui | Feature |
 |:----:|:---:|:---:|---------|
-| [x] | [x] | [ ] | Fill text/checkbox/radio/choice fields (Pass 7.0, 7.1) — GUI form-fill explicitly named a follow-up slice, not built |
-| [x] | [x] | [ ] | Flatten a form to static page content (Pass 7.1) |
-| [x] | [x] | [ ] | Import/export form data, FDF/XFDF (Pass 7.1) |
+| [x] | [x] | [x] | Fill form fields — core/CLI: text, checkbox, radio, choice; **GUI: text + checkbox only** (Pass 7.0, 7.1 core/CLI; Pass 37.2 GUI Forms panel, P0) — radio groups and choice fields are recognised, listed, and disabled-with-a-reason (P1), as are read-only, signature and pushbutton fields. **Rich-text fields are REFUSED in the GUI** (filling would silently discard stored formatting) — core/CLI do NOT yet refuse; see `ROADMAP.md` *Next up* |
+| [x] | [x] | [ ] | Flatten a form to static page content (Pass 7.1) — GUI is Pass 37.2's P1, not built |
+| [x] | [x] | [ ] | Import/export form data, FDF/XFDF (Pass 7.1) — GUI (Batch Tools) is Pass 37.2's P1, not built |
 
 ### Redaction & security
 
 | core | cli | gui | Feature |
 |:----:|:---:|:---:|---------|
 | [x] | [x] | [x] | Mark redactions by text search or named region (Pass 8.0, 8.1) |
+| [x] | [x] | [x] | Mark redactions by PATTERN — `#` = any digit, `?` = any character, so `###-##-####` marks every SSN-shaped run in one action (Pass 8 core/CLI `redact-mark --pattern`; Pass 37.0 GUI `Match: Exact text \| Pattern` switch over the existing query box) |
 | [x] | [x] | [x] | Apply redaction with a runtime-verified true-removal proof (Pass 8.0, 8.1) |
 
 ### Fonts & rendering
@@ -165,7 +166,10 @@ worth knowing when scoping the work.
 | [ ] | [ ] | [ ] | `EditSession::insert_pages` — true in-place page insertion (no Pass number yet; filed 2026-08-05, Pass 3.5's ship) — the core command that would let Insert edit the open document instead of always writing a new file |
 | [ ] | [ ] | [ ] | Form field creation/authoring — text/checkbox/radio/choice/pushbutton, tab order (decision 020, Pass 20.0–20.7 — decided, scoped, not started; **operator's own priority #4, "after, if that makes sense"**) |
 | [x] | [ ] | [ ] | FF-C remainder — apply an embedded/subsetted font to existing text (Pass 21.2, `set-font`) |
-| [ ] | [ ] | [ ] | FF-C remainder — GUI font-embedding surface (Pass 21.3) |
+| [ ] | [ ] | ◐ | FF-C remainder — Pass 21.3 GUI font-embedding surface. Pass 37.1 shipped its Add-Text half (face picker, refusal-with-remedy, measured embed disclosure). **Still owed:** the `fsType` trust/licence disclosure (R109, owed since Pass 21.0 — core work) and a picker over EXISTING text (blocked on Pass 21.2) |
+| [ ] | [ ] | [ ] | Forms P1 — radio groups, choice fields, flatten, FDF/XFDF in Batch Tools, regenerate-appearances, per-row page jump, canvas highlight (Pass 37.2's own named residuals) |
+| [ ] | [ ] | — | Rich-text fill: should `pdfce-core`/`pdfce-cli` refuse too? Pass 37.2 guards the GUI only; `fill-field` can still silently discard stored formatting. Undecided — `ROADMAP.md` *Next up* |
+| [ ] | [ ] | [ ] | Forms P2 — click-on-canvas-to-edit, comb cell dividers, `/Tabs` computed tab order, rich-text editing |
 | [ ] | [ ] | [ ] | FF-B — cross-block / cross-page reflow |
 | [ ] | [ ] | [ ] | Bulleted/numbered list authoring — **awaiting an explicit operator yes/no; do not schedule until answered** |
 | [ ] | [ ] | [ ] | FF-I — minimal StructTree/`/ActualText` update on tagged-page text edits (deliberately cut from FF-H; needs its own decision record) |
@@ -187,6 +191,6 @@ worth knowing when scoping the work.
 | [ ] | — | [ ] | Autosave / crash-recovery, then true in-place Save (in-place save is deliberately gated on autosave existing first) |
 | [ ] | [ ] | — | Release & distribution channel — Scoop + WinGet manifests, published checksums (blocked on a separate, not-yet-granted publish authorization — independent of the license decision) |
 
-`◐` = partially shipped; see the row's Pass IDs and `ROADMAP.md`'s
-decision-028 item table for the exact split (some of the 6+ named
-sub-items are done, some are not).
+`◐` = partially shipped; the row names its own split. For the decision-028
+row, `ROADMAP.md`'s decision-028 item table has the exact per-item state
+(some of the 6+ named sub-items are done, some are not).

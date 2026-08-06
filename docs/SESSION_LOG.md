@@ -15426,3 +15426,678 @@ specific number to watch.
   behaviour was observed; no PDF was touched.
 - **Nothing `D:\Dev\Rag-Specialized\PDF_Spec\`-worthy**, and that RAG is
   `pdfce-spec-librarian`'s exclusively regardless (hard rule 6).
+
+**Same-day continuation 101 (real date 2026-08-05) — THREE PASSES
+SHIPPED as one GUI-gap sweep: pattern redaction, donor-font embedding in
+Add Text, and the Forms panel. Pass family 37 minted. The AUDIT METHOD is
+filed as the headline, and it is a correction to R156's own prescribed
+check.**
+
+**The operator request that drove all three, verbatim (Ken,
+2026-08-05):** *"zip a backup. then add GUI support for all outstanding
+tools the the other implemented core features."* Both halves performed —
+the backup is recorded below, the GUI work is Passes 37.0–37.2.
+
+**Shipped:**
+- **Pass 37.0 — pattern redaction reaches the GUI; committed
+  `2bceb73`.** GUI only.
+  `EditSession::mark_redactions_by_pattern` shipped in core at Pass 8 and
+  in the CLI as `redact-mark --pattern`, with **no GUI caller at all**.
+  Shipped as a two-way **`Match: [ Exact text | Pattern ]`** switch over
+  the **existing** query box — not a second box, because the two are
+  mutually exclusive inputs to one operation and two boxes would raise
+  "which wins when both are filled?" with no good answer. The hint swaps
+  with the mode and states the whole syntax (`#` = any digit, `?` = any
+  character — two characters long; an operator who has to go hunting will
+  type a literal and get nothing). **Both** hints keep the scanned-page
+  caveat, because a redaction search finding nothing looks **identical**
+  in either mode and dropping the warning from one of two hints is how it
+  stops being read. New GUI state `redact_search_is_pattern: bool`. Not
+  cosmetic: `###-##-####` marks every SSN-shaped run in one action, no
+  literal search expresses that, and the failure mode of missing one by
+  eye is **shipping an un-redacted document**.
+- **Pass 37.1 — the GUI can embed a donor font in Add Text; committed
+  `f81ba89`.** `pdfce-render` + `pdfce-gui`. Pass 21.0 shipped donor
+  subsetting/embedding in core + CLI on 2026-08-04 and **its GUI slice
+  was never started** — so `pdfce-cli add-text --embed-font` could put
+  Devanagari, Greek, Cyrillic or CJK on a page and the GUI could not. An
+  operator who had added a font folder watched pdfce **render** with
+  their font while **refusing to write** with it.
+  - `pdfce-render`: **`FontEnvironment::named_faces()`** — every supplied
+    face name, **sorted**. `named()` answers "do you have this face?",
+    which is all a renderer needs (the document hands it a `/BaseFont`);
+    a shell building a picker has the opposite problem and needs the
+    list. Sorted because the store is a `HashMap` — unsorted output would
+    reshuffle the picker between launches **and** make a scripted GUI run
+    non-reproducible, which the harness depends on.
+  - `pdfce-render`: **`subset_tag_for` HOISTED** from `pdfce-cli`. Two
+    copies of a subset-tag derivation is two chances to change one, after
+    which the CLI and GUI would write **different bytes** for the same
+    document and donor — and the round-trip harness compares bytes. Same
+    reasoning that hoisted `FontEnvironment::subset_stem`.
+  - `pdfce-gui`: **`AddTextState::prop_donor: Option<String>`**,
+    deliberately **not** a widened `prop_font` — a Standard-14 face is
+    written by name and adds no bytes (R79) while a donor is subsetted,
+    adds real bytes, can be refused by name, and its cost is worth
+    disclosing; keeping `prop_font` a `Std14` also leaves the shipped
+    Standard-14 path **bit-for-bit unchanged**. Held as the registered
+    **name**, not bytes, because the font environment is rebuilt whenever
+    a folder changes — cached bytes would describe a detached folder,
+    and a name that no longer resolves is a **refusal the operator can be
+    told about** where stale bytes are not.
+  - Subset refusals surface **by name** with a remedy naming **all four**
+    real causes (CFF outlines, `fsType` licence flags, size ceiling,
+    missing glyph); **three of the four are properties of the chosen
+    FILE** and are not discoverable by retrying. The **draft is
+    retained**, so a refusal costs the font choice, not the typing.
+  - The commit disclosure is a **measurement, not a prediction**
+    (R108/R98), **worded to match the CLI's own line deliberately** —
+    same operation, must not drift into describing itself two ways.
+- **Pass 37.2 — the Forms panel; committed `c1158cd`.** `pdfce-core` +
+  `pdfce-gui`. The largest gap and the only one leaving a shipped
+  capability **entirely unreachable**: core has filled text fields,
+  toggled buttons, set choice values, flattened and imported/exported
+  FDF/XFDF **since Pass 7.0/7.1**, the CLI exposes all six, the GUI
+  exposed **none**. A fillable PDF could be opened in pdfce and not
+  filled. Design: **`docs/ui_specs/forms-panel.md`**
+  (`pdfce-ui-specialist`, 2026-08-05, 752 lines), which **supersedes the
+  never-implemented `docs/ui_specs/pass-7-form-fill.md`** on
+  placement/architecture — that spec predates four shell changes and
+  specified a canvas overlay the current shell has no hit-testing for.
+  This commit ships its **P0**.
+  - New **`PaneSubject::Forms`** (fifth subject) + **`RibbonGroup::
+    Forms`** on the **Edit** tab. **Not `ActiveTool`** (tied to
+    `doc.active_tool`, which this correctly never sets). **Not folded
+    into the Pass-34.2-widened Properties pane** (that pane is "the
+    selected thing"). **Not the Tools tab beside Redact** — Redact is
+    there because it is irreversible, and that reasoning does not
+    transfer to a reversible fill.
+  - **A LIST, not a canvas overlay, and not merely because it is
+    cheaper:** real `TextEdit`/`Checkbox` widgets get **Tab order and
+    AccessKit exposure directly**, where projected overlays get neither
+    and the canvas raster stays screen-reader-illegible.
+    Click-on-the-page-to-edit is named as its own future Pass.
+  - Rows in the **file's** order (`/AcroForm /Fields`) — matches the
+    printed form more often than a sort would. Visible label prefers
+    **`/TU`** (what a screen reader announces), falling back to the FQN;
+    the **raw name is always in the tooltip**, because that is what
+    diagnoses an FDF-import mismatch. **Reads the SESSION, not the file**
+    (Pass 17.1's rule).
+  - Text fill with live **`/MaxLen`** truncation, multiline, and password
+    masking — whose tooltip says **plainly that masking is display-only
+    and the value is stored as plain text**, because a masked box reads
+    as "secure" to anyone not told otherwise. Checkbox toggles
+    immediately.
+  - **`form_field_commit`** — the exact shape Pass 34.2's
+    `place_draft_commit` established. **The equality guard is the one
+    that matters in practice: tabbing THROUGH a form is how people read
+    one**, and without it every pass over a 40-field form pushes **40
+    undo entries** and regenerates **40 appearances**. **4 unit tests**,
+    including that **clearing a filled field IS a commit** — guarding the
+    tempting `if draft.is_empty() { return None }` shortcut that would
+    make a field **impossible to empty once filled**.
+  - Every unfillable row **disabled and explained, never hidden** (R83):
+    read-only, signature, pushbutton, radio group, choice field, and
+    rich-text (below).
+  - **`pdfce-core`: `EditSession::fill_refusal() -> Option<EditError>`**
+    — a pure query returning the refusal a fill **would** raise. **R83
+    needs the answer before the control is offered.** Returns the
+    **error, not a bool**, because the two refusals
+    (`CertificationForbidsChange`, `FieldLockedBySignature`) have
+    different remedies and a bool would force the shell to invent wording
+    for a distinction core already knows — which is how an engine's
+    message and a shell's drift apart.
+  - Two **form-wide disclosures** at the top: **`/NeedAppearances`** (a
+    filled value may look different, or not appear, depending on the
+    viewer) and **JavaScript-computed fields** (pdfce does not run them —
+    decision 009 posture A). Plus a **per-toggle** disclosure when a
+    checkbox's `/AP` has no sub-stream for the state entered — the value
+    changes and nothing on the page moves, which reads exactly like the
+    click not registering.
+
+**Gate numbers, as relayed by the engineer (R87 — nothing here is
+inferred, rounded, or invented; this librarian has no shell):**
+- `cargo test --workspace` at `c1158cd`: **1966 passed, 0 failed** —
+  **1960 → 1961 → 1966** across the three commits, **9 new tests** total.
+- `cargo fmt --all --check` clean.
+- `cargo clippy --workspace --all-targets -- -D warnings` clean.
+- `tools/check-ui-strings.sh` clean — and **it BIT during Pass 37.0**,
+  catching a bare `" pt"` `DragValue` suffix, now
+  `ui_text::points_suffix()`.
+- `cargo tree -p pdfce-core` and `cargo tree -p pdfce-render`: **zero**
+  egui/eframe/winit/wgpu/glow matches. **Load-bearing on Pass 37.1**,
+  which adds to `pdfce-render` (CLAUDE.md rule 2) — not a routine check
+  on this filing.
+- **No new dependencies**, so `THIRD_PARTY_LICENSES.md` is unchanged.
+  Packaging untouched; **no packaging smoke test run**.
+
+### ★★ THE HEADLINE IS THE METHOD, not the three outcomes
+
+The engineer **did not read `FEATURES.md` to find the gaps.** That file's
+`gui` column had already been wrong **twice in one week, in opposite
+directions**, which is the whole reason **R156** exists — a document just
+demonstrated unreliable about exactly this question cannot be the
+instrument that answers it.
+
+What was done instead:
+
+1. **Enumerate every `pub fn` on `EditSession`** — the core mutation
+   surface.
+2. **Check each for a call site anywhere under
+   `crates/pdfce-gui/src/`.**
+3. **Resolve every unreferenced verb by reading its call path**, not by
+   trusting the list.
+
+**23 unreferenced verbs.** 13 were **plumbing** (`dirty_set`,
+`into_document`, `page_slots`, …). Two were **false positives a
+name-based check cannot see**. The rest were real gaps, and became
+Passes 37.0–37.2.
+
+**The two false-positive shapes — the part worth keeping:**
+- **The semantic alias.** `rotate_page_by` / `set_page_rotation` have no
+  GUI call site and the GUI is **correct** — it calls the
+  certification-gated `rotate_pages` instead. "Nothing calls this name"
+  is **not** the claim "this capability is unreachable."
+- **The near-name sibling.** `mark_redactions_by_search` vs
+  `mark_redactions_by_pattern`, one suffix apart. The GUI had the first,
+  not the second. Any check reasoning about the **family** ("redaction
+  marking is wired") rather than the **member** reports this as covered.
+  It was not.
+
+**This is a CORRECTION to R156's prescribed check, not an application of
+it.** R156 says to audit the **`Action` enum**. But `Action` enumerates
+**what the GUI already has** — sweeping it can find a **dead** `Action`,
+never a capability the GUI **never named**. Pass 37.2's entire Forms
+surface had **no `Action` variant, no `PaneSubject`, and no string** in
+`pdfce-gui` before this sweep; an `Action`-variant sweep would have
+returned a clean bill of health on it, truthfully and uselessly.
+`EditSession`'s `pub fn` list enumerates **what core offers** — the side
+the gap is measured against — and is exhaustive by construction.
+
+Filed to `ROADMAP.md` as a **`### PROPOSED, NOT MINTED — R156
+amendment`** block under *Standing rules*, with the recommendation being
+an **amendment to R156 rather than R157**, and the case for minting
+stated too. **Nothing was minted; the standing-rule ceiling is unchanged
+at R156.** The engineer rules, same protocol as the proposal ruled on at
+continuation 100.
+
+**This also answers the owed R156 follow-up better than its original
+plan did.** The `FEATURES.md` `gui`-column re-verification owed since
+continuation 97 was scoped as an **`Action`-variant sweep** — which is
+name-based, and would have missed exactly the gaps this sweep found. It
+should be redone as an `EditSession` `pub fn` sweep; this sweep already
+performed it for the three capabilities shipped here, and the remaining
+rows are still owed.
+
+### ★ A CORRECTNESS FINDING inside Pass 37.2, filed as one rather than left in a commit message
+
+`EditSession::fill_text_field` **does not special-case the `RichText`
+flag.** It would overwrite the value with plain text and regenerate a
+plain appearance, **silently discarding stored formatting** — a lossy
+conversion presented as an ordinary edit, i.e. the **sneaky half of
+CLAUDE.md rule 4**, waiting for the first real-world rich-text field.
+**The GUI row now refuses and says why.**
+
+**The check is GATED ON FIELD TYPE FIRST and must stay that way:
+`FieldFlags::RICH_TEXT` (bit 26) has the SAME BIT VALUE as
+`RADIOS_IN_UNISON`**, so testing the bit without the gate reports **every
+radio group as rich text**.
+
+**UNDECIDED and now filed as a named follow-up:** should `pdfce-core`
+**also** refuse, so `pdfce-cli fill-field` gets the same guard? Today the
+guard is GUI-only, so the CLI can still perform the silent lossy
+conversion. Filed to `ROADMAP.md` *Next up* as **"★ Rich-text fill:
+should `pdfce-core` refuse too?"**, with both sides argued (structural
+guarantee and one wording for both shells, versus a behaviour change to a
+shipped subcommand that would break scripts filling rich-text fields
+today) and the shared-bit trap restated so it survives into whoever picks
+it up. **Deliberately given no Pass number** — it is a one-verb decision
+that the forms **P1** set should resolve rather than carry.
+
+### Findings + decisions
+
+- **Pass family 37 minted**, IDs **37.0 / 37.1 / 37.2**, assigned by this
+  librarian from the live ceiling (family 37 next free; the engineer
+  minted none). Checked for collisions before filing: no "Pass 37"
+  appears anywhere in `docs/`.
+- **Why one family and not three existing ones — the alternative was
+  seriously considered and rejected for a specific reason.** The obvious
+  alternative was **8.2 / 21.3 / 7.2**, filing each ship beside its own
+  feature family's history. It was rejected because **two of the three
+  would have consumed a number for work that is not finished**:
+  - **Pass 21.3** ("GUI. FINAL SLICE") is scoped as face picker +
+    refusal→remedy + measured embed disclosure + **trust and licence
+    disclosure**. The first three shipped; the **`fsType` disclosure
+    (R109, owed since Pass 21.0) did not**, and a picker over **existing**
+    text cannot exist until **Pass 21.2** (`set-font`) does. Numbering
+    this Pass 21.3 would mark a slice shipped that is not.
+  - The **Pass 7.1 "GUI form-fill" residual** is likewise only partly
+    discharged — P0 shipped, **P1 and P2 did not**.
+  Filing under family 37 lets both 21.3 and the Pass-7 GUI residual stay
+  **open and honest**, and keeps the three commits — one operator
+  request, one audit, one session — together where the **method** can own
+  a heading of its own. Both cross-references are written into the Pass
+  entries so neither family loses the thread.
+- **A screenshot changed the design, and that is a process finding.** The
+  first Pass 37.1 build listed supplied fonts **after** the fourteen
+  built-ins; opening the list showed the supplied group **below the
+  fold**, reachable only by scrolling past fourteen faces the operator
+  did not choose. Backwards twice over: someone who added a font folder
+  did it to **use that font**, and it is the **only** route to text the
+  built-ins cannot render, so burying it hides the answer to *"why is my
+  Devanagari blank boxes."* Supplied now leads when non-empty; with no
+  folder added, nothing moves. **The defect was invisible in the source
+  and obvious in the screenshot** — the code correctly appended a second
+  group to a list, which reads as fine until you see where the fold
+  lands.
+- **`PDFCE_DIAG_FONT_DIR` unblocks more than this Pass.** Font folders
+  are added through a **native folder picker**, exactly what the scripted
+  harness cannot drive — so the **whole supplied-font feature (decision
+  012, shipped) had been unobservable since it landed**, not just this
+  slice. Splits on **`;` not `:`**, because these are Windows paths and
+  `C:\fonts` contains a colon.
+- **The Redact surface was UNREACHABLE from `tools/gui-drive.ps1`
+  entirely** — mark-whole-page, search-and-mark, the mark list, apply —
+  so every question about it had to be answered by reading code. **A
+  panel the observation harness cannot open is a panel whose defects only
+  the operator finds**, which is backwards in general and inverted for
+  the one operation in this application that cannot be undone. Now
+  `diag::Step::Redact` (`panel:redact`) with traced rects.
+- **Clippy covered a documented `check-ui-strings.sh` blind spot.** Pass
+  37.2's helper functions first landed **after `mod tests`** — legal
+  Rust, and the **exact** documented blind spot of
+  `tools/check-ui-strings.sh` (it truncates at `#[cfg(test)]`, so
+  anything below is invisible to it). **Clippy's `items after a test
+  module` caught it; the strings gate would not have.** A live instance
+  of the limitation that script's own comment records, and the useful
+  half is knowing **which** gate covers it.
+- **Every one of the three was verified in the RUNNING application
+  against a CLI oracle, with every link driven rather than inferred.**
+  - **37.0** — fixture carrying `SSN 123-45-6789 and 987-65-4321` and
+    `Tel 555-867-5309 acct A7-1234`. CLI `redact-mark --pattern
+    "###-##-####"` → `marks_created=2`. GUI: driven click into the query
+    box, `type:###-##-####`, driven click on **Pattern**, driven click on
+    **Find & mark** → *"2 pending redaction mark(s) — the content
+    underneath them is STILL IN THIS FILE until you apply"*, two Page-1
+    regions of **81 × 17 pt** listed for review. Both agree, and **both
+    correctly DECLINE** the phone number (different shape) and
+    `A7-1234`.
+  - **37.1** — `font-env-rebuilt named=["Noto Sans Devanagari", "Noto
+    Sans Devanagari Regular", "NotoSansDevanagari-Regular"]`;
+    `add-text-font-combo donor=Some("NotoSansDevanagari-Regular")`;
+    `add-text-donor-embedded Embedded a subset of
+    "NotoSansDevanagari-Regular": 6 glyph(s), 2288 byte(s) of font
+    program, covering 6 character(s) - subset tag JXUUYI.` CLI: **6
+    glyph(s), 2288 byte(s), subset tag JXUUYI.** Identical, **tag
+    included** — which is also the proof that hoisting `subset_tag_for`
+    kept both shells writing the **same bytes** rather than merely
+    compiling.
+  - **37.2** — `panel:forms` → *"Form fields / 2 field(s), 2 you can fill
+    here"*, rows **"Full name (p. 1)"** (the `/TU` name, **not** the raw
+    `FullName`) and **"Subscribe (p. 1)"**. Driven click into the text
+    row, `type:Ken Mantle`, driven click on the checkbox (which also
+    drops focus) → `form-row-text fqn="FullName" draft="Ken Mantle"
+    stored="Ken Mantle"` and `form-row-check fqn="Subscribe" on=true`.
+    **`stored` reading back proves the round trip** through
+    `fill_text_field` into the live session — it was **empty before**.
+    **And the screenshot shows "Ken Mantle" RENDERED ON THE PAGE** with
+    the checkbox's on-appearance drawn: panel → core → regenerated
+    appearance → re-rasterized canvas, end to end.
+
+### The backup — the first half of the operator's request, and the discarded first attempt is the finding
+
+**Relayed by the engineer (R87 — this librarian has no shell and asserts
+nothing about disk state; the paragraph below records what was reported,
+not what was observed here).**
+
+- `D:\Dev\pdfce-backups\pdfce-20260805-2035.zip` — **39.7 MB, 25,988
+  entries**: the full working tree minus `target/` and
+  `fixtures/external/`, **plus the history** as
+  `GIT-HISTORY-20260805-2035.bundle` **inside** it.
+- `D:\Dev\pdfce-backups\pdfce-20260805-2035.bundle` — **5.4 MB**, beside
+  it.
+- **Proven restorable rather than merely created:** the bundle was cloned
+  and the tips compared — **`ad0d0d6…` in both**.
+
+**A FIRST ATTEMPT WAS DISCARDED AND DELETED, and this is the reusable
+part.** `Compress-Archive`'s wildcard source **silently skips hidden
+directories**, so **`.git` was omitted** and the zip **had no history at
+all while looking complete** — right file count order of magnitude, right
+size order of magnitude, no error, exit 0. Escalated to
+`D:\dev\rag\rust\` (see RAG escalations below).
+
+**Backup currency going forward is not verifiable from here** — the
+engineer should check `D:\Dev\pdfce-backups\` directly (hard rule 8). The
+figures above are a relay of one reported run, not a claim about the
+directory's current state.
+
+### Still in flight
+
+Everything below is **carried forward unchanged** — none of it was
+touched by this filing.
+
+- **Pass 34.1 slice 4** — move the last floating status/disclosure strips
+  into the Tool Options dock.
+- **Pass 24.0, 24.2–24.5** — remaining ribbon slices (fixed-anchor
+  confirm strip, contextual tool tabs, selection tabs, overflow/collapse,
+  keyboard & accessibility).
+- **Pass 35.0** (ce-dimension tolerance & tolerance types) and **Pass
+  35.1** (drag extension lines to extend/retract).
+- **The `Pages` / `Tool Options` icon-less-tab item.**
+- **The owed R156 `FEATURES.md` `gui`-column re-verification** —
+  outstanding since continuation 97. **Note that this session's audit
+  method is a better answer to it than the original plan:** that plan was
+  an **`Action`-variant sweep**, which is **name-based**; the
+  **`EditSession` `pub fn` sweep** found gaps a name sweep would miss
+  (see the method section above). Re-scope before running it.
+- **`EditSession::insert_pages`** — true in-place page insertion (filed
+  to Backlog at continuation 98, no Pass number); would let GUI Insert
+  stop always writing a new file.
+- **`ARCHITECTURE.md` §4's sync — now SEVEN filings behind.** This
+  filing adds **`EditSession::fill_refusal`**,
+  **`FontEnvironment::named_faces`** and the **hoisted `subset_tag_for`**
+  to the component list §4 owes, on top of the six filings' worth already
+  named (most recently `set_dimension_display`,
+  `CommandKind::SetDimensionDisplay`, `EditError::NotACircularDimension`
+  at continuation 99). Not attempted here; named so it is found rather
+  than rediscovered.
+- **Pass 32.0** — delete one text run without deleting every run sharing
+  its text object.
+- **The `/FD` half** — unchanged, untouched.
+- **Open operator questions (au) and (av)** — unchanged, unanswered.
+
+### For next session
+
+- **★ Pass 35.0 — ce-dimension tolerance and tolerance types — remains
+  the other half of the operator's own 2026-08-05 GUI request**
+  (*"…fractions, tolerance and tolerance types like solidworks has…"*),
+  and Pass 34.2 has already built the per-ce-dimension property surface
+  its controls need to live in. Unchanged from continuations 99/100.
+- **★ The Pass 37.2 forms P1 set is now the natural continuation of THIS
+  session's work** — radio groups, choice fields, flatten, FDF/XFDF
+  import/export in Batch Tools, regenerate-appearances, per-row page
+  jump, canvas highlight. Two of those (flatten, FDF/XFDF) are shipped
+  core+CLI capabilities that **still have no GUI at all**, so they are
+  the same class of gap this session's sweep exists to close.
+- **★ Decide the UNDECIDED `fill_text_field` / `RichText` core
+  question** — should `pdfce-core` refuse, so `pdfce-cli fill-field`
+  gets the guard the GUI now has? Filed to `ROADMAP.md` *Next up*, both
+  sides argued. The forms P1 set is its natural host.
+- **Rule on the PROPOSED R156 amendment** (`ROADMAP.md` *Standing rules*
+  → "PROPOSED, NOT MINTED — R156 amendment"). Recommendation is
+  **amend R156**, not mint R157; the case for minting is stated too.
+  Nothing is renumbered and the ceiling is unchanged either way until the
+  ruling.
+
+**Backup currency not verifiable from here** — engineer should check
+`D:\Dev\pdfce-backups\` directly (hard rule 8). The figures recorded
+above are a relay of one reported run, not a claim about current state.
+
+### Ledger discipline (R106) — continuation 101
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | **THREE: 37.0, 37.1, 37.2** — Pass family **37** minted, assigned by this librarian from the live ceiling (the engineer minted none). Collision-checked: no "Pass 37" existed anywhere in `docs/` before this filing | family **38** now next free; highest ID **37.2** |
+| Standing rules | **none minted.** One **PROPOSED** (no number, not in force): an **amendment to R156** — sweep `EditSession`'s `pub fn` surface, not the `Action` enum; resolve every unreferenced verb by reading its call path | **R156** (**R157** next free), **unchanged**; decision 030's three contingent candidates still hold the claim on R157 |
+| Decision records | **none** | **031** (**032** next free), unchanged |
+| Operator questions | **none** — the rich-text core question is filed as a *Next up* entry, not as a lettered operator question, because it is an **engineering** call, not Ken's | **(az)** (**(ba)** next free), unchanged |
+
+**Ledger-checker state: NOT observable from this filing.** The engineer's
+last run was at `ad0d0d6` and reported Pass families up to **36**,
+standing rules **R156**, decisions **031**, **95** (section, Pass ID)
+pairs, **156** rules, **31** decision files, clean. **That run predates
+these edits**, which add **three new `### Pass 37.x` headings** and one
+`###` block inside `## Standing rules`. **The engineer will re-run
+`tools/check-ledger-numbers.py --stats` after committing this filing and
+report the result** — this librarian has no shell and asserts no
+post-edit ledger state.
+
+**The numbers to watch on that re-run, and what a move in each would
+mean:**
+- `Pass families with headings` should read **37** (highest ID **37.2**),
+  up from 36 — three new headings under one `## Shipped` section, no
+  duplicates.
+- `distinct (section, Pass ID) pairs` should read **98**, up from 95 —
+  exactly three more. Any other number means a heading was parsed
+  differently than intended.
+- `standing rules defined` must stay **156**. This filing added a `###`
+  block inside `## Standing rules` but **no `- **R<n> — ` bullet**; if
+  this count moves in either direction, the block disturbed the rule
+  parse and the block is the thing to look at.
+- `decision records` must stay **031** / **31 files**.
+
+### RAG escalations, continuation 101 — ONE filed to `D:\dev\rag\rust\`; the other two candidates are reasoned, and one is redirected to another owner
+
+**Filed:**
+1. **`D:\dev\rag\rust\compress_archive_wildcard_skips_hidden_dirs_dropping_git.md`**
+   (NEW file) — `Compress-Archive -Path <dir>\*` silently omits hidden
+   directories, so a repo backup zip can look complete (right entry
+   count, right size, exit 0) and contain **no `.git` and therefore no
+   history**. Cross-project: bites any Windows/PowerShell repo-archiving
+   or backup task, in any language. Checked the existing index first
+   (hard rule 4): the nearest files are
+   `gitattributes_last_match_wins_ordering_corrupts_index.md` and
+   `git_stash_on_clean_tree_makes_before_after_comparison_vacuous.md` —
+   both about **git semantics**, neither about **the archiver's file
+   selection**. Genuinely new axis, so a new file rather than an
+   amendment. Cross-referenced to the `git_stash` finding, which is the
+   same *"succeeded, and proved nothing"* shape.
+
+**NOT escalated, with the reasoning stated rather than assumed:**
+- **`D:\dev\rag\egui\` — nothing new.** The screenshot-vs-trace lesson
+  and the raise/settle findings were already escalated with Pass 34.2
+  (continuation 99). Pass 37.1's "a screenshot changed the design"
+  finding is a **second occurrence of an already-filed lesson**, not a
+  new one; it is recorded in this session log and in the Pass entry,
+  which is where a second occurrence belongs until it teaches something
+  the filed lesson does not.
+- **`C:\personal_rag\pdf\` — REDIRECTED, not written, and the call is
+  argued rather than assumed.** The candidate was the
+  **`RICH_TEXT` / `RADIOS_IN_UNISON` shared-bit-value hazard**.
+  - *The case for `personal_rag\pdf\`:* the operational form of the
+    finding is a **trap that bit an implementation** — "test the bit
+    without gating on field type and every radio group reports as rich
+    text" — which reads like exactly the empirical, cost-real-time
+    lesson that subject exists for.
+  - *The case against, which wins:* the shared bit value is **canonical
+    ISO 32000 content**. The field-flag tables assign bit meanings **per
+    field type**, and they say so on their face. Nothing here is a
+    real-world **producer** diverging from the spec — the spec is being
+    followed exactly, by pdfce and by every file. Under **hard rule 6**,
+    *"if it's what the standard says, it's the spec-librarian's"*, and
+    `D:\Dev\Rag-Specialized\PDF_Spec\` is `pdfce-spec-librarian`'s
+    exclusive territory, not this librarian's to write into.
+  - *What was done instead:* the hazard is recorded **twice inside
+    pdfce**, where an implementer will actually meet it — in the Pass
+    37.2 *Shipped* entry and in the *Next up* rich-text decision entry,
+    both stating the gate-on-field-type-first requirement explicitly.
+  - **★ Recommendation to the engineer: dispatch `pdfce-spec-librarian`**
+    to cover the per-field-type field-flag bit tables in
+    `PDF_Spec`, with the shared bit 26 called out by name. It is a
+    canonical-sourcing gap, and it is the kind that produces a
+    plausible-looking bug in any future forms work.
+- **`D:\Dev\Rag-Specialized\Acrobat_Features\`** — no dispatch needed;
+  none of the three Passes scoped a new Backlog bucket, and all three
+  implemented capabilities `pdfce-core` already had.
+
+**Same-day continuation 102 (real date 2026-08-05) — NO PASS SHIPPED, NO
+NUMBER MINTED. Two items: the ledger checker HAS now been run and every
+number continuation 101 predicted matched exactly; and the engineer RULED
+on the proposed R156 amendment — ACCEPTED as an amendment to R156 IN
+PLACE, with the FRAMING corrected.**
+
+**Carry-forward and "For next session" are UNCHANGED from continuation
+101 — see that entry**, not restated here.
+
+### Item 1 — the ledger checker was run, and continuation 101's predictions were exact
+
+Continuation 101 recorded that its ledger-checker state was **not
+observable from that filing** and named four numbers to watch on the
+engineer's re-run. The engineer has now run it. **Verbatim output, as
+relayed by the engineer**, measured at the tip of the continuation-101
+edits **in the working tree** (see the filing note below):
+
+```
+LIVE CEILINGS (read these before assigning any new number):
+  Pass families with headings : up to 37 (highest ID 37.2)
+  Pass families MENTIONED     : up to 37 (highest ID 37.2)
+  CLAIMED BUT NOT YET HEADED  : 5, 9, 9c, 10, 13, 20, 22, 23, 31, 33  <- already spoken for; do NOT reuse
+  standing rules      : R156  -> next free is R157
+  decision records    : 031 -> next free is 032
+
+PARSE STATS (a sudden drop means the conventions moved):
+  distinct (section, Pass ID) pairs : 98
+  standing rules defined            : 156
+  decision files                    : 31
+  allowlisted rule amendments       : 1
+
+ledger-numbers: clean - no duplicate Pass, rule, or decision numbers.
+```
+
+**Every number continuation 101 predicted matched exactly:**
+
+| Predicted at continuation 101 | Observed | Verdict |
+|---|---|---|
+| `Pass families with headings` = **37**, highest ID **37.2** (up from 36) | 37 / 37.2 | match |
+| `distinct (section, Pass ID) pairs` = **98** (up from 95, exactly three more) | 98 | match |
+| `standing rules defined` must **stay 156** | 156 | match |
+| `decision records` = **031** / **31 files** | 031 / 31 | match |
+
+**Specifically — the `###` block added inside `## Standing rules` did NOT
+disturb the rule parse.** That was the one thing continuation 101 flagged
+to watch, on the reasoning that the block uses `###` and carries no
+`- **R<n> — ` bullet, so it should be invisible to `collect_rules()`.
+`standing rules defined` held at **156** and the ceiling held at **R156**,
+which confirms the reasoning empirically rather than by assertion. A
+filing may therefore add a `###` discussion block under `## Standing
+rules` — a proposal, a ruling, a scope note — without touching the rule
+count, provided it does not use the definition bullet shape.
+
+### Item 2 — ENGINEER'S RULING on the proposed R156 amendment: ACCEPTED IN PLACE, and the FRAMING corrected
+
+**RULING (engineer, 2026-08-05): ACCEPTED, AS AN AMENDMENT TO R156 IN
+PLACE. R157 was NOT minted.** Ceiling stays **R156**; decision 030's
+three contingent candidates (§6.2(a), §4.5, "date and label every
+contract statement") **keep their claim on R157**; nothing renumbered.
+
+**The engineer corrected the framing the proposal was filed under, and
+the correction matters more than the verdict.** Recorded as the engineer
+stated it, not as this librarian originally argued it:
+
+- **R156 is NOT WRONG, and the amendment must not say it is.** The
+  proposal called the `Action` sweep *"the wrong prescription"*. It is
+  not. It is the **right** prescription for the failure R156 was minted
+  from, and **incomplete** for the opposite one. Both source incidents —
+  "Extract pages" and "composite text" — were cases where the GUI
+  **already had** the capability and a name-based grep said it did not.
+  For that failure, a false negative about something **present**,
+  auditing the `Action` enum is exactly correct, because the capability
+  is in there under a name the grep could not guess.
+- **What the 2026-08-05 sweep hit is the MIRROR failure** — a capability
+  the GUI genuinely does not have — and the reason `Action` is
+  structurally blind to it is the whole insight, in one sentence:
+  **`Action` enumerates what the GUI HAS, so it can prove a capability is
+  present under an unexpected name, and can never prove one is absent.**
+  Pass 37.2's entire Forms surface had no `Action` variant, no
+  `PaneSubject` and no string anywhere in `pdfce-gui` — an `Action` sweep
+  would have returned a clean bill of health on the largest gap in the
+  application.
+- **So the amendment's content is: the audit runs in TWO directions, and
+  each direction has its own instrument.**
+  - *"Does the GUI already do this?"* → audit the `Action` enum /
+    dispatch surface. Catches a capability present under a name a grep
+    cannot guess. (R156 as originally written.)
+  - *"Is any core capability unreachable from the GUI?"* → enumerate
+    `EditSession`'s `pub fn`s and check each for a call site anywhere
+    under `crates/pdfce-gui/src/`. Catches a capability that is absent
+    entirely — which the first direction cannot see.
+- **The second direction's two known false-positive shapes are recorded
+  in the rule**, because a reader who does not expect them will file two
+  phantom gaps: the **semantic alias** (the GUI calls `rotate_pages`, the
+  certification-gated entry, not `rotate_page_by`) and the **near-name
+  sibling** (`mark_redactions_by_search` present,
+  `mark_redactions_by_pattern` absent — one real gap sitting beside one
+  non-gap, distinguishable only by reading both).
+- **Why an amendment and not a peer rule — the deciding argument.** Both
+  halves answer the SAME question ("does this capability reach this
+  shell?") from opposite ends. If they are two numbered rules, someone
+  looks up the question, finds R156, follows it alone, and gets a clean
+  bill of health on a missing feature — precisely what would have
+  happened to Forms. One rule with both directions makes that mistake
+  structurally unavailable. Same shape as the continuation-100 ruling on
+  the no-in-app-oracle proposal, and the amendment mechanism is already
+  established — the checker counts one allowlisted rule amendment today,
+  **R26**.
+
+**Also ACCEPTED in the same breath: the owed R156 `FEATURES.md`
+re-verification is RE-SCOPED to run in BOTH directions.** This
+librarian's flag on it was right — it was planned as an
+`Action`-variant sweep, which is direction one only, and direction one is
+the half that cannot find a missing capability. The 2026-08-05 sweep
+already performed direction two for the three capabilities Passes
+37.0–37.2 delivered; the remaining rows are still owed.
+
+**Where the text now lives, in `docs/ROADMAP.md`:**
+- **R156's own entry** under `## Standing rules` — the binding text,
+  headed *"AMENDED 2026-08-05 (engineer ruling, continuation 102) —
+  BROADENED, NOT CORRECTED."* The original mechanical-check paragraph is
+  **kept unchanged** and is now explicitly direction one.
+- The former `### PROPOSED, NOT MINTED — R156 amendment` block is
+  retitled **`### RESOLVED 2026-08-05 — R156 amendment: the audit runs in
+  TWO directions — ACCEPTED AS AN AMENDMENT TO R156 IN PLACE; R157 NOT
+  MINTED`**, carrying the ruling and the corrected framing at its head,
+  with **the original proposal text kept unedited beneath a divider**
+  (append-only spirit — the reasoning that produced the ruling is part of
+  the record) plus an end-marker noting the two points the ruling
+  supersedes.
+- The `### ★ GUI-gap sweep` sub-section in *Shipped* had a stale pointer
+  to "PROPOSED, NOT MINTED" and a heading calling the sweep *"a
+  correction to R156's prescribed check"*. Both now carry a dated
+  **AMENDED 2026-08-05** note stating **BROADENED, not corrected**, and
+  re-reading its two bullets as the two directions of one audit. The
+  original wording is left in place.
+
+### Ledger discipline (R106) — continuation 102
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | **none** — no Pass shipped, scoped or filed | family **38** next free; highest ID **37.2**, unchanged |
+| Standing rules | **none.** R156 was **amended in place**, which mints no number | **R156** (**R157** next free), **unchanged**; decision 030's three contingent candidates still hold the claim on R157 |
+| Decision records | **none** | **031** (**032** next free), unchanged |
+| Operator questions | **none** | **(az)** (**(ba)** next free), unchanged |
+
+**A fact about this filing, not a claim about disk:** the engineer had
+**not yet committed** continuation 101's edits when the checker output
+above was produced, and has not committed these either. **Both filings
+will be committed together**, and the checker output recorded above was
+measured **on the working tree**, not on a commit. The engineer will
+**re-run `tools/check-ledger-numbers.py --stats` once more after
+committing and report it**. Per hard rule 8, this librarian asserts no
+git or working-tree state of its own — everything in this paragraph is a
+relay of what the engineer stated.
+
+**`FEATURES.md` — untouched this filing, and correctly so.** No
+capability changed state: no Pass shipped, none scoped. The maintenance
+contract binds `FEATURES.md` to `ROADMAP.md` *capability* changes; this
+filing changed a standing rule's text and a ruling's status only. The
+owed `gui`-column re-verification (now two-directional, above) remains
+outstanding.
+
+### RAG escalations, continuation 102 — none filed; one dispatch NOTED as made
+
+- **`D:\Dev\Rag-Specialized\PDF_Spec\` — the recommended dispatch was
+  ACCEPTED and MADE.** Continuation 101 recommended the engineer dispatch
+  **`pdfce-spec-librarian`** to cover the **per-field-type field-flag bit
+  tables**, with bit 26's **`RichText` / `RadiosInUnison` collision**
+  called out by name. The engineer has **accepted the recommendation and
+  dispatched it** — recorded here as a dispatch **made**, not merely
+  recommended. **What that RAG now contains is not described here**: this
+  librarian cannot observe it, and the spec RAG is
+  `pdfce-spec-librarian`'s exclusive territory under hard rule 6.
+- **`D:\dev\rag\rust\` / `D:\dev\rag\egui\` / `C:\personal_rag\pdf\` —
+  nothing new.** This filing produced no toolchain, GUI-framework or
+  PDF-producer finding; it recorded a ruling and a checker result. The
+  one general observation it did produce — that a `###` block under
+  `## Standing rules` does not disturb the rule parse — is **specific to
+  this project's own ledger tool** and belongs in this log and in R106's
+  orbit, not in a cross-project RAG.
