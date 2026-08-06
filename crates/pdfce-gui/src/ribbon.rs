@@ -448,21 +448,14 @@ impl ResetScope {
 /// them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PaneSubject {
-    /// Whatever canvas tool is armed, or the empty state when none is.
-    #[default]
-    ActiveTool,
-    /// **The properties of whatever is in scope** — three tiers, outermost
-    /// last: the selected ce dimension, the ce-dimension groups, and the
-    /// document's own `/Info` metadata form.
-    ///
-    /// **Widened at Pass 34.2**; this doc comment used to read "the document's
-    /// `/Info` metadata form" and nothing else, which was accurate until the
-    /// pane gained the other two. The variant is deliberately NOT split into
-    /// three subjects: the first thing an operator does after changing a
-    /// group's units is look at what it did to the ce dimension they have
-    /// selected, and two panes cannot show that in one view.
-    Properties,
     /// Batch operations across whole files, and the font folders.
+    ///
+    /// The DEFAULT, because the Activities compartment is always on screen
+    /// now and therefore always showing something: it needs a subject that is
+    /// useful to land on rather than one that is a mode. Redact and Forms are
+    /// both destinations an operator goes to deliberately; Batch Tools is the
+    /// closest thing here to a neutral resting state.
+    #[default]
     BatchTools,
     /// The redaction review surface.
     Redact,

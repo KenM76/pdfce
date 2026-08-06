@@ -1880,21 +1880,6 @@ pub fn dock_panel_pages_tooltip() -> &'static str {
     "Move between pages, and select pages to delete, reorder, rotate or extract them. Drag a thumbnail to move that page within the document."
 }
 
-/// Tab label of the tool-options panel (Pass 34.1).
-///
-/// "Tool Options" rather than "Options": bare "Options" in a desktop
-/// application means application preferences, and an operator looking for
-/// their settings would open this and find a font size for the tool they
-/// happen to have armed.
-pub fn dock_panel_tool_options_label() -> &'static str {
-    "Tool Options"
-}
-
-/// Purpose tooltip / accessible name for the Tool Options tab.
-pub fn dock_panel_tool_options_tooltip() -> &'static str {
-    "The settings for whichever tool you have armed, and anything pdfce needs to tell you about what it just did. Empty until you pick a tool."
-}
-
 // ---------------------------------------------------------------------------
 // Tool Options pane body (Pass 34.1)
 // ---------------------------------------------------------------------------
@@ -6350,4 +6335,75 @@ pub fn form_field_rich_text_convert_tooltip() -> &'static str {
 /// Report after converting a rich-text field.
 pub fn form_field_rich_text_converted(label: &str) -> String {
     format!("“{label}” is now an ordinary text field — you can type in it. Undo reverses this.")
+}
+
+// -- Shell redesign: the left dock's four standalone compartments -----------
+//
+// No longer TAB labels — these four are stacked and always visible, so each
+// caption is a permanent heading rather than a thing you click to reveal.
+
+/// Heading over the armed tool's own options.
+pub fn dock_panel_armed_tool_label() -> &'static str {
+    "Tool"
+}
+
+/// Its purpose line — says when to look at it, never restates the label.
+pub fn dock_panel_armed_tool_tooltip() -> &'static str {
+    "The settings of whichever tool you have picked, and where its work is accepted or refused."
+}
+
+/// Heading over the properties compartment.
+pub fn dock_panel_properties_label() -> &'static str {
+    "Properties"
+}
+
+/// Its purpose line.
+pub fn dock_panel_properties_tooltip() -> &'static str {
+    "What is selected on the page, the dimension groups, and the document's own title and author."
+}
+
+/// Heading over the activities compartment.
+pub fn dock_panel_activities_label() -> &'static str {
+    "Activities"
+}
+
+/// Its purpose line.
+///
+/// Names the distinction that decides what lives here: these are whole-file
+/// jobs you GO TO, as opposed to the compartments above, which describe what
+/// is in front of you and are watched rather than entered.
+pub fn dock_panel_activities_tooltip() -> &'static str {
+    "Whole-document jobs — batch operations across files, redaction review, and filling forms."
+}
+
+/// The Activities compartment's segmented control — three whole-document
+/// workflows an operator ENTERS, as opposed to the compartments above it,
+/// which describe what is in front of them and are watched.
+pub fn activities_batch_label() -> &'static str {
+    "Batch"
+}
+
+/// See [`activities_batch_label`].
+pub fn activities_batch_tooltip() -> &'static str {
+    "Operations across whole files — combine, split, insert, extract — and your font folders."
+}
+
+/// See [`activities_batch_label`].
+pub fn activities_redact_label() -> &'static str {
+    "Redact"
+}
+
+/// See [`activities_batch_label`].
+pub fn activities_redact_tooltip() -> &'static str {
+    "Mark content for removal and review it before applying. The only operation here that cannot be undone once saved."
+}
+
+/// See [`activities_batch_label`].
+pub fn activities_forms_label() -> &'static str {
+    "Forms"
+}
+
+/// See [`activities_batch_label`].
+pub fn activities_forms_tooltip() -> &'static str {
+    "Fill in this document's interactive fields, flatten them, or move their values in and out as a data file."
 }

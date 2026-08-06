@@ -1998,7 +1998,7 @@ struct OpenDoc {
     /// drained by the app into [`PdfceApp::show_pane_subject`] on the next
     /// frame — the exact sibling of [`Self::pending_note`], for exactly the
     /// same borrow reason.
-    pending_pane_subject: Option<ribbon::PaneSubject>,
+    pending_pane_reveal: Option<DockPanel>,
     /// Which pages are selected for a batch operation, by 0-based index.
     ///
     /// Ordered (a `BTreeSet`) so that "the selected pages" is always a
@@ -2182,7 +2182,7 @@ impl OpenDoc {
             dimension_drag: None,
             dimension_place_draft: None,
             pending_note: None,
-            pending_pane_subject: None,
+            pending_pane_reveal: None,
             selected_pages: BTreeSet::new(),
             selection_anchor: None,
             dragged_page: None,
@@ -6210,7 +6210,9 @@ impl PdfceApp {
                 // repointed (floating window -> right dock, decision 017 §8.3;
                 // right dock -> Tool Options, here) and the second time its
                 // muscle memory has been deliberately preserved across a move.
-                self.show_pane_subject(ribbon::PaneSubject::Properties);
+                // Properties is its own always-visible compartment now, so
+                // "show properties" is a scroll-into-view, not a mode switch.
+                self.reveal_panel(DockPanel::Properties);
                 return;
             }
             Action::SelectRibbonTab(tab) => {
@@ -6375,15 +6377,18 @@ impl PdfceApp {
                 // tool they just put down. Raising on arm is answering a
                 // request; restoring on disarm would be overruling one.
                 //
-                // Not a focus steal: it changes which tab of an already-open
-                // dock is in front, and takes no keyboard focus, so a
-                // half-typed value elsewhere is undisturbed.
+                // THE AUTO-RAISE ON TOOL-ARM IS GONE, and its absence is the
+                // point rather than an omission.
+                //
+                // It existed because arming a tool used to switch a shared
+                // pane's subject, so without a raise the operator could arm a
+                // tool and see nothing change. The Tool compartment is now
+                // always on screen, so there is nothing to raise: the options
+                // simply appear where they already were. A raise here would
+                // now be a layout change the operator did not ask for, in
+                // response to picking a tool.
                 if tool.is_some() {
-                    self.pane_subject = ribbon::PaneSubject::ActiveTool;
                     self.rail_expanded = true;
-                    let mut tree = std::mem::replace(&mut self.left_dock, dock::left_swap_tree());
-                    dock::activate(&mut tree, DockPanel::ToolOptions);
-                    self.left_dock = tree;
                 }
                 // Pass 16.2 §5.1: the default add-text font is read BEFORE
                 // borrowing `doc` (it lives on `self`), so tool entry can seed
@@ -6446,7 +6451,7 @@ impl PdfceApp {
                 if let Status::Open(doc) = &mut self.status {
                     doc.dimension_groups_open = true;
                 }
-                self.show_pane_subject(ribbon::PaneSubject::Properties);
+                self.reveal_panel(DockPanel::Properties);
                 return;
             }
             Action::CancelToolGesture => {
@@ -7014,9 +7019,31 @@ impl PdfceApp {
     fn show_pane_subject(&mut self, subject: ribbon::PaneSubject) {
         diag::trace(|| format!("show-pane-subject {subject:?}"));
         self.pane_subject = subject;
+        self.reveal_panel(DockPanel::Activities);
+    }
+
+    /// Make `panel` visible — open the rail, and raise the panel if it is
+    /// behind a tab.
+    ///
+    /// # Why this replaced most of `show_pane_subject`'s body
+    ///
+    /// Before the shell redesign, four unrelated surfaces shared one pane
+    /// behind a subject switch, so EVERY command that wanted to show one of
+    /// them had to set the subject and raise that pane. Now Properties and the
+    /// armed tool's options are their own always-visible compartments, and
+    /// "show Properties" no longer has a subject to set — it only has to make
+    /// sure the rail is open.
+    ///
+    /// `dock::activate` is still called, and deliberately: the four
+    /// compartments ship stacked in a `Linear` container where nothing is
+    /// hidden, but an operator may drag them into tabs themselves, and a
+    /// command that silently did nothing in that layout would be a defect. It
+    /// is a no-op in the default arrangement, which is the correct amount of
+    /// work for it to do there.
+    fn reveal_panel(&mut self, panel: DockPanel) {
         self.rail_expanded = true;
         let mut tree = std::mem::replace(&mut self.left_dock, dock::left_swap_tree());
-        dock::activate(&mut tree, DockPanel::ToolOptions);
+        dock::activate(&mut tree, panel);
         self.left_dock = tree;
     }
 
@@ -7629,9 +7656,9 @@ impl eframe::App for PdfceApp {
         // command that changes a pane the operator cannot see has, from their
         // side, done nothing).
         if let Status::Open(doc) = &mut self.status
-            && let Some(subject) = doc.pending_pane_subject.take()
+            && let Some(panel) = doc.pending_pane_reveal.take()
         {
-            self.show_pane_subject(subject);
+            self.reveal_panel(panel);
         }
 
         let canvas_delete_target = match &self.status {
@@ -8548,7 +8575,9 @@ impl PdfceApp {
                     if Self::icon_text_toggle(
                         ui,
                         icons::Icon::Properties,
-                        self.rail_expanded && self.pane_subject == ribbon::PaneSubject::Properties,
+                        // Properties is always visible now, so the toggle's
+                        // "selected" state is just whether the rail is open.
+                        self.rail_expanded,
                         ui_text::properties_button(),
                         ui_text::properties_tooltip(),
                     )
@@ -9173,29 +9202,63 @@ impl PdfceApp {
     /// this pane has already drawn. Moving them needs those values cached on
     /// the tool state so this pane can read the previous frame's, which is the
     /// next slice, not a thing to fake here.
-    fn tool_options_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        // Pass 24.3: the pane hosts more than tools now. Properties, Batch
-        // Tools and Redact moved here from the right dock, so the pane's
-        // subject is an explicit choice rather than "whatever tool is armed".
+    /// The **Activities** compartment: the three whole-document workflows,
+    /// behind an always-visible segmented control.
+    ///
+    /// # Why these three still share a pane when Properties no longer does
+    ///
+    /// Batch Tools, Redact and Forms are genuinely mutually exclusive
+    /// WORKFLOWS — an operator is doing one of them, and seeing the other two
+    /// at the same time buys nothing. Properties and the armed tool's options
+    /// are the opposite: they describe what is currently in front of the
+    /// operator, and are watched continuously while doing something else.
+    ///
+    /// That is the distinction the whole restructure turns on: **selection
+    /// state is watched, workflows are entered.** Watched things get their own
+    /// always-visible compartment; entered things share one and switch.
+    ///
+    /// The switch is an in-panel segmented control rather than `egui_tiles`
+    /// tabs, because a tab bar here would put a second, differently-styled tab
+    /// convention inside a dock that no longer has any tab bars of its own.
+    fn activities_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        ui.horizontal(|ui| {
+            for (subject, label, tip) in [
+                (
+                    ribbon::PaneSubject::BatchTools,
+                    ui_text::activities_batch_label(),
+                    ui_text::activities_batch_tooltip(),
+                ),
+                (
+                    ribbon::PaneSubject::Redact,
+                    ui_text::activities_redact_label(),
+                    ui_text::activities_redact_tooltip(),
+                ),
+                (
+                    ribbon::PaneSubject::Forms,
+                    ui_text::activities_forms_label(),
+                    ui_text::activities_forms_tooltip(),
+                ),
+            ] {
+                if ui
+                    .selectable_label(self.pane_subject == subject, label)
+                    .on_hover_text(tip)
+                    .clicked()
+                {
+                    self.pane_subject = subject;
+                }
+            }
+        });
+        ui.separator();
         match self.pane_subject {
-            ribbon::PaneSubject::Properties => {
-                self.properties_panel(ui, actions);
-                return;
-            }
-            ribbon::PaneSubject::BatchTools => {
-                self.tools_dock(ui, actions);
-                return;
-            }
-            ribbon::PaneSubject::Redact => {
-                self.redact_panel(ui, actions);
-                return;
-            }
-            ribbon::PaneSubject::Forms => {
-                self.forms_panel(ui, actions);
-                return;
-            }
-            ribbon::PaneSubject::ActiveTool => {}
+            ribbon::PaneSubject::BatchTools => self.tools_dock(ui, actions),
+            ribbon::PaneSubject::Redact => self.redact_panel(ui, actions),
+            ribbon::PaneSubject::Forms => self.forms_panel(ui, actions),
         }
+    }
+
+    /// The **Tool** compartment — the armed tool's own options, and nothing
+    /// else.
+    fn tool_options_panel(&mut self, ui: &mut egui::Ui, _actions: &mut Vec<Action>) {
         let Status::Open(doc) = &self.status else {
             ui.label(ui_text::tool_options_no_document());
             return;
@@ -9446,10 +9509,20 @@ impl PdfceApp {
                 let ppp = self.left_dock_pixels_per_point;
                 self.thumbnail_rail(ui, actions, ppp);
             }
-            DockPanel::ToolOptions => {
+            DockPanel::ArmedTool => {
                 egui::ScrollArea::vertical()
-                    .id_salt("dock-tool-options")
+                    .id_salt("dock-armed-tool")
                     .show(ui, |ui| self.tool_options_panel(ui, actions));
+            }
+            DockPanel::Properties => {
+                egui::ScrollArea::vertical()
+                    .id_salt("dock-properties")
+                    .show(ui, |ui| self.properties_panel(ui, actions));
+            }
+            DockPanel::Activities => {
+                egui::ScrollArea::vertical()
+                    .id_salt("dock-activities")
+                    .show(ui, |ui| self.activities_panel(ui, actions));
             }
         }
     }
@@ -16563,7 +16636,7 @@ fn run_measure_tool(
         // looking at (they are looking at Measure's own Tool Options, which is
         // where the button they just pressed lives).
         doc.dimension_groups_open = true;
-        doc.pending_pane_subject = Some(ribbon::PaneSubject::Properties);
+        doc.pending_pane_reveal = Some(DockPanel::Properties);
     }
     // Pass 34.0: click-out commit for the linear ce-dimension tool. Runs
     // before the explicit-Accept arm and through the SAME
@@ -18412,44 +18485,52 @@ mod tests {
         assert_eq!(removed, BTreeSet::from([TargetId(0)]));
     }
 
-    /// The Properties control must report what is ON SCREEN (Pass 24.3).
+    /// The Properties toggle still reports what is on screen — but the thing
+    /// that decides "on screen" changed.
     ///
-    /// # What changed under this test, and what did not
+    /// # What this test used to assert, and why the change is not a weakening
     ///
-    /// It used to read `tools_open && Properties is the right dock's front
-    /// tab`. Properties is no longer a right-dock pane at all — it is a
-    /// SUBJECT of the left dock's Tool Options pane — so the expression moved
-    /// to `rail_expanded && pane_subject == Properties`.
+    /// It read `rail_expanded && pane_subject == Properties`, because
+    /// Properties was one setting of a shared pane's subject switch and could
+    /// therefore be hidden by choosing a different subject. The shell redesign
+    /// promoted Properties to its own always-visible compartment, so the only
+    /// way it can be off screen now is the rail being closed.
     ///
-    /// The property being asserted is unchanged and is the reason this test
-    /// exists: the toggle's selected state is DERIVED from what is displayed,
-    /// never from a boolean of its own. The retired `properties_open` flag
-    /// could disagree with the screen, and a toggle that lies about its own
-    /// state is worse than no toggle. Two relocations later, that is still
-    /// true — which is exactly why the test survived both.
+    /// The PROPERTY under test is unchanged and is why this test has survived
+    /// three relocations: the toggle's selected state is DERIVED from what is
+    /// displayed, never from a boolean of its own. The retired
+    /// `properties_open` flag could disagree with the screen, and a toggle
+    /// that lies about its own state is worse than no toggle.
+    ///
+    /// The `pane_subject` half is gone from the predicate because it is gone
+    /// from the truth — not because it became inconvenient to assert. A test
+    /// that kept it would now be asserting a relationship the shell no longer
+    /// has.
     #[test]
     fn the_properties_toggle_reports_what_is_on_screen() {
         let mut app = PdfceApp::default();
-        let showing =
-            |a: &PdfceApp| a.rail_expanded && a.pane_subject == ribbon::PaneSubject::Properties;
+        let showing = |a: &PdfceApp| a.rail_expanded;
 
-        // Left panel closed: not on screen, whatever the subject says.
         app.rail_expanded = false;
-        app.pane_subject = ribbon::PaneSubject::Properties;
-        assert!(!showing(&app));
+        assert!(!showing(&app), "rail closed: Properties is not on screen");
 
         app.rail_expanded = true;
-        assert!(showing(&app));
+        assert!(showing(&app), "rail open: Properties is always visible");
 
-        // Showing something ELSE in the pane hides Properties, and the toggle
-        // must follow — the exact disagreement the old boolean allowed.
-        app.pane_subject = ribbon::PaneSubject::BatchTools;
-        assert!(!showing(&app));
-
-        // Arming a canvas tool takes the pane back to the tool, which also
-        // means Properties is no longer showing.
-        app.pane_subject = ribbon::PaneSubject::ActiveTool;
-        assert!(!showing(&app));
+        // AND THE POINT OF THE REDESIGN: switching the Activities compartment
+        // between its workflows no longer hides Properties. Under the old
+        // shape each of these assertions would have failed.
+        for subject in [
+            ribbon::PaneSubject::BatchTools,
+            ribbon::PaneSubject::Redact,
+            ribbon::PaneSubject::Forms,
+        ] {
+            app.pane_subject = subject;
+            assert!(
+                showing(&app),
+                "{subject:?} must not hide Properties — they are separate compartments now"
+            );
+        }
     }
 
     /// A reset restores the DEFAULT arrangement of BOTH docks, per the scope
@@ -18476,11 +18557,8 @@ mod tests {
             left_dock: dock::default_left_tree(),
             ..PdfceApp::default()
         };
-        dock::activate(&mut app.left_dock, DockPanel::ToolOptions);
-        assert!(dock::panel_is_active(
-            &app.left_dock,
-            DockPanel::ToolOptions
-        ));
+        dock::activate(&mut app.left_dock, DockPanel::ArmedTool);
+        assert!(dock::panel_is_active(&app.left_dock, DockPanel::ArmedTool));
         app.rail_expanded = false;
         app.tools_open = false;
 
