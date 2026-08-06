@@ -319,6 +319,725 @@ rather than a change to the existing one.
 `check-passes-filed.py` proves a commit was **NOTICED**. Nothing this
 project owns proves a Pass was **FILED**.
 
+### Pass 38.4 — shell redesign slice 4: the Comments panel — the document's notes and markup, listed at last (core + GUI) — 2026-08-06, committed `8228f44`, branch `pass-8-redaction`
+
+**MOVED from *Next up*, not minted.** Pass 38.4 was minted 2026-08-06 on
+Pass 38.2's ship as slice 4 of the `★ Pass 38.1–38.5` family. Its *Next
+up* row read **"UNBUILT — BLOCKED on two `pdfce-core` additions."** One
+blocker was removed by this Pass; the other was deliberately left, and is
+still 38.5's.
+
+#### The two blockers were CONFIRMED against the code before anything was built on them
+
+This is the part worth carrying forward as method. The *Next up* entry
+stated both blockers as **claims relayed from the spec**, not as verified
+facts. The engineer checked both **first**:
+
+1. **CONFIRMED.** `annot::Annotation` carried `id`, `subtype`, `rect`,
+   `flags`, `appearance`, `is_popup`, `oc`, `is_widget` — **and nothing
+   else.** No `/Contents`, no `/T`, no `/M`. A comment list built on that
+   struct is a list of *shapes*, which is not what the operator asked to
+   see.
+2. **CONFIRMED, and the code named one hazard MORE than the brief did.**
+   `edit.rs` L3664 says in terms *"deliberately not a general
+   `delete_annotation`"*, and names **three** dangling-reference hazards:
+   `/AcroForm /Fields`, `/Popup` companions, **and `/IRT` reply chains**
+   (the brief named the first two). Delete therefore stays unbuilt.
+
+#### `pdfce-core`: three optional, read-only, ADDITIVE fields
+
+`annot::Annotation` gains `contents`, `title` and `modified`, populated
+from dictionary keys `model_annotation` **already had in hand** — so this
+is a widening of what is surfaced, not new parsing. `ARCHITECTURE.md`
+§4.1 (J) records the API delta.
+
+**★ The spec RAG decided two details that memory would have got wrong,
+and this is exactly what CLAUDE.md rule 1 exists for:**
+
+- **`/M` is stored RAW — deliberately not parsed to a date type.**
+  ISO 32000-1 §12.5.2 types `/M` as *"date **or** text string"* and
+  **requires a reader to "accept and display a string in any format."*
+  A date parser would have to either reject or mangle values the standard
+  explicitly obliges a reader to accept. **A test pins a `/M` of
+  `(last Tuesday)` surviving verbatim**, so a later well-meaning
+  "improvement" to parse it fails loudly instead of silently narrowing
+  what pdfce can read.
+- **`/T` is Table 170, NOT Table 164.** It is a **markup-annotation**
+  key, so it is *legitimately absent* on a Link or a Stamp. Documented on
+  the field so `None` is never read as **"anonymous"** when what it
+  actually means is **"this subtype has no such concept."** Those are
+  different facts and a UI that conflates them lies about the document.
+
+`/Contents` is decoded through the **same §7.9.2 text-string decoder**
+every other text-string consumer in the crate uses — not a private
+byte-to-char shortcut, which would disagree with the rest of pdfce on
+non-Latin input. **Pinned by a UTF-16BE test asserting `"Ré"` rather than
+mojibake**, which a naive conversion cannot pass.
+
+**Documented rather than silently half-applied:** §12.5.6.2 NOTE 2 says a
+markup annotation carrying an `/IRT` parent has **its own `/Contents`
+ignored** in favour of the thread. Honouring that needs `/IRT` modelling
+this struct does not have, so the raw value is surfaced **and the caveat
+is stated on the field** — the alternative was to imply a threading
+model that does not exist.
+
+#### GUI: `PaneSubject::Comments`, the fourth Activities workflow
+
+Placed as `RibbonGroup::CommentsList` on `RibbonTab::Review`, because
+**browsing what has been added is `Review`'s own question asked
+backwards** — the same reasoning that puts Undo/Redo on `Edit`. Consistent
+with **R157** (*watched state gets a compartment, entered workflows share
+one*): Comments is a workflow you enter, so it shares the Activities
+compartment rather than claiming a fifth.
+
+Widgets and popups are excluded through the predicates that **already
+exist** (`is_widget()`, `is_popup`) rather than second copies of the same
+test — R92's one-method-both-callers rule applied to a predicate.
+
+**★ ce dimensions ARE listed, and that is a DELIBERATE departure from a
+strict reading, with its reason recorded.** A ce dimension is a `/Line`
+annotation. Excluding it by subtype would **also hide a genuine `/Line`
+markup an operator drew by hand**, and hiding real operator markup is a
+worse failure than listing pdfce's own annotation alongside it. Showing
+them is the lesser wrong **and it is honest** — they *are* annotations on
+the document. (Terminology, CLAUDE.md rule 15: this is about **ce
+dimensions** — the `/Line` + `/IT /LineDimension` annotations pdfce
+authors. **pdf dimensions** baked into page content by a CAD exporter are
+not annotations at all and never appear in this list.)
+
+#### The disclosure that stops a CORRECT list from reading as a BROKEN one
+
+**pdfce's own markup authoring never sets `/Contents`** (Pass 6.1). So on
+a document whose annotations pdfce itself created, **every row shows "No
+note text"** — a correct list that looks like a bug.
+
+When **every** row lacks a note, the panel says why, **once, at the top**.
+The empty state also **names the exclusions**, so a form-only document
+shows a stated reason rather than a bare empty list. This is the
+`FEATURES.md`-legend distinction (`—` vs `[ ]`) enacted in the UI: *"there
+are none"* and *"there are some but they are not shown here"* must not
+look alike.
+
+#### Verified in the running app (R86), `pdfce-cli list-annotations` as the oracle — three documents, all three paths
+
+| Document | CLI (oracle) | GUI trace | Path exercised |
+|---|---|---|---|
+| `comments.pdf` | 4 annots, 1 popup, 2 with `/Contents` + `/T` | `comments-panel rows=3 with_note=2 authors=2` | the normal path |
+| `demo-annotated` | 4 annots, 1 popup, **none** with `/Contents` | `rows=3 with_note=0` | **the honest-caption path** |
+| `demo-form` | 2 widgets only | `rows=0` | **widget exclusion** |
+
+Screenshot confirms the rendered rows: *"Square — p. 1 / by Ken / Check
+this weld size"*, *"Text — p. 1 / by Reviewer"*, *"Circle — p. 1 / No note
+text on this markup"*, each with its Go-to button.
+
+#### Not done, deliberately — and one of them is an R83 application
+
+- **Delete stays unbuilt** — needs the general `delete_annotation` core
+  verb (three named hazards above). **Per R83 the control is OMITTED, not
+  greyed**, because this is *"the capability does not exist anywhere
+  yet"*, which is a different fact from *"it exists and does not apply
+  here."* Pass 38.5's.
+- **Click-a-row-to-select-on-canvas** — needs **Pass 22.0**'s annotation
+  selection, which is unstarted.
+- **`pdfce-cli list-annotations` gaining `contents=` / `author=`** — the
+  spec flags it P1 parity. **The core fields now exist for it, so it is
+  cheap whenever someone wants it.** Pass 38.5's; named here so the
+  cheapness is on the record and not rediscovered.
+
+---
+
+### Pass 38.1 — shell redesign slice 1: the dock panels get their own row rhythm, taken from the GAPS and not from the CONTROLS (GUI) — 2026-08-06, committed `9de335f`, branch `pass-8-redaction`
+
+**MOVED from *Next up*, not minted.** 38.1 was the slice the engineer
+**skipped** when he shipped 38.2 first, and the *Next up* entry flagged it
+as *"the one most likely to be silently dropped, because slice 2 shipped
+without it and the shell now looks finished."* It was not dropped.
+
+#### Measured FIRST, and the measurement named the lever
+
+egui 0.35's defaults are `item_spacing: vec2(8.0, 3.0)` and
+`interact_size: vec2(40.0, 18.0)` (`egui-0.35.0/src/style.rs:1449,1454`),
+so a row's pitch is `interact_size.y + item_spacing.y`. Pitches measured
+off a screenshot **before touching anything** agree exactly:
+
+| Surface | Measured pitch | Arithmetic |
+|---|---|---|
+| radio option rows | **21 px** | 18 + 3 (egui defaults) |
+| `/Info` property grid | **25 px** | 18 + 6 (its own `.spacing([12,6])`) |
+
+**That is the finding, and it is a negative one:** the airiness was **not**
+large text and **not** the general `item_spacing`. It was the gap stacked
+on a widget height **already near its floor**, plus **one grid quietly
+running a second, looser rhythm than everything above it**.
+
+#### What shipped
+
+`DENSE_ROW_SPACING_Y = 2.0`, applied **once**, in `panel_body` — the
+single chokepoint every dock pane renders through. No panel sets its own,
+and **a future panel inherits the convention without knowing it exists**.
+The `/Info` grid's *row* spacing joins the same number; its **12.0 column
+spacing is untouched**, being horizontal and buying nothing back.
+
+**Scoped to the dock, deliberately NOT `configure_context`.** The same 3.0
+is doing a *different job* in a toolbar row, where controls need to be
+separable at a glance. Narrowing it globally would export a decision the
+dense surfaces asked for onto surfaces that did not ask for it.
+
+#### ★ What density was NOT allowed to come from — written into `UI_PREFERENCES.md` §11.3 so a later pass cannot quietly spend it
+
+`UI_PREFERENCES.md` **lives at the REPO ROOT, not `docs/`** — a correction
+the engineer made to his own dispatch, recorded here because a wrong path
+in a filing is how a convention gets rewritten in a second file.
+
+1. **`interact_size.y` STAYS 18.0.** Shrinking the click target is the
+   **single biggest density win available** and it is **refused**: it
+   trades pointer accuracy, which costs most for the operators least able
+   to spare it. **Density comes from the gap between controls, never from
+   the controls.**
+2. **No text gets smaller.** Shell-redesign spec §6's type roles stand.
+3. **No explanatory line is deleted to save a row.** The canvas raster is
+   screen-reader-illegible, and this project has repeatedly narrowed that
+   gap by routing facts through real text widgets — **those lines ARE the
+   accessibility surface.** A separator that separates nothing is fair
+   game; a sentence never is.
+
+A refusal recorded as a numbered convention is worth more than a refusal
+merely exercised, because the next pass looking for pixels will find the
+argument already made against the cheapest place to take them.
+
+#### Verified visually — before and after, same crop, same fixture
+
+- **Forms pane** — `/Info` rows **25 → 20 px**; option rows **21 → 20 px**.
+  **Ink measured in the label column: 285 rows before, 285 after —
+  nothing was deleted** — while content reaches **994 px instead of
+  1005**. **Eleven pixels reclaimed with provably identical content**,
+  which is the entire claim and the reason it is stated as a measurement
+  rather than an impression.
+- **Redact pane** — the same crop now shows **one MORE line of real
+  content**: *"No redaction marks in this document…"* was cut off before
+  and is visible after.
+- **Batch pane** — checked **specifically** for the failure the engineer
+  shipped earlier the same day (controls built for one width clipping at
+  another). All four rows fully visible, nothing clipped.
+
+#### Not done, deliberately
+
+**No control pairing and no separator removal in this commit.** The token
+change is uniform, reversible and **provably content-neutral**; per-panel
+surgery is a judgement call *per panel*, and mixing the two would make a
+regression in either **indistinguishable from the other**. `UI_PREFERENCES.md`
+**§11.4** records the convention for whoever does it — including *when not
+to pair*, because pairing unrelated controls to save a row makes an
+operator read a row as a unit that it is not.
+
+---
+
+### Pass 41.0 — node multi-select: a SET beside the ladder, not a field inside it (GUI) — 2026-08-06, committed `66cee16`, branch `pass-8-redaction`
+
+**MINTED by this filing** (family ceiling was 38; 39 and 40 minted above,
+41 next). The operator's request: *"I should also be able to select
+multiple nodes/objects at once by holding the usual mouse methods and
+keyboard shortcuts."* **The OBJECT half shipped earlier the same day as
+`7d3e44c` (no Pass ID — a correctness fix). This is the NODE half.**
+
+**★ Relationship to Pass 23.3, stated so nobody builds it twice.** Pass
+23.3 (decision 023 Q4) is scoped in *Backlog* as *"node selection set,
+multi-node move, node delete."* **This Pass discharges the first of those
+three**, ahead of 23.3's stated dependency on 23.2, and **without**
+23.3's core plan. **Nothing is renumbered** (hard rule 2). See the
+partial-discharge note added to 23.3's own Backlog entry.
+
+#### The blast-radius measurement, done BEFORE touching anything
+
+`grep -rn "\.node"` returns **27 hits, but most are lookalikes** —
+`drag.node` is a different struct, `summary.nodes` a different concept.
+The genuine `EnteredObject.node` readers are **13**, in three groups:
+*"is a node selected"* (5), *"which node"* (6), *"clear it"* (2).
+
+**Counting before choosing is now this project's established move** — the
+parent commit did it at 76 call sites the same day. The count is what
+makes the shape argument decidable instead of aesthetic.
+
+#### Which shape, and why the obvious one was rejected
+
+Widening `node: Option<usize>` into a set was the obvious move and was
+rejected on **two** grounds:
+
+1. **`EnteredObject` is `Copy`, and is passed BY VALUE everywhere** —
+   `doc.entered.filter(..)`, `.is_some_and(..)`, `self.entered =
+   self.entered.and_then(..)`. A `BTreeSet` field **removes `Copy`** and
+   ripples through every one of those sites **for reasons unrelated to
+   node selection**.
+2. **★ THE DECIDING ARGUMENT: this codebase already answers the same
+   question one rung up.** Object multi-selection is
+   `canvas_selection: BTreeSet<TargetId>`, a set sitting **beside**
+   `entered` on `OpenDoc` — **not a field within it.** Nodes mirroring
+   that is **consistency**; inventing a different shape for the rung
+   below would be **the divergence**. *"Look one rung up before designing
+   the rung below"* is the reusable form of this.
+
+So: **`selected_nodes: BTreeSet<usize>` beside `entered`**, holding the
+COMPLETE selection, with **`EnteredObject::node` remaining the PRIMARY** —
+the anchor most recently clicked, the one the readout names and a drag
+grabs. **`entered.node.is_none()` therefore still means "no node
+selected", and all 13 existing readers stay correct untouched.**
+
+Note the two commits reached the same conclusion by **different routes**:
+the multi-document parent argued *leave call sites correct BY
+CONSTRUCTION rather than by audit* (76 was unreviewable); here **13 is
+reviewable**, and the `Copy` loss plus the existing one-rung-up answer
+point the same way regardless.
+
+#### Divergence is contained in ONE place
+
+`prune_canvas_selection` already runs on every edit, undo and page change,
+and already truncates the level ladder (**Pass 26.2**). The node set is
+pruned in the same breath — **cleared outright rather than filtered**, on
+the *identical* reasoning that governs the ladder above it: **after a
+content rewrite the same object-scoped index can name a DIFFERENT
+anchor**, and a selection that silently changed which points it refers to
+is worse than one the operator has to remake.
+
+#### Additive selection is decided at the right layer
+
+The `additive` flag is threaded into **`apply_click_depth`**, not into
+`depth_after_click`. That function answers *"which rung am I on"*, which
+is **orthogonal** to *"how many anchors are picked"*, and it is
+exhaustively tested with plain `Option<usize>` inputs **precisely because
+it knows nothing of modifiers or sets**. The flag is the **same
+`shift || command`** the object rung reads — so **Ctrl and Shift mean one
+thing at every level of the ladder**, which is the whole point of the
+operator's *"the usual mouse methods and keyboard shortcuts."*
+
+**Drawing:** every selected anchor renders as selected, not only the
+primary — at **both** the node-mark and the Bézier-handle sites.
+
+#### ★ VERIFICATION, AND ITS HONEST LIMIT — R87 in its amended (2026-08-06) form
+
+**The Node rung is UNREACHABLE through the scripted harness, so this rule
+could not be driven in the running app.** Stated in the form the amended
+rule requires — the expected trace **and** the emitting path:
+
+| | |
+|---|---|
+| **Expected** | `vector-depth` (emitted by `run_vector_edit_tool` after `apply_click_depth`) reporting `node: Some(_)` |
+| **Observed** | `node: None` across a full driven descent — **and `node-descent-missed`, which fires ONLY when `double` is true, never fired at all** |
+
+**★ That second line is the evidence that matters, and it is the R87
+amendment working as intended.** It is *not* that the descent logic
+failed; it is that **injected clicks never register as double-clicks**, so
+the rung **cannot be entered from a script at all**. The instrument was
+validated before the reading was believed. Consistent with the recorded
+finding that rapid successive double-clicks coalesce, and with a sibling
+fork hitting the same wall earlier the same day.
+
+**What WAS verified in the app:** node marks draw, with their screen
+positions traced (5 anchors on the fixture object), and `node-select`
+reports `set={}` on the leave-the-rung branch.
+
+So the rule is extracted as **`node_selection_after_click`** and unit
+tested — the same substitution this session already made for
+`place_draft_commit` and `truncate_entered`. **A test is a SUBSTITUTE for
+in-app verification, not an equivalent to it**, and this entry says so
+rather than letting five green tests imply otherwise.
+
+**Five tests:** plain click replaces; additive click adds **and becomes
+primary**; additive click on an already-selected anchor **toggles it off
+and demotes the primary to a survivor**; toggling the last one clears the
+primary too; leaving the rung clears everything, **including under a held
+Ctrl**.
+
+#### ★ Not done, and it is a CORE gap, not a wiring gap
+
+**Moving several nodes together is NOT built.**
+`EditSession::move_node` takes **ONE** `node_index` and an **ABSOLUTE**
+destination, and goes through `vector_surgery` with
+`CommandKind::MoveNode` — so N anchors would be **N undo entries, each
+rewriting the content stream on top of the last**. Moving a multi-node
+selection needs a core verb that does not exist:
+
+```
+move_nodes(page, object, &[(index, to)])   // ONE surgery, ONE undo entry
+```
+
+That is a **`pdfce-core` Pass**, not a GUI wiring job, and **faking it
+with a loop would break the one-gesture-one-undo contract this project
+holds.** (Pass 23.3 names the same verb as `plan_move_nodes`; the two are
+the same obligation under two names — see 23.3's Backlog note.)
+
+There is also **no arrow-key nudge for a SINGLE node yet** (decision 028
+items 10/11, still owed), **so there is nothing to extend** — the two
+residuals are coupled and should be scoped together.
+
+Pass 26.2's five level-survival tests still pass unchanged — **their
+premise was not disturbed**, which was checked rather than assumed.
+
+---
+
+### Pass 40.0 — modeless editing: no tool armed IS the object-edit tool, and a drag on empty paper is still a marquee (GUI) — 2026-08-06, committed `b6fcf27`, branch `pass-8-redaction`
+
+**MINTED by this filing.** The operator's request: *"we should be able to
+activate any and all of the edit options at once."*
+
+#### The agreed reading, because the request as stated is not implementable verbatim
+
+**Selection and editing become modeless — what you CLICK decides — while
+creation verbs (Add Text, the measure tools) keep their explicit arming.**
+The reason for the split is not conservatism: **a click-sequence meaning
+"place new text HERE" cannot be disambiguated from a marquee by what is
+under the pointer**, because the answer is *nothing* in both cases. Verbs
+that act on what exists can be modeless; verbs that create where nothing
+exists cannot.
+
+#### What was ACTUALLY missing — measured, not assumed
+
+The engineer checked the no-tool path **before** changing it.
+**Click-to-select and double-click-to-descend ALREADY worked there** —
+that branch calls `apply_click_depth` and `selection_and_cycle_after_click`,
+and a driven click produced `plain-click hits=1 newsel=1`. Both paths
+already drew selection outlines too.
+
+The **genuine** gaps were **drag-to-move / node-drag** (which lived only
+in `run_vector_edit_tool`) and **click-text-to-edit**. Baseline evidence,
+no tool armed: **`vector-click` count = 0** across a click-then-drag.
+
+#### The change: the same function, not a thinner copy
+
+The no-tool branch now **calls `run_vector_edit_tool` itself**, with a
+`Modeless::Yes` flag, instead of carrying its own copy of click-select and
+depth handling. **Modeless is not a re-implementation of the Obj tool — it
+is literally the same function**, which is what stops the two drifting.
+
+**★ They HAD already drifted, and that is why the duplication had to
+go.** `apply_click_depth` was once wired into only **one** of the two
+paths, so **double-click descended with no tool armed and did nothing with
+the tool armed.** That is precisely the failure **R92**'s *one method, both
+callers* rule exists to prevent, and this branch was the last of that
+duplication in the file.
+
+#### The ONE behaviour that differs, and why it must
+
+With the Obj tool **ARMED**, a drag anywhere moves the selected object —
+`classify_drag` never asks where the press landed, which is defensible for
+a mode whose stated job is moving things. **Modeless, that is wrong**:
+nothing was armed, so a drag on empty paper is a **marquee**. Without a
+gate, selecting an object and then rubber-banding elsewhere would
+**silently drag the selection across the page** — a destructive edit
+produced by a gesture that looks like a selection.
+
+So **`Modeless::Yes` requires the press to land on the selected object's
+BOUNDS** (grown by the selection tolerance) before a drag becomes a move,
+and returns `false` otherwise so the caller runs the marquee instead.
+**Measured against BOUNDS, not anchors**: a press inside a large filled
+shape is plainly *"on it"* while far from every anchor.
+
+**The marquee is the FALL-THROUGH, not a competitor.** That is what makes
+*"all the edit options at once"* **coherent rather than ambiguous** — the
+gesture's meaning comes from **what is under the pointer**, not from a
+mode.
+
+#### ★ A PRE-EXISTING DEFECT THIS SURFACED AND FIXED — the THIRD occurrence of one bug
+
+The marquee recorded its start corner from **`interact_pointer_pos()`**.
+egui reports `drag_started` on the frame the drag **threshold** is
+crossed, so the pointer has **already left the press point** — the marquee
+has **always** rubber-banded a rectangle that did not start where the
+operator pressed.
+
+**Measured on a driven drag: press at canvas x=9.9, recorded start
+x=43.6.**
+
+**This is the THIRD occurrence of that exact bug in this one file**, and
+the first two already carry this fix **with this comment** — Pass 25.5 for
+the ce-dimension drag, and `run_vector_edit_tool` for object/node drags.
+**The marquee was simply never revisited.** It is **silent by nature**: a
+marquee that under-selects looks exactly like one the operator drew too
+small.
+
+Fixed to **`press_origin()`**:
+
+| | Marquee rect | Hits |
+|---|---|---|
+| Before | `[[43.6 230.0] - [70.0 258.9]]` | **0** |
+| After | `[[9.9 230.0] - [70.0 290.1]]` | **2** (`newsel=2`) |
+
+Escalated to `D:\dev\rag\egui\drag_started_fires_after_the_threshold_use_press_origin.md`
+as a dated third-occurrence amendment — three instances in one file is the
+signal that the finding needs a **sweep instruction**, not just a
+description.
+
+#### Verified in the running application (R86) — no tool armed unless stated
+
+```
+baseline    vector-click count = 0            (the edit path did not run)
+after       vector-click hits=1 newsel=1
+            drag-start obj=0
+            commit-move idx=0 dx=22.0 dy=0 -> Ok([])
+
+gate        select an object, drag from EMPTY paper ->
+            vector-drag-declined modeless sp=[1317.0 156.0] obj=0
+            commit-move count = 0             (it did NOT move)
+
+marquee     drag enclosing two objects ->
+            marquee-release hits=2 newsel=2
+
+regression  ARMED Obj tool, same empty-paper drag ->
+            vector-drag-declined count = 0
+            commit-move idx=0 dx=-42.9 dy=-52.8   (armed unchanged)
+```
+
+**A trace-reading note worth keeping** (and a direct application of the
+R87 amendment ruled earlier the same day): the `canvas` line's `sel=` is
+read at the **START** of a frame, so it reports `0` for a marquee that
+worked. The engineer misread exactly that earlier the same day, so the new
+**`marquee-release`** trace is emitted **AFTER** the assignment and carries
+`newsel` itself. **The instrument was fixed, not the reading
+rationalised.**
+
+#### ★ NOT DONE — and it is a rule-4 question, not an omission
+
+**Clicking a text object with no tool armed does NOT begin text editing.**
+
+**It is not wiring — it is a MODE CHANGE TRIGGERED BY A CLICK.** Entering
+`TextEdit` sets `active_tool`, runs `build_text_edit_state()` (a full
+page-text re-extraction), and tears down the other tools' state. Doing
+that implicitly would:
+
+- change what the Tool compartment displays **without the operator arming
+  anything**;
+- change what **Escape** means;
+- require a **defined way back out** when the next click lands on a path.
+
+That is a **CLAUDE.md rule 4** question about pdfce silently changing the
+operator's mode, and **it deserves a decision rather than an inference**.
+Filed as **open operator question (bc)**. The object-edit half is complete
+and verified; **this half is named, not attempted.**
+
+#### Verification gap, stated rather than buried
+
+**NO NEW TESTS.** Verification for this Pass is **in-app traces only**
+(the block above). The gate logic is covered by construction — the
+`Modeless::Yes` bounds test is a single branch — but **there is no unit
+test asserting that a modeless drag off-bounds declines**, and the sibling
+Passes in this same session (39.x, 41.0) each shipped five. **Named as a
+gap so it is a known debt rather than an assumed cover.**
+
+---
+
+### Pass 39.1 — close a document, with a real three-way save prompt (GUI) — 2026-08-06, committed `1c48cbd`, branch `pass-8-redaction`
+
+**MINTED by this filing**, as the second slice of family 39. The
+operator's request: *"I need to be able to close documents with a prompt
+to choose to save or not save if changes were made."* This wires the
+`CloseDocument` action that **Pass 39.0 shipped deliberately unbound**,
+with the reason recorded on the variant.
+
+#### ★ The FOURTH member of the pending-gate family — NOT a fourth modal
+
+`pending_save`, `pending_copy` and `pending_redaction_apply` already share
+**one guard at the top of `apply`** that refuses **every unrelated action**
+while any of them is outstanding. **`pending_close` joins it.**
+
+That guard exists because **two centre-anchored windows rendering over
+each other — only the later one clickable — is a defect this project has
+already had once** (escalated to
+`D:\dev\rag\egui\egui_0.35_two_center_anchored_windows_pending_state_gate_dispatcher.md`).
+**A fourth ad-hoc modal would sit OUTSIDE the very mechanism that prevents
+it** — which is why "join the family" is a correctness decision here, not
+a tidiness one.
+
+**Proven, not assumed:** a test drives `Action::SwitchDocument` while the
+close question is outstanding **and asserts the switch is refused.**
+
+#### THREE answers, all real
+
+**Save-and-close · Close-without-saving · Keep-it-open.**
+
+Offering only two would **force one of the three things an operator
+actually wants to be expressed by DISMISSING a dialog** — which is exactly
+how an accidental discard happens. A dialog whose escape hatch carries
+semantic meaning is a trap.
+
+#### ★ Save-and-close only closes if the save SUCCEEDED
+
+A cancelled file dialog, a read-only path, a refused write — **each leaves
+the edits unsaved, and closing anyway would discard exactly the work the
+operator just asked to keep.** The document **stays open**, and the
+failure is already in the status bar. **Its tooltip says so**, because
+that is the one consequence an operator cannot see coming.
+
+#### A CLEAN document closes with NO prompt
+
+**A confirmation whose answer is always "yes, obviously" teaches people to
+dismiss prompts unread — which is what makes the one that matters
+dangerous.** Tested both ways: clean closes silently; modified asks **and
+does not close**.
+
+#### `close_active_document` stays UNCONDITIONAL, and its doc comment now says why
+
+**"Don't save" must be able to reach a close that really discards.** A
+method that re-checked `is_modified` would either **refuse that answer**
+or **need a bypass flag** — a second, quieter way of asking the same
+question, which is how two sources of truth get created.
+
+#### The Close button sits with the ACTIVE tab, not as a ✕ on every tab
+
+**A per-tab close is one chance per tab to close the wrong file**, and the
+switcher's whole job is that **you always know which document is in
+front**. A control that can act on a document you are not looking at
+undoes the invariant Pass 39.0 was built to preserve.
+
+#### `apply_for_test` drives the REAL `apply`
+
+Not the methods underneath it. **A test that called `close_active_document`
+directly would prove the close works and NOTHING WHATSOEVER about the
+guard in front of it** — and the guard is the part that is easy to get
+wrong.
+
+#### Five tests
+
+Clean closes silently; modified asks and does not close; **discard really
+discards and brings the parked document forward**; **cancel changes
+nothing at all** (document, edits **and** parked list); and the
+outstanding question **blocks unrelated actions**.
+
+---
+
+### Pass 39.0 — multiple open documents — WITHOUT touching 76 call sites (GUI) — 2026-08-06, committed `d92c1b3`, branch `pass-8-redaction`
+
+**MINTED by this filing.** Family 39 is minted here; the family ceiling
+had been **38**. The operator's request: *"what about multiple file open
+support?"*
+
+#### ★ THE DESIGN DECISION IS THE ENTRY — it is the whole of why this is small
+
+The obvious shape is **`documents: Vec<OpenDoc>` + `active: usize`**. The
+engineer **counted the cost before choosing it**:
+
+> **76 call sites destructure `Status::Open(doc)`**, and every one would
+> have to resolve the active document through an index.
+
+**That is 76 chances to silently address the WRONG document — and "an edit
+landed on the file you were not looking at" is close to the worst defect
+this application could have, BECAUSE NOTHING ON SCREEN WOULD SHOW IT.**
+It is not merely a bug class; it is a bug class with **no operator-visible
+symptom**, which is the category this project's whole disclosure
+discipline exists to avoid creating.
+
+**Rejected in favour of a PARKED LIST beside `status`.**
+
+`Status::Open` **still means exactly what it always has — the document in
+front of the operator** — so **all 76 sites remain correct WITHOUT BEING
+TOUCHED, by construction rather than by review.** Opening a second file
+**parks** the first; switching **swaps** one out and the other in; nothing
+else in the application can see a non-active document at all. **The bad
+class is unrepresentable rather than merely avoided.**
+
+**The cost, stated rather than glossed:** a switch is a **move** rather
+than an index change, and the parked list is in **most-recently-parked**
+order rather than open order. **Both are cheap next to 76 audited call
+sites**, and saying so is what makes this a decision rather than a
+preference.
+
+#### ★ Why it was cheap AT ALL — and this is the part worth carrying forward
+
+**Per-document state was ALREADY isolated on `OpenDoc`** — session, pages,
+view, active tool, selection, entered level, object model, form drafts.
+**That isolation is the part that usually makes multiple-file support a
+rewrite, and it went the right way long before anyone needed it.**
+
+Consequence the operator actually feels: **a parked document keeps its
+unsaved edits, its selection AND its scroll position.**
+
+#### Five tests, and the third is the one that matters
+
+1. Opening a second file **PARKS** the first rather than dropping it.
+2. Switching **SWAPS** — **exactly one document is ever in `status`,
+   never two and never none**, which is precisely the invariant every one
+   of those 76 sites depends on.
+3. **★ An edit lands ONLY on the document in front** — asserted by editing
+   *after* a switch and checking **BOTH** documents' modified flags, so a
+   parked document is **proven pristine rather than assumed**.
+4. Closing reveals the next; the **last** close returns to `Idle`.
+5. An out-of-range switch is a **no-op, not a panic**.
+
+#### The switcher appears only when a SECOND file is open
+
+**Hidden at one document rather than shown empty.** A switcher with a
+single entry is **permanent chrome that never acts**, which is **R124**'s
+own argument. **It appears the moment it becomes useful, which is also the
+moment it becomes discoverable.**
+
+The active document is shown **selected and DISABLED** — **clicking the
+file you are already in should do nothing, and a live control that does
+nothing invites the click.** Per-tab `*` dirty markers are read from each
+document's **OWN** session, which the state isolation makes free.
+
+#### `CloseDocument` shipped DELIBERATELY UNBOUND
+
+With the reason recorded on **both** the variant and the method: closing
+discards unsaved edits, **every other destructive path here asks first**,
+and that confirmation belongs in the existing `pending_save` /
+`pending_copy` gate **rather than as a fourth ad-hoc modal**. Wiring it
+there is its own piece of work — **shipped the same day as Pass 39.1**,
+above.
+
+#### Verification, and its limit
+
+The parking, switching and isolation logic is **unit-tested (5 tests)**.
+**The switcher's two-document appearance is NOT visually verified** —
+opening a second file needs a **native file dialog the scripted harness
+cannot drive**, the same limit the font-folder picker has.
+**Confirmed by screenshot: with ONE document open, no switcher row is
+drawn** — which is the half that *can* be observed, observed.
+
+#### One wart this made visible and did NOT fix
+
+**`redact_search_query` lives on the app rather than on `OpenDoc`, so it
+is shared across documents.** Noted in `switch_to_parked`'s doc comment.
+Filed here as a named residual so it is a known gap rather than a
+surprise: switch documents mid-redaction-search and the query follows you.
+
+---
+
+### Gates for the SIX commits of 2026-08-06 (`d92c1b3` · `1c48cbd` · `b6fcf27` · `66cee16` · `9de335f` · `8228f44`) — measured by the ENGINEER at `8228f44` and relayed (R87)
+
+| Gate | Result |
+|---|---|
+| `cargo test` (workspace) | **1999 pass, 0 fail** — **1991 → 1996 → 1999** across these six (**23 new tests total** across the arc: 5 for Pass 39.0, 5 for 39.1, 5 for 41.0, 3 core for 38.4, plus the balance from earlier commits in the run) |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `tools/check-ui-strings.sh` | clean |
+| **`cargo tree -p pdfce-core` / `-p pdfce-render`** | **ZERO GUI-dependency matches** — `ARCHITECTURE.md` §3 invariant holds |
+| `tools/check-ledger-numbers.py` | clean at `8228f44` (**110 pairs**) |
+| `tools/check-passes-filed.py` | clean at `8228f44` |
+| New dependencies | **none** |
+
+**★ The `cargo tree` line is LOAD-BEARING for this arc specifically, not
+boilerplate.** Five of these six commits touch only `pdfce-gui`, but
+**`8228f44` touches `pdfce-core`** (`annot.rs`, +138 lines) — so this is
+the first Pass in several where the GUI-core separation invariant could
+actually have been broken. It was checked, and it holds.
+
+**Test-count anchoring, so the next filing does not repeat a known failure
+mode** (see open question (ba)'s carried note on running totals): **1991**
+is the count at `1c48cbd` **and** `b6fcf27` (40.0 added no tests);
+**1996** at `66cee16` **and** `9de335f` (38.1 added no behaviour);
+**1999** at `8228f44` and **is the current figure.** Do not quote 1991 or
+1996 as current.
+
+**Relationship to ⚠ FILING GAP #2 at the head of *Shipped*: NONE.** These
+six are a **different set of commits**, all 2026-08-06, all filed here on
+first presentation. **The five owed build records from 2026-08-05 remain
+owed** and are not discharged by this filing.
+
+**Backup currency is NOT verifiable from this filing — the engineer should
+check `D:\Dev\pdfce-backups\`** (hard rule 8; a confident number here has
+been wrong twice before). Nothing about remotes, the index or CI is
+asserted.
+
+---
+
 ### tooling — `tools/check-passes-filed.py`: the first gate this project owns that reads `git log` (no Pass ID — ledger infrastructure) — 2026-08-06, committed `91b142b`, branch `pass-8-redaction`; plus the `★`-blind-spot fix to `check-ledger-numbers.py`, committed `0720adb`
 
 **Why it exists, in the finding that produced it.** The librarian's
@@ -11635,7 +12354,7 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
-### ★ Pass 38.1–38.5 — the shell redesign (five operator-confirmed UI properties; spec `docs/ui_specs/shell-redesign.md`, 723 lines) — **family minted 2026-08-06; 38.2 SHIPPED `aa48167`, the other four OWED**
+### ★ Pass 38.1–38.5 — the shell redesign (five operator-confirmed UI properties; spec `docs/ui_specs/shell-redesign.md`, 723 lines) — **family minted 2026-08-06; 38.1 · 38.2 · 38.4 SHIPPED — 38.3 blocked on an operator answer, 38.5 the only unbuilt slice**
 
 **Pass family 38 was minted on 38.2's ship** (ceiling had been 37.2).
 **The Pass IDs map ONE-TO-ONE onto the spec's own slices 1–5** — 38.1 is
@@ -11652,33 +12371,47 @@ all. Full record: the Pass 38.2 Shipped entry.
 
 | Slice | Pass | State |
 |---|---|---|
-| **1** — density convention (`UI_PREFERENCES.md` §11 row-spacing constant, applied to the existing panels *as they stand*) | **38.1** | **UNBUILT — SKIPPED AND STILL OWED.** The engineer built slice 2 first, out of the spec's order, and says so |
+| **1** — density convention (`UI_PREFERENCES.md` §11 row-spacing constant, applied to the existing panels *as they stand*) | **38.1** | **✅ SHIPPED `9de335f` 2026-08-06** — see *Shipped*. It was NOT dropped |
 | **2** — the left-dock restructure: four always-visible compartments, no tab container, `PaneSubject` narrowed to workflows | **38.2** | **✅ SHIPPED `aa48167` 2026-08-06** |
 | **3** — property 4's exact intended reading; doc-comment corrections (spec folds this into slice 2's commit) | **38.3** | **PARTLY DISCHARGED / BLOCKED.** The **maximal** reading is **REFUSED** by the engineer and flagged — open operator question **(ba)**. The `dock.rs` doc-comment correction was **not reported either way**; treat as **owed and unverified** |
-| **4** — the Comments / annotation-list panel | **38.4** | **UNBUILT — BLOCKED on two `pdfce-core` additions** (below) |
-| **5** — P1 remainder | **38.5** | **UNBUILT** |
+| **4** — the Comments / annotation-list panel | **38.4** | **✅ SHIPPED `8228f44` 2026-08-06** — **blocker 1 REMOVED** (core gained `/Contents`, `/T`, `/M`); **blocker 2 DELIBERATELY LEFT** and is 38.5's |
+| **5** — P1 remainder | **38.5** | **UNBUILT — now the only unbuilt slice**, and it grew one cheap item (below) |
 
-**★ Pass 38.1 is the one most likely to be silently dropped**, because
-slice 2 shipped without it and the shell now *looks* finished. The spec's
-own argument for doing it first is the argument for not abandoning it:
-it *"buys a tighter baseline for every later slice to inherit, so the
-redesign doesn't ship loose and need a second density pass afterward."*
-**It shipped loose. The second density pass is now the only pass.**
+**★ Pass 38.1's own entry said it was "the one most likely to be silently
+dropped", because slice 2 shipped without it and the shell now *looked*
+finished. IT WAS NOT DROPPED — it shipped `9de335f` on 2026-08-06.** The
+spec's argument for doing it first (*"buys a tighter baseline for every
+later slice to inherit, so the redesign doesn't ship loose and need a
+second density pass afterward"*) was **correct about the cost and wrong
+about the outcome**: the redesign did ship loose, the second density pass
+happened anyway, and it cost one constant at one chokepoint. **Recorded
+because the prediction is worth keeping beside its result** — the
+out-of-order build was cheaper than the spec assumed, which is a fact
+about *this* codebase's panel chokepoint, not a general licence to reorder
+slices.
 
-**★ Pass 38.4's blockers, stated concretely because they are core work,
-not GUI work:**
+**★ Pass 38.4's blockers — HOW THEY RESOLVED, kept in place rather than
+deleted, because the disposition is more useful than the absence:**
 
-1. **`annot::Annotation` models no `/Contents`, no `/T`, no `/M`** — the
-   note text, the author and the modification date. The panel is a list
-   of those three fields; without them there is nothing to list.
-2. **There is no general `delete_annotation` verb** in `pdfce-core`
-   (scoped per `edit.rs` L3663's own named cautions). Slice 5's, not
-   slice 4's — 38.4's P0 list is browse / navigate / highlight only.
-3. **And an honest ceiling that no amount of core work fixes:** **Pass
-   6.1's markup authoring never sets `/Contents`**, so a first release of
-   this panel shows **mostly untitled rows** on documents pdfce itself
-   authored. The fix is note-text authoring for geometric markup — spec
-   §8 item 12, a Pass 6.1-adjacent capability, not scoped here.
+1. ~~**`annot::Annotation` models no `/Contents`, no `/T`, no `/M`**~~ —
+   **RESOLVED by Pass 38.4 itself** (`8228f44`). The blocker was
+   **verified true against the code before being built on**, then removed:
+   three optional read-only fields, `/M` stored **raw** per §12.5.2, `/T`
+   documented as **Table 170 markup-only**. See `ARCHITECTURE.md` §4.1
+   (J).
+2. **STILL OPEN — there is no general `delete_annotation` verb** in
+   `pdfce-core`. `edit.rs` L3664 names **THREE** hazards, one more than
+   this entry originally recorded: dangling `/AcroForm /Fields`, `/Popup`
+   companions, **and `/IRT` reply chains**. **Slice 5's, not slice 4's.**
+   Per **R83** the Delete control is **OMITTED, not greyed**, in the
+   shipped panel.
+3. **The honest ceiling HELD, and was handled by disclosure rather than
+   by pretending otherwise:** **Pass 6.1's markup authoring never sets
+   `/Contents`**, so on a pdfce-authored document **every row shows "No
+   note text."** 38.4 ships a **once-at-the-top caption saying why** when
+   *every* row lacks a note, so a correct list does not read as a broken
+   one. The real fix is note-text authoring for geometric markup — spec
+   §8 item 12, a Pass 6.1-adjacent capability, **still not scoped**.
 
 **Pass 38.5's contents** (spec §8 P1): the general `delete_annotation`
 core verb and the Delete row action it unlocks; `pdfce-cli
@@ -11688,10 +12421,20 @@ tuned against the running app, which discharges the *worst* of this);
 and `ResetScope`'s left-panels reset extended to also reset the four
 compartments' **collapse** state.
 
+**★ Amended 2026-08-06 on Pass 38.4's ship — the CLI item just got
+cheap, and that is worth knowing when scoping 38.5.** `list-annotations`
+gaining `contents=` / `author=` was P1 because **the fields did not
+exist**. **They exist now** (`annot::Annotation::contents` / `title` /
+`modified`, `8228f44`), so the CLI item is a **formatting change over a
+populated struct**, not a parsing job. It is the cheapest thing left in
+38.5 and the only one with **no design question attached** — take it
+first if 38.5 is ever picked up piecemeal.
+
 **Dependency note:** the spec states 38.4 is **independently shippable**
 and could in principle have shipped *before* 38.2, temporarily hosted in
 the unnarrowed `PaneSubject`. That option is now moot — 38.2 shipped, and
-the `Activities` compartment exists to receive it.
+the `Activities` compartment exists to receive it. **38.4 shipped into it
+on 2026-08-06 as predicted, requiring no temporary hosting.**
 
 ### ★ Rich-text fill: should `pdfce-core` refuse too, so `pdfce-cli fill-field` gets the same guard? — UNDECIDED, filed 2026-08-05 with Pass 37.2 (no Pass number assigned)
 
@@ -15999,7 +16742,36 @@ nothing gets forgotten, not as a commitment to build in this order.
   - **Pass 23.3** (decision 023, Q4) — node selection set, multi-node
     move (**ONE** core plan, `plan_move_nodes`, not N sequential
     `move_node` calls), node delete (straight-join semantics, curvature
-    disclosed-as-lost). Named, reachable, R96-tested refusals:
+    disclosed-as-lost).
+
+    > **★ PARTIAL DISCHARGE — READ BEFORE BUILDING THIS, 2026-08-06.**
+    > **Two of 23.3's three named components have now shipped under OTHER
+    > Pass IDs**, and nothing here has been renumbered (hard rule 2):
+    >
+    > | 23.3 component | State |
+    > |---|---|
+    > | **node selection set** | **SHIPPED as Pass 41.0** (`66cee16`) — `selected_nodes: BTreeSet<usize>` beside `entered` on `OpenDoc`, primary anchor retained on `EnteredObject::node`, additive under Shift **or** Ctrl/Cmd |
+    > | **node delete** | **SHIPPED as Pass 36.1** (`23f8f8e`) |
+    > | **multi-node move** | **STILL OWED — and it is the CORE half.** `plan_move_nodes` does not exist. Pass 41.0 names the same verb as `move_nodes(page, object, &[(index, to)])`; **they are one obligation under two names** |
+    >
+    > **Both discharges happened WITHOUT 23.2**, which this entry lists as
+    > a hard dependency (*"level 3 is the level below level 2"*). **That
+    > dependency was real for the CONTAINER-descent question and not for
+    > the selection-set question**, which is a correction to this entry's
+    > model, not a violation of it — worth noting because the same
+    > assumption may be over-strong elsewhere in decision 023's graph.
+    >
+    > **What the engineer still owes here is a RE-STATEMENT of 23.3's
+    > residual scope**, not a librarian inference. The honest reading
+    > today is *"23.3 = `plan_move_nodes` + its refusal set"*, but
+    > narrowing a decided Pass is an engineer act. **Nothing minted,
+    > nothing renumbered by this note.**
+    >
+    > **Also still owed and coupled to it:** there is **no arrow-key nudge
+    > for a SINGLE node** (decision 028 items 10/11), so there is nothing
+    > for a multi-node nudge to extend. Scope the two together.
+
+    Named, reachable, R96-tested refusals:
     `SubpathWouldDegenerate`, `RectangleNode`, `ImplicitNode`,
     `NotAPath`, `FormStreamIsShared`. `DegenerateCtm` must **NOT** be
     raised for node delete — deletion needs no coordinate transform, so
@@ -17493,6 +18265,36 @@ not a judgment call:**
   governs every panel in the new dock. *Default if unanswered:* **R124
   stands**, empty space stays empty, and every future surface is designed
   to it — which makes a later reversal a broad, not a local, change.
+
+- **(bc) Modeless editing — should clicking a TEXT object with no tool
+  armed begin text editing?** **Filed 2026-08-06 with Pass 40.0**, which
+  built the object-editing half of your *"we should be able to activate
+  any and all of the edit options at once"* and **named this half rather
+  than attempting it.**
+
+  **Why it was not just wired.** With no tool armed, clicking a vector
+  object now selects it and dragging it moves it — that is safe to make
+  modeless because **the gesture's meaning comes from what is under the
+  pointer**. Text is different: entering `TextEdit` **sets `active_tool`,
+  runs a full page-text re-extraction (`build_text_edit_state()`), and
+  tears down the other tools' state.** Doing that on a click would:
+
+  1. change **what the Tool compartment displays** without you having
+     armed anything;
+  2. change **what Escape means** (it is currently the pop-one-rung /
+     cancel-gesture verb, R130–R132);
+  3. require a **defined way back out** when your next click lands on a
+     path instead of on text.
+
+  **That is a CLAUDE.md rule 4 question — pdfce silently changing your
+  mode — so it is your call, not an inference.** The engineer's position:
+  a mode change triggered by a click is exactly the class of "the
+  software did something I did not ask for" that rule 4 exists to catch,
+  and it deserves a decision.
+
+  *Default if unanswered:* **it stays unwired.** Text editing keeps
+  requiring the Edit Text tool to be armed; everything else — select,
+  marquee, move, descend, node-select — is modeless as of Pass 40.0.
 
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,

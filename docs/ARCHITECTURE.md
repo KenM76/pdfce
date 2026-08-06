@@ -912,6 +912,49 @@ point at.
 
 ---
 
+### (J) Pass 38.4 — `annot::Annotation` gains `contents`, `title`, `modified` (ADDITIVE, read-only) — 2026-08-06, `8228f44`
+
+**Filed on the Pass, not in a later sync**, because §4 lagging several
+filings behind the shipped core surface is the failure §4.1 exists to
+correct — repeating it on the very next core change would be the whole
+lesson unlearned.
+
+**Before** (`pdfce_core::annot::Annotation`): `id`, `subtype`, `rect`,
+`flags`, `appearance`, `is_popup`, `is_widget`, `oc`. **No note text, no
+author, no modification date** — a struct describing *shapes*.
+
+**After**, three additions, all `Option`, all read-only, all populated
+from dictionary keys `model_annotation` **already had in hand** (this is
+a widening of what is *surfaced*, not new parsing):
+
+| Field | Key | Type | The contract, and why it is that contract |
+|---|---|---|---|
+| `contents` | `/Contents` | `Option<String>` | Decoded through the **§7.9.2 text-string decoder** every other text-string consumer in the crate uses — **not** a private byte-to-char conversion, which would disagree with the rest of pdfce on non-Latin input. Pinned by a **UTF-16BE test asserting `"Ré"`**, which a naive conversion cannot pass |
+| `title` | `/T` | `Option<String>` | **ISO 32000-1 Table 170 — a MARKUP-annotation key, not Table 164.** Legitimately **absent** on a Link or a Stamp. `None` therefore means *"this subtype has no such concept"*, **NOT "anonymous"** — documented on the field, because a UI that conflates those two lies about the document |
+| `modified` | `/M` | `Option<String>` | **Stored RAW — deliberately NOT parsed to a date type.** §12.5.2 types `/M` as *"date **or** text string"* and **requires readers to "accept and display a string in any format."** A date parser would have to reject or mangle values the standard obliges a reader to accept. **A test pins a `/M` of `(last Tuesday)` surviving verbatim**, so a later "improvement" to parse it fails loudly |
+
+**Documented rather than silently half-applied:** §12.5.6.2 NOTE 2 says a
+markup annotation carrying an `/IRT` parent has **its own `/Contents`
+ignored** in favour of the thread. Honouring that needs `/IRT` modelling
+this struct does not have, so the raw value is surfaced **and the caveat
+is stated on the field**. Surfacing it silently would imply a threading
+model that does not exist.
+
+**Breaking? NO.** Three added fields on a struct consumers construct only
+by reading a document. **`ARCHITECTURE.md` §3's GUI-core invariant was
+re-verified at this commit specifically** (`cargo tree -p pdfce-core` /
+`-p pdfce-render`: zero GUI-dependency matches) — this was the first Pass
+in several to touch `pdfce-core` at all, so the check was load-bearing
+rather than ceremonial.
+
+**Still absent, named so the edge is honest:** no `delete_annotation`
+verb (`edit.rs` L3664's three hazards — dangling `/AcroForm /Fields`,
+`/Popup` companions, `/IRT` reply chains); no `/IRT` field; no
+`/CreationDate`; no `/RC` rich-text contents. The **CLI** has not yet been
+widened to print these (`list-annotations` gains `contents=`/`author=` in
+Pass 38.5) — a live instance of the **R151** core-ahead-of-shell pattern,
+recorded rather than rounded up.
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a
@@ -7130,3 +7173,112 @@ with a forward pointer.
   numbers) is **split from the lookup** (`revalidate_entered`) so the
   decidable half is testable without constructing a decomposed page.
   Filed as a standing-rule **proposal**, not minted.
+- **2026-08-06 (continuation 107, first entry)** — **When widening a
+  singular piece of state to a collection, COUNT THE READERS FIRST, and
+  let the count pick the shape.** Two Passes the same day faced the same
+  question at two rungs of the same ladder and answered it **differently
+  on the evidence, not by template**.
+  **Pass 39.0** (`d92c1b3`, multiple open documents): **76 call sites**
+  destructure `Status::Open(doc)`. A `Vec<OpenDoc>` + `active: usize`
+  would make each of those 76 a chance to silently address the wrong
+  document — **a defect class with NO on-screen symptom**, which is the
+  worst kind this application can carry. Chosen instead: a **parked list
+  beside `status`**, so `Status::Open` keeps meaning *"the document in
+  front of the operator"* and **all 76 sites stay correct BY
+  CONSTRUCTION rather than by review.** The bad class becomes
+  *unrepresentable*, not merely *avoided*. Costs accepted and stated: a
+  switch is a **move** not an index change, and the list is in
+  most-recently-parked order. **It was affordable only because
+  per-document state was ALREADY isolated on `OpenDoc`** — the property
+  that usually makes multi-document a rewrite.
+  **Pass 41.0** (`66cee16`, node multi-select): **13** genuine
+  `EnteredObject.node` readers (27 grep hits, most lookalikes). 13 is
+  reviewable where 76 was not — yet the same answer was reached, by two
+  *different* arguments: (a) `EnteredObject` is **`Copy` and passed by
+  value everywhere**, so a `BTreeSet` field would ripple through every
+  such site for reasons unrelated to node selection; and (b) **the
+  codebase already answers the same question one rung up** —
+  `canvas_selection: BTreeSet<TargetId>` sits **beside** `entered`, not
+  inside it. So `selected_nodes: BTreeSet<usize>` **beside** it, with
+  `EnteredObject::node` retained as the **primary** anchor, leaving all
+  13 readers untouched.
+  **The generalisable rules, both stated because they are cheap and were
+  each load-bearing once today:** *count the readers before choosing the
+  shape — the count is what makes the argument decidable rather than
+  aesthetic*; and *look one rung up before designing the rung below — a
+  codebase that has already answered this question has also already paid
+  for the answer.*
+- **2026-08-06 (continuation 107, second entry)** — **Selection and
+  editing are MODELESS; creation verbs keep explicit arming.** Shipped as
+  **Pass 40.0** (`b6fcf27`), resolving the operator's *"we should be able
+  to activate any and all of the edit options at once."* **The boundary
+  is not caution, it is decidability:** a verb that acts on **what
+  exists** can take its meaning from what is under the pointer; a verb
+  that **creates where nothing exists** cannot, because *"place new text
+  here"* and *"start a marquee"* are the same gesture over the same empty
+  paper. So: click-select, double-click-descend, drag-to-move and
+  node-drag are modeless; **Add Text and the measure tools stay armed.**
+  Implemented by the no-tool branch **calling `run_vector_edit_tool`
+  itself** with a `Modeless` flag — *the same function*, not a thinner
+  copy, which is what stops the two drifting (**R92**). They **had**
+  already drifted: `apply_click_depth` was once wired into only one of
+  the two paths.
+  **The one deliberate behavioural difference:** modeless, a drag must
+  start **on the selection's BOUNDS** (grown by the selection tolerance)
+  or it stays a marquee — otherwise selecting an object and
+  rubber-banding elsewhere would **silently drag the selection across the
+  page**. Bounds, not anchors: a press inside a large filled shape is
+  plainly *on it* while far from every anchor.
+  **Deliberately NOT included, and it is a rule-4 question rather than a
+  wiring gap:** clicking a text object with no tool armed does **not**
+  begin text editing — entering `TextEdit` sets `active_tool`, runs a
+  full page-text re-extraction and tears down other tools' state, i.e.
+  **a mode change triggered by a click**. Filed as open operator question
+  **(bc)**.
+- **2026-08-06 (continuation 107, third entry)** — **A confirmation
+  belongs in the EXISTING pending-gate, never as a new modal — and
+  "save-and-close" must not close on a FAILED save.** Shipped as **Pass
+  39.1** (`1c48cbd`). `pending_close` joins `pending_save`,
+  `pending_copy` and `pending_redaction_apply` under the **single guard
+  at the top of `apply`** that refuses every unrelated action while any
+  question is outstanding. That guard exists because **two
+  centre-anchored `egui::Window`s render over each other with only the
+  later one clickable** — a defect this project has already had once
+  (RAG:
+  `D:\dev\rag\egui\egui_0.35_two_center_anchored_windows_pending_state_gate_dispatcher.md`).
+  **A fourth ad-hoc modal would sit outside the very mechanism that
+  prevents it**, so joining the family is a *correctness* decision, not a
+  tidiness one. Proven by a test that drives `Action::SwitchDocument`
+  while the close question is outstanding and asserts refusal.
+  **Three sub-rules, each with its own argument:** (1) **three real
+  answers**, because offering two forces one of the three things an
+  operator wants to be expressed by *dismissing* a dialog; (2)
+  **save-and-close closes ONLY if the save succeeded** — a cancelled
+  dialog or refused write otherwise discards exactly the work just asked
+  to be kept; (3) **a clean document closes with no prompt**, because a
+  confirmation whose answer is always *"yes, obviously"* teaches people
+  to dismiss prompts unread, which is what makes the one that matters
+  dangerous.
+- **2026-08-06 (continuation 107, fourth entry)** — **UI density comes
+  from the GAP between controls, never from the controls.** Shipped as
+  **Pass 38.1** (`9de335f`); written into `UI_PREFERENCES.md` **§11**
+  (**repo root**, not `docs/`). Measured first: egui 0.35's
+  `item_spacing.y = 3.0` and `interact_size.y = 18.0`
+  (`egui-0.35.0/src/style.rs:1449,1454`) give a 21 px row pitch, and the
+  `/Info` grid was quietly running **25 px** against everything else's 21
+  — so the airiness was **the gap stacked on a widget height already near
+  its floor**, plus one grid on a second rhythm. Fixed with one constant
+  (`DENSE_ROW_SPACING_Y = 2.0`) applied **once**, in `panel_body`, the
+  single chokepoint every dock pane renders through — so a future panel
+  inherits it without knowing it exists. **Scoped to the dock, NOT
+  `configure_context`**: the same 3.0 does a different job in a toolbar
+  row, where controls must be separable at a glance.
+  **Three refusals are the durable half, and are recorded as a numbered
+  convention so a later pass cannot quietly spend them:**
+  **`interact_size.y` stays 18.0** — shrinking the click target is the
+  biggest density win available and it trades pointer accuracy, which
+  costs most for the operators least able to spare it; **no text gets
+  smaller**; **no explanatory line is deleted to save a row**, because
+  the canvas raster is screen-reader-illegible and those text widgets
+  **are** the accessibility surface. Verified as **content-neutral by
+  measurement**: 285 label rows before and after, 11 px reclaimed.

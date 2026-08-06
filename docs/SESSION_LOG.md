@@ -17475,3 +17475,228 @@ about backups, remotes, CI or the index is asserted.** These
 documentation edits are **UNCOMMITTED at the time of writing**; the
 engineer said he will re-run both checkers after committing this filing
 and report the numbers.
+
+---
+
+## Same-day continuation 107 (real date 2026-08-06) — SIX commits filed: multiple documents, close-with-prompt, modeless editing, node multi-select, and the two shell-redesign slices that were owed
+
+**Six commits, all 2026-08-06, all on `pass-8-redaction`, all hashes
+supplied and verified by the engineer.** Four minted new Pass IDs; **two
+MOVED from *Next up* rather than minting**, because `38.1` and `38.4`
+already existed in the `★ Pass 38.1–38.5` family entry.
+
+### Shipped
+
+| Commit | Pass | What it is |
+|---|---|---|
+| `d92c1b3` | **39.0** (minted) | multiple open documents — a parked list beside `status`, so 76 call sites stay correct untouched |
+| `1c48cbd` | **39.1** (minted) | close a document, with a three-way save prompt joining the existing pending-gate |
+| `b6fcf27` | **40.0** (minted) | modeless editing — no tool armed IS the object-edit tool; **third `press_origin` bug fixed** |
+| `66cee16` | **41.0** (minted) | node multi-select — `BTreeSet<usize>` **beside** the ladder, not a field inside it |
+| `9de335f` | **38.1** (**MOVED**) | shell-redesign slice 1: the density convention (`UI_PREFERENCES.md` §11) |
+| `8228f44` | **38.4** (**MOVED**) | shell-redesign slice 4: the Comments panel (**core + GUI**) |
+
+**The `★ Pass 38.1–38.5` family is now 38.1 · 38.2 · 38.4 shipped, 38.3
+blocked on operator question (ba), and 38.5 the only unbuilt slice.**
+Pass 38.1's own *Next up* entry had warned it was *"the one most likely
+to be silently dropped."* **It was not dropped.**
+
+### Decisions made this session
+
+Four filed to `ARCHITECTURE.md` §12 (continuation 107, entries 1–4). In
+brief, because the §12 entries carry the full argument:
+
+1. **Count the readers before choosing the shape, and look one rung up
+   before designing the rung below.** Passes 39.0 (76 call sites) and
+   41.0 (13 readers) faced the same widen-a-scalar-to-a-collection
+   question at two rungs and reached the same *shape* by two *different*
+   arguments — which is what makes it a rule rather than a habit.
+2. **Selection and editing are modeless; creation verbs keep explicit
+   arming.** The boundary is **decidability**, not caution: *"place new
+   text here"* and *"start a marquee"* are the same gesture over the same
+   empty paper.
+3. **A confirmation belongs in the existing pending-gate, never as a new
+   modal — and save-and-close must not close on a FAILED save.**
+4. **UI density comes from the gap between controls, never from the
+   controls** — with three refusals recorded as numbered convention so a
+   later pass cannot spend them.
+
+### Findings + decisions
+
+- **★ The `press_origin` bug has now been found THREE TIMES in ONE
+  FILE.** The marquee recorded its start corner from
+  `interact_pointer_pos()`, which egui only makes available *after* the
+  drag threshold is crossed. Measured: **press at canvas x=9.9, recorded
+  start x=43.6**; before `hits=0`, after `hits=2`. Pass 25.5 and
+  `run_vector_edit_tool` already carried the fix **with the same
+  comment**; the marquee was simply never revisited. **It is silent by
+  nature** — a marquee that under-selects looks exactly like one the
+  operator drew too small. **Three occurrences in one file is the signal
+  that the RAG finding needed a SWEEP instruction, not just a
+  description** — filed as a dated amendment, not a new file (hard rule
+  4).
+- **★ The Node rung is UNREACHABLE through the scripted harness, and the
+  R87 amendment is what proved it rather than letting it look like a code
+  defect.** Expected `vector-depth` reporting `node: Some(_)`; observed
+  `node: None` — **and `node-descent-missed`, which fires ONLY when
+  `double` is true, never fired at all.** That second line is the
+  evidence: it is not that descent failed, it is that **injected clicks
+  never register as double-clicks**, so the rung cannot be entered from a
+  script. The instrument was validated before the reading was believed —
+  which is precisely the discipline continuation 106 accepted as an R87
+  amendment, working on its first real use.
+- **★ The spec RAG corrected two things memory would have got wrong** in
+  Pass 38.4, and both would have been silently plausible: **`/M` must be
+  stored RAW** (§12.5.2 types it *"date **or** text string"* and obliges
+  readers to accept any format — a test pins `(last Tuesday)` surviving
+  verbatim), and **`/T` is Table 170, not 164** — markup-only, so `None`
+  means *"this subtype has no such concept"*, **never "anonymous."**
+  CLAUDE.md rule 1 earning its keep on a change that looked like three
+  trivial field additions.
+- **Both of Pass 38.4's claimed core blockers were CONFIRMED against the
+  code before being built on**, and the code named **one hazard more**
+  than the brief did (`/IRT` reply chains, beyond `/AcroForm /Fields` and
+  `/Popup` companions). Worth noting as method: the *Next up* entry
+  stated them as relayed claims, and they were treated as claims.
+- **One deliberate departure from a strict reading, with its reason on
+  the record:** the Comments panel **lists ce dimensions**, because they
+  are `/Line` annotations and excluding by subtype would **also hide a
+  genuine hand-drawn `/Line` markup**. The lesser wrong, and honest —
+  they *are* annotations on the document.
+- **A correct list can read as a broken one, and disclosure is the fix.**
+  pdfce's own markup authoring never sets `/Contents`, so on a
+  pdfce-authored document every Comments row shows *"No note text."* When
+  **every** row lacks a note the panel says why, once, at the top. This
+  is the `FEATURES.md` `—` vs `[ ]` distinction enacted in the UI.
+- **Pass 38.1's density work was a NEGATIVE finding first:** the airiness
+  was **not** large text and **not** the general `item_spacing`. It was
+  the gap stacked on a widget height already near its floor, plus the
+  `/Info` grid quietly running 25 px against everything else's 21.
+  **285 label rows before and after, 11 px reclaimed** — measured, not
+  impressionistic.
+- **A verification gap, named rather than buried: Pass 40.0 shipped NO
+  NEW TESTS.** Its verification is in-app traces only. The three sibling
+  Passes in this arc each shipped five tests. The modeless off-bounds
+  drag-decline is covered by construction and by a driven trace
+  (`vector-drag-declined`, `commit-move count = 0`), but **there is no
+  unit test asserting it.** Recorded as known debt.
+
+### Gates (engineer-measured at `8228f44`, relayed — R87)
+
+**1999 tests pass, 0 fail** (1991 → 1996 → 1999 across the six; **23 new**).
+`cargo fmt --all --check` clean. `cargo clippy --workspace --all-targets
+-- -D warnings` clean. `tools/check-ui-strings.sh` clean.
+**`cargo tree -p pdfce-core` / `-p pdfce-render`: ZERO GUI-dependency
+matches** — load-bearing this arc, because `8228f44` is the first commit
+in several to touch `pdfce-core`. Both ledger gates clean (110 pairs).
+No new dependencies.
+
+**Anchoring note, because a running total is only as good as its anchor:**
+1991 is the count at `1c48cbd` **and** `b6fcf27`; 1996 at `66cee16`
+**and** `9de335f`; **1999 at `8228f44` is current.**
+
+### Still in flight
+
+- **Pass 38.5** — now the only unbuilt shell-redesign slice. Its
+  `list-annotations contents=`/`author=` item **just got cheap**, since
+  38.4 added the core fields; it is the one item with no design question
+  attached.
+- **The five owed build records from 2026-08-05** (⚠ FILING GAP #2) are
+  **NOT discharged by this filing** — a different set of commits
+  entirely. Still owed, and nothing mechanical will remind anyone.
+- **`c3d605b`'s 24.3/24.4 identity collision** — still unruled.
+- **Pass 23.3** is now **partly discharged** (selection set → 41.0,
+  delete → 36.1) and needs an **engineer re-statement of its residual
+  scope**, which is a librarian-flagged, not librarian-made, call.
+
+### For next session
+
+1. **Answer operator question (bc)** — should clicking a text object with
+   no tool armed begin text editing? It is the last piece of *"activate
+   any and all edit options at once."*
+2. **Two operator questions remain unanswered from earlier**: **(ba)**
+   the property-4 fly-out refusal, and **(bb)** R124 greyed placeholders.
+   Both now govern more surface than when filed.
+3. **`move_nodes` core verb** — the only thing between the shipped
+   node-selection set and multi-node drag. Scope it **together with the
+   single-node arrow-key nudge** (decision 028 items 10/11), since the
+   nudge has nothing to extend without it.
+4. **`delete_annotation` core verb** — unlocks the Comments panel's
+   Delete and closes 38.5's largest item. Three named hazards.
+5. **Backfill a unit test for Pass 40.0's modeless off-bounds
+   drag-decline**, closing the named verification gap.
+
+### RAG escalations, continuation 107 — TWO filed, one redirect declined, three reasoned refusals
+
+**FILED:**
+
+1. **`D:\dev\rag\egui\drag_started_fires_after_the_threshold_use_press_origin.md`**
+   — **dated AMENDMENT, not a new file** (hard rule 4: the finding is
+   already there). The amendment adds what one occurrence could not
+   teach: **three instances in ONE file**, the two earlier ones already
+   carrying the fix *and its comment*, and the marquee missed anyway. The
+   actionable addition is a **SWEEP instruction** — grep the whole file
+   for `interact_pointer_pos()` read at gesture start, because fixing the
+   instance in front of you provably does not find the siblings.
+2. **`D:\dev\rag\egui\two_gui_harnesses_with_different_default_window_sizes_make_coordinates_non_transferable.md`**
+   — **new file.** Two harnesses in one project defaulting to different
+   window sizes (**measured**: `gui-shot.ps1` `W=1760 H=1150`;
+   `gui-drive.ps1` `W=1600 H=1000`) means **a coordinate traced in one
+   does not land in the other**, and the symptom is a control that
+   appears broken. **Distinct from the existing
+   `scripted_click_coordinates_go_stale_when_a_dock_width_changes.md`**,
+   which is about one harness across a layout change; this is **two
+   harnesses at the same commit**, which no re-measurement inside a
+   single harness can catch.
+
+**CONSIDERED AND DECLINED, with reasons — because "why not" is worth as
+much as "what":**
+
+- **The double-click-unreachable finding was NOT re-filed.**
+  `egui_rapid_successive_double_clicks_coalesce_into_one_burst.md` and
+  `eframe_035_raw_input_hook_synthetic_event_injection.md` already carry
+  the harness's click-injection limits. **What continuation 107 added is
+  the DIAGNOSTIC, not the limit** — *instrument a branch that fires ONLY
+  on the condition you are testing, then check whether it fired at all* —
+  and that is already the substance of the **R87 amendment** ruled at
+  continuation 106 and of
+  `an_absent_trace_proves_nothing_until_you_confirm_which_trace_the_code_emits.md`.
+  **Re-filing a first successful application of an already-filed rule is
+  duplication.**
+- **Nothing to `C:\personal_rag\pdf\`.** The `/M`-raw and `/T`-Table-170
+  findings are **what the STANDARD says**, not what a real-world producer
+  empirically does — that is `pdfce-spec-librarian`'s territory by hard
+  rule 6, and the spec RAG is where they came from. **No producer
+  divergence was observed this arc.**
+- **Nothing to `D:\dev\rag\rust\`.** The parked-list-vs-`Vec`+index and
+  `BTreeSet`-beside-vs-field decisions are **API-shape judgement**, and
+  the transferable part (*count the readers; look one rung up*) is
+  general software design, not a Rust or Cargo finding. Filed to
+  `ARCHITECTURE.md` §12 instead, which is where this project's own design
+  reasoning belongs.
+- **No `pdfce-spec-librarian` dispatch needed** — the spec questions were
+  answered *from* the existing RAG, which is the system working.
+
+### Ledger discipline (R106) — continuation 107
+
+| | Minted this continuation | Ceiling after |
+|---|---|---|
+| Pass IDs | **39.0, 39.1, 40.0, 41.0** (four minted, three new families). **38.1 and 38.4 were MOVED from *Next up*, not minted** — they were minted 2026-08-06 on 38.2's ship | families up to **41** (highest ID **41.0**); **42** next free. 38.x runs 38.1–38.5; 39.x runs 39.0–39.1 |
+| Standing rules | **NONE.** No rule proposed or minted this continuation | **R157** (**R158** next free), unchanged. Decision 030's three contingent candidates and the cross-RAG-handoff proposal still take **R158** |
+| Decision records | **NONE** — four entries appended to `ARCHITECTURE.md` §12, which mints no `docs/decisions/` file | **031** (**032** next free), unchanged |
+| Operator questions | **(bc)** — modeless click-to-edit-text, a rule-4 question | **(bc)** (**(bd)** next free) |
+
+**Ceiling figures MEASURED, not predicted.** This librarian invocation
+**had a shell** and read the ceilings directly out of `ROADMAP.md` and
+`docs/decisions/` before minting.
+
+**Observation-boundary note (hard rule 8).** Asserted here: the six commit
+messages read via `git show`; the Pass/rule/decision/question ceilings
+grepped from `docs/`; the two harness default window sizes read from
+`tools/gui-shot.ps1:32` and `tools/gui-drive.ps1:82`. **All gate figures
+are ENGINEER-MEASURED AND RELAYED (R87), not run by this librarian.**
+**Nothing about backups, remotes, CI or the index is asserted** — backup
+currency is not verifiable from here; the engineer should check
+`D:\Dev\pdfce-backups\`. These documentation edits are **UNCOMMITTED at
+the time of writing**; the engineer said he will re-run both checkers
+after committing.
