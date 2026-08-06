@@ -17091,10 +17091,14 @@ fn form_field_block_reason(field: &pdfce_core::forms::Field) -> Option<&'static 
     match field.field_type {
         Some(FieldType::Signature) => Some(ui_text::form_field_signature_note()),
         Some(FieldType::Choice) => Some(ui_text::form_field_choice_note()),
-        // TYPE-GATED, deliberately — see this function's own doc comment.
-        Some(FieldType::Text) if field.flags.has(FieldFlags::RICH_TEXT) => {
-            Some(ui_text::form_field_rich_text_note())
-        }
+        // `Field::is_rich_text`, NOT a bare `flags.has(RICH_TEXT)`. Bit 26 is
+        // the only overloaded position in the whole `/Ff` family — `RichText`
+        // on a text field, `RadiosInUnison` on a button — so the bare test
+        // compiles and reports every radio group as rich text. The predicate
+        // lives on `Field`, which has already resolved `/FT` through the
+        // inheritable `/Parent` walk, which is what makes the mistake
+        // unavailable rather than merely documented.
+        Some(FieldType::Text) if field.is_rich_text() => Some(ui_text::form_field_rich_text_note()),
         Some(FieldType::Button) => match field.button_kind {
             Some(ButtonKind::Push) => Some(ui_text::form_field_pushbutton_note()),
             Some(ButtonKind::Radio) => Some(ui_text::form_field_radio_note()),

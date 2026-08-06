@@ -467,6 +467,53 @@ impl Field {
         }
     }
 
+    /// Whether this is a **rich-text** field — `/Ff` bit 26 on a `/Tx` field
+    /// (§12.7.4.3 Table 228).
+    ///
+    /// # Why this exists as a method rather than a flag test at the call site
+    ///
+    /// **Bit 26 is the only overloaded bit position in the whole `/Ff` family**
+    /// (confirmed by exhaustive enumeration of Tables 221/226/228/230): it is
+    /// `RichText` on a text field and [`RadiosInUnison`](Self::radios_in_unison)
+    /// on a button field, same value `33554432`. So
+    /// `field.flags.has(FieldFlags::RICH_TEXT)` compiles perfectly and is
+    /// WRONG on a radio group — it reports every one of them as rich text.
+    ///
+    /// The hazard is the CONJUNCTION of two facts, and neither alone is
+    /// dangerous: bit positions are reused across field types, **and** `/FT`
+    /// is inheritable through `/Parent` (§12.7.3.1), so a widget-shaped
+    /// dictionary routinely carries `/Ff` and no `/FT` of its own. A caller
+    /// holding only the flag word cannot decode it correctly even in
+    /// principle.
+    ///
+    /// Putting the question on [`Field`] — which has already resolved the type
+    /// through the parent walk — makes the mistake unavailable rather than
+    /// merely documented. That is the difference between a warning and a
+    /// signature.
+    ///
+    /// Returns `false` for every non-text field, including a `/Sig` field with
+    /// bit 26 set: signature fields have **no type-specific flag table at
+    /// all** (Table 232 adds only `/Lock` and `/SV`), so bits 4–32 there are
+    /// reserved and a set bit is malformed, never a meaning.
+    #[must_use]
+    pub fn is_rich_text(&self) -> bool {
+        matches!(self.field_type, Some(FieldType::Text)) && self.flags.has(FieldFlags::RICH_TEXT)
+    }
+
+    /// Whether this button field's radio kids toggle **in unison** — `/Ff`
+    /// bit 26 on a `/Btn` field (§12.7.4.2 Table 226).
+    ///
+    /// The other half of bit 26's overload; see [`Self::is_rich_text`] for the
+    /// full argument. Gated on the button kind as well as the type, because
+    /// the flag is meaningful only for a radio set — Table 226 defines it
+    /// against radio kids sharing an on-state name.
+    #[must_use]
+    pub fn radios_in_unison(&self) -> bool {
+        matches!(self.field_type, Some(FieldType::Button))
+            && matches!(self.button_kind, Some(ButtonKind::Radio))
+            && self.flags.has(FieldFlags::RADIOS_IN_UNISON)
+    }
+
     /// Whether any of this field's widgets carries a usable normal
     /// appearance (`/AP` `/N`). The per-field demand signal for
     /// regeneration and `/NeedAppearances` disclosure.
@@ -1768,5 +1815,121 @@ mod tests {
             "one field, two widgets — not two fields"
         );
         assert_eq!(form.fields[0].widgets.len(), 2);
+    }
+
+    // -----------------------------------------------------------------
+    // `/Ff` bit 26 — the ONLY overloaded bit position in the whole family.
+    // -----------------------------------------------------------------
+
+    /// A radio group with bit 26 set is `RadiosInUnison`, **not** rich text.
+    ///
+    /// This is the test the whole `is_rich_text`/`radios_in_unison` pair
+    /// exists for. `flags.has(FieldFlags::RICH_TEXT)` on this field returns
+    /// TRUE — the bit really is set — and every consumer that asks the flag
+    /// word directly gets a wrong answer that compiles. Only a question that
+    /// has the resolved `/FT` in hand can tell the two apart.
+    ///
+    /// Non-vacuous by construction: it asserts the raw bit IS set, so it
+    /// cannot pass by the flag accidentally being absent.
+    #[test]
+    fn bit_26_on_a_radio_group_is_radios_in_unison_not_rich_text() {
+        let radio = Field {
+            id: ObjId::new(1, 0),
+            fully_qualified_name: "Choice".to_owned(),
+            partial_name: None,
+            alternate_name: None,
+            mapping_name: None,
+            field_type: Some(FieldType::Button),
+            button_kind: Some(ButtonKind::Radio),
+            flags: FieldFlags(FieldFlags::RADIO | FieldFlags::RADIOS_IN_UNISON),
+            value: FieldValue::Absent,
+            default_value: FieldValue::Absent,
+            default_appearance: None,
+            quadding: Quadding::Left,
+            max_len: None,
+            options: Vec::new(),
+            top_index: 0,
+            selected_indices: Vec::new(),
+            widgets: Vec::new(),
+            merged: false,
+            has_additional_actions: false,
+            shares_parent_name: false,
+        };
+        assert!(
+            radio.flags.has(FieldFlags::RICH_TEXT),
+            "precondition: the RAW bit is set — this is exactly why the bare              flag test is unsafe, and asserting it keeps this test honest"
+        );
+        assert!(
+            !radio.is_rich_text(),
+            "a RADIO GROUP must never be reported as a rich-text field"
+        );
+        assert!(
+            radio.radios_in_unison(),
+            "bit 26 on a /Btn IS RadiosInUnison"
+        );
+    }
+
+    /// The mirror: bit 26 on a text field is rich text, and is NOT reported
+    /// as `RadiosInUnison`.
+    #[test]
+    fn bit_26_on_a_text_field_is_rich_text_not_radios_in_unison() {
+        let text = Field {
+            id: ObjId::new(2, 0),
+            fully_qualified_name: "Notes".to_owned(),
+            partial_name: None,
+            alternate_name: None,
+            mapping_name: None,
+            field_type: Some(FieldType::Text),
+            button_kind: None,
+            flags: FieldFlags(FieldFlags::RICH_TEXT),
+            value: FieldValue::Absent,
+            default_value: FieldValue::Absent,
+            default_appearance: None,
+            quadding: Quadding::Left,
+            max_len: None,
+            options: Vec::new(),
+            top_index: 0,
+            selected_indices: Vec::new(),
+            widgets: Vec::new(),
+            merged: false,
+            has_additional_actions: false,
+            shares_parent_name: false,
+        };
+        assert!(text.is_rich_text());
+        assert!(!text.radios_in_unison());
+    }
+
+    /// A SIGNATURE field with bit 26 set is neither.
+    ///
+    /// `/Sig` has **no type-specific flag table at all** (Table 232 adds only
+    /// `/Lock` and `/SV`), so bits 4–32 there are reserved and a set bit is
+    /// malformed rather than meaningful. Surfaced as "neither", never
+    /// silently decoded against some other type's table.
+    #[test]
+    fn bit_26_on_a_signature_field_is_neither_meaning() {
+        let sig = Field {
+            id: ObjId::new(3, 0),
+            fully_qualified_name: "Sig1".to_owned(),
+            partial_name: None,
+            alternate_name: None,
+            mapping_name: None,
+            field_type: Some(FieldType::Signature),
+            button_kind: None,
+            flags: FieldFlags(FieldFlags::RICH_TEXT),
+            value: FieldValue::Absent,
+            default_value: FieldValue::Absent,
+            default_appearance: None,
+            quadding: Quadding::Left,
+            max_len: None,
+            options: Vec::new(),
+            top_index: 0,
+            selected_indices: Vec::new(),
+            widgets: Vec::new(),
+            merged: false,
+            has_additional_actions: false,
+            shares_parent_name: false,
+        };
+        assert!(!sig.is_rich_text());
+        assert!(!sig.radios_in_unison());
     }
 }
