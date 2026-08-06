@@ -6430,3 +6430,53 @@ pub fn document_tab_label(file_name: &str, modified: bool) -> String {
 pub fn document_tab_tooltip(full_path: &str) -> String {
     format!("Switch to {full_path}")
 }
+
+/// The close-confirmation title.
+pub fn close_confirm_title() -> &'static str {
+    "Save before closing?"
+}
+
+/// Its body. Names the FILE, because with several documents open "this
+/// document" is not enough to act on.
+pub fn close_confirm_body(file_name: &str) -> String {
+    format!(
+        "“{file_name}” has changes you have not saved. Closing it without saving discards them."
+    )
+}
+
+/// The save-then-close button.
+pub fn close_confirm_save() -> &'static str {
+    "Save and close"
+}
+
+/// Its tooltip — states the one thing an operator cannot see: that a failed
+/// or cancelled save leaves the document OPEN rather than closing anyway.
+pub fn close_confirm_save_tooltip() -> &'static str {
+    "Save the changes, then close. If the save is cancelled or fails, the document stays open and nothing is lost."
+}
+
+/// The discard button.
+pub fn close_confirm_discard() -> &'static str {
+    "Close without saving"
+}
+
+/// Its tooltip. Blunt on purpose: this is the irreversible answer.
+pub fn close_confirm_discard_tooltip() -> &'static str {
+    "Discard every unsaved change in this document and close it. This cannot be undone."
+}
+
+/// The cancel button.
+pub fn close_confirm_cancel() -> &'static str {
+    "Keep it open"
+}
+
+/// The close-document button in the switcher.
+pub fn close_document_button() -> &'static str {
+    "Close"
+}
+
+/// Its tooltip. Says WHICH document, because the button sits in a row of
+/// several and "close" alone does not say which one goes.
+pub fn close_document_tooltip() -> &'static str {
+    "Close the document shown above. If it has unsaved changes you will be asked first."
+}

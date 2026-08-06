@@ -708,6 +708,18 @@ struct PdfceApp {
     /// Pass 3.2 UI spec the question is asked *before* it, so an operator
     /// who is going to back out is not made to pick a destination first.
     pending_save: Option<PendingSave>,
+    /// A close waiting on "save first?", when the document in front has
+    /// unsaved edits.
+    ///
+    /// The FOURTH member of this application's pending-gate family
+    /// (`pending_save`, `pending_copy`, `pending_redaction_apply`), and
+    /// deliberately joined to it rather than given a modal of its own — see
+    /// `apply`'s gate, which already refuses every unrelated action while any
+    /// pending question is outstanding. Two centre-anchored windows rendering
+    /// over each other, only the later one clickable, is a defect this project
+    /// has already had once; the gate is what prevents it, and a fourth
+    /// ad-hoc modal would sit outside it.
+    pending_close: bool,
     /// The outcome of the most recent Copy-text, kept until the next one.
     ///
     /// Deliberately **not** folded into the render-diagnostics
@@ -1098,6 +1110,7 @@ impl Default for PdfceApp {
             // page text (the R79 non-embedded Standard-14 default).
             default_add_text_font: pdfce_core::fontdata::Std14::Helvetica,
             pending_save: None,
+            pending_close: false,
             copy_result: None,
             // Collapsed, like the render diagnostics: the one-line
             // summary is always visible and the detail is there for when
@@ -3002,16 +3015,14 @@ enum Action {
     ToggleFormsPanel,
     /// Bring a parked document to the front, by its index in `parked`.
     SwitchDocument(usize),
-    /// Close the document in front, revealing the most recently parked one.
-    ///
-    /// Deliberately UNBOUND — see `close_active_document`'s own doc comment:
-    /// closing discards unsaved edits, and the confirmation belongs in the
-    /// existing pending-gate rather than as a fourth ad-hoc modal.
-    #[allow(
-        dead_code,
-        reason = "the close half of multiple-file support; unbound until the unsaved-edits confirmation is wired through the existing pending-gate" // ui-text-exempt: clippy lint justification, never displayed
-    )]
+    /// Close the document in front. Asks first when it has unsaved edits.
     CloseDocument,
+    /// "Save" on the close prompt: save, then close if the save succeeded.
+    CloseSaveThenClose,
+    /// "Don't save" on the close prompt: close, discarding the edits.
+    CloseWithoutSaving,
+    /// "Cancel" on the close prompt: keep the document open, unchanged.
+    CancelClose,
     /// Burn every form field's appearance into page content and remove the
     /// interactive form (`EditSession::flatten_fields`).
     FlattenForm,
@@ -5600,6 +5611,56 @@ impl PdfceApp {
         }
     }
 
+    /// The "save before closing?" prompt (multiple-file support).
+    ///
+    /// Three answers, and all three are REAL — this is not a yes/no with an
+    /// escape hatch. Save-then-close, close-and-discard, and cancel are the
+    /// three things an operator can actually want, and offering only two would
+    /// force one of them to be expressed by dismissing a dialog, which is how
+    /// an accidental discard happens.
+    ///
+    /// Centre-anchored, non-collapsible, matching its three siblings — and
+    /// gated by the same `apply` guard, so it can never render alongside them.
+    fn close_confirmation(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        if !self.pending_close {
+            return;
+        }
+        let name = match &self.status {
+            Status::Open(d) => d
+                .path
+                .file_name()
+                .map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
+            _ => String::new(),
+        };
+        egui::Window::new(ui_text::close_confirm_title())
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.label(ui_text::close_confirm_body(&name));
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .button(ui_text::close_confirm_save())
+                        .on_hover_text(ui_text::close_confirm_save_tooltip())
+                        .clicked()
+                    {
+                        actions.push(Action::CloseSaveThenClose);
+                    }
+                    if ui
+                        .button(ui_text::close_confirm_discard())
+                        .on_hover_text(ui_text::close_confirm_discard_tooltip())
+                        .clicked()
+                    {
+                        actions.push(Action::CloseWithoutSaving);
+                    }
+                    if ui.button(ui_text::close_confirm_cancel()).clicked() {
+                        actions.push(Action::CancelClose);
+                    }
+                });
+            });
+    }
+
     /// The Apply report — pdfce's **third** confirmation-dialog convention,
     /// adopted deliberately rather than by drift (ui-spec §4.1).
     ///
@@ -6352,6 +6413,16 @@ impl PdfceApp {
         {
             return;
         }
+        // The close question joins the same gate, for the same reason: while
+        // it is on screen it is the ONLY thing that may be answered.
+        if self.pending_close
+            && !matches!(
+                action,
+                Action::CloseSaveThenClose | Action::CloseWithoutSaving | Action::CancelClose
+            )
+        {
+            return;
+        }
         // Pass 12.0 substrate: the ONE enforcement point for a tool's
         // in-progress gesture (spec §3.3). Any action that is not itself
         // part of continuing/cancelling/committing the gesture consults the
@@ -6742,7 +6813,38 @@ impl PdfceApp {
                 return;
             }
             Action::CloseDocument => {
+                // ASK ONLY WHEN THERE IS SOMETHING TO LOSE. A clean document
+                // closes immediately: a confirmation whose answer is always
+                // "yes, obviously" is the kind that teaches an operator to
+                // dismiss prompts without reading them, which is exactly what
+                // makes the one that matters dangerous.
+                if matches!(&self.status, Status::Open(d) if d.session.is_modified()) {
+                    self.pending_close = true;
+                } else {
+                    self.close_active_document();
+                }
+                return;
+            }
+            Action::CloseSaveThenClose => {
+                self.pending_close = false;
+                self.save_dialog();
+                // CLOSE ONLY IF THE SAVE ACTUALLY SUCCEEDED. A cancelled file
+                // dialog, a read-only path, a refused write — each leaves the
+                // edits unsaved, and closing anyway would discard exactly the
+                // work the operator just asked to keep. The document stays
+                // open and the failure is already in the status bar.
+                if matches!(self.save_result, Some(SaveOutcome::Saved { .. })) {
+                    self.close_active_document();
+                }
+                return;
+            }
+            Action::CloseWithoutSaving => {
+                self.pending_close = false;
                 self.close_active_document();
+                return;
+            }
+            Action::CancelClose => {
+                self.pending_close = false;
                 return;
             }
             Action::ToggleFormsPanel => {
@@ -6845,6 +6947,9 @@ impl PdfceApp {
             | Action::ToggleRedactPanel
             | Action::SwitchDocument(_)
             | Action::CloseDocument
+            | Action::CloseSaveThenClose
+            | Action::CloseWithoutSaving
+            | Action::CancelClose
             | Action::ToggleFormsPanel
             | Action::FlattenForm
             | Action::RegenerateFormAppearances
@@ -7210,6 +7315,21 @@ impl PdfceApp {
         }
     }
 
+    /// Drive `apply` from a headless test.
+    ///
+    /// `apply` needs an `egui::Context` for the handful of actions that touch
+    /// the viewport; a default `Context` satisfies that without a window, and
+    /// none of the document-lifecycle actions this exercises read it. Going
+    /// through the REAL `apply` is the point — it is what carries the shared
+    /// pending-gate, and a test that called `close_active_document` directly
+    /// would prove the close works while proving nothing about the guard in
+    /// front of it.
+    #[cfg(test)]
+    fn apply_for_test(&mut self, action: Action) {
+        let ctx = egui::Context::default();
+        self.apply(action, &ctx, 1.0);
+    }
+
     /// Bring parked document `index` to the front, parking the current one.
     ///
     /// A SWAP, not a copy: exactly one `OpenDoc` is ever in `status`, so the
@@ -7246,19 +7366,16 @@ impl PdfceApp {
 
     /// Close the document in front and reveal the most recently parked one.
     ///
-    /// # Unsaved edits are NOT guarded here, and that is deliberate for now
+    /// # Unsaved edits are guarded by the CALLER, not here
     ///
-    /// `EditSession` holds unsaved edits, so closing discards them. Every
-    /// other destructive path in this application asks first, and this one
-    /// should too — but the confirmation belongs with the existing
-    /// `pending_save`/`pending_copy` gate rather than as a fourth ad-hoc
-    /// modal, and wiring it there is its own piece of work. Until then this
-    /// action is NOT bound to any control: it exists for the document
-    /// switcher's close affordance to use once that guard is in place.
-    #[allow(
-        dead_code,
-        reason = "the close half of multiple-file support; deliberately unbound until the unsaved-edits confirmation is wired through the existing pending-gate rather than as a fourth ad-hoc modal" // ui-text-exempt: clippy lint justification, never displayed
-    )]
+    /// This discards whatever is in the session. `Action::CloseDocument` is
+    /// what asks first, through the shared pending-gate; this is the
+    /// unconditional half, reached only once the question is answered.
+    ///
+    /// Kept unconditional deliberately: "Don't save" must be able to reach a
+    /// close that really does discard, and a method that re-checked
+    /// `is_modified` would either refuse that answer or need a bypass flag —
+    /// which is a second, quieter way of asking the same question.
     fn close_active_document(&mut self) {
         self.status = match self.parked.pop() {
             Some(next) => Status::Open(Box::new(next)),
@@ -8083,6 +8200,19 @@ impl eframe::App for PdfceApp {
                             ),
                         );
                     }
+                    // Close acts on the document IN FRONT, so it sits with
+                    // the active tab rather than as a per-tab affordance: a
+                    // small ✕ on every tab is four chances to close the wrong
+                    // file, and the switcher's whole job is that you always
+                    // know which one is in front.
+                    if ui
+                        .button(ui_text::close_document_button())
+                        .on_hover_text(ui_text::close_document_tooltip())
+                        .clicked()
+                    {
+                        actions.push(Action::CloseDocument);
+                    }
+                    ui.separator();
                     for (i, other) in self.parked.iter().enumerate() {
                         let name = other
                             .path
@@ -8149,6 +8279,7 @@ impl eframe::App for PdfceApp {
         // only decides what is on top if two ever coexist, which the gate
         // makes impossible.
         self.redaction_apply_confirmation(&ctx, &mut actions);
+        self.close_confirmation(&ctx, &mut actions);
         // The Pass 6.2 text-entry popup: a small non-blocking window that
         // collects the text before authoring.
         self.text_entry_popup(&ctx, &mut actions);
@@ -19391,5 +19522,95 @@ mod tests {
             Status::Open(d) => d.path.display().to_string(),
             _ => String::new(),
         }
+    }
+
+    /// A CLEAN document closes with no prompt — a confirmation whose answer is
+    /// always "yes, obviously" teaches operators to dismiss prompts unread,
+    /// which is what makes the one that matters dangerous.
+    #[test]
+    fn closing_an_unmodified_document_asks_nothing() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture_path("forms/demo-form.pdf"));
+        app.open_path(fixture_path("vector/curves.pdf"));
+        app.apply_for_test(Action::CloseDocument);
+        assert!(!app.pending_close, "a clean document must not prompt");
+        assert!(app.parked.is_empty(), "and must actually close");
+    }
+
+    /// A MODIFIED document prompts instead of closing.
+    #[test]
+    fn closing_a_modified_document_asks_first_and_does_not_close() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture_path("forms/demo-form.pdf"));
+        app.open_path(fixture_path("vector/curves.pdf"));
+        modify_front(&mut app);
+
+        app.apply_for_test(Action::CloseDocument);
+        assert!(app.pending_close, "an unsaved document must ask");
+        assert_eq!(app.parked.len(), 1, "and must NOT have closed yet");
+    }
+
+    /// "Don't save" really discards and really closes.
+    #[test]
+    fn close_without_saving_discards_and_closes() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture_path("forms/demo-form.pdf"));
+        app.open_path(fixture_path("vector/curves.pdf"));
+        modify_front(&mut app);
+        app.apply_for_test(Action::CloseDocument);
+
+        app.apply_for_test(Action::CloseWithoutSaving);
+        assert!(!app.pending_close);
+        assert!(app.parked.is_empty(), "the parked document came forward");
+        assert!(
+            matches!(&app.status, Status::Open(d) if !d.session.is_modified()),
+            "and it is the untouched one"
+        );
+    }
+
+    /// "Keep it open" changes nothing at all — the document, its edits and the
+    /// parked list are exactly as they were.
+    #[test]
+    fn cancelling_the_close_leaves_everything_untouched() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture_path("forms/demo-form.pdf"));
+        app.open_path(fixture_path("vector/curves.pdf"));
+        modify_front(&mut app);
+        app.apply_for_test(Action::CloseDocument);
+
+        app.apply_for_test(Action::CancelClose);
+        assert!(!app.pending_close);
+        assert_eq!(app.parked.len(), 1, "nothing closed");
+        assert!(
+            matches!(&app.status, Status::Open(d) if d.session.is_modified()),
+            "and the edits are still there"
+        );
+    }
+
+    /// While the close question is outstanding, UNRELATED actions are refused
+    /// by the shared gate — the property that lets this dialog coexist with
+    /// its three siblings without two of them rendering over each other.
+    #[test]
+    fn an_outstanding_close_question_blocks_unrelated_actions() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture_path("forms/demo-form.pdf"));
+        app.open_path(fixture_path("vector/curves.pdf"));
+        modify_front(&mut app);
+        app.apply_for_test(Action::CloseDocument);
+
+        let before = app.parked.len();
+        app.apply_for_test(Action::SwitchDocument(0));
+        assert!(app.pending_close, "the question is still outstanding");
+        assert_eq!(app.parked.len(), before, "the switch was refused");
+    }
+
+    fn modify_front(app: &mut PdfceApp) {
+        let Status::Open(front) = &mut app.status else {
+            panic!("no document in front");
+        };
+        front
+            .session
+            .set_info_field(pdfce_core::edit::InfoField::Title, Some("edited"))
+            .expect("edit the active document");
     }
 }
