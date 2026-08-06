@@ -6407,3 +6407,26 @@ pub fn activities_forms_label() -> &'static str {
 pub fn activities_forms_tooltip() -> &'static str {
     "Fill in this document's interactive fields, flatten them, or move their values in and out as a data file."
 }
+
+// -- Multiple open documents ------------------------------------------------
+
+/// The document switcher's leading label.
+pub fn document_switcher_label() -> &'static str {
+    "Open:"
+}
+
+/// One document's button. The `*` is the same unsaved marker the window title
+/// uses, so one convention means one thing in both places.
+pub fn document_tab_label(file_name: &str, modified: bool) -> String {
+    if modified {
+        format!("{file_name}*")
+    } else {
+        file_name.to_owned()
+    }
+}
+
+/// Its tooltip — the FULL path, because two open files very often share a
+/// name and the switcher shows only the last component.
+pub fn document_tab_tooltip(full_path: &str) -> String {
+    format!("Switch to {full_path}")
+}

@@ -766,6 +766,36 @@ struct PdfceApp {
     /// the two are mutually exclusive inputs to the same operation, and two
     /// boxes would raise the question of which wins when both are filled.
     redact_search_is_pattern: bool,
+    /// Documents that are OPEN but not in front (multiple-file support).
+    ///
+    /// # Why a "parked" list beside `status`, rather than `status` becoming a
+    /// list with an active index
+    ///
+    /// The obvious shape is `documents: Vec<OpenDoc>` + `active: usize`. It
+    /// was rejected after counting the cost: **76 call sites** destructure
+    /// `Status::Open(doc)`, and every one of them would have to be rewritten
+    /// to resolve the active document through an index. That is 76 chances to
+    /// silently address the wrong document — and "an edit landed on the file
+    /// you were not looking at" is close to the worst defect this application
+    /// could have, because nothing on screen would show it.
+    ///
+    /// This shape makes that class of bug UNREPRESENTABLE instead of merely
+    /// avoided. `Status::Open` still means, exactly as it always has, **the
+    /// document in front of the operator** — so every existing call site
+    /// remains correct without being touched, by construction rather than by
+    /// review. Switching documents SWAPS one out of here and the active one
+    /// in; nothing else in the application can see a non-active document at
+    /// all.
+    ///
+    /// The cost, stated: a switch is a move rather than an index change, and
+    /// this list is in most-recently-parked order rather than open order. Both
+    /// are cheap next to 76 audited call sites.
+    ///
+    /// Per-document state was already isolated on [`OpenDoc`] — session,
+    /// pages, view, active tool, selection, entered level, object model, form
+    /// drafts. That isolation is what makes this a small change; it is the
+    /// part that usually makes multiple-file support a rewrite.
+    parked: Vec<OpenDoc>,
     /// In-flight text-field edits, keyed by fully-qualified field name.
     ///
     /// Same reasoning as [`OpenDoc::dimension_place_draft`] (Pass 34.2): an
@@ -1077,6 +1107,7 @@ impl Default for PdfceApp {
             pending_redaction_apply: None,
             redact_search_query: String::new(),
             redact_search_is_pattern: false,
+            parked: Vec::new(),
             form_drafts: std::collections::HashMap::new(),
             edit_note: None,
             recovery_note: None,
@@ -2969,6 +3000,18 @@ enum Action {
     ToggleRedactPanel,
     /// Show the interactive-form field list (`docs/ui_specs/forms-panel.md`).
     ToggleFormsPanel,
+    /// Bring a parked document to the front, by its index in `parked`.
+    SwitchDocument(usize),
+    /// Close the document in front, revealing the most recently parked one.
+    ///
+    /// Deliberately UNBOUND — see `close_active_document`'s own doc comment:
+    /// closing discards unsaved edits, and the confirmation belongs in the
+    /// existing pending-gate rather than as a fourth ad-hoc modal.
+    #[allow(
+        dead_code,
+        reason = "the close half of multiple-file support; unbound until the unsaved-edits confirmation is wired through the existing pending-gate" // ui-text-exempt: clippy lint justification, never displayed
+    )]
+    CloseDocument,
     /// Burn every form field's appearance into page content and remove the
     /// interactive form (`EditSession::flatten_fields`).
     FlattenForm,
@@ -3069,6 +3112,17 @@ impl PdfceApp {
         self.copy_detail_expanded = false;
         self.pending_text_kind = None;
         self.text_input.clear();
+        // PARK the document that is currently in front, rather than
+        // dropping it. This is the whole of "open a second file": the new one
+        // becomes active, the old one keeps its session, its unsaved edits,
+        // its selection and its scroll position, and is one click away.
+        //
+        // Only a successfully-OPEN document is parked. A failed load leaves
+        // `status` an error variant, and parking that would put an error card
+        // in the document switcher.
+        if let Status::Open(current) = std::mem::take(&mut self.status) {
+            self.parked.push(*current);
+        }
         self.status = match Document::load(&path) {
             Ok(doc) => match pdfce_core::page_tree::pages(&doc) {
                 Ok(pages) => {
@@ -6683,6 +6737,14 @@ impl PdfceApp {
                 self.show_pane_subject(ribbon::PaneSubject::Redact);
                 return;
             }
+            Action::SwitchDocument(index) => {
+                self.switch_to_parked(index);
+                return;
+            }
+            Action::CloseDocument => {
+                self.close_active_document();
+                return;
+            }
             Action::ToggleFormsPanel => {
                 self.show_pane_subject(ribbon::PaneSubject::Forms);
                 return;
@@ -6781,6 +6843,8 @@ impl PdfceApp {
             | Action::ConfirmPendingCopy
             | Action::CancelPendingCopy
             | Action::ToggleRedactPanel
+            | Action::SwitchDocument(_)
+            | Action::CloseDocument
             | Action::ToggleFormsPanel
             | Action::FlattenForm
             | Action::RegenerateFormAppearances
@@ -7144,6 +7208,65 @@ impl PdfceApp {
                 state.clear_gesture();
             }
         }
+    }
+
+    /// Bring parked document `index` to the front, parking the current one.
+    ///
+    /// A SWAP, not a copy: exactly one `OpenDoc` is ever in `status`, so the
+    /// rest of the application continues to see one document and cannot
+    /// accidentally address another.
+    ///
+    /// Narration is reset for the same reason [`Self::open_path`] resets it —
+    /// `edit_note`, `save_result` and the copy results all describe an action
+    /// taken against the document being parked, and leaving them in the status
+    /// bar would narrate the wrong file. The difference from `open_path` is
+    /// that this does NOT clear the redaction query: that is per-document
+    /// state the operator typed, and switching away and back should not eat
+    /// it. (It lives on the app rather than on `OpenDoc` today, which is a
+    /// real wart this makes visible — noted, not fixed here.)
+    fn switch_to_parked(&mut self, index: usize) {
+        if index >= self.parked.len() {
+            return;
+        }
+        let Status::Open(current) = std::mem::take(&mut self.status) else {
+            // Nothing in front (an error card, or idle): just take the parked
+            // document without pushing anything back.
+            self.status = Status::Open(Box::new(self.parked.remove(index)));
+            return;
+        };
+        let incoming = Box::new(self.parked.remove(index));
+        self.parked.push(*current);
+        self.status = Status::Open(incoming);
+        self.save_result = None;
+        self.edit_note = None;
+        self.recovery_note = None;
+        self.copy_result = None;
+        self.copy_detail_expanded = false;
+    }
+
+    /// Close the document in front and reveal the most recently parked one.
+    ///
+    /// # Unsaved edits are NOT guarded here, and that is deliberate for now
+    ///
+    /// `EditSession` holds unsaved edits, so closing discards them. Every
+    /// other destructive path in this application asks first, and this one
+    /// should too — but the confirmation belongs with the existing
+    /// `pending_save`/`pending_copy` gate rather than as a fourth ad-hoc
+    /// modal, and wiring it there is its own piece of work. Until then this
+    /// action is NOT bound to any control: it exists for the document
+    /// switcher's close affordance to use once that guard is in place.
+    #[allow(
+        dead_code,
+        reason = "the close half of multiple-file support; deliberately unbound until the unsaved-edits confirmation is wired through the existing pending-gate rather than as a fourth ad-hoc modal" // ui-text-exempt: clippy lint justification, never displayed
+    )]
+    fn close_active_document(&mut self) {
+        self.status = match self.parked.pop() {
+            Some(next) => Status::Open(Box::new(next)),
+            None => Status::Idle,
+        };
+        self.save_result = None;
+        self.edit_note = None;
+        self.recovery_note = None;
     }
 
     /// Show `subject` in the Tool Options pane and RAISE it (Pass 24.3).
@@ -7930,6 +8053,61 @@ impl eframe::App for PdfceApp {
         // the CentralPanel and follow the full-width status bar) — what
         // changed is that the rail is now a PANE, so Tool Options can be a tab
         // beside it, which is the operator's literal request.
+        // THE DOCUMENT SWITCHER — one row, above the docks, only when there
+        // is more than one document open.
+        //
+        // Hidden at one document rather than shown empty: a switcher with a
+        // single entry is a permanent row of chrome that never does anything,
+        // and this application's own R124 reasoning applies — a control that
+        // cannot act promises a capability. It appears the moment a second
+        // file is opened, which is also the moment it becomes discoverable
+        // BECAUSE it appeared.
+        if !self.parked.is_empty() {
+            egui::Panel::top("document-switcher").show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(ui_text::document_switcher_label());
+                    // The active document first, selected and inert — clicking
+                    // the file you are already in should do nothing, and
+                    // saying so with a selected-but-live control would invite
+                    // the click.
+                    if let Status::Open(doc) = &self.status {
+                        let name = doc
+                            .path
+                            .file_name()
+                            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+                        ui.add_enabled(
+                            false,
+                            egui::Button::selectable(
+                                true,
+                                ui_text::document_tab_label(&name, doc.session.is_modified()),
+                            ),
+                        );
+                    }
+                    for (i, other) in self.parked.iter().enumerate() {
+                        let name = other
+                            .path
+                            .file_name()
+                            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+                        // The modified marker is per-document and read from
+                        // that document's OWN session — the state isolation
+                        // that made this feature small is also what makes an
+                        // honest per-tab dirty flag free.
+                        if ui
+                            .button(ui_text::document_tab_label(
+                                &name,
+                                other.session.is_modified(),
+                            ))
+                            .on_hover_text(ui_text::document_tab_tooltip(
+                                &other.path.display().to_string(),
+                            ))
+                            .clicked()
+                        {
+                            actions.push(Action::SwitchDocument(i));
+                        }
+                    }
+                });
+            });
+        }
         if self.rail_expanded {
             egui::Panel::left("dock-left")
                 .default_size(LEFT_DOCK_DEFAULT_WIDTH_PTS)
@@ -19078,5 +19256,140 @@ mod tests {
             OpenDoc::truncate_entered(ent(None, None), true, None, None),
             ent(None, None)
         );
+    }
+
+    // -----------------------------------------------------------------
+    // Multiple open documents — the isolation that makes it safe.
+    // -----------------------------------------------------------------
+
+    /// Opening a second file PARKS the first rather than discarding it.
+    #[test]
+    fn opening_a_second_file_parks_the_first() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture_path("forms/demo-form.pdf"));
+        assert!(matches!(app.status, Status::Open(_)), "first file opened");
+        assert!(app.parked.is_empty(), "nothing parked yet");
+
+        app.open_path(fixture_path("vector/curves.pdf"));
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "second file is in front"
+        );
+        assert_eq!(
+            app.parked.len(),
+            1,
+            "the first file must be PARKED, not dropped"
+        );
+    }
+
+    /// Switching swaps: exactly ONE document is ever in `status`.
+    ///
+    /// This is the invariant the whole design rests on — every one of the 76
+    /// `Status::Open(doc)` call sites is correct precisely because
+    /// `Status::Open` can only ever be the document in front. If a switch
+    /// could leave two, or none, those call sites would start addressing the
+    /// wrong file with nothing on screen to show it.
+    #[test]
+    fn switching_swaps_and_never_duplicates_or_loses_a_document() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture_path("forms/demo-form.pdf"));
+        app.open_path(fixture_path("vector/curves.pdf"));
+
+        let front = active_name(&app);
+        let parked_before = app.parked.len();
+        app.switch_to_parked(0);
+
+        assert_eq!(app.parked.len(), parked_before, "the count must not change");
+        assert_ne!(active_name(&app), front, "a different document is in front");
+        // Two documents in, two documents accounted for, always.
+        assert_eq!(app.parked.len() + 1, 2);
+    }
+
+    /// **An edit lands on the active document and NOT on a parked one.**
+    ///
+    /// The defect this forecloses is the worst one available here: an edit
+    /// applied to the file the operator is not looking at, which nothing on
+    /// screen would reveal. Asserted by editing after a switch and checking
+    /// BOTH documents' modified flags — the parked one must still be pristine.
+    #[test]
+    fn an_edit_lands_only_on_the_document_in_front() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture_path("forms/demo-form.pdf"));
+        app.open_path(fixture_path("vector/curves.pdf"));
+
+        // Edit whatever is in front.
+        let Status::Open(front) = &mut app.status else {
+            panic!("no document in front");
+        };
+        front
+            .session
+            .set_info_field(pdfce_core::edit::InfoField::Title, Some("edited"))
+            .expect("set a title on the active document");
+
+        assert!(
+            matches!(&app.status, Status::Open(d) if d.session.is_modified()),
+            "the active document must be modified"
+        );
+        assert!(
+            app.parked.iter().all(|d| !d.session.is_modified()),
+            "a PARKED document must be untouched by an edit to the active one"
+        );
+
+        // And the isolation survives a switch: the edit stays with its own
+        // document rather than following the front position.
+        app.switch_to_parked(0);
+        assert!(
+            matches!(&app.status, Status::Open(d) if !d.session.is_modified()),
+            "the newly-fronted document is the pristine one"
+        );
+        assert!(
+            app.parked.iter().any(|d| d.session.is_modified()),
+            "the edited document kept its edit while parked"
+        );
+    }
+
+    /// Closing reveals the most recently parked document, and closing the
+    /// last one returns to Idle rather than leaving a phantom.
+    #[test]
+    fn closing_reveals_the_next_document_then_returns_to_idle() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture_path("forms/demo-form.pdf"));
+        app.open_path(fixture_path("vector/curves.pdf"));
+
+        app.close_active_document();
+        assert!(
+            matches!(app.status, Status::Open(_)),
+            "the parked one comes forward"
+        );
+        assert!(app.parked.is_empty());
+
+        app.close_active_document();
+        assert!(
+            matches!(app.status, Status::Idle),
+            "the last close returns to Idle"
+        );
+    }
+
+    /// An out-of-range switch is a no-op, not a panic.
+    #[test]
+    fn switching_to_a_nonexistent_document_does_nothing() {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture_path("forms/demo-form.pdf"));
+        let before = active_name(&app);
+        app.switch_to_parked(99);
+        assert_eq!(active_name(&app), before);
+    }
+
+    fn fixture_path(rel: &str) -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/synthetic")
+            .join(rel)
+    }
+
+    fn active_name(app: &PdfceApp) -> String {
+        match &app.status {
+            Status::Open(d) => d.path.display().to_string(),
+            _ => String::new(),
+        }
     }
 }
