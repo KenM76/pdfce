@@ -11479,150 +11479,141 @@ impl PdfceApp {
             // `EditSession` command. It suppresses the plain object-selection
             // marquee so a drag is unambiguously an edit gesture, not a
             // rubber-band.
-            run_vector_edit_tool(doc, ui, &image_response, image_rect, extent, zoom);
+            run_vector_edit_tool(
+                doc,
+                ui,
+                &image_response,
+                image_rect,
+                extent,
+                zoom,
+                Modeless::No,
+            );
         } else {
-            if (image_response.clicked() || image_response.double_clicked())
-                && let Some(screen_pos) = image_response.interact_pointer_pos()
-            {
-                let canvas_pos = viewer::screen_to_page(screen_pos, image_rect, extent, zoom);
-                // ADDITIVE SELECT TAKES CTRL AS WELL AS SHIFT.
-                //
-                // Shift-toggle has worked since Pass 9a; Ctrl did nothing, and
-                // `modifiers.ctrl`/`command` appeared exactly once in this
-                // whole file. On Windows, Ctrl+click is THE toggle-add
-                // convention — so an operator reaching for it got a plain
-                // click that threw their selection away, which reads as
-                // "multi-select is not implemented" rather than "wrong key".
-                //
-                // `command` rather than `ctrl`: egui maps it to Ctrl on
-                // Windows/Linux and Cmd on macOS, so this is one expression of
-                // "the platform's modifier" instead of a Windows-only literal.
-                //
-                // Shift is kept as a synonym rather than reassigned to
-                // range-select: pdfce's selection is a set with no ordering to
-                // range over, so a range verb would have nothing to mean.
-                let (shift, alt) =
-                    ui.input(|i| (i.modifiers.shift || i.modifiers.command, i.modifiers.alt));
-                let tol =
-                    canvas::screen_tolerance_to_page(canvas::SELECT_SCREEN_TOLERANCE_PX, zoom);
-                // Depth first: a double-click descends into the object under
-                // the pointer, and a click inside an entered object picks one
-                // of its subpaths. `true` means the click was consumed at that
-                // level, so the object-level selection below is skipped —
-                // otherwise picking a line inside a view would re-select the
-                // whole view in the same frame and visually undo the descent.
-                let consumed_inside =
-                    doc.apply_click_depth(canvas_pos, tol, image_response.double_clicked(), alt);
-                diag::trace(|| {
-                    format!(
-                        "depth-click canvas={canvas_pos:?} double={} consumed={consumed_inside} \
-                         entered={:?}",
-                        image_response.double_clicked(),
-                        doc.entered
-                    )
-                });
-                // The ALL-hits query, always — even for a plain click, whose
-                // outcome is unchanged (the head of the list). The extra
-                // information is what the readout discloses as "1 of 3 at
-                // this point", which is how the operator finds out there is
-                // anything underneath to Alt+click to (ui-spec §C.3).
-                //
-                // Skipped entirely when the click was consumed inside an
-                // entered object. Computing it and discarding it would be
-                // merely wasteful; TRACING it and discarding it was actively
-                // misleading — the log read `newsel=1` for a selection that was
-                // never applied, which is the kind of evidence that sends the
-                // next investigation down a false path (R93).
-                let hits = if consumed_inside {
-                    Vec::new()
-                } else {
-                    doc.target_provider()
-                        .map(|p| p.hit_test_all(doc.view.page_index, canvas_pos, tol))
-                        .unwrap_or_default()
-                };
-                let (selection, cycle) = canvas::selection_and_cycle_after_click(
-                    &hits,
-                    &doc.canvas_selection,
-                    doc.click_cycle,
-                    doc.view.page_index,
-                    canvas_pos,
-                    shift,
-                    alt,
-                );
-                // Applied — and traced — only when the click was NOT consumed
-                // inside an entered object: picking a line within a view must
-                // not also re-select the whole view, which would visually undo
-                // the descent in the same frame it happened.
-                if !consumed_inside {
-                    diag::trace(|| {
-                        format!(
-                            "plain-click screen={screen_pos:?} canvas={canvas_pos:?} tol={tol} \
-                             hits={} first={:?} newsel={}",
-                            hits.len(),
-                            hits.first(),
-                            selection.len()
-                        )
-                    });
-                    doc.canvas_selection = selection;
-                    doc.click_cycle = cycle;
+            // MODELESS EDITING (the operator's own words: "we should be able
+            // to activate any and all of the edit options at once").
+            //
+            // With no tool armed the canvas runs the SAME object-edit
+            // behaviour the Obj tool provides — click selects, double-click
+            // descends the level ladder, a drag on the selection moves it, a
+            // drag on an anchor moves that node. It is not a thinner copy of
+            // that behaviour; it is literally the same function, which is what
+            // stops the two paths drifting apart.
+            //
+            // They drifted before. Until today this branch and the Obj tool
+            // each had their OWN click-select and depth handling, and the
+            // divergence was visible: `apply_click_depth` was wired into one
+            // of them and not the other, so double-click descended with no
+            // tool and did nothing with the tool armed. That is exactly the
+            // failure R92's "one method, both callers" rule exists to prevent,
+            // and the duplication here was the last of it.
+            //
+            // The marquee is the FALL-THROUGH, not a competitor: a drag the
+            // object-edit path declines (empty paper, or nothing selected) is
+            // a rubber band. That disambiguation is what makes "all the edit
+            // options at once" coherent rather than ambiguous — the gesture's
+            // meaning comes from WHAT IS UNDER THE POINTER, not from a mode.
+            let claimed = run_vector_edit_tool(
+                doc,
+                ui,
+                &image_response,
+                image_rect,
+                extent,
+                zoom,
+                Modeless::Yes,
+            );
+            if !claimed {
+                // §4.2 marquee — Pass 9a's rubber-band selection. A drag on the
+                // canvas (which now suppresses pan in selection mode) records its
+                // start in canvas space, draws the in-progress rectangle, and on
+                // release asks the provider which objects it fully encloses,
+                // folding them into the selection (plain = replace, Shift = add).
+                if canvas::primary_drag_started(&image_response) {
+                    // `press_origin`, NOT `interact_pointer_pos` — THE THIRD
+                    // OCCURRENCE of this bug in this file, and the first two
+                    // are already fixed with this exact comment.
+                    //
+                    // egui reports `drag_started` on the frame the drag
+                    // THRESHOLD is crossed, so the pointer has already left
+                    // the press point by the time this runs. The marquee
+                    // therefore recorded a drifted corner and rubber-banded a
+                    // rectangle that did not start where the operator pressed
+                    // — measured here at 34 canvas units on a driven drag
+                    // (recorded start x=43.6 for a press at x=9.9).
+                    //
+                    // Pass 25.5 fixed this for the ce-dimension drag and
+                    // `run_vector_edit_tool` for object/node drags; the
+                    // marquee was simply never revisited, and the error is
+                    // silent — a marquee that under-selects looks like a
+                    // marquee the operator drew too small.
+                    doc.marquee_start = ui
+                        .ctx()
+                        .input(|i| i.pointer.press_origin())
+                        .map(|s| viewer::screen_to_page(s, image_rect, extent, zoom));
                 }
-            }
-
-            // §4.2 marquee — Pass 9a's rubber-band selection. A drag on the
-            // canvas (which now suppresses pan in selection mode) records its
-            // start in canvas space, draws the in-progress rectangle, and on
-            // release asks the provider which objects it fully encloses,
-            // folding them into the selection (plain = replace, Shift = add).
-            if canvas::primary_drag_started(&image_response) {
-                doc.marquee_start = image_response
-                    .interact_pointer_pos()
-                    .map(|s| viewer::screen_to_page(s, image_rect, extent, zoom));
-            }
-            if let Some(start_canvas) = doc.marquee_start {
-                match image_response.interact_pointer_pos() {
-                    Some(cur_screen) => {
-                        let cur_canvas =
-                            viewer::screen_to_page(cur_screen, image_rect, extent, zoom);
-                        let canvas_rect = egui::Rect::from_two_pos(start_canvas, cur_canvas);
-                        // Draw the marquee outline (a 1px shape, projected
-                        // back to the screen), never a re-raster.
-                        let painter = ui.painter_at(image_rect);
-                        let min_s =
-                            viewer::page_to_screen(canvas_rect.min, image_rect, extent, zoom);
-                        let max_s =
-                            viewer::page_to_screen(canvas_rect.max, image_rect, extent, zoom);
-                        painter.rect_stroke(
-                            egui::Rect::from_two_pos(min_s, max_s),
-                            0.0,
-                            egui::Stroke::new(1.0, ui.visuals().selection.stroke.color),
-                            egui::StrokeKind::Inside,
-                        );
-                        if canvas::primary_drag_stopped(&image_response) {
-                            // Same widening as the click path above — a
-                            // marquee that adds under Shift but replaces under
-                            // Ctrl would be the same trap one gesture over.
-                            let shift = ui.input(|i| i.modifiers.shift || i.modifiers.command);
-                            let hits = doc
-                                .target_provider()
-                                .map(|p| p.hit_test_rect(doc.view.page_index, canvas_rect))
-                                .unwrap_or_default();
-                            doc.canvas_selection = canvas::selection_after_marquee(
-                                &doc.canvas_selection,
-                                &hits,
-                                shift,
+                if let Some(start_canvas) = doc.marquee_start {
+                    match image_response.interact_pointer_pos() {
+                        Some(cur_screen) => {
+                            let cur_canvas =
+                                viewer::screen_to_page(cur_screen, image_rect, extent, zoom);
+                            let canvas_rect = egui::Rect::from_two_pos(start_canvas, cur_canvas);
+                            // Draw the marquee outline (a 1px shape, projected
+                            // back to the screen), never a re-raster.
+                            let painter = ui.painter_at(image_rect);
+                            let min_s =
+                                viewer::page_to_screen(canvas_rect.min, image_rect, extent, zoom);
+                            let max_s =
+                                viewer::page_to_screen(canvas_rect.max, image_rect, extent, zoom);
+                            painter.rect_stroke(
+                                egui::Rect::from_two_pos(min_s, max_s),
+                                0.0,
+                                egui::Stroke::new(1.0, ui.visuals().selection.stroke.color),
+                                egui::StrokeKind::Inside,
                             );
-                            doc.marquee_start = None;
+                            if canvas::primary_drag_stopped(&image_response) {
+                                // Same widening as the click path above — a
+                                // marquee that adds under Shift but replaces under
+                                // Ctrl would be the same trap one gesture over.
+                                let shift = ui.input(|i| i.modifiers.shift || i.modifiers.command);
+                                let hits = doc
+                                    .target_provider()
+                                    .map(|p| p.hit_test_rect(doc.view.page_index, canvas_rect))
+                                    .unwrap_or_default();
+
+                                doc.canvas_selection = canvas::selection_after_marquee(
+                                    &doc.canvas_selection,
+                                    &hits,
+                                    shift,
+                                );
+                                // Traced AFTER the assignment: the `canvas`
+                                // line's `sel=` is read at the start of a
+                                // frame, so it reports the selection BEFORE
+                                // this runs and reads as 0 for a marquee that
+                                // worked. That misreading cost a debugging
+                                // round earlier in this session.
+                                diag::trace(|| {
+                                    format!(
+                                        "marquee-release rect={canvas_rect:?} hits={} newsel={}",
+                                        hits.len(),
+                                        doc.canvas_selection.len()
+                                    )
+                                });
+                                doc.marquee_start = None;
+                            }
                         }
+                        // The pointer left the window mid-drag: abandon the marquee
+                        // rather than commit a rectangle with no end point.
+                        None => doc.marquee_start = None,
                     }
-                    // The pointer left the window mid-drag: abandon the marquee
-                    // rather than commit a rectangle with no end point.
-                    None => doc.marquee_start = None,
                 }
-            }
+            } // end: marquee, the fall-through for a drag the edit path declined
 
             // §5.1 live-preview overlay: painted above the raster via the
             // painter, NEVER a re-raster. A selection outline is a 2px SHAPE,
             // not a tint (rule 6): a real boundary.
+            //
+            // Still drawn here even though `run_vector_edit_tool` draws its
+            // own: it also covers the marquee-selection case, and the call is
+            // idempotent (it paints from current state, holding none).
             draw_selection_outlines(
                 doc,
                 ui,
@@ -15797,6 +15788,34 @@ fn draw_selection_badge(
     );
 }
 
+/// Whether the object-edit behaviour is running as an ARMED TOOL or as the
+/// modeless default.
+///
+/// # The one behaviour that genuinely differs, and why
+///
+/// With the Obj tool armed, a drag anywhere moves the selected object — the
+/// operator entered a mode whose stated job is moving things, so the whole
+/// canvas is fair game and `classify_drag` never asks where the press landed.
+///
+/// Modeless, that is wrong. Nothing was armed, so a drag on empty paper is a
+/// marquee, and only a drag that STARTS ON the selected object is a move.
+/// Without that gate, selecting an object and then rubber-banding elsewhere
+/// would silently drag the selection across the page instead of selecting —
+/// an edit the operator neither asked for nor aimed at.
+///
+/// This is the only place the two differ. Click-select, the level ladder,
+/// node and handle grabs, previews and snapping are identical, which is the
+/// point: modeless is the SAME behaviour reached without arming anything, not
+/// a second, thinner implementation of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Modeless {
+    /// The operator armed the Obj tool. A drag anywhere moves the selection.
+    No,
+    /// No tool armed. A drag must start on the selected object to move it;
+    /// anything else falls through to the marquee.
+    Yes,
+}
+
 fn run_vector_edit_tool(
     doc: &mut OpenDoc,
     ui: &mut egui::Ui,
@@ -15804,12 +15823,13 @@ fn run_vector_edit_tool(
     image_rect: egui::Rect,
     extent: (f32, f32),
     zoom: f32,
-) {
+    modeless: Modeless,
+) -> bool {
     use pdfce_core::vector::{Point, SnapConfig, snap_candidates};
 
     let page_index = doc.view.page_index;
     if doc.pages.get(page_index).is_none() {
-        return;
+        return false;
     }
     let selected: Option<usize> = doc.canvas_selection.iter().next().map(|t| t.0 as usize);
 
@@ -16076,6 +16096,35 @@ fn run_vector_edit_tool(
                 vector_edit_tool::NODE_GRAB_SCREEN_TOLERANCE_PX,
                 zoom,
             );
+            // MODELESS GATE: a drag that did not start on the selected
+            // object is not a move — it is a marquee, and this function
+            // declines it so the caller can run one. See `Modeless`.
+            //
+            // Measured against the object's own bounds rather than its
+            // anchors: a press inside a large filled shape is plainly "on it"
+            // while being far from every anchor, and requiring anchor
+            // proximity would make big objects undraggable.
+            let started_on_object = modeless == Modeless::No
+                || doc
+                    .object_model
+                    .as_ref()
+                    .and_then(|p| p.bounds(page_index, TargetId(idx as u64)))
+                    .is_some_and(|b| {
+                        let pad = canvas::screen_tolerance_to_page(
+                            canvas::SELECT_SCREEN_TOLERANCE_PX,
+                            zoom,
+                        );
+                        #[allow(
+                            clippy::cast_possible_truncation,
+                            reason = "canvas-space bounds are f32 already; the pad is a small screen tolerance" // ui-text-exempt: clippy lint justification, never displayed
+                        )]
+                        let grown = b.expand(pad as f32);
+                        grown.contains(viewer::screen_to_page(sp, image_rect, extent, zoom))
+                    });
+            if !started_on_object {
+                diag::trace(|| format!("vector-drag-declined modeless sp={sp:?} obj={idx}"));
+                return false;
+            }
             let mut drag = vector_edit_tool::classify_drag(idx, start, &anchors, tol_page);
             diag::trace(|| {
                 format!(
@@ -16434,6 +16483,14 @@ fn run_vector_edit_tool(
             })
         }),
     );
+    // TRUE when a vector drag owns the pointer this frame.
+    //
+    // The modeless caller uses this to decide whether to run the marquee, so
+    // the two gestures can share one canvas without a mode: a drag that became
+    // a move or a node grab is claimed here, and anything else falls through
+    // to the rubber band. With the tool armed the caller ignores it, because
+    // an armed Obj tool suppresses the marquee outright.
+    doc.vector_drag.is_some()
 }
 
 /// Select and drag ce dimensions on the canvas (Pass 25.5).
