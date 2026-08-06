@@ -58,13 +58,32 @@ height.
   exactly this reason — without it, "diag was never enabled" and "nothing
   happened" look identical.
 
-**`gui-shot.ps1` photographs the SCREEN REGION, not the window.** If pdfce's
-window is not foreground it captures whatever app owns those pixels — on
-2026-08-05 it returned a pixel-perfect screenshot of SolidWorks while pdfce ran
-correctly behind it. Fixed in-script (`SetForegroundWindow` + a 2500 ms settle;
-at 700 ms the capture was a uniform WHITE client area under a correct pdfce
-title bar, which looks like a rendering bug and is not). Still verify the shot
-by eye — `SetForegroundWindow` is best-effort by Windows' own rules.
+**`gui-shot.ps1` photographs the SCREEN REGION, not the window.** Two distinct
+failures, both of which produce a file that looks like evidence and is not:
+
+1. **Not foreground → you photograph another app.** On 2026-08-05 it returned a
+   pixel-perfect screenshot of SolidWorks while pdfce ran correctly behind it.
+   Fixed in-script with `SetForegroundWindow` (best-effort by Windows' rules).
+2. **The DISPLAY IS ASLEEP → uniform white/black.** `CopyFromScreen` reads the
+   composited desktop; a powered-down display has nothing to read. Ken fixed it
+   by setting the display to stay on.
+
+**I got (2) wrong first, and the way I got it wrong is the lesson.** I saw the
+blank, invented a DWM-recomposite race, raised the settle 700 ms → 2500 ms,
+saw it work, and wrote the cause into a comment as fact. Re-measured after Ken
+identified the real cause: **three consecutive captures at 700 ms, all fine.**
+The sleep bought nothing. The tell I ignored at the time — blanks came back
+later at a *20 s* wait, which a recomposite race cannot explain.
+
+`gui-shot.ps1` now **refuses a near-uniform capture with a loud warning** that
+lists the known causes in the order they have occurred. That is the fix that
+matters, not the sleep: a silent failure is what lets a plausible story get
+attached to an unexamined symptom. Verified by making it fail on purpose
+(capture an off-screen region → warns; real capture → silent).
+
+Generalisable, and this project has now recorded it five times: **a change that
+appears to fix something is not evidence for why.** If the cause was not
+tested, say so instead of naming one.
 
 Related: [[feedback_engineer_does_the_observing]] — this is the tool that makes
 that rule cheap to follow. [[reference_clap_windows_stack]] for the other

@@ -70,12 +70,34 @@ $proc.Refresh()
 if ($proc.MainWindowHandle -ne [IntPtr]::Zero) {
     [Win32Fg.U]::ShowWindow($proc.MainWindowHandle, 5) | Out-Null   # SW_SHOW
     [Win32Fg.U]::SetForegroundWindow($proc.MainWindowHandle) | Out-Null
-    # 2.5 s, not 0.7 s: at 0.7 s the first capture came back a uniform WHITE
-    # client area under a correct pdfce title bar — the raise had happened but
-    # DWM had not recomposited the GPU surface yet. A blank capture is the
-    # precise failure the harness hardening of 2026-08-03 exists to refuse, so
-    # it is given room rather than raced.
-    Start-Sleep -Milliseconds 2500
+    # A short settle after the raise. 700 ms, measured — see the CORRECTION
+    # below before changing it.
+    #
+    # CORRECTION 2026-08-05, same day, and the correction matters more than the
+    # number. This line briefly read 2500 ms with a comment asserting that at
+    # 700 ms "the raise had happened but DWM had not recomposited the GPU
+    # surface yet". THAT CAUSE WAS INVENTED. It was a plausible story told
+    # about a symptom (a uniform WHITE client area under a correct pdfce title
+    # bar) without testing it, and raising the sleep appeared to fix the
+    # problem because the real cause happened to go away at the same time.
+    #
+    # The real cause was the DISPLAY POWER STATE. The operator's monitor had
+    # gone to sleep; `CopyFromScreen` reads the composited desktop, and there
+    # is nothing to read from a powered-down display. The operator identified
+    # it ("I set the display to always stay on so screenshots should stay
+    # working now") — which is also why the blanks came back later at 20 s,
+    # something a recomposite race could not explain and which should have
+    # falsified the story at the time.
+    #
+    # Re-measured after the fact: three consecutive captures at 700 ms, each
+    # with identical non-blank content. The longer sleep bought nothing and
+    # cost 1.8 s per capture.
+    #
+    # The lesson kept, because this project has now recorded it five times: a
+    # comment stating a CAUSE is a claim, and a change that appears to fix
+    # something is not evidence for the claim. If the cause was not tested,
+    # say so in the comment instead of naming one.
+    Start-Sleep -Milliseconds 700
 } else {
     Write-Warning "gui-shot: no main window handle — the capture may photograph another app."
 }
@@ -92,7 +114,46 @@ $bmp = New-Object System.Drawing.Bitmap $cw, $ch
 $g = [System.Drawing.Graphics]::FromImage($bmp)
 $g.CopyFromScreen($cx, $cy, 0, 0, (New-Object System.Drawing.Size $cw, $ch))
 $bmp.Save($Shot, [System.Drawing.Imaging.ImageFormat]::Png)
+
+# REFUSE A UNIFORM CAPTURE, loudly. Added 2026-08-05 after a run of blank
+# screenshots got a WRONG CAUSE invented for them (see the CORRECTION above).
+#
+# This is the fix that actually matters, and it is not the sleep. A blank
+# capture is indistinguishable from a real one at the call site: the file
+# exists, the command succeeds, and the only thing that says "this is not
+# evidence" is a human looking at it. That is exactly how a plausible cause
+# gets attached to an unexamined symptom — the failure was silent, so it got
+# a story instead of a diagnosis.
+#
+# `observe-gui.ps1` was hardened the same way on 2026-08-03, for the same
+# reason, and gui-shot simply never got the same treatment.
+#
+# Sampled on a grid rather than every pixel: a 1760x1150 capture is 2M
+# GetPixel calls in PowerShell, which is slower than the capture itself, and a
+# uniform image is uniform at any sampling density.
+$distinct = @{}
+for ($sy = 0; $sy -lt $bmp.Height; $sy += 17) {
+    for ($sx = 0; $sx -lt $bmp.Width; $sx += 17) {
+        $distinct[$bmp.GetPixel($sx, $sy).ToArgb()] = $true
+        if ($distinct.Count -gt 4) { break }
+    }
+    if ($distinct.Count -gt 4) { break }
+}
 $g.Dispose(); $bmp.Dispose()
+if ($distinct.Count -le 4) {
+    Write-Warning @"
+gui-shot: the capture is (near-)UNIFORM — $($distinct.Count) distinct colour(s) sampled.
+This is almost certainly NOT a picture of pdfce. Do not treat it as evidence.
+Known causes, in the order they have actually occurred:
+  1. The DISPLAY IS ASLEEP or powered off. CopyFromScreen reads the composited
+     desktop and there is nothing there to read. Wake it / set it to stay on.
+  2. The window was not raised, so the capture region belongs to another app
+     (this one usually looks like a screenshot OF THAT APP, not a blank).
+  3. pdfce died before the capture — check $Log.
+Re-run after ruling those out; do not raise the settle sleep and assume it fixed
+it, which is what happened the first time.
+"@
+}
 
 $proc | Stop-Process -Force
 Write-Host "shot=$Shot"
