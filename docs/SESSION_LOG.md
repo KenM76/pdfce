@@ -16101,3 +16101,211 @@ outstanding.
   `## Standing rules` does not disturb the rule parse — is **specific to
   this project's own ledger tool** and belongs in this log and in R106's
   orbit, not in a cross-project RAG.
+
+**Same-day continuation 103 (real date 2026-08-05) — NO PASS SHIPPED, NO
+NUMBER MINTED. A CORRECTION to something filed earlier today: the cause
+recorded for `tools/gui-shot.ps1`'s blank screenshots was INVENTED. It
+was not DWM composition — the operator's DISPLAY WAS ASLEEP.**
+
+**Carry-forward and "For next session" are UNCHANGED from continuation
+101 — see that entry**, not restated here.
+
+**Whose error this is, stated plainly.** The engineer's, not this
+librarian's. At Pass 34.2 this librarian was handed the DWM story as a
+measured finding and filed it faithfully into `ROADMAP.md` and into
+`D:\dev\rag\egui\`. The engineer has said so explicitly in dispatching
+the correction. Recorded because a future reader hitting the superseded
+text should know where the claim entered the record, not conclude the
+filing pipeline invented it.
+
+### What was filed earlier today, and what was wrong with it
+
+Pass 34.2's *Shipped* entry (and a matching amendment to
+`D:\dev\rag\egui\blank_capture_guard_must_sample_client_rect_not_window_rect.md`)
+recorded that `tools/gui-shot.ps1` needed a **2500 ms** settle after
+`SetForegroundWindow` because at 700 ms *"the capture came back a uniform
+WHITE client area under a correct pdfce title bar — the raise had
+happened but DWM had not recomposited the GPU surface yet."*
+
+**No measurement ever isolated that cause.** The engineer observed a
+symptom, told a plausible story about it, raised the sleep, saw it work,
+and wrote the story down as fact — in the script's own comment, in the
+roadmap entry, and in a cross-project RAG, all in a confident voice.
+
+### The real cause
+
+**The operator's display was asleep.** `CopyFromScreen` reads the
+**composited desktop**, and there is nothing to read from a powered-down
+display. Ken identified it himself — *"I set the display to always stay
+on so screenshots should stay working now"* — and screenshots have worked
+since, at every delay tried.
+
+### The tell that was available and got ignored
+
+The blank captures **returned later in the same session at a
+twenty-second wait**. A post-raise recomposite race cannot survive twenty
+seconds. That observation was in hand, it flatly contradicted the story,
+and it did not falsify it: the engineer switched to trace-based
+verification and moved on, leaving the wrong cause on disk. A hypothesis
+is only falsifiable if someone consciously checks new observations
+against it.
+
+### The re-measurement
+
+**Three consecutive captures at 700 ms, each with identical non-blank
+content.** The 2500 ms bought nothing and cost **1.8 s per capture**.
+`gui-shot.ps1` is restored to **700 ms**.
+
+### The fix that actually matters is the GUARD, not the sleep
+
+`tools/gui-shot.ps1` now **REFUSES a near-uniform capture** with a loud
+warning naming the three known causes **in the order they have actually
+occurred**:
+
+1. the display is asleep,
+2. the window was not raised — which usually looks like a screenshot of
+   the **other** application rather than a blank,
+3. pdfce died before the capture.
+
+Two details worth keeping:
+
+- **Verified BOTH ways, not only on the passing path.** A real capture is
+  silent; a deliberately off-screen capture region warns. A guard
+  confirmed only on its success path is the exact mistake the top of that
+  same egui RAG file already documents.
+- **Sampled on a 17-px grid.** Two million `GetPixel` calls in PowerShell
+  is slower than the capture itself, and a uniform image is uniform at
+  any sampling density.
+
+`tools/observe-gui.ps1` was hardened this same way on **2026-08-03**;
+`gui-shot.ps1` simply never got the same treatment. **A second capture
+entry point is a second place the guard has to exist**, and the one
+without it is the one that produced the false evidence.
+
+### Commit
+
+**`a6e5bf3`**, branch `pass-8-redaction`, message *"correct: the blank
+screenshots were a sleeping DISPLAY, and I invented a cause for them"*.
+Touches `tools/gui-shot.ps1` and
+`.claude/agents/pdfce-engineer/reference_gui_diag_harness.md`.
+
+**Observation-boundary note (hard rule 8).** This librarian invocation
+was given a **shell**, contrary to the usual constraint. The commit hash,
+its date, its subject line, its two-file stat, and the current 700 ms +
+17-px-grid state of `tools/gui-shot.ps1` in the working tree were
+therefore **verified directly by this librarian**, not relayed. Marked as
+such so a future reader can tell this paragraph apart from the relayed
+claims elsewhere in this log. **The ledger checker was NOT run by this
+librarian** — the engineer will run `tools/check-ledger-numbers.py
+--stats` after this filing, and nothing here mints a number for it to
+find.
+
+### Files edited this filing
+
+- **`docs/ROADMAP.md`** — Pass 34.2's *Shipped* entry now carries a
+  dated **CORRECTION 2026-08-05** block **immediately above** the
+  superseded "The settle is 2500 ms, not 700 ms" paragraph. The original
+  paragraph is **left standing, unedited** (Shipped is append-only, hard
+  rule 1); the correction block precedes it so a reader cannot reach the
+  false cause without first being told it is false.
+- **`D:\dev\rag\egui\blank_capture_guard_must_sample_client_rect_not_window_rect.md`**
+  — the 2026-08-05 amendment's heading is struck through and marked
+  **SUPERSEDED, CAUSE WAS WRONG**, with a block quote directing the
+  reader to the new **CORRECTION 2026-08-05** section below it. The
+  superseded body is kept visible and unedited, **deliberately**: the
+  *shape* of the error is the most useful thing in the entry. The
+  correction section carries the real cause, the ignored twenty-second
+  tell, the re-measurement, a replacement cause/fix table (the "raise not
+  yet composited" row does not exist), the guard's implementation notes,
+  and the generalisable rule.
+- **`D:\dev\rag\egui\index.md`** — that file's bullet repeated the false
+  cause and now states it is superseded, names the display-power cause,
+  and points at the guard rather than a longer sleep.
+- **`D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`**
+  — see below.
+- **`D:\dev\rag\rust\index.md`** — bullet updated six → seven
+  occurrences, with the new kind and the remedy line named.
+- **`docs/FEATURES.md` — deliberately NOT touched.** No capability
+  changed; this is a harness correction. The maintenance contract binds
+  `FEATURES.md` to `ROADMAP.md` **capability** changes.
+
+### The generalisable rule now recorded in `D:\dev\rag\egui\`
+
+**`CopyFromScreen`-based capture has a hard dependency on the display
+being powered on.** It is a read of the composited desktop, not of the
+application, and the application's health has no bearing on whether there
+are pixels to read. **Any harness built on it must REFUSE a near-uniform
+result rather than return it silently** — a uniform PNG is a valid PNG
+and will otherwise be filed as evidence.
+
+### RAG escalations, continuation 103 — ONE correction to `D:\dev\rag\egui\`, ONE seventh occurrence to `D:\dev\rag\rust\`
+
+**`D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`
+gains a SEVENTH occurrence, and what is new about it is flagged.**
+
+*(A counting note for future readers: the engineer's dispatch called this
+"a FIFTH occurrence." The file already held **six** — cases 5 and 6 were
+added on 2026-08-04/05. It is filed as **case 7** and the file's own
+heading and index bullet are updated six → seven, so the count matches
+the content rather than the dispatch.)*
+
+- **Occurrences 1–6 are comments asserting untrue RUNTIME BEHAVIOUR** of
+  this codebase — a cache is valid, two spans share a convention, a guard
+  fires, two nearby call sites use the same converter. All are claims
+  about *what the code does*, checkable by reading or running it.
+- **Occurrence 7 is a comment asserting an untrue CAUSAL DIAGNOSIS.** Not
+  checkable by reading the code at all, because the cause was outside the
+  program. The mechanism is named in the file: **a change that appears to
+  fix something is not evidence for why it fixed it.** Post hoc ergo
+  propter hoc, committed to disk in three places at once, in a confident
+  tone.
+- **Written while the engineer was actively citing that same file's
+  discipline** — which is the sharpest part, and the argument for the
+  remedy line. Knowing the pattern by name did not prevent it, because it
+  was being applied to *comments about code* (the six examples it had
+  read) and a causal diagnosis was not recognised as the same species of
+  unverified claim. **A lesson generalises only as far as its stated
+  examples reach.**
+
+**Engineer's ruling on elevation, recorded in the RAG file itself:
+STILL NOT A STANDING RULE.** This librarian had previously flagged the
+pattern as frequent enough to be worth judging for elevation into
+`ROADMAP.md`'s *Standing rules* ledger, and said the call was not its own
+to make solo. The ruling, with reasoning:
+
+- A **pdfce standing rule governs how pdfce is built** — project-scoped
+  by construction.
+- This is a **general engineering-epistemics failure** that would apply
+  identically to any codebase in any language.
+- The **cross-project RAG is where cross-project lessons belong** — the
+  same boundary that sent the `Compress-Archive` packaging finding to
+  `D:\dev\rag\rust\` rather than into a pdfce Pass entry.
+- Elevating it would put a general lesson in a project-scoped ledger,
+  where every *other* project hitting the same failure would never see
+  it — the opposite of what the flag was trying to achieve.
+
+**What the file GAINED instead, at the engineer's direction: a "how to
+avoid it" line at the top**, which seven occurrences had never had:
+
+> **If you did not test the cause, write "cause not established."**
+> Naming an untested cause is **worse than naming none**, because it
+> stops the next reader looking.
+
+- **`C:\personal_rag\pdf\` — nothing.** No PDF-producer or PDF-domain
+  behaviour is involved; this is a Windows screen-capture harness
+  finding and a methodology finding.
+- **`D:\Dev\Rag-Specialized\PDF_Spec\` / `Acrobat_Features\` — no
+  dispatch.** No spec question and no Backlog bucket scoped.
+
+### Ledger discipline (R106) — continuation 103
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | **none** — a correction to an already-Shipped Pass's entry, not a new Pass | family **38** next free; highest ID **37.2**, unchanged |
+| Standing rules | **none** — and one candidate **explicitly REFUSED** (see the elevation ruling above), which mints nothing | **R156** (**R157** next free), unchanged; decision 030's three contingent candidates still hold the claim on R157 |
+| Decision records | **none** — the elevation ruling is recorded in the RAG file and in this log, not as an `ARCHITECTURE.md` §12 decision, because it decides where a *cross-project* lesson lives, not a pdfce architectural matter | **031** (**032** next free), unchanged |
+| Operator questions | **none** | **(az)** (**(ba)** next free), unchanged |
+
+**Nothing minted.** The engineer will re-run
+`tools/check-ledger-numbers.py --stats` after this filing; every number
+above should be unchanged from continuation 102's table.

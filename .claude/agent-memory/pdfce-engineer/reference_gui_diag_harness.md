@@ -81,9 +81,17 @@ matters, not the sleep: a silent failure is what lets a plausible story get
 attached to an unexamined symptom. Verified by making it fail on purpose
 (capture an off-screen region → warns; real capture → silent).
 
-Generalisable, and this project has now recorded it five times: **a change that
-appears to fix something is not evidence for why.** If the cause was not
-tested, say so instead of naming one.
+Generalisable: **a change that appears to fix something is not evidence for
+why.** If the cause was not tested, say so instead of naming one. Lives in
+`D:/dev/rag/rust/trust_but_verify_doc_comments_are_not_evidence.md`, which now
+holds **seven** occurrences on this project.
+
+**Postscript, and it is not a joke.** In the commit correcting myself for
+asserting an untested CAUSE, I asserted an untested COUNT — said "five times"
+from memory of when I had last read that file, twice, including to Ken. It held
+six. Same failure, one paragraph later, about the very file that documents it.
+**Check the artifact, not your memory of the artifact** — the cost of `grep` is
+seconds and the cost of a confident wrong number is that someone believes it.
 
 Related: [[feedback_engineer_does_the_observing]] — this is the tool that makes
 that rule cheap to follow. [[reference_clap_windows_stack]] for the other

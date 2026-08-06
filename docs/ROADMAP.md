@@ -865,6 +865,33 @@ through a mechanism the comment did not anticipate.
 script **warns when it has no main window handle** rather than silently
 capturing anyway.
 
+> **CORRECTION 2026-08-05 (later the same day), committed `a6e5bf3` —
+> the paragraph immediately below states a CAUSE THAT IS FALSE.** It is
+> left in place per this section's append-only rule; do not act on it.
+> The uniform captures were **not** a DWM composition lag — **the
+> operator's display was asleep**, and `CopyFromScreen` reads the
+> composited desktop, which has nothing to read from a powered-down
+> display. The operator identified it himself (*"I set the display to
+> always stay on so screenshots should stay working now"*) and captures
+> have worked since. The tell that was available and ignored at the time:
+> the blanks **returned at a twenty-second wait**, which no recomposite
+> race survives. **Re-measured:** three consecutive captures at 700 ms,
+> all non-blank — the 2500 ms bought nothing and cost 1.8 s per capture,
+> and `tools/gui-shot.ps1` is back to **700 ms**. The fix that actually
+> matters is a **uniform-capture GUARD** (coarse 17-px grid over the
+> client rect) that **refuses** a near-uniform result and names the three
+> known causes in the order they have occurred — display asleep, window
+> not raised (which usually looks like a screenshot of the *other*
+> application, not a blank), app died before the capture — verified both
+> ways, not only on the passing path. `observe-gui.ps1` was hardened this
+> way on 2026-08-03; `gui-shot.ps1` had never received the same
+> treatment. The `D:\dev\rag\egui\` amendment cited below has been
+> marked **superseded in place** and carries the corrected finding; the
+> methodology failure (*a change that appears to fix something is not
+> evidence for why it fixed it*) is filed as the seventh occurrence in
+> `D:\dev\rag\rust\trust_but_verify_doc_comments_are_not_evidence.md`.
+> See the 2026-08-05 continuation entry in `docs/SESSION_LOG.md`.
+
 **The settle is 2500 ms, not 700 ms**, and the number was measured, not
 guessed: at 700 ms the first raised capture came back a **uniform WHITE
 client area under a correct pdfce title bar** — the raise had happened,
