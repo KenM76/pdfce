@@ -111,9 +111,9 @@ and they are not interchangeable:
 | [x] | [x] | [x] | [x] | Move / delete a whole vector object (Pass 25.x, 28.0) |
 | [x] | [x] | [x] | **[ ]** | Enter an object and select one part (subpath) (Pass 25.0–25.4) |
 | [x] | [x] | [x] | **[ ]** | Move / delete a subpath (Pass 28.0 core, Pass 25.2 delete, Pass 36.0 GUI gesture) |
-| [x] | [x] | [x] | **[ ]** | Move a node (anchor point), incl. `re` rectangle corners and reused subpath starts (Pass 26.0, 30.0) |
+| [x] | [x] | [x] | **[ ]** | Move a node (anchor point), incl. `re` rectangle corners and reused subpath starts (Pass 26.0, 30.0). **Pass 26.3** (`f8bbdd4`) claims grab-without-descent, a hover mark state and live drag preview — **build record OWED**, see `ROADMAP.md` ⚠ FILING GAP #2 |
 | [x] | [x] | [x] | **[ ]** | Delete a node (Pass 36.1) |
-| [x] | [x] | [x] | **[ ]** | Edit a Bézier handle / control point (Pass 30.1 core+CLI; Pass 26.1 GUI) |
+| [x] | [x] | [x] | **[ ]** | Edit a Bézier handle / control point (Pass 30.1 core+CLI; Pass 26.1 GUI; Pass 26.3 grab/hover/live-preview — build record owed, as above) |
 | — | — | [x] | **[ ]** | Level-ladder rung readout (Object/Part/Point) + Escape-to-ascend navigation (Pass 26.0, 36.2) — no clickable breadcrumb yet |
 | — | — | [x] | — | Level survival across an edit: an edit/undo/redo truncates your rung one step at a time instead of ejecting you to Page (Pass 26.2). `Acrobat` `—`: Acrobat has no level ladder, so the question is not meaningful. Ladder proven by unit test; the entry gesture is **not** driven end-to-end |
 
@@ -196,7 +196,7 @@ build.
 | [ ] | [ ] | [ ] | ? | Pass 35.1 — drag a ce dimension's extension lines to extend/retract |
 | [ ] | [ ] | [ ] | — | Pass 33.0 — real fix for reflow's auto-detected wrap width inheriting a prior edit's overflow (disclosure ships today; the fix itself — clamp / median-width / refuse — is undecided) |
 | [ ] | [ ] | [ ] | ? | Pass 32.0 — delete one text run without deleting every run sharing its text object (fixes: deleting one CAD label deletes all 237 sharing a `BT`…`ET` block on the operator's own drawing) |
-| ◐ | ◐ | [ ] | **[ ]** | Decision 028 remainder — Tab/Shift+Tab node cycling; arrow-key node nudge; readout-row corrections; clickable breadcrumb navigation. (**Pass 26.2 itself SHIPPED** 2026-08-06 — moved to *Implemented*) |
+| ◐ | ◐ | [ ] | **[ ]** | Decision 028 remainder — Tab/Shift+Tab node cycling; arrow-key node nudge; readout-row corrections; clickable breadcrumb navigation. (**Pass 26.2 SHIPPED** 2026-08-06; **Pass 26.3** — the grab/hover/live-preview plan items — **code committed `f8bbdd4`, build record owed**. Both moved to *Implemented*) |
 | [ ] | [ ] | [ ] | [x] | Pass 22.0 — make ce dimensions and foreign annotations selectable, marqueeable, and deletable from the canvas |
 | [ ] | [ ] | [ ] | ◐ | Pass 23.0–23.3 — ce-dimension format/units GUI control; re-measure + whole-dimension move; descend into nested form-XObject containers; multi-node select/move/delete |
 | — | — | [ ] | — | Pass 24.0, 24.2–24.5 — remaining ribbon slices (fixed-anchor confirm strip, contextual tool tabs, selection tabs, overflow/collapse, keyboard & accessibility) |

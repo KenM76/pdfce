@@ -81,7 +81,7 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
-### ⚠ FILING GAP #2 — FIVE commits of 2026-08-05 have NO *Shipped* entry, and TWO of them claim the SAME Pass ID (26.2). Found 2026-08-06, continuation 105; **UNRESOLVED — the ID collision needs an ENGINEER RULING**
+### ⚠ FILING GAP #2 — FIVE commits of 2026-08-05 have NO *Shipped* entry, and TWO of them claim the SAME Pass ID (26.2). Found 2026-08-06, continuation 105; ~~**UNRESOLVED — the ID collision needs an ENGINEER RULING**~~ → **THE COLLISION IS RULED (2026-08-06, continuation 106): `f8bbdd4` BECOMES PASS 26.3.** The five commits' BUILD RECORDS remain OWED — see the ✅ RULING block below
 
 **Filed at the very head of *Shipped*, above the work it was found
 alongside, because it invalidates statements this document and
@@ -173,6 +173,260 @@ five; the 24.3/24.4 identity reconciliation; the 26.2 collision ruling.
 **Done by this filing:** the `FEATURES.md` slice-4 correction — it
 asserts a falsehood today, and correcting a false statement needs no
 ruling.
+
+---
+
+#### ✅ RULING (engineer, 2026-08-06, continuation 106) — `50ab8ec` KEEPS 26.2; `f8bbdd4` BECOMES **PASS 26.3**. Appended, not rewritten; the gap record above stands as the record of what was found.
+
+**`50ab8ec` keeps 26.2. `f8bbdd4` was mis-numbered and takes 26.3.**
+**Pass 26.3 is MINTED by this filing** — the first Pass ID this project
+has minted to *correct* a claim rather than to open new work.
+
+**The ruling was decided from the SOURCE, not from seniority or date**,
+and that is the part worth carrying forward. `docs/decisions/025-the-
+subpath-rung-and-the-unified-level-ladder.md` **defines Pass 26.2**,
+repeatedly and unambiguously, as *level survival / re-validation*. Its
+§6 and §7 are cited by ID, and its own item 10 says of
+`prune_canvas_selection`'s unconditional `entered = None`:
+
+> *"`self.level = LevelPath::default()` — semantics unchanged … Stated
+> explicitly so nobody 'improves' it away; **Pass 26.2 changes it, and
+> only with re-validation (§6)**."*
+
+That is exactly and only what `50ab8ec` did. `f8bbdd4` (*"points are
+grabbable without a descent, highlight on hover, and drag live"*) is
+**decision-028 plan-item work** — a different thing that took a number
+already spoken for by a decision record.
+
+**Why this is NOT a violation of hard rule 2 (IDs are stable, never
+reused), and the distinction generalizes.** Hard rule 2 protects a
+**FILED** ID. 26.2's filed meaning is decision 025's, and it has been
+that since 2026-08-04 — before either commit existed. `f8bbdd4`'s claim
+on 26.2 was **never valid**, so renumbering it is not a *reuse*, it is
+the **correction of a claim that was never good**. The stable-ID
+guarantee is about what the ledger says, not about what a commit subject
+asserted; a commit cannot mint an ID by asserting one.
+
+**26.3 was verified free before minting**, by the same read-the-live-
+ceiling discipline R106/R133 prescribe: zero matches for `26.3` across
+`ROADMAP.md` and every file under `docs/decisions/`; the 26.x family held
+**26.0, 26.1, 26.2 only**.
+
+**★ The commit message is IMMUTABLE and now disagrees with the ledger.**
+`f8bbdd4`'s subject line says *"Pass 26.2"* and always will. **This entry
+carries the corrected identity; `git log` does not and cannot.** Anyone
+reading the log and this document together will see a conflict — the
+document wins, and this paragraph is why. Same instrument as `9328038`
+(the empty correction commit) reached for one day earlier, from the other
+end: there the record was corrected because the message could not be;
+here the ledger is corrected because the message could not be.
+
+**What Pass 26.3 IS, stated as a CLAIM sourced to the commit message and
+NOT as a build record** (R87 — see the owed-work paragraph below): the
+un-gating of node/handle grabs from `entered.node.is_some()` to
+`subpath.is_some()`, the grab radius 6 → 10 px, a third **hover** mark
+state (drawn at the selected SIZE with the unselected FILL — size and
+fill, never colour alone, R84), and live drag preview of the part's
+polyline / the handle's arm. Its own message names all four as decision
+028 plan-item work, which is what the Pass 26.0–26.2 status table already
+tracked **separately** as *"plan items 9–14"*.
+
+**`e666d3f` belongs to Pass 26.3 as its CORRECTION, not as work of its
+own.** It retracts `f8bbdd4`'s claimed root cause (*"the Obj tool
+converts the press position to the wrong PDF x"*, named as a
+coordinate-space defect of Pass 36.3's family) and establishes that the
+cause was **stale test coordinates** — `rect.min.x` was 581, not the
+479.5 the script was computed against, because Pass 24.1's left-dock
+widening moved the canvas ~100 px. **There is no coordinate defect and
+none should be filed.** This is occurrence 2 in the R87 instrument-
+silence amendment ruled below.
+
+**★ BUILD RECORDS FOR ALL FIVE COMMITS REMAIN OWED, DELIBERATELY.** The
+engineer's ruling on this is explicit and is recorded as a discipline,
+not as an apology: *"I am NOT dictating build records for them from their
+subject lines, and you are right to refuse to write them that way
+(R87)."* A commit subject is a claim by its author about work he
+remembers doing; a *Shipped* entry is this project's assertion that the
+work was measured. **Manufacturing the second from the first is exactly
+the failure R87 exists to prevent**, and doing it five times in one
+filing would put five unmeasured build records into the permanent record
+at once.
+
+**So the debt is named rather than discharged, and `git show` is named
+with it:** whoever picks these up has `git show 7f850c9`, `git show
+f8bbdd4`, `git show e666d3f`, `git show 2c306ec`, `git show c3d605b`
+available, and those messages are unusually detailed. **The detail is not
+lost — it is unverified.** Say that, rather than implying the information
+is gone.
+
+| Commit | Identity after this ruling | Build record |
+|---|---|---|
+| `7f850c9` | Pass 34.1 **slice 4** | **OWED** |
+| `f8bbdd4` | **Pass 26.3** ← renumbered from the invalid 26.2 claim | **OWED** |
+| `e666d3f` | Pass 26.3's **correction** (no ID of its own) | **OWED** |
+| `2c306ec` | Pass 24.3 | **OWED** |
+| `c3d605b` | claims Pass 24.4; ***Next up* defines 24.4 as collapse/overflow — identity NOT reconciled, still needs a ruling** | **OWED** |
+
+**Note that 24.3/24.4 is NOT resolved by this ruling.** Only the 26.2
+collision was put to the engineer and only it was decided. `c3d605b` is a
+**second, structurally identical collision** — different work under a
+filed number — and it is still open. Whoever reconciles it should apply
+the same test used here: **what does the document that DEFINED the number
+say it means?**
+
+**★ NO GATE TRACKS THIS DEBT. Both were run; both are blind to it; and
+the way that was found is worth more than the fact.**
+
+**This filing first asserted the opposite** — that minting 26.3 without a
+heading would surface it in `tools/check-ledger-numbers.py`'s
+**`CLAIMED BUT NOT YET HEADED`** list, carrying the debt mechanically.
+**That was WRONG, and it was caught by RUNNING BOTH GATES after the edit
+rather than reasoning about what they would say.** Corrected before this
+filing was reported. The false claim is recorded here rather than quietly
+replaced, because it is **a fifth occurrence of the exact failure the R87
+amendment ruled on in this same filing** — an assertion about what an
+instrument would report, made without validating the instrument. What
+caught it is `0720adb`'s method: **predict the number, then chase your
+own wrong prediction.**
+
+**What the two gates actually do, measured at this filing:**
+
+| Gate | Reports | Why 26.3's debt is invisible to it |
+|---|---|---|
+| `check-ledger-numbers.py` | `CLAIMED BUT NOT YET HEADED : 5, 9, 9c, 10, 13, 20, 22, 23, 31` — **no 26.3** | `claimed_only` is computed at **FAMILY** level (`pid.split(".")[0]`), and **family 26 has headings**, so no unheaded 26.x sub-ID can ever surface. `distinct (section, Pass ID) pairs` is **110, unchanged**, for the same reason: `collect_passes` counts **headings only**, and this filing added none. |
+| `check-passes-filed.py` | `passes-filed: clean`, with `note  Pass 26.2 claimed by 2 commits: 50ab8ec, f8bbdd4` | Its join is *"this short hash appears somewhere in `ROADMAP.md`"*, and `f8bbdd4` appears in the gap table above. **A hash in a gap record counts as filed** — its own documented weakness, not a defect. |
+
+**So the honest statement is: the five owed build records are tracked by
+THIS ENTRY and by nothing else.** No gate goes red when they are
+forgotten.
+
+**★ And that is FILING GAP #2's own headline finding, recurring one level
+down.** The gap record above says *"a commit that is never filed is not
+badly filed — it is outside the reach of every check."* The same is now
+true of **a MINTED Pass ID with no heading**. Both gates compare
+`git log` against `ROADMAP.md`; **neither compares a minted ID against a
+written entry.**
+
+**Flagged for the engineer, NOT minted — tooling scope is his call:**
+`claimed_only` could be computed at **full-ID** level rather than family
+level, which would surface `26.3` immediately and would have made the
+original paragraph true instead of wrong. The cost is that it would also
+surface every sub-ID legitimately mentioned before it is headed, so the
+useful shape is probably a **separate line** (*"minted, not yet headed"*)
+rather than a change to the existing one.
+
+**Until then, read neither green line as discharge.**
+`check-passes-filed.py` proves a commit was **NOTICED**. Nothing this
+project owns proves a Pass was **FILED**.
+
+### tooling — `tools/check-passes-filed.py`: the first gate this project owns that reads `git log` (no Pass ID — ledger infrastructure) — 2026-08-06, committed `91b142b`, branch `pass-8-redaction`; plus the `★`-blind-spot fix to `check-ledger-numbers.py`, committed `0720adb`
+
+**Why it exists, in the finding that produced it.** The librarian's
+sweep for FILING GAP #2 established that
+**`tools/check-ledger-numbers.py` reports `ledger-numbers: clean` while a
+duplicate Pass ID exists** — because it parses `ROADMAP.md`, **not
+`git log`**. The generalization is the reason this is tooling and not a
+note: **every ledger-integrity mechanism this project owned validated the
+document against itself, so a commit that never reaches the document is
+not "badly filed" — it is outside the reach of every check.**
+
+That is the same shape as the `FEATURES.md` Acrobat-column finding filed
+the same day (an obligation recorded only on the producing side is not
+recorded at all), one level down: there the producing side was a RAG
+file, here it is a commit message.
+
+**It is deliberately a SECOND SCRIPT, and that is a design decision, not
+convenience.** `check-ledger-numbers.py` is a **pure Markdown parse of
+`docs/`** — no git, no working tree, no remotes — and the librarian
+**relies on that property**, because a librarian with no shell must be
+able to reason about exactly what that checker can and cannot see (hard
+rule 8's territory). Folding git access into it would have bought one
+script and cost the only guarantee that makes it trustworthy from a
+seat with no shell. **Its documented guarantee is unchanged.**
+
+**It joins on the COMMIT HASH, not the Pass ID.** This is the load-
+bearing choice and it is what the 26.2 case actually needed: two commits,
+one ID, **only one of them filed**. A Pass-ID join would have seen *"26.2
+is filed"* and stopped — reporting clean on the exact collision it was
+written to catch. The hash is the stronger key because it is unique by
+construction and a filing convention already cites it.
+
+**★ The gate corrected itself on its first run, and the correction is the
+most transferable thing here.** It flagged **Pass 34.1** as a collision —
+and 34.1 shipping in **four slice commits** is normal and correct in this
+project, as is 27.2's two ticks. **Repeated IDs are therefore
+INFORMATIONAL, never a failure**; only genuinely unfiled commits exit
+non-zero. The reasoning, in the engineer's own words: *"a gate that cries
+wolf on correct work is a gate everyone learns to ignore."* A gate's
+false-positive rate is a correctness property of the gate, not a
+tolerable nuisance — this is the same argument R156's amendment makes
+about an audit that terminates on a clean-but-useless answer.
+
+**Two limits are named IN THE FILE rather than discovered later:**
+
+1. **A hash cited in a GAP RECORD counts as filed.** The join is *"this
+   short hash appears somewhere in `ROADMAP.md`"*, and a gap table is
+   somewhere. That is the honest limit of a hash grep; closing it would
+   require the checker to understand entry structure, which is a much
+   larger script for a case a human reading the gap record already sees.
+   **Consequence, spelled out above in the ✅ RULING block:** the five
+   owed build records read as `clean` here — **and are tracked by no
+   other gate either**, which this filing established by running both
+   after wrongly predicting otherwise.
+2. **`fix:` / `harden:` commits are NOT checked.** A subject-line grep
+   cannot tell a behaviour change from a docs commit, and a gate that
+   guesses would cry wolf until ignored. It catches the class that
+   carries an explicit, **collidable NUMBER**.
+
+**Measured output at `91b142b`** (run directly for this filing):
+
+```
+commits scanned          : 60
+claiming a Pass ID       : 22
+unfiled (hash not in doc): 0
+IDs claimed by >1 commit : 2
+note  Pass 26.2 claimed by 2 commits: 50ab8ec, f8bbdd4
+note  Pass 34.1 claimed by 4 commits: 7f850c9, 13f3c0b, fae916d, e15f55b
+passes-filed: clean - every Pass-claiming commit is filed
+```
+
+The `26.2` note is the collision this filing has now ruled on; the `34.1`
+note is the legitimate four-slice case that taught the gate not to fail
+on repetition. **Both notes are expected to persist** — the 26.2 one
+until `f8bbdd4`'s build record is written under its new ID.
+
+#### `0720adb` — the `★` blind spot in `check-ledger-numbers.py`, and the METHOD that found it
+
+**The defect:** the Pass-heading anchor did not accept the `★`
+decoration this project uses on family entries, so **ten declaring
+headings were never checked in either direction.** Anchor widened to
+`^#{2,4} (?:★ )?Pass `.
+
+**Measured effect:** distinct *(section, Pass ID)* pairs **98 → 110**,
+verdict still **`clean`** — so **nothing was hiding**, but for ten
+headings it had never been checked either way, which is a different and
+worse thing than a clean result. `CLAIMED BUT NOT YET HEADED` also
+correctly **loses `33`**, which had been a phantom.
+
+**★ THE METHOD IS THE FINDING, and the engineer asked for it recorded
+explicitly.** It was found by **predicting the delta before running the
+fix, and then chasing his own wrong prediction instead of accepting a
+green result.** The prediction was made, the observed number disagreed,
+and the disagreement was pursued rather than rationalized.
+
+Stated as the reusable move: **when you change what a checker can see,
+predict the number it will report BEFORE you run it, and treat a
+mismatch as a finding — in either direction.** A green result that
+disagrees with your model is not a pass; it is an unexplained
+observation, and *"it came out clean"* is the single easiest way to stop
+looking. This is the same discipline as the R87 amendment ruled below
+(validate the instrument before believing the reading), applied to a
+checker instead of to a diagnostic trace — and it is worth noticing that
+the two findings arrived in the same day from opposite ends of the same
+principle.
+
+**Ledger effect of both commits: none.** No Pass ID, no standing rule, no
+decision record. Filed as tooling infrastructure.
 
 ### fix — multi-select: `Ctrl` was never consulted (no Pass ID — a correctness fix to Pass 9a's additive selection, which was BUILT and reachable only by the wrong key; GUI) — 2026-08-06, committed `7d3e44c`, branch `pass-8-redaction`
 
@@ -12475,6 +12729,44 @@ confirmation stays (R98).
 > exercised end to end. See the Pass 26.0 Shipped entry's verification
 > section and the egui RAG amendment.
 
+> **✅ STATUS AMENDMENT 2026-08-06 (continuation 106) — THE FAMILY IS NOW
+> 26.0–26.3. Appended, not rewritten; the heading above still reads
+> "26.0–26.2" and is left alone deliberately (append-only).**
+>
+> **Pass 26.3 is MINTED, and it did NOT open new work — it CORRECTED A
+> MIS-NUMBERING.** `f8bbdd4` (2026-08-05) shipped with the subject
+> *"Pass 26.2: points are grabbable without a descent, highlight on
+> hover, and drag live"*, which is **decision-028 plan-item work**, not
+> level survival. The engineer ruled on 2026-08-06 that **`50ab8ec` keeps
+> 26.2 and `f8bbdd4` becomes 26.3**, decided from **decision 025's own
+> definition of 26.2** rather than from which commit came first. Full
+> ruling: the ✅ RULING block inside **⚠ FILING GAP #2** at the head of
+> *Shipped*.
+>
+> | | State |
+> |---|---|
+> | **Pass 26.2** — level survival across an edit | **SHIPPED `50ab8ec`** 2026-08-06 |
+> | **Pass 26.3** — grab without descent, hover mark state, live drag preview (decision 028 plan items) | **CODE COMMITTED `f8bbdd4`** 2026-08-05, corrected by `e666d3f`. **BUILD RECORD OWED** — no *Shipped* heading exists, deliberately (R87: a commit subject is not a build record) |
+>
+> **⚠ 26.3's debt is tracked by NO GATE.** This amendment first claimed
+> it would show in `check-ledger-numbers.py`'s `CLAIMED BUT NOT YET
+> HEADED` list; **that was wrong and was corrected by running the gate.**
+> `claimed_only` is family-level, and family 26 is headed. See the ✅
+> RULING block at the head of *Shipped* for the measured behaviour of
+> both gates and the tooling change flagged to the engineer.
+>
+> **What this does NOT change:** `e666d3f` established there is **no
+> coordinate-space defect** — `f8bbdd4`'s claimed root cause was stale
+> test coordinates after Pass 24.1's dock widening. **None should be
+> filed.** That instance is occurrence 2 (KIND B) in R87's 2026-08-06
+> instrument-validation amendment.
+>
+> **Still owed from decision 028 regardless:** the breadcrumb (item 12),
+> keyboard node navigation (items 10 + 11), the clip-gate Tier 2 routing
+> (**BLOCKED on operator question (av)**), the Obj-tool toolbar tooltip
+> correction (item 14), and items 13 + 7 (**unreported either way — treat
+> as owed and unverified**).
+
 **Source:**
 `docs/decisions/025-the-subpath-rung-and-the-unified-level-ladder.md`
 (1,744 lines). **This record resolves the flag filed at continuation 81
@@ -18300,6 +18592,95 @@ not a judgment call:**
   against `git`, never against memory of what was last written) working
   as designed on its own blind spot; recorded as an amendment so the
   discipline reads as one rule, not two.
+
+  **AMENDED 2026-08-06 (engineer ruling, continuation 106) — R87 now
+  covers the INSTRUMENT, not only the FIGURE. BROADENED, not corrected.**
+  R87 as originally written governs a *number handed to a doc-writing
+  agent*: do not file what you did not measure. The amendment carries it
+  one step earlier, to the apparatus that produced the reading:
+  **do not trust what you DID measure until you know the measurement was
+  pointed at the thing.**
+
+  **The binding text, in its enforceable form** (this wording, not the
+  proposal's original *"prove the instrument would have fired"*, which
+  was unfalsifiable as written and is superseded):
+
+  > **A diagnostic claim of the shape *"X did not run"* — or *"X is
+  > absent"*, *"X is unchanged"*, *"X reports the wrong value"* — must
+  > NAME the specific trace expected AND the code path that emits it,
+  > before the claim is filed anywhere. An absent, unchanging, or
+  > unexpected diagnostic reading is not evidence about the code until
+  > the instrument itself has been validated: that it is the trace the
+  > code under test actually emits, that it is capable of showing the
+  > negative case, and that the inputs driving it are current.**
+
+  Naming the trace and its emitting path is **checkable at review time**,
+  which is what makes this a rule rather than a slogan; *"prove it would
+  have fired"* has no such check, and the objection that killed that
+  wording is recorded here so nobody restores it.
+
+  **The operative failure is always the same:** two explanations exist
+  for one silence — *"the behaviour is absent"* and *"my instrument is
+  wrong"* — **and the alarming one gets reported without eliminating the
+  boring one.**
+
+  **FOUR occurrences in roughly twenty-six hours, across three
+  instruments and three subsystems**, which is what cleared the
+  two-occurrence promotion bar several times over. **They split into two
+  kinds, and the split is KEPT in the rule text because the two kinds
+  have different remedies** — a single undifferentiated rule sends people
+  checking the wrong half:
+
+  **KIND A — the instrument is WRONG or TAUTOLOGICAL. Remedy: check the
+  instrument.**
+
+  | Commit | Instrument | Wrongly concluded | Actual cause |
+  |---|---|---|---|
+  | `7d368e6` (08-06) | `focus={has_focus()}` written **inside** the `has_focus()` guard | *"focus is fine, something else is wrong"* | **a tautology — it could only ever print `true`.** The real signal was the frame COUNT: 10 traces across ~45 frames |
+  | `9328038` (08-06, correcting `7d3e44c`) | a grep for the **`plain-click`** trace while the **Obj tool** was armed | an `⚠ OPEN DEFECT` filed into `ROADMAP.md`: *"the selection path does not run"* | **wrong trace name.** The Obj tool's path emits **`vector-click`**; `plain-click` belongs to the no-tool `else`. Also `sel=0` was read off a **start-of-frame** trace |
+  | `a6e5bf3` (08-05, correcting a Pass 34.2 filing) | `tools/gui-shot.ps1` blank screenshots | **an invented DWM-composition cause**, filed into `ROADMAP.md` *and* into `D:\dev\rag\egui\` before it was checked | **the operator's DISPLAY WAS ASLEEP** |
+
+  **KIND B — the instrument is CORRECT but the INPUT is stale. Remedy:
+  re-derive the input.**
+
+  | Commit | Instrument | Wrongly concluded | Actual cause |
+  |---|---|---|---|
+  | `e666d3f` (08-05, correcting `f8bbdd4` — now **Pass 26.3**) | a new `drag-start` trace | *"the Obj tool converts the press position to the wrong PDF x"* — named a **coordinate-space defect** of Pass 36.3's family | **stale click coordinates.** `rect.min.x` was 581, not the 479.5 the script was computed against; the canvas had shifted ~100 px when Pass 24.1 widened the left dock. *"The trace I added to prove it is what disproved it."* |
+
+  **Kind B is the more dangerous of the two**, because everything about
+  the instrument is defensible: it emits, it emits the right field, and
+  the number it prints is arithmetically correct. Only the world it was
+  aimed at moved. **A stale coordinate and a broken screen→document
+  conversion produce an identical symptom**, which is why the conversion
+  code was blamed and then read as correct. The engineer had **written
+  that exact trap down himself** after the Pass 18.8 harness work
+  (*"hard-coded screen points silently stop hitting anything when the
+  layout changes"*) and walked into it the same week.
+
+  **The cost is measured, not hypothetical: two of the four reached the
+  permanent record before being caught.** `a6e5bf3`'s invented cause was
+  escalated into a **cross-project RAG**, where it would have misinformed
+  every future project, not only this one; `9328038`'s became an
+  `⚠ OPEN DEFECT` at the head of *In progress*. **Both were caught by the
+  author's own second look, not by any gate** — which is the argument
+  for a rule rather than for more care.
+
+  **Why an AMENDMENT and not R158.** Same deciding argument as the R156
+  amendment (continuation 102) and the no-in-app-oracle ruling
+  (continuation 100), and the engineer applied it by name: **a rule that
+  only qualifies another rule is a scope note, not a peer.** Two numbers
+  would let someone look up *"what may I file?"*, find R87 alone, satisfy
+  it — the figure was measured — and still make the mistake, because R87
+  alone never asked whether the measurement was pointed at the thing.
+  One rule carrying both makes that path structurally unavailable.
+  **Nothing was renumbered; the standing-rule ceiling stays R157**
+  (R158 next free). The full ruling is in the RESOLVED block in this
+  section (*"before reporting that instrumented code did not run…"*).
+
+  **Related:** **R93** (a code comment asserting a behaviour is not
+  evidence) — the same epistemic error one layer out, in prose instead of
+  in a trace; **R156**'s amendment (each audit direction has its own
+  instrument, and the wrong one returns a clean bill of health).
 - **R88 — Direct text-state formatting is scoped by explicit
   restore-by-value, never by `q`/`Q`, never by normalization (decision
   019, 2026-08-03; wording CORRECTED 2026-08-03 by decision 019
@@ -19232,6 +19613,75 @@ not a judgment call:**
   unanswerable at a glance"). A tab set copied from a competitor's
   ribbon is trade dress, and it also produces placements no operator
   can derive from first principles.
+
+  **AMENDED 2026-08-06 (engineer ruling, continuation 106) — R123 GAINS
+  ITS POSITIVE HALF: the conversion to neutral properties.** R123 as
+  originally written says only what NOT to derive from. It never said
+  what to do **instead** when an operator asks for a competitor's layout
+  — which is the situation that actually arises, and a prohibition alone
+  leaves whoever receives it with two bad options: **refuse the operator
+  something he plainly wants, or comply and break the rule.** The
+  operator's preference was never the problem R123 exists to solve; the
+  **derivation** is.
+
+  **The binding text:**
+
+  > **When an operator's request is phrased as a resemblance to a
+  > specific competing product, it is converted — BEFORE any design work
+  > begins — into a list of NEUTRAL, PRODUCT-INDEPENDENT PROPERTIES,
+  > which the operator CONFIRMS or amends. The design agent is then
+  > dispatched against the confirmed properties, with an EXPLICIT
+  > INSTRUCTION NOT TO EXAMINE the named product. The conversion, the
+  > operator's confirmation, and the non-examination instruction are all
+  > recorded in the resulting Pass entry.**
+
+  **The occurrence (2026-08-06, Pass 38.2).** Ken said he likes how
+  **PDF-XChange Editor** is laid out and that pdfce should resemble it
+  more. The request was converted into **five neutral properties** —
+  persistent panels, higher density, a page rail, adjacency, an
+  annotation list — the operator confirmed them, and
+  `pdfce-ui-specialist` was dispatched against the properties **with an
+  explicit instruction not to look at PDF-XChange at all.**
+
+  **Four reasons this earns a place in the rule** (the fourth is the one
+  that decided it):
+
+  1. **It is the only move that satisfies both parties.** The operator
+     got all five properties. **Nothing was refused except the
+     derivation.**
+  2. **The properties are testable and the resemblance is not.**
+     *"Panels that change content instead of opening and closing"* can be
+     designed to, argued about, and asserted in a test —
+     `every_left_panel_is_visible_at_once_in_the_default_layout` is
+     literally that. *"More like PDF-XChange"* can only be satisfied by
+     looking at PDF-XChange.
+  3. **It converts a compliance problem into a DESIGN BRIEF**, which is a
+     strictly better artefact. `docs/ui_specs/shell-redesign.md` is 723
+     lines of reasoning that outlives the request, and its central
+     finding — that three of the five properties were **one structural
+     move** — **could not have been found by copying**, because a copy
+     has no level at which to notice that.
+  4. **The non-examination instruction is what makes the output
+     DEFENSIBLE however the operator later rules on trade dress.** A
+     design produced by an agent that never looked at the competitor
+     cannot have been derived from it, and that is a property of the
+     process, provable from the dispatch record, rather than a claim
+     about intent made after the fact.
+
+  **Why an AMENDMENT and not R158.** The proposal had **no independent
+  life apart from R123** — it is R123's missing positive half, and R123
+  is where someone will look. Same shape and same deciding argument as
+  the R87 and R156 amendments; the engineer applied it by name.
+  **Nothing was renumbered; the ceiling stays R157** (R158 next free).
+  The full proposal, including the arguments against, is retained in the
+  RESOLVED block in this section.
+
+  **Related:** **R61** (Inkscape is a behavioural reference only) and
+  `CLAUDE.md` rule 12 (the Acrobat RAG catalogs capability, never GUI
+  mechanics) — R123 is their extension to the command surface, and this
+  amendment is the extension of all three to a request phrased as
+  resemblance. **R157** is what you apply *after* this conversion has
+  told you which properties to design to.
 
 - **R124 — Empty space in the command surface stays empty (decision 024
   §7, filed 2026-08-04, continuation 81; librarian-assigned number).**
@@ -20700,7 +21150,43 @@ not a judgment call:**
   take R158** if and when any of them is accepted or promoted.
   **Ceiling is now R157** (was R156). **R158 is next free.**
 
-### PROPOSED 2026-08-06 — a request to "look like <competitor>" is converted into neutral, operator-confirmed PROPERTIES before any design work — AWAITING ENGINEER RULING; NOTHING MINTED
+### RESOLVED 2026-08-06 — a request to "look like <competitor>" is converted into neutral, operator-confirmed PROPERTIES before any design work — ACCEPTED AS AN AMENDMENT TO R123 IN PLACE; R158 NOT MINTED
+
+**RULING (engineer, 2026-08-06, continuation 106): ACCEPTED, AS AN
+AMENDMENT TO R123 IN PLACE.** The adopted text now lives inside **R123's
+own entry** in this section, under *"AMENDED 2026-08-06 (engineer ruling,
+continuation 106) — R123 GAINS ITS POSITIVE HALF."* **R158 was NOT
+minted. The standing-rule ceiling stays R157** (R158 still next free).
+**Nothing was renumbered**, and decision 030's three still-unminted
+contingent candidates plus the cross-RAG-handoff proposal **keep their
+claim on R158**, exactly as before this proposal was filed.
+
+**The engineer's own framing, recorded because it is sharper than the
+proposal's:** *"You called it R123's missing positive half and that is
+exactly right. R123 says what NOT to do. It never said what to do
+INSTEAD when an operator asks for a competitor's layout — which is the
+situation that actually arises."* Argument 2 of the against-case (it is
+an amendment, not a peer) was accepted as correct, on the same reasoning
+used at continuations 100, 102 and — the same day — for the R87
+instrument-silence amendment.
+
+**One addition the ruling makes that the proposal did not argue, and it
+is the load-bearing one for the record:** the filing must state **that
+the conversion turned a trade-dress problem into a design brief**, and
+**that the specialist was explicitly instructed not to look at the
+competitor at all** — *"which is what makes the output defensible however
+the operator later rules on trade dress."* That is a property of the
+process, provable from the dispatch record, rather than a claim about
+intent asserted after the fact. It is carried in R123's amended entry as
+reason 4.
+
+**Original proposal text follows, unedited** (append-only spirit: the
+reasoning that produced the ruling is part of the record, not scaffolding
+to delete). Read everything below as the case that was put, not as
+current status — current status is the ruling above, and the binding text
+is R123's own amended entry.
+
+---
 
 **Status AS FILED: a librarian PROPOSAL. It has NO number, is NOT in
 force, and amends nothing until the engineer rules.** Filed 2026-08-06
@@ -20775,6 +21261,13 @@ someone will look. **If minted as a number instead, it claims R158**
 three contingent candidates and the cross-RAG-handoff proposal to R159.
 **Ceiling is UNCHANGED at R157 by this proposal**, because nothing is
 minted here.
+
+**— END OF THE PROPOSAL AS FILED.** The paragraph immediately above is
+**confirmed, not superseded**, by the ruling at the head of this block:
+the amendment shape was chosen, so **R158 was never claimed**, nothing
+was pushed to R159, and decision 030's three contingent candidates plus
+the cross-RAG-handoff proposal still take **R158**. **The standing-rule
+ceiling is R157, unchanged, and no rule was renumbered.**
 
 ### PROPOSED 2026-08-06 — a re-validated positional index proves KIND and addressability, never IDENTITY, and the disclosure must say which — AWAITING ENGINEER RULING; NOTHING MINTED
 
@@ -21269,7 +21762,56 @@ to **R158**, and decision 030's three contingent candidates still take
 **R157** if and when one of them is accepted or promoted. **The
 standing-rule ceiling is R156, unchanged, and no rule was renumbered.**
 
-### PROPOSED 2026-08-06 (continuation 105) — before reporting that instrumented code did not run, prove the instrument would have fired — AWAITING ENGINEER RULING; NOTHING MINTED
+### RESOLVED 2026-08-06 (continuation 106) — before reporting that instrumented code did not run, VALIDATE THE INSTRUMENT — ACCEPTED AS AN AMENDMENT TO R87 IN PLACE, IN THE ENFORCEABLE FORM; R158 NOT MINTED
+
+**RULING (engineer, 2026-08-06, continuation 106): ACCEPTED, AS AN
+AMENDMENT TO R87 IN PLACE.** The adopted text now lives inside **R87's
+own entry** in this section, under *"AMENDED 2026-08-06 (engineer ruling,
+continuation 106) — R87 now covers the INSTRUMENT, not only the
+FIGURE."* **R158 was NOT minted. The standing-rule ceiling stays R157**
+(R158 still next free). **Nothing was renumbered**, and decision 030's
+three still-unminted contingent candidates plus the cross-RAG-handoff
+proposal **keep their claim on R158**.
+
+**THREE things the ruling decided, and only the first is the verdict:**
+
+**1. Amendment, not R158.** The engineer's reasoning, given by name:
+*"Same reasoning I gave for R156 and for R86's scope note — a rule that
+only qualifies another rule is a scope note, not a peer, and two numbers
+would let someone follow R87 alone and still make the mistake."* That
+last clause is the operative one and is carried into R87's amended entry:
+R87 alone is satisfiable by a figure that **was** measured, and never
+asks whether the measurement was pointed at the thing.
+
+**2. The proposal's own headline wording was REJECTED in favour of the
+enforceable form from its argument 2.** *"Prove the instrument would have
+fired"* is **unfalsifiable as written** and is not the adopted text. The
+binding wording is: **a claim of the shape *"X did not run"* must NAME
+the expected trace AND the code path that emits it.** That is checkable
+at review time, and **all four occurrences would have failed it.** The
+rejected wording is recorded here so it is not restored by someone
+reading the proposal below and mistaking it for the ruling.
+
+**3. The KIND A / KIND B split is KEPT, and the engineer's reason
+overrides this librarian's recommendation.** The proposal argued the
+split was *not* worth preserving — that the operator-visible failure and
+the remedy were identical in all four. **The engineer disagreed, and was
+right:** the first three are fixed by **checking the instrument**, the
+fourth by **re-deriving the input**, and *"a single undifferentiated rule
+would send people checking the wrong half."* Both tables are carried in
+R87's amended entry. **This is recorded as a librarian recommendation
+that was overruled on the merits**, not smoothed into agreement — the
+disagreement is the useful part.
+
+**Original proposal text follows, unedited** (append-only spirit: the
+argument that produced the ruling is part of the record). Read everything
+below as the case that was put — including its *"prove the instrument
+would have fired"* headline, which the ruling **replaces**, and its
+argument that the split is not worth making, which the ruling
+**rejects** — not as current status. Current status is the ruling above,
+and the binding text is R87's own amended entry.
+
+---
 
 **Status AS FILED: a librarian PROPOSAL. It has NO number, is NOT in
 force, and amends nothing until the engineer rules.** Filed as a proposal
@@ -21371,6 +21913,19 @@ candidates to **R159**. **If accepted as an R87 amendment instead,
 NOTHING is minted and the ceiling does not move**, which is the outcome
 this librarian recommends. **Ceiling is UNCHANGED at R157 by this
 proposal** (**R158** next free) because **nothing is minted here.**
+
+**— END OF THE PROPOSAL AS FILED.** The ruling at the head of this block
+took the second branch: **accepted as an R87 amendment, so R158 was never
+claimed**, nothing was pushed to R159, and decision 030's three
+contingent candidates plus the cross-RAG-handoff proposal still take
+**R158**. **The standing-rule ceiling is R157, unchanged, and no rule was
+renumbered.** Two corrections from the ruling, restated here because this
+is where a reader lands: **(1)** the headline wording *"prove the
+instrument would have fired"* is **replaced** by the enforceable form
+(name the expected trace and the emitting code path); **(2)** the
+proposal's argument that the wrong-instrument / stale-input split is
+**not** worth making was **rejected** — both kinds are carried
+separately in R87's amended entry, because they have different remedies.
 
 ## Update protocol
 

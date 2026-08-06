@@ -17176,3 +17176,302 @@ particular, **these documentation edits are UNCOMMITTED at the time of
 writing**, and a concurrent librarian invocation was writing to the same
 four files during this filing (its work is preserved; this amendment
 corrects it in place rather than replacing it).
+
+---
+
+**Continuation 106 (real date 2026-08-06) — FOUR ENGINEER RULINGS FILED.
+PASS 26.3 MINTED TO CORRECT A MIS-NUMBERING (NOT TO OPEN WORK); TWO
+STANDING-RULE PROPOSALS ACCEPTED AS AMENDMENTS IN PLACE (R87, R123) WITH
+NOTHING MINTED AND THE CEILING UNMOVED AT R157; FIVE BUILD RECORDS
+DELIBERATELY LEFT OWED; TWO LEDGER GATES FILED AS TOOLING.**
+
+**Carry-forward and "For next session" are UNCHANGED from continuation
+105 except where named below.**
+
+### Shipped
+
+- **`91b142b`** — `tools/check-passes-filed.py`, the first gate this
+  project owns that reads `git log`. No Pass ID (ledger infrastructure).
+- **`0720adb`** — the `★` blind-spot fix to
+  `tools/check-ledger-numbers.py`. No Pass ID.
+- **Pass 26.3 — MINTED, BUILD RECORD OWED.** `f8bbdd4`'s code has been
+  committed since 2026-08-05; what was minted here is its **identity**,
+  not its build record. There is deliberately **no *Shipped* heading**
+  for it.
+
+### Decisions made this session — the four rulings
+
+#### RULING 1 — the Pass 26.2 collision: `f8bbdd4` becomes **Pass 26.3**
+
+**`50ab8ec` keeps 26.2.** Decided **from the source**, not from seniority
+or date: `docs/decisions/025-the-subpath-rung-and-the-unified-level-ladder.md`
+**defines** 26.2 as level survival / re-validation, cites §6 and §7 by
+ID, and its item 10 says of `prune_canvas_selection`'s unconditional
+`entered = None` — *"Pass 26.2 changes it, and only with re-validation
+(§6)."* That is exactly and only what `50ab8ec` did. `f8bbdd4` is
+decision-028 plan-item work that took a number already spoken for by a
+decision record.
+
+**★ The generalizable half, and why this is not a hard-rule-2
+violation.** Hard rule 2 protects a **FILED** ID. 26.2's filed meaning
+has been decision 025's since 2026-08-04 — before either commit existed
+— so `f8bbdd4`'s claim was **never valid**, and renumbering it is the
+**correction of a bad claim, not the reuse of a good one**. As a reusable
+test: **a commit cannot mint an ID by asserting one; ask what the
+document that DEFINED the number says it means.**
+
+**26.3 verified free before minting** (R106/R133 — read the live ceiling,
+don't assume a reservation): zero matches across `ROADMAP.md` and every
+file under `docs/decisions/`; the 26.x family held 26.0, 26.1, 26.2 only.
+
+**The commit message is immutable and now disagrees with the ledger**, and
+the entry says so. Same instrument as `9328038` (the empty correction
+commit) reached for from the other end: there the record was corrected
+because the message could not be; here the ledger was.
+
+**NOT resolved by this ruling:** `c3d605b`'s 24.3/24.4 identity. It is a
+**second, structurally identical collision** — different work under a
+filed number — and only the 26.2 one was put to the engineer.
+
+#### RULING 2 — the instrument-silence rule: ACCEPTED as an **R87 amendment**
+
+Not R158. The engineer's reasoning, by name: *"Same reasoning I gave for
+R156 and for R86's scope note — a rule that only qualifies another rule
+is a scope note, not a peer, and two numbers would let someone follow R87
+alone and still make the mistake."*
+
+**Two things the ruling changed about this librarian's proposal. Both are
+improvements, and both are recorded as overrules rather than smoothed
+into agreement:**
+
+1. **The headline wording was REJECTED.** *"Prove the instrument would
+   have fired"* is unfalsifiable as written. The binding form is the
+   enforceable one from the proposal's own argument 2: **a claim of the
+   shape "X did not run" must NAME the expected trace AND the code path
+   that emits it.** Checkable at review time; **all four occurrences
+   would have failed it.**
+2. **The KIND A / KIND B split was KEPT — overruling this librarian.**
+   The proposal argued the split was not worth making. The engineer
+   disagreed and was right: the first three are fixed by **checking the
+   instrument**, the fourth by **re-deriving the input**, and *"a single
+   undifferentiated rule would send people checking the wrong half."*
+
+**KIND A — wrong or tautological instrument:** `7d368e6`
+(`focus={has_focus()}` written inside the `has_focus()` guard — could
+only ever print `true`); `9328038` (a grep for `plain-click` against a
+path that emits `vector-click`); `a6e5bf3` (an invented DWM cause; the
+display was asleep). **KIND B — correct instrument, stale input:**
+`e666d3f` (click coordinates computed against `rect.min.x = 479.5` when
+it was 581, after Pass 24.1 widened the left dock).
+
+#### RULING 3 — trade-dress → properties: ACCEPTED as an **R123 amendment**
+
+*"You called it R123's missing positive half and that is exactly right."*
+R123 says what NOT to derive from; it never said what to do **instead**,
+which is the situation that actually arises. The amendment adds the
+positive half: convert the request into neutral, product-independent
+**properties**, have the operator confirm them, design against those.
+
+**The ruling added one thing the proposal did not argue, and it is the
+load-bearing one:** the filing must record **that the conversion turned a
+trade-dress problem into a design brief** and **that the specialist was
+explicitly instructed not to look at the competitor at all** — *"which is
+what makes the output defensible however the operator later rules on
+trade dress."* A process property provable from the dispatch record beats
+a claim about intent asserted after the fact.
+
+#### RULING 4 — the five unfiled commits: build records **stay owed**
+
+The engineer declined to dictate build records from commit subject lines
+and endorsed the refusal to write them that way: *"you are right to
+refuse (R87)."* A commit subject is a claim by its author about work he
+remembers doing; a *Shipped* entry is this project's assertion that the
+work was measured. **Manufacturing the second from the first is the exact
+failure R87 exists to prevent**, and doing it five times in one filing
+would put five unmeasured build records into the permanent record at
+once.
+
+**The record names `git show` explicitly** rather than implying the detail
+is lost. It is not lost — **it is unverified**, and those two words are
+not interchangeable.
+
+### Findings + decisions
+
+#### ★ NO GATE TRACKS THE 26.3 DEBT — and this filing asserted that it did, then caught itself
+
+**This is the single most useful item in the continuation, and it is a
+self-correction.** The filing was first written claiming that minting
+26.3 without a heading would surface it in
+`tools/check-ledger-numbers.py`'s **`CLAIMED BUT NOT YET HEADED`** list,
+carrying the debt mechanically. **That was false.** It was caught by
+**running both gates after the edits instead of reasoning about what they
+would say** — `0720adb`'s own method, applied the same hour it was
+written down.
+
+**It is a FIFTH occurrence of the failure RULING 2 just amended R87
+for**: an assertion about what an instrument would report, made without
+validating the instrument. It is recorded rather than quietly replaced
+for that reason. **The rule caught its author within the same filing**,
+which is the strongest evidence available that the amendment was worth
+making.
+
+**Measured behaviour of both gates:**
+
+| Gate | Reports | Why 26.3 is invisible |
+|---|---|---|
+| `check-ledger-numbers.py` | `CLAIMED BUT NOT YET HEADED : 5, 9, 9c, 10, 13, 20, 22, 23, 31` — **no 26.3**; pairs **110, unchanged** | `claimed_only` is computed at **FAMILY** level (`pid.split(".")[0]`) and **family 26 is headed**. `collect_passes` counts **headings only**, and this filing added none. |
+| `check-passes-filed.py` | `passes-filed: clean` + `note  Pass 26.2 claimed by 2 commits: 50ab8ec, f8bbdd4` | Join is *"this hash appears somewhere in `ROADMAP.md`"*; `f8bbdd4` is in the gap table. **A hash in a gap record counts as filed** — its documented weakness. |
+
+**The honest statement: the five owed build records are tracked by the
+ROADMAP entry and by nothing else. No gate goes red when they are
+forgotten.**
+
+**★ This is FILING GAP #2's own headline finding recurring one level
+down.** That record says *"a commit that is never filed is outside the
+reach of every check."* The same is now true of **a MINTED Pass ID with
+no heading** — both gates compare `git log` to `ROADMAP.md`, and
+**neither compares a minted ID to a written entry.**
+
+**Flagged to the engineer, not minted (tooling scope is his):** compute
+`claimed_only` at **full-ID** level, probably as a **separate line**
+(*"minted, not yet headed"*) so it does not swallow every sub-ID
+legitimately mentioned before it is headed.
+
+#### ★ The method behind `0720adb` — predict the number, then chase your own wrong prediction
+
+The engineer asked for this recorded explicitly, and it is the most
+transferable item in the continuation. The `★` blind spot was found by
+**predicting the pair-count delta before running the fixed checker, and
+pursuing the disagreement instead of accepting a green result.**
+
+> **When you change what a checker can see, predict the number it will
+> report BEFORE you run it, and treat a mismatch as a finding — in either
+> direction.** A green result that disagrees with your model is not a
+> pass; it is an unexplained observation, and *"it came out clean"* is
+> the single easiest way to stop looking.
+
+**Measured effect:** distinct (section, Pass ID) pairs **98 → 110**,
+verdict still `clean` — **nothing was hiding**, but for ten headings it
+had never been checked either way, which is a different and worse thing
+than a clean result. `CLAIMED BUT NOT YET HEADED` also correctly lost the
+phantom `33`.
+
+**This is the same principle as RULING 2 from the opposite end** —
+validate the instrument before believing the reading — arriving on the
+same day, once pointed at a diagnostic trace and once at a checker. Worth
+recording as convergence rather than coincidence.
+
+#### ★ A gate's false-positive rate is a correctness property of the gate
+
+`check-passes-filed.py` corrected itself on its **first run**: it flagged
+Pass 34.1 as a collision, and 34.1 shipping in four slice commits is
+normal and correct here. Repeated IDs are now **INFORMATIONAL, never a
+failure**. The engineer's reason — *"a gate that cries wolf on correct
+work is a gate everyone learns to ignore"* — is the same argument R156's
+amendment makes about an audit that terminates on a clean-but-useless
+answer.
+
+#### Why a SECOND script rather than extending the first
+
+`check-ledger-numbers.py` is a **pure Markdown parse of `docs/`** — no
+git, no working tree, no remotes — and the librarian **relies on that
+property**, because a seat with no shell must be able to reason about
+exactly what the checker can and cannot see (hard rule 8's territory).
+Folding git access in would have bought one script and cost the only
+guarantee that makes it trustworthy from that seat. **Its documented
+guarantee is unchanged.**
+
+### Files edited this filing
+
+- **`docs/ROADMAP.md`** — FILING GAP #2 heading amended + ✅ RULING block
+  appended (26.3 minted, five build records named as owed); new tooling
+  *Shipped* entry for `91b142b` + `0720adb`; **R87 amended in place**;
+  **R123 amended in place**; two PROPOSED blocks converted to RESOLVED
+  with their original text retained unedited; the Pass 26.0–26.2 entry
+  given a continuation-106 status amendment (the family is now 26.0–26.3).
+- **`docs/FEATURES.md`** — three rows touched (node move, Bézier handle,
+  decision-028 remainder). **No box was ticked.** 26.3's capability rows
+  were already `[x]` in the `gui` column from Passes 26.0/26.1, and
+  ticking anything new from a commit subject would be the exact R87
+  failure this continuation just ruled against. Each row names the owed
+  build record instead.
+- **`docs/SESSION_LOG.md`** — this entry.
+
+### Still in flight
+
+- **FIVE build records OWED**, deliberately: `7f850c9` (Pass 34.1 slice
+  4), `f8bbdd4` (**Pass 26.3**), `e666d3f` (26.3's correction),
+  `2c306ec` (Pass 24.3), `c3d605b` (claims 24.4 — **identity
+  unresolved**).
+- **The 24.3/24.4 collision is UNRULED.** Apply the same test used for
+  26.2: what does the document that defined the number say it means?
+- **Pass 34.1's heading still says "THREE slices of four"** — flagged, not
+  corrected, for the same R87 reason.
+- **The positional-index proposal** (*a re-validated positional index
+  proves KIND and addressability, never IDENTITY*) is **still awaiting a
+  ruling** — this librarian recommended holding it for a second
+  occurrence.
+- **The cross-RAG-handoff proposal** (continuation 104) is still awaiting
+  a ruling, and takes **R158** if minted.
+- **Decision 030's three contingent candidates** also take **R158**.
+
+### For next session
+
+1. **Write the five owed build records, or explicitly retire the debt.
+   NOTHING MECHANICAL WILL REMIND YOU** — see the finding above; both
+   gates report clean today. This list and the ROADMAP entry are the only
+   trackers.
+2. Rule on `c3d605b`'s 24.3/24.4 identity — the second, unresolved
+   collision, structurally identical to 26.2's.
+3. Rule on the positional-index proposal and the cross-RAG-handoff
+   proposal — both currently contend for **R158**.
+4. **Decide the `claimed_only` full-ID change** to
+   `tools/check-ledger-numbers.py` (item 1's missing gate), flagged in the
+   ✅ RULING block.
+
+### RAG escalations, continuation 106 — NONE FILED, with the reasoning
+
+Everything in this continuation is **this project's own filing and
+numbering discipline** — Pass-ID collisions, standing-rule amendment
+shape, ledger gates that read this project's own `ROADMAP.md`. That is
+the boundary drawn at continuations 103, 104 and 105, and it holds here:
+it stays in `ROADMAP.md` and this log.
+
+**Specifically NOT escalated, with reasons:**
+
+- **Nothing to `C:\personal_rag\pdf\`** — no PDF-producer divergence was
+  involved.
+- **Nothing to `D:\dev\rag\rust\` or `D:\dev\rag\egui\`** — the two
+  ecosystem-wide methodology findings from this arc were **already filed
+  by continuation 105's amendment**
+  (`an_absent_trace_proves_nothing_until_you_confirm_which_trace_the_code_emits.md`
+  and `scripted_click_coordinates_go_stale_when_a_dock_width_changes.md`).
+  This continuation **ruled** on them; it discovered nothing new about
+  Rust or egui. **Re-filing a ruling into a RAG that already carries the
+  finding is duplication (hard rule 4).**
+- **The predict-then-chase method (`0720adb`)** is a genuine candidate for
+  a cross-project methodology file and is **flagged rather than written**:
+  it is currently one occurrence, about a project-specific checker. If a
+  second instance appears against a different tool, it earns a file in
+  `D:\dev\rag\rust\`.
+- **No `pdfce-spec-librarian` dispatch** — no spec question arose.
+
+### Ledger discipline (R106) — continuation 106
+
+| | Minted this continuation | Ceiling after |
+|---|---|---|
+| Pass IDs | **26.3** — and it opened no work; it **corrected a mis-numbering**. The first ID this project has minted for that purpose | families up to **38** (highest ID **38.5**); **39** next free. 26.x now runs **26.0–26.3** |
+| Standing rules | **NONE.** Two proposals **ACCEPTED AS AMENDMENTS IN PLACE** (R87, R123) — an amendment mints nothing | **R157** (**R158** next free). Decision 030's three contingent candidates **and** the cross-RAG-handoff proposal still take **R158**; nothing was transferred or renumbered |
+| Decision records | none | **031** (**032** next free) |
+| Operator questions | none | unchanged |
+
+**Ceiling figures MEASURED, not predicted.** This librarian invocation
+**had a shell** and ran both gates directly, before and after the edits.
+
+**Observation-boundary note (hard rule 8).** Asserted here only: the
+commit messages read via `git log`, the `26.3`-is-free grep across
+`ROADMAP.md` and `docs/decisions/`, and the two gate runs. **Nothing
+about backups, remotes, CI or the index is asserted.** These
+documentation edits are **UNCOMMITTED at the time of writing**; the
+engineer said he will re-run both checkers after committing this filing
+and report the numbers.

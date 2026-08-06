@@ -296,6 +296,25 @@ def main() -> int:
 
     head_top, head_high = top_of(heading_families)
     ment_top, ment_high = top_of(mentioned)
+    # FAMILY level, deliberately — and this was MEASURED, not assumed.
+    #
+    # A minted sub-ID with no heading yet (Pass 26.3, minted 2026-08-06 for a
+    # commit whose build record is still owed) does NOT surface here, because
+    # family 26 is headed. The librarian found that, and it is a real gap: no
+    # gate tracks a minted-but-unwritten sub-ID.
+    #
+    # A sub-ID-level check was measured before being built and REJECTED: 27
+    # sub-IDs are mentioned without a heading, and 26 of them are legitimate
+    # planned work (the whole 20.x family, 23.x, the shell redesign's own
+    # 38.3-38.5). A gate that is 96% noise is the "cries wolf" failure that
+    # `check-passes-filed.py`'s own first run had to be corrected for — it
+    # would be ignored within a week and would then hide the 27th case too.
+    #
+    # So the debt is tracked by the ROADMAP entry that minted it, and by
+    # `check-passes-filed.py`'s collision NOTE, and by nothing else. That is
+    # stated here rather than left for the next person to discover the hard
+    # way. If a cheap discriminator between "minted for existing work" and
+    # "named as future work" ever appears, this is where it goes.
     claimed_only = sorted(
         (f for f in mentioned if f not in heading_families),
         key=pass_sort_key,
