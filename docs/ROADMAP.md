@@ -319,6 +319,348 @@ rather than a change to the existing one.
 `check-passes-filed.py` proves a commit was **NOTICED**. Nothing this
 project owns proves a Pass was **FILED**.
 
+### Pass 43.0 — the ribbon owns the surfaces, the Tool tab shows them, and the object tree finally nests (GUI) — 2026-08-06, committed `37a49e6`, branch `pass-8-redaction`
+
+**MINTED by this filing** (family ceiling was 41; **42.0 is minted below
+in the same filing**, and this takes **43.0**). **Deliberately NOT filed
+as a 38.x slice**, even though it is shell work: the `★ Pass 38.1–38.5`
+family maps **one-to-one onto the spec's own slices 1–5**, and adding a
+sixth slice for work the spec never contained would break the one
+property that family was minted to guarantee.
+
+The operator's request, verbatim: *"There is still a dedicated properties
+and activities tab. both of these should have their options integrated
+into the ribbon and their options/inputs shown in the tool tab when they
+are activated. Also all measurement related tools should also have their
+options/inputs show up in the tool tab only when they are activated. Also
+there should still be a dedicated right side bar with all the objects in
+a nested tree view."*
+
+Three parts. **One of them turned out to be already satisfied and is
+REPORTED rather than re-implemented** — which is the entry's first
+finding, not a footnote.
+
+#### (A) `Properties` and `Activities` stop being compartments
+
+`DockPanel::Properties` and `DockPanel::Activities` are **retired**. The
+left dock is **Pages + Tool**, and the **Tool compartment becomes the
+universal options surface**: whatever the ribbon last activated renders
+there, with a named *"Back to tools"* exit and a label saying which
+subject is showing.
+
+**★ EVERY RIBBON ENTRY POINT ALREADY EXISTED** — Properties on **File**,
+Forms on **Edit**, Comments on **Review**, Batch and Redact on **Tools**.
+**So this was routing, not new controls**, and that is the reason the
+change is as small as it is. The **Activities segmented control is
+DELETED**: with each activity reachable from the ribbon, a second switch
+sitting beside it is **two controls for one choice**.
+
+#### ★ This PARTIALLY REVERSES Pass 38.2, which shipped the same morning — and the reversal is recorded in Pass 24.3's convention
+
+**The premise that failed is nameable, and naming it is the whole
+value.** Pass 38.2 classified **Properties as *watched*** — consulted
+continuously while doing something else, the way a selection readout is.
+**In use it is not.** It is consulted **in bursts, deliberately, when
+there is something to change** — which is the *same shape as the
+workflows* it was promoted away from.
+
+**R157 SURVIVES; its APPLICATION did not.** The distinction *"selection
+state is WATCHED, workflows are ENTERED"* was real and remains the rule
+that decides promotion-vs-multiplexing. **Properties was simply on the
+wrong side of the line.** A rule stated at the level of a distinction
+outlives a mis-sorted instance; a rule stated as *"Properties gets a
+compartment"* would have had to be deleted. That is the argument R157's
+own entry made for stating it that way, and this is the first time it
+paid.
+
+**Why the old reasoning is kept and not deleted:** this is exactly the
+convention **Pass 24.3** set when it retired decision 017 §A.3's
+right-dock vertical split — *the specific pairing had gone stale, the
+underlying need had not*. The Pass 38.2 entry stands untouched above,
+with a dated pointer to this one appended to it.
+
+**What SURVIVES from 38.2, unchanged and still right:** Pages and Tool
+stand **side by side**, **neither can hide the other**, and **there is
+no tab bar** anywhere in the left dock. The half of 38.2 that answered
+the operator's actual complaint is the half that was not reversed.
+
+#### (B) Measure options — ALREADY SATISFIED, reported not rebuilt
+
+`measure_options_ui` has **exactly one call site**, inside the Tool
+compartment, gated on `tool.is_measure()` where `tool` comes from
+`active_tool()` — **which only ever returns an ENABLED tool** (Pass 42.0,
+below). **No floating measure area remains** (Pass 34.1 slice 4 removed
+the last of them). **Nothing to do, and saying so is the deliverable** —
+the alternative is a second implementation of a satisfied requirement,
+which is how a codebase acquires two of everything.
+
+#### (C) The object tree nests — and ONLY where nesting really exists
+
+**object → subpath → node.** That is the **level ladder the canvas
+already walks** (R130), and the operator confirmed it verbatim: *"object
+→ subpath → node is the type of nesting i would expect to see in the
+tree."*
+
+**★ The tree and the canvas agree BY CONSTRUCTION, not by care.** A row's
+`(object, subpath, node)` triple **IS an `EnteredObject`**, so clicking a
+row *sets the canvas level* — there is no second representation to keep
+in sync, which is the failure mode R130 exists to foreclose.
+
+**★ WHAT WAS REFUSED, and the refusal was RE-VERIFIED rather than
+inherited: marked-content / OCG grouping.** The flat panel's own doc
+comment said there is no such grouping to render and that inventing one
+*"would be a lie about the document's structure."* That claim was
+**checked against the code, not trusted** (R143's shape): **no
+`--tree`/`--level` on `object-list`, no `ContentPath` in `decompose.rs`**
+— **Pass 23.2's core half is planned, not built.** So the tree gained
+**the nesting that exists** and refused **the nesting that does not**,
+and the stale part of that comment (which described a *flat* panel) was
+**corrected rather than deleted**.
+
+**Cost held flat.** A flattened per-frame display list keeps
+`show_rows` virtualization, so a **fully-collapsed tree costs exactly the
+object count** — the same budget the flat list had.
+
+#### The sidebar had NO TOGGLE OF ITS OWN — an R117-shaped gap
+
+After `Action::ToggleTools` was repurposed to show Batch Tools, the right
+dock could only be opened **as a side effect of other commands**.
+`Action::ToggleObjectsSidebar` now lives on the **View** tab, as asked.
+**A surface reachable only incidentally is the same defect as a
+capability reachable from no surface** (R117) with one extra step of
+disguise.
+
+#### Test bookkeeping, stated because a deleted function usually takes its tests with it
+
+`display_row_for_target` is **retired**; its two tests asserted
+**front-most-first ordering**, which `build_object_tree_rows` now owns —
+so those assertions **MOVED rather than being deleted with the
+function**. Four new tree tests are built on **decomposed FIXTURES**
+rather than hand-made literals, so **a decomposition change surfaces
+here** instead of being masked by a struct the test invented.
+
+#### Verified in the running application (R86)
+
+```
+left dock      Pages + Tool only
+View ▸ Objects opens the right sidebar
+listing        three objects, front-most-first (#2, #1, #0)
+expander       driven: index=0 open=false -> open=true
+expanded       #0 -> Part #0 -> Point #0..#4   (five anchors)
+oracle         object-list reports anchors=5   (matches)
+```
+
+#### ★ TWO CATCHES, both worth their own record
+
+**1. The Pass 18.7 glyph gate rejected `←` (U+2190) in "← Tools".** No
+glyph in the shipped font stack — it **would have shipped as an empty
+box**. The expander glyphs are ASCII for the same reason. **The gate
+caught this before a human saw it, which is the second time this session
+a string gate has earned its keep.** *(The operator has since ruled on
+what the correct ANSWER to a glyph-gate rejection is — see **R158**,
+minted this filing: **author the icon**, never reword.)*
+
+**2. The engineer TWICE concluded "the trace never fired" when his own
+PowerShell `-split` filter was silently returning ONE element.** The app
+was working throughout. **That is R87's amended failure exactly** — a
+claim about instrumented code not running, made **without validating the
+instrument** — and it cost **two wrong diagnoses** before he switched to
+a regex match. Once actually read, the expander rects were **70 px from
+where he had been guessing**. **Filed as a further occurrence on R87's
+own table** (see *Standing rules*), and escalated to
+`D:\dev\rag\egui\` as a dated amendment.
+
+#### Gates (engineer-measured, relayed per R87)
+
+**2008 tests pass, 0 fail** (4 new, 2 ported from the retired helper).
+`cargo fmt` clean; `cargo clippy --workspace --all-targets -- -D
+warnings` clean; `tools/check-ui-strings.sh` clean. **`cargo tree -p
+pdfce-core`: zero GUI matches.** Both ledger gates clean.
+
+#### Residual, and it is being worked NOW
+
+**The tree scroll-reveals a canvas-selected OBJECT but not a selected
+SUBPATH or NODE.** Named here rather than discovered later. **A THIRD
+commit — missing-icon authoring plus tree scroll-reveal — was already in
+progress when this entry was filed**, and is deliberately **not**
+anticipated here (R87: nothing is filed on trust).
+
+Also untouched and still stale: **`dock.rs`'s `default_tree` doc comment
+describes a two-group right dock** that Pass 24.3 already reduced to one.
+Pre-existing; not introduced here.
+
+---
+
+### Pass 42.0 — edit toggles stop being radio buttons, and one switch turns them all off (GUI) — 2026-08-06, committed `871c868`, branch `pass-8-redaction`
+
+**MINTED by this filing**, opening family **42** (ceiling had been 41).
+The operator's request, verbatim: *"Should have an edit toggle like the
+others. once on though it stays on and allows edits like the others.
+should have one toggle to turn all edits on or off."*
+
+**★ THIS ANSWERS OPEN OPERATOR QUESTION (bc)** — filed one commit
+earlier with Pass 40.0, asking whether clicking a TEXT object with no
+tool armed should begin text editing. **The answer is NO: a toggle, like
+the others.** See the *Open operator questions* section, where **(bc) is
+now RESOLVED**.
+
+#### ★ THE DIAGNOSIS IS THE ENTRY — nothing was disarming itself
+
+The complaint was *"a tool turns itself off."* **Nothing did.** The
+single `active_tool = None` in the file is an **explicit measure-panel
+close**. The real cause: **`active_tool` held exactly ONE tool**, so
+**every toggle was a RADIO BUTTON** — switching `Obj` on switched `Edit
+Text` off.
+
+**From outside, a radio button and a tool that disarms itself are
+indistinguishable**, which is precisely how the operator experienced it.
+**Recorded at this length because the reported symptom named a behaviour
+that did not exist**, and a fix aimed at the reported symptom would have
+gone looking for a stray assignment for as long as anyone cared to look.
+
+#### The shape: a SET, and ~20 readers stay correct untouched
+
+`enabled_tools: BTreeSet<CanvasTool>` replaces `Option<CanvasTool>`.
+**`active_tool()` becomes a METHOD** returning *the enabled tool that
+OWNS a click* — with one tool on it returns that tool, with none it
+returns `None`. **What changed is that "several on" is now
+expressible**; what did **not** change is any of the ~20 existing
+readers.
+
+**That is the same by-construction move Pass 39.0 made at 76 call sites
+the same day** (leave the callers correct by construction rather than by
+audit), reached here for a different reason: the readers all want *"which
+tool handles this click"*, and that question still has exactly one
+answer.
+
+#### ★ ENABLED IS NOT "HANDLES THIS CLICK" — and that distinction is the design
+
+Several tools can be on, **but a click still means exactly one thing**.
+`TOOL_PRECEDENCE` is a documented ladder, ordered **most-specific-claim
+first**:
+
+| Rung | Tool | The claim it makes |
+|---|---|---|
+| 1 | **TextEdit** | acts **only on text under the pointer** — the narrowest claim |
+| 2 | **AddText** | claims a click **ANYWHERE** (that is its meaning), so it **must** sit below the tool that claims only text, or it swallows every caret placement |
+| 3 | **measure** | claims any click as a pick; above object editing because **a measurement is a deliberate multi-click gesture a stray selection must not interrupt** |
+| 4 | **VectorEdit** | the most general claim, so it is **the floor** |
+
+**★ Order is by LADDER, never by which tool was switched on last, and a
+test pins exactly that.** Enable-order dependence would mean **the same
+click does different things depending on history the operator cannot
+see** — the class of behaviour this project's disclosure discipline
+exists to prevent.
+
+**THE LADDER IS INVISIBLE, SO IT IS DISCLOSED.** The Tool compartment
+reads: *"Edit Text has the canvas — a click goes to it first. Also on:
+Obj."* **A precedence an operator discovers by a click landing somewhere
+unexpected is not a precedence, it is a surprise.**
+
+#### ONE departure: the measure family stays exclusive INSIDE itself
+
+The three measure tools **share one `measure` state struct and dispatch
+on a single value**, so **two-on is a state with no meaning** rather than
+extra capability. They remain **fully independent of the text and object
+tools**, and **a test pins that asymmetry** — so a later reader cannot
+mistake the exclusivity for a leftover of the radio-button model this
+Pass removed.
+
+#### State is now PER-TOOL, and that is the loss the operator was describing
+
+`build_tool_state` / `tear_down_tool_state` replace the old
+build-mine-and-destroy-the-others. **Switching Edit Text on no longer
+discards an Add-Text draft** — which was the old model's behaviour **by
+design**. The measure state is dropped **only when no measure tool
+remains enabled**, since the three share it.
+
+#### The master switch — gated at ONE chokepoint, on purpose
+
+`editing_enabled` gates **every** tool through **`tool_enabled()`**, a
+single chokepoint, **so it cannot be forgotten at one dispatch site.**
+The failure mode that design forecloses is precise: **a single tool still
+editing in review mode**, which is exactly what review mode exists to
+make impossible.
+
+It also covers the **non-canvas authoring surfaces** — the **ce-dimension
+drag** (an edit that commits `place_dimension`), **form filling**, and
+**redaction marking** — each **disabled-and-explained rather than
+hidden** (R83), so a document can still be **READ** while nothing can
+change it.
+
+**Switching editing off KEEPS the tool set**, and switching back on
+**restores the arrangement rather than making the operator rebuild it** —
+verified in the app, not merely asserted.
+
+#### Three call sites changed MEANING rather than shape
+
+Each is noted where it sits: **Ctrl+E** used to read *"is ANY tool on"*
+and send `None`, which under replace-semantics meant *"put the current
+tool away"* and under a set would **clear every tool**; the
+**add-text→edit-text continuity** now **ADDS** `TextEdit` instead of
+tearing `AddText` down; and **closing the measure panel** now switches
+off **the measure family only**, not everything.
+
+#### ★ HARNESS: the ribbon was ENTIRELY UNDRIVABLE — an R125 consequence nobody had noticed
+
+`diag::Step::Tab` is new (`tab:edit`, `tab:view`, …). **Only the ACTIVE
+tab's band is emitted (R125) and the default tab is File** — therefore
+**every control on every other tab was unreachable from the scripted
+harness, including this commit's own master switch.**
+
+**Diagnosed in R87's amended form BEFORE the step was added** — the
+expected trace and the emitting path were both named first:
+`master-edit-toggle` is emitted **inside the `RG::ContentTools` block**,
+which is **gated on the active tab being Edit**; the default is File, so
+**the block never ran.** *(R125 gains a dated harness scope note — see
+*Standing rules*. **R125 itself is unchanged and still correct**: the
+non-emission is the keyboard-accessibility property it was minted for.
+What was missing was a way to CHANGE tabs, not a reason to emit
+inactive ones.)*
+
+#### Verified in the running application (R86)
+
+```
+two tools on   canvas tool=Some(TextEdit) enabled=[TextEdit, VectorEdit]
+               editing=true
+master off     master-edit-toggle on=true -> on=false, then
+               canvas tool=None enabled=[] editing=false
+master on      enabled=[TextEdit, VectorEdit]   (exactly as configured)
+screenshot     "Editing on", "Aa" and "Obj" all lit TOGETHER; the Tool
+               pane reads "Edit Text has the canvas — a click goes to it
+               first. Also on: Obj."
+```
+
+#### Seven tests — and they DISCHARGE Pass 40.0's filed no-tests debt
+
+Independent on/off; toggle-off leaves the others alone; measure exclusive
+within itself but **not** beyond; **precedence is enable-order-
+independent**; master-off wins **and remembers**; `None` still clears
+everything; switching one tool off does not discard another's state.
+
+**★ These land on the SAME dispatch chain Pass 40.0 shipped untested**,
+so the verification gap that Pass named rather than buried is now
+**closed**. See the dated discharge note appended to Pass 40.0's own
+entry.
+
+#### Gates (engineer-measured, relayed per R87)
+
+**2006 tests pass** (7 new). `cargo fmt` clean; `cargo clippy
+--workspace --all-targets -- -D warnings` clean; **`tools/check-ui-strings.sh`
+clean — and it caught a REAL violation during this commit** (a `", "`
+separator joined at the call site rather than living in `ui_text.rs`).
+**`cargo tree -p pdfce-core`: zero GUI matches.**
+
+#### Not done, and argued rather than omitted
+
+**Showing every enabled tool's controls STACKED.** The compartment shows
+the tool that has the canvas and **names** the others, because **five
+property bars deep the relevant one is below the fold** — switching the
+top tool off promotes the next, which is how the others are reached. **The
+argument is written into the code, not left as an absence.**
+
+---
+
 ### Pass 38.4 — shell redesign slice 4: the Comments panel — the document's notes and markup, listed at last (core + GUI) — 2026-08-06, committed `8228f44`, branch `pass-8-redaction`
 
 **MOVED from *Next up*, not minted.** Pass 38.4 was minted 2026-08-06 on
@@ -821,6 +1163,23 @@ and verified; **this half is named, not attempted.**
 test asserting that a modeless drag off-bounds declines**, and the sibling
 Passes in this same session (39.x, 41.0) each shipped five. **Named as a
 gap so it is a known debt rather than an assumed cover.**
+
+**★ DISCHARGED 2026-08-06 (continuation 108) by Pass 42.0 (`871c868`) —
+appended, nothing above rewritten.** Pass 42.0 shipped **seven tests on
+this same dispatch chain** (independent tool on/off, toggle-off leaves
+others alone, measure exclusivity, **precedence is enable-order-
+independent**, master-off wins and remembers, `None` still clears
+everything, per-tool state survives another tool's toggle). **The debt
+this section named is closed.**
+
+**One honest boundary, so the discharge is not overread:** the seven
+tests cover **which tool owns a click and what a toggle does to the
+others** — they do **not** add the specific *"modeless drag off-bounds
+declines"* assertion this section asked for. That one branch is still
+covered **by construction and by the driven trace above**
+(`vector-drag-declined`, `commit-move count = 0`), not by a unit test.
+**The chain is no longer untested; that single assertion is still worth
+having.**
 
 ---
 
@@ -1436,6 +1795,27 @@ standing rule** — the same boundary the engineer drew at continuation
 **Gates:** see the shared gate block below.
 
 ### Pass 38.2 — shell redesign slice 2: the left dock stops hiding itself (GUI) — 2026-08-06, committed `aa48167`, branch `pass-8-redaction`
+
+> **★ PARTIALLY REVERSED THE SAME DAY by Pass 43.0 (`37a49e6`) — this
+> entry is UNTOUCHED below and stays the record of what was built and
+> why (hard rule 1).** What was reversed: **`Properties` and
+> `Activities` are no longer compartments** — both are now reached from
+> the ribbon and render **in the Tool compartment**, and the Activities
+> segmented control is deleted. The left dock is **Pages + Tool**.
+> **The premise that failed** is nameable: this Pass classified
+> **Properties as *watched*** (consulted continuously while doing
+> something else). **It is not** — it is consulted **in bursts,
+> deliberately**, which is the same shape as the *entered* workflows.
+> **R157 SURVIVES; only its application to Properties did not** — the
+> distinction *"selection state is watched, workflows are entered"* is
+> still the rule that decides promotion-vs-multiplexing, and a rule
+> stated as a distinction outlives a mis-sorted instance. **What
+> SURVIVES from this Pass, unchanged and still right:** Pages and Tool
+> stand side by side, neither can hide the other, **and there is no tab
+> bar** — the half that answered the operator's actual complaint.
+> **Recorded in Pass 24.3's convention** (the specific pairing went
+> stale, the underlying need did not), not by deleting the reasoning
+> below.
 
 **★ Pass family 38 is minted by this entry** (ceiling was 37.2). It is
 the shell-redesign program; **Pass IDs 38.1–38.5 map one-to-one onto the
@@ -12372,7 +12752,7 @@ all. Full record: the Pass 38.2 Shipped entry.
 | Slice | Pass | State |
 |---|---|---|
 | **1** — density convention (`UI_PREFERENCES.md` §11 row-spacing constant, applied to the existing panels *as they stand*) | **38.1** | **✅ SHIPPED `9de335f` 2026-08-06** — see *Shipped*. It was NOT dropped |
-| **2** — the left-dock restructure: four always-visible compartments, no tab container, `PaneSubject` narrowed to workflows | **38.2** | **✅ SHIPPED `aa48167` 2026-08-06** |
+| **2** — the left-dock restructure: four always-visible compartments, no tab container, `PaneSubject` narrowed to workflows | **38.2** | **✅ SHIPPED `aa48167` 2026-08-06 — ⚠ PARTIALLY REVERSED the same day by Pass 43.0 (`37a49e6`): `Properties` and `Activities` are retired as compartments and now render in `Tool` from the ribbon; the left dock is Pages + Tool. **No tab bar** and **neither pane can hide the other** survive unchanged. R157 survives; only its application to `Properties` did not. See both Shipped entries** |
 | **3** — property 4's exact intended reading; doc-comment corrections (spec folds this into slice 2's commit) | **38.3** | **PARTLY DISCHARGED / BLOCKED.** The **maximal** reading is **REFUSED** by the engineer and flagged — open operator question **(ba)**. The `dock.rs` doc-comment correction was **not reported either way**; treat as **owed and unverified** |
 | **4** — the Comments / annotation-list panel | **38.4** | **✅ SHIPPED `8228f44` 2026-08-06** — **blocker 1 REMOVED** (core gained `/Contents`, `/T`, `/M`); **blocker 2 DELIBERATELY LEFT** and is 38.5's |
 | **5** — P1 remainder | **38.5** | **UNBUILT — now the only unbuilt slice**, and it grew one cheap item (below) |
@@ -12420,6 +12800,25 @@ tuning for the four stacked compartments (38.2 shipped 0.7/0.7/1.3/1.3,
 tuned against the running app, which discharges the *worst* of this);
 and `ResetScope`'s left-panels reset extended to also reset the four
 compartments' **collapse** state.
+
+**★ AMENDED 2026-08-06 (continuation 108) — TWO of 38.5's four items were
+INVALIDATED by Pass 43.0 (`37a49e6`), which retired the compartments they
+were about.** The left dock is now **Pages + Tool** (two compartments,
+not four): `Properties` and `Activities` are reached from the **ribbon**
+and render **in the Tool compartment**. So —
+
+- *"real default-height tuning for the FOUR stacked compartments"* —
+  **moot as written.** There are two. Whether the two need tuning is a
+  fresh question against the shipped layout, **not this item**.
+- *"`ResetScope`'s left-panels reset extended to also reset the four
+  compartments' COLLAPSE state"* — **re-scope or retire.** The surface it
+  named no longer exists in that shape.
+- **UNAFFECTED and still owed:** the `delete_annotation` core verb + its
+  Delete row action, and the `list-annotations` `contents=`/`author=`
+  formatting item below. **Those two are the whole of 38.5 until an
+  engineer re-scopes the other two.** *(A librarian-flagged, not
+  librarian-made, call — hard rule 2's discipline applied to scope
+  rather than to numbers.)*
 
 **★ Amended 2026-08-06 on Pass 38.4's ship — the CLI item just got
 cheap, and that is worth knowing when scoping 38.5.** `list-annotations`
@@ -17437,6 +17836,24 @@ nothing gets forgotten, not as a commitment to build in this order.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
+**RESOLVED this session (continuation 108, 2026-08-06) — no longer open:**
+- **(bc) Modeless editing — should clicking a TEXT object with no tool
+  armed begin text editing? — RESOLVED, ANSWERED *NO*: a TOGGLE, like the
+  others.** Operator, verbatim: ***"Should have an edit toggle like the
+  others. once on though it stays on and allows edits like the others.
+  should have one toggle to turn all edits on or off."*** **Shipped the
+  same breath as the answer, as Pass 42.0 (`871c868`).** The answer is
+  **not** the default fallback ("it stays unwired") and **not** the
+  wiring the question asked about — the operator **rejected the framing**:
+  Edit Text keeps an explicit toggle, but the toggles **stop being radio
+  buttons**, so *"like the others"* now means *"on at the same time as the
+  others."* **The rule-4 concern the question was filed on is answered
+  structurally rather than argued away** — arming stays a deliberate act,
+  so nothing changes the operator's mode on a click. **The question also
+  gained a second half nobody had asked for and the operator supplied:
+  one master switch that turns all editing off.** Full resolution text at
+  the item's own entry, below.
+
 **RESOLVED this session (continuation 94, 2026-08-05) — no longer open:**
 - **(aw) `MeasureScale`'s explicit Accept/Reject — RESOLVED, CONFIRMED
   kept.** Operator, verbatim: *"good choice. we need to enter a value
@@ -18295,6 +18712,43 @@ not a judgment call:**
   *Default if unanswered:* **it stays unwired.** Text editing keeps
   requiring the Edit Text tool to be armed; everything else — select,
   marquee, move, descend, node-select — is modeless as of Pass 40.0.
+
+  **★ RESOLVED 2026-08-06 (continuation 108) — ANSWERED *NO*, AND THE
+  FRAMING WAS REJECTED. Shipped as Pass 42.0 (`871c868`).** Operator,
+  verbatim: ***"Should have an edit toggle like the others. once on
+  though it stays on and allows edits like the others. should have one
+  toggle to turn all edits on or off."***
+
+  **The answer is neither branch the question offered.** Not *"wire it"*
+  and **not** the stated default either — the default said *"text editing
+  keeps requiring the Edit Text tool to be armed"* **while the other verbs
+  are modeless**, and the operator's answer says the interesting word in
+  that sentence was never *armed*, it was ***requiring***. Edit Text keeps
+  a toggle; what was wrong is that arming it **switched something else
+  off**. **`active_tool` held exactly ONE tool, so every toggle was a
+  RADIO BUTTON** — which is indistinguishable, from outside, from a tool
+  turning itself off, and that is what the operator had been reporting.
+
+  **All three of the question's stated objections are answered
+  structurally rather than argued away**, because arming remains a
+  deliberate act: (1) the Tool compartment changes only when the operator
+  toggles something; (2) **Escape keeps its meaning** (R130–R132
+  untouched); (3) **there is no "way back out" to define**, because
+  nothing entered a mode on a click. **A CLAUDE.md rule-4 concern
+  dissolved by a shape change rather than by a confirmation step** —
+  worth noting as the pattern, since rule 4's usual remedy is disclosure
+  and here the remedy was *not doing the thing that needed disclosing*.
+
+  **The operator supplied a second half nobody asked for:** *"one toggle
+  to turn all edits on or off"* — a **master switch**, gated at a single
+  chokepoint (`tool_enabled()`) so it cannot be forgotten at one dispatch
+  site, and covering the **non-canvas** authoring surfaces (ce-dimension
+  drag, form filling, redaction marking) as well as the canvas tools.
+  **Review mode is now a real state**, not an absence of armed tools.
+
+  **Nothing about this reopens** — the answer is shipped, verified in the
+  running app, and pinned by seven tests. See the Pass 42.0 *Shipped*
+  entry.
 
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
@@ -19441,6 +19895,36 @@ not a judgment call:**
   | `7d368e6` (08-06) | `focus={has_focus()}` written **inside** the `has_focus()` guard | *"focus is fine, something else is wrong"* | **a tautology — it could only ever print `true`.** The real signal was the frame COUNT: 10 traces across ~45 frames |
   | `9328038` (08-06, correcting `7d3e44c`) | a grep for the **`plain-click`** trace while the **Obj tool** was armed | an `⚠ OPEN DEFECT` filed into `ROADMAP.md`: *"the selection path does not run"* | **wrong trace name.** The Obj tool's path emits **`vector-click`**; `plain-click` belongs to the no-tool `else`. Also `sel=0` was read off a **start-of-frame** trace |
   | `a6e5bf3` (08-05, correcting a Pass 34.2 filing) | `tools/gui-shot.ps1` blank screenshots | **an invented DWM-composition cause**, filed into `ROADMAP.md` *and* into `D:\dev\rag\egui\` before it was checked | **the operator's DISPLAY WAS ASLEEP** |
+  | **`37a49e6`** (08-06, **added 2026-08-06, continuation 108**) | a **PowerShell `-split` filter over the trace file** | *"the expander trace never fired"* — **twice, two wrong diagnoses** | **the filter was silently returning ONE element.** The app was working throughout; once the trace was actually read, **the expander rects were 70 px from where the engineer had been guessing** |
+
+  **★ FIFTH ROW ADDED 2026-08-06 (continuation 108), and it is the FIRST
+  occurrence where the instrument was the READING TOOL rather than the
+  TRACE.** `7d368e6` was a tautological trace, `9328038` was the wrong
+  trace *name*, `a6e5bf3` was an invented cause for a blank capture —
+  all faults in what the code emitted or in how the capture was
+  explained. **Here the trace was correct, complete, and on disk**; the
+  **PowerShell pipeline reading it** was what lied, by returning a
+  single-element result the caller read as *"nothing matched."* **The
+  rule as written already covers it** — *"that the inputs driving it are
+  current"* and *"capable of showing the negative case"* apply to the
+  reader as much as to the emitter — **but nobody would have looked
+  there**, because every prior occurrence pointed at the instrumented
+  code. **The generalisation: the instrument is the WHOLE chain from
+  emit to eyeball, and the last link is the one nobody instruments.**
+  A filter that cannot distinguish *"no matches"* from *"one match,
+  mis-parsed"* is not a negative-case-capable instrument. Remedy used: a
+  **regex match** instead of `-split`.
+
+  **A counting note, so the two figures in this entry are not read as a
+  contradiction.** The engineer reported this as *"the FOURTH occurrence
+  of that pattern **today**"* — 08-06 alone: `7d368e6`, `9328038`, and
+  this commit's **two** wrong diagnoses. **This table counts INCIDENTS
+  across ~26 hours spanning 08-05 and 08-06, so by the table's own
+  measure it now holds FIVE.** Both numbers are right about different
+  things; the headline sentence above ("FOUR occurrences in roughly
+  twenty-six hours") is **left as written** because it records what
+  cleared the promotion bar at ruling time. **Neither figure is
+  adjusted, and no rule is renumbered.**
 
   **KIND B — the instrument is CORRECT but the INPUT is stale. Remedy:
   re-derive the input.**
@@ -20512,6 +20996,31 @@ not a judgment call:**
   future "render all tabs and hide the inactive ones" optimisation
   would turn a keyboard improvement into a keyboard regression **with
   no visual symptom at all.**
+
+  **★ HARNESS SCOPE NOTE, added 2026-08-06 (continuation 108, Pass 42.0
+  `871c868`) — the rule is UNCHANGED and still correct; this records a
+  consequence nobody had noticed for two days.** Because only the active
+  tab's band is emitted **and the default tab is File**, **every ribbon
+  control on every other tab was UNREACHABLE from the scripted
+  observation harness** — including, at the moment it was written, Pass
+  42.0's own master edit switch. **A control that is not emitted does
+  not exist this frame**, so there is nothing for a driven click to
+  find, and the symptom is a control that looks broken.
+
+  **The remedy is a tab step, NOT an emission change.** `diag::Step::Tab`
+  (`tab:edit`, `tab:view`, …) was added; **R125's non-emission is the
+  keyboard-accessibility property it was minted for and must not be
+  traded for testability.** Stated explicitly so a future session under
+  harness pressure does not "fix" the harness by emitting inactive tabs
+  — that is exactly the regression the rule forecloses, arrived at from
+  a new direction.
+
+  **Diagnosed in R87's AMENDED form before the step was added**, and it
+  is a clean worked example of that amendment: the expected trace
+  (`master-edit-toggle`) **and** its emitting path (inside the
+  `RG::ContentTools` block, gated on the active tab being Edit) were both
+  named **first**, which is what turned *"the toggle does not work"* into
+  *"the block never ran."* Escalated to `D:\dev\rag\egui\`.
 
 - **R126 — Every canvas gesture predicate is BUTTON-QUALIFIED (Pass
   18.9, 2026-08-04, continuation 81; librarian-assigned number).**
@@ -21897,6 +22406,32 @@ not a judgment call:**
   `Activities` compartment. **`PaneSubject` means "workflow" now, and
   nothing else.**
 
+  **★ AMENDED 2026-08-06 (continuation 108, Pass 43.0 `37a49e6`) — THE
+  RULE STANDS; THE APPLICATION ABOVE WAS WRONG ABOUT ONE SURFACE.**
+  **`Properties` was classified as *watched* and it is not.** In use it
+  is consulted **in bursts, deliberately, when there is something to
+  change** — the same shape as an *entered* workflow. Pass 43.0
+  therefore **retired the `Properties` and `Activities` compartments
+  entirely**: both are activated from the **ribbon** and render in the
+  **Tool** compartment, and the `Activities` segmented control is
+  **deleted** (with each activity on the ribbon, a second switch beside
+  it is two controls for one choice). **The left dock is `Pages` +
+  `Tool`.**
+
+  **Why this is an amendment and not a retirement — and it is the point
+  the rule was written to survive.** R157 is stated as a **distinction**
+  (*watched* vs *entered*), not as an inventory of which panes are
+  which. **A mis-sorted instance does not falsify the sort.** Had this
+  rule been written as *"Properties gets a compartment"* it would have
+  had to be **deleted** three commits after it was minted; written as a
+  distinction, it **decided the correction too** — Properties moved
+  because the rule says entered things multiplex, not in spite of it.
+  **Both corollaries are untouched and both still held through the
+  reversal:** a tab bar is the mechanism that hides things (there is
+  still none), and an always-visible compartment is never auto-raised.
+  **The first real test of "state the distinction, not the instance,"
+  and it passed.**
+
   **Corollary, and it is the operative half in practice: a tab bar is
   the mechanism that hides things.** Removing it is the fix; rearranging
   what sits in it is not. Four unrelated surfaces behind one subject
@@ -21951,6 +22486,64 @@ not a judgment call:**
   three contingent candidates, and the cross-RAG-handoff proposal, now
   take R158** if and when any of them is accepted or promoted.
   **Ceiling is now R157** (was R156). **R158 is next free.**
+
+- **R158 — A missing glyph or icon is answered by AUTHORING ONE, never
+  by rewording the feature (OPERATOR RULING, 2026-08-06, continuation
+  108; librarian-assigned number).** The operator, verbatim: ***"if an
+  appropriate glyph is missing for a feature or function, they should
+  just be created as part of the process."***
+
+  **What it binds.** When the Pass 18.7 glyph-coverage gate rejects a
+  character — or when a new command has no icon in the shipped set — the
+  correct response is to **author the missing artwork as part of that
+  same piece of work**. Substituting a word for the intended mark,
+  reaching for a lookalike character that happens to have coverage, or
+  shipping the command label-only **are no longer acceptable answers**
+  unless the operator says otherwise for that specific case.
+
+  **This REVERSES the project's prior habit, and the habit is on the
+  record so the reversal is legible.** Pass 8.1 replaced `✕` (U+2715)
+  with the word *"Remove"* citing the tofu finding; **Pass 43.0
+  (`37a49e6`) hit the same wall the day this rule was minted** — the gate
+  rejected `←` (U+2190) in *"← Tools"*, which would have shipped as an
+  empty box, and the string was reworded. **Every one of those was a
+  correct application of the gate and a wrong answer to it**, and the
+  operator has now said which way the trade goes.
+
+  **Why the operator is right, stated as the argument and not as
+  deference.** The gate proves a character has no glyph in the shipped
+  font stack; it says nothing about whether the *concept* deserves a
+  mark. Rewording lets a **font-coverage accident silently redesign the
+  UI** — a back arrow becomes a sentence, an icon-width control becomes
+  a text-width one, and the surface drifts by a mechanism no design
+  review ever sees. **pdfce already owns its own icon pipeline** (Pass
+  18.3's ScripTree-style SVG set, rendered through the tiny-skia path
+  parser at any DPI), so authoring a mark is **a known, cheap, in-house
+  operation** — which is exactly why the old trade was a bad one.
+
+  **Boundary — what this rule does NOT license.** It does **not** weaken
+  the glyph gate (R1/Pass 18.7 stand: no operator-visible string may
+  contain an uncovered character); the rule changes the **remedy**, not
+  the **check**. It does **not** authorise bundling a new *font*, which
+  is a separate, still-open scope item (*Non-Latin UI font coverage*, in
+  `FEATURES.md`'s Planned list). And it does **not** override **R124** —
+  an icon is authored for a feature that **exists**, never as a greyed
+  placeholder for one that does not.
+
+  **Implementation status, stated to R87's standard (nothing filed on
+  trust).** A **third commit was in progress at the time of this filing**
+  (missing-icon authoring plus the Pass 43.0 tree scroll-reveal residual)
+  and is reported to implement this ruling. **Its hash, contents and
+  gates are NOT known to this filing and are NOT recorded here** — the
+  rule is filed now so the ruling is not lost; **its build record is
+  OWED** and must be filed against the real commit.
+
+  **Ceiling is now R158** (was R157). **R159 is next free.** Decision
+  030's three still-unminted contingent candidates and the
+  cross-RAG-handoff proposal — which had been left claiming R158 — **now
+  take R159**, by the same read-the-live-ceiling transfer
+  (R106/R133) that moved them from R157 to R158 one continuation ago.
+  **Nothing is renumbered.**
 
 ### RESOLVED 2026-08-06 — a request to "look like <competitor>" is converted into neutral, operator-confirmed PROPERTIES before any design work — ACCEPTED AS AN AMENDMENT TO R123 IN PLACE; R158 NOT MINTED
 

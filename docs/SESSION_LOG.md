@@ -17700,3 +17700,260 @@ currency is not verifiable from here; the engineer should check
 `D:\Dev\pdfce-backups\`. These documentation edits are **UNCOMMITTED at
 the time of writing**; the engineer said he will re-run both checkers
 after committing.
+
+## Same-day continuation 108 (real date 2026-08-06) — TWO commits filed: the edit toggles stop being radio buttons, and the ribbon takes back the surfaces the dock had been holding
+
+**Two commits, both 2026-08-06, both on `pass-8-redaction`, both read
+directly with `git show --stat --format=%B` by this librarian.** Both
+**MINT** new Pass IDs, opening families **42** and **43**.
+
+**A THIRD commit was in progress at filing time** (missing-icon authoring
++ the object-tree scroll-reveal residual). **It is NOT anticipated
+anywhere in this filing** — R87: nothing is filed on trust. Its build
+record is **OWED**, and the operator ruling it implements is recorded
+independently as **R158** so the ruling cannot be lost with it.
+
+### Shipped
+
+| Commit | Pass | What it is |
+|---|---|---|
+| `871c868` | **42.0** (minted) | independent edit toggles + one master edit switch — `BTreeSet<CanvasTool>` replaces `Option`, with a documented precedence ladder |
+| `37a49e6` | **43.0** (minted) | the ribbon owns Properties/Activities and the Tool tab shows them; the object sidebar nests object → subpath → node |
+
+### Decisions made this session
+
+Three filed to `ARCHITECTURE.md` §12 (continuation 108, entries 1–3). In
+brief; the §12 entries carry the arguments:
+
+1. **"Enabled" and "handles this click" are two different questions**, and
+   conflating them is what made every edit toggle a radio button. The
+   precedence ladder is a property of the ladder, never of enable
+   history — pinned by a test.
+2. **A rule stated as a DISTINCTION survives a mis-sorted instance; a
+   rule stated as an INVENTORY would have had to be deleted.** R157
+   survives Pass 38.2's partial reversal; **Properties was simply on the
+   wrong side of *watched* vs *entered*.**
+3. **A tree renders the nesting the MODEL has and refuses the nesting it
+   does not** — object → subpath → node ships, marked-content/OCG
+   grouping is refused, and the refusal was **re-verified against the
+   code** rather than inherited from a doc comment.
+
+### Findings + decisions
+
+- **★ THE DIAGNOSIS WAS THE WHOLE OF PASS 42.0, and the reported symptom
+  named a behaviour that did not exist.** The complaint was *"a tool
+  turns itself off."* **Nothing did.** `active_tool` held exactly ONE
+  tool, so **every toggle was a radio button** — and from outside, a
+  radio button and a self-disarming tool are **indistinguishable**. A fix
+  aimed at the reported symptom would have hunted a stray assignment for
+  as long as anyone cared to look. **Worth carrying forward as a shape:
+  when a symptom describes an action ("it turned itself off"), check
+  first whether anything performs that action at all.**
+- **★ OPERATOR QUESTION (bc) IS ANSWERED, AND THE FRAMING WAS
+  REJECTED.** The question asked whether clicking a text object with no
+  tool armed should begin text editing. The operator: *"Should have an
+  edit toggle like the others. once on though it stays on and allows
+  edits like the others."* **The interesting word in the question's own
+  default was never *armed* — it was *requiring*.** The rule-4 concern is
+  dissolved by a **shape change** rather than by a confirmation step,
+  which is notable because rule 4's usual remedy is disclosure and here
+  the remedy was *not doing the thing that needed disclosing*.
+- **★ R157 SURVIVED ITS OWN REVERSAL — the first real test of "state the
+  distinction, not the instance."** Pass 43.0 retired the `Properties`
+  and `Activities` compartments **three commits after Pass 38.2 created
+  them**. Had R157 been written as *"Properties gets a compartment"* it
+  would have been deleted; written as *watched vs entered*, **the rule
+  decided the correction too**. Both corollaries (no tab bar; never
+  auto-raise an always-visible compartment) held throughout.
+- **Pass 43.0 was ROUTING, not new controls.** Every ribbon entry point
+  already existed — Properties/File, Forms/Edit, Comments/Review,
+  Batch+Redact/Tools. That is why a same-day reversal was cheap, and it
+  is the reason the `Activities` segmented control could simply be
+  **deleted**: with each activity on the ribbon, a second switch beside
+  it is **two controls for one choice**.
+- **One of the operator's three asks was ALREADY SATISFIED and was
+  REPORTED rather than re-implemented.** `measure_options_ui` has exactly
+  one call site, in the Tool compartment, gated on `tool.is_measure()`
+  from `active_tool()` — which only ever returns an **enabled** tool.
+  **Saying "nothing to do" is a deliverable**; the alternative is a
+  second implementation of a satisfied requirement.
+- **★ THE RIBBON WAS ENTIRELY UNDRIVABLE BY THE HARNESS, AND HAD BEEN FOR
+  TWO DAYS.** Only the **active** tab's band is emitted (**R125**) and
+  the default tab is **File**, so **every control on every other tab was
+  unreachable** — including Pass 42.0's own master switch. **Diagnosed in
+  R87's amended form BEFORE `diag::Step::Tab` was added**: the expected
+  trace (`master-edit-toggle`) and its emitting path (inside
+  `RG::ContentTools`, gated on the Edit tab) were both named first.
+  **R125 is unchanged and must stay unchanged** — emitting inactive tabs
+  would trade a keyboard-accessibility property for testability, with no
+  visual symptom. **A scope note was added to R125 so a future session
+  under harness pressure does not "fix" it the wrong way.**
+- **★ THE FOURTH INSTRUMENT-SILENCE FAILURE OF THE DAY, AND THE FIRST
+  WHERE THE TRACE WAS INNOCENT.** The engineer **twice** concluded *"the
+  expander trace never fired"* when his own PowerShell `-split` filter
+  was **silently returning one element**. The app was working throughout;
+  once read, the expander rects were **70 px from where he had been
+  guessing.** Every prior occurrence of this class pointed at the
+  *emitting* code — **this one was the reading pipeline, the link nobody
+  instruments.** Filed as a fifth row on R87's own table, with a counting
+  note (the engineer counted four **today**; the table counts five
+  **incidents across ~26 hours** — both right about different things,
+  neither figure adjusted).
+- **The glyph gate caught a real one, and the operator then ruled on what
+  the correct ANSWER to a catch is.** Pass 18.7's gate rejected `←`
+  (U+2190) in *"← Tools"* — no glyph in the shipped stack, would have
+  shipped as an empty box. The string was reworded, as this project has
+  always done (Pass 8.1 replaced `✕` with the word *"Remove"*). **The
+  operator has now said that is the wrong trade: *"if an appropriate
+  glyph is missing for a feature or function, they should just be created
+  as part of the process."*** **Minted as R158.**
+- **`tools/check-ui-strings.sh` caught a real violation during `871c868`**
+  — a `", "` separator joined at the call site rather than living in
+  `ui_text.rs`. **Second time in two continuations a string gate has paid
+  for itself.**
+- **Pass 40.0's no-tests debt is DISCHARGED**, and the discharge is
+  bounded honestly: `871c868`'s seven tests land on the **same dispatch
+  chain**, so the chain is no longer untested — but **the specific
+  "modeless drag off-bounds declines" assertion is still not written**,
+  and that branch remains covered by construction plus a driven trace.
+  Both facts are on Pass 40.0's own entry.
+- **Two of Pass 38.5's four items were INVALIDATED** by 43.0 — the
+  four-compartment height tuning and the four-compartment collapse-state
+  reset both name a layout that no longer exists. **Flagged for engineer
+  re-scope, not re-scoped here.**
+
+### Gates (engineer-measured, relayed — R87)
+
+**At `871c868`: 2006 pass** (7 new). **At `37a49e6`: 2008 pass, 0 fail**
+(4 new, **2 ported from a retired helper** — `display_row_for_target`'s
+front-most-first assertions moved to `build_object_tree_rows` rather than
+dying with the function). `cargo fmt` clean; `cargo clippy --workspace
+--all-targets -- -D warnings` clean; `tools/check-ui-strings.sh` clean
+(**and it caught a real violation during `871c868`**). **`cargo tree -p
+pdfce-core`: zero GUI matches.** **Both ledger gates clean; 116 pairs.**
+
+**Anchoring note:** 2006 is the count at `871c868`; **2008 at `37a49e6`
+is current** as of this filing, and does **not** include the third,
+in-progress commit.
+
+### Still in flight
+
+- **The THIRD commit** — missing-icon authoring (the R158 implementation)
+  plus Pass 43.0's tree scroll-reveal residual. **Build record OWED.**
+- **Pass 43.0's residual:** the tree scroll-reveals a selected **object**
+  but not a selected **subpath** or **node**.
+- **Pass 38.5** — two of its four items invalidated by 43.0; the other
+  two (`delete_annotation` + Delete row action; `list-annotations`
+  `contents=`/`author=`) are unaffected and still owed. **Needs an
+  engineer re-scope.**
+- **The five owed build records from 2026-08-05** (⚠ FILING GAP #2) are
+  **still NOT discharged** — a different set of commits entirely.
+- **`c3d605b`'s 24.3/24.4 identity collision** — still unruled.
+- **Pass 23.3's residual scope re-statement** — still owed (partly
+  discharged by 41.0 and 36.1; only multi-node MOVE remains, and it is
+  core work).
+- **`dock.rs`'s `default_tree` doc comment** still describes a two-group
+  right dock that Pass 24.3 reduced to one. Pre-existing; named twice
+  now without being fixed.
+
+### For next session
+
+1. **File the third commit** the moment it lands — it carries R158's
+   implementation and 43.0's named residual, and **nothing mechanical
+   will remind anyone.**
+2. **Two operator questions remain unanswered:** **(ba)** the property-4
+   fly-out refusal, and **(bb)** R124 greyed placeholders. **(bc) is now
+   closed.** Both survivors govern more surface than when filed, and
+   **(bb) now interacts with R158** — an authored icon is for a feature
+   that exists; it is not a licence to pad empty space.
+3. **Re-scope or retire Pass 38.5's two invalidated items.**
+4. **`move_nodes` core verb** — still the only thing between the shipped
+   node-selection set and multi-node drag; scope it with the single-node
+   arrow-key nudge (decision 028 items 10/11).
+5. **Backfill the Pass 40.0 modeless off-bounds drag-decline unit test** —
+   narrowed but not eliminated by 42.0's seven tests.
+
+### RAG escalations, continuation 108 — TWO filed (one new, one amendment), one PDF-domain refusal reasoned
+
+**FILED:**
+
+1. **`D:\dev\rag\egui\only_the_active_tab_is_emitted_so_scripted_harnesses_cannot_reach_other_tabs.md`**
+   — **new file.** In immediate mode a control on an **inactive tab does
+   not exist this frame** — no `Response`, no `Rect`, no `Id`, no trace —
+   so a scripted harness can neither observe nor click it, and the
+   symptom reads as a broken control. **Measured:** every ribbon control
+   outside the default tab was unreachable **for two days**, including
+   the commit that found it. The fix is a **tab step** in the harness,
+   **not** emitting inactive tabs. Generalized past ribbons to **every
+   conditional emission gate** — collapsing headers, `ScrollArea`
+   `show_rows` virtualization, closed `Window`s, mode-switched panels —
+   with the reusable invariant: **every conditional emission gate needs a
+   matching harness step that satisfies it.** Cross-linked to the
+   absent-trace lesson as its *structural* cousin (there the wrong name
+   was grepped; here the emitting code was never built).
+2. **`D:\dev\rag\rust\an_absent_trace_proves_nothing_until_you_confirm_which_trace_the_code_emits.md`**
+   — **dated AMENDMENT, not a new file** (hard rule 4). The addition one
+   occurrence could not teach: **the instrument is the whole chain emit →
+   buffer → file → filter → parse → the value you read**, and the fourth
+   instance was **the first where the emitting side was flawless**. Three
+   new validations added to its checklist (validate the reader on a
+   known-positive line; distrust any filter that cannot tell zero results
+   from one — print the COUNT; prefer a regex match over split-and-index,
+   whose failure mode is a wrong-shaped result that still looks like
+   data).
+
+**ALSO FILED, outside the pdfce tiers because the finding is not pdfce's:**
+
+3. **`C:\personal_rag\claude_code\lesson_20260806_powershell_scalar_vs_array_silent_single_element.md`**
+   — the **PowerShell-specific** half, filed under `claude_code/` per this
+   role's own coordination note (a genuinely Claude-Code-tooling finding,
+   not a PDF one). PowerShell **unwraps single-element collections**, so
+   three traps ride together: `$r[0]` on a single string yields a
+   **character**; `.Count` on `$null` **throws in PS 5.1** and returns 0
+   in PS 7; and `-split` with an absent separator yields a short array
+   indexed past the end. Both the subject index and the master
+   `C:\personal_rag\index.md` were updated in the same filing.
+
+**CONSIDERED AND DECLINED, with reasons:**
+
+- **Nothing to `C:\personal_rag\pdf\`.** Neither commit observed a
+  real-world producer diverging from spec — both are GUI/tooling work.
+  **No PDF-domain finding this arc.**
+- **No new `D:\dev\rag\rust\` FILE.** The `Option` → `BTreeSet` +
+  precedence-ladder shape is **API-shape judgement**, and its
+  transferable half (*enabled is not the same as handles-this-click*) is
+  general software design, not a Rust or Cargo finding. Filed to
+  `ARCHITECTURE.md` §12 instead — the same call continuation 107 made
+  for the parked-list and set-beside-the-ladder decisions, kept
+  consistent deliberately.
+- **No `pdfce-spec-librarian` dispatch.** No spec-governed behaviour was
+  touched by either commit.
+
+### Ledger discipline (R106) — continuation 108
+
+| | Minted this continuation | Ceiling after |
+|---|---|---|
+| Pass IDs | **42.0, 43.0** — two minted, **two new families** | families up to **43** (highest ID **43.0**); **44** next free |
+| Standing rules | **R158** — the operator's glyph/icon-authoring ruling | **R158** (**R159** next free). Decision 030's three contingent candidates and the cross-RAG-handoff proposal **now take R159** |
+| Decision records | **NONE** — three entries appended to `ARCHITECTURE.md` §12, which mints no `docs/decisions/` file | **031** (**032** next free), unchanged |
+| Operator questions | **NONE minted; (bc) RESOLVED** | **(bc)** (**(bd)** next free), unchanged |
+
+**Amendments made IN PLACE, nothing renumbered:** **R87** gains a fifth
+table row (the reading-pipeline instrument) plus a counting note;
+**R125** gains a harness scope note; **R157** gains the
+application-was-wrong-rule-still-right amendment.
+
+**Ceiling figures MEASURED, not predicted** — this invocation had a shell
+and read the Pass, rule, decision and question ceilings directly out of
+`docs/` before minting.
+
+**Observation-boundary note (hard rule 8).** Asserted here: the two
+commit messages, read via `git show --stat --format=%B`; the ledger
+ceilings, grepped from `docs/` and `docs/decisions/`. **All gate figures
+(2006/2008 tests, fmt, clippy, ui-strings, `cargo tree`, 116 ledger
+pairs) are ENGINEER-MEASURED AND RELAYED (R87) — not run by this
+librarian.** **Nothing about backups, remotes, CI or the index is
+asserted**; backup currency is not verifiable from here and the engineer
+should check `D:\Dev\pdfce-backups\`. These documentation edits are
+**UNCOMMITTED at the time of writing**, and the third commit's contents
+are **unknown to this filing by design**.

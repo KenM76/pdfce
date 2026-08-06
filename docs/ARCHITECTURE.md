@@ -7282,3 +7282,97 @@ with a forward pointer.
   the canvas raster is screen-reader-illegible and those text widgets
   **are** the accessibility surface. Verified as **content-neutral by
   measurement**: 285 label rows before and after, 11 px reclaimed.
+- **2026-08-06 (continuation 108, first entry)** — **"ENABLED" and
+  "HANDLES THIS CLICK" are two different questions, and conflating them
+  is what made every edit toggle a radio button.** Shipped as **Pass
+  42.0** (`871c868`). `active_tool: Option<CanvasTool>` could hold
+  **exactly one** tool, so arming `Obj` disarmed `Edit Text` — which from
+  outside is **indistinguishable from a tool switching itself off**, and
+  that is what the operator reported. **The state is now
+  `enabled_tools: BTreeSet<CanvasTool>`, and `active_tool()` becomes a
+  METHOD** answering the second question: *which enabled tool owns this
+  click*. **~20 existing readers stay correct untouched**, because they
+  all wanted the second question all along — the same
+  leave-callers-correct-by-construction move Pass 39.0 made at 76 call
+  sites the same day, reached here by a different route.
+  **The precedence ladder is ordered MOST-SPECIFIC-CLAIM FIRST, and its
+  order is a property of the ladder, never of enable history:**
+  `TextEdit` (acts only on text under the pointer) → `AddText` (claims a
+  click **anywhere**, so it must sit below the tool that claims only
+  text, or it swallows every caret placement) → measure (a deliberate
+  multi-click gesture a stray selection must not interrupt) →
+  `VectorEdit` (the most general claim, therefore the floor). **A test
+  pins enable-order independence**, because the alternative is *the same
+  click doing different things depending on history the operator cannot
+  see*. **The ladder is invisible, so it is DISCLOSED** — the Tool pane
+  names which tool has the canvas and which others are on.
+  **One deliberate asymmetry:** the three measure tools stay exclusive
+  **among themselves** — they share one state struct and dispatch on a
+  single value, so two-on is a **state with no meaning**, not extra
+  capability. A test pins the asymmetry so it cannot be mistaken for a
+  leftover of the radio-button model.
+  **The master switch is gated at ONE chokepoint (`tool_enabled()`) as a
+  correctness decision, not a tidiness one:** the failure mode a
+  per-dispatch-site gate invites is **one tool still editing in review
+  mode**, which is precisely what review mode exists to make impossible.
+  It covers the non-canvas authoring surfaces too — ce-dimension drag,
+  form filling, redaction marking — each **disabled-and-explained rather
+  than hidden** (R83), so a document still READS while nothing can change
+  it. Turning editing off **keeps** the tool set.
+  **This ANSWERS open operator question (bc)** by rejecting its framing:
+  the rule-4 concern (pdfce silently changing the operator's mode) is
+  dissolved by a **shape change**, not by a confirmation step — arming
+  stays a deliberate act, so nothing changes mode on a click.
+- **2026-08-06 (continuation 108, second entry)** — **A rule stated as a
+  DISTINCTION survives a mis-sorted instance; a rule stated as an
+  INVENTORY would have had to be deleted.** Shipped as **Pass 43.0**
+  (`37a49e6`), which **partially reverses Pass 38.2** (`aa48167`) of the
+  same morning. **R157** (*selection state is WATCHED, workflows are
+  ENTERED; watched things get a compartment, entered things share one*)
+  classified **`Properties` as watched**. **It is not** — Properties is
+  consulted **in bursts, deliberately, when there is something to
+  change**, which is the shape of an *entered* workflow. So
+  `DockPanel::Properties` and `::Activities` are **retired**; both are
+  activated from the **ribbon** and render in the **Tool** compartment,
+  which becomes the universal options surface (named subject label,
+  "Back to tools" exit). **The left dock is Pages + Tool.**
+  **R157 SURVIVES the reversal, and that is the transferable finding.**
+  Because the rule names a *distinction* rather than an inventory of
+  panes, **the rule itself decided the correction** — Properties moved
+  because entered things multiplex. Had 38.2 written *"Properties gets a
+  compartment"*, the rule would have been deleted three commits after
+  being minted. **Both corollaries held throughout:** no tab bar (a tab
+  bar is the mechanism that hides things), and an always-visible
+  compartment is never auto-raised.
+  **The change was ROUTING, not new controls** — every ribbon entry point
+  already existed (Properties/File, Forms/Edit, Comments/Review,
+  Batch+Redact/Tools), which is why the reversal was cheap. **The
+  `Activities` segmented control is DELETED**: with each activity on the
+  ribbon, a second switch beside it is **two controls for one choice**.
+  **Recorded in Pass 24.3's convention** — the specific pairing went
+  stale, the underlying need did not — rather than by deleting 38.2's
+  reasoning, which stands untouched with a dated pointer.
+- **2026-08-06 (continuation 108, third entry)** — **A tree renders the
+  nesting the MODEL has, and refuses the nesting it does not.** Shipped
+  as **Pass 43.0** (`37a49e6`). The object sidebar nests **object →
+  subpath → node** — the level ladder the canvas already walks (R130) —
+  and the operator confirmed that ladder verbatim. **Tree and canvas
+  agree BY CONSTRUCTION rather than by care:** a row's
+  `(object, subpath, node)` triple **IS an `EnteredObject`**, so clicking
+  a row *sets the canvas level*; there is no second representation to
+  keep in sync.
+  **Marked-content / OCG grouping was REFUSED, and the refusal was
+  RE-VERIFIED rather than inherited.** The old flat panel's doc comment
+  claimed inventing that grouping *"would be a lie about the document's
+  structure"*; that claim was checked against the code (R143's shape) —
+  **no `--tree`/`--level` on `object-list`, no `ContentPath` in
+  `decompose.rs`; Pass 23.2's core half is planned, not built** — and the
+  stale half of the comment (which described a *flat* panel) was
+  corrected rather than deleted. **A doc comment that is still right
+  about the refusal and wrong about the shipped widget is exactly the
+  R93 failure**, caught here by reading the code the comment was about.
+  **Cost held flat:** a flattened per-frame display list keeps `show_rows`
+  virtualization, so a fully-collapsed tree costs exactly the object
+  count. **And a retired helper's tests MOVED rather than dying with
+  it** — `display_row_for_target`'s front-most-first assertions now sit
+  on `build_object_tree_rows`, which owns that ordering.
