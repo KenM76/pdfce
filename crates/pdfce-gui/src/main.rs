@@ -7643,6 +7643,27 @@ impl eframe::App for PdfceApp {
                     modifiers,
                 });
             }
+            diag::Step::CtrlClick(pressed, x, y) => {
+                // COMMAND, not the bare CTRL flag: the selection paths read
+                // `modifiers.command`, which egui maps to Ctrl on Windows and
+                // Cmd on macOS. Injecting only `ctrl` would drive a modifier
+                // the code under test does not consult on every platform.
+                let m = egui::Modifiers {
+                    ctrl: true,
+                    command: true,
+                    ..egui::Modifiers::default()
+                };
+                raw_input
+                    .events
+                    .push(egui::Event::PointerMoved(egui::pos2(x, y)));
+                raw_input.events.push(egui::Event::PointerButton {
+                    pos: egui::pos2(x, y),
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: m,
+                });
+                raw_input.modifiers = m;
+            }
             diag::Step::AltClick(pressed, x, y) => {
                 let alt = egui::Modifiers::ALT;
                 raw_input
@@ -11155,7 +11176,24 @@ impl PdfceApp {
                 && let Some(screen_pos) = image_response.interact_pointer_pos()
             {
                 let canvas_pos = viewer::screen_to_page(screen_pos, image_rect, extent, zoom);
-                let (shift, alt) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
+                // ADDITIVE SELECT TAKES CTRL AS WELL AS SHIFT.
+                //
+                // Shift-toggle has worked since Pass 9a; Ctrl did nothing, and
+                // `modifiers.ctrl`/`command` appeared exactly once in this
+                // whole file. On Windows, Ctrl+click is THE toggle-add
+                // convention — so an operator reaching for it got a plain
+                // click that threw their selection away, which reads as
+                // "multi-select is not implemented" rather than "wrong key".
+                //
+                // `command` rather than `ctrl`: egui maps it to Ctrl on
+                // Windows/Linux and Cmd on macOS, so this is one expression of
+                // "the platform's modifier" instead of a Windows-only literal.
+                //
+                // Shift is kept as a synonym rather than reassigned to
+                // range-select: pdfce's selection is a set with no ordering to
+                // range over, so a range verb would have nothing to mean.
+                let (shift, alt) =
+                    ui.input(|i| (i.modifiers.shift || i.modifiers.command, i.modifiers.alt));
                 let tol =
                     canvas::screen_tolerance_to_page(canvas::SELECT_SCREEN_TOLERANCE_PX, zoom);
                 // Depth first: a double-click descends into the object under
@@ -11251,7 +11289,10 @@ impl PdfceApp {
                             egui::StrokeKind::Inside,
                         );
                         if canvas::primary_drag_stopped(&image_response) {
-                            let shift = ui.input(|i| i.modifiers.shift);
+                            // Same widening as the click path above — a
+                            // marquee that adds under Shift but replaces under
+                            // Ctrl would be the same trap one gesture over.
+                            let shift = ui.input(|i| i.modifiers.shift || i.modifiers.command);
                             let hits = doc
                                 .target_provider()
                                 .map(|p| p.hit_test_rect(doc.view.page_index, canvas_rect))
@@ -15565,7 +15606,10 @@ fn run_vector_edit_tool(
             && let Some(sp) = image_response.interact_pointer_pos()
         {
             let canvas_pos = viewer::screen_to_page(sp, image_rect, extent, zoom);
-            let (shift, alt) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
+            // Ctrl/Cmd as an additive synonym, matching the object-selection
+            // path — see its comment for why.
+            let (shift, alt) =
+                ui.input(|i| (i.modifiers.shift || i.modifiers.command, i.modifiers.alt));
             let tol = canvas::screen_tolerance_to_page(canvas::SELECT_SCREEN_TOLERANCE_PX, zoom);
             // The SAME level navigation the no-tool path has. Recorded here and
             // applied below rather than duplicated — the whole reason

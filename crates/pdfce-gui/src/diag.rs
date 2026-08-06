@@ -90,6 +90,13 @@ pub enum Step {
     /// has to be set on the event itself; egui reads modifiers from the event,
     /// not from a separate key-state channel.
     AltClick(bool, f32, f32),
+    /// A primary press/release with CTRL held (`ctrldown:X,Y` / `ctrlup:X,Y`).
+    ///
+    /// Added to prove additive selection: the harness could send Alt (the
+    /// click-through cycle) but not Ctrl, so the modifier an operator actually
+    /// reaches for to multi-select was the one gesture that could not be
+    /// driven.
+    CtrlClick(bool, f32, f32),
     /// Press (`true`) or release (`false`) the MIDDLE button at a position —
     /// the pan gesture, which the primary-button steps cannot express.
     Middle(bool, f32, f32),
@@ -252,6 +259,8 @@ fn parse_step(s: &str) -> Option<Step> {
         "up" => xy().map(|(x, y)| Step::Up(x, y)),
         "zoom" => rest.trim().parse().ok().map(Step::Zoom),
         "altdown" => xy().map(|(x, y)| Step::AltClick(true, x, y)),
+        "ctrldown" => xy().map(|(x, y)| Step::CtrlClick(true, x, y)),
+        "ctrlup" => xy().map(|(x, y)| Step::CtrlClick(false, x, y)),
         "altup" => xy().map(|(x, y)| Step::AltClick(false, x, y)),
         "mdown" => xy().map(|(x, y)| Step::Middle(true, x, y)),
         "mup" => xy().map(|(x, y)| Step::Middle(false, x, y)),
