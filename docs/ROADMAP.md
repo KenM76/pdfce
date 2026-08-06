@@ -81,6 +81,554 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ⚠ FILING GAP #2 — FIVE commits of 2026-08-05 have NO *Shipped* entry, and TWO of them claim the SAME Pass ID (26.2). Found 2026-08-06, continuation 105; **UNRESOLVED — the ID collision needs an ENGINEER RULING**
+
+**Filed at the very head of *Shipped*, above the work it was found
+alongside, because it invalidates statements this document and
+`FEATURES.md` make RIGHT NOW.** This is not a summary of the gap — until
+the engineer rules, it is the gap's only record.
+
+**Distinct from the ✅ FILING GAP of 2026-08-05** (five commits, opened
+and closed the same day, retained further down for its process lesson).
+**That one recurred.** This is the second instance of the same failure in
+two days, which is itself the most important thing on this entry.
+
+#### How it was found — the method, so it can be re-run
+
+The continuation-105 dispatch named four commits to file. Before filing
+them this librarian swept the last 32 commits:
+
+```
+for c in $(git log --format='%h' -32); do
+  grep -rqF "$c" docs/ || echo "UNFILED: $c"
+done
+```
+
+**A hash miss alone proves nothing** — a docs commit cannot cite its own
+hash, and a Pass entry legitimately cites only its chain head — so every
+miss was **re-checked by content**. Five survived both checks: **no
+hash, no Shipped heading, and no content anywhere under `docs/`.**
+
+| Commit | Time | Claims to be | What the docs say TODAY |
+|---|---|---|---|
+| `7f850c9` | 08-05 13:56 | **Pass 34.1 slice 4** — *"nothing floats over the canvas any more"* | **Recorded as still OWED.** Pass 34.1's heading says *"THREE slices of four"*; `FEATURES.md` lists slice 4 under ***Planned***. **Both are FALSE.** |
+| `f8bbdd4` | 08-05 15:47 | **"Pass 26.2"** — *"points are grabbable without a descent, highlight on hover, and drag live"* | 26.2 recorded **UNBUILT**. **ID COLLIDES with `50ab8ec`.** |
+| `e666d3f` | 08-05 | correction retracting `f8bbdd4`'s claimed root cause | nothing |
+| `2c306ec` | 08-05 | **Pass 24.3** — right dock shows the object tree only | No Shipped heading — **yet referenced as done twice** (*"Pass 24.3's right-dock consolidation had…"*). The document already **depends on a Pass it never filed.** |
+| `c3d605b` | 08-05 | **Pass 24.4** — *"the last four dropdowns are gone"* | *Next up* defines **24.4 as collapse/overflow** (`show_collapsible`). **Different work under the same number** — reconcile before filing. |
+
+#### The Pass-26.2 collision — the part needing a ruling
+
+Two commits, a day apart, both titled **Pass 26.2**:
+
+- **`f8bbdd4`** (08-05) — un-gates node/handle grabs from
+  `entered.node.is_some()` to `subpath.is_some()`, widens the grab radius
+  6 → 10 px, adds a third **hover** mark state, previews drags live.
+- **`50ab8ec`** (08-06) — `prune_canvas_selection` re-validates and
+  truncates instead of dropping `entered` unconditionally.
+
+**`50ab8ec` is the one matching this document's own definition of 26.2** —
+*"level survival across an edit (re-validate and truncate)"*. `f8bbdd4`'s
+content is not level survival at all; it is **decision 028 plan-item
+work** (the grab-gating and mark-state items), which the Pass 26.0–26.2
+status table already tracks **separately** as *"plan items 9–14"*.
+
+**This librarian has NOT renumbered either commit and will not.** Hard
+rule 2 — IDs are stable and never reused — means a collision is resolved
+by the engineer **assigning** an identity, not by a librarian inferring
+one, however clear the inference looks. **Recommendation, offered so the
+engineer does not start cold:** `50ab8ec` **keeps 26.2**; `f8bbdd4` is
+**re-identified as decision-028 plan-item work under a new number**.
+**Nothing is minted here.**
+
+#### Why this matters more than five missing entries
+
+The commit messages are not lost — they are in `git log`, and they are
+unusually good. **What is lost is everything that reads the DOCS instead
+of the log:**
+
+- `FEATURES.md` advertises a **shipped** capability (34.1 slice 4) as
+  *Planned*;
+- the Pass 26.0–26.2 status table says **UNBUILT** for work that shipped
+  **twice**;
+- **`tools/check-ledger-numbers.py` reports `ledger-numbers: clean` while
+  a duplicate Pass ID exists** — because that tool parses `ROADMAP.md`,
+  **not `git log`**, so an ID that never reached the document is
+  **structurally invisible to the gate built to catch exactly this.**
+
+**That last point is the real finding, and it generalizes:** every
+ledger-integrity mechanism this project owns validates the document
+against itself. **A commit that is never filed is not "badly filed" — it
+is outside the reach of every check.** This is the same shape as the
+`FEATURES.md` Acrobat-column finding filed 2026-08-06 (an obligation
+recorded only on the producing side is not recorded at all), one level
+down: there the producing side was a RAG file, here it is a commit
+message. **A standing rule extending `check-ledger-numbers.py` to
+reconcile `git log` Pass claims against `ROADMAP.md` headings is the
+obvious remedy** — flagged here, **not minted**, because tooling scope is
+the engineer's call.
+
+**Owed, explicitly NOT done by this filing:** *Shipped* entries for all
+five; the 24.3/24.4 identity reconciliation; the 26.2 collision ruling.
+**Done by this filing:** the `FEATURES.md` slice-4 correction — it
+asserts a falsehood today, and correcting a false statement needs no
+ruling.
+
+### fix — multi-select: `Ctrl` was never consulted (no Pass ID — a correctness fix to Pass 9a's additive selection, which was BUILT and reachable only by the wrong key; GUI) — 2026-08-06, committed `7d3e44c`, branch `pass-8-redaction`
+
+**The operator's request:** *"I should also be able to select multiple
+nodes/objects at once by holding the usual mouse methods and keyboard
+shortcuts."*
+
+**What the engineer expected to find, and did not.** He went in assuming
+multi-select was unbuilt. **It was not.** `canvas::selection_after_click`
+has done toggle-add under Shift **since Pass 9a**;
+`selection_after_marquee` does the same for the rubber band; and the
+marquee **is wired**.
+
+**What was actually wrong, in one sentence:** `modifiers.ctrl` appeared
+**exactly once in the whole of `main.rs`, and not in any selection
+path.**
+
+That is the entire defect, and its shape is why this is filed as a fix
+rather than a feature. On Windows, **Ctrl+click is the toggle-add
+convention.** An operator reaching for it got a plain click — and a
+plain click does not merely *fail to add*, it **throws the existing
+selection away**. From outside the code that reads as *"multi-select
+isn't implemented"*, when the truth was *"wrong key."* A capability that
+exists behind a modifier nobody reaches for is indistinguishable, to the
+operator, from a capability that does not exist.
+
+**The fix:** the additive test widened to `shift || command` at **three**
+sites — the object click (`PdfceApp::canvas`, `main.rs` ~L11196), the
+marquee release (same function, ~L11295), and
+**`run_vector_edit_tool` — the Obj tool — ~L15612.**
+
+> **★ CORRECTION 1 of 2, applied 2026-08-06 from `9328038`.** The commit
+> message names the third site as *"the **measure tool's** own selection
+> read."* **That is wrong. It is `run_vector_edit_tool`, the Obj tool;
+> the measure tool was not touched.** The mislabel **understated the
+> fix**: the Obj tool is exactly where an operator doing object editing
+> is standing, so it is the site that matters **most**, not an incidental
+> third. The commit message is immutable and remains wrong — this entry
+> carries the corrected fact. Independently re-verified for this filing
+> by reading all three call sites.
+
+**`command`, not `ctrl`, and the distinction is deliberate.** egui maps
+`Modifiers::command` to Ctrl on Windows/Linux and Cmd on macOS, so one
+expression means *"the platform's modifier"* rather than a Windows-only
+literal.
+
+**Shift is KEPT as a synonym rather than reassigned to range-select**,
+and the reason is a property of the data structure, not a preference:
+pdfce's selection is a `BTreeSet` with **no ordering to range over**, so
+a range verb would have nothing to mean. Silently changing what Shift
+does to an operator who already relies on it would be the worse trade.
+
+**Deliberately NOT widened:** the text-caret path's Shift, where it means
+*"extend the span."* A different verb, which Ctrl must not acquire.
+
+**Harness:** `diag::Step::CtrlClick` (`ctrldown:X,Y` / `ctrlup:X,Y`). The
+harness could send Alt (the click-through cycle) but not Ctrl — so the
+one modifier an operator actually reaches for to multi-select was the one
+gesture that could not be driven. It injects `command` **as well as**
+`ctrl`, because injecting only the bare flag would drive a modifier the
+code under test does not consult on every platform.
+
+**★ VERIFICATION STATUS: VERIFIED IN THE RUNNING APPLICATION (R86).**
+
+> **★ CORRECTION 2 of 2, applied 2026-08-06 from `9328038` — the
+> load-bearing one.** `7d3e44c`'s own message states *"the widening is
+> NOT proven in the running app"* and blames a suspected defect.
+> **Both halves are wrong.** Re-run with the **correct trace name**,
+> identical script:
+>
+> ```
+> vector-click screen=[990.0 265.0] canvas=[150.0 70.0] hits=1
+>     first=Some(TargetId(0)) newsel=1
+> vector-click screen=[636.0 728.0] canvas=[20.2 239.9] hits=1
+>     first=Some(TargetId(1)) newsel=2
+> ```
+>
+> A plain click selects **one** object; **Ctrl+click accumulates to
+> two.** `newsel=1` → `newsel=2` is the widening working end to end, at
+> the `run_vector_edit_tool` site corrected above. **R86 is satisfied.**
+
+**★ AND THE "LARGER OBSERVATION" `7d3e44c` LOGGED WAS NOT A DEFECT. NO
+DEFECT IS OPEN. NONE SHOULD BE FILED.**
+
+`7d3e44c` logged, as a possible defect *"of the same class as the
+2026-08-04 'can't click on objects' arc"*, that a click at a
+CLI-confirmed-hittable point with the Obj tool armed produced
+`clicked=true provider=true sel=0` **and no `plain-click` trace at all**.
+An `⚠ OPEN DEFECT` entry was filed at the head of *In progress* on the
+strength of it. **The engineer investigated with fresh context
+immediately after dispatching that filing, and the explanation is
+entirely mundane — two reading errors, both his:**
+
+1. **The wrong trace name was grepped.** The canvas click dispatch is a
+   chain: `dimension_consumed` → TextEdit → AddText → measure →
+   `tool_builds_vector_edit` → **else**. **`plain-click` lives in the
+   final `else` — the NO-TOOL path.** With the Obj tool armed,
+   `run_vector_edit_tool` owns the canvas and emits **`vector-click`**
+   instead. The Obj tool was driven while the *other* path's trace was
+   searched for, so of course there was none.
+2. **`sel=0` was misread.** That field sits on the `canvas` trace, which
+   is emitted at the **START of the frame** — it is the selection count
+   **BEFORE** the click is applied. Zero there is correct and expected.
+
+**The `⚠ OPEN DEFECT` entry has been REMOVED from *In progress*** (it
+appeared there only between `7d3e44c` and this amendment, both on
+2026-08-06). **It was removed rather than downgraded, on the operator's
+explicit instruction and for a good reason: a hedged defect entry that
+says *"possibly nothing"* still sends the next session looking.** The
+corrected account lives here, in the Shipped entry for the commit that
+produced it, where it is history rather than a work item.
+
+**What survives, and is worth more than the non-defect was:** the process
+finding — *an absent trace is not evidence of absent behaviour until you
+have confirmed which trace the code under test emits.* Carried in full in
+the `SESSION_LOG.md` continuation-105 entry and in the standing-rule
+**proposal** at the end of *Standing rules*.
+
+**A small R93-adjacent finding, recorded because it is the third thing
+this fix walked past.** `targets_in_rect` carries
+`#[allow(dead_code, reason = "wired by Pass 9a once marquee-vs-pan is
+decided")]`. The marquee **is** wired; the `reason` string describes a
+state that has since moved on. Same failure shape R93 names — a comment
+that vouches for a state of the world and stops anyone looking. Filed as
+a cleanup bullet under *Backlog*.
+
+**Gates:** see the shared gate block below (measured at this commit).
+
+### Pass 26.2 — level survival across an edit: an edit no longer ejects you three rungs back to Page (GUI) — 2026-08-06, committed `50ab8ec`, branch `pass-8-redaction`
+
+**The operator's request:** *"once I've dragged and moved a node or
+anything else, the view should still show the others."*
+
+**★ He walked into a KNOWN, FILED gap.** `ROADMAP.md` listed Pass 26.2
+under *Next up* as **UNBUILT**, with this exact description: *"level
+survival across an edit (re-validate and truncate to the nearest
+surviving ancestor, disclosed) — today every subpath edit ejects the
+operator from three rungs deep to Page on a ~5,900-object page."* **This
+entry is that Pass moving to Shipped — its ID was not minted here and was
+not renumbered** (hard rule 2). The *Next up* entry for Pass 26.0–26.2
+carries a status amendment recording the move.
+
+**What it was.** `prune_canvas_selection` — which every edit, undo and
+redo funnels through — did an unconditional `self.entered = None`.
+
+**Its reasoning was sound, and is preserved in the code**, because the
+hazard is real: `EnteredObject` is nothing but **positional indices**,
+and after a content rewrite the same paint-order index can name a
+*different* object. Keeping it blindly would draw an outline around
+whatever now occupies that slot — a selection that silently changed its
+referent, which is worse than no selection.
+
+**But dropping it was the wrong response, because the hazard mostly does
+not occur.** A node move, a handle move, a subpath move — *precisely the
+edits after which an operator most wants their place kept* — rewrite
+operands **inside one object**. They add and remove nothing, so paint
+order is untouched. **The unconditional drop paid the rare case's price
+on every occurrence of the common one.**
+
+**What it is now:** re-validate, and truncate to the nearest surviving
+rung, **deepest-first, one rung at a time**. A vanished node leaves the
+operator on the subpath; a vanished subpath leaves them on the object;
+only a slot that no longer looks like what they entered returns them to
+Page.
+
+**★ WHAT THE CHECK HONESTLY PROVES — the part of this Pass worth keeping,
+and it is stated in the code because the temptation is to overclaim it.**
+**NOT** that the object is the same object. It cannot prove that —
+**indices carry no identity**, and any such claim would be *a guess
+dressed as a check*. It proves the slot still holds something of the
+**same KIND** with **enough structure to address**. That is a **bound on
+how wrong a retained position can be, not a proof that it is right.**
+
+**The residual risk is accepted knowingly**, and the reason is a property
+of the disclosure rather than of the check: **the outline is DRAWN.** A
+wrong one is visible immediately; a lost place is silently expensive.
+(This honesty bound is filed as a standing-rule PROPOSAL at the end of
+*Standing rules* — **not minted**.)
+
+**The RULE is split from the LOOKUP, and that is a design point rather
+than test convenience.** `revalidate_entered` finds three facts;
+`truncate_entered` decides from three numbers. Only the second can be got
+wrong in an interesting way, and it is now testable **without
+constructing a decomposed page** — eight fields of geometry to exercise a
+ladder that needs two integers and a bool.
+
+**Five tests:** the headline survival case; node-gone truncating exactly
+one rung; subpath-gone truncating exactly one rung; a changed KIND giving
+up every inner rung; and an object-rung position needing no inner
+structure.
+
+**★ VERIFICATION — AND ITS LIMIT, STATED.** The truncation ladder is
+proven by **unit test**. **The end-to-end gesture is NOT driven:** a
+double-click could not be landed through the scripted harness to enter an
+object, and there is a recorded finding that **rapid successive
+double-clicks coalesce into one burst**
+(`D:\dev\rag\egui\egui_rapid_successive_double_clicks_coalesce_into_one_burst.md`).
+The engineer made the rule directly testable instead of continuing to
+guess pixels — **and states that this is a SUBSTITUTE for in-app
+verification, not an equivalent.** One gesture in the running app settles
+it.
+
+**Also in this commit:** `diag::Step::NavKey` gained `key:up`/`key:down`
+alongside the arrow fix's left/right/home/end, and a `level-survival`
+trace on the prune path, so the next investigation starts from evidence
+rather than a hypothesis.
+
+**Still open from the same operator message, and NOT silently folded in:**
+*"activate any and all of the edit options at once"* — architectural, and
+the engineer wants the operator's intent before touching it
+(`active_tool` is a single `Option<CanvasTool>` today).
+
+**Gates:** see the shared gate block below.
+
+### fix — `ArrowLeft` while editing text moved FOCUS, not the caret (no Pass ID — a correctness fix to shipped in-place text editing, Pass 14.x; GUI) — 2026-08-06, committed `7d368e6`, branch `pass-8-redaction`
+
+**The operator's report, and it contains the diagnosis:** *"when I go to
+edit a block of text, I can use the cursor keys to move forward, but when
+I press the one to move backward focus switches to the side panel."*
+
+**ROOT CAUSE, read out of egui's source rather than guessed.**
+`egui-0.35.0/src/memory/mod.rs` (`Focus::begin_pass`) maps a **bare**
+arrow key to a `FocusDirection` — `ArrowLeft` → `Left`, and so on — and
+uses it to move focus between widgets. It does that **only** `if
+!event_filter.matches(event)`, where the filter belongs to the
+**currently focused widget**. pdfce's canvas declared **no filter**, so
+every arrow press was offered to the focus system as well as to the
+caret.
+
+**★ THE ASYMMETRY IN THE REPORT IS THE PROOF, and it is what made this
+diagnosable at all.** Nothing sits to the **right** of the canvas, so
+`FocusDirection::Right` finds no candidate, focus stays put, and the
+caret moves — *"forward works"*. The dock sits to the **left**, so
+`FocusDirection::Left` finds it and takes the focus. **And once focus is
+gone, the caret block does not merely fail to move the caret — it stops
+running entirely on every subsequent frame.** A directional asymmetry in
+a symmetric feature is a focus problem until proven otherwise.
+
+**FIX:** `set_focus_lock_filter` on the canvas **while a text caret is
+live**, claiming `horizontal_arrows` and `vertical_arrows`.
+
+**`tab: false` deliberately** — Tab must still leave the canvas, or a
+keyboard-only operator is **trapped** in it. **`escape: false`
+likewise** — Escape is how this app pops a level rung and cancels a
+gesture, and claiming it would break both.
+
+**HARNESS: `diag::Step::NavKey` (`key:left|right|up|down|home|end`).**
+The harness **could not press an arrow key at all** — `type:` sends text,
+`delete`/`escape` send those two, and every other key was unreachable. So
+**this defect could neither be reproduced nor its fix proven** until the
+harness gained the step. Injected as a real press/release pair through the
+same `raw_input.events` seam a physical key arrives on, which matters here
+more than usual: **the defect IS a focus interaction**, so the event has
+to reach the focus system the same way a real one does.
+
+**VERIFIED IN THE RUNNING APPLICATION (R86), same script before and
+after:**
+
+| | Result |
+|---|---|
+| **before** | frames with focus held: **10** of ~45; caret offsets: **11** (four `ArrowLeft`s, caret never moved) |
+| **after** | frames with focus held: **15**; caret offsets: **11 → 10 → 9 → 8 → 7** |
+
+Other directions confirmed unbroken in one run — Home, Right×3, Left,
+End → **11 → 0 → 1 → 2 → 3 → 2 → 11**.
+
+**★ TWO PROCESS NOTES, both of which the engineer rates above the fix.**
+
+1. **A tautological assertion reads as evidence until you notice it
+   cannot fail.** The first diagnostic trace sat **inside** the
+   `has_focus()` guard and printed `focus={has_focus()}` — so it could
+   only ever print `true`, and that was briefly read as *"focus is fine,
+   something else is wrong."* **The real signal was the frame COUNT:** 10
+   traces across a ~45-frame script meant the block was not running for
+   35 of them. Instrumentation that cannot report the negative case is
+   not instrumentation.
+2. **The evidence caught an edit, not a regression.** Applying the fix,
+   the engineer **replaced** the trace with it instead of adding
+   alongside; the next run reported **zero** frames — which looked
+   exactly like the fix making things worse.
+
+Both are escalated to `D:\dev\rag\rust\` as one cross-project finding
+(see the RAG-escalation note in `SESSION_LOG.md` continuation 105); they
+are engineering-epistemics, not pdfce policy, so **neither is minted as a
+standing rule** — the same boundary the engineer drew at continuation
+103.
+
+**Gates:** see the shared gate block below.
+
+### Pass 38.2 — shell redesign slice 2: the left dock stops hiding itself (GUI) — 2026-08-06, committed `aa48167`, branch `pass-8-redaction`
+
+**★ Pass family 38 is minted by this entry** (ceiling was 37.2). It is
+the shell-redesign program; **Pass IDs 38.1–38.5 map one-to-one onto the
+spec's own slices 1–5** so the two numbering schemes can never drift
+apart. See the `★ Pass 38.1–38.5` entry under *Next up* for the four
+slices that did **not** ship here. **Slice 1 was SKIPPED and is still
+owed** — the engineer built slice 2 first, out of the spec's order, and
+says so.
+
+#### The request, and the refusal that turned it into a brief
+
+Ken, 2026-08-06, said he likes how **PDF-XChange Editor** is laid out and
+that pdfce should resemble it more.
+
+**The engineer DECLINED to copy it.** **R123** forbids deriving pdfce's
+command surface from a competitor's and names **trade dress** by name,
+and that call is the operator's, not the engineer's, to reverse.
+
+**★ WHAT HE DID INSTEAD IS THE REUSABLE PART, and it is recorded here as
+a move, not as an anecdote.** He converted the request into **five
+neutral UI PROPERTIES** and asked which the operator actually wanted. The
+operator **confirmed all five**. `pdfce-ui-specialist` was then dispatched
+against the properties **with an explicit instruction not to look at
+PDF-XChange at all.**
+
+That conversion is what made a compliant answer possible: **it turned a
+trade-dress problem into a design brief**, and it did so without refusing
+the operator anything he actually wanted. The properties were his; only
+the derivation was ours. **Filed as a PROPOSED amendment to R123 at the
+end of *Standing rules* — proposed, NOT minted.**
+
+**Spec: `docs/ui_specs/shell-redesign.md` (723 lines).**
+
+#### The spec's central finding: three of five properties are ONE structural move
+
+Not three fixes. `PaneSubject::ActiveTool` and `::Properties` were the
+**exact** *"select above, edit below"* relationship that **decision 017
+§A.3** built the original right-dock vertical split for. **Pass 24.3
+correctly retired that split** — its specific pairing had gone stale —
+**but the underlying need did not disappear. It RECURRED one level down,
+inside Tool Options.** Four unrelated surfaces behind one subject switch
+meant **reaching any one of them hid the others**, which is precisely the
+complaint.
+
+#### What shipped
+
+- `DockPanel::ToolOptions` → **`ArmedTool`**.
+- **`Properties`** and a new **`Activities`** promoted to **peers**.
+- **`Pages`** taken out of the tab pairing.
+- The left dock is now a vertical `Container::Linear` of **four
+  ALWAYS-VISIBLE compartments** with **no tab container anywhere**.
+  **Removing the tab bar is the fix, not rearranging what sits in it — a
+  tab bar is the mechanism that hides things.**
+- `PaneSubject` narrows to the three genuinely mutually-exclusive
+  **workflows** (`BatchTools`/`Redact`/`Forms`) behind an in-panel
+  **segmented control**.
+
+**★ THE REUSABLE RULE, and it is the line that decides which surfaces get
+promoted and which stay multiplexed: *selection state is WATCHED,
+workflows are ENTERED.* Watched things get a permanent compartment;
+entered things share one and switch.** **Minted this filing as standing
+rule R157** (see *Standing rules*).
+
+**The tool-arm auto-raise is DELETED, and its absence is the point.** It
+existed **only** because arming a tool switched a shared pane's subject,
+so without a raise nothing appeared to happen. The Tool compartment is
+always on screen now, so a raise would be **a layout change the operator
+did not ask for, in response to picking a tool**.
+
+#### A screenshot changed the result — for the third time this session
+
+`Container::Linear` splits space **equally** by default, and the first
+capture showed the thumbnail rail and an **empty-state** Tool compartment
+each holding a quarter of the height while Activities — which holds real
+scrolling content — was squeezed into the bottom quarter. **Shares are
+now 0.7 / 0.7 / 1.3 / 1.3, tuned against the RUNNING APP rather than
+invented**, following how much each compartment has to *say*. Still
+draggable; these are defaults, not constraints.
+
+#### Two tests REWRITTEN rather than renamed, because their premises became false
+
+Renaming variants would have preserved a lie.
+
+- **`a_backgrounded_panel_can_be_brought_forward`** asserted Tool Options
+  starts **behind** Pages. True under a tab group; false now. Replaced by
+  **`every_left_panel_is_visible_at_once_in_the_default_layout`**, which
+  asserts the invariant that took its place — **and is the property the
+  whole restructure exists to create**. A second test keeps `activate`
+  covered for the tabbed case, since the default layout no longer
+  exercises it and it would otherwise be **silently untested**.
+- **`the_properties_toggle_reports_what_is_on_screen`** read
+  `rail_expanded && pane_subject == Properties`. **The `pane_subject`
+  half left the predicate because it left the TRUTH**, not because it
+  became inconvenient. It now also asserts the new guarantee directly:
+  switching Activities between its three workflows must **not** hide
+  Properties — assertions that would all have failed under the old shape.
+
+#### Verified in the running application (R86)
+
+All four compartments render simultaneously, and a driven `panel:forms`
+switches the Activities segment **while Pages, Tool and Properties stay
+on screen** — the thing that was impossible before.
+
+#### ★ STILL OPEN, DELIBERATELY, AND NOT SILENTLY DECIDED
+
+- **Property 4's MAXIMAL reading is REFUSED** — tool options as a
+  **fly-out hugging the selection**. It would structurally reintroduce
+  the floating `egui::Area` that produced the operator's own *"there is a
+  separate accept / reject box somewhere on the screen to click"*
+  complaint (CLAUDE.md rule 4's 2026-08-05 narrowing, decision 024 §4.4).
+  The **narrow** reading is satisfied by construction, since `ArmedTool`
+  is now *more* adjacent than it was. **Flagged for the operator rather
+  than split — filed as open operator question (ba).**
+- **Property 5 (the annotation/comment list) is slice 4** and needs **two
+  `pdfce-core` additions first**: `annot::Annotation` models no
+  `/Contents`, `/T` or `/M`, and there is **no general
+  `delete_annotation` verb**. **Also honest:** Pass 6.1's markup
+  authoring **never sets `/Contents`**, so a first release shows mostly
+  **untitled rows**. Filed as Pass 38.4 under *Next up*.
+- **R124** (no greyed placeholders for unbuilt features) — **the operator
+  asked for placeholders, the engineer argued against, and the operator
+  has not ruled.** The design was built **to R124 as it stands**. Filed
+  as open operator question **(bb)**.
+- **Slice 1 (density) was SKIPPED** and is still owed — Pass 38.1.
+
+#### Not claimed by this filing (R87 — the librarian has no shell and invents nothing)
+
+The spec's P0 list also names a **per-compartment collapse chevron** and
+**`dock.rs` doc-comment corrections** (the L308–335 *"why one group and
+not a vertical split"* reasoning, whose premise this Pass reverses).
+`aa48167` touches `dock.rs` (+142 lines) and `ui_text.rs` (+86), which is
+consistent with both — **but neither was reported as shipped, so neither
+is recorded as shipped.** Treat both as **owed and unverified**, the same
+posture Pass 26.0's items 7 and 13 carry.
+
+**Gates:** the shared block below is measured at `7d3e44c`; the gate
+figures relayed **at this commit specifically** were **1976 tests pass**,
+`fmt` clean, `clippy --workspace --all-targets -D warnings` clean,
+`check-ui-strings.sh` clean, no GUI dependency in `pdfce-core`.
+
+### Gates for the four commits of 2026-08-06 (`aa48167` · `7d368e6` · `50ab8ec` · `7d3e44c`) — measured at `7d3e44c`; engineer-run and relayed, R87 — this librarian has no shell
+
+| Gate | Result |
+|---|---|
+| `cargo test` (workspace) | **1981 pass, 0 fail** — **1976 → 1981** across these four commits (**10 new tests**: 5 for Pass 26.2's truncation ladder, plus the shell-redesign test rewrites and additions) |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `tools/check-ui-strings.sh` | clean |
+| `cargo tree -p pdfce-core` / `-p pdfce-render` | **zero GUI-dependency matches** — the `ARCHITECTURE.md` §3 invariant holds |
+| New dependencies | **none** |
+
+**The 1976 figure is the count at `aa48167`, `7d368e6` and `50ab8ec`'s
+own gate runs** as relayed (26.2's own run reports 1981 with 5 new); the
+**1981** figure is the count at `7d3e44c` and is the current one. Do not
+quote 1976 as current.
+
+**Backup — taken and VERIFIED RESTORABLE *before* the shell work, at the
+operator's own instruction.**
+`D:\Dev\pdfce-backups\pdfce-20260806-0732-pre-ui-redesign.zip` — **39.9
+MB, 25,993 entries, 55 GUI-crate files** — plus a bundle **proven to
+clone back to `a1ff3f4`**. **All of this is relayed, not observed.**
+**Backup currency after these four commits is not verifiable from here —
+the engineer should check `D:\Dev\pdfce-backups\`** (hard rule 8: this
+librarian has no way to know what is on that disk now, and a confident
+number here has been wrong twice before).
+
 ### ★ 2026-08-06 — `FEATURES.md` gains its **Acrobat** column, and the reason it did not have one is worth more than the column
 
 **No Pass shipped, no number minted.** A documentation filing, recorded
@@ -1363,6 +1911,30 @@ the *Next up* entry, below, updated in this same filing to reflect the
 split.
 
 ### Pass 34.1 — the tool options move into a docked sidebar tab beside page navigation (GUI) — THREE slices of four — 2026-08-05, chain `e15f55b` (slice 1, the left dock) → `fae916d` (slice 2, Edit Text) → `13f3c0b` (slice 3, Add Text + Measure)
+
+> **⚠ HEADING CORRECTION, 2026-08-06 (continuation 105). "THREE slices of
+> four" IS NO LONGER TRUE — ALL FOUR SLICES HAVE SHIPPED.** Slice 4
+> landed **2026-08-05 13:56 as `7f850c9`** (*"nothing floats over the
+> canvas any more"*): the last three floating strips — the commit
+> controls, refusals and disclosures for Edit Text, Add Text and Measure
+> — moved into the Tool Options pane, and **`canvas::tool_strip_anchor`
+> and `canvas::StripCorner` were DELETED**, the compiler having noticed
+> they went dead once the last strip relocated. **That closes the
+> complaint the whole arc started from** (*"there is a separate accept /
+> reject box **somewhere** on the screen to click"* — decision 024
+> answered the *position*, Pass 34.1 answers the *category*: it does not
+> float at all).
+>
+> **The heading is left un-rewritten deliberately, and this is a flag
+> rather than a fix.** `7f850c9` has **no *Shipped* entry at all** — it
+> is one of five commits in the **⚠ FILING GAP #2** flag at the head of
+> *Shipped*. **R87 forbids writing a build record from a commit subject
+> line**, so this librarian will not manufacture the slice-4 entry the
+> heading would then point at. **Owed:** an engineer-relayed build record
+> for `7f850c9`, after which this heading becomes *"FOUR slices"* and the
+> chain gains its fourth link. **`FEATURES.md` has been corrected already**
+> — it listed slice 4 under *Planned*, which was a false statement about
+> shipped capability and needed no ruling to fix.
 
 **Librarian correction, continuation 95 — this heading merges two prior
 Shipped filings for the same Pass ID.** `tools/check-ledger-numbers.py`
@@ -9773,6 +10345,30 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 
 ## In progress
 
+> **★ AN `⚠ OPEN DEFECT` ENTRY STOOD HERE FOR PART OF 2026-08-06 AND HAS
+> BEEN REMOVED. IT WAS NOT A DEFECT.** Filed from `7d3e44c` — *"a
+> confirmed-hit click reaches the canvas with the right tool armed and
+> the selection path does not run"* — and **retracted the same day by
+> `9328038`**, which found the cause to be two reading errors, not a
+> defect: **`plain-click` was the wrong trace to grep** (with the Obj
+> tool armed the canvas emits **`vector-click`**; `plain-click` belongs
+> to the no-tool path), and **`sel=0` sits on a start-of-frame trace**,
+> so it reports the selection count *before* the click is applied.
+> Re-run correctly, selection works and Ctrl+click accumulates
+> (`newsel=1` → `newsel=2`).
+>
+> **Removed rather than downgraded, deliberately** (operator
+> instruction): a hedged defect entry that says *"possibly nothing"*
+> still sends the next session looking, which is the entire cost this
+> removal avoids. **This tombstone is retained instead** — short, closed,
+> and unambiguous — so that a reader who saw the defect referenced
+> elsewhere finds its disposition here rather than concluding it was lost.
+> **Full corrected account:** the `7d3e44c` *Shipped* entry. **The process
+> finding it produced** — *an absent trace is not evidence of absent
+> behaviour until you have confirmed which trace the code under test
+> emits* — is carried in `SESSION_LOG.md` continuation 105 and in the
+> standing-rule **proposal** at the end of *Standing rules*.
+
 ### Pass 21.1 — FF-C composite-run editability under verified-injective `/ToUnicode` (decision 021 R110; promoted from ★ Pass 21.x's Next-up slice list, 2026-08-04, on Pass 21.0's ship) — **SCOPE DISCHARGED 2026-08-05 by Pass 29.0 (`a104536`). See the Pass 29.0 Shipped entry (top of Shipped) for the delivery record.** Retained below in place (append-only discipline) because its continuation-76 and continuation-78 build logs ARE the record of how 29.0's substrate got built
 
 **Why this entry is annotated rather than moved.** Pass 21.1's remaining
@@ -10785,6 +11381,64 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
+### ★ Pass 38.1–38.5 — the shell redesign (five operator-confirmed UI properties; spec `docs/ui_specs/shell-redesign.md`, 723 lines) — **family minted 2026-08-06; 38.2 SHIPPED `aa48167`, the other four OWED**
+
+**Pass family 38 was minted on 38.2's ship** (ceiling had been 37.2).
+**The Pass IDs map ONE-TO-ONE onto the spec's own slices 1–5** — 38.1 is
+slice 1, 38.5 is slice 5 — deliberately, so that a future reader never
+has to hold an offset in their head between two numbering schemes.
+
+**Provenance, restated so this entry stands alone.** The operator said he
+likes PDF-XChange Editor's layout and that pdfce should resemble it. The
+engineer **declined to copy it** (**R123**, trade dress) and instead
+converted the request into **five neutral UI properties**, which the
+operator **confirmed in full**; `pdfce-ui-specialist` designed against
+the properties with an explicit instruction not to look at PDF-XChange at
+all. Full record: the Pass 38.2 Shipped entry.
+
+| Slice | Pass | State |
+|---|---|---|
+| **1** — density convention (`UI_PREFERENCES.md` §11 row-spacing constant, applied to the existing panels *as they stand*) | **38.1** | **UNBUILT — SKIPPED AND STILL OWED.** The engineer built slice 2 first, out of the spec's order, and says so |
+| **2** — the left-dock restructure: four always-visible compartments, no tab container, `PaneSubject` narrowed to workflows | **38.2** | **✅ SHIPPED `aa48167` 2026-08-06** |
+| **3** — property 4's exact intended reading; doc-comment corrections (spec folds this into slice 2's commit) | **38.3** | **PARTLY DISCHARGED / BLOCKED.** The **maximal** reading is **REFUSED** by the engineer and flagged — open operator question **(ba)**. The `dock.rs` doc-comment correction was **not reported either way**; treat as **owed and unverified** |
+| **4** — the Comments / annotation-list panel | **38.4** | **UNBUILT — BLOCKED on two `pdfce-core` additions** (below) |
+| **5** — P1 remainder | **38.5** | **UNBUILT** |
+
+**★ Pass 38.1 is the one most likely to be silently dropped**, because
+slice 2 shipped without it and the shell now *looks* finished. The spec's
+own argument for doing it first is the argument for not abandoning it:
+it *"buys a tighter baseline for every later slice to inherit, so the
+redesign doesn't ship loose and need a second density pass afterward."*
+**It shipped loose. The second density pass is now the only pass.**
+
+**★ Pass 38.4's blockers, stated concretely because they are core work,
+not GUI work:**
+
+1. **`annot::Annotation` models no `/Contents`, no `/T`, no `/M`** — the
+   note text, the author and the modification date. The panel is a list
+   of those three fields; without them there is nothing to list.
+2. **There is no general `delete_annotation` verb** in `pdfce-core`
+   (scoped per `edit.rs` L3663's own named cautions). Slice 5's, not
+   slice 4's — 38.4's P0 list is browse / navigate / highlight only.
+3. **And an honest ceiling that no amount of core work fixes:** **Pass
+   6.1's markup authoring never sets `/Contents`**, so a first release of
+   this panel shows **mostly untitled rows** on documents pdfce itself
+   authored. The fix is note-text authoring for geometric markup — spec
+   §8 item 12, a Pass 6.1-adjacent capability, not scoped here.
+
+**Pass 38.5's contents** (spec §8 P1): the general `delete_annotation`
+core verb and the Delete row action it unlocks; `pdfce-cli
+list-annotations` gaining `contents=`/`author=`; real default-height
+tuning for the four stacked compartments (38.2 shipped 0.7/0.7/1.3/1.3,
+tuned against the running app, which discharges the *worst* of this);
+and `ResetScope`'s left-panels reset extended to also reset the four
+compartments' **collapse** state.
+
+**Dependency note:** the spec states 38.4 is **independently shippable**
+and could in principle have shipped *before* 38.2, temporarily hosted in
+the unnarrowed `PaneSubject`. That option is now moot — 38.2 shipped, and
+the `Activities` compartment exists to receive it.
+
 ### ★ Rich-text fill: should `pdfce-core` refuse too, so `pdfce-cli fill-field` gets the same guard? — UNDECIDED, filed 2026-08-05 with Pass 37.2 (no Pass number assigned)
 
 **The finding, restated so this entry stands alone.**
@@ -11747,8 +12401,49 @@ confirmation stays (R98).
 > |---|---|
 > | **Pass 26.0** — the Node rung + **the REQUIRED gate** | **SHIPPED `c62c4d0`** |
 > | **Pass 26.1** — handles visible and grabbable in the GUI | **SHIPPED `7c45bf8`** |
-> | **Pass 26.2** — level survival across an edit | **UNBUILT** |
-> | decision 028 plan items **9, 10, 11, 12, 13, 14** + the conditional 15th | **UNBUILT** — see the annotated table below |
+> | **Pass 26.2** — level survival across an edit | ~~**UNBUILT**~~ → **SHIPPED `50ab8ec` 2026-08-06** — see the amendment below |
+> | decision 028 plan items **9, 10, 11, 12, 13, 14** + the conditional 15th | **UNBUILT** — see the annotated table below (**item 9 SHIPPED as Pass 36.0**; the rest stand) |
+
+> **✅ STATUS AMENDMENT 2026-08-06 (continuation 105). Appended, not
+> rewritten.** **Pass 26.2 is SHIPPED (`50ab8ec`)** — see its own entry
+> at the head of *Shipped*. **The ID was NOT re-minted and NOT
+> renumbered** (hard rule 2): the operator asked for exactly the
+> behaviour this entry had already described as owed, and the engineer
+> recognised it as the filed gap rather than opening a new one.
+>
+> **What the ladder now survives, and what it does not.**
+> `prune_canvas_selection` re-validates and truncates **one rung at a
+> time, deepest first**, instead of dropping the whole position. The
+> check proves the slot holds **the same KIND with enough structure to
+> address** — **not** that it is the same object; indices carry no
+> identity. That bound is stated in the code and in the Shipped entry,
+> and is filed as a standing-rule PROPOSAL (not minted).
+>
+> **The Node-rung DEVIATION recorded above is UNAFFECTED** — clicking
+> nothing at the Node rung still LEAVES rather than ascending to Object,
+> and still resolves only when `LevelPath`/`Rung` (025 §3.2) lands.
+> **26.2 changes what survives an EDIT, not what a click does.**
+>
+> **And the gesture is still not driven.** 26.2's truncation ladder is
+> proven by unit test; the double-click that enters an object could not
+> be landed through the harness. The **"verified BY CONSTRUCTION, not by
+> a driven gesture"** caveat this entry already carries for 26.0's gate
+> now applies to 26.2's entry gesture as well, for a *different* harness
+> reason (double-click coalescing).
+>
+> > **★ AMENDED 2026-08-06 (continuation 105).** This paragraph
+> > originally ended *"and a **third** instance is filed as an open
+> > defect at the head of *In progress*."* **That third instance was
+> > NOT REAL and the sentence is withdrawn.** It referred to the
+> > `7d3e44c` observation, **retracted the same day by `9328038`**: the
+> > canvas click path was driven successfully all along, and the
+> > apparent silence was a grep for `plain-click` (the no-tool path's
+> > trace) while the **Obj tool** was armed and emitting `vector-click`.
+> > **There were TWO undriven-gesture instances, not three**, and the
+> > count matters here precisely because this entry uses it to argue a
+> > pattern. The two that remain — 26.0's gate (no egui drag events)
+> > and 26.2's entry gesture (double-click coalescing) — are both real
+> > and both still owed.
 >
 > **★ WHAT IS STILL OWED, in the operator's own words from the
 > session-close handoff** — the breadcrumb (item 12, *net new, nothing
@@ -14364,6 +15059,48 @@ nothing gets forgotten, not as a commitment to build in this order.
   network), two are already covered by *Cannot*, and none should be
   scoped into a Pass without a dedicated `pdfce-acrobat-librarian`
   cataloguing session first, because each rests on one search.
+- **⚠ `tools/check-ledger-numbers.py` cannot see a `### ★ Pass …`
+  heading — TEN declaring headings have never been checked (filed
+  2026-08-06, continuation 105, no Pass number assigned).**
+  `collect_passes` anchors on `^#{2,4} Pass `, requiring the word `Pass`
+  **immediately** after the hashes. This project's convention for a
+  multi-Pass family entry is `### ★ Pass 24.0–24.5 — …`, and **the `★`
+  makes the whole heading invisible to the uniqueness gate.** Found by
+  arithmetic, not by inspection: continuation 105 declared three Pass IDs
+  and the checker's pair count rose by **two**; a set-difference of the
+  parsed pairs before and after showed `('Next up', '38.1')` simply
+  absent. **Currently affected:** `★ Pass 38.1–38.5`, `★ Pass 33.0`,
+  `★ Pass 24.0–24.5`, `★ Pass 26.0–26.2`, `★ Pass 17.x`, `★ Pass 18.x`,
+  `★ Pass 19.x`, `★ Pass 21.x`, `★ Pass 15.x`, `★ Pass 16.x`. **This is
+  the exact failure the tool's own docstring names** (*"if ROADMAP's
+  heading conventions change, this silently stops covering whatever
+  changed"*) and the same shape as **R156**'s source incident and
+  `D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md`: a green
+  gate covering less than it appears to. **Two candidate fixes, the
+  choice is a judgment call:** relax the anchor to
+  `^#{2,4} (?:[^\w\s]\s*)*Pass ` so leading `★`/`⚠`/`✅` decorations are
+  skipped, **or** forbid decoration on a *declaring* heading and keep it
+  for narrative ones. **Expect the pair count to JUMP when the fix
+  lands** — that is the fix working, and it may surface duplicates that
+  have been hiding in those ten headings since they were written.
+- **Stale `#[allow(dead_code, reason = …)]` strings that describe a state
+  the codebase has moved past — a sweep, not a fix (filed 2026-08-06
+  with `7d3e44c`, no Pass number assigned).** `canvas::targets_in_rect`
+  carries `reason = "wired by Pass 9a once marquee-vs-pan is decided"`.
+  **The marquee IS wired.** The `reason` describes a world that no
+  longer exists, and it cost the engineer real time on `7d3e44c`: he
+  went in expecting to find multi-select unbuilt, and the comment is one
+  of the things that said so. **This is R93's exact failure shape** — a
+  comment that vouches for a state of the world and therefore terminates
+  the audit — and it is the **second** time an `allow(dead_code)`
+  `reason` string has done it here (the first: `snap_glyph()`'s
+  *"drawn by the Pass 12.M2 measure tools' overlay"*, which was false and
+  was deleted rather than repaired, Pass 19.3's filing). **Scope:** grep
+  every `allow(dead_code, reason = …)` in the workspace, check each
+  claim against current reality, and either delete the item or correct
+  the string. **Do not simply delete the `allow`s** — the reason strings
+  that are still TRUE are load-bearing documentation of deliberate
+  not-yet-wired substrate (R151's territory).
 - **`EditSession::insert_pages` — in-place page insertion, as a real
   `EditSession` command (filed 2026-08-05, Pass 3.5's ship, no Pass
   number assigned).** Both GUI Insert (Pass 3.5) and CLI `insert`
@@ -16430,6 +17167,40 @@ not a judgment call:**
   tooling would catch by default. *Default if unanswered:* do not bundle
   a custom font; keep egui's shipped defaults until this question is
   answered.
+
+- **(ba) Shell redesign property 4 — the MAXIMAL reading is REFUSED, and
+  the refusal is said out loud rather than silently avoided.** Filed
+  2026-08-06 with Pass 38.2. You confirmed a property reading *"tool
+  options adjacent to the canvas, not floating over it."* There are two
+  readings. **The narrow one — tool controls in a docked compartment
+  next to the canvas rather than in a floating strip over it — is
+  SATISFIED by Pass 38.2 by construction**, and `ArmedTool` is now *more*
+  adjacent than it was, not less. **The maximal one — tool options as a
+  fly-out that HUGS the current selection — is refused**, because it
+  would structurally reintroduce the floating `egui::Area` behind your
+  own complaint that *"there is a separate accept / reject box somewhere
+  on the screen to click — I've never seen any other software operate
+  that way"* (the complaint that produced CLAUDE.md rule 4's 2026-08-05
+  narrowing and decision 024 §4.4). A control whose position is derived
+  from the document moves on every zoom, scroll and page change — which
+  is the specific thing you objected to, not the confirm step. *Default
+  if unanswered:* the refusal stands; property 4 is treated as fully
+  answered by 38.2's narrow reading and Pass 38.3 closes.
+
+- **(bb) R124 — do unbuilt features get greyed placeholders in the
+  command surface, or does empty space stay empty?** **Re-surfaced, not
+  new**, and filed here because it has now blocked a second design.
+  **R124** (decision 024 §7) says a ribbon group is never padded with
+  disabled placeholders for unbuilt features, on the argument that *a
+  greyed control promises a capability; a gap promises nothing, which is
+  the truth.* **You asked for placeholders; the engineer argued against;
+  you have not ruled.** The shell redesign was therefore **designed to
+  R124 as it stands** — which means the four-compartment dock shows no
+  greyed stubs for slice-4 Comments or anything else unbuilt. This
+  question is not about the ribbon alone any more: the same call now
+  governs every panel in the new dock. *Default if unanswered:* **R124
+  stands**, empty space stays empty, and every future surface is designed
+  to it — which makes a later reversal a broad, not a local, change.
 
 **Carried from prior sessions (unchanged, still open):**
 - Push/publish the local commit chain to a remote — separate,
@@ -19845,6 +20616,232 @@ not a judgment call:**
   `tools/check-ledger-numbers.py --stats` should be re-run after this
   commit — this librarian has no shell and has not run it itself.
 
+- **R157 — Selection state is WATCHED; workflows are ENTERED. Watched
+  things get a permanent compartment; entered things share one and
+  switch (shell redesign, `docs/ui_specs/shell-redesign.md`, filed
+  2026-08-06 with Pass 38.2; librarian-assigned number).** The rule that
+  decides, for any docked surface, whether it is **promoted to a
+  standing compartment** or **multiplexed behind a subject switch** —
+  and the reason the left dock is now four always-visible compartments
+  rather than a tab group.
+
+  **The distinction, stated so it is applicable rather than evocative.**
+  A surface is **watched** when its content is a *continuous readout of
+  state the operator did not choose to look at* — what is selected, what
+  tool is armed, where in the document they are. Hiding a watched
+  surface removes information the operator was relying on **without
+  their asking**, and the removal is invisible, because what is missing
+  is a fact and not a control. A surface is **entered** when the
+  operator *deliberately starts a task in it* — batch tools, redaction,
+  forms. Entering one is an act; leaving it to enter another is the same
+  act again; and the operator therefore already knows the previous one
+  is gone. **Multiplexing is honest for entered surfaces and dishonest
+  for watched ones.**
+
+  **The concrete application** (Pass 38.2): `Pages`, `ArmedTool` and
+  `Properties` are watched → each gets its own always-visible
+  compartment. `BatchTools`, `Redact` and `Forms` are entered → they
+  stay behind one `PaneSubject` segmented control inside a single
+  `Activities` compartment. **`PaneSubject` means "workflow" now, and
+  nothing else.**
+
+  **Corollary, and it is the operative half in practice: a tab bar is
+  the mechanism that hides things.** Removing it is the fix; rearranging
+  what sits in it is not. Four unrelated surfaces behind one subject
+  switch meant reaching any one of them hid the other three — which was
+  the operator's actual complaint, and no rearrangement inside a tab
+  group could have answered it.
+
+  **Second corollary, and the one that catches a specific regression: a
+  compartment that is always visible must never be auto-raised.** Pass
+  38.2 **deleted** the tool-arm auto-raise, and its absence is the
+  point. The raise existed *only* because arming a tool switched a
+  shared pane's subject, so without it nothing appeared to happen. Once
+  the surface is permanent, a raise is **a layout change the operator
+  did not ask for, made in response to an unrelated action** — the same
+  family of complaint as a control that moves under the pointer.
+
+  **Why this earns a number rather than living only in the spec.** The
+  need is a **recurrence, not a discovery**. `PaneSubject::ActiveTool`
+  and `::Properties` were the exact *"select above, edit below"*
+  relationship **decision 017 §A.3** built the original right-dock
+  vertical split for; **Pass 24.3 correctly retired that split** because
+  its specific pairing had gone stale — **and the underlying need
+  reappeared one level down, inside Tool Options, where nothing was
+  looking for it.** A rule stated at the level of *watched vs entered*
+  survives the next retirement of the next specific pairing, which is
+  precisely what the two previous framings did not.
+
+  **Precedent for a librarian-assigned number from a design spec rather
+  than from two failures:** **R121–R125**, all minted from decision 024
+  §7's ribbon design in exactly this shape. The two-occurrence promotion
+  bar the engineer has been holding (R156; the no-in-app-oracle
+  proposal) governs **failure-derived** rules; a design rule extracted
+  from a specialist spec is the R121–R125 case, not that one.
+
+  **Related:** **R123** (command-surface structure is derived from what
+  pdfce can do, never from another product's menus) — R157 is what you
+  apply *after* R123 has told you not to copy someone's layout and you
+  still have to decide where things go. **R124** (empty space stays
+  empty) — a peer decision about the same surface, currently blocked on
+  operator question **(bb)**. **R81** (no persistent floating windows) —
+  the reason a fly-out was refused rather than adopted.
+  **Numbering note, so the next filing does not double-mint.** R156's
+  own entry left **R157** to whichever of decision 030's three
+  still-unminted contingent candidates (§6.2(a), §4.5, "date and label
+  every contract statement") is accepted or promoted first, and the
+  2026-08-06 cross-RAG-handoff PROPOSAL below also named R157 as the
+  slot it would claim **if** it were minted — it was not, and a proposal
+  claims nothing. This finding is **filed first against the live
+  ceiling** (R106/R133: read the ceiling, don't assume a reservation),
+  so it claims **R157** — the same transfer mechanism
+  R150→R151→R152→R153→R154→R155→R156 each used in turn. **Decision 030's
+  three contingent candidates, and the cross-RAG-handoff proposal, now
+  take R158** if and when any of them is accepted or promoted.
+  **Ceiling is now R157** (was R156). **R158 is next free.**
+
+### PROPOSED 2026-08-06 — a request to "look like <competitor>" is converted into neutral, operator-confirmed PROPERTIES before any design work — AWAITING ENGINEER RULING; NOTHING MINTED
+
+**Status AS FILED: a librarian PROPOSAL. It has NO number, is NOT in
+force, and amends nothing until the engineer rules.** Filed 2026-08-06
+with Pass 38.2, at the engineer's explicit instruction to *"record the
+conversion — it is the reusable move."*
+
+#### The occurrence
+
+Ken, 2026-08-06: he likes how **PDF-XChange Editor** is laid out, and
+pdfce should resemble it more.
+
+**R123 forbids the direct route** — the command surface's structure is
+derived from what pdfce can do, never from another product's menus, and
+it names **trade dress**. But R123 is a prohibition, and a prohibition
+alone leaves an engineer with two bad options: refuse the operator
+something he plainly wants, or comply and violate the rule. **The
+operator's own preference is not the problem R123 exists to solve; the
+derivation is.**
+
+#### The proposed text
+
+**When an operator's request is phrased as a resemblance to a specific
+competing product, it is converted — before any design work begins —
+into a list of NEUTRAL, PRODUCT-INDEPENDENT PROPERTIES, which the
+operator CONFIRMS or amends. The design agent is then dispatched against
+the confirmed properties, with an explicit instruction not to examine
+the named product. The conversion, the operator's confirmation, and the
+non-examination instruction are all recorded in the resulting Pass
+entry.**
+
+#### Why it is worth recording (the argument for accepting)
+
+1. **It is the only move that satisfies both parties.** The operator got
+   all five properties he asked for — persistent panels, higher density,
+   the page rail, adjacency, an annotation list — and pdfce derived none
+   of them from PDF-XChange. **Nothing was refused except the
+   derivation.**
+2. **The properties are testable and the resemblance is not.** *"Panels
+   that change content instead of opening and closing"* can be designed
+   to, argued about, and asserted in a test
+   (`every_left_panel_is_visible_at_once_in_the_default_layout` is
+   literally that). *"More like PDF-XChange"* can only be satisfied by
+   looking at PDF-XChange.
+3. **It converts a compliance problem into a design brief**, which is a
+   strictly better artefact: `docs/ui_specs/shell-redesign.md` is 723
+   lines of reasoning that outlives the request, and its central
+   finding — that three of the five properties were one structural move
+   — **could not have been found by copying**, because a copy has no
+   level at which to notice that.
+4. **R123 has no positive half today.** It says what not to derive from.
+   Every future *"can it be more like X"* request re-poses the same
+   problem to whoever receives it.
+
+#### Why it might be REFUSED (stated so the engineer can weigh it)
+
+1. **One occurrence.** The project's own promotion bar is two.
+2. **It is arguably an AMENDMENT to R123, not a peer rule** — it has no
+   independent life apart from R123, which is the exact shape the
+   engineer preferred at continuations 100 and 102 (*a rule that only
+   refines another rule's discipline is a scope note, not a peer*).
+3. **It may belong in `pdfce-engineer.md` and `pdfce-ui-specialist.md`**
+   rather than in `ROADMAP.md`, on the same argument the cross-RAG
+   proposal below makes about itself: the enforcement point is where the
+   dispatch happens, and the agent writing the brief is the one who must
+   obey it.
+
+**This librarian's own recommendation, so the engineer is not guessing:
+accept the substance as an AMENDMENT to R123, not as R158.** Argument 2
+is correct — this is R123's missing positive half, and R123 is where
+someone will look. **If minted as a number instead, it claims R158**
+(the live ceiling is R157 after this filing), pushing decision 030's
+three contingent candidates and the cross-RAG-handoff proposal to R159.
+**Ceiling is UNCHANGED at R157 by this proposal**, because nothing is
+minted here.
+
+### PROPOSED 2026-08-06 — a re-validated positional index proves KIND and addressability, never IDENTITY, and the disclosure must say which — AWAITING ENGINEER RULING; NOTHING MINTED
+
+**Status AS FILED: a librarian PROPOSAL. NO number, NOT in force.**
+Filed 2026-08-06 with Pass 26.2.
+
+#### The occurrence
+
+Pass 26.2 replaced an unconditional *"drop the operator's position on
+every edit"* with a re-validation that truncates one rung at a time. The
+re-validation reads **positional indices** — paint order, subpath index,
+node index — and **indices carry no identity**. The check therefore
+**cannot** prove the slot holds the same object it held before the edit.
+What it proves is that the slot holds **something of the same KIND with
+enough structure to address**.
+
+The engineer wrote that distinction **into the code** rather than letting
+the check's success imply the stronger claim, and named the temptation
+explicitly: *"a guess dressed as a check."*
+
+#### The proposed text
+
+**Where retained state is addressed by POSITION rather than by identity,
+any re-validation of that state states, at the point of the claim, what
+it actually proves — a bound on how wrong the retention can be — and
+never the stronger claim that the referent is unchanged. Where the
+residual risk is accepted, the acceptance names the property that makes
+it acceptable.**
+
+For Pass 26.2 that property is: **the outline is DRAWN**, so a wrong
+retention is visible immediately, whereas a lost place is silently
+expensive. The asymmetry is what licenses the risk — not the strength of
+the check.
+
+#### Why it is worth a number (for)
+
+1. **It is CLAUDE.md rule 4 (*fuzzy, never sneaky*) applied to a
+   check rather than to a value.** Rule 4 governs inferred *values*
+   pdfce shows the operator. This governs an inferred *guarantee* pdfce
+   shows **itself** — and a component that believes a bound is a proof
+   will eventually act on it.
+2. **The pattern is not confined to the level ladder.** Anything
+   index-addressed and retained across a rewrite has the same shape:
+   canvas selection sets, ce-dimension group membership, `/Annots`
+   positions, undo-log targets.
+3. **The failure mode is silent** — an over-strong claim in a doc comment
+   is R93's exact territory, and R93 exists because this project has been
+   burned by it four times.
+
+#### Why it might be REFUSED (against)
+
+1. **One occurrence**, and the bar is two.
+2. **It may be R93's scope** (a code comment asserting a behaviour is not
+   evidence) read from the other end, in which case it is an amendment,
+   not a peer.
+3. **It may be too general to enforce.** *"State what your check
+   proves"* has no mechanical check behind it — unlike R156's grep or
+   R106's ledger scan — and a rule with no trigger is read once.
+
+**This librarian's own recommendation: hold it until a second
+occurrence, then mint.** Argument 3 is the strongest one against, and
+the substance is already recorded twice (in the code, and in the Pass
+26.2 Shipped entry) where the next person to touch `revalidate_entered`
+will actually meet it. **If minted, it claims R158** behind the R123
+amendment above if that one takes a number instead. **Ceiling UNCHANGED
+at R157 by this proposal.**
+
 ### PROPOSED 2026-08-06 — a cross-RAG deliverable is not handed off until the CONSUMING project's own documents name it — AWAITING ENGINEER RULING; NOTHING MINTED
 
 **Status AS FILED: a librarian PROPOSAL, filed 2026-08-06 with the
@@ -20271,6 +21268,109 @@ refused as to number, so **R157 was never claimed**, nothing was pushed
 to **R158**, and decision 030's three contingent candidates still take
 **R157** if and when one of them is accepted or promoted. **The
 standing-rule ceiling is R156, unchanged, and no rule was renumbered.**
+
+### PROPOSED 2026-08-06 (continuation 105) — before reporting that instrumented code did not run, prove the instrument would have fired — AWAITING ENGINEER RULING; NOTHING MINTED
+
+**Status AS FILED: a librarian PROPOSAL. It has NO number, is NOT in
+force, and amends nothing until the engineer rules.** Filed as a proposal
+rather than minted at the engineer's explicit instruction in the
+continuation-105 correction dispatch — *"If you judge that these … now
+constitute a pattern worth a standing rule, **propose it** (do not
+mint) … Your call to propose, mine to accept."* **This librarian judges
+that it does**, and the reason is the occurrence count below.
+
+#### The proposed text
+
+**An absent, unchanging, or unexpected diagnostic reading is not evidence
+about the code until the INSTRUMENT itself has been validated — that it
+is the trace the code under test actually emits, that it is capable of
+showing the negative case, and that the inputs driving it are current.
+Before reporting that instrumented code did not run, state which trace
+would have fired and why it did not.**
+
+The operative failure is always the same: **two explanations exist for
+one silence — "the behaviour is absent" and "my instrument is wrong" —
+and the alarming one gets reported without eliminating the boring one.**
+
+#### The occurrences — FOUR in roughly one day, all the same shape
+
+| # | Commit | The instrument | What was wrongly concluded | Actual cause |
+|---|---|---|---|---|
+| 1 | `a6e5bf3` (2026-08-05, correcting a Pass 34.2 filing) | `tools/gui-shot.ps1` blank screenshots | **an invented DWM-composition cause**, filed into `ROADMAP.md` *and* `D:\dev\rag\egui\` before it was checked | **the operator's DISPLAY WAS ASLEEP** |
+| 2 | `e666d3f` (2026-08-05, correcting `f8bbdd4`) | a new `drag-start` trace | *"the Obj tool converts the press position to the wrong PDF x"* — named a **coordinate-space defect** of Pass 36.3's family | **stale test coordinates.** `rect.min.x` was 581, not the 479.5 the script was computed against; the canvas had shifted ~100 px when Pass 24.1 widened the left dock. *"The trace I added to prove it is what disproved it."* |
+| 3 | `7d368e6` (2026-08-06) | `focus={has_focus()}`, written **inside** the `has_focus()` guard | *"focus is fine, something else is wrong"* | **a tautology — it could only ever print `true`.** The real signal was the frame COUNT: 10 traces across ~45 frames |
+| 4 | `7d3e44c` → `9328038` (2026-08-06) | a grep for the **`plain-click`** trace while the **Obj tool** was armed | **an `⚠ OPEN DEFECT` filed into `ROADMAP.md`**: *"the selection path does not run"* | **wrong trace name.** The Obj tool's path emits **`vector-click`**; `plain-click` belongs to the no-tool `else`. Also `sel=0` was read off a **start-of-frame** trace |
+
+**Occurrence 2 is this librarian's own addition to the engineer's list of
+three, found while sweeping for unfiled commits** (`e666d3f` and the
+`f8bbdd4` it corrects are **both still unfiled** — see the FILING GAP
+flag at the head of *Shipped*). It is offered as strengthening the case,
+with its one difference stated honestly: occurrences 1, 3 and 4 are
+**wrong or tautological instruments**, while 2 is a **correct instrument
+fed a stale input**. The engineer may judge that a distinction worth
+splitting. **This librarian argues it is not**, because the operator-
+visible failure and the remedy are identical in all four: a symptom was
+attributed to a cause before the apparatus that produced the symptom was
+validated, and in all four the validation was cheap — one extra field, or
+one grep of the emitting path.
+
+#### Why it clears this project's own promotion bar
+
+**The bar the engineer has been holding deliberately is TWO independent
+occurrences** (R156's two mis-verifications; the no-in-app-oracle
+proposal's two harness failures). **This is three by the engineer's own
+count and four by this librarian's, inside about twenty-six hours, across
+three different instruments** (a screenshot tool, a coordinate trace, a
+focus trace, a click trace) **and three different subsystems.** One
+occurrence is a story; four is a rule.
+
+**The cost is already measured, and it is not hypothetical.** Two of the
+four **reached the permanent record before being caught**: occurrence 1
+was filed into `ROADMAP.md` *and* escalated into a cross-project RAG at
+`D:\dev\rag\egui\`, where it would have misinformed **every future
+project**, not just this one; occurrence 4 became an `⚠ OPEN DEFECT` at
+the head of *In progress*, and was removed only because the engineer
+re-checked it within the hour. **Both were caught by the author's own
+second look, not by any gate.** A third instance that nobody re-checks is
+the expected outcome of leaving this unruled.
+
+#### Why it might be REFUSED (stated so the engineer can weigh it)
+
+1. **It may be R87's scope, not a peer rule.** R87 already says a commit
+   subject line is not a build record — *"do not file what you did not
+   measure."* This proposal is arguably the same principle one step
+   earlier: **do not trust what you did measure until you know the
+   measurement was pointed at the thing.** If the engineer reads it that
+   way, this is an **amendment to R87**, which is the shape he chose for
+   R156 at continuation 101/102 and explicitly prefers when a proposal
+   *"has no independent life"* apart from another rule.
+2. **It may be unenforceable as written.** *"Prove the instrument would
+   have fired"* has no mechanical check — unlike R156's *"grep the
+   `Action` enum"* or R106's counted ledger. A rule nobody can be
+   measured against is a slogan. **A concrete counter to this, if the
+   engineer wants one:** require that a diagnostic claim of the form
+   *"X did not run"* name **the specific trace expected and the code path
+   that emits it** — which is checkable at review time, and which all
+   four occurrences would have failed.
+3. **It overlaps the harness-verification proposals already pending.** If
+   decision 030's contingent candidates or the no-in-app-oracle proposal
+   are accepted, some of this ground may already be covered.
+
+**This librarian's recommendation, stated so the engineer is not
+guessing: ACCEPT THE SUBSTANCE; the number and the home are arguable, and
+the R87-amendment shape (argument 1) is the stronger of the two.** The
+enforceable form in argument 2 is what makes it a rule rather than a
+slogan and should be adopted whichever home is chosen.
+
+**Numbering, if accepted as a standalone rule.** It would claim the next
+free slot against the live ceiling — **which is R157 after this
+continuation's filing minted R157** (*"selection state is WATCHED;
+workflows are ENTERED"*, with Pass 38.2) — so this proposal would take
+**R158**, pushing decision 030's three still-unminted contingent
+candidates to **R159**. **If accepted as an R87 amendment instead,
+NOTHING is minted and the ceiling does not move**, which is the outcome
+this librarian recommends. **Ceiling is UNCHANGED at R157 by this
+proposal** (**R158** next free) because **nothing is minted here.**
 
 ## Update protocol
 

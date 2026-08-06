@@ -96,7 +96,7 @@ and they are not interchangeable:
 |:----:|:---:|:---:|:-------:|---------|
 | [x] | [x] | [x] | [x] | Extract & copy text: search index, `ToUnicode`, reading order, plus page/document-scope clipboard copy (Pass 4 core+CLI `extract-text`; GUI Copy ▾ menu, `CopyScope::Page`/`Document`) |
 | [x] | — | [ ] | [x] | Select text on the canvas and copy the selection — the selection itself exists (Edit Text tool: triple-click, `text_caret_after_click`, a live caret/anchor pair), but there is no `CopyScope::Selection` and no copy verb reaches it. `cli` marked — (not `[ ]`): "mouse-select a range, then copy" has no batch shape; page/document-scope copy above already covers the CLI case |
-| [x] | [x] | [x] | [x] | In-place text editing of existing runs (Pass 14.x) |
+| [x] | [x] | [x] | [x] | In-place text editing of existing runs (Pass 14.x) — arrow-key caret navigation fixed `7d368e6`: the canvas claims the arrows via `set_focus_lock_filter` instead of letting egui steal focus leftward |
 | [x] | [x] | [x] | ◐ | Text formatting: size/colour/font-family-style, char/word spacing, horizontal scale, super/subscript, synthetic bold/italic (Pass 19.x, FF-H — complete end-to-end) |
 | [x] | [x] | [x] | [x] | Within-block reflow incl. justified alignment (Pass 15.x, FF-A) — open defect: auto-detected wrap width can inherit a prior edit's overflow (Pass 33.0, disclosed but not yet fixed) |
 | [x] | [x] | [x] | [x] | Add new page text: point insert + wrapped multi-line box (Pass 16.x, FF-D) |
@@ -107,7 +107,7 @@ and they are not interchangeable:
 
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
-| [x] | [x] | [x] | [x] | Select vector objects: click, marquee, Alt+click cycle through overlapping hits (Pass 9a, 12.0, 18.5) |
+| [x] | [x] | [x] | [x] | Select vector objects: click, marquee, Alt+click cycle through overlapping hits (Pass 9a, 12.0, 18.5); **additive multi-select** under Shift **or** Ctrl/Cmd, for both click and marquee, and in the Obj tool (`7d3e44c` — Shift worked since Pass 9a, Ctrl was never consulted). **Verified in the running app** (`9328038`: `newsel=1` → `newsel=2` on Ctrl+click) |
 | [x] | [x] | [x] | [x] | Move / delete a whole vector object (Pass 25.x, 28.0) |
 | [x] | [x] | [x] | **[ ]** | Enter an object and select one part (subpath) (Pass 25.0–25.4) |
 | [x] | [x] | [x] | **[ ]** | Move / delete a subpath (Pass 28.0 core, Pass 25.2 delete, Pass 36.0 GUI gesture) |
@@ -115,17 +115,18 @@ and they are not interchangeable:
 | [x] | [x] | [x] | **[ ]** | Delete a node (Pass 36.1) |
 | [x] | [x] | [x] | **[ ]** | Edit a Bézier handle / control point (Pass 30.1 core+CLI; Pass 26.1 GUI) |
 | — | — | [x] | **[ ]** | Level-ladder rung readout (Object/Part/Point) + Escape-to-ascend navigation (Pass 26.0, 36.2) — no clickable breadcrumb yet |
+| — | — | [x] | — | Level survival across an edit: an edit/undo/redo truncates your rung one step at a time instead of ejecting you to Page (Pass 26.2). `Acrobat` `—`: Acrobat has no level ladder, so the question is not meaningful. Ladder proven by unit test; the entry gesture is **not** driven end-to-end |
 
 ### ce dimensions
 
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
 | [x] | [x] | [x] | ◐ | Author a ce dimension with snapping: linear/radius/diameter (Pass 12.M1, 12.M2, 12.M2b) |
-| [x] | [x] | [x] | **[ ]** | ce-dimension groups: scale, number format (decimal/fraction), ANSI/ISO drafting standard (Pass 12.M2, 27.2; GUI controls in the Properties dock pane since Pass 34.2) — group-wide: a change regenerates every member's `/AP` |
+| [x] | [x] | [x] | **[ ]** | ce-dimension groups: scale, number format (decimal/fraction), ANSI/ISO drafting standard (Pass 12.M2, 27.2; GUI controls in the Properties dock compartment since Pass 34.2, **always visible since Pass 38.2**) — group-wide: a change regenerates every member's `/AP` |
 | [x] | [x] | [x] | **[ ]** | Change a PLACED circular ce dimension between the radius and diameter reading (Pass 34.2, `EditSession::set_dimension_display` / `pdfce-cli dimension-display`) — **circular only**; a linear target is refused by name (`EditError::NotACircularDimension`). Per-object: regenerates exactly one `/AP` |
 | [x] | [x] | [x] | [x] | Drag to reposition a ce dimension (Pass 25.5) |
 | [x] | [x] | [x] | ? | Edit a placed ce dimension's placement NUMERICALLY — standoff / value-position (Pass 27.1 core+CLI `dimension-offset`; Pass 34.2 GUI spinners, which mirror the drag rather than replace it) |
-| [x] | [x] | [x] | [x] | Toggle a ce-dimension group's OCG layer visibility (Properties dock pane since Pass 34.2 — the floating Group Manager window is gone, closing R81's last named holdout) |
+| [x] | [x] | [x] | [x] | Toggle a ce-dimension group's OCG layer visibility (Properties dock compartment since Pass 34.2, **always visible since Pass 38.2** — the floating Group Manager window is gone, closing R81's last named holdout) |
 | [x] | [x] | [x] | [x] | Delete a ce dimension: annotation + `/AP` + `/PieceInfo` sidecar, together (Pass 25.6) |
 
 ### Annotations & markup
@@ -167,9 +168,10 @@ and they are not interchangeable:
 | — | [x] | — | **[ ]** | A first-class scriptable CLI (`pdfce-cli`) over the capabilities above — Acrobat has no CLI at all (Action Wizard, embedded JS and COM only) |
 | [x] | [x] | [x] | — | Live-edit canvas: renders the edited revision, not a static page image (Pass 17.x) |
 | — | — | [x] | — | Interactive canvas: pan, zoom-to-cursor, marquee select (Pass 12.0, 18.8) |
-| — | — | [x] | — | Dockable panel shell: Pages / Tool Options / Properties / Object-Layer tree (Pass 18.1, 34.1, 34.2) — Properties holds three scope-named sections (selected ce dimension · ce-dimension groups · document `/Info`); no persistent floating window remains (R81) |
+| — | — | [x] | — | Dockable panel shell — **four always-visible left compartments, no tab bar**: Pages · Tool (armed tool's options) · Properties · Activities (Batch Tools / Redact / Forms behind a segmented control) (Pass 18.1, 34.1, 34.2, **38.2**). Properties still holds the same three scope-named sections (selected ce dimension · ce-dimension groups · document `/Info`) and is now **always on screen**; no persistent floating window remains (R81). Rule: **watched state gets a compartment, entered workflows share one** (R157) |
 | — | — | [x] | — | Ribbon command surface — File/Edit/Review/Measure/Tools/View tabs, reset-layout chooser covering both docks (Pass 24.1, chain `6449859`→`2b12efe`) |
-| — | — | [x] | — | Implicit gesture-commit: clicking away accepts an in-progress edit instead of requiring a separate Accept/Reject click (Pass 34.0; slice 4 of the related Pass 34.1 dock-relocation work still owed, see *Planned*) |
+| — | — | [x] | — | Implicit gesture-commit: clicking away accepts an in-progress edit instead of requiring a separate Accept/Reject click (Pass 34.0) |
+| — | — | [x] | — | **Nothing floats over the canvas** — every commit control, refusal and disclosure (Edit Text · Add Text · Measure) lives in the tool's dock compartment; `canvas::tool_strip_anchor`/`StripCorner` deleted (Pass 34.1 slice 4, `7f850c9`). ⚠ **Shipped but NOT yet filed in `ROADMAP.md`** — see the *FILING GAP #2* flag at the head of *Shipped* |
 | [x] | [x] | [x] | — | ScripTree-style SVG icon set for every GUI feature (Pass 18.3) |
 
 ## Planned, in predicted order
@@ -187,12 +189,14 @@ build.
 
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
-| — | — | [ ] | — | Pass 34.1 slice 4 — move the last floating status/disclosure strips into the Tool Options dock |
+| — | — | [ ] | — | Pass 38.1 — shell-redesign slice 1: the density convention (`UI_PREFERENCES.md` §11), applied to the existing panels. **Skipped when 38.2 shipped out of order; still owed.** (Pass 38.3 is the property-4 confirmation — an operator question, not a capability, so it has no row here) |
+| — | — | [ ] | ? | Pass 38.4 — the Comments / annotation-list panel. **Blocked on core:** `annot::Annotation` models no `/Contents`/`/T`/`/M`. Honest ceiling: Pass 6.1 markup never sets `/Contents`, so v1 shows mostly untitled rows |
+| [ ] | [ ] | [ ] | — | Pass 38.5 — shell-redesign P1: general `delete_annotation` core verb + the Delete row action; `pdfce-cli list-annotations` `contents=`/`author=`; `ResetScope` also resetting per-compartment collapse state |
 | [ ] | [ ] | [ ] | **[ ]** | Pass 35.0 — ce-dimension tolerance & tolerance types, SolidWorks-style (None/Basic/Bilateral/Symmetric/Limit/Min/Max) — zero existing representation today. **Next up**: Pass 34.2 built the per-ce-dimension property surface its controls need to live in |
 | [ ] | [ ] | [ ] | ? | Pass 35.1 — drag a ce dimension's extension lines to extend/retract |
 | [ ] | [ ] | [ ] | — | Pass 33.0 — real fix for reflow's auto-detected wrap width inheriting a prior edit's overflow (disclosure ships today; the fix itself — clamp / median-width / refuse — is undecided) |
 | [ ] | [ ] | [ ] | ? | Pass 32.0 — delete one text run without deleting every run sharing its text object (fixes: deleting one CAD label deletes all 237 sharing a `BT`…`ET` block on the operator's own drawing) |
-| ◐ | ◐ | [ ] | **[ ]** | Pass 26.2 + decision 028 remainder — level survival across an edit; Tab/Shift+Tab node cycling; arrow-key node nudge; readout-row corrections; clickable breadcrumb navigation |
+| ◐ | ◐ | [ ] | **[ ]** | Decision 028 remainder — Tab/Shift+Tab node cycling; arrow-key node nudge; readout-row corrections; clickable breadcrumb navigation. (**Pass 26.2 itself SHIPPED** 2026-08-06 — moved to *Implemented*) |
 | [ ] | [ ] | [ ] | [x] | Pass 22.0 — make ce dimensions and foreign annotations selectable, marqueeable, and deletable from the canvas |
 | [ ] | [ ] | [ ] | ◐ | Pass 23.0–23.3 — ce-dimension format/units GUI control; re-measure + whole-dimension move; descend into nested form-XObject containers; multi-node select/move/delete |
 | — | — | [ ] | — | Pass 24.0, 24.2–24.5 — remaining ribbon slices (fixed-anchor confirm strip, contextual tool tabs, selection tabs, overflow/collapse, keyboard & accessibility) |

@@ -147,7 +147,18 @@ def collect_passes(lines: list[str], secs):
     """
     found = defaultdict(list)
     for n, ln in enumerate(lines, 1):
-        if not re.match(r"^#{2,4} Pass ", ln):
+        # `★ ` is allowed between the hashes and "Pass". `ROADMAP.md` marks
+        # umbrella/operator-request headings that way, and the anchor used to
+        # require "Pass" immediately after the hashes — so TEN headings
+        # (`★ Pass 15/16/17/18/19/21/24.0/26.0/33.0/38.1`) were invisible to
+        # this checker and had never been uniqueness-checked at all.
+        #
+        # Found by the librarian predicting the delta before running the gate:
+        # it declared three Pass IDs, the checker counted two, and the missing
+        # one was a `★` heading. A gate whose blind spot is only discovered by
+        # someone independently forecasting its output is a gate that has been
+        # reporting less than it appeared to — the R53-R57 shape.
+        if not re.match(r"^#{2,4} (?:★ )?Pass ", ln):
             continue
         prefix = ln.split("—")[0]
         for pid in re.findall(rf"Pass ({PASS_ID})", prefix):

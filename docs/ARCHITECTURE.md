@@ -7056,3 +7056,77 @@ with a forward pointer.
     Pass family minted (Pass 34.1's slice count is not a family count;
     ceiling stays **37 next free**). Full record: `ROADMAP.md`'s new
     Pass 34.1 Shipped entry and `SESSION_LOG.md` continuation 94.
+- **2026-08-06 (continuation 105)** — **The left dock's shape is decided
+  by *watched vs entered*, and `PaneSubject` now means "workflow" and
+  nothing else.** Shipped as **Pass 38.2** (`aa48167`); design record
+  `docs/ui_specs/shell-redesign.md` (723 lines); rule minted as
+  **R157**.
+  - **What changed structurally.** `DockPanel::ToolOptions` →
+    `ArmedTool`; `Properties` and a new `Activities` promoted to peers;
+    `Pages` removed from the tab pairing. The left dock is a vertical
+    `egui_tiles::Container::Linear` of **four always-visible
+    compartments** with **no tab container anywhere** (shares
+    0.7/0.7/1.3/1.3, tuned against the running app, draggable —
+    defaults, not constraints). `PaneSubject` narrows to
+    `{BatchTools, Redact, Forms}` behind an in-panel segmented control.
+    The `dock::activate`-on-tool-arm **auto-raise is deleted**.
+  - **Why this is a decision and not just a layout change.**
+    `PaneSubject::ActiveTool` and `::Properties` were the exact *"select
+    above, edit below"* relationship **decision 017 §A.3** built the
+    original right-dock vertical split for. **Pass 24.3 retired that
+    split correctly** — its specific pairing had gone stale — but the
+    underlying need **recurred one level down**, inside Tool Options,
+    where nothing was looking for it. The decision is to state the rule
+    at a level that survives the next such retirement: **selection state
+    is watched and gets a permanent compartment; workflows are entered
+    and share one.** §12's earlier decision-017 and Pass-24.3 entries
+    stand; this one supersedes neither, it generalises both.
+  - **No decision record minted.** The 723-line spec **is** the record,
+    and a `docs/decisions/032-*.md` would duplicate it. **Decision-record
+    ceiling stays 031 (032 next free).**
+  - **Origin, recorded because the derivation is the compliance-relevant
+    part.** The operator asked for resemblance to **PDF-XChange Editor**.
+    The engineer **declined to copy it** (**R123**, trade dress) and
+    converted the request into **five neutral UI properties**, which the
+    operator confirmed; `pdfce-ui-specialist` designed against the
+    properties under an explicit instruction not to examine PDF-XChange.
+    That conversion is filed as a **proposed R123 amendment** — proposed,
+    not minted.
+  - **A refusal, stated rather than silently avoided.** Property 4's
+    *maximal* reading — tool options as a fly-out hugging the selection —
+    is **refused**: it would structurally reintroduce the floating
+    `egui::Area` behind the operator's *"separate accept/reject box
+    somewhere on the screen"* complaint (§ CLAUDE.md rule 4's 2026-08-05
+    narrowing; **R81**). Open operator question **(ba)**.
+- **2026-08-06 (continuation 105, second entry)** — **The canvas claims
+  the arrow keys while a text caret is live, and Tab/Escape deliberately
+  stay unclaimed.** `egui-0.35.0/src/memory/mod.rs`'s `Focus::begin_pass`
+  routes a **bare** arrow key to `FocusDirection` **unless the focused
+  widget's `EventFilter` matches it**; pdfce's canvas declared none, so
+  `ArrowLeft` moved focus into the left dock and the caret block stopped
+  running entirely. Fixed in `7d368e6` with `set_focus_lock_filter`
+  claiming `horizontal_arrows` + `vertical_arrows`.
+  **The two deliberate non-claims are the contract:** `tab: false`, so a
+  keyboard-only operator is never trapped in the canvas; `escape: false`,
+  because Escape is pdfce's **pop-one-level-rung / cancel-gesture** verb
+  (decision 025's ladder, **R130–R132**) and claiming it would break
+  both. **Consequence to know, read from egui's source:** with
+  `escape: false`, a bare Escape also sets egui's `focused_widget = None`
+  — pdfce's rung pop and egui's focus surrender happen on the same press.
+  Escalated to `D:\dev\rag\egui\`.
+- **2026-08-06 (continuation 105, third entry)** — **Retained
+  position that is addressed by INDEX is re-validated for KIND and
+  addressability, never for identity.** Shipped as **Pass 26.2**
+  (`50ab8ec`). `EnteredObject` is positional indices only, so
+  `prune_canvas_selection`'s re-validation **cannot** prove the slot
+  holds the same object; it proves the slot holds **the same kind with
+  enough structure to address**, and truncates **one rung at a time,
+  deepest first**, when it does not. The stronger claim is refused **in
+  the code**, not merely omitted. The residual risk (a same-kind object
+  arriving at the same index) is **accepted knowingly**, licensed by an
+  asymmetry rather than by the strength of the check: **the outline is
+  drawn**, so a wrong retention is visible immediately, while a lost
+  place is silently expensive. The rule (`truncate_entered`, three
+  numbers) is **split from the lookup** (`revalidate_entered`) so the
+  decidable half is testable without constructing a decomposed page.
+  Filed as a standing-rule **proposal**, not minted.

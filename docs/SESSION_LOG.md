@@ -16536,3 +16536,643 @@ Pass ID) pairs, **156** rules, **31** decision files, **1** allowlisted
 rule amendment, `ledger-numbers: clean`. Every number matches the
 engineer's pre-dispatch run at `93140b5` exactly. **Nothing else about
 the working tree, the index, remotes, backups or CI is asserted here.**
+
+---
+
+**Continuation 105 (real date 2026-08-06) — FOUR COMMITS FILED. ONE NEW
+PASS FAMILY (38) MINTED FOR THE SHELL REDESIGN; PASS 26.2 MOVED FROM
+UNBUILT TO SHIPPED WITHOUT RENUMBERING; TWO CORRECTNESS FIXES FILED
+WITHOUT PASS IDS; ONE STANDING RULE MINTED (R157); ~~ONE OPEN DEFECT
+LOGGED THAT MATTERS MORE THAN THE COMMIT IT WAS FOUND IN~~ **← STRUCK.
+THAT DEFECT WAS NOT REAL — see the AMENDMENT at the end of this entry.
+What replaced it is a PROCESS finding that does matter more, plus a
+SECOND FILING GAP (five unfiled commits, one duplicate Pass ID).**
+
+**Carry-forward and "For next session" are UNCHANGED from continuation
+101 except where named below.**
+
+### Shipped
+
+- **Pass 38.2** — shell redesign slice 2: the left dock stops hiding
+  itself (`aa48167`, GUI).
+- **Pass 26.2** — level survival across an edit (`50ab8ec`, GUI).
+  **Already filed as UNBUILT with this exact description** — moved, not
+  minted, not renumbered (hard rule 2).
+- **fix (no Pass ID)** — `ArrowLeft` while editing text moved FOCUS, not
+  the caret (`7d368e6`, GUI).
+- **fix (no Pass ID)** — multi-select: `Ctrl` was never consulted
+  (`7d3e44c`, GUI).
+
+**Gates, measured at `7d3e44c` (engineer-run and relayed, R87):
+1981 tests pass / 0 fail** (1976 → 1981 across the four commits; 10 new
+tests). `cargo fmt --all --check` clean. `cargo clippy --workspace
+--all-targets -- -D warnings` clean. `tools/check-ui-strings.sh` clean.
+`cargo tree -p pdfce-core` / `-p pdfce-render`: **zero GUI-dependency
+matches**. **No new dependencies.** *The 1976 figure is historical — it
+means "the count at `50ab8ec` and earlier" and must not be quoted as
+current.*
+
+**Backup, relayed:** taken **and verified restorable** before the shell
+work at the operator's instruction —
+`D:\Dev\pdfce-backups\pdfce-20260806-0732-pre-ui-redesign.zip` (39.9 MB,
+25,993 entries, 55 GUI-crate files) plus a bundle proven to clone back
+to `a1ff3f4`. **Backup currency AFTER these four commits is not
+verifiable from here — the engineer should check
+`D:\Dev\pdfce-backups\`** (hard rule 8; this has been asserted wrongly
+twice before).
+
+### Decisions made this session
+
+Three, all recorded in `ARCHITECTURE.md` §12 as dated entries; **no
+decision RECORD minted** (ceiling stays 031).
+
+1. **The left dock's shape is decided by *watched vs entered*.** Watched
+   state (Pages, armed tool, Properties) gets a permanent compartment;
+   entered workflows (Batch/Redact/Forms) share one behind a segmented
+   control. `PaneSubject` means *workflow* now and nothing else.
+   **Minted as standing rule R157.** The 723-line
+   `docs/ui_specs/shell-redesign.md` **is** the decision record; a
+   `decisions/032-*.md` would only duplicate it.
+2. **The canvas claims bare arrows while a caret is live; Tab and Escape
+   stay unclaimed.** `tab: false` so a keyboard-only operator is not
+   trapped; `escape: false` because Escape is the rung-pop verb
+   (R130–R132).
+3. **Index-addressed retained position is re-validated for KIND and
+   addressability, never identity** — and the weaker claim is written
+   into the code rather than allowed to be read as the stronger one.
+
+### Findings + decisions
+
+#### ★ The reusable move: a trade-dress request converted into a design brief
+
+Ken said he likes **PDF-XChange Editor**'s layout and that pdfce should
+resemble it. **R123** forbids deriving our command surface from a
+competitor's and names trade dress — and the engineer treated reversing
+that as the operator's call, not his.
+
+**So he did not refuse, and he did not comply.** He converted the request
+into **five neutral UI properties**, asked which the operator actually
+wanted, got **all five confirmed**, and dispatched
+`pdfce-ui-specialist` against the properties **with an explicit
+instruction not to look at PDF-XChange at all.**
+
+**The operator got everything he asked for; only the derivation was
+refused.** And the conversion produced a strictly better artefact than a
+copy could have: the spec's central finding — that **three of the five
+properties are ONE structural move** — is a thing you can only see from
+inside your own model. Filed as a **proposed R123 amendment** (proposed,
+not minted; this librarian recommends accepting it *as an amendment*,
+because R123 is where someone will look and this is R123's missing
+positive half).
+
+#### ★ The structural finding: the need did not go away, it moved down a level
+
+`PaneSubject::ActiveTool` and `::Properties` were the exact *"select
+above, edit below"* relationship **decision 017 §A.3** built the original
+right-dock split for. **Pass 24.3 retired that split correctly** — its
+pairing had gone stale. **But the need recurred one level down, inside
+Tool Options**, where nothing was watching for it. Four unrelated
+surfaces behind one subject switch meant reaching any one hid the others.
+
+**Removing the tab bar is the fix, not rearranging what sits in it — a
+tab bar is the mechanism that hides things.** And the tool-arm
+auto-raise was **deleted**: it existed only because arming switched a
+shared pane's subject, so on a permanent compartment it would be a layout
+change the operator did not ask for.
+
+**A screenshot changed the result, for the third time this session.**
+`Container::Linear` splits equally by default; the first capture showed
+the thumbnail rail and an **empty-state** Tool pane each taking a quarter
+of the height. Shares tuned to **0.7/0.7/1.3/1.3 against the running
+app**, by how much each compartment has to say.
+
+**Two tests REWRITTEN rather than renamed**, because their premises
+became false and a renamed variant preserves a lie:
+`a_backgrounded_panel_can_be_brought_forward` →
+`every_left_panel_is_visible_at_once_in_the_default_layout` (plus a new
+test keeping `activate` covered for the tabbed case, which the default
+layout no longer exercises); and
+`the_properties_toggle_reports_what_is_on_screen` lost its `pane_subject`
+half **because that half left the TRUTH**, and gained a direct assertion
+that switching Activities cannot hide Properties.
+
+#### ★ ArrowLeft: the asymmetry WAS the proof
+
+`egui-0.35.0/src/memory/mod.rs` (`Focus::begin_pass`) maps a **bare**
+arrow to a `FocusDirection` and moves focus with it — **only** `if
+!event_filter.matches(event)`, where the filter belongs to the focused
+widget. The canvas declared none.
+
+**Nothing sits right of the canvas**, so `FocusDirection::Right` finds no
+candidate and the caret moves. **The dock sits left**, so `Left` takes
+the focus — **and once focus is gone the caret block stops running
+entirely**, which is why it looked like a caret bug rather than a focus
+bug. *A directional asymmetry in a symmetric feature is a focus problem
+until proven otherwise.*
+
+**Verified in-app (R86), same script:** before — 10 focus-held frames of
+~45, caret stuck at 11. After — 15 frames, and 11 → 10 → 9 → 8 → 7. Other
+directions unbroken: Home, Right×3, Left, End → 11 → 0 → 1 → 2 → 3 → 2 →
+11.
+
+The harness **could not press an arrow key at all** before this
+(`diag::Step::NavKey` is new), so the defect could neither be reproduced
+nor its fix proven.
+
+#### ★ Two process notes from `7d368e6`, and the engineer rates both above the fix
+
+1. **A tautological assertion reads as evidence until you notice it
+   cannot fail.** The first diagnostic sat *inside* the `has_focus()`
+   guard and printed `focus={has_focus()}` — it could only ever print
+   `true`, and it was briefly read as "focus is fine." **The real signal
+   was the FRAME COUNT**: 10 traces across ~45 frames meant the block was
+   not running for 35 of them.
+2. **The evidence caught an edit, not a regression.** Applying the fix,
+   the trace was **replaced** rather than added alongside; the next run
+   showed zero frames, which looked exactly like the fix making things
+   worse.
+
+**Escalated to `D:\dev\rag\rust\` as one cross-project finding, and
+deliberately NOT minted as a pdfce standing rule** — it is engineering
+epistemics, not pdfce policy, the same boundary the engineer drew at
+continuation 103.
+
+#### ★ Pass 26.2: what the check honestly proves
+
+`prune_canvas_selection` did an unconditional `entered = None`. **Its
+reasoning was sound** — positional indices, and after a rewrite the same
+index can name a different object — **and it was the wrong response,
+because the hazard mostly does not occur**: a node/handle/subpath move
+rewrites operands *inside* one object, so paint order is untouched. **It
+paid the rare case's price on every occurrence of the common one.**
+
+Now: re-validate and truncate **one rung at a time, deepest first**.
+
+**And the honest bound, which is the part to keep.** The check does
+**not** prove the object is the same object — indices carry no identity,
+and such a claim would be *a guess dressed as a check*. It proves the
+slot holds **the same KIND with enough structure to address**. Residual
+risk accepted knowingly, licensed by an **asymmetry**: the outline is
+DRAWN, so a wrong retention is visible immediately, while a lost place is
+silently expensive.
+
+**The RULE is split from the LOOKUP** (`truncate_entered` over three
+numbers vs `revalidate_entered` doing the lookup) so the decidable half
+is testable without constructing a decomposed page. **5 tests.**
+
+**Limit, stated: the end-to-end gesture is NOT driven.** A double-click
+could not be landed through the harness, and there is a recorded finding
+that rapid successive double-clicks coalesce. **The unit test is a
+SUBSTITUTE for in-app verification, not an equivalent.**
+
+#### ★ Multi-select: the capability existed, the key did not
+
+The engineer **expected to find it unbuilt. It was not.** Shift toggle-add
+has worked since **Pass 9a** for both click and marquee, and the marquee
+**is** wired — despite `targets_in_rect`'s own stale
+`reason = "wired by Pass 9a once marquee-vs-pan is decided"`.
+
+**`modifiers.ctrl` appeared exactly ONCE in all of `main.rs`, and not in
+any selection path.** Ctrl+click is the Windows toggle-add convention,
+and a plain click does not merely fail to add — **it throws the selection
+away.** From outside that reads as "not implemented" when the truth is
+"wrong key."
+
+Widened to `shift || command` at three sites (object click, marquee
+release, **`run_vector_edit_tool` — the Obj tool, NOT the measure tool;
+see the AMENDMENT at the end of this entry**). **`command`, not `ctrl`** — egui maps it to Ctrl
+on Windows/Linux and Cmd on macOS. **Shift KEPT as a synonym, not
+reassigned to range-select**: the selection is a `BTreeSet` with no
+ordering to range over. **Text-caret Shift deliberately not widened** —
+there it means "extend the span."
+
+The stale `allow(dead_code)` `reason` string is **R93's exact shape** and
+the **second** instance in this project (after `snap_glyph()`); filed as
+a Backlog sweep.
+
+### ~~★ AN OPEN DEFECT, FILED SEPARATELY — this is the most important item in this filing~~ — ★ RETRACTED, SAME DAY, BY `9328038`. THERE IS NO DEFECT
+
+**This section as originally written claimed an open defect. It was
+wrong.** The claim: driving a click at a CLI-confirmed hit
+(`at=150,230 tolerance=3 index=0 kind=path candidates=1`) with the Obj
+tool armed produced `clicked=true provider=true sel=0` **and no
+`plain-click` trace at all**, therefore *"the selection path did not
+run"* — possibly the same class as the 2026-08-04 four-root-cause
+"can't click on objects" arc.
+
+**The engineer re-investigated with fresh context within the hour and
+found two reading errors, both his:**
+
+1. **The wrong trace was grepped.** The canvas click dispatch is a chain:
+   `dimension_consumed` → TextEdit → AddText → measure →
+   `tool_builds_vector_edit` → **else**. **`plain-click` is emitted in
+   that final `else` — the NO-TOOL path.** With the Obj tool armed,
+   `run_vector_edit_tool` owns the canvas and emits **`vector-click`**.
+   The Obj tool was driven while the other path's trace was searched for.
+2. **`sel=0` was misread.** It sits on the `canvas` trace, emitted at the
+   **START of the frame** — the selection count **before** the click is
+   applied. Zero is correct there.
+
+**Re-run with the right trace name, identical script:**
+
+```
+vector-click screen=[990.0 265.0] canvas=[150.0 70.0] hits=1
+    first=Some(TargetId(0)) newsel=1
+vector-click screen=[636.0 728.0] canvas=[20.2 239.9] hits=1
+    first=Some(TargetId(1)) newsel=2
+```
+
+**Click selects one; Ctrl+click accumulates to two.** So the consequence
+recorded here — *"`7d3e44c`'s Ctrl widening is unverified end to end"* —
+is **also withdrawn. It is VERIFIED in the running app (R86).**
+
+**The `⚠ OPEN DEFECT` entry has been REMOVED from `ROADMAP.md`** *In
+progress*, replaced by a short closed tombstone. **Removed rather than
+downgraded, on the operator's explicit instruction:** *"a defect entry
+that says 'possibly nothing' still sends the next session looking."*
+
+### Files edited this filing
+
+- **`docs/ROADMAP.md`** — four new *Shipped* entries + a shared gate
+  block; one new **⚠ OPEN DEFECT** entry at the head of *In progress*; a
+  **✅ STATUS AMENDMENT** on the Pass 26.0–26.2 *Next up* entry; a new
+  **★ Pass 38.1–38.5** *Next up* entry; one new *Backlog* bullet (stale
+  `allow(dead_code)` reason strings); **R157** minted in *Standing
+  rules*; **two new PROPOSED blocks** (nothing minted by either); open
+  operator questions **(ba)** and **(bb)**.
+- **`docs/FEATURES.md`** — *Shell & UX* dock row rewritten to the
+  four-compartment shape; three ce-dimension/Properties rows reworded to
+  "always visible"; the vector-selection row gained additive
+  multi-select; a new **level survival** row; the text-edit row gained
+  the arrow-key fix; the Pass 26.2 *Planned* row reduced to the decision-
+  028 remainder; three new *Planned* rows for Passes 38.1 / 38.4 / 38.5;
+  Pass 34.1 slice 4's row renamed to `ArmedTool`.
+- **`docs/ARCHITECTURE.md`** — three dated **§12** decision-log entries.
+- **`docs/SESSION_LOG.md`** — this entry.
+- **`D:\dev\rag\egui\arrow_keys_move_focus_unless_the_focused_widget_declares_an_event_filter.md`** — new, + index bullet.
+- **`D:\dev\rag\rust\a_diagnostic_inside_the_guard_it_reports_can_only_report_true.md`** — new, + index bullet.
+
+### Still in flight
+
+- ~~**The open defect above** — the engineer is investigating with fresh
+  context.~~ **CLOSED — it was not a defect. See the AMENDMENT below.**
+- **★ FIVE UNFILED COMMITS from 2026-08-05, and a DUPLICATE Pass 26.2** —
+  `7f850c9`, `f8bbdd4`, `e666d3f`, `2c306ec`, `c3d605b`. Filed as
+  **⚠ FILING GAP #2** at the head of `ROADMAP.md` *Shipped*. **The 26.2
+  ID collision needs an engineer ruling**; nothing was renumbered.
+- **Pass 38.1** (density) — **skipped and still owed.** The most likely
+  item in this filing to be silently dropped, because the shell now
+  *looks* finished. It shipped loose; the second density pass is now the
+  only pass.
+- **Pass 38.3** — partly discharged. The `dock.rs` doc-comment correction
+  was **not reported either way**; treat as **owed and unverified**, same
+  posture as Pass 26.0's items 7 and 13. The spec's per-compartment
+  **collapse chevron** is in the same position.
+- **Pass 38.4** — blocked on two `pdfce-core` additions
+  (`/Contents`/`/T`/`/M` on `annot::Annotation`; a general
+  `delete_annotation` verb is 38.5's).
+- **Decision 028's remainder** — items 10–14 + the conditional 15th
+  still owed; 26.2 closes none of them.
+- *"Activate any and all of the edit options at once"* — the operator
+  asked; the engineer wants his intent before touching it (`active_tool`
+  is a single `Option<CanvasTool>`).
+
+### For next session
+
+- **Answer (ba)** — is property 4's maximal reading (a fly-out hugging
+  the selection) genuinely wanted, or does the refusal stand? Default:
+  the refusal stands.
+- **Answer (bb)** — **R124**: greyed placeholders for unbuilt features,
+  or empty space stays empty? This now governs every panel in the new
+  dock, not just the ribbon, so a later reversal is a broad change.
+- **Rule on the two PROPOSALS** — the R123 conversion amendment
+  (recommended: **accept as an amendment**, not as a number) and the
+  index-revalidation honesty rule (recommended: **hold for a second
+  occurrence**). Also still awaiting a ruling: continuation 104's
+  cross-RAG-handoff proposal.
+- **Schedule Pass 38.1** before more of the shell is built on top of an
+  untightened baseline.
+
+### RAG escalations, continuation 105 — TWO filed, one redirect reasoned, two declined
+
+1. **`D:\dev\rag\egui\arrow_keys_move_focus_unless_the_focused_widget_declares_an_event_filter.md` — FILED.** The
+   strongest candidate in this batch, and the engineer named it as such.
+   **Checked for an existing focus file first: there is none** — the
+   directory's 30 files cover input injection, drag predicates, pointer
+   loss and coordinate spaces, but nothing about focus. Verified against
+   the pinned crate source rather than relayed: `Focus::begin_pass` at
+   `memory/mod.rs:567`, `set_focus_lock_filter` at `:887`, and
+   `EventFilter`'s four fields (all `false` by default) at
+   `data/input/event_filter.rs:11`. Two facts recorded that the relay did
+   not contain and that a future reader needs: the interception is
+   **bare-modifier only** (`!modifiers.any()`), so `Shift`+arrow and
+   `Ctrl`+arrow never reach the focus system; and with `escape: false`,
+   the **same code path clears `focused_widget` outright** on a bare
+   Escape.
+2. **`D:\dev\rag\rust\a_diagnostic_inside_the_guard_it_reports_can_only_report_true.md` — FILED,
+   and the "stand alone vs join `trust_but_verify`" question was
+   ARGUED, not assumed.** It stands alone. `trust_but_verify_doc_comments
+   _are_not_evidence.md` is about a **static** artefact — a comment
+   asserting a behaviour it does not establish. This is about a
+   **runtime** artefact whose output is *true* and *worthless*, and its
+   remedy is different in kind: not "verify the claim" but "check whether
+   your instrument can express the negative case." It is the same genus
+   as the directory's existing **vacuity** family
+   (`git_stash_on_clean_tree_makes_before_after_comparison_vacuous.md`,
+   `prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_
+   tests.md`, `regression_test_guard_via_incidental_property_disarms_
+   silently.md`) and is cross-linked to all four. The trace-replacement
+   corollary rides in the same file because it is the same episode and
+   the same subject — instrumentation integrity — not a second finding.
+3. **`C:\personal_rag\pdf\` — nothing.** No PDF-producer or PDF-domain
+   behaviour was involved in any of the four commits; all four are GUI
+   shell, input handling and selection state.
+4. **`D:\Dev\Rag-Specialized\PDF_Spec\` — no dispatch.** No spec question
+   arose.
+5. **The *watched vs entered* rule was considered for `D:\dev\rag\egui\`
+   and deliberately kept in `ROADMAP.md` as R157.** It is a
+   product-design rule about pdfce's own shell, not an egui behaviour —
+   and `D:\dev\rag\egui\index.md`'s own "Not what goes here" section
+   names *"pdfce's own UI design decisions"* by name. Filing it there
+   would have violated that directory's stated boundary.
+
+### Ledger discipline (R106) — continuation 105
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | **family 38 minted** (38.1–38.5 declared; **38.2 SHIPPED**). **Pass 26.2 MOVED, not minted** — it was already filed as UNBUILT with this exact description, and hard rule 2 forbids renumbering it. Two correctness fixes filed with **no Pass ID**, per the established `### fix — …` convention | family **39** next free; highest ID **38.5** |
+| Standing rules | **R157** — *selection state is watched, workflows are entered* (librarian-assigned, from `docs/ui_specs/shell-redesign.md`; same precedent as R121–R125, which were minted from decision 024's ribbon spec). **Two PROPOSALS filed, which mint nothing** | **R157** (**R158** next free). Decision 030's three contingent candidates **and** continuation 104's cross-RAG-handoff proposal now take **R158**, transferred off R157 by the first-filed-against-the-live-ceiling mechanism R150→…→R156 each used in turn |
+| Decision records | **none.** The shell restructure's record is the 723-line `docs/ui_specs/shell-redesign.md`; a `032-*.md` would duplicate it. Three dated `ARCHITECTURE.md` §12 entries carry the audit trail | **031** (**032** next free), unchanged |
+| Operator questions | **(ba)** property-4 maximal reading (refused; confirm) and **(bb)** R124 greyed placeholders (asked, argued, unruled) | **(bb)** (**(bc)** next free) |
+
+**Observation-boundary note (hard rule 8).** This librarian invocation
+was given a **shell**, and used it to: read the four commit messages
+(`git show`), read the pinned `egui-0.35.0` crate source to verify the
+focus finding rather than relay it, and **run
+`tools/check-ledger-numbers.py --stats` directly**. Everything below the
+line is therefore **this librarian's own observation**, not relayed.
+Everything about the working tree, the index, remotes, **backups** and CI
+remains unasserted — the backup figures earlier in this entry are relayed
+from the engineer, and **backup currency after these four commits is not
+verifiable from this seat**.
+
+**Ledger checker, run by this librarian AFTER the `ROADMAP.md` edits:**
+Pass families up to **38** (highest headed ID **38.2**; highest mentioned
+**38.5**), standing rules **R157** (next free **R158**), decisions
+**031** (next free **032**), **100** distinct (section, Pass ID) pairs,
+**157** rules, **31** decision files, **1** allowlisted rule amendment,
+`ledger-numbers: clean`, exit 0. A **baseline run against
+`git show HEAD:docs/ROADMAP.md`** (the pre-filing text) gave **98** pairs
+and **156** rules — so this filing's delta is exactly **+2 pairs, +1
+rule**, and nothing was renumbered.
+
+#### ⚠ A COVERAGE GAP IN THE LEDGER GATE ITSELF, found by that arithmetic — for the engineer, not fixed here
+
+The +2 was **expected to be +3**. This filing declares three Pass IDs in
+headings: `Pass 38.2` and `Pass 26.2` in *Shipped*, and `Pass 38.1` in
+*Next up*. **Only the first two were counted.**
+
+**Cause:** `check-ledger-numbers.py`'s `collect_passes` matches
+`^#{2,4} Pass ` — the word `Pass` must follow the hashes **immediately**.
+This project's convention for a multi-Pass family entry is
+`### ★ Pass 38.1–38.5 — …`, and **the `★` makes the heading invisible to
+the checker.** Verified by set-differencing the parsed pairs before and
+after: `ADDED: [('Shipped','26.2'), ('Shipped','38.2')]`, and
+`('Next up','38.1')` simply absent.
+
+**Scale of the gap: 10 `### ★ Pass …` headings currently in
+`ROADMAP.md`** — including `★ Pass 24.0–24.5`, `★ Pass 26.0–26.2`,
+`★ Pass 33.0`, `★ Pass 17.x`, `★ Pass 18.x`, `★ Pass 19.x`, `★ Pass 21.x`
+— **none of which the uniqueness gate has ever checked.** (A broader
+`^#{2,4} [^P].*Pass [0-9]` count is 28 headings, most of which merely
+*mention* a Pass rather than declare one; the 10 `★` ones are the
+declaration-shaped subset.)
+
+**This is precisely the failure the tool's own docstring warns about**
+(*"If ROADMAP's heading conventions change, this silently stops covering
+whatever changed"*) and the same shape as **R156**'s own source incident
+and `D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md`: **a
+green gate that covers less than it appears to.** The `--stats` counts
+exist to make exactly this visible, and they did — but only because the
+delta was predicted first.
+
+**NOT fixed here, deliberately** — `tools/` is the engineer's, and the
+right fix is a judgment call: relax the anchor to
+`^#{2,4} (?:[^\w\s]\s*)*Pass ` (accepts `★`, `⚠`, `✅` decorations), or
+forbid the decoration on declaring headings. **Whichever is chosen, the
+pair count will JUMP when it lands** — a jump is the fix working, not a
+regression, and it may surface real duplicates that have been hiding in
+those 10 headings.
+
+**This filing left its own `### ★ Pass 38.1–38.5` heading decorated**, to
+match the established convention for family entries rather than diverge
+from it silently; if the anchor is relaxed, it starts being counted for
+free.
+
+---
+
+### ★ AMENDMENT to continuation 105, appended 2026-08-06 (same day, same session) — THE DEFECT WAS NOT REAL; THE PROCESS FINDING IS, AND A SECOND FILING GAP WAS FOUND WHILE APPLYING THE CORRECTION
+
+**Why this is an appended amendment and not a rewrite.** This file's own
+header: *"Never overwrite or reorder a prior entry; corrections get a
+dated amendment footer appended to the affected entry."* The entry above
+has had four **inline** markers added (the struck headline, the struck
+"open defect" section heading, the third-site correction, the struck
+still-in-flight bullet), each pointing here. **The original claims are
+still legible above** — they are the record of what was believed, and
+striking them without keeping them would hide the very error this
+amendment exists to teach from.
+
+#### 1. The two factual corrections (source: `9328038`, an EMPTY commit)
+
+**`9328038` is deliberately empty of code.** The engineer made it because
+*"the correction is entirely to the record"* — the commit message of
+`7d3e44c` is immutable and remains wrong, so the corrections had to land
+somewhere greppable. **That is a pattern worth copying**: when the defect
+is in the record rather than the code, an empty commit is the honest
+instrument.
+
+| # | `7d3e44c` claims | Truth |
+|---|---|---|
+| 1 | the third widened site is **"the measure tool's own selection read"** | **`run_vector_edit_tool`** — the Obj tool. The measure tool was never touched. **The mislabel UNDERSTATED the fix**: the Obj tool is where an operator doing object editing actually stands, so it is the site that matters **most**. *(Independently re-verified for this amendment by reading all three sites: `main.rs` ~L11196 object click, ~L11295 marquee release, ~L15612 `run_vector_edit_tool`.)* |
+| 2 | the Ctrl widening is **"NOT proven in the running app"** | **VERIFIED (R86).** `vector-click … newsel=1` then `newsel=2` — a click selects one object, Ctrl+click accumulates to two. |
+
+#### 2. The finding that replaces the non-defect, and is worth more than it was
+
+> **An absent trace is not evidence of absent behaviour when you have not
+> confirmed which trace the code under test emits.**
+
+The engineer, in his own words: *"I had two competing explanations for
+the same silence — 'the selection path did not run' and 'I am grepping
+for the wrong string' — and I reported the alarming one without
+eliminating the boring one."*
+
+**This is the same error class as the invented DWM cause corrected in
+`a6e5bf3` earlier the same day**: a plausible story attached to an
+unexamined symptom. **And it is the second time in one day that a
+tautological or mis-targeted observation read as evidence** — the first
+being the `focus={has_focus()}` trace written *inside* the `has_focus()`
+guard, recorded with `7d368e6`, which could only ever print `true`.
+
+**★ This librarian found a FOURTH instance while sweeping for unfiled
+commits, and offers it as strengthening the pattern:** `e666d3f`
+(2026-08-05) retracts `f8bbdd4`'s claimed root cause — *"the Obj tool
+converts the press position to the wrong PDF x"*, named as a
+coordinate-space defect of Pass 36.3's family. **It was stale test
+coordinates.** `rect.min.x` was 581, not the 479.5 the script had been
+computed against; the canvas had shifted ~100 px when Pass 24.1 widened
+the left dock. The engineer's own line: *"the trace I added to prove it
+is what disproved it"* — and, more damningly, he had **written that exact
+trap down himself** after the Pass 18.8 harness work (*"hard-coded screen
+points silently stop hitting anything when the layout changes"*) and then
+walked into it.
+
+**The honest difference, stated rather than smoothed over:** instances 1,
+3 and 4 are **wrong or tautological instruments**; instance 2 is a
+**correct instrument fed a stale input**. This librarian argues that is
+not worth splitting — the operator-visible failure and the remedy are
+identical in all four, and in all four the validation was cheap (one
+extra field, or one grep of the emitting path). **The engineer may
+disagree; the split is noted so he can.**
+
+**A STANDING RULE HAS BEEN PROPOSED, NOT MINTED** — *"before reporting
+that instrumented code did not run, prove the instrument would have
+fired"* — at the end of `ROADMAP.md` *Standing rules*, per the engineer's
+explicit instruction (*"propose it, do not mint … Your call to propose,
+mine to accept"*). **This librarian recommends accepting the substance**,
+notes that **an R87 amendment is the stronger home** than a new number,
+and supplies an enforceable form for the "it's just a slogan" objection:
+require that any claim of the shape *"X did not run"* **name the specific
+trace expected and the code path that emits it**. All four occurrences
+would have failed that check.
+
+**Two of the four reached the permanent record before being caught** —
+occurrence 1 was filed into `ROADMAP.md` *and* escalated into
+`D:\dev\rag\egui\`, where it would have misinformed **every future
+project**; occurrence 4 became an `⚠ OPEN DEFECT` at the head of *In
+progress*. **Both were caught by the author's own second look, not by any
+gate.** That is the argument for a rule.
+
+#### 3. ★ SECOND FILING GAP — five unfiled commits, one duplicate Pass ID
+
+Found by this librarian while applying the correction, by sweeping the
+last 32 commits (`git log --format='%h' -32`) against `grep -rqF` over
+`docs/`, then **re-checking every miss by CONTENT** — a hash miss alone
+proves nothing, since a docs commit cannot cite its own hash.
+
+**Five commits from 2026-08-05 have no hash, no *Shipped* heading, and no
+content anywhere in `docs/`:** `7f850c9` (Pass 34.1 **slice 4**),
+`f8bbdd4` (**"Pass 26.2"**), `e666d3f` (its correction), `2c306ec`
+(Pass 24.3), `c3d605b` (Pass 24.4).
+
+**`f8bbdd4` and `50ab8ec` BOTH claim Pass 26.2.** `50ab8ec` matches this
+project's own filed definition (*"level survival across an edit"*);
+`f8bbdd4`'s content is **decision 028 plan-item work** (grab un-gating,
+6→10 px radius, hover mark state, live drag preview). **Neither was
+renumbered** — hard rule 2 makes that an engineer decision. Full record
+and recommendation: **⚠ FILING GAP #2** at the head of `ROADMAP.md`
+*Shipped*.
+
+**Two false statements were corrected without waiting for a ruling**,
+because they were false *today*: `FEATURES.md` listed Pass 34.1 slice 4
+under ***Planned*** when it shipped 2026-08-05, and Pass 34.1's ROADMAP
+heading still says *"THREE slices of four"* (flagged in place — R87
+forbids manufacturing the slice-4 build record from a commit subject
+line).
+
+**★ The generalizable part, which is why this outranks "five missing
+entries":** `tools/check-ledger-numbers.py` reports **`ledger-numbers:
+clean` while a duplicate Pass ID exists**, because it parses
+`ROADMAP.md`, **not `git log`**. **A commit that is never filed is not
+badly filed — it is outside the reach of every check this project owns**,
+since every one of them validates the document against itself. **This is
+the same shape as continuation 104's Acrobat-column finding** (an
+obligation recorded only on the producing side is not recorded at all),
+one level down: there the producing side was a RAG file, here it is a
+commit message. **Extending the checker to reconcile `git log` Pass
+claims against `ROADMAP.md` headings is the obvious remedy** — flagged,
+**not minted**; tooling scope is the engineer's call.
+
+**And it is a RECURRENCE.** The ✅ FILING GAP of 2026-08-05 was five
+commits, opened and closed the same day. **This is five more, two days
+later.** One was an incident; two is a process defect.
+
+#### 4. RAG escalations — TWO MORE filed by this amendment (beyond continuation 105's two)
+
+Both are **ecosystem-wide methodology**, not pdfce-specific, so they go to
+the cross-project tool RAGs rather than `C:\personal_rag\pdf\` (no
+PDF-producer behaviour was involved in either).
+
+- **`D:\dev\rag\rust\an_absent_trace_proves_nothing_until_you_confirm_which_trace_the_code_emits.md`** — new,
+  + `index.md` bullet. The primary finding of this amendment, written as
+  the **deliberate mirror** of continuation 105's
+  `a_diagnostic_inside_the_guard_it_reports_can_only_report_true.md`:
+  that one is a trace that **fires and says nothing**, this one is a
+  trace that **never fires and is misread**. Carries the dispatch-chain
+  structural trap, the start-of-frame-field trap, and the enforceable
+  form of the proposed rule.
+- **`D:\dev\rag\egui\scripted_click_coordinates_go_stale_when_a_dock_width_changes.md`** — new,
+  + `index.md` bullet. The `f8bbdd4` → `e666d3f` instance: absolute
+  screen coordinates in a scripted harness are silently coupled to every
+  panel width, and **a stale coordinate is indistinguishable from a
+  broken screen→document conversion**, which is why the conversion code
+  got blamed and read as correct. Fix: script *document* coordinates;
+  failing that, log `rect` and `zoom` beside every pointer trace.
+
+**Not filed, with reasoning:** nothing to `C:\personal_rag\pdf\` (no
+producer-divergence finding); no `pdfce-spec-librarian` dispatch (no spec
+question); the **filing-gap/ledger finding stays in `ROADMAP.md` and this
+log** — it is a *this-project* filing-discipline failure between this
+project's own documents and its own git history, the same boundary drawn
+at continuations 103 and 104.
+
+#### 5. Ledger discipline (R106) — amendment to continuation 105
+
+**Nothing minted by this amendment.** No Pass ID (the 26.2 collision is
+referred to the engineer *unresolved*), no standing rule (one
+**proposed**), no decision record, no operator question.
+
+**Ceiling after this amendment — MEASURED, not predicted.** Superseding
+the observation-boundary note above: **this librarian invocation HAD a
+shell and DID run `tools/check-ledger-numbers.py --stats` directly:**
+
+| | Value |
+|---|---|
+| Pass families | up to **38** (highest ID **38.5**) — **39** next free |
+| Standing rules | **R157** — **R158** next free |
+| Decision records | **031** — **032** next free |
+| distinct (section, Pass ID) pairs | **110** (was **100** before this amendment's edits — see below) |
+| rules defined / decision files / allowlisted amendments | **157** / **31** / **1** |
+| verdict | **`ledger-numbers: clean`** |
+
+**The predictions in the note above were correct**: families up to 38,
+rules R157, decisions 031.
+
+**Why the pair count rose by 10 without anything being minted, stated so
+the next `--stats` run is not alarming.** The checker counts distinct
+*(section, Pass ID)* **mentions**, not declarations. The **⚠ FILING GAP
+#2** flag names `34.1`, `26.2`, `24.3` and `24.4` inside *Shipped*, and
+the Pass 34.1 heading correction names slice 4 — each is a new
+(section, ID) pair the parser had not seen. **No Pass ID was minted, no
+heading was added, and the verdict stayed `clean`.** A count that moves
+because a flag *discusses* Pass IDs is expected behaviour; **it is the
+`clean` verdict, not the pair count, that carries the integrity claim** —
+and see the caveat immediately below on exactly how far that claim
+reaches.
+
+**⚠ But read that `clean` narrowly, and this amendment is the reason:**
+the checker validates `ROADMAP.md` against itself. **It cannot see the
+duplicate Pass 26.2**, because `f8bbdd4` never reached the document.
+**`ledger-numbers: clean` means "no duplicate numbers among the Passes
+that were FILED," not "no duplicate Pass numbers exist."**
+
+**Observation-boundary note (hard rule 8).** This amendment asserts only
+what was directly observed from this seat: the seven commit messages read
+via `git log`, the three widened call sites read in
+`crates/pdfce-gui/src/main.rs`, the unfiled-commit sweep, and the
+`check-ledger-numbers.py --stats` run above. **Nothing about the working
+tree's commit state, the index, remotes, backups or CI is asserted** — in
+particular, **these documentation edits are UNCOMMITTED at the time of
+writing**, and a concurrent librarian invocation was writing to the same
+four files during this filing (its work is preserved; this amendment
+corrects it in place rather than replacing it).
