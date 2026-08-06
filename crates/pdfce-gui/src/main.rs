@@ -4323,6 +4323,8 @@ impl PdfceApp {
         // discipline the ce-dimension sections use.
         let mut fill: Option<(String, String)> = None;
         let mut toggle: Option<(String, Vec<u8>, bool, String, bool)> = None;
+        let mut set_radio: Option<(String, String, String)> = None;
+        let mut set_choice: Option<(String, Vec<String>, String)> = None;
         let drafts = &mut self.form_drafts;
 
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -4479,6 +4481,182 @@ impl PdfceApp {
                             ));
                         }
                     }
+                    (
+                        Some(pdfce_core::forms::FieldType::Button),
+                        Some(pdfce_core::forms::ButtonKind::Radio),
+                    ) => {
+                        // A radio GROUP is one field with several widgets, each
+                        // carrying its own on-state name; the field's `/V` is
+                        // whichever name is selected, or `Off`. So the control
+                        // is one exclusive cluster over the distinct on-states,
+                        // NOT a checkbox per widget — which is exactly the
+                        // shape `set_button_state(fqn, on_state)` takes.
+                        let current = match &field.value {
+                            pdfce_core::forms::FieldValue::Name(n) => {
+                                String::from_utf8_lossy(n).into_owned()
+                            }
+                            _ => String::new(),
+                        };
+                        // Distinct, in widget order. Duplicates are real and
+                        // meaningful — two kids sharing an on-state name is
+                        // what `RadiosInUnison` describes — but they are ONE
+                        // choice to the operator, so they get one control.
+                        let mut states: Vec<String> = Vec::new();
+                        for w in &field.widgets {
+                            for st in &w.on_states {
+                                let name = String::from_utf8_lossy(st).into_owned();
+                                if !states.contains(&name) {
+                                    states.push(name);
+                                }
+                            }
+                        }
+                        if states.is_empty() {
+                            // No on-state anywhere means nothing selectable —
+                            // said out loud rather than drawn as an empty
+                            // cluster that looks broken (R83).
+                            ui.label(
+                                egui::RichText::new(ui_text::form_field_radio_no_states())
+                                    .small()
+                                    .weak(),
+                            );
+                        } else {
+                            for st in &states {
+                                let selected = current == *st;
+                                let r = ui.radio(selected, st.as_str());
+                                diag::trace(|| {
+                                    format!(
+                                        "form-row-radio fqn={fqn:?} state={st:?} on={selected} rect={:?}",
+                                        r.rect
+                                    )
+                                });
+                                if r.clicked() && !selected {
+                                    set_radio =
+                                        Some((fqn.clone(), st.clone(), label.clone()));
+                                }
+                            }
+                            // Clearing is offered ONLY when the field permits
+                            // it. `NoToggleToOff` means exactly one button is
+                            // always selected, so a Clear control there would
+                            // be an affordance for something the engine will
+                            // refuse (R83).
+                            if !field
+                                .flags
+                                .has(pdfce_core::forms::FieldFlags::NO_TOGGLE_TO_OFF)
+                                && ui
+                                    .button(ui_text::form_field_radio_clear())
+                                    .on_hover_text(ui_text::form_field_radio_clear_tooltip())
+                                    .clicked()
+                            {
+                                set_radio = Some((
+                                    fqn.clone(),
+                                    "Off".to_owned(),
+                                    label.clone(),
+                                ));
+                            }
+                        }
+                    }
+                    (Some(pdfce_core::forms::FieldType::Choice), _) => {
+                        let multi = field
+                            .flags
+                            .has(pdfce_core::forms::FieldFlags::MULTI_SELECT);
+                        // Options are displayed in `/Opt` ORDER, never sorted.
+                        // §12.7.4.4: a conforming reader SHALL display them in
+                        // the order they occur in `/Opt` — re-sorting is a
+                        // conformance violation, not a presentation choice, and
+                        // the `Sort` flag is an instruction to the WRITER.
+                        let selected_now: Vec<String> = match &field.value {
+                            pdfce_core::forms::FieldValue::Choice(items) => items
+                                .iter()
+                                .map(|b| pdfce_core::edit::decode_text_string(b).text)
+                                .collect(),
+                            pdfce_core::forms::FieldValue::Text(b) => {
+                                vec![pdfce_core::edit::decode_text_string(b).text]
+                            }
+                            _ => Vec::new(),
+                        };
+                        if field.options.is_empty() {
+                            ui.label(
+                                egui::RichText::new(ui_text::form_field_choice_no_options())
+                                    .small()
+                                    .weak(),
+                            );
+                        } else if multi {
+                            // A checkbox stack: several selections are the
+                            // point, and a combo cannot express "these three".
+                            let mut wanted = selected_now.clone();
+                            let mut changed = false;
+                            for opt in &field.options {
+                                let display =
+                                    pdfce_core::edit::decode_text_string(&opt.display).text;
+                                let export =
+                                    pdfce_core::edit::decode_text_string(&opt.export).text;
+                                // Matched on EXPORT or DISPLAY: `/V` may hold
+                                // either in the wild, and a strict match on one
+                                // shows a filled field as empty.
+                                let mut on = wanted.iter().any(|v| *v == export || *v == display);
+                                if ui.checkbox(&mut on, &display).changed() {
+                                    changed = true;
+                                    if on {
+                                        wanted.push(export.clone());
+                                    } else {
+                                        wanted.retain(|v| *v != export && *v != display);
+                                    }
+                                }
+                            }
+                            if changed {
+                                set_choice = Some((fqn.clone(), wanted, label.clone()));
+                            }
+                        } else {
+                            let current = selected_now.first().cloned().unwrap_or_default();
+                            // Show the option's DISPLAY string, not the raw
+                            // `/V`. `/Opt` entries may be `[export display]`
+                            // pairs (§12.7.4.4) and `/V` stores the EXPORT
+                            // value, so rendering `/V` verbatim shows an
+                            // operator "MX" where the form says "Mexico" —
+                            // caught by a screenshot of a fixture built with
+                            // export deliberately unequal to display.
+                            //
+                            // Falls back to the raw value when no option
+                            // matches: a `/V` that is not in `/Opt` is a real
+                            // state (a stale or externally-set value), and
+                            // showing it is more honest than showing blank.
+                            let shown = field
+                                .options
+                                .iter()
+                                .find_map(|o| {
+                                    let ex =
+                                        pdfce_core::edit::decode_text_string(&o.export).text;
+                                    let di =
+                                        pdfce_core::edit::decode_text_string(&o.display).text;
+                                    (ex == current || di == current).then_some(di)
+                                })
+                                .unwrap_or_else(|| current.clone());
+                            egui::ComboBox::from_id_salt(("pdfce-choice", &fqn))
+                                .selected_text(if current.is_empty() {
+                                    ui_text::form_field_choice_unset().to_owned()
+                                } else {
+                                    shown
+                                })
+                                .show_ui(ui, |ui| {
+                                    for opt in &field.options {
+                                        let display =
+                                            pdfce_core::edit::decode_text_string(&opt.display)
+                                                .text;
+                                        let export =
+                                            pdfce_core::edit::decode_text_string(&opt.export)
+                                                .text;
+                                        let sel = current == export || current == display;
+                                        if ui.selectable_label(sel, &display).clicked() && !sel {
+                                            set_choice = Some((
+                                                fqn.clone(),
+                                                vec![export.clone()],
+                                                label.clone(),
+                                            ));
+                                        }
+                                    }
+                                });
+                        }
+                    }
                     _ => {}
                 }
                 ui.separator();
@@ -4494,6 +4672,29 @@ impl PdfceApp {
                 // Reported, never swallowed. A certification signature, an
                 // encrypted document, or a field the model no longer holds all
                 // refuse here, and silence would read as the typing being lost.
+                Err(err) => err.to_string(),
+            });
+        }
+        if let Some((fqn, state, label)) = set_radio {
+            doc.pending_note = Some(match doc.session.set_button_state(&fqn, &state) {
+                Ok(()) => {
+                    doc.refresh_pages();
+                    if state == "Off" {
+                        ui_text::form_field_radio_cleared(&label)
+                    } else {
+                        ui_text::form_field_radio_selected(&label, &state)
+                    }
+                }
+                Err(err) => err.to_string(),
+            });
+        }
+        if let Some((fqn, values, label)) = set_choice {
+            let refs: Vec<&str> = values.iter().map(String::as_str).collect();
+            doc.pending_note = Some(match doc.session.set_choice_value(&fqn, &refs) {
+                Ok(_) => {
+                    doc.refresh_pages();
+                    ui_text::form_field_choice_set(&label, values.len())
+                }
                 Err(err) => err.to_string(),
             });
         }
@@ -17090,7 +17291,7 @@ fn form_field_block_reason(field: &pdfce_core::forms::Field) -> Option<&'static 
     }
     match field.field_type {
         Some(FieldType::Signature) => Some(ui_text::form_field_signature_note()),
-        Some(FieldType::Choice) => Some(ui_text::form_field_choice_note()),
+
         // `Field::is_rich_text`, NOT a bare `flags.has(RICH_TEXT)`. Bit 26 is
         // the only overloaded position in the whole `/Ff` family — `RichText`
         // on a text field, `RadiosInUnison` on a button — so the bare test
@@ -17101,7 +17302,7 @@ fn form_field_block_reason(field: &pdfce_core::forms::Field) -> Option<&'static 
         Some(FieldType::Text) if field.is_rich_text() => Some(ui_text::form_field_rich_text_note()),
         Some(FieldType::Button) => match field.button_kind {
             Some(ButtonKind::Push) => Some(ui_text::form_field_pushbutton_note()),
-            Some(ButtonKind::Radio) => Some(ui_text::form_field_radio_note()),
+
             _ => None,
         },
         _ => None,

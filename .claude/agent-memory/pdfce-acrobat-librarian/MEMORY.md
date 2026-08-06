@@ -1,3 +1,3 @@
-- [helpx.adobe.com fetch reliability](feedback_helpx_fetch_reliability.md) — WebFetch times out on Adobe help pages; budget 2 tries, fall back to search snippets + PDF Association issues + SDK-vendor docs
+- [helpx.adobe.com fetch reliability](feedback_helpx_fetch_reliability.md) — WebFetch times out on Adobe help pages (helpx/adobe.com root); opensource.adobe.com SDK docs + community.adobe.com + vendor API-ref sites fetch more reliably
 - [Bucket-building file-decomposition pattern](project_bucket_building_pattern.md) — N per-capability files + cross-cutting files (always permissions/signatures); ask what bucket-specific cross-cutting files are needed too
 - [Cross-cutting comparison dispatch](project_cross_cutting_comparison_dispatch.md) — a wide-shallow "verdict per FEATURES.md row" ask is a different shape than bucket-building; RAG/FRESH/GK confidence-tagging pattern, one cross-cutting file not per-template

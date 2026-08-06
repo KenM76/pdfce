@@ -6069,16 +6069,6 @@ pub fn form_field_rich_text_note() -> &'static str {
     "This field stores rich (formatted) text. pdfce can only edit it as plain text, which would throw away its formatting — so it is left alone for now."
 }
 
-/// Note on a choice field, which P0 does not edit.
-pub fn form_field_choice_note() -> &'static str {
-    "Drop-down / list field — choosing from its options is not built yet. Its current value is shown above."
-}
-
-/// Note on a radio group, which P0 does not edit.
-pub fn form_field_radio_note() -> &'static str {
-    "Radio group — selecting an option is not built yet. Its current value is shown above."
-}
-
 /// The `(required)` marker, as TEXT — never a colour-only cue (rule 6).
 pub fn form_field_required_marker() -> &'static str {
     " (required)"
@@ -6276,5 +6266,54 @@ pub fn forms_data_imported(applied: usize, skipped: usize) -> String {
             "Imported {applied} field value(s). {skipped} name(s) in the file are not fields \
 in this document and were skipped — check that this data belongs to this form."
         )
+    }
+}
+
+// -- Radio groups and choice fields (forms-panel.md P1) ---------------------
+
+/// Shown when a radio group declares no on-state anywhere in its widgets.
+///
+/// R83: an empty exclusive cluster looks broken. This says the field is
+/// recognised and that the DOCUMENT is what offers nothing to pick.
+pub fn form_field_radio_no_states() -> &'static str {
+    "This radio group has no selectable options recorded in the document."
+}
+
+/// The clear-selection button on a radio group.
+pub fn form_field_radio_clear() -> &'static str {
+    "Clear"
+}
+
+/// Its tooltip.
+pub fn form_field_radio_clear_tooltip() -> &'static str {
+    "Deselect every option in this group, leaving it unanswered."
+}
+
+/// Report after selecting a radio option.
+pub fn form_field_radio_selected(label: &str, state: &str) -> String {
+    format!("“{label}” set to {state}.")
+}
+
+/// Report after clearing a radio group.
+pub fn form_field_radio_cleared(label: &str) -> String {
+    format!("“{label}” cleared.")
+}
+
+/// Shown when a choice field lists no options.
+pub fn form_field_choice_no_options() -> &'static str {
+    "This drop-down lists no options in the document, so there is nothing to choose."
+}
+
+/// The combo's placeholder when nothing is selected.
+pub fn form_field_choice_unset() -> &'static str {
+    "— not set —"
+}
+
+/// Report after setting a choice value.
+pub fn form_field_choice_set(label: &str, count: usize) -> String {
+    if count == 1 {
+        format!("“{label}” set.")
+    } else {
+        format!("“{label}” set to {count} selection(s).")
     }
 }

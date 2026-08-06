@@ -186,6 +186,31 @@ since it changes the recommended next step for `pdfce-engineer` from
 fixtures exist" — a materially different, more useful instruction to leave
 behind for a gap that has already absorbed real search budget.
 
+**Priority-upgrade deep-dive — a new, narrow trigger shape worth telling
+apart from a full bucket/sub-bucket extension (2026-08-06, Forms bucket,
+rich-text fields).** Distinct from every pattern above: this wasn't
+triggered by a new Pass being scoped or a dispatching brief's own
+open question, but by the OPERATOR overriding a prior session's own
+`should_have`/judgment-call flag with an explicit ruling ("it should be
+able to handle X if Acrobat can, or if it makes it better than Acrobat").
+When a feature gets promoted `should_have`→`must_have` this way, treat
+the existing 2-3-line stub bullet as no longer sufficient for
+acceptance-criteria work and spin it into its OWN dedicated
+`<prefix>__<feature>.md` file (don't just edit the priority tag in place)
+— the operator's ruling is itself evidence the feature is about to be
+BUILT, not just tracked, and acceptance criteria need the same
+depth-of-sourcing every other must_have file in the bucket has. Convert
+the original stub's bullet into an explicit pointer (not a duplicate
+restatement) and propagate the priority-change + pointer to every
+`related_files` cross-reference the stub already had (this session:
+`field_property_model`, `appearance_generation_and_needappearances`,
+`fill_save_and_data_export` all got one-line additions, not full
+rewrites). Worth watching for this same trigger shape recurring on other
+existing `should_have`/judgment-call flags in this RAG (file-select
+fields, barcode fields, CSV aggregation, etc.) — any of them could get
+the same operator-ruling promotion later, and the same
+stub-to-dedicated-file move should apply.
+
 **Contested/conflicting-tier-or-fact resolution — a DIFFERENT pattern
 from the redaction removal-scope GAP above, worth telling apart.** The
 redaction pattern applies to a must_have-grade MECHANISM question with

@@ -67,6 +67,35 @@ session: realitypathing.com, answers.acrobatusers.com) — the "helpx.adobe.com
 specifically fails, other domains mostly work" pattern held even in a
 session where WebSearch was unavailable for most of the work.
 
+Confirmed a twelfth time (2026-08-06, deepening `forms__rich_text_fields.md`)
+— with a genuinely NEW, useful data point rather than just another
+confirmation: `opensource.adobe.com` (Adobe's own hosted SDK/JS-API-reference
+docs, a THIRD Adobe-owned domain distinct from both `helpx.adobe.com` and
+`adobe.com` root) succeeded on a direct `WebFetch` for the JS API `Span`
+reference page — the first successful direct fetch of first-party Adobe
+technical content observed across twelve sessions of this feedback log. Not
+a universal fix, though: a second `opensource.adobe.com` URL in the same
+session (a different SDK guide page, and separately an XFDF-spec PDF on the
+same subdomain) 404'd rather than timing out — so the domain is reachable in
+principle but individual URLs still need verifying, not assumed live. New
+third-party 403: `evermap.com` (a specialist PDF-forms-tutorial vendor site)
+blocked every attempt this session, joining `pdfa.org`/`clrn.org`/Experts
+Exchange in the "outright bot-blocks WebFetch" bucket rather than the
+"times out" bucket — same practical mitigation (WebSearch snippet fallback).
+`community.adobe.com` continued its strong track record (5/6 direct fetches
+succeeded this session) and `api.itextpdf.com` (a PDF-SDK vendor's generated
+API-reference site) also fetched cleanly and yielded a precise, useful
+schema-mapping fact (XFDF `value-richtext` ↔ `/RV`) — reinforces that
+vendor-generated API-reference sites are a reliably fetchable, high-signal
+source class distinct from vendor blog/marketing pages. **Practical
+implication**: when a fact specifically concerns Acrobat's JavaScript API
+surface (as opposed to general "using Acrobat" help content), try
+`opensource.adobe.com` SDK-doc URLs directly before assuming Adobe-owned
+domains are a lost cause — the reliability profile is NOT uniform across
+Adobe's own subdomains the way this file's title implies; it's specifically
+`helpx.adobe.com` (and `adobe.com` marketing/pricing pages) that fail hardest,
+not every Adobe property.
+
 **How to apply:**
 - Don't spend more than **two** fetch attempts on any single
   helpx.adobe.com URL before giving up and working from `WebSearch`
