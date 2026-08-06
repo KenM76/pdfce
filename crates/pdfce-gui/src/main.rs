@@ -2106,12 +2106,48 @@ struct OpenDoc {
     /// cosmetic; taken modulo a small cycle so the offset stays on the
     /// page rather than marching off it.
     author_jitter: u32,
-    /// The active canvas tool, if any (Pass 12.0 substrate). **Always
-    /// `None` this Pass** — [`CanvasTool`] is uninhabited, so this can only
-    /// ever observably be `None` until a future tool-bearing Pass adds a
-    /// variant (`docs/ui_specs/pass-12.0-canvas-substrate.md` §3.1). Session
-    /// state only, matching `rail_expanded`/`tools_open`.
-    active_tool: Option<CanvasTool>,
+    /// The canvas tools that are switched ON — **a set, not one tool**.
+    ///
+    /// # Why this stopped being `Option<CanvasTool>`
+    ///
+    /// The operator, 2026-08-06: *"we should be able to activate any and all
+    /// of the edit options at once"*, and then *"once on though it stays on
+    /// and allows edits like the others."*
+    ///
+    /// A single `Option` made every toggle a RADIO BUTTON: switching Edit
+    /// Objects on switched Edit Text off, so an operator moving between the
+    /// two re-armed a tool on every alternation. Nothing was disarming itself
+    /// — selecting one simply replaced the other, which is the same
+    /// experience from the outside and the actual complaint.
+    ///
+    /// # Enabled is not the same as "handles this click"
+    ///
+    /// Several tools can be on at once, but a single click still has to mean
+    /// exactly one thing. The canvas dispatch resolves that with a documented
+    /// PRECEDENCE LADDER (see [`Self::active_tool`]), not by exclusion — so
+    /// "all on" is a real state and the operator is told which enabled tool
+    /// currently owns a click rather than left to infer it.
+    ///
+    /// # The measure family is still exclusive INSIDE itself
+    ///
+    /// `MeasureLinear` / `MeasureCircular` / `MeasureScale` share one
+    /// `measure` state struct and dispatch on a single value, and a click can
+    /// only ever be one kind of pick — two of them on would be a state with no
+    /// meaning rather than extra capability. Enabling one clears its two
+    /// siblings; they remain independent of the text and object tools.
+    enabled_tools: BTreeSet<CanvasTool>,
+    /// The MASTER editing switch — when `false`, no canvas tool acts and no
+    /// authoring surface in the application will commit.
+    ///
+    /// The operator asked for *"one toggle to turn all edits on or off"*. It
+    /// is more than convenience: it is a review mode, where a document can be
+    /// read, selected, navigated and searched with no gesture able to change
+    /// it by accident.
+    ///
+    /// Kept SEPARATE from emptying [`Self::enabled_tools`] deliberately —
+    /// switching editing off and on again must restore the tools the operator
+    /// had set up, not make them rebuild the arrangement each time.
+    editing_enabled: bool,
     /// The substrate's canvas selection set — hit-tested content targets,
     /// in a deterministic order (`BTreeSet`, like `selected_pages`). Populated
     /// by [`Self::target_provider`]'s hits (Pass 9a); empty when no object
@@ -2248,6 +2284,126 @@ struct OpenDoc {
 }
 
 impl OpenDoc {
+    /// The PRECEDENCE ORDER of the canvas tools — the ladder a click walks.
+    ///
+    /// # Why an order exists at all
+    ///
+    /// Enabling several tools does not make a click mean several things. Each
+    /// gesture still resolves to exactly one tool, and this is the tie-break.
+    /// The order is not arbitrary and is not "whichever was switched on last"
+    /// — that would make the same click do different things depending on
+    /// history the operator cannot see.
+    ///
+    /// # The order, and the reasoning for it
+    ///
+    /// **Most specific claim on a click first.**
+    ///
+    /// 1. `TextEdit` — only ever acts on text the pointer is actually over,
+    ///    so it makes the narrowest claim of any tool. Anything it does not
+    ///    claim falls through untouched.
+    /// 2. `AddText` — claims a click ANYWHERE (that is its whole meaning:
+    ///    "put new text here"), so it must sit below the tool that only
+    ///    claims text, or it would swallow every caret placement.
+    /// 3. The measure family — claims a click anywhere as a pick, so it is
+    ///    below the text tools for the same reason, and above object editing
+    ///    because a measurement in progress is a deliberate multi-click
+    ///    gesture that a stray selection must not interrupt.
+    /// 4. `VectorEdit` — the most general: any object, any click. It is the
+    ///    floor precisely because it claims the most, and because with no
+    ///    tool on at all the modeless path already provides it.
+    ///
+    /// A tool lower in this list is not disabled by one above it; it is
+    /// simply not the one that answered THIS click. The Tool compartment
+    /// states which tool is answering, so the ladder is visible rather than
+    /// inferred.
+    const TOOL_PRECEDENCE: [CanvasTool; 6] = [
+        CanvasTool::TextEdit,
+        CanvasTool::AddText,
+        CanvasTool::MeasureLinear,
+        CanvasTool::MeasureCircular,
+        CanvasTool::MeasureScale,
+        CanvasTool::VectorEdit,
+    ];
+
+    /// Build the per-page state a tool needs when it is switched ON.
+    ///
+    /// Per-TOOL rather than the old build-mine-and-destroy-the-others: with a
+    /// set, switching one tool on must not silently discard another's caret or
+    /// draft, which is exactly the loss the operator was complaining about.
+    fn build_tool_state(
+        &mut self,
+        tool: CanvasTool,
+        default_add_text_font: pdfce_core::fontdata::Std14,
+    ) {
+        match tool {
+            CanvasTool::TextEdit => self.build_text_edit_state(),
+            CanvasTool::AddText => self.build_add_text_state(default_add_text_font),
+            // Kept across a switch among the three measure tools when the page
+            // has not changed, so the active group and snap toggle persist
+            // (ui-spec §1.3).
+            t if t.is_measure()
+                && self
+                    .measure
+                    .as_ref()
+                    .is_none_or(|m| m.page_index != self.view.page_index) =>
+            {
+                self.measure = Some(measure_tool::MeasureState::new(self.view.page_index));
+            }
+            // VectorEdit carries no per-page state beyond the drag cleared by
+            // the caller.
+            _ => {}
+        }
+    }
+
+    /// Drop the per-page state a tool owned when it is switched OFF.
+    ///
+    /// The measure state is dropped only when NO measure tool remains enabled
+    /// — the three share it, so tearing it down on any one of them would
+    /// discard a pick set that a still-enabled sibling is mid-way through.
+    fn tear_down_tool_state(&mut self, tool: CanvasTool) {
+        match tool {
+            CanvasTool::TextEdit => self.text_edit = None,
+            CanvasTool::AddText => self.add_text = None,
+            t if t.is_measure() && !self.enabled_tools.iter().any(|e| e.is_measure()) => {
+                self.measure = None;
+            }
+            _ => {}
+        }
+    }
+
+    /// Whether `tool` is switched on AND editing is enabled.
+    ///
+    /// Every canvas-dispatch arm asks this rather than reading the set
+    /// directly, so the master switch cannot be forgotten at one site — the
+    /// failure mode would be a single tool that still edits in review mode,
+    /// which is precisely the thing review mode exists to make impossible.
+    fn tool_enabled(&self, tool: CanvasTool) -> bool {
+        self.editing_enabled && self.enabled_tools.contains(&tool)
+    }
+
+    /// The enabled tool that OWNS a canvas click right now — the first entry
+    /// of [`Self::TOOL_PRECEDENCE`] that is enabled, or `None`.
+    ///
+    /// This is what the old `active_tool` field meant, and the ~30 readers of
+    /// that field continue to be correct against it: with exactly one tool on
+    /// it returns that tool, and with none on it returns `None`. What changed
+    /// is that "several on" is now expressible, and this answers which of them
+    /// a gesture reaches.
+    fn active_tool(&self) -> Option<CanvasTool> {
+        Self::TOOL_PRECEDENCE
+            .into_iter()
+            .find(|t| self.tool_enabled(*t))
+    }
+
+    /// Every enabled tool, in precedence order — for surfaces that must show
+    /// ALL of them rather than only the one answering clicks.
+    fn enabled_tools_in_order(&self) -> Vec<CanvasTool> {
+        Self::TOOL_PRECEDENCE
+            .into_iter()
+            .filter(|t| self.tool_enabled(*t))
+            .collect()
+    }
+
     /// Build the open-document state for a freshly loaded file.
     fn new(path: PathBuf, session: EditSession, pages: Vec<Page>) -> Self {
         let view = ViewState::default();
@@ -2285,7 +2441,11 @@ impl OpenDoc {
             // structurally-guaranteed no-op this Pass (uninhabited tool,
             // provider that hits nothing) — the "zero behaviour change"
             // acceptance criterion.
-            active_tool: None,
+            enabled_tools: BTreeSet::new(),
+            // Editing starts ON: pdfce is an editor, and a new operator who
+            // finds every tool inert would reasonably conclude it is broken
+            // rather than guarded.
+            editing_enabled: true,
             canvas_selection: BTreeSet::new(),
             selected_nodes: BTreeSet::new(),
             click_cycle: None,
@@ -3013,6 +3173,9 @@ enum Action {
     /// tool family. `Some(_)` is uninhabited this Pass ([`CanvasTool`] has
     /// no variants), so only the `None` (exit) case is ever constructed.
     SelectCanvasTool(Option<CanvasTool>),
+    /// Flip the MASTER editing switch (the operator's "one toggle to turn all
+    /// edits on or off").
+    ToggleEditingEnabled,
     /// Cancel the active tool's in-progress gesture WITHOUT exiting the tool
     /// (the first stage of the two-stage Escape, spec §3.5). No tool exists
     /// to have a gesture this Pass, so applying it is a no-op.
@@ -4629,6 +4792,12 @@ impl PdfceApp {
             return;
         };
         ui.heading(ui_text::forms_panel_heading());
+        if !doc.editing_enabled {
+            // Filling a field commits an `EditSession` command, so review mode
+            // covers it. Disabled-and-explained (R83), not hidden: an operator
+            // should still be able to READ the form's values.
+            ui.label(ui_text::authoring_disabled_note());
+        }
 
         // Read the SESSION, not the opened file (the Pass 17.1 session-read
         // rule): an operator who has already filled three fields must see
@@ -5437,6 +5606,10 @@ impl PdfceApp {
         // not hidden, when the document has no pages — a control that
         // vanishes teaches nothing, while a disabled one with a tooltip
         // teaches what would enable it.
+        if !doc.editing_enabled {
+            ui.label(ui_text::authoring_disabled_note());
+        }
+        let has_pages = has_pages && doc.editing_enabled;
         ui.add_enabled_ui(has_pages, |ui| {
             if ui
                 .button(ui_text::redact_mark_whole_page_button())
@@ -6790,7 +6963,7 @@ impl PdfceApp {
                 let delete_object = matches!(
                     &self.status,
                     Status::Open(doc)
-                        if doc.active_tool == Some(CanvasTool::VectorEdit)
+                        if doc.active_tool() == Some(CanvasTool::VectorEdit)
                             && !doc.canvas_selection.is_empty()
                 );
                 if delete_dimension {
@@ -6838,6 +7011,32 @@ impl PdfceApp {
             // `CancelToolGesture` has no gesture to cancel yet. Both are
             // no-ops this Pass but are the live dispatch every future tool
             // Pass routes through (spec §3.2).
+            Action::ToggleEditingEnabled => {
+                if let Status::Open(doc) = &mut self.status {
+                    doc.editing_enabled = !doc.editing_enabled;
+                    // Turning editing OFF abandons in-flight gestures but
+                    // KEEPS the enabled-tool set: switching back on must
+                    // restore the arrangement the operator built, not make
+                    // them rebuild it. A half-finished draft is different —
+                    // it is a gesture, and a gesture cannot survive the
+                    // capability that was producing it being withdrawn.
+                    if !doc.editing_enabled {
+                        doc.vector_drag = None;
+                        doc.dimension_drag = None;
+                        if let Some(st) = doc.measure.as_mut() {
+                            st.clear_gesture();
+                        }
+                        if let Some(st) = doc.add_text.as_mut() {
+                            st.draft = None;
+                            st.drag_anchor = None;
+                        }
+                        if let Some(st) = doc.text_edit.as_mut() {
+                            st.pending = None;
+                        }
+                    }
+                }
+                return;
+            }
             Action::SelectCanvasTool(tool) => {
                 // Pass 34.1: arming a tool raises Tool Options, and opens the
                 // rail if it was closed, so the options the operator just
@@ -6867,46 +7066,39 @@ impl PdfceApp {
                 // the property bar without a second borrow.
                 let default_add_text_font = self.default_add_text_font;
                 if let Status::Open(doc) = &mut self.status {
-                    doc.active_tool = tool;
-                    // Pass 9c-min: a tool switch always abandons any in-flight
-                    // vector-edit drag (it is transient view state, never an
-                    // edit) — the VectorEdit tool rebuilds it on the next drag.
+                    // Pass 9c-min: any change to the tool set abandons an
+                    // in-flight vector-edit drag (transient view state, never
+                    // an edit) — VectorEdit rebuilds it on the next drag.
                     doc.vector_drag = None;
-                    // Pass 14.3/16.2: entering a tool builds ITS per-page state
-                    // and tears down the OTHER tool's — the §0.1 mutual
-                    // exclusion a single `active_tool` already guarantees. The
-                    // dispatch is the pure `tool_builds_*` predicates themselves
-                    // (headless-tested to be never both true), so a stale
-                    // caret/draft never survives a tool switch.
-                    if canvas::tool_builds_text_edit(tool) {
-                        doc.build_text_edit_state();
-                        doc.add_text = None;
-                        doc.measure = None;
-                    } else if canvas::tool_builds_add_text(tool) {
-                        doc.build_add_text_state(default_add_text_font);
-                        doc.text_edit = None;
-                        doc.measure = None;
-                    } else if canvas::tool_builds_measure(tool) {
-                        // Pass 12.M2b §1.3: entering any of the three measure
-                        // tools builds the shared per-page pick state; the other
-                        // tools' state is torn down (the single-`active_tool`
-                        // mutual exclusion). A tool SWITCH among the three
-                        // measure tools keeps the state (same page) so the
-                        // active group / snap toggle persist.
-                        if doc
-                            .measure
-                            .as_ref()
-                            .is_none_or(|m| m.page_index != doc.view.page_index)
-                        {
-                            doc.measure =
-                                Some(measure_tool::MeasureState::new(doc.view.page_index));
+                    match tool {
+                        // `None` still means CLEAR EVERYTHING — Escape's
+                        // ExitTool rung and the keyboard paths depend on it.
+                        None => {
+                            doc.enabled_tools.clear();
+                            doc.text_edit = None;
+                            doc.add_text = None;
+                            doc.measure = None;
                         }
-                        doc.text_edit = None;
-                        doc.add_text = None;
-                    } else {
-                        doc.text_edit = None;
-                        doc.add_text = None;
-                        doc.measure = None;
+                        Some(t) => {
+                            // TOGGLE, not replace. This is the whole of the
+                            // operator's ruling: switching Edit Objects on no
+                            // longer switches Edit Text off.
+                            if doc.enabled_tools.contains(&t) {
+                                doc.enabled_tools.remove(&t);
+                                doc.tear_down_tool_state(t);
+                            } else {
+                                // The measure family stays exclusive INSIDE
+                                // itself: the three share one `measure` state
+                                // and dispatch on a single value, so two of
+                                // them on is a state with no meaning rather
+                                // than extra capability.
+                                if t.is_measure() {
+                                    doc.enabled_tools.retain(|e| !e.is_measure());
+                                }
+                                doc.enabled_tools.insert(t);
+                                doc.build_tool_state(t, default_add_text_font);
+                            }
+                        }
                     }
                 }
                 return;
@@ -7146,6 +7338,7 @@ impl PdfceApp {
             | Action::AddPendingText
             | Action::CancelTextEntry
             | Action::SelectCanvasTool(_)
+            | Action::ToggleEditingEnabled
             | Action::CancelToolGesture
             | Action::ToggleDimensionGroups
             | Action::MoveSelection(_)
@@ -7493,7 +7686,7 @@ impl PdfceApp {
             .is_some_and(|s| s.draft.as_ref().is_some_and(|d| !d.draft_text.is_empty()));
         // A complete linear ce-dimension pick pair. Circular (best-fit =
         // inferred) and scale (blast radius) are deliberately excluded.
-        let measure = doc.active_tool == Some(CanvasTool::MeasureLinear)
+        let measure = doc.active_tool() == Some(CanvasTool::MeasureLinear)
             && doc.measure.as_ref().is_some_and(|s| s.pending.is_some());
         text || add || measure
     }
@@ -7958,7 +8151,7 @@ fn commit_add_text_draft(
 ///   to keep an explicit confirm, and flags it to the operator as the single
 ///   deviation from "this goes the same with all tools".
 fn commit_measure_linear_draft(doc: &mut OpenDoc) -> CommitOutcome {
-    if doc.active_tool != Some(CanvasTool::MeasureLinear) {
+    if doc.active_tool() != Some(CanvasTool::MeasureLinear) {
         return CommitOutcome::Nothing;
     }
     let Some(state) = doc.measure.as_ref() else {
@@ -8188,6 +8381,18 @@ impl eframe::App for PdfceApp {
                     });
                 }
             }
+            diag::Step::Tab(which) => {
+                let tab = match which {
+                    "file" => ribbon::RibbonTab::File,
+                    "edit" => ribbon::RibbonTab::Edit,
+                    "review" => ribbon::RibbonTab::Review,
+                    "measure" => ribbon::RibbonTab::Measure,
+                    "tools" => ribbon::RibbonTab::Tools,
+                    _ => ribbon::RibbonTab::View,
+                };
+                // Through the SAME action a real tab click pushes.
+                self.apply(Action::SelectRibbonTab(tab), ctx, ctx.pixels_per_point());
+            }
             diag::Step::NavKey(which) => {
                 // Injected as a real press/release pair through the SAME
                 // `raw_input.events` seam a physical key arrives on, so the
@@ -8266,13 +8471,12 @@ impl eframe::App for PdfceApp {
         // `false` when nothing is open). All three are always `false` this
         // Pass — uninhabited tool, no gesture, no-op provider — so Escape
         // still falls through to the existing rail-clear unchanged.
-        let (canvas_tool_active, add_text_active, canvas_selection_nonempty) = match &self.status {
+        let (canvas_tool_active, canvas_selection_nonempty) = match &self.status {
             Status::Open(doc) => (
-                doc.active_tool.is_some(),
-                doc.active_tool == Some(CanvasTool::AddText),
+                doc.active_tool().is_some(),
                 !doc.canvas_selection.is_empty(),
             ),
-            _ => (false, false, false),
+            _ => (false, false),
         };
         // Whether the CANVAS has something Delete should remove while a tool is
         // armed — see the binding in `collect_keyboard_actions`. Only the
@@ -8299,7 +8503,7 @@ impl eframe::App for PdfceApp {
         }
 
         let canvas_delete_target = match &self.status {
-            Status::Open(doc) if doc.active_tool == Some(CanvasTool::VectorEdit) => {
+            Status::Open(doc) if doc.active_tool() == Some(CanvasTool::VectorEdit) => {
                 doc.selected_dimension.is_some()
                     || doc.entered.is_some_and(|e| e.subpath.is_some())
                     || !doc.canvas_selection.is_empty()
@@ -8316,7 +8520,6 @@ impl eframe::App for PdfceApp {
             &mut actions,
             CanvasKeys {
                 tool_active: canvas_tool_active,
-                add_text_active,
                 gesture_discardable: canvas_gesture_discardable,
                 selection_nonempty: canvas_selection_nonempty,
                 delete_target: canvas_delete_target,
@@ -8577,8 +8780,6 @@ impl eframe::App for PdfceApp {
 struct CanvasKeys {
     /// Any canvas tool is armed — most global bindings yield to a tool.
     tool_active: bool,
-    /// The add-text tool specifically, which owns typing.
-    add_text_active: bool,
     /// A tool gesture is in flight and can be thrown away.
     gesture_discardable: bool,
     /// Something is selected on the canvas.
@@ -8592,7 +8793,6 @@ struct CanvasKeys {
 fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys: CanvasKeys) {
     let CanvasKeys {
         tool_active,
-        add_text_active,
         gesture_discardable,
         selection_nonempty: canvas_selection_nonempty,
         delete_target: canvas_delete_target,
@@ -8704,26 +8904,23 @@ fn collect_keyboard_actions(ctx: &egui::Context, actions: &mut Vec<Action>, keys
     // undo). Placed here, after the `pressed` closure's last use, so pushing
     // to `actions` directly is sound. The enter/exit choice reads the
     // frame-start `tool_active` flag this function is already handed.
+    // Now a straight TOGGLE of Edit Text specifically. It used to read
+    // `tool_active` — "is ANY tool on" — and send `None`, which under
+    // replace-semantics happened to mean "put the current tool away". With a
+    // tool SET that would clear every tool, so Ctrl+E while Edit Objects was
+    // on would silently disarm Edit Objects too.
     if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::E)) {
-        actions.push(Action::SelectCanvasTool(if tool_active {
-            None
-        } else {
-            Some(CanvasTool::TextEdit)
-        }));
+        actions.push(Action::SelectCanvasTool(Some(CanvasTool::TextEdit)));
     }
 
     // Pass 16.2 §1.2: Ctrl+Shift+E toggles the Add-Page-Text tool. COMMAND+SHIFT
     // +E is unclaimed (only Ctrl+Shift+Z and Ctrl+Shift+C are bound above, and
     // `consume_key` matches modifiers EXACTLY, so this never races the plain
     // Ctrl+E Edit-Text chord). Shift signals the "create" variant. It toggles
-    // AddText SPECIFICALLY (from `add_text_active`, not "any tool active"), so
+    // AddText SPECIFICALLY, so
     // pressing it while Edit Text is active switches straight to Add Text.
     if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::E)) {
-        actions.push(Action::SelectCanvasTool(if add_text_active {
-            None
-        } else {
-            Some(CanvasTool::AddText)
-        }));
+        actions.push(Action::SelectCanvasTool(Some(CanvasTool::AddText)));
     }
 
     // Escape resolves through the four-way precedence chain (see this
@@ -9403,6 +9600,36 @@ impl PdfceApp {
                 }
 
                 if Self::ribbon_group(ui, tab, RG::ContentTools) {
+                    // THE MASTER EDIT SWITCH, first in the group because it
+                    // governs everything after it. The operator: "should have
+                    // one toggle to turn all edits on or off."
+                    //
+                    // Its OFF state is a review mode — the document can be
+                    // read, selected, navigated and searched, and no gesture
+                    // anywhere in the application can change it by accident.
+                    // Selected-state shows EDITING ON, so the lit button means
+                    // "this document is editable", which is the fact an
+                    // operator wants at a glance before they start clicking.
+                    ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                        let on = doc.editing_enabled;
+                        let response = Self::icon_text_toggle(
+                            ui,
+                            icons::Icon::EditObjects,
+                            on,
+                            ui_text::editing_enabled_button(on),
+                            ui_text::editing_enabled_tooltip(on),
+                        );
+                        // Rect traced so the harness can drive the master
+                        // switch — the technique used throughout this session
+                        // rather than guessing a screen point.
+                        diag::trace(|| {
+                            format!("master-edit-toggle on={on} rect={:?}", response.rect)
+                        });
+                        if response.clicked() {
+                            actions.push(Action::ToggleEditingEnabled);
+                        }
+                    });
+                    ui.separator();
                     // Pass 14.3 in-place page-text editing — a DISTINCT control
                     // from Markup/Text (decision 014 §1 draws a hard line between
                     // editing words already on the page and authoring new
@@ -9413,7 +9640,7 @@ impl PdfceApp {
                     // pages to edit (§1.2). The tooltip's second sentence is the
                     // required disambiguator from Markup/Text.
                     ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                        let active = doc.active_tool == Some(CanvasTool::TextEdit);
+                        let active = doc.tool_enabled(CanvasTool::TextEdit);
                         let response = Self::icon_text_toggle(
                             ui,
                             icons::Icon::EditText,
@@ -9422,11 +9649,7 @@ impl PdfceApp {
                             ui_text::edit_text_tool_tooltip(),
                         );
                         if response.clicked() {
-                            actions.push(Action::SelectCanvasTool(if active {
-                                None
-                            } else {
-                                Some(CanvasTool::TextEdit)
-                            }));
+                            actions.push(Action::SelectCanvasTool(Some(CanvasTool::TextEdit)));
                         }
                     });
 
@@ -9439,7 +9662,7 @@ impl PdfceApp {
                     // hidden) with no pages. The tooltip is the R78 disambiguator
                     // naming the competing Text ▾ and Edit Text controls (§1.1/§10).
                     ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                        let active = doc.active_tool == Some(CanvasTool::AddText);
+                        let active = doc.tool_enabled(CanvasTool::AddText);
                         let response = Self::icon_text_toggle(
                             ui,
                             icons::Icon::AddText,
@@ -9448,11 +9671,7 @@ impl PdfceApp {
                             ui_text::add_text_tool_tooltip(),
                         );
                         if response.clicked() {
-                            actions.push(Action::SelectCanvasTool(if active {
-                                None
-                            } else {
-                                Some(CanvasTool::AddText)
-                            }));
+                            actions.push(Action::SelectCanvasTool(Some(CanvasTool::AddText)));
                         }
                     });
 
@@ -9462,7 +9681,7 @@ impl PdfceApp {
                     // tooltip names the three gestures and the "not redaction"
                     // caveat for delete (decision 011 §2.5).
                     ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                        let active = doc.active_tool == Some(CanvasTool::VectorEdit);
+                        let active = doc.tool_enabled(CanvasTool::VectorEdit);
                         let response = Self::icon_text_toggle(
                             ui,
                             icons::Icon::EditObjects,
@@ -9471,11 +9690,7 @@ impl PdfceApp {
                             ui_text::vector_edit_tool_tooltip(),
                         );
                         if response.clicked() {
-                            actions.push(Action::SelectCanvasTool(if active {
-                                None
-                            } else {
-                                Some(CanvasTool::VectorEdit)
-                            }));
+                            actions.push(Action::SelectCanvasTool(Some(CanvasTool::VectorEdit)));
                         }
                     });
                 }
@@ -9489,7 +9704,7 @@ impl PdfceApp {
                     // toggle (a NEW combination, ui-spec §1.2). The label is dynamic
                     // so the active tool is never hidden by the closed menu.
                     ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
-                        let active_name = match doc.active_tool {
+                        let active_name = match doc.active_tool() {
                             Some(CanvasTool::MeasureLinear) => {
                                 Some(ui_text::measure_tool_name_linear())
                             }
@@ -9539,7 +9754,7 @@ impl PdfceApp {
                                 ui_text::measure_set_scale_menu_item(),
                             ),
                         ] {
-                            let is_active = doc.active_tool == Some(tool);
+                            let is_active = doc.tool_enabled(tool);
                             if ui
                                 .add(egui::Button::selectable(
                                     is_active,
@@ -9547,11 +9762,7 @@ impl PdfceApp {
                                 ))
                                 .clicked()
                             {
-                                actions.push(Action::SelectCanvasTool(if is_active {
-                                    None
-                                } else {
-                                    Some(tool)
-                                }));
+                                actions.push(Action::SelectCanvasTool(Some(tool)));
                             }
                         }
                         // "Manage Dimension Groups…" — opens the §5 modeless
@@ -9997,10 +10208,48 @@ impl PdfceApp {
             ui.label(ui_text::tool_options_no_document());
             return;
         };
-        let Some(tool) = doc.active_tool else {
+        if !doc.editing_enabled {
+            // R83: say WHY the compartment is inert rather than showing an
+            // empty pane that reads as broken.
+            ui.label(ui_text::tool_options_editing_off());
+            return;
+        }
+        let Some(tool) = doc.active_tool() else {
             ui.label(ui_text::tool_options_empty());
             return;
         };
+        // WITH SEVERAL TOOLS ON, THIS PANE SHOWS THE ONE THAT HAS THE CANVAS,
+        // and names the others. Argued rather than assumed:
+        //
+        // Showing every enabled tool's property bar stacked would bury the
+        // relevant one — the operator is about to use the tool a click reaches,
+        // and that is exactly one tool. Five bars deep, the controls they want
+        // are below the fold.
+        //
+        // But the precedence ladder is invisible, and an operator with Edit
+        // Text and Edit Objects both on has no way to know a click goes to the
+        // first. So the ladder is DISCLOSED here in words rather than left to
+        // be discovered by a click landing somewhere unexpected — the same
+        // disclose-rather-than-surprise stance the rest of the application
+        // takes. Switching the top tool off promotes the next one, which is
+        // how the operator reaches the others' controls.
+        let enabled = doc.enabled_tools_in_order();
+        if enabled.len() > 1 {
+            ui.label(ui_text::tool_options_handles_clicks(
+                ui_text::tool_options_heading(tool),
+            ));
+            let others: Vec<&str> = enabled
+                .iter()
+                .skip(1)
+                .map(|t| ui_text::tool_options_heading(*t))
+                .collect();
+            ui.label(
+                egui::RichText::new(ui_text::tool_options_also_on(&others))
+                    .small()
+                    .weak(),
+            );
+            ui.separator();
+        }
         // The pane heading is drawn ONLY for tools whose body does not already
         // carry its own title (Pass 34.1 slice 2). The migrated property bars
         // open with `*_propbar_title()`, and stacking a pane heading above an
@@ -11451,7 +11700,7 @@ impl PdfceApp {
         // right page's geometry (rebuilt lazily on page change / edit).
         doc.ensure_object_provider();
 
-        let tool_active = doc.active_tool.is_some();
+        let tool_active = doc.active_tool().is_some();
         // Pass 9a interaction decision (the marquee-vs-pan disambiguation the
         // Pass 12.0 substrate deferred to this Pass, spec §4.2): with NO tool
         // active the canvas is in object-selection mode, where a drag is a
@@ -11663,11 +11912,13 @@ impl PdfceApp {
                 let p = ui.ctx().pointer_latest_pos();
                 diag::trace(|| {
                     format!(
-                        "canvas tool={:?} rect={:?} zoom={zoom} hovered={} clicked={} \
+                        "canvas tool={:?} enabled={:?} editing={} rect={:?} zoom={zoom}                          hovered={} clicked={} \
                          drag_started={} dragged={} drag_stopped={} pointer={p:?} \
                          interact={:?} down={down} pressed={pressed} released={released} \
                          zdelta={zoom_delta} off={scroll_offset:?} provider={} sel={}",
-                        doc.active_tool,
+                        doc.active_tool(),
+                        doc.enabled_tools_in_order(),
+                        doc.editing_enabled,
                         image_rect,
                         image_response.hovered(),
                         image_response.clicked(),
@@ -11709,10 +11960,15 @@ impl PdfceApp {
         //
         // Skipped for the text tools, which own the canvas as a caret surface
         // and would be broken by a click being eaten out from under them.
-        let dimension_consumed = if matches!(
-            doc.active_tool,
-            Some(CanvasTool::TextEdit | CanvasTool::AddText)
-        ) {
+        // The ce-dimension drag is an EDIT (it moves a dimension and commits
+        // a `place_dimension` command), so the master switch gates it too.
+        // Missing this would leave one authoring gesture live in review mode,
+        // which is precisely the hole review mode exists to close.
+        let dimension_consumed = if !doc.editing_enabled
+            || matches!(
+                doc.active_tool(),
+                Some(CanvasTool::TextEdit | CanvasTool::AddText)
+            ) {
             false
         } else {
             run_dimension_drag(doc, ui, &image_response, image_rect, extent, zoom)
@@ -11721,16 +11977,16 @@ impl PdfceApp {
         if dimension_consumed {
             // The click/drag belonged to a ce dimension. Nothing below runs, so
             // the drawing underneath is neither selected nor moved by it.
-        } else if doc.active_tool == Some(CanvasTool::TextEdit) {
+        } else if doc.active_tool() == Some(CanvasTool::TextEdit) {
             run_text_edit_tool(doc, ui, &image_response, image_rect, extent, zoom);
-        } else if doc.active_tool == Some(CanvasTool::AddText) {
+        } else if doc.active_tool() == Some(CanvasTool::AddText) {
             // Pass 16.2: the Add-Page-Text tool owns the canvas — click places a
             // point caret, drag rubber-bands a wrap box, typing composes a live
             // preview, Accept commits ONE `CommandKind::AddText` (§3-§7). Its
             // own click/drag handler always means "place new text," so it needs
             // no hit-vs-miss branch (§0.1).
             run_add_text_tool(doc, ui, &image_response, image_rect, extent, zoom, font_env);
-        } else if canvas::tool_builds_measure(doc.active_tool) {
+        } else if canvas::tool_builds_measure(doc.active_tool()) {
             // Pass 12.M2: a measure tool is selected. The on-canvas snap-pick
             // authoring gesture is the documented follow-up UI slice; this build
             // surfaces the selected tool honestly (a status overlay) while the
@@ -11738,7 +11994,7 @@ impl PdfceApp {
             // suppresses the object-selection click so a measure-mode click is
             // not silently repurposed as a selection (ui-spec §1.1).
             run_measure_tool(doc, ui, &image_response, image_rect, extent, zoom);
-        } else if canvas::tool_builds_vector_edit(doc.active_tool) {
+        } else if canvas::tool_builds_vector_edit(doc.active_tool()) {
             // Pass 9c-min (decision 011 §2.5): the object-edit tool owns the
             // canvas — click selects, drag moves the selected object (or a
             // grabbed node), Delete removes it, each committing one undoable
@@ -13949,9 +14205,12 @@ fn run_add_text_tool(
         // §7.2 P1 continuity: switch to Edit Text so the just-added run (now
         // ordinary page content) is re-editable — its extraction happens on the
         // TextEdit tool's own entry (14.3 §2.1), unchanged by this Pass.
-        doc.active_tool = Some(CanvasTool::TextEdit);
+        // §7.2 P1 continuity is now ADDITIVE: Edit Text is switched on so the
+        // just-added run is re-editable, and Add Text is left ON rather than
+        // torn down — the operator asked for tools that stay on, and placing
+        // one run is not a signal that they have finished adding text.
+        doc.enabled_tools.insert(CanvasTool::TextEdit);
         doc.build_text_edit_state();
-        doc.add_text = None;
         return;
     }
     // Pass 34.0: the click-out (or drag-out, or Place-button) commit. A
@@ -17254,7 +17513,7 @@ fn run_measure_tool(
     use pdfce_core::dimension::{DEFAULT_GROUP_ID, DimensionKind};
     use pdfce_core::vector::{Point, SnapConfig, SnapKind, snap_candidates};
 
-    let active = doc.active_tool;
+    let active = doc.active_tool();
     let page_index = doc.view.page_index;
 
     // Repoint on page navigation while the tool stays active (ui-spec §1.3):
@@ -17499,7 +17758,13 @@ fn run_measure_tool(
         // dismissed panel would leave the next canvas click completing a
         // measurement the operator thought they had cancelled.
         if close_tool {
-            doc.active_tool = None;
+            // Closing the measure box switches OFF the measure family only —
+            // not every tool. Under the old single-`active_tool` model those
+            // were the same thing; with a set they are not, and clearing
+            // everything here would silently disarm Edit Text because the
+            // operator dismissed a measurement panel.
+            doc.enabled_tools.retain(|t| !t.is_measure());
+            doc.measure = None;
             return;
         }
 
@@ -20066,5 +20331,137 @@ mod tests {
         let (set, primary) = node_selection_after_click(None, true, &nodes(&[1, 2, 3]));
         assert!(set.is_empty());
         assert_eq!(primary, None);
+    }
+
+    // -----------------------------------------------------------------
+    // Independent edit toggles + the master switch (2026-08-06 ruling).
+    // -----------------------------------------------------------------
+
+    fn doc_with_tools(tools: &[CanvasTool]) -> PdfceApp {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture_path("vector/curves.pdf"));
+        for t in tools {
+            app.apply_for_test(Action::SelectCanvasTool(Some(*t)));
+        }
+        app
+    }
+
+    fn enabled_of(app: &PdfceApp) -> Vec<CanvasTool> {
+        match &app.status {
+            Status::Open(d) => d.enabled_tools_in_order(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// **THE RULING ITSELF: switching one tool on does not switch another
+    /// off.** Under the old single-`active_tool` model every toggle was a
+    /// radio button, which is the behaviour the operator objected to.
+    #[test]
+    fn enabling_a_second_tool_leaves_the_first_on() {
+        let app = doc_with_tools(&[CanvasTool::TextEdit, CanvasTool::VectorEdit]);
+        assert_eq!(
+            enabled_of(&app),
+            vec![CanvasTool::TextEdit, CanvasTool::VectorEdit],
+            "both tools must be on; a toggle is not a radio button"
+        );
+    }
+
+    /// A tool stays on until it is switched off — "once on though it stays
+    /// on". Re-pressing the same toggle is what turns it off.
+    #[test]
+    fn a_tool_toggles_off_only_when_pressed_again_and_leaves_others_alone() {
+        let mut app = doc_with_tools(&[CanvasTool::TextEdit, CanvasTool::VectorEdit]);
+        app.apply_for_test(Action::SelectCanvasTool(Some(CanvasTool::TextEdit)));
+        assert_eq!(
+            enabled_of(&app),
+            vec![CanvasTool::VectorEdit],
+            "switching one off must not disturb the other"
+        );
+    }
+
+    /// The measure family stays exclusive INSIDE itself — the three share one
+    /// state struct and dispatch on a single value, so two on is a state with
+    /// no meaning. They remain independent of the text/object tools.
+    #[test]
+    fn the_measure_family_is_exclusive_within_itself_but_not_beyond_it() {
+        let app = doc_with_tools(&[
+            CanvasTool::TextEdit,
+            CanvasTool::MeasureLinear,
+            CanvasTool::MeasureCircular,
+        ]);
+        assert_eq!(
+            enabled_of(&app),
+            vec![CanvasTool::TextEdit, CanvasTool::MeasureCircular],
+            "the second measure tool replaces the first; TextEdit is untouched"
+        );
+    }
+
+    /// The precedence ladder decides which enabled tool answers a click, and
+    /// it is ORDER-INDEPENDENT — the ladder, not the order they were switched
+    /// on, is what decides. Otherwise the same click would do different things
+    /// depending on history the operator cannot see.
+    #[test]
+    fn precedence_does_not_depend_on_the_order_tools_were_enabled() {
+        let a = doc_with_tools(&[CanvasTool::TextEdit, CanvasTool::VectorEdit]);
+        let b = doc_with_tools(&[CanvasTool::VectorEdit, CanvasTool::TextEdit]);
+        let active = |app: &PdfceApp| match &app.status {
+            Status::Open(d) => d.active_tool(),
+            _ => None,
+        };
+        assert_eq!(active(&a), Some(CanvasTool::TextEdit));
+        assert_eq!(active(&a), active(&b), "enable order must not change it");
+    }
+
+    /// **MASTER OFF WINS over every enabled tool**, and does not forget them.
+    #[test]
+    fn the_master_switch_overrides_every_tool_and_remembers_them() {
+        let mut app = doc_with_tools(&[CanvasTool::TextEdit, CanvasTool::VectorEdit]);
+        app.apply_for_test(Action::ToggleEditingEnabled);
+
+        let Status::Open(doc) = &app.status else {
+            panic!("no document");
+        };
+        assert!(!doc.editing_enabled);
+        assert!(doc.active_tool().is_none(), "no tool answers a click");
+        assert!(!doc.tool_enabled(CanvasTool::TextEdit));
+        assert_eq!(
+            doc.enabled_tools.len(),
+            2,
+            "the SET is remembered — switching editing back on must not make \
+             the operator rebuild their arrangement"
+        );
+
+        app.apply_for_test(Action::ToggleEditingEnabled);
+        assert_eq!(
+            enabled_of(&app),
+            vec![CanvasTool::TextEdit, CanvasTool::VectorEdit],
+            "both tools come back exactly as they were"
+        );
+    }
+
+    /// `SelectCanvasTool(None)` still clears everything — Escape's ExitTool
+    /// rung and the keyboard paths depend on that meaning being unchanged.
+    #[test]
+    fn selecting_no_tool_still_clears_the_whole_set() {
+        let mut app = doc_with_tools(&[CanvasTool::TextEdit, CanvasTool::MeasureLinear]);
+        app.apply_for_test(Action::SelectCanvasTool(None));
+        assert!(enabled_of(&app).is_empty());
+    }
+
+    /// Switching a tool OFF tears down only ITS state. The regression this
+    /// forecloses is the one the old model had by design: losing an Add-Text
+    /// draft because Edit Text was switched on.
+    #[test]
+    fn switching_one_tool_off_does_not_discard_another_tools_state() {
+        let mut app = doc_with_tools(&[CanvasTool::AddText, CanvasTool::TextEdit]);
+        assert!(
+            matches!(&app.status, Status::Open(d) if d.add_text.is_some() && d.text_edit.is_some()),
+            "both tools built their own state"
+        );
+        app.apply_for_test(Action::SelectCanvasTool(Some(CanvasTool::TextEdit)));
+        assert!(
+            matches!(&app.status, Status::Open(d) if d.add_text.is_some() && d.text_edit.is_none()),
+            "only the switched-off tool's state went"
+        );
     }
 }

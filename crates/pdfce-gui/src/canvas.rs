@@ -82,7 +82,13 @@ use pdfce_core::vector::{SnapCandidate, SnapKind};
 /// `TextEditState`, NOT in `canvas_selection`/[`TargetId`] — text selection is
 /// a contiguous `(anchor, active)` caret span, categorically different from
 /// the discrete-object selection [`CanvasTargetProvider`] models (spec §0.3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `Ord`/`Hash` are derived so a `BTreeSet<CanvasTool>` can hold the SET of
+/// enabled tools (2026-08-06, the operator's independent-toggles ruling). The
+/// derived order is declaration order and is **not** the dispatch precedence —
+/// that lives in `OpenDoc::TOOL_PRECEDENCE`, stated explicitly there so it can
+/// be argued about rather than accidentally inherited from where a variant
+/// happens to sit in this enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CanvasTool {
     /// Acrobat-style in-place page-text editing (Pass 14.3): click→caret,
     /// type→edit (a reviewable `PendingEdit` preview), drag/double/triple-click

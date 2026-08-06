@@ -6574,3 +6574,63 @@ pub fn comment_row_goto() -> &'static str {
 pub fn comment_row_goto_tooltip(page_number: usize) -> String {
     format!("Show page {page_number}, where this is")
 }
+
+// -- The master editing switch (2026-08-06 operator ruling) ------------------
+
+/// The master edit toggle's label, which STATES THE CURRENT STATE rather than
+/// the action.
+///
+/// "Editing on" / "Editing off" answers the question an operator actually has
+/// when they glance at it — *can I change this document right now?* A label
+/// naming the action ("Turn editing off") answers a question they only have
+/// once they have already decided, and reads as the opposite state to about
+/// half of readers.
+pub fn editing_enabled_button(on: bool) -> &'static str {
+    if on { "Editing on" } else { "Editing off" }
+}
+
+/// Its tooltip — names what the OTHER state would mean, since that is the
+/// thing a press commits to.
+pub fn editing_enabled_tooltip(on: bool) -> &'static str {
+    if on {
+        "Editing is on. Press to switch every edit off — the document can still be read, selected and searched, but nothing can change it until you switch editing back on. Your chosen tools are remembered."
+    } else {
+        "Editing is OFF — no tool, form field, redaction mark or dimension can change this document. Press to switch editing back on, with the tools you had before."
+    }
+}
+
+/// Shown in the Tool compartment when editing is switched off.
+pub fn tool_options_editing_off() -> &'static str {
+    "Editing is switched off, so no tool will act. Turn Editing on to use them."
+}
+
+/// Names the enabled tool that currently answers a canvas click, when more
+/// than one tool is on.
+///
+/// The precedence ladder is real and an operator cannot see it. Rather than
+/// let them discover it by a click going somewhere unexpected, the compartment
+/// says which tool has the click — the same disclose-rather-than-surprise
+/// stance the rest of this application takes.
+pub fn tool_options_handles_clicks(tool_name: &str) -> String {
+    format!("{tool_name} has the canvas — a click goes to it first.")
+}
+
+/// The other enabled tools, listed after the one that has the canvas.
+pub fn tool_options_also_on(names: &[&str]) -> String {
+    // The separator is joined HERE rather than by the caller: ", " is
+    // operator-visible punctuation, and R1 puts every such string in this
+    // catalog — the gate caught it at the call site, correctly.
+    format!(
+        "Also on: {}. Switch the one above off to reach their controls.",
+        names.join(", ")
+    )
+}
+
+/// Shown on any authoring surface while the master edit switch is off.
+///
+/// One string for every such surface deliberately: the reason is identical
+/// wherever it appears, and an operator who reads it once on the Forms panel
+/// should recognise it instantly on Redact rather than parse a new sentence.
+pub fn authoring_disabled_note() -> &'static str {
+    "⚠ Editing is switched off, so nothing here will change the document. Turn Editing on in the Edit tab."
+}

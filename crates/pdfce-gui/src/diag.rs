@@ -156,6 +156,14 @@ pub enum Step {
     /// sends text, `delete`/`escape` send those two keys, and every other key
     /// was unreachable.
     NavKey(&'static str),
+    /// Select a ribbon tab (`tab:edit`, `tab:view`, …).
+    ///
+    /// Added because the ribbon was entirely undrivable: only the ACTIVE tab's
+    /// band is emitted (R125), the default tab is `File`, and every control on
+    /// any other tab was therefore unreachable from the harness — including the
+    /// master edit switch on `Edit`. A control the observation harness cannot
+    /// reach is one whose defects only the operator finds.
+    Tab(&'static str),
 
     /// Burn a frame. Used to let a texture, a provider rebuild, or egui's own
     /// click detection settle between steps.
@@ -270,6 +278,15 @@ fn parse_step(s: &str) -> Option<Step> {
         "panel" if rest.trim() == "groups" => Some(Step::Groups),
         "panel" if rest.trim() == "redact" => Some(Step::Redact),
         "panel" if rest.trim() == "forms" => Some(Step::Forms),
+        "tab" => match rest.trim() {
+            "file" => Some(Step::Tab("file")),
+            "edit" => Some(Step::Tab("edit")),
+            "review" => Some(Step::Tab("review")),
+            "measure" => Some(Step::Tab("measure")),
+            "tools" => Some(Step::Tab("tools")),
+            "view" => Some(Step::Tab("view")),
+            _ => None,
+        },
         "key" => match rest.trim() {
             "left" => Some(Step::NavKey("left")),
             "right" => Some(Step::NavKey("right")),
