@@ -4823,6 +4823,25 @@ impl PdfceApp {
         // The source hint is the document this data came FROM — an FDF that
         // does not say so is a set of values with no way back to the form it
         // fills, which is how form data ends up applied to the wrong file.
+        // How many rich-text fields this document has, counted BEFORE the
+        // write so the operator is told at the moment the data leaves.
+        //
+        // pdfce's FDF/XFDF model carries field VALUES only — `<value-richtext>`
+        // / the FDF `/RV` key are a named non-goal of Pass 7.1, and both
+        // formats exist precisely to carry formatting alongside the plain
+        // value. So exporting a rich-text field today writes its plain-text
+        // equivalent and silently drops the formatting.
+        //
+        // That was a defensible scope call while this was CLI-only, where the
+        // limit is in `--help` and the caller is a scripter. It is NOT
+        // defensible behind a GUI button labelled "Export data…", where the
+        // operator has no way to learn it. Disclosed rather than left to be
+        // discovered by a re-import that comes back unstyled.
+        //
+        // Conditional, so it is a signal and not noise: a document with no
+        // rich-text field says nothing about rich text.
+        let rich = pdfce_core::forms::parse_acroform(&doc.session.graph())
+            .map_or(0, |f| f.fields.iter().filter(|x| x.is_rich_text()).count());
         let hint = doc.path.display().to_string();
         let xfdf = path
             .extension()
@@ -4834,7 +4853,15 @@ impl PdfceApp {
             data.to_fdf(Some(&hint))
         };
         self.edit_note = Some(match std::fs::write(&path, &bytes) {
-            Ok(()) => ui_text::forms_data_exported(data.fields.len(), &path.display().to_string()),
+            Ok(()) => {
+                let mut note =
+                    ui_text::forms_data_exported(data.fields.len(), &path.display().to_string());
+                if rich > 0 {
+                    note.push(' ');
+                    note.push_str(&ui_text::forms_data_rich_text_dropped(rich));
+                }
+                note
+            }
             Err(err) => ui_text::forms_data_export_failed(&err.to_string()),
         });
     }
@@ -4884,6 +4911,8 @@ impl PdfceApp {
         let Status::Open(doc) = &mut self.status else {
             return;
         };
+        let rich = pdfce_core::forms::parse_acroform(&doc.session.graph())
+            .map_or(0, |f| f.fields.iter().filter(|x| x.is_rich_text()).count());
         match doc.session.import_form_data(&data) {
             Ok(outcome) => {
                 doc.refresh_pages();
@@ -4892,10 +4921,12 @@ impl PdfceApp {
                 // show stale text over freshly imported values — the panel
                 // would disagree with the document it is describing.
                 self.form_drafts.clear();
-                self.edit_note = Some(ui_text::forms_data_imported(
-                    outcome.applied,
-                    outcome.skipped,
-                ));
+                let mut note = ui_text::forms_data_imported(outcome.applied, outcome.skipped);
+                if rich > 0 {
+                    note.push(' ');
+                    note.push_str(&ui_text::forms_data_rich_text_dropped(rich));
+                }
+                self.edit_note = Some(note);
             }
             Err(err) => {
                 self.save_result = Some(SaveOutcome::Failed(err.to_string()));

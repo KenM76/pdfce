@@ -6317,3 +6317,21 @@ pub fn form_field_choice_set(label: &str, count: usize) -> String {
         format!("“{label}” set to {count} selection(s).")
     }
 }
+
+/// Disclosure appended to a form-data export/import report when the document
+/// carries rich-text fields.
+///
+/// pdfce's FDF/XFDF model carries field VALUES only. Both formats have a
+/// dedicated slot for formatted content (`<value-richtext>` in XFDF, `/RV` in
+/// FDF) that pdfce does not yet read or write, so a rich-text field
+/// round-trips as its plain-text equivalent and loses its formatting.
+///
+/// Said out loud because the alternative is an operator discovering it when a
+/// re-import comes back unstyled, by which point the styled original may be
+/// gone. Conditional on the document actually having such a field, so it is a
+/// signal rather than boilerplate.
+pub fn forms_data_rich_text_dropped(count: usize) -> String {
+    format!(
+        "⚠ {count} field(s) hold formatted (rich) text. Only the plain text is carried in the data file — bold, colours and fonts are not, and will not come back on import."
+    )
+}
