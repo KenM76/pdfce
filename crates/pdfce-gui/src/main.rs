@@ -2567,6 +2567,115 @@ impl OpenDoc {
             .map(|p| p as &dyn CanvasTargetProvider)
     }
 
+    /// Truncate an [`EnteredObject`] to the deepest rung that still exists on
+    /// the freshly-decomposed page (Pass 26.2).
+    ///
+    /// `None` means even the object is gone and the operator returns to Page.
+    ///
+    /// # What "still exists" is allowed to mean, and what it must not
+    ///
+    /// This deliberately does NOT try to prove the object is *the same object*
+    /// — it cannot. `EnteredObject` holds paint-order indices and a decomposed
+    /// page offers no stable identity to compare against, so any such claim
+    /// would be a guess dressed as a check.
+    ///
+    /// What it proves instead is that the slot is still occupied by something
+    /// of the SAME KIND with ENOUGH structure to address: a path where a path
+    /// was, with at least `subpath + 1` subpaths, and that subpath with at
+    /// least `node + 1` points. That is a genuine bound on how wrong the
+    /// retained state can be, not a proof it is right.
+    ///
+    /// The residual risk is an edit that removes one object and leaves a
+    /// same-kind object of similar shape at the same index — after which the
+    /// operator's outline would sit on a neighbour. Accepted knowingly,
+    /// because the alternative was ejecting them on EVERY edit, and because
+    /// the outline is drawn: a wrong one is visible immediately, where a lost
+    /// place is silently expensive.
+    fn revalidate_entered(
+        objects: Option<&pdfce_core::vector::PageObjects>,
+        entered: canvas::EnteredObject,
+    ) -> Option<canvas::EnteredObject> {
+        use pdfce_core::vector::VectorObject;
+        let objects = objects?;
+        let object = objects.objects.get(entered.object)?;
+        // Kind check first: a Path slot now holding Text is not the object the
+        // operator entered, whatever its index says.
+        let VectorObject::Path(path) = object else {
+            return None;
+        };
+        let Some(sub_ix) = entered.subpath else {
+            // Object rung only — the object survived, and there is nothing
+            // deeper to check.
+            return Some(canvas::EnteredObject {
+                subpath: None,
+                node: None,
+                ..entered
+            });
+        };
+        let Some(subpath) = path.subpaths.get(sub_ix) else {
+            // The subpath is gone; the object is not. Truncate one rung
+            // instead of all the way out.
+            return Some(canvas::EnteredObject {
+                subpath: None,
+                node: None,
+                ..entered
+            });
+        };
+        // A subpath's addressable anchors are its start plus one per segment,
+        // which is what the Node rung indexes over.
+        Some(Self::truncate_entered(
+            entered,
+            true,
+            Some(path.subpaths.len()),
+            Some(subpath.segments.len() + 1),
+        ))
+    }
+
+    /// The truncation LADDER itself, over plain counts.
+    ///
+    /// Split out from [`Self::revalidate_entered`] so the rule can be tested
+    /// without constructing a decomposed page — the lookup needs a
+    /// `PageObjects` with eight fields of geometry, the RULE needs three
+    /// numbers, and only the rule can be got wrong in an interesting way.
+    ///
+    /// `None` for a count means that level is gone. Each level is checked
+    /// deepest-first and truncated ONE RUNG at a time, because a rung that is
+    /// still valid must not be discarded because a deeper one was not.
+    fn truncate_entered(
+        entered: canvas::EnteredObject,
+        object_is_path: bool,
+        subpath_count: Option<usize>,
+        anchor_count: Option<usize>,
+    ) -> canvas::EnteredObject {
+        let to_object = canvas::EnteredObject {
+            subpath: None,
+            node: None,
+            ..entered
+        };
+        if !object_is_path {
+            return to_object;
+        }
+        let Some(sub_ix) = entered.subpath else {
+            return to_object;
+        };
+        if subpath_count.is_none_or(|n| sub_ix >= n) {
+            return to_object;
+        }
+        let Some(node_ix) = entered.node else {
+            return canvas::EnteredObject {
+                node: None,
+                ..entered
+            };
+        };
+        if anchor_count.is_none_or(|n| node_ix >= n) {
+            return canvas::EnteredObject {
+                node: None,
+                ..entered
+            };
+        }
+        entered
+    }
+
     /// Drop any canvas-selection target the provider can no longer resolve
     /// (spec §4.4) — the geometry analogue of [`Self::clamp_selection`] for
     /// the page rail. Run from [`Self::refresh_pages`], which every edit,
@@ -2577,15 +2686,45 @@ impl OpenDoc {
     /// no-op; the call site exists so Pass 9a's real provider gets the
     /// cleanup for free.
     fn prune_canvas_selection(&mut self) {
-        // The entered object cannot survive an edit or a page change, for the
-        // same reason the click cycle cannot: after a content rewrite the SAME
-        // paint-order index can name a different object, and the same subpath
-        // ordinal a different line. Keeping it would leave an outline drawn
-        // around whatever now happens to occupy that slot — a selection that
-        // silently changed what it refers to, which is worse than no selection.
-        // This runs from `refresh_pages`, which every edit, undo and redo
-        // already funnels through.
-        self.entered = None;
+        // LEVEL SURVIVAL ACROSS AN EDIT (Pass 26.2).
+        //
+        // This used to be an unconditional `self.entered = None`, and the
+        // operator hit exactly the cost of that: *"once I've dragged and moved
+        // a node or anything else, the view should still show the others."*
+        // Moving one node ejected them from three rungs deep back to Page, on
+        // a page with ~5,900 objects — so every single node edit was followed
+        // by re-finding the object, re-entering it, and re-finding the subpath.
+        //
+        // The old reasoning was sound and is preserved, because the hazard is
+        // real: `EnteredObject` is all POSITIONAL indices, and after a content
+        // rewrite the same paint-order index can name a different object.
+        // Keeping it blindly would draw an outline around whatever now
+        // occupies that slot — a selection that silently changed its referent,
+        // which is worse than no selection.
+        //
+        // But dropping it was the wrong response to that hazard, because the
+        // hazard mostly does not occur. A node move, a handle move, a subpath
+        // move — the edits after which an operator most wants their place kept
+        // — rewrite operands INSIDE one object. They add and remove nothing,
+        // so paint order is untouched. The unconditional drop was paying for
+        // the rare case on every occurrence of the common one.
+        //
+        // So: RE-VALIDATE, and truncate to the nearest surviving rung. Each
+        // rung is checked against the freshly-decomposed page, deepest first.
+        // If the node is gone but the subpath survives, the operator stays on
+        // the subpath; if the subpath is gone, they stay on the object; only
+        // if the object itself no longer looks like the one they entered are
+        // they returned to Page.
+        let before = self.entered;
+        self.entered = self.entered.and_then(|e| {
+            Self::revalidate_entered(
+                self.object_model
+                    .as_ref()
+                    .map(ObjectModelProvider::page_objects),
+                e,
+            )
+        });
+        diag::trace(|| format!("level-survival before={before:?} after={:?}", self.entered));
         self.subpath_cycle = None;
         // A click cycle cannot survive an edit or a page change. Its
         // liveness checks compare `TargetId`s, and after a content rewrite
@@ -18828,5 +18967,72 @@ mod tests {
     #[test]
     fn clearing_a_filled_form_field_is_a_commit() {
         assert_eq!(form_field_commit(true, "", "Ken"), Some(String::new()));
+    }
+
+    // -----------------------------------------------------------------
+    // Pass 26.2 — level survival across an edit: the truncation ladder.
+    // -----------------------------------------------------------------
+
+    fn ent(subpath: Option<usize>, node: Option<usize>) -> canvas::EnteredObject {
+        canvas::EnteredObject {
+            object: 0,
+            subpath,
+            node,
+        }
+    }
+
+    /// THE HEADLINE, and the operator's own report: a node-deep position
+    /// SURVIVES an edit that leaves the structure intact. Moving one node used
+    /// to eject them from three rungs deep back to Page on a ~5,900-object
+    /// page, so every node edit cost a re-find and a re-enter.
+    #[test]
+    fn a_node_deep_position_survives_a_structurally_neutral_edit() {
+        let e = ent(Some(0), Some(3));
+        assert_eq!(
+            OpenDoc::truncate_entered(e, true, Some(1), Some(5)),
+            e,
+            "5 anchors still address node 3 — nothing should be given up"
+        );
+    }
+
+    /// A vanished node truncates to its SUBPATH, not to Page. Discarding the
+    /// still-valid subpath rung would be the same over-reaction, one level up.
+    #[test]
+    fn a_vanished_node_truncates_one_rung_to_the_subpath() {
+        assert_eq!(
+            OpenDoc::truncate_entered(ent(Some(0), Some(9)), true, Some(1), Some(3)),
+            ent(Some(0), None)
+        );
+    }
+
+    /// A vanished subpath truncates to the OBJECT, again one rung.
+    #[test]
+    fn a_vanished_subpath_truncates_one_rung_to_the_object() {
+        assert_eq!(
+            OpenDoc::truncate_entered(ent(Some(7), Some(1)), true, Some(2), None),
+            ent(None, None)
+        );
+    }
+
+    /// A slot whose KIND changed is not the object that was entered, whatever
+    /// its index says. This is the check that bounds how wrong a retained
+    /// position can be — without it, "the index still resolves" would be the
+    /// only guard, and an index always resolves.
+    #[test]
+    fn a_slot_whose_kind_changed_gives_up_every_inner_rung() {
+        assert_eq!(
+            OpenDoc::truncate_entered(ent(Some(0), Some(0)), false, Some(4), Some(4)),
+            ent(None, None)
+        );
+    }
+
+    /// An object-rung position is unaffected by anything deeper being absent —
+    /// there is nothing deeper to lose.
+    #[test]
+    fn an_object_rung_position_needs_no_inner_structure() {
+        assert_eq!(
+            OpenDoc::truncate_entered(ent(None, None), true, None, None),
+            ent(None, None)
+        );
     }
 }
