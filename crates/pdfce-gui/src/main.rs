@@ -540,6 +540,19 @@ fn configure_context(ctx: &egui::Context) {
 // Application state
 // ---------------------------------------------------------------------------
 
+/// Vertical gap between rows inside a dock panel (`UI_PREFERENCES.md` §11).
+///
+/// egui's default is 3.0, chosen for general-purpose layout and shared with
+/// every other surface in the app. The dock panels are a *dense property
+/// surface* and are the one place that default was never tuned for, so they —
+/// and only they — get this.
+///
+/// Deliberately a named constant rather than a literal at the call site: it is
+/// a design token with a documented rationale, and the next person to want a
+/// tighter panel should change one number with a paper trail rather than
+/// sprinkle `spacing_mut` calls through individual panels.
+const DENSE_ROW_SPACING_Y: f32 = 2.0;
+
 /// The whole application state.
 struct PdfceApp {
     /// What, if anything, is open.
@@ -10062,6 +10075,26 @@ impl PdfceApp {
     /// tree scrolled to row 900 would leave the properties form scrolled off
     /// its own top.
     fn panel_body(&mut self, panel: DockPanel, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        // DENSITY, applied ONCE for every dock pane (UI_PREFERENCES.md §11).
+        //
+        // egui's default `item_spacing.y` is 3.0 and its `interact_size.y` is
+        // 18.0, so a row's pitch is 21 px — measured and confirmed against the
+        // running app before touching anything. The 3.0 is a general-purpose
+        // value shared with the toolbar, the ribbon and the status bar; it was
+        // never chosen for a dense property surface, which is exactly what
+        // these panes are.
+        //
+        // Narrowed HERE rather than in `configure_context` deliberately: the
+        // same number is doing a different job in a toolbar row, where
+        // controls need to be separable at a glance. Scoping it to the dock
+        // means the density decision cannot leak into surfaces that did not
+        // ask for it.
+        //
+        // What is NOT touched, and the reason is in §11.3: `interact_size.y`
+        // stays 18.0. Shrinking the click target is the biggest density win
+        // available and it is refused — the gap between controls is fair game,
+        // the controls are not.
+        ui.spacing_mut().item_spacing.y = DENSE_ROW_SPACING_Y;
         // Statement arms, not expression arms: `Pages` hosts a body that
         // scrolls itself, so it must NOT be wrapped in a `ScrollArea` — two
         // nested scroll areas give the operator two scrollbars for one list
@@ -10137,7 +10170,12 @@ impl PdfceApp {
         }
         egui::Grid::new("properties-grid")
             .num_columns(2)
-            .spacing([12.0, 6.0])
+            // Row spacing matches the pane's own (UI_PREFERENCES.md §11): a
+            // labelled property row and a plain control row above it sat on
+            // two different rhythms, 25 px against 21 px, which reads as a
+            // gap between sections that are not separate. The COLUMN spacing
+            // stays 12.0 — that is horizontal and buys nothing back.
+            .spacing([12.0, DENSE_ROW_SPACING_Y])
             .show(ui, |ui| {
                 for (field, text) in &mut doc.properties_draft {
                     // Per-field lossy marking, carried from the Pass 3.1

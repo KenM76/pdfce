@@ -417,6 +417,78 @@ statement (state is never carried by color alone — CLAUDE.md rule and
 
 ---
 
+## §11. Density — the dock panels are a dense surface
+
+Added by the shell redesign's slice 1 (`docs/ui_specs/shell-redesign.md`
+§2.2/§6), which asked for a named convention rather than a per-panel
+judgement, *"cheaper to fix once, in the token module, than to re-derive
+per new surface."*
+
+### §11.1 What was actually costing the space — measured, not guessed
+
+egui's shipped defaults are `item_spacing: vec2(8.0, 3.0)` and
+`interact_size: vec2(40.0, 18.0)` (`egui-0.35.0/src/style.rs:1449,1454`).
+So a row's pitch is **`interact_size.y` + `item_spacing.y`**, and the
+measured pitches before this pass agree exactly:
+
+| Surface | Measured pitch | Composition |
+|---|---|---|
+| Radio option rows (Forms) | 21 px | 18 + 3 (defaults) |
+| `/Info` property grid rows | 25 px | 18 + 6 (its own `.spacing([12.0, 6.0])`) |
+
+That matters because it names the lever. The airiness was **not** large
+text and **not** the general `item_spacing` — it was the vertical gap
+*added on top of* a widget height that is already near the floor.
+
+### §11.2 The convention
+
+**`DENSE_ROW_SPACING_Y = 2.0`**, applied once to the whole dock-pane
+scope in `PdfceApp::panel_body`, so every dock panel inherits it and no
+panel sets its own. The property grid's own row spacing is brought to the
+same number, so a labelled property row and a plain control row sit on the
+same rhythm instead of two.
+
+egui's 3.0 default is a *general-purpose* value shared with the toolbar,
+the ribbon, the status bar and the canvas overlays. It was never chosen
+for a dense property surface, and the redesign spec says so in those
+words. This narrows it **for the dock panels only** — deliberately not
+globally, because the same number is doing a different job in a toolbar
+row where controls need to be separable at a glance.
+
+### §11.3 What density may NOT be bought with
+
+Three things are ruled out here so a future pass does not quietly trade
+them for pixels:
+
+1. **`interact_size.y` stays at 18.0.** It is the minimum height of an
+   interactive widget — i.e. the click target. Shrinking it is the single
+   biggest available density win and it is refused: it trades pointer
+   accuracy, which costs most for the operators least able to spare it.
+   Density is taken from the GAP between controls, never from the
+   controls.
+2. **No text gets smaller.** §6's roles stand — Heading 17, Body 13.5,
+   Caption 11. The redesign spec makes the same point independently.
+3. **No explanatory line is deleted to save a row.** The canvas raster is
+   screen-reader-illegible, and this project has repeatedly narrowed that
+   gap by routing facts through real text widgets — disclosures,
+   refusals, readouts. Those lines ARE the accessibility surface. A
+   separator that separates nothing is fair game; a sentence never is.
+
+### §11.4 One control per row is not a rule to defend
+
+Where a numeric field and its unit/mode selector are stacked, pair them
+on one row (the scale-entry and decimal-places rows already do this).
+Where a section's controls are genuinely independent, leave them stacked
+— pairing unrelated controls to save a row makes the operator read a row
+as a unit that is not one.
+
+`ui.separator()` earns its row only between sections that are
+conceptually distinct. Two separators with one label between them, or a
+separator immediately under a heading that already has one, are the
+common cases worth removing.
+
+---
+
 ## §10. Open items — not decided here
 
 1. **A conflict between the handoff and a standing rule, surfaced
