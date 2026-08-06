@@ -133,6 +133,12 @@ pub enum Step {
     /// the code. A panel the observation harness cannot open is a panel whose
     /// defects can only be found by the operator.
     Redact,
+    /// Open the interactive-form field list (`panel:forms`).
+    ///
+    /// Same argument as [`Self::Redact`] one variant up: a panel the
+    /// observation harness cannot open is a panel whose defects only the
+    /// operator finds.
+    Forms,
     /// Burn a frame. Used to let a texture, a provider rebuild, or egui's own
     /// click detection settle between steps.
     Wait,
@@ -243,6 +249,7 @@ fn parse_step(s: &str) -> Option<Step> {
         "wait" => Some(Step::Wait),
         "panel" if rest.trim() == "groups" => Some(Step::Groups),
         "panel" if rest.trim() == "redact" => Some(Step::Redact),
+        "panel" if rest.trim() == "forms" => Some(Step::Forms),
         "view" if rest.trim() == "points" => Some(Step::ShowPoints),
         // NOT `rest.trim()`: leading and trailing spaces are legitimate text.
         "type" if !rest.is_empty() => Some(Step::Text(rest.to_owned())),

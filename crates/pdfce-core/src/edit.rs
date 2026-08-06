@@ -4022,6 +4022,49 @@ impl EditSession {
     /// resolve *which* fields a `/FieldMDP` locks, so it refuses fill
     /// conservatively whenever any `/FieldMDP` is present — a named
     /// over-refusal, precise per-field resolution a follow-up.
+    /// **Would a form fill be refused on this document, and why?**
+    ///
+    /// `None` when filling is allowed; `Some(err)` carrying the exact refusal
+    /// a fill would raise.
+    ///
+    /// # Why a shell needs to ask BEFORE it offers the control
+    ///
+    /// Standing rule R83: no affordance without the capability. A form panel
+    /// that renders a live, focusable text box over a document whose
+    /// certification signature forbids fills is promising something it cannot
+    /// deliver — the operator types a value, tabs away, and gets a refusal
+    /// instead of an edit. Disabling the row up front with the reason on it is
+    /// the honest surface, and that requires knowing the answer before any
+    /// mutation is attempted.
+    ///
+    /// # Why it returns the ERROR, not a `bool`
+    ///
+    /// The two refusals are different facts with different remedies —
+    /// [`EditError::CertificationForbidsChange`] is about the whole document's
+    /// permissions entry, [`EditError::FieldLockedBySignature`] about a
+    /// `/FieldMDP` transform lock — and a `bool` would force the caller to
+    /// invent its own wording for a distinction `pdfce-core` already knows.
+    /// That is how a shell's message and the engine's message drift apart.
+    ///
+    /// This is a **pure query**: it reads the signature census and mutates
+    /// nothing, so it is safe to call every frame from a UI.
+    ///
+    /// ```
+    /// # use pdfce_core::{document::Document, edit::EditSession};
+    /// # fn demo(doc: Document) {
+    /// let session = EditSession::new(doc);
+    /// if let Some(err) = session.fill_refusal() {
+    ///     // Disable the control and show `err`, rather than offering a box
+    ///     // that will reject whatever is typed into it.
+    ///     eprintln!("form filling is not available: {err}");
+    /// }
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn fill_refusal(&self) -> Option<EditError> {
+        self.check_certification_for_fill().err()
+    }
+
     fn check_certification_for_fill(&self) -> Result<(), EditError> {
         let found = census(&self.graph());
         if found.perms_enforced && found.signatures > 0 && found.certification_permission == Some(1)

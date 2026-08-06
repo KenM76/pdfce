@@ -1770,6 +1770,10 @@ pub fn ribbon_group_content_tools() -> &'static str {
     "Content"
 }
 /// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_forms() -> &'static str {
+    "Forms"
+}
+/// See [`ribbon_group_file_ops`].
 pub fn ribbon_group_markup() -> &'static str {
     "Markup"
 }
@@ -5977,4 +5981,160 @@ mod refusal_tests {
             "and it must still say what failed: {msg}"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Forms panel (`docs/ui_specs/forms-panel.md`) — interactive AcroForm filling.
+// ---------------------------------------------------------------------------
+
+/// The Forms pane heading.
+pub fn forms_panel_heading() -> &'static str {
+    "Form fields"
+}
+
+/// The ribbon button that opens the Forms pane.
+pub fn forms_open_button() -> &'static str {
+    "Fill Form"
+}
+
+/// Tooltip on that button.
+pub fn forms_open_tooltip() -> &'static str {
+    "List this document's fillable fields and type into them. Nothing is written to disk until you save."
+}
+
+/// Shown in the Forms pane when no document is open.
+pub fn forms_no_document() -> &'static str {
+    "Open a document to fill in its form fields."
+}
+
+/// Shown when the open document carries no `/AcroForm` at all.
+///
+/// States the distinction that actually matters to the operator: a page can
+/// LOOK like a form — ruled boxes, printed labels — without carrying a single
+/// interactive field. Without this, "no fields" reads as pdfce failing to find
+/// something that is plainly there on the page.
+pub fn forms_no_acroform() -> &'static str {
+    "This document has no interactive form fields. A page can look like a form — boxes and labels printed on it — without carrying any fields you can type into; that is a picture of a form, and filling it needs the text tools instead."
+}
+
+/// Shown when there is an `/AcroForm` but it declares no fields.
+pub fn forms_empty_acroform() -> &'static str {
+    "This document declares an interactive form but lists no fields in it."
+}
+
+/// The count line at the top of a populated list.
+pub fn forms_field_count(total: usize, fillable: usize) -> String {
+    format!("{total} field(s), {fillable} you can fill here.")
+}
+
+/// One field row's tooltip — always the RAW fully-qualified name.
+///
+/// The row's visible label prefers `/TU`, which is what a screen reader
+/// announces; but an operator diagnosing why an FDF import did not match needs
+/// the technical name, and it may differ from the label or be absent from it.
+pub fn form_field_row_tooltip(fqn: &str) -> String {
+    format!("Field name in the file: {fqn}")
+}
+
+/// Page suffix on a field label.
+pub fn form_field_page_suffix(page_number: usize) -> String {
+    format!(" (p. {page_number})")
+}
+
+/// Tooltip on a row disabled because the field is read-only.
+pub fn form_field_readonly_tooltip() -> &'static str {
+    "This field is marked read-only in the document, so its value is not meant to be changed."
+}
+
+/// Tooltip on a row disabled by a certification signature.
+pub fn form_field_certification_disabled_tooltip() -> &'static str {
+    "A certification signature on this document forbids changing form values. Filling this field would invalidate that signature, so pdfce will not do it."
+}
+
+/// Note on a signature-field row.
+pub fn form_field_signature_note() -> &'static str {
+    "Signature field — pdfce does not create or verify signatures yet."
+}
+
+/// Note on a pushbutton row.
+///
+/// A pushbutton holds no value, so there is nothing to fill; saying so is the
+/// difference between "recognised and has no value" and "pdfce missed it".
+pub fn form_field_pushbutton_note() -> &'static str {
+    "Button — it runs an action rather than holding a value, so there is nothing to fill in."
+}
+
+/// Note on a rich-text field row (P0 refusal — see spec §3.1).
+pub fn form_field_rich_text_note() -> &'static str {
+    "This field stores rich (formatted) text. pdfce can only edit it as plain text, which would throw away its formatting — so it is left alone for now."
+}
+
+/// Note on a choice field, which P0 does not edit.
+pub fn form_field_choice_note() -> &'static str {
+    "Drop-down / list field — choosing from its options is not built yet. Its current value is shown above."
+}
+
+/// Note on a radio group, which P0 does not edit.
+pub fn form_field_radio_note() -> &'static str {
+    "Radio group — selecting an option is not built yet. Its current value is shown above."
+}
+
+/// The `(required)` marker, as TEXT — never a colour-only cue (rule 6).
+pub fn form_field_required_marker() -> &'static str {
+    " (required)"
+}
+
+/// Caption under a `/MaxLen` text editor.
+pub fn form_field_length_caption(len: usize, max: i64) -> String {
+    format!("{len}/{max}")
+}
+
+/// Tooltip on a password-masked field.
+///
+/// Says the masking is display-only. A masked box reads as "secure" to anyone
+/// not told otherwise, and the value really is stored as plain text in the
+/// file — the sneaky half of rule 4 if left unsaid.
+pub fn form_field_password_tooltip() -> &'static str {
+    "Typing here is masked on screen. That does NOT encrypt it — the value is stored as plain text inside the PDF."
+}
+
+/// The `/NeedAppearances` disclosure.
+///
+/// The real trap this closes: a value pdfce writes is correct in the file, but
+/// a viewer that honours `/NeedAppearances` draws it from the value while one
+/// that does not draws the stale baked appearance — so the same document shows
+/// two different things depending on who opens it.
+pub fn forms_need_appearances_note() -> &'static str {
+    "⚠ This form asks viewers to draw field values themselves. Some viewers do and some don't, so a filled value may look different — or not appear — depending on what opens the file."
+}
+
+/// The JavaScript-computed-value disclosure.
+pub fn forms_javascript_note(count: usize) -> String {
+    format!(
+        "⚠ {count} field(s) carry scripts that would normally calculate, format or validate their value. pdfce does not run them, so a value you type here stays exactly as typed and any field that would have been computed from it is left alone."
+    )
+}
+
+/// Status note after a successful text fill.
+pub fn form_field_filled(label: &str) -> String {
+    format!("Filled “{label}”.")
+}
+
+/// Status note after a checkbox toggle.
+pub fn form_field_toggled(label: &str, on: bool) -> String {
+    if on {
+        format!("Ticked “{label}”.")
+    } else {
+        format!("Cleared “{label}”.")
+    }
+}
+
+/// Disclosure when a toggled checkbox has no appearance for its new state.
+///
+/// The value really did change; nothing on the page moved. Without this the
+/// operator reasonably concludes the click did not register.
+pub fn form_field_no_appearance_for_state(label: &str) -> String {
+    format!(
+        "“{label}” changed, but this document has no drawn appearance for that state — the value is set even though the page looks the same."
+    )
 }

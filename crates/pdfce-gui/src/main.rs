@@ -766,6 +766,19 @@ struct PdfceApp {
     /// the two are mutually exclusive inputs to the same operation, and two
     /// boxes would raise the question of which wins when both are filled.
     redact_search_is_pattern: bool,
+    /// In-flight text-field edits, keyed by fully-qualified field name.
+    ///
+    /// Same reasoning as [`OpenDoc::dimension_place_draft`] (Pass 34.2): an
+    /// `egui::TextEdit` reports `changed()` on every keystroke and
+    /// `EditSession::fill_text_field` pushes one undo entry per call, so
+    /// committing on `changed` would make one typed word a dozen undo steps
+    /// and a dozen appearance regenerations. The draft holds what is typed;
+    /// the commit happens once, on `lost_focus()`.
+    ///
+    /// Keyed by FQN rather than by row index because the row list is rebuilt
+    /// from the session every frame — an index would silently re-target the
+    /// draft the moment a field's position changed.
+    form_drafts: std::collections::HashMap<String, String>,
     /// The narrator line describing the most recent edit — a delete's
     /// dangling-reference disclosure, a reorder's page count.
     ///
@@ -1064,6 +1077,7 @@ impl Default for PdfceApp {
             pending_redaction_apply: None,
             redact_search_query: String::new(),
             redact_search_is_pattern: false,
+            form_drafts: std::collections::HashMap::new(),
             edit_note: None,
             recovery_note: None,
             // Pass 6.1: a visible red pen and a 2-point stroke — sensible
@@ -2814,6 +2828,8 @@ enum Action {
     /// toggle semantics as [`Action::ToggleProperties`], for the same
     /// reason: a control that opens a surface should also put it away.
     ToggleRedactPanel,
+    /// Show the interactive-form field list (`docs/ui_specs/forms-panel.md`).
+    ToggleFormsPanel,
     /// Mark the whole of the current page for redaction (Pass 8.1,
     /// ui-spec §2.4). One `EditSession::add_redaction`; Undo reverses it.
     /// **Marks nothing about content** — it authors a reviewable
@@ -4152,6 +4168,300 @@ impl PdfceApp {
     }
 
     // -- Pass 8.1: redaction review & apply (ui-spec §3/§4) --------------
+
+    /// The **Forms** pane — the document's interactive fields, listed and
+    /// fillable (`docs/ui_specs/forms-panel.md`, P0).
+    ///
+    /// # The gap this closes
+    ///
+    /// `pdfce-core` has been able to fill text fields, toggle buttons, set
+    /// choice values, flatten, and import/export FDF/XFDF since Pass 7.0/7.1,
+    /// and `pdfce-cli` exposes all six. The GUI exposed NONE of it — a grep
+    /// for field-related identifiers over this file returned only
+    /// `/Info`-metadata hits. An operator could open a fillable PDF in pdfce
+    /// and had no way to fill it. This is the largest single core-versus-GUI
+    /// gap the 2026-08-05 audit found, and the only one that left a shipped
+    /// capability entirely unreachable.
+    ///
+    /// # A LIST, not a canvas overlay — and why that is not merely cheaper
+    ///
+    /// The superseded `docs/ui_specs/pass-7-form-fill.md` specified
+    /// click-the-widget-on-the-page, which needs widget hit-testing the canvas
+    /// does not have. But the deciding argument is not cost: real
+    /// `egui::TextEdit`/`Checkbox` widgets in a panel get Tab order and
+    /// AccessKit exposure **directly**, where projected canvas overlays get
+    /// neither — and the canvas raster remains screen-reader-illegible, a gap
+    /// this project has repeatedly narrowed by routing facts through real text
+    /// widgets. Click-to-edit on the page is named as a separate future Pass,
+    /// not silently dropped.
+    ///
+    /// # Fields are listed in the FILE's order
+    ///
+    /// Not sorted, not tab-order. `/AcroForm /Fields` order is what the
+    /// document itself declares, so the list matches the printed form far more
+    /// often than an alphabetical sort would. Computed `/Tabs` ordering is a
+    /// named P2 residual.
+    fn forms_panel(&mut self, ui: &mut egui::Ui) {
+        let Status::Open(doc) = &mut self.status else {
+            ui.label(ui_text::forms_no_document());
+            return;
+        };
+        ui.heading(ui_text::forms_panel_heading());
+
+        // Read the SESSION, not the opened file (the Pass 17.1 session-read
+        // rule): an operator who has already filled three fields must see
+        // those three values, not what was on disk when they opened it.
+        let Some(form) = pdfce_core::forms::parse_acroform(&doc.session.graph()) else {
+            ui.label(ui_text::forms_no_acroform());
+            return;
+        };
+        if form.fields.is_empty() {
+            ui.label(ui_text::forms_empty_acroform());
+            return;
+        }
+
+        // A page-object-id -> 1-based page number map, so a row can say WHICH
+        // page its field is on. Built once per frame rather than per row: a
+        // 400-field form would otherwise do 400 linear scans of the page list.
+        let page_numbers: std::collections::HashMap<pdfce_core::object::ObjId, usize> = doc
+            .pages
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (p.id, i + 1))
+            .collect();
+
+        // Asked ONCE, before any row is drawn, and applied to every row: a
+        // certification signature forbids filling the whole DOCUMENT, not one
+        // field, so per-row re-asking would repeat a signature census per
+        // field and still say the same thing (R83 — know before you offer).
+        let fill_refusal_note: Option<&'static str> = doc
+            .session
+            .fill_refusal()
+            .map(|_| ui_text::form_field_certification_disabled_tooltip());
+        let fillable = form.fields.iter().filter(|f| f.is_fillable()).count();
+        ui.label(ui_text::forms_field_count(form.fields.len(), fillable));
+
+        // -- The two document-wide disclosures, before any control. --
+        //
+        // Both describe conditions under which what the operator sees here and
+        // what a different viewer shows can legitimately disagree. Stated at
+        // the top, once, rather than repeated per row: they are properties of
+        // the FORM, not of any one field.
+        if form.need_appearances {
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::forms_need_appearances_note(),
+            );
+        }
+        let scripted = form
+            .fields
+            .iter()
+            .filter(|f| f.has_additional_actions)
+            .count();
+        if scripted > 0 {
+            ui.colored_label(
+                ui.visuals().warn_fg_color,
+                ui_text::forms_javascript_note(scripted),
+            );
+        }
+        ui.separator();
+
+        // Captured and applied after the `form` borrow ends — the same
+        // discipline the ce-dimension sections use.
+        let mut fill: Option<(String, String)> = None;
+        let mut toggle: Option<(String, Vec<u8>, bool, String, bool)> = None;
+        let drafts = &mut self.form_drafts;
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for field in &form.fields {
+                let fqn = field.fully_qualified_name.clone();
+                // The visible label prefers `/TU` — what a screen reader
+                // announces for an interactive field — so the operator reads
+                // the same string an assistive technology speaks, rather than
+                // two different names for one field. The raw name is always in
+                // the tooltip, because an FDF-import mismatch is diagnosed
+                // with it and `/TU` may be absent or differ.
+                let mut label = field
+                    .alternate_name
+                    .as_ref()
+                    .map(|b| String::from_utf8_lossy(b).into_owned())
+                    .filter(|s| !s.trim().is_empty())
+                    .unwrap_or_else(|| fqn.clone());
+                if let Some(n) = field
+                    .widgets
+                    .first()
+                    .and_then(|w| w.page)
+                    .and_then(|p| page_numbers.get(&p))
+                {
+                    label.push_str(&ui_text::form_field_page_suffix(*n));
+                }
+                if field.flags.has(pdfce_core::forms::FieldFlags::REQUIRED) {
+                    label.push_str(ui_text::form_field_required_marker());
+                }
+                ui.label(&label)
+                    .on_hover_text(ui_text::form_field_row_tooltip(&fqn));
+
+                // Every unfillable row is DISABLED AND EXPLAINED, never hidden
+                // (R83). An operator scrolling past a signature field should
+                // see that pdfce knows it is there.
+                if let Some(note) = fill_refusal_note.or_else(|| form_field_block_reason(field)) {
+                    ui.add_enabled_ui(false, |ui| {
+                        let mut shown = field.value.display_text();
+                        if matches!(field.field_type, Some(pdfce_core::forms::FieldType::Text)) {
+                            ui.add(
+                                egui::TextEdit::singleline(&mut shown).desired_width(f32::INFINITY),
+                            );
+                        } else if !shown.is_empty() {
+                            ui.label(&shown);
+                        }
+                    });
+                    ui.label(egui::RichText::new(note).small().weak());
+                    ui.separator();
+                    continue;
+                }
+
+                match (field.field_type, field.button_kind) {
+                    (Some(pdfce_core::forms::FieldType::Text), _) => {
+                        let stored = field.value.display_text();
+                        let draft = drafts.entry(fqn.clone()).or_insert_with(|| stored.clone());
+                        let multiline = field.flags.has(pdfce_core::forms::FieldFlags::MULTILINE);
+                        let password = field.flags.has(pdfce_core::forms::FieldFlags::PASSWORD);
+                        // `/MaxLen` truncates LIVE rather than at commit: a
+                        // limit discovered only when the value is written is a
+                        // limit the operator finds out about by losing text.
+                        if let Some(max) = field.max_len
+                            && max > 0
+                        {
+                            let max = usize::try_from(max).unwrap_or(usize::MAX);
+                            if draft.chars().count() > max {
+                                *draft = draft.chars().take(max).collect();
+                            }
+                        }
+                        let resp = if multiline {
+                            ui.add(
+                                egui::TextEdit::multiline(draft)
+                                    .desired_width(f32::INFINITY)
+                                    .desired_rows(2),
+                            )
+                        } else {
+                            ui.add(
+                                egui::TextEdit::singleline(draft)
+                                    .password(password)
+                                    .desired_width(f32::INFINITY),
+                            )
+                        };
+                        if password {
+                            resp.clone()
+                                .on_hover_text(ui_text::form_field_password_tooltip());
+                        }
+                        if let Some(max) = field.max_len
+                            && max > 0
+                        {
+                            ui.label(
+                                egui::RichText::new(ui_text::form_field_length_caption(
+                                    draft.chars().count(),
+                                    max,
+                                ))
+                                .small()
+                                .weak(),
+                            );
+                        }
+                        // Rect traced so the harness can drive this row —
+                        // same technique as Pass 34.2's display button and the
+                        // Redact panel's query box.
+                        diag::trace(|| {
+                            format!(
+                                "form-row-text fqn={fqn:?} draft={draft:?} stored={stored:?} lost_focus={} rect={:?}",
+                                resp.lost_focus(),
+                                resp.rect
+                            )
+                        });
+                        if let Some(text) =
+                            form_field_commit(resp.lost_focus(), draft.as_str(), &stored)
+                        {
+                            fill = Some((fqn.clone(), text));
+                        }
+                    }
+                    (
+                        Some(pdfce_core::forms::FieldType::Button),
+                        Some(pdfce_core::forms::ButtonKind::Check),
+                    ) => {
+                        let on_state = field
+                            .widgets
+                            .iter()
+                            .find_map(|w| w.on_states.first().cloned())
+                            .unwrap_or_else(|| b"Yes".to_vec());
+                        let is_on = matches!(
+                            &field.value,
+                            pdfce_core::forms::FieldValue::Name(n)
+                                if n.as_slice() == on_state.as_slice()
+                        );
+                        // Whether the widget's `/AP` `/N` actually defines a
+                        // sub-stream for the state being toggled INTO. When it
+                        // does not, the value changes and NOTHING ON THE PAGE
+                        // MOVES — which reads exactly like the click not
+                        // registering, so it has to be said out loud.
+                        let has_ap_for_target = |on: bool| {
+                            on || field
+                                .widgets
+                                .iter()
+                                .any(|w| w.on_states.iter().any(|st| st == b"Off"))
+                        };
+                        let mut checked = is_on;
+                        // Immediate commit, no draft: a checkbox has one
+                        // atomic change and no intermediate state to protect,
+                        // so the sixty-undo-entries argument that governs the
+                        // text rows does not apply.
+                        let cb = ui.checkbox(&mut checked, "");
+                        diag::trace(|| {
+                            format!("form-row-check fqn={fqn:?} on={is_on} rect={:?}", cb.rect)
+                        });
+                        if cb.changed() {
+                            toggle = Some((
+                                fqn.clone(),
+                                on_state.clone(),
+                                checked,
+                                label.clone(),
+                                has_ap_for_target(checked),
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+                ui.separator();
+            }
+        });
+
+        if let Some((fqn, text)) = fill {
+            doc.pending_note = Some(match doc.session.fill_text_field(&fqn, &text) {
+                Ok(_) => {
+                    doc.refresh_pages();
+                    ui_text::form_field_filled(&fqn)
+                }
+                // Reported, never swallowed. A certification signature, an
+                // encrypted document, or a field the model no longer holds all
+                // refuse here, and silence would read as the typing being lost.
+                Err(err) => err.to_string(),
+            });
+        }
+        if let Some((fqn, on_state, on, label, has_appearance)) = toggle {
+            // `Off` is the ISO 32000-1 §12.7.4.2.3 name for the cleared state
+            // of every check box, whatever its ON state happens to be called.
+            let target: &[u8] = if on { &on_state } else { b"Off" };
+            let name = String::from_utf8_lossy(target).into_owned();
+            doc.pending_note = Some(match doc.session.set_button_state(&fqn, &name) {
+                Ok(()) => {
+                    doc.refresh_pages();
+                    if has_appearance {
+                        ui_text::form_field_toggled(&label, on)
+                    } else {
+                        ui_text::form_field_no_appearance_for_state(&label)
+                    }
+                }
+                Err(err) => err.to_string(),
+            });
+        }
+    }
 
     /// The redaction review panel (ui-spec §3) — the dock pane that answers
     /// "what is marked in this document, and how do I finish or undo it?".
@@ -5706,6 +6016,10 @@ impl PdfceApp {
                 self.show_pane_subject(ribbon::PaneSubject::Redact);
                 return;
             }
+            Action::ToggleFormsPanel => {
+                self.show_pane_subject(ribbon::PaneSubject::Forms);
+                return;
+            }
             Action::MarkWholePageForRedaction => {
                 self.mark_whole_page_for_redaction();
                 return;
@@ -5784,6 +6098,7 @@ impl PdfceApp {
             | Action::ConfirmPendingCopy
             | Action::CancelPendingCopy
             | Action::ToggleRedactPanel
+            | Action::ToggleFormsPanel
             | Action::MarkWholePageForRedaction
             | Action::SearchAndMarkForRedaction
             | Action::RemoveRedactionMark(_)
@@ -6654,6 +6969,9 @@ impl eframe::App for PdfceApp {
                 // Through the SAME action the toolbar toggle pushes, so a
                 // scripted open takes the identical path a real one does.
                 self.apply(Action::ToggleRedactPanel, ctx, ctx.pixels_per_point());
+            }
+            diag::Step::Forms => {
+                self.apply(Action::ToggleFormsPanel, ctx, ctx.pixels_per_point());
             }
             diag::Step::ShowPoints => {
                 // Through the SAME action the toolbar toggle pushes, so a
@@ -7950,6 +8268,26 @@ impl PdfceApp {
                     });
                 }
 
+                if Self::ribbon_group(ui, tab, RG::Forms) {
+                    // The entry point to the Forms pane. Disabled with a
+                    // reason when the document has no pages (R83), for the
+                    // same reason every other document-scoped control here is:
+                    // a control that vanishes teaches nothing, a disabled one
+                    // with a tooltip teaches what would enable it.
+                    ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                        let response = Self::icon_text_toggle(
+                            ui,
+                            icons::Icon::EditText,
+                            self.pane_subject == ribbon::PaneSubject::Forms,
+                            ui_text::forms_open_button(),
+                            ui_text::forms_open_tooltip(),
+                        );
+                        if response.clicked() {
+                            actions.push(Action::ToggleFormsPanel);
+                        }
+                    });
+                }
+
                 if Self::ribbon_group(ui, tab, RG::Protect) {
                     // Pass 8.1 redaction (ui-spec §3.1) — the entry point to the
                     // dock's Redact panel.
@@ -8307,6 +8645,10 @@ impl PdfceApp {
             }
             ribbon::PaneSubject::Redact => {
                 self.redact_panel(ui, actions);
+                return;
+            }
+            ribbon::PaneSubject::Forms => {
+                self.forms_panel(ui);
                 return;
             }
             ribbon::PaneSubject::ActiveTool => {}
@@ -16458,6 +16800,78 @@ fn dimension_groups_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
     }
 }
 
+/// Why a form row cannot be filled here, or `None` when it can.
+///
+/// One function rather than a chain of `if`s inside the row loop, so the
+/// precedence is stated once and can be unit-tested. Order matters:
+/// read-only outranks type, because a read-only choice field is refused for
+/// being read-only whichever way you look at it, and reporting the less
+/// specific reason first would be less useful.
+///
+/// # The rich-text check is gated on field TYPE first, and must stay that way
+///
+/// `FieldFlags::RICH_TEXT` (bit 26) has the SAME BIT VALUE as
+/// `RADIOS_IN_UNISON`, and `forms.rs`'s own doc comment says to decode it
+/// against the resolved `/FT`. Testing the bit without the type gate would
+/// report every radio group as a rich-text field.
+///
+/// # Why rich text is refused rather than filled
+///
+/// `EditSession::fill_text_field` does not special-case the flag: it would
+/// overwrite the field value with plain text and regenerate a plain
+/// appearance, silently discarding whatever formatting was stored. That is a
+/// lossy conversion presented as an ordinary edit — the sneaky half of rule 4
+/// — so the row refuses and says why. Whether `pdfce-core` should ALSO refuse
+/// (so `pdfce-cli fill-field` gets the same protection) is a core question,
+/// raised by `pdfce-ui-specialist` and not decided here.
+fn form_field_block_reason(field: &pdfce_core::forms::Field) -> Option<&'static str> {
+    use pdfce_core::forms::{ButtonKind, FieldFlags, FieldType};
+    if field.flags.has(FieldFlags::READ_ONLY) {
+        return Some(ui_text::form_field_readonly_tooltip());
+    }
+    match field.field_type {
+        Some(FieldType::Signature) => Some(ui_text::form_field_signature_note()),
+        Some(FieldType::Choice) => Some(ui_text::form_field_choice_note()),
+        // TYPE-GATED, deliberately — see this function's own doc comment.
+        Some(FieldType::Text) if field.flags.has(FieldFlags::RICH_TEXT) => {
+            Some(ui_text::form_field_rich_text_note())
+        }
+        Some(FieldType::Button) => match field.button_kind {
+            Some(ButtonKind::Push) => Some(ui_text::form_field_pushbutton_note()),
+            Some(ButtonKind::Radio) => Some(ui_text::form_field_radio_note()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Should a form text-field draft be written to the session yet?
+///
+/// The exact shape [`place_draft_commit`] established in Pass 34.2, applied to
+/// a different widget — cited rather than re-derived, because the failure it
+/// prevents is identical:
+///
+/// 1. **`ended`** — `lost_focus()`, not `changed()`. `TextEdit` reports
+///    `changed()` on every keystroke and `EditSession::fill_text_field` pushes
+///    one undo entry per call, so committing on `changed` would make one typed
+///    word a dozen undo steps and a dozen appearance regenerations.
+/// 2. **the draft differs from what the document already holds** — otherwise
+///    tabbing THROUGH a field without typing writes a command whose only
+///    effect is an undo entry the operator did not earn. This bites harder
+///    here than it did for a spinner: tabbing through a form is how people
+///    read one.
+///
+/// `place_draft_commit`'s third condition — that the draft belongs to the
+/// selected object — has no analogue: the drafts are keyed by fully-qualified
+/// field name, so a draft cannot be aimed at the wrong field by construction
+/// rather than by check.
+fn form_field_commit(ended: bool, draft: &str, stored: &str) -> Option<String> {
+    if !ended || draft == stored {
+        return None;
+    }
+    Some(draft.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     /// Every declared ribbon group is actually GATED to some widget
@@ -17702,5 +18116,43 @@ mod tests {
     #[test]
     fn no_place_draft_commits_nothing() {
         assert_eq!(place_draft_commit(true, None, did(0), (0.0, 0.0)), None);
+    }
+
+    // -----------------------------------------------------------------
+    // Forms panel — the commit rule (`docs/ui_specs/forms-panel.md` §4).
+    // -----------------------------------------------------------------
+
+    /// Mid-typing NEVER commits. `TextEdit` reports `changed()` per keystroke
+    /// and `fill_text_field` pushes one undo entry per call, so committing on
+    /// change makes one typed word a dozen undo steps.
+    #[test]
+    fn a_form_draft_does_not_commit_until_focus_is_lost() {
+        assert_eq!(form_field_commit(false, "Ken", ""), None);
+    }
+
+    /// Losing focus with a changed value commits it.
+    #[test]
+    fn a_form_draft_commits_on_lost_focus() {
+        assert_eq!(form_field_commit(true, "Ken", ""), Some("Ken".to_owned()));
+    }
+
+    /// TABBING THROUGH a field without typing writes nothing.
+    ///
+    /// The condition that matters most in practice: tabbing through a form is
+    /// how people READ one, and without this every pass over a 40-field form
+    /// would push 40 undo entries and regenerate 40 appearances.
+    #[test]
+    fn tabbing_through_an_unchanged_form_field_commits_nothing() {
+        assert_eq!(form_field_commit(true, "Ken", "Ken"), None);
+        assert_eq!(form_field_commit(true, "", ""), None);
+    }
+
+    /// CLEARING a field is a real edit, not an absence of one.
+    ///
+    /// Guards the tempting `if draft.is_empty() { return None }` shortcut,
+    /// which would make a field impossible to empty once filled.
+    #[test]
+    fn clearing_a_filled_form_field_is_a_commit() {
+        assert_eq!(form_field_commit(true, "", "Ken"), Some(String::new()));
     }
 }

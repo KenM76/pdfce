@@ -81,6 +81,24 @@ pub enum RibbonGroup {
     Navigate,
     /// The tools that change what is drawn: Edit Text, Add Text, Obj.
     ContentTools,
+    /// Interactive-form (AcroForm) filling.
+    ///
+    /// # Why its own group and not a member of `ContentTools`
+    ///
+    /// `ContentTools` arms canvas TOOLS — each of its entries sets
+    /// `doc.active_tool` and takes over pointer input. Filling a form does
+    /// neither: the Forms panel is a list of the document's fields that works
+    /// with no tool armed and never touches the canvas gesture state. Putting
+    /// it in that group would promise a mode change that does not happen.
+    ///
+    /// # Why `Edit` and not `Tools` (where `Protect`/Redact lives)
+    ///
+    /// Redact sits under `Tools` because of what it IS — an irreversible,
+    /// document-wide operation that deserves distance from routine editing.
+    /// That reasoning does not transfer: filling a field is reversible before
+    /// save, low-stakes, and is exactly the routine document editing the
+    /// `Edit` tab is for.
+    Forms,
     /// Annotation authoring: shapes, highlights.
     Markup,
     /// Annotation authoring: notes, free text, stamps.
@@ -132,7 +150,7 @@ impl RibbonGroup {
         dead_code,
         reason = "the group enumeration; swept by this module's taxonomy test and by main.rs's gated-widget test, and the list any future group-picker must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::FileOps,
         Self::DocumentProperties,
         Self::Clipboard,
@@ -142,6 +160,7 @@ impl RibbonGroup {
         Self::Pages,
         Self::Navigate,
         Self::ContentTools,
+        Self::Forms,
         Self::Markup,
         Self::Notes,
         Self::MeasureTools,
@@ -166,6 +185,7 @@ impl RibbonGroup {
             Self::Pages => ui_text::ribbon_group_pages(),
             Self::Navigate => ui_text::ribbon_group_navigate(),
             Self::ContentTools => ui_text::ribbon_group_content_tools(),
+            Self::Forms => ui_text::ribbon_group_forms(),
             Self::Markup => ui_text::ribbon_group_markup(),
             Self::Notes => ui_text::ribbon_group_notes(),
             Self::MeasureTools => ui_text::ribbon_group_measure_tools(),
@@ -323,6 +343,7 @@ impl RibbonTab {
             Self::Edit => &[
                 RibbonGroup::History,
                 RibbonGroup::ContentTools,
+                RibbonGroup::Forms,
                 RibbonGroup::Pages,
             ],
             Self::Review => &[RibbonGroup::Markup, RibbonGroup::Notes],
@@ -445,6 +466,15 @@ pub enum PaneSubject {
     BatchTools,
     /// The redaction review surface.
     Redact,
+    /// The interactive-form (AcroForm) field list — see
+    /// `docs/ui_specs/forms-panel.md`.
+    ///
+    /// A fifth subject rather than a section of [`Self::Properties`]: that
+    /// pane is about "the selected thing", and a form fill shares no state
+    /// with a canvas selection. It is also not [`Self::ActiveTool`], which is
+    /// structurally tied to `doc.active_tool` — a value the Forms panel
+    /// correctly never sets, because filling a field arms no canvas tool.
+    Forms,
 }
 
 #[cfg(test)]
