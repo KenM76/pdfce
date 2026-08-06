@@ -6066,7 +6066,7 @@ pub fn form_field_pushbutton_note() -> &'static str {
 
 /// Note on a rich-text field row (P0 refusal — see spec §3.1).
 pub fn form_field_rich_text_note() -> &'static str {
-    "This field stores rich (formatted) text. pdfce can only edit it as plain text, which would throw away its formatting — so it is left alone for now."
+    "This field holds formatted text. pdfce cannot edit that formatting yet, and typing plain text into it would leave the stored formatting deciding what other viewers show — so the box above is read-only."
 }
 
 /// The `(required)` marker, as TEXT — never a colour-only cue (rule 6).
@@ -6334,4 +6334,20 @@ pub fn forms_data_rich_text_dropped(count: usize) -> String {
     format!(
         "⚠ {count} field(s) hold formatted (rich) text. Only the plain text is carried in the data file — bold, colours and fonts are not, and will not come back on import."
     )
+}
+
+/// The convert-to-plain-text button on a rich-text row.
+pub fn form_field_rich_text_convert() -> &'static str {
+    "Convert to plain text…"
+}
+
+/// Its tooltip. Delete-shaped weight: says what is lost, plainly, before the
+/// press — this discards formatting the operator may not be able to recreate.
+pub fn form_field_rich_text_convert_tooltip() -> &'static str {
+    "Turn this into an ordinary text field so you can type in it. The stored bold, colours and fonts are DISCARDED — only the plain words are kept. One undo reverses it."
+}
+
+/// Report after converting a rich-text field.
+pub fn form_field_rich_text_converted(label: &str) -> String {
+    format!("“{label}” is now an ordinary text field — you can type in it. Undo reverses this.")
 }

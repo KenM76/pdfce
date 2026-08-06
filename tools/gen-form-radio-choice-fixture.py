@@ -75,14 +75,14 @@ objs = {}
 # Catalog: four terminal/parent fields in /Fields. Widget KIDS are not listed
 # there — only the field parents are (§12.7.2 /Fields is the root field list).
 objs[1] = (
-    b"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [10 0 R 20 0 R 30 0 R 40 0 R] "
+    b"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [10 0 R 20 0 R 30 0 R 40 0 R 50 0 R] "
     b"/DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv << /Type /Font /Subtype /Type1 "
     b"/BaseFont /Helvetica >> >> >> >> >>"
 )
 objs[2] = b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
 objs[3] = (
     b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 260] /Resources << >> "
-    b"/Annots [11 0 R 12 0 R 13 0 R 21 0 R 22 0 R 31 0 R 41 0 R] >>"
+    b"/Annots [11 0 R 12 0 R 13 0 R 21 0 R 22 0 R 31 0 R 41 0 R 51 0 R] >>"
 )
 
 # Shared appearance streams: one filled dot (on) and one empty ring (off).
@@ -132,6 +132,31 @@ objs[41] = (
     b"<< /Parent 40 0 R /Subtype /Widget /Rect [20 60 200 115] /P 3 0 R "
     b"/MK << /BC [0 0 0] >> >>"
 )
+
+# -- 5. Notes: a RICH-TEXT field (/Ff bit 26 = 33554432).
+#
+#    /RV carries the XHTML-subset body (SS12.7.3.4 Tables 224/225), /DS the
+#    default style string (a bare `name:value;` list — NOT XML, per Table 223),
+#    and /V the plain-text twin the standard says SHOULD be preserved.
+#
+#    The /V wording deliberately DIFFERS from the /RV wording, and that is the
+#    whole point of this field. Appearance generation for a rich-text field is
+#    bound to /RV, not /V, so a plain-text writer that sets /V and leaves /RV
+#    in place produces a document that DISPLAYS THE OLD WORDS. With /V and /RV
+#    saying the same thing, that correctness bug is invisible to any test.
+objs[50] = (
+    b"<< /FT /Tx /Ff 33554432 /T (Notes) /TU (Notes) /Kids [51 0 R] "
+    b"/V (RICH ORIGINAL) "
+    b"/DS (font: 12pt Helvetica; color: #FF0000) "
+    b"/RV (<body xmlns='http://www.w3.org/1999/xhtml' "
+    b"xmlns:xfa='http://www.xfa.org/schema/xfa-data/1.0/' xfa:spec='2.4'>"
+    b"<p><b>RICH</b> <i>ORIGINAL</i></p></body>) >>"
+)
+objs[51] = (
+    b"<< /Parent 50 0 R /Subtype /Widget /Rect [20 15 280 50] /P 3 0 R "
+    b"/MK << /BC [0 0 0] >> >>"
+)
+
 
 buf = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n"
 off = {}

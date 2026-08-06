@@ -4324,6 +4324,7 @@ impl PdfceApp {
         let mut fill: Option<(String, String)> = None;
         let mut toggle: Option<(String, Vec<u8>, bool, String, bool)> = None;
         let mut set_radio: Option<(String, String, String)> = None;
+        let mut convert_rich: Option<(String, String, String)> = None;
         let mut set_choice: Option<(String, Vec<String>, String)> = None;
         let drafts = &mut self.form_drafts;
 
@@ -4376,6 +4377,43 @@ impl PdfceApp {
                 }
 
                 match (field.field_type, field.button_kind) {
+                    (Some(pdfce_core::forms::FieldType::Text), _) if field.is_rich_text() => {
+                        // A rich-text field is NOT editable in place, and the
+                        // reason is CORRECTNESS rather than fidelity: pdfce
+                        // cannot author `/RV`, and appearance generation for
+                        // these fields is bound to `/RV` rather than `/V`
+                        // (§12.7.3.4 and §12.7.3.3, both `shall`). Writing
+                        // plain text and leaving `/RV` behind would make
+                        // conforming readers rebuild the appearance from the
+                        // OLD text — the document would display words nobody
+                        // typed.
+                        //
+                        // So the row shows the value read-only and offers the
+                        // one conformant way through: convert the field to a
+                        // plain one. Deliberate, named and lossy, which is why
+                        // it is a button the operator presses rather than
+                        // something that happens when they start typing.
+                        let mut shown = field.value.display_text();
+                        ui.add_enabled(
+                            false,
+                            egui::TextEdit::singleline(&mut shown)
+                                .desired_width(f32::INFINITY),
+                        );
+                        ui.label(
+                            egui::RichText::new(ui_text::form_field_rich_text_note())
+                                .small()
+                                .weak(),
+                        );
+                        let b = ui
+                            .button(ui_text::form_field_rich_text_convert())
+                            .on_hover_text(ui_text::form_field_rich_text_convert_tooltip());
+                        diag::trace(|| {
+                            format!("form-row-rich fqn={fqn:?} rect={:?}", b.rect)
+                        });
+                        if b.clicked() {
+                            convert_rich = Some((fqn.clone(), shown.clone(), label.clone()));
+                        }
+                    }
                     (Some(pdfce_core::forms::FieldType::Text), _) => {
                         let stored = field.value.display_text();
                         let draft = drafts.entry(fqn.clone()).or_insert_with(|| stored.clone());
@@ -4674,6 +4712,20 @@ impl PdfceApp {
                 // refuse here, and silence would read as the typing being lost.
                 Err(err) => err.to_string(),
             });
+        }
+        if let Some((fqn, text, label)) = convert_rich {
+            doc.pending_note = Some(
+                match doc
+                    .session
+                    .fill_text_field_downgrading_rich_text(&fqn, &text)
+                {
+                    Ok(_) => {
+                        doc.refresh_pages();
+                        ui_text::form_field_rich_text_converted(&label)
+                    }
+                    Err(err) => err.to_string(),
+                },
+            );
         }
         if let Some((fqn, state, label)) = set_radio {
             doc.pending_note = Some(match doc.session.set_button_state(&fqn, &state) {
@@ -17322,15 +17374,6 @@ fn form_field_block_reason(field: &pdfce_core::forms::Field) -> Option<&'static 
     }
     match field.field_type {
         Some(FieldType::Signature) => Some(ui_text::form_field_signature_note()),
-
-        // `Field::is_rich_text`, NOT a bare `flags.has(RICH_TEXT)`. Bit 26 is
-        // the only overloaded position in the whole `/Ff` family — `RichText`
-        // on a text field, `RadiosInUnison` on a button — so the bare test
-        // compiles and reports every radio group as rich text. The predicate
-        // lives on `Field`, which has already resolved `/FT` through the
-        // inheritable `/Parent` walk, which is what makes the mistake
-        // unavailable rather than merely documented.
-        Some(FieldType::Text) if field.is_rich_text() => Some(ui_text::form_field_rich_text_note()),
         Some(FieldType::Button) => match field.button_kind {
             Some(ButtonKind::Push) => Some(ui_text::form_field_pushbutton_note()),
 

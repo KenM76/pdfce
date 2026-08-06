@@ -762,6 +762,75 @@ input (here `/FT`) is itself *inheritable*, say so in the same breath — the
 hazard is the **conjunction** (reused bits + inheritable discriminator), and
 either half alone is harmless.
 
+**27. A NAMED-GAP-CLOSURE dispatch where the gap was a recorded NON-GOAL — and a
+topic that splits across TWO licence bases *mid-clause*.** Established 2026-08-06
+closing §12.7.3.4 Rich Text (`iso32000__s__12.7.3.4.md` + `adobe_ext__xfa_rich_text.md`,
+opening the `adobe_ext\` directory). Eight sub-rules:
+
+- **Closing a NON-GOAL is not the same as closing a GAP.** VT3 said "`/RC`/`/RV`/`/DS`
+  = EXPLICIT NON-GOAL". Nothing in it was *wrong* — it was a correct **product-scope**
+  record that the operator later reversed. So the closure is an **`AMENDMENT <date>`
+  with the wording retained** (item 3) whose "what was wrong about it" line says
+  **"nothing, as a scope statement"** and names the *date and decision* that retired
+  it. Then **sweep every file that cited the non-goal** — VT3 was quoted in THREE
+  (`12.7.3.3` VT3 row, `12.5.6` FreeText bullet, `ref__field_flags` cross-ref); each
+  needed its own inline amendment, because a reader landing on any one of them
+  otherwise still reads "out of scope."
+- **THIRD instance of the licensing-axis split (items 1 / 15), and the first where
+  the answer is "partly".** Before: "is it in ISO 32000-1?" was a yes/no test
+  (AES-256 = measured no). Here ISO **pins the DATA and defers the BEHAVIOUR**: Tables
+  223/224/225 are a *complete* PDF-1.5 grammar (`free_primary`, quotable), while the
+  1.6/1.7 supersets **and every behavioural rule** go to XFA (`free_secondary_paraphrase`).
+  **The refined test is "does ISO enumerate it, or name-and-defer it?"** — and the two
+  files must cross-warn in both directions, because a lookup landing on either one
+  alone answers confidently and half-wrongly.
+- **Check whether the deferred-to document is in clause 3 (Normative references) or
+  the Bibliography — the citing prose can be WRONG about it.** §12.7.3.4 says "see the
+  **Bibliography**"; **XFA 2.0/2.2/2.4/2.5 are in clause 3, *Normative references***
+  ("indispensable for the application of this document"). Only CSS2 [21] and XHTML 1.0
+  [41] are bibliographic. That flips the conformance weight of the whole outward
+  deferral — and it means a "the spec is silent" negative (RT-N1, unknown markup) is
+  **closable by the referenced document**, normatively. **Always grep clause 3 and the
+  Bibliography for the deferred-to title; do not trust the citing sentence.**
+- **A `should` can carry the OPPOSITE engineering weight to its surface reading —
+  trace which key the OUTPUT is bound to.** The dispatch asked "must `/V` accompany
+  `/RV`?" Modality answer: **no, a `should`.** Product answer: a plain-text writer that
+  sets `/V` and leaves `/RV` **corrupts the displayed value**, because §12.7.3.4 binds
+  *appearance generation* to `/DS`+`/RV` and §12.7.3.3 makes regeneration a `shall` on
+  every value change. **Item 6's modality tabulation is necessary but not sufficient** —
+  also ask "**which key does the rendered output read?**" A `should`-optional mirror
+  field beside a `shall`-authoritative source is a corruption hazard, not a nicety.
+- **ERRATA CLUSTER, and an erratum can be EXPLAINED by an earlier build's finding.**
+  Eight in one clause pair (E1–E8) vs the single Table 175/179 one in item 20. **E1 —
+  §12.7.3.3 cites "Table 226" for the `RichText` flag (it is Table 228) — is almost
+  certainly the *bit-26 collision* (`RadiosInUnison` T.226 / `RichText` T.228) recorded
+  in the 2026-08-05 build leaking into the editors' prose.** Worth stating: it converts
+  a bare "the spec has a typo" into a *pattern*. Also **three dangling EXAMPLE
+  cross-refs** (E3/E7/E8 point at examples containing none of what is promised) — check
+  every "as shown in the Example in X" by actually reading X; the cost is one `sed`.
+- **Two independent extractors to confirm a suspected TYPO in the source.** The
+  EXAMPLE's `xmlns=".../1999/xtml"` (missing `h`) looked like an extraction artifact.
+  `pypdf` **and** `pdfminer.high_level.extract_text(page_numbers=[n])` both produced
+  `xtml` ⇒ genuine. **pdfminer is the second opinion on pypdf** (extraction inserts
+  spaces; it does not drop letters — but prove it rather than assert it).
+- **Wayback's silent truncation boundary VARIES — the check is `%%EOF`, never a size.**
+  Item-recorded as 1 MiB (2026-07-31); this time **exactly 5 242 880 B (5 MiB)** with
+  `http=200`, and `file` still called it a valid PDF. **Two snapshot URLs for the same
+  document behaved differently** (`/wp-content/uploads/…` truncated, `/norm-refs/…`
+  complete) ⇒ if one Wayback path truncates, **try another path before resuming**.
+  Also new: `archive.org/wayback/available` **HTTP 429** ⇒ skip the availability API
+  and go straight to `https://web.archive.org/web/2id_/<url>`.
+- **A licence can permit BUILDING THE FEATURE while forbidding copying the prose.**
+  XFA 3.3's Preface grants anyone permission to "write software that … displays,
+  prints, or otherwise interprets" XFA and to "copy Adobe's copyrighted grammar …
+  to the extent necessary", conditioned on including the copyright notice — while
+  the specification text "may not be copied without Adobe's permission."
+  ⇒ `free_secondary_paraphrase` **for the prose**, but the **grammar tables are
+  copy-permitted with attribution**, and the pdfce feature is expressly allowed.
+  Different from the Adobe-Supplement row (item 6 of the licensing memory: all-rights-
+  reserved, no grant). **Read the Preface/IP page, not just the cover NOTICE** — the
+  cover said only "All information contained herein is the property of Adobe."
+
 **16. Under a NO-FALLBACK-SYNTHESIS product rule (pdfce R43), per-subtype spec
 coverage collapses to a binary "AP-vs-fallback map".** Every ISO 32000-1 §12.5.6
 geometry subtype defines a fallback look from its own keys (`L`/`Vertices`/

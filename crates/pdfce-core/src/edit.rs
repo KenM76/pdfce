@@ -777,6 +777,39 @@ pub enum EditError {
         /// The fully-qualified name that was requested.
         name: String,
     },
+    /// A plain-text fill named a **rich-text** field (`/Ff` bit 26).
+    ///
+    /// # This refusal prevents a WRONG VALUE ON SCREEN, not merely lost bold
+    ///
+    /// It would be easy to read this as a fidelity compromise — "pdfce can
+    /// only write plain text, so the formatting is dropped". It is worse than
+    /// that, and the reason is a `shall`.
+    ///
+    /// §12.7.3.4: the rich text string *"in addition to the `RV` or `RC`
+    /// entry, **shall** be used to generate the appearance"*, and §12.7.3.3
+    /// requires the appearance to be regenerated on **every** value change for
+    /// these fields. Appearance generation for a rich-text field is bound to
+    /// `/RV`, **not** to `/V`. So writing a fresh `/V` while leaving `/RV`
+    /// stale produces a field whose appearance a conforming reader rebuilds
+    /// **from the OLD text** — the document then displays a value nobody
+    /// entered, which is a correctness defect rather than a formatting one.
+    ///
+    /// Hence a refusal by name rather than a lossy best effort.
+    ///
+    /// # The way through
+    ///
+    /// [`EditSession::fill_text_field_downgrading_rich_text`] — clear bit 26,
+    /// DELETE `/RV`, write `/V`, regenerate a plain appearance. That is fully
+    /// conformant (the field simply stops being a rich-text field), needs no
+    /// XHTML engine, and is a deliberate act the operator asks for rather than
+    /// something that happens to their document silently.
+    #[error(
+        "field {name:?} holds rich (formatted) text; writing plain text into it would leave its stored formatting in charge of what readers display — use the explicit convert-to-plain-text fill instead"
+    )]
+    FieldIsRichText {
+        /// The fully-qualified name that was requested.
+        name: String,
+    },
     /// A fill named a field that cannot hold a fillable value: a
     /// `ReadOnly` field, a pushbutton, or a signature field.
     #[error("field {name:?} is not fillable (it is read-only, a pushbutton, or a signature field)")]
@@ -4117,6 +4150,65 @@ impl EditSession {
     /// - [`EditError::DocumentEncrypted`], the fill certification gate, the
     ///   `/Size`-suppression guard, [`EditError::ObjectNumbersExhausted`].
     pub fn fill_text_field(&mut self, fqn: &str, text: &str) -> Result<FillOutcome, EditError> {
+        self.fill_text_field_inner(fqn, text, false)
+    }
+
+    /// **Fill a rich-text field with plain text, converting it to a plain
+    /// field** — an explicit, conformant downgrade.
+    ///
+    /// # Why this exists as a SEPARATE, differently-named entry point
+    ///
+    /// [`Self::fill_text_field`] refuses a rich-text field, because writing
+    /// `/V` while leaving `/RV` in place makes conforming readers regenerate
+    /// the appearance from the OLD text (see
+    /// [`EditError::FieldIsRichText`] for the two `shall`s that make that
+    /// true). The refusal is right, but it leaves the field unfillable, and
+    /// "unfillable forever" is not an acceptable answer to an operator who
+    /// simply wants to type in a box.
+    ///
+    /// This is the way through, and it needs **no XHTML engine at all**:
+    ///
+    /// 1. clear `/Ff` bit 26 (`RichText`) — the field stops being one,
+    /// 2. **delete `/RV`**, so no stale rich value can drive the appearance,
+    /// 3. write `/V` and regenerate a plain appearance the ordinary way.
+    ///
+    /// The result is a perfectly ordinary text field holding exactly what was
+    /// typed. Nothing is left inconsistent, and no reader has to guess.
+    ///
+    /// # It is LOSSY, and that is the caller's decision to disclose
+    ///
+    /// The stored formatting is discarded, not preserved-and-hidden. That is
+    /// exactly why this is a separate method with an unmissable name rather
+    /// than a flag on the ordinary fill: a caller cannot reach it by accident,
+    /// and a UI that offers it is obliged to say what it costs (rule 4 —
+    /// pdfce may not quietly convert an operator's document).
+    ///
+    /// Preserving the formatting instead means authoring `/RV` and generating
+    /// its appearance — and ISO 32000-1 §12.7.3.3 explicitly switches off its
+    /// own appearance conventions for these fields **without replacing them**,
+    /// so that path is unspecified by the standard and is a much larger piece
+    /// of work. Deferred deliberately; this is the honest, shippable half.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::fill_text_field`], except that
+    /// [`EditError::FieldIsRichText`] is precisely the case this accepts.
+    pub fn fill_text_field_downgrading_rich_text(
+        &mut self,
+        fqn: &str,
+        text: &str,
+    ) -> Result<FillOutcome, EditError> {
+        self.fill_text_field_inner(fqn, text, true)
+    }
+
+    /// The shared body of the two fills above; `downgrade_rich_text` decides
+    /// whether a rich-text field is refused or converted.
+    fn fill_text_field_inner(
+        &mut self,
+        fqn: &str,
+        text: &str,
+        downgrade_rich_text: bool,
+    ) -> Result<FillOutcome, EditError> {
         self.fill_guards()?;
 
         let form =
@@ -4141,6 +4233,16 @@ impl EditSession {
         ) || primary.flags.read_only()
         {
             return Err(EditError::FieldNotFillable {
+                name: fqn.to_owned(),
+            });
+        }
+        // THE RICH-TEXT GATE. `Field::is_rich_text()` and not a bare
+        // `flags.has(RICH_TEXT)`: bit 26 is the only overloaded position in
+        // the whole `/Ff` family (`RadiosInUnison` on a button), so the bare
+        // test would misfire. The predicate resolves `/FT` first.
+        let is_rich = primary.is_rich_text();
+        if is_rich && !downgrade_rich_text {
+            return Err(EditError::FieldIsRichText {
                 name: fqn.to_owned(),
             });
         }
@@ -4216,6 +4318,33 @@ impl EditSession {
             let before = self.state.get(&field.id).cloned();
             let mut updated = field_dict.clone();
             updated.insert(Name::from(b"V"), v_string.clone());
+            if is_rich {
+                // THE DOWNGRADE, and both halves are load-bearing.
+                //
+                // Removing `/RV` alone would leave bit 26 set on a field with
+                // no rich value — malformed. Clearing bit 26 alone would leave
+                // a stale `/RV` sitting in the dictionary, which is exactly
+                // the state a future reader (or a future pdfce) could resurrect
+                // the old text from. So the flag and the value go together, in
+                // one command, or the field is left in neither state.
+                //
+                // `/RV` is removed rather than emptied: §12.7.3.4 gives no
+                // meaning to an empty rich value, and an absent key is the
+                // unambiguous way to say "this field has none".
+                updated.remove(b"RV");
+                // `/DS` (default style, Table 222) goes with it — it exists to
+                // style the rich value and means nothing without one.
+                updated.remove(b"DS");
+                // Bit 26 cleared on the field's OWN `/Ff` only when it has one.
+                // The resolved flags may have been INHERITED through /Parent
+                // (§12.7.3.1); writing a synthesised /Ff onto a child that had
+                // none would silently sever that inheritance for every OTHER
+                // flag too, which is a much larger change than asked for.
+                if let Some(own) = field_dict.get(b"Ff").and_then(Object::as_int) {
+                    let cleared = own & !i64::from(forms::FieldFlags::RICH_TEXT);
+                    updated.insert(Name::from(b"Ff"), Object::Integer(cleared));
+                }
+            }
             if let Some(ap_id) = merged_ap {
                 let mut ap = Dict::new();
                 ap.insert(Name::from(b"N"), Object::Reference(ap_id));
