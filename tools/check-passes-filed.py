@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""check-passes-filed.py — every commit that CLAIMS a Pass must be FILED.
+
+WHY THIS EXISTS, AND WHY IT IS A SECOND SCRIPT
+==============================================
+`check-ledger-numbers.py` is deliberately a **pure Markdown parse of
+`docs/`**. It reads no git, no working tree, no remotes — a property its own
+docs state and the librarian relies on, because the librarian has no shell and
+must be able to reason about what that checker can and cannot see.
+
+That purity is also its blind spot. On 2026-08-06 the librarian found:
+
+  * **five commits from 2026-08-05 with no filing at all** (`7f850c9`,
+    `f8bbdd4`, `e666d3f`, `2c306ec`, `c3d605b`); and
+  * **two commits both claiming Pass 26.2** (`f8bbdd4` and `50ab8ec`) —
+
+while `check-ledger-numbers.py` reported `clean`. It was not wrong. The
+duplicate simply never reached the document it parses, so it was outside the
+reach of every check this project owned.
+
+That is the same shape as the Acrobat-column finding earlier the same day: a
+deliverable recorded only on the producing side has not been handed off, it
+has been filed. Here the producing side is `git log` and the consuming side is
+`ROADMAP.md`, and nothing was comparing them.
+
+So: a SEPARATE script, so `check-ledger-numbers.py` keeps its no-git purity
+and its guarantee stays exactly as documented.
+
+WHAT IT CHECKS
+==============
+For every commit whose SUBJECT LINE claims a Pass ID (`Pass 26.2:`,
+`Pass 37.0 —`, …), assert that `docs/ROADMAP.md` mentions that commit's short
+hash somewhere. Filing convention is to cite the hash in the entry, so the
+hash is the join key — and it is a far stronger one than the Pass ID, which is
+exactly what went wrong with 26.2 (two commits, one ID, one of them filed).
+
+EXIT CODES
+==========
+0  every Pass-claiming commit is filed (repeated IDs are reported as
+   notes, not failures — see the comment on `collisions`)
+1  at least one is not (they are listed)
+
+KNOWN WEAKNESS, stated rather than discovered later: the join is "this
+commit's short hash appears somewhere in `ROADMAP.md`". A hash cited in a
+*gap record* — a table listing commits that still need filing — therefore
+counts as filed. That is the honest limit of a hash grep; closing it would
+need the checker to understand entry structure, which is a much larger
+script for a case a human reading the gap record already sees.
+
+Deliberately NOT checked, and named so the gap is honest rather than implied:
+commits that change behaviour without claiming a Pass in the subject (a `fix:`
+or `harden:` line). Those are filed too by convention, but a subject-line
+grep cannot tell a behaviour change from a docs-only commit, and a gate that
+guesses would cry wolf until it was ignored. This catches the class that
+carries an explicit, collidable NUMBER.
+
+USAGE
+=====
+    python tools/check-passes-filed.py [--since <rev>] [--stats]
+
+`--since` defaults to the last 60 commits, which spans several days of this
+project's cadence; widen it for an audit.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROADMAP = Path(__file__).resolve().parent.parent / "docs" / "ROADMAP.md"
+
+# `Pass 26.2`, `Pass 9c`, `Pass 12.M2` — the same shape the sibling checker
+# accepts, kept in step deliberately so the two cannot disagree about what a
+# Pass ID looks like.
+PASS_ID = r"\d+(?:\.\d+)?(?:\.M\d+)?[a-z]?"
+SUBJECT_CLAIM = re.compile(rf"^(?:★\s*)?Pass ({PASS_ID})\b")
+
+
+def git(*args: str) -> str:
+    """Run git and return stdout, or exit with a clear message on failure."""
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=ROADMAP.parent.parent,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        sys.exit(f"check-passes-filed: cannot run git: {exc}")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--since", default=None, help="a git rev to scan from")
+    ap.add_argument("--stats", action="store_true")
+    args = ap.parse_args()
+
+    rng = f"{args.since}..HEAD" if args.since else "-60"
+    raw = git("log", rng, "--format=%h\x1f%s")
+
+    roadmap = ROADMAP.read_text(encoding="utf-8", errors="replace")
+
+    claimed: list[tuple[str, str, str]] = []
+    for line in raw.splitlines():
+        if "\x1f" not in line:
+            continue
+        short, subject = line.split("\x1f", 1)
+        m = SUBJECT_CLAIM.match(subject.strip())
+        if m:
+            claimed.append((short, m.group(1), subject.strip()))
+
+    unfiled = [c for c in claimed if c[0] not in roadmap]
+
+    # Multiple commits per Pass is NORMAL and correct here — Pass 34.1
+    # shipped in four slices, Pass 27.2 in two ticks — so a repeated ID is
+    # INFORMATIONAL, never a failure. The gate learned this the honest way: its
+    # first run flagged 34.1's four legitimate slice commits alongside the one
+    # real collision, and a gate that cries wolf on correct work is a gate
+    # everyone learns to ignore.
+    #
+    # What it cannot distinguish, and does not pretend to: "one Pass shipped in
+    # four commits" from "two unrelated pieces of work under one number" (the
+    # real 26.2 case). That needs a human reading the subjects. Listing them is
+    # still worth it — a human glancing at the list spots the odd one out
+    # immediately, which is exactly how 26.2 was caught.
+    by_id: dict[str, list[str]] = {}
+    for short, pid, _ in claimed:
+        by_id.setdefault(pid, []).append(short)
+    collisions = {p: v for p, v in by_id.items() if len(v) > 1}
+
+    if args.stats:
+        print(f"commits scanned          : {len(raw.splitlines())}")
+        print(f"claiming a Pass ID       : {len(claimed)}")
+        print(f"unfiled (hash not in doc): {len(unfiled)}")
+        print(f"IDs claimed by >1 commit : {len(collisions)}")
+
+    for short, pid, subject in unfiled:
+        print(f"UNFILED  {short}  Pass {pid}  {subject[:88]}")
+    for pid, shorts in sorted(collisions.items()):
+        print(f"note  Pass {pid} claimed by {len(shorts)} commits: {', '.join(shorts)}")
+
+    if unfiled:
+        print(
+            "\ncheck-passes-filed: a commit that never reaches ROADMAP.md is "
+            "outside\nthe reach of every other check this project owns — "
+            "including the\nduplicate-number check, which parses the document "
+            "and not the history."
+        )
+        return 1
+    print("passes-filed: clean - every Pass-claiming commit is filed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
