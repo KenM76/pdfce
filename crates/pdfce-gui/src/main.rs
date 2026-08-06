@@ -1203,6 +1203,25 @@ enum ObjectTreeRow {
     },
 }
 
+/// Which chevron an object-tree expander shows.
+///
+/// Down when open, right when closed — the near-universal disclosure
+/// convention, and the same two icons the ribbon's own menus use, so one
+/// shape means one thing across the app.
+///
+/// These are ICONS rather than the ASCII `v`/`>` that shipped first. The
+/// ASCII was chosen because the Pass 18.7 glyph gate rejects characters with
+/// no face in the shipped stack — but the gate's remedy is to give it real
+/// art, and `ChevronDown`/`ChevronRight` were ALREADY in the set, having been
+/// authored for exactly this reason when `▾` (U+25BE) shipped as tofu.
+const fn object_tree_expander_icon(open: bool) -> icons::Icon {
+    if open {
+        icons::Icon::ChevronDown
+    } else {
+        icons::Icon::ChevronRight
+    }
+}
+
 /// Materialise the visible rows for one frame, front-most first.
 ///
 /// Only expanded parents contribute children, so a fully-collapsed tree costs
@@ -2330,6 +2349,16 @@ struct OpenDoc {
     /// after the selection is cleared: the next selection, even of the same
     /// object, is a fresh change worth revealing.
     objects_revealed: Option<TargetId>,
+    /// The entered LEVEL the tree has already revealed, alongside
+    /// [`Self::objects_revealed`]'s selection.
+    ///
+    /// A second edge-trigger rather than a wider one, because the two fire on
+    /// genuinely different events: selecting an object on the canvas changes
+    /// the selection, while descending into a subpath or onto a node changes
+    /// the LEVEL and touches the selection not at all. Watching only the
+    /// selection is why reveal used to stop at the object row — the deeper
+    /// rungs simply never triggered it.
+    level_revealed: Option<canvas::EnteredObject>,
     /// Which objects are expanded in the tree, by paint-order index.
     ///
     /// Per-DOCUMENT, like every other view state on `OpenDoc`, so switching
@@ -2556,6 +2585,7 @@ impl OpenDoc {
             // that first build; until then selection finds nothing.
             object_model: None,
             objects_revealed: None,
+            level_revealed: None,
             objects_expanded: BTreeSet::new(),
             subpaths_expanded: BTreeSet::new(),
             provider_page: None,
@@ -9096,6 +9126,30 @@ impl PdfceApp {
     // `icon_button` was always the sibling entry point into the same
     // `labeled_icon_button` body, which is where `WidgetInfo::labeled` lives.
 
+    /// An icon-only button that keeps its NATURAL size but still gets an
+    /// accessible name (the object tree's expanders).
+    ///
+    /// `labeled_icon_button` below forces [`ICON_BUTTON_SIZE`], which is a
+    /// toolbar target and far too large for a row-level disclosure control in
+    /// a dense tree. This is the same `WidgetInfo::labeled` override without
+    /// the sizing — and it exists rather than the tree calling `ui.add`
+    /// directly, because that module's own warning applies exactly here: an
+    /// IMAGE button with no label announces NOTHING to a screen reader, which
+    /// is worse than a bare glyph, not better.
+    fn labeled_small_icon_button(
+        ui: &mut egui::Ui,
+        button: egui::Button<'_>,
+        tooltip: impl Into<String>,
+    ) -> egui::Response {
+        let name = tooltip.into();
+        let enabled = ui.is_enabled();
+        let response = ui.add(button.small()).on_hover_text(name.clone());
+        response.widget_info(move || {
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, name.clone())
+        });
+        response
+    }
+
     /// Size an icon-only button to [`ICON_BUTTON_SIZE`], attach its
     /// tooltip, and override its accessible name with that same tooltip
     /// text (P1-6).
@@ -10326,8 +10380,17 @@ impl PdfceApp {
         // button that un-does a ribbon button is worse than a named exit.
         if self.pane_subject != ribbon::PaneSubject::ArmedTool {
             ui.horizontal(|ui| {
+                // Icon AND words. The icon is `Icon::Back`, authored for this
+                // control after the glyph gate rejected U+2190 — the operator's
+                // standing ruling is that a missing glyph is authored, not
+                // worked around. The words stay: this is the only exit from a
+                // ribbon-opened surface, and an icon-only exit would be a
+                // guess for anyone who has not met the arrow convention.
                 if ui
-                    .button(ui_text::tool_pane_back_to_tools())
+                    .add(egui::Button::image_and_text(
+                        icons::image(ui, icons::Icon::Back),
+                        ui_text::tool_pane_back_to_tools(),
+                    ))
                     .on_hover_text(ui_text::tool_pane_back_to_tools_tooltip())
                     .clicked()
                 {
@@ -10904,23 +10967,81 @@ impl PdfceApp {
         // Build the visible rows for THIS frame. Front-most first, matching
         // the flat list this replaces (see "Front-most FIRST" above).
         let rows = build_object_tree_rows(objects, &doc.objects_expanded, &doc.subpaths_expanded);
-        let total_rows = rows.len();
 
         // The first selected target, in paint order. Drives both the
         // scroll-reveal edge trigger and nothing else — multi-select
         // highlights every matching row independently (§B.5).
         let first_selected = doc.canvas_selection.iter().next().copied();
-        let reveal_row = (first_selected != doc.objects_revealed)
-            .then(|| {
-                first_selected.and_then(|t| {
-                    let want = usize::try_from(t.0).unwrap_or(usize::MAX);
-                    rows.iter().position(
-                        |r| matches!(r, ObjectTreeRow::Object { index } if *index == want),
-                    )
+
+        // THE ENTERED LEVEL REVEALS ITS OWN ROW, not merely its object's.
+        //
+        // The tree nests object -> subpath -> node and a row's triple IS an
+        // `EnteredObject`, so descending on the canvas has an exact row to
+        // land on. Reveal used to watch only `canvas_selection`, which a
+        // descent does not change — so entering a subpath scrolled to the
+        // OBJECT row and entering a node did nothing at all.
+        //
+        // Expansion first, and it is not optional: `build_object_tree_rows`
+        // only emits a subpath row inside an expanded object, and a node row
+        // inside an expanded subpath. Scrolling to a row that was never built
+        // lands on whatever occupies that index instead — which is worse than
+        // not scrolling, because it looks like the tree answered.
+        let level = doc.entered;
+        if level != doc.level_revealed
+            && let Some(e) = level
+        {
+            if e.subpath.is_some() {
+                doc.objects_expanded.insert(e.object);
+            }
+            if let (Some(sp), true) = (e.subpath, e.node.is_some()) {
+                doc.subpaths_expanded.insert((e.object, sp));
+            }
+        }
+        // Rebuilt after expanding — the rows computed above predate it, and
+        // scrolling against a stale row list is the same off-by-a-row bug the
+        // expansion exists to prevent.
+        let rows = if level != doc.level_revealed {
+            build_object_tree_rows(objects, &doc.objects_expanded, &doc.subpaths_expanded)
+        } else {
+            rows
+        };
+        let total_rows = rows.len();
+
+        let reveal_row = if level != doc.level_revealed {
+            // Deepest rung the level names — node, else subpath, else object.
+            level.and_then(|e| {
+                rows.iter().position(|r| match (*r, e.subpath, e.node) {
+                    (
+                        ObjectTreeRow::Node {
+                            object,
+                            subpath,
+                            node,
+                        },
+                        Some(sp),
+                        Some(n),
+                    ) => object == e.object && subpath == sp && node == n,
+                    (ObjectTreeRow::Subpath { object, subpath }, Some(sp), None) => {
+                        object == e.object && subpath == sp
+                    }
+                    (ObjectTreeRow::Object { index }, None, _) => index == e.object,
+                    _ => false,
                 })
             })
-            .flatten();
+        } else {
+            (first_selected != doc.objects_revealed)
+                .then(|| {
+                    first_selected.and_then(|t| {
+                        let want = usize::try_from(t.0).unwrap_or(usize::MAX);
+                        rows.iter().position(
+                            |r| matches!(r, ObjectTreeRow::Object { index } if *index == want),
+                        )
+                    })
+                })
+                .flatten()
+        };
+        diag::trace(|| format!("tree-reveal level={level:?} row={reveal_row:?} rows={total_rows}"));
         doc.objects_revealed = first_selected;
+        doc.level_revealed = level;
 
         // `Button::selectable` is not `small()` by default, so its height
         // floor is `interact_size.y`; declaring the same value as the row
@@ -10966,9 +11087,19 @@ impl PdfceApp {
                             let expandable = object_tree_expandable(Some(object));
                             let open = doc.objects_expanded.contains(&index);
                             if expandable {
-                                let ex = ui
-                                    .small_button(ui_text::object_tree_expander(open))
-                                    .on_hover_text(ui_text::object_tree_expander_tooltip());
+                                // The chevron ICONS, not ASCII `v`/`>`. Both
+                                // already existed — `ChevronDown`/`ChevronRight`
+                                // were themselves authored because their text
+                                // glyphs were tofu — so the ASCII stand-in was
+                                // reaching past art the set already had.
+                                let ex = Self::labeled_small_icon_button(
+                                    ui,
+                                    egui::Button::image(icons::image(
+                                        ui,
+                                        object_tree_expander_icon(open),
+                                    )),
+                                    ui_text::object_tree_expander_tooltip(),
+                                );
                                 // Rect traced so the harness can drive the
                                 // expander instead of guessing a screen point.
                                 diag::trace(|| {
@@ -11011,10 +11142,15 @@ impl PdfceApp {
                         ui.horizontal(|ui| {
                             ui.add_space(ui_text::OBJECT_TREE_INDENT);
                             let open = doc.subpaths_expanded.contains(&(object, subpath));
-                            if ui
-                                .small_button(ui_text::object_tree_expander(open))
-                                .on_hover_text(ui_text::object_tree_expander_tooltip())
-                                .clicked()
+                            if Self::labeled_small_icon_button(
+                                ui,
+                                egui::Button::image(icons::image(
+                                    ui,
+                                    object_tree_expander_icon(open),
+                                )),
+                                ui_text::object_tree_expander_tooltip(),
+                            )
+                            .clicked()
                             {
                                 toggle_subpath = Some((object, subpath));
                             }

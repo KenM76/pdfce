@@ -5845,11 +5845,29 @@ indiscriminately and proves nothing about the glyphs below."
     ///
     /// # What a failure means
     ///
-    /// The named character renders as an empty box wherever it appears. The
-    /// fix is *not* to bundle a font — that would grow the single-folder
-    /// distribution for one glyph. It is to replace the character with a word,
-    /// with an SVG from `icons.rs` (the mask-and-tint pipeline that already
-    /// draws real art), or with a codepoint the chain does cover.
+    /// The named character renders as an empty box wherever it appears.
+    ///
+    /// **The remedy is to AUTHOR AN ICON, not to reword.** Operator ruling,
+    /// 2026-08-06: *"if an appropriate glyph is missing for a feature or
+    /// function, they should just be created as part of the process."*
+    ///
+    /// In order of preference:
+    ///
+    /// 1. **An icon** — a new SVG in `crates/pdfce-gui/assets/icons/` plus a
+    ///    variant in `icons.rs`, the mask-and-tint pipeline that already
+    ///    draws real art at any DPI for zero new dependencies.
+    ///    `Icon::ChevronUp`, `Icon::ChevronDown` and `Icon::Back` all exist
+    ///    for precisely this reason. **Check first** — the set may already
+    ///    have the shape, as it did for the object tree's expanders.
+    /// 2. **A codepoint the chain covers**, when one genuinely says the same
+    ///    thing.
+    /// 3. **A word**, and only where the control can afford the width. This
+    ///    was the default before the ruling, and it spends the operator's
+    ///    affordance to protect the font stack — the wrong trade when an icon
+    ///    costs one file.
+    ///
+    /// What it is NOT is bundling a font: that grows the single-folder
+    /// distribution for one glyph.
     #[test]
     fn every_glyph_in_the_catalog_has_a_real_face() {
         let src = include_str!("ui_text.rs");
@@ -5921,7 +5939,9 @@ escaped glyph in the file."
             missing.is_empty(),
             "TOFU: {} character(s) used in operator-visible strings have no glyph in any font of \
 the shipped stack (Ubuntu-Light, NotoEmoji-Regular, emoji-icon-font) and will render as an empty \
-box: {}",
+box: {}
+
+REMEDY: author an icon, do not reword — operator ruling 2026-08-06. A missing glyph for a feature or function gets CREATED as part of the process: add an SVG to crates/pdfce-gui/assets/icons/ and a variant to icons.rs. Icon::ChevronUp, Icon::ChevronDown and Icon::Back all exist for exactly this reason, so check whether the shape is already there first. Rewording is the last resort, not the default.",
             missing.len(),
             missing
                 .iter()
@@ -6600,9 +6620,11 @@ pub fn authoring_disabled_note() -> &'static str {
 
 /// The control that returns the Tool compartment to the armed tools.
 ///
-/// Plain words, no arrow glyph: `←` (U+2190) has no glyph in any font of the
-/// shipped stack, and the Pass 18.7 coverage gate caught it here before it
-/// could render as an empty box.
+/// Words BESIDE an icon, not instead of one. `←` (U+2190) has no glyph in the
+/// shipped stack and the Pass 18.7 gate caught it here — the first fix
+/// reworded to plain text, which the operator's 2026-08-06 ruling reverses: a
+/// missing glyph is authored. `Icon::Back` carries the arrow now, and the
+/// words stay because this is the only exit from a ribbon-opened surface.
 pub fn tool_pane_back_to_tools() -> &'static str {
     "Back to tools"
 }
@@ -6639,14 +6661,21 @@ pub const OBJECT_TREE_EXPANDER_WIDTH: f32 = 18.0;
 /// One level of indent in the object tree.
 pub const OBJECT_TREE_INDENT: f32 = 14.0;
 
-/// The expander glyph.
-///
-/// ASCII, deliberately: the Pass 18.7 coverage gate rejects any character with
-/// no glyph in the shipped font stack, and it caught a U+2190 arrow elsewhere
-/// in this same commit. These two characters are safe.
-pub fn object_tree_expander(open: bool) -> &'static str {
-    if open { "v" } else { ">" }
-}
+// REMOVED 2026-08-06: `object_tree_expander`.
+//
+// It returned ASCII `v`/`>` because the Pass 18.7 glyph gate rejects
+// characters with no face in the shipped stack. The operator's ruling that a
+// missing glyph is AUTHORED rather than worked around retires it: the tree's
+// expanders now draw `Icon::ChevronDown`/`ChevronRight`, both of which were
+// ALREADY in the set — authored when `▾` (U+25BE) shipped as tofu. The ASCII
+// was reaching past art that existed.
+//
+// It was briefly kept on the theory that it was the icon button's accessible
+// name. That was wrong: this app names icon-only controls with their TOOLTIP
+// (`labeled_icon_button`'s `WidgetInfo::labeled`), so a screen reader gets
+// "Show the parts this object is drawn from", not "v". Keeping a dead
+// function under a false justification is the R93 shape — an annotation that
+// converts "nobody uses this" into "this is load-bearing".
 
 /// Its tooltip — says what expanding REVEALS, not that it expands.
 pub fn object_tree_expander_tooltip() -> &'static str {

@@ -148,6 +148,7 @@ Each built to the construction notes in the cited ui-spec section.
 | `stamp.svg` | §3.4 | Rubber-stamp silhouette. Shared on purpose between Text → Stamp and the future Bates-numbering feature: genuinely the same "mark applied with a stamp" concept, invoked from two surfaces that are never simultaneously visible. |
 | `redact.svg` | §8.1 | Page with a **solid** bar (the exception, §3 above). Must never be scissors art — §2.1 names Split-vs-Redaction as the set's one collision that would actually mislead. |
 | `edit-objects.svg` | **not in the ui-spec** | Bézier segment with square node handles, for the Pass 9c-min "Obj" vector-edit toggle. See §5 below. |
+| `back.svg` | **not in the ui-spec** | Straight left arrow with a full SHAFT plus an open chevron head, for the Tool compartment's "Back to tools" exit. The shaft is the whole distinction from `chevron-left.svg`, whose own note reserves the bare chevron for "previous page" — a STEP through a sequence — while this is a RETURN, a jump back out of a surface. Not curved either: `chevron-left.svg` reserves curved arrows for `rotate-ccw.svg` and `undo.svg`, and backing out of a panel is neither a rotation nor an undo. Authored 2026-08-06 under the operator's ruling that a missing glyph is CREATED rather than worked around, after the Pass 18.7 coverage gate correctly rejected `←` (U+2190) as having no face in the shipped stack. |
 
 ## 5. Deviations from the ui-spec, recorded
 

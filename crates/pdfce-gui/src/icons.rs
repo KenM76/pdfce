@@ -242,6 +242,21 @@ pub enum Icon {
     Comment,
     /// Previous page (§2 #5, §3.1 "chevron").
     ChevronLeft,
+    /// Leave a ribbon-opened surface and return to the armed tools' own
+    /// options (§3.1 "back-arrow").
+    ///
+    /// Authored 2026-08-06 under the operator's standing ruling that a
+    /// missing glyph is AUTHORED, not worked around: the control wanted
+    /// `←` (U+2190), the Pass 18.7 coverage gate correctly rejected it as
+    /// having no glyph in the shipped stack, and the first fix reworded the
+    /// button to plain text. Rewording spends the operator's affordance to
+    /// protect the font stack; an icon costs one asset and keeps both.
+    ///
+    /// Distinct from [`Icon::ChevronLeft`] by its SHAFT — see `back.svg`'s
+    /// own note. Same reasoning that made [`Icon::ChevronUp`] and
+    /// [`Icon::ChevronDown`] exist: those two were also authored precisely
+    /// because their text glyphs were tofu.
+    Back,
     /// Next page (§2 #6).
     ChevronRight,
     /// "Move selection up" in the page rail and the Combine-files list,
@@ -361,6 +376,7 @@ impl Icon {
         Icon::Sidebar,
         Icon::Comment,
         Icon::ChevronLeft,
+        Icon::Back,
         Icon::ChevronRight,
         Icon::ChevronDown,
         Icon::ChevronUp,
@@ -411,6 +427,7 @@ impl Icon {
             Icon::Sidebar => include_str!("../assets/icons/sidebar.svg"),
             Icon::Comment => include_str!("../assets/icons/comment.svg"),
             Icon::ChevronLeft => include_str!("../assets/icons/chevron-left.svg"),
+            Icon::Back => include_str!("../assets/icons/back.svg"),
             Icon::ChevronRight => include_str!("../assets/icons/chevron-right.svg"),
             Icon::ChevronDown => include_str!("../assets/icons/chevron-down.svg"),
             Icon::ChevronUp => include_str!("../assets/icons/chevron-up.svg"),
@@ -460,6 +477,7 @@ impl Icon {
             Icon::Sidebar => "sidebar",
             Icon::Comment => "comment",
             Icon::ChevronLeft => "chevron-left",
+            Icon::Back => "back",
             Icon::ChevronRight => "chevron-right",
             Icon::ChevronDown => "chevron-down",
             Icon::ChevronUp => "chevron-up",
