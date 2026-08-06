@@ -2106,6 +2106,39 @@ struct OpenDoc {
     /// (spec §4.2). Session/view state — a selection is never an edit, exactly
     /// like `selected_pages`.
     canvas_selection: BTreeSet<TargetId>,
+    /// The selected ANCHORS within [`Self::entered`]'s subpath — node
+    /// multi-selection (object-scoped indices, decision 025 §1.3(b)).
+    ///
+    /// # Why a set BESIDE `entered`, and not a set INSIDE it
+    ///
+    /// Two reasons, and the second is the one that decided it.
+    ///
+    /// `EnteredObject` is `Copy`, and it is passed by value everywhere —
+    /// `doc.entered.filter(..)`, `.is_some_and(..)`, `self.entered =
+    /// self.entered.and_then(..)`. A `BTreeSet` field would take that away and
+    /// ripple through every one of those sites for reasons that have nothing
+    /// to do with node selection.
+    ///
+    /// More importantly: **this codebase already answers the same question one
+    /// rung up.** Object multi-selection is [`Self::canvas_selection`], a
+    /// `BTreeSet` sitting BESIDE `entered`, not a field within it. Nodes
+    /// mirroring that is consistency; inventing a different shape for the rung
+    /// below would be the divergence.
+    ///
+    /// # The invariant, and where it is enforced
+    ///
+    /// This holds the COMPLETE selection including
+    /// [`canvas::EnteredObject::node`], which remains the PRIMARY — the anchor
+    /// most recently clicked, the one the readout names and the one a drag
+    /// grabs. So `entered.node.is_none()` still means "no node selected", and
+    /// every existing reader of that field stays correct without being
+    /// touched.
+    ///
+    /// Divergence is contained by clearing this in exactly one place —
+    /// [`OpenDoc::prune_canvas_selection`], which already runs on every edit,
+    /// undo and page change and already truncates the level ladder. One
+    /// enforcement point rather than a rule every future caller must remember.
+    selected_nodes: BTreeSet<usize>,
     /// Where click-through cycling stands (ui-spec §C.3,
     /// [`canvas::ClickCycle`]).
     ///
@@ -2241,6 +2274,7 @@ impl OpenDoc {
             // acceptance criterion.
             active_tool: None,
             canvas_selection: BTreeSet::new(),
+            selected_nodes: BTreeSet::new(),
             click_cycle: None,
             text_edit: None,
             add_text: None,
@@ -2504,6 +2538,7 @@ impl OpenDoc {
         tol: f64,
         double: bool,
         alt: bool,
+        additive: bool,
     ) -> bool {
         let page_index = self.view.page_index;
         let object_hit = self
@@ -2565,6 +2600,32 @@ impl OpenDoc {
 
         let before = self.entered;
         self.entered = canvas::depth_after_click(before, double, object_hit, subpath_hit, node_hit);
+        // NODE MULTI-SELECTION, decided here rather than inside
+        // `depth_after_click` — that function answers "which rung am I on",
+        // which is orthogonal to "how many anchors are picked", and it is
+        // exhaustively tested with plain `Option<usize>` inputs precisely
+        // because it has no notion of modifiers or sets.
+        //
+        // `additive` is the SAME `shift || command` the object rung uses, read
+        // by the caller and passed in, so Ctrl and Shift mean one thing at
+        // every level (R92's reasoning applied to a modifier rather than a
+        // function).
+        let (nodes, primary) = node_selection_after_click(
+            self.entered.and_then(|e| e.node),
+            additive,
+            &self.selected_nodes,
+        );
+        self.selected_nodes = nodes;
+        if let Some(e) = self.entered.as_mut() {
+            e.node = primary;
+        }
+        diag::trace(|| {
+            format!(
+                "node-select additive={additive} primary={:?} set={:?}",
+                self.entered.and_then(|e| e.node),
+                self.selected_nodes
+            )
+        });
         // Pass 36.2: a double-click that MEANT "descend to the points" and
         // found none is reported, not swallowed.
         //
@@ -2769,6 +2830,21 @@ impl OpenDoc {
             )
         });
         diag::trace(|| format!("level-survival before={before:?} after={:?}", self.entered));
+        // The node SET is pruned with the ladder, in the same breath, because
+        // this is the single enforcement point that keeps it from diverging
+        // from `entered.node` (see `selected_nodes`' own doc comment).
+        //
+        // Cleared outright rather than filtered against the new anchor count:
+        // after a content rewrite the same object-scoped index can name a
+        // different anchor, which is exactly the reasoning that governs the
+        // ladder above it. A selection that silently changed which points it
+        // refers to is worse than one the operator has to remake.
+        if self.entered.and_then(|e| e.node).is_none() {
+            self.selected_nodes.clear();
+        } else {
+            self.selected_nodes
+                .retain(|n| self.entered.is_some_and(|e| e.node == Some(*n)));
+        }
         self.subpath_cycle = None;
         // A click cycle cannot survive an edit or a page change. Its
         // liveness checks compare `TargetId`s, and after a content rewrite
@@ -15511,7 +15587,13 @@ fn draw_selection_outlines(
                     let Some(ac) = pdf_to_screen(anchor) else {
                         continue;
                     };
-                    let selected = entered.node == Some(index);
+                    // EVERY selected anchor draws as selected, not only the
+                    // primary. `selected_nodes` holds the complete set and
+                    // `entered.node` names the primary within it; the fallback
+                    // to `entered.node` covers the ordinary single-node case
+                    // before any additive click has populated the set.
+                    let selected =
+                        doc.selected_nodes.contains(&index) || entered.node == Some(index);
                     // A DASHED arm ties the handle to its node. Dashing is
                     // already this project's signal for "this line is not a
                     // measured edge of the drawing" (APPROXIMATE_OUTLINE_DASH),
@@ -15543,7 +15625,16 @@ fn draw_selection_outlines(
                     let Some(c) = pdf_to_screen(p) else {
                         continue;
                     };
-                    let selected = entered.node == Some(index);
+                    // Screen positions of the drawn anchors, so the scripted
+                    // harness can CLICK a node instead of guessing a pixel.
+                    diag::trace(|| format!("node-mark index={index} screen={c:?}"));
+                    // EVERY selected anchor draws as selected, not only the
+                    // primary. `selected_nodes` holds the complete set and
+                    // `entered.node` names the primary within it; the fallback
+                    // to `entered.node` covers the ordinary single-node case
+                    // before any additive click has populated the set.
+                    let selected =
+                        doc.selected_nodes.contains(&index) || entered.node == Some(index);
                     // Pass 26.2: HOVER is a third state, between unselected and
                     // selected, and it is drawn at the SELECTED size so the
                     // operator sees the target grow under the pointer before
@@ -15891,7 +15982,7 @@ fn run_vector_edit_tool(
     // outcome in this function: `apply_click_depth` needs `&mut doc`, and the
     // read borrows of the page and the object model are still live inside the
     // block below.
-    let mut depth_request: Option<(egui::Pos2, f64, bool, bool)> = None;
+    let mut depth_request: Option<(egui::Pos2, f64, bool, bool, bool)> = None;
 
     {
         let page = &doc.pages[page_index];
@@ -15947,7 +16038,10 @@ fn run_vector_edit_tool(
             // double-click descend with no tool and do nothing with the object
             // tool armed: exactly the invisible divergence the shared method
             // was written to prevent.
-            depth_request = Some((canvas_pos, tol, image_response.double_clicked(), alt));
+            // `shift` here is already `shift || command` — the additive
+            // modifier the object rung reads. Passed straight through so
+            // Ctrl means "add to the selection" at the Node rung too.
+            depth_request = Some((canvas_pos, tol, image_response.double_clicked(), alt, shift));
             diag::trace(|| {
                 format!(
                     "vector-depth-click canvas={canvas_pos:?} double={} alt={alt}",
@@ -16360,8 +16454,8 @@ fn run_vector_edit_tool(
     // object-level selection computed above is discarded, or picking one part
     // of a view would re-select the whole view in the same frame and visually
     // undo the descent.
-    if let Some((pos, tol, double, alt)) = depth_request {
-        let consumed = doc.apply_click_depth(pos, tol, double, alt);
+    if let Some((pos, tol, double, alt, additive)) = depth_request {
+        let consumed = doc.apply_click_depth(pos, tol, double, alt, additive);
         diag::trace(|| {
             format!(
                 "vector-depth consumed={consumed} entered={:?} cycle={:?}",
@@ -18023,6 +18117,56 @@ fn dimension_groups_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
     }
 }
 
+/// The node-selection rule: what a click does to the set of selected anchors.
+///
+/// `picked` is the anchor `depth_after_click` resolved to (`None` when the
+/// click left the Node rung). Returns the new set and the new PRIMARY — the
+/// anchor `EnteredObject::node` should name.
+///
+/// # Why this is a free function rather than inline
+///
+/// **It has no in-app oracle.** The Node rung is reached by DOUBLE-CLICKING,
+/// and injected double-clicks do not register as such through
+/// `tools/gui-drive.ps1` — measured: `vector-depth` reports
+/// `node: None` throughout a driven descent, and `node-descent-missed` (which
+/// fires only when `double` is true) never fires at all. So the rung cannot be
+/// entered from a script, and this rule cannot be driven.
+///
+/// That is the same substitution this session made twice before
+/// (`place_draft_commit`, `truncate_entered`): when the harness structurally
+/// cannot produce the input, extract the rule and unit-test it, and say
+/// plainly that a test is a SUBSTITUTE for in-app verification rather than an
+/// equivalent to it.
+fn node_selection_after_click(
+    picked: Option<usize>,
+    additive: bool,
+    current: &BTreeSet<usize>,
+) -> (BTreeSet<usize>, Option<usize>) {
+    match (picked, additive) {
+        // Left the Node rung: nothing is selected any more.
+        (None, _) => (BTreeSet::new(), None),
+        // Plain click: replace the set with just this anchor.
+        (Some(n), false) => (BTreeSet::from([n]), Some(n)),
+        (Some(n), true) => {
+            let mut next = current.clone();
+            if next.insert(n) {
+                // Newly added, and it becomes the primary — the anchor most
+                // recently clicked is the one a drag should grab.
+                (next, Some(n))
+            } else {
+                // Already selected, so an additive click REMOVES it — toggling
+                // rather than only-adding is what lets an operator correct a
+                // mis-click without starting the selection over. The primary
+                // must never name an anchor that is no longer selected, so it
+                // demotes to a survivor, or to `None` when that was the last.
+                next.remove(&n);
+                let primary = next.iter().next().copied();
+                (next, primary)
+            }
+        }
+    }
+}
+
 /// Why a form row cannot be filled here, or `None` when it can.
 ///
 /// One function rather than a chain of `if`s inside the row loop, so the
@@ -19669,5 +19813,68 @@ mod tests {
             .session
             .set_info_field(pdfce_core::edit::InfoField::Title, Some("edited"))
             .expect("edit the active document");
+    }
+
+    // -----------------------------------------------------------------
+    // Node multi-selection — the click rule.
+    // -----------------------------------------------------------------
+
+    fn nodes(v: &[usize]) -> BTreeSet<usize> {
+        v.iter().copied().collect()
+    }
+
+    /// A plain click REPLACES the selection, exactly as it does for objects.
+    #[test]
+    fn a_plain_node_click_replaces_the_selection() {
+        let (set, primary) = node_selection_after_click(Some(3), false, &nodes(&[1, 2]));
+        assert_eq!(set, nodes(&[3]));
+        assert_eq!(primary, Some(3));
+    }
+
+    /// **THE OPERATOR'S ASK**: an additive click ADDS an anchor rather than
+    /// replacing, so several can be picked — and the newest becomes primary,
+    /// because a drag should grab the anchor most recently clicked.
+    #[test]
+    fn an_additive_node_click_adds_and_becomes_primary() {
+        let (set, primary) = node_selection_after_click(Some(3), true, &nodes(&[1]));
+        assert_eq!(set, nodes(&[1, 3]), "both anchors are selected");
+        assert_eq!(primary, Some(3), "the newest click is the primary");
+    }
+
+    /// An additive click on an ALREADY-selected anchor removes it — toggling,
+    /// which is what lets a mis-click be corrected without starting over.
+    #[test]
+    fn an_additive_click_on_a_selected_node_toggles_it_off() {
+        let (set, primary) = node_selection_after_click(Some(1), true, &nodes(&[1, 3]));
+        assert_eq!(set, nodes(&[3]));
+        assert_eq!(
+            primary,
+            Some(3),
+            "the primary must never name an anchor that is no longer selected"
+        );
+    }
+
+    /// Toggling the LAST anchor off leaves the rung with no primary, rather
+    /// than a primary pointing at an empty selection.
+    #[test]
+    fn toggling_the_last_node_off_clears_the_primary_too() {
+        let (set, primary) = node_selection_after_click(Some(1), true, &nodes(&[1]));
+        assert!(set.is_empty());
+        assert_eq!(primary, None);
+    }
+
+    /// Leaving the Node rung clears everything — an anchor set that outlived
+    /// the rung it belongs to would draw marks for a level the operator is no
+    /// longer on.
+    #[test]
+    fn leaving_the_node_rung_clears_the_whole_selection() {
+        let (set, primary) = node_selection_after_click(None, false, &nodes(&[1, 2, 3]));
+        assert!(set.is_empty());
+        assert_eq!(primary, None);
+        // And an additive click that resolved to no anchor does the same —
+        // holding Ctrl must not preserve a selection the rung no longer has.
+        let (set, primary) = node_selection_after_click(None, true, &nodes(&[1, 2, 3]));
+        assert!(set.is_empty());
+        assert_eq!(primary, None);
     }
 }
