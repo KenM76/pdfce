@@ -6480,3 +6480,97 @@ pub fn close_document_button() -> &'static str {
 pub fn close_document_tooltip() -> &'static str {
     "Close the document shown above. If it has unsaved changes you will be asked first."
 }
+
+// -- Comments / annotation list (shell-redesign.md §3) ----------------------
+
+/// See [`ribbon_group_file_ops`].
+pub fn ribbon_group_comments_list() -> &'static str {
+    "Comments"
+}
+
+/// The Activities segmented-control label.
+pub fn activities_comments_label() -> &'static str {
+    "Comments"
+}
+
+/// Its tooltip.
+pub fn activities_comments_tooltip() -> &'static str {
+    "Every note and markup already on this document, in page order."
+}
+
+/// The ribbon button that opens the Comments pane.
+pub fn comments_open_button() -> &'static str {
+    "Comments"
+}
+
+/// Its tooltip.
+pub fn comments_open_tooltip() -> &'static str {
+    "List the notes and markup on this document and jump to any of them."
+}
+
+/// The pane heading.
+pub fn comments_heading() -> &'static str {
+    "Comments"
+}
+
+/// Shown when no document is open.
+pub fn comments_no_document() -> &'static str {
+    "Open a document to see the notes and markup on it."
+}
+
+/// Shown when the document carries no listable annotation.
+///
+/// Names what is EXCLUDED, because a document full of form fields would
+/// otherwise show an empty comment list and look broken. Form fields and
+/// pop-up windows are deliberately not comments.
+pub fn comments_none() -> &'static str {
+    "No notes or markup on this document. Form fields and pop-up windows are not listed here — form fields have their own panel."
+}
+
+/// The count line.
+pub fn comments_count(total: usize) -> String {
+    format!("{total} note(s) and markup item(s).")
+}
+
+/// Shown when EVERY listed annotation lacks `/Contents`.
+///
+/// The disclosure that stops a correct list reading as a broken one: pdfce's
+/// own markup tools do not yet attach a note to a shape, so a document whose
+/// annotations pdfce authored shows a column of "no note" captions. Said once
+/// at the top rather than inferred from the repetition.
+pub fn comments_all_without_notes() -> &'static str {
+    "None of these carry note text. Shapes drawn in pdfce do not have a note attached to them yet, so this is expected rather than missing data."
+}
+
+/// One row's heading — what it is and which page it is on.
+pub fn comment_row_heading(subtype: &str, page_number: usize) -> String {
+    format!("{subtype} — p. {page_number}")
+}
+
+/// A row's author line, shown only when the annotation carries `/T`.
+pub fn comment_row_author(author: &str) -> String {
+    format!("by {author}")
+}
+
+/// A row's note body.
+pub fn comment_row_body(text: &str) -> String {
+    text.to_owned()
+}
+
+/// A row's caption when the annotation has no `/Contents`.
+///
+/// "No note text" rather than blank space: an empty row is indistinguishable
+/// from a rendering failure, and this is a real, expected state.
+pub fn comment_row_no_note() -> &'static str {
+    "No note text on this markup."
+}
+
+/// The go-to-page button on a row.
+pub fn comment_row_goto() -> &'static str {
+    "Go to"
+}
+
+/// Its tooltip — names the page, because the button sits in a list of many.
+pub fn comment_row_goto_tooltip(page_number: usize) -> String {
+    format!("Show page {page_number}, where this is")
+}

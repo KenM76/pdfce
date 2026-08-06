@@ -103,6 +103,17 @@ pub enum RibbonGroup {
     Markup,
     /// Annotation authoring: notes, free text, stamps.
     Notes,
+    /// Browsing the comments already ON the document — the entry point to the
+    /// Comments list.
+    ///
+    /// # Why it belongs on `Review` beside the authoring groups
+    ///
+    /// `Review`'s own organising question is *"what am I adding for someone
+    /// else to read?"* Browsing what has already been added is that question
+    /// asked backwards — the same move this module already makes for Undo/Redo
+    /// sitting on `Edit`. It is not a new taxonomy decision, and it is
+    /// explicitly NOT a new tab.
+    CommentsList,
     /// The three ce-dimension measure tools.
     ///
     /// # There is deliberately no `MeasureGroups` beside this
@@ -150,7 +161,7 @@ impl RibbonGroup {
         dead_code,
         reason = "the group enumeration; swept by this module's taxonomy test and by main.rs's gated-widget test, and the list any future group-picker must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::FileOps,
         Self::DocumentProperties,
         Self::Clipboard,
@@ -163,6 +174,7 @@ impl RibbonGroup {
         Self::Forms,
         Self::Markup,
         Self::Notes,
+        Self::CommentsList,
         Self::MeasureTools,
         Self::Batch,
         Self::Fonts,
@@ -188,6 +200,7 @@ impl RibbonGroup {
             Self::Forms => ui_text::ribbon_group_forms(),
             Self::Markup => ui_text::ribbon_group_markup(),
             Self::Notes => ui_text::ribbon_group_notes(),
+            Self::CommentsList => ui_text::ribbon_group_comments_list(),
             Self::MeasureTools => ui_text::ribbon_group_measure_tools(),
             Self::Batch => ui_text::ribbon_group_batch(),
             Self::Fonts => ui_text::ribbon_group_fonts(),
@@ -346,7 +359,11 @@ impl RibbonTab {
                 RibbonGroup::Forms,
                 RibbonGroup::Pages,
             ],
-            Self::Review => &[RibbonGroup::Markup, RibbonGroup::Notes],
+            Self::Review => &[
+                RibbonGroup::Markup,
+                RibbonGroup::Notes,
+                RibbonGroup::CommentsList,
+            ],
             Self::Measure => &[RibbonGroup::MeasureTools],
             Self::Tools => &[RibbonGroup::Batch, RibbonGroup::Fonts, RibbonGroup::Protect],
             Self::View => &[
@@ -459,6 +476,12 @@ pub enum PaneSubject {
     BatchTools,
     /// The redaction review surface.
     Redact,
+    /// The comment/annotation list — see `docs/ui_specs/shell-redesign.md` §3.
+    ///
+    /// The fourth Activities workflow, and it is one for the same reason the
+    /// other three are: browsing a document's comments is something an
+    /// operator ENTERS, not something they watch while doing else.
+    Comments,
     /// The interactive-form (AcroForm) field list — see
     /// `docs/ui_specs/forms-panel.md`.
     ///

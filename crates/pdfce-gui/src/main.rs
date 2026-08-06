@@ -3102,6 +3102,8 @@ enum Action {
     ToggleRedactPanel,
     /// Show the interactive-form field list (`docs/ui_specs/forms-panel.md`).
     ToggleFormsPanel,
+    /// Show the comment/annotation list.
+    ToggleCommentsPanel,
     /// Bring a parked document to the front, by its index in `parked`.
     SwitchDocument(usize),
     /// Close the document in front. Asks first when it has unsaved edits.
@@ -4471,6 +4473,123 @@ impl PdfceApp {
     }
 
     // -- Pass 8.1: redaction review & apply (ui-spec §3/§4) --------------
+
+    /// The **Comments** pane — every annotation on the document, listed
+    /// (`docs/ui_specs/shell-redesign.md` §3).
+    ///
+    /// # What it deliberately excludes, decided by exclusion first
+    ///
+    /// - **`/Widget`** — form fields have their own first-class surface
+    ///   (the Forms pane). `Annotation::is_widget()` already exists as the
+    ///   exact predicate; a second one would be a divergence waiting to
+    ///   happen.
+    /// - **`/Popup`** — a reader-UI window attached to a `Text`/`FreeText`
+    ///   annotation, never independent content. One row per real annotation;
+    ///   its popup is implementation detail.
+    /// - **ce dimensions are NOT excluded by type**, and that is worth
+    ///   stating: they are `/Line` annotations and so they appear here. The
+    ///   spec excludes them conceptually because they have their own home,
+    ///   but excluding them by subtype would also hide a genuine `/Line`
+    ///   markup an operator drew. Showing them is the lesser wrong, and it is
+    ///   honest — they ARE annotations on the document.
+    ///
+    /// # Page order, from the same rule the CLI uses
+    ///
+    /// Page order then `/Annots`-array order — the ordering
+    /// `pdfce-cli list-annotations` already produces, reused by name rather
+    /// than a second GUI-only rule that could disagree with it.
+    fn comments_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let Status::Open(doc) = &self.status else {
+            ui.label(ui_text::comments_no_document());
+            return;
+        };
+        ui.heading(ui_text::comments_heading());
+
+        // Collected across every page, in page order. `page_annotations`
+        // reads the SESSION graph, so an annotation the operator just
+        // authored appears without a save (the Pass 17.1 session-read rule).
+        let graph = doc.session.graph();
+        let mut rows: Vec<(usize, pdfce_core::annot::Annotation)> = Vec::new();
+        for (page_index, page) in doc.pages.iter().enumerate() {
+            for annot in pdfce_core::annot::page_annotations(&graph, page.id) {
+                if annot.is_widget() || annot.is_popup {
+                    continue;
+                }
+                rows.push((page_index, annot));
+            }
+        }
+
+        diag::trace(|| {
+            format!(
+                "comments-panel rows={} with_note={} authors={}",
+                rows.len(),
+                rows.iter().filter(|(_, a)| a.contents.is_some()).count(),
+                rows.iter().filter(|(_, a)| a.title.is_some()).count()
+            )
+        });
+        if rows.is_empty() {
+            ui.label(ui_text::comments_none());
+            return;
+        }
+        ui.label(ui_text::comments_count(rows.len()));
+
+        // THE HONEST CAPTION, and it is a disclosure rather than a nicety.
+        //
+        // pdfce's own markup authoring never sets `/Contents`, so on a
+        // document whose annotations pdfce created, every row shows "no note".
+        // A list that is CORRECT and looks empty reads as broken, so the
+        // reason is stated once, here, rather than left to be inferred from a
+        // column of identical captions.
+        if rows.iter().all(|(_, a)| a.contents.is_none()) {
+            ui.label(
+                egui::RichText::new(ui_text::comments_all_without_notes())
+                    .small()
+                    .weak(),
+            );
+        }
+        ui.separator();
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for (page_index, annot) in &rows {
+                ui.label(ui_text::comment_row_heading(
+                    &annot.subtype_label(),
+                    page_index + 1,
+                ));
+                // Author, only when the annotation carries one. `/T` is a
+                // Table 170 MARKUP key, so its absence on a Link or a Stamp
+                // means "this subtype has no such concept", not "anonymous" —
+                // which is why an absent one prints nothing rather than a
+                // placeholder that would read as a claim.
+                if let Some(author) = &annot.title {
+                    ui.label(
+                        egui::RichText::new(ui_text::comment_row_author(author))
+                            .small()
+                            .weak(),
+                    );
+                }
+                match &annot.contents {
+                    Some(text) => {
+                        ui.label(ui_text::comment_row_body(text));
+                    }
+                    None => {
+                        ui.label(
+                            egui::RichText::new(ui_text::comment_row_no_note())
+                                .small()
+                                .weak(),
+                        );
+                    }
+                }
+                if ui
+                    .button(ui_text::comment_row_goto())
+                    .on_hover_text(ui_text::comment_row_goto_tooltip(page_index + 1))
+                    .clicked()
+                {
+                    actions.push(Action::GoToPage(*page_index));
+                }
+                ui.separator();
+            }
+        });
+    }
 
     /// The **Forms** pane — the document's interactive fields, listed and
     /// fillable (`docs/ui_specs/forms-panel.md`, P0).
@@ -6940,6 +7059,10 @@ impl PdfceApp {
                 self.show_pane_subject(ribbon::PaneSubject::Forms);
                 return;
             }
+            Action::ToggleCommentsPanel => {
+                self.show_pane_subject(ribbon::PaneSubject::Comments);
+                return;
+            }
             Action::FlattenForm => {
                 self.flatten_form();
                 return;
@@ -7040,6 +7163,7 @@ impl PdfceApp {
             | Action::CloseWithoutSaving
             | Action::CancelClose
             | Action::ToggleFormsPanel
+            | Action::ToggleCommentsPanel
             | Action::FlattenForm
             | Action::RegenerateFormAppearances
             | Action::ExportFormData
@@ -9214,6 +9338,25 @@ impl PdfceApp {
                     });
                 }
 
+                if Self::ribbon_group(ui, tab, RG::CommentsList) {
+                    // The entry point to the Comments pane. Disabled with a
+                    // reason when there are no pages (R83) — a control that
+                    // vanishes teaches nothing, a disabled one teaches what
+                    // would enable it.
+                    ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                        let response = Self::icon_text_toggle(
+                            ui,
+                            icons::Icon::EditText,
+                            self.pane_subject == ribbon::PaneSubject::Comments,
+                            ui_text::comments_open_button(),
+                            ui_text::comments_open_tooltip(),
+                        );
+                        if response.clicked() {
+                            actions.push(Action::ToggleCommentsPanel);
+                        }
+                    });
+                }
+
                 if Self::ribbon_group(ui, tab, RG::Notes) {
                     // Pass 6.2 text-bearing authoring — the same edit-group,
                     // same minimal-affordance approach as Markup. A menu opens
@@ -9820,12 +9963,20 @@ impl PdfceApp {
                     ui_text::activities_forms_label(),
                     ui_text::activities_forms_tooltip(),
                 ),
+                (
+                    ribbon::PaneSubject::Comments,
+                    ui_text::activities_comments_label(),
+                    ui_text::activities_comments_tooltip(),
+                ),
             ] {
-                if ui
+                let seg = ui
                     .selectable_label(self.pane_subject == subject, label)
-                    .on_hover_text(tip)
-                    .clicked()
-                {
+                    .on_hover_text(tip);
+                // Rect traced so the harness can drive the segmented control —
+                // the technique this session uses everywhere rather than
+                // guessing a screen point.
+                diag::trace(|| format!("activities-seg {subject:?} rect={:?}", seg.rect));
+                if seg.clicked() {
                     self.pane_subject = subject;
                 }
             }
@@ -9835,6 +9986,7 @@ impl PdfceApp {
             ribbon::PaneSubject::BatchTools => self.tools_dock(ui, actions),
             ribbon::PaneSubject::Redact => self.redact_panel(ui, actions),
             ribbon::PaneSubject::Forms => self.forms_panel(ui, actions),
+            ribbon::PaneSubject::Comments => self.comments_panel(ui, actions),
         }
     }
 

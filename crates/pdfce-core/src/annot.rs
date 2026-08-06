@@ -236,6 +236,50 @@ pub struct Annotation {
     /// UI window, **never** page content — a structural non-paint rule
     /// stronger than R43, checked before flags or appearance (risk X4).
     pub is_popup: bool,
+    /// `/Contents` — the annotation's text, decoded per §7.9.2 (Table 164,
+    /// Optional, PDF 1.0). `None` when the key is absent.
+    ///
+    /// # It is DUAL-PURPOSE, and a consumer must not assume "comment"
+    ///
+    /// §12.5.2: this is *"text displayed for the annotation, **or** (if the
+    /// type does not display text) an alternate human-readable description"*
+    /// for accessibility (§14.9.3). Which one it is depends on the subtype
+    /// (§12.5.6.2): a `FreeText` DISPLAYS it, most markup types put it in the
+    /// pop-up, and `Link`/`Movie`/`Widget`/`PrinterMark`/`TrapNet` use it
+    /// purely as an accessibility alternate. So a UI labelling this "comment"
+    /// is right for markup and wrong for a Link — modelled here without that
+    /// interpretation, which belongs to whoever displays it.
+    ///
+    /// **Not resolved here:** §12.5.6.2 NOTE 2 says a markup annotation with
+    /// a parent (`/IRT` reply) has its own `Contents` "shall be ignored".
+    /// That is a reply-chain rule needing `/IRT` modelling this struct does
+    /// not have, so the raw value is surfaced and the caveat is stated rather
+    /// than silently half-applied.
+    pub contents: Option<String>,
+    /// `/T` — the annotation's title, conventionally the AUTHOR (Table 170,
+    /// markup annotations only). `None` when absent.
+    ///
+    /// # Table 170, NOT Table 164 — this is not a common key
+    ///
+    /// `/T` is a **markup-annotation** key (§12.5.6), so it is legitimately
+    /// absent on a `Link`, a `Widget` or a `PrinterMark`. Reading it here for
+    /// every subtype is deliberate and harmless — an absent key is `None`,
+    /// which is exactly the truth — but a consumer must not read `None` as
+    /// "anonymous"; on a non-markup annotation it means "this subtype has no
+    /// such concept".
+    pub title: Option<String>,
+    /// `/M` — the modification date, **raw and unparsed** (Table 164,
+    /// Optional, PDF 1.1). `None` when absent.
+    ///
+    /// # Stored raw because the standard requires accepting anything
+    ///
+    /// §12.5.2 gives its type as "date **or text string**" and says a
+    /// conforming reader *"shall accept and display a string in any format"*.
+    /// Parsing to a date type would therefore have to either reject or
+    /// silently mangle values the standard explicitly requires be accepted —
+    /// so this is a `String`, and any future sort-by-date feature owns the
+    /// decision about what to do with a value that is not a §7.9.4 date.
+    pub mod_date: Option<String>,
     /// The `/OC` optional-content group/membership reference (§8.11.3.3), if
     /// the annotation carries one. Its default visibility is resolved against
     /// the catalog `/OCProperties /D` config: the annotation is visible only
@@ -358,6 +402,23 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
     // visibility against /OCProperties /D (Pass 12.M2).
     let oc = dict.get(b"OC").and_then(Object::as_reference);
 
+    // §7.9.2 text strings: `/Contents` and `/T` are text strings and may be
+    // UTF-16BE with a BOM, so they go through the same decoder every other
+    // text-string consumer in this crate uses rather than a second, private
+    // lossy conversion that would disagree with it on non-Latin input.
+    //
+    // `/M` deliberately does NOT: it is "date or text string" and the
+    // standard requires accepting any format, so it is surfaced verbatim.
+    let text_of = |key: &[u8]| -> Option<String> {
+        match graph.resolve(dict.get(key)?) {
+            Object::String(bytes) => Some(crate::edit::decode_text_string(bytes).text),
+            _ => None,
+        }
+    };
+    let contents = text_of(b"Contents");
+    let title = text_of(b"T");
+    let mod_date = text_of(b"M");
+
     Annotation {
         id,
         subtype,
@@ -366,6 +427,9 @@ fn model_annotation<G: ObjectGraph + ?Sized>(
         appearance,
         is_popup,
         oc,
+        contents,
+        title,
+        mod_date,
     }
 }
 
@@ -909,5 +973,79 @@ mod tests {
             (3, b"<< /Type /Page /Parent 2 0 R >>".to_vec()),
         ]);
         assert!(need_appearances(&doc));
+    }
+
+    /// `/Contents`, `/T` and `/M` are modelled, and each is `None` when absent
+    /// rather than an empty string — "no note" and "an empty note" are
+    /// different facts and a UI captions them differently.
+    #[test]
+    fn contents_title_and_mod_date_are_modelled_and_absent_means_none() {
+        let doc = doc_with_annots(
+            "[4 0 R 5 0 R]",
+            &[
+                (
+                    4,
+                    b"<< /Type /Annot /Subtype /Square /Rect [0 0 10 10]                        /Contents (Check this dimension) /T (Ken) /M (D:20260806120000Z) >>"
+                        .to_vec(),
+                ),
+                // No /Contents, no /T, no /M — the common case for a shape
+                // pdfce itself authored (Pass 6.1 sets none of them).
+                (
+                    5,
+                    b"<< /Type /Annot /Subtype /Circle /Rect [0 0 10 10] >>".to_vec(),
+                ),
+            ],
+        );
+        let annots = page_annotations(&doc, PAGE_ID);
+        assert_eq!(annots.len(), 2);
+
+        assert_eq!(annots[0].contents.as_deref(), Some("Check this dimension"));
+        assert_eq!(annots[0].title.as_deref(), Some("Ken"));
+        assert_eq!(annots[0].mod_date.as_deref(), Some("D:20260806120000Z"));
+
+        assert_eq!(annots[1].contents, None, "absent /Contents is None");
+        assert_eq!(annots[1].title, None, "absent /T is None");
+        assert_eq!(annots[1].mod_date, None, "absent /M is None");
+    }
+
+    /// A UTF-16BE `/Contents` decodes through the SAME §7.9.2 decoder every
+    /// other text-string consumer uses.
+    ///
+    /// Non-vacuous by construction: the assertion is on a non-ASCII character
+    /// that a naive byte-to-char conversion would mangle, so a second private
+    /// lossy decoder could not pass this.
+    #[test]
+    fn a_utf16_contents_decodes_rather_than_mojibake() {
+        // UTF-16BE BOM + "Ré" — 0xFEFF, 'R', 0x00E9.
+        let doc = doc_with_annots(
+            "[4 0 R]",
+            &[(
+                4,
+                b"<< /Type /Annot /Subtype /Text /Rect [0 0 10 10]                    /Contents <FEFF005200E9> >>"
+                    .to_vec(),
+            )],
+        );
+        let annots = page_annotations(&doc, PAGE_ID);
+        assert_eq!(annots[0].contents.as_deref(), Some("Ré"));
+    }
+
+    /// `/M` is stored VERBATIM, including a value that is not a §7.9.4 date.
+    ///
+    /// §12.5.2 gives its type as "date or text string" and requires a reader
+    /// to "accept and display a string in any format" — so a parser that
+    /// rejected or normalised this would violate the standard, and this test
+    /// is what stops one being added later.
+    #[test]
+    fn a_non_date_mod_date_is_kept_verbatim_because_the_standard_demands_it() {
+        let doc = doc_with_annots(
+            "[4 0 R]",
+            &[(
+                4,
+                b"<< /Type /Annot /Subtype /Square /Rect [0 0 10 10]                    /M (last Tuesday) >>"
+                    .to_vec(),
+            )],
+        );
+        let annots = page_annotations(&doc, PAGE_ID);
+        assert_eq!(annots[0].mod_date.as_deref(), Some("last Tuesday"));
     }
 }
