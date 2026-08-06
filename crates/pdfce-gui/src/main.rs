@@ -1165,6 +1165,97 @@ const MAX_FONT_FILE_BYTES: u64 = 64 * 1024 * 1024;
 /// have to sit below both.
 const FONT_FILE_EXTENSIONS: [&str; 7] = ["ttf", "otf", "ttc", "cff", "pfb", "pfa", "otc"]; // ui-text-exempt: file extensions are machine tokens, not prose
 
+/// One visible line of the object tree (2026-08-06).
+///
+/// # The nesting is the LEVEL LADDER, and nothing else
+///
+/// **object → subpath → node**, which is exactly the ladder the canvas
+/// already walks (Passes 25.0, 26.0, 26.1). `PathObject` owns
+/// `subpaths: Vec<Subpath>` and each `Subpath` owns its segments, so every
+/// level here is structure `pdfce-core` already models and the canvas already
+/// addresses with the same coordinates. The tree and the canvas therefore
+/// agree BY CONSTRUCTION rather than by care — a row's `(object, subpath,
+/// node)` triple *is* an [`canvas::EnteredObject`].
+///
+/// # What is deliberately NOT nested here
+///
+/// **Marked-content / optional-content grouping.** The flat list this
+/// replaces carried the reason and it still stands: `PageObjects` has no OCG
+/// membership for page content, so there is no such grouping to render and
+/// inventing one would be a lie about the document's structure. That level
+/// becomes available only once `decompose_page` tracks `BDC`/`EMC` membership
+/// — Pass 23.2's core half, planned and not built (verified 2026-08-06: no
+/// `--tree`/`--level` on `object-list`, no `ContentPath` in `decompose.rs`).
+///
+/// So the tree gained the nesting that exists and refused the nesting that
+/// does not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ObjectTreeRow {
+    /// A page object, at paint-order `index`.
+    Object { index: usize },
+    /// A subpath within an expanded path object.
+    Subpath { object: usize, subpath: usize },
+    /// An anchor within an expanded subpath.
+    Node {
+        object: usize,
+        subpath: usize,
+        node: usize,
+    },
+}
+
+/// Materialise the visible rows for one frame, front-most first.
+///
+/// Only expanded parents contribute children, so a fully-collapsed tree costs
+/// exactly the object count — the same row budget the flat list had.
+fn build_object_tree_rows(
+    objects: &[pdfce_core::vector::VectorObject],
+    objects_expanded: &BTreeSet<usize>,
+    subpaths_expanded: &BTreeSet<(usize, usize)>,
+) -> Vec<ObjectTreeRow> {
+    use pdfce_core::vector::VectorObject;
+    let total = objects.len();
+    let mut rows = Vec::with_capacity(total);
+    for display in 0..total {
+        // Front-most first: display row 0 is the LAST-painted object.
+        let index = total - 1 - display;
+        rows.push(ObjectTreeRow::Object { index });
+        if !objects_expanded.contains(&index) {
+            continue;
+        }
+        let Some(VectorObject::Path(path)) = objects.get(index) else {
+            continue;
+        };
+        for (sub_ix, subpath) in path.subpaths.iter().enumerate() {
+            rows.push(ObjectTreeRow::Subpath {
+                object: index,
+                subpath: sub_ix,
+            });
+            if !subpaths_expanded.contains(&(index, sub_ix)) {
+                continue;
+            }
+            // A subpath's addressable anchors are its start plus one per
+            // segment — the same count `truncate_entered` validates against,
+            // so the tree cannot offer a node the level ladder would reject.
+            for node in 0..=subpath.segments.len() {
+                rows.push(ObjectTreeRow::Node {
+                    object: index,
+                    subpath: sub_ix,
+                    node,
+                });
+            }
+        }
+    }
+    rows
+}
+
+/// Whether an object can be expanded — i.e. has subpaths to show.
+fn object_tree_expandable(object: Option<&pdfce_core::vector::VectorObject>) -> bool {
+    matches!(
+        object,
+        Some(pdfce_core::vector::VectorObject::Path(p)) if !p.subpaths.is_empty()
+    )
+}
+
 impl PdfceApp {
     /// Rebuild [`Self::font_env`] from [`Self::font_folders`] and bump
     /// [`Self::font_env_generation`] (decision 012).
@@ -2055,7 +2146,7 @@ struct OpenDoc {
     /// drained by the app into [`PdfceApp::show_pane_subject`] on the next
     /// frame — the exact sibling of [`Self::pending_note`], for exactly the
     /// same borrow reason.
-    pending_pane_reveal: Option<DockPanel>,
+    pending_pane_subject: Option<ribbon::PaneSubject>,
     /// Which pages are selected for a batch operation, by 0-based index.
     ///
     /// Ordered (a `BTreeSet`) so that "the selected pages" is always a
@@ -2239,6 +2330,14 @@ struct OpenDoc {
     /// after the selection is cleared: the next selection, even of the same
     /// object, is a fresh change worth revealing.
     objects_revealed: Option<TargetId>,
+    /// Which objects are expanded in the tree, by paint-order index.
+    ///
+    /// Per-DOCUMENT, like every other view state on `OpenDoc`, so switching
+    /// files does not carry one document's expansion onto another's objects —
+    /// where index 5870 means something entirely different.
+    objects_expanded: BTreeSet<usize>,
+    /// Which `(object, subpath)` pairs are expanded to show their anchors.
+    subpaths_expanded: BTreeSet<(usize, usize)>,
     /// The page index [`Self::object_model`] was last built for (Pass 9a).
     /// The provider decomposes only the CURRENT page (module docs of
     /// `object_provider`), so it is rebuilt lazily whenever this stops
@@ -2428,7 +2527,7 @@ impl OpenDoc {
             dimension_drag: None,
             dimension_place_draft: None,
             pending_note: None,
-            pending_pane_reveal: None,
+            pending_pane_subject: None,
             selected_pages: BTreeSet::new(),
             selection_anchor: None,
             dragged_page: None,
@@ -2457,6 +2556,8 @@ impl OpenDoc {
             // that first build; until then selection finds nothing.
             object_model: None,
             objects_revealed: None,
+            objects_expanded: BTreeSet::new(),
+            subpaths_expanded: BTreeSet::new(),
             provider_page: None,
             marquee_start: None,
             // Pass 12.M2b: no measure tool active, the group panel closed, a
@@ -3221,6 +3322,8 @@ enum Action {
     Save,
     /// Show or hide the right-hand Tools dock.
     ToggleTools,
+    /// Show or hide the right-hand object-tree sidebar.
+    ToggleObjectsSidebar,
     /// Add or remove one page from the batch selection.
     TogglePageSelection(usize),
     /// Extend the selection from the anchor to this page.
@@ -6857,7 +6960,7 @@ impl PdfceApp {
                 // muscle memory has been deliberately preserved across a move.
                 // Properties is its own always-visible compartment now, so
                 // "show properties" is a scroll-into-view, not a mode switch.
-                self.reveal_panel(DockPanel::Properties);
+                self.show_pane_subject(ribbon::PaneSubject::Properties);
                 return;
             }
             Action::SelectRibbonTab(tab) => {
@@ -6911,6 +7014,10 @@ impl PdfceApp {
             }
             Action::Save => {
                 self.begin_save();
+                return;
+            }
+            Action::ToggleObjectsSidebar => {
+                self.tools_open = !self.tools_open;
                 return;
             }
             Action::ToggleTools => {
@@ -7115,7 +7222,7 @@ impl PdfceApp {
                 if let Status::Open(doc) = &mut self.status {
                     doc.dimension_groups_open = true;
                 }
-                self.reveal_panel(DockPanel::Properties);
+                self.show_pane_subject(ribbon::PaneSubject::Properties);
                 return;
             }
             Action::CancelToolGesture => {
@@ -7331,6 +7438,7 @@ impl PdfceApp {
             | Action::ApplyProperties
             | Action::Save
             | Action::ToggleTools
+            | Action::ToggleObjectsSidebar
             | Action::DeleteSelection
             | Action::RotateSelection(_)
             | Action::AddMarkupShape(_)
@@ -7804,7 +7912,9 @@ impl PdfceApp {
     fn show_pane_subject(&mut self, subject: ribbon::PaneSubject) {
         diag::trace(|| format!("show-pane-subject {subject:?}"));
         self.pane_subject = subject;
-        self.reveal_panel(DockPanel::Activities);
+        // ALL subjects now land in the Tool compartment — Activities and
+        // Properties stopped being panes of their own on 2026-08-06.
+        self.reveal_panel(DockPanel::ArmedTool);
     }
 
     /// Make `panel` visible — open the rail, and raise the panel if it is
@@ -8497,9 +8607,9 @@ impl eframe::App for PdfceApp {
         // command that changes a pane the operator cannot see has, from their
         // side, done nothing).
         if let Status::Open(doc) = &mut self.status
-            && let Some(panel) = doc.pending_pane_reveal.take()
+            && let Some(subject) = doc.pending_pane_subject.take()
         {
-            self.reveal_panel(panel);
+            self.show_pane_subject(subject);
         }
 
         let canvas_delete_target = match &self.status {
@@ -9306,6 +9416,25 @@ impl PdfceApp {
                     .clicked()
                 {
                     actions.push(Action::ToggleRail);
+                }
+                // THE OBJECT-TREE SIDEBAR'S OWN TOGGLE (2026-08-06, operator
+                // instruction: *"these can be activated from the view menu"*).
+                //
+                // Until now the right dock had NO toggle of its own — it was
+                // opened only as a side effect of other commands, and after
+                // `ToggleTools` was repurposed to show Batch Tools it had no
+                // route at all. A panel reachable by accident is the R80
+                // defect one step short of a panel reachable nowhere.
+                let b = ui
+                    .add(Self::icon_text(
+                        ui,
+                        icons::Icon::EditObjects,
+                        ui_text::objects_sidebar_toggle(),
+                    ))
+                    .on_hover_text(ui_text::objects_sidebar_toggle_tooltip());
+                diag::trace(|| format!("objects-sidebar-toggle rect={:?}", b.rect));
+                if b.clicked() {
+                    actions.push(Action::ToggleObjectsSidebar);
                 }
                 // Annotation-visibility toggle (Pass 6.0). A `SelectableLabel`
                 // rather than a plain button: on a lightly-annotated page,
@@ -10153,57 +10282,66 @@ impl PdfceApp {
     /// state is watched, workflows are entered.** Watched things get their own
     /// always-visible compartment; entered things share one and switch.
     ///
-    /// The switch is an in-panel segmented control rather than `egui_tiles`
-    /// tabs, because a tab bar here would put a second, differently-styled tab
-    /// convention inside a dock that no longer has any tab bars of its own.
+    /// **AMENDED 2026-08-06 (operator instruction).** The reasoning above was
+    /// sound for the shape it described and the premise moved: Activities is
+    /// no longer a compartment at all. The operator asked for these surfaces
+    /// *"integrated into the ribbon and their options/inputs shown in the tool
+    /// tab when they are activated"*, so the ribbon is the switch and this
+    /// renders whichever activity it chose.
+    ///
+    /// The in-panel segmented control is therefore GONE. With every activity
+    /// reachable from the ribbon — Batch and Redact on Tools, Forms on Edit,
+    /// Comments on Review — a second switch beside the first would be two
+    /// controls for one choice, which is the two-mental-models duplication
+    /// decision 024 §1.3 item 6 names.
     fn activities_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        ui.horizontal(|ui| {
-            for (subject, label, tip) in [
-                (
-                    ribbon::PaneSubject::BatchTools,
-                    ui_text::activities_batch_label(),
-                    ui_text::activities_batch_tooltip(),
-                ),
-                (
-                    ribbon::PaneSubject::Redact,
-                    ui_text::activities_redact_label(),
-                    ui_text::activities_redact_tooltip(),
-                ),
-                (
-                    ribbon::PaneSubject::Forms,
-                    ui_text::activities_forms_label(),
-                    ui_text::activities_forms_tooltip(),
-                ),
-                (
-                    ribbon::PaneSubject::Comments,
-                    ui_text::activities_comments_label(),
-                    ui_text::activities_comments_tooltip(),
-                ),
-            ] {
-                let seg = ui
-                    .selectable_label(self.pane_subject == subject, label)
-                    .on_hover_text(tip);
-                // Rect traced so the harness can drive the segmented control —
-                // the technique this session uses everywhere rather than
-                // guessing a screen point.
-                diag::trace(|| format!("activities-seg {subject:?} rect={:?}", seg.rect));
-                if seg.clicked() {
-                    self.pane_subject = subject;
-                }
-            }
-        });
-        ui.separator();
         match self.pane_subject {
             ribbon::PaneSubject::BatchTools => self.tools_dock(ui, actions),
             ribbon::PaneSubject::Redact => self.redact_panel(ui, actions),
             ribbon::PaneSubject::Forms => self.forms_panel(ui, actions),
             ribbon::PaneSubject::Comments => self.comments_panel(ui, actions),
+            // Never reached from `tool_options_panel`'s dispatch, which sends
+            // these two elsewhere; an arm rather than a catch-all so a future
+            // subject cannot land here silently.
+            ribbon::PaneSubject::ArmedTool | ribbon::PaneSubject::Properties => {}
         }
     }
 
     /// The **Tool** compartment — the armed tool's own options, and nothing
     /// else.
-    fn tool_options_panel(&mut self, ui: &mut egui::Ui, _actions: &mut Vec<Action>) {
+    fn tool_options_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        // THE TOOL COMPARTMENT IS NOW THE UNIVERSAL OPTIONS SURFACE
+        // (2026-08-06, operator instruction): *"both of these should have
+        // their options integrated into the ribbon and their options/inputs
+        // shown in the tool tab when they are activated."*
+        //
+        // Properties and Activities were standing compartments of their own
+        // until this change. They are reached from the ribbon now, and what
+        // they show lands here — so the pane answers one question, "what are
+        // the options for the thing I am doing", whatever that thing is.
+        //
+        // A back-to-the-tools control is offered rather than assumed: an
+        // operator who opened Properties from the ribbon has no other way
+        // back to the armed tool's own controls, and hunting for the ribbon
+        // button that un-does a ribbon button is worse than a named exit.
+        if self.pane_subject != ribbon::PaneSubject::ArmedTool {
+            ui.horizontal(|ui| {
+                if ui
+                    .button(ui_text::tool_pane_back_to_tools())
+                    .on_hover_text(ui_text::tool_pane_back_to_tools_tooltip())
+                    .clicked()
+                {
+                    self.pane_subject = ribbon::PaneSubject::ArmedTool;
+                }
+                ui.label(ui_text::tool_pane_subject_name(self.pane_subject));
+            });
+            ui.separator();
+            match self.pane_subject {
+                ribbon::PaneSubject::Properties => self.properties_panel(ui, actions),
+                _ => self.activities_panel(ui, actions),
+            }
+            return;
+        }
         let Status::Open(doc) = &self.status else {
             ui.label(ui_text::tool_options_no_document());
             return;
@@ -10517,16 +10655,6 @@ impl PdfceApp {
                     .id_salt("dock-armed-tool")
                     .show(ui, |ui| self.tool_options_panel(ui, actions));
             }
-            DockPanel::Properties => {
-                egui::ScrollArea::vertical()
-                    .id_salt("dock-properties")
-                    .show(ui, |ui| self.properties_panel(ui, actions));
-            }
-            DockPanel::Activities => {
-                egui::ScrollArea::vertical()
-                    .id_salt("dock-activities")
-                    .show(ui, |ui| self.activities_panel(ui, actions));
-            }
         }
     }
 
@@ -10722,6 +10850,19 @@ impl PdfceApp {
     /// nothing to disclose because nothing is hidden. If a future cost
     /// (row-string precompute, memory) ever forces a cap, §B.6 binds it to
     /// be visible text naming both numbers, never a quietly shortened list.
+    /// One visible line of the object tree — see [`ObjectTreeRow`].
+    ///
+    /// # Why a FLATTENED display list rather than recursive drawing
+    ///
+    /// The panel virtualizes with `ScrollArea::show_rows`, which needs a row
+    /// COUNT and the ability to draw an arbitrary slice — a page can decompose
+    /// to thousands of objects and drawing them all would cost a frame. A
+    /// recursive tree walk cannot answer "what is row 4,000" without walking
+    /// to it, so the visible rows are materialised once per frame and indexed
+    /// directly.
+    ///
+    /// With everything collapsed this list is exactly the object count, so the
+    /// nesting costs nothing until it is used.
     fn objects_panel(&mut self, ui: &mut egui::Ui) {
         let Status::Open(doc) = &mut self.status else {
             ui.label(ui_text::objects_dock_no_document_hint());
@@ -10760,12 +10901,24 @@ impl PdfceApp {
         ));
         ui.separator();
 
+        // Build the visible rows for THIS frame. Front-most first, matching
+        // the flat list this replaces (see "Front-most FIRST" above).
+        let rows = build_object_tree_rows(objects, &doc.objects_expanded, &doc.subpaths_expanded);
+        let total_rows = rows.len();
+
         // The first selected target, in paint order. Drives both the
         // scroll-reveal edge trigger and nothing else — multi-select
         // highlights every matching row independently (§B.5).
         let first_selected = doc.canvas_selection.iter().next().copied();
         let reveal_row = (first_selected != doc.objects_revealed)
-            .then(|| first_selected.map(|t| display_row_for_target(t, total)))
+            .then(|| {
+                first_selected.and_then(|t| {
+                    let want = usize::try_from(t.0).unwrap_or(usize::MAX);
+                    rows.iter().position(
+                        |r| matches!(r, ObjectTreeRow::Object { index } if *index == want),
+                    )
+                })
+            })
             .flatten();
         doc.objects_revealed = first_selected;
 
@@ -10785,60 +10938,185 @@ impl PdfceApp {
             scroll = scroll.vertical_scroll_offset(row as f32 * (row_height + spacing));
         }
 
+        // Three intents, captured and applied after the loop so a click cannot
+        // mutate state the rows drawn after it are still reading.
         let mut clicked: Option<(TargetId, bool)> = None;
-        scroll.show_rows(ui, row_height, total, |ui, rows| {
-            for row in rows {
-                // Front-most first: display row 0 is the LAST-painted
-                // object (see the "Front-most FIRST" section above).
-                let index = total - 1 - row;
-                let Some(object) = objects.get(index) else {
+        let mut toggle_object: Option<usize> = None;
+        let mut toggle_subpath: Option<(usize, usize)> = None;
+        let mut enter: Option<canvas::EnteredObject> = None;
+
+        scroll.show_rows(ui, row_height, total_rows, |ui, range| {
+            for row_ix in range {
+                let Some(row) = rows.get(row_ix) else {
                     continue;
                 };
-                let target = TargetId(index as u64);
-                let selected = doc.canvas_selection.contains(&target);
-                // ONE description path (`object_summary::describe_object`),
-                // shared with the status-bar selection readout and the canvas
-                // overlay's type badge. Two independently-written descriptions
-                // of the same object is the divergence pattern decision 011
-                // warns about, one layer above the decomposition it warns
-                // about it for; this is the structural answer.
-                let label = ui_text::object_row(index, &describe_object(object));
-                // R84: selected state is never colour alone. The background
-                // fill is `Button::selectable`'s; the BOLD is this project's
-                // standing second cue, and survives greyscale.
-                let text = Self::toggle_label(selected, &label);
-                let response = ui.add_sized(
-                    egui::vec2(ui.available_width(), row_height),
-                    // `Atom::grow()` after the text pushes the label to the
-                    // LEFT edge; a centred label in a list of rows reads as
-                    // a column of buttons, not as a list.
-                    egui::Button::selectable(selected, (text, egui::Atom::grow())).small(),
-                );
-                if response
-                    .on_hover_text(ui_text::objects_dock_row_tooltip())
-                    .clicked()
-                {
-                    clicked = Some((target, ui.input(|i| i.modifiers.shift)));
+                match *row {
+                    ObjectTreeRow::Object { index } => {
+                        let Some(object) = objects.get(index) else {
+                            continue;
+                        };
+                        let target = TargetId(index as u64);
+                        let selected = doc.canvas_selection.contains(&target);
+                        ui.horizontal(|ui| {
+                            // The expander is a SEPARATE control from the row,
+                            // not a click on the label: expanding to look
+                            // inside and selecting the whole object are
+                            // different intents, and one gesture cannot mean
+                            // both without one of them being a surprise.
+                            let expandable = object_tree_expandable(Some(object));
+                            let open = doc.objects_expanded.contains(&index);
+                            if expandable {
+                                let ex = ui
+                                    .small_button(ui_text::object_tree_expander(open))
+                                    .on_hover_text(ui_text::object_tree_expander_tooltip());
+                                // Rect traced so the harness can drive the
+                                // expander instead of guessing a screen point.
+                                diag::trace(|| {
+                                    format!(
+                                        "tree-expander index={index} open={open} rect={:?}",
+                                        ex.rect
+                                    )
+                                });
+                                if ex.clicked() {
+                                    toggle_object = Some(index);
+                                }
+                            } else {
+                                // R83: the gap is held so labels stay aligned,
+                                // but no dead control is drawn — a leaf has
+                                // nothing to expand and should not offer to.
+                                ui.add_space(ui_text::OBJECT_TREE_EXPANDER_WIDTH);
+                            }
+                            // ONE description path (`describe_object`), shared
+                            // with the status-bar readout and the canvas badge.
+                            let label = ui_text::object_row(index, &describe_object(object));
+                            // R84: selected state is never colour alone.
+                            let text = Self::toggle_label(selected, &label);
+                            let response = ui.add_sized(
+                                egui::vec2(ui.available_width(), row_height),
+                                egui::Button::selectable(selected, (text, egui::Atom::grow()))
+                                    .small(),
+                            );
+                            if response
+                                .on_hover_text(ui_text::objects_dock_row_tooltip())
+                                .clicked()
+                            {
+                                clicked = Some((target, ui.input(|i| i.modifiers.shift)));
+                            }
+                        });
+                    }
+                    ObjectTreeRow::Subpath { object, subpath } => {
+                        let entered_here = doc.entered.is_some_and(|e| {
+                            e.object == object && e.subpath == Some(subpath) && e.node.is_none()
+                        });
+                        ui.horizontal(|ui| {
+                            ui.add_space(ui_text::OBJECT_TREE_INDENT);
+                            let open = doc.subpaths_expanded.contains(&(object, subpath));
+                            if ui
+                                .small_button(ui_text::object_tree_expander(open))
+                                .on_hover_text(ui_text::object_tree_expander_tooltip())
+                                .clicked()
+                            {
+                                toggle_subpath = Some((object, subpath));
+                            }
+                            let label = ui_text::object_tree_subpath_row(subpath);
+                            let text = Self::toggle_label(entered_here, &label);
+                            if ui
+                                .add_sized(
+                                    egui::vec2(ui.available_width(), row_height),
+                                    egui::Button::selectable(
+                                        entered_here,
+                                        (text, egui::Atom::grow()),
+                                    )
+                                    .small(),
+                                )
+                                .on_hover_text(ui_text::object_tree_subpath_tooltip())
+                                .clicked()
+                            {
+                                enter = Some(canvas::EnteredObject {
+                                    object,
+                                    subpath: Some(subpath),
+                                    node: None,
+                                });
+                            }
+                        });
+                    }
+                    ObjectTreeRow::Node {
+                        object,
+                        subpath,
+                        node,
+                    } => {
+                        let entered_here = doc.entered.is_some_and(|e| {
+                            e.object == object && e.subpath == Some(subpath) && e.node == Some(node)
+                        });
+                        ui.horizontal(|ui| {
+                            ui.add_space(ui_text::OBJECT_TREE_INDENT * 2.0);
+                            let label = ui_text::object_tree_node_row(node);
+                            let text = Self::toggle_label(entered_here, &label);
+                            if ui
+                                .add_sized(
+                                    egui::vec2(ui.available_width(), row_height),
+                                    egui::Button::selectable(
+                                        entered_here,
+                                        (text, egui::Atom::grow()),
+                                    )
+                                    .small(),
+                                )
+                                .on_hover_text(ui_text::object_tree_node_tooltip())
+                                .clicked()
+                            {
+                                enter = Some(canvas::EnteredObject {
+                                    object,
+                                    subpath: Some(subpath),
+                                    node: Some(node),
+                                });
+                            }
+                        });
+                    }
                 }
             }
         });
+
+        if let Some(index) = toggle_object
+            && !doc.objects_expanded.remove(&index)
+        {
+            doc.objects_expanded.insert(index);
+        }
+        if let Some(key) = toggle_subpath
+            && !doc.subpaths_expanded.remove(&key)
+        {
+            doc.subpaths_expanded.insert(key);
+        }
+        // A tree row that names a level SETS that level on the canvas — the
+        // row's coordinates already ARE an `EnteredObject`, so this is the
+        // same state a double-click descent produces, reached another way.
+        // The object is selected alongside it, because entering an object the
+        // canvas has not selected would draw an inner outline with no outer
+        // one and read as a rendering fault.
+        if let Some(level) = enter {
+            doc.entered = Some(level);
+            doc.selected_nodes.clear();
+            if let Some(n) = level.node {
+                doc.selected_nodes.insert(n);
+            }
+            let target = TargetId(level.object as u64);
+            doc.canvas_selection =
+                canvas::selection_after_click(&doc.canvas_selection, Some(target), false);
+            doc.objects_revealed = Some(target);
+        }
 
         // Applied after the loop so the selection is not mutated while the
         // rows are still reading it (and so one click cannot cascade into
         // the rows drawn after it within the same frame).
         if let Some((target, shift)) = clicked {
-            // §B.5: the EXACT function the canvas click path calls
-            // (`main.rs`'s object-selection branch), never a second,
-            // divergent selection path. Plain click replaces, Shift+click
-            // toggles membership — the canvas's own convention, mirrored
-            // rather than reinvented, so an operator who learned one has
-            // already learned the other.
+            // §B.5: the EXACT function the canvas click path calls, never a
+            // second, divergent selection path. Plain click replaces,
+            // Shift+click toggles — the canvas's own convention, mirrored
+            // rather than reinvented.
             doc.canvas_selection =
                 canvas::selection_after_click(&doc.canvas_selection, Some(target), shift);
             // A tree-driven selection must not then yank the tree's own
             // scroll: the operator is already looking at the row they
-            // clicked. Recording it as "already revealed" suppresses the
-            // edge trigger on the next frame.
+            // clicked.
             doc.objects_revealed = doc.canvas_selection.iter().next().copied();
         }
     }
@@ -15701,98 +15979,6 @@ fn annotation_status(
 // uses — so a canvas-authored dimension is byte-identical to `dimension-add`
 // for the same picks (measure_tool's equivalence tests pin the shared `kind`).
 
-/// The measure tools' per-frame handler (ui-spec §§2–4): resolve the snapped
-/// pick, draw the indicator + live preview, render the property/status bars,
-/// and commit an accepted dimension / scale as ONE undoable `EditSession`
-/// command. A free function (like `run_add_text_tool`) so `doc.pages`
-/// (immutable, coordinate bridge), `doc.object_model` (immutable, the ONE
-/// decomposition — snap + fit), and `doc.measure` (mutable, tool state) are
-/// borrowed as disjoint fields across the frame; `doc.session`/`refresh_pages`
-/// are touched only in the Phase-C commit, after those borrows drop.
-#[allow(
-    clippy::too_many_lines,
-    reason = "one tool family = one handler; the pick/preview/propbar/status/commit phases are tightly coupled and splitting them would need shared owned scratch structs that obscure more than they clarify" // ui-text-exempt: clippy lint justification, never displayed
-)]
-/// Pass 9c-min (decision 011 §2.5): the on-canvas object-edit gesture.
-///
-/// Click selects the object under the pointer (reusing the 9a hit-test);
-/// **dragging** a selected object translates it, and dragging its anchor
-/// relocates that node (a node grab is decided by
-/// [`vector_edit_tool::classify_drag`], snapped via the 12.M1 engine), each
-/// showing a live preview before it commits on release to one undoable
-/// `EditSession::{move_object, move_node}` command. Delete is routed
-/// separately (`delete_selected_object`) from the `DeleteSelection` action.
-///
-/// GUI glue only: every geometry decision is a headless-tested
-/// `vector_edit_tool`/`canvas`/`vector` helper; the surgery is `pdfce-core`.
-///
-/// ## The one-edit-per-page limitation, and its removal (Pass 25.3)
-///
-/// Until 2026-08-04 a page accepted exactly ONE vector edit per session and
-/// then refused every further one with `VectorEditNeedsReopen`, telling the
-/// operator to save and reopen. The stated reason was index alignment:
-/// `vector_surgery` decomposed the BASE content, so once the page had been
-/// rewritten, base-relative indices no longer described what the operator
-/// could see.
-///
-/// That was backwards. Pass 17.0 (decision 018) had already moved the
-/// provider to `session.view()` — the edited revision — so the surgery's
-/// base-decompose was the side that was out of step, and the refusal was
-/// guarding against a mismatch the core was itself creating. `vector_surgery`
-/// now decomposes the session-CURRENT content through the same
-/// `current_page_content` helper `edit_text` uses, the two agree by
-/// construction, and vector edits accumulate like text edits always have.
-///
-/// The operator found it within minutes of subpath delete shipping: *"After
-/// clicking and deleting an object I couldn't delete another one after
-/// selecting it."* On a drawing whose stray lines are the thing to remove,
-/// one edit per session was not a limitation — it was the feature not working.
-#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-/// Stroke a 2px outline around every currently-selected canvas object.
-///
-/// # Why this is a shared function and not inline code
-///
-/// It used to be inline in the plain-selection branch of `canvas`, which meant
-/// **the object-edit tool drew no selection feedback at all**: that branch is
-/// an `else`, and `run_vector_edit_tool` returns long before it. Clicking an
-/// object with the Obj tool selected it, armed Delete, and armed drag-to-move —
-/// while showing the operator absolutely nothing.
-///
-/// That is the second half of the operator's 2026-08-02 report, *"If I click
-/// the one to edit objects, I don't seem to be able to click on objects."* The
-/// first half was a real hit-testing bug (a canvas-space tolerance shrinking to
-/// sub-pixel on screen as you zoom out, fixed in `SELECT_SCREEN_TOLERANCE_PX`).
-/// This is the other half, and it is the more deceptive of the two: hit-testing
-/// worked, selection worked, the state was correct — and the tool looked
-/// completely dead because nothing was painted. A correct action with no
-/// feedback is indistinguishable from a broken one.
-///
-/// Every tool that owns the canvas and supports object selection must call
-/// this. Painting is a `painter` overlay above the raster, never a re-raster.
-/// Where an object sits in the Objects panel's **display** order, given its
-/// paint-order [`TargetId`] and the page's object count (ui-spec §B.2).
-///
-/// The panel lists front-most first, so display row = `total - 1 - index`.
-/// Pulled out of [`PdfceApp::objects_panel`] as a free function for exactly
-/// one reason: it is the only arithmetic in that panel that can be wrong in
-/// a way a human would notice (the scroll-reveal landing on the wrong row,
-/// or one row off the end), and this crate's standing split is that wiring
-/// gets reviewed while arithmetic gets a test.
-///
-/// Out-of-range input is clamped rather than refused. A [`TargetId`] can
-/// outlive the object it named — an edit shortens the list and
-/// `prune_canvas_selection` has not run yet — and the worst honest outcome
-/// of a stale id is scrolling to the wrong row for one frame. Panicking, or
-/// refusing to draw the list, would both be worse answers to a transient.
-fn display_row_for_target(target: TargetId, total: usize) -> usize {
-    if total == 0 {
-        return 0;
-    }
-    let last = total - 1;
-    let index = usize::try_from(target.0).unwrap_or(last).min(last);
-    last - index
-}
-
 /// The side of the square type-badge chip drawn at a selection's top-left
 /// corner, in egui logical points.
 ///
@@ -17792,7 +17978,7 @@ fn run_measure_tool(
         // looking at (they are looking at Measure's own Tool Options, which is
         // where the button they just pressed lives).
         doc.dimension_groups_open = true;
-        doc.pending_pane_reveal = Some(DockPanel::Properties);
+        doc.pending_pane_subject = Some(ribbon::PaneSubject::Properties);
     }
     // Pass 34.0: click-out commit for the linear ce-dimension tool. Runs
     // before the explicit-Accept arm and through the SAME
@@ -19185,24 +19371,117 @@ mod tests {
     /// which is the one thing the panel exists to avoid.
     #[test]
     fn the_object_tree_lists_the_topmost_object_first() {
-        // Five objects, paint order 0..4. #4 was painted last, so it is
-        // topmost, so it is display row 0.
-        assert_eq!(display_row_for_target(TargetId(4), 5), 0);
-        assert_eq!(display_row_for_target(TargetId(3), 5), 1);
-        assert_eq!(display_row_for_target(TargetId(0), 5), 4);
-        // A single-object page: the only object is the only row.
-        assert_eq!(display_row_for_target(TargetId(0), 1), 0);
+        // `curves.pdf` decomposes to three path objects. #2 was painted last,
+        // so it is topmost, so it is row 0.
+        //
+        // This assertion MOVED here from `display_row_for_target`, which the
+        // nested tree retired. The rule is unchanged — front-most first — so
+        // the test follows the rule to its new home rather than being deleted
+        // with the function that used to hold it.
+        let objects = tree_fixture_objects("vector/curves.pdf");
+        assert_eq!(objects.len(), 3, "fixture drift: expected three objects");
+        let rows = build_object_tree_rows(&objects, &BTreeSet::new(), &BTreeSet::new());
+        assert_eq!(rows.len(), 3, "collapsed: one row per object");
+        assert_eq!(rows[0], ObjectTreeRow::Object { index: 2 });
+        assert_eq!(rows[1], ObjectTreeRow::Object { index: 1 });
+        assert_eq!(rows[2], ObjectTreeRow::Object { index: 0 });
     }
 
-    /// A stale target id (an edit shortened the list, and
-    /// `prune_canvas_selection` has not run yet) must clamp, never panic and
-    /// never index past the end — the worst honest outcome is one frame
-    /// scrolled to the wrong row.
+    /// An empty page yields no rows, and the `total - 1 - display` arithmetic
+    /// does not panic on it — the shape `display_row_for_target`'s clamp test
+    /// used to guard.
     #[test]
-    fn a_stale_target_clamps_instead_of_panicking() {
-        assert_eq!(display_row_for_target(TargetId(99), 5), 0);
-        assert_eq!(display_row_for_target(TargetId(0), 0), 0);
-        assert_eq!(display_row_for_target(TargetId(u64::MAX), 3), 0);
+    fn an_empty_page_yields_no_tree_rows() {
+        let rows = build_object_tree_rows(&[], &BTreeSet::new(), &BTreeSet::new());
+        assert!(rows.is_empty());
+    }
+
+    /// **The nesting is the level ladder, and only where it really exists.**
+    ///
+    /// Expanding an object reveals its subpaths; expanding a subpath reveals
+    /// its anchors, counted as `segments + 1` — the same count
+    /// `truncate_entered` validates against, so the tree cannot offer a level
+    /// the ladder would then reject.
+    #[test]
+    fn expanding_reveals_subpaths_then_anchors() {
+        let objects = tree_fixture_objects("vector/curves.pdf");
+        // Object 0 is the closed 5-anchor path (`object-list` reports
+        // subpaths=1 anchors=5 for it).
+        let mut expanded_objects = BTreeSet::new();
+        expanded_objects.insert(0);
+        let rows = build_object_tree_rows(&objects, &expanded_objects, &BTreeSet::new());
+        // Three objects + object 0's single subpath, and NOT its anchors.
+        assert_eq!(rows.len(), 4, "{rows:?}");
+        assert_eq!(
+            rows[3],
+            ObjectTreeRow::Subpath {
+                object: 0,
+                subpath: 0
+            },
+            "an expanded object shows subpaths only"
+        );
+
+        let mut expanded_subpaths = BTreeSet::new();
+        expanded_subpaths.insert((0usize, 0usize));
+        let rows = build_object_tree_rows(&objects, &expanded_objects, &expanded_subpaths);
+        let anchors = rows
+            .iter()
+            .filter(|r| matches!(r, ObjectTreeRow::Node { object: 0, .. }))
+            .count();
+        assert!(
+            anchors >= 2,
+            "an expanded subpath must reveal its anchors: {rows:?}"
+        );
+        // The node indices are contiguous from zero — the object-scoped
+        // numbering decision 025 §1.3(b) fixed.
+        assert_eq!(
+            rows.iter()
+                .find(|r| matches!(r, ObjectTreeRow::Node { .. })),
+            Some(&ObjectTreeRow::Node {
+                object: 0,
+                subpath: 0,
+                node: 0
+            })
+        );
+    }
+
+    /// A row that is not a path cannot be expanded, and expanding it anyway
+    /// contributes no children — the tree must never offer a control that
+    /// would reveal nothing.
+    #[test]
+    fn a_non_path_object_is_not_expandable() {
+        let objects = tree_fixture_objects("vector/mixed.pdf");
+        let non_path = objects
+            .iter()
+            .position(|o| !matches!(o, pdfce_core::vector::VectorObject::Path(_)))
+            .expect("mixed.pdf carries a text or image object");
+        assert!(!object_tree_expandable(objects.get(non_path)));
+        let mut expanded = BTreeSet::new();
+        expanded.insert(non_path);
+        let rows = build_object_tree_rows(&objects, &expanded, &BTreeSet::new());
+        assert_eq!(
+            rows.len(),
+            objects.len(),
+            "expanding a non-path added rows: {rows:?}"
+        );
+    }
+
+    /// Decompose a committed fixture — real objects rather than hand-built
+    /// literals, so a change to the decomposition surfaces here instead of
+    /// being masked by a struct the test invented.
+    fn tree_fixture_objects(rel: &str) -> Vec<pdfce_core::vector::VectorObject> {
+        let mut app = PdfceApp::default();
+        app.open_path(fixture(rel));
+        let Status::Open(doc) = &mut app.status else {
+            panic!("the fixture did not open");
+        };
+        doc.ensure_object_provider();
+        doc.object_model
+            .as_ref()
+            .expect("the fixture page decomposes")
+            .page_objects()
+            .objects
+            .clone()
     }
 
     /// Every object kind produces a row that carries its paint-order index
@@ -19666,11 +19945,6 @@ mod tests {
         // The oracle says `paint=stroke` for index 0; the row must say the
         // same thing in the panel's own words, not a different one.
         assert!(rows[2].contains("stroked"), "{rows:?}");
-
-        // And the display-row arithmetic the scroll-reveal uses agrees with
-        // the ordering the rows were built with.
-        assert_eq!(display_row_for_target(TargetId(2), 3), 0);
-        assert_eq!(display_row_for_target(TargetId(0), 3), 2);
     }
 
     /// A tree row click and a canvas click must produce the SAME selection —

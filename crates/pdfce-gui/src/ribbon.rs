@@ -465,14 +465,29 @@ impl ResetScope {
 /// them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PaneSubject {
-    /// Batch operations across whole files, and the font folders.
+    /// Whatever edit tools are enabled — the Tool compartment's resting
+    /// state.
     ///
-    /// The DEFAULT, because the Activities compartment is always on screen
-    /// now and therefore always showing something: it needs a subject that is
-    /// useful to land on rather than one that is a mode. Redact and Forms are
-    /// both destinations an operator goes to deliberately; Batch Tools is the
-    /// closest thing here to a neutral resting state.
+    /// **The DEFAULT, and the reason it is the default is the whole shape of
+    /// this enum.** The compartment is permanently on screen, so it is always
+    /// showing *something*; that something should be the surface an operator
+    /// returns to rather than one they went to. Every other subject here is a
+    /// destination reached from the ribbon, and each is finished with. Arming
+    /// a tool comes back here.
+    ///
+    /// **Amended 2026-08-06 (operator instruction).** This variant is
+    /// reinstated after the shell redesign removed it, and the earlier
+    /// `BatchTools` default is retired. That default was written when
+    /// Activities was its own always-visible compartment and therefore needed
+    /// "a subject that is useful to land on"; with Activities folded back into
+    /// the Tool compartment, landing on Batch Tools would mean the pane opened
+    /// on a whole-file workflow nobody asked for.
     #[default]
+    ArmedTool,
+    /// The selected thing's properties, the ce-dimension groups, and the
+    /// document's `/Info` form.
+    Properties,
+    /// Batch operations across whole files, and the font folders.
     BatchTools,
     /// The redaction review surface.
     Redact,

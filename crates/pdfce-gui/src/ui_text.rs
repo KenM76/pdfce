@@ -6357,25 +6357,6 @@ pub fn dock_panel_properties_label() -> &'static str {
     "Properties"
 }
 
-/// Its purpose line.
-pub fn dock_panel_properties_tooltip() -> &'static str {
-    "What is selected on the page, the dimension groups, and the document's own title and author."
-}
-
-/// Heading over the activities compartment.
-pub fn dock_panel_activities_label() -> &'static str {
-    "Activities"
-}
-
-/// Its purpose line.
-///
-/// Names the distinction that decides what lives here: these are whole-file
-/// jobs you GO TO, as opposed to the compartments above, which describe what
-/// is in front of you and are watched rather than entered.
-pub fn dock_panel_activities_tooltip() -> &'static str {
-    "Whole-document jobs — batch operations across files, redaction review, and filling forms."
-}
-
 /// The Activities compartment's segmented control — three whole-document
 /// workflows an operator ENTERS, as opposed to the compartments above it,
 /// which describe what is in front of them and are watched.
@@ -6384,28 +6365,13 @@ pub fn activities_batch_label() -> &'static str {
 }
 
 /// See [`activities_batch_label`].
-pub fn activities_batch_tooltip() -> &'static str {
-    "Operations across whole files — combine, split, insert, extract — and your font folders."
-}
-
-/// See [`activities_batch_label`].
 pub fn activities_redact_label() -> &'static str {
     "Redact"
 }
 
 /// See [`activities_batch_label`].
-pub fn activities_redact_tooltip() -> &'static str {
-    "Mark content for removal and review it before applying. The only operation here that cannot be undone once saved."
-}
-
-/// See [`activities_batch_label`].
 pub fn activities_forms_label() -> &'static str {
     "Forms"
-}
-
-/// See [`activities_batch_label`].
-pub fn activities_forms_tooltip() -> &'static str {
-    "Fill in this document's interactive fields, flatten them, or move their values in and out as a data file."
 }
 
 // -- Multiple open documents ------------------------------------------------
@@ -6491,11 +6457,6 @@ pub fn ribbon_group_comments_list() -> &'static str {
 /// The Activities segmented-control label.
 pub fn activities_comments_label() -> &'static str {
     "Comments"
-}
-
-/// Its tooltip.
-pub fn activities_comments_tooltip() -> &'static str {
-    "Every note and markup already on this document, in page order."
 }
 
 /// The ribbon button that opens the Comments pane.
@@ -6633,4 +6594,92 @@ pub fn tool_options_also_on(names: &[&str]) -> String {
 /// should recognise it instantly on Redact rather than parse a new sentence.
 pub fn authoring_disabled_note() -> &'static str {
     "⚠ Editing is switched off, so nothing here will change the document. Turn Editing on in the Edit tab."
+}
+
+// -- The Tool compartment as the universal options surface (2026-08-06) -----
+
+/// The control that returns the Tool compartment to the armed tools.
+///
+/// Plain words, no arrow glyph: `←` (U+2190) has no glyph in any font of the
+/// shipped stack, and the Pass 18.7 coverage gate caught it here before it
+/// could render as an empty box.
+pub fn tool_pane_back_to_tools() -> &'static str {
+    "Back to tools"
+}
+
+/// Its tooltip. Names the destination rather than the gesture, because
+/// "back" alone does not say back to WHAT when the pane has five subjects.
+pub fn tool_pane_back_to_tools_tooltip() -> &'static str {
+    "Return this panel to the options of whichever edit tools are switched on."
+}
+
+/// Names the subject the Tool compartment is currently showing.
+///
+/// Shown beside the back control so the pane always says what it is, rather
+/// than relying on the operator remembering which ribbon button they pressed
+/// — the panel has no tab bar of its own to carry that any more.
+pub fn tool_pane_subject_name(subject: crate::ribbon::PaneSubject) -> &'static str {
+    use crate::ribbon::PaneSubject as S;
+    match subject {
+        S::ArmedTool => dock_panel_armed_tool_label(),
+        S::Properties => dock_panel_properties_label(),
+        S::BatchTools => activities_batch_label(),
+        S::Redact => activities_redact_label(),
+        S::Forms => activities_forms_label(),
+        S::Comments => activities_comments_label(),
+    }
+}
+
+// -- The nested object tree (2026-08-06) ------------------------------------
+
+/// Width reserved where a leaf object would show an expander, so every row's
+/// label starts at the same x. R83: the space is held, no dead control drawn.
+pub const OBJECT_TREE_EXPANDER_WIDTH: f32 = 18.0;
+
+/// One level of indent in the object tree.
+pub const OBJECT_TREE_INDENT: f32 = 14.0;
+
+/// The expander glyph.
+///
+/// ASCII, deliberately: the Pass 18.7 coverage gate rejects any character with
+/// no glyph in the shipped font stack, and it caught a U+2190 arrow elsewhere
+/// in this same commit. These two characters are safe.
+pub fn object_tree_expander(open: bool) -> &'static str {
+    if open { "v" } else { ">" }
+}
+
+/// Its tooltip — says what expanding REVEALS, not that it expands.
+pub fn object_tree_expander_tooltip() -> &'static str {
+    "Show the parts this object is drawn from - its separate lines, and the points on them."
+}
+
+/// A subpath row's label.
+pub fn object_tree_subpath_row(index: usize) -> String {
+    format!("Part #{index}")
+}
+
+/// Its tooltip. Says the row and the canvas are the same place, because that
+/// is the non-obvious part.
+pub fn object_tree_subpath_tooltip() -> &'static str {
+    "Select this part on the page - the same as double-clicking into the object and picking it."
+}
+
+/// A node row's label.
+pub fn object_tree_node_row(index: usize) -> String {
+    format!("Point #{index}")
+}
+
+/// Its tooltip.
+pub fn object_tree_node_tooltip() -> &'static str {
+    "Select this point on the page, ready to move or delete."
+}
+
+/// The View-tab toggle for the object-tree sidebar.
+pub fn objects_sidebar_toggle() -> &'static str {
+    "Objects"
+}
+
+/// Its tooltip.
+pub fn objects_sidebar_toggle_tooltip() -> &'static str {
+    "Show or hide the right-hand panel listing everything on the page, nested into parts and points."
 }

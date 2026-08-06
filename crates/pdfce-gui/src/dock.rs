@@ -191,24 +191,27 @@ pub enum DockPanel {
     /// subject switch — those are their own compartments now, so this variant
     /// means exactly what its name says.
     ArmedTool,
-    /// The selected thing's properties, plus the ce-dimension groups and the
-    /// document's `/Info` form (the three sections Pass 34.2 built).
-    ///
-    /// **Its content is unchanged; what is new is that it is ALWAYS VISIBLE.**
-    /// It used to be one setting of a subject switch, so reaching it hid the
-    /// armed tool's own options — and "select above, edit below" is precisely
-    /// the relationship decision 017 §A.3 built a vertical split for.
-    Properties,
-    /// The activity compartment: whole-file and document-wide surfaces that
-    /// are entered deliberately rather than watched — Batch Tools, Redact,
-    /// Forms.
-    ///
-    /// These genuinely ARE mutually exclusive workflows, so they keep a
-    /// switch (an in-panel segmented control, not an `egui_tiles` tab bar).
-    /// The distinction that decides which panes get promoted and which stay
-    /// muxed: **selection state is watched, workflows are entered.**
-    Activities,
 }
+
+// `Properties` and `Activities` were variants here until 2026-08-06.
+//
+// They were promoted to standing compartments that morning on the reasoning
+// **"selection state is watched, workflows are entered"** — watched things get
+// a permanent compartment, entered things share one. The operator then used it
+// and asked for both to be *"integrated into the ribbon and their
+// options/inputs shown in the tool tab when they are activated."*
+//
+// Recorded in the convention Pass 24.3 set for its own reversal: the pairing
+// was reasonable and the premise was wrong. The premise here was that
+// Properties is WATCHED — consulted continuously while doing something else,
+// the way a selection readout is. In use it is not. It is consulted in bursts,
+// deliberately, when there is something to change, which is the same shape as
+// the workflows; and both belong where the options for the current activity
+// live. The distinction was real and Properties was on the wrong side of it.
+//
+// What survives unchanged is the half that was right: reaching one surface
+// must not hide another you are using AT THE SAME TIME. Pages and the Tool
+// compartment still stand side by side and neither can hide the other.
 
 impl DockPanel {
     /// Every panel, in the order the default layout introduces them.
@@ -230,13 +233,7 @@ impl DockPanel {
         dead_code,
         reason = "the panel enumeration; swept by this module's tests today, and the list any future panel-picker or fail-soft remount must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 5] = [
-        Self::Objects,
-        Self::Pages,
-        Self::ArmedTool,
-        Self::Properties,
-        Self::Activities,
-    ];
+    pub const ALL: [Self; 3] = [Self::Objects, Self::Pages, Self::ArmedTool];
 
     /// The panel's tab label (decision 002 R1: through the catalog).
     pub fn label(self) -> &'static str {
@@ -244,8 +241,6 @@ impl DockPanel {
             Self::Objects => ui_text::dock_panel_objects_label(),
             Self::Pages => ui_text::dock_panel_pages_label(),
             Self::ArmedTool => ui_text::dock_panel_armed_tool_label(),
-            Self::Properties => ui_text::dock_panel_properties_label(),
-            Self::Activities => ui_text::dock_panel_activities_label(),
         }
     }
 
@@ -257,8 +252,6 @@ impl DockPanel {
             Self::Objects => ui_text::dock_panel_objects_tooltip(),
             Self::Pages => ui_text::dock_panel_pages_tooltip(),
             Self::ArmedTool => ui_text::dock_panel_armed_tool_tooltip(),
-            Self::Properties => ui_text::dock_panel_properties_tooltip(),
-            Self::Activities => ui_text::dock_panel_activities_tooltip(),
         }
     }
 }
@@ -368,15 +361,10 @@ const LEFT_SWAP_TREE_ID: &str = "pdfce-dock-left-swap";
 #[must_use]
 pub fn default_left_tree() -> DockTree {
     let mut tiles = egui_tiles::Tiles::default();
-    let panes: Vec<_> = [
-        DockPanel::Pages,
-        DockPanel::ArmedTool,
-        DockPanel::Properties,
-        DockPanel::Activities,
-    ]
-    .into_iter()
-    .map(|p| tiles.insert_pane(p))
-    .collect();
+    let panes: Vec<_> = [DockPanel::Pages, DockPanel::ArmedTool]
+        .into_iter()
+        .map(|p| tiles.insert_pane(p))
+        .collect();
     // VERTICAL LINEAR, NOT TABS — and the absence of a tab bar is the point.
     //
     // These four are always visible together, which `Container::Linear`
@@ -407,7 +395,11 @@ pub fn default_left_tree() -> DockTree {
     if let Some(egui_tiles::Tile::Container(egui_tiles::Container::Linear(lin))) =
         tiles.get_mut(root)
     {
-        for (pane, share) in panes.iter().zip([0.7_f32, 0.7, 1.3, 1.3]) {
+        // Two compartments now, not four. Pages is frequently near-empty (a
+        // short document is one thumbnail); the Tool compartment holds every
+        // tool's controls AND, since 2026-08-06, Properties and the four
+        // activities — so it is the one that has to say the most.
+        for (pane, share) in panes.iter().zip([0.6_f32, 1.4]) {
             lin.shares.set_share(*pane, share);
         }
     }
@@ -707,15 +699,15 @@ mod tests {
     #[test]
     fn every_left_panel_is_visible_at_once_in_the_default_layout() {
         let tree = default_left_tree();
-        for panel in [
-            DockPanel::Pages,
-            DockPanel::ArmedTool,
-            DockPanel::Properties,
-            DockPanel::Activities,
-        ] {
+        // TWO panels now, not four — Properties and Activities were retired on
+        // 2026-08-06 (see the note on `DockPanel`). The INVARIANT is unchanged
+        // and is why this test survives the reversal: whatever the left dock
+        // holds, it stacks rather than tabs, so nothing in it can hide
+        // anything else in it.
+        for panel in [DockPanel::Pages, DockPanel::ArmedTool] {
             assert!(
                 panel_is_active(&tree, panel),
-                "{panel:?} is not visible in the default layout — the left dock                  must stack, not tab"
+                "{panel:?} is not visible in the default layout —                  the left dock must stack, not tab"
             );
         }
     }
@@ -731,12 +723,12 @@ mod tests {
     fn a_backgrounded_panel_can_still_be_brought_forward_when_tabbed() {
         let mut tiles = egui_tiles::Tiles::default();
         let a = tiles.insert_pane(DockPanel::Pages);
-        let b = tiles.insert_pane(DockPanel::Properties);
+        let b = tiles.insert_pane(DockPanel::ArmedTool);
         let root = tiles.insert_tab_tile(vec![a, b]);
         let mut tree = Tree::new(LEFT_TREE_ID, root, tiles);
-        assert!(!panel_is_active(&tree, DockPanel::Properties));
-        assert!(activate(&mut tree, DockPanel::Properties));
-        assert!(panel_is_active(&tree, DockPanel::Properties));
+        assert!(!panel_is_active(&tree, DockPanel::ArmedTool));
+        assert!(activate(&mut tree, DockPanel::ArmedTool));
+        assert!(panel_is_active(&tree, DockPanel::ArmedTool));
     }
 
     /// Every pane that survives is reachable — no orphan tiles (Pass 24.3).
