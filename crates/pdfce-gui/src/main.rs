@@ -7575,6 +7575,30 @@ impl eframe::App for PdfceApp {
                     });
                 }
             }
+            diag::Step::NavKey(which) => {
+                // Injected as a real press/release pair through the SAME
+                // `raw_input.events` seam a physical key arrives on, so the
+                // focus system sees it exactly as it would a typed one — which
+                // is the whole point, since the defect being chased IS a focus
+                // interaction.
+                let key = match which {
+                    "left" => egui::Key::ArrowLeft,
+                    "right" => egui::Key::ArrowRight,
+                    "up" => egui::Key::ArrowUp,
+                    "down" => egui::Key::ArrowDown,
+                    "home" => egui::Key::Home,
+                    _ => egui::Key::End,
+                };
+                for pressed in [true, false] {
+                    raw_input.events.push(egui::Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed,
+                        repeat: false,
+                        modifiers,
+                    });
+                }
+            }
             diag::Step::Delete => {
                 for pressed in [true, false] {
                     raw_input.events.push(egui::Event::Key {
@@ -12018,6 +12042,40 @@ fn run_text_edit_tool(
         // collapses it. Up/Down preserve the caret's page-space column
         // (`caret_x`), landing on the adjacent line's nearest slot.
         if image_response.has_focus() && state.reflow.is_none() && state.pending.is_none() {
+            // CLAIM THE ARROW KEYS, or egui spends them moving focus instead.
+            //
+            // egui uses a bare arrow key for DIRECTIONAL FOCUS NAVIGATION —
+            // `memory/mod.rs` maps `ArrowLeft` to `FocusDirection::Left` and
+            // so on — but only `if !event_filter.matches(event)`, where the
+            // filter comes from the currently focused widget. The canvas
+            // declared no filter, so every arrow press was offered to the
+            // focus system as well as to the caret.
+            //
+            // That produced the operator's report, and the ASYMMETRY in it is
+            // the tell: *"I can use the cursor keys to move forward, but when
+            // I press the one to move backward focus switches to the side
+            // panel."* Nothing sits to the RIGHT of the canvas, so
+            // `FocusDirection::Right` finds no candidate, focus stays, and the
+            // caret moves. The dock sits to the LEFT, so `FocusDirection::Left`
+            // finds it and takes the focus — and with focus gone the next
+            // frame, the block below stops running entirely.
+            //
+            // `tab: false` deliberately: Tab must still leave the canvas, or a
+            // keyboard-only operator would be trapped in it. `escape: false`
+            // likewise — Escape is how this app pops a level rung and cancels
+            // a gesture, and claiming it here would break both.
+            ui.memory_mut(|m| {
+                m.set_focus_lock_filter(
+                    image_response.id,
+                    egui::EventFilter {
+                        tab: false,
+                        horizontal_arrows: true,
+                        vertical_arrows: true,
+                        escape: false,
+                    },
+                );
+            });
+            diag::trace(|| format!("caret-nav caret={:?}", state.caret));
             let nav: Vec<(egui::Key, bool)> = ui.input(|i| {
                 i.events
                     .iter()

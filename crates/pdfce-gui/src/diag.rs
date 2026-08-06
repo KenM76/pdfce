@@ -139,6 +139,17 @@ pub enum Step {
     /// observation harness cannot open is a panel whose defects only the
     /// operator finds.
     Forms,
+    /// Press and release a named navigation key (`key:left`, `key:right`,
+    /// `key:up`, `key:down`, `key:home`, `key:end`).
+    ///
+    /// Added chasing the caret-versus-focus defect: the operator reported that
+    /// ArrowLeft while editing text moved focus to the side panel instead of
+    /// moving the caret, and the harness could not press an arrow key at all,
+    /// so the defect could neither be reproduced nor its fix proven. `type:`
+    /// sends text, `delete`/`escape` send those two keys, and every other key
+    /// was unreachable.
+    NavKey(&'static str),
+
     /// Burn a frame. Used to let a texture, a provider rebuild, or egui's own
     /// click detection settle between steps.
     Wait,
@@ -250,6 +261,15 @@ fn parse_step(s: &str) -> Option<Step> {
         "panel" if rest.trim() == "groups" => Some(Step::Groups),
         "panel" if rest.trim() == "redact" => Some(Step::Redact),
         "panel" if rest.trim() == "forms" => Some(Step::Forms),
+        "key" => match rest.trim() {
+            "left" => Some(Step::NavKey("left")),
+            "right" => Some(Step::NavKey("right")),
+            "up" => Some(Step::NavKey("up")),
+            "down" => Some(Step::NavKey("down")),
+            "home" => Some(Step::NavKey("home")),
+            "end" => Some(Step::NavKey("end")),
+            _ => None,
+        },
         "view" if rest.trim() == "points" => Some(Step::ShowPoints),
         // NOT `rest.trim()`: leading and trailing spaces are legitimate text.
         "type" if !rest.is_empty() => Some(Step::Text(rest.to_owned())),
