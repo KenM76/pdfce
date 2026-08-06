@@ -16309,3 +16309,230 @@ avoid it" line at the top**, which seven occurrences had never had:
 **Nothing minted.** The engineer will re-run
 `tools/check-ledger-numbers.py --stats` after this filing; every number
 above should be unchanged from continuation 102's table.
+
+**Continuation 104 (real date 2026-08-06) — NO PASS SHIPPED, NO NUMBER
+MINTED. `docs/FEATURES.md` gains its Acrobat comparison column. The
+operator caught a dropped cross-RAG handoff: the RAG half had been built
+a day earlier and the pdfce half was never tracked ANYWHERE.**
+
+**Carry-forward and "For next session" are UNCHANGED from continuation
+101 — see that entry**, not restated here, except for the two new
+Backlog items and one standing-rule proposal named below.
+
+### The operator's catch, and the finding underneath it
+
+Ken, 2026-08-06: *"features.md didn't get its adobe comparision
+column."*
+
+He was right.
+`D:\Dev\Rag-Specialized\Acrobat_Features\comparison__pdfce_feature_column.md`
+— 419 lines, `last_verified: 2026-08-05` — had been built the previous
+day for exactly one purpose, stated in its own Purpose section: to be
+merged into `docs/FEATURES.md`'s new Acrobat column. Per-bucket verdict
+tables matched to `FEATURES.md`'s own row structure, a list of Acrobat
+capabilities `FEATURES.md` never mentions, a proposed CANNOT list, a
+proposed WILL-NOT list. A finished deliverable, dated, addressed to this
+project by name.
+
+**Before this filing,
+`grep -rniE "acrobat column|comparison__pdfce_feature_column|FEATURES.md.*Acrobat"`
+over `ROADMAP.md` and `SESSION_LOG.md` returned nothing.** Not a
+deferral. Not a "next session" line. Not a Backlog bullet. **The merge
+was never tracked at all** — a different and worse failure than being
+deferred, because a deferred item is greppable and this one was not.
+
+**Why nothing caught it.** Every omission-detector this project owns
+points inward. R106's ledger discipline counts Pass IDs, standing rules,
+decision records and operator questions — all pdfce-internal. The
+`FEATURES.md` maintenance contract binds it to `ROADMAP.md` **capability**
+changes, and no capability changed. The librarian's own "index check"
+mode walks Shipped entries against crate existence and checks RAG index
+bullets — inward again. The omission lived in the space *between* two
+document sets, where nothing was looking. It would have stayed there
+indefinitely; it surfaced because the operator read his own features
+list.
+
+**The generalisation:** *a cross-RAG deliverable recorded only in the
+producing RAG has not been handed off — it has been filed.* A handoff
+exists when the **consuming** project's own documents carry an obligation
+naming the producing file by path, because the consuming side is the only
+side that will ever be read looking for it.
+
+**Filed as a PROPOSED standing rule, not minted** — `ROADMAP.md`,
+*Standing rules*, `### PROPOSED 2026-08-06`. The engineer's dispatch was
+explicit: *"propose it, do not mint it silently."* The proposal argues
+both sides. **The case against is real and this librarian says so in the
+block itself:** it is **one** occurrence, and this project's promotion
+bar — applied twice this week — is two. The block also names two
+alternative homes (an R106 amendment; or the `pdfce-engineer.md` /
+`pdfce-librarian.md` dispatch checklists) and recommends the agent-file
+home as the one most likely to actually fire, since it sits where the
+dispatch happens rather than where the roadmap is read.
+
+### What was merged into `FEATURES.md`, and what was deliberately left out
+
+**Merged:** one new **Acrobat** column in every table — *Implemented* and
+*Planned* — one character wide; a `## Cannot` section (five bullets,
+structural/legal, not a to-do list); a `## Will not` section (four
+bullets, all from pdfce's own decision records); one new *Shell & UX*
+row for the scriptable CLI, which had no row at all despite being the
+single most confidently-sourced parity-plus in the comparison.
+
+**Deliberately NOT merged: the per-row Basis and Note columns.**
+`FEATURES.md`'s own header says it is *"a scan, not a record"* and
+*"don't 'fix' this file by expanding it; if a row needs an argument, that
+argument belongs in `ROADMAP.md`."* Merging two more columns onto every
+table would have doubled their width and destroyed the two-minute-scan
+property the file exists for. They stay in the RAG file, which the legend
+now names as the authority.
+
+### The confidence tiers survived — the part most at risk
+
+The comparison file grades every verdict **RAG** (a dated
+`Acrobat_Features` file), **FRESH** (one 2026-08-05 WebSearch, its own
+words: *"treat as provisional, re-verify before any `must_have`
+acceptance criterion leans on it"*) or **GK** (low-drift general
+knowledge, *"flagged, not hidden"*). Collapsing those into an
+undifferentiated tick was the obvious failure mode of a one-character
+column, and it was avoided by carrying the grade **by bucket, in the
+legend**:
+
+- **RAG-grade, trustworthy at `must_have`:** redaction, forms, core page
+  ops, text, measuring tools.
+- **FRESH-grade, provisional:** digital signatures, encryption, Bates,
+  OCR, accessibility, comparison, portfolios, optimization, PDF/A,
+  prepress — **ten buckets, zero dedicated RAG files between them.**
+- The legend also names the `[x]` marks that are inferences or carry
+  material caveats, and points at the RAG file for the per-row basis.
+
+A tick sourced from one web search does not get to look like a tick
+sourced from a dated catalog file. It does not, now.
+
+### Five states, none collapsed
+
+`FEATURES.md`'s legend already insists `[ ]` (a gap) and `—` (a shape
+mismatch) are different and that confusing them is *"exactly the mistake
+this legend exists to prevent."* The Acrobat column inherits that and
+extends it to five: `[x]` has it · `[ ]` **verified absence** · `◐` has
+only part of what the row names · `—` not meaningful to ask (a
+pdfce-internal concept, or GUI mechanics the Acrobat RAG never catalogues
+**by charter**) · `?` **not looked up yet**.
+
+**`?` is load-bearing and it is used honestly.** `FEATURES.md` changed
+after the comparison file was written — pattern redaction, donor-font
+embedding, the whole Forms panel, radio groups, choice fields, the
+rich-text refusal all landed on 2026-08-05/06. Those rows get `?`, and
+the legend states in terms that `?` never means "Acrobat lacks it."
+**No verdict was invented to fill a blank**, which was the dispatch's
+named worst outcome.
+
+`◐` is borrowed from the file's own *Planned*-section vocabulary
+(`◐` = partially shipped). Its Acrobat-column meaning is stated
+separately, at the point the existing `◐` note appears, so the two
+readings cannot merge.
+
+### The verdicts, condensed
+
+**Confirmed absences — pdfce exceeds:** the whole sub-object vector
+cluster (five clean `[ ]` — enter object, select subpath, move/delete
+subpath, move node, delete node, edit Bézier control point; Acrobat's
+Edit PDF is whole-object-only and its own answer to anything finer is
+"open Illustrator"), plus path booleans falling out of the same absence;
+a first-class scriptable CLI (Acrobat has none — Action Wizard, embedded
+JS and COM only, re-verified fresh rather than trusted); non-Latin text
+from a subsetted embedded donor font (Acrobat's font-availability rule is
+script-agnostic — embedded-but-not-installed permits colour/size only,
+never new-character insertion, for *any* script); radius/diameter
+dimensions and CAD tolerance types (Acrobat's Measure tool is an
+exhaustive three-primitive model, no fourth); named ce-dimension groups
+with their own scale/format/drafting-standard (Acrobat's scale scoping is
+strictly geometric `/Viewport`/`/BBox`); a runtime-verified true-removal
+proof after redaction (Acrobat's documented redaction failure modes were
+found by an **external** ACSC audit, not by any self-check — it gives the
+operator no automated proof); operator-supplied font folders.
+
+**`[x]` that are not clean yeses:** text formatting is `◐` — word spacing
+(`Tw`) and free baseline shift (`Ts`) were **removed from Acrobat's own
+UI** in the Acrobat-8→DC consolidation, and synthetic bold/italic sits
+behind a global preference rather than a per-use disclosure. Cross-block
+reflow is the most caveated `[x]` in the comparison: cloud-dependent,
+English-qualified by one source, capped at 80% of a page for tables, and
+nonexistent before 2021 — a fully-offline reflow is an exceed, not
+parity. Form-field auto-detection exists but is **not confidence-scored**,
+with documented false-positive and false-negative rates.
+
+### Files edited this filing
+
+- **`docs/FEATURES.md`** — Acrobat column across every table; a new
+  legend subsection carrying the five states and the confidence-tier
+  split; one new *Shell & UX* CLI row; `## Cannot` and `## Will not` at
+  the bottom. The `◐` footnote now distinguishes its two meanings.
+- **`docs/ROADMAP.md`** — a `### ★ 2026-08-06` entry at the top of
+  *Shipped* recording the merge, the dropped handoff, the tier treatment
+  and the state table; **two new Backlog bullets** (below); a
+  `### PROPOSED 2026-08-06` block at the head of the *Standing rules*
+  proposal sequence.
+- **`docs/SESSION_LOG.md`** — this entry.
+
+### The two new Backlog bullets — the RAG file's gap lists, made schedulable
+
+Both were previously visible only inside the comparison file, which is
+the same failure this filing exists to record, one level down.
+
+1. **`Acrobat_Features` coverage gaps — ELEVEN buckets with zero
+   dedicated files.** Digital signatures, encryption, Bates, OCR,
+   accessibility, comparison, portfolios, optimization, PDF/A, prepress,
+   plus **vector/object editing** inside the "Text & object editing"
+   bucket. Each is one `pdfce-acrobat-librarian` dispatch.
+   **Vector/object editing is recommended FIRST** — the RAG file's own
+   call, and the right one: those findings are already load-bearing for
+   six `FEATURES.md` Vector-objects verdicts and the ce-dimension
+   tolerance verdict, and they currently rest on two WebSearch passes
+   rather than a built file.
+2. **Fifteen Acrobat capabilities with no `FEATURES.md` row at all.** PDF
+   ↔ Office conversion, PDFMaker, Web Capture, scan-to-PDF, links &
+   bookmarks authoring, batch headers/footers/watermarks, embedded file
+   attachments, document/page-level JavaScript, multimedia and 3D,
+   "Restrict Editing", Read Aloud, AI Assistant, Liquid Mode, Fill &
+   Sign, article threads. **Triage, not a build list** — all FRESH-grade,
+   several plainly outside pdfce's shape, two already covered by
+   `FEATURES.md`'s *Cannot*.
+
+### RAG escalations, continuation 104 — none filed, with the reasoning stated
+
+- **`C:\personal_rag\pdf\` — nothing.** No PDF-producer or PDF-domain
+  behaviour was involved; this filing merged a comparison and recorded a
+  process failure.
+- **`D:\dev\rag\rust\` / `D:\dev\rag\egui\` — nothing.** No toolchain and
+  no GUI-framework finding.
+- **`D:\Dev\Rag-Specialized\PDF_Spec\` — no dispatch.** No spec question
+  arose.
+- **`D:\Dev\Rag-Specialized\Acrobat_Features\` — no dispatch made, but
+  eleven are now named and queued in *Backlog*.** Not this librarian's
+  territory to write; the engineer schedules them.
+- **The dropped-handoff finding was considered for a cross-project RAG
+  and deliberately NOT sent there.** It is a *this-project*
+  filing-discipline failure between *this project's* own agents and
+  RAGs, so it belongs in `ROADMAP.md` and here — the same boundary the
+  engineer drew at continuation 103 when he refused to elevate a general
+  engineering-epistemics lesson into a pdfce standing rule, applied in
+  the opposite direction.
+
+### Ledger discipline (R106) — continuation 104
+
+| Ledger | Minted this filing | Ceiling after this filing |
+|---|---|---|
+| Pass IDs | **none** — a documentation merge, not a Pass | family **38** next free; highest ID **37.2**, unchanged |
+| Standing rules | **none** — one candidate **PROPOSED, awaiting ruling**, which mints nothing | **R156** (**R157** next free), unchanged; decision 030's three contingent candidates still hold the claim on R157 |
+| Decision records | **none** — the tier-preservation and column-shape calls are documentation-format choices, recorded in `FEATURES.md`'s own legend and the Shipped entry, not architectural decisions | **031** (**032** next free), unchanged |
+| Operator questions | **none** | **(az)** (**(ba)** next free), unchanged |
+
+**Observation-boundary note (hard rule 8).** This librarian invocation
+was given a **shell**. `tools/check-ledger-numbers.py --stats` was
+therefore **run by this librarian directly**, not relayed, after the
+`ROADMAP.md` edits above: Pass families up to **37** (highest **37.2**),
+standing rules **R156**, decisions **031**, **98** distinct (section,
+Pass ID) pairs, **156** rules, **31** decision files, **1** allowlisted
+rule amendment, `ledger-numbers: clean`. Every number matches the
+engineer's pre-dispatch run at `93140b5` exactly. **Nothing else about
+the working tree, the index, remotes, backups or CI is asserted here.**

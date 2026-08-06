@@ -81,6 +81,182 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★ 2026-08-06 — `FEATURES.md` gains its **Acrobat** column, and the reason it did not have one is worth more than the column
+
+**No Pass shipped, no number minted.** A documentation filing, recorded
+in *Shipped* because the finding underneath it is a process failure with
+a general shape, and process failures that live only in a session log
+get read once.
+
+#### The operator caught it
+
+Ken, 2026-08-06: *"features.md didn't get its adobe comparision
+column."* He was right, and the galling part is that **the work was
+already done on the other side.**
+
+`D:\Dev\Rag-Specialized\Acrobat_Features\comparison__pdfce_feature_column.md`
+— 419 lines, `last_verified: 2026-08-05` — was built for exactly one
+purpose, and says so in its own Purpose section: *"Answers, for every row
+`pdfce-librarian` needs to merge into `D:\Dev\pdfce\docs\FEATURES.md`'s
+new **Acrobat** column…"*. It carries per-bucket verdict tables matched
+to `FEATURES.md`'s own row structure, a list of Acrobat capabilities
+`FEATURES.md` never mentions, a proposed CANNOT list and a proposed
+WILL-NOT list. It was, in every sense, a finished deliverable addressed
+to this project by name.
+
+#### The finding: the handoff evaporated without leaving a trace
+
+Before this filing, `grep -rniE "acrobat column|comparison__pdfce_feature_column|FEATURES.md.*Acrobat"`
+over `ROADMAP.md` and `SESSION_LOG.md` returned **nothing**. Not a
+deferral, not a "next session", not a Backlog bullet. **The consuming
+project had no record that the work existed at all.**
+
+That is the shape worth naming, because it is not "someone forgot":
+
+- The producing side did its job **and recorded it** — in its own RAG,
+  in its own file, with its own `last_verified` date.
+- The consuming side had **no obligation to discover** the file, because
+  nothing in its own documents said one was owed.
+- Every existing safety net in this project points **inward**. R106's
+  ledger discipline counts Pass IDs, rules, decisions and operator
+  questions — all pdfce-internal. The `FEATURES.md` maintenance contract
+  binds it to `ROADMAP.md` **capability** changes. None of them can
+  notice that an external RAG produced something addressed to us.
+- So the failure was **silent by construction**, and stayed silent for a
+  day, and would have stayed silent indefinitely. It took the operator
+  reading his own features list to surface it.
+
+**The generalisation:** *a cross-RAG deliverable that is recorded only in
+the producing RAG has not been handed off — it has been filed.* A handoff
+exists when the **consuming** project's own documents carry an obligation
+naming it. Anything less relies on someone happening to re-read a RAG
+they did not write.
+
+**This is proposed as a standing rule, NOT minted** — see the proposal
+block at the end of *Standing rules*. Nothing here claims R157.
+
+#### What was merged
+
+One new **Acrobat** column in every `FEATURES.md` table — *Implemented*
+and *Planned* — one character wide, plus a `## Cannot` and a `## Will
+not` section at the bottom of that file.
+
+**What was deliberately NOT merged, and why.** `FEATURES.md`'s own header
+says it is *"a scan, not a record"* and *"don't 'fix' this file by
+expanding it."* The comparison file carries a per-row **Basis** column
+(RAG / FRESH / GK) and a per-row **Note** column. Merging those would
+have doubled every table's width and destroyed the two-minute-scan
+property the file exists for. They stay in the RAG file, which
+`FEATURES.md`'s legend now names as the authority.
+
+#### The confidence tiers survived the merge — this is the load-bearing part
+
+The comparison file distinguishes three grades of evidence, and
+flattening them would have been the real damage:
+
+| Grade | Meaning | Trust |
+|---|---|---|
+| **RAG** | grounded in a dated `Acrobat_Features` file | `must_have` acceptance-criteria grade |
+| **FRESH** | one 2026-08-05 WebSearch, not promoted to a file | **provisional** — re-verify before any `must_have` criterion leans on it |
+| **GK** | general low-drift knowledge, not re-verified | flagged, not hidden |
+
+A one-character column cannot carry a per-row grade, so the grade is
+carried **by bucket, in the legend**: Redaction, Forms, core page ops,
+Text and the measuring tools are RAG-grade and trustworthy; **digital
+signatures, encryption, Bates, OCR, accessibility, comparison,
+portfolios, optimization, PDF/A and prepress rest on a single web search
+and are named as provisional in the file itself.** A tick sourced from
+one search does not get to look like a tick sourced from a dated
+catalog file.
+
+#### Five states, all distinct, none collapsed
+
+`FEATURES.md`'s legend already insists that `[ ]` (a gap) and `—` (a
+shape mismatch) are different things and that confusing them is *"exactly
+the mistake this legend exists to prevent."* The Acrobat column inherits
+that discipline and extends it:
+
+| State | Means | Does NOT mean |
+|---|---|---|
+| `[x]` | Acrobat has the capability | |
+| `[ ]` | **verified absence** | "we didn't find it" |
+| `◐` | Acrobat has only **part** of what the row names | |
+| `—` | not meaningful to ask — a pdfce-internal concept, or GUI mechanics the Acrobat RAG never catalogues by charter | "Acrobat lacks it" |
+| `?` | **not looked up yet** | "Acrobat lacks it" |
+
+`?` is used wherever the comparison file gives no verdict for the row —
+which is real, because `FEATURES.md` changed after 2026-08-05 (pattern
+redaction, donor-font embedding, the Forms panel, radio groups, choice
+fields, the rich-text refusal). **No verdict was invented to fill a
+blank.** `◐` is reused from the file's own *Planned*-section vocabulary,
+with its Acrobat-column meaning stated separately so the two readings do
+not merge.
+
+#### The verdicts worth knowing without opening the file
+
+**Confirmed Acrobat absences — pdfce exceeds, and these are the
+best-evidenced ones:**
+
+- **Sub-object vector editing.** Five clean `[ ]` in one bucket: enter an
+  object, select a subpath, move/delete a subpath, move a node, delete a
+  node, edit a Bézier control point. Acrobat's Edit PDF is
+  whole-object-only; its own answer to anything finer is *leave Acrobat
+  and open Illustrator*. Path booleans fall out of the same absence.
+- **A first-class scriptable CLI.** Acrobat has none — Action Wizard,
+  embedded JavaScript and COM only. Re-verified fresh rather than
+  trusted. This is pdfce's most confidently-sourced parity-plus.
+- **Non-Latin text from a subsetted embedded donor font.** Acrobat's
+  font-availability rule is script-agnostic: an embedded-but-not-locally-
+  installed font permits colour/size changes only, never new-character
+  insertion, for *any* script. Pass 21.0's capability has no Acrobat
+  behaviour to match.
+- **Radius/diameter dimensions and CAD tolerance types.** Acrobat's
+  Measure tool is an exhaustive three-primitive model —
+  Distance/Perimeter/Area. No fourth primitive, no tolerance-display
+  concept anywhere.
+- **Named ce-dimension groups** carrying their own scale + number format
+  + drafting standard. Acrobat's scale scoping is strictly geometric
+  (`/Viewport`/`/BBox`); there is no named, operator-assignable
+  measurement collection.
+- **A runtime-verified true-removal proof after redaction.** Acrobat's
+  documented redaction failure modes (CMap/font remnants, leftover vector
+  objects) were found by an **external** audit — the ACSC — not by any
+  Acrobat self-check. Acrobat gives the operator no automated proof that
+  Apply removed what it claims to.
+- **Operator-supplied font folders** for substitution. Acrobat searches
+  the OS-installed inventory only.
+
+**`[x]` that are not clean yeses:**
+
+- **Text formatting** is `◐`: word spacing (`Tw`) and free baseline shift
+  (`Ts`) were **removed from Acrobat's own UI** in the Acrobat-8→DC
+  consolidation. Synthetic bold/italic exists but behind a global
+  preference, not a per-use disclosure — pdfce's per-use disclosure is a
+  deliberate, sourced exceed.
+- **Cross-block reflow** is the most heavily caveated `[x]` in the whole
+  comparison: cloud-dependent, English-qualified by one source, capped at
+  80% of a page for tables, and did not exist at all before 2021. A
+  fully-offline, ungated reflow is an exceed, not parity.
+- **Form field auto-detection** exists but is **not confidence-scored**,
+  with documented false-positive and false-negative rates — a place
+  fuzzy-never-sneaky should beat Acrobat's own bar rather than match it.
+
+#### Also filed this session
+
+- **The ten-bucket RAG coverage gap** (plus vector/object editing) —
+  moved out of the RAG file and into *Backlog* below, where it is
+  actionable. See the bullet **"`Acrobat_Features` coverage gaps."**
+- **Fifteen Acrobat capabilities `FEATURES.md` never mentions at all** —
+  also *Backlog*, as a triage list. See the bullet **"Acrobat
+  capabilities with no `FEATURES.md` row."**
+
+#### Ledger
+
+**Nothing minted.** Pass family **38** next free (highest **37.2**);
+standing rules **R156** (**R157** next free — the proposal at the end of
+*Standing rules* claims nothing); decisions **031** (**032** next free);
+operator questions **(az)** (**(ba)** next free).
+
 ### ★ GUI-gap sweep, 2026-08-05 — the audit method that found Passes 37.0–37.2, and why it is not the method R156 prescribes
 
 **Read this before the three Pass entries beneath it.** The three Passes
@@ -14129,6 +14305,65 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **`Acrobat_Features` coverage gaps — ELEVEN buckets with zero
+  dedicated files, and every `FEATURES.md` Acrobat verdict touching them
+  is provisional (filed 2026-08-06, no Pass number assigned).** Surfaced
+  by `comparison__pdfce_feature_column.md`'s own gap report and filed
+  here rather than left in the RAG, because a gap list that lives only
+  in the RAG it describes cannot be scheduled. Each of the following
+  carries **0 files** in that RAG's taxonomy table, so every verdict
+  above touching it rests on a single 2026-08-05 WebSearch pass:
+  **digital signatures** (PKCS#7/PAdES B-B/B-T/B-LT/B-LTA behaviour, the
+  found B-LTA-on-certified-document bug, timestamp-authority mechanics),
+  **encryption** (AES-128/256, legacy RC4 decrypt, and the `/R 5` vs
+  `/R 6` sub-decision already open in this file), **Bates numbering**,
+  **OCR** (beyond the one cross-reference in
+  `text_edit__ocr_prerequisite_for_scanned_text.md`), **accessibility
+  (PDF/UA)**, **comparison**, **portfolios**, **optimization/
+  linearization**, **PDF/A conformance**, **print & prepress (PDF/X)**
+  (lowest urgency, consistent with its standing low-priority flag), and
+  **vector/object editing** inside the "Text & object editing" bucket
+  (`index.md` already flags that bucket as text-only).
+  **Catalogue vector/object editing FIRST** — the RAG file's own
+  recommendation, and the right one: its findings (whole-object-only, no
+  node/subpath model at all) are already load-bearing for six
+  `FEATURES.md` Vector-objects verdicts and for the ce-dimension
+  tolerance verdict, and they currently rest on two WebSearch passes
+  rather than a built file. Each bucket is one
+  `pdfce-acrobat-librarian` dispatch. Until a bucket is catalogued, its
+  verdicts are `should_have`-grade at best — **never cite them in a
+  `must_have` acceptance criterion**, per the Feature-fidelity
+  discipline standing rule and the RAG's own 6-month freshness rule.
+- **Acrobat capabilities with no `FEATURES.md` row at all — a
+  fifteen-item triage list (filed 2026-08-06, no Pass number assigned).**
+  From `comparison__pdfce_feature_column.md`'s *"What Acrobat Pro has
+  that FEATURES.md never mentions"* section. These are gaps **we never
+  thought to ask about**, as distinct from the ones we already track —
+  which is the reason to keep them somewhere schedulable rather than
+  only in a RAG. **All FRESH-grade** (one 2026-08-05 WebSearch each, no
+  live-Acrobat verification): (1) convert PDF ↔ Office formats with
+  layout reconstruction; (2) PDFMaker — one-click Create-PDF from
+  Word/Excel/PowerPoint/Outlook preserving links, bookmarks and tags;
+  (3) Web Capture — a live web page or page tree to PDF; (4)
+  scan-to-PDF via TWAIN/WIA with deskew/despeckle cleanup; (5) links &
+  bookmarks authoring incl. named destinations, as a first-class
+  surface; (6) headers/footers/watermarks/backgrounds as a batch over a
+  page range (broader than Bates, which is sequential-ID-specific); (7)
+  file attachments embedded in a PDF, distinct from Portfolios; (8)
+  document- and page-level JavaScript actions beyond form
+  calculation/validation; (9) multimedia and rich-media embedding
+  (video/audio/U3D/PRC 3D); (10) a "Restrict Editing" permission flow
+  that sets the `/P` bitmask without necessarily setting a password;
+  (11) Read Aloud text-to-speech; (12) the generative-AI "AI Assistant"
+  (**cloud-backed** — see `FEATURES.md`'s *Cannot*); (13) Liquid Mode
+  reflow for small screens (**cloud-backed** — same); (14) Fill & Sign,
+  a lightweight non-certificate self-signing flow distinct from
+  PKCS#7/PAdES; (15) article threads, the legacy multi-column reading-
+  order mechanism. **Triage, not a build list** — several are plainly
+  out of pdfce's shape (2, 3, 4 depend on external apps, drivers or the
+  network), two are already covered by *Cannot*, and none should be
+  scoped into a Pass without a dedicated `pdfce-acrobat-librarian`
+  cataloguing session first, because each rests on one search.
 - **`EditSession::insert_pages` — in-place page insertion, as a real
   `EditSession` command (filed 2026-08-05, Pass 3.5's ship, no Pass
   number assigned).** Both GUI Insert (Pass 3.5) and CLI `insert`
@@ -19609,6 +19844,111 @@ not a judgment call:**
   ceiling stays **(az)** (**(ba)** next free), unchanged.
   `tools/check-ledger-numbers.py --stats` should be re-run after this
   commit — this librarian has no shell and has not run it itself.
+
+### PROPOSED 2026-08-06 — a cross-RAG deliverable is not handed off until the CONSUMING project's own documents name it — AWAITING ENGINEER RULING; NOTHING MINTED
+
+**Status AS FILED: a librarian PROPOSAL, filed 2026-08-06 with the
+`FEATURES.md` Acrobat-column merge. It has NO number, is NOT in force,
+and amends nothing until the engineer rules.** Filed as a proposal
+rather than minted because the engineer's dispatch said so explicitly —
+*"If you think the … lesson deserves a standing rule, propose it, do not
+mint it silently"* — the same protocol used at continuations 100 and
+101/102.
+
+#### The occurrence
+
+`D:\Dev\Rag-Specialized\Acrobat_Features\comparison__pdfce_feature_column.md`
+(419 lines, `last_verified: 2026-08-05`) was built for one purpose, named
+in its own Purpose section: to be merged into `docs/FEATURES.md`'s
+Acrobat column. It was finished, dated, and addressed to this project by
+name.
+
+`grep -rniE "acrobat column|comparison__pdfce_feature_column|FEATURES.md.*Acrobat"`
+over `ROADMAP.md` and `SESSION_LOG.md` returned **nothing**. Not a
+deferral, not a "next session" item, not a Backlog bullet. The merge was
+not deferred — **it was never tracked at all**, and it surfaced only
+because the operator read his own features list a day later and noticed
+the column missing.
+
+#### The proposed text
+
+**When a dispatched librarian or external RAG produces a deliverable
+intended for consumption by another document, the OBLIGATION is recorded
+in the CONSUMING document's own project records — a Backlog bullet, a
+*Next up* entry, or a `SESSION_LOG.md` "still in flight" item that names
+the producing file by path — in the same filing that reports the
+dispatch.** Recording it only in the producing RAG is not a handoff; it
+is filing. A handoff exists when the consuming side carries the
+obligation, because that is the only side that will ever be read looking
+for it.
+
+#### Why it is worth a number (the argument for accepting)
+
+1. **The failure is silent by construction, and no existing net catches
+   it.** R106's ledger discipline counts Pass IDs, standing rules,
+   decision records and operator questions — all pdfce-internal. The
+   `FEATURES.md` maintenance contract binds it to `ROADMAP.md`
+   **capability** changes, and no capability changed here. The
+   `pdfce-librarian` "index check" mode walks Shipped entries against
+   crate existence and checks RAG index bullets — all inward-facing.
+   **Every mechanism this project has for noticing an omission looks at
+   its own documents**, and the omission was in the space *between* two
+   document sets. Nothing was going to fire.
+2. **The producing side did nothing wrong**, which is what makes a rule
+   the right instrument rather than a correction. `pdfce-acrobat-
+   librarian` built the file, dated it, and stated its purpose inside
+   it. There is no reasonable additional step it could have taken from
+   inside its own RAG. The obligation has to land on the consuming
+   side's records, or it lands nowhere.
+3. **This project has six agents and five RAG trees**, and the number of
+   cross-boundary handoffs only grows. `pdfce-spec-librarian`,
+   `pdfce-acrobat-librarian` and `pdfce-inkscape-librarian` all produce
+   material intended to be consumed by `ROADMAP.md`, `FEATURES.md` or a
+   Pass's acceptance criteria. This occurrence is the first *detected*
+   one, not plausibly the first one.
+4. **The remedy is cheap and mechanical** — one bullet, in the filing
+   that already exists, at the moment the dispatch is reported. It costs
+   a line and it makes the obligation greppable from the side that will
+   grep for it.
+
+#### Why it might be REFUSED (the argument against, stated so the engineer can weigh it)
+
+1. **One occurrence.** This project's own promotion bar, applied twice in
+   the last two days (R156's two mis-verifications, the no-in-app-oracle
+   proposal's two harness failures), is **two independent occurrences**.
+   This is one. Minting on a single instance would lower a bar the
+   engineer has been holding deliberately.
+2. **It may be R106's scope rather than a peer rule.** R106 already
+   governs "what gets counted and recorded at filing time." An owed
+   cross-RAG merge is arguably just another thing to count, in which
+   case this is an **amendment to R106**, not R157 — the same shape the
+   engineer chose for the R156 amendment at continuation 101/102, and
+   the shape he explicitly prefers when a proposal *"has no independent
+   life"* apart from another rule.
+3. **It may be an agent-file obligation, not a roadmap rule.** The
+   natural enforcement point is `pdfce-engineer.md`'s dispatch discipline
+   ("when you dispatch a librarian, file the owed consumption") and
+   `pdfce-librarian.md`'s filing checklist — both of which are read at
+   session start by the agents that would have to obey it. A standing
+   rule in `ROADMAP.md` is read by whoever is reading `ROADMAP.md`, which
+   is not reliably the agent making the dispatch.
+
+**This librarian's own recommendation**, stated so the engineer is not
+guessing: **accept the substance; the number is genuinely arguable.** Of
+the three homes, the agent-file one (argument 3) is the most likely to
+actually fire, because it sits where the dispatch happens. If the
+engineer wants a single place, R106 amendment is the better shape than a
+new number, for exactly the reason given at continuation 100 — a rule
+that only refines another rule's filing discipline is a scope note, not a
+peer.
+
+**Numbering, if minted:** it would claim the next free slot against the
+live ceiling — **R157** at the time of this filing — under the same
+first-filed-against-the-live-ceiling transfer mechanism R150→…→R156 each
+used in turn, pushing decision 030's three still-unminted contingent
+candidates (§6.2(a), §4.5, "date and label every contract statement") to
+**R158**. **Ceiling is UNCHANGED at R156 by this filing** (**R157** next
+free) because **nothing is minted here**.
 
 ### RESOLVED 2026-08-05 — R156 amendment: the audit runs in TWO directions — ACCEPTED AS AN AMENDMENT TO R156 IN PLACE; R157 NOT MINTED
 

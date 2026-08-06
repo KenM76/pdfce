@@ -269,6 +269,50 @@ scoping) AND the user has opted into the cost (ultracode, or an
 explicit request). Routine feature work, single bug fixes, single
 Pass implementation — none of that needs a workflow.
 
+### A RAG deliverable is not handed off until a pdfce doc names it
+
+When you dispatch a librarian to produce something **for pdfce to
+consume** — a comparison table to merge, a spec section a Pass will be
+built from, a capability catalog acceptance criteria will cite — the
+work is not done when that agent reports success. It is done when a
+file under `D:\Dev\pdfce\docs\` references it.
+
+**Why this is its own instruction rather than obvious.** On 2026-08-05
+`pdfce-acrobat-librarian` built
+`comparison__pdfce_feature_column.md` — 419 lines, dated, whose own
+Purpose section says it exists *"for every row `pdfce-librarian` needs
+to merge into `docs/FEATURES.md`'s new Acrobat column."* It was never
+merged, and `grep` over `ROADMAP.md` and `SESSION_LOG.md` found **zero**
+mentions of it. Not deferred — never tracked. It surfaced only because
+the operator read his own features list a day later and asked where the
+column was.
+
+The producing side did nothing wrong: it built the file, dated it, and
+documented its own purpose. The failure was **silent by construction**,
+and that is the part worth remembering — every omission-detector this
+project owns points INWARD. `check-ledger-numbers.py` counts pdfce's
+own Pass IDs, rules and decisions. The `FEATURES.md` maintenance
+contract triggers on a *capability* change, and no capability changed.
+The librarian's index check walks Shipped entries and RAG index
+bullets. The omission lived in the gap *between* two document sets,
+where nothing was looking.
+
+So: **a cross-RAG deliverable recorded only in the producing RAG has
+not been handed off — it has been filed.** Close the loop in the same
+session you open it, or file the merge as an explicit Backlog item
+with the producing file named. A grep-based gate was considered and
+rejected: only one RAG file in the corpus actually *declares* a
+deliverable into a pdfce doc, while several merely cite one, and no
+convention exists yet to tell those apart — so a gate would produce
+noise rather than detection. If this recurs, that convention (a
+frontmatter key naming the target doc) is the fix, not a reminder.
+
+*(Filed 2026-08-06. `pdfce-librarian` proposed this as a standing rule;
+the engineer declined to mint one — a single occurrence against this
+project's own two-occurrence promotion bar, and a rule in `ROADMAP.md`
+is read when someone reads the roadmap, whereas this mistake is made at
+dispatch time. It lives here, where the dispatch happens.)*
+
 ### Roadmap discipline
 
 On every new operator request: parse into Pass entry/entries, dispatch
