@@ -242,7 +242,7 @@ use std::path::{Path, PathBuf};
 use pdfce_core::annot_author::{Color, MarkupSpec, TextAnnotSpec, TextMarkupKind};
 use pdfce_core::dimension::{DEFAULT_GROUP_ID, DimensionKind};
 use pdfce_core::document::Document;
-use pdfce_core::edit::EditSession;
+use pdfce_core::edit::{EditSession, NewTextField};
 use pdfce_core::fontdata::Std14;
 use pdfce_core::page_tree::{self, Page, Rect};
 use pdfce_core::text_edit::{
@@ -860,6 +860,64 @@ fn fill_field_multi_widget_preview_equals_saved() {
         "the fixture's Reference field has three widgets across two pages",
     );
     check("fill-field/multi-widget", &s, 1, Visible::Yes);
+}
+
+/// **The merge itself** — a second `add-text-field` under an existing name,
+/// which promotes a merged (Shape A) field into a `/Kids` parent with two
+/// widgets, then filled so both appearances paint (decision 020's F1).
+///
+/// # Why this is a separate case from the two above
+///
+/// [`fill_field_multi_widget_preview_equals_saved`] renders a multi-widget
+/// field that a **byte-authored fixture** already contained. It proves the
+/// fill path handles the shape; it says nothing about whether pdfce PRODUCES
+/// that shape correctly, because the fixture was written by hand. This case
+/// starts from a one-widget field and makes pdfce build the second widget —
+/// so the promotion, not just its result, is what gets rendered.
+///
+/// # The specific defect this is an oracle for
+///
+/// Promotion is two whole-page `/Annots` writes in one command: the original
+/// entry is RETARGETED from the field dict (now a non-terminal parent, which
+/// under Table 220 has no appearance of its own) to the new widget dict that
+/// took over its annotation role, and the second widget is APPENDED. F1 found
+/// these computed independently from the pre-command state, so the append
+/// silently discarded the retarget and `/Annots` named a dictionary that had
+/// stopped being a widget. It is the same double-write failure the oracle
+/// already caught once in `flatten_fields`.
+///
+/// That class of defect is exactly what R85 sees and a parse-level assertion
+/// does not: the document still parses, `list-fields` still reports one field
+/// with two widgets, and only the PICTURE disagrees — and it disagrees
+/// between preview and saved specifically, because the two sides resolve the
+/// page through different lookups.
+///
+/// **Page 0 is checked and both widgets are on it**, deliberately: a lost
+/// retarget silently drops the ORIGINAL widget while the appended one still
+/// paints, so a page holding only the new widget would look entirely correct.
+#[test]
+fn field_merge_preview_equals_saved() {
+    let mut s = session("forms", "demo-form.pdf");
+    // `FullName` exists in the fixture as a single-widget text field with no
+    // value — Shape A, the input promotion is defined over.
+    s.add_text_field(&NewTextField::new(
+        0,
+        "FullName",
+        Rect::from_corners(72.0, 600.0, 340.0, 624.0),
+    ))
+    .expect("a same-name, same-type add merges rather than refusing");
+
+    let outcome = s
+        .fill_text_field("FullName", "Ada Lovelace")
+        .expect("fill_text_field applies to the promoted field");
+    assert_eq!(
+        outcome.widgets_updated, 2,
+        "the merge must leave ONE field with TWO widgets — a count of 1 means \
+         the promotion did not happen and this case is silently testing a \
+         plain fill instead",
+    );
+
+    check("field-merge", &s, 0, Visible::Yes);
 }
 
 /// `flatten` — burning a filled widget's appearance into page content and
