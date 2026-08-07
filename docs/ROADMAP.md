@@ -81,7 +81,331 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
-### render — **A RENDER CAN BE STOPPED, AND STOPPING IT STOPS THE WORK**: `ObjectGraph: Send + Sync` · `RenderCancel` (`Arc<AtomicBool>`) in `pdfce-render` · `RenderOptions.cancel` defaulting to `None`. **★ NOT A SPEEDUP — nothing here makes a render faster; it makes one INTERRUPTIBLE, which is the difference between an application that is slow and one that is DEAD.** **★★ LAYERS 1 AND 2 ONLY — LAYER 3 WAS DELIBERATELY CUT, SO THE GUI STILL FREEZES.** **Measured: pre-cancelled 322 ms against 10,367 ms uncancelled; 28.9 ms from `cancel()` to thread exit MID-RENDER.** **★★ THE TEST FINDING: disabling the `break` left `a_pre_cancelled_render_returns_cancelled` PASSING IDENTICALLY while the render took 10,227 ms instead of 322 ms — a 32× behavioural difference the assertion could not see — so the load-bearing assertion moved to PIXELS.** **★ THE EDIT-COLLISION SHAPE IS RULED WITH A NUMBER: cancel, wait, mutate — 28.9 ms against ~58 s for blocking.** **★ THIS ONE CHANGES `pdfce-core`'s PUBLIC API, unlike the three no-ID entries below it — the Pass-ID argument is recorded, and the ID is the engineer's to mint** (no Pass ID assigned) — 2026-08-07, committed `e4256f2`, branch `pass-8-redaction`
+### Pass 44.0 — **THE RENDER MOVES TO A WORKER, AND THE WINDOW STOPS DYING WITH IT** (GUI + core + render) — **★ THE ID IS MINTED HERE, AND IT COVERS ALL THREE LAYERS: `e4256f2` IS RECORDED AGAINST IT RETROACTIVELY.** **★★ THE HEADLINE IS A BUG FOUND BY REASONING, BEFORE IT COULD BE OBSERVED — a per-frame staleness check would have cancelled and restarted the same render every frame, so ANY PAGE SLOWER THAN ONE FRAME WOULD NEVER HAVE FINISHED AT ALL. Not slow: IMPOSSIBLE. `RenderKey` is what prevents it, and the fix for the freeze would otherwise have shipped a WORSE freeze wearing the same face.** **★ A bounded 12 ms in-frame wait (72% of one 16.7 ms frame at 60 Hz) returns fast pages INLINE, so nothing regresses when fast — BY CONSTRUCTION, not by hoping the debounce covers it.** **★ THE MUTATION COUNT WAS 51, NOT THE ~40 PREVIOUSLY RELAYED — the fifth relayed figure to be wrong in one day; the compiler was allowed to count rather than either estimate being trusted.** **★ THE STALENESS DISCLOSURE IS SPLIT BY CASE: a zoom already discloses itself, an edit does not.** **⚠ ONE VERIFICATION IS OWED AND IS NOT A FORMALITY: THE RENDERED BEHAVIOUR IS UNVERIFIED BY SCREENSHOT.** — 2026-08-07, committed `7926a78` (layer 3) and **`e4256f2` (layers 1 and 2, retroactive)**, branch `pass-8-redaction`
+
+**Gates — the ENGINEER's, relayed under R87; no build, render or test was
+run by this filing.** `cargo test` **2170 passed / 0 failed** — **+4 over
+`e4256f2`'s 2166, and all four are the new `render_worker` module's own
+tests (4 of 4 new tests in 1 new module)** · `clippy` **0** · `cargo tree`
+**0 GUI matches for `pdfce-core`** · working tree **clean** (`git status
+--porcelain`, 0 lines, at dispatch time). **4 files changed, +840 / −132 =
+net +708**, per file: `render_worker.rs` **+503 / −0** (**59.9% of all
+insertions, and the whole file is new**) · `main.rs` **+262 / −90** ·
+`ui_text.rs` **+46 / −0** · `raster.rs` **+29 / −42** — **`raster.rs` is
+the only file that SHRANK**, which is the dead synchronous path leaving.
+
+**★ AND A SNAPSHOT IS NOT A STANDING FACT.** The dispatch stated a clean
+tree and `HEAD` = `cf656a8` *at dispatch time*, and said so in exactly
+those terms. This filing repeats the qualifier rather than dropping it,
+because dropping it is how a checked fact becomes an inferred one — the
+failure hard rule 8 was amended for.
+
+#### 1. ★★ THE LIVELOCK — FILED ABOVE THE FEATURE, BECAUSE IT IS THE MORE IMPORTANT HALF
+
+**The shell re-runs its staleness check every frame.** While a render is
+in flight the texture **has not been replaced**, so the check keeps saying
+*stale* and keeps requesting the same render. **Without recognising that
+the running job IS the request being asked for again, every frame would
+cancel the previous render and start an identical one.**
+
+**Any page slower than one frame would never finish at all.** Not slow —
+**impossible**. And it would present as **exactly the freeze this Pass
+exists to fix**: a window that repaints, a spinner-free canvas that never
+resolves, a page that is being rendered continuously and delivered never.
+
+**`RenderKey` is what prevents it** — the four staleness keys (page index,
+`raster_scale` as raw bits, the annotation flag, the font-environment
+generation) as one comparable value, so `spawn` can recognise the in-flight
+job as the job being asked for. **The fix for the freeze would otherwise
+have shipped a worse freeze wearing the same face**, and the only reason it
+did not is that the defect was **reasoned out of the design before the code
+could exhibit it**. The first draft had no guard; nothing observed it.
+
+**This is the project's own *"green is not evidence"* family pointed one
+step earlier**: `e4256f2`'s test finding was a passing test that could not
+see a 32× behavioural difference; this is a defect that **no test would
+have been written for**, because the state it needs (a render outstanding
+across frames) did not exist until the same commit created it.
+
+#### 2. What actually shipped — layer 3, and the freeze is gone
+
+`crates/pdfce-gui/src/render_worker.rs` (**503 lines, new**): the worker
+thread, the channel, the cancellation token, the generation counter — the
+four things `raster.rs` named when it documented itself as the seam and
+deferred the work *"until a real corpus produces pages slow enough to drop
+frames."* **The corpus arrived** (a 129,515-path CAD sheet, **~10 s at 1×
+and ~58 s at 2×**).
+
+**Still not a speedup, and this must not be read as one.** A 10 s page
+still takes 10 s. It is now spent on a thread **nobody is waiting on**, so
+the window repaints, the zoom responds, and the render can be **abandoned**.
+The two lines of attack stay independent: **cancellation plus off-thread
+makes ~10 s survivable; only the clip work makes it short** (*Next up*).
+
+#### 3. ★ THE PASS-ID QUESTION IS RESOLVED — and the restraint is why the ID means something
+
+**Minted: `Pass 44.0`**, covering **all three layers**, with `e4256f2`
+recorded against it **retroactively** — the **Pass 20.2 PARTIAL → COMPLETE
+shape**, reused deliberately rather than invented.
+
+**Why it could not be minted a commit earlier, stated plainly because the
+sequence is the argument.** The librarian's reading at `e4256f2` was
+exactly this shape and it **stopped**, on one ground: a Pass whose
+acceptance criterion is *"the GUI no longer freezes"* would have been
+**FAILED by `e4256f2` alone**. **Layer 3 landed at `7926a78`. The blocking
+condition has cleared.** The criterion is now met, so the ID is minted
+against the whole.
+
+**★ THIS IS THE FIRST OF THE RECENT NO-ID COMMITS WHERE THE SHARED
+JUSTIFICATION DID NOT REACH.** The three entries below `e4256f2`
+(`110b8c9`, `fa17d54`, `6b33789`) were each filed with the same reason —
+***"an out-of-tree tool plus an off-by-default feature flag; no shipped
+behaviour changes"*** — and that reason was **TRUE of all three**. It is
+**FALSE here**: `e4256f2` changed `pdfce-core`'s **public API**
+(`ObjectGraph: Send + Sync`, a semver-breaking supertrait) and `7926a78`
+changed **the GUI's behaviour** (the window no longer dies with the render).
+
+**Say this so the precedent is not read as inconsistency: the restraint
+through three prior entries is what makes this ID mean something.** A
+project that mints an ID for every commit has IDs that carry no
+information; a project that refuses one for every commit has a Shipped
+section that cannot be navigated. **Four consecutive commits were weighed
+against the same test and three were refused** — so the fourth being minted
+is a **statement about this commit**, not about a policy loosening. The
+refusals are the calibration.
+
+**Ceilings after this filing** (read by **running**
+`tools/check-ledger-numbers.py`, not from prose): Pass family **44**
+(highest ID **44.0**), standing rules **R166** (**R167** next free),
+decision records **031** (**032** next free), operator questions **(bb)**.
+**Nothing but the Pass ID is minted.**
+
+#### 4. ★ THE MUTATION COUNT WAS 51, NOT ~40 — and it let the compiler count
+
+**Three numbers, and only one of them is a measurement.**
+
+| figure | value | what produced it |
+|---|---|---|
+| static pre-count | **46** | a grep of the mutation surface, **before** the change |
+| compiler borrow errors | **49** | `cargo build` after `session` became `Arc<EditSession>` |
+| **sites actually moved** | **51** | the rewrite, counted afterwards |
+
+**51 mutating call sites moved; 45 read-only ones did not** — because
+`Deref` still yields `&EditSession`, so a read needs no change at all.
+**51 + 45 = 96 total `session` call sites; 51 / 96 = 53%.**
+
+**The two gaps are both instructive.** The static pre-count was **5 short
+(46 of 51 = 90%)** — an estimate of a surface, made before touching it.
+The **compiler** was **2 short (49 of 51 = 96%)**, and the two it missed
+are **in test code, which `cargo build` does not reach** — so even the
+authoritative instrument had a documented blind spot, and naming it is
+what makes the 51 checkable.
+
+**★ AND THIS IS THE FIFTH RELAYED FIGURE TO BE WRONG IN ONE DAY.** The
+prior four: `Mask::new` 10.1 s → **1.02 s**; mean clip bbox 0.663% →
+**66.36%** (100×); `fill_path` 8–10 µs → **216 µs** (22×); painting
+0.87 s → **~0.27 s**. This one is the mildest of the five — **~40 against
+51 is 28% low, not 22× or 100×** — and it is filed anyway, at the same
+weight, because **the failure mode is the frequency, not the magnitude**.
+**What broke the streak is method, not care:** the previous four were
+argued or estimated; this one **let the compiler count** and then checked
+the compiler's own coverage. **That is the transferable half.**
+
+#### 5. The bounded in-frame wait — and it is VERIFIED NOT FREE
+
+`IN_FRAME_BUDGET` = **12 ms**. One frame at 60 Hz is **16.7 ms**, so the
+budget is **72% of a frame** — deliberately under it, so **even the
+worst-case wait cannot itself drop a frame**. A page that beats the
+deadline **returns its pixels inline and never touches the asynchronous
+path at all**.
+
+**Why a blocking wait on the UI thread is the right answer here, rather
+than a smell.** The requirement is that a page rasterizing in milliseconds
+behaves **exactly** as it did when rendering was synchronous — no flash, no
+spinner, no frame of stale content. **Handing every render to a worker and
+collecting it next frame would cost such a page one frame of staleness for
+no benefit.**
+
+**★ AND THAT COST WAS VERIFIED, NOT ASSUMED: without the budget, EVERY
+render costs a frame of staleness** — including the ones that finish in
+microseconds. **That is how *"nothing regresses when fast"* is satisfied —
+by construction, not by hoping the existing `ZOOM_SETTLE` debounce happens
+to cover it.** A debounce delays a *request*; it does nothing about a
+result that arrives one frame after it was ready.
+
+**The scale of the split, so the constant is checkable:** 12 ms against a
+**10,000 ms** CAD render is **0.12%** — a page must be roughly **830×
+faster than that sheet** to return inline. **This is the ONE place the UI
+thread blocks on rendering, it is bounded by a constant, and the bound is
+the whole point.**
+
+#### 6. Single-slot worker, and cancel-BEFORE-spawn — two shape decisions with reasons
+
+**Single slot, not a queue.** A second concurrent render is **always a
+superseded first one** — the shell only ever asks for the picture it wants
+*now*. **A queue would mean choosing which stale result to paint**, which
+is a question with no good answer and no caller who wants it asked.
+
+**Cancel before spawn, not after.** Two CAD rasterizations competing for
+cores **make both slower**, and the old output **is already unwanted**.
+Cancelling first costs the measured **28.9 ms**; cancelling after would buy
+nothing and spend a core. **This is also why `e4256f2`'s cancellation had
+to STOP work rather than discard a result** — a cancelled render that ran
+to completion would make cancel-before-spawn into *blocking* wearing
+cancellation's name.
+
+#### 7. The edit collision — implemented exactly as `e4256f2` ruled it
+
+**Cancel, join, mutate — at ONE choke point**, `OpenDoc::session_mut`.
+Every mutation now goes through it; it cancels the in-flight render and
+**joins the thread** before handing out `&mut`.
+
+**★ `Arc::get_mut` is therefore INFALLIBLE BY CONSTRUCTION, so the `expect`
+is HONEST rather than OPTIMISTIC.** The worker is the only other holder of
+the `Arc`, and it has been joined by the time the borrow is taken — the
+sole strong reference is the one being unwrapped. An `expect` whose
+precondition is established two statements above it is documentation; an
+`expect` that hopes is a latent panic. **This one is the first kind, and
+the distinction is the reason the choke point is a choke point.**
+
+**The ruling it implements, with the number that made it a ruling:**
+blocking the edit until the render finishes costs up to **~58,000 ms**;
+cancel-then-mutate costs **28.9 ms**. **58,000 / 28.9 = 2,007× — three
+orders of magnitude**, which is why this was decided by measurement rather
+than by taste. Snapshotting was rejected separately: `EditSession` is
+**deliberately not `Clone`**, so it would need a **new public deep-copy**
+on the largest type in the crate, and would copy the document **per
+keystroke-sized edit**.
+
+#### 8. ★ THE DISCLOSURE DECISION, SPLIT BY CASE — recorded because TWO forks deferred it
+
+**Zoom already discloses itself.** The previous texture is drawn scaled
+with `TextureOptions::LINEAR`, so it reads as **soft** — **visibly not
+final, and free**. Nothing needs saying, and saying it would be noise on
+every zoom click.
+
+**An edit does not.** The page renders **sharp and simply wrong**: the
+operator places a field, the canvas shows the page without it, and
+**nothing distinguishes that from the edit having failed.** That is the
+case the disclosure is for, and it is the only one.
+
+So the **status bar** says **the canvas is behind**:
+
+- **Gated at 150 ms**, `CANVAS_BEHIND_NOTICE_AFTER = ZOOM_SETTLE` —
+  **matched to that constant deliberately**, because `ZOOM_SETTLE` already
+  encodes this project's answer to *"how long is too short to be worth
+  telling anyone about"*. **150 ms is 9 frames at 60 Hz**, and the gate is
+  what stops the line **flickering** on every fast edit.
+- **Worded as a fact about the PICTURE, not as progress.** *"canvas still
+  drawing; the page shown is not yet up to date"* — because **the
+  operator's question is *"did my edit take?"***, and the answer is **yes,
+  the drawing has not caught up**. *"Rendering…"* answers a question
+  nobody asked and leaves the real one open.
+- **Fixed position, never page-relative** — **decision 024 §4.4**, which
+  exists precisely because the operator objected to controls whose position
+  derived from the document and therefore moved on every zoom and scroll.
+  The status bar is exactly where it was last frame.
+
+**This is rule 4 (*fuzzy, never sneaky*) as narrowed by §4.4, applied to a
+picture rather than to a value:** a rendering that is **not of the current
+state** must not silently pass as one. **The narrowing is what keeps this a
+status line and not a confirm button** — nothing here was inferred by
+pdfce, so nothing needs accepting; what is owed is **disclosure**, and a
+fixed-position line discharges it.
+
+#### 9. R162 discharged — and the FIRST ATTEMPT WAS TOO WEAK, which is the part worth filing
+
+**The weak version:** remove the `#[derive(PartialEq)]` from `RenderKey`.
+That is a **compile error** — and a compile error proves the derive is
+**NEEDED**, not that the comparison is **RIGHT**. It answers *"does
+anything call `==`?"* when the question is *"does `==` look at everything
+it must?"*
+
+**The version that works:** a **hand-written `PartialEq` that ignores
+`raster_scale`**. It **compiles**, and it fails **exactly two of the four**
+tests in the module — `changing_any_single_render_input_makes_a_different_key`
+(on the assertion labelled *"raster scale must be compared"*) and
+`a_one_bit_scale_difference_is_a_different_render` — **leaving the other
+two green**. **2 of 4 = 50%**, and the 50% that stays green is the point:
+`the_same_request_twice_is_recognised_as_the_same_render` and
+`an_idle_worker_reports_nothing_in_flight` are **blind to this defect by
+construction**, which is what a mutation probe is supposed to reveal.
+
+**Why it matters that scale is in the key at all:** a `RenderKey` ignoring
+`raster_scale` would make the livelock guard **swallow a genuine new
+request** — change the zoom, and the shell declines to re-render because it
+believes the in-flight job already covers it. **The page would stop
+responding to zoom entirely.** So the same field that prevents the livelock
+in one direction causes a different hang in the other if it is compared
+wrongly, and **only the hand-written probe can tell those two apart.**
+
+**R162's own lesson, restated for the ledger:** *the probe must be able to
+COMPILE*. A mutation that the type system refuses is not a mutation, it is
+a dependency check.
+
+#### 10. ⚠ AN OWED VERIFICATION — AND IT IS NOT SOFTENED
+
+**The rendered behaviour is UNVERIFIED BY SCREENSHOT.** The operator was at
+the machine and `gui-shot.ps1` **takes the foreground**, so a capture would
+have photographed his desktop rather than the app.
+
+**This is a real gap, not a formality.** **Three defects on 2026-08-07 were
+caught only by looking** — the node marks drawn in the wrong place, the
+dock layout, the refused-rotation silence — and every one of them was
+green under `cargo test` at the moment it was wrong. **A status line that
+never appears, appears at the wrong moment, or appears and never clears is
+exactly the class of defect this project has repeatedly shipped past a
+green suite.** The disclosure in §8 is asserted by construction and by two
+unit tests; **it has not been seen.**
+
+**Owed under this Pass ID**, alongside Pass 20.5's own outstanding
+rendered-appearance verification — **two now, not one**, and they are the
+same kind.
+
+#### 11. Two smaller items, both worth a line
+
+**`check-ui-strings` caught a worker-failure literal.** The string shown
+when a rasterization thread stops without delivering pixels or an error —
+it panicked, or its channel closed under it — was inline; it is now
+`ui_text::canvas_render_worker_stopped()`. **The gate found it, not a
+reviewer.** The choice it encodes is deliberate: **a render FAILURE rather
+than silence**, because the alternative is a canvas waiting forever for a
+message that will never arrive — **which presents as a hang, the exact
+failure this Pass exists to eliminate.**
+
+**The dead synchronous `render_page_texture` was REMOVED, not left with a
+stale justification.** `raster.rs` is the one file in the commit that
+shrank (**+29 / −42**). **This is the same lesson `e4256f2` filed one
+commit earlier** — a doc comment that had become unimplementable survived
+in a second location because only the first was corrected. **A dead
+function with a correct-sounding comment is that failure with a longer
+fuse**; deleting it is cheaper than maintaining the sentence that explains
+why nobody calls it.
+
+#### 12. Two carried items — NEITHER RETIRED
+
+**(a) Which 0.25× total stands — 2.57 s or ~2.23 s.** **STILL OPEN, STILL
+CARRIED.** Both figures are on the record, neither has been withdrawn, and
+this filing does not choose between them. It is the second of the
+twenty-second filing's two engineer rulings; **the first was discharged by
+`e4256f2`** (the doc comment, folded in).
+
+**(b) The canvas-treatment question — whether a sharp-but-stale canvas
+deserves more than a status line.** **A DESIGN question, not an
+engineering one** — the fork judged it so and recommended
+`pdfce-ui-specialist`; **the engineer concurs; so does this filing.**
+Candidate treatments (a desaturation, a hairline border, a corner badge)
+are all **cheap to build and expensive to get wrong**, and choosing among
+them is exactly what that agent exists for.
+
+**★ THE STATUS LINE SHIPS MEANWHILE, SO THE GAP IS A REFINEMENT, NOT A
+HOLE.** This matters for how the item is read next session: **nothing is
+undisclosed today.** The operator is told, in a fixed position, after
+150 ms, in the case where the picture is misleading. What is open is
+whether *telling* is the best available treatment — not whether the
+obligation is met.
+
+### render — **A RENDER CAN BE STOPPED, AND STOPPING IT STOPS THE WORK**: `ObjectGraph: Send + Sync` · `RenderCancel` (`Arc<AtomicBool>`) in `pdfce-render` · `RenderOptions.cancel` defaulting to `None`. **★ NOT A SPEEDUP — nothing here makes a render faster; it makes one INTERRUPTIBLE, which is the difference between an application that is slow and one that is DEAD.** **★★ LAYERS 1 AND 2 ONLY — LAYER 3 WAS DELIBERATELY CUT, SO THE GUI STILL FREEZES.** **Measured: pre-cancelled 322 ms against 10,367 ms uncancelled; 28.9 ms from `cancel()` to thread exit MID-RENDER.** **★★ THE TEST FINDING: disabling the `break` left `a_pre_cancelled_render_returns_cancelled` PASSING IDENTICALLY while the render took 10,227 ms instead of 322 ms — a 32× behavioural difference the assertion could not see — so the load-bearing assertion moved to PIXELS.** **★ THE EDIT-COLLISION SHAPE IS RULED WITH A NUMBER: cancel, wait, mutate — 28.9 ms against ~58 s for blocking.** **★ THIS ONE CHANGES `pdfce-core`'s PUBLIC API, unlike the three no-ID entries below it — the Pass-ID argument is recorded, and the ID is the engineer's to mint** ~~(no Pass ID assigned)~~ — 2026-08-07, committed `e4256f2`, branch `pass-8-redaction` — **[★ HEADING AMENDED 2026-08-07, twenty-fourth filing (`7926a78`): THE ID IS NOW MINTED. This commit is `Pass 44.0`, retroactively — the ID covers all three layers and is headed at `7926a78` at the top of *Shipped*. The blocking condition named in §6 (*"a Pass whose acceptance criterion is 'the GUI no longer freezes' would be FAILED by this commit"*) CLEARED when layer 3 landed. **`★★ LAYERS 1 AND 2 ONLY … THE GUI STILL FREEZES` above is TRUE OF THIS COMMIT and is NO LONGER TRUE OF THE PROJECT** — read it as a statement about `e4256f2`, which is what it always was. Heading otherwise left as filed; see the AMENDMENT BLOCK at the end of §6.]**
 
 **Gates — the ENGINEER's, relayed under R87; no build, render or test was
 run by this filing.** `cargo test` **2166 passed / 0 failed** · `clippy`
@@ -103,6 +427,17 @@ web fork a shell-crate swap rather than a rewrite.
 **R166** (**R167** next free), decision records stay **031** (**032** next
 free), operator questions stay **(bb)**.
 
+> **[★ AMENDED 2026-08-07, twenty-fourth filing (`7926a78`) — the sentence
+> *"Nothing is minted"* is TRUE OF THAT FILING and is NOT a live ceiling
+> claim.** It records what that one refusal did to the ledger. **The live
+> Pass ceiling is now family `44` (highest ID `44.0`)**, minted at
+> `7926a78` and covering `e4256f2` retroactively. **Standing rules, decision
+> records and operator questions are UNCHANGED — R166 (R167 next free), 031
+> (032 next free), (bb).** Read from `tools/check-ledger-numbers.py`, exit
+> **0**, never from prose. Amended here because the *Update protocol*'s
+> same-filing propagation duty requires every editable location that states
+> a fact to carry its amendment in the same filing.]**
+
 #### 1. ★ WHAT DID NOT SHIP, STATED FIRST, BECAUSE THE NUMBERS INVITE THE OPPOSITE READING
 
 **The GUI still freezes.** The operator's report was *"it took minutes to
@@ -114,6 +449,17 @@ counter — does not exist**, and lives in `pdfce-gui`.
 What `e4256f2` delivers is the **mechanism a worker will need**. A reader
 who sees *"322 ms against 10,367 ms"* and stops there will conclude the
 operator's report is resolved. **It is not.**
+
+> **[★ AMENDED 2026-08-07, twenty-fourth filing (`7926a78`) — THIS SECTION
+> IS TRUE OF `e4256f2` AND IS NO LONGER TRUE OF THE PROJECT.** Layer 3 —
+> `Arc<EditSession>`, the worker thread, the channel, the generation counter
+> — **now exists**, in `crates/pdfce-gui/src/render_worker.rs` (503 lines).
+> **The operator's report IS resolved**; the freeze is gone. **The section
+> is left standing rather than struck**, because it is the record of what
+> `e4256f2` did and did not do, and a Shipped entry that silently acquires
+> its successor's achievements is a worse document than one that dates its
+> own claims. **Read it as scoped to its commit.** Full account: the
+> `Pass 44.0` entry at the head of *Shipped*.]**
 
 #### 2. `ObjectGraph: Send + Sync` — the bound records a property every implementor already had
 
@@ -202,9 +548,16 @@ The two rejected shapes, with their real reasons:
 - **Snapshot the session** — `EditSession` is **not `Clone`**, so this
   needs a **new public deep-copy** on the largest type in the crate. A
   public API addition to avoid a 28.9 ms wait.
-- **`Arc::get_mut`** — **~40 sites.** Wrong shape: it spreads a
-  concurrency concern across the entire mutation surface in order to
-  serialise something already serialised by one flag.
+- **`Arc::get_mut`** — ~~**~40 sites.**~~ **[★ CORRECTED 2026-08-07,
+  twenty-fourth filing (`7926a78`): THE REAL COUNT IS 51.** Static
+  pre-count 46, compiler borrow errors 49 (2 short — those two are in test
+  code `cargo build` does not reach), sites actually moved **51**. **51
+  mutating + 45 read-only = 96 total `session` call sites; 51 / 96 = 53%.**
+  **The ruling below is UNAFFECTED** — 51 is a stronger argument against
+  this alternative than 40 — but the figure was relayed and wrong, which
+  makes it **the fifth wrong relayed figure of 2026-08-07**.] Wrong shape:
+  it spreads a concurrency concern across the entire mutation surface in
+  order to serialise something already serialised by one flag.
 
 **The measurement is what makes this a ruling rather than a judgement
 call.** The alternatives were being weighed against an unknown, and the
@@ -236,6 +589,30 @@ against it retroactively** — the shape already used for Pass 20.2
 (PARTIAL → COMPLETE). **The public-API change needs `ARCHITECTURE.md` §4
 to reflect it regardless of how the ID question resolves, and it does, this
 filing.**
+
+> **[★ AMENDMENT BLOCK — 2026-08-07, twenty-fourth filing (`7926a78`). THE
+> QUESTION ABOVE IS RESOLVED, AND THE RECOMMENDATION WAS ACCEPTED IN FULL.**
+>
+> **Ruled: `Pass 44.0`, covering all three layers, `e4256f2` recorded
+> retroactively.** Headed at `7926a78` at the top of *Shipped* — the entry
+> to read for the whole feature; **this entry remains the build record for
+> layers 1 and 2.**
+>
+> **The *"Against an ID"* argument above did not lose — it EXPIRED.** It
+> rested on one condition: *a Pass whose acceptance criterion is "the GUI no
+> longer freezes" would be **failed by this commit**.* **Layer 3 landed at
+> `7926a78`, and the criterion is now met.** The argument was correct when
+> written and is correct still, **about `e4256f2` alone**; it was never an
+> argument that the work did not deserve an ID.
+>
+> **The *"For an ID"* half is unchanged and is the reason the ID exists.**
+> The three no-ID entries below share one justification — *"an out-of-tree
+> tool plus an off-by-default feature flag; no shipped behaviour changes"* —
+> **true of `110b8c9`, `fa17d54` and `6b33789`, and false here.** Recorded
+> in the `7926a78` entry §3 so the precedent reads as **calibration, not
+> inconsistency**: four consecutive commits were weighed against the same
+> test, three were refused, and the fourth being minted is a statement about
+> that commit rather than a loosening of the bar.]**
 
 #### 7. One deleted doc comment — the single-location-amendment failure, inside a crate this time
 
@@ -18693,6 +19070,22 @@ it**. **So "about 9–10 s at 1×" is the supportable statement, "the
 instrumentation costs 6%" is NOT** (a single before/after pair would have
 said exactly that and been wrong), and **any future claim of a few-percent
 win must be shown against that spread, not against a single pair.**
+
+**★★ A SECOND, INDEPENDENT LINE OF ATTACK IS NOW COMPLETE — AND IT MOVES
+NOTHING IN THE TABLE BELOW (2026-08-07, `Pass 44.0`: `e4256f2` + `7926a78`).**
+Rasterization is **cancellable** and runs **off the UI thread**, and the
+freeze the operator reported is **gone**. **Not one millisecond of the
+~10 s came off** — a 10 s page still takes 10 s; it is now spent on a
+thread nobody is waiting on. **The two lines are orthogonal by
+construction: Pass 44.0 makes ~10 s SURVIVABLE, and only the clip work
+below makes it SHORT.** So the ordering, the ranking figures and the
+`R166` constraint on them are **untouched by that Pass** — nothing here may
+be re-ranked on the strength of it. **What DID change for this entry is the
+acceptance bar for a proxy or a progressive-refinement scheme:** the
+canvas can now display an out-of-date picture while a better one is
+computed, which is the shell-side precondition such a scheme needs, and it
+exists today. **The measured floor under a 0.25× proxy (~2.6 s) is
+unchanged and still refutes the naive version.**
 
 #### The ORIGINAL order — PRESERVED, NOT CURRENT (items 1 and 2 are both superseded; see the amendment box above and the revised order below)
 
