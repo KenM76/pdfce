@@ -34,14 +34,33 @@
 //! and a number nobody can re-run is a number that ages into a fact.
 //! That is the failure this module exists to make impossible.
 //!
-//! ## What it deliberately does NOT do
+//! ## What it deliberately does NOT do, and the one exception
 //!
-//! It does not time sub-phases by wrapping them in `Instant::now()`
-//! pairs. Timer calls inside a loop that runs 148,517 times perturb the
-//! thing being measured, and the resulting per-phase numbers invite
-//! exactly the subtract-two-totals reasoning that produced error (1).
-//! **Counts and geometry are cheap and honest; timings belong at the
-//! whole-render boundary**, where `tools/render-profile` takes them.
+//! It does not time the **per-paint** path by wrapping it in
+//! `Instant::now()` pairs. That loop runs 148,517 times over work of
+//! well under a microsecond, so timer calls would be a large fraction of
+//! the thing being measured.
+//!
+//! **Clip construction is the deliberate exception** (see
+//! [`note_clip_phases`]). It runs 24,128 times over work averaging
+//! ~350 µs, so a ~25 ns timer is ~1e-4 of the quantity — and unlike an
+//! ablation, a direct timing has **no confound at all**: nothing is
+//! removed, so nothing else changes. Ablation was the only honest tool
+//! while the phases could not be timed; where they can be, it is the
+//! weaker instrument, not the stronger one.
+//!
+//! **The perturbation was measured, not assumed, and the honest answer
+//! is that it is below this machine's noise.** Three invocations of the
+//! instrumented harness at 1× gave 9.49 / 9.52 / 10.04 s — a 5.8%
+//! spread. The un-instrumented figure was 9.28 s, which is 2.2% from the
+//! instrumented best and therefore *inside* that spread.
+//!
+//! So the claim is "not distinguishable from variance", **not** the
+//! ~1e-4 the arithmetic above predicts. The prediction and the
+//! measurement agree only in direction; the measurement is what stands.
+//! Anyone re-checking should run the harness several times before
+//! reading a single pair as overhead — one before/after pair here would
+//! have shown "6% overhead" and been wrong.
 
 /// One switchable cost centre in the rasterizer.
 ///
@@ -214,7 +233,39 @@ pub struct Counters {
     /// `Q`, and reports a clip far smaller than the real one — which is
     /// how a 1.34% cull rate first measured as 73.71%.
     pub clip_accum_area_ppm: u64,
+
+    /// Nanoseconds in `Mask::new` — allocating and zeroing a page-sized
+    /// byte-per-pixel buffer, once per clip.
+    pub clip_new_ns: u64,
+    /// Nanoseconds in `Mask::fill_path` — rasterizing the clip path into
+    /// that buffer.
+    pub clip_fill_ns: u64,
+    /// Nanoseconds in the bounded multiply that intersects the new mask
+    /// with the one already in force.
+    pub clip_mul_ns: u64,
+
+    /// Per-clip total nanoseconds, bucketed by magnitude.
+    ///
+    /// # Why a histogram and not just a mean
+    ///
+    /// 24,128 clips at a 350 µs *mean* could be 24,000 cheap clips plus
+    /// 128 catastrophic ones, or a uniform population. **Those are
+    /// different defects with different fixes**, and a mean cannot tell
+    /// them apart — a tail is attacked by finding what makes those
+    /// clips special, a uniform cost by changing the representation for
+    /// all of them.
+    ///
+    /// Buckets are [`CLIP_BUCKET_EDGES_US`], upper-exclusive, last one
+    /// unbounded.
+    pub clip_hist: [u64; CLIP_BUCKETS],
 }
+
+/// Number of per-clip timing buckets.
+pub const CLIP_BUCKETS: usize = 9;
+
+/// Upper edges of [`Counters::clip_hist`] in microseconds; the final
+/// bucket is everything above the last edge.
+pub const CLIP_BUCKET_EDGES_US: [u64; CLIP_BUCKETS - 1] = [32, 64, 128, 256, 512, 1024, 2048, 4096];
 
 impl Counters {
     /// Mean individual clip-path bbox, as a percentage of page area.
@@ -245,6 +296,36 @@ impl Counters {
         }
         self.paints_cullable as f64 * 100.0 / clipped as f64
     }
+
+    /// Total nanoseconds attributed to the three timed clip phases.
+    #[must_use]
+    pub fn clip_phase_ns(&self) -> u64 {
+        self.clip_new_ns + self.clip_fill_ns + self.clip_mul_ns
+    }
+
+    /// The per-clip cost at the given percentile, in microseconds,
+    /// resolved to the containing bucket's **upper edge**.
+    ///
+    /// Deliberately coarse and deliberately an upper bound: a histogram
+    /// cannot give an exact percentile, and interpolating inside a
+    /// bucket would invent precision the data does not carry. Returns
+    /// `None` when no clips were recorded.
+    #[must_use]
+    pub fn clip_percentile_us(&self, pct: f64) -> Option<u64> {
+        let total: u64 = self.clip_hist.iter().sum();
+        if total == 0 {
+            return None;
+        }
+        let target = (total as f64 * pct / 100.0).ceil() as u64;
+        let mut seen = 0;
+        for (i, n) in self.clip_hist.iter().enumerate() {
+            seen += n;
+            if seen >= target {
+                return Some(CLIP_BUCKET_EDGES_US.get(i).copied().unwrap_or(u64::MAX));
+            }
+        }
+        None
+    }
 }
 
 #[cfg(feature = "profile")]
@@ -257,8 +338,21 @@ mod imp {
     pub(super) static CLIPS: AtomicU64 = AtomicU64::new(0);
     pub(super) static CLIP_INDIV: AtomicU64 = AtomicU64::new(0);
     pub(super) static CLIP_ACCUM: AtomicU64 = AtomicU64::new(0);
+    pub(super) static CLIP_NEW_NS: AtomicU64 = AtomicU64::new(0);
+    pub(super) static CLIP_FILL_NS: AtomicU64 = AtomicU64::new(0);
+    pub(super) static CLIP_MUL_NS: AtomicU64 = AtomicU64::new(0);
+    #[allow(
+        clippy::declare_interior_mutable_const,
+        reason = "array initialiser for statics"
+    )]
+    const ZERO: AtomicU64 = AtomicU64::new(0);
+    pub(super) static CLIP_HIST: [AtomicU64; super::CLIP_BUCKETS] = [ZERO; super::CLIP_BUCKETS];
 
     pub(super) fn snapshot() -> super::Counters {
+        let mut hist = [0u64; super::CLIP_BUCKETS];
+        for (dst, src) in hist.iter_mut().zip(CLIP_HIST.iter()) {
+            *dst = src.load(Relaxed);
+        }
         super::Counters {
             paints: PAINTS.load(Relaxed),
             paints_unclipped: PAINTS_UNCLIPPED.load(Relaxed),
@@ -266,6 +360,10 @@ mod imp {
             clips: CLIPS.load(Relaxed),
             clip_indiv_area_ppm: CLIP_INDIV.load(Relaxed),
             clip_accum_area_ppm: CLIP_ACCUM.load(Relaxed),
+            clip_new_ns: CLIP_NEW_NS.load(Relaxed),
+            clip_fill_ns: CLIP_FILL_NS.load(Relaxed),
+            clip_mul_ns: CLIP_MUL_NS.load(Relaxed),
+            clip_hist: hist,
         }
     }
 
@@ -277,8 +375,14 @@ mod imp {
             &CLIPS,
             &CLIP_INDIV,
             &CLIP_ACCUM,
+            &CLIP_NEW_NS,
+            &CLIP_FILL_NS,
+            &CLIP_MUL_NS,
         ] {
             c.store(0, Relaxed);
+        }
+        for b in CLIP_HIST.iter() {
+            b.store(0, Relaxed);
         }
     }
 
@@ -422,6 +526,53 @@ pub(crate) fn note_clip(indiv_area_frac: f32, accum_area_frac: f32) {
         imp::CLIP_INDIV.fetch_add((f64::from(indiv_area_frac) * 1e6) as u64, Relaxed);
         imp::CLIP_ACCUM.fetch_add((f64::from(accum_area_frac) * 1e6) as u64, Relaxed);
     }
+}
+
+/// Record one clip's three timed phases, in nanoseconds.
+///
+/// # Why this times where [`note_paint`] does not
+///
+/// The module docs' objection to sub-phase timers is about the paint
+/// loop: 148,517 iterations of sub-microsecond work, where a ~25 ns
+/// timer is a large fraction of the quantity. Clip construction is the
+/// opposite regime — 24,128 iterations averaging **~350 µs** — so the
+/// same timer is ~1e-4 of what it measures.
+///
+/// And a direct timing is the **stronger** instrument here, not a
+/// compromise: an ablation answers "what does the render cost without
+/// this?", which removes other things with it and yields an upper bound
+/// (**R164**). A timer answers "how long did this take?" with nothing
+/// removed and therefore nothing confounded. Ablation was the only
+/// honest tool while phases could not be timed individually.
+///
+/// No-op without the `profile` feature.
+#[inline]
+#[cfg_attr(not(feature = "profile"), allow(unused_variables))]
+pub(crate) fn note_clip_phases(new_ns: u64, fill_ns: u64, mul_ns: u64) {
+    #[cfg(feature = "profile")]
+    {
+        use std::sync::atomic::Ordering::Relaxed;
+        imp::CLIP_NEW_NS.fetch_add(new_ns, Relaxed);
+        imp::CLIP_FILL_NS.fetch_add(fill_ns, Relaxed);
+        imp::CLIP_MUL_NS.fetch_add(mul_ns, Relaxed);
+
+        let total_us = (new_ns + fill_ns + mul_ns) / 1_000;
+        let bucket = CLIP_BUCKET_EDGES_US
+            .iter()
+            .position(|&e| total_us < e)
+            .unwrap_or(CLIP_BUCKETS - 1);
+        imp::CLIP_HIST[bucket].fetch_add(1, Relaxed);
+    }
+}
+
+/// True when clip phases should be timed at all.
+///
+/// Reads as a compile-time `false` without the feature, so the
+/// `Instant::now()` calls fold away entirely in a shipping build —
+/// timing instrumentation must cost a shipping render nothing.
+#[inline(always)]
+pub(crate) fn timing_enabled() -> bool {
+    cfg!(feature = "profile")
 }
 
 #[cfg(test)]

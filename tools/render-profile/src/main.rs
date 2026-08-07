@@ -247,10 +247,27 @@ fn main() -> std::process::ExitCode {
 
     let mut prev: Option<(f64, f64)> = None;
     for &scale in &scales {
-        profile::reset();
         let mut best = f64::MAX;
         let mut px = 0u64;
-        for _ in 0..repeat {
+        for i in 0..repeat {
+            // Reset before EVERY repeat, not once per scale.
+            //
+            // Counters accumulate, so resetting once per scale reported
+            // `repeat`× the true counts — 445,551 paints and 72,384 clips
+            // at `--repeat 3` instead of 148,517 and 24,128. **Under the
+            // tool's own recommended setting**, since `--repeat 1` is
+            // warned against for cold-start inflation: the advice for
+            // accurate timings silently corrupted the content block.
+            //
+            // Derived percentages survived it (numerator and denominator
+            // both scaled), which is exactly why it was not obvious — the
+            // wrong numbers sat beside right ones.
+            //
+            // Resetting per repeat leaves the counters describing the LAST
+            // render, which is one render, which is what the block claims
+            // to describe.
+            let _ = i;
+            profile::reset();
             let t = Instant::now();
             match render_page_with_view(&view, page, scale, &opts) {
                 Ok(r) => {
@@ -302,6 +319,10 @@ fn main() -> std::process::ExitCode {
             "  NOTE: clips cover a large share of the page. Optimizations premised on\n  \
              clips being small relative to the paper do not apply to this file."
         );
+    }
+
+    if c.clips > 0 && c.clip_phase_ns() > 0 {
+        report_clip_phases(&c);
     }
 
     if ablate_sweep {
@@ -494,5 +515,102 @@ fn run_ablation_sweep(
         "  A delta is what STOPPED HAPPENING, which is not the same as what the named\n  \
          centre costs. Reading one as the other reported Mask::new at 10.1s when it is\n  \
          1.02s (R164). Only rows marked 'attributable' support that reading."
+    );
+}
+
+/// Report the three timed clip phases and the per-clip distribution.
+///
+/// # Why a distribution and not only a mean
+///
+/// 24,128 clips at a 350 µs mean is consistent with two completely
+/// different worlds: a uniform population, or ~24,000 cheap clips plus a
+/// few hundred catastrophic ones. **They need different fixes** — a tail
+/// is attacked by finding what makes those clips special, a uniform cost
+/// by changing the representation for every clip — and a mean cannot
+/// distinguish them. Printing only the mean would hide the question.
+///
+/// # Why these numbers are timed rather than ablated
+///
+/// An ablation says what stops happening when a phase is removed, which
+/// removes other things with it: an upper bound (R164). These are direct
+/// timings — nothing is removed, so nothing is confounded, and the three
+/// phases sum to a checkable total.
+fn report_clip_phases(c: &pdfce_render::profile::Counters) {
+    use pdfce_render::profile::{CLIP_BUCKET_EDGES_US, CLIP_BUCKETS};
+
+    let ns = |v: u64| v as f64 / 1e9;
+    let total = c.clip_phase_ns();
+    let per = |v: u64| {
+        if c.clips == 0 {
+            0.0
+        } else {
+            v as f64 / c.clips as f64 / 1000.0
+        }
+    };
+    let pct = |v: u64| {
+        if total == 0 {
+            0.0
+        } else {
+            v as f64 * 100.0 / total as f64
+        }
+    };
+
+    println!();
+    println!("clip construction, timed per phase (one render, {} clips):", c.clips);
+    println!("    {:<14} {:>9} {:>9} {:>8}", "phase", "total", "per clip", "share");
+    for (name, v) in [
+        ("Mask::new", c.clip_new_ns),
+        ("fill_path", c.clip_fill_ns),
+        ("multiply", c.clip_mul_ns),
+    ] {
+        println!(
+            "    {name:<14} {:>8.2}s {:>8.1}us {:>7.1}%",
+            ns(v),
+            per(v),
+            pct(v)
+        );
+    }
+    println!(
+        "    {:<14} {:>8.2}s {:>8.1}us",
+        "= sum",
+        ns(total),
+        per(total)
+    );
+    println!(
+        "    (timed directly, not ablated: nothing is removed, so nothing is confounded)"
+    );
+
+    println!();
+    println!("per-clip distribution:");
+    let n: u64 = c.clip_hist.iter().sum();
+    for i in 0..CLIP_BUCKETS {
+        let count = c.clip_hist[i];
+        if count == 0 {
+            continue;
+        }
+        let label = if i == 0 {
+            format!("<{}us", CLIP_BUCKET_EDGES_US[0])
+        } else if i == CLIP_BUCKETS - 1 {
+            format!(">={}us", CLIP_BUCKET_EDGES_US[CLIP_BUCKETS - 2])
+        } else {
+            format!("{}-{}us", CLIP_BUCKET_EDGES_US[i - 1], CLIP_BUCKET_EDGES_US[i])
+        };
+        let share = if n == 0 { 0.0 } else { count as f64 * 100.0 / n as f64 };
+        let bar = "#".repeat(((share / 2.0).round() as usize).min(50));
+        println!("    {label:>12}  {count:>7}  {share:>5.1}%  {bar}");
+    }
+    for p in [50.0, 90.0, 99.0] {
+        if let Some(v) = c.clip_percentile_us(p) {
+            let s = if v == u64::MAX {
+                format!(">={}us", CLIP_BUCKET_EDGES_US[CLIP_BUCKETS - 2])
+            } else {
+                format!("<{v}us")
+            };
+            println!("    p{p:<3.0}          {s}");
+        }
+    }
+    println!(
+        "    (bucket upper edges; a histogram cannot give an exact percentile and\n     \
+         interpolating inside a bucket would invent precision the data lacks)"
     );
 }

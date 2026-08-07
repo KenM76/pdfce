@@ -2170,10 +2170,25 @@ fn intersect_clip(
     if crate::profile::skip_clip_build() {
         return;
     }
+    // Sub-phase timing. `timing_enabled()` is a compile-time constant, so
+    // without the `profile` feature every `Instant::now()` below folds
+    // away and a shipping render pays nothing.
+    //
+    // Timed rather than ablated ON PURPOSE — see `profile::note_clip_phases`.
+    // An ablation of one phase removes others with it and yields an upper
+    // bound (R164); a timer removes nothing and confounds nothing. Clips
+    // run 24,128 times over ~350 µs each, so a ~25 ns timer is ~1e-4 of
+    // the measured quantity, and `render-profile` prints the
+    // un-instrumented total beside it so the overhead is shown, not
+    // argued.
+    let timed = crate::profile::timing_enabled();
+    let t0 = timed.then(std::time::Instant::now);
     let Some(mut mask) = Mask::new(pixmap.width(), pixmap.height()) else {
         return;
     };
+    let t1 = timed.then(std::time::Instant::now);
     mask.fill_path(path, rule, true, ctm);
+    let t2 = timed.then(std::time::Instant::now);
     if let Some(old) = &state.clip {
         // Multiply ONLY inside the new path's device-space bounds.
         //
@@ -2228,6 +2243,14 @@ fn intersect_clip(
                 *n = ((u16::from(*n) * u16::from(*o)) / 255) as u8;
             }
         }
+    }
+    if let (Some(t0), Some(t1), Some(t2)) = (t0, t1, t2) {
+        let t3 = std::time::Instant::now();
+        crate::profile::note_clip_phases(
+            (t1 - t0).as_nanos() as u64,
+            (t2 - t1).as_nanos() as u64,
+            (t3 - t2).as_nanos() as u64,
+        );
     }
     // Maintain the bbox alongside the mask. `state` is the live graphics
     // state, so `q`/`Q` carry this exactly as they carry the mask — see
