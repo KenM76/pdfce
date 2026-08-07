@@ -19428,6 +19428,12 @@ done next."*
    **R162 asks *could my assertion ever have come out false?*** — a third
    failure in the family whose unifying property is *evidence that could
    not have come out differently is not evidence.*
+   **[★ AMENDED 2026-08-07, twelfth filing — the family is now FOUR and
+   that unifying sentence has WIDENED. `R164` was minted for a verdict
+   that DID come out differently, for reasons unrelated to its subject;
+   the clause is now *"evidence whose value is not a function of its
+   subject alone is not evidence about that subject."* R162's own text is
+   unchanged. See the twelfth filing at the end of this file.]**
 4. **The `git add -A` finding mints NOTHING — accepted as an amendment to
    R160 in place.** R160 already governs a fork's hand-off obligations and
    lands on *"the fork itself and on whoever sized it"*; **the person about
@@ -20340,3 +20346,341 @@ holds those.
 should check `D:\Dev\pdfce-backups\` if it matters. **Working-tree state
 at the end of this filing is likewise not asserted here**; this filing
 edited `docs/` and the five RAG trees only.
+
+## 2026-08-07 (eleventh filing) — **THE veraPDF GATE'S FIRST REAL DEFECT, END TO END**: a missing `endobj` cost the whole page-tree object (`49dfe81`), `round-trip`'s reload check was a SURVIVORSHIP TEST that reported SUCCESS on the broken file, and the gate's own two-tier model was making a file's verdict depend on its BATCH (`23a5812`). **Nothing minted; `R164` REQUESTED and left free** — **[★ AMENDED 2026-08-07, twelfth filing: `R164` IS NOW MINTED, and the owed `--self-test` vacuity is DISCHARGED by `b92c313`. Ceiling R163 → R164; R165 next free. Heading left as filed; see the amendment footer at the end of this entry.]**
+
+**Shipped:**
+
+- **`fix` — the first defect the veraPDF gate found, and the two
+  instruments that called it clean** (no Pass ID — a correctness fix to
+  shipped Pass 13a/13b cross-reference recovery, a correctness fix to the
+  shipped `round-trip` verb, and a false-positive fix to
+  `tools/verapdf-parse-gate.py`; core + CLI + tooling). Commits `49dfe81`
+  and `23a5812`, filed as **one** entry because split apart each reads as
+  an ordinary fix and together they are the finding.
+
+**★ The headline, because it is the answer to "was the gate worth
+building?":**
+
+| qpdf corpus, 560 files | before | after |
+|---|---|---|
+| **regressions** | **10** | **0** |
+| improved | 273 | **275** |
+| preserved | 7 | **15** |
+| refused by pdfce | 79 | 79 |
+
+**Improvements went UP.** The ten reconcile exactly — 2 became genuine
+improvements, 8 became correctly-classified preserved damage.
+**`bad6.pdf` now reports `missing-endobj-recovered=1` and `extract-text`
+returns "Sandwiches" from a document that was unreadable before.**
+
+**Decisions made this session:**
+
+- **NO Pass ID, and the call was left to this librarian.** A Pass is a
+  scoped unit of work with acceptance criteria; this is a **defect found
+  by a gate**, and **the gate itself was filed as tooling with no Pass
+  ID**. Minting a number for *the first thing the un-numbered gate caught*
+  would rank the finding above the instrument that produced it. **Pass
+  family stays 43.**
+- **`R164` is REQUESTED, argued, and NOT MINTED** — per the dispatch's
+  explicit instruction (*"if you think it needs a number, say so, do not
+  mint"*). **Ceiling stays R163; R164 stays next free.** Full proposal at
+  the end of `ROADMAP.md`'s *Standing rules*.
+- **`FEATURES.md`: one row's DESCRIPTION amended, NO box changed.** The
+  cross-reference-recovery row was already `[x] [x] [x] [x]`; this work
+  **strengthens a ticked capability rather than adding one**. The
+  `round-trip` verb and the gate get **no row at all**, on the precedent
+  set at the gate's own filing — a verification harness is not an operator
+  capability.
+
+**Findings + decisions:**
+
+- **The object was NEVER REGISTERED, not registered-then-dropped.**
+  `parse_object_at` requires `endobj` (§7.3.10), so `confirm_candidates`
+  never saw object 2. Recovery reported `file-level-objects=5`; the output
+  held 1, 3, 5, 6, 7; the catalog still said `/Pages 2 0 R`. **A
+  writer-side guard would have produced a different broken file, not a
+  working one.**
+- **`TerminatorPolicy` mirrors `StreamLengthPolicy` by construction.**
+  Strict by default, leniency only on the recovery path, **integer-only
+  terminator guard** so it cannot swallow trailing garbage, provenance
+  **`RecoveredFile`** so the writer re-serialises rather than copying bytes
+  that lack an `endobj` (**R94's second instance**). Every repair counted
+  and disclosed (R20) with a prose NOTE beside the number.
+- **★ A red herring the ENGINEER supplied, and the fork refused to
+  follow.** `last-wins-collisions=1` was handed over as a clue and **was
+  not the cause**; the fork **established that** rather than building on
+  it. Recorded at the engineer's instruction, because a subagent testing
+  its dispatcher's premise — unprompted — is the behaviour R87 exists to
+  encourage, and this project's failure library is thick with the opposite.
+- **★ The engineer's framing of defect (b) was WRONG, and is corrected in
+  the record rather than dropped.** He held that `round-trip`'s check
+  *should have caught* `bad6`. **It would not have** — pdfce could not
+  resolve the page tree on the **input** either, so a comparative check
+  correctly files it under **preserved damage**, and a non-comparative
+  check would false-fire on every legitimately broken corpus file.
+  **Comparative is right; it was not SUFFICIENT.** The actual fix is a
+  **NOTE that fires whenever the OUTPUT lacks a page tree, stating whether
+  the damage is new or inherited** — verified by reverting the recovery fix
+  and watching it fire with the correct classification.
+- **★ `c-empty.pdf` was the GATE's bug, and the mechanism is an AGGREGATE
+  ATTRIBUTED TO AN INDIVIDUAL.** It is a valid zero-page document
+  (`/Type /Pages /Count 0 /Kids []`, valid xref, both objects terminated)
+  that veraPDF grades identically on input and output. veraPDF reports a
+  failure **COUNT with no job attribution**, so the two-tier promotion
+  guessed from `counted == len(results)` — **making a file's tier depend on
+  what else was in its 32-file batch.** Input and output scans batch
+  differently, so the same file could grade `WARNED` before and `FAILED`
+  after and surface as a regression **purely from batching**. Collapsed to
+  a boolean; the `batchSummary` cross-check survives as a sanity check.
+- **★ THE CORRECTION THE ENGINEER ASKED TO HAVE FILED AS HIS OWN:** *some
+  of the ten regressions he reported to the operator were batching
+  artifacts.* He reported *"ten regressions"* **with more confidence than
+  his instrument had earned.** The reconciliation is exact and the
+  underlying defect was real; **the count was not trustworthy when he gave
+  it.** Filed in the ledger rather than left in conversation.
+- **★ A VACUITY THE CORRECT FIX CREATED — found by this librarian while
+  filing, and OWED BACK.** `--self-test` still asserts `tier != FAILED`,
+  and **`FAILED` is now the only tier that can enter the results dict.**
+  Established by exhaustive grep of assignments into the container
+  (`grep -n "results\[" tools/verapdf-parse-gate.py` → **one hit**,
+  `results[name] = (FAILED, msg)`; `OK` appears only as a `.get()` default
+  for an absent file), **not** by reading the happy path. **R162 exactly:
+  the assertion cannot come out false.** When three tiers became two, a
+  meaningful assertion became a tautology and **nothing in the project
+  would have noticed** — the gate passes, the self-test still prints
+  `self-test ok`. **The same-filing propagation duty, pointed at code.**
+- **R162 discharged by OBSERVATION.** With `TerminatorPolicy` reverted to
+  `Strict` the new test **fails on its counted-disclosure assertion**, and
+  **paired parser unit tests** attribute the difference to the policy
+  rather than to something incidental about the input. **A revert that
+  makes a test fail proves sensitivity to *something*; the paired tests are
+  what prove sensitivity to *the thing*.**
+- **R67 was NOT violated, and the distinction is the reusable part.** The
+  save *was* a full rewrite emitting a fresh valid xref — **valid over an
+  inventory that was short.** Filed in §5.10 as: ***a valid
+  cross-reference table over an incomplete inventory is still a broken
+  document.*** R67 is a **write-side** contract and guarantees nothing
+  about completeness.
+- **The ledger gate's grammar shaped this file for the SIXTH time, and it
+  was RIGHT to.** The R164 proposal's comparison bullets were first written
+  as `- **R87 — …`, which `check-ledger-numbers.py` parses as a rule
+  **DEFINITION**; it reported three duplicates (R87, R159, R162) and the
+  run **exited 1**. Reworded to `- **R87 asks …`; both checkers now exit 0.
+  **Recorded because the natural prose form for citing a rule inside a
+  proposal is exactly the form that collides with its definition syntax**,
+  and every author reaches for it once.
+
+**Gates — measured by the ENGINEER at `23a5812`, each read by its OWN exit
+code (R87):** `cargo test` **2148 passed / 0 failed**; `cargo fmt
+--check`, `cargo clippy -- -D warnings`, `tools/check-ui-strings.sh`,
+`tools/check-bypass-paths.sh`, `tools/check-ledger-numbers.py` — **all exit
+0**; the 560-file qpdf sweep **re-run by the engineer himself** rather than
+accepted from the fork that did the work.
+
+**Both checkers re-run by this librarian after the filing:**
+`tools/check-ledger-numbers.py` → **exit 0**;
+`tools/check-passes-filed.py` → **exit 0**. **Ceilings unchanged:** Pass
+**43**, standing rules **R163** (R164 next free, now formally requested),
+decision records **031** (032 next free), operator questions **(bb)**.
+
+**Documents amended (four + the RAG trees):** `ROADMAP.md` (a new *Shipped*
+entry at the top, an `★ AMENDED` block on the veraPDF-gate tooling entry,
+and the `R164` proposal at the end of *Standing rules*), `FEATURES.md` (one
+row's description), `ARCHITECTURE.md` (a new §12 fifteenth entry, an
+`★ AMENDED` marker on the fourteenth, a §5.10 amendment, and a third-policy
+marker on §5.11's `/Contents` record), `docs/SESSION_LOG.md` (this entry),
+plus five new and four amended RAG files with their indices.
+**`crates/`, `tools/` and `fixtures/` were NOT touched** — the engineer
+holds those.
+
+**Still in flight / for next session:**
+
+- **OWED TOOLING, new and specific — `--self-test`'s tier assertion is
+  unfalsifiable.** Restore a second distinguishable outcome for it to
+  assert against, or delete the branch and record in a comment that the
+  boolean collapse made it vacuous. **Leaving it is the worse option**: a
+  dead guard reads as a live one.
+- **ENGINEER RULING REQUESTED — mint `R164`?** The argued case, including
+  the cost (the R87/R159/R162 family's unifying sentence needs one added
+  clause, and a concrete replacement is proposed) and three honest
+  arguments for refusal, is at the end of *Standing rules*.
+- **ENGINEER CONFIRMATION REQUESTED — the corpus arithmetic.** The four
+  buckets account for **369 of 560 files**; the remaining 191 were not
+  broken out in the dispatch and **are not guessed at** in the filing. Nor
+  was the per-file split of the ten between *"fixed by `49dfe81`"* and
+  *"never a regression, only a batching artifact"*. The natural reading is
+  flagged **as an inference**, not recorded as measured.
+- **The PDF/A conformance gate** remains unscoped Backlog and remains
+  deliberately a **separate tool** from the parse gate.
+- **Everything carried forward from the tenth filing is UNCHANGED** — Pass
+  20.5's remaining cut half and its owed rendered-appearance check, the
+  multi-page repeated-field labelling gap, `tools/gui-drive.ps1`'s
+  build-or-assert-freshness item, Pass 20.3's `/I`/`/TI`/push buttons and
+  the unruled push-button verb name, the `pdfce-ui-specialist` spec-filing
+  call, and F0's disposition.
+
+**Backup currency is not verifiable from the documents** — the engineer
+should check `D:\Dev\pdfce-backups\` if it matters. This filing edited
+`docs/` and the two RAG trees only; **no claim is made here about the
+working tree, the index, or any remote.**
+
+> **★ AMENDED 2026-08-07 (twelfth filing) — THREE of the four items above
+> are CLOSED. Nothing here is deleted; this is the pointer.**
+>
+> - **`R164` is MINTED.** The engineer ruled it in, adopted the
+>   librarian's framing, **accepted the family-sentence cost knowingly**,
+>   and **overruled the one-occurrence objection with its reason**.
+>   Ceiling **R163 → R164**; **R165 next free**.
+> - **The owed `--self-test` vacuity is DISCHARGED** by `b92c313`.
+> - **The corpus arithmetic is RULED: leave it.** *Do not backfill a
+>   number nobody measured.* **The per-file split of the ten stays
+>   flagged as an INFERENCE** — it is exactly the R164 hazard, and
+>   labelling it honestly is the answer, not a gap.
+> - **The PDF/A conformance gate** is the one item that carries forward
+>   unchanged.
+
+## 2026-08-07 (twelfth filing) — **`R164` IS MINTED** (*an aggregate must never be attributed to an individual*), the owed `--self-test` vacuity is **DISCHARGED** by `b92c313`, and two open items are **RULED CLOSED WITHOUT BEING FILLED IN**
+
+**Shipped:**
+
+- **Nothing built by this filing.** It records an engineer ruling, a
+  discharge, and two dispositions. The only commit it describes is
+  **`b92c313`** — *"a detector that never says no is not a detector"* —
+  which is the **engineer's**, in `tools/`, which this librarian does not
+  hold.
+
+**Decisions made this session:**
+
+- **★ `R164` IS MINTED — *a verdict whose value depends on anything other
+  than its subject is not evidence about that subject; the mechanism is an
+  AGGREGATE ATTRIBUTED TO AN INDIVIDUAL.*** Proposed by this librarian at
+  the eleventh filing and deliberately left unminted; **ruled in by the
+  engineer.** Full entry in `ROADMAP.md`'s *Standing rules*; the eleventh
+  filing's proposal block is now headed **RESOLVED** with the ruling on
+  top and **the original proposal text left unedited beneath it.**
+- **The FAMILY PLACEMENT is what justifies a separate number**, and it is
+  recorded as four questions rather than four rules: `R87` asks *did I
+  look in the right place?* — it did. `R159` asks *did my reader lie to
+  me?* — no leniency was involved. `R162` asks *could my assertion have
+  come out false?* — **it did come out false; not vacuous, wrong.**
+  `R164` asks *does my verdict depend on anything other than its
+  subject?* **All three of the others can be satisfied in full and the
+  verdict still be wrong** — which is the argument for a peer.
+- **★ THE COST WAS PAID KNOWINGLY, NOT ABSORBED.** Admitting R164
+  **widens the family's unifying sentence** from *"evidence that could not
+  have come out differently is not evidence"* to ***"evidence whose value
+  is not a function of its subject alone is not evidence about that
+  subject."*** The engineer's ruling, recorded so it cannot later read as
+  drift: *both are failures of the link between measurement and
+  conclusion, not two unrelated hazards.* **R163 is unaffected** — still a
+  complement, not a member.
+- **★ THE ONE-OCCURRENCE OBJECTION IS OVERRULED, WITH THE REASON — and
+  that reason is precedent.** This project promotes on **two**
+  occurrences; R164 has **one**. Minted anyway because **the occurrence
+  produced a false report to the operator** (*"ten regressions"*, some of
+  which were batching artifacts) **and because the pattern recurs wherever
+  measurements are batched, which this project does routinely in corpus
+  sweeps.** *A rule whose first instance already cost a wrong statement to
+  the operator does not need a second.*
+- **The LIMIT is part of the rule, so it is not over-applied.** R164 binds
+  where a **per-item verdict is DERIVED from a group-level result**.
+  ***Legitimate aggregate reporting — "15 of 560 failed" — is not the
+  failure.*** Attributing the group's property to a **member** is.
+- **Contingent claims TRANSFERRED R164 → R165, and the transfer is
+  STATED.** Decision 030's three still-unminted contingent candidates and
+  the cross-RAG-handoff proposal move by the read-the-live-ceiling rule
+  (R106/R133). **This is the third such transfer this session** — R162 →
+  R163 → R164 → R165 — and each has been written down rather than
+  performed silently, because a claim that moves without a record is a
+  collision waiting for the next filing.
+- **Two open items RULED, and both rulings are "leave it."** (1) **The
+  corpus arithmetic** — the four buckets account for **369 of 560** and
+  the rest was not measured. ***Do not backfill a number nobody
+  measured***; if it matters later it can be measured. (2) **The per-file
+  split of the ten** between *"fixed by `49dfe81`"* and *"batching
+  artifact"* **stays flagged as an inference** — it is **exactly the R164
+  hazard**, a per-file cause attributed from an aggregate reconciliation,
+  and **labelling it honestly is the right answer, not a gap to close.**
+
+**Findings + decisions:**
+
+- **★ THE DISCHARGE'S REAL CONTENT IS THE PROVENANCE OF THE DEFECT:
+  *this was an R162 violation created BY THE FIX FOR AN R162 FINDING.***
+  `--self-test` asserted the broken file's tier was `FAILED`, which became
+  **unreachable** when the two-tier model collapsed to a boolean —
+  `FAILED` is the only value that can enter the results dict. The dead
+  branch was produced by a **correct** change and **inherited its author's
+  confidence.** **That is how the class survives review: nobody re-audits
+  the guard they just wrote correctly.** A repair is precisely the moment
+  R162's question stops being asked.
+- **The fix refuses to revive a fake tier**, because reinstating a second
+  tier means reinstating the batch-dependent promotion R164 forbids —
+  *fabricating a distinction so a test can assert on it.* It supplies the
+  discrimination **where it actually exists**: the gate's real claim is
+  ***broken files appear, sound files do not***, and **a gate reporting
+  EVERY file as unreadable would pass a one-directional test.**
+  `--self-test` now scans a known-good document as well as the broken one
+  and fails if the good one comes back dirty. ***A detector that never
+  says no is not a detector.***
+- **Two stale docstrings corrected in the same commit** — the removed
+  `WARNED` tier (**kept as a record of WHY it was removed**, which is the
+  durable fact, not deleted) and the module-level sentence describing the
+  self-test as one-directional. **"Stale twice over"**, as this librarian
+  put it when filing the defect; both halves are now current.
+- **The ledger gate's grammar shaped this file for the SEVENTH time — and
+  this filing was warned in advance and complied.** The dispatch named it:
+  the eleventh filing's comparison bullets first read `- **R87 — …`, which
+  `check-ledger-numbers.py` parses as a rule **DEFINITION**. R164's own
+  entry and this one write them as **`- **R87 asks** …`**, which cannot
+  parse as a definition because no em dash follows the number. **Recorded
+  again because the natural prose form for citing a rule inside a rule is
+  the form that collides with its definition syntax**, and every author
+  reaches for it once.
+
+**Gates:**
+
+**Both ledger checkers re-run by this librarian after the filing:**
+`tools/check-ledger-numbers.py` → **exit 0**;
+`tools/check-passes-filed.py` → **exit 0**. **Ceilings after this filing,
+read from the checker's own output rather than from the file:** Pass
+**43**, standing rules **R164** (**R165** next free), decision records
+**031** (032 next free), operator questions **(bb)**.
+
+**No `cargo` gate was run by this librarian and none is claimed** — this
+filing touched no code. The `b92c313` gate results are the engineer's.
+
+**Documents amended (three, plus the RAG trees):** `ROADMAP.md` (the new
+`R164` entry in *Standing rules*; an `✅ AMENDED` footer on R163's ceiling
+paragraph; the eleventh filing's proposal block re-headed **RESOLVED**
+with the ruling on top and the original text unedited beneath; `★ AMENDED`
+footers on R162's and R163's statements of the family's unifying sentence;
+a `✅ DISCHARGED` block on the owed self-test item; a `✅ RULED` block on
+the ruling-requested section; an `★ AMENDED` block on the *Ledger*; and a
+`★ FURTHER AMENDED` block on the veraPDF-gate tooling entry),
+`ARCHITECTURE.md` (a new §12 sixteenth entry, plus two in-place amendment
+markers on the fifteenth), `SESSION_LOG.md` (this entry, plus an amendment
+footer on the eleventh filing and one on the R162 minting note).
+**`FEATURES.md` was NOT touched, and the absence is established rather
+than assumed:** this filing minted a **methodology rule** and recorded a
+**tooling** discharge. Neither is an operator capability, and
+`FEATURES.md` has no tooling section by design — the precedent set at the
+veraPDF gate's own filing and re-applied at the eleventh.
+**`crates/`, `tools/` and `fixtures/` were NOT touched** — the engineer
+holds those.
+
+**Still in flight / for next session:**
+
+- **The PDF/A conformance gate** remains unscoped Backlog and remains
+  deliberately a **separate tool** from the parse gate.
+- **Everything carried forward from the eleventh filing is UNCHANGED
+  except the three items it closes** — Pass 20.5's remaining cut half and
+  its owed rendered-appearance check, the multi-page repeated-field
+  labelling gap, `tools/gui-drive.ps1`'s build-or-assert-freshness item,
+  Pass 20.3's `/I`/`/TI`/push buttons and the unruled push-button verb
+  name, the `pdfce-ui-specialist` spec-filing call, and F0's disposition.
+
+**Backup currency is not verifiable from the documents** — the engineer
+should check `D:\Dev\pdfce-backups\` if it matters. This filing edited
+`docs/` and the RAG trees only; **no claim is made here about the working
+tree, the index, or any remote.**

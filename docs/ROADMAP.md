@@ -81,6 +81,388 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### fix — THE FIRST DEFECT THE veraPDF GATE FOUND, and the two instruments that called it clean (no Pass ID — a correctness fix to shipped Pass 13a/13b cross-reference recovery, a correctness fix to the shipped `round-trip` verb, and a false-positive fix to `tools/verapdf-parse-gate.py`; core + CLI + tooling) — 2026-08-07, committed `49dfe81` (the parser) and `23a5812` (both instruments), branch `pass-8-redaction`
+
+**Why NO Pass ID, stated first because the engineer left the call to this
+librarian.** A Pass is *"a scoped unit of engineering work with acceptance
+criteria"* (Glossary). This is a **defect found by a gate**, filed in the
+class this file already uses for exactly that — `### fix — … (no Pass ID —
+a correctness fix to shipped Pass NN)` — and the gate that found it was
+itself filed **as tooling with no Pass ID**, three entries below. Minting a
+Pass number for *the first thing the un-numbered gate caught* would put the
+finding at a higher ledger rank than the instrument that produced it.
+**Pass family stays 43; R163 stays the standing-rule ceiling; decision
+records stay 031.** One number is **proposed and deliberately not minted** —
+see *The ruling this filing asks for*, below.
+
+**Filed as ONE entry across TWO commits, on purpose.** `49dfe81` is the
+defect; `23a5812` is the two instruments that reported cleanly on it. Split
+apart, each reads as an ordinary fix. Together they are the finding: **the
+defect was not caught by the verb whose entire job is catching it, and the
+gate that did catch it was simultaneously producing false alarms of its
+own.**
+
+#### ★ THE HEADLINE — the gate's first real defect, end to end, and the improvement count went UP
+
+| qpdf corpus, 560 files | before | after |
+|---|---|---|
+| **regressions** | **10** | **0** |
+| improved | 273 | **275** |
+| preserved | 7 | **15** |
+| refused by pdfce | 79 | 79 |
+
+**The ten reconcile exactly: 2 became genuine improvements, 8 became
+correctly-classified preserved damage** (273 + 2 = 275; 7 + 8 = 15). **The
+sweep was re-run by the ENGINEER himself** rather than the numbers being
+taken from the fork that did the work — the same discipline as the gate
+records elsewhere in this file.
+
+**`bad6.pdf` now reports `missing-endobj-recovered=1`, and `extract-text`
+returns "Sandwiches" from a document that was unreadable before.** That
+sentence is the whole point of the entry: an independent parser said pdfce
+had made a file **worse**, pdfce agreed, and the file now reads.
+
+**What this librarian was NOT given, stated rather than inferred (R87).**
+The four buckets account for **369 of the 560 files**, before and after;
+what the remaining 191 are was not broken out in the dispatch and **is not
+guessed at here**. Nor was the split of the ten between *"fixed by
+`49dfe81`"* and *"was never a regression, only a batching artifact"*
+supplied as a per-file list. The natural reading — that the 2 are genuine
+recoveries and the 8 are the `c-empty.pdf` class — **is an inference, and
+is flagged as one** rather than recorded as measured. **ENGINEER: confirm
+or correct.**
+
+#### Defect (a) — the PARSER, not the writer. And the object was never registered, not registered-then-dropped
+
+**pdfce wrote a document whose catalog said `/Pages 2 0 R` while object 2
+was ABSENT from the file.** qpdf's `bad6.pdf` omits **exactly one**
+`endobj` — the one after the `/Pages` node. `parse_object_at` **requires**
+the terminator (§7.3.10), so `confirm_candidates` never registered object
+2 at all. Recovery reported `file-level-objects=5`; the output contained
+1, 3, 5, 6, 7; the catalog still named 2.
+
+**The distinction between *never registered* and *registered then dropped*
+is the reason the fix landed in `parser.rs` and not in `recover.rs` or
+`writer.rs`.** A writer-side guard (*"do not emit a catalog naming an
+object you do not have"*) would have produced a **different broken file**,
+not a working one — and would have hidden the fact that a recoverable
+object had been thrown away.
+
+**★ A RED HERRING THE ENGINEER SUPPLIED, AND THE FORK REFUSED TO FOLLOW —
+recorded at the engineer's own instruction.** The dispatch handed the fork
+`last-wins-collisions=1` as a clue to the missing object. **It was not the
+cause.** The fork **established that** rather than building on it.
+Recorded because this project's failure library is thick with the opposite
+outcome — a lead taken on authority and confirmed rather than tested — and
+because a subagent checking its dispatcher's premise is the behaviour R87
+exists to encourage, appearing here **unprompted**.
+
+**The fix: `TerminatorPolicy`, mirroring `StreamLengthPolicy` exactly.**
+Same kind of decision, so it gets the same shape: the file contradicts the
+spec, *which of two readings to believe* is a **policy** choice rather than
+a spec choice, and pdfce makes it an **explicit parameter** rather than a
+hidden default. `Strict` is the default and the clean load path is
+**unchanged** — accepting an inferred extent there would put a guess into
+the byte-identical re-emission path and break `ARCHITECTURE.md` §5.
+
+**Two details that are load-bearing rather than cosmetic:**
+
+1. **The leniency accepts only when the terminator is an INTEGER.**
+   `2 0 obj << … >> 3 0 obj` recovers; a body followed by an unexpected
+   keyword still fails. **It cannot swallow trailing garbage** — which is
+   what separates a bounded repair from a scan that eats the rest of the
+   file.
+2. **Provenance is `RecoveredFile`, not `File`.** These bytes contain **no
+   `endobj`**, so re-emitting them verbatim would copy the malformation
+   into the saved file and produce a document pdfce could not reload.
+   **This is the SECOND instance of R94's shape** (`ARCHITECTURE.md`
+   §5.11's stream-length record: *a repair that mutates a value must
+   invalidate verbatim provenance*) — the first was the `/Length` repair
+   in `409a6b5`, and it was already documented as a trap when this one was
+   built.
+
+**Counted and disclosed (R20, fuzzy-never-sneaky):**
+`Parser::missing_endobj_recovered()` → `RecoveryReport.missing_endobj_recovered`
+→ the CLI's `missing-endobj-recovered=N` stable line **plus** a prose NOTE
+naming §7.3.10 and saying what pdfce did before 2026-08-07. **A count with
+no sentence beside it would have told the operator a number and not a
+fact.**
+
+#### Defect (b) — `round-trip` is a SURVIVORSHIP TEST — and the ENGINEER'S OWN FRAMING OF THIS WAS WRONG, corrected here at his instruction
+
+**The correct half:** `reload_ok` iterates `doc.objects()` and asks *"did
+every object I **HAVE** survive?"* §7.3.10 resolves a **dangling reference
+to null rather than an error**, so a saved file that **references**
+something absent reads **clean** through the model. **The verb whose entire
+job is verifying the save invariant reported SUCCESS on the broken file.**
+
+**★ THE PART THE ENGINEER GOT WRONG, IN HIS WORDS AND FILED AS HIS:** he
+told the fork that `round-trip`'s check *"should have caught `bad6`."*
+**It would not have.** pdfce could not resolve the page tree on the
+**INPUT** either, so a comparative check correctly files `bad6` under
+**preserved damage**, not **destroyed** — and a **non-comparative** check
+would false-fire on **every legitimately broken corpus file**, where
+preserving the damage is the correct behaviour.
+**Comparative is right; it simply was not SUFFICIENT.**
+
+**So the fix is two things, not one, and only the second would have caught
+the defect that prompted it:**
+
+- **Check 2b (comparative, a hard failure):** `page_tree_kept` — the source
+  resolved a page tree and the saved file does not. Exits `RELOAD_FAILED`;
+  reported in the stable line as `page_tree_kept=0|1`, **appended at the
+  END** for the same reason `promoted` was.
+- **★ The NOTE (non-comparative, never a failure):** fires whenever the
+  **OUTPUT** lacks a page tree, **stating whether the damage is NEW or
+  INHERITED**. This is the part that would have caught `bad6` — by making
+  the broken output **visible** instead of letting a clean-looking
+  `identical=1` result line speak for it.
+
+**Verified by REVERTING the recovery fix and watching the NOTE fire on
+`bad6` with the correct classification** — not by reading the code and
+concluding it would.
+
+**Why the survivorship blindness was fixed rather than noted: R163,
+applied on the day after it was minted.** Fixing only the dropped object
+would have left this check **just as blind to the next one**. The gate was
+strengthened; no note was written asking future authors to look harder.
+
+#### ★ `c-empty.pdf` WAS THE GATE'S OWN BUG — and this is the part the engineer most wanted recorded
+
+**`c-empty.pdf` is a VALID zero-page document.** `/Type /Pages /Count 0
+/Kids []`, valid xref, **both objects terminated**. veraPDF grades its
+input and its output **identically**. The gate accused pdfce of breaking
+it.
+
+**The cause is not a misreading of the file. It is an aggregate attributed
+to an individual.** veraPDF reports a failure **COUNT**
+(`batchSummary/@failedToParse`) **without saying WHICH job it belongs to**,
+so the gate's two-tier promotion had to **guess** from
+`counted == len(results)`. In a 32-file batch with one counted failure and
+two exceptions, neither was promoted. **A file's tier therefore depended on
+what else happened to be in its batch.** The input scan and the output scan
+batch **differently**, so the same file could grade `WARNED` on one side
+and `FAILED` on the other and surface as a **regression purely from
+batching**.
+
+**Fix: the tiers are collapsed to a boolean.** The distinction bought
+nothing anyway — this gate is **comparative**, and all it needs to know is
+whether the output hit a problem the input did not. **A boolean is
+batch-independent and answers exactly that.** The `batchSummary`
+cross-check **stays**, demoted to a sanity check: veraPDF must never count
+more failures than we found exceptions for, because a counted failure with
+**no exception attached** is one this gate would report as **clean**.
+
+**★ THE CONSEQUENCE THE ENGINEER ASKED TO HAVE FILED AS HIS OWN, recorded
+verbatim in substance:** ***some of the ten regressions he reported to the
+operator were batching artifacts.*** He reported *"ten regressions"* **with
+more confidence than his instrument had earned.** The reconciliation is
+exact and the underlying defect was real — **but the count was not
+trustworthy when he gave it.** Filed here, in the ledger, rather than left
+in a conversation, because this project's record of its own instruments is
+the thing that makes the next instrument believable.
+
+#### ★ A NEW R162 INSTANCE THE FIX ITSELF CREATED — found by this librarian, and OWED back to the engineer
+
+**`--self-test`'s tier assertion is now UNFALSIFIABLE.** It reads:
+
+```python
+(_name, (tier, msg)), = failures.items()
+if tier != FAILED:
+    print("SELF-TEST FAILED: … graded '{TIER_NAME[tier]}' rather than …")
+```
+
+**`FAILED` is now the only tier that can ever enter that dict.**
+Established by exhaustive grep of assignments into the container rather
+than by reading the happy path (R87 — the method, not the conclusion):
+`grep -n "results\[" tools/verapdf-parse-gate.py` returns **exactly one
+hit**, line 383, `results[name] = (FAILED, msg)`. `OK` appears **only** as
+a `.get()` default for a file **absent** from the dict, never as a stored
+value.
+
+**So the branch cannot be reached, and R162 is the exact diagnosis:
+*could my assertion ever have come out false?* No.** The `if not failures`
+check above it still carries real weight; the tier check below it is **dead
+code that reads as a live guard**, which is worse than no check because a
+future reader counts it as one.
+
+**Why this is worth an entry and not a shrug: the vacuity was CREATED by
+the correct fix.** When three tiers became two, an assertion that had been
+meaningful became a tautology, and **nothing in the project would have
+noticed** — the gate still passes, the self-test still prints `self-test
+ok`. **This is the same-filing propagation duty pointed at code**: the
+collapse was filed against the tier constants, the extraction and the
+cross-check, and **not** against the assertion that consumed them.
+
+**OWED TOOLING, new:** either restore a second distinguishable outcome for
+the self-test to assert against, or **delete the tier branch** and let
+`if not failures` be the whole guard, saying in a comment that the tier
+assertion was removed because the boolean collapse made it unfalsifiable.
+**This librarian does not hold `tools/`** — the engineer does.
+
+> **✅ DISCHARGED 2026-08-07 (twelfth filing), committed `b92c313` —
+> "a detector that never says no is not a detector."** The engineer took
+> **neither** of the two options offered above, and the third answer is
+> better than both.
+>
+> **The part worth carrying forward, and it is not the fix:** ***this was
+> an R162 violation created BY THE FIX FOR AN R162 FINDING.*** The dead
+> branch was produced by a **correct** change — the tier collapse, which
+> is now `R164` — and **inherited its author's confidence.** That is how
+> this class survives review: **nobody re-audits the guard they just wrote
+> correctly.** The vacuity was not introduced by carelessness; it was
+> introduced by a repair, which is precisely the moment R162's question
+> stops being asked.
+>
+> **Why a tier assertion could not be revived honestly.** Reinstating a
+> second tier would have meant reinstating the batch-dependent promotion
+> that `23a5812` removed — *fabricating a distinction so that a test could
+> assert on it.* So the fix **supplies the missing discrimination where it
+> actually exists**: the gate's real claim is ***broken files appear,
+> sound files do not***, and **a gate reporting EVERY file as unreadable
+> would pass a one-directional test.** `--self-test` now scans a
+> **known-good document** (`fixtures/synthetic/forms/demo-form.pdf`) as
+> well as the deliberately broken one, and **fails if the good one comes
+> back dirty.** ***A detector that never says no is not a detector.***
+>
+> **Two stale docstrings corrected in the same commit** (the same-filing
+> propagation duty, pointed at code): the `verapdf_parse_report` docstring
+> still described the removed **`WARNED`** tier — kept, not deleted, as a
+> **record of why it was removed**, which is the fact worth preserving —
+> and the module-level sentence describing `self_test()` as
+> one-directional. **Stale twice over**, as this librarian put it when
+> filing the defect, and both halves are now current.
+>
+> **The item is closed.** It is carried forward in no later filing.
+
+#### R162 discharged by OBSERVATION, not assertion — the second such discharge in two days
+
+The regression test asserts on **BYTES** (R159), because §7.3.10 makes a
+model-level check unable to tell *"object 2 is present"* from *"object 2 is
+missing and reads as null"* — **exactly the blindness R159 was minted
+for.** It asserts the catalog **actually references object 2 first**,
+because otherwise the byte assertion would be about nothing (R162's
+positive control).
+
+**And the non-vacuity was proven by breaking it:** with `TerminatorPolicy`
+reverted to `Strict` the new test **FAILS on its counted-disclosure
+assertion**, and **paired parser unit tests** prove the difference comes
+from **the policy** rather than from something incidental about the input.
+That second half is the part usually skipped — a revert that makes a test
+fail proves the test is sensitive to *something*, not to *the thing*.
+
+#### Gates — measured by the ENGINEER at `23a5812`, each read by its OWN exit code (R87)
+
+| Gate | Result |
+|---|---|
+| `cargo test` (workspace) | **2148 passed, 0 failed** |
+| `cargo fmt --check` | **exit 0** |
+| `cargo clippy -- -D warnings` | **exit 0** |
+| `tools/check-ui-strings.sh` | **exit 0** |
+| `tools/check-bypass-paths.sh` | **exit 0** |
+| `tools/check-ledger-numbers.py` | **exit 0** |
+| qpdf corpus sweep (560 files) | **re-run by the engineer**, table above |
+
+**"Each read by its OWN exit code" is the load-bearing clause.** This
+project has previously reported a chained-command result as if it were six
+independent ones. Six exit codes were read; one summary is printed.
+
+**Both ledger checkers re-run by THIS LIBRARIAN after the filing** —
+results and ceilings in the report and in *Ledger*, below.
+
+#### RAG escalations, this entry
+
+**New — PDF domain (`C:\personal_rag\pdf\`):**
+
+- `lesson_20260807_missing_endobj_drops_the_whole_object_and_the_rewrite_still_names_it.md`
+  — the producer/corpus finding: a single omitted `endobj` costs the entire
+  object under a strict parser, and if that object is the page tree the
+  rewrite names a `/Pages` that is not in the file.
+- `lesson_20260807_dangling_reference_is_null_so_a_survivorship_reload_check_reads_clean.md`
+  — §7.3.10's consequence for **instrument design**: a reload check over
+  the objects you HAVE is structurally incapable of seeing a reference to
+  one you do not.
+- `lesson_20260807_verapdf_batchsummary_count_has_no_job_attribution.md`
+  — the batching finding as an empirical veraPDF property.
+
+**New — ecosystem (`D:\dev\rag\rust\`):**
+
+- `per_item_verdict_derived_from_a_batch_aggregate_is_batch_dependent.md`
+  — the general form. Filed in the `rust\` tree following the precedent of
+  `ci_gate_red_at_baseline_enforces_nothing.md` and
+  `harness_that_silently_drops_a_malformed_step_blames_the_system_under_test.md`,
+  which are likewise verification-methodology rather than Rust-language
+  findings.
+- `survivorship_check_over_what_you_have_cannot_see_what_you_reference.md`
+  — the general form of defect (b), applicable to any
+  serialize-reload-verify loop over a referencing graph.
+
+**AMENDED, per the same-filing propagation duty (dated footers, nothing
+deleted):**
+
+- `C:\personal_rag\pdf\lesson_20260807_verapdf_two_parse_failure_tiers_taskexception_vs_failedtoparse.md`
+  — **its *Implementation* section is now stale**: the tiers are real but
+  **must not be modelled**, and `--self-test`'s tier assertion is the
+  vacuity recorded above. **A lesson whose recommendation has been reversed
+  by measurement is the single most dangerous file in a RAG.**
+- `D:\dev\rag\rust\repair_that_mutates_a_value_must_invalidate_verbatim_provenance.md`
+  — second instance (`TerminatorPolicy` → `RecoveredFile`).
+- `D:\dev\rag\rust\prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`
+  — second instance (revert to `Strict`, plus the paired unit tests that
+  attribute the difference).
+- `D:\dev\rag\rust\absence_assertion_must_first_prove_the_container_could_have_held_it.md`
+  — R162's own file gains the **self-test tier** instance, which is the
+  first recorded case of a vacuity **created by a correct simplification**.
+
+#### The ruling this filing asks for — a standing-rule number PROPOSED and NOT MINTED
+
+**The batching shape earns a number, in this librarian's judgement, and
+R164 is the number it should have.** Per the dispatch's explicit
+instruction, **it is proposed and NOT minted; the ceiling stays R163 and
+R164 remains free.** Full argued case — including the cost, which is that
+the R87/R159/R162 family's unifying sentence needs one added clause — is
+filed at the end of *Standing rules* as
+**"PROPOSED 2026-08-07 — a verdict whose value depends on unrelated inputs
+processed alongside it (R164 REQUESTED, NOT MINTED)."**
+
+> **✅ RULED 2026-08-07 (twelfth filing) — MINTED AS `R164`.** The
+> engineer ruled it in, adopted the librarian's framing as the headline,
+> **accepted the cost knowingly** (the R87/R159/R162 family's unifying
+> sentence widens to *"evidence whose value is not a function of its
+> subject alone is not evidence about that subject"*), and **overruled the
+> one-occurrence objection with its reason**: the occurrence produced a
+> **false report to the operator**, and batched measurement recurs
+> routinely here. **Ceiling R163 → R164; R165 next free.** Binding text:
+> `R164`'s own entry in *Standing rules*.
+
+#### Ledger
+
+**Nothing minted.** No Pass ID, no standing rule, no decision record, no
+operator question. **Ceilings after this filing, re-measured by running the
+checker rather than read from the file:** Pass **43**, standing rules
+**R163** (R164 next free **and now formally requested**), decision records
+**031** (032 next free), operator questions **(bb)**.
+
+> **★ AMENDED 2026-08-07 (twelfth filing) — the standing-rule line above
+> is SUPERSEDED.** `R164` **is minted**; the ceiling is **R164**, **R165
+> next free**, and decision 030's three contingent candidates plus the
+> cross-RAG-handoff proposal **transfer R164 → R165**. Everything else in
+> the line stands: Pass **43**, decision records **031** (032 next free),
+> operator questions **(bb)**. The paragraph above is left exactly as
+> filed.
+
+**`FEATURES.md` — ONE row's description amended, NO box changed, and the
+absence is established rather than assumed.** `grep -n -i
+"recover\|damaged\|round-trip" docs/FEATURES.md` returns two rows; the
+relevant one already reads `[x] [x] [x] [x]` for *"Recovers a
+damaged/malformed cross-reference table…"*. This work **strengthens a
+capability already ticked** — it does not add one — so the honest edit is
+to name the new repair in that row's description and tick nothing. **The
+`round-trip` verb and the veraPDF gate get no row at all**, on the
+precedent this file set three entries below: *a verification harness is not
+an operator capability, and `FEATURES.md` has no tooling section by
+design.*
+
 ### Pass 20.5 (PARTIAL) — form fields stop being a thing only the command line can make (GUI + core) — 2026-08-07, committed `8a8678e` (the disclosure predicate) and `165dd49` (the GUI surface), branch `pass-8-redaction`. **This entry gives Pass 20.5 its FIRST heading** — the ID was filed 2026-08-03 by decision 020's Backlog amendment and has been cited as owed in six later filings without ever being headed. **PARTIAL BY CHOICE, NOT BY OMISSION** — field deletion in the Forms panel was core-complete, scoped into this Pass, and deliberately cut; see *The cut*, below
 
 > **★ SUPERSEDED IN PART, SAME DAY (tenth filing) — READ THE `★ ADDENDUM`
@@ -630,6 +1012,46 @@ than as R86. The ledger gate agrees by construction: it counts
 **exit 0**, `check-passes-filed.py` **exit 0**.
 
 ### tooling — the veraPDF parse gate: the first OUTSIDE reader pdfce's bytes have ever had (no Pass ID — verification infrastructure, the same class as `tools/check-passes-filed.py`) — 2026-08-07, committed `9dcab62` (the gate), `b4d6d61` (the build-lock half), `6ca17e1` (the decode fix) and `1f5f1e5` (the COMPARATIVE reframing), branch `pass-8-redaction`
+
+> **★ AMENDED 2026-08-07 (eleventh filing) — TWO CORRECTIONS, AND THE
+> ENTRY IS OTHERWISE UNCHANGED.** Read both before quoting anything below.
+>
+> 1. **Defect 2's finding survives; the DESIGN it justified does not.**
+>    veraPDF really does have two parse-failure tiers — that measurement
+>    stands. **Modelling them was a false-positive generator**, because the
+>    count carries no job attribution, so a file's tier depended on **what
+>    else was in its 32-file batch**. The tiers are collapsed to a boolean
+>    in `23a5812`. **The sentence below reading *"the self-test also
+>    asserts the TIER"* is therefore stale twice over**: there is no longer
+>    a tier to assert, and the assertion left behind is **unfalsifiable**.
+>    See the new *first defect the veraPDF gate found* entry at the top of
+>    *Shipped* for the full record and the owed tooling item.
+> 2. **The headline result gains a companion, and the gate's first REAL
+>    defect.** *"115 pdfbox files: 0 regressions, 3 IMPROVED"* stands as
+>    filed. The qpdf corpus (560 files) then produced **the finding this
+>    gate was built for**: pdfce writing a catalog naming an absent
+>    `/Pages` object. **Fixed; improvements went UP** (273 → 275,
+>    regressions 10 → 0).
+>
+> **A correction the gate's own author filed against himself, kept with
+> the entry it belongs to:** the *"ten regressions"* first reported to the
+> operator **included batching artifacts**, and were stated with more
+> confidence than the instrument had earned.
+>
+> **★ FURTHER AMENDED 2026-08-07 (twelfth filing), `b92c313`.** Two of the
+> statements above are now settled rather than open:
+>
+> - **The unfalsifiable assertion named in correction 1 is FIXED.**
+>   `--self-test` no longer asserts a tier at all. It **runs both
+>   directions** — the deliberately broken file must be detected, **and a
+>   known-good document must not be** — so the sentence *"a file with no
+>   xref table graded as a mere warning"* has been replaced by a claim the
+>   gate can actually fail. **A detector that never says no is not a
+>   detector.** Full record in the *first defect* entry at the top of
+>   *Shipped*.
+> - **The batching mechanism named in correction 1 is now `R164`**, a
+>   standing rule, minted the same day: *an aggregate must never be
+>   attributed to an individual.*
 
 **Not a Pass, and the boundary is stated so the green is not overread.**
 This is the **parse** gate only. **The PDF/A CONFORMANCE gate remains
@@ -25841,6 +26263,19 @@ not a judgment call:**
   **quantified assertions over collections** — where the failure is not in
   the evidence but in the arithmetic of the claim.
 
+  > **★ AMENDED 2026-08-07 (twelfth filing) — THE UNIFYING SENTENCE ABOVE
+  > IS SUPERSEDED, and the family is now FOUR.** `R164` was minted for a
+  > verdict that **did** come out differently, for reasons unrelated to its
+  > subject — the opposite of a constant assertion. The engineer ruled the
+  > wider clause in **knowingly**, as the price of admitting the member:
+  > ***evidence whose value is not a function of its subject alone is not
+  > evidence about that subject.*** It covers all four — R87 (a function of
+  > where you pointed), R159 (a function of the reader's repairs), R162 (a
+  > constant, therefore a function of nothing), R164 (a function of the
+  > subject's batch-mates). **The sentence above is left exactly as filed**;
+  > this is the amendment, not a rewrite. R162's own text is unchanged and
+  > still binds.
+
   **Scope, so this does not become "assert counts everywhere."** It binds
   a test whose PRIMARY claim is **negative** — nothing dangles, no
   reference survives, no entry remains, the log contains no error. It does
@@ -25906,6 +26341,19 @@ not a judgment call:**
   *evidence that could not have come out differently is not evidence*;
   R163's is *an obligation the machine can hold should not be held by a
   person*. They meet only at the point where R163 fails to apply.
+
+  > **★ AMENDED 2026-08-07 (twelfth filing) — the family named above is now
+  > FOUR, and its unifying sentence has WIDENED.** `R164` joined it the
+  > same day (*does my verdict depend on anything other than its
+  > subject?*), and the quoted clause *"evidence that could not have come
+  > out differently is not evidence"* is superseded by ***"evidence whose
+  > value is not a function of its subject alone is not evidence about that
+  > subject."*** **R163's own relationship to the family is UNCHANGED** —
+  > it is still a complement and not a member, on exactly the reasoning
+  > above: R164 is another after-the-fact *is my evidence real?* question,
+  > and R163 still operates before any evidence is needed. Read
+  > *"R87 / R159 / R162 / R164"* wherever the paragraph above reads
+  > *"R87 / R159 / R162"*.
 
   **The evidence, and the first item is the strongest because the project
   already conceded it against itself.**
@@ -25983,6 +26431,141 @@ not a judgment call:**
   cross-RAG-handoff proposal — last recorded as claiming R163 — **now
   take R164**, by the same read-the-live-ceiling transfer (R106/R133)
   that has moved them R157 → R158 → R159 → R161 → R162 → R163 → R164.
+  **Nothing is renumbered.** Pass family stays **43**; decision records
+  stay **031**; operator questions stay **(bb)**.
+
+  > **✅ AMENDED 2026-08-07 (later the same day) — R164 IS NOW MINTED**
+  > (the aggregate-attributed-to-an-individual rule, immediately below).
+  > **The ceiling is R164; R165 is next free.** Decision 030's three
+  > still-unminted contingent candidates and the cross-RAG-handoff
+  > proposal — recorded in the paragraph above as taking R164 — **now
+  > take R165**, by the same read-the-live-ceiling transfer (R106/R133)
+  > that has moved them R157 → R158 → R159 → R161 → R162 → R163 → R164
+  > → R165. **Nothing is renumbered**; the paragraph above is left
+  > exactly as filed.
+
+- **R164 — A verdict whose value depends on anything other than its
+  subject is not evidence about that subject. The mechanism to look for is
+  an AGGREGATE ATTRIBUTED TO AN INDIVIDUAL (methodology; no decision
+  number; librarian-proposed, ENGINEER-RULED; 2026-08-07,
+  `tools/verapdf-parse-gate.py`'s two-tier promotion / `23a5812`).**
+
+  **The finding, in its enforceable form:**
+
+  > **A per-item verdict must be a function of that item alone. Before
+  > believing a per-item result produced by a tool that processes items in
+  > BATCHES, ask: *would this verdict change if I ran this item by
+  > itself?* Where a tool reports an AGGREGATE that does not name the
+  > items it covers, that aggregate may be used to CROSS-CHECK a per-item
+  > extraction and must NEVER be used to ASSIGN one. If the per-item
+  > verdict cannot be made batch-independent, collapse the reported
+  > distinction until it can.**
+
+  **The instance, measured.** The gate graded qpdf's **`c-empty.pdf`** — a
+  valid zero-page document (`/Type /Pages /Count 0 /Kids []`, valid xref,
+  both objects terminated) that veraPDF grades **identically on input and
+  output** — as a **regression caused by pdfce**. veraPDF reports
+  `batchSummary/@failedToParse` as a **count with no job attribution**;
+  the gate needed a per-file tier; the bridge was a guess,
+  `counted == len(results)`. **In a 32-file batch with one counted failure
+  and two exceptions, neither was promoted** — so a file's tier depended
+  on its batch-mates, and because the input scan and the output scan batch
+  **differently**, the same file could grade `WARNED` before and `FAILED`
+  after and surface as a regression **purely from batching**. Fixed in
+  `23a5812` by collapsing to a boolean, which is batch-independent and
+  answers the only question a comparative gate actually asks. **Nothing in
+  the gate's output disclosed that its verdicts were context-dependent**:
+  the report named the file, the tier and the message, and looked exactly
+  like a per-file verdict.
+
+  **Where it sits in the R87 / R159 / R162 family — and the reason it is a
+  peer and not a scope note.** Each member is numbered by **which way** the
+  evidence fails, and the questions read in order:
+
+  - **R87 asks** *did I look in the right place, and is there a duller
+    explanation?* Here, **yes it did** — veraPDF was run on exactly that
+    file and reported on exactly that file.
+  - **R159 asks** *did my reader repair the reading on the way out?*
+    **No leniency was involved** — veraPDF reported precisely what it saw.
+  - **R162 asks** *could my assertion ever have come out false?* **It did
+    come out false.** The assertion was not vacuous. It was **wrong**,
+    which is a different defect.
+  - **R164 asks** *does my verdict for this subject depend on anything
+    other than this subject?*
+
+  **All three of the others can be satisfied in full — every check
+  performed, every answer clean — and the verdict still be wrong.** A
+  family whose complete satisfaction does not exclude a known failure mode
+  is missing a member. That is the whole argument for the number.
+
+  **★ THE COST, RULED ON KNOWINGLY BY THE ENGINEER RATHER THAN LET SLIP
+  IN.** Accepting R164 **widens the family's unifying sentence**. It read
+  (R162's entry, R163's entry): *evidence that could not have come out
+  differently is not evidence.* This instance is the **opposite** —
+  evidence that came out differently **for reasons unrelated to its
+  subject**. The replacement clause, now in force for the family:
+
+  > ***Evidence whose value is not a function of its subject alone is not
+  > evidence about that subject.***
+
+  It covers all four: R87 (value is a function of where you pointed), R159
+  (a function of the reader's repairs), R162 (a constant, therefore a
+  function of nothing), R164 (a function of the subject's batch-mates).
+  **The engineer's ruling, recorded because widening a family's organising
+  principle is exactly the move that should not happen quietly:** *"I judge
+  that the right generalisation — both are failures of the link between
+  measurement and conclusion, not two unrelated hazards."* The librarian
+  filing the member flagged the cost and did not absorb it; the engineer
+  paid it deliberately.
+
+  **★ THE ONE-OCCURRENCE OBJECTION, OVERRULED WITH THE REASON.** This
+  project's promotion bar is **two** (R156's two mis-verifications; R87's
+  four-then-five; R163's two-in-one-day). **R164 has one measured
+  instance**, in one tool, on one day, and was minted anyway. The
+  engineer's reasons, both of which are properties of the occurrence rather
+  than of the count:
+
+  1. **The occurrence produced a FALSE REPORT TO THE OPERATOR.** *"Ten
+     regressions"* was stated to Ken; some of the ten were batching
+     artifacts. **A rule whose first instance already cost a wrong
+     statement to the operator does not need a second.**
+  2. **The pattern recurs anywhere measurements are batched, and this
+     project batches routinely** — the corpus sweeps do it now, and the
+     PDF/A conformance gate will do it when `to-pdfa` ships.
+
+  **★ THE LIMIT, STATED SO THIS IS NOT OVER-APPLIED.** R164 binds where a
+  **per-item verdict is DERIVED from a group-level result**. **Legitimate
+  aggregate reporting is not the failure** — *"15 of 560 files failed"* is
+  a true and useful sentence, and R164 has nothing to say about it.
+  Attributing the group's property **to a member** is the failure. The
+  honest test: *point at the item, then at the number, and ask which one
+  the verdict was read off.*
+
+  **A note on the surviving cross-check, because the fix is not "delete
+  the aggregate."** `batchSummary` **stays, demoted**: veraPDF must never
+  count more failures than the gate found exceptions for, because a counted
+  failure with no exception attached is one the gate would report as clean.
+  **That is the aggregate used to CROSS-CHECK, which the rule permits** —
+  the same number, in the role it can actually carry.
+
+  **Recorded in the author's favour, because the rule is about mechanism
+  and not blame:** the defect was found by the gate's **own author**, on
+  the gate's **own first real corpus run**, and the correction to the
+  operator was filed **against himself, at his own instruction**.
+
+  **See** `R87`, `R159`, `R162` (the family), `R163` (its complement — the
+  fix here was structural, not a note asking the next author to remember),
+  and
+  `D:\dev\rag\rust\per_item_verdict_derived_from_a_batch_aggregate_is_batch_dependent.md`
+  plus
+  `C:\personal_rag\pdf\lesson_20260807_verapdf_batchsummary_count_has_no_job_attribution.md`
+  for the general and the veraPDF-specific forms.
+
+  **Ceiling is now R164** (was R163). **R165 is next free.** Decision
+  030's three still-unminted contingent candidates and the
+  cross-RAG-handoff proposal — last recorded as claiming R164 — **now take
+  R165**, by the same read-the-live-ceiling transfer (R106/R133) that has
+  moved them R157 → R158 → R159 → R161 → R162 → R163 → R164 → R165.
   **Nothing is renumbered.** Pass family stays **43**; decision records
   stay **031**; operator questions stay **(bb)**.
 
@@ -27024,6 +27607,191 @@ twice in one day by the agent that wrote the rule's entry.
 refused: both occurrences are recorded as a lesson in
 `C:\personal_rag\claude_code\`, which is the cross-project home for
 agent-behaviour findings and survives any ruling made here.
+
+**— END OF THE PROPOSAL AS FILED.**
+
+### RESOLVED 2026-08-07 (twelfth filing) — a verdict whose value depends on unrelated inputs processed alongside it — **MINTED AS R164. Ceiling R163 → R164; R165 next free**
+
+**RULING (engineer, 2026-08-07, twelfth filing): ACCEPTED AND MINTED AS
+`R164`.** The binding text now lives in **R164's own entry** in this
+section, above. **Ceiling R163 → R164; R165 is next free.** Decision 030's
+three still-unminted contingent candidates and the cross-RAG-handoff
+proposal **transfer from R164 to R165**, by the read-the-live-ceiling rule
+(R106/R133) — **the third such transfer this session**, and stated rather
+than performed silently. Pass family stays **43**; decision records stay
+**031**; operator questions stay **(bb)**. **Nothing is renumbered.**
+
+**Three things the ruling settled that the proposal could only ask for,
+recorded here because each was a real cost:**
+
+1. **The librarian's own framing was adopted as the rule's headline:**
+   *"A verdict whose value depends on anything other than its subject is
+   not evidence about that subject."* The engineer's addition is that
+   **the mechanism, not the symptom, is what the rule names** — *an
+   aggregate attributed to an individual* — because a mechanism is
+   checkable and a symptom is felt.
+2. **The family's unifying sentence WIDENS, and the engineer ruled on
+   that knowingly.** From *"evidence that could not have come out
+   differently is not evidence"* to ***"evidence whose value is not a
+   function of its subject alone is not evidence about that subject."***
+   His reason, recorded verbatim in substance: *both are failures of the
+   link between measurement and conclusion, not two unrelated hazards.*
+   The proposal flagged this as the reason it might be refused; it was
+   accepted **as a deliberate act by the engineer, not absorbed quietly by
+   the librarian filing the member.**
+3. **The ONE-OCCURRENCE objection is OVERRULED, with the reason.** The
+   proposal made the objection against itself and the project's bar is
+   two. The ruling: **the occurrence produced a false report to the
+   operator** — *"ten regressions"* was said to Ken and some of the ten
+   were batching artifacts — **and the pattern recurs anywhere
+   measurements are batched, which this project does routinely in corpus
+   sweeps.** *A rule whose first instance already cost a wrong statement
+   to the operator does not need a second.*
+
+**The ruling also fixed the LIMIT into the rule text**, unprompted by the
+proposal: R164 binds **only** where a per-item verdict is **derived** from
+a group-level result. **Legitimate aggregate reporting — *"15 of 560
+failed"* — is not the failure.** Attributing the group's property to a
+member is.
+
+**Original proposal text follows, unedited** (append-only spirit: the
+reasoning that produced the ruling is part of the record, not scaffolding
+to delete). Read everything below as the case that was put, not as current
+status — current status is the ruling above, and the binding text is
+R164's own entry.
+
+---
+
+**STATUS AS FILED: PROPOSED. NOTHING WAS MINTED BY THIS BLOCK.** The dispatch that
+produced it said, in terms: *"if you think it needs a number, R164 is free
+— say so, do not mint."* This librarian **does** think so. **The
+standing-rule ceiling remains R163; R164 remains next free**; decision
+030's three still-unminted contingent candidates and the cross-RAG-handoff
+proposal **keep their claim on R164** unless and until this is accepted.
+Pass family stays **43**; decision records stay **031**; operator questions
+stay **(bb)**.
+
+#### The proposed text, in its enforceable form
+
+> **A per-item verdict must be a function of that item alone. Before
+> believing a per-item result produced by a tool that processes items in
+> batches, ask: *would this verdict change if I ran this item by itself?*
+> Where a tool reports an AGGREGATE that does not name the items it
+> covers, that aggregate may be used to CROSS-CHECK a per-item extraction
+> and must never be used to ASSIGN one. If the per-item verdict cannot be
+> made batch-independent, collapse the reported distinction until it
+> can.**
+
+#### The instance, measured
+
+`tools/verapdf-parse-gate.py` graded qpdf's **`c-empty.pdf`** — a valid
+zero-page document (`/Type /Pages /Count 0 /Kids []`, valid xref, both
+objects terminated) that veraPDF grades **identically** on input and
+output — as a **regression caused by pdfce**.
+
+veraPDF reports `batchSummary/@failedToParse` as a **count with no job
+attribution**. The gate needed a per-file tier. The bridge was a guess:
+`counted == len(results)`. **In a 32-file batch with one counted failure
+and two exceptions, neither was promoted** — so a file's tier depended on
+its batch-mates. **The input scan and the output scan batch differently**,
+so the same file could grade `WARNED` before and `FAILED` after and be
+reported as a regression **purely from batching**. Fixed in `23a5812` by
+collapsing to a boolean, which is batch-independent and answers the only
+question a comparative gate actually asks.
+
+**The failure PROPAGATED past the tool**: *"ten regressions"* reached the
+operator, and some of the ten were artifacts. **Nothing in the gate's
+output disclosed that its verdicts were context-dependent** — the report
+named the file, the tier and the message, and looked exactly like a
+per-file verdict.
+
+#### Why this is a NEW shape and not R87, R159 or R162
+
+The family is explicitly a family of *"is my evidence real?"* questions,
+each numbered by **which way** the evidence fails. Run the three checks
+against this instance and all three come out clean:
+
+- **R87 asks *did I look in the right place, and is there a duller
+  explanation?*** **Yes, it looked in the right place.** veraPDF was run on
+  exactly that file and reported on exactly that file.
+- **R159 asks *did my reader repair the reading on the way out?*** **No
+  leniency was involved.** veraPDF reported precisely what it saw; nothing
+  was normalized, dropped or absorbed.
+- **R162 asks *could my assertion ever have come out false?*** **It did
+  come out false.** The assertion was not vacuous. It was **wrong** — which
+  is a different defect, and the one no existing rule names.
+
+**A filing note, because the shape recurs.** Those three bullets were
+first written as `- **R87 — …`, which `check-ledger-numbers.py` parses as
+a rule **DEFINITION**, and the gate correctly reported three duplicate
+definitions. **This is the SIXTH time that grammar has shaped this
+file.** The gate is right and the wording changed; recorded so the next
+author reaching for the natural `- **RNNN — ` prose form knows why nobody
+else uses it inside a proposal.
+
+**The new question is: *does my verdict for this subject depend on
+anything other than this subject?*** And the mechanism underneath it,
+stated because it is more checkable than the symptom: **an aggregate was
+attributed to an individual.**
+
+#### ★ THE COST, STATED BECAUSE IT IS THE REASON THIS MIGHT BE REFUSED
+
+**Accepting R164 requires amending the family's unifying sentence**, which
+currently reads (R162's entry, R163's entry): *"evidence that could not
+have come out differently is not evidence."* **This instance is the
+opposite** — evidence that came out differently **for reasons unrelated to
+its subject.**
+
+**The proposed replacement clause, offered so the engineer is ruling on a
+concrete sentence rather than on a gap:**
+
+> *Evidence whose value is not a function of its subject alone is not
+> evidence about that subject.*
+
+That generalisation **does** cover all four: R87 (value is a function of
+where you pointed), R159 (a function of the reader's repairs), R162 (a
+constant, therefore a function of nothing), R164 (a function of the
+subject's batch-mates). **But it is a bigger claim than the sentence it
+replaces**, and widening a family's organising principle to admit a new
+member is exactly the move that should be made deliberately by the
+engineer and not quietly by the librarian filing the member.
+
+#### Why it might be REFUSED — three arguments, made honestly
+
+1. **One occurrence.** This project's promotion bar is **two** (R156's two
+   mis-verifications; R87's four-then-five; R163's two-in-one-day). **This
+   has one measured instance**, in one tool, on one day. The counter-case
+   is that the occurrence is unusually expensive — it produced a **false
+   accusation against pdfce's own output** and propagated a wrong number to
+   the operator — and that batch-processing tools are about to become more
+   common here, not less (the corpus sweeps, the PDF/A conformance gate
+   when `to-pdfa` ships).
+2. **It may be an R87 AMENDMENT, not a peer.** R87's 2026-08-07 broadening
+   already says *"prefer the mundane explanation of a surprising
+   observation."* *"My tool batches"* is arguably a mundane explanation
+   that should have been reached for. **The same deciding argument the
+   engineer has now applied four times** (R123/R158, R156, R87, R83/R164)
+   is *a rule that only qualifies another rule is a scope note, not a
+   peer.* The counter-case: R87's binding text and every one of its
+   occurrences is about **instrument silence and trace attribution**, and a
+   reader looking up *"is my per-file number trustworthy?"* would find a
+   rule about traces and correctly conclude it does not apply.
+3. **It may be tooling advice rather than a project rule.** The general
+   form is being written to `D:\dev\rag\rust\` regardless, and the
+   veraPDF-specific form to `C:\personal_rag\pdf\`. **The finding survives
+   a refusal**, which is the same note the R87-broadening proposal carried.
+
+**This librarian's recommendation: MINT AS R164, with the amended family
+sentence above.** The reason it is a peer rather than a scope note is the
+one thing the other three cannot do: **R87, R159 and R162 can all be
+satisfied in full — every check performed, every answer clean — and the
+verdict still be wrong.** A family whose complete satisfaction does not
+exclude a known failure mode is missing a member.
+
+**Where the finding also lives if this is refused:**
+`D:\dev\rag\rust\per_item_verdict_derived_from_a_batch_aggregate_is_batch_dependent.md`
+and
+`C:\personal_rag\pdf\lesson_20260807_verapdf_batchsummary_count_has_no_job_attribution.md`.
 
 **— END OF THE PROPOSAL AS FILED.**
 

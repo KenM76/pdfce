@@ -78,7 +78,7 @@ and they are not interchangeable:
 | core | cli | gui | Acrobat | Feature |
 |:----:|:---:|:---:|:-------:|---------|
 | [x] | [x] | [x] | [x] | Open, parse, and render a PDF (Pass 1) |
-| [x] | [x] | [x] | [x] | Recovers a damaged/malformed cross-reference table; tolerates common lenient-PDF defects (Pass 13a/13b, `/Contents`-defect fix) |
+| [x] | [x] | [x] | [x] | Recovers a damaged/malformed cross-reference table; tolerates common lenient-PDF defects (Pass 13a/13b, `/Contents`-defect fix, missing-`endobj` repair `49dfe81`) |
 | [x] | [x] | [x] | [x] | Rotate pages, incl. refusal disclosure (Pass 3.2 core/CLI; GUI rotate buttons + `5b2682b` disclosure fix) |
 | [x] | [x] | [x] | [x] | Delete pages (Pass 3.2 core/CLI; GUI `delete_pages` call in `main.rs`) |
 | [x] | [x] | [x] | [x] | Reorder pages — thumbnail drag or keyboard (Pass 3.2 core/CLI; GUI `apply_reorder`/`move_pages_keyboard` in `main.rs`) |
