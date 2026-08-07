@@ -10,11 +10,18 @@
 //!
 //! Crate choice is decision 005 §4.4: **`hayro-jbig2`**. The alternatives
 //! were all GPL-3.0 C FFI bindings to Artifex's `jbig2dec`, untouched
-//! since 2020 — disqualified three times over (copyleft against an
-//! undecided `LEGAL.md` §1, C FFI against the wasm32/portable
+//! since 2020 — disqualified three times over (copyleft against
+//! `LEGAL.md` §1, C FFI against the wasm32/portable
 //! invariants, abandonment against `ARCHITECTURE.md` §10). `hayro-jbig2`
 //! removes the question rather than posing it, and it is the reason no
 //! `LEGAL.md` §6.2 escalation was needed for this Pass.
+//!
+//! **Amended 2026-08-07**: this said "an *undecided* `LEGAL.md` §1". The
+//! licence was decided **MIT** on 2026-08-01, which makes the copyleft
+//! disqualification **stronger, not weaker** — an MIT project cannot
+//! link GPL-3.0 at all (`LEGAL.md` §6.1), so what was a risk pending a
+//! decision is now a categorical bar. The choice made here needs no
+//! revisiting; only its stated reason was out of date.
 //!
 //! ## `/JBIG2Globals` is why this codec needs `&Document`
 //!

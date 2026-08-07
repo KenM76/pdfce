@@ -43,7 +43,7 @@ Rust workspace exists yet. See `docs/ROADMAP.md` for the plan
 |---|---|
 | `docs/ARCHITECTURE.md` | Crate layout, core data model, round-trip invariant, packaging strategy, decision log. **The logic — read this before writing any code.** |
 | `docs/ROADMAP.md` | Pass-by-Pass plan and history. Shipped / in-progress / next-up / backlog / standing rules. |
-| `docs/LEGAL.md` | License status (currently undecided — do not publish), PDF-spec copyright/sourcing posture, patent/trademark notes, test-corpus sourcing rules, open-source dependency licensing & attribution discipline. |
+| `docs/LEGAL.md` | License (**MIT**, chosen 2026-08-01) — but **do not publish**: pushing to a public repo or cutting a release still needs an explicit operator go-ahead, which is a separate decision and has not been given. Also PDF-spec copyright/sourcing posture, patent/trademark notes, test-corpus sourcing rules, dependency licensing & attribution discipline, and the veraPDF MPL-2.0 election (§6.5). |
 | `docs/PRIOR_ART.md` | Survey/decision record of existing open-source crates and tools pdfce depends on or learned from — what was adopted, what was reference-only, and why. |
 | `docs/SESSION_LOG.md` | Append-only session-by-session record. |
 | `.claude/agents/` | The project's engineer, librarian, PDF-spec RAG builder, Acrobat feature-parity RAG builder, and GUI specialist agents — see `CLAUDE.md` for how they fit together. |

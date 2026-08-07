@@ -45,8 +45,9 @@ accepted = [
     # the Ubuntu font and OFL-licensed faces. These govern the FONT FILES,
     # not pdfce's code: both permit embedding/redistribution and impose only
     # an attribution obligation (satisfied by reproducing their notices in
-    # THIRD_PARTY_LICENSES.md). Neither constrains pdfce's own (still
-    # undecided) software license the way a copyleft *software* dependency
+    # THIRD_PARTY_LICENSES.md). Neither constrains pdfce's own (MIT, chosen
+    # 2026-08-01 — this comment said "still undecided" until 2026-08-07)
+    # software license the way a copyleft *software* dependency
     # would — the OFL's "derivatives stay OFL" clause applies to modified
     # fonts, which pdfce does not create; it only embeds them. Flagged to the
     # user and to be recorded in docs/PRIOR_ART.md.

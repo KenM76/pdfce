@@ -1138,8 +1138,19 @@ pub fn diagnostics_no_document() -> &'static str {
 // ---------------------------------------------------------------------------
 
 /// Heading shown above the empty-canvas hint, before any file is open
-/// (P0-5). Plain app name only — no tagline, no "open source"/release
-/// claim (the project's licence is still undecided, CLAUDE.md rule 8).
+/// (P0-5). Plain app name only — no tagline, no release claim.
+///
+/// **The behaviour is unchanged; its reason was corrected 2026-08-07.**
+/// This used to say the licence was undecided. It is not — the operator
+/// chose **MIT** on 2026-08-01 (`LEGAL.md` §1), so "open source" would
+/// now be accurate. The restriction survives on its own footing: rule 8's
+/// *other* half is that **publishing still awaits an explicit operator
+/// go-ahead that has not been given**, and there is no remote configured.
+/// A release claim in the shipped UI would get ahead of that decision.
+///
+/// Recorded rather than quietly reworded because the licence was doing
+/// duty as the publish gate in several places, and deleting the note
+/// would have removed a live restriction along with a dead reason.
 pub fn empty_state_heading() -> &'static str {
     "pdfce"
 }

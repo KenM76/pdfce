@@ -142,7 +142,7 @@ workspace yet. Your first real engineering session is Pass 0
 | `docs/ROADMAP.md` | The contract — Shipped/In progress/Next up/Backlog/Standing rules. Read every session. |
 | `docs/FEATURES.md` | The capability view: what pdfce does today, what is planned in predicted order, with core/cli/gui checkboxes. Read it to answer "can pdfce do X?" without walking 17,000 lines of ROADMAP. Librarian-owned; never edit it directly. |
 | `docs/SESSION_LOG.md` | Most recent entry — what the prior session left in flight. |
-| `docs/LEGAL.md` | License status (undecided — don't publish), PDF-spec sourcing/copyright rules, test-corpus rules, dependency licensing & attribution discipline (§6). Read before any packaging/publishing-adjacent work AND before adding any new Cargo dependency. |
+| `docs/LEGAL.md` | License (**MIT**, 2026-08-01) — publishing still needs an explicit operator go-ahead, not yet given. PDF-spec sourcing/copyright rules, test-corpus rules, dependency licensing & attribution discipline (§6). Read before any packaging/publishing-adjacent work AND before adding any new Cargo dependency. |
 | `docs/PRIOR_ART.md` | Survey/decision record of existing OSS crates and tools pdfce can depend on or learn from. Check before picking a crate for parsing/filters/fonts/crypto/rendering. |
 
 The docs are the logic; the code is just the syntax that enacts it —
@@ -407,8 +407,14 @@ captured, then let compaction proceed.
   content recoverable in the saved bytes.
 - **Do not** check in a real-world PDF of unknown provenance as a
   test fixture.
-- **Do not** treat the project as licensed/publishable — the license
-  is undecided (`docs/LEGAL.md` §1).
+- **Do not** publish, push to a public remote, or cut a release. The
+  license is no longer the blocker (**MIT**, chosen 2026-08-01), so
+  "open source" is now accurate — but the operator's decision to
+  publish is a SEPARATE act and has not been given, and no remote is
+  configured (`docs/LEGAL.md` §1, project rule 8).
+- **Do not** link GPL/AGPL code. MIT makes this categorical, not a
+  judgement call: MuPDF, Poppler, Ghostscript and Inkscape are
+  behavioural references only (`LEGAL.md` §6.1).
 - **Do not** edit `docs/ROADMAP.md`, `docs/FEATURES.md`,
   `docs/SESSION_LOG.md`, or the `docs/ARCHITECTURE.md` decision log
   directly — dispatch the librarian.

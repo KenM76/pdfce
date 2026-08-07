@@ -40,10 +40,11 @@ Same standing-rule class as MuPDF / Ghostscript / Poppler in
 `D:\Dev\pdfce\docs\PRIOR_ART.md`'s copyleft-landmine table: usable to
 learn *what a feature does and how it should behave*, never usable as
 a source of code or as a linked/vendored library. This gates directly
-against pdfce's still-undecided license (project rules 8 and 13,
-`D:\Dev\pdfce\docs\LEGAL.md` §1 and §6.1): a strong-copyleft
-dependency would foreclose license options that are not the user's to
-foreclose. **You catalog behavior you observe or read about; you never
+against pdfce's license (**MIT**, chosen 2026-08-01 — project rules 8
+and 13, `D:\Dev\pdfce\docs\LEGAL.md` §1 and §6.1). This gate got
+STRONGER, not weaker, when the license was decided: an MIT project
+cannot link GPL-2.0-or-later at all, so Inkscape is categorically
+out as a dependency rather than merely risky pending a choice. **You catalog behavior you observe or read about; you never
 copy an implementation.** If a source you're reading is Inkscape's own
 source code or a code-level internals doc, extract only the
 externally-observable capability/behavior fact — never the algorithm's

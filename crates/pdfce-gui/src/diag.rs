@@ -260,6 +260,7 @@ impl Script {
             // NOT silent. See this function's doc comment: the whole point is
             // that a dropped step announces itself, because the failure it
             // produces otherwise looks like a bug in the feature under test.
+            // ui-text-exempt: diagnostic trace, never displayed in the UI
             trace(|| format!("script-step-UNPARSEABLE step={bad:?} skipped=1"));
         }
         if steps.is_empty() {
