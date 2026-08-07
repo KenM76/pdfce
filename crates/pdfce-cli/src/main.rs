@@ -3748,7 +3748,7 @@ fn disclose_recovery(file: &Path, report: &pdfce_core::recover::RecoveryReport) 
         "pdfce-cli: {}: opened via cross-reference recovery (rebuild-by-scan): \
          reason={:?}, file-level-objects={}, from-object-streams={}, \
          last-wins-collisions={}, trailer={:?}, offset-start={}, \
-         stream-lengths-recovered={}",
+         stream-lengths-recovered={}, missing-endobj-recovered={}",
         file.display(),
         report.reason,
         report.file_level_objects,
@@ -3757,6 +3757,7 @@ fn disclose_recovery(file: &Path, report: &pdfce_core::recover::RecoveryReport) 
         report.trailer_source,
         report.offset_start,
         report.stream_lengths_recovered,
+        report.missing_endobj_recovered,
     );
     eprintln!(
         "pdfce-cli: {}: NOTE: the cross-reference table was rebuilt in memory; \
@@ -3771,6 +3772,17 @@ fn disclose_recovery(file: &Path, report: &pdfce_core::recover::RecoveryReport) 
              are pdfce's reading of the file, not the file's own claim.",
             file.display(),
             report.stream_lengths_recovered
+        );
+    }
+    if report.missing_endobj_recovered > 0 {
+        eprintln!(
+            "pdfce-cli: {}: NOTE: {} object definition(s) had no `endobj` keyword \
+             (ISO 32000-1 \u{a7}7.3.10 requires one); each was bounded at the next object \
+             header instead of being dropped. Dropping is what pdfce did before \
+             2026-08-07, and when the dropped object was the page tree the saved file \
+             named a /Pages object that was not in it.",
+            file.display(),
+            report.missing_endobj_recovered
         );
     }
 }
@@ -5165,6 +5177,67 @@ fn cmd_round_trip(
         ),
     };
 
+    // --- check 2b: the saved file is still USABLE ---------------------
+    //
+    // `reload_ok` above asks "did every object I HAVE survive?" — a
+    // survivorship test over the model. It cannot see a saved file that
+    // REFERENCES something absent, because §7.3.10 makes a dangling
+    // reference resolve to null rather than an error, so the model reads
+    // clean while the file is broken.
+    //
+    // That blindness shipped. On 2026-08-07 the veraPDF parse gate found
+    // pdfce writing a catalog that said `/Pages 2 0 R` with object 2
+    // absent, and `round-trip --mode full` reported SUCCESS on it — the
+    // verb whose entire job is verifying the save invariant was the thing
+    // that missed it. Fixing only the dropped object would have left this
+    // check just as blind to the next one (R163: strengthen the gate, do
+    // not write a note asking future authors to look harder).
+    //
+    // The criterion is COMPARATIVE, and that is deliberate. Asking "does
+    // the saved file have a page tree?" would fail every round-trip over
+    // a legitimately broken corpus file, where faithfully preserving the
+    // damage is correct behaviour. What must never happen is a save that
+    // DESTROYS a page tree the source had. §7.7.2 Table 28 makes /Pages
+    // required, so a document that loses it is one no conforming reader
+    // can open.
+    let resolves_page_tree = |d: &Document| -> bool {
+        d.catalog()
+            .ok()
+            .and_then(|c| c.get(b"Pages").cloned())
+            .is_some_and(|p| d.resolve(&p).as_dict().is_some())
+    };
+    // Three outcomes, not two — the same shape `tools/verapdf-parse-gate.py`
+    // settled on, and for the same reason. A save that DESTROYS a page
+    // tree fails. A save that faithfully preserves an already-missing one
+    // is not a failure, but it must not be SILENT either: the saved file
+    // still names a /Pages object it does not contain, and an operator who
+    // sees "round-trip ... identical=1" and nothing else will reasonably
+    // conclude the output is usable. It is not.
+    //
+    // Stated plainly because it is the honest limit of this check: the
+    // 2026-08-07 `bad6.pdf` defect lands in the PRESERVED bucket, not the
+    // destroyed one, because pdfce could not resolve the page tree on the
+    // input either. So check 2b alone would not have caught it — the NOTE
+    // below is the part that would have, by making the broken output
+    // visible instead of letting a clean-looking result line speak for it.
+    let page_tree_before = resolves_page_tree(&doc);
+    let page_tree_after = reloaded.as_ref().is_ok_and(resolves_page_tree);
+    let page_tree_kept = !page_tree_before || page_tree_after;
+    if !page_tree_after && reloaded.is_ok() {
+        eprintln!(
+            "pdfce-cli: {}: NOTE: the saved file's catalog does not resolve to a page \
+tree{}. \u{a7}7.7.2 Table 28 requires /Pages, so this output is not openable by a \
+conforming reader.",
+            input.display(),
+            if page_tree_before {
+                " — and the SOURCE resolved one, so the save destroyed it"
+            } else {
+                " — the source did not resolve one either, so this is preserved \
+damage rather than new damage"
+            }
+        );
+    }
+
     // --- check 3: raster self-comparison ------------------------------
     let mut raster_compared = 0u32;
     let mut raster_identical = 0u32;
@@ -5198,7 +5271,7 @@ ordinary PDF'. pdfce does not repair or re-linearize, and does not strip the \
         "round-trip {} mode={} -> {}; \
 identical={} in_bytes={} out_bytes={} appended={} objects={} verbatim={} \
 reserialized={} reloaded={} raster_compared={} raster_identical={} delinearized={} \
-promoted={}",
+promoted={} page_tree_kept={}",
         input.display(),
         mode_name(mode),
         output.map_or_else(|| "<memory>".to_owned(), |p| p.display().to_string()),
@@ -5219,6 +5292,8 @@ promoted={}",
         // compressed object necessarily promotes it out of its
         // container.
         report.promoted.len(),
+        // Appended at the END for the same reason `promoted` was.
+        u32::from(page_tree_kept),
     );
 
     // Ordered worst-first: an unloadable file is a more serious result
@@ -5235,6 +5310,15 @@ promoted={}",
         Ok(_) if !reload_ok => {
             eprintln!(
                 "pdfce-cli: {}: the saved file reloaded, but its object graph changed.",
+                input.display()
+            );
+            return exit::RELOAD_FAILED;
+        }
+        Ok(_) if !page_tree_kept => {
+            eprintln!(
+                "pdfce-cli: {}: the source resolved a page tree and the saved file does \
+not — the catalog names a /Pages object the file does not contain (ISO 32000-1 \
+\u{a7}7.7.2 Table 28 requires it). No conforming reader can open the result.",
                 input.display()
             );
             return exit::RELOAD_FAILED;

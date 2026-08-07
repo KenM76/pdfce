@@ -289,12 +289,36 @@ def produce(cli: Path, src: Path, mode: str, dest: Path) -> str | None:
 
 
 # Parse outcomes, ORDERED worst-last so they can be compared directly.
-# veraPDF distinguishes two failure tiers and the distinction is load-
-# bearing here — see `verapdf_parse_report`.
+#
+# # Why there are only TWO, after an attempt at three
+#
+# veraPDF really does distinguish "a PARSE taskException" from "a job
+# counted in batchSummary/@failedToParse" — an earlier version of this
+# file modelled both, as WARNED and FAILED.
+#
+# That was wrong, and wrong in the way that quietly destroys a gate.
+# veraPDF reports the failure COUNT in the batch summary but does not say
+# WHICH job it belongs to, so promoting exceptions to FAILED required
+# guessing from `counted == len(results)`. In a 32-file batch with one
+# counted failure and two exceptions, neither got promoted — meaning **a
+# file's tier depended on what else happened to be in its batch**. The
+# input scan and the output scan batch differently, so the same file could
+# come out WARNED before and FAILED after and be reported as a regression
+# purely from batching.
+#
+# Measured 2026-08-07 on qpdf's `c-empty.pdf`, a perfectly valid zero-page
+# document (`/Type /Pages /Count 0 /Kids []`) that this gate accused pdfce
+# of breaking. veraPDF reports `failedToParse="1"` for its input AND its
+# output; nothing regressed.
+#
+# The distinction also bought nothing. This gate is COMPARATIVE: all it
+# needs to know is whether the output hit a parse problem the input did
+# not. Collapsing to a boolean is batch-independent and answers exactly
+# that question. A gate that cries wolf is one nobody reads, which is how
+# the next real finding gets missed.
 OK = 0
-WARNED = 1  # a PARSE taskException veraPDF does NOT count as a failure
-FAILED = 2  # counted in batchSummary/@failedToParse: could not open it
-TIER_NAME = {OK: "ok", WARNED: "parse-warning", FAILED: "unreadable"}
+FAILED = 1  # veraPDF hit a PARSE problem, counted or not
+TIER_NAME = {OK: "ok", FAILED: "parse-failure"}
 
 
 def verapdf_parse_report(verapdf: Path, files: list[Path]) -> dict[str, tuple[int, str]]:
@@ -356,16 +380,19 @@ def verapdf_parse_report(verapdf: Path, files: list[Path]) -> dict[str, tuple[in
             if task.get("type") == "PARSE":
                 msg_el = task.find("exceptionMessage")
                 msg = (msg_el.text or "").strip() if msg_el is not None else "parse failed"
-                results[name] = (WARNED, msg)
+                results[name] = (FAILED, msg)
 
-    # Promote to FAILED using veraPDF's OWN count, and cross-check.
+    # Cross-check against veraPDF's OWN count.
     #
-    # veraPDF reports the failure COUNT in the summary but does not mark
-    # which job it belongs to, so the tiers are reconciled rather than
-    # read directly: the number of exceptions must be at least the number
-    # veraPDF counted. If we extracted FEWER exceptions than veraPDF
-    # counted failures, some failure has no exception attached and
-    # reporting "clean" for it would be a lie.
+    # This is NOT used to assign tiers any more (see the note on OK/FAILED
+    # for why that was a false-positive generator). It is kept purely as a
+    # sanity check: veraPDF must never count more failures than we found
+    # exceptions for, because a counted failure with no exception attached
+    # is one this gate would report as CLEAN.
+    #
+    # It has already earned its keep once — it caught the original
+    # exception/count mismatch instead of letting either number be
+    # believed.
     summary = report.find("batchSummary")
     if summary is not None:
         counted = int(summary.get("failedToParse", "0"))
@@ -377,12 +404,6 @@ def verapdf_parse_report(verapdf: Path, files: list[Path]) -> dict[str, tuple[in
                 f"attached would be reported as clean. Fix the parser "
                 f"rather than trusting either number."
             )
-        # When every exception corresponds to a counted failure, they are
-        # all hard failures. When there are more exceptions than counted
-        # failures, the surplus are warnings — and we cannot tell WHICH,
-        # so the conservative reading applies only when counts align.
-        if counted == len(results) and counted > 0:
-            results = {k: (FAILED, m) for k, (_, m) in results.items()}
     return results
 
 
