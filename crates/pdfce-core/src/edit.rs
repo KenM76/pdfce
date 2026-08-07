@@ -580,16 +580,138 @@ pub struct NewTextField {
     pub value: String,
     /// `/MaxLen` — the maximum character count (§12.7.4.3 Table 229).
     pub max_len: Option<i64>,
-    /// `/TU`, the alternate (accessibility / UI) name. Screen readers
-    /// announce this in preference to `/T`, which is why it is offered at
-    /// creation rather than only as a later edit.
-    pub tooltip: Option<String>,
+    /// `/TU`, the alternate (accessibility / UI) name — as an explicit
+    /// DECISION, not an option (R105). Screen readers announce this in
+    /// preference to `/T`, and for form fields they read it INSTEAD of the
+    /// tag tree, which is why leaving it undecided is refused rather than
+    /// defaulted. See [`TooltipChoice`].
+    pub tooltip: TooltipChoice,
     /// `/Ff` bit 13 — the field accepts multiple lines.
     pub multiline: bool,
     /// `/Ff` bit 1 — the value may not be changed by the operator.
     pub read_only: bool,
     /// `/Ff` bit 2 — the field must have a value when the form is submitted.
     pub required: bool,
+}
+
+/// Whether the operator has decided about `/TU`, the accessibility name
+/// (**R105**, decision 020 §3.5.3).
+///
+/// # Why this is a three-state decision and not an `Option<String>`
+///
+/// `Option<String>` cannot distinguish *"the operator chose not to have
+/// one"* from *"nobody thought about it"*, and for `/TU` those are not the
+/// same situation. For form fields specifically, `/TU` — **not** the
+/// structure tree — is what assistive technology actually reads: screen
+/// readers announce fields through the interactive-field layer and bypass
+/// the tag tree entirely. So a missing `/TU` is invisible to the sighted
+/// person who created the field and load-bearing for the person who cannot
+/// see the form.
+///
+/// That asymmetry is the whole argument for making it mandatory-or-declined
+/// rather than warning about it. A warning is read by the person for whom
+/// nothing is wrong.
+///
+/// Declining is a legitimate answer and is recorded in the operation's
+/// disclosure, so *"I decided not to"* leaves a trace and *"I never
+/// considered it"* cannot happen silently.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum TooltipChoice {
+    /// Nobody has decided. Field creation REFUSES this
+    /// ([`EditError::TooltipDecisionRequired`]) — it is never a silent
+    /// default, which is the entire point of R105.
+    #[default]
+    Undecided,
+    /// The operator supplied an accessibility name; it is written as `/TU`.
+    Text(String),
+    /// The operator explicitly declined one. No `/TU` is written, and the
+    /// declination is reported in [`FieldAuthorDisclosures`].
+    Declined,
+}
+
+impl TooltipChoice {
+    /// The text to write as `/TU`, or `None` when declined.
+    #[must_use]
+    pub fn text(&self) -> Option<&str> {
+        match self {
+            Self::Text(t) => Some(t),
+            Self::Undecided | Self::Declined => None,
+        }
+    }
+}
+
+/// What field creation did, and everything about it the operator must be
+/// told (decision 020 §3.4.3, §3.5.3; R105).
+///
+/// # Why creation returns a struct rather than an id
+///
+/// Three of these are things pdfce KNOWS and the operator cannot see: that a
+/// document is tagged and the new field is not in its tag tree, that a page
+/// uses structure tab order and the new field therefore has no tab position
+/// at all, and that an accessibility name was declined. None of them is an
+/// error — each is a true statement about a document that was created
+/// exactly as asked — and none of them is discoverable by looking at the
+/// result. That combination is what a disclosure is for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FieldAuthorOutcome {
+    /// The field's object id — the NEW field on a create, or the EXISTING
+    /// field a merge attached a widget to.
+    pub field_id: ObjId,
+    /// Whether this attached a widget to an existing field (a merge) rather
+    /// than creating one. The operator asked for "a field here" either way,
+    /// so which happened is worth saying: a merge means the new widget
+    /// SHARES a value with the one already on the form.
+    pub merged: bool,
+    /// Everything about the result the operator cannot see.
+    pub disclosures: FieldAuthorDisclosures,
+}
+
+/// The disclosures field creation owes (decision 020 §3.4.3 / §3.5.3, R105).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct FieldAuthorDisclosures {
+    /// The operator explicitly declined an accessibility name, so this field
+    /// has no `/TU` (R105). Recorded so the declination leaves a trace.
+    pub tooltip_declined: bool,
+    /// The document carries `/StructTreeRoot` (§14.7, Tagged PDF) and the
+    /// new field is **not** in the structure tree.
+    ///
+    /// pdfce has no structure-tree writer (FF-I), and decision 020 §3.5.3
+    /// deliberately ships this disclosure rather than a partial one — a
+    /// half-written tag tree is worse than an honestly absent one. This is
+    /// already stricter than Acrobat, whose own workflow leaves new fields
+    /// untagged and says nothing about it.
+    pub tagged_document: bool,
+    /// The target page carries `/Tabs /S` (structure tab order, Table 30)
+    /// while the new field is untagged.
+    ///
+    /// # Why this is its own disclosure and not folded into the one above
+    ///
+    /// §14.7 derives structure tab order from the TAG TREE. An untagged
+    /// field on such a page therefore has no tab position **at all** — not
+    /// "last", *undefined* — and different viewers will do different things
+    /// with it. That is a functional defect in the form, not merely an
+    /// accessibility gap, and it needs naming as one.
+    ///
+    /// Not hypothetical: `/Tabs /S` is Acrobat's own recommended default for
+    /// well-tagged forms, so the forms most likely to carry it are exactly
+    /// the ones where this bites.
+    pub structure_tab_order: bool,
+    /// A choice field was created with an EMPTY `/Opt` and therefore cannot
+    /// be filled until options are added. Always `false` for other types.
+    pub has_no_options: bool,
+}
+
+impl FieldAuthorDisclosures {
+    /// Whether there is anything at all to tell the operator.
+    #[must_use]
+    pub const fn any(self) -> bool {
+        self.tooltip_declined
+            || self.tagged_document
+            || self.structure_tab_order
+            || self.has_no_options
+    }
 }
 
 impl NewTextField {
@@ -603,7 +725,7 @@ impl NewTextField {
             rect,
             value: String::new(),
             max_len: None,
-            tooltip: None,
+            tooltip: TooltipChoice::Undecided,
             multiline: false,
             read_only: false,
             required: false,
@@ -627,7 +749,19 @@ impl NewTextField {
     /// Set `/TU`, the accessibility name.
     #[must_use]
     pub fn with_tooltip(mut self, tooltip: impl Into<String>) -> Self {
-        self.tooltip = Some(tooltip.into());
+        self.tooltip = TooltipChoice::Text(tooltip.into());
+        self
+    }
+
+    /// Explicitly DECLINE an accessibility name (R105).
+    ///
+    /// A legitimate answer, and the only alternative to supplying one —
+    /// leaving the decision unmade is refused. The declination is reported
+    /// in [`FieldAuthorDisclosures::tooltip_declined`], so "I decided not
+    /// to" leaves a trace and "I never considered it" cannot happen quietly.
+    #[must_use]
+    pub fn declining_tooltip(mut self) -> Self {
+        self.tooltip = TooltipChoice::Declined;
         self
     }
 
@@ -698,8 +832,12 @@ pub struct NewCheckBox {
     pub on_state: String,
     /// Whether the box is created already ticked.
     pub checked: bool,
-    /// `/TU`, the accessibility name.
-    pub tooltip: Option<String>,
+    /// `/TU`, the alternate (accessibility / UI) name — as an explicit
+    /// DECISION, not an option (R105). Screen readers announce this in
+    /// preference to `/T`, and for form fields they read it INSTEAD of the
+    /// tag tree, which is why leaving it undecided is refused rather than
+    /// defaulted. See [`TooltipChoice`].
+    pub tooltip: TooltipChoice,
     /// `/Ff` bit 1 — the value may not be changed by the operator.
     pub read_only: bool,
     /// `/Ff` bit 2 — the field must have a value when the form is submitted.
@@ -716,7 +854,7 @@ impl NewCheckBox {
             rect,
             on_state: "Yes".to_owned(),
             checked: false,
-            tooltip: None,
+            tooltip: TooltipChoice::Undecided,
             read_only: false,
             required: false,
         }
@@ -739,7 +877,19 @@ impl NewCheckBox {
     /// Set `/TU`, the accessibility name.
     #[must_use]
     pub fn with_tooltip(mut self, tooltip: impl Into<String>) -> Self {
-        self.tooltip = Some(tooltip.into());
+        self.tooltip = TooltipChoice::Text(tooltip.into());
+        self
+    }
+
+    /// Explicitly DECLINE an accessibility name (R105).
+    ///
+    /// A legitimate answer, and the only alternative to supplying one —
+    /// leaving the decision unmade is refused. The declination is reported
+    /// in [`FieldAuthorDisclosures::tooltip_declined`], so "I decided not
+    /// to" leaves a trace and "I never considered it" cannot happen quietly.
+    #[must_use]
+    pub fn declining_tooltip(mut self) -> Self {
+        self.tooltip = TooltipChoice::Declined;
         self
     }
 
@@ -870,8 +1020,12 @@ pub struct NewChoiceField {
     /// list is meant to stay sorted. Setting the flag alone would do nothing
     /// visible, because readers display `/Opt` order regardless.
     pub sort: bool,
-    /// `/TU`, the accessibility name.
-    pub tooltip: Option<String>,
+    /// `/TU`, the alternate (accessibility / UI) name — as an explicit
+    /// DECISION, not an option (R105). Screen readers announce this in
+    /// preference to `/T`, and for form fields they read it INSTEAD of the
+    /// tag tree, which is why leaving it undecided is refused rather than
+    /// defaulted. See [`TooltipChoice`].
+    pub tooltip: TooltipChoice,
     /// `/Ff` bit 1 — the value may not be changed by the operator.
     pub read_only: bool,
     /// `/Ff` bit 2 — the field must have a value when the form is submitted.
@@ -896,7 +1050,7 @@ impl NewChoiceField {
             editable: false,
             multi_select: false,
             sort: false,
-            tooltip: None,
+            tooltip: TooltipChoice::Undecided,
             read_only: false,
             required: false,
         }
@@ -927,7 +1081,19 @@ impl NewChoiceField {
     /// Set `/TU`, the accessibility name.
     #[must_use]
     pub fn with_tooltip(mut self, tooltip: impl Into<String>) -> Self {
-        self.tooltip = Some(tooltip.into());
+        self.tooltip = TooltipChoice::Text(tooltip.into());
+        self
+    }
+
+    /// Explicitly DECLINE an accessibility name (R105).
+    ///
+    /// A legitimate answer, and the only alternative to supplying one —
+    /// leaving the decision unmade is refused. The declination is reported
+    /// in [`FieldAuthorDisclosures::tooltip_declined`], so "I decided not
+    /// to" leaves a trace and "I never considered it" cannot happen quietly.
+    #[must_use]
+    pub fn declining_tooltip(mut self) -> Self {
+        self.tooltip = TooltipChoice::Declined;
         self
     }
 
@@ -1189,6 +1355,27 @@ pub enum EditError {
     ChoiceOptionDuplicate {
         /// The repeated export value.
         value: String,
+    },
+    /// Field creation was asked for without deciding about `/TU` (R105).
+    ///
+    /// # Why an undecided accessibility name is an error and not a default
+    ///
+    /// For form fields, `/TU` — not the structure tree — is what assistive
+    /// technology actually reads: screen readers announce fields through the
+    /// interactive-field layer and bypass the tag tree. So a field with no
+    /// `/TU` is perfectly usable for the person who created it and
+    /// unnavigable for the person who cannot see the form.
+    ///
+    /// That asymmetry is why this is not a warning. A warning is read by the
+    /// person for whom nothing is wrong. Declining is a legitimate answer —
+    /// it is simply required to be an ANSWER, and it is recorded in the
+    /// operation's disclosure so it leaves a trace.
+    #[error(
+        "field {name:?}: decide about the accessibility name (tooltip) — supply one, or decline it explicitly; it is what screen readers announce for a form field, so it is never defaulted silently"
+    )]
+    TooltipDecisionRequired {
+        /// The field being created.
+        name: String,
     },
     /// A new field was given an empty name.
     ///
@@ -3676,23 +3863,6 @@ pub struct FillOutcome {
     pub unencodable_chars: usize,
 }
 
-/// What an [`add_choice_field`](EditSession::add_choice_field) call
-/// produced.
-///
-/// Exists — where the other two authoring verbs return a bare `ObjId` —
-/// because a choice field is the one type that can be created in a state
-/// pdfce cannot fill, and R4 requires that be visible at the moment it
-/// happens rather than discovered later.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct ChoiceAuthorOutcome {
-    /// The new field's object id.
-    pub field_id: ObjId,
-    /// The field was created with an EMPTY `/Opt` and therefore cannot be
-    /// filled until options are added — a disclosure, not an error.
-    pub has_no_options: bool,
-}
-
 /// What a [`regenerate_appearances`](EditSession::regenerate_appearances)
 /// operation did (Pass 7.1, R51).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -4019,14 +4189,15 @@ impl EditSession {
     /// certification signature exists to freeze. So this takes
     /// `check_certification`, the same gate `add_markup` and `flatten_fields`
     /// take.
-    pub fn add_text_field(&mut self, spec: &NewTextField) -> Result<ObjId, EditError> {
+    pub fn add_text_field(&mut self, spec: &NewTextField) -> Result<FieldAuthorOutcome, EditError> {
         let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
-        let (page_id, slots, path) = self.field_authoring_preflight(
+        let (page_id, slots, path, disclosures) = self.field_authoring_preflight(
             &spec.name,
             spec.rect,
             spec.page_index,
             forms::FieldType::Text,
             None,
+            &spec.tooltip,
         )?;
 
         // The `/DA` Acrobat's floor specifies: Helvetica, size 0 (auto), black.
@@ -4072,8 +4243,7 @@ impl EditSession {
         // reference number repeats in a header and how a check box appears on
         // every page — and it is a capability, not a tolerated degeneracy.
         if let FieldPath::Terminal { id, shape, .. } = path {
-            let mut w =
-                Self::widget_base_dict(&spec.name, spec.rect, page_id, spec.tooltip.as_ref());
+            let mut w = Self::widget_base_dict(&spec.name, spec.rect, page_id, &spec.tooltip);
             // The widget carries the LOOK; the field keeps the name and the
             // value. `widget_base_dict` writes a `/T` because a merged
             // (Shape A) field needs one — a widget kid must not have one
@@ -4106,7 +4276,11 @@ impl EditSession {
                 removals: Vec::new(),
                 trailer: None,
             });
-            return Ok(id);
+            return Ok(FieldAuthorOutcome {
+                field_id: id,
+                merged: true,
+                disclosures,
+            });
         }
 
         // THE CREATE BRANCH. Any intermediate grouping nodes a dotted path
@@ -4164,7 +4338,8 @@ impl EditSession {
         if let Some(max) = spec.max_len {
             d.insert(Name::from(b"MaxLen"), Object::Integer(max));
         }
-        if let Some(tu) = &spec.tooltip {
+        // See `widget_base_dict`: declined writes nothing, and is disclosed.
+        if let Some(tu) = spec.tooltip.text() {
             d.insert(Name::from(b"TU"), Object::String(encode_text_string(tu)));
         }
         // `/MK` with a black border colour and no fill — Acrobat's documented
@@ -4219,7 +4394,11 @@ impl EditSession {
             removals: Vec::new(),
             trailer: None,
         });
-        Ok(field_id)
+        Ok(FieldAuthorOutcome {
+            field_id,
+            merged: false,
+            disclosures,
+        })
     }
 
     /// The guard sequence EVERY field-authoring verb runs before it writes
@@ -4277,9 +4456,26 @@ impl EditSession {
         page_index: usize,
         want: forms::FieldType,
         want_button: Option<forms::ButtonKind>,
-    ) -> Result<(ObjId, Vec<PageSlot>, forms_author::FieldPath), EditError> {
+        tooltip: &TooltipChoice,
+    ) -> Result<
+        (
+            ObjId,
+            Vec<PageSlot>,
+            forms_author::FieldPath,
+            FieldAuthorDisclosures,
+        ),
+        EditError,
+    > {
         if name.trim().is_empty() {
             return Err(EditError::FieldNameEmpty);
+        }
+        // R105, and FIRST among the content checks: an undecided
+        // accessibility name is refused before pdfce spends any effort on a
+        // field it is not going to create.
+        if *tooltip == TooltipChoice::Undecided {
+            return Err(EditError::TooltipDecisionRequired {
+                name: name.to_owned(),
+            });
         }
         let (w, h) = (rect.urx - rect.llx, rect.ury - rect.lly);
         if w <= 0.0 || h <= 0.0 {
@@ -4344,7 +4540,62 @@ impl EditSession {
         if suppressed > 0 {
             return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
         }
-        Ok((page_id, slots, path))
+
+        let disclosures = FieldAuthorDisclosures {
+            tooltip_declined: *tooltip == TooltipChoice::Declined,
+            tagged_document: self.document_is_tagged(),
+            structure_tab_order: self.page_uses_structure_tab_order(page_id),
+            has_no_options: false,
+        };
+        Ok((page_id, slots, path, disclosures))
+    }
+
+    /// Whether the document carries `/StructTreeRoot` (§14.7, Tagged PDF).
+    ///
+    /// Field creation discloses this because pdfce has no structure-tree
+    /// writer, so a field it adds to a tagged document is **not** in that
+    /// document's tag tree. Decision 020 §3.5.3 ships the disclosure rather
+    /// than a partial writer: a half-written tag tree claims a completeness
+    /// the document does not have, which is worse than an honestly absent
+    /// one. The same R73 posture redaction already takes.
+    fn document_is_tagged(&self) -> bool {
+        self.graph()
+            .catalog_dict()
+            .is_some_and(|c| c.contains_key(b"StructTreeRoot"))
+    }
+
+    /// Whether a page declares `/Tabs /S` — structure tab order (Table 30).
+    ///
+    /// # Why this is worth its own check
+    ///
+    /// §14.7 derives structure tab order from the TAG TREE. A pdfce-authored
+    /// field is untagged, so on such a page it has no tab position **at
+    /// all** — not "last", *undefined* — and viewers are free to differ.
+    /// That is a functional defect in the form rather than only an
+    /// accessibility gap, so it is disclosed separately from
+    /// [`Self::document_is_tagged`].
+    ///
+    /// `/Tabs` is inheritable through the page tree (Table 30), so an
+    /// absent entry on the page itself is not the answer — the ancestors
+    /// are walked, bounded by the page tree's own depth guard.
+    fn page_uses_structure_tab_order(&self, page_id: ObjId) -> bool {
+        let graph = self.graph();
+        let mut current = Some(page_id);
+        for _ in 0..page_tree::MAX_TREE_DEPTH {
+            let Some(id) = current else { return false };
+            let Some(d) = graph.resolved(id).as_dict() else {
+                return false;
+            };
+            if let Some(tabs) = d
+                .get(b"Tabs")
+                .map(|o| graph.resolve(o))
+                .and_then(Object::as_name)
+            {
+                return tabs.as_bytes() == b"S";
+            }
+            current = d.get(b"Parent").and_then(Object::as_reference);
+        }
+        false
     }
 
     /// Whether an existing field's type accepts a merge from a requested one.
@@ -4789,7 +5040,7 @@ impl EditSession {
         name: &str,
         rect: page_tree::Rect,
         page_id: ObjId,
-        tooltip: Option<&String>,
+        tooltip: &TooltipChoice,
     ) -> Dict {
         let mut d = Dict::new();
         d.insert(Name::from(b"Type"), Object::Name(Name::from(b"Annot")));
@@ -4806,7 +5057,11 @@ impl EditSession {
         );
         d.insert(Name::from(b"P"), Object::Reference(page_id));
         d.insert(Name::from(b"F"), Object::Integer(4));
-        if let Some(tu) = tooltip {
+        // `/TU` only when the operator SUPPLIED one. A declined tooltip
+        // writes nothing and is reported instead (R105) — an empty `/TU`
+        // would be worse than none, because a screen reader would announce
+        // an empty accessibility name rather than falling back to `/T`.
+        if let Some(tu) = tooltip.text() {
             d.insert(Name::from(b"TU"), Object::String(encode_text_string(tu)));
         }
         d
@@ -4835,7 +5090,7 @@ impl EditSession {
     /// [`EditError::CheckBoxOnStateInvalid`] when the on state is empty or
     /// `Off`, plus every refusal from
     /// [`Self::field_authoring_preflight`].
-    pub fn add_check_box(&mut self, spec: &NewCheckBox) -> Result<ObjId, EditError> {
+    pub fn add_check_box(&mut self, spec: &NewCheckBox) -> Result<FieldAuthorOutcome, EditError> {
         // §12.7.4.2.3: `Off` names the off state, so it cannot also name the
         // on state — a box whose states share a name cannot express "ticked".
         if spec.on_state.trim().is_empty() || spec.on_state == "Off" {
@@ -4849,12 +5104,13 @@ impl EditSession {
         // group is also `/FT /Btn`, and merging a check box into one would
         // give a single field widgets that disagree about whether they toggle
         // independently or exclusively.
-        let (page_id, slots, path) = self.field_authoring_preflight(
+        let (page_id, slots, path, disclosures) = self.field_authoring_preflight(
             &spec.name,
             spec.rect,
             spec.page_index,
             forms::FieldType::Button,
             Some(forms::ButtonKind::Check),
+            &spec.tooltip,
         )?;
 
         // VECTOR artwork, not a ZapfDingbats glyph — see
@@ -4879,7 +5135,7 @@ impl EditSession {
         let off_stream = stream_of(off);
         let on_stream = stream_of(on);
 
-        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, spec.tooltip.as_ref());
+        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, &spec.tooltip);
 
         // `/V` and `/AS` are NAMES here, not strings — the single most
         // common way a hand-written check box comes out unrecognisable.
@@ -4947,7 +5203,11 @@ impl EditSession {
                 removals: Vec::new(),
                 trailer: None,
             });
-            return Ok(id);
+            return Ok(FieldAuthorOutcome {
+                field_id: id,
+                merged: true,
+                disclosures,
+            });
         }
 
         let FieldPath::Vacant { deepest, remaining } = path else {
@@ -4984,7 +5244,11 @@ impl EditSession {
             removals: Vec::new(),
             trailer: None,
         });
-        Ok(field_id)
+        Ok(FieldAuthorOutcome {
+            field_id,
+            merged: false,
+            disclosures,
+        })
     }
 
     /// Create a **list box or combo box** on a page (§12.7.4.4), returning
@@ -5025,7 +5289,7 @@ impl EditSession {
     /// # An empty option list is ALLOWED, and disclosed
     ///
     /// A choice field with no options saves, and the returned
-    /// [`ChoiceAuthorOutcome::has_no_options`] says so, because a zero-option
+    /// [`FieldAuthorDisclosures::has_no_options`] says so, because a zero-option
     /// field **cannot be filled** — [`Self::set_choice_value`] refuses any
     /// value not in `/Opt`, and pdfce has no verb that adds options later.
     ///
@@ -5046,7 +5310,7 @@ impl EditSession {
     pub fn add_choice_field(
         &mut self,
         spec: &NewChoiceField,
-    ) -> Result<ChoiceAuthorOutcome, EditError> {
+    ) -> Result<FieldAuthorOutcome, EditError> {
         if spec.editable && !spec.combo {
             return Err(EditError::ChoiceEditRequiresCombo);
         }
@@ -5062,12 +5326,13 @@ impl EditSession {
             }
         }
         let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
-        let (page_id, slots, path) = self.field_authoring_preflight(
+        let (page_id, slots, path, disclosures) = self.field_authoring_preflight(
             &spec.name,
             spec.rect,
             spec.page_index,
             forms::FieldType::Choice,
             None,
+            &spec.tooltip,
         )?;
 
         // SORT THE ARRAY, do not merely flag it. §12.7.4.4: a reader "shall
@@ -5110,7 +5375,7 @@ impl EditSession {
             data_span: ap_span,
         });
 
-        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, spec.tooltip.as_ref());
+        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, &spec.tooltip);
         d.insert(Name::from(b"DA"), Object::String(da.clone()));
         // §12.7.4.4: an element is `(Display)` when export and display
         // coincide, or `[(export) (display)]` when they differ. Writing the
@@ -5179,9 +5444,13 @@ impl EditSession {
                 .and_then(|fd| fd.get(b"Opt").map(|o| self.graph().resolve(o).clone()))
                 .and_then(|o| o.as_array().map(<[Object]>::len))
                 .is_none_or(|n| n == 0);
-            return Ok(ChoiceAuthorOutcome {
+            return Ok(FieldAuthorOutcome {
                 field_id: id,
-                has_no_options,
+                merged: true,
+                disclosures: FieldAuthorDisclosures {
+                    has_no_options,
+                    ..disclosures
+                },
             });
         }
 
@@ -5219,9 +5488,13 @@ impl EditSession {
             removals: Vec::new(),
             trailer: None,
         });
-        Ok(ChoiceAuthorOutcome {
+        Ok(FieldAuthorOutcome {
             field_id,
-            has_no_options: options.is_empty(),
+            merged: false,
+            disclosures: FieldAuthorDisclosures {
+                has_no_options: options.is_empty(),
+                ..disclosures
+            },
         })
     }
 

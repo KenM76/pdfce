@@ -63,9 +63,8 @@ fn a_field_created_on_a_formless_page_parses_back_as_a_text_field() {
          creation from nothing rather than appending to something"
     );
 
-    s.add_text_field(&NewTextField::new(0, "Customer", rect()))
+    s.add_text_field(&NewTextField::new(0, "Customer", rect()).declining_tooltip())
         .expect("author a text field");
-
     let f = field_named(&s, "Customer").expect("the field parses back");
     assert_eq!(f.field_type, Some(FieldType::Text));
     assert!(
@@ -86,9 +85,9 @@ fn a_field_created_on_a_formless_page_parses_back_as_a_text_field() {
 fn the_field_is_registered_annotated_and_given_an_appearance() {
     let mut s = session("dimension/plain-base.pdf");
     let id = s
-        .add_text_field(&NewTextField::new(0, "Customer", rect()))
-        .unwrap();
-
+        .add_text_field(&NewTextField::new(0, "Customer", rect()).declining_tooltip())
+        .unwrap()
+        .field_id;
     let graph = s.graph();
     let d = graph
         .resolved(id)
@@ -153,7 +152,7 @@ fn the_field_is_registered_annotated_and_given_an_appearance() {
 fn authoring_a_field_is_additive_and_the_result_reopens() {
     let original = std::fs::read(fixture("dimension/plain-base.pdf")).unwrap();
     let mut s = EditSession::new(Document::from_bytes(original.clone()).unwrap());
-    s.add_text_field(&NewTextField::new(0, "Customer", rect()))
+    s.add_text_field(&NewTextField::new(0, "Customer", rect()).declining_tooltip())
         .unwrap();
     let out = s
         .to_incremental_bytes(&pdfce_core::writer::SaveOptions::identity())
@@ -176,13 +175,13 @@ fn the_requested_value_and_properties_are_what_gets_written() {
     let mut s = session("dimension/plain-base.pdf");
     s.add_text_field(
         &NewTextField::new(0, "Notes", rect())
+            .declining_tooltip()
             .with_value("hello")
             .with_max_len(40)
             .with_tooltip("Your notes")
             .with_flags(true, false, true),
     )
     .unwrap();
-
     let f = field_named(&s, "Notes").unwrap();
     assert_eq!(f.value.display_text(), "hello");
     assert_eq!(f.max_len, Some(40));
@@ -202,7 +201,7 @@ fn the_requested_value_and_properties_are_what_gets_written() {
 #[test]
 fn a_created_field_can_immediately_be_filled_by_the_existing_verb() {
     let mut s = session("dimension/plain-base.pdf");
-    s.add_text_field(&NewTextField::new(0, "Customer", rect()))
+    s.add_text_field(&NewTextField::new(0, "Customer", rect()).declining_tooltip())
         .unwrap();
     s.fill_text_field("Customer", "Ken Mantle")
         .expect("the ordinary fill path accepts a field pdfce just authored");
@@ -218,7 +217,7 @@ fn a_created_field_can_immediately_be_filled_by_the_existing_verb() {
 fn one_undo_removes_the_entire_field() {
     let original = std::fs::read(fixture("dimension/plain-base.pdf")).unwrap();
     let mut s = EditSession::new(Document::from_bytes(original.clone()).unwrap());
-    s.add_text_field(&NewTextField::new(0, "Customer", rect()))
+    s.add_text_field(&NewTextField::new(0, "Customer", rect()).declining_tooltip())
         .unwrap();
     assert!(s.is_modified());
 
@@ -241,9 +240,8 @@ fn one_undo_removes_the_entire_field() {
 fn adding_to_an_existing_form_appends_and_keeps_the_existing_fields() {
     let mut s = session("forms/demo-form.pdf");
     let before = forms::parse_acroform(&s.graph()).unwrap().fields.len();
-    s.add_text_field(&NewTextField::new(0, "Extra", rect()))
+    s.add_text_field(&NewTextField::new(0, "Extra", rect()).declining_tooltip())
         .unwrap();
-
     let form = forms::parse_acroform(&s.graph()).unwrap();
     assert_eq!(form.fields.len(), before + 1);
     assert!(
@@ -263,7 +261,7 @@ fn a_name_used_by_a_different_field_type_is_refused_by_name() {
     let mut s = session("forms/demo-form.pdf");
     // `Subscribe` is the fixture's check box.
     let err = s
-        .add_text_field(&NewTextField::new(0, "Subscribe", rect()))
+        .add_text_field(&NewTextField::new(0, "Subscribe", rect()).declining_tooltip())
         .expect_err("a text field may not take a button's name");
     assert!(
         matches!(
@@ -285,7 +283,7 @@ fn a_name_used_by_a_different_field_type_is_refused_by_name() {
 fn an_empty_name_is_refused() {
     let mut s = session("dimension/plain-base.pdf");
     assert!(matches!(
-        s.add_text_field(&NewTextField::new(0, "   ", rect())),
+        s.add_text_field(&NewTextField::new(0, "   ", rect()).declining_tooltip()),
         Err(EditError::FieldNameEmpty)
     ));
     assert!(!s.is_modified());
@@ -303,7 +301,7 @@ fn a_degenerate_rectangle_is_refused() {
         ury: 100.0,
     };
     assert!(matches!(
-        s.add_text_field(&NewTextField::new(0, "Flat", flat)),
+        s.add_text_field(&NewTextField::new(0, "Flat", flat).declining_tooltip()),
         Err(EditError::FieldRectDegenerate { .. })
     ));
     assert!(!s.is_modified());
@@ -315,7 +313,7 @@ fn a_degenerate_rectangle_is_refused() {
 fn a_page_out_of_range_is_refused() {
     let mut s = session("dimension/plain-base.pdf");
     assert!(
-        s.add_text_field(&NewTextField::new(99, "Customer", rect()))
+        s.add_text_field(&NewTextField::new(99, "Customer", rect()).declining_tooltip())
             .is_err()
     );
     assert!(!s.is_modified());
@@ -342,9 +340,8 @@ fn rect2() -> Rect {
 #[test]
 fn a_created_check_box_parses_back_as_a_check_box() {
     let mut s = session("dimension/plain-base.pdf");
-    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()))
+    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()).declining_tooltip())
         .expect("add check box");
-
     let f = field_named(&s, "Agree").expect("field parses back");
     assert_eq!(f.field_type, Some(FieldType::Button));
     // The type test that matters: neither Radio nor Pushbutton is set, which
@@ -360,14 +357,18 @@ fn a_created_check_box_parses_back_as_a_check_box() {
 #[test]
 fn a_check_box_value_is_a_name_and_defaults_to_off() {
     let mut s = session("dimension/plain-base.pdf");
-    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()))
+    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()).declining_tooltip())
         .expect("add");
     let f = field_named(&s, "Agree").expect("parses");
     assert_eq!(f.value, FieldValue::Name(b"Off".to_vec()));
 
     let mut s2 = session("dimension/plain-base.pdf");
-    s2.add_check_box(&NewCheckBox::new(0, "Agree", rect2()).checked(true))
-        .expect("add");
+    s2.add_check_box(
+        &NewCheckBox::new(0, "Agree", rect2())
+            .declining_tooltip()
+            .checked(true),
+    )
+    .expect("add");
     let f2 = field_named(&s2, "Agree").expect("parses");
     assert_eq!(f2.value, FieldValue::Name(b"Yes".to_vec()));
 }
@@ -381,9 +382,13 @@ fn a_check_box_value_is_a_name_and_defaults_to_off() {
 fn both_appearance_states_exist_and_as_selects_one() {
     let mut s = session("dimension/plain-base.pdf");
     let id = s
-        .add_check_box(&NewCheckBox::new(0, "Agree", rect2()).checked(true))
-        .expect("add");
-
+        .add_check_box(
+            &NewCheckBox::new(0, "Agree", rect2())
+                .declining_tooltip()
+                .checked(true),
+        )
+        .expect("add")
+        .field_id;
     let g = s.graph();
     let d = g.resolved(id).as_dict().expect("field dict").clone();
 
@@ -427,10 +432,12 @@ fn the_on_state_name_is_overridable_and_reaches_both_v_and_ap() {
     let id = s
         .add_check_box(
             &NewCheckBox::new(0, "Colour", rect2())
+                .declining_tooltip()
                 .with_on_state("Red")
                 .checked(true),
         )
-        .expect("add");
+        .expect("add")
+        .field_id;
     let f = field_named(&s, "Colour").expect("parses");
     assert_eq!(f.value, FieldValue::Name(b"Red".to_vec()));
 
@@ -461,9 +468,8 @@ fn the_on_state_name_is_overridable_and_reaches_both_v_and_ap() {
 #[test]
 fn a_created_check_box_can_immediately_be_toggled_by_the_existing_verb() {
     let mut s = session("dimension/plain-base.pdf");
-    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()))
+    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()).declining_tooltip())
         .expect("add");
-
     s.set_button_state("Agree", "Yes").expect("tick it");
     assert_eq!(
         field_named(&s, "Agree").expect("parses").value,
@@ -483,12 +489,20 @@ fn a_created_check_box_can_immediately_be_toggled_by_the_existing_verb() {
 fn off_is_refused_as_an_on_state_name() {
     let mut s = session("dimension/plain-base.pdf");
     let err = s
-        .add_check_box(&NewCheckBox::new(0, "Agree", rect2()).with_on_state("Off"))
+        .add_check_box(
+            &NewCheckBox::new(0, "Agree", rect2())
+                .declining_tooltip()
+                .with_on_state("Off"),
+        )
         .expect_err("must refuse");
     assert!(matches!(err, EditError::CheckBoxOnStateInvalid { .. }));
 
     let err = s
-        .add_check_box(&NewCheckBox::new(0, "Agree", rect2()).with_on_state("  "))
+        .add_check_box(
+            &NewCheckBox::new(0, "Agree", rect2())
+                .declining_tooltip()
+                .with_on_state("  "),
+        )
         .expect_err("must refuse");
     assert!(matches!(err, EditError::CheckBoxOnStateInvalid { .. }));
 }
@@ -500,7 +514,7 @@ fn off_is_refused_as_an_on_state_name() {
 fn one_undo_removes_the_entire_check_box() {
     let mut s = session("dimension/plain-base.pdf");
     let before = std::fs::read(fixture("dimension/plain-base.pdf")).unwrap();
-    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()))
+    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()).declining_tooltip())
         .expect("add");
     assert!(field_named(&s, "Agree").is_some());
     s.undo().expect("undo");
@@ -531,9 +545,8 @@ fn countries() -> Vec<ChoiceOption> {
 #[test]
 fn a_created_choice_field_parses_back_with_its_options() {
     let mut s = session("dimension/plain-base.pdf");
-    s.add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+    s.add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()).declining_tooltip())
         .expect("add choice");
-
     let f = field_named(&s, "Country").expect("parses back");
     assert_eq!(f.field_type, Some(FieldType::Choice));
     assert_eq!(f.options.len(), 3);
@@ -556,7 +569,9 @@ fn a_created_choice_field_parses_back_with_its_options() {
 fn a_plain_option_is_written_as_a_bare_string() {
     let mut s = session("dimension/plain-base.pdf");
     let id = s
-        .add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+        .add_choice_field(
+            &NewChoiceField::new(0, "Country", rect(), countries()).declining_tooltip(),
+        )
         .expect("add")
         .field_id;
     let g = s.graph();
@@ -578,7 +593,9 @@ fn a_plain_option_is_written_as_a_bare_string() {
 fn a_created_choice_field_has_no_selection() {
     let mut s = session("dimension/plain-base.pdf");
     let id = s
-        .add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+        .add_choice_field(
+            &NewChoiceField::new(0, "Country", rect(), countries()).declining_tooltip(),
+        )
         .expect("add")
         .field_id;
     assert_eq!(
@@ -595,9 +612,8 @@ fn a_created_choice_field_has_no_selection() {
 #[test]
 fn a_created_choice_field_can_immediately_be_filled_by_the_existing_verb() {
     let mut s = session("dimension/plain-base.pdf");
-    s.add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+    s.add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()).declining_tooltip())
         .expect("add");
-
     s.set_choice_value("Country", &["Mexico"])
         .expect("the existing fill verb must accept a field we created");
     assert!(
@@ -624,6 +640,7 @@ fn the_choice_flags_reach_ff() {
     let mut s = session("dimension/plain-base.pdf");
     s.add_choice_field(
         &NewChoiceField::new(0, "Country", rect(), countries())
+            .declining_tooltip()
             .as_combo(true)
             .multi_select(true)
             .sorted(true),
@@ -642,8 +659,12 @@ fn the_choice_flags_reach_ff() {
 #[test]
 fn sorting_reorders_the_options_rather_than_only_flagging_them() {
     let mut s = session("dimension/plain-base.pdf");
-    s.add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()).sorted(true))
-        .expect("add");
+    s.add_choice_field(
+        &NewChoiceField::new(0, "Country", rect(), countries())
+            .declining_tooltip()
+            .sorted(true),
+    )
+    .expect("add");
     let f = field_named(&s, "Country").expect("parses");
     let display: Vec<_> = f
         .options
@@ -655,7 +676,7 @@ fn sorting_reorders_the_options_rather_than_only_flagging_them() {
     // And unsorted preserves the caller's order exactly.
     let mut s2 = session("dimension/plain-base.pdf");
     let reversed = vec![ChoiceOption::plain("Zulu"), ChoiceOption::plain("Alpha")];
-    s2.add_choice_field(&NewChoiceField::new(0, "C", rect(), reversed))
+    s2.add_choice_field(&NewChoiceField::new(0, "C", rect(), reversed).declining_tooltip())
         .expect("add");
     let f2 = field_named(&s2, "C").expect("parses");
     assert_eq!(f2.options[0].display, b"Zulu".to_vec());
@@ -671,10 +692,12 @@ fn sorting_reorders_the_options_rather_than_only_flagging_them() {
 fn a_choice_field_with_no_options_is_allowed_and_disclosed() {
     let mut s = session("dimension/plain-base.pdf");
     let out = s
-        .add_choice_field(&NewChoiceField::new(0, "Country", rect(), Vec::new()))
+        .add_choice_field(
+            &NewChoiceField::new(0, "Country", rect(), Vec::new()).declining_tooltip(),
+        )
         .expect("an empty option list is legal");
     assert!(
-        out.has_no_options,
+        out.disclosures.has_no_options,
         "the un-fillable state must be disclosed, not silent"
     );
     let f = field_named(&s, "Country").expect("the field still exists");
@@ -694,9 +717,11 @@ fn a_choice_field_with_no_options_is_allowed_and_disclosed() {
 fn a_populated_choice_field_discloses_nothing() {
     let mut s = session("dimension/plain-base.pdf");
     let out = s
-        .add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+        .add_choice_field(
+            &NewChoiceField::new(0, "Country", rect(), countries()).declining_tooltip(),
+        )
         .expect("add");
-    assert!(!out.has_no_options);
+    assert!(!out.disclosures.has_no_options);
 }
 
 /// `Edit` without `Combo` is impossible (§12.7.4.4 Table 230) and is refused
@@ -704,7 +729,7 @@ fn a_populated_choice_field_discloses_nothing() {
 #[test]
 fn an_editable_list_box_is_refused() {
     let mut s = session("dimension/plain-base.pdf");
-    let mut spec = NewChoiceField::new(0, "Country", rect(), countries());
+    let mut spec = NewChoiceField::new(0, "Country", rect(), countries()).declining_tooltip();
     spec.editable = true; // without `combo`
     let err = s.add_choice_field(&spec).expect_err("must refuse");
     assert!(matches!(err, EditError::ChoiceEditRequiresCombo));
@@ -720,7 +745,7 @@ fn a_duplicate_export_value_is_refused() {
         ChoiceOption::new("CA", "Canada (again)"),
     ];
     let err = s
-        .add_choice_field(&NewChoiceField::new(0, "Country", rect(), dupes))
+        .add_choice_field(&NewChoiceField::new(0, "Country", rect(), dupes).declining_tooltip())
         .expect_err("must refuse");
     assert!(matches!(err, EditError::ChoiceOptionDuplicate { .. }));
 }
@@ -730,7 +755,7 @@ fn a_duplicate_export_value_is_refused() {
 fn one_undo_removes_the_entire_choice_field() {
     let mut s = session("dimension/plain-base.pdf");
     let before = std::fs::read(fixture("dimension/plain-base.pdf")).unwrap();
-    s.add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+    s.add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()).declining_tooltip())
         .expect("add");
     s.undo().expect("undo");
     assert!(field_named(&s, "Country").is_none());
@@ -767,25 +792,25 @@ fn one_undo_removes_the_entire_choice_field() {
 fn a_name_already_used_by_the_same_type_merges_into_one_field() {
     // TEXT.
     let mut s = session("dimension/plain-base.pdf");
-    s.add_text_field(&NewTextField::new(0, "Dup", rect()))
+    s.add_text_field(&NewTextField::new(0, "Dup", rect()).declining_tooltip())
         .expect("first text field");
-    s.add_text_field(&NewTextField::new(0, "Dup", rect2()))
+    s.add_text_field(&NewTextField::new(0, "Dup", rect2()).declining_tooltip())
         .expect("the second text field must MERGE, not be refused");
     assert_merged(&s, "Dup", "text");
 
     // CHECK BOX.
     let mut s = session("dimension/plain-base.pdf");
-    s.add_check_box(&NewCheckBox::new(0, "Dup", rect2()))
+    s.add_check_box(&NewCheckBox::new(0, "Dup", rect2()).declining_tooltip())
         .expect("first check box");
-    s.add_check_box(&NewCheckBox::new(0, "Dup", rect()))
+    s.add_check_box(&NewCheckBox::new(0, "Dup", rect()).declining_tooltip())
         .expect("the second check box must MERGE");
     assert_merged(&s, "Dup", "check box");
 
     // CHOICE.
     let mut s = session("dimension/plain-base.pdf");
-    s.add_choice_field(&NewChoiceField::new(0, "Dup", rect(), countries()))
+    s.add_choice_field(&NewChoiceField::new(0, "Dup", rect(), countries()).declining_tooltip())
         .expect("first choice field");
-    s.add_choice_field(&NewChoiceField::new(0, "Dup", rect2(), countries()))
+    s.add_choice_field(&NewChoiceField::new(0, "Dup", rect2(), countries()).declining_tooltip())
         .expect("the second choice field must MERGE");
     assert_merged(&s, "Dup", "choice");
 }
@@ -821,11 +846,10 @@ fn assert_merged(s: &EditSession, fqn: &str, label: &str) {
 #[test]
 fn a_name_used_by_another_field_type_is_refused_for_both_new_types() {
     let mut s = session("dimension/plain-base.pdf");
-    s.add_text_field(&NewTextField::new(0, "Shared", rect()))
+    s.add_text_field(&NewTextField::new(0, "Shared", rect()).declining_tooltip())
         .expect("text field");
-
     let err = s
-        .add_check_box(&NewCheckBox::new(0, "Shared", rect2()))
+        .add_check_box(&NewCheckBox::new(0, "Shared", rect2()).declining_tooltip())
         .expect_err("check box must not steal a text field's name");
     assert!(matches!(
         err,
@@ -833,7 +857,9 @@ fn a_name_used_by_another_field_type_is_refused_for_both_new_types() {
     ));
 
     let err = s
-        .add_choice_field(&NewChoiceField::new(0, "Shared", rect2(), countries()))
+        .add_choice_field(
+            &NewChoiceField::new(0, "Shared", rect2(), countries()).declining_tooltip(),
+        )
         .expect_err("choice must not steal a text field's name");
     assert!(matches!(
         err,
@@ -853,27 +879,29 @@ fn the_shared_preflight_refusals_apply_to_both_new_types() {
     };
     let mut s = session("dimension/plain-base.pdf");
     assert!(matches!(
-        s.add_check_box(&NewCheckBox::new(0, "A", degenerate)),
+        s.add_check_box(&NewCheckBox::new(0, "A", degenerate).declining_tooltip()),
         Err(EditError::FieldRectDegenerate { .. })
     ));
     assert!(matches!(
-        s.add_choice_field(&NewChoiceField::new(0, "A", degenerate, countries())),
+        s.add_choice_field(
+            &NewChoiceField::new(0, "A", degenerate, countries()).declining_tooltip()
+        ),
         Err(EditError::FieldRectDegenerate { .. })
     ));
     assert!(matches!(
-        s.add_check_box(&NewCheckBox::new(0, "   ", rect2())),
+        s.add_check_box(&NewCheckBox::new(0, "   ", rect2()).declining_tooltip()),
         Err(EditError::FieldNameEmpty)
     ));
     assert!(matches!(
-        s.add_choice_field(&NewChoiceField::new(0, "", rect(), countries())),
+        s.add_choice_field(&NewChoiceField::new(0, "", rect(), countries()).declining_tooltip()),
         Err(EditError::FieldNameEmpty)
     ));
     assert!(matches!(
-        s.add_check_box(&NewCheckBox::new(9, "A", rect2())),
+        s.add_check_box(&NewCheckBox::new(9, "A", rect2()).declining_tooltip()),
         Err(EditError::PageOutOfRange { .. })
     ));
     assert!(matches!(
-        s.add_choice_field(&NewChoiceField::new(9, "A", rect(), countries())),
+        s.add_choice_field(&NewChoiceField::new(9, "A", rect(), countries()).declining_tooltip()),
         Err(EditError::PageOutOfRange { .. })
     ));
 }
@@ -884,10 +912,18 @@ fn the_shared_preflight_refusals_apply_to_both_new_types() {
 #[test]
 fn all_three_field_types_coexist_and_the_result_reopens() {
     let mut s = session("dimension/plain-base.pdf");
-    s.add_text_field(&NewTextField::new(0, "Name", rect()).with_value("Ken Mantle"))
-        .expect("text");
-    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()).checked(true))
-        .expect("check");
+    s.add_text_field(
+        &NewTextField::new(0, "Name", rect())
+            .declining_tooltip()
+            .with_value("Ken Mantle"),
+    )
+    .expect("text");
+    s.add_check_box(
+        &NewCheckBox::new(0, "Agree", rect2())
+            .declining_tooltip()
+            .checked(true),
+    )
+    .expect("check");
     s.add_choice_field(
         &NewChoiceField::new(
             0,
@@ -900,10 +936,10 @@ fn all_three_field_types_coexist_and_the_result_reopens() {
             },
             countries(),
         )
+        .declining_tooltip()
         .as_combo(false),
     )
     .expect("choice");
-
     let bytes = s
         .to_incremental_bytes(&pdfce_core::writer::SaveOptions::identity())
         .unwrap()

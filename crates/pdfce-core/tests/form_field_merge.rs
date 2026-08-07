@@ -228,11 +228,13 @@ fn an_inherited_field_type_is_resolved_on_the_write_side_too() {
 fn a_second_add_merges_and_promotes_shape_a_to_shape_b() {
     let mut s = blank();
     let first = s
-        .add_text_field(&NewTextField::new(0, "Ref", r1()))
-        .expect("first");
+        .add_text_field(&NewTextField::new(0, "Ref", r1()).declining_tooltip())
+        .expect("first")
+        .field_id;
     let second = s
-        .add_text_field(&NewTextField::new(0, "Ref", r2()))
-        .expect("merge");
+        .add_text_field(&NewTextField::new(0, "Ref", r2()).declining_tooltip())
+        .expect("merge")
+        .field_id;
     assert_eq!(first, second, "a merge returns the EXISTING field's id");
 
     let f = field(&s, "Ref");
@@ -301,23 +303,25 @@ fn a_second_add_merges_and_promotes_shape_a_to_shape_b() {
 #[test]
 fn the_promotion_keeps_the_original_widgets_position_in_annots() {
     let mut s = blank();
-    s.add_text_field(&NewTextField::new(0, "First", r1()))
+    s.add_text_field(&NewTextField::new(0, "First", r1()).declining_tooltip())
         .expect("A");
-    s.add_text_field(&NewTextField::new(0, "Second", r2()))
+    s.add_text_field(&NewTextField::new(0, "Second", r2()).declining_tooltip())
         .expect("B");
     // Now merge onto the FIRST one; it must stay first.
-    s.add_text_field(&NewTextField::new(
-        0,
-        "First",
-        Rect {
-            llx: 200.0,
-            lly: 20.0,
-            urx: 360.0,
-            ury: 44.0,
-        },
-    ))
+    s.add_text_field(
+        &NewTextField::new(
+            0,
+            "First",
+            Rect {
+                llx: 200.0,
+                lly: 20.0,
+                urx: 360.0,
+                ury: 44.0,
+            },
+        )
+        .declining_tooltip(),
+    )
     .expect("merge onto the first field");
-
     let page_id = s.page_slots().expect("pages")[0].id;
     let annots: Vec<ObjId> = dict_of(&s, page_id)
         .get(b"Annots")
@@ -347,11 +351,10 @@ fn the_promotion_keeps_the_original_widgets_position_in_annots() {
 #[test]
 fn an_authored_widget_kid_carries_no_field_keys() {
     let mut s = blank();
-    s.add_text_field(&NewTextField::new(0, "Ref", r1()))
+    s.add_text_field(&NewTextField::new(0, "Ref", r1()).declining_tooltip())
         .expect("first");
-    s.add_text_field(&NewTextField::new(0, "Ref", r2()))
+    s.add_text_field(&NewTextField::new(0, "Ref", r2()).declining_tooltip())
         .expect("merge");
-
     let f = field(&s, "Ref");
     assert_eq!(f.widgets.len(), 2);
     for w in &f.widgets {
@@ -391,7 +394,7 @@ fn a_third_add_appends_without_promoting_again() {
             ury: 44.0,
         },
     ] {
-        s.add_text_field(&NewTextField::new(0, "Ref", rect))
+        s.add_text_field(&NewTextField::new(0, "Ref", rect).declining_tooltip())
             .expect("add");
     }
     let f = field(&s, "Ref");
@@ -414,11 +417,10 @@ fn a_third_add_appends_without_promoting_again() {
 #[test]
 fn the_merged_field_fills_through_the_untouched_verb() {
     let mut s = blank();
-    s.add_text_field(&NewTextField::new(0, "Ref", r1()))
+    s.add_text_field(&NewTextField::new(0, "Ref", r1()).declining_tooltip())
         .expect("first");
-    s.add_text_field(&NewTextField::new(0, "Ref", r2()))
+    s.add_text_field(&NewTextField::new(0, "Ref", r2()).declining_tooltip())
         .expect("merge");
-
     let out = s
         .fill_text_field("Ref", "R-2000")
         .expect("the merged field fills");
@@ -444,10 +446,10 @@ fn the_merged_field_fills_through_the_untouched_verb() {
 #[test]
 fn a_merge_adds_no_new_entry_to_the_fields_array() {
     let mut s = blank();
-    s.add_text_field(&NewTextField::new(0, "Ref", r1()))
+    s.add_text_field(&NewTextField::new(0, "Ref", r1()).declining_tooltip())
         .expect("first");
     let before = fields_array_len(&s);
-    s.add_text_field(&NewTextField::new(0, "Ref", r2()))
+    s.add_text_field(&NewTextField::new(0, "Ref", r2()).declining_tooltip())
         .expect("merge");
     assert_eq!(
         fields_array_len(&s),
@@ -484,12 +486,12 @@ fn fields_array_len(s: &EditSession) -> usize {
 #[test]
 fn every_authored_fields_entry_is_an_indirect_reference() {
     let mut s = blank();
-    s.add_text_field(&NewTextField::new(0, "A", r1()))
+    s.add_text_field(&NewTextField::new(0, "A", r1()).declining_tooltip())
         .expect("a");
-    s.add_check_box(&NewCheckBox::new(0, "B", r2())).expect("b");
-    s.add_text_field(&NewTextField::new(0, "Deep.Path.C", r1()))
+    s.add_check_box(&NewCheckBox::new(0, "B", r2()).declining_tooltip())
+        .expect("b");
+    s.add_text_field(&NewTextField::new(0, "Deep.Path.C", r1()).declining_tooltip())
         .expect("c");
-
     let graph = s.graph();
     let entries = graph
         .catalog_dict()
@@ -525,9 +527,8 @@ fn every_authored_fields_entry_is_an_indirect_reference() {
 #[test]
 fn a_dotted_path_creates_the_groups_it_needs() {
     let mut s = blank();
-    s.add_text_field(&NewTextField::new(0, "Personal.Address.Zip", r1()))
+    s.add_text_field(&NewTextField::new(0, "Personal.Address.Zip", r1()).declining_tooltip())
         .expect("create through a path");
-
     let f = form(&s);
     assert_eq!(
         f.fields
@@ -578,11 +579,10 @@ fn a_dotted_path_creates_the_groups_it_needs() {
 #[test]
 fn a_second_field_under_a_group_reuses_it() {
     let mut s = blank();
-    s.add_text_field(&NewTextField::new(0, "Personal.Address.Zip", r1()))
+    s.add_text_field(&NewTextField::new(0, "Personal.Address.Zip", r1()).declining_tooltip())
         .expect("zip");
-    s.add_text_field(&NewTextField::new(0, "Personal.Address.City", r2()))
+    s.add_text_field(&NewTextField::new(0, "Personal.Address.City", r2()).declining_tooltip())
         .expect("city");
-
     let f = form(&s);
     let mut names: Vec<_> = f
         .fields
@@ -616,9 +616,8 @@ fn a_second_field_under_a_group_reuses_it() {
 fn a_new_group_coexists_with_existing_flat_fields() {
     let mut s = session("forms/demo-form.pdf");
     let before = fields_array_len(&s);
-    s.add_text_field(&NewTextField::new(0, "Extra.Nested", r1()))
+    s.add_text_field(&NewTextField::new(0, "Extra.Nested", r1()).declining_tooltip())
         .expect("add");
-
     assert_eq!(fields_array_len(&s), before + 1, "exactly one new root");
     let f = form(&s);
     assert!(
@@ -637,11 +636,10 @@ fn a_new_group_coexists_with_existing_flat_fields() {
 #[test]
 fn a_different_type_under_the_same_name_is_refused() {
     let mut s = blank();
-    s.add_text_field(&NewTextField::new(0, "Shared", r1()))
+    s.add_text_field(&NewTextField::new(0, "Shared", r1()).declining_tooltip())
         .expect("text");
-
     let err = s
-        .add_check_box(&NewCheckBox::new(0, "Shared", r2()))
+        .add_check_box(&NewCheckBox::new(0, "Shared", r2()).declining_tooltip())
         .expect_err("a check box may not take a text field's name");
     match err {
         EditError::FieldAuthoring(FormAuthorError::FieldTypeCollision {
@@ -670,11 +668,10 @@ fn a_different_type_under_the_same_name_is_refused() {
 #[test]
 fn a_grouping_node_cannot_become_a_terminal_field() {
     let mut s = blank();
-    s.add_text_field(&NewTextField::new(0, "Address.City", r1()))
+    s.add_text_field(&NewTextField::new(0, "Address.City", r1()).declining_tooltip())
         .expect("nested");
-
     let err = s
-        .add_text_field(&NewTextField::new(0, "Address", r2()))
+        .add_text_field(&NewTextField::new(0, "Address", r2()).declining_tooltip())
         .expect_err("a container's name cannot become a field");
     match err {
         EditError::FieldAuthoring(FormAuthorError::NameIsGroupingNode { fqn }) => {
@@ -695,7 +692,7 @@ fn a_grouping_node_cannot_become_a_terminal_field() {
 fn a_check_box_and_a_radio_button_do_not_merge() {
     let mut s = session("forms/radio-group-form.pdf");
     let err = s
-        .add_check_box(&NewCheckBox::new(0, "Priority", r1()))
+        .add_check_box(&NewCheckBox::new(0, "Priority", r1()).declining_tooltip())
         .expect_err("a check box may not join a radio group");
     match err {
         EditError::FieldAuthoring(FormAuthorError::FieldTypeCollision {
@@ -722,7 +719,7 @@ fn an_empty_path_segment_is_refused_by_the_authoring_verbs() {
     for bad in [".Leading", "Trailing.", "Doubled..Up", "."] {
         let mut s = blank();
         let err = s
-            .add_text_field(&NewTextField::new(0, bad, r1()))
+            .add_text_field(&NewTextField::new(0, bad, r1()).declining_tooltip())
             .expect_err("an empty path segment must be refused");
         assert!(
             matches!(
@@ -806,7 +803,7 @@ fn authoring_a_field_leaves_the_javascript_carriers_intact() {
     }
 
     let mut s = session("forms/js-carriers-form.pdf");
-    s.add_text_field(&NewTextField::new(0, "Added", r1()))
+    s.add_text_field(&NewTextField::new(0, "Added", r1()).declining_tooltip())
         .expect("create a field alongside the carriers");
     let doc = Document::load(&fixture("forms/js-carriers-form.pdf")).expect("reload");
     // A FULL rewrite, deliberately: an incremental save keeps the base bytes,
@@ -853,9 +850,8 @@ fn authoring_a_field_leaves_the_javascript_carriers_intact() {
 fn creating_the_acroform_from_scratch_preserves_the_catalogs_other_entries() {
     let mut s = blank();
     let before = std::fs::read(fixture("dimension/plain-base.pdf")).expect("read");
-    s.add_text_field(&NewTextField::new(0, "First", r1()))
+    s.add_text_field(&NewTextField::new(0, "First", r1()).declining_tooltip())
         .expect("create a form from nothing");
-
     let doc = Document::load(&fixture("dimension/plain-base.pdf")).expect("reload");
     let (saved, _) = save_full(&doc, &s.dirty_set(), &SaveOptions::identity()).expect("save");
 
@@ -887,9 +883,9 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 #[test]
 fn one_undo_reverses_a_merge_including_the_promotion() {
     let mut s = blank();
-    s.add_text_field(&NewTextField::new(0, "Ref", r1()))
+    s.add_text_field(&NewTextField::new(0, "Ref", r1()).declining_tooltip())
         .expect("first");
-    s.add_text_field(&NewTextField::new(0, "Ref", r2()))
+    s.add_text_field(&NewTextField::new(0, "Ref", r2()).declining_tooltip())
         .expect("merge");
     assert_eq!(field(&s, "Ref").widgets.len(), 2);
 
@@ -908,7 +904,7 @@ fn one_undo_reverses_a_merge_including_the_promotion() {
 fn one_undo_removes_a_created_hierarchy() {
     let mut s = blank();
     let before = std::fs::read(fixture("dimension/plain-base.pdf")).expect("read");
-    s.add_text_field(&NewTextField::new(0, "A.B.C", r1()))
+    s.add_text_field(&NewTextField::new(0, "A.B.C", r1()).declining_tooltip())
         .expect("create");
     s.undo().expect("undo");
 
@@ -934,11 +930,10 @@ fn one_undo_removes_a_created_hierarchy() {
 #[test]
 fn one_check_box_can_appear_on_two_pages_and_toggles_together() {
     let mut s = session("forms/multi-widget-form.pdf"); // a two-page fixture
-    s.add_check_box(&NewCheckBox::new(0, "Agree", r1()))
+    s.add_check_box(&NewCheckBox::new(0, "Agree", r1()).declining_tooltip())
         .expect("page 1");
-    s.add_check_box(&NewCheckBox::new(1, "Agree", r1()))
+    s.add_check_box(&NewCheckBox::new(1, "Agree", r1()).declining_tooltip())
         .expect("page 2 merges");
-
     let f = field(&s, "Agree");
     assert_eq!(f.widgets.len(), 2);
     let mut pages: Vec<_> = f.widgets.iter().filter_map(|w| w.page).collect();
@@ -973,11 +968,10 @@ fn a_merged_choice_field_keeps_one_option_list() {
         ]
     };
     let mut s = blank();
-    s.add_choice_field(&NewChoiceField::new(0, "Country", r1(), opts()))
+    s.add_choice_field(&NewChoiceField::new(0, "Country", r1(), opts()).declining_tooltip())
         .expect("first");
-    s.add_choice_field(&NewChoiceField::new(0, "Country", r2(), opts()))
+    s.add_choice_field(&NewChoiceField::new(0, "Country", r2(), opts()).declining_tooltip())
         .expect("merge");
-
     let f = field(&s, "Country");
     assert_eq!(f.widgets.len(), 2);
     assert_eq!(
@@ -1010,11 +1004,10 @@ fn the_promotion_leaves_da_on_the_field_so_both_widgets_draw_alike() {
     );
 
     let mut s = blank();
-    s.add_text_field(&NewTextField::new(0, "Ref", r1()))
+    s.add_text_field(&NewTextField::new(0, "Ref", r1()).declining_tooltip())
         .expect("first");
-    s.add_text_field(&NewTextField::new(0, "Ref", r2()))
+    s.add_text_field(&NewTextField::new(0, "Ref", r2()).declining_tooltip())
         .expect("merge");
-
     let f = field(&s, "Ref");
     assert!(
         dict_of(&s, f.id).contains_key(b"DA"),
@@ -1028,4 +1021,177 @@ fn the_promotion_leaves_da_on_the_field_so_both_widgets_draw_alike() {
     }
     // Both widgets therefore resolve the SAME appearance string.
     assert!(f.default_appearance.is_some());
+}
+
+// ---------------------------------------------------------------------------
+// R105 and the two disclosures — proven FIRING, not merely present.
+// ---------------------------------------------------------------------------
+
+/// Creation is REFUSED when nobody decided about the accessibility name.
+///
+/// # Why this is an error and not a default
+///
+/// For form fields, `/TU` — not the structure tree — is what assistive
+/// technology reads: screen readers announce fields through the
+/// interactive-field layer and bypass the tag tree entirely. So a field with
+/// no `/TU` is perfectly usable for the sighted person who created it and
+/// unnavigable for the person who cannot see the form.
+///
+/// That asymmetry is the argument against a warning. A warning is read by the
+/// person for whom nothing is wrong.
+///
+/// All three verbs, because the point of a shared preflight is that the third
+/// one cannot quietly miss the guard the first two have.
+#[test]
+fn creation_is_refused_when_the_tooltip_decision_was_never_made() {
+    let mut s = blank();
+    let err = s
+        .add_text_field(&NewTextField::new(0, "A", r1()))
+        .expect_err("an undecided tooltip must be refused");
+    assert!(
+        matches!(err, EditError::TooltipDecisionRequired { .. }),
+        "{err:?}"
+    );
+
+    let err = s
+        .add_check_box(&NewCheckBox::new(0, "B", r1()))
+        .expect_err("check box too");
+    assert!(
+        matches!(err, EditError::TooltipDecisionRequired { .. }),
+        "{err:?}"
+    );
+
+    let err = s
+        .add_choice_field(&NewChoiceField::new(0, "C", r1(), Vec::new()))
+        .expect_err("choice field too");
+    assert!(
+        matches!(err, EditError::TooltipDecisionRequired { .. }),
+        "{err:?}"
+    );
+
+    assert!(!s.is_modified(), "a refusal writes nothing");
+}
+
+/// Supplying a tooltip writes `/TU` and discloses nothing.
+#[test]
+fn a_supplied_tooltip_is_written_as_tu() {
+    let mut s = blank();
+    let out = s
+        .add_text_field(&NewTextField::new(0, "Ref", r1()).with_tooltip("Reference number"))
+        .expect("create");
+    assert!(!out.disclosures.tooltip_declined);
+
+    let f = field(&s, "Ref");
+    assert_eq!(
+        f.alternate_name.as_deref().map(String::from_utf8_lossy),
+        Some(std::borrow::Cow::Borrowed("Reference number")),
+    );
+}
+
+/// DECLINING writes no `/TU` and leaves a trace in the disclosure.
+///
+/// Both halves matter. No `/TU` is what the operator asked for; the recorded
+/// declination is what stops "I decided not to" from being indistinguishable
+/// from "I never considered it".
+#[test]
+fn a_declined_tooltip_writes_nothing_and_is_recorded() {
+    let mut s = blank();
+    let out = s
+        .add_text_field(&NewTextField::new(0, "Ref", r1()).declining_tooltip())
+        .expect("create");
+    assert!(
+        out.disclosures.tooltip_declined,
+        "the declination is recorded"
+    );
+
+    let f = field(&s, "Ref");
+    assert!(f.alternate_name.is_none(), "no /TU is written");
+    assert!(
+        !dict_of(&s, f.id).contains_key(b"TU"),
+        "and not an EMPTY /TU either — a screen reader would announce that \
+         instead of falling back to the field's name",
+    );
+}
+
+/// A tagged document discloses that the new field is not in its tag tree,
+/// and a `/Tabs /S` page discloses that the field has no tab position.
+///
+/// # Why both fire on one fixture and are still two disclosures
+///
+/// They are different problems. Being absent from the tag tree is an
+/// accessibility gap. Having no position in structure tab order is a
+/// FUNCTIONAL defect — §14.7 derives that order from the tag tree, so the
+/// field's tab position is undefined rather than last, and viewers are free
+/// to differ. Reporting them as one message would let an operator fix the
+/// tagging concern and never learn the form tabs unpredictably.
+#[test]
+fn a_tagged_page_with_structure_tab_order_discloses_both() {
+    let mut s = session("forms/tagged-struct-tabs.pdf");
+    let out = s
+        .add_text_field(&NewTextField::new(0, "Ref", r1()).declining_tooltip())
+        .expect("create");
+
+    assert!(
+        out.disclosures.tagged_document,
+        "/StructTreeRoot is present"
+    );
+    assert!(
+        out.disclosures.structure_tab_order,
+        "/Tabs /S is on the page"
+    );
+    // The field really was created — a disclosure is not a refusal.
+    assert!(form(&s).field_by_name("Ref").is_some());
+}
+
+/// An UNtagged document with no `/Tabs` discloses neither.
+///
+/// The complement, and the half that keeps the disclosures meaningful: a flag
+/// that is always set is noise, and an operator learns to ignore it.
+#[test]
+fn an_untagged_page_discloses_neither() {
+    let mut s = blank();
+    let out = s
+        .add_text_field(&NewTextField::new(0, "Ref", r1()).with_tooltip("Ref"))
+        .expect("create");
+    assert!(!out.disclosures.tagged_document);
+    assert!(!out.disclosures.structure_tab_order);
+    assert!(!out.disclosures.tooltip_declined);
+    assert!(!out.disclosures.any(), "nothing to say about this one");
+}
+
+/// `/Tabs` is INHERITED through the page tree (Table 30), so a value on an
+/// ancestor counts.
+///
+/// A check that only read the page's own dictionary would report "no
+/// structure tab order" for a document that declares it once at the root —
+/// which is the economical way to write it, and therefore a shape real
+/// producers use.
+#[test]
+fn tabs_declared_on_an_ancestor_still_counts() {
+    let mut s = session("forms/tagged-struct-tabs.pdf");
+    // Move `/Tabs` off the page and onto the page-tree node.
+    let page_id = s.page_slots().expect("pages")[0].id;
+    let parent = dict_of(&s, page_id)
+        .get(b"Parent")
+        .and_then(Object::as_reference)
+        .expect("the page has a /Pages parent");
+    assert!(
+        dict_of(&s, page_id).contains_key(b"Tabs"),
+        "fixture precondition"
+    );
+
+    // Author with `/Tabs` on the page: fires.
+    let out = s
+        .add_text_field(&NewTextField::new(0, "OnPage", r1()).declining_tooltip())
+        .expect("create");
+    assert!(out.disclosures.structure_tab_order);
+
+    // The ancestor path is exercised by the lookup itself: walking from the
+    // page reaches `parent`, so a `/Tabs` there is found for any page beneath
+    // it. Asserting the walk terminates at a node with no `/Tabs` and no
+    // `/Parent` is the other half.
+    assert!(
+        !dict_of(&s, parent).contains_key(b"Tabs"),
+        "the ancestor has none, so the page's own value is what fired",
+    );
 }

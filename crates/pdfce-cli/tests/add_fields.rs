@@ -100,6 +100,20 @@ impl TempDir {
         self.0.join(name)
     }
 
+    /// A repo fixture copied into the scratch directory.
+    ///
+    /// Copied rather than used in place because these tests write output
+    /// beside their input and must never touch a committed fixture.
+    fn seeded_with(tag: &str, rel: &str) -> (Self, PathBuf) {
+        let dir = Self::new(tag);
+        let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/synthetic")
+            .join(rel);
+        let input = dir.join("in.pdf");
+        std::fs::copy(&src, &input).expect("could not copy fixture");
+        (dir, input)
+    }
+
     /// The scratch directory seeded with the formless fixture as `in.pdf`.
     fn seeded(tag: &str) -> (Self, PathBuf) {
         let dir = Self::new(tag);
@@ -160,6 +174,7 @@ fn add_check_box_creates_a_field_list_fields_can_see() {
         "1",
         "--rect",
         "20,20,44,44",
+        "--no-tooltip",
         "-o",
         &output.display().to_string(),
         "--verify-undo",
@@ -207,6 +222,7 @@ fn the_on_state_and_checked_flags_reach_the_file() {
         "1",
         "--rect",
         "20,20,44,44",
+        "--no-tooltip",
         "--on-state",
         "Red",
         "--checked",
@@ -232,6 +248,7 @@ fn an_off_on_state_is_refused_without_writing_a_file() {
         "1",
         "--rect",
         "20,20,44,44",
+        "--no-tooltip",
         "--on-state",
         "Off",
         "-o",
@@ -268,6 +285,7 @@ fn add_choice_field_creates_a_field_and_splits_export_from_label() {
         "1",
         "--rect",
         "20,60,180,84",
+        "--no-tooltip",
         "--option",
         "CA=Canada",
         "--option",
@@ -330,6 +348,7 @@ fn an_option_label_may_contain_an_equals_sign() {
         "1",
         "--rect",
         "20,60,180,84",
+        "--no-tooltip",
         "--option",
         "EQ=a = b",
         "-o",
@@ -370,6 +389,7 @@ fn an_editable_list_box_is_refused_by_the_cli() {
         "1",
         "--rect",
         "20,60,180,84",
+        "--no-tooltip",
         "--option",
         "Canada",
         "--editable",
@@ -395,6 +415,7 @@ fn a_duplicate_export_value_is_refused_by_the_cli() {
         "1",
         "--rect",
         "20,60,180,84",
+        "--no-tooltip",
         "--option",
         "CA=Canada",
         "--option",
@@ -422,6 +443,7 @@ fn a_choice_field_with_no_options_succeeds_and_warns() {
         "1",
         "--rect",
         "20,60,180,84",
+        "--no-tooltip",
         "-o",
         &output.display().to_string(),
     ]);
@@ -484,6 +506,7 @@ fn a_duplicate_field_name_merges_for_every_subcommand() {
             "1",
             "--rect",
             "20,20,180,44",
+            "--no-tooltip",
         ];
         a.extend_from_slice(&extra);
         a.extend_from_slice(&["-o", &first_s]);
@@ -501,6 +524,7 @@ fn a_duplicate_field_name_merges_for_every_subcommand() {
             "1",
             "--rect",
             "20,60,180,84",
+            "--no-tooltip",
         ];
         b.extend_from_slice(&extra);
         b.extend_from_slice(&["-o", &second_s]);
@@ -552,6 +576,7 @@ fn a_merged_field_fills_through_the_existing_verb_and_paints_both_widgets() {
         "1",
         "--rect",
         "20,20,180,44",
+        "--no-tooltip",
         "-o",
         &one_s,
     ]);
@@ -565,6 +590,7 @@ fn a_merged_field_fills_through_the_existing_verb_and_paints_both_widgets() {
         "1",
         "--rect",
         "20,60,180,84",
+        "--no-tooltip",
         "-o",
         &two_s,
     ]);
@@ -617,6 +643,7 @@ fn a_dotted_name_creates_a_hierarchy() {
         "1",
         "--rect",
         "20,20,180,44",
+        "--no-tooltip",
         "-o",
         &out_s,
     ]);
@@ -643,6 +670,7 @@ fn a_dotted_name_creates_a_hierarchy() {
         "1",
         "--rect",
         "20,60,180,84",
+        "--no-tooltip",
         "-o",
         &two_s,
     ]);
@@ -681,6 +709,7 @@ fn a_grouping_node_name_cannot_become_a_field() {
         "1",
         "--rect",
         "20,20,180,44",
+        "--no-tooltip",
         "-o",
         &nested_s,
     ]);
@@ -695,6 +724,7 @@ fn a_grouping_node_name_cannot_become_a_field() {
         "1",
         "--rect",
         "20,60,180,84",
+        "--no-tooltip",
         "-o",
         &refused_s,
     ]);
@@ -734,6 +764,7 @@ fn an_empty_path_segment_is_refused() {
             "1",
             "--rect",
             "20,20,180,44",
+            "--no-tooltip",
             "-o",
             &out_s,
         ]);
@@ -763,6 +794,7 @@ fn page_zero_is_refused_by_both_subcommands() {
             "A",
             "--rect",
             "20,20,44,44",
+            "--no-tooltip",
             "--page",
             "0",
         ],
@@ -772,6 +804,7 @@ fn page_zero_is_refused_by_both_subcommands() {
             "A",
             "--rect",
             "20,20,44,44",
+            "--no-tooltip",
             "--option",
             "X",
             "--page",
@@ -839,6 +872,7 @@ fn a_name_used_by_another_field_type_is_refused_across_subcommands() {
         "1",
         "--rect",
         "20,20,180,44",
+        "--no-tooltip",
         "-o",
         &text.display().to_string(),
     ]);
@@ -860,6 +894,7 @@ fn a_name_used_by_another_field_type_is_refused_across_subcommands() {
             "1",
             "--rect",
             "20,60,44,84",
+            "--no-tooltip",
         ];
         full.extend_from_slice(&extra);
         full.extend_from_slice(&["-o", &clash_s]);
@@ -871,4 +906,171 @@ fn a_name_used_by_another_field_type_is_refused_across_subcommands() {
             stdout(&out)
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// R105 and the creation disclosures, at the CLI surface.
+// ---------------------------------------------------------------------------
+
+/// Omitting BOTH `--tooltip` and `--no-tooltip` is refused (R105).
+///
+/// Not a warning, and not a silent default. For a form field, `/TU` — not the
+/// tag tree — is what a screen reader announces, so a missing one is
+/// invisible to the person creating the field and load-bearing for the person
+/// who cannot see the form. A warning would be read by the person for whom
+/// nothing is wrong.
+///
+/// All three subcommands, because a shared rule that one verb quietly misses
+/// is not a rule.
+#[test]
+fn omitting_the_tooltip_decision_is_refused_by_every_subcommand() {
+    let (dir, input) = TempDir::seeded("tt");
+    let input_s = input.display().to_string();
+    for (cmd, extra) in [
+        ("add-text-field", vec![]),
+        ("add-check-box", vec![]),
+        ("add-choice-field", vec!["--option", "X"]),
+    ] {
+        let out_path = dir.join(&format!("{cmd}.pdf"));
+        let out_s = out_path.display().to_string();
+        let mut a = vec![
+            cmd,
+            &input_s,
+            "--name",
+            "A",
+            "--page",
+            "1",
+            "--rect",
+            "20,20,180,44",
+        ];
+        a.extend_from_slice(&extra);
+        a.extend_from_slice(&["-o", &out_s]);
+        let out = run(&a);
+        assert_eq!(
+            code(&out),
+            EDIT_REFUSED,
+            "{cmd} must refuse an undecided tooltip: {}",
+            stdout(&out)
+        );
+        assert!(
+            stderr(&out).contains("--no-tooltip"),
+            "{cmd} must say how to decide: {}",
+            stderr(&out)
+        );
+        assert!(!out_path.exists(), "{cmd}: a refusal writes nothing");
+    }
+}
+
+/// `--tooltip` and `--no-tooltip` together are refused by the parser.
+///
+/// They are contradictory answers to one question, and accepting both would
+/// mean silently picking one.
+#[test]
+fn supplying_both_tooltip_flags_is_refused() {
+    let (dir, input) = TempDir::seeded("tt2");
+    let input_s = input.display().to_string();
+    let out_path = dir.join("x.pdf");
+    let out_s = out_path.display().to_string();
+    let out = run(&[
+        "add-text-field",
+        &input_s,
+        "--name",
+        "A",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,180,44",
+        "--tooltip",
+        "Something",
+        "--no-tooltip",
+        "-o",
+        &out_s,
+    ]);
+    assert_ne!(code(&out), 0, "contradictory flags must not be accepted");
+    assert!(!out_path.exists());
+}
+
+/// `--no-tooltip` succeeds, writes no `/TU`, and SAYS the name was declined.
+#[test]
+fn declining_the_tooltip_succeeds_and_is_disclosed() {
+    let (dir, input) = TempDir::seeded("tt3");
+    let input_s = input.display().to_string();
+    let out_path = dir.join("declined.pdf");
+    let out_s = out_path.display().to_string();
+    let out = run(&[
+        "add-text-field",
+        &input_s,
+        "--name",
+        "A",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,180,44",
+        "--no-tooltip",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(out_path.exists());
+    assert!(
+        stderr(&out).contains("no accessibility name"),
+        "the declination must leave a trace: {}",
+        stderr(&out)
+    );
+    assert!(
+        stdout(&out).contains("tooltip_declined=1"),
+        "and be machine-readable: {}",
+        stdout(&out)
+    );
+}
+
+/// A tagged document with `/Tabs /S` discloses BOTH conditions, in words and
+/// in the machine-readable report, and still creates the field.
+///
+/// A disclosure is not a refusal: the document was created exactly as asked.
+/// What it earns is a statement of two things the operator cannot see — that
+/// the field is absent from a tag tree the document has, and that on this
+/// page its tab position is undefined rather than last.
+#[test]
+fn a_tagged_structure_tab_order_page_discloses_both_conditions() {
+    let (dir, input) = TempDir::seeded_with("tagged", "forms/tagged-struct-tabs.pdf");
+    let input_s = input.display().to_string();
+    let out_path = dir.join("out.pdf");
+    let out_s = out_path.display().to_string();
+
+    let out = run(&[
+        "add-text-field",
+        &input_s,
+        "--name",
+        "Ref",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,180,44",
+        "--no-tooltip",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(
+        code(&out),
+        0,
+        "a disclosure is not a refusal: {}",
+        stderr(&out)
+    );
+    assert!(out_path.exists());
+
+    let e = stderr(&out);
+    assert!(
+        e.contains("structure tree"),
+        "tagged-document disclosure: {e}"
+    );
+    assert!(
+        e.contains("UNDEFINED"),
+        "structure-tab-order disclosure: {e}"
+    );
+    let o = stdout(&out);
+    assert!(o.contains("tagged=1"), "machine-readable: {o}");
+    assert!(o.contains("struct_tabs=1"), "machine-readable: {o}");
+
+    assert!(list_fields(&out_path).contains("name=Ref"));
 }

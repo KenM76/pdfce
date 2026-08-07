@@ -464,6 +464,50 @@ def fixture_js_carriers() -> bytes:
     objs[9] = b"<< /S /JavaScript /JS (console.println\('init'\);) >>"
     return assemble(objs)
 
+
+# ---------------------------------------------------------------------------
+# (g) A TAGGED document with structure tab order, for the two disclosures.
+# ---------------------------------------------------------------------------
+def fixture_tagged_struct_tabs() -> bytes:
+    """A tagged document whose page declares `/Tabs /S` (decision 020 §3.4.3).
+
+    Two disclosures need this fixture, and neither is reachable without it:
+
+    * **The document is tagged** (`/StructTreeRoot`) and a pdfce-authored
+      field is not in its structure tree. pdfce has no structure-tree writer,
+      and §3.5.3 deliberately ships the disclosure rather than a partial
+      writer — a half-written tag tree claims a completeness the document
+      does not have.
+
+    * **The page uses structure tab order** (`/Tabs /S`, Table 30). §14.7
+      derives tab order from the TAG TREE, so an untagged field on such a
+      page has no tab position **at all** — not "last", *undefined*, with
+      different viewers doing different things. That is a functional defect
+      in the form, not only an accessibility gap.
+
+    `/Tabs` sits on the PAGE here rather than on the page tree node, because
+    that is the shape a real producer writes and it is the one the inheriting
+    lookup must get right in its base case. The structure tree is a minimal
+    well-formed skeleton: pdfce reads no further than "is `/StructTreeRoot`
+    present", so a fuller tree would add bytes without adding coverage.
+
+    Without this fixture both disclosures would be unreachable code — a rule
+    that is correct, wired, and never fires, which is exactly the shape R96
+    exists to forbid.
+    """
+    objs: dict[int, bytes] = {}
+    objs[1] = (
+        b"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 5 0 R /MarkInfo << /Marked true >> >>"
+    )
+    objs[2] = b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
+    objs[3] = (
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> "
+        b"/Contents 4 0 R /Tabs /S >>"
+    )
+    objs[4] = stream_obj(b"<<", b"BT ET")
+    objs[5] = b"<< /Type /StructTreeRoot /K [] >>"
+    return assemble(objs)
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     write("multi-widget-form.pdf", fixture_multi_widget())
@@ -472,6 +516,7 @@ def main() -> int:
     write("mixed-kids-form.pdf", fixture_mixed_kids())
     write("xfa-hybrid-form.pdf", fixture_xfa_hybrid())
     write("js-carriers-form.pdf", fixture_js_carriers())
+    write("tagged-struct-tabs.pdf", fixture_tagged_struct_tabs())
     return 0
 
 

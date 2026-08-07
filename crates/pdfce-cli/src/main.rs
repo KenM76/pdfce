@@ -1099,6 +1099,17 @@ enum Command {
         /// `/TU`, the accessibility name a screen reader announces.
         #[arg(long)]
         tooltip: Option<String>,
+        /// Explicitly DECLINE an accessibility name (R105).
+        ///
+        /// Exactly one of `--tooltip` / `--no-tooltip` is required. Omitting
+        /// both is an error, never a silent default: for a form field, `/TU`
+        /// — not the tag tree — is what a screen reader announces, so a
+        /// missing one is invisible to the person creating the field and
+        /// load-bearing for the person who cannot see the form. Declining is
+        /// a legitimate answer; it just has to be an ANSWER, and it is
+        /// reported back in the operation's disclosures.
+        #[arg(long, conflicts_with = "tooltip")]
+        no_tooltip: bool,
         /// Accept multiple lines (`/Ff` bit 13).
         #[arg(long)]
         multiline: bool,
@@ -1163,6 +1174,17 @@ enum Command {
         /// `/TU`, the accessibility name a screen reader announces.
         #[arg(long)]
         tooltip: Option<String>,
+        /// Explicitly DECLINE an accessibility name (R105).
+        ///
+        /// Exactly one of `--tooltip` / `--no-tooltip` is required. Omitting
+        /// both is an error, never a silent default: for a form field, `/TU`
+        /// — not the tag tree — is what a screen reader announces, so a
+        /// missing one is invisible to the person creating the field and
+        /// load-bearing for the person who cannot see the form. Declining is
+        /// a legitimate answer; it just has to be an ANSWER, and it is
+        /// reported back in the operation's disclosures.
+        #[arg(long, conflicts_with = "tooltip")]
+        no_tooltip: bool,
         /// Mark the field read-only (`/Ff` bit 1).
         #[arg(long)]
         read_only: bool,
@@ -1241,6 +1263,17 @@ enum Command {
         /// `/TU`, the accessibility name a screen reader announces.
         #[arg(long)]
         tooltip: Option<String>,
+        /// Explicitly DECLINE an accessibility name (R105).
+        ///
+        /// Exactly one of `--tooltip` / `--no-tooltip` is required. Omitting
+        /// both is an error, never a silent default: for a form field, `/TU`
+        /// — not the tag tree — is what a screen reader announces, so a
+        /// missing one is invisible to the person creating the field and
+        /// load-bearing for the person who cannot see the form. Declining is
+        /// a legitimate answer; it just has to be an ANSWER, and it is
+        /// reported back in the operation's disclosures.
+        #[arg(long, conflicts_with = "tooltip")]
+        no_tooltip: bool,
         /// Mark the field read-only (`/Ff` bit 1).
         #[arg(long)]
         read_only: bool,
@@ -2861,6 +2894,7 @@ fn run() -> ExitCode {
             value,
             max_len,
             tooltip,
+            no_tooltip,
             multiline,
             read_only,
             required,
@@ -2875,6 +2909,7 @@ fn run() -> ExitCode {
             value: value.as_deref(),
             max_len,
             tooltip: tooltip.as_deref(),
+            no_tooltip,
             multiline,
             read_only,
             required,
@@ -2890,6 +2925,7 @@ fn run() -> ExitCode {
             on_state,
             checked,
             tooltip,
+            no_tooltip,
             read_only,
             required,
             output,
@@ -2903,6 +2939,7 @@ fn run() -> ExitCode {
             on_state: &on_state,
             checked,
             tooltip: tooltip.as_deref(),
+            no_tooltip,
             read_only,
             required,
             output: &output,
@@ -2920,6 +2957,7 @@ fn run() -> ExitCode {
             multi_select,
             sort,
             tooltip,
+            no_tooltip,
             read_only,
             required,
             output,
@@ -2936,6 +2974,7 @@ fn run() -> ExitCode {
             multi_select,
             sort,
             tooltip: tooltip.as_deref(),
+            no_tooltip,
             read_only,
             required,
             output: &output,
@@ -8766,6 +8805,7 @@ struct AddTextFieldArgs<'a> {
     value: Option<&'a str>,
     max_len: Option<i64>,
     tooltip: Option<&'a str>,
+    no_tooltip: bool,
     multiline: bool,
     read_only: bool,
     required: bool,
@@ -8783,6 +8823,7 @@ struct AddCheckBoxArgs<'a> {
     on_state: &'a str,
     checked: bool,
     tooltip: Option<&'a str>,
+    no_tooltip: bool,
     read_only: bool,
     required: bool,
     output: &'a Path,
@@ -8802,6 +8843,7 @@ struct AddChoiceFieldArgs<'a> {
     multi_select: bool,
     sort: bool,
     tooltip: Option<&'a str>,
+    no_tooltip: bool,
     read_only: bool,
     required: bool,
     output: &'a Path,
@@ -8868,14 +8910,27 @@ fn cmd_add_check_box(args: &AddCheckBoxArgs<'_>) -> u8 {
         .with_on_state(args.on_state)
         .checked(args.checked)
         .with_flags(args.read_only, args.required);
-    if let Some(t) = args.tooltip {
-        spec = spec.with_tooltip(t);
-    }
+    // R105: exactly one of the two must have been chosen. `clap`'s
+    // `conflicts_with` rules out BOTH; only "neither" can reach here, and it
+    // is refused rather than defaulted.
+    spec = match (args.tooltip, args.no_tooltip) {
+        (Some(t), _) => spec.with_tooltip(t),
+        (None, true) => spec.declining_tooltip(),
+        (None, false) => {
+            eprintln!(
+                "pdfce-cli: {}: decide about the accessibility name — pass --tooltip <text>, or --no-tooltip to decline it. It is what a screen reader announces for this field, so it is never defaulted silently.",
+                args.input.display()
+            );
+            return exit::EDIT_REFUSED;
+        }
+    };
 
-    let field_id = match session.add_check_box(&spec) {
-        Ok(id) => id,
+    let authored = match session.add_check_box(&spec) {
+        Ok(o) => o,
         Err(err) => return report_edit_error(args.input, &err),
     };
+    let field_id = authored.field_id;
+    report_field_disclosures(args.name, authored.disclosures);
     let outcome = match save_edited(
         &mut session,
         &source,
@@ -8889,7 +8944,7 @@ fn cmd_add_check_box(args: &AddCheckBoxArgs<'_>) -> u8 {
     };
     let r = &outcome.report;
     println!(
-        "add-check-box {} name={:?} page={} rect={},{},{},{} on_state={:?} checked={} field={} {} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        "add-check-box {} name={:?} page={} rect={},{},{},{} on_state={:?} checked={} field={} {} merged={} tagged={} struct_tabs={} tooltip_declined={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
         args.input.display(),
         args.name,
         args.page,
@@ -8901,6 +8956,10 @@ fn cmd_add_check_box(args: &AddCheckBoxArgs<'_>) -> u8 {
         u32::from(args.checked),
         field_id.num,
         field_id.generation,
+        u32::from(authored.merged),
+        u32::from(authored.disclosures.tagged_document),
+        u32::from(authored.disclosures.structure_tab_order),
+        u32::from(authored.disclosures.tooltip_declined),
         args.mode.name(),
         args.output.display(),
         outcome.changed,
@@ -8959,23 +9018,30 @@ fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
         // dropping a flag the operator asked for.
         spec.editable = args.editable;
     }
-    if let Some(t) = args.tooltip {
-        spec = spec.with_tooltip(t);
-    }
+    // R105: exactly one of the two must have been chosen. `clap`'s
+    // `conflicts_with` rules out BOTH; only "neither" can reach here, and it
+    // is refused rather than defaulted.
+    spec = match (args.tooltip, args.no_tooltip) {
+        (Some(t), _) => spec.with_tooltip(t),
+        (None, true) => spec.declining_tooltip(),
+        (None, false) => {
+            eprintln!(
+                "pdfce-cli: {}: decide about the accessibility name — pass --tooltip <text>, or --no-tooltip to decline it. It is what a screen reader announces for this field, so it is never defaulted silently.",
+                args.input.display()
+            );
+            return exit::EDIT_REFUSED;
+        }
+    };
 
     let authored = match session.add_choice_field(&spec) {
         Ok(outcome) => outcome,
         Err(err) => return report_edit_error(args.input, &err),
     };
     let field_id = authored.field_id;
-    // R4: a field that exists and cannot be filled is disclosed at the moment
-    // it is created, not left for the operator to discover at fill time.
-    if authored.has_no_options {
-        eprintln!(
-            "pdfce-cli: field {:?}: this choice field has no options and cannot be filled until options are added",
-            args.name
-        );
-    }
+    // R4 + decision 020 §3.4.3/§3.5.3: everything pdfce knows and the
+    // operator cannot see is said at the moment it happens, not left to be
+    // discovered later.
+    report_field_disclosures(args.name, authored.disclosures);
     let outcome = match save_edited(
         &mut session,
         &source,
@@ -8989,7 +9055,7 @@ fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
     };
     let r = &outcome.report;
     println!(
-        "add-choice-field {} name={:?} page={} rect={},{},{},{} options={} no_options={} combo={} editable={} multi_select={} sort={} field={} {} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        "add-choice-field {} name={:?} page={} rect={},{},{},{} options={} no_options={} combo={} editable={} multi_select={} sort={} field={} {} merged={} tagged={} struct_tabs={} tooltip_declined={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
         args.input.display(),
         args.name,
         args.page,
@@ -8998,13 +9064,17 @@ fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
         rect.urx,
         rect.ury,
         args.options.len(),
-        u32::from(authored.has_no_options),
+        u32::from(authored.disclosures.has_no_options),
         u32::from(args.combo),
         u32::from(args.editable),
         u32::from(args.multi_select),
         u32::from(args.sort),
         field_id.num,
         field_id.generation,
+        u32::from(authored.merged),
+        u32::from(authored.disclosures.tagged_document),
+        u32::from(authored.disclosures.structure_tab_order),
+        u32::from(authored.disclosures.tooltip_declined),
         args.mode.name(),
         args.output.display(),
         outcome.changed,
@@ -9015,6 +9085,43 @@ fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
         u32::from(outcome.undo_identical),
     );
     finish_edit(args.input, &outcome)
+}
+
+/// Print every disclosure a field-creation call owes the operator.
+///
+/// # Why this is one function rather than three copies
+///
+/// Three of these are things pdfce KNOWS and the operator cannot see by
+/// looking at the result: a tagged document whose tag tree the new field is
+/// absent from, a page whose structure tab order gives the new field no tab
+/// position at all, and a declined accessibility name. None is an error —
+/// each is a true statement about a document created exactly as asked — and
+/// none is discoverable after the fact.
+///
+/// Copied per verb, the third copy is where one of them goes missing, and it
+/// would go missing SILENTLY: a disclosure that is never printed looks
+/// exactly like a disclosure that did not apply.
+fn report_field_disclosures(name: &str, d: pdfce_core::edit::FieldAuthorDisclosures) {
+    if d.tooltip_declined {
+        eprintln!(
+            "pdfce-cli: field {name:?}: no accessibility name (tooltip) was set, as requested — screen readers will announce the field's name instead"
+        );
+    }
+    if d.tagged_document {
+        eprintln!(
+            "pdfce-cli: field {name:?}: this document is tagged (/StructTreeRoot), and the new field is NOT in its structure tree — pdfce does not write structure elements"
+        );
+    }
+    if d.structure_tab_order {
+        eprintln!(
+            "pdfce-cli: field {name:?}: this page uses structure tab order (/Tabs /S) and the new field is untagged, so its tab position is UNDEFINED — not last. Set an explicit tab order, or use row/column order for this page."
+        );
+    }
+    if d.has_no_options {
+        eprintln!(
+            "pdfce-cli: field {name:?}: this choice field has no options and cannot be filled until options are added"
+        );
+    }
 }
 
 /// `add-text-field` — author a new text form field.
@@ -9029,6 +9136,9 @@ fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
 ///   message and exit code the GUI will surface.
 /// - `--page` is 1-BASED here and 0-based in the core call, matching every
 ///   other page-taking subcommand in this CLI.
+/// - Every disclosure the core reports is printed by
+///   [`report_field_disclosures`], so a fact stated by one authoring verb
+///   cannot be silently dropped by another.
 fn cmd_add_text_field(args: &AddTextFieldArgs<'_>) -> u8 {
     let (page_index, rect) = match parse_page_and_rect(args.input, args.page, args.rect) {
         Ok(pair) => pair,
@@ -9052,14 +9162,27 @@ fn cmd_add_text_field(args: &AddTextFieldArgs<'_>) -> u8 {
     if let Some(m) = args.max_len {
         spec = spec.with_max_len(m);
     }
-    if let Some(t) = args.tooltip {
-        spec = spec.with_tooltip(t);
-    }
+    // R105: exactly one of the two must have been chosen. `clap`'s
+    // `conflicts_with` rules out BOTH; only "neither" can reach here, and it
+    // is refused rather than defaulted.
+    spec = match (args.tooltip, args.no_tooltip) {
+        (Some(t), _) => spec.with_tooltip(t),
+        (None, true) => spec.declining_tooltip(),
+        (None, false) => {
+            eprintln!(
+                "pdfce-cli: {}: decide about the accessibility name — pass --tooltip <text>, or --no-tooltip to decline it. It is what a screen reader announces for this field, so it is never defaulted silently.",
+                args.input.display()
+            );
+            return exit::EDIT_REFUSED;
+        }
+    };
 
-    let field_id = match session.add_text_field(&spec) {
-        Ok(id) => id,
+    let authored = match session.add_text_field(&spec) {
+        Ok(o) => o,
         Err(err) => return report_edit_error(args.input, &err),
     };
+    let field_id = authored.field_id;
+    report_field_disclosures(args.name, authored.disclosures);
     let outcome = match save_edited(
         &mut session,
         &source,
@@ -9073,7 +9196,7 @@ fn cmd_add_text_field(args: &AddTextFieldArgs<'_>) -> u8 {
     };
     let r = &outcome.report;
     println!(
-        "add-text-field {} name={:?} page={} rect={},{},{},{} field={} {} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        "add-text-field {} name={:?} page={} rect={},{},{},{} field={} {} merged={} tagged={} struct_tabs={} tooltip_declined={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
         args.input.display(),
         args.name,
         args.page,
@@ -9083,6 +9206,10 @@ fn cmd_add_text_field(args: &AddTextFieldArgs<'_>) -> u8 {
         ury,
         field_id.num,
         field_id.generation,
+        u32::from(authored.merged),
+        u32::from(authored.disclosures.tagged_document),
+        u32::from(authored.disclosures.structure_tab_order),
+        u32::from(authored.disclosures.tooltip_declined),
         args.mode.name(),
         args.output.display(),
         outcome.changed,

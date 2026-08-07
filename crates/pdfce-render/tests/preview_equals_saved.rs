@@ -900,13 +900,11 @@ fn field_merge_preview_equals_saved() {
     let mut s = session("forms", "demo-form.pdf");
     // `FullName` exists in the fixture as a single-widget text field with no
     // value — Shape A, the input promotion is defined over.
-    s.add_text_field(&NewTextField::new(
-        0,
-        "FullName",
-        Rect::from_corners(72.0, 600.0, 340.0, 624.0),
-    ))
+    s.add_text_field(
+        &NewTextField::new(0, "FullName", Rect::from_corners(72.0, 600.0, 340.0, 624.0))
+            .declining_tooltip(),
+    )
     .expect("a same-name, same-type add merges rather than refusing");
-
     let outcome = s
         .fill_text_field("FullName", "Ada Lovelace")
         .expect("fill_text_field applies to the promoted field");
