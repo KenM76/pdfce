@@ -5605,51 +5605,33 @@ impl EditSession {
         let v_string = Object::String(encode_text_string(text));
 
         for field in &targets {
-            let da = field
-                .default_appearance
-                .clone()
-                .unwrap_or_else(|| default_da.clone());
-            let quad = field.quadding;
             let multiline = field.flags.has(forms::FieldFlags::MULTILINE);
 
-            // Regenerate each widget's appearance and collect the /AP stream
-            // writes; a merged (Shape A) widget's /AP patch is folded into
-            // the field-dict patch below rather than written twice.
-            let mut merged_ap: Option<ObjId> = None;
-            for widget in &field.widgets {
-                let (w, h) = widget.rect.map_or((0.0, 0.0), |r| (r.width(), r.height()));
-                let appearance = annot_author::build_field_text_appearance(
-                    w, h, text, &da, quad, multiline, &fonts,
-                )?;
-                if appearance.applied_autosize.is_some() {
-                    applied_autosize = appearance.applied_autosize;
-                }
-                unencodable_chars += appearance.unencodable_chars;
-
-                let ap_id = ObjId::new(self.alloc_number()?, 0);
-                let mut ap_dict = appearance.ap_dict;
-                ap_dict.insert(
-                    Name::from(b"Length"),
-                    Object::Integer(i64::try_from(appearance.content.len()).unwrap_or(i64::MAX)),
-                );
-                let span = self.stage_bytes(&appearance.content);
-                objects.push(ObjectWrite {
-                    id: ap_id,
-                    before: None,
-                    after: Some(Object::Stream(Stream {
-                        dict: ap_dict,
-                        data_span: span,
-                    })),
-                });
-                widgets_updated += 1;
-
-                if widget.merged {
-                    merged_ap = Some(ap_id);
-                } else {
-                    // Shape B: patch the separate widget dict's /AP /N.
-                    objects.push(self.set_widget_ap(widget.id, ap_id)?);
-                }
-            }
+            // THE SHARED REGENERATOR (R92: one appearance path, never two).
+            //
+            // This loop used to be written out here — an exact copy of
+            // `regen_field_appearance`'s body plus a counter. Two copies of
+            // an appearance generator is the shape R92 exists to forbid, and
+            // for a concrete reason rather than a tidiness one: a fill and an
+            // appearance REGENERATION of the same field would have been free
+            // to disagree about how a value is drawn, and the disagreement
+            // would only show as "the field changed when I regenerated it
+            // without editing it" — a defect with no obvious cause.
+            //
+            // A merged (Shape A) widget's `/AP` patch comes back rather than
+            // being written, so it can be folded into the field-dict patch
+            // below rather than written as a second object write.
+            let merged_ap = self.regen_field_appearance(
+                field,
+                text,
+                &default_da,
+                multiline,
+                &fonts,
+                &mut objects,
+                &mut applied_autosize,
+                &mut unencodable_chars,
+            )?;
+            widgets_updated += field.widgets.len();
 
             // Patch the field dictionary: set /V, and (Shape A) its own /AP.
             let Some(Object::Dict(field_dict)) = self.value(field.id) else {
@@ -6592,7 +6574,12 @@ impl EditSession {
         // Remove flattened fields from /AcroForm /Fields (and any parent
         // /Kids). Root fields drop from /Fields; nested ones from /Parent.
         let field_ids: Vec<ObjId> = targets.iter().map(|f| f.id).collect();
-        objects.extend(self.remove_fields_from_form(&field_ids)?);
+        let (form_writes, emptied_parents) = self.remove_fields_from_form(&field_ids)?;
+        objects.extend(form_writes);
+        // A grouping node the flatten emptied is deleted with the fields it
+        // held. Leaving it would leave a named node in the field tree that
+        // owns nothing — see `remove_fields_from_form`'s cascade.
+        let delete_ids: Vec<ObjId> = delete_ids.into_iter().chain(emptied_parents).collect();
 
         // Delete the flattened field/widget dictionaries (§7.5.4). Their
         // /AP appearance streams survive — they are now page resources.
@@ -6842,12 +6829,94 @@ impl EditSession {
     /// Remove flattened fields from the `/AcroForm` `/Fields` array and from
     /// any parent field's `/Kids`. Root fields drop from `/Fields`; a nested
     /// field drops from its `/Parent`'s `/Kids`.
-    fn remove_fields_from_form(&self, field_ids: &[ObjId]) -> Result<Vec<ObjectWrite>, EditError> {
+    ///
+    /// # Returns
+    ///
+    /// The container patches, **and** the ids of any additional grouping
+    /// nodes the removal emptied — see the cascade below. The caller owns
+    /// deleting the field dictionaries themselves and must delete these too,
+    /// or an emptied node survives as an unreferenced object.
+    fn remove_fields_from_form(
+        &self,
+        field_ids: &[ObjId],
+    ) -> Result<(Vec<ObjectWrite>, Vec<ObjId>), EditError> {
         let mut writes: Vec<ObjectWrite> = Vec::new();
         let graph = self.graph();
         // Group the removals by the container that holds each field id: its
         // /Parent's /Kids, or the AcroForm /Fields root.
         let acro_holder = self.acroform_id();
+
+        // CASCADE FIRST: a parent left with no kids is itself removed.
+        //
+        // Removing the last child of a non-terminal grouping node leaves a
+        // node with `/Kids []` — a field with a name, no type of its own
+        // (Table 220), and nothing beneath it. It is not merely untidy: it is
+        // a name that still OCCUPIES its slot in the field tree, so
+        // §12.7.3.2's FQN space still has `Personal.Address` in it, and a
+        // later request to create a terminal field called `Personal.Address`
+        // is refused as a grouping-node collision by a node that exists only
+        // because a deletion did not finish.
+        //
+        // Recursive because emptying a parent can empty ITS parent: deleting
+        // `Personal.Address.Zip` when `Zip` is `Address`'s only child empties
+        // `Address`, which is `Personal`'s only child, which empties
+        // `Personal`. A single pass would leave two dead nodes behind.
+        //
+        // The fixed point is computed BEFORE any write, so the patches below
+        // see the final removal set and no container is patched to keep a kid
+        // that a later round decided to remove.
+        let mut removing: BTreeSet<ObjId> = field_ids.iter().copied().collect();
+        loop {
+            let mut added = false;
+            // Candidate parents: the /Parent of everything currently marked
+            // for removal that is not itself already marked.
+            let parents: Vec<ObjId> = removing
+                .iter()
+                .filter_map(|id| {
+                    graph
+                        .resolved(*id)
+                        .as_dict()
+                        .and_then(|d| d.get(b"Parent").and_then(Object::as_reference))
+                })
+                .filter(|p| !removing.contains(p))
+                .collect();
+            for p in parents {
+                let survives = graph
+                    .resolved(p)
+                    .as_dict()
+                    .and_then(|d| d.get(b"Kids").map(|o| graph.resolve(o)))
+                    .and_then(Object::as_array)
+                    .is_some_and(|kids| {
+                        kids.iter()
+                            .filter_map(Object::as_reference)
+                            .any(|k| !removing.contains(&k))
+                    });
+                // A parent whose `/Kids` cannot be read at all is LEFT ALONE.
+                // `survives == false` there would mean "it has no surviving
+                // kids", which is true but useless: the node's structure is
+                // not understood, and deleting what is not understood is how
+                // a repair becomes a data loss.
+                let readable = graph
+                    .resolved(p)
+                    .as_dict()
+                    .and_then(|d| d.get(b"Kids").map(|o| graph.resolve(o)))
+                    .and_then(Object::as_array)
+                    .is_some();
+                if readable && !survives && removing.insert(p) {
+                    added = true;
+                }
+            }
+            if !added {
+                break;
+            }
+        }
+        // The nodes the cascade ADDED, reported so the caller deletes their
+        // dictionaries alongside the fields it already owns.
+        let requested: BTreeSet<ObjId> = field_ids.iter().copied().collect();
+        let cascaded: Vec<ObjId> = removing.difference(&requested).copied().collect();
+        let field_ids: Vec<ObjId> = removing.iter().copied().collect();
+        let field_ids = &field_ids[..];
+
         // Map container-object-id -> (array-key, ids to drop).
         let mut by_parent: BTreeMap<ObjId, Vec<ObjId>> = BTreeMap::new();
         let mut root_drop: Vec<ObjId> = Vec::new();
@@ -6857,7 +6926,11 @@ impl EditSession {
                 .as_dict()
                 .and_then(|d| d.get(b"Parent").and_then(Object::as_reference));
             match parent {
-                Some(p) => by_parent.entry(p).or_default().push(*id),
+                // A parent that is ITSELF being removed needs no `/Kids`
+                // patch — the whole node is going, and patching it would emit
+                // a write for an object that is about to be dropped.
+                Some(p) if !removing.contains(&p) => by_parent.entry(p).or_default().push(*id),
+                Some(_) => {}
                 None => root_drop.push(*id),
             }
         }
@@ -6884,11 +6957,46 @@ impl EditSession {
                 }
             }
         }
-        // AcroForm /Fields root patch. Clone the fields array up front so the
-        // immutable borrow of the AcroForm dict is released before its own
-        // (direct-array) case mutates it.
+        // AcroForm /Fields root patch.
+        //
+        // # `holder_id` is not always the AcroForm dictionary
+        //
+        // `acroform_id` returns the object that HOLDS the form: the
+        // referenced object when `/AcroForm` is indirect, and **the catalog**
+        // when it is a direct dictionary. Those are two different
+        // dictionaries, and the difference is the whole of a defect this
+        // slice found by running the shipped flatten over the shipped
+        // `demo-form.pdf`:
+        //
+        //     flatten ... fields_flattened=2
+        //     /AcroForm << /Fields [4 0 R 5 0 R] ...
+        //
+        // Objects 4 and 5 were deleted; `/Fields` still referenced them. The
+        // code read `/Fields` off the CATALOG, found nothing there (it lives
+        // one level down, inside the direct `/AcroForm`), and the `if let`
+        // guarding the patch simply did not fire — so removal silently did
+        // nothing and left `/AcroForm /Fields` pointing at deleted objects.
+        //
+        // No test caught it because every forms test asserted through
+        // `parse_acroform`, which resolves each `/Fields` entry and drops the
+        // ones that no longer resolve. The projection looked right; the FILE
+        // was wrong. `add_field`'s registration path had the direct case
+        // right all along — this brings removal into line with it.
         if let Some(holder_id) = acro_holder {
-            let acro = graph.resolved(holder_id).as_dict().cloned();
+            let catalog_id = graph.catalog_id();
+            let holder_is_catalog = Some(holder_id) == catalog_id;
+            let holder = graph.resolved(holder_id).as_dict().cloned();
+            // The actual AcroForm dict: the holder itself, or the direct
+            // `/AcroForm` value inside the catalog.
+            let acro: Option<Dict> = if holder_is_catalog {
+                holder
+                    .as_ref()
+                    .and_then(|c| c.get(b"AcroForm"))
+                    .and_then(Object::as_dict)
+                    .cloned()
+            } else {
+                holder.clone()
+            };
             let fields_owned: Option<Vec<Object>> = acro
                 .as_ref()
                 .and_then(|d| d.get(b"Fields"))
@@ -6906,24 +7014,34 @@ impl EditSession {
                     .collect();
                 match fields_holder {
                     // /Fields is an indirect array object: patch it directly.
+                    // Correct whichever dictionary points at it.
                     Some(arr_id) => writes.push(ObjectWrite {
                         id: arr_id,
                         before: self.state.get(&arr_id).cloned(),
                         after: Some(Object::Array(kept)),
                     }),
-                    // /Fields is a direct array in the AcroForm dict.
+                    // /Fields is a direct array. Rewrite the dictionary that
+                    // contains it — nesting the corrected AcroForm back into
+                    // the catalog when that is where it lives.
                     None => {
                         acro.insert(Name::from(b"Fields"), Object::Array(kept));
+                        let after = if holder_is_catalog {
+                            let mut cat = holder.unwrap_or_default();
+                            cat.insert(Name::from(b"AcroForm"), Object::Dict(acro));
+                            Object::Dict(cat)
+                        } else {
+                            Object::Dict(acro)
+                        };
                         writes.push(ObjectWrite {
                             id: holder_id,
                             before: self.state.get(&holder_id).cloned(),
-                            after: Some(Object::Dict(acro)),
+                            after: Some(after),
                         });
                     }
                 }
             }
         }
-        Ok(writes)
+        Ok((writes, cascaded))
     }
 
     /// The object id that holds the `/AcroForm` dictionary: the referenced

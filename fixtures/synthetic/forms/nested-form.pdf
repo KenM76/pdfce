@@ -1,0 +1,42 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >> >> >> >> >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 260] /Resources << >> /Annots [6 0 R 7 0 R 8 0 R] >>
+endobj
+4 0 obj
+<< /T (Personal) /FT /Tx /Kids [5 0 R 8 0 R] >>
+endobj
+5 0 obj
+<< /T (Address) /DA (/Helv 8 Tf 0 0 1 rg) /Kids [6 0 R 7 0 R] /Parent 4 0 R >>
+endobj
+6 0 obj
+<< /T (Zip) /Parent 5 0 R /V (K7L 1A1) /Type /Annot /Subtype /Widget /Rect [20 200 140 222] /P 3 0 R /F 4 /MK << /BC [0 0 0] >> >>
+endobj
+7 0 obj
+<< /T (City) /Parent 5 0 R /V (Kingston) /Type /Annot /Subtype /Widget /Rect [20 160 140 182] /P 3 0 R /F 4 /MK << /BC [0 0 0] >> >>
+endobj
+8 0 obj
+<< /T (Name) /Parent 4 0 R /V (A. Operator) /Type /Annot /Subtype /Widget /Rect [20 120 240 142] /P 3 0 R /F 4 /MK << /BC [0 0 0] >> >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000015 00000 n 
+0000000227 00000 n 
+0000000284 00000 n 
+0000000400 00000 n 
+0000000463 00000 n 
+0000000557 00000 n 
+0000000703 00000 n 
+0000000851 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+1002
+%%EOF

@@ -163,6 +163,7 @@
 //! | `format-text` | [`format_text_preview_equals_saved`] | `textedit/format_color.pdf` |
 //! | `reflow` | [`reflow_preview_equals_saved`] | `reflow/reflow.pdf` |
 //! | `fill-field` | [`fill_field_preview_equals_saved`] | `forms/demo-form.pdf` |
+//! | `fill-field` (3 widgets, 2 pages) | [`fill_field_multi_widget_preview_equals_saved`] | `forms/multi-widget-form.pdf` |
 //! | `flatten` | [`flatten_preview_equals_saved`] | `forms/demo-form.pdf` |
 //! | redaction *marking* | [`redaction_mark_preview_equals_saved`] | `redact/demo-secret.pdf` |
 //!
@@ -823,6 +824,42 @@ fn fill_field_preview_equals_saved() {
         "the fixture's FullName field has a widget to update"
     );
     check("fill-field", &s, 0, Visible::Yes);
+}
+
+/// `fill-field` on a **multi-widget** field — one value, three appearances,
+/// across two pages (decision 020's F0).
+///
+/// # Why the single-widget case above does not cover this
+///
+/// `fill_text_field` fans out over `field.widgets`, and a merged (Shape A)
+/// field has exactly one — so the shipped oracle case exercises a loop that
+/// runs once. Every way that loop can be wrong for N > 1 is invisible to it:
+/// generating one stream and attaching it to three widgets, generating three
+/// and attaching only the first, or attaching each to the wrong widget. All
+/// three produce a correct `widgets_updated` count and a document that parses.
+///
+/// This matters now rather than in the abstract because the merge primitive
+/// GENERATES this shape — a second `add-field` under an existing name
+/// promotes a merged field into a `/Kids` parent with two widgets. Authoring
+/// starts producing exactly the input the fill path has never been rendered
+/// against.
+///
+/// **Page 2 is the page checked**, deliberately. Two of the three widgets are
+/// on page 1 and only the third is on page 2, so a fill that painted every
+/// widget onto the first page — or that skipped the last widget — leaves page
+/// 2 blank in the saved file while the preview shows it filled. Page 1 would
+/// hide both errors behind the widgets that *are* correct there.
+#[test]
+fn fill_field_multi_widget_preview_equals_saved() {
+    let mut s = session("forms", "multi-widget-form.pdf");
+    let outcome = s
+        .fill_text_field("Reference", "R-2000")
+        .expect("fill_text_field applies");
+    assert_eq!(
+        outcome.widgets_updated, 3,
+        "the fixture's Reference field has three widgets across two pages",
+    );
+    check("fill-field/multi-widget", &s, 1, Visible::Yes);
 }
 
 /// `flatten` — burning a filled widget's appearance into page content and

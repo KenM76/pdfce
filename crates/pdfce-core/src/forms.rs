@@ -446,6 +446,41 @@ pub struct Field {
     /// field that has others (they share `/FT`/`/V`/`/DV`, §12.7.3.2). A
     /// value edit must apply to every same-FQN representation.
     pub shares_parent_name: bool,
+    /// The object id of this field's `/Parent` node in the field tree
+    /// (§12.7.3.1), or `None` for a root field in `/AcroForm /Fields`.
+    ///
+    /// # Why the read projection carries a pointer back INTO the tree
+    ///
+    /// The projection is deliberately flat — it lists terminal fields and
+    /// discards the non-terminal grouping nodes above them, because that is
+    /// the right shape for "show me the fields / fill this one / flatten
+    /// these". But two operations genuinely need the ancestor and cannot
+    /// recover it from a flat list:
+    ///
+    /// * **Writing an inherited `/V`.** §12.7.3.1 lets `/V` be declared on an
+    ///   ancestor and inherited by every terminal beneath it. The projection
+    ///   RESOLVES that inheritance, so a resolved value looks identical
+    ///   whether it was declared here or three levels up — and a fill that
+    ///   writes to the terminal in the second case leaves the ancestor's
+    ///   declaration untouched, so the old value is still inherited by every
+    ///   SIBLING. The write went to the wrong dictionary and nothing said so.
+    /// * **Subtree rename.** Renaming `Personal` changes the FQN of every
+    ///   terminal beneath it; the terminals must be able to name the node
+    ///   whose `/T` actually moves.
+    ///
+    /// Populated by the tree walk, which is the only place the relationship
+    /// is known for certain. It is deliberately NOT read from the node's own
+    /// `/Parent` key: that key is a back-reference a producer may omit or get
+    /// wrong, whereas the walk arrived here FROM the parent and cannot be
+    /// mistaken about which node that was.
+    ///
+    /// # Honest limit
+    ///
+    /// Adding this field does not by itself fix the inherited-`/V` write —
+    /// the three setters still write to the terminal (decision 020 §8.4,
+    /// named there as a limit rather than a defect). This is the substrate
+    /// that fix needs, added where the walk can populate it correctly.
+    pub parent: Option<ObjId>,
 }
 
 impl Field {
@@ -592,6 +627,20 @@ pub struct AcroForm {
     pub quadding: Quadding,
     /// Whether — and how — the form carries an XFA layer (detect only).
     pub xfa: XfaPresence,
+    /// How many `/AcroForm /Fields` entries were **direct dictionaries**
+    /// rather than indirect references, and are therefore absent from
+    /// [`AcroForm::fields`].
+    ///
+    /// §12.7.3.1 requires every field to be an indirect object. A direct dict
+    /// in `/Fields` is malformed input — but a reader that skips it silently
+    /// reports a field count the file does not have, which is the difference
+    /// between tolerating damage and hiding it. pdfce cannot descend into
+    /// such an entry (every downstream operation addresses a field by object
+    /// id, and a direct dict has none), so it counts it and says so.
+    ///
+    /// Normally `0`. A non-zero value means `fields.len()` understates the
+    /// file's field count by exactly this much.
+    pub inline_field_roots: usize,
 }
 
 impl AcroForm {
@@ -703,6 +752,7 @@ pub fn parse_acroform<G: ObjectGraph + ?Sized>(graph: &G) -> Option<AcroForm> {
     // Walk the root fields depth-first, resolving inheritance down /Kids.
     let mut fields = Vec::new();
     let mut visited = HashSet::new();
+    let mut inline_field_roots = 0usize;
     if let Some(roots) = acro
         .get(b"Fields")
         .map(|o| graph.resolve(o))
@@ -710,13 +760,33 @@ pub fn parse_acroform<G: ObjectGraph + ?Sized>(graph: &G) -> Option<AcroForm> {
     {
         // Collect the root field ids up front so `roots` (borrowed from the
         // cloned `acro`) does not tangle with the recursive borrow of `graph`.
-        let root_ids: Vec<ObjId> = roots.iter().filter_map(Object::as_reference).collect();
+        //
+        // NON-REFERENCE entries are COUNTED, not silently skipped. §12.7.3.1
+        // requires every field to be an indirect object, so a direct dict
+        // sitting in `/Fields` is malformed — but "malformed" is not the same
+        // as "absent", and a reader that drops it without saying so reports a
+        // field count the file does not have. The count is the disclosure;
+        // the walk still cannot descend into it, because every operation
+        // downstream (fill, flatten, appearance regeneration) addresses a
+        // field by OBJECT ID and a direct dict has none to address.
+        //
+        // This matters to authoring rather than to reading: pdfce must never
+        // WRITE such an entry, which is why F1's acceptance asserts the
+        // `/Fields` entry it appends is an indirect reference.
+        let mut root_ids: Vec<ObjId> = Vec::with_capacity(roots.len());
+        for entry in roots {
+            match entry.as_reference() {
+                Some(id) => root_ids.push(id),
+                None => inline_field_roots += 1,
+            }
+        }
         for id in root_ids {
             walk_field(
                 graph,
                 id,
                 &Inherited::default(),
                 String::new(),
+                None,
                 0,
                 &mut visited,
                 &mut fields,
@@ -726,6 +796,7 @@ pub fn parse_acroform<G: ObjectGraph + ?Sized>(graph: &G) -> Option<AcroForm> {
 
     Some(AcroForm {
         fields,
+        inline_field_roots,
         need_appearances,
         sig_flags,
         signatures_exist: sig_flags & 1 != 0,
@@ -759,14 +830,17 @@ fn detect_xfa<G: ObjectGraph + ?Sized>(graph: &G, acro: &Dict) -> XfaPresence {
 /// One node of the field-tree DFS (§12.7.3.1).
 ///
 /// `inherited` is the nearest-ancestor context; `parent_fqn` is the
-/// ancestors' fully-qualified name so far; `depth`/`visited` bound cycles
-/// and hostile trees; resolved terminal fields are pushed onto `out`.
+/// ancestors' fully-qualified name so far; `parent_id` is the node this walk
+/// descended FROM (`None` at an `/AcroForm /Fields` root); `depth`/`visited`
+/// bound cycles and hostile trees; resolved terminal fields are pushed onto
+/// `out`.
 #[allow(clippy::too_many_arguments)]
 fn walk_field<G: ObjectGraph + ?Sized>(
     graph: &G,
     id: ObjId,
     inherited: &Inherited,
     parent_fqn: String,
+    parent_id: Option<ObjId>,
     depth: usize,
     visited: &mut HashSet<ObjId>,
     out: &mut Vec<Field>,
@@ -857,23 +931,64 @@ fn walk_field<G: ObjectGraph + ?Sized>(
         quadding: q_code,
     };
 
-    if !child_fields.is_empty() {
-        // Non-terminal: recurse into each child field, carrying inheritance.
-        for kid in child_fields {
-            walk_field(graph, kid, &ctx, this_fqn.clone(), depth + 1, visited, out);
-        }
+    // MIXED `/Kids` — a node may hold BOTH child fields and bare widgets.
+    //
+    // §12.7.3.1's merge rule classifies each kid INDIVIDUALLY: a kid with its
+    // own `/T` is a child field, a `/T`-less widget kid is one of this node's
+    // own appearances. Nothing in the spec says a node must pick one KIND of
+    // kid, and a node that mixes them is both a non-terminal (for its child
+    // fields) and a terminal with on-page presence (for its widget kids).
+    //
+    // This code used to pick one: if ANY kid was a field it recursed and
+    // RETURNED, so a mixed node's own widgets were never modelled and the
+    // node itself never reached `out`. Its `/V` and its rectangle simply
+    // vanished from `list-fields`, from `regenerate-appearances`, from
+    // `export-data` and from `flatten` — while the page's `/Annots` still
+    // referenced the widget, so a viewer painted a field the form did not
+    // contain. Measured on `mixed-kids-form.pdf` before the fix:
+    // `list-fields` reported `Order.Qty` alone and `Order` not at all.
+    //
+    // No corpus file has the shape (Pass 7.0's census: no file nests fields
+    // at all), which is why it survived — and F1's merge can GENERATE it, by
+    // attaching a widget to a node that already has a child field. So the two
+    // classifications now both happen: recurse into the child fields, and
+    // fall through to model this node's own widget kids.
+    let widget_kids: Vec<ObjId> = kid_ids
+        .iter()
+        .copied()
+        .filter(|kid| !child_fields.contains(kid))
+        .collect();
+
+    for kid in &child_fields {
+        walk_field(
+            graph,
+            *kid,
+            &ctx,
+            this_fqn.clone(),
+            Some(id),
+            depth + 1,
+            visited,
+            out,
+        );
+    }
+
+    // A PURE non-terminal — child fields and no widgets of its own — has no
+    // presence and no type of its own (Table 220), so it contributes nothing
+    // to a projection of terminal fields. Stop here.
+    if !child_fields.is_empty() && widget_kids.is_empty() {
         visited.remove(&id);
         return;
     }
 
-    // Terminal field. Its widgets are either the /T-less /Kids (Shape B) or,
-    // when there are none, the field dict itself if it looks like a widget
-    // (Shape A merge) — otherwise a value-only terminal with no presence.
+    // Terminal field (possibly ALSO a non-terminal, per the mixed case above).
+    // Its widgets are either the /T-less /Kids (Shape B) or, when there are
+    // none, the field dict itself if it looks like a widget (Shape A merge) —
+    // otherwise a value-only terminal with no presence.
     let flags = FieldFlags(flags_word);
     let button_kind =
         (field_type == Some(FieldType::Button)).then(|| ButtonKind::from_flags(flags));
 
-    let widgets = if kid_ids.is_empty() {
+    let widgets = if widget_kids.is_empty() {
         // Shape A (merged) or value-only.
         if dict_is_widget(&dict) {
             vec![model_widget(graph, id, &dict, true)]
@@ -882,7 +997,7 @@ fn walk_field<G: ObjectGraph + ?Sized>(
         }
     } else {
         // Shape B: each /T-less kid is a widget of this field.
-        kid_ids
+        widget_kids
             .iter()
             .filter_map(|kid| {
                 graph
@@ -928,9 +1043,10 @@ fn walk_field<G: ObjectGraph + ?Sized>(
             .unwrap_or(0),
         selected_indices: read_indices(graph, &dict),
         widgets,
-        merged: kid_ids.is_empty() && dict_is_widget(&dict),
+        merged: widget_kids.is_empty() && dict_is_widget(&dict),
         has_additional_actions: dict.contains_key(b"AA"),
         shares_parent_name: !has_own_name,
+        parent: parent_id,
     });
 
     visited.remove(&id);
@@ -1854,6 +1970,7 @@ mod tests {
             merged: false,
             has_additional_actions: false,
             shares_parent_name: false,
+            parent: None,
         };
         assert!(
             radio.flags.has(FieldFlags::RICH_TEXT),
@@ -1894,6 +2011,7 @@ mod tests {
             merged: false,
             has_additional_actions: false,
             shares_parent_name: false,
+            parent: None,
         };
         assert!(text.is_rich_text());
         assert!(!text.radios_in_unison());
@@ -1928,6 +2046,7 @@ mod tests {
             merged: false,
             has_additional_actions: false,
             shares_parent_name: false,
+            parent: None,
         };
         assert!(!sig.is_rich_text());
         assert!(!sig.radios_in_unison());
