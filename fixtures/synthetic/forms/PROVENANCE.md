@@ -166,3 +166,36 @@ Every forms test asserted through `parse_acroform`, which resolves each
 an empty form while the file named deleted objects. The regression test for
 it (`flatten_clears_the_fields_array_in_the_saved_bytes`) therefore asserts
 on **bytes**, not on the model.
+
+## `certified-p2-form.pdf` — the certification level that SEPARATES two gates
+
+Byte-authored by `tools/gen-form-certified-p2-fixture.py`; no PDF library
+is involved, so it cannot inherit a bug from the code it tests.
+
+`demo-form.pdf`'s two merged fields (`FullName` text, `Subscribe` check
+box) plus `/Perms << /DocMDP >>` on the catalog and a signature dictionary
+whose `/DocMDP` transform carries **`/P 2`** — "filling in forms and
+signing is permitted" (§12.8.4 Table 254).
+
+**Why a new fixture rather than reusing `addtext/certified-locked.pdf`.**
+That file is `/P 1`, "no changes permitted", and refuses *everything*.
+`EditSession::fill_refusal` and `EditSession::deletion_refusal`
+deliberately use different gates — filling takes the `/P`-aware one,
+deletion takes the strict one — so a test written against `/P 1` passes
+whether or not those gates differ at all, and would keep passing if
+someone collapsed one into the other. **R162**: an assertion that cannot
+come out false.
+
+`/P 2` is the only value where the two disagree, and it is not an exotic
+one — a certified fillable form is the ordinary real-world case. It is
+what makes "pdfce offers filling and refuses deletion on the same
+document" a testable claim rather than a doc comment.
+
+The `/ByteRange` and `/Reference` are structural placeholders with no
+signed bytes, deliberately: the guards read census-visible *structure* and
+verify no cryptography, so real signing would test a claim pdfce does not
+make while adding a key nobody can rotate.
+
+Two fields rather than one because deleting a text field and deleting a
+button travel slightly different paths in the panel, and a one-field
+fixture would let a regression in either hide.

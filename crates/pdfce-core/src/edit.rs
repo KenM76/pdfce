@@ -7123,6 +7123,48 @@ impl EditSession {
         self.check_certification_for_fill().err()
     }
 
+    /// Why field/widget DELETION would refuse right now, or `None`.
+    ///
+    /// [`Self::fill_refusal`]'s sibling, and deliberately **not** the same
+    /// query — a shell that reused `fill_refusal` to gate a delete control
+    /// would offer deletion on a document that refuses it.
+    ///
+    /// # Why the gates differ, argued from what each operation does
+    ///
+    /// Filling uses the `/P`-aware gate: a certified document at
+    /// `/P >= 2` permits form filling, because that is frequently what such
+    /// a document was certified TO allow (§12.8.2.2 Table 257). Deleting a
+    /// field is a **structural** change to the form itself, which is
+    /// precisely what a certification signature exists to freeze — so
+    /// [`Self::delete_field`] and [`Self::delete_widget`] take the STRICT
+    /// gate through `deletion_preflight`.
+    ///
+    /// The consequence a caller must not get wrong: **there are documents
+    /// where filling is offered and deletion is refused.** They are not
+    /// rare — a certified fillable form is the ordinary case.
+    ///
+    /// A **pure query**: it reads the signature census and the trailer and
+    /// mutates nothing, so it is safe to call every frame from a UI.
+    ///
+    /// ```
+    /// # use pdfce_core::{document::Document, edit::EditSession};
+    /// # fn demo(doc: Document) {
+    /// let session = EditSession::new(doc);
+    /// if let Some(err) = session.deletion_refusal() {
+    ///     // Disable the delete control and show `err` (R83), rather than
+    ///     // offering a button whose every press returns this same error.
+    ///     eprintln!("field deletion is not available: {err}");
+    /// }
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn deletion_refusal(&self) -> Option<EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Some(EditError::DocumentEncrypted);
+        }
+        self.check_certification().err()
+    }
+
     fn check_certification_for_fill(&self) -> Result<(), EditError> {
         let found = census(&self.graph());
         if found.perms_enforced && found.signatures > 0 && found.certification_permission == Some(1)
