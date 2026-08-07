@@ -138,6 +138,18 @@ All four outcomes are live across all three verbs (`add_text_field`, `add_check_
 
 Comb layout still not driven from `/MaxLen`; positional-`/Opt` radio authoring still unresolved; inherited-`/V` writes still terminal-only; `/Tabs` (F4) still blocked on a `pdfce-spec-librarian` dispatch. **F2's radio grouping is now UNBLOCKED** — the merge primitive it needed now exists — but is not built by this filing. Field/widget deletion (F2's other half), `/I`/`/TI`, push buttons (F3's other half), the GUI surface (F5), and field property editing (F6, the operator's own "editing" ask) are all still owed, unchanged.
 
+> **✅ AMENDED 2026-08-07 (same day, seventh filing) — THREE of the items
+> above are now DISCHARGED, and the paragraph is left as filed because it
+> was correct at `f809857`.** **Radio grouping is BUILT**, not merely
+> unblocked; **field/widget deletion is BUILT**; and **positional-`/Opt`
+> radio authoring is RESOLVED — as an explicit, reasoned REFUSAL**, which
+> decision 020 §8.3 names as an equal outcome to implementing it. Together
+> these **COMPLETE Pass 20.2**. See the **COMPLETION ADDENDUM** on the
+> `Pass 20.2 + Pass 20.3` entry below (`69ab966`+`834d256`+`817b268`).
+> **Everything else in the paragraph above is unchanged and still owed**:
+> comb layout, inherited-`/V`, `/Tabs` authoring, `/I`/`/TI`, push buttons,
+> F5, F6.
+
 #### Verification — measured, not asserted
 
 ```
@@ -907,7 +919,7 @@ Operator-question ceiling unchanged at **(bb)**.
 **Backup currency is not verifiable from here** — the engineer should
 check `D:\Dev\pdfce-backups\` if it matters.
 
-### Pass 20.2 + Pass 20.3 — check boxes and choice fields, and the duplicate name that stops being allowed (core + CLI) — 2026-08-07, committed `bca60c9`, branch `pass-8-redaction`. **BOTH PARTIAL.** **No number is MINTED — both IDs were filed by decision 020 on 2026-08-03 and this filing HEADS them for the first time**, which is the first time family 20 has had a heading at all
+### Pass 20.2 + Pass 20.3 — check boxes and choice fields, and the duplicate name that stops being allowed (core + CLI) — 2026-08-07, committed `bca60c9`, branch `pass-8-redaction`. **BOTH PARTIAL AT `bca60c9`.** **No number is MINTED — both IDs were filed by decision 020 on 2026-08-03 and this filing HEADS them for the first time**, which is the first time family 20 has had a heading at all. **★ SUPERSEDED IN PART, SAME DAY: Pass 20.2 is now COMPLETE** — radio creation and field/widget deletion landed in `69ab966`+`834d256`+`817b268`; see the **COMPLETION ADDENDUM** at the end of this entry. **Pass 20.3 remains PARTIAL** (`/I`, `/TI`, push buttons still owed)
 
 **Slice 2 of the operator's field-creation request** (*"get form field
 creation/editing done next."*). `EditSession::add_check_box` and
@@ -937,6 +949,17 @@ declaring more than one Pass (*"Pass 17.1 + Pass 17.2"*), so this shape
 costs the gate nothing.
 
 **Both are PARTIAL, and here is exactly which half of each is missing:**
+
+> **⚠ THE `Pass 20.2` ROW BELOW IS STALE AS OF THE SAME DAY — read the
+> COMPLETION ADDENDUM at the end of this entry before quoting it.**
+> `69ab966`+`834d256`+`817b268` deliver **every item the 20.2 row lists as
+> missing**: radio grouping through the F1 merge primitive, `delete-field` /
+> `delete-widget`, and button positional-`/Opt` (**as a reasoned REFUSAL**,
+> which decision 020 §8.3 permits as an equal outcome to implementing it).
+> **The `Pass 20.3` row is still accurate and still owed.** Left in place
+> rather than edited, per this section's append-only discipline — the gap
+> the row records was real at `bca60c9`, and is the reason the three later
+> commits exist.
 
 | Slice | Decision 020's definition | `bca60c9` |
 |---|---|---|
@@ -1192,6 +1215,14 @@ propagation duty.
   operator asked for **by name** and decision 020 filed as the non-gating
   fast-follow F6.
 
+> **✅ AMENDED 2026-08-07 (same day, seventh filing).** Of the six items
+> above, **four are now discharged**: the resolver and F0's substrate
+> (`a3d885b`+`f809857`), **radio groups** and **field/widget deletion**
+> (`69ab966`+`834d256`+`817b268`, the COMPLETION ADDENDUM at the end of
+> this entry). **Still owed, unchanged: `/I`/`/TI`, push buttons, and F6
+> property editing.** The list is left as filed — it is the record of what
+> `bca60c9` itself named as its own debt.
+
 **The CLI shape still diverges from decision 020** — `add-check-box` /
 `add-choice-field` versus `forms add-field --type checkbox|listbox|…`.
 **Inherited from slice 1, not introduced here**, and now at three verbs
@@ -1222,6 +1253,371 @@ the condition `tools/check-ledger-numbers.py` had reported since
 2026-08-03, and which the `8e799e9` filing explicitly could not clear.
 **Note what actually cleared it: a heading, not a commit.** Two commits of
 family-20 work existed before this filing and neither moved that line.
+
+---
+
+#### ★ COMPLETION ADDENDUM (2026-08-07, seventh filing of the day) — **PASS 20.2 IS NOW COMPLETE.** Radio groups and field/widget deletion both land: `69ab966` + `834d256` + `817b268`
+
+**Pass 20.2 is no longer PARTIAL.** Decision 020 §6 defines **F2** as
+*"Checkbox + radio creation, **and field/widget deletion**"*. The check-box
+half shipped in `bca60c9` (the entry above); **this addendum files the other
+two thirds — radio creation and deletion — and with them F2's whole
+acceptance surface.** `EditSession::add_radio_button` / `delete_field` /
+`delete_widget` in `pdfce-core`, `add-radio-button` / `delete-field` /
+`delete-widget` in `pdfce-cli` (**rule 11 satisfied for all three**), across
+five files, **~2,600 insertions**.
+
+**Pass 20.3 (F3) stays PARTIAL and is untouched by this addendum** — `/I`,
+`/TI` and push buttons are all still owed. Stated first because the entry
+this addendum extends heads both IDs, and a reader skimming a *"COMPLETE"*
+banner on a two-ID entry could reasonably conclude both closed.
+
+##### Why this is an ADDENDUM and not a new Shipped heading — two reasons, and the second is mechanical
+
+**1. The ID test, applied a fourth time.** The project's standing test for
+whether work needs a fresh number is *what does the document that DEFINED
+the number say it means?* Decision 020 §6 names radio creation and
+field/widget deletion as **F2's own content**, and the Backlog's 2026-08-03
+amendment assigned **F2 → Pass 20.2**. This is 20.2's unbuilt remainder,
+built — **not different work under a spoken-for number.** Per hard rule 2,
+**no Pass ID is minted.**
+
+**2. `Pass 20.2` cannot appear in a new heading's pre-em-dash prefix, and
+this is the FOURTH time that constraint has shaped this file.**
+`check-ledger-numbers.py` counts every Pass ID in a heading's prefix **per
+section**, and **20.2 is already headed in *Shipped*** — by the entry this
+addendum sits inside. A new `### Pass 20.2 — …` heading would report
+`DUPLICATE Pass 20.2 declared 2x in section [Shipped]` and exit 1, exactly
+as `Pass 20.0 + Pass 20.1 (completion)` did (see that entry's **⚠ HEADING
+CORRECTED** block).
+
+**The remedy chosen here is different from the one used there, deliberately.**
+That entry had a *free* ID (`20.0`) to lead with and could move the taken one
+into the descriptive half. **This filing has no free ID at all** — every line
+of it is 20.2. The two remaining shapes were (a) a top-level heading not
+beginning with `Pass `, which the gate does not read at all, or (b) an
+addendum inside the entry that already declares the ID. **(b) was chosen**,
+because (a) deliberately authors a heading the gate is blind to — the exact
+`★ Pass`-prefix blind spot fixed in `0720adb` and the R53–R57 shape — and
+because a reader looking up *"what happened to Pass 20.2"* should find the
+partial and its completion **in one place**, not two entries apart.
+
+##### The headline: radio groups are built out of F1's merge primitive, and almost nothing knows what a radio group IS
+
+**Three `add_radio_button` calls sharing one `--name` produce ONE field with
+THREE widgets.** There is no radio-specific grouping path and no
+`add-radio-group` verb. `add_radio_button` sets `/Ff` bit 16, draws a round
+widget, and hands the name to F1's `resolve_field_path`; **grouping falls out
+of §12.7.3.2 meaning what it says a shared fully-qualified name means.**
+
+**Mutual exclusion likewise needed no code.** The already-shipped
+`set_button_state` sets each widget's `/AS` to the requested state when that
+widget offers it and `/Off` otherwise — **which IS radio behaviour**, and was
+written before radio authoring existed. **A radio-specific grouping path
+would have been a second mechanism for something the format already defines**
+(R92's instinct, applied to structure rather than to appearance generators).
+
+**That is also why the verification drives the UNMODIFIED fill path.** An
+untouched consumer, written before this feature, accepting these fields is
+what proves the authored thing is a **real group** rather than a dictionary
+that happens to parse — the R44 proof shape.
+
+**One invocation adds one MEMBER, not a group.** There is no
+`add-radio-group` because **there is no moment at which pdfce could know you
+were finished**; a one-member group is a legitimate intermediate state. The
+CLI output line carries `merged=`, so a script can distinguish
+*created-the-group* from *joined-it* without re-reading the file.
+
+**The circle is pdfce's own design choice, recorded as one rather than as a
+parity claim.** Nothing in ISO 32000-1 says a radio should look round —
+§12.7.4.2 distinguishes radio from check box by bit 16 alone. But the
+round/square convention is **load-bearing for the operator, not decorative**:
+a check box means *toggle me independently*, a radio means *choose one of
+these*, and that difference is invisible until you click. **A group drawn as
+square boxes is a form that lies about its own behaviour.**
+
+##### Three refusals and one disclosure, each for a stated reason
+
+- **Duplicate export values — REFUSED, unless the group is
+  `RadiosInUnison`.** Members are told apart by on-state name alone
+  (§12.7.4.2.1), so two sharing one make `/V` unable to say which was chosen
+  and light both. **That is precisely what `/Ff` bit 26 requests
+  deliberately**, so the refusal names the flag rather than treating the
+  legitimate case as an error.
+- **★ Positional-`/Opt` radio groups — REFUSED BY NAME, and this DISCHARGES
+  decision 020 §8.3.** Table 227 lets a button's `/Opt` supply export values
+  **positionally**, which makes the `/AP /N` keys array **indices**. pdfce
+  parses `/Opt` but **has never consulted it on the write side**, so it can
+  compute neither what index a new member would take nor what the existing
+  members export. §8.3 required *"either implement or explicitly refuse"* —
+  **this is the refusal, chosen, not an omission.** It is unreachable on
+  pdfce-authored groups, which are always named. **Recorded as a chosen
+  refusal so a future reader does not file it as a gap.**
+- **A check box joining a radio group, and the reverse — REFUSED.** Both are
+  `/FT /Btn`, so comparing type alone would merge them into one field whose
+  widgets disagree about whether they toggle independently or exclusively.
+  **The KIND comparison F1 already had is what catches it** — no new
+  mechanism.
+- **Group flags are DISCLOSED, not applied and not refused.**
+  `NoToggleToOff` and `RadiosInUnison` live on the **field**, so a later
+  member honouring its own would **silently rewrite how every existing member
+  behaves**. Refusing outright would break the obvious script that passes the
+  same flags to every call in a loop. So the group's flags stand and the
+  divergence is reported — **rule 4, fuzzy never sneaky.**
+
+**Bit 26 is read only through `Field::radios_in_unison()`, the type-gated
+predicate** — the same raw bit means `RichText` on a text field, and reading
+it raw is how a button's flag would silently become a text field's.
+
+##### Deletion — §3.6.3's three rules, and the one that earns its code
+
+**The rule worth the code is the second one.** Deleting a radio member whose
+on-state equals the field's `/V` leaves **`/V` naming a state no remaining
+widget can display** — a malformed field that **parses perfectly** and that
+no viewer can render honestly. So `/V` goes to `/Off`, every surviving kid's
+`/AS` goes with it, and **the operator is TOLD**, in prose and in a
+machine-readable field (`selection_cleared=1`). **§3.6.3 is explicit that
+silence either way is the sneaky outcome:** leaving the dangling value, or
+clearing it quietly.
+
+- **Last-member deletion delegates to `delete_field`** rather than
+  reimplementing it, so the two paths **cannot come to disagree about what
+  *gone* means.**
+- **R102 holds on the way down.** A group falling from three members to one
+  **keeps its `/Kids` parent** instead of collapsing back to a merged
+  dictionary. Both shapes are legal, so **a deletion has no business
+  rewriting object identities nobody asked it to change.**
+- **Empty grouping nodes cascade away** (`emptied_parents`) — F0's prune,
+  reaching its first real caller.
+- **One function serves both verbs**, because §3.6.3 makes the last-member
+  case of `delete-widget` **become** `delete-field`. **They stay separate at
+  the surface** because an optional `--index` whose absence silently means
+  *delete everything* is a footgun.
+
+**Verb names follow the rulings already filed** (decision 020 §0.1, and R161
+for the shape): `delete-` is the house word — five shipped `delete` verbs,
+zero `remove-*` — and forms is a verb-first domain. **The decision record's
+own `remove-field` / `remove-widget` is SUPERSEDED**, not unmet.
+
+##### ★ FOUR FINDINGS, AND THREE OF THEM ARE ABOUT INSTRUMENTS
+
+**1. A vacuous test, caught by its own author — and it is a THIRD family
+member, not a restatement of R87 or R159.** The dangling-reference check
+originally read `text.rsplit("startxref").next()` — **the text AFTER the
+final `startxref`**, which is an offset and `%%EOF`. `contains()` was
+therefore **trivially false**: the assertion proved nothing while looking
+rigorous.
+
+Rewritten, it reads `/AcroForm /Fields` and every page's `/Annots` **raw,
+deliberately NOT through `parse_acroform`** — **R159's exact lesson, applied
+unprompted**: the repairing reader that hid the shipped flatten defect cannot
+be the witness for a write path.
+
+**And then the move that is genuinely new.** Because **a loop over an empty
+array also asserts nothing**, the test now **proves its own instrument
+first**: it re-derives the **pre-deletion** document and asserts `/Annots`
+names **exactly three** widgets there. Only then does the post-deletion
+silence mean anything. **This is an absence assertion establishing that the
+thing could have been present** — which is neither R87 (the instrument was
+pointed correctly) nor R159 (no lenient parser was involved). **Minted as
+R162, below.**
+
+**2. A disclosure existed but never reached anyone.** `group_flags_ignored`
+was on `FieldAuthorDisclosures` **and** in the machine-readable output line,
+but `report_field_disclosures` **had no arm for it** — so a member whose
+`--no-toggle-to-off` was overridden by its group would have been told
+**nothing in prose** while the fact sat in a `key=value` field nobody reads
+by eye. **`cmd_add_text_field`'s own doc comment warns about exactly this**
+(*"a fact stated by one authoring verb cannot be silently dropped by
+another"*) — **and it happened one function away from the warning.**
+
+**The mechanical cause is the part worth recording, because the warning
+plainly was not enough:** **adding a disclosure is TWO edits, not one, and
+the second is easy to miss because the first makes the field look done.** A
+struct field plus a machine-readable emitter *reads* as a finished feature.
+Rust's exhaustiveness checking does not reach a prose renderer built from
+independent `if` arms, so **nothing but a reader stands between a declared
+disclosure and a silent one.** Escalated — see *RAG escalations*, below.
+
+**3. Rendering caught what counting could not — the THIRD instance in one
+day.** The first attempt placed the widgets at **y=640–720 on a 400×400
+page**. All three reported **`annots_painted=3` while drawing entirely
+off-canvas.** The defect was found by **looking at the PNG**, not by any
+count. **`annots_painted` counts ATTEMPTS, not visible results** — a
+distinction no assertion in the suite could have drawn.
+
+**Why this shape keeps recurring here, stated once:** a radio group is **the
+first authored shape whose widgets must paint DIFFERENTLY FROM EACH OTHER at
+one instant** — one dot, two empty rings — carried entirely by per-widget
+`/AS` values written in a single command. **That is the multi-write shape
+behind this project's two worst rendering defects** (flatten overwriting its
+own three page writes; F1's promotion discarding its `/Annots` retarget),
+**both of which parsed, counted correctly, and drew the wrong picture.** The
+R85 preview-equals-saved oracle was extended for exactly this case.
+
+**4. A process failure the fork SELF-REPORTED, and the mixed commit it
+left.** See the block immediately below — it is filed separately because it
+is a fact about the repository's history, not about the code.
+
+##### ⚠ `69ab966` IS A MIXED COMMIT — it contains a librarian's docs work under a message that describes only radio groups
+
+**Filed here because this is where a reader will look, and `git log` will not
+tell them.** The fork used **`git add -A` despite an explicit warning not
+to**, and so staged files it did not author. `69ab966`'s message describes
+**radio groups only**; its contents are:
+
+| Path | Whose work | Described by the commit message? |
+|---|---|---|
+| `crates/pdfce-core/src/annot_author.rs` | the fork (radio appearances) | yes |
+| `crates/pdfce-core/src/edit.rs` | the fork (`add_radio_button`) | yes |
+| `crates/pdfce-core/tests/form_radio_groups.rs` | the fork (13 tests) | yes |
+| `docs/ARCHITECTURE.md` | **`pdfce-librarian`** | **no** |
+| `docs/FEATURES.md` | **`pdfce-librarian`** | **no** |
+| `docs/ROADMAP.md` | **`pdfce-librarian`** | **no** |
+| `docs/SESSION_LOG.md` | **`pdfce-librarian`** | **no** |
+| `docs/decisions/020-form-field-authoring.md` | **`pdfce-librarian`** (the **CLI verb-shape amendment**, §0/§0.1) | **no** |
+
+**Nothing was lost and the tree is clean.** **What was lost is
+findability**: a future reader running `git log -- docs/decisions/020-*.md`
+to answer *"when did the CLI amendment land?"* gets a commit whose subject
+line is *"radio groups, built out of the merge primitive rather than a path
+of their own"*, and will not believe it.
+
+**The fork left it rather than rewriting, and that call was CORRECT.**
+Splitting the commit would have meant **authoring a filing message for
+content it did not write** — inventing a librarian's rationale — which is a
+worse failure than a mislabelled commit. **Recorded rather than repaired**,
+consistent with this section's append-only discipline.
+
+**Judged: this does NOT earn a standing rule number. It is an amendment to
+R160 in place** (see *Standing rules*). R160 already governs a fork's
+hand-off obligations and lands on *"the fork itself and on whoever sized
+it"* — **the person about to type `git add -A` in a fork is exactly the
+person R160 already addresses**, so a peer rule would be a second doorway to
+the same room. That is the amendment-not-a-number test the project applied to
+R123, R156 and R87 (twice).
+
+**And the honest limit on the amendment, stated because it is the whole
+lesson:** **a verbal warning was already given and was ignored.** A rule
+number would have been ignored the same way. **The mitigation that would
+actually work is mechanical** — a fork that stages by explicit path, or a
+pre-commit check that refuses a commit touching `docs/` from an agent
+dispatched to touch `crates/`. **Flagged for the engineer as tooling work,
+not claimed as done by this filing.**
+
+##### Verification — measured by the ENGINEER at `ee4f793`, not relayed (R87, R160)
+
+```
+2137 tests passing (was 2116 before this arc), 0 failed
+cargo fmt --all --check                                     clean
+cargo clippy --workspace --all-targets -- -D warnings       exit 0
+cargo tree -p pdfce-core / -p pdfce-render                  zero GUI matches (rule 2)
+tools/check-ledger-numbers.py                               clean, exit 0
+```
+
+**Verified end to end through the actual CLI, not the API — and RENDERED at
+every step:**
+
+```
+3 × add-radio-button (one --name, three --export-value)
+  -> list-fields: fields=1 widgets=3 button=radio flags=0x8000
+  -> the UNMODIFIED fill-field selects Green
+  -> render-page: three rings, the MIDDLE one filled
+fill Pick=Red, then delete-widget --index 0 (the selected one)
+  -> selection_cleared=1 + the prose disclosure; value=Off widgets=2
+  -> render-page: the deleted member's ring is GONE, NEITHER survivor filled
+delete-field
+  -> fields=0
+```
+
+**The rendered check at the deletion step is the one that carries weight:**
+`value=Off widgets=2` is also what *two filled rings* would report.
+**Counting alone could not distinguish those.**
+
+##### Fixtures — considered, and none owed
+
+**No `PROVENANCE.md` entry is owed by this filing, and that was checked
+rather than assumed.** The new tests reuse the **existing synthetic
+fixtures** built by `tools/gen-form-fixtures.py` /
+`gen-form-hierarchy-fixtures.py` / `gen-form-radio-choice-fixture.py`, all
+already provenance-documented. **How the absence was established (R87):**
+`git show --stat` over all three commits lists **five source files and no
+file under `fixtures/` and no `PROVENANCE.md`** — the five are
+`crates/pdfce-core/src/{annot_author,edit}.rs`,
+`crates/pdfce-core/tests/form_radio_groups.rs`,
+`crates/pdfce-cli/src/main.rs`,
+`crates/pdfce-render/tests/preview_equals_saved.rs`, plus the docs files
+listed in the mixed-commit table above. **LEGAL.md §5 / rule 7 unaffected.**
+
+##### Still owed in F2's own neighbourhood, and immediately around it
+
+- **`/I` and `/TI`** (choice selection indices) — **Pass 20.3, still
+  PARTIAL.**
+- **Push buttons** — Pass 20.3's other half. **Its verb name remains NOT
+  RULED**, deliberately, and **must not be inferred from
+  `add-radio-button`.** R161 supplies the *shape* (forms is verb-first, so
+  `add-<thing>`); it does not supply the **word**.
+- **F2's own `--defaults-from`** — deferred to **F6**, where decision 020
+  filed the property-editing family.
+- **Positional-`/Opt` radio authoring** — **no longer an open gap**; it is a
+  recorded, reasoned **refusal** (above), discharging §8.3.
+- **Comb layout not driven from `/MaxLen`**; **inherited-`/V` writes still
+  terminal-only** (`Field.parent` exists; the setters still do not use it);
+  **F4 `/Tabs` tab-order AUTHORING still BLOCKED** on a
+  `pdfce-spec-librarian` dispatch (the *disclosure* shipped in `50a5461` and
+  is a different thing); **F5 GUI surface** still needs a
+  `pdfce-ui-specialist` dispatch first; **F6 field PROPERTY editing** — the
+  operator's own *"editing"* — still behind everything.
+- **F0's disposition** (owed retroactively / deferred / retired) is **still
+  owed by the engineer**, unchanged.
+
+##### RAG escalations, this addendum
+
+- **`D:\dev\rag\rust\absence_assertion_must_first_prove_the_container_could_have_held_it.md`**
+  (new) — finding 1. Indexed this filing.
+- **`D:\dev\rag\rust\msvc_lnk1201_pdb_write_at_default_cargo_test_parallelism.md`**
+  (new) — the `cargo test --workspace` link-contention finding. **Ecosystem
+  tier, not project docs**: it is a Rust-on-Windows toolchain fact, not a
+  pdfce fact. Indexed this filing.
+- **`D:\dev\rag\rust\disclosure_text_must_be_tested_against_producing_branch.md`**
+  (**amended**, dated footer) — finding 2, filed as a second occurrence with
+  a sharper claim: the first occurrence was a disclosure describing the
+  *wrong branch*; this one is a disclosure that **reaches no prose renderer
+  at all**.
+- **`C:\personal_rag\claude_code\lesson_20260807_git_add_all_in_a_fork_mislabels_another_agents_work.md`**
+  (new) — finding 4. **Claude-Code tooling tier**, per this librarian's
+  agent file (`troubleshooting-librarian` owns `claude_code/`; a genuinely
+  tooling-shaped pdfce finding is filed there rather than in
+  `personal_rag/pdf`).
+- **No new `personal_rag/pdf` entry, and that is a reasoned refusal, not an
+  oversight.** Every finding in this addendum is testing/process
+  methodology or toolchain behaviour. **Nothing here is a real-world PDF
+  producer diverging from the spec**, which is that subject's entire scope.
+  The radio-group structural facts (§12.7.3.2 grouping by shared name, bit
+  16, bit 26's type-gating, Table 227's positional `/Opt`) are **canonical
+  spec content** — `pdfce-spec-librarian`'s exclusive territory under hard
+  rule 6, not this librarian's to write.
+
+##### Ledger — ONE standing rule MINTED, no Pass ID
+
+**Pass family ceiling unchanged at 43** (43.0 highest). **No Pass ID
+minted** — this completes an ID filed 2026-08-03 and headed by the entry
+above (hard rule 2). **Decision-record ceiling unchanged at 031.**
+**Operator-question ceiling unchanged at (bb).**
+
+**★ STANDING RULE `R162` IS MINTED** — *an assertion that something is
+ABSENT proves nothing until the container is shown capable of holding it*
+(finding 1). **The ceiling is now R162; R163 is next free.** Decision 030's
+three still-unminted contingent candidates and the cross-RAG-handoff
+proposal — last recorded as claiming R162 — **now take R163**, by the same
+read-the-live-ceiling transfer (R106/R133) that has moved them
+R157 → R158 → R159 → R161 → R162 → R163. **Nothing is renumbered.**
+
+**The `git add -A` finding mints NOTHING** — accepted as an amendment to
+**R160** in place, for the reasons given in the mixed-commit block above.
+
+**Backup currency is not verifiable from here** — the engineer should check
+`D:\Dev\pdfce-backups\` if it matters.
 
 ### Pass 20.1 (PARTIAL) — form fields can be CREATED, not only filled (core + CLI, text fields) — 2026-08-07, committed `8e799e9`, branch `pass-8-redaction`. **HEADING AMENDED IN PLACE 2026-08-07** — this entry was filed as *"⚠ IDENTITY UNRESOLVED … NO Pass ID is minted by this filing … ENGINEER RULING NEEDED"* and the recommendation it made was **ACCEPTED IN FULL** by the engineer the same day. The body below is unchanged; the ✅ RULING block is appended at its end. **The heading had to change, not merely gain a footer** — `check-ledger-numbers.py` only sees a Pass ID in a heading that *starts* with `Pass`, so while this entry read `⚠ IDENTITY UNRESOLVED` the ruled ID was invisible to the very gate that reports family 20's state
 
@@ -18820,6 +19216,32 @@ nothing gets forgotten, not as a commitment to build in this order.
   the push-button verb (forms is a verb-first domain, so `add-<thing>`) —
   **but R161 still does not supply the WORD, and the name remains NOT
   RULED.** See *Standing rules*, R161.
+  **★ AMENDMENT (2026-08-07, seventh filing) — PASS 20.2 IS COMPLETE, and
+  this bucket's owed list narrows again.** `69ab966` + `834d256` +
+  `817b268` deliver **radio-group creation** (built out of F1's merge
+  primitive exactly as decision 020 F2 required — no radio-specific
+  grouping path, no `add-radio-group` verb) and **field/widget deletion**
+  (`delete-field` / `delete-widget`, §3.6.3's three rules including the
+  dangling-`/V` clear-and-disclose). **With the check-box half already in
+  `bca60c9`, F2's entire acceptance surface is now built, so Pass 20.2 is
+  COMPLETE** — see the COMPLETION ADDENDUM on the `Pass 20.2 + Pass 20.3`
+  *Shipped* entry. **No Pass ID minted.**
+  **Also DISCHARGED by that filing:** decision 020 **§8.3's
+  positional-`/Opt`** requirement — **as the explicit REFUSAL branch**,
+  which §8.3 names as an equal outcome to implementing it. **File it as a
+  chosen refusal, not an omission**; it is unreachable on pdfce-authored
+  groups, which are always named.
+  **Still owed by this bucket, restated so the list is current:** **`/I`
+  and `/TI`**, **push buttons** (Pass 20.3's other half — **its verb name
+  is still NOT RULED and must not be inferred from `add-radio-button`**;
+  R161 gives the shape, not the word), **tab order AUTHORING** (F4, still
+  **BLOCKED** on the `pdfce-spec-librarian` `/Tabs` dispatch — distinct
+  from the disclosure, which shipped), the **GUI surface** (F5, still
+  requires a `pdfce-ui-specialist` dispatch first), and **field property
+  editing** (F6 — the operator's own *"editing"*, and where F2's
+  `--defaults-from` was deferred to). **Comb layout** (not driven from
+  `/MaxLen`) and **inherited-`/V` writes** (still terminal-only) remain
+  named limits.
 - **XFA** — legacy Adobe forms tech. **Verify current status before
   scoping** — Adobe has been deprecating XFA in Acrobat; consult the
   spec RAG + a fresh web check before committing engineering time here.
@@ -24282,6 +24704,53 @@ not a judgment call:**
   deciding it, and it wrote durably as it went. **The failure is budget
   sizing and hand-off design.**
 
+  **AMENDED 2026-08-07 (later the same day, Pass 20.2's completion) —
+  R160 GAINS ITS STAGING HALF: a fork COMMITS ONLY THE PATHS IT AUTHORED.
+  `R162` was NOT claimed for this; the ceiling is unaffected by this
+  amendment.**
+
+  > **A fork must stage by explicit path, never `git add -A` / `git commit
+  > -a`. Its commit message describes the work it did; staging the whole
+  > tree makes that message describe OTHER AGENTS' work too, and the
+  > mislabelling is undetectable afterwards without reading every diff.**
+
+  **The instance.** The fork that built Pass 20.2's completion used
+  **`git add -A` despite an explicit warning not to**, so **`69ab966`
+  carries five `pdfce-librarian` docs files** — `ARCHITECTURE.md`,
+  `FEATURES.md`, `ROADMAP.md`, `SESSION_LOG.md`, and decision 020's **CLI
+  verb-shape amendment** — **inside a commit whose subject line describes
+  radio groups.** Nothing was lost and the tree stayed clean. **What was
+  lost is findability:** `git log -- docs/decisions/020-*.md` now answers
+  *"when did the CLI amendment land?"* with a commit about radio buttons,
+  and a reader will not believe it. Filed in full, with the file-by-file
+  table, on the `Pass 20.2 + Pass 20.3` *Shipped* entry's COMPLETION
+  ADDENDUM — **because that is where a reader looks, and `git log` will
+  not tell them.**
+
+  **Why an AMENDMENT and not a peer rule (the R123/R156/R87 test).** R160
+  already governs a fork's hand-off obligations and already lands on
+  *"the fork itself and on whoever sized it."* **The person about to type
+  `git add -A` in a fork is exactly the person R160 addresses** — there is
+  no third party who would encounter the new rule and miss R160, which is
+  the condition that earned **R161** its own number. A peer rule would be
+  a second doorway to the same room.
+
+  **The honest limit on this amendment, stated because it is the whole
+  lesson: a verbal warning was already given, in the dispatch, and was
+  ignored. A rule number would have been ignored the same way.** R160's
+  own closing observation applies to itself here — *the signal that a rule
+  needs a mechanical check, not just a doc.* **The mitigation that would
+  actually work is tooling:** a fork that stages by explicit path, or a
+  pre-commit check that refuses a commit touching `docs/` from an agent
+  dispatched to touch `crates/`. **Flagged for the engineer as tooling
+  work; not claimed as done.**
+
+  **Recorded in the fork's favour again:** it **self-reported** the
+  violation, and it **declined to rewrite history** rather than authoring
+  a filing message for content it had not written. **Both calls were
+  correct** — an invented librarian's rationale is a worse artefact than a
+  mislabelled commit.
+
   **Ceiling is now R160** (was R158). **R161 is next free.** Decision
   030's three still-unminted contingent candidates and the
   cross-RAG-handoff proposal — last recorded as claiming R159 — **now
@@ -24428,6 +24897,92 @@ not a judgment call:**
   that has moved them R157 → R158 → R159 → R161 → R162. **Nothing is
   renumbered.** Pass family stays **43**; decision records stay **031**;
   operator questions stay **(bb)**.
+
+  > **✅ AMENDED 2026-08-07 (later the same day) — R162 IS NOW MINTED**
+  > (the absence-assertion rule, immediately below). **The ceiling is
+  > R162; R163 is next free.** Decision 030's three still-unminted
+  > contingent candidates and the cross-RAG-handoff proposal — recorded
+  > in the paragraph above as taking R162 — **now take R163**, by the
+  > same read-the-live-ceiling transfer (R106/R133) that has moved them
+  > R157 → R158 → R159 → R161 → R162 → R163. **Nothing is renumbered**;
+  > the paragraph above is left exactly as filed.
+
+- **R162 — An assertion that something is ABSENT proves nothing until the
+  container has been shown CAPABLE OF HOLDING IT; establish the positive
+  case over the same container first (methodology; no decision number;
+  librarian-assigned; 2026-08-07, Pass 20.2 completion / decision 020
+  F2's `delete-field` / `delete-widget`).**
+
+  **The finding, in its enforceable form:**
+
+  > **A test whose claim is "X is not there" must, in the same test,
+  > assert over the SAME container that the thing it is scanning was
+  > populated at all — ideally by re-deriving the pre-change state and
+  > asserting the expected COUNT. An empty container satisfies every
+  > absence assertion ever written over it, and does so silently,
+  > forever.**
+
+  **The instance — two vacuity bugs in one test, the second surviving the
+  fix for the first.** The dangling-reference check for field deletion
+  originally read `text.rsplit("startxref").next()` — **the text AFTER the
+  final `startxref`**, which is a byte offset and `%%EOF`. `contains()`
+  over that was **trivially false**, so the assertion passed while
+  examining essentially nothing. Rewritten to read `/AcroForm /Fields` and
+  every page's `/Annots` **raw** — R159's lesson, applied — it was still
+  vacuous in a second, subtler way: **it looped over the parsed `/Annots`
+  array and asserted per entry, and a loop body over an empty array
+  executes zero times.** The test now **re-derives the PRE-deletion
+  document and asserts `/Annots` names exactly three widgets there**, and
+  only then does the post-deletion silence carry meaning.
+
+  **Why this is NOT already covered by R87 or R159 — the distinction is
+  the whole reason it needs its own number.**
+
+  - **R87** (as broadened) governs whether **the instrument was pointed at
+    the thing**, and whether a claimed silence has a competing dull
+    explanation. **Here the instrument was pointed correctly.** The reader
+    read the right bytes of the right file at the right moment.
+  - **R159** governs an instrument that **repaired the reading on the way
+    out** — a lenient parser absorbing the defect. **No lenient parser is
+    involved here**; the second version deliberately avoided one.
+  - **R162 is a third failure of the same family**: the instrument is
+    correct, the reading is faithful, and **the ASSERTION SHAPE cannot
+    fail** because its quantifier ranges over nothing. R87 asks *did I
+    look in the right place?*; R159 asks *did my reader lie to me?*;
+    **R162 asks *could my assertion ever have come out false?***
+
+  **The unifying property across all three, stated once because it is the
+  thing worth remembering:** *evidence that could not have come out
+  differently is not evidence.* R162 is that principle applied to
+  **quantified assertions over collections** — where the failure is not in
+  the evidence but in the arithmetic of the claim.
+
+  **Scope, so this does not become "assert counts everywhere."** It binds
+  a test whose PRIMARY claim is **negative** — nothing dangles, no
+  reference survives, no entry remains, the log contains no error. It does
+  **not** bind ordinary positive assertions, which fail loudly when their
+  subject is missing. **Detection cost is near zero once stated:** ask, of
+  any negative assertion, *"what does this test do if the collection is
+  empty?"* If the answer is "passes," it needs a positive control.
+
+  **Recorded in the author's favour, because the rule is about mechanism
+  and not blame:** **both vacuity bugs were caught by the code's own
+  author, before shipping, and the second was caught only because fixing
+  the first prompted the question again.** That is the argument for a
+  standing rule rather than a habit — the check has to be asked *after*
+  the obvious fix, which is exactly when confidence is highest.
+
+  **See** `D:\dev\rag\rust\absence_assertion_must_first_prove_the_container_could_have_held_it.md`
+  (written this same filing) and, for the family, `R87`, `R159`, and
+  `D:\dev\rag\rust\prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`.
+
+  **Ceiling is now R162** (was R161). **R163 is next free.** Decision
+  030's three still-unminted contingent candidates and the
+  cross-RAG-handoff proposal — last recorded as claiming R162 — **now
+  take R163**, by the same read-the-live-ceiling transfer (R106/R133)
+  that has moved them R157 → R158 → R159 → R161 → R162 → R163. **Nothing
+  is renumbered.** Pass family stays **43**; decision records stay
+  **031**; operator questions stay **(bb)**.
 
 ### RESOLVED 2026-08-06 — a request to "look like <competitor>" is converted into neutral, operator-confirmed PROPERTIES before any design work — ACCEPTED AS AN AMENDMENT TO R123 IN PLACE; R158 NOT MINTED
 

@@ -1226,6 +1226,33 @@ becomes a curiosity, not a gate.
 All three are pdfce's own documented design choices, flagged as such, and
 provable by pdfce's own tests.
 
+> **✅ IMPLEMENTED 2026-08-07 — `817b268` (Pass 20.2 COMPLETE).** All four
+> rules above are built and test-proven: mid-group deletion with the
+> **dangling-`/V` clear-and-disclose** (`FieldDeletion.selection_cleared`,
+> reported in prose **and** as a machine-readable field — §3.6.3's
+> "silence either way is sneaky" honoured in both directions);
+> **last-member deletion delegating to `delete_field`** rather than
+> reimplementing it, so the two paths cannot disagree about what *gone*
+> means; **one rule, not a radio special case**
+> (`FieldDeletion.emptied_parents` carries the recursive grouping-node
+> prune, F0's fix reaching its first real caller); and **no Shape-B→A
+> collapse** (R102 — a 3→1 group keeps its `/Kids` parent).
+>
+> **Two naming corrections this section does NOT reflect above, and which
+> `ROADMAP.md` is canonical for:** the verbs shipped as **`delete-field` /
+> `delete-widget`**, not `remove-*` — ruled by **§0.1** the same day
+> (`delete` is the house word; forms is a verb-first domain, R161) — and
+> they are **two verbs, not one with an optional `--index`**, because an
+> index whose absence silently means *delete everything* is a footgun.
+>
+> **The test that proves this is the origin of standing rule R162.** Its
+> dangling-reference assertion reads `/Fields` and every page's `/Annots`
+> **raw, deliberately not through `parse_acroform`** (R159 — a repairing
+> reader cannot witness a write path), and it **proves its own instrument
+> first** by re-deriving the pre-deletion document and asserting three
+> widgets were named there. Build record: `ROADMAP.md`'s COMPLETION
+> ADDENDUM on the `Pass 20.2 + Pass 20.3` *Shipped* entry.
+
 ---
 
 ## 4. Rationale — the reasoning behind the reasoning
@@ -1488,7 +1515,7 @@ fuzz target 13 re-run over the new shapes.
 - `/Fields` entry is an **indirect reference** (§1.2.2 trap).
 - Every authored field dict is an indirect object (§12.7.3.1).
 
-### F2 — Checkbox + radio creation, and field/widget deletion (core + CLI)
+### F2 — Checkbox + radio creation, and field/widget deletion (core + CLI) — **✅ COMPLETE 2026-08-07 as Pass 20.2** (`bca60c9` check boxes; `69ab966`+`834d256`+`817b268` radio + deletion)
 
 - The first **button appearance generator**: a keyed `/AP /N` sub-dictionary
   with one stream per named state, `/Off` always present, `/AS` set.
@@ -1524,6 +1551,31 @@ remaining `/AS` to `/Off`, and **discloses the cleared selection**;
 deleting the last member removes the parent field from `/AcroForm/Fields`;
 a 3→1 deletion leaves Shape B intact (R102, byte-verified); `regenerate-appearances`
 still skips buttons (unchanged `_ => continue`).
+
+> **✅ F2's ACCEPTANCE IS MET IN FULL — 2026-08-07, Pass 20.2 COMPLETE.**
+> Every clause above is built and verified **through the CLI and by
+> RENDERING**, not only by a green suite: three `add-radio-button` calls →
+> `fields=1 widgets=3 button=radio flags=0x8000` → the **unmodified**
+> `fill-field` selects Green → three rings with the middle one filled;
+> `delete-widget --index 0` on the **selected** member →
+> `selection_cleared=1` with the prose disclosure, `value=Off widgets=2`,
+> **rendered with the deleted ring gone and neither survivor filled** →
+> `delete-field` → `fields=0`. **The rendered check carries the weight at
+> the deletion step: `value=Off widgets=2` is also what two filled rings
+> would report.**
+>
+> **Two additions this acceptance list did not name, both recorded as
+> pdfce's own choices:** the check-glyph decision it left open in-slice was
+> made in `bca60c9` (**vector-drawn**, because a ZapfDingbats route needs a
+> second appearance generator and **R92 forbids it**), and the radio widget
+> is **drawn round** — a pdfce design choice, not a parity claim, since
+> §12.7.4.2 distinguishes radio from check box by `/Ff` bit 16 alone. **A
+> group drawn as square boxes is a form that lies about its own
+> behaviour.**
+>
+> **Deferred, not missed:** F2's `--defaults-from` is deferred to **F6**,
+> where the property-editing family lives. **Positional-`/Opt` (§8.3) is
+> DISCHARGED as a reasoned refusal** — see that limit's own ✅ block.
 
 ### F3 — Choice fields + push buttons (core + CLI)
 
@@ -1675,6 +1727,26 @@ a dependency were added — and none is.
    either implement or explicitly refuse positional-`/Opt` radio authoring;
    it must not author a group whose export values pdfce cannot itself
    resolve.
+   > **✅ DISCHARGED 2026-08-07 — `69ab966` (Pass 20.2 COMPLETE). THE
+   > REFUSAL BRANCH WAS TAKEN, and this item is CLOSED, not outstanding.**
+   > `add_radio_button` **refuses to extend a positional-`/Opt` group by
+   > name**, for the reason this limit states: Table 227's `/Opt` makes the
+   > `/AP /N` keys array **indices**, and pdfce parses `/Opt` but has never
+   > consulted it on the write side — so it can compute neither what index
+   > a new member would take nor what the existing members export. **The
+   > refusal is unreachable on pdfce-authored groups**, which are always
+   > named. **File this as a CHOSEN REFUSAL, not an omission or a gap** —
+   > §8.3 names refusing as an equal outcome to implementing, and the
+   > alternative it actually forbids (authoring a group whose export values
+   > pdfce cannot itself resolve) never became reachable.
+   > **Two adjacent refusals shipped with it, both reasoned:** duplicate
+   > export values are refused **unless the group is `RadiosInUnison`**
+   > (members are told apart by on-state name alone, §12.7.4.2.1, so two
+   > sharing one make `/V` unable to say which was chosen — which is
+   > precisely what `/Ff` bit 26 requests deliberately, so the refusal
+   > names the flag); and a check box may not join a radio group or the
+   > reverse (both are `/FT /Btn`, so the **KIND** comparison F1 already
+   > had is what catches it — no new mechanism).
 4. **Inherited-`/V` writes remain terminal-only** until `Field.parent`
    (F0) is actually *used* by the setters — F0 adds the field, it does not
    rewire the three setters. A group whose `/V` is declared on a

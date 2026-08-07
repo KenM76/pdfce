@@ -3925,6 +3925,34 @@ with a forward pointer.
     resolver types are not reflected there. Flagged rather than resynced
     in this filing; a full §4.1 resync was not part of this dispatch's
     scope.
+    **★ RE-MEASURED 2026-08-07 at `817b268` (Pass 20.2 COMPLETE) — the
+    discharge above HOLDS, and the surface is now FOUR authoring verbs
+    plus TWO deletion verbs.** `EditSession::add_radio_button` joins the
+    three `add_*` verbs and writes `/AcroForm /Fields` through the same
+    `resolve_field_path` path, so it is covered by the same
+    `authoring_a_field_leaves_the_javascript_carriers_intact` test and
+    the same catalog-whitespace narrowing — **no new exposure, because no
+    new write path.** **`delete_field` / `delete_widget` are a genuinely
+    new shape and are stated as such:** they are the first verbs that
+    *remove* entries from `/AcroForm /Fields` rather than appending to
+    it, and they prune grouping nodes left childless. **The JS-carrier
+    guarantee is not re-derived for them by the append-path test** — what
+    covers them instead is the deletion suite's own **raw-byte**
+    dangling-reference assertion (deliberately not routed through
+    `parse_acroform`, per **R159**), which reads `/Fields` and every
+    page's `/Annots` from the serialized document and **first proves its
+    own instrument** by re-deriving the pre-deletion state and asserting
+    three widgets were named there (**R162**). **Named precisely so a
+    future reader does not read the 2026-08-07 discharge above as
+    covering the removal path**; it covers the append path, and the
+    removal path is covered by a different, byte-level oracle.
+    **New `pub` surface this filing, for §4.1's eventual resync:**
+    `NewRadioButton` (+ `selected`, `with_tooltip`, `declining_tooltip`,
+    `with_group_flags`, `with_flags`), `build_radio_button_appearances`,
+    `FieldDeletion` (`widgets_removed`, `field_removed`,
+    `selection_cleared`, `emptied_parents`), and the three
+    `EditSession` methods. All checked against
+    `D:\dev\rag\rust\rust-style-guide-and-api-guidelines.md` (rule 10).
   - **(f) Additivity preserves R34/R46.** A new module + additive
     methods/variants + one new `pub fn`; the re-emission path and
     `add_markup`/`add_text_annotation` are byte-unchanged. Full-corpus R46
@@ -7910,3 +7938,105 @@ with a forward pointer.
   still NOT RULED** and must not be inferred from R161 — R161 supplies
   the shape, not the word. Full entry: `ROADMAP.md` *Standing rules*,
   R161.
+
+- **2026-08-07 (ninth entry this day) — Pass 20.2 COMPLETE: radio groups
+  are built OUT OF the F1 merge primitive rather than by a path of their
+  own, deletion implements decision 020 §3.6.3, positional-`/Opt` is
+  REFUSED by name, and standing rule R162 is minted.** Commits `69ab966`,
+  `834d256`, `817b268`.
+
+  **The architectural claim worth recording is a NEGATIVE one: almost
+  nothing in pdfce knows what a radio group IS.** `add_radio_button` sets
+  `/Ff` bit 16, draws a round widget, and hands the name to
+  `forms_author::resolve_field_path`. **Grouping falls out of §12.7.3.2
+  meaning what it says a shared fully-qualified name means** — three calls
+  with one `--name` produce ONE field with THREE widgets via the existing
+  MERGE outcome, including Shape A→B promotion, with **no radio-specific
+  grouping code and no `add-radio-group` verb.** Mutual exclusion likewise
+  required no code: the already-shipped `set_button_state` sets each
+  widget's `/AS` to the requested state when that widget offers it and
+  `/Off` otherwise — **which IS radio behaviour**, written before radio
+  authoring existed.
+
+  **Why this belongs in the decision log and not only in the roadmap:** it
+  is the second time this family has produced the same architectural
+  result — a capability delivered by a *general* primitive rather than a
+  *specific* path (the first being F1's four collision outcomes serving all
+  authoring verbs identically). **The standing consequence is a
+  constraint on future forms work:** a new button-family capability should
+  be attempted through `resolve_field_path` and the existing state setters
+  first, and a proposal that needs its own grouping/exclusion mechanism is
+  a signal to re-read §12.7.3.2 before writing it. **A second mechanism
+  for something the format already defines is the failure mode R92 names
+  for appearance generators, here applied to STRUCTURE.**
+
+  **Deletion is the first REMOVAL verb in the authoring family, and its
+  §3.6.3 rule set is a design commitment, not an implementation detail.**
+  Deleting the widget whose on-state equals the field's `/V` leaves `/V`
+  naming a state no remaining widget can display — **a malformed field
+  that parses perfectly**. pdfce sets `/V` and every surviving kid's `/AS`
+  to `/Off` **and discloses it** (rule 4): §3.6.3 is explicit that both
+  silences — leaving the dangling value, and clearing it quietly — are the
+  sneaky outcome. **R102 holds on the way down** (a 3→1 group keeps its
+  `/Kids` parent; both shapes are legal, so a deletion has no business
+  rewriting object identities nobody asked it to change), and last-member
+  `delete_widget` **delegates to `delete_field`** so the two paths cannot
+  come to disagree about what *gone* means. **Two verbs at the surface,
+  one function beneath**, because an optional `--index` whose absence
+  silently means *delete everything* is a footgun.
+
+  **Positional-`/Opt` radio authoring is REFUSED BY NAME, discharging
+  decision 020 §8.3.** Table 227 lets a button's `/Opt` supply export
+  values positionally, which makes the `/AP /N` keys array **indices**.
+  pdfce parses `/Opt` but has never consulted it on the write side, so it
+  can compute neither a new member's index nor the existing members'
+  exports. §8.3 required *"either implement or explicitly refuse"*; **this
+  is the refusal, chosen and reasoned**, and it is unreachable on
+  pdfce-authored groups, which are always named. **Recorded as a decision
+  so a future reader does not re-file it as a gap.**
+
+  **Group flags are DISCLOSED, not applied and not refused** —
+  `NoToggleToOff` and `RadiosInUnison` live on the **field**, so a joining
+  member honouring its own would silently rewrite how every existing
+  member behaves, while refusing outright would break the obvious script
+  that passes the same flags to every call in a loop. **Bit 26 is read
+  only through the type-gated `Field::radios_in_unison()`** — the same raw
+  bit means `RichText` on a text field.
+
+  **The round widget is pdfce's own stated design choice, not a parity
+  claim.** §12.7.4.2 distinguishes radio from check box by bit 16 alone.
+  But the convention is load-bearing: check box means *toggle me
+  independently*, radio means *choose one of these*, and the difference is
+  invisible until you click. **A group drawn as squares is a form that
+  lies about its own behaviour.**
+
+  **Standing rule R162 MINTED** — *an assertion that something is ABSENT
+  proves nothing until the container has been shown capable of holding
+  it.* Derived from a deletion test that was vacuous twice: first reading
+  the bytes **after** the final `startxref` (an offset and `%%EOF`), then,
+  once corrected to read `/Fields` and `/Annots` raw, **looping over a
+  possibly-empty array**. It now re-derives the pre-deletion document and
+  asserts three widgets were named there before asserting the
+  post-deletion silence. **It is a peer of R87 and R159, not an amendment
+  to either:** R87 asks *did I look in the right place?* (the instrument
+  here was pointed correctly); R159 asks *did my reader lie to me?* (no
+  lenient parser was involved); **R162 asks *could my assertion ever have
+  come out false?*** **Ceiling is now R162; R163 is next free.**
+
+  **R160 AMENDED IN PLACE (no number claimed) — a fork commits only the
+  paths it authored.** `69ab966` carries five `pdfce-librarian` docs files
+  — including **decision 020's own CLI verb-shape amendment** — inside a
+  commit whose subject line describes radio groups, because the fork used
+  `git add -A` despite an explicit warning. Nothing lost; **findability**
+  lost. **The honest limit is recorded with the amendment:** a verbal
+  warning was already given and ignored, so a rule number would have been
+  ignored the same way — **the working mitigation is mechanical**, and is
+  flagged to the engineer as tooling work rather than claimed as done.
+
+  **Nothing else minted** — no Pass ID (20.2 was filed 2026-08-03 and
+  headed by `bca60c9`'s entry; this completes it under hard rule 2), no
+  new decision record. Decision records stay **031**, Pass family stays
+  **43**, operator questions stay **(bb)**. **F3's push-button verb name
+  is still NOT RULED and must not be inferred from `add-radio-button`.**
+  Full build record: `ROADMAP.md`'s COMPLETION ADDENDUM on the
+  `Pass 20.2 + Pass 20.3` *Shipped* entry.
