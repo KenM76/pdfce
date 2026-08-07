@@ -11,6 +11,10 @@
 **AMENDED IN PLACE 2026-08-07** by an engineer ruling — **§0 below
 supersedes every `forms <verb>` CLI shape this document specifies.**
 Read §0 before acting on any CLI line in §6 or §11.
+**AMENDED AGAIN 2026-08-07 (second ruling, same day) — see §0.1:** the
+radio verb is **RULED `add-radio-button`**, and §6's deletion verbs
+`remove-field` / `remove-widget` are **SUPERSEDED by `delete-field` /
+`delete-widget`**. §0 ruled the CLI *shape*; §0.1 rules the *words*.
 **Depends on:** decision 009 (JS posture), decision 019 §3.7 (the FF-I cut),
 `ARCHITECTURE.md` §5 (round-trip), §12.7.3 spec RAG.
 
@@ -28,7 +32,10 @@ any of those before meeting this one will implement the wrong surface.**
 This document specified field creation as a **nested** CLI surface —
 `pdfce-cli forms add-field --type text|checkbox|choice …`, with sibling
 `forms remove-field`, `forms remove-widget`, `forms set-tab-order`,
-`forms rename-field`.
+`forms rename-field`. **[§0.1, 2026-08-07: the two deletion siblings lose
+their VERB as well as their nesting — they are now `delete-field` /
+`delete-widget`. This paragraph describes what the document originally
+specified and is left as the historical record.]**
 
 What shipped in Pass 20.1 / 20.2 / 20.3 / 20.0 is **flat**:
 `add-text-field`, `add-check-box`, `add-choice-field`.
@@ -90,8 +97,8 @@ not picked a name and one must not be invented.
 |---|---|---|
 | F1 | `forms add-field --type text …` | `add-text-field …` — **SHIPPED** |
 | F2 (checkbox) | `forms add-field --type checkbox …` | `add-check-box …` — **SHIPPED** |
-| F2 (radio) | repeated `add-field --type radio --name G --export-value V` | **NOT RULED.** See the radio caveat below — this is the one line where the flat translation is not mechanical. |
-| F2 (deletion) | `forms remove-field --name <fqn>`, `forms remove-widget --name <fqn> --index N` | `remove-field`, `remove-widget`. **Note the verb is REMOVE, not DELETE** — §6 says `remove-*` and this amendment does not change it. `delete-field` is not a name this document or this ruling authorises, notwithstanding that the CLI elsewhere uses `object-delete` / `node-delete` / `dimension-delete`; reconciling `remove` vs `delete` across the surface is a separate, unruled question. |
+| F2 (radio) | repeated `add-field --type radio --name G --export-value V` | ~~**NOT RULED.**~~ **[§0.1, 2026-08-07: NOW RULED — `add-radio-button`.]** One call per radio MEMBER, per the radio caveat below. |
+| F2 (deletion) | `forms remove-field --name <fqn>`, `forms remove-widget --name <fqn> --index N` | ~~`remove-field`, `remove-widget`. **Note the verb is REMOVE, not DELETE** — §6 says `remove-*` and this amendment does not change it. `delete-field` is not a name this document or this ruling authorises, notwithstanding that the CLI elsewhere uses `object-delete` / `node-delete` / `dimension-delete`; reconciling `remove` vs `delete` across the surface is a separate, unruled question.~~ **[SUPERSEDED by §0.1, 2026-08-07 — the separate question is now RULED the other way: `delete-field --name <fqn>`, `delete-widget --name <fqn> --index N`. `delete` is the house word; forms is a verb-first domain.]** |
 | F3 (listbox/combobox) | `--type listbox\|combobox …` | `add-choice-field …` — **SHIPPED** (both list and combo behaviours live behind the one verb, via `--combo`-family flags) |
 | F3 (push button) | `--type pushbutton [--caption <s>]` | **NOT RULED** by name. The flat pattern implies `add-push-button`, but that is an inference from `add-check-box`, not an engineer ruling. |
 | F4 | `forms set-tab-order --mode …` / `--order …` | `set-tab-order …`. Reads cleanly flat; still BLOCKED on the `pdfce-spec-librarian` dispatch (§3.4.4) regardless of naming. |
@@ -109,9 +116,12 @@ That matters for naming, because the obvious-sounding flat name
 **`add-radio-group` would misdescribe the operation** — it names a group
 where §6 authors a member. A name faithful to §6 is member-shaped
 (`add-radio-button`, or `add-radio-field` by analogy with
-`add-choice-field`). **No name is ruled here.** Whoever scopes F2 picks
+`add-choice-field`). ~~**No name is ruled here.** Whoever scopes F2 picks
 one, and should pick it against §6's per-member merge model rather than
-against the word "group".
+against the word "group".~~
+**[§0.1, 2026-08-07: a name IS now ruled — `add-radio-button`. The
+reasoning above is unchanged and is precisely the reasoning that
+selected it: member-shaped, not group-shaped. See §0.1 Ruling 1.]**
 
 ### Bare `add-field` mentions elsewhere in this document
 
@@ -122,8 +132,9 @@ Those are **generic references to "the field-creation verb"**, not
 surface specifications, and they are left as written rather than edited
 eleven times into unreadability. **Blanket rule: every bare `add-field`
 in this document reads as "the flat creation verb for the type under
-discussion"** — `add-text-field`, `add-check-box`, `add-choice-field`, or
-the not-yet-named radio/push-button verb. Flags spelled on those lines
+discussion"** — `add-text-field`, `add-check-box`, `add-choice-field`,
+`add-radio-button` (**named by §0.1, 2026-08-07**), or the still-unnamed
+push-button verb. Flags spelled on those lines
 (`--comb`, `--export-value`, `--option`) are unaffected by this
 amendment; only the verb changes.
 
@@ -136,6 +147,164 @@ forms subcommands stay flat and top-level, and no `forms` parent is
 created for the authoring verbs either, so there is nothing left for them
 to migrate toward. `ROADMAP.md`'s open-operator-question **(q)**, which
 was the same question filed as a pointer, is closed with it.
+
+---
+
+## §0.1 — SECOND AMENDMENT, 2026-08-07: the radio verb is RULED, deletion is `delete-*`, and the CLI's word order is DOMAIN-PARTITIONED
+
+**Ruled by `pdfce-engineer`, 2026-08-07. Filed by `pdfce-librarian` the
+same day, into this same §0 rather than into a parallel record, because
+these are exactly the two names §0 above deliberately left open.** §0
+ruled the CLI **shape** (flat, not nested). §0.1 rules the **words**.
+
+### Ruling 1 — the radio verb is `add-radio-button`
+
+**RULED.** This replaces the `NOT RULED` marker that stood in four
+locations across the project's documents.
+
+The grounds matter more than the name, because the name is the small
+part:
+
+- **It matches its three shipped siblings' `add-<thing>` shape** —
+  `add-text-field`, `add-check-box`, `add-choice-field`.
+- **`button`, not `group`, is faithful to §6's design.** §6 authors one
+  radio **MEMBER** per call through the F1 merge primitive; the group is
+  what the merge produces. `add-radio-group` names a group where §6
+  authors a member. The radio caveat above is unchanged and is precisely
+  the reasoning that selected this name.
+
+**It is ratified on the MERITS, not because an in-flight engineering
+fork had already typed it.** That distinction is the reusable part of
+this entry, and it is recorded deliberately.
+
+A prior librarian, filing §0, found `add_radio_button` live in
+`crates/` and **refused to bless the name from source** — leaving
+`NOT RULED` standing rather than ratifying whatever happened to be in
+the working tree. **That refusal was correct, and it is the reason this
+is now a decision rather than a fait accompli.** Adopting a name because
+a fork typed it is exactly the accretion §0's ruling exists to stop:
+one more verb per slice, each one settling the convention by arriving
+rather than by being chosen. The name is adopted here because it
+independently satisfies the two tests above; had it failed them, the
+fork would have been renamed to match the ruling, not the ruling bent to
+match the fork.
+
+### Ruling 2 — deletion is `delete-field` / `delete-widget`
+
+**§6's `remove-field` / `remove-widget` are SUPERSEDED.** The house word
+for deletion is **`delete`**, and the deletion verbs are **verb-first**:
+`delete-field`, `delete-widget` — **not** `field-delete` / `widget-delete`.
+
+**Measured, not recalled.** From `pdfce-cli --help`: **five shipped
+verbs use *delete*** — `delete-pages`, `dimension-delete`,
+`object-delete`, `subpath-delete`, `node-delete` — and ***remove*
+appears only in prose descriptions, never as a verb name.**
+Independently confirmed by this filing against
+`crates/pdfce-cli/src/main.rs`'s `Command` enum: **51 variants, five
+carrying `Delete`, and ZERO named `Remove*`.**
+
+This reverses the F2-deletion row of §0's mapping table above, which
+recorded `remove` vs `delete` as "a separate, unruled question." It is
+now ruled, and the row is struck accordingly.
+
+### The finding worth keeping: the CLI is NOT inconsistent — it is DOMAIN-PARTITIONED
+
+This is the part that outlives both verb names, and the reason it is
+written as its own section rather than buried inside one verb's
+rationale: **it answers the next naming question without another
+ruling.**
+
+`pdfce-cli` *looks* inconsistent about word order — `object-delete` but
+`delete-pages` — and is not. **It is partitioned by domain, and each
+domain is internally consistent:**
+
+| Domain | Word order | Verbs |
+|---|---|---|
+| vector / dimension | **noun-first** | `object-list`, `object-delete`, `node-move`, `node-delete`, `subpath-delete`, `dimension-add`, `group-add`, `layer-toggle` |
+| page | **verb-first** | `extract-pages`, `insert-pages`, `delete-pages`, `reorder-pages` |
+| forms | **verb-first** | `list-fields`, `fill-field`, `add-text-field`, `export-data`, `import-data` |
+
+**Forms is a verb-first domain.** That single fact is what makes
+`delete-field` right and `field-delete` wrong, and it is what made
+`add-radio-button` right without needing an argument of its own.
+
+**The general rule, stated so it is greppable:** *a new `pdfce-cli` verb
+takes its word order from the DOMAIN it joins, not from the CLI as a
+whole.* An apparent inconsistency across domains is not a defect to be
+normalised away; normalising it would break the consistency that
+actually exists.
+
+~~**No rule number is minted for this.** Whether the domain-partition
+finding deserves a standing rule of its own is the operator's call, and
+is flagged rather than pre-empted. Ceilings stay **R160 / decisions 031 /
+Pass family 43**.~~
+
+> **✅ SUPERSEDED 2026-08-07 (later the same day) — THE NUMBER IS MINTED.
+> This finding is now STANDING RULE R161.** The struck sentence above is
+> preserved, not deleted; it was accurate when filed and the flag it
+> raised is what produced the ruling.
+>
+> **`ROADMAP.md`'s *Standing rules* section is CANONICAL for R161**, per
+> the *Update protocol*'s same-filing propagation duty — this decision
+> record is append-only and this block is a pointer to the live text, not
+> a second copy of it.
+>
+> **R161's binding statement** (the wording ruled, unchanged from the
+> section above): *"A new verb takes its word order from the domain it
+> joins, not from the CLI as a whole."* Carried with it: the three-domain
+> partition table above; **`delete` is the house word and `remove` is
+> not** (five `Delete` variants, zero `Remove*`); **zero nesting**
+> (`#[command(subcommand)]` occurs zero times inside the `Command`
+> enum); and the corollary that **the CLI's apparent inconsistency is not
+> a defect and must not be "corrected."**
+>
+> **Why it earned a number when Rulings 1 and 2 above did not:** *there
+> is a live failure mode it guards against.* A finding that only
+> describes the CLI can live in a decision-record amendment; one that
+> must **stop** a plausible, well-intentioned future action needs a
+> number, **because the person about to take that action will not be
+> reading decision 020.** Two supporting arguments also held — it is a
+> standing constraint on all future work, and it would be rediscovered or
+> contradicted if it lived only here.
+>
+> **Ceilings are now R161 / decisions 031 / Pass family 43** (**R162**
+> next free). Rulings 1 and 2 above still mint nothing.
+>
+> **One measurement correction, recorded rather than silently fixed
+> (R87).** This section's Ruling 2 states *"51 variants, five carrying
+> `Delete`, and ZERO named `Remove*`."* **The variant count is a
+> miscount.** Re-measured by parsing the `Command` enum out of `git show
+> <rev>:crates/pdfce-cli/src/main.rs` across eleven commits: the sequence
+> is **50** (`8e799e9`, `e137277`) → **52** (`bca60c9` through
+> `69ab966`, the entire window in which §0 and §0.1 were both filed) →
+> **53** (`834d256`, HEAD at R161's filing, which added
+> `AddRadioButton`). **51 appears at no commit.** ***The load-bearing
+> half of the sentence is CORRECT and was corroborated independently:
+> five `Delete`, zero `Remove*` — at all eleven commits.*** §0's own
+> "52 subcommands" figure is right; only §0.1's 51 is wrong, and neither
+> ruling depended on it.
+
+### What §0.1 does NOT rule
+
+- **F3's push-button verb name remains `NOT RULED`, deliberately.** The
+  flat pattern implies `add-push-button` and Ruling 1's sibling-shape
+  argument would very likely reach it — but F3 was not the question in
+  front of the engineer, and a name arrived at by inference is the exact
+  thing §0 and §0.1 both refuse. Its `NOT RULED` markers stand.
+- ~~**Nothing is minted** — no Pass ID, no standing rule, no new decision
+  record. This is an amendment to decision 020, exactly as §0 is.~~
+  **[AMENDED 2026-08-07, later the same day — the two RULINGS still mint
+  nothing, but the DOMAIN-PARTITION FINDING was minted as **standing rule
+  R161**. Ceilings are now **R161 / decisions 031 / Pass family 43**
+  (R162 next free). See the superseded-block above and `ROADMAP.md`
+  *Standing rules*, which is canonical. F3's push-button verb name is
+  still NOT RULED and must not be inferred from R161.]**
+- **No Pass is shipped or implied.** An engineering fork was live in
+  `crates/` building F2 when this was filed; its outcome is neither
+  anticipated nor recorded here, and this filing carries no commit.
+- **Reversible on the same terms as §0** — no release, no git remote, no
+  users (project rule 8). Renaming is hours, not a migration, and both
+  rulings are Ken's to overturn.
 
 ---
 
@@ -1329,17 +1498,24 @@ fuzz target 13 re-run over the new shapes.
 - Default on-state export value `Yes` (sourced default), overridable.
 - Radio grouping **through the F1 merge primitive**, not a radio-specific
   path — repeated `add-field --type radio --name G --export-value V`.
-  **[§0, 2026-08-07: the flat radio verb name is NOT RULED. This line
+  ~~**[§0, 2026-08-07: the flat radio verb name is NOT RULED. This line
   authors one radio MEMBER per call; `add-radio-group` would misdescribe
-  it. See §0's radio caveat before picking a name.]**
-- `remove-field` / `remove-widget` implementing §3.6.3's three rules.
+  it. See §0's radio caveat before picking a name.]**~~
+  **[§0.1, 2026-08-07: NOW RULED — the verb is `add-radio-button`. The
+  member-per-call reading above is unchanged and is what selected it.]**
+- ~~`remove-field` / `remove-widget`~~ **`delete-field` / `delete-widget`
+  [§0.1, 2026-08-07]** implementing §3.6.3's three rules.
 - CLI: ~~`forms add-field --type checkbox|radio …`, `forms remove-field`,
   `forms remove-widget`~~ **[SUPERSEDED by §0, 2026-08-07 — flat verbs.]**
   Checkbox SHIPPED as `add-check-box [--export-value V]
-  [--no-toggle-to-off]`. Radio: verb name NOT RULED (above);
-  `[--radios-in-unison]` unaffected. Deletion: `remove-field --name <fqn>`,
-  `remove-widget --name <fqn> --index N` — **`remove`, not `delete`**, per
-  §0's mapping table.
+  [--no-toggle-to-off]`. Radio: **`add-radio-button` (RULED by §0.1,
+  2026-08-07)**; `[--radios-in-unison]` unaffected. Deletion:
+  ~~`remove-field --name <fqn>`, `remove-widget --name <fqn> --index N` —
+  **`remove`, not `delete`**, per §0's mapping table.~~
+  **[SUPERSEDED by §0.1, 2026-08-07: `delete-field --name <fqn>`,
+  `delete-widget --name <fqn> --index N` — `delete` is the house word
+  (five shipped `*-delete`/`delete-*` verbs, zero `remove-*`), and forms
+  is a verb-first domain.]**
 
 **Acceptance:** a 3-member radio group authored by three CLI calls behaves
 mutually-exclusively on `set-button-state` and renders correct on/off

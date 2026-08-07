@@ -18830,6 +18830,11 @@ self-reports — uncorroborated, and must not be quoted as measured.
   030's three still-unminted contingent candidates and the
   cross-RAG-handoff proposal — last recorded as claiming R159 — **now
   take R161**. Nothing renumbered.
+  **[AMENDED 2026-08-07, later the same day: R161 was subsequently MINTED
+  (the CLI domain-partition rule — see the THIRD addendum at the foot of
+  this day's entry). Ceiling is now **R161**, **R162** next free, and the
+  contingent candidates + cross-RAG-handoff proposal **now take R162**.
+  Nothing renumbered.]**
 - Decision ceiling **031**; operator-question ceiling **(bb)** — both
   unchanged.
 - **F0's disposition is ANSWERED** — ruled OWED, and BUILT. It was the
@@ -18934,6 +18939,9 @@ quiet.
 - No Pass ID minted (this is Pass 20.1's own commit, hard rule 2). Pass
   family ceiling unchanged at **43**.
 - No standing rule minted. Ceiling unchanged at **R160** (R161 next free).
+  **[AMENDED 2026-08-07, later the same day: R161 has since been minted —
+  ceiling is now **R161**, **R162** next free. This filing still mints no
+  rule of its own.]**
 - Decision ceiling **031**, operator-question ceiling **(bb)** — both
   unchanged.
 - **Pass 20.1 STAYS PARTIAL.** Two of the three items the fourth filing
@@ -19035,13 +19043,20 @@ explicitly for that reason — see *Findings*, below.
     merge produces. So the obvious-sounding `add-radio-group` would
     **misdescribe the operation**: it names a group where §6 authors a
     member. A faithful name is member-shaped (`add-radio-button`,
-    `add-radio-field`). **Not ruled here; F2's scoper picks it against
-    §6's merge model, not against the word "group".**
+    `add-radio-field`). ~~**Not ruled here; F2's scoper picks it against
+    §6's merge model, not against the word "group".**~~
+    **[AMENDED 2026-08-07, second ruling same day: NOW RULED —
+    `add-radio-button`. The member-shaped reasoning above is exactly what
+    selected it. See the addendum at the end of this entry.]**
   - **Deletion.** §6 says `remove-field` / `remove-widget` — **remove,
     not delete.** The CLI elsewhere says `object-delete`, `node-delete`,
-    `dimension-delete`. Whether `remove-*` or `delete-*` is the house
+    `dimension-delete`. ~~Whether `remove-*` or `delete-*` is the house
     word is a genuine, separate, unruled question; the ruling does not
-    authorise renaming §6's verbs to `delete-field`.
+    authorise renaming §6's verbs to `delete-field`.~~
+    **[AMENDED 2026-08-07, second ruling same day: that separate question
+    is NOW RULED — `delete-field` / `delete-widget`. `delete` is the
+    house word (five shipped `delete` verbs, zero `remove-*`). See the
+    addendum at the end of this entry.]**
   - **Push buttons.** §6 says `--type pushbutton`. The flat pattern
     implies `add-push-button`, but that is an inference from
     `add-check-box`, not a ruling.
@@ -19100,6 +19115,12 @@ explicitly for that reason — see *Findings*, below.
   have been reported rather than acted on, and it is not warranted — an
   amendment to decision 020 is the correct instrument, since the record
   being corrected is decision 020 itself.
+  **[AMENDED 2026-08-07, later the same day: this filing still mints
+  nothing, and that judgment stands for the VERB-SHAPE ruling. What the
+  next filing's second-order FINDING left behind was a different matter —
+  the domain-partition finding was minted as **R161** on a third dispatch.
+  Ceiling is now **R161**, **R162** next free. See the THIRD addendum at
+  the foot of this day's entry.]**
 
 - **Process finding, and the reason this dispatch was scoped so
   narrowly.** Earlier the same day, **two librarians were dispatched
@@ -19140,5 +19161,209 @@ explicitly for that reason — see *Findings*, below.
   against decision 020 §6's own text**, not by pattern-matching this
   ruling. §6 authors a radio *member* per call; `add-radio-group` is the
   wrong name for that operation.
+  **[AMENDED 2026-08-07: the radio half is DONE — `add-radio-button`,
+  ruled exactly on §6's own text as this bullet asked. Only the
+  push-button name is still owed.]**
 - **Backup currency is not verifiable from here** — the engineer should
   check `D:\Dev\pdfce-backups\`.
+
+---
+
+#### ADDENDUM, 2026-08-07 (same day, second ruling) — the two verb names §0 left open are now RULED
+
+Filed by `pdfce-librarian` on a second `pdfce-engineer` dispatch, into
+decision 020's existing **§0.1** and `ARCHITECTURE.md` §12's **eighth**
+entry — extending the same filing as the verb-shape ruling above rather
+than opening a parallel record. **No commit filed, no Pass shipped, no
+`Shipped` entry added.**
+
+**Ruling 1 — the radio verb is `add-radio-button`.** Grounds: it matches
+its three shipped siblings' `add-<thing>` shape (`add-text-field`,
+`add-check-box`, `add-choice-field`), and **`button` rather than `group`
+is faithful to decision 020 §6's one-call-per-member design.**
+
+**The reusable part is WHY it counts as a decision.** It is ratified on
+the **merits**, not because an engineering fork building F2 was live in
+`crates/` with `add_radio_button` already written. The prior librarian
+found that fork and **refused to bless the name from source**, leaving
+`NOT RULED` standing instead. **That refusal was correct** — adopting
+whatever a fork happens to have typed is exactly the accretion the
+verb-shape ruling exists to stop (one more verb per slice, the
+convention settled by arriving rather than by being chosen), and it is
+the reason this is now a decision rather than a fait accompli. Had the
+name failed the two tests, the fork would have been renamed.
+
+**Ruling 2 — deletion is `delete-field` / `delete-widget`**, superseding
+§6's `remove-*`. Measured from `pdfce-cli --help`: **five shipped verbs
+use *delete*** — `delete-pages`, `dimension-delete`, `object-delete`,
+`subpath-delete`, `node-delete` — and ***remove* appears only in prose
+descriptions, never as a verb name.** Confirmed at filing time against
+`crates/pdfce-cli/src/main.rs`'s `Command` enum: **51 variants, five
+carrying `Delete`, ZERO named `Remove*`.** Verb-first, not noun-first.
+
+**The second-order finding, filed as its own section because it answers
+the NEXT naming question without another ruling: `pdfce-cli` is not
+inconsistent about word order — it is DOMAIN-PARTITIONED, and each
+domain is internally consistent.**
+
+- vector / dimension → **noun-first**: `object-list`, `object-delete`,
+  `node-move`, `node-delete`, `subpath-delete`, `dimension-add`,
+  `group-add`, `layer-toggle`
+- page → **verb-first**: `extract-pages`, `insert-pages`,
+  `delete-pages`, `reorder-pages`
+- forms → **verb-first**: `list-fields`, `fill-field`,
+  `add-text-field`, `export-data`, `import-data`
+
+Forms being a verb-first domain is what makes `delete-field` right and
+`field-delete` wrong, and what made `add-radio-button` right without a
+separate argument. **General rule: a new verb takes its word order from
+the DOMAIN it joins, not from the CLI as a whole.** Recorded so nobody
+"normalises" the cross-domain variation and destroys the consistency
+that actually exists.
+
+**Still NOT ruled: F3's push-button verb name**, deliberately — it must
+not be inferred from `add-radio-button`.
+
+**How the location set was established (R87).** `git ls-files -z |
+xargs -0 grep -in` over **tracked files only**, three passes: `NOT
+RULED`, `add.radio.button` / `add-radio-group` / `radio verb`, and
+`remove.field` / `remove.widget`. Restricting to `git ls-files` is the
+same discipline the prior filing used and for the same reason — a naive
+recursive grep also returns stale copies under
+`.claude/worktrees/agent-*/docs/`. The first two passes each surfaced
+locations the other missed (`ROADMAP.md`'s owed-list note and
+`FEATURES.md`'s Forms row came only from the third sweep), which is why
+all three were run before any edit. **Five documents amended, every
+location in each**, per the single-location-amendment lesson this
+project has now learned three times.
+
+**Nothing minted** — ceilings stay **R160 / decisions 031 / Pass family
+43**. Whether the domain-partition finding deserves a standing rule of
+its own is **flagged to the operator, not decided**.
+
+**[AMENDED 2026-08-07, later the same day: it WAS decided — see the third
+addendum below. R161 is minted; the ceiling is now R161, R162 next free.]**
+
+---
+
+#### ADDENDUM, 2026-08-07 (same day, THIRD ruling) — **R161 IS MINTED**: the CLI's word order is domain-partitioned, and the partition must not be "fixed"
+
+Filed by `pdfce-librarian` on a third `pdfce-engineer` dispatch, extending
+the two filings above rather than opening a parallel record. **No commit
+filed, no Pass shipped, no `Shipped` entry added, and the engineering fork
+building decision 020's F2 was still live in `crates/` — its work is
+neither described nor anticipated here (R87).**
+
+**★ R161 MINTED — a new `pdfce-cli` verb takes its word order from the
+DOMAIN it joins, not from the CLI as a whole; the CLI's apparent
+cross-domain inconsistency is not a defect and must not be "corrected."**
+
+The binding statement is the librarian's own proposed wording, kept
+verbatim at the engineer's direction:
+
+> **A new verb takes its word order from the domain it joins, not from
+> the CLI as a whole.**
+
+**Recorded with the rule:** the three-domain partition as measured
+(vector/dimension → **noun-first**; page → **verb-first**; forms →
+**verb-first**); **`delete` is the house word and `remove` is not** (five
+`Delete` variants, zero named `Remove*`); **zero nesting**
+(`#[command(subcommand)]` occurs zero times *inside* the `Command` enum —
+the single file-wide hit is the mandatory top-level attribute on `Cli`'s
+own field, which is not nesting); and the operational corollary that
+**flattening the variation would break more consistency than it creates.**
+
+**★ WHY IT EARNED A NUMBER WHEN THE TWO VERB-NAME RULINGS DID NOT — this
+is the reusable half of the ruling.** Three arguments were put and the
+engineer named the third as the one that carries it:
+
+1. **There is a LIVE failure mode it guards against.** Someone
+   well-intentioned "fixes" `object-delete` beside `delete-pages` and
+   destroys consistency that actually exists. **A finding that only
+   DESCRIBES the CLI could live in decision 020's amendment. One that
+   must STOP a plausible, well-intentioned future action needs a number,
+   because the person about to take it will not be reading decision 020.**
+2. It is a standing constraint on all future work, not a fact about one
+   slice.
+3. It would be rediscovered — or filed as a defect to fix — if it lived
+   only inside one decision record's amendment.
+
+**Still NOT ruled: F3's push-button verb name.** R161 supplies the
+*shape*, never the word, and the name must not be inferred from it.
+
+##### ★ The three-way count discrepancy — RECONCILED, not resolved by picking
+
+Three counts of the CLI surface were on record and disagreed: **"45+"**
+(engineer, from `pdfce-cli --help`), **"52 subcommands"** (a prior
+librarian, from the `Command` enum), and **"51 `Command` variants"** (the
+second-ruling filing). **The ruling never rested on the disputed figure** —
+its load-bearing claims (zero `#[command(subcommand)]`, zero `Remove*`)
+were corroborated by two independent measurements. Per the dispatch, no
+number was silently adopted; the figure was established instead, cheaply:
+
+**Method** — parse the `Command` enum out of `git show
+<rev>:crates/pdfce-cli/src/main.rs` (brace-matched enum body, variants =
+indent-4 lines beginning with an uppercase identifier) at every commit in
+the window. Eleven commits measured.
+
+| Commit(s) | variants | `Delete` | `Remove*` | `subcommand` in enum |
+|---|---|---|---|---|
+| `8e799e9`, `e137277` | 50 | 5 | 0 | 0 |
+| `bca60c9` → `69ab966` (9 commits) | **52** | 5 | 0 | 0 |
+| `834d256` (HEAD at filing) | **53** | 5 | 0 | 0 |
+
+- **52 is CORRECT**, at every commit in the window in which both prior
+  rulings were filed.
+- **51 is a MISCOUNT** — the sequence is 50 → 52 → 53; 51 occurs nowhere.
+- **"45+" is a FLOOR, not a count**, and is consistent with 52. There are
+  **no hidden and no aliased subcommands**, so `--help` and the enum
+  cannot legitimately disagree.
+- **53 at HEAD is the live fork's own `add-radio-button` commit landing
+  mid-filing** — which is exactly why a bare subcommand count goes stale
+  and must be quoted with its commit.
+- Residual, non-load-bearing: the enum line range **"381–2414"** quoted in
+  decision 020 §0 and `ARCHITECTURE.md` §12's seventh entry matches no
+  commit exactly (380–2335 / 380–2373 / 380–2406). Recorded, not silently
+  fixed.
+
+**R87 cuts both ways and was applied that way:** the engineer's own "45+"
+got the same treatment as the fork-supplied and librarian-supplied
+figures. None was adopted on authority.
+
+##### How the location set was established (R87)
+
+`git ls-files -z | xargs -0 grep -n` over **tracked files only**, four
+passes: (1) `R160|R161`; (2) `domain-partition|DOMAIN-PARTITIONED|word
+order from the DOMAIN|normalis`; (3) `house word|earns a rule
+number|deserves a standing rule|flagged rather than pre-empted|flagged to
+the operator, not decided`; (4) a targeted sweep of `FEATURES.md` and the
+open-question list. **Passes 2 and 3 each surfaced locations pass 1
+missed** — `ROADMAP.md`'s Backlog owed-list note and decision 020's
+"What §0.1 does NOT rule" bullet came only from pass 3 — which is why all
+four were run before any edit. Restricting to `git ls-files` matters here
+specifically: a naive recursive grep also returns stale document copies
+under `.claude/worktrees/agent-*/docs/`, and a live engineering fork was
+running.
+
+##### Ledger
+
+**Standing-rule ceiling R160 → R161. R162 is next free.** Decision 030's
+three still-unminted contingent candidates and the cross-RAG-handoff
+proposal — last recorded as claiming **R161** — **now take R162**, by the
+same read-the-live-ceiling transfer (R106/R133) that has moved them
+R157 → R158 → R159 → R161 → R162. **That transfer is stated explicitly
+because it has now happened twice in one session.** **Nothing is
+renumbered.** Pass family stays **43**, decision records stay **031**,
+operator questions stay **(bb)**.
+
+**Documents amended (five):** `ROADMAP.md` (R161 minted in *Standing
+rules*, plus four amended ceiling/flag locations), `ARCHITECTURE.md` §12
+eighth entry, `docs/decisions/020-form-field-authoring.md` §0.1 (two
+locations, struck-and-preserved with `ROADMAP.md` named as canonical),
+and this log. **`FEATURES.md` deliberately NOT edited** — R161 is a naming
+convention, not a capability; no row's core/cli/gui state changed and
+nothing shipped. Stated explicitly so the same-filing maintenance contract
+is seen to have been considered rather than forgotten.
+
+**Backup currency is not verifiable from the documents** — the engineer
+should check `D:\Dev\pdfce-backups\` if it matters.

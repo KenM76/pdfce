@@ -7805,6 +7805,108 @@ with a forward pointer.
   `remove-widget`; the CLI elsewhere says `object-delete` / `node-delete`
   / `dimension-delete`). Those are picked when F2/F3 are scoped, against
   §6's own text.
+  **✅ AMENDED 2026-08-07 — two of those three are now RULED by the
+  eighth entry below: the radio verb is `add-radio-button`, and deletion
+  is `delete-field` / `delete-widget` (`delete` is the house word). Only
+  F3's push-button verb name remains NOT RULED, and still must not be
+  inferred.**
   **Nothing minted** — no Pass ID, no standing rule, no new decision
   record. This is an amendment to decision 020, and the ceilings stay
   where they were (R160, decisions 031, Pass family 43).
+
+- **2026-08-07 (eighth entry) — the radio verb is RULED
+  `add-radio-button`; deletion is RULED `delete-field` / `delete-widget`,
+  superseding decision 020 §6's `remove-*`; and `pdfce-cli`'s word order
+  is found to be DOMAIN-PARTITIONED, not inconsistent.** Ruled by
+  `pdfce-engineer`; filed by `pdfce-librarian` the same day, into
+  decision 020's existing **§0.1** rather than a parallel record — the
+  seventh entry above ruled the CLI *shape*, this one rules the *words*
+  it left open.
+
+  **Ruling 1 — `add-radio-button`.** Grounds, which matter more than the
+  name: it matches its three shipped siblings' `add-<thing>` shape
+  (`add-text-field`, `add-check-box`, `add-choice-field`), and **`button`
+  rather than `group` is faithful to decision 020 §6's one-call-per-member
+  design** — §6 authors one radio MEMBER through the F1 merge primitive
+  and the group is what the merge produces, so `add-radio-group` would
+  misdescribe the operation.
+
+  **It is ratified on the MERITS, not because an in-flight fork wrote
+  it — and that is the reusable part of this entry.** The prior
+  librarian found `add_radio_button` already live in `crates/` and
+  **refused to bless the name from source**, leaving `NOT RULED`
+  standing. That refusal was **correct**, and it is why this is a
+  decision rather than a fait accompli: adopting whatever a fork happens
+  to have typed is exactly the accretion the seventh entry's ruling
+  exists to stop — one more verb per slice, the convention settled by
+  arriving rather than by being chosen. Had the name failed the two
+  tests above, the fork would have been renamed to match the ruling.
+
+  **Ruling 2 — `delete`, not `remove`; and verb-first.** Measured from
+  `pdfce-cli --help`: **five shipped verbs use *delete*** —
+  `delete-pages`, `dimension-delete`, `object-delete`, `subpath-delete`,
+  `node-delete` — and ***remove* appears only in prose descriptions,
+  never as a verb name.** Confirmed independently at filing time against
+  `crates/pdfce-cli/src/main.rs`'s `Command` enum: **51 variants, five
+  carrying `Delete`, ZERO named `Remove*`.** So `delete-field` /
+  `delete-widget`, not `field-delete`.
+
+  **The second-order finding, which is the one worth preserving: the CLI
+  is not inconsistent about word order — it is DOMAIN-PARTITIONED, and
+  each domain is internally consistent.** vector/dimension is
+  **noun-first** (`object-list`, `object-delete`, `node-move`,
+  `node-delete`, `subpath-delete`, `dimension-add`, `group-add`,
+  `layer-toggle`); page is **verb-first** (`extract-pages`,
+  `insert-pages`, `delete-pages`, `reorder-pages`); forms is
+  **verb-first** (`list-fields`, `fill-field`, `add-text-field`,
+  `export-data`, `import-data`). Forms being a verb-first domain is what
+  makes `delete-field` right and `field-delete` wrong, and what made
+  `add-radio-button` right without a separate argument. **The general
+  rule: a new verb takes its word order from the DOMAIN it joins, not
+  from the CLI as a whole** — recorded here so the next naming question
+  needs no ruling, and so nobody "fixes" the cross-domain variation by
+  normalising away the consistency that actually exists.
+
+  **Still NOT ruled:** F3's push-button verb name. The flat pattern
+  implies `add-push-button` and Ruling 1's sibling-shape argument would
+  likely reach it, but F3 was not the question in front of the engineer
+  and a name arrived at by inference is what both rulings refuse.
+
+  **Nothing minted** — no Pass ID, no standing rule, no new decision
+  record; ceilings stay R160 / decisions 031 / Pass family 43. **Whether
+  the domain-partition finding deserves a standing rule of its own is
+  flagged to the operator, not decided here.** No Pass is shipped or
+  implied by this filing, and it carries no commit.
+
+  **✅ AMENDED 2026-08-07 (later the same day) — IT DOES, and it is now
+  STANDING RULE R161.** The paragraph above is left as filed. The
+  operator ruled that the domain-partition finding is minted; the two
+  verb-NAME rulings this entry records still mint nothing. **R161's
+  binding statement:** *"A new verb takes its word order from the domain
+  it joins, not from the CLI as a whole"* — with the corollary that the
+  CLI's apparent cross-domain inconsistency **is not a defect and must
+  not be "corrected."**
+  **The deciding argument, recorded because it is the reusable half:
+  there is a LIVE failure mode the rule guards against.** A finding that
+  only *describes* the CLI could have lived in decision 020's amendment;
+  one that must **stop** a plausible, well-intentioned future action — a
+  tidy-minded rename of `object-delete` to `delete-object` — needs a
+  number, **because the person about to take that action will not be
+  reading decision 020.** Two supporting arguments also held: it is a
+  standing constraint on all future work, and it would be rediscovered or
+  contradicted if it lived only inside one decision record's amendment.
+  **A three-way count discrepancy about the size of the CLI surface
+  ("45+" / "52 subcommands" / "51 `Command` variants") was RECONCILED at
+  the same filing rather than resolved by picking**: **52** is correct at
+  every commit in the window in which both rulings were filed, **51** is
+  a miscount (the true sequence is 50 → 52 → 53), and **"45+"** is a
+  floor rather than a count. The load-bearing claims — zero
+  `#[command(subcommand)]` inside the enum, zero `Remove*` variants,
+  five `Delete` variants — held at all eleven commits measured. Method,
+  per-commit table and the residual line-range imprecision are recorded
+  in R161's own entry.
+  **Ceiling is now R161; R162 is next free.** Decision records stay
+  **031**, Pass family stays **43**. **F3's push-button verb name is
+  still NOT RULED** and must not be inferred from R161 — R161 supplies
+  the shape, not the word. Full entry: `ROADMAP.md` *Standing rules*,
+  R161.
