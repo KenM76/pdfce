@@ -1115,6 +1115,120 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// Author a new check box (ISO 32000-1 §12.7.4.2).
+    ///
+    /// Both appearance states are written at creation, so the box is
+    /// immediately usable by `set-button-state` and immediately correct in a
+    /// viewer — there is no `/NeedAppearances` fallback involved.
+    AddCheckBox {
+        /// Input PDF.
+        input: PathBuf,
+        /// The field's name — also how `fill-field` and `list-fields` will
+        /// refer to it.
+        #[arg(long)]
+        name: String,
+        /// 1-based page number to place the box on.
+        #[arg(long)]
+        page: usize,
+        /// The field rectangle in PDF user space, `llx,lly,urx,ury`.
+        #[arg(long, value_name = "LLX,LLY,URX,URY", allow_hyphen_values = true)]
+        rect: String,
+        /// The ON state's name — the value this box exports when ticked.
+        ///
+        /// `Off` is reserved for the unticked state (§12.7.4.2.3) and is
+        /// refused here. Override it when the form's submitted data needs a
+        /// particular value, e.g. `--on-state Red`.
+        #[arg(long, default_value = "Yes")]
+        on_state: String,
+        /// Create the box already ticked.
+        #[arg(long)]
+        checked: bool,
+        /// `/TU`, the accessibility name a screen reader announces.
+        #[arg(long)]
+        tooltip: Option<String>,
+        /// Mark the field read-only (`/Ff` bit 1).
+        #[arg(long)]
+        read_only: bool,
+        /// Mark the field required at submit time (`/Ff` bit 2).
+        #[arg(long)]
+        required: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the add reproduces the input byte for
+        /// byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
+    /// Author a new list box or drop-down (ISO 32000-1 §12.7.4.4).
+    ///
+    /// The field is created with its options and NO selection; `fill-field`
+    /// puts the first value in.
+    AddChoiceField {
+        /// Input PDF.
+        input: PathBuf,
+        /// The field's name.
+        #[arg(long)]
+        name: String,
+        /// 1-based page number to place the field on.
+        #[arg(long)]
+        page: usize,
+        /// The field rectangle in PDF user space, `llx,lly,urx,ury`.
+        #[arg(long, value_name = "LLX,LLY,URX,URY", allow_hyphen_values = true)]
+        rect: String,
+        /// One selectable option. Repeat for each.
+        ///
+        /// `LABEL` alone makes the exported value and the displayed label the
+        /// same. `EXPORT=LABEL` splits them — the form submits `EXPORT` and
+        /// the operator sees `LABEL`. That split is the whole point of a
+        /// choice field's option list: `--option CA=Canada` submits `CA`.
+        ///
+        /// May be omitted: a choice field with no options is legal and
+        /// saves, but cannot be filled until options are added, so creating
+        /// one prints a warning rather than failing.
+        #[arg(long = "option", value_name = "[EXPORT=]LABEL")]
+        options: Vec<String>,
+        /// Make this a drop-down (combo box) rather than a scrolling list.
+        #[arg(long)]
+        combo: bool,
+        /// Allow typing a value that is not in the list. Combo boxes only
+        /// (§12.7.4.4 Table 230).
+        #[arg(long)]
+        editable: bool,
+        /// Allow more than one selection at a time (`/Ff` bit 22).
+        #[arg(long)]
+        multi_select: bool,
+        /// Sort the options alphabetically by label.
+        ///
+        /// This REORDERS the written array, because §12.7.4.4 makes readers
+        /// display `/Opt` order regardless of the sort flag.
+        #[arg(long)]
+        sort: bool,
+        /// `/TU`, the accessibility name a screen reader announces.
+        #[arg(long)]
+        tooltip: Option<String>,
+        /// Mark the field read-only (`/Ff` bit 1).
+        #[arg(long)]
+        read_only: bool,
+        /// Mark the field required at submit time (`/Ff` bit 2).
+        #[arg(long)]
+        required: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the add reproduces the input byte for
+        /// byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     FillField {
         /// Input PDF.
         input: PathBuf,
@@ -2724,6 +2838,66 @@ fn run() -> ExitCode {
             max_len,
             tooltip: tooltip.as_deref(),
             multiline,
+            read_only,
+            required,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::AddCheckBox {
+            input,
+            name,
+            page,
+            rect,
+            on_state,
+            checked,
+            tooltip,
+            read_only,
+            required,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_add_check_box(&AddCheckBoxArgs {
+            input: &input,
+            name: &name,
+            page,
+            rect: &rect,
+            on_state: &on_state,
+            checked,
+            tooltip: tooltip.as_deref(),
+            read_only,
+            required,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::AddChoiceField {
+            input,
+            name,
+            page,
+            rect,
+            options,
+            combo,
+            editable,
+            multi_select,
+            sort,
+            tooltip,
+            read_only,
+            required,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_add_choice_field(&AddChoiceFieldArgs {
+            input: &input,
+            name: &name,
+            page,
+            rect: &rect,
+            options: &options,
+            combo,
+            editable,
+            multi_select,
+            sort,
+            tooltip: tooltip.as_deref(),
             read_only,
             required,
             output: &output,
@@ -8562,6 +8736,249 @@ struct AddTextFieldArgs<'a> {
     verify_undo: bool,
 }
 
+/// Borrowed argument bundle for [`cmd_add_check_box`] (clippy arg-count).
+struct AddCheckBoxArgs<'a> {
+    input: &'a Path,
+    name: &'a str,
+    page: usize,
+    rect: &'a str,
+    on_state: &'a str,
+    checked: bool,
+    tooltip: Option<&'a str>,
+    read_only: bool,
+    required: bool,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// Borrowed argument bundle for [`cmd_add_choice_field`] (clippy arg-count).
+struct AddChoiceFieldArgs<'a> {
+    input: &'a Path,
+    name: &'a str,
+    page: usize,
+    rect: &'a str,
+    options: &'a [String],
+    combo: bool,
+    editable: bool,
+    multi_select: bool,
+    sort: bool,
+    tooltip: Option<&'a str>,
+    read_only: bool,
+    required: bool,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// Parse `--page` (1-based) and `--rect` (`llx,lly,urx,ury`), the two
+/// arguments every field-authoring subcommand takes in the same form.
+///
+/// Shared so the three subcommands cannot disagree about whether `--page` is
+/// 1-based — which is the kind of divergence that produces a field on the
+/// wrong page rather than an error.
+fn parse_page_and_rect(
+    input: &Path,
+    page: usize,
+    rect: &str,
+) -> Result<(usize, pdfce_core::page_tree::Rect), u8> {
+    let Some(page_index) = page.checked_sub(1) else {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            input.display()
+        );
+        return Err(exit::EDIT_REFUSED);
+    };
+    let parts: Vec<f64> = rect
+        .split(',')
+        .filter_map(|t| t.trim().parse::<f64>().ok())
+        .collect();
+    let [llx, lly, urx, ury] = parts[..] else {
+        eprintln!(
+            "pdfce-cli: {}: --rect needs four numbers as LLX,LLY,URX,URY",
+            input.display()
+        );
+        return Err(exit::EDIT_REFUSED);
+    };
+    Ok((
+        page_index,
+        pdfce_core::page_tree::Rect { llx, lly, urx, ury },
+    ))
+}
+
+/// `add-check-box` — author a new check box.
+///
+/// ## Contract
+///
+/// - Emits one `add-check-box …` line with the usual save-report fields,
+///   then defers the exit code to [`finish_edit`].
+/// - Every refusal — an `Off` on-state, XFA present, a name already used by
+///   a different field type, a degenerate rectangle, an empty name, a page
+///   out of range — goes through [`report_edit_error`] BEFORE any mutation.
+/// - `--page` is 1-BASED here and 0-based in the core call.
+fn cmd_add_check_box(args: &AddCheckBoxArgs<'_>) -> u8 {
+    let (page_index, rect) = match parse_page_and_rect(args.input, args.page, args.rect) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let mut spec = pdfce_core::edit::NewCheckBox::new(page_index, args.name, rect)
+        .with_on_state(args.on_state)
+        .checked(args.checked)
+        .with_flags(args.read_only, args.required);
+    if let Some(t) = args.tooltip {
+        spec = spec.with_tooltip(t);
+    }
+
+    let field_id = match session.add_check_box(&spec) {
+        Ok(id) => id,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "add-check-box {} name={:?} page={} rect={},{},{},{} on_state={:?} checked={} field={} {} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.name,
+        args.page,
+        rect.llx,
+        rect.lly,
+        rect.urx,
+        rect.ury,
+        args.on_state,
+        u32::from(args.checked),
+        field_id.num,
+        field_id.generation,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// `add-choice-field` — author a new list box or drop-down.
+///
+/// ## Contract
+///
+/// - Emits one `add-choice-field …` line with the usual save-report fields,
+///   then defers the exit code to [`finish_edit`].
+/// - `--option EXPORT=LABEL` splits the submitted value from the displayed
+///   one; `--option LABEL` makes them the same. **The first `=` splits**, so
+///   a label may contain `=` and an export value may not — the export value
+///   is form data and the label is prose, and prose is where an `=` actually
+///   turns up.
+/// - Refusals — no options, `--editable` without `--combo`, a duplicated
+///   export value, plus every structural refusal the other authoring
+///   subcommands share — go through [`report_edit_error`] before any
+///   mutation.
+fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
+    let (page_index, rect) = match parse_page_and_rect(args.input, args.page, args.rect) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let options: Vec<pdfce_core::edit::ChoiceOption> = args
+        .options
+        .iter()
+        .map(|raw| match raw.split_once('=') {
+            Some((export, display)) => pdfce_core::edit::ChoiceOption::new(export, display),
+            None => pdfce_core::edit::ChoiceOption::plain(raw),
+        })
+        .collect();
+
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let mut spec = pdfce_core::edit::NewChoiceField::new(page_index, args.name, rect, options)
+        .multi_select(args.multi_select)
+        .sorted(args.sort)
+        .with_flags(args.read_only, args.required);
+    if args.combo {
+        spec = spec.as_combo(args.editable);
+    } else {
+        // Carried through UNCHANGED rather than silently cleared, so the core
+        // refuses `--editable` without `--combo` instead of the CLI quietly
+        // dropping a flag the operator asked for.
+        spec.editable = args.editable;
+    }
+    if let Some(t) = args.tooltip {
+        spec = spec.with_tooltip(t);
+    }
+
+    let authored = match session.add_choice_field(&spec) {
+        Ok(outcome) => outcome,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    let field_id = authored.field_id;
+    // R4: a field that exists and cannot be filled is disclosed at the moment
+    // it is created, not left for the operator to discover at fill time.
+    if authored.has_no_options {
+        eprintln!(
+            "pdfce-cli: field {:?}: this choice field has no options and cannot be filled until options are added",
+            args.name
+        );
+    }
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "add-choice-field {} name={:?} page={} rect={},{},{},{} options={} no_options={} combo={} editable={} multi_select={} sort={} field={} {} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.name,
+        args.page,
+        rect.llx,
+        rect.lly,
+        rect.urx,
+        rect.ury,
+        args.options.len(),
+        u32::from(authored.has_no_options),
+        u32::from(args.combo),
+        u32::from(args.editable),
+        u32::from(args.multi_select),
+        u32::from(args.sort),
+        field_id.num,
+        field_id.generation,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
 /// `add-text-field` — author a new text form field.
 ///
 /// ## Contract
@@ -8575,37 +8992,22 @@ struct AddTextFieldArgs<'a> {
 /// - `--page` is 1-BASED here and 0-based in the core call, matching every
 ///   other page-taking subcommand in this CLI.
 fn cmd_add_text_field(args: &AddTextFieldArgs<'_>) -> u8 {
-    let Some(page_index) = args.page.checked_sub(1) else {
-        eprintln!(
-            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
-            args.input.display()
-        );
-        return exit::EDIT_REFUSED;
+    let (page_index, rect) = match parse_page_and_rect(args.input, args.page, args.rect) {
+        Ok(pair) => pair,
+        Err(code) => return code,
     };
-    let parts: Vec<f64> = args
-        .rect
-        .split(',')
-        .filter_map(|t| t.trim().parse::<f64>().ok())
-        .collect();
-    let [llx, lly, urx, ury] = parts[..] else {
-        eprintln!(
-            "pdfce-cli: {}: --rect needs four numbers as LLX,LLY,URX,URY",
-            args.input.display()
-        );
-        return exit::EDIT_REFUSED;
-    };
+    let (llx, lly, urx, ury) = (rect.llx, rect.lly, rect.urx, rect.ury);
 
     let (source, mut session) = match open_for_edit(args.input) {
         Ok(pair) => pair,
         Err(code) => return code,
     };
 
-    let mut spec = pdfce_core::edit::NewTextField::new(
-        page_index,
-        args.name,
-        pdfce_core::page_tree::Rect { llx, lly, urx, ury },
-    )
-    .with_flags(args.multiline, args.read_only, args.required);
+    let mut spec = pdfce_core::edit::NewTextField::new(page_index, args.name, rect).with_flags(
+        args.multiline,
+        args.read_only,
+        args.required,
+    );
     if let Some(v) = args.value {
         spec = spec.with_value(v);
     }

@@ -1312,6 +1312,128 @@ pub struct FieldAppearance {
     pub unencodable_chars: usize,
 }
 
+/// One state of a check-box's `/AP` `/N` sub-dictionary: the form-XObject
+/// dict and its content bytes.
+///
+/// A check box's `/AP` `/N` is **not** a stream, as it is for every other
+/// field type — it is a DICTIONARY KEYED BY STATE NAME (§12.7.4.2.3), and
+/// each entry is a complete appearance stream:
+///
+/// ```text
+/// /AP << /N << /Yes 12 0 R  /Off 13 0 R >> >>
+/// ```
+///
+/// `/AS` then names which of those entries is painted (§12.5.5). This type
+/// exists so the caller can stage both streams and assemble that
+/// sub-dictionary, rather than the builder needing an object allocator.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CheckBoxStateAppearance {
+    /// The form-XObject dict for this state (`/BBox = [0 0 w h]`).
+    pub ap_dict: Dict,
+    /// The state's content-stream bytes (raw, unfiltered).
+    pub content: Vec<u8>,
+}
+
+/// Build a check box's **two** appearance states — on and off — as
+/// vector-drawn artwork (§12.7.4.2.3).
+///
+/// Returns `(off, on)`.
+///
+/// # Why this is vector-drawn rather than a ZapfDingbats glyph
+///
+/// Acrobat draws a check box's mark as character `4` (a check) from the
+/// **ZapfDingbats** font, named through the widget's `/DA`. pdfce cannot
+/// currently take that route, and the reason is worth recording because it
+/// looks like an arbitrary divergence and is not:
+///
+/// [`Std14::ZapfDingbats`](crate::fontdata::Std14) exists and its metrics are
+/// present, but the only appearance generator this crate has —
+/// [`vartext::build_variable_text`], the one R92 requires everything to share
+/// — is **Latin-only**: it encodes through `WinAnsi` and raises
+/// [`VarTextError`] on a symbolic font. So a glyph-drawn check would need a
+/// SECOND generator, which is exactly what R92 forbids, or a symbolic-font
+/// path through the shared one, which is a font-machinery Pass and not a
+/// field-authoring one.
+///
+/// Vector artwork has no such dependency: two line segments and a rectangle,
+/// drawn directly into the appearance stream, produce a check box that every
+/// conforming viewer paints identically and that pdfce's own renderer paints
+/// too — which the `/MK`-only border of slice 1 notably does NOT (R43,
+/// named-not-painted). The visual difference from Acrobat's glyph is a
+/// slightly different check shape. The behavioural difference is none.
+///
+/// # The off state is drawn, not omitted
+///
+/// §12.7.4.2.3 makes the off appearance OPTIONAL — a viewer may paint nothing
+/// when `/AS` selects a missing state. It is written anyway so the box's
+/// border is visible when unchecked. An unchecked box that renders as blank
+/// paper is indistinguishable from no field at all, which would make an
+/// unfilled form look empty rather than look like a form.
+///
+/// # Errors
+///
+/// Never — the geometry is fixed and no text is laid out. Returns a plain
+/// pair rather than a `Result` for that reason.
+#[must_use]
+pub fn build_check_box_appearances(
+    width: f64,
+    height: f64,
+) -> (CheckBoxStateAppearance, CheckBoxStateAppearance) {
+    let (w, h) = (width.max(1.0), height.max(1.0));
+    let rect = Rect {
+        llx: 0.0,
+        lly: 0.0,
+        urx: w,
+        ury: h,
+    };
+    // A half-unit inset keeps the 1.0-wide border stroke INSIDE the BBox.
+    // A stroke is centred on its path, so a border drawn at the BBox edge
+    // would have half its width clipped away by the form XObject.
+    let inset = 0.5;
+
+    let border = |b: &mut ContentBuilder| {
+        b.set_stroke_gray(0.0);
+        b.set_line_width(1.0);
+        b.rect(inset, inset, w - 2.0 * inset, h - 2.0 * inset);
+        b.paint(Paint::Stroke);
+    };
+
+    let mut off = ContentBuilder::new();
+    border(&mut off);
+
+    let mut on = ContentBuilder::new();
+    border(&mut on);
+    // The check itself: a short down-stroke into a long up-stroke, scaled to
+    // the box and centred, with a round join so the vertex reads as a tick
+    // rather than as two crossing lines. Proportions are the conventional
+    // check: the descender lands ~40% across and the ascender rises above
+    // the start of the down-stroke.
+    let m = (w.min(h)) * 0.25;
+    let (cx, cy) = (w / 2.0, h / 2.0);
+    let s = (w.min(h) - 2.0 * m) / 2.0;
+    on.set_stroke_gray(0.0);
+    on.set_line_width((s * 0.32).max(0.6));
+    on.set_line_cap(LineCap::Round);
+    on.set_line_join(LineJoin::Round);
+    on.move_to(cx - s, cy + s * 0.1);
+    on.line_to(cx - s * 0.25, cy - s * 0.7);
+    on.line_to(cx + s, cy + s * 0.8);
+    on.paint(Paint::Stroke);
+
+    // No /Resources entries: nothing here names a font, an XObject or a
+    // colour space, so an empty dict is correct rather than merely minimal.
+    (
+        CheckBoxStateAppearance {
+            ap_dict: form_dict(rect, Dict::new()),
+            content: off.into_bytes(),
+        },
+        CheckBoxStateAppearance {
+            ap_dict: form_dict(rect, Dict::new()),
+            content: on.into_bytes(),
+        },
+    )
+}
+
 /// Generate a text/choice **widget field** appearance (§12.7.3.3) for Pass 7
 /// form fill.
 ///

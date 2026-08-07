@@ -16,10 +16,12 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use pdfce_core::document::Document;
-use pdfce_core::edit::{EditError, EditSession, NewTextField};
-use pdfce_core::forms::{self, FieldFlags, FieldType};
+use pdfce_core::edit::{
+    ChoiceOption, EditError, EditSession, NewCheckBox, NewChoiceField, NewTextField,
+};
+use pdfce_core::forms::{self, ButtonKind, FieldFlags, FieldType, FieldValue};
 use pdfce_core::graph::ObjectGraph;
-use pdfce_core::object::Object;
+use pdfce_core::object::{Name, Object};
 use pdfce_core::page_tree::Rect;
 use std::path::{Path, PathBuf};
 
@@ -310,4 +312,582 @@ fn a_page_out_of_range_is_refused() {
             .is_err()
     );
     assert!(!s.is_modified());
+}
+
+// ---------------------------------------------------------------------------
+// Slice 2 — check boxes (ISO 32000-1 §12.7.4.2)
+// ---------------------------------------------------------------------------
+
+/// A second rectangle, so a test can place two fields without them
+/// overlapping and make the "which one did I get back" question ambiguous.
+fn rect2() -> Rect {
+    Rect {
+        llx: 20.0,
+        lly: 200.0,
+        urx: 44.0,
+        ury: 224.0,
+    }
+}
+
+/// The headline for check boxes: created on a page with no form at all, and
+/// read back by the ORDINARY parser as a check box — not as some other kind
+/// of button, and not as a text field that happens to hold a name.
+#[test]
+fn a_created_check_box_parses_back_as_a_check_box() {
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()))
+        .expect("add check box");
+
+    let f = field_named(&s, "Agree").expect("field parses back");
+    assert_eq!(f.field_type, Some(FieldType::Button));
+    // The type test that matters: neither Radio nor Pushbutton is set, which
+    // is what MAKES a /Btn field a check box (§12.7.4.2.1). A wrong flag
+    // here produces a field that still parses, as a different type.
+    assert_eq!(f.button_kind, Some(ButtonKind::Check));
+    assert!(!f.flags.has(FieldFlags::RADIO));
+    assert!(!f.flags.has(FieldFlags::PUSHBUTTON));
+}
+
+/// `/V` is a NAME for a check box, not a string — the single most common way
+/// a hand-written box comes out unrecognisable. An unchecked box is `/Off`.
+#[test]
+fn a_check_box_value_is_a_name_and_defaults_to_off() {
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()))
+        .expect("add");
+    let f = field_named(&s, "Agree").expect("parses");
+    assert_eq!(f.value, FieldValue::Name(b"Off".to_vec()));
+
+    let mut s2 = session("dimension/plain-base.pdf");
+    s2.add_check_box(&NewCheckBox::new(0, "Agree", rect2()).checked(true))
+        .expect("add");
+    let f2 = field_named(&s2, "Agree").expect("parses");
+    assert_eq!(f2.value, FieldValue::Name(b"Yes".to_vec()));
+}
+
+/// Both appearance states exist at creation, `/AP` `/N` is a sub-dictionary
+/// keyed by state name, and `/AS` selects one of them (§12.7.4.2.3, §12.5.5).
+///
+/// This is the structural difference from every other field type, so it is
+/// asserted against the raw dictionary rather than through the forms layer.
+#[test]
+fn both_appearance_states_exist_and_as_selects_one() {
+    let mut s = session("dimension/plain-base.pdf");
+    let id = s
+        .add_check_box(&NewCheckBox::new(0, "Agree", rect2()).checked(true))
+        .expect("add");
+
+    let g = s.graph();
+    let d = g.resolved(id).as_dict().expect("field dict").clone();
+
+    assert_eq!(
+        d.get(b"AS").and_then(Object::as_name),
+        Some(&Name::from(b"Yes")),
+        "/AS must name the painted state"
+    );
+    let ap = d.get(b"AP").and_then(Object::as_dict).expect("/AP");
+    let n = ap
+        .get(b"N")
+        .and_then(Object::as_dict)
+        .expect("/AP /N is a DICTIONARY for a check box, not a stream");
+    // Both states present, and the off state named exactly `Off` — §12.7.4.2.3
+    // says it "shall" be, and a viewer that cannot find `Off` paints nothing.
+    assert!(n.get(b"Yes").is_some(), "on state present");
+    assert!(n.get(b"Off").is_some(), "off state present and named Off");
+    // Each entry is a real stream with DRAWN content, not an empty
+    // placeholder — a state that resolves to a zero-length stream paints
+    // nothing, which for the off state is indistinguishable from no field.
+    for state in [&b"Yes"[..], &b"Off"[..]] {
+        let Some(Object::Reference(r)) = n.get(state) else {
+            panic!("state {state:?} is not an indirect reference");
+        };
+        let Object::Stream(stream) = g.resolved(*r).clone() else {
+            panic!("state {state:?} does not resolve to a stream");
+        };
+        let len = stream.dict.get(b"Length").and_then(Object::as_int);
+        assert!(
+            len.is_some_and(|n| n > 0),
+            "state {state:?} has drawn content"
+        );
+    }
+}
+
+/// The on-state name is the exported value, so it is overridable — a form
+/// that submits `Colour=Red` needs the on state named `Red`.
+#[test]
+fn the_on_state_name_is_overridable_and_reaches_both_v_and_ap() {
+    let mut s = session("dimension/plain-base.pdf");
+    let id = s
+        .add_check_box(
+            &NewCheckBox::new(0, "Colour", rect2())
+                .with_on_state("Red")
+                .checked(true),
+        )
+        .expect("add");
+    let f = field_named(&s, "Colour").expect("parses");
+    assert_eq!(f.value, FieldValue::Name(b"Red".to_vec()));
+
+    let g = s.graph();
+    let d = g.resolved(id).as_dict().expect("dict").clone();
+    assert_eq!(
+        d.get(b"AS").and_then(Object::as_name),
+        Some(&Name::from(b"Red"))
+    );
+    let n = d
+        .get(b"AP")
+        .and_then(Object::as_dict)
+        .and_then(|ap| ap.get(b"N"))
+        .and_then(Object::as_dict)
+        .expect("/AP /N");
+    assert!(
+        n.get(b"Red").is_some(),
+        "the appearance sub-dictionary must be keyed by the SAME name /AS uses"
+    );
+}
+
+/// THE PROOF THAT IT IS A REAL FIELD: the existing, unmodified
+/// `set_button_state` accepts a box this created and toggles it.
+///
+/// A dictionary that merely parses is not a field. This is what separates
+/// the two — the fill verb was written against Acrobat-authored files and
+/// knows nothing about the creation path.
+#[test]
+fn a_created_check_box_can_immediately_be_toggled_by_the_existing_verb() {
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()))
+        .expect("add");
+
+    s.set_button_state("Agree", "Yes").expect("tick it");
+    assert_eq!(
+        field_named(&s, "Agree").expect("parses").value,
+        FieldValue::Name(b"Yes".to_vec())
+    );
+
+    s.set_button_state("Agree", "Off").expect("untick it");
+    assert_eq!(
+        field_named(&s, "Agree").expect("parses").value,
+        FieldValue::Name(b"Off".to_vec())
+    );
+}
+
+/// `Off` cannot name the on state: §12.7.4.2.3 reserves it, and a box whose
+/// two states share a name cannot express "checked".
+#[test]
+fn off_is_refused_as_an_on_state_name() {
+    let mut s = session("dimension/plain-base.pdf");
+    let err = s
+        .add_check_box(&NewCheckBox::new(0, "Agree", rect2()).with_on_state("Off"))
+        .expect_err("must refuse");
+    assert!(matches!(err, EditError::CheckBoxOnStateInvalid { .. }));
+
+    let err = s
+        .add_check_box(&NewCheckBox::new(0, "Agree", rect2()).with_on_state("  "))
+        .expect_err("must refuse");
+    assert!(matches!(err, EditError::CheckBoxOnStateInvalid { .. }));
+}
+
+/// One undo removes the whole box — both appearance streams, the field, the
+/// `/Annots` entry and the `/AcroForm` registration — and leaves the document
+/// byte-identical to before.
+#[test]
+fn one_undo_removes_the_entire_check_box() {
+    let mut s = session("dimension/plain-base.pdf");
+    let before = std::fs::read(fixture("dimension/plain-base.pdf")).unwrap();
+    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()))
+        .expect("add");
+    assert!(field_named(&s, "Agree").is_some());
+    s.undo().expect("undo");
+    assert!(field_named(&s, "Agree").is_none(), "field is gone");
+    assert_eq!(
+        s.to_incremental_bytes(&pdfce_core::writer::SaveOptions::identity())
+            .unwrap()
+            .0,
+        before,
+        "undo must be byte-identical, not merely equivalent"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Slice 2 — choice fields (ISO 32000-1 §12.7.4.4)
+// ---------------------------------------------------------------------------
+
+fn countries() -> Vec<ChoiceOption> {
+    vec![
+        ChoiceOption::new("CA", "Canada"),
+        ChoiceOption::new("MX", "Mexico"),
+        ChoiceOption::plain("Other"),
+    ]
+}
+
+/// A created choice field parses back as one, with its options intact and the
+/// export/display split preserved.
+#[test]
+fn a_created_choice_field_parses_back_with_its_options() {
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+        .expect("add choice");
+
+    let f = field_named(&s, "Country").expect("parses back");
+    assert_eq!(f.field_type, Some(FieldType::Choice));
+    assert_eq!(f.options.len(), 3);
+    // THE SPLIT IS THE POINT. Collapsing export into display would leave the
+    // drop-down reading correctly and the submitted data wrong — a defect
+    // with no visible symptom.
+    assert_eq!(f.options[0].export, b"CA".to_vec());
+    assert_eq!(f.options[0].display, b"Canada".to_vec());
+    assert_eq!(f.options[1].export, b"MX".to_vec());
+    assert_eq!(f.options[1].display, b"Mexico".to_vec());
+    // A plain option round-trips with both halves equal.
+    assert_eq!(f.options[2].export, b"Other".to_vec());
+    assert_eq!(f.options[2].display, b"Other".to_vec());
+}
+
+/// An option whose export and display coincide is written as a BARE STRING,
+/// not as a two-element array — the shape §12.7.4.4 intends and the shape a
+/// hand-written file would have.
+#[test]
+fn a_plain_option_is_written_as_a_bare_string() {
+    let mut s = session("dimension/plain-base.pdf");
+    let id = s
+        .add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+        .expect("add")
+        .field_id;
+    let g = s.graph();
+    let d = g.resolved(id).as_dict().expect("dict").clone();
+    let opt = d.get(b"Opt").and_then(Object::as_array).expect("/Opt");
+    assert!(
+        matches!(opt[0], Object::Array(_)),
+        "an export != display option is a two-element array"
+    );
+    assert!(
+        matches!(opt[2], Object::String(_)),
+        "an export == display option is a bare string"
+    );
+}
+
+/// Created UNSELECTED: §12.7.4.4 defaults `/V` to null, and this constructor
+/// deliberately takes no position on the export-vs-display `/V` convention.
+#[test]
+fn a_created_choice_field_has_no_selection() {
+    let mut s = session("dimension/plain-base.pdf");
+    let id = s
+        .add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+        .expect("add")
+        .field_id;
+    assert_eq!(
+        field_named(&s, "Country").expect("parses").value,
+        FieldValue::Absent
+    );
+    let g = s.graph();
+    let d = g.resolved(id).as_dict().expect("dict").clone();
+    assert!(d.get(b"V").is_none(), "/V is absent, not an empty string");
+}
+
+/// THE PROOF, again: the existing unmodified `set_choice_value` accepts a
+/// field this created, and resolves the display string the operator sees.
+#[test]
+fn a_created_choice_field_can_immediately_be_filled_by_the_existing_verb() {
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+        .expect("add");
+
+    s.set_choice_value("Country", &["Mexico"])
+        .expect("the existing fill verb must accept a field we created");
+    assert!(
+        field_named(&s, "Country")
+            .expect("parses")
+            .value
+            .is_present(),
+        "the fill landed"
+    );
+
+    // And a value that is not an option is still refused — creation did not
+    // weaken the fill verb's own guard.
+    let err = s
+        .set_choice_value("Country", &["Atlantis"])
+        .expect_err("not an option");
+    assert!(matches!(err, EditError::ChoiceValueNotInOptions { .. }));
+}
+
+/// Combo, editable, multi-select and sort each reach `/Ff` (§12.7.4.4
+/// Table 230). Bit 26 is NOT set — on a `/Tx` field that bit is `RichText`,
+/// and the overload is a documented trap.
+#[test]
+fn the_choice_flags_reach_ff() {
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_choice_field(
+        &NewChoiceField::new(0, "Country", rect(), countries())
+            .as_combo(true)
+            .multi_select(true)
+            .sorted(true),
+    )
+    .expect("add");
+    let f = field_named(&s, "Country").expect("parses");
+    assert!(f.flags.has(FieldFlags::COMBO));
+    assert!(f.flags.has(FieldFlags::EDIT));
+    assert!(f.flags.has(FieldFlags::MULTI_SELECT));
+    assert!(f.flags.has(FieldFlags::SORT));
+}
+
+/// `sorted` SORTS THE ARRAY, it does not merely set a flag. §12.7.4.4: a
+/// reader "shall display the options in the order in which they occur in the
+/// Opt array", so a flag alone would change nothing an operator can see.
+#[test]
+fn sorting_reorders_the_options_rather_than_only_flagging_them() {
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()).sorted(true))
+        .expect("add");
+    let f = field_named(&s, "Country").expect("parses");
+    let display: Vec<_> = f
+        .options
+        .iter()
+        .map(|o| String::from_utf8_lossy(&o.display).into_owned())
+        .collect();
+    assert_eq!(display, vec!["Canada", "Mexico", "Other"]);
+
+    // And unsorted preserves the caller's order exactly.
+    let mut s2 = session("dimension/plain-base.pdf");
+    let reversed = vec![ChoiceOption::plain("Zulu"), ChoiceOption::plain("Alpha")];
+    s2.add_choice_field(&NewChoiceField::new(0, "C", rect(), reversed))
+        .expect("add");
+    let f2 = field_named(&s2, "C").expect("parses");
+    assert_eq!(f2.options[0].display, b"Zulu".to_vec());
+}
+
+/// An empty option list is ALLOWED and DISCLOSED: the field saves, and the
+/// outcome says it cannot be filled until options are added.
+///
+/// A form under construction legitimately passes through the empty state, so
+/// refusing would block a real workflow; but a field nothing can fill is
+/// exactly what R4 says must not be discovered later.
+#[test]
+fn a_choice_field_with_no_options_is_allowed_and_disclosed() {
+    let mut s = session("dimension/plain-base.pdf");
+    let out = s
+        .add_choice_field(&NewChoiceField::new(0, "Country", rect(), Vec::new()))
+        .expect("an empty option list is legal");
+    assert!(
+        out.has_no_options,
+        "the un-fillable state must be disclosed, not silent"
+    );
+    let f = field_named(&s, "Country").expect("the field still exists");
+    assert_eq!(f.field_type, Some(FieldType::Choice));
+    assert!(f.options.is_empty());
+
+    // And it really is un-fillable — the disclosure is not merely cosmetic.
+    assert!(matches!(
+        s.set_choice_value("Country", &["anything"]),
+        Err(EditError::ChoiceValueNotInOptions { .. })
+    ));
+}
+
+/// A populated choice field reports NO disclosure — the flag tracks the real
+/// condition rather than being set unconditionally.
+#[test]
+fn a_populated_choice_field_discloses_nothing() {
+    let mut s = session("dimension/plain-base.pdf");
+    let out = s
+        .add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+        .expect("add");
+    assert!(!out.has_no_options);
+}
+
+/// `Edit` without `Combo` is impossible (§12.7.4.4 Table 230) and is refused
+/// rather than silently dropped.
+#[test]
+fn an_editable_list_box_is_refused() {
+    let mut s = session("dimension/plain-base.pdf");
+    let mut spec = NewChoiceField::new(0, "Country", rect(), countries());
+    spec.editable = true; // without `combo`
+    let err = s.add_choice_field(&spec).expect_err("must refuse");
+    assert!(matches!(err, EditError::ChoiceEditRequiresCombo));
+}
+
+/// A duplicated export value would be unselectable, because the fill verb
+/// resolves to the first match.
+#[test]
+fn a_duplicate_export_value_is_refused() {
+    let mut s = session("dimension/plain-base.pdf");
+    let dupes = vec![
+        ChoiceOption::new("CA", "Canada"),
+        ChoiceOption::new("CA", "Canada (again)"),
+    ];
+    let err = s
+        .add_choice_field(&NewChoiceField::new(0, "Country", rect(), dupes))
+        .expect_err("must refuse");
+    assert!(matches!(err, EditError::ChoiceOptionDuplicate { .. }));
+}
+
+/// One undo removes the whole choice field, byte-identically.
+#[test]
+fn one_undo_removes_the_entire_choice_field() {
+    let mut s = session("dimension/plain-base.pdf");
+    let before = std::fs::read(fixture("dimension/plain-base.pdf")).unwrap();
+    s.add_choice_field(&NewChoiceField::new(0, "Country", rect(), countries()))
+        .expect("add");
+    s.undo().expect("undo");
+    assert!(field_named(&s, "Country").is_none());
+    assert_eq!(
+        s.to_incremental_bytes(&pdfce_core::writer::SaveOptions::identity())
+            .unwrap()
+            .0,
+        before
+    );
+}
+
+/// A name already used by the SAME type is refused too, for all three verbs.
+///
+/// §12.7.3.2 makes the fully-qualified name a field's identity, so appending
+/// a second same-named field emits a document with two fields and one
+/// identity. The merge that SHOULD happen needs a resolver pdfce does not
+/// have; until it does, refusing keeps the damage out of the files.
+#[test]
+fn a_name_already_used_by_the_same_type_is_refused() {
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_text_field(&NewTextField::new(0, "Dup", rect()))
+        .expect("first text field");
+    assert!(matches!(
+        s.add_text_field(&NewTextField::new(0, "Dup", rect2())),
+        Err(EditError::FieldNameAlreadyUsed { .. })
+    ));
+
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_check_box(&NewCheckBox::new(0, "Dup", rect2()))
+        .expect("first check box");
+    assert!(matches!(
+        s.add_check_box(&NewCheckBox::new(0, "Dup", rect())),
+        Err(EditError::FieldNameAlreadyUsed { .. })
+    ));
+
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_choice_field(&NewChoiceField::new(0, "Dup", rect(), countries()))
+        .expect("first choice field");
+    assert!(matches!(
+        s.add_choice_field(&NewChoiceField::new(0, "Dup", rect2(), countries())),
+        Err(EditError::FieldNameAlreadyUsed { .. })
+    ));
+}
+
+/// The refusal really does keep the file single-identity: after a refused
+/// duplicate the form still holds exactly ONE field of that name.
+#[test]
+fn a_refused_duplicate_leaves_exactly_one_field() {
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_text_field(&NewTextField::new(0, "Dup", rect()))
+        .expect("first");
+    let _ = s.add_text_field(&NewTextField::new(0, "Dup", rect2()));
+    let form = forms::parse_acroform(&s.graph()).expect("form");
+    assert_eq!(
+        form.fields
+            .iter()
+            .filter(|f| f.fully_qualified_name == "Dup")
+            .count(),
+        1,
+        "a refused add must not have appended anything"
+    );
+}
+
+/// A name already used by a field of a DIFFERENT type is refused, in both
+/// directions — the shared preflight is what makes this uniform across the
+/// three creation verbs.
+#[test]
+fn a_name_used_by_another_field_type_is_refused_for_both_new_types() {
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_text_field(&NewTextField::new(0, "Shared", rect()))
+        .expect("text field");
+
+    let err = s
+        .add_check_box(&NewCheckBox::new(0, "Shared", rect2()))
+        .expect_err("check box must not steal a text field's name");
+    assert!(matches!(err, EditError::FieldNameTypeConflict { .. }));
+
+    let err = s
+        .add_choice_field(&NewChoiceField::new(0, "Shared", rect2(), countries()))
+        .expect_err("choice must not steal a text field's name");
+    assert!(matches!(err, EditError::FieldNameTypeConflict { .. }));
+}
+
+/// Both new types run the SAME preflight as slice 1, so the structural
+/// refusals hold for them without being re-implemented.
+#[test]
+fn the_shared_preflight_refusals_apply_to_both_new_types() {
+    let degenerate = Rect {
+        llx: 10.0,
+        lly: 10.0,
+        urx: 10.0,
+        ury: 40.0,
+    };
+    let mut s = session("dimension/plain-base.pdf");
+    assert!(matches!(
+        s.add_check_box(&NewCheckBox::new(0, "A", degenerate)),
+        Err(EditError::FieldRectDegenerate { .. })
+    ));
+    assert!(matches!(
+        s.add_choice_field(&NewChoiceField::new(0, "A", degenerate, countries())),
+        Err(EditError::FieldRectDegenerate { .. })
+    ));
+    assert!(matches!(
+        s.add_check_box(&NewCheckBox::new(0, "   ", rect2())),
+        Err(EditError::FieldNameEmpty)
+    ));
+    assert!(matches!(
+        s.add_choice_field(&NewChoiceField::new(0, "", rect(), countries())),
+        Err(EditError::FieldNameEmpty)
+    ));
+    assert!(matches!(
+        s.add_check_box(&NewCheckBox::new(9, "A", rect2())),
+        Err(EditError::PageOutOfRange { .. })
+    ));
+    assert!(matches!(
+        s.add_choice_field(&NewChoiceField::new(9, "A", rect(), countries())),
+        Err(EditError::PageOutOfRange { .. })
+    ));
+}
+
+/// All three field types coexist on one page, and the document reopens with
+/// every one of them intact — the additive-authoring check (R46) extended to
+/// slice 2.
+#[test]
+fn all_three_field_types_coexist_and_the_result_reopens() {
+    let mut s = session("dimension/plain-base.pdf");
+    s.add_text_field(&NewTextField::new(0, "Name", rect()).with_value("Ken Mantle"))
+        .expect("text");
+    s.add_check_box(&NewCheckBox::new(0, "Agree", rect2()).checked(true))
+        .expect("check");
+    s.add_choice_field(
+        &NewChoiceField::new(
+            0,
+            "Country",
+            Rect {
+                llx: 250.0,
+                lly: 200.0,
+                urx: 400.0,
+                ury: 224.0,
+            },
+            countries(),
+        )
+        .as_combo(false),
+    )
+    .expect("choice");
+
+    let bytes = s
+        .to_incremental_bytes(&pdfce_core::writer::SaveOptions::identity())
+        .unwrap()
+        .0;
+    let doc = pdfce_core::document::Document::from_bytes(bytes).expect("reopen");
+    let reopened = EditSession::new(doc);
+    let form = forms::parse_acroform(&reopened.graph()).expect("form survives the round trip");
+    let mut names: Vec<_> = form
+        .fields
+        .iter()
+        .map(|f| f.fully_qualified_name.clone())
+        .collect();
+    names.sort();
+    assert_eq!(names, vec!["Agree", "Country", "Name"]);
+
+    let agree = field_named(&reopened, "Agree").expect("check box survives");
+    assert_eq!(agree.button_kind, Some(ButtonKind::Check));
+    assert_eq!(agree.value, FieldValue::Name(b"Yes".to_vec()));
+    let country = field_named(&reopened, "Country").expect("choice survives");
+    assert_eq!(country.options.len(), 3);
 }

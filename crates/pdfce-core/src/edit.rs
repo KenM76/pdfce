@@ -655,6 +655,314 @@ impl NewTextField {
     }
 }
 
+/// A check box to be created by [`EditSession::add_check_box`].
+///
+/// # What makes a check box structurally unlike slice 1's text field
+///
+/// Three things, all of them consequences of §12.7.4.2.3, and each one a
+/// place where copying the text-field code would produce a field that parses
+/// and does not work:
+///
+/// 1. **`/V` is a NAME, not a string.** A text field's value is
+///    `/V (Ken Mantle)`; a check box's is `/V /Yes`. Writing a string here
+///    produces a field whose value no conforming reader recognises as "on".
+/// 2. **`/AP` `/N` is a sub-dictionary keyed by state**, not a stream:
+///    `<< /N << /Yes 12 0 R /Off 13 0 R >> >>`. Both states exist in the
+///    file at once and `/AS` selects between them.
+/// 3. **The appearance is CHOSEN, never generated.** A text or choice field
+///    regenerates its `/AP` from `/DA` + `/V` on every change (§12.7.3.3);
+///    a button just repoints `/AS`. Nothing here goes near the variable-text
+///    generator.
+///
+/// # The on-state name is exposed, and deliberately so
+///
+/// §12.7.4.2.3 says the off state *shall* be `Off` and the on state
+/// *should* be `Yes` — a **should**, not a **shall**, and Acrobat treats the
+/// on-state export value as independently overridable per field. It is
+/// offered here because that name is the field's exported data: a form that
+/// submits `Colour=Red` needs the on state named `Red`, and a creator that
+/// hard-coded `Yes` could not author one. `Yes` is the default, so the
+/// common case does not have to know any of this.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct NewCheckBox {
+    /// 0-based page index the widget is placed on.
+    pub page_index: usize,
+    /// The field's partial name `/T` (§12.7.3.2).
+    pub name: String,
+    /// The widget's `/Rect` in default user space.
+    pub rect: page_tree::Rect,
+    /// The name of the ON state — `/V` and `/AS` when checked, and the
+    /// value the form exports. `Off` is reserved (§12.7.4.2.3).
+    pub on_state: String,
+    /// Whether the box is created already ticked.
+    pub checked: bool,
+    /// `/TU`, the accessibility name.
+    pub tooltip: Option<String>,
+    /// `/Ff` bit 1 — the value may not be changed by the operator.
+    pub read_only: bool,
+    /// `/Ff` bit 2 — the field must have a value when the form is submitted.
+    pub required: bool,
+}
+
+impl NewCheckBox {
+    /// An unchecked box at `rect` on `page_index`, on-state `Yes`.
+    #[must_use]
+    pub fn new(page_index: usize, name: impl Into<String>, rect: page_tree::Rect) -> Self {
+        Self {
+            page_index,
+            name: name.into(),
+            rect,
+            on_state: "Yes".to_owned(),
+            checked: false,
+            tooltip: None,
+            read_only: false,
+            required: false,
+        }
+    }
+
+    /// Override the on-state name (the exported value).
+    #[must_use]
+    pub fn with_on_state(mut self, on_state: impl Into<String>) -> Self {
+        self.on_state = on_state.into();
+        self
+    }
+
+    /// Create the box already ticked.
+    #[must_use]
+    pub const fn checked(mut self, checked: bool) -> Self {
+        self.checked = checked;
+        self
+    }
+
+    /// Set `/TU`, the accessibility name.
+    #[must_use]
+    pub fn with_tooltip(mut self, tooltip: impl Into<String>) -> Self {
+        self.tooltip = Some(tooltip.into());
+        self
+    }
+
+    /// Set the two `/Ff` bits this type offers at creation.
+    #[must_use]
+    pub const fn with_flags(mut self, read_only: bool, required: bool) -> Self {
+        self.read_only = read_only;
+        self.required = required;
+        self
+    }
+
+    /// The resolved `/Ff` (§12.7.3.1 Table 221).
+    ///
+    /// Neither `Radio` (bit 16) nor `Pushbutton` (bit 17) is set: with both
+    /// clear, a `/Btn` field **is** a check box (§12.7.4.2.1). That is the
+    /// whole of the type declaration — there is no positive "I am a check
+    /// box" flag to set.
+    fn field_flags(&self) -> i64 {
+        let mut ff = 0i64;
+        if self.read_only {
+            ff |= i64::from(forms::FieldFlags::READ_ONLY);
+        }
+        if self.required {
+            ff |= i64::from(forms::FieldFlags::REQUIRED);
+        }
+        ff
+    }
+}
+
+/// One entry in a choice field's `/Opt` array: what the form SUBMITS and what
+/// the operator SEES.
+///
+/// §12.7.4.4 lets an `/Opt` element be either a single text string (the two
+/// coincide) or a two-element array `[(export) (display)]`. Keeping them as
+/// separate fields here — rather than as one string with a convention — is
+/// what stops the pair being collapsed by accident. The Acrobat reference
+/// names that collapse as something that *"would silently break forms"*: the
+/// document still opens, the drop-down still reads correctly, and the
+/// submitted data is wrong.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChoiceOption {
+    /// The export value — what the form submits for this item.
+    pub export: String,
+    /// The display string — what the operator sees in the list.
+    pub display: String,
+}
+
+impl ChoiceOption {
+    /// An option whose export value and display string are the same.
+    ///
+    /// Emitted as a **bare string** rather than a one-element-repeated array,
+    /// which is both what §12.7.4.4 intends and what keeps a round-tripped
+    /// file byte-comparable with a hand-written one.
+    #[must_use]
+    pub fn plain(text: impl Into<String>) -> Self {
+        let text = text.into();
+        Self {
+            export: text.clone(),
+            display: text,
+        }
+    }
+
+    /// An option whose submitted value differs from its label.
+    #[must_use]
+    pub fn new(export: impl Into<String>, display: impl Into<String>) -> Self {
+        Self {
+            export: export.into(),
+            display: display.into(),
+        }
+    }
+
+    /// Whether this option can be written as a bare string.
+    fn is_plain(&self) -> bool {
+        self.export == self.display
+    }
+}
+
+/// A list box or combo box to be created by
+/// [`EditSession::add_choice_field`].
+///
+/// # Created UNSELECTED, and that is a decision rather than an omission
+///
+/// No `/V` is written. §12.7.4.4 gives `/V` a default of `null` (nothing
+/// selected), so this is a well-formed field — but the reason is more
+/// specific than "the default was convenient".
+///
+/// pdfce's spec reference and pdfce's own code **disagree about what `/V`
+/// holds for a choice field**. The §12.7.4.4 summary says `/V` is the
+/// *display* name of the selected item; [`EditSession::set_choice_value`]
+/// writes the *export* value and paints the display string into the
+/// appearance. Real-world files and Acrobat's own documentation side with
+/// the code — an export value that never got exported would not be an
+/// export value — but the discrepancy is real and is not this slice's to
+/// settle.
+///
+/// Creating the field unselected means this constructor **takes no position
+/// on it**. Whatever convention `set_choice_value` uses is the one the field
+/// ends up with, because that verb is what puts the first value in. If the
+/// convention is later found to be wrong it is wrong in exactly one place,
+/// and fixing it there fixes fields created here too.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct NewChoiceField {
+    /// 0-based page index the widget is placed on.
+    pub page_index: usize,
+    /// The field's partial name `/T` (§12.7.3.2).
+    pub name: String,
+    /// The widget's `/Rect` in default user space.
+    pub rect: page_tree::Rect,
+    /// The `/Opt` entries, in the order they will be displayed.
+    ///
+    /// **Order is presentation order.** §12.7.4.4 is explicit that a
+    /// conforming reader *"shall display the options in the order in which
+    /// they occur in the `Opt` array"* — the `Sort` flag is a note to
+    /// authoring tools, not an instruction to viewers, so pdfce sorts the
+    /// array itself if asked rather than setting a flag and hoping.
+    pub options: Vec<ChoiceOption>,
+    /// `/Ff` bit 18 — a drop-down (combo) rather than a scrolling list box.
+    pub combo: bool,
+    /// `/Ff` bit 19 — the operator may type a value not in the list.
+    /// Valid only with `combo` (§12.7.4.4 Table 230).
+    pub editable: bool,
+    /// `/Ff` bit 22 — more than one item may be selected at a time.
+    pub multi_select: bool,
+    /// Sort the options alphabetically by display string before writing.
+    ///
+    /// This SORTS THE ARRAY, and also sets `/Ff` bit 20 to record that the
+    /// list is meant to stay sorted. Setting the flag alone would do nothing
+    /// visible, because readers display `/Opt` order regardless.
+    pub sort: bool,
+    /// `/TU`, the accessibility name.
+    pub tooltip: Option<String>,
+    /// `/Ff` bit 1 — the value may not be changed by the operator.
+    pub read_only: bool,
+    /// `/Ff` bit 2 — the field must have a value when the form is submitted.
+    pub required: bool,
+}
+
+impl NewChoiceField {
+    /// A list box at `rect` on `page_index` offering `options`.
+    #[must_use]
+    pub fn new(
+        page_index: usize,
+        name: impl Into<String>,
+        rect: page_tree::Rect,
+        options: Vec<ChoiceOption>,
+    ) -> Self {
+        Self {
+            page_index,
+            name: name.into(),
+            rect,
+            options,
+            combo: false,
+            editable: false,
+            multi_select: false,
+            sort: false,
+            tooltip: None,
+            read_only: false,
+            required: false,
+        }
+    }
+
+    /// Make this a drop-down (combo box), optionally free-text editable.
+    #[must_use]
+    pub const fn as_combo(mut self, editable: bool) -> Self {
+        self.combo = true;
+        self.editable = editable;
+        self
+    }
+
+    /// Allow more than one selection at a time.
+    #[must_use]
+    pub const fn multi_select(mut self, multi: bool) -> Self {
+        self.multi_select = multi;
+        self
+    }
+
+    /// Sort the options alphabetically by display string.
+    #[must_use]
+    pub const fn sorted(mut self, sort: bool) -> Self {
+        self.sort = sort;
+        self
+    }
+
+    /// Set `/TU`, the accessibility name.
+    #[must_use]
+    pub fn with_tooltip(mut self, tooltip: impl Into<String>) -> Self {
+        self.tooltip = Some(tooltip.into());
+        self
+    }
+
+    /// Set the two general `/Ff` bits this type offers at creation.
+    #[must_use]
+    pub const fn with_flags(mut self, read_only: bool, required: bool) -> Self {
+        self.read_only = read_only;
+        self.required = required;
+        self
+    }
+
+    /// The resolved `/Ff` (§12.7.3.1 Table 221, §12.7.4.4 Table 230).
+    fn field_flags(&self) -> i64 {
+        let mut ff = 0i64;
+        if self.read_only {
+            ff |= i64::from(forms::FieldFlags::READ_ONLY);
+        }
+        if self.required {
+            ff |= i64::from(forms::FieldFlags::REQUIRED);
+        }
+        if self.combo {
+            ff |= i64::from(forms::FieldFlags::COMBO);
+        }
+        if self.editable {
+            ff |= i64::from(forms::FieldFlags::EDIT);
+        }
+        if self.sort {
+            ff |= i64::from(forms::FieldFlags::SORT);
+        }
+        if self.multi_select {
+            ff |= i64::from(forms::FieldFlags::MULTI_SELECT);
+        }
+        ff
+    }
+}
+
 /// One object-existence change inside a [`Command`].
 #[derive(Debug, Clone, Copy)]
 struct Removal {
@@ -850,6 +1158,66 @@ pub enum EditError {
         w: f64,
         /// Height in user-space units.
         h: f64,
+    },
+    /// The requested field name is already used by a field of the SAME type.
+    ///
+    /// # This refusal is standing in for a capability pdfce owes
+    ///
+    /// §12.7.3.2 makes the fully-qualified name a field's IDENTITY. Two
+    /// top-level fields sharing a `/T` therefore have the same identity and
+    /// no disambiguator — a shape the spec does not define, and one pdfce's
+    /// own reader survives only by accident: the setters filter by FQN and
+    /// write to EVERY match, which is a defensive coping mechanism for
+    /// malformed third-party input, not an intended result.
+    ///
+    /// What a same-name add SHOULD do is **merge**: §12.7.3.2 makes two
+    /// widgets sharing a name two views of one field, which is how a check
+    /// box appears on every page of a form and is the mechanism a radio group
+    /// is built from. That merge needs a write-side resolver pdfce does not
+    /// have yet.
+    ///
+    /// Until it exists, this refuses. The choice is between a **missing
+    /// capability**, which is honest, visible and reversible, and a
+    /// **malformed document**, which cannot be un-authored — you cannot
+    /// retroactively decide which of two same-named fields the operator
+    /// meant. Refusing keeps the damage out of the files.
+    #[error(
+        "a {existing} field named {name:?} already exists; pdfce cannot yet merge a second widget into an existing field"
+    )]
+    FieldNameAlreadyUsed {
+        /// The fully-qualified name that is already taken.
+        name: String,
+        /// The existing field's type, for the message.
+        existing: &'static str,
+    },
+    /// `Edit` was asked for on a list box rather than a combo box.
+    ///
+    /// §12.7.4.4 Table 230 says the `Edit` flag is *"used only if the Combo
+    /// flag is on"* — a list box has no text entry to make editable. Refused
+    /// rather than silently dropped so the caller learns their combination
+    /// was impossible instead of quietly getting a field that ignores it.
+    #[error("the editable flag applies only to a combo box (drop-down), not to a list box")]
+    ChoiceEditRequiresCombo,
+    /// A check box's on-state name was empty or was `Off`.
+    ///
+    /// §12.7.4.2.3: the off state *shall* be named `Off`, so it cannot also
+    /// name the on state — a box whose two states share a name has no way to
+    /// express "checked". An empty name is not a valid PDF name object here.
+    #[error("{name:?} cannot name a check box's on state (\"Off\" is reserved for the off state)")]
+    CheckBoxOnStateInvalid {
+        /// The rejected name.
+        name: String,
+    },
+    /// A choice field listed the same export value twice.
+    ///
+    /// §12.7.4.4 does not forbid duplicates, but pdfce's own fill verb
+    /// resolves a requested value to the FIRST matching option, so a
+    /// duplicate export makes the later one unselectable — a field with an
+    /// option in it the operator can see and can never choose.
+    #[error("option {value:?} is listed more than once; the duplicate could never be selected")]
+    ChoiceOptionDuplicate {
+        /// The repeated export value.
+        value: String,
     },
     /// A new field was given an empty name.
     ///
@@ -3337,6 +3705,23 @@ pub struct FillOutcome {
     pub unencodable_chars: usize,
 }
 
+/// What an [`add_choice_field`](EditSession::add_choice_field) call
+/// produced.
+///
+/// Exists — where the other two authoring verbs return a bare `ObjId` —
+/// because a choice field is the one type that can be created in a state
+/// pdfce cannot fill, and R4 requires that be visible at the moment it
+/// happens rather than discovered later.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ChoiceAuthorOutcome {
+    /// The new field's object id.
+    pub field_id: ObjId,
+    /// The field was created with an EMPTY `/Opt` and therefore cannot be
+    /// filled until options are added — a disclosure, not an error.
+    pub has_no_options: bool,
+}
+
 /// What a [`regenerate_appearances`](EditSession::regenerate_appearances)
 /// operation did (Pass 7.1, R51).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -3664,58 +4049,13 @@ impl EditSession {
     /// `check_certification`, the same gate `add_markup` and `flatten_fields`
     /// take.
     pub fn add_text_field(&mut self, spec: &NewTextField) -> Result<ObjId, EditError> {
-        if spec.name.trim().is_empty() {
-            return Err(EditError::FieldNameEmpty);
-        }
         let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
-        if w <= 0.0 || h <= 0.0 {
-            return Err(EditError::FieldRectDegenerate { w, h });
-        }
-        if self.base.trailer().contains_key(b"Encrypt") {
-            return Err(EditError::DocumentEncrypted);
-        }
-        self.check_certification()?;
-
-        // XFA and same-name checks both read the CURRENT form, so they see
-        // fields added earlier in this session, not just those in the file.
-        let form = forms::parse_acroform(&self.graph());
-        if let Some(f) = &form
-            && f.xfa.is_present()
-        {
-            return Err(EditError::FieldAuthoringRefusedXfa {
-                name: "/AcroForm /XFA".to_owned(),
-            });
-        }
-        if let Some(f) = &form
-            && let Some(clash) = f
-                .fields
-                .iter()
-                .find(|x| x.fully_qualified_name == spec.name)
-            && !matches!(clash.field_type, Some(forms::FieldType::Text))
-        {
-            return Err(EditError::FieldNameTypeConflict {
-                name: spec.name.clone(),
-                existing: match clash.field_type {
-                    Some(forms::FieldType::Button) => "button",
-                    Some(forms::FieldType::Choice) => "choice",
-                    Some(forms::FieldType::Signature) => "signature",
-                    Some(forms::FieldType::Text) | None => "text",
-                },
-            });
-        }
-
-        let slots = self.page_slots()?;
-        let page_id = slots
-            .get(spec.page_index)
-            .ok_or(EditError::PageOutOfRange {
-                index: spec.page_index,
-                count: slots.len(),
-            })?
-            .id;
-        let suppressed = self.base.suppressed_object_count();
-        if suppressed > 0 {
-            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
-        }
+        let (page_id, slots) = self.field_authoring_preflight(
+            &spec.name,
+            spec.rect,
+            spec.page_index,
+            forms::FieldType::Text,
+        )?;
 
         // The `/DA` Acrobat's floor specifies: Helvetica, size 0 (auto), black.
         let da = crate::vartext::default_appearance_string(
@@ -3843,6 +4183,468 @@ impl EditSession {
             trailer: None,
         });
         Ok(field_id)
+    }
+
+    /// The guard sequence EVERY field-authoring verb runs before it writes
+    /// anything, returning the resolved page object and the page slots.
+    ///
+    /// # Why this is shared rather than copied per field type
+    ///
+    /// Eight refusals in a fixed order, and the order is load-bearing: the
+    /// cheap structural checks come first so a malformed request never
+    /// reaches the parser, and `check_certification` comes before anything
+    /// that inspects the form so a certified document is refused for being
+    /// certified rather than for whatever the form happens to contain.
+    ///
+    /// Three copies of that sequence — one per field type — is how the third
+    /// one ends up missing a guard that the first two have. There would be no
+    /// test failure: the field would be created, would parse, and would be
+    /// refused by nothing. Keeping it in one place makes "check boxes forgot
+    /// the encryption guard" unrepresentable rather than merely unlikely.
+    ///
+    /// `want` is the type being created. **Any** existing field with the
+    /// requested fully-qualified name is refused — see below.
+    ///
+    /// # Same-name is REFUSED, and the resolver is owed
+    ///
+    /// §12.7.3.2 makes two widgets sharing a `/T` two views of ONE field, and
+    /// that is a real feature — it is how a check box appears on every page
+    /// of a multi-page form, and it is the mechanism a radio group is built
+    /// from. pdfce cannot do it: performing the merge needs a write-side
+    /// resolver that answers *what does this name currently name?* and
+    /// promotes a merged single-widget field into a field-with-`/Kids`.
+    ///
+    /// Without that resolver the only alternative to refusing is appending a
+    /// second top-level field with the same name, which emits a document
+    /// whose two fields have the same identity and no disambiguator. That is
+    /// not a deferred refactor — it is corrupt output, and it is unrecoverable
+    /// in a way a refusal is not: a missing capability can be added later and
+    /// the operator loses nothing, whereas a duplicate-named pair cannot be
+    /// resolved after the fact because nothing records which one was meant.
+    ///
+    /// So this refuses, by name, and the merge is owed. Both refusals live
+    /// here rather than in the three callers for the reason given above.
+    ///
+    /// # Errors
+    ///
+    /// In evaluation order: [`EditError::FieldNameEmpty`],
+    /// [`EditError::FieldRectDegenerate`], [`EditError::DocumentEncrypted`],
+    /// a certification refusal, [`EditError::FieldAuthoringRefusedXfa`],
+    /// [`EditError::FieldNameTypeConflict`], [`EditError::PageOutOfRange`],
+    /// and [`EditError::ObjectCreationWouldExposeHiddenObjects`].
+    fn field_authoring_preflight(
+        &mut self,
+        name: &str,
+        rect: page_tree::Rect,
+        page_index: usize,
+        want: forms::FieldType,
+    ) -> Result<(ObjId, Vec<PageSlot>), EditError> {
+        if name.trim().is_empty() {
+            return Err(EditError::FieldNameEmpty);
+        }
+        let (w, h) = (rect.urx - rect.llx, rect.ury - rect.lly);
+        if w <= 0.0 || h <= 0.0 {
+            return Err(EditError::FieldRectDegenerate { w, h });
+        }
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        // XFA and same-name checks both read the CURRENT form, so they see
+        // fields added earlier in this session, not just those in the file.
+        let form = forms::parse_acroform(&self.graph());
+        if let Some(f) = &form
+            && f.xfa.is_present()
+        {
+            return Err(EditError::FieldAuthoringRefusedXfa {
+                name: "/AcroForm /XFA".to_owned(),
+            });
+        }
+        if let Some(f) = &form
+            && let Some(clash) = f.fields.iter().find(|x| x.fully_qualified_name == name)
+        {
+            let existing = match clash.field_type {
+                Some(forms::FieldType::Button) => "button",
+                Some(forms::FieldType::Choice) => "choice",
+                Some(forms::FieldType::Signature) => "signature",
+                Some(forms::FieldType::Text) | None => "text",
+            };
+            // A DIFFERENT type and the SAME type are both refused, by
+            // different names, because they are different problems: the first
+            // is a mistake the operator can fix by renaming, the second is a
+            // merge pdfce cannot yet perform.
+            return Err(if clash.field_type == Some(want) {
+                EditError::FieldNameAlreadyUsed {
+                    name: name.to_owned(),
+                    existing,
+                }
+            } else {
+                EditError::FieldNameTypeConflict {
+                    name: name.to_owned(),
+                    existing,
+                }
+            });
+        }
+
+        let slots = self.page_slots()?;
+        let page_id = slots
+            .get(page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: page_index,
+                count: slots.len(),
+            })?
+            .id;
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+        Ok((page_id, slots))
+    }
+
+    /// The `/Rect`, `/P`, `/T`, `/F` and `/TU` entries every authored widget
+    /// carries, as a merged field+widget dictionary (§12.5.6.19).
+    ///
+    /// `/F 4` is §12.5.3 Table 165 bit 3 (Print). Without it the field is on
+    /// screen and absent from paper, which is not what an operator placing a
+    /// form field means — and is a difference they would not see until
+    /// printing.
+    fn widget_base_dict(
+        name: &str,
+        rect: page_tree::Rect,
+        page_id: ObjId,
+        tooltip: Option<&String>,
+    ) -> Dict {
+        let mut d = Dict::new();
+        d.insert(Name::from(b"Type"), Object::Name(Name::from(b"Annot")));
+        d.insert(Name::from(b"Subtype"), Object::Name(Name::from(b"Widget")));
+        d.insert(Name::from(b"T"), Object::String(encode_text_string(name)));
+        d.insert(
+            Name::from(b"Rect"),
+            Object::Array(vec![
+                Object::Real(rect.llx),
+                Object::Real(rect.lly),
+                Object::Real(rect.urx),
+                Object::Real(rect.ury),
+            ]),
+        );
+        d.insert(Name::from(b"P"), Object::Reference(page_id));
+        d.insert(Name::from(b"F"), Object::Integer(4));
+        if let Some(tu) = tooltip {
+            d.insert(Name::from(b"TU"), Object::String(encode_text_string(tu)));
+        }
+        d
+    }
+
+    /// Create a **check box** on a page (§12.7.4.2), returning the new
+    /// field's object id.
+    ///
+    /// The box is a merged field+widget dictionary (§12.5.6.19) with
+    /// `/FT /Btn` and neither `Radio` nor `Pushbutton` set — which is what
+    /// makes a `/Btn` field a check box (§12.7.4.2.1). Both appearance
+    /// states are written at creation, so the box is immediately usable by
+    /// [`EditSession::set_button_state`] and immediately correct in a viewer;
+    /// there is no `/NeedAppearances` fallback involved (R51).
+    ///
+    /// # Everything here is one undoable command
+    ///
+    /// The two appearance streams, the field dictionary, the page's
+    /// `/Annots`, and the `/AcroForm` `/Fields` registration all go into a
+    /// single [`Command`]. A half-created field — registered in the form but
+    /// absent from the page, or on the page and unregistered — is a document
+    /// that no undo can repair, so the operation is atomic by construction.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::CheckBoxOnStateInvalid`] when the on state is empty or
+    /// `Off`, plus every refusal from
+    /// [`Self::field_authoring_preflight`].
+    pub fn add_check_box(&mut self, spec: &NewCheckBox) -> Result<ObjId, EditError> {
+        // §12.7.4.2.3: `Off` names the off state, so it cannot also name the
+        // on state — a box whose states share a name cannot express "ticked".
+        if spec.on_state.trim().is_empty() || spec.on_state == "Off" {
+            return Err(EditError::CheckBoxOnStateInvalid {
+                name: spec.on_state.clone(),
+            });
+        }
+        let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
+        let (page_id, slots) = self.field_authoring_preflight(
+            &spec.name,
+            spec.rect,
+            spec.page_index,
+            forms::FieldType::Button,
+        )?;
+
+        // VECTOR artwork, not a ZapfDingbats glyph — see
+        // `build_check_box_appearances` for why the shared text generator
+        // cannot draw a check mark.
+        let (off, on) = annot_author::build_check_box_appearances(w, h);
+        let off_id = ObjId::new(self.alloc_number()?, 0);
+        let on_id = ObjId::new(self.alloc_number()?, 0);
+        let field_id = ObjId::new(self.alloc_number()?, 0);
+
+        let mut stream_of = |state: annot_author::CheckBoxStateAppearance| {
+            let span = self.stage_bytes(&state.content);
+            let mut dict = state.ap_dict;
+            dict.insert(
+                Name::from(b"Length"),
+                Object::Integer(i64::try_from(state.content.len()).unwrap_or(i64::MAX)),
+            );
+            Object::Stream(Stream {
+                dict,
+                data_span: span,
+            })
+        };
+        let off_stream = stream_of(off);
+        let on_stream = stream_of(on);
+
+        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, spec.tooltip.as_ref());
+        d.insert(Name::from(b"FT"), Object::Name(Name::from(b"Btn")));
+        d.insert(Name::from(b"Ff"), Object::Integer(spec.field_flags()));
+
+        // `/V` and `/AS` are NAMES here, not strings — the single most
+        // common way a hand-written check box comes out unrecognisable.
+        let state = if spec.checked {
+            Name::from(spec.on_state.as_bytes())
+        } else {
+            Name::from(b"Off")
+        };
+        d.insert(Name::from(b"V"), Object::Name(state.clone()));
+        // `/AS` (§12.5.5) is what actually selects the painted stream. It is
+        // written even though it equals `/V`, because they are answering
+        // different questions — `/V` is the field's value, `/AS` is the
+        // annotation's current appearance — and a viewer paints from `/AS`.
+        d.insert(Name::from(b"AS"), Object::Name(state));
+
+        // `/AP` `/N` is a SUB-DICTIONARY keyed by state name, not a stream.
+        let mut n = Dict::new();
+        n.insert(
+            Name::from(spec.on_state.as_bytes()),
+            Object::Reference(on_id),
+        );
+        n.insert(Name::from(b"Off"), Object::Reference(off_id));
+        let mut ap = Dict::new();
+        ap.insert(Name::from(b"N"), Object::Dict(n));
+        d.insert(Name::from(b"AP"), Object::Dict(ap));
+
+        let mut objects = vec![
+            ObjectWrite {
+                id: off_id,
+                before: None,
+                after: Some(off_stream),
+            },
+            ObjectWrite {
+                id: on_id,
+                before: None,
+                after: Some(on_stream),
+            },
+            ObjectWrite {
+                id: field_id,
+                before: None,
+                after: Some(Object::Dict(d)),
+            },
+        ];
+        objects.extend(self.annots_writes(page_id, field_id, &slots)?);
+        objects.push(self.acroform_register_write(field_id)?);
+
+        self.commit(Command {
+            kind: CommandKind::AddFormField,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(field_id)
+    }
+
+    /// Create a **list box or combo box** on a page (§12.7.4.4), returning
+    /// the new field's object id.
+    ///
+    /// The field is created with its options and **no selection** — see
+    /// [`NewChoiceField`] for why that is deliberate rather than a default
+    /// that happened to be convenient. Filling it is
+    /// [`EditSession::set_choice_value`]'s job.
+    ///
+    /// Unlike a check box, a choice field's appearance IS generated, through
+    /// the same §12.7.3.3 variable-text path a text field uses (R92: one
+    /// regenerator, never two) — so an empty appearance is generated here for
+    /// the same reason slice 1 generates one for an empty text field.
+    ///
+    /// # The border asymmetry with check boxes, named rather than hidden
+    ///
+    /// A check box created by [`Self::add_check_box`] shows a visible box in
+    /// pdfce's own renderer; a choice field created here does NOT, and
+    /// neither does a text field from slice 1. Verified by rendering, not
+    /// assumed.
+    ///
+    /// The cause is not inconsistency about what a field should look like —
+    /// it is WHERE the border lives. A check box's border is vector artwork
+    /// inside its `/AP` stream, because its appearance is hand-drawn anyway.
+    /// A choice or text field's border is `/MK` `/BC`, which R43 makes the
+    /// canonical named-not-painted case: pdfce declines to synthesise a
+    /// dynamic appearance from `/MK` at display time, so the border is in the
+    /// FILE for viewers that honour it and invisible here.
+    ///
+    /// Closing the gap would mean putting a border into the SHARED
+    /// variable-text appearance — which fill also uses, so every refilled
+    /// field in every document would gain a border it never had — or writing
+    /// a second generator, which R92 forbids. Neither is a slice-2 trade, and
+    /// this note exists so the difference is a known limit rather than a
+    /// surprise.
+    ///
+    /// # An empty option list is ALLOWED, and disclosed
+    ///
+    /// A choice field with no options saves, and the returned
+    /// [`ChoiceAuthorOutcome::has_no_options`] says so, because a zero-option
+    /// field **cannot be filled** — [`Self::set_choice_value`] refuses any
+    /// value not in `/Opt`, and pdfce has no verb that adds options later.
+    ///
+    /// Allowed rather than refused because the option list is a thing the
+    /// operator populates, and a form under construction legitimately passes
+    /// through the empty state; the spec permits it and Acrobat does not
+    /// block it. Disclosing rather than staying silent because "this field
+    /// exists and nothing can fill it" is exactly the sort of thing an
+    /// operator must not discover later (R4).
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::ChoiceEditRequiresCombo`] for `editable` without `combo`,
+    /// [`EditError::ChoiceOptionDuplicate`] for a repeated export value,
+    /// a [`VarTextError`](crate::vartext::VarTextError) from the appearance
+    /// generator, plus every refusal from
+    /// [`Self::field_authoring_preflight`].
+    pub fn add_choice_field(
+        &mut self,
+        spec: &NewChoiceField,
+    ) -> Result<ChoiceAuthorOutcome, EditError> {
+        if spec.editable && !spec.combo {
+            return Err(EditError::ChoiceEditRequiresCombo);
+        }
+        // A duplicate export is unselectable, because the fill verb resolves
+        // to the first match. Checked before any write so the refusal is
+        // total rather than partial.
+        let mut seen = std::collections::BTreeSet::new();
+        for opt in &spec.options {
+            if !seen.insert(opt.export.as_str()) {
+                return Err(EditError::ChoiceOptionDuplicate {
+                    value: opt.export.clone(),
+                });
+            }
+        }
+        let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
+        let (page_id, slots) = self.field_authoring_preflight(
+            &spec.name,
+            spec.rect,
+            spec.page_index,
+            forms::FieldType::Choice,
+        )?;
+
+        // SORT THE ARRAY, do not merely flag it. §12.7.4.4: a reader "shall
+        // display the options in the order in which they occur in the Opt
+        // array", so the flag alone changes nothing an operator can see.
+        let mut options = spec.options.clone();
+        if spec.sort {
+            options.sort_by(|a, b| a.display.cmp(&b.display));
+        }
+
+        let da = crate::vartext::default_appearance_string(
+            b"Helv",
+            0.0,
+            crate::vartext::TextColor::Gray(0.0),
+        );
+        let resources = [crate::vartext::FontResource {
+            name: b"Helv".to_vec(),
+            font: crate::fontdata::Std14::Helvetica,
+        }];
+        // THE SAME builder a fill and a text field use (R92).
+        let appearance = annot_author::build_field_text_appearance(
+            w,
+            h,
+            "",
+            &da,
+            crate::vartext::Quadding::Left,
+            false,
+            &resources,
+        )?;
+
+        let ap_id = ObjId::new(self.alloc_number()?, 0);
+        let field_id = ObjId::new(self.alloc_number()?, 0);
+        let ap_span = self.stage_bytes(&appearance.content);
+        let mut ap_dict = appearance.ap_dict;
+        ap_dict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(appearance.content.len()).unwrap_or(i64::MAX)),
+        );
+        let ap_stream = Object::Stream(Stream {
+            dict: ap_dict,
+            data_span: ap_span,
+        });
+
+        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, spec.tooltip.as_ref());
+        d.insert(Name::from(b"FT"), Object::Name(Name::from(b"Ch")));
+        d.insert(Name::from(b"Ff"), Object::Integer(spec.field_flags()));
+        d.insert(Name::from(b"DA"), Object::String(da.clone()));
+        // §12.7.4.4: an element is `(Display)` when export and display
+        // coincide, or `[(export) (display)]` when they differ. Writing the
+        // short form where it applies keeps the file the shape a hand-written
+        // one would be, rather than uniformly verbose.
+        d.insert(
+            Name::from(b"Opt"),
+            Object::Array(
+                options
+                    .iter()
+                    .map(|o| {
+                        if o.is_plain() {
+                            Object::String(encode_text_string(&o.display))
+                        } else {
+                            Object::Array(vec![
+                                Object::String(encode_text_string(&o.export)),
+                                Object::String(encode_text_string(&o.display)),
+                            ])
+                        }
+                    })
+                    .collect(),
+            ),
+        );
+        // NO `/V`: §12.7.4.4 defaults it to null (nothing selected).
+        let mut mk = Dict::new();
+        mk.insert(
+            Name::from(b"BC"),
+            Object::Array(vec![
+                Object::Real(0.0),
+                Object::Real(0.0),
+                Object::Real(0.0),
+            ]),
+        );
+        d.insert(Name::from(b"MK"), Object::Dict(mk));
+        let mut ap = Dict::new();
+        ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+        d.insert(Name::from(b"AP"), Object::Dict(ap));
+
+        let mut objects = vec![
+            ObjectWrite {
+                id: ap_id,
+                before: None,
+                after: Some(ap_stream),
+            },
+            ObjectWrite {
+                id: field_id,
+                before: None,
+                after: Some(Object::Dict(d)),
+            },
+        ];
+        objects.extend(self.annots_writes(page_id, field_id, &slots)?);
+        objects.push(self.acroform_register_write(field_id)?);
+
+        self.commit(Command {
+            kind: CommandKind::AddFormField,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(ChoiceAuthorOutcome {
+            field_id,
+            has_no_options: options.is_empty(),
+        })
     }
 
     /// Register `field_id` in the catalog's `/AcroForm` `/Fields`, creating
