@@ -71,6 +71,8 @@ pub enum ScriptTool {
     Text,
     /// The Add-Text tool (Pass 34.0) — authoring brand-new page content.
     AddText,
+    /// The Create-Field tool (decision 020 F5) — placing a new form field.
+    PlaceField,
 }
 
 /// One step of a scripted input run — see [`Script`].
@@ -305,6 +307,7 @@ fn parse_step(s: &str) -> Option<Step> {
             "measure" => Some(Step::Tool(ScriptTool::Measure)),
             "text" => Some(Step::Tool(ScriptTool::Text)),
             "addtext" => Some(Step::Tool(ScriptTool::AddText)),
+            "placefield" => Some(Step::Tool(ScriptTool::PlaceField)),
             _ => None,
         },
         _ => None,

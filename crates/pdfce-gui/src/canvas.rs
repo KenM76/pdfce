@@ -110,6 +110,34 @@ pub enum CanvasTool {
     /// construction — [`tool_builds_text_edit`]/[`tool_builds_add_text`] make
     /// that invariant a headless-tested predicate.
     AddText,
+    /// Place a new interactive-form field (decision 020's F5): click → a
+    /// type-dependent default box, drag → an explicit box, then name it and
+    /// Accept in the Tool Options pane.
+    ///
+    /// # Why a tool at all, when Pass 7's form FILLING deliberately is not one
+    ///
+    /// The comment above says Pass 7 "adds NONE — it needs no tool mode at
+    /// all", and `RibbonGroup::Forms`'s own doc comment gives filling's whole
+    /// reason for being its own group: it never touches canvas gesture state.
+    /// Creating a field is the opposite kind of act. It is a rectangle placed
+    /// on the page by a pointer gesture, so it must own what a click MEANS,
+    /// which is exactly what a `CanvasTool` is for.
+    ///
+    /// Same argument that made [`CanvasTool::AddText`] a separate tool from
+    /// [`CanvasTool::TextEdit`] rather than a sub-mode: a plain click's
+    /// existing meaning must not be silently repurposed into "sometimes
+    /// creates a form field."
+    ///
+    /// # One tool for four field types, not four tools
+    ///
+    /// The TYPE (text / check box / radio / choice) is a control in the Tool
+    /// Options pane, not a separate armed tool. Four tools would put four
+    /// entries on [`OpenDoc::TOOL_PRECEDENCE`] that are mutually exclusive in
+    /// practice but expressible as simultaneous — a set of enabled tools where
+    /// three of the four combinations mean nothing coherent. One tool with a
+    /// type selector also matches how the field is actually placed: arm once,
+    /// place several.
+    PlaceField,
     /// Linear dimension (Pass 12.M2, ui-spec §1.1): two snapped point picks
     /// author a scaled measurement. A plain click while this tool is active is
     /// always a point-pick, never an object-selection click.

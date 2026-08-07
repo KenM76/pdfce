@@ -1987,6 +1987,212 @@ struct AddTextDraft {
     last_refusal: Option<String>,
 }
 
+/// Which of the four core authoring verbs the Create Field tool will call.
+///
+/// A GUI-side enum rather than a re-export: the four `New*` spec structs have
+/// different required arguments (a radio member needs an export value, a
+/// choice needs an option list) so there is no single core type this could
+/// be, and the selector needs something `Copy` and exhaustively matchable.
+///
+/// **Push button is deliberately absent.** Its CLI verb name is still
+/// `NOT RULED` in decision 020 §0.1 and no `add_push_button` exists, so a
+/// fifth entry would be an affordance without a capability (R83). It is
+/// absent rather than greyed, per R124: an empty control teaches nothing that
+/// its absence does not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum NewFieldKind {
+    /// `EditSession::add_text_field`.
+    #[default]
+    Text,
+    /// `EditSession::add_check_box`.
+    CheckBox,
+    /// `EditSession::add_radio_button` — one MEMBER, not a group.
+    Radio,
+    /// `EditSession::add_choice_field`.
+    Choice,
+}
+
+impl NewFieldKind {
+    /// Every kind, for the selector to walk.
+    const ALL: [Self; 4] = [Self::Text, Self::CheckBox, Self::Radio, Self::Choice];
+
+    /// The operator-facing name (R1).
+    fn label(self) -> &'static str {
+        match self {
+            Self::Text => ui_text::create_field_type_text(),
+            Self::CheckBox => ui_text::create_field_type_check_box(),
+            Self::Radio => ui_text::create_field_type_radio(),
+            Self::Choice => ui_text::create_field_type_choice(),
+        }
+    }
+
+    /// The auto-name stub's prefix.
+    ///
+    /// pdfce's own convention, NOT a parity claim: Acrobat's corpus disagrees
+    /// with itself here (`Checkbox1` in one source, `Check Box1` in another),
+    /// so there is nothing to match even if matching were wanted. No spaces,
+    /// because a field name with a space in it is legal but reads badly in
+    /// every export format that quotes it.
+    const fn stub_prefix(self) -> &'static str {
+        match self {
+            Self::Text => "Text",
+            Self::CheckBox => "CheckBox",
+            Self::Radio => "Radio",
+            Self::Choice => "Choice",
+        }
+    }
+
+    /// The `/Rect` a plain CLICK produces, in points.
+    ///
+    /// # Sourcing, stated per type because it differs
+    ///
+    /// Text `150x22` and check box / radio `18x18` come from the Acrobat
+    /// feature RAG (`forms__field_creation_minimums.md`, 2026-08-07). Both are
+    /// community-sourced — no Adobe-authored page states them — and the RAG
+    /// records them at that confidence.
+    ///
+    /// **Choice is DERIVED, not sourced.** A dedicated search found no figure
+    /// for list/combo boxes at all, so it takes the text field's size: a
+    /// drop-down holds one line of text and is the same shape on screen. That
+    /// is a defensible guess and is recorded as a guess rather than dressed up
+    /// as parity.
+    ///
+    /// Sizes vary by type deliberately. One universal default would make a
+    /// clicked check box 150pt wide, which is not a check box anyone wants.
+    const fn default_size(self) -> (f64, f64) {
+        match self {
+            Self::Text | Self::Choice => (150.0, 22.0),
+            Self::CheckBox | Self::Radio => (18.0, 18.0),
+        }
+    }
+
+    /// Whether this kind needs an export value from the operator.
+    ///
+    /// Only the radio member does. `NewRadioButton::new` takes it as a
+    /// required argument with no default, because §12.7.4.2.3 makes it the
+    /// only thing distinguishing one member of a group from another — every
+    /// member shares the group's `/T`. The other three constructors supply
+    /// their own defaults (`Yes` for a check box's on-state) or need none.
+    const fn needs_export_value(self) -> bool {
+        matches!(self, Self::Radio)
+    }
+}
+
+/// The Create-Field tool's settings, which outlive any single draft.
+#[derive(Debug, Clone, Default)]
+struct FieldToolState {
+    /// The type the next placement will author.
+    kind: NewFieldKind,
+}
+
+/// A placed-but-not-yet-authored field (decision 020 F5).
+///
+/// # Why the geometry is fixed at placement and the rest is not
+///
+/// The rectangle is direct manipulation — the operator dragged it and can see
+/// it — so it is settled the moment the pointer is released; repositioning is
+/// Discard-and-replace, exactly as [`AddTextDraft`] decided for the same
+/// reason. What follows (name, accessibility decision, export value) is typed
+/// into the Tool Options pane at a FIXED anchor, never a control floating over
+/// the page. That placement rule is decision 024 §4.4, and it comes from the
+/// operator's own report: the complaint was that confirm controls moved with
+/// the document on every zoom and scroll, not that confirming existed.
+#[derive(Debug, Clone)]
+struct FieldDraft {
+    /// The kind captured at placement, so changing the tool's selector
+    /// afterwards cannot silently retarget a draft the operator already
+    /// placed and is halfway through naming.
+    kind: NewFieldKind,
+    /// 0-based page the rectangle was placed on.
+    page_index: usize,
+    /// Lower-left corner and size, PDF default user space.
+    llx: f64,
+    /// See [`Self::llx`].
+    lly: f64,
+    /// See [`Self::llx`].
+    width: f64,
+    /// See [`Self::llx`].
+    height: f64,
+    /// The field name. Pre-filled with an auto-generated stub.
+    name: String,
+    /// Whether the operator has changed [`Self::name`] away from the stub.
+    ///
+    /// This is what makes the auto-name an honest inference rather than a
+    /// silent one. Committing with the stub untouched means pdfce chose the
+    /// name, which rule 4 requires be DISCLOSED; committing with an edited
+    /// name is direct manipulation and needs no note. Tracking the edit is the
+    /// only way to tell those apart after the fact, since the resulting `/T`
+    /// looks identical either way.
+    name_edited: bool,
+    /// The accessibility name (`/TU`) text, if supplying one.
+    tooltip: String,
+    /// Whether the operator explicitly DECLINED an accessibility name.
+    ///
+    /// Three states are needed and two bools express them: not-declined with
+    /// empty text is UNDECIDED, which `pdfce-core` refuses outright (R105).
+    /// The pane disables Accept in that state rather than letting the operator
+    /// press it and receive a refusal for a decision they did not know they
+    /// owed.
+    tooltip_declined: bool,
+    /// A radio member's export value. Unused by the other three kinds.
+    export_value: String,
+    /// The last Accept attempt's refusal, kept visible while the operator
+    /// revises — the draft is RETAINED on refusal so the rectangle need not be
+    /// drawn again. Mirrors [`AddTextDraft::last_refusal`].
+    last_refusal: Option<String>,
+}
+
+impl FieldDraft {
+    /// Whether the accessibility-name decision has been made either way.
+    ///
+    /// Pure so the rule is testable without a UI: `pdfce-core` refuses an
+    /// `Undecided` tooltip, and this is the predicate that keeps the operator
+    /// from meeting that refusal by surprise.
+    fn tooltip_decided(&self) -> bool {
+        self.tooltip_declined || !self.tooltip.trim().is_empty()
+    }
+
+    /// Whether Accept may be pressed at all.
+    ///
+    /// Three requirements, each of which `pdfce-core` would otherwise refuse:
+    /// a non-empty name (`EditError::FieldNameEmpty`), a made accessibility
+    /// decision (R105), and — for a radio member only — an export value.
+    ///
+    /// Checked HERE as well as in core deliberately. Core's refusal is the
+    /// authority and still runs; this exists so the operator is not invited to
+    /// press a button that cannot succeed, which R83 treats as an affordance
+    /// without a capability.
+    fn can_commit(&self) -> bool {
+        !self.name.trim().is_empty()
+            && self.tooltip_decided()
+            && (!self.kind.needs_export_value() || !self.export_value.trim().is_empty())
+    }
+}
+
+/// The next free auto-name stub for `kind`, given the names already in use.
+///
+/// # Why this scans rather than counting
+///
+/// Acrobat's auto-namer is a session counter that does NOT re-scan the
+/// document — an operator who renamed a box to `Check Box1` and made another
+/// got `Check Box21`, because the in-memory counter had already advanced. That
+/// is a defect to avoid, not behaviour to match, and the reason is specific to
+/// pdfce: a same-name same-type add MERGES (§12.7.3.2). A colliding stub would
+/// therefore turn a click the operator believes creates a NEW field into a
+/// silent extra widget on an existing one — the exact sneaky outcome rule 4
+/// exists to prevent, arrived at through a name pdfce chose itself.
+///
+/// So the stub is guaranteed unused at the moment it is offered. It can still
+/// be made to collide by typing, which is fine: that is the operator's own
+/// choice, made visibly, and the merge is disclosed after the fact.
+fn next_field_stub(kind: NewFieldKind, taken: &[String]) -> String {
+    let prefix = kind.stub_prefix();
+    (1..)
+        .map(|n| format!("{prefix}{n}"))
+        .find(|candidate| !taken.iter().any(|t| t == candidate))
+        .unwrap_or_else(|| prefix.to_owned())
+}
+
 /// PDF-space placement of an add-text draft, fixed at creation (§2).
 enum AddPlacement {
     /// A single-line run growing rightward from `(x, y)` (16.0, shipped).
@@ -2324,6 +2530,39 @@ struct OpenDoc {
     /// state — a draft is never an edit; only an accepted add is, and that goes
     /// through `session` like every other command.
     add_text: Option<AddTextState>,
+    /// Decision 020 F5's Create-Field tool state. `Some` only once a
+    /// rectangle has been placed and before it is Accepted or discarded.
+    ///
+    /// Per-document like its two siblings above, and for the same reason: a
+    /// draft belongs to the file it will be written into, so switching
+    /// documents cannot commit a placement onto the wrong one. It is NOT an
+    /// edit — only an accepted add is, and that goes through `session`.
+    ///
+    /// Unlike `text_edit`/`add_text`, this is `None` while the tool is merely
+    /// ARMED. The tool's own controls (the type selector) live on
+    /// [`Self::field_tool`], which outlives any one draft — arming once and
+    /// placing several fields is the intended workflow, and a type choice that
+    /// reset itself after every Accept would fight it.
+    field_draft: Option<FieldDraft>,
+    /// Where a Create-Field drag began, PDF user space.
+    ///
+    /// Held across frames because egui reports a drag's start and its release
+    /// on different frames, and the release needs both corners. Cleared by
+    /// `.take()` on release so an interrupted drag cannot seed the next one.
+    field_drag_anchor: Option<egui::Pos2>,
+    /// What the LAST accepted field creation disclosed (rule 4).
+    ///
+    /// Survives the draft being cleared, which is the whole point: the merge
+    /// and auto-name facts are only knowable AFTER the commit, so there is no
+    /// draft left to hang them on when they arrive. Held per-document so
+    /// switching files cannot show one document's disclosures over another.
+    ///
+    /// Cleared when the next placement begins — the operator is looking at a
+    /// new field by then, and a stale note beside it would describe the wrong
+    /// one.
+    field_notes: Vec<String>,
+    /// The Create-Field tool's own settings, independent of any draft.
+    field_tool: FieldToolState,
     /// The current page's concrete object-model provider (Pass 9a's
     /// [`ObjectModelProvider`]), or `None` when the page could not be
     /// decomposed (a degenerate/undecodable page — selection then finds
@@ -2444,9 +2683,16 @@ impl OpenDoc {
     /// simply not the one that answered THIS click. The Tool compartment
     /// states which tool is answering, so the ladder is visible rather than
     /// inferred.
-    const TOOL_PRECEDENCE: [CanvasTool; 6] = [
+    const TOOL_PRECEDENCE: [CanvasTool; 7] = [
         CanvasTool::TextEdit,
         CanvasTool::AddText,
+        // Immediately after AddText, and above the measure/vector tools, for
+        // the reason the two share: a click while either is on ALWAYS means
+        // "create something here." Below AddText because that tool can be
+        // mid-composition with typed-but-uncommitted text, which a field
+        // placement would strand; above the rest because a placement gesture
+        // must not be re-read as a selection or a snap pick.
+        CanvasTool::PlaceField,
         CanvasTool::MeasureLinear,
         CanvasTool::MeasureCircular,
         CanvasTool::MeasureScale,
@@ -2492,6 +2738,10 @@ impl OpenDoc {
         match tool {
             CanvasTool::TextEdit => self.text_edit = None,
             CanvasTool::AddText => self.add_text = None,
+            // Disarming drops the placed-but-unaccepted rectangle. The tool's
+            // own settings on `field_tool` SURVIVE, so re-arming does not
+            // silently reset the operator's chosen field type.
+            CanvasTool::PlaceField => self.field_draft = None,
             t if t.is_measure() && !self.enabled_tools.iter().any(|e| e.is_measure()) => {
                 self.measure = None;
             }
@@ -2579,6 +2829,10 @@ impl OpenDoc {
             click_cycle: None,
             text_edit: None,
             add_text: None,
+            field_draft: None,
+            field_drag_anchor: None,
+            field_notes: Vec::new(),
+            field_tool: FieldToolState::default(),
             // Pass 9a/12.M1: the concrete object-model provider is built lazily
             // for the current page on the first `canvas` frame (and rebuilt on
             // page change / edit) — `None` here (and after every edit) forces
@@ -8507,6 +8761,7 @@ impl eframe::App for PdfceApp {
                     diag::ScriptTool::Measure => Some(CanvasTool::MeasureLinear),
                     diag::ScriptTool::Text => Some(CanvasTool::TextEdit),
                     diag::ScriptTool::AddText => Some(CanvasTool::AddText),
+                    diag::ScriptTool::PlaceField => Some(CanvasTool::PlaceField),
                 };
                 self.apply(Action::SelectCanvasTool(tool), ctx, ctx.pixels_per_point());
             }
@@ -9979,6 +10234,33 @@ impl PdfceApp {
                     });
                 }
 
+                if Self::ribbon_group(ui, tab, RG::FormsAuthor) {
+                    // Decision 020 F5's Create Field tool. A toggle, the same
+                    // widget as every other tool arming control, and disabled
+                    // with a reason when there are no pages (R83) rather than
+                    // hidden — a control that vanishes teaches nothing.
+                    //
+                    // Its own group, adjacent to Forms: see
+                    // `RibbonGroup::FormsAuthor`'s doc comment for why filling
+                    // and authoring cannot share a band.
+                    ui.add_enabled_ui(!doc.pages.is_empty(), |ui| {
+                        let active = doc.tool_enabled(CanvasTool::PlaceField);
+                        let response = Self::icon_text_toggle(
+                            ui,
+                            icons::Icon::FormField,
+                            active,
+                            ui_text::create_field_button(),
+                            ui_text::create_field_button_tooltip(),
+                        );
+                        diag::trace(|| {
+                            format!("create-field-toggle on={active} rect={:?}", response.rect)
+                        });
+                        if response.clicked() {
+                            actions.push(Action::SelectCanvasTool(Some(CanvasTool::PlaceField)));
+                        }
+                    });
+                }
+
                 if Self::ribbon_group(ui, tab, RG::Protect) {
                     // Pass 8.1 redaction (ui-spec §3.1) — the entry point to the
                     // dock's Redact panel.
@@ -10531,6 +10813,30 @@ impl PdfceApp {
                 state.queued_accept |= accept;
                 state.queued_reject |= reject;
                 state.queued_switch_to_edit |= to_edit;
+            }
+            return;
+        }
+
+        // Create Field (decision 020 F5). Everything the operator types about
+        // the field lives HERE, at a fixed anchor inside the dock — never a
+        // control floating over the page. That is decision 024 §4.4, and it
+        // comes from the operator's own report that confirm controls moved
+        // with the document on every zoom and scroll.
+        if tool == CanvasTool::PlaceField {
+            let mut commit = false;
+            let mut discard = false;
+            if let Status::Open(doc) = &mut self.status {
+                (commit, discard) = place_field_options_ui(doc, ui);
+            }
+            if discard {
+                if let Status::Open(doc) = &mut self.status {
+                    doc.field_draft = None;
+                }
+            } else if commit && let Status::Open(doc) = &mut self.status {
+                let (outcome, notes) = commit_field_draft(doc);
+                if outcome == CommitOutcome::Committed {
+                    doc.field_notes = notes;
+                }
             }
             return;
         }
@@ -12400,6 +12706,13 @@ impl PdfceApp {
             // own click/drag handler always means "place new text," so it needs
             // no hit-vs-miss branch (§0.1).
             run_add_text_tool(doc, ui, &image_response, image_rect, extent, zoom, font_env);
+        } else if doc.active_tool() == Some(CanvasTool::PlaceField) {
+            // Decision 020 F5: a click or drag places the rectangle for a new
+            // form field. Like Add Text, this handler's gesture always means
+            // "place", so it needs no hit-vs-miss branch — and it must run
+            // BEFORE the selection fallback so a placement is never re-read as
+            // a selection click.
+            run_place_field_tool(doc, ui, &image_response, image_rect, extent, zoom);
         } else if canvas::tool_builds_measure(doc.active_tool()) {
             // Pass 12.M2: a measure tool is selected. The on-canvas snap-pick
             // authoring gesture is the documented follow-up UI slice; this build
@@ -14306,6 +14619,433 @@ fn paint_add_preview_frame(painter: &egui::Painter, screen_box: egui::Rect, colo
 /// coordinate bridge) and `doc.add_text` (the mutated tool state) are disjoint
 /// fields, so both are borrowed across the frame; `doc.session`/`refresh_pages`
 /// are touched only in the Phase-C commit, after the state borrow is dropped.
+/// Draw the Create-Field tool's options, returning `(commit, discard)`.
+///
+/// # Ordering is R99's state → action → detail, applied deliberately
+///
+/// The geometry readout comes first (what IS this?), the inputs and the
+/// Accept/Discard pair next (what can I DO?), and the refusal or disclosure
+/// text last (why, and what should I know?). The same order `forms_panel` and
+/// `redact_panel` already use — followed here from the start rather than
+/// rediscovered after an operator complains about hunting for the button.
+fn place_field_options_ui(doc: &mut OpenDoc, ui: &mut egui::Ui) -> (bool, bool) {
+    ui.heading(ui_text::tool_options_heading(CanvasTool::PlaceField));
+    ui.separator();
+
+    // The TYPE selector lives on the tool, not the draft, so it survives an
+    // Accept: arming once and placing several fields of one type is the
+    // workflow, and a selector that reset itself would fight it.
+    ui.horizontal(|ui| {
+        ui.label(ui_text::create_field_type_label());
+        for kind in NewFieldKind::ALL {
+            if ui
+                .selectable_label(doc.field_tool.kind == kind, kind.label())
+                .clicked()
+            {
+                doc.field_tool.kind = kind;
+            }
+        }
+    });
+
+    let Some(draft) = doc.field_draft.as_mut() else {
+        // R124: nothing placed, so no empty input rows are drawn waiting to be
+        // filled in. One line saying what to do instead.
+        ui.separator();
+        ui.label(ui_text::create_field_awaiting_placement());
+        // The last commit's disclosures land HERE, in the space the draft
+        // occupied — the fixed anchor decision 024 §4.4 requires, and the
+        // place the operator is already looking because it is where they just
+        // pressed Add field.
+        if !doc.field_notes.is_empty() {
+            ui.separator();
+            ui.label(ui_text::create_field_disclosures_heading());
+            for note in &doc.field_notes {
+                ui.label(egui::RichText::new(note).small());
+            }
+        }
+        return (false, false);
+    };
+
+    ui.separator();
+    ui.label(ui_text::create_field_draft_heading());
+    ui.label(
+        egui::RichText::new(ui_text::create_field_draft_geometry(
+            draft.width,
+            draft.height,
+            draft.page_index + 1,
+        ))
+        .small()
+        .weak(),
+    );
+
+    ui.horizontal(|ui| {
+        ui.label(ui_text::create_field_name_label());
+        let r = ui
+            .add(egui::TextEdit::singleline(&mut draft.name).desired_width(160.0))
+            .on_hover_text(ui_text::create_field_name_tooltip());
+        // The dirty bit that makes the auto-name an honest inference. Set on
+        // any edit, never cleared — an operator who types and then restores
+        // the stub character-for-character HAS chosen it, and reporting that
+        // as pdfce's guess would be the opposite error.
+        if r.changed() {
+            draft.name_edited = true;
+        }
+    });
+
+    if draft.kind.needs_export_value() {
+        ui.horizontal(|ui| {
+            ui.label(ui_text::create_field_export_value_label());
+            ui.add(egui::TextEdit::singleline(&mut draft.export_value).desired_width(120.0))
+                .on_hover_text(ui_text::create_field_export_value_tooltip());
+        });
+    }
+
+    ui.horizontal(|ui| {
+        ui.label(ui_text::create_field_tooltip_label());
+        ui.add_enabled(
+            !draft.tooltip_declined,
+            egui::TextEdit::singleline(&mut draft.tooltip).desired_width(160.0),
+        )
+        .on_hover_text(ui_text::create_field_tooltip_tooltip());
+    });
+    let decline = ui
+        .checkbox(
+            &mut draft.tooltip_declined,
+            ui_text::create_field_tooltip_decline(),
+        )
+        .on_hover_text(ui_text::create_field_tooltip_decline_tooltip());
+    diag::trace(|| format!("field-decline-box rect={:?}", decline.rect));
+
+    ui.separator();
+    let can = draft.can_commit();
+    let mut commit = false;
+    let mut discard = false;
+    ui.horizontal(|ui| {
+        let accept = ui.add_enabled(can, egui::Button::new(ui_text::create_field_accept()));
+        // Traced with its enabled state: a harness driving a click at this
+        // rect needs to know whether the button could have accepted it, or a
+        // silent no-op reads as a broken commit.
+        diag::trace(|| format!("field-accept-button can={can} rect={:?}", accept.rect));
+        commit = accept.clicked();
+        discard = ui
+            .button(ui_text::create_field_reject())
+            .on_hover_text(ui_text::create_field_reject_tooltip())
+            .clicked();
+    });
+    // R83 again: a disabled button with no reason reads as a bug. The core
+    // enforces R105 and would refuse, so the pane says what is missing rather
+    // than letting the operator press and be told no.
+    if !can && !draft.tooltip_decided() {
+        ui.label(
+            egui::RichText::new(ui_text::create_field_tooltip_undecided())
+                .small()
+                .weak(),
+        );
+    }
+
+    if let Some(refusal) = &draft.last_refusal {
+        ui.separator();
+        ui.label(egui::RichText::new(refusal).color(ui.visuals().error_fg_color));
+    }
+    (commit, discard)
+}
+
+/// The Create-Field tool's canvas gesture (decision 020 F5).
+///
+/// Click places a type-dependent default box; drag places an explicit one. A
+/// degenerate drag falls back to the default box at the press point rather
+/// than producing a zero-area rectangle, which `pdfce-core` would refuse
+/// (`EditError::FieldRectDegenerate`) — the same "a slip should do the
+/// obvious thing, not raise an error" stance Add Text took for its own
+/// degenerate drag.
+///
+/// # Why the click anchors the box's TOP-left
+///
+/// PDF user space has y increasing upward, so a rectangle is named by its
+/// LOWER-left corner. But an operator clicking to place something expects it
+/// to appear below-and-right of the pointer, the way text does. So the click
+/// point is treated as the top-left and `lly` is derived by subtracting the
+/// height. Getting this backwards puts every clicked field one field-height
+/// above where it was asked for, which looks like a rendering bug rather than
+/// a coordinate convention.
+fn run_place_field_tool(
+    doc: &mut OpenDoc,
+    ui: &mut egui::Ui,
+    image_response: &egui::Response,
+    image_rect: egui::Rect,
+    extent: (f32, f32),
+    zoom: f32,
+) {
+    let page_index = doc.view.page_index;
+    let Some(page) = doc.pages.get(page_index) else {
+        return;
+    };
+    // A draft placed on another page has no meaning on this one — the same
+    // rule Add Text applies when the page changes under an open draft.
+    if doc
+        .field_draft
+        .as_ref()
+        .is_some_and(|d| d.page_index != page_index)
+    {
+        doc.field_draft = None;
+    }
+
+    let crop = page.crop_box;
+    let to_pdf = |sp: egui::Pos2| -> Option<egui::Pos2> {
+        viewer::canvas_to_pdf_space(viewer::screen_to_page(sp, image_rect, extent, zoom), page)
+    };
+    let to_screen = |pdf: egui::Pos2| -> Option<egui::Pos2> {
+        viewer::pdf_space_to_canvas(pdf, page)
+            .map(|c| viewer::page_to_screen(c, image_rect, extent, zoom))
+    };
+    let _ = crop;
+
+    let kind = doc.field_tool.kind;
+    let (def_w, def_h) = kind.default_size();
+
+    // -- The drag rubber-band, painted live so the operator sees the size they
+    //    are choosing. Direct-manipulation feedback on geometry under the
+    //    pointer is explicitly NOT the floating-command-surface decision 024
+    //    §4.4 forbids: it is not a control, it commits nothing, and it
+    //    disappears on release.
+    if image_response.dragged()
+        && let Some(origin) = image_response.interact_pointer_pos()
+        && let Some(start) = doc.field_drag_anchor
+        && let (Some(a), Some(b)) = (to_screen(start), Some(origin))
+    {
+        ui.painter_at(image_rect).rect_stroke(
+            egui::Rect::from_two_pos(a, b),
+            0.0,
+            egui::Stroke::new(1.5, egui::Color32::from_rgb(210, 90, 40)),
+            egui::StrokeKind::Middle,
+        );
+    }
+
+    if image_response.drag_started()
+        && let Some(sp) = image_response.interact_pointer_pos()
+        && let Some(pdf) = to_pdf(sp)
+    {
+        doc.field_drag_anchor = Some(pdf);
+    }
+
+    if image_response.drag_stopped()
+        && let Some(sp) = image_response.interact_pointer_pos()
+        && let Some(end) = to_pdf(sp)
+        && let Some(start) = doc.field_drag_anchor.take()
+    {
+        let (dx, dy) = (
+            (end.x - start.x).abs() as f64,
+            (end.y - start.y).abs() as f64,
+        );
+        // MIN_DRAG guards a slip, not a preference: below it the operator
+        // meant to click.
+        const MIN_DRAG: f64 = 4.0;
+        let (llx, lly, width, height) = if dx >= MIN_DRAG && dy >= MIN_DRAG {
+            (
+                f64::from(start.x.min(end.x)),
+                f64::from(start.y.min(end.y)),
+                dx,
+                dy,
+            )
+        } else {
+            (f64::from(start.x), f64::from(start.y) - def_h, def_w, def_h)
+        };
+        install_field_draft(doc, kind, page_index, llx, lly, width, height);
+        return;
+    }
+
+    if image_response.clicked()
+        && let Some(sp) = image_response.interact_pointer_pos()
+        && let Some(pdf) = to_pdf(sp)
+    {
+        install_field_draft(
+            doc,
+            kind,
+            page_index,
+            f64::from(pdf.x),
+            f64::from(pdf.y) - def_h,
+            def_w,
+            def_h,
+        );
+    }
+}
+
+/// Replace whatever draft is in flight with a fresh one at `rect`.
+///
+/// The auto-name is generated HERE, at placement, rather than at Accept, so
+/// the operator sees the name they are about to get and can change it before
+/// committing — which is what makes the stub an offer rather than a surprise.
+fn install_field_draft(
+    doc: &mut OpenDoc,
+    kind: NewFieldKind,
+    page_index: usize,
+    llx: f64,
+    lly: f64,
+    width: f64,
+    height: f64,
+) {
+    // Read through the SAME projection the Forms panel lists, so the stub is
+    // unique against exactly what the operator can see. `parse_acroform`
+    // returns `None` for a document with no form at all, where nothing is
+    // taken and the first stub is free.
+    let taken: Vec<String> = pdfce_core::forms::parse_acroform(&doc.session.graph())
+        .map(|form| {
+            form.fields
+                .into_iter()
+                .map(|f| f.fully_qualified_name)
+                .collect()
+        })
+        .unwrap_or_default();
+    doc.field_notes.clear();
+    // Traced so the harness can confirm a placement landed AND where, without
+    // a screenshot — the rect is the part a wrong coordinate convention gets
+    // wrong, and a count alone would not show it.
+    diag::trace(|| {
+        format!(
+            "field-draft-placed kind={kind:?} page={page_index} llx={llx:.1} lly={lly:.1} w={width:.1} h={height:.1}"
+        )
+    });
+    doc.field_draft = Some(FieldDraft {
+        kind,
+        page_index,
+        llx,
+        lly,
+        width,
+        height,
+        name: next_field_stub(kind, &taken),
+        name_edited: false,
+        tooltip: String::new(),
+        tooltip_declined: false,
+        export_value: String::new(),
+        last_refusal: None,
+    });
+}
+
+/// Commit the placed field as ONE `EditSession` command (decision 020 F5).
+///
+/// Returns the outcome in the SAME three states every other gesture uses, so
+/// an interruption can tell "nothing in flight" from "written" from "core
+/// refused" without a fourth vocabulary.
+///
+/// # The merge disclosure can only be built AFTER this succeeds
+///
+/// `resolve_field_path` runs INSIDE the core authoring verb, so whether this
+/// add creates a field or merges into an existing one is not knowable until
+/// the call returns. That is a real difference from every other reviewable
+/// action in decision 024's table, all of which can show the operator what
+/// they are about to get. There is no honest preview here, so none is
+/// offered — the fact is reported the moment it exists instead.
+fn commit_field_draft(doc: &mut OpenDoc) -> (CommitOutcome, Vec<String>) {
+    use pdfce_core::edit::{
+        NewCheckBox, NewChoiceField, NewRadioButton, NewTextField, TooltipChoice,
+    };
+
+    let Some(draft) = doc.field_draft.as_ref() else {
+        return (CommitOutcome::Nothing, Vec::new());
+    };
+    if !draft.can_commit() {
+        return (CommitOutcome::Nothing, Vec::new());
+    }
+
+    let rect = pdfce_core::page_tree::Rect::from_corners(
+        draft.llx,
+        draft.lly,
+        draft.llx + draft.width,
+        draft.lly + draft.height,
+    );
+    let name = draft.name.trim().to_owned();
+    let tooltip = if draft.tooltip_declined {
+        TooltipChoice::Declined
+    } else {
+        TooltipChoice::Text(draft.tooltip.trim().to_owned())
+    };
+    let (kind, page_index, auto_named) = (draft.kind, draft.page_index, !draft.name_edited);
+    let export_value = draft.export_value.trim().to_owned();
+
+    let outcome = match kind {
+        NewFieldKind::Text => {
+            let mut spec = NewTextField::new(page_index, &name, rect);
+            spec.tooltip = tooltip;
+            doc.session.add_text_field(&spec)
+        }
+        NewFieldKind::CheckBox => {
+            let mut spec = NewCheckBox::new(page_index, &name, rect);
+            spec.tooltip = tooltip;
+            doc.session.add_check_box(&spec)
+        }
+        NewFieldKind::Radio => {
+            let mut spec = NewRadioButton::new(page_index, &name, rect, &export_value);
+            spec.tooltip = tooltip;
+            doc.session.add_radio_button(&spec)
+        }
+        NewFieldKind::Choice => {
+            let mut spec = NewChoiceField::new(page_index, &name, rect, Vec::new());
+            spec.tooltip = tooltip;
+            doc.session.add_choice_field(&spec)
+        }
+    };
+
+    match outcome {
+        Err(e) => {
+            if let Some(d) = doc.field_draft.as_mut() {
+                d.last_refusal = Some(ui_text::create_field_refused(&e.to_string()));
+            }
+            (CommitOutcome::Refused, Vec::new())
+        }
+        Ok(authored) => {
+            let notes = field_disclosure_lines(&authored, &name, auto_named);
+            diag::trace(|| {
+                format!(
+                    "field-committed name={name} merged={} notes={}",
+                    authored.merged,
+                    notes.len()
+                )
+            });
+            doc.field_draft = None;
+            (CommitOutcome::Committed, notes)
+        }
+    }
+}
+
+/// Every disclosure the commit produced, one operator-facing line each.
+///
+/// A free function taking the outcome rather than a method on the pane, so the
+/// mapping from "what core reported" to "what the operator reads" is testable
+/// without a UI — and so a newly-added disclosure has exactly one place to be
+/// wired, which is the omission that has now bitten this feature twice.
+fn field_disclosure_lines(
+    authored: &pdfce_core::edit::FieldAuthorOutcome,
+    name: &str,
+    auto_named: bool,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    // The INFERENCE first, because it is the one about a choice pdfce made
+    // rather than a consequence of one the operator made.
+    if auto_named {
+        out.push(ui_text::create_field_disclosure_auto_named(name));
+    }
+    if authored.merged {
+        out.push(ui_text::create_field_disclosure_merged(name));
+    }
+    let d = authored.disclosures;
+    if d.tooltip_declined {
+        out.push(ui_text::create_field_disclosure_tooltip_declined().to_owned());
+    }
+    if d.tagged_document {
+        out.push(ui_text::create_field_disclosure_tagged_document().to_owned());
+    }
+    if d.structure_tab_order {
+        out.push(ui_text::create_field_disclosure_structure_tab_order().to_owned());
+    }
+    if d.has_no_options {
+        out.push(ui_text::create_field_disclosure_has_no_options().to_owned());
+    }
+    if d.group_flags_ignored {
+        out.push(ui_text::create_field_disclosure_group_flags_ignored().to_owned());
+    }
+    out
+}
+
 #[allow(
     clippy::too_many_lines,
     reason = "one tool = one handler; splitting the tightly-coupled placement/compose/preview/commit phases would need shared owned scratch structs that obscure more than they clarify" // ui-text-exempt: clippy lint justification, never displayed

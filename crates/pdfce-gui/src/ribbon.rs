@@ -99,6 +99,32 @@ pub enum RibbonGroup {
     /// save, low-stakes, and is exactly the routine document editing the
     /// `Edit` tab is for.
     Forms,
+    /// Interactive-form (AcroForm) field AUTHORING — decision 020's F5.
+    ///
+    /// # Why a sibling of `Forms` rather than a member of it
+    ///
+    /// `Forms`'s own doc comment above states its entire reason for existing:
+    /// it deliberately arms NO `CanvasTool`, because filling a field "works
+    /// with no tool armed and never touches the canvas gesture state", and
+    /// putting it in `ContentTools` "would promise a mode change that does not
+    /// happen." Creating a field is precisely the mode change that group is
+    /// defined by not having — a rectangle placed by a pointer gesture, which
+    /// must own what a click MEANS. Adding it to `Forms` would falsify the
+    /// sentence that justifies `Forms`.
+    ///
+    /// # Why not folded into `ContentTools` instead
+    ///
+    /// It would pass that group's "arms a tool" test, and fail its subject
+    /// test. `ContentTools` is *"the tools that change what is drawn"* — page
+    /// CONTENT. A form field is not page content: it is an `/AcroForm` entry
+    /// with a widget annotation, it survives content edits, and it is removed
+    /// by flattening rather than by erasing marks. Filing it under Content
+    /// would also bury the word an operator scans for.
+    ///
+    /// Adjacent to `Forms` on the same tab, so someone looking for "the forms
+    /// things" finds both bands together — visually neighbouring, structurally
+    /// separate, which is exactly the distinction the two groups encode.
+    FormsAuthor,
     /// Annotation authoring: shapes, highlights.
     Markup,
     /// Annotation authoring: notes, free text, stamps.
@@ -161,7 +187,7 @@ impl RibbonGroup {
         dead_code,
         reason = "the group enumeration; swept by this module's taxonomy test and by main.rs's gated-widget test, and the list any future group-picker must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 21] = [
         Self::FileOps,
         Self::DocumentProperties,
         Self::Clipboard,
@@ -172,6 +198,7 @@ impl RibbonGroup {
         Self::Navigate,
         Self::ContentTools,
         Self::Forms,
+        Self::FormsAuthor,
         Self::Markup,
         Self::Notes,
         Self::CommentsList,
@@ -198,6 +225,7 @@ impl RibbonGroup {
             Self::Navigate => ui_text::ribbon_group_navigate(),
             Self::ContentTools => ui_text::ribbon_group_content_tools(),
             Self::Forms => ui_text::ribbon_group_forms(),
+            Self::FormsAuthor => ui_text::ribbon_group_forms_author(),
             Self::Markup => ui_text::ribbon_group_markup(),
             Self::Notes => ui_text::ribbon_group_notes(),
             Self::CommentsList => ui_text::ribbon_group_comments_list(),
@@ -357,6 +385,7 @@ impl RibbonTab {
                 RibbonGroup::History,
                 RibbonGroup::ContentTools,
                 RibbonGroup::Forms,
+                RibbonGroup::FormsAuthor,
                 RibbonGroup::Pages,
             ],
             Self::Review => &[

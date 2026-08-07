@@ -297,6 +297,15 @@ pub enum Icon {
     /// ui-spec (that tool shipped after the spec was written); authored in
     /// the same style contract, see `assets/icons/PROVENANCE.md`.
     EditObjects,
+    /// Create an interactive form field — decision 020's F5 "Create Field"
+    /// tool. Authored 2026-08-07 under R158; not in the ui-spec, same style
+    /// contract as [`Icon::EditObjects`].
+    ///
+    /// Deliberately NOT reusing any existing asset. The nearest candidates
+    /// each would have said something false: `edit-objects.svg` promises
+    /// vector editing, and a plain box would read as the FILL surface, which
+    /// is a different capability in a different ribbon group.
+    FormField,
     /// Measure/dimension menu (§8.2). ScripTree `icon-ruler.svg`.
     Measure,
     /// Undo (§2 #19, §3.1 "history-arrow").
@@ -392,6 +401,7 @@ impl Icon {
         Icon::EditText,
         Icon::AddText,
         Icon::EditObjects,
+        Icon::FormField,
         Icon::Measure,
         Icon::Undo,
         Icon::Redo,
@@ -442,6 +452,7 @@ impl Icon {
             Icon::Text => include_str!("../assets/icons/text.svg"),
             Icon::EditText => include_str!("../assets/icons/edit.svg"),
             Icon::AddText => include_str!("../assets/icons/add-text.svg"),
+            Icon::FormField => include_str!("../assets/icons/form-field.svg"),
             Icon::EditObjects => include_str!("../assets/icons/edit-objects.svg"),
             Icon::ShowPoints => include_str!("../assets/icons/show-points.svg"),
             Icon::Measure => include_str!("../assets/icons/ruler.svg"),
@@ -492,6 +503,7 @@ impl Icon {
             Icon::Text => "text",
             Icon::EditText => "edit-text",
             Icon::AddText => "add-text",
+            Icon::FormField => "form-field",
             Icon::EditObjects => "edit-objects",
             Icon::ShowPoints => "show-points",
             Icon::Measure => "measure",

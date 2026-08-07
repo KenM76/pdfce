@@ -1774,6 +1774,15 @@ pub fn ribbon_group_forms() -> &'static str {
     "Forms"
 }
 /// See [`ribbon_group_file_ops`].
+///
+/// "Build Form" and not "Forms": [`ribbon_group_forms`] already owns that
+/// word for FILLING, and two adjacent bands both captioned Forms would make
+/// the operator read both captions to tell them apart. The verb says which
+/// one authors.
+pub fn ribbon_group_forms_author() -> &'static str {
+    "Build Form"
+}
+/// See [`ribbon_group_file_ops`].
 pub fn ribbon_group_markup() -> &'static str {
     "Markup"
 }
@@ -1913,6 +1922,7 @@ pub fn tool_options_heading(tool: crate::canvas::CanvasTool) -> &'static str {
         CanvasTool::MeasureCircular => "Measure — radius / diameter",
         CanvasTool::MeasureScale => "Measure — set scale",
         CanvasTool::VectorEdit => "Obj — edit objects",
+        CanvasTool::PlaceField => "Create Field",
     }
 }
 
@@ -6711,4 +6721,201 @@ pub fn objects_sidebar_toggle() -> &'static str {
 /// Its tooltip.
 pub fn objects_sidebar_toggle_tooltip() -> &'static str {
     "Show or hide the right-hand panel listing everything on the page, nested into parts and points."
+}
+
+// =====================================================================
+// Field authoring (decision 020's F5)
+// =====================================================================
+//
+// The Create Field tool's strings. Filling a form is a different capability
+// with its own catalog block above; nothing here is shared with it, because
+// the two surfaces answer different questions and a shared string would drift
+// toward whichever one changed last.
+
+/// The ribbon control that arms the Create Field tool.
+pub fn create_field_button() -> &'static str {
+    "Create Field"
+}
+
+/// Its tooltip.
+///
+/// Names the gesture, because a tool that does nothing until the canvas is
+/// clicked is otherwise indistinguishable from one that is broken.
+pub fn create_field_button_tooltip() -> &'static str {
+    "Add a new form field to the page. Click where you want it, or drag out the exact size."
+}
+
+/// Body text in Tool Options while the tool is armed and nothing is placed.
+pub fn create_field_awaiting_placement() -> &'static str {
+    "Click on the page to place a field at a standard size, or drag to set its size exactly."
+}
+
+/// The field-type selector's label.
+pub fn create_field_type_label() -> &'static str {
+    "Type"
+}
+
+/// The four type names. These are the operator's words, not the spec's - a
+/// person building a form thinks "drop-down", not "/Ch with the Combo flag".
+pub fn create_field_type_text() -> &'static str {
+    "Text"
+}
+
+/// See [`create_field_type_text`].
+pub fn create_field_type_check_box() -> &'static str {
+    "Check box"
+}
+
+/// See [`create_field_type_text`].
+pub fn create_field_type_radio() -> &'static str {
+    "Radio button"
+}
+
+/// See [`create_field_type_text`].
+pub fn create_field_type_choice() -> &'static str {
+    "Drop-down"
+}
+
+/// The name input's label.
+pub fn create_field_name_label() -> &'static str {
+    "Name"
+}
+
+/// The name input's tooltip.
+///
+/// States the MERGE consequence, which is the non-obvious one and the reason
+/// the name matters more here than it looks: reusing a name does not fail, it
+/// silently joins the existing field (ISO 32000-1 12.7.3.2).
+pub fn create_field_name_tooltip() -> &'static str {
+    "What this field is called. Reusing an existing name of the same type adds this as another box on THAT field, rather than making a new one - which is how a check box appears on every page of a form."
+}
+
+/// The accessibility-name input's label.
+pub fn create_field_tooltip_label() -> &'static str {
+    "Accessibility name"
+}
+
+/// Its tooltip.
+pub fn create_field_tooltip_tooltip() -> &'static str {
+    "What a screen reader announces for this field. Announced in preference to the name, so it can be a plain-English question where the name is a code."
+}
+
+/// The control by which the operator DECLINES an accessibility name.
+pub fn create_field_tooltip_decline() -> &'static str {
+    "No accessibility name"
+}
+
+/// Its tooltip. Says the decision is required and why declining is offered at
+/// all, rather than leaving the operator to guess that an empty box is enough.
+pub fn create_field_tooltip_decline_tooltip() -> &'static str {
+    "Tick this to create the field without one. A decision either way is required - leaving it blank is not the same as choosing to skip it."
+}
+
+/// Shown beside a disabled Accept when the accessibility-name decision is
+/// still open (R105 is enforced in the core, so this explains a refusal that
+/// would otherwise arrive as a surprise).
+pub fn create_field_tooltip_undecided() -> &'static str {
+    "Give this field an accessibility name, or tick \"No accessibility name\", before adding it."
+}
+
+/// The radio member's export-value label.
+pub fn create_field_export_value_label() -> &'static str {
+    "Value when chosen"
+}
+
+/// Its tooltip. Radio members share one name and are told apart by this, which
+/// is the part that surprises people.
+pub fn create_field_export_value_tooltip() -> &'static str {
+    "What the form records when this button is the one picked. Every button in a group shares the group's name and is told apart by this value."
+}
+
+/// Commit control.
+pub fn create_field_accept() -> &'static str {
+    "Add field"
+}
+
+/// Discard control.
+pub fn create_field_reject() -> &'static str {
+    "Discard"
+}
+
+/// Its tooltip.
+pub fn create_field_reject_tooltip() -> &'static str {
+    "Throw away this placement without adding anything. Esc does the same."
+}
+
+/// Heading over the placed-but-not-yet-added draft's readout.
+pub fn create_field_draft_heading() -> &'static str {
+    "New field"
+}
+
+/// The draft's geometry readout.
+pub fn create_field_draft_geometry(width: f64, height: f64, page_number: usize) -> String {
+    format!("{width:.0} x {height:.0} pt on page {page_number}")
+}
+
+/// A refusal from `pdfce-core`, shown with the draft RETAINED so the operator
+/// can fix the cause and try again.
+pub fn create_field_refused(reason: &str) -> String {
+    format!("Not added: {reason}")
+}
+
+// ---------------------------------------------------------------------
+// Disclosures (rule 4)
+// ---------------------------------------------------------------------
+//
+// One line each, never a "there were warnings" blob. Every one of these
+// reports something pdfce CHOSE that the operator did not ask for, which is
+// exactly the obligation rule 4 states; collapsing them into a count would
+// keep the obligation's form while discarding its content.
+
+/// Heading over the disclosure list, shown only when there is at least one.
+pub fn create_field_disclosures_heading() -> &'static str {
+    "Worth knowing"
+}
+
+/// The field was created under a name pdfce generated.
+///
+/// The one disclosure here that is about an INFERENCE rather than a
+/// consequence: the operator placed a box and never named it, so the name is
+/// pdfce's guess and says so. An operator who typed the name gets no such
+/// line, because that is direct manipulation and needs no disclosure.
+pub fn create_field_disclosure_auto_named(name: &str) -> String {
+    format!("Named automatically as \"{name}\" - you can rename it later.")
+}
+
+/// The field MERGED into an existing one of the same name and type.
+pub fn create_field_disclosure_merged(name: &str) -> String {
+    format!("Added as another box on the existing field \"{name}\", not as a new field.")
+}
+
+/// `FieldAuthorDisclosures::tooltip_declined`.
+pub fn create_field_disclosure_tooltip_declined() -> &'static str {
+    "Created with no accessibility name, as you chose. Screen readers will announce its name instead."
+}
+
+/// `FieldAuthorDisclosures::tagged_document`.
+pub fn create_field_disclosure_tagged_document() -> &'static str {
+    "This document is tagged for accessibility, and the new field is not in its tag tree - pdfce cannot write one yet."
+}
+
+/// `FieldAuthorDisclosures::structure_tab_order`.
+///
+/// Deliberately says "no position at all" rather than "may tab oddly": under
+/// 14.7 an untagged field on a `/Tabs /S` page has an UNDEFINED tab
+/// position, not a last one, and different viewers will do different things.
+/// That is a functional defect in the form, and softening it would be the
+/// sneaky reading.
+pub fn create_field_disclosure_structure_tab_order() -> &'static str {
+    "This page tabs in tag-tree order, so the new field has no tab position at all until the page is tagged. Different viewers will handle it differently."
+}
+
+/// `FieldAuthorDisclosures::has_no_options`.
+pub fn create_field_disclosure_has_no_options() -> &'static str {
+    "This drop-down has no options yet and cannot be filled until some are added."
+}
+
+/// `FieldAuthorDisclosures::group_flags_ignored`.
+pub fn create_field_disclosure_group_flags_ignored() -> &'static str {
+    "This button joined an existing group, so the group's own behaviour settings apply rather than the ones set here."
 }
