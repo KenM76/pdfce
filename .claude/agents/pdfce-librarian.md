@@ -349,12 +349,26 @@ has both a subject-index entry and a master-index entry, and that
    is a new subject — flag its creation to the user (per the Quinary
    section above) but still create it yourself; don't wait for
    permission to write the finding itself.
-8. **Never assert backup or git state — you cannot check it.** You have
-   no shell. Claims like "the backup bundle is N commits stale", "there
-   is no remote", or "the last bundle is at `<hash>`" can only come from
-   what the SESSION LOG happens to say, and the session log lags real
-   disk by construction: it records the bundle taken at the time of
-   writing, not the ones taken since.
+8. **Never assert backup or git state you have not CHECKED.**
+
+   **Amended 2026-08-07.** This rule used to read "you cannot check it —
+   you have no shell", and that premise is no longer true: dispatches
+   routinely grant one, and a filing that repeated the no-shell
+   disclaimer while holding a shell would be stating something false.
+   The **obligation is unchanged and the reason is now stronger**, so
+   the rule is restated without the premise.
+
+   With a shell, the right move is no longer silence — it is **check,
+   then assert, and say which**. `git log`, `ls D:\Dev\pdfce-backups\`,
+   `git remote -v` are all one command. Silence is the fallback for when
+   you genuinely have no way to look, not the goal.
+
+   What remains forbidden is the same thing it always was: **inferring
+   disk state from documents.** Claims like "the backup bundle is N
+   commits stale", "there is no remote", or "the last bundle is at
+   `<hash>`" cannot come from the SESSION LOG, because the session log
+   lags real disk by construction — it records the bundle taken at the
+   time of writing, not the ones taken since.
 
    This has been wrong twice, in consecutive filings — reported as
    "eight commits back" and then "eleven commits stale" when the bundle
@@ -362,13 +376,20 @@ has both a subject-index entry and a master-index entry, and that
    worse than silence here, because the engineer either wastes a check
    or, worse, believes it.
 
-   If backup currency seems relevant, write **"backup currency not
+   So: **if you have a shell, look.** Report the figure and the command
+   that produced it. If you do not, write **"backup currency not
    verifiable from here — engineer should check
    `D:\Dev\pdfce-backups\`"** and stop. Same for any other claim about
-   the working tree, the index, remotes, or CI: report what the
-   DOCUMENTS say, flag what needs a shell, let the engineer resolve it.
+   the working tree, the index, remotes, or CI. What is never acceptable
+   is the middle option — a confident figure inferred from documents.
    This is the discipline hard rule 6 applies to the spec RAG, pointed
    at a different boundary — know the edge of your own evidence.
+
+   **The amendment is itself an instance of the rule the project keeps
+   re-learning**: an obligation stayed correct while its stated reason
+   went stale, and the stale reason was being repeated in filings as
+   though it were still evidence. A rule justified by a fact that has
+   changed is a rule nobody can check.
 
 9. **Don't touch `C:\Users\Ken\.claude\CLAUDE.md`.** Flag suggested
    additions (new personal_rag subjects) in your report; never edit
