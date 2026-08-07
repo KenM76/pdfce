@@ -125,14 +125,19 @@ USAGE
     --keep                 keep the produced PDFs for inspection
     --self-test            prove the gate can fail, then exit
     --verapdf PATH         override veraPDF discovery
+    --timeout SECONDS      per-file budget before pdfce counts as HUNG
+                           (default 120). A hang is the worst class the
+                           gate reports: without a budget one
+                           non-terminating input stalls the sweep and
+                           everything after it is silently never tested.
 
 Discovery order for veraPDF: ``--verapdf``, then ``$PDFCE_VERAPDF``,
 then ``D:\\tools\\verapdf\\verapdf.bat``, then ``verapdf`` on ``PATH``.
 
 EXIT CODES
 ----------
-0   every produced file parsed, **or** veraPDF is not installed (skip)
-1   at least one file pdfce wrote could not be parsed by veraPDF
+0   no regressions and no hangs, **or** veraPDF is not installed (skip)
+1   pdfce made a file WORSE than its input, or never terminated on one
 2   the harness itself failed (pdfce-cli missing, bad arguments)
 
 A parse failure is printed with the file, the mode that produced it,
@@ -263,13 +268,32 @@ def build_cli(workdir: Path) -> Path:
     return private
 
 
-def produce(cli: Path, src: Path, mode: str, dest: Path) -> str | None:
+def produce(cli: Path, src: Path, mode: str, dest: Path, timeout: float) -> str | None:
     """Have pdfce WRITE `src` to `dest` in `mode`.
 
     Returns None on success, or a reason string. A pdfce refusal is
     NOT a gate failure: refusing by name is correct behaviour (R27),
     and a sweep that counted refusals as failures would push the
     implementation toward guessing rather than refusing.
+
+    Raises [`Hang`] if pdfce does not terminate within `timeout`.
+
+    # Why a per-file timeout is not optional
+
+    Without one, a single non-terminating input stalls the whole sweep
+    and **everything after it is silently never tested** — while the
+    tool prints nothing at all, because results are only reported at the
+    end. That is R162 at the harness level: a sweep that stopped at file
+    87 of 331 and a sweep that passed all 331 look identical from the
+    outside.
+
+    This is not theoretical. On 2026-08-07 a sweep of pdfium's corpus sat
+    on `bug_455199.pdf` for over thirty minutes; the remaining 244 files
+    were never examined, and the only reason anyone noticed was that a
+    process listing showed one `pdfce-cli.exe` alive far longer than any
+    file should take. A hang is now a **reported finding** with the file
+    that caused it — the most severe class the gate can report, because
+    a hang in the GUI is an unrecoverable freeze.
     """
     proc = subprocess.run(
         [
@@ -277,6 +301,7 @@ def produce(cli: Path, src: Path, mode: str, dest: Path) -> str | None:
             "round-trip", "--mode", mode, "-o", str(dest), str(src),
         ],
         capture_output=True,
+        timeout=timeout,
         text=True,
         # Decode as UTF-8 with replacement, NEVER the platform locale.
         # `text=True` alone decodes with cp1252 on Windows, and a single
@@ -489,6 +514,12 @@ def main() -> int:
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--verapdf", default=None)
+    ap.add_argument(
+        "--timeout",
+        type=float,
+        default=120.0,
+        help="per-file seconds before pdfce is treated as HUNG (default 120)",
+    )
     args = ap.parse_args()
 
     verapdf = find_verapdf(args.verapdf)
@@ -521,6 +552,7 @@ def main() -> int:
     workdir = Path(tempfile.mkdtemp(prefix="verapdf-gate-"))
     produced: dict[Path, Path] = {}
     refused = 0
+    hangs: list[Path] = []
     try:
         try:
             cli = build_cli(workdir)
@@ -529,7 +561,13 @@ def main() -> int:
             return 2
         for i, src in enumerate(inputs):
             dest = workdir / f"{i:05d}-{src.name}"
-            reason = produce(cli, src, args.mode, dest)
+            try:
+                reason = produce(cli, src, args.mode, dest, args.timeout)
+            except subprocess.TimeoutExpired:
+                # A HANG, not a slow file. Recorded and reported by name
+                # rather than stalling the sweep — see `produce`.
+                hangs.append(src)
+                continue
             if reason is not None:
                 # A refusal is a correct outcome, not a gate failure.
                 refused += 1
@@ -580,18 +618,28 @@ def main() -> int:
             elif tier_out != OK:
                 preserved += 1
 
+        # Hangs first, and loudest. A hang outranks a regression: a bad
+        # file can be inspected, but a non-terminating save is an
+        # unrecoverable freeze in the GUI — no error, no cancel, no save.
+        for src in hangs:
+            print(
+                f"HANG        {src}  [--mode {args.mode}]\n"
+                f"            pdfce did not terminate within {args.timeout:g}s. "
+                f"This outranks every other finding below."
+            )
         for f in regressions:
             print(f"REGRESSION  {f.source}  [--mode {f.mode}]\n            {f.message}")
 
         print(
             f"\nverapdf-parse-gate: {len(produced)} file(s) written by pdfce "
             f"and read back by veraPDF {verapdf.name}.\n"
-            f"  {len(regressions)} regression(s)   <- the only failure condition\n"
+            f"  {len(hangs)} hang(s)         <- pdfce never terminated; worst class\n"
+            f"  {len(regressions)} regression(s)   <- pdfce made a readable file worse\n"
             f"  {improvements} improved (pdfce's output parses better than its input)\n"
             f"  {preserved} pre-existing defect(s) faithfully preserved (not a failure)\n"
             f"  {refused} refused by pdfce (refusals are not failures)"
         )
-        return 1 if regressions else 0
+        return 1 if (regressions or hangs) else 0
     finally:
         if args.keep:
             print(f"produced files kept in {workdir}", file=sys.stderr)
