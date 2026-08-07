@@ -167,6 +167,19 @@ pub struct GraphicsState {
     /// `GraphicsState` non-`Send` for a saving of one non-atomic
     /// increment per `q`.
     pub clip: Option<std::sync::Arc<tiny_skia::Mask>>,
+    /// Device-space bounding box of [`Self::clip`]'s non-zero region, as
+    /// `(left, top, right, bottom)`. `None` exactly when `clip` is.
+    ///
+    /// It lives HERE, in the graphics state, rather than in a side table,
+    /// and that placement is the whole correctness argument: a clip bbox
+    /// must be saved by `q` and restored by `Q` exactly as the mask is,
+    /// because `Q` reinstates a LARGER clip. Tracked outside the state it
+    /// shrinks monotonically and never widens, which on the reference CAD
+    /// sheet made a 1.34% bounding-box cull rate measure as 73.71%.
+    ///
+    /// Maintained today only to feed [`crate::profile`]; it is a `Copy`
+    /// 16-byte field, so `q` pays nothing meaningful for it.
+    pub clip_bbox: Option<(f32, f32, f32, f32)>,
     /// The nine §9.3 text-state parameters (module docs: they ARE
     /// graphics-state parameters, so `q`/`Q` save and restore them).
     pub text: crate::text::TextState,
@@ -186,6 +199,7 @@ impl GraphicsState {
             miter_limit: 10.0,
             dash: (Vec::new(), 0.0),
             clip: None,
+            clip_bbox: None,
             text: crate::text::TextState::default(),
         }
     }

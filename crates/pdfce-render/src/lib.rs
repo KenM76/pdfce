@@ -56,6 +56,7 @@ pub mod font;
 pub mod gstate;
 pub mod image;
 pub mod interpret;
+pub mod profile;
 pub mod text;
 
 use pdfce_core::content::ContentStream;

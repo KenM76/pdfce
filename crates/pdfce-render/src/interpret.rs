@@ -1459,6 +1459,10 @@ impl Interpreter<'_> {
         // BORROWED, never cloned — see `paint_path`'s note. A glyph is
         // one more paint under the same page-sized mask.
         let clip = self.gs.current.clip.as_deref();
+        crate::profile::note_paint(
+            clip.is_some(),
+            paint_is_cullable(&path, ctm, self.gs.current.clip_bbox),
+        );
         if self.gs.current.text.fills() {
             let paint = solid(self.gs.current.fill_color);
             // Glyph outlines are filled with the NONZERO winding rule
@@ -2013,6 +2017,12 @@ impl Interpreter<'_> {
                 && let Some(mask) = Mask::new(pixmap.width(), pixmap.height())
             {
                 self.gs.current.clip = Some(std::sync::Arc::new(mask));
+                // An all-zero mask admits nothing, so the bbox is EMPTY —
+                // not `None`, which means "no clip at all" and is the
+                // opposite. Left > right, so every paint tests as outside,
+                // which is exactly what an everything-clipped-out state is.
+                self.gs.current.clip_bbox = Some((f32::MAX, f32::MAX, f32::MIN, f32::MIN));
+                crate::profile::note_clip(0.0, 0.0);
             }
             return;
         };
@@ -2063,6 +2073,10 @@ impl Interpreter<'_> {
         // take `Option<&Mask>`, and the clip is not mutated until
         // `intersect_clip` below, which is after the last use.
         let clip = self.gs.current.clip.as_deref();
+        crate::profile::note_paint(
+            clip.is_some(),
+            paint_is_cullable(&path, ctm, self.gs.current.clip_bbox),
+        );
         if fill && let Some(rule) = fill_rule {
             let paint = solid(self.gs.current.fill_color);
             pixmap.fill_path(&path, &paint, rule, ctm, clip);
@@ -2097,6 +2111,24 @@ impl Interpreter<'_> {
 /// A failure to allocate the mask leaves the clip unchanged, which
 /// paints *more* than it should rather than less; the alternative
 /// (treating it as "clip everything") would silently blank content.
+/// Would a bounding-box cull skip this paint?
+///
+/// True when a clip is in force and the paint's device bounds miss the
+/// clip's bbox entirely. **Reporting only** — no cull is performed,
+/// because the answer on the reference CAD sheet is 1.34% of clipped
+/// paints (2026-08-07) and a cull that skips one paint in seventy-five
+/// costs more in branches than it saves in fills. The counter exists so
+/// the next proposal starts from the number.
+fn paint_is_cullable(path: &Path, ctm: Transform, bbox: Option<(f32, f32, f32, f32)>) -> bool {
+    let Some((l, t, r, b)) = bbox else {
+        return false;
+    };
+    let Some(pb) = path.bounds().transform(ctm) else {
+        return false;
+    };
+    pb.right() < l || pb.left() > r || pb.bottom() < t || pb.top() > b
+}
+
 fn intersect_clip(
     state: &mut GraphicsState,
     path: &Path,
@@ -2116,13 +2148,22 @@ fn intersect_clip(
         // the multiply is provably a no-op. Restricting the loop is an
         // identity, not an approximation.
         //
-        // It matters because clips in real drawings are SMALL relative to
-        // the paper. The CAD sheet this was measured on (2026-08-07) has
-        // 24,142 clip operations on a 1191×842 page; multiplying the full
-        // page each time is ~24 GB of work to combine rectangles that
-        // mostly cover a few percent of it. The whole-page loop made the
-        // cost of clipping a corner of the drawing depend on the size of
-        // the drawing.
+        // CORRECTED 2026-08-07, same day it was written. This comment
+        // originally read "clips in real drawings are SMALL relative to
+        // the paper … rectangles that mostly cover a few percent of it".
+        // **That is false**, and the error was a fraction printed as a
+        // percent: the reference CAD sheet's mean clip bbox is 66.36% of
+        // the page, not 0.663%. Measured concretely, its first clips
+        // cover 87%, 65%, 100%, 81% and 95% of the sheet.
+        //
+        // The bound is still an identity and still worth keeping — it
+        // skips the ~34% of the page that lies outside the new path, and
+        // the tail of small clips (0.98%, 2.58%) benefits a lot. But it
+        // is a third off the work, not the two orders of magnitude the
+        // original wording implied, and no optimization should be scoped
+        // on the premise that clips are tiny. `tools/render-profile`
+        // reports this figure so the claim stays checkable; it prints an
+        // explicit note when clips are large.
         let w = mask.width() as usize;
         let h = mask.height() as usize;
         let (x0, y0, x1, y1) = match path.bounds().transform(ctm) {
@@ -2153,6 +2194,23 @@ fn intersect_clip(
                 *n = ((u16::from(*n) * u16::from(*o)) / 255) as u8;
             }
         }
+    }
+    // Maintain the bbox alongside the mask. `state` is the live graphics
+    // state, so `q`/`Q` carry this exactly as they carry the mask — see
+    // `GraphicsState::clip_bbox` for why anywhere else is wrong.
+    let (w, h) = (mask.width() as f32, mask.height() as f32);
+    let page_area = w * h;
+    if let Some(b) = path.bounds().transform(ctm) {
+        let (nl, nt) = (b.left().max(0.0), b.top().max(0.0));
+        let (nr, nb) = (b.right().min(w), b.bottom().min(h));
+        let indiv = ((nr - nl).max(0.0) * (nb - nt).max(0.0)) / page_area;
+        let accum = match state.clip_bbox {
+            Some((pl, pt, pr, pb)) => (nl.max(pl), nt.max(pt), nr.min(pr), nb.min(pb)),
+            None => (nl, nt, nr, nb),
+        };
+        state.clip_bbox = Some(accum);
+        let accum_area = ((accum.2 - accum.0).max(0.0) * (accum.3 - accum.1).max(0.0)) / page_area;
+        crate::profile::note_clip(indiv, accum_area);
     }
     state.clip = Some(std::sync::Arc::new(mask));
 }

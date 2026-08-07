@@ -8,6 +8,14 @@ authors.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[features]
+# Render instrumentation for `tools/render-profile`. OFF by default and
+# compiled out entirely: without it `profile`'s counters are absent and
+# its note_* calls have empty bodies, so a shipping build carries no
+# atomic and no branch. See `src/profile.rs` for why it is permanent
+# rather than throwaway.
+profile = []
+
 [dependencies]
 # Depends on pdfce-core plus the CPU rasterizer. NOTHING here may pull a
 # GUI/windowing crate — see docs/ARCHITECTURE.md §3.

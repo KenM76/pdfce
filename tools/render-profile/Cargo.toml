@@ -1,0 +1,24 @@
+# Standing render-profiling harness. A DETACHED single-crate workspace,
+# excluded from the root workspace for the same reason every other
+# `tools/` crate is: it must never enter the shipping dependency graph
+# or `THIRD_PARTY_LICENSES.md`.
+#
+# It enables `pdfce-render/profile`, which is off in every shipping
+# build. See `crates/pdfce-render/src/profile.rs` for why the
+# instrumentation is permanent rather than throwaway.
+[package]
+name = "render-profile"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+pdfce-core = { path = "../../crates/pdfce-core" }
+pdfce-render = { path = "../../crates/pdfce-render", features = ["profile"] }
+
+[profile.release]
+# Profiling a debug build measures the allocator, not the renderer.
+opt-level = 3
+debug = true
