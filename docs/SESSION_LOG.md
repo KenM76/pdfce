@@ -17957,3 +17957,209 @@ asserted**; backup currency is not verifiable from here and the engineer
 should check `D:\Dev\pdfce-backups\`. These documentation edits are
 **UNCOMMITTED at the time of writing**, and the third commit's contents
 are **unknown to this filing by design**.
+
+---
+
+## Same-day continuation 109 (real date 2026-08-06) — PRE-COMPACTION CAPTURE: a retraction, a stale-citation root cause, and two findings about the agent's own reasoning
+
+**No commits filed. No Pass shipped. Nothing minted.** This is a
+mid-work capture requested by the operator, who asked the engineer to
+check in with this librarian **regularly rather than only at the end of
+work**, precisely so findings are not lost to context summarization.
+**That cadence is now the standing expectation — see "Going forward"
+below, so a future session inherits it rather than rediscovering it.**
+
+### ★ A RETRACTION — continuation 107's Pass 23.3 dependency note was wrong, and the correction runs the OPPOSITE way
+
+**What continuation 107 filed**, on the engineer's relay: that Pass
+41.0's and 36.1's discharges of 23.3 scope happened *"WITHOUT 23.2,
+which 23.3 lists as a hard dependency"*, and that *"the same assumption
+may be over-strong elsewhere in decision 023's graph."*
+
+**Both halves are false.** Three checks, all available in under a minute:
+
+1. **Decision 023 §11's binding sentence names 23.1 and 23.2 ONLY** —
+   *"22.0 ships first, or 23.1/23.2 do not start. 23.0 is the exception
+   — it depends on neither."* **23.3 is never mentioned in it.**
+2. **23.3's dependency had ALREADY been amended to Pass 26.0** (the node
+   rung) at decision 025's registration — recorded in `ROADMAP.md`'s
+   decision-025 registration note and in `docs/decisions/025-…md` §1302.
+3. **26.0 shipped before both discharges**, verified by **ancestry, not
+   by commit date**: `git merge-base --is-ancestor c62c4d0 23f8f8e` and
+   `... c62c4d0 66cee16` both succeed (`c62c4d0` = Pass 26.0, 2026-08-05).
+   **Run by this librarian in this invocation**, not relayed.
+
+**The dependency was SATISFIED and the graph was CORRECT.** There is no
+scheduling anomaly and no over-strong assumption to hunt.
+
+**The real defect is duller and more transferable: the amendment was
+written in ONE location and not the others.** Three statements of the
+same fact existed; one was amended and two were not:
+
+| Location | State before this filing |
+|---|---|
+| `ROADMAP.md` decision-025 registration note | **amended** — says 26.0 |
+| `docs/decisions/023-…md` §7.4 | stale — *"Depends on 23.2"*; **correctly unedited**, the decisions directory is append-only |
+| `ROADMAP.md` Backlog, Pass 23.3's own entry | stale — the same sentence, **copied from 023 §7.4, and editable all along** |
+
+A filing a day later went to the single most obvious place — Pass 23.3's
+own Backlog entry — read the stale copy, and reported a graph defect.
+**The careful reader was the victim, not the careless one.**
+
+### Corrections applied to `ROADMAP.md` (three places, all corrected IN PLACE with the stale text preserved as evidence)
+
+1. **Pass 41.0's Shipped entry** — a dated correction block after the
+   *"ahead of 23.3's stated dependency on 23.2"* sentence. The sentence
+   is **not deleted**; it is the evidence for how the error travelled.
+2. **Pass 23.3's partial-discharge note** — the *"the same assumption
+   may be over-strong"* paragraph is **explicitly RETRACTED** in a
+   nested block that carries the three checks above and says *"do not
+   act on it."* The paragraph itself stays.
+3. **Pass 23.3's Backlog dependency line** — *"Depends on 23.2"* struck
+   through, replaced with **"depends on Pass 26.0, DISCHARGED, 23.3 is
+   unblocked today"**, and marked as the **canonical** statement, since
+   `023-…md` §7.4 cannot be edited.
+
+### Findings + decisions
+
+- **★ THE TRANSFERABLE FINDING: an amendment that lives in ONE location
+  is not an amendment; it is a second, contradictory source.** In an
+  append-only documentation system this is **guaranteed**, not
+  accidental — every amendment to a decided fact necessarily leaves an
+  older, still-authoritative-looking statement behind. Nothing in this
+  project detects it: `tools/check-ledger-numbers.py` counts IDs, not
+  agreement between statements; `FEATURES.md`'s maintenance contract is
+  the only same-filing propagation duty and it covers capability rows
+  only. **Filed as a PROPOSED rule** (awaiting engineer ruling, nothing
+  minted) at the end of `ROADMAP.md`'s *Standing rules*.
+- **★ SECOND OCCURRENCE OF "ESCALATE THE INTERESTING EXPLANATION
+  WITHOUT ELIMINATING THE DULL ONE" — and the first with no instrument
+  in it.** Occurrence 1 (`9328038`, already an R87 row): *"the selection
+  path does not run"* when the grep used the wrong trace name.
+  Occurrence 2 (today): *"the dependency assumption is over-strong"*
+  when the citation was merely stale. **Same shape, same choice.** R87's
+  amended entry already contains the general sentence (*"two
+  explanations exist ... and the alarming one gets reported without
+  eliminating the boring one"*) — but its **binding text and all six of
+  its occurrences are code-shaped**, so a reader looking up *"may I file
+  this?"* finds a rule about traces and decides it does not cover a
+  roadmap citation. **Filed as a PROPOSED R87 AMENDMENT** (three
+  observation kinds, three concrete checks), deliberately not as a new
+  number, so nothing is minted and the ceiling does not move.
+- **★ AN UNTESTED CAUSAL CLAIM THE AGENT MADE ABOUT ITSELF.**
+  Repeatedly today the engineer justified scoping down and delegating
+  with *"errors come from moving fast on a tired read"* — asserting that
+  reliability degraded with context length. **The operator challenged
+  the premise** (*"don't worry about session limits"*), and on checking,
+  the day's errors — the invented DWM cause, the tautological trace, the
+  stale coordinates — were **spread across the session, not clustered at
+  the end.** The correlation was never measured. **This is the same
+  failure class pointed at self-assessment: the instrument can be the
+  agent's own model of itself, and it is the only instrument nobody ever
+  validates.** Carried as the second occurrence in the same proposal.
+- **Ancestry, not commit date, is the check that settles ordering
+  questions.** Dates on a branch can mislead; `git merge-base
+  --is-ancestor` cannot. Recorded because it is what made the retraction
+  decidable in one command.
+
+### Written outside the repo
+
+- **`C:\personal_rag\claude_code\lesson_20260806_agent_reports_alarming_explanation_before_dull_one.md`**
+  (new) — all eight occurrences in one table, the three-kinds/three-checks
+  fix, and the append-only-systems corollary. **Filed under `claude_code/`
+  rather than `pdf/` or `D:\dev\rag\rust\`** because it is a finding about
+  **agent reasoning**, not about the PDF domain or the Rust ecosystem;
+  `pdfce-librarian`'s own charter permits this (*"a genuinely
+  Claude-Code-tooling finding ... file it under `claude_code/`"*).
+  Subject index + master index both updated.
+
+### Still in flight
+
+- **A fork is implementing form-field CREATION** (core + CLI first
+  slice). **Not committed at filing time, and NOTHING about it is
+  anticipated anywhere in this filing** (R87 — nothing is filed on
+  trust). Its build record is **OWED**.
+- **Two of Pass 38.5's four items remain flagged INVALIDATED by 43.0**,
+  awaiting an **engineer re-scope**. Not a librarian act.
+- **Pass 23.3's residual scope still needs an engineer RE-STATEMENT.**
+  The honest reading is *"23.3 = `plan_move_nodes` + its refusal set"*,
+  but narrowing a decided Pass is an engineer act. **Now genuinely
+  unblocked** — its 26.0 dependency shipped 2026-08-05. Couple it with
+  the missing **single-node arrow-key nudge** (decision 028 items 10/11),
+  since there is nothing for a multi-node nudge to extend.
+- **Open operator questions (ba)** — property-4 fly-out refusal — and
+  **(bb)** — R124 greyed placeholders — remain **unanswered**.
+- **Two PROPOSALS await an engineer ruling** at the end of *Standing
+  rules*: the single-location-amendment rule and the R87 broadening.
+
+### Ledger discipline (R106) — continuation 109
+
+| | Minted this continuation | Ceiling after |
+|---|---|---|
+| Pass IDs | **NONE** | families up to **43**; **44** next free |
+| Standing rules | **NONE — two PROPOSALS only, neither in force** | **R158** (**R159** next free), **unchanged** |
+| Decision records | **NONE** | **031** (**032** next free), unchanged |
+| Operator questions | **NONE** | **(bc)** (**(bd)** next free), unchanged |
+
+**If the single-location-amendment proposal is accepted as a standalone
+rule it takes R159**, pushing decision 030's three contingent candidates
+and the cross-RAG-handoff proposal to **R160**. **If the R87 broadening
+is accepted as an amendment — this librarian's recommendation — nothing
+is minted and no ceiling moves.**
+
+### Observation-boundary note (hard rule 8)
+
+**Asserted here, because this invocation HAD a shell and ran them:** the
+ancestry checks (`git merge-base --is-ancestor`), the three stale-citation
+locations (grepped), and decision 023 §11's and §7.4's wording (read).
+
+**ENGINEER-MEASURED AND RELAYED, not run here (R87):** repo clean at
+`a8d74b7`; **2008 tests**; all gates clean; ledger **families → 43 /
+R158 / 118 pairs**; and the backup **`pdfce-20260806-1646.zip` verified
+restorable** (bundle cloned, tip matches `a8d74b7`). **Backup currency
+generally is still not verifiable from here** — the engineer owns
+`D:\Dev\pdfce-backups\`.
+
+**Nothing is asserted about the fork's working tree, about remotes, or
+about CI.** These documentation edits are **UNCOMMITTED at the time of
+writing**.
+
+### Going forward — the check-in cadence, and what this librarian wants at each one
+
+**The operator has asked that the engineer check in with this librarian
+REGULARLY DURING work, not only at the end.** Recorded here so a future
+session inherits the expectation. The reason is demonstrated by this very
+filing: continuation 107's error existed only in the live conversation
+for a full continuation before anyone re-derived it.
+
+**What a check-in should carry, beyond a narrative** — asked for plainly,
+since the engineer asked:
+
+1. **Provenance on every figure.** Say which numbers you MEASURED this
+   invocation versus which you are relaying from earlier in the session.
+   R87 is about the first hop; a relayed figure has had two.
+2. **The competing explanation you rejected**, for any diagnosis being
+   filed — and how you eliminated it. If it was not eliminated, say
+   *"unchecked"* and it will be filed as a hypothesis, not a finding.
+   This is the whole substance of today's proposal.
+3. **Corrections to earlier filings, explicitly flagged as corrections.**
+   Do not fold a retraction into new material; it will be missed. Today's
+   retraction arrived flagged, which is why it took one filing to fix.
+4. **What is IN FLIGHT and must not be anticipated** — named, so R87 is
+   honoured by construction rather than by memory.
+5. **Anything the operator SAID**, verbatim where it is a ruling or a
+   refusal. Operator wording is the one input this librarian cannot
+   re-derive from disk, and it is the most frequently lost to compaction.
+6. **Nothing about backups, remotes, CI or the index** unless you ran the
+   check — hard rule 8 cuts both ways, and a relayed backup claim is
+   filed as relayed, never as fact.
+
+### For next session
+
+- **Rule on the two proposals** at the end of `ROADMAP.md`'s *Standing
+  rules* (recommendations stated in each block: prefer an *Update
+  protocol* scope note for the first; accept the second as an R87
+  amendment).
+- **Re-scope Pass 23.3** and the two INVALIDATED Pass 38.5 items.
+- **Answer (ba) and (bb)** — both still open.
+- **File the form-field-creation fork** when it commits.

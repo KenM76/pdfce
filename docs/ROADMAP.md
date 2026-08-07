@@ -889,6 +889,32 @@ three**, ahead of 23.3's stated dependency on 23.2, and **without**
 23.3's core plan. **Nothing is renumbered** (hard rule 2). See the
 partial-discharge note added to 23.3's own Backlog entry.
 
+> **★ CORRECTED 2026-08-06 (continuation 109, engineer-checked) — the
+> sentence above cites a SUPERSEDED dependency, and the citation is left
+> standing because it is the evidence for how the error travelled.**
+>
+> **23.3 does not depend on 23.2.** Its dependency was amended to **Pass
+> 26.0 (the node rung)** when decision 025 was registered — see the
+> registration note in this file (*"Pass 23.3's dependency changes and
+> improves — it depends on **26.0** … not on 23.2. A genuine
+> unblocking"*), and `docs/decisions/025-…md` §1302, which states the
+> same thing: *"023 §7.4 says it depends on 23.2. Under the ladder its
+> real dependency is 26.0."*
+>
+> **26.0 shipped BEFORE this Pass**, verified by ancestry rather than by
+> date: `git merge-base --is-ancestor c62c4d0 66cee16` succeeds
+> (`c62c4d0` = Pass 26.0, 2026-08-05). **So the dependency was
+> SATISFIED, this Pass ran nothing "ahead of" anything, and there is no
+> scheduling anomaly to explain.**
+>
+> **What actually went wrong is duller and more transferable: the
+> amendment was written in ONE place and not the OTHER.** Decision 023
+> §7.4's *"Depends on 23.2"* and 23.3's own Backlog entry were never
+> updated to match, so a filing weeks later read the stale citation and
+> reported a graph defect that did not exist. See the PROPOSED rule
+> *"an amendment that lives in one location is not an amendment"* at the
+> end of *Standing rules*.
+
 #### The blast-radius measurement, done BEFORE touching anything
 
 `grep -rn "\.node"` returns **27 hits, but most are lookalikes** —
@@ -17160,6 +17186,39 @@ nothing gets forgotten, not as a commitment to build in this order.
     > model, not a violation of it — worth noting because the same
     > assumption may be over-strong elsewhere in decision 023's graph.
     >
+    > > **★ THE PARAGRAPH DIRECTLY ABOVE IS WRONG AND IS RETRACTED —
+    > > CORRECTED 2026-08-06 (continuation 109, engineer-checked). It is
+    > > left in place because it is the evidence for how the error
+    > > propagated; do not act on it.**
+    > >
+    > > **There is no over-strong assumption anywhere in decision 023's
+    > > graph, and nothing shipped out of dependency order.** Three
+    > > checks, all of which were available in under a minute:
+    > >
+    > > 1. **Decision 023 §11's binding sentence names 23.1 and 23.2
+    > >    ONLY** — *"22.0 ships first, or 23.1/23.2 do not start. 23.0
+    > >    is the exception — it depends on neither."* **23.3 is not
+    > >    mentioned in it at all.**
+    > > 2. **23.3's dependency had already been AMENDED to Pass 26.0**
+    > >    (the node rung) at decision 025's registration — see the
+    > >    decision-025 registration note in this file, and
+    > >    `docs/decisions/025-…md` §1302.
+    > > 3. **26.0 shipped before both discharges**, verified by ANCESTRY,
+    > >    not by commit date: `git merge-base --is-ancestor c62c4d0
+    > >    23f8f8e` and `… c62c4d0 66cee16` both succeed (`c62c4d0` =
+    > >    Pass 26.0).
+    > >
+    > > **The dependency was SATISFIED. The graph was correct.** The
+    > > defect is narrower and duller: **the amendment was made in one
+    > > location and not the other**, so the stale *"Depends on 23.2"*
+    > > below — and in decision 023 §7.4 — was still readable weeks
+    > > later, and this filing read it. See the PROPOSED rule
+    > > *"an amendment that lives in one location is not an amendment"*
+    > > at the end of *Standing rules*, and R87's amended form (two
+    > > explanations existed — *"the dependency graph is wrong"* and
+    > > *"the citation is stale"* — and the alarming one was filed
+    > > without eliminating the boring one).
+    >
     > **What the engineer still owes here is a RE-STATEMENT of 23.3's
     > residual scope**, not a librarian inference. The honest reading
     > today is *"23.3 = `plan_move_nodes` + its refusal set"*, but
@@ -17178,7 +17237,21 @@ nothing gets forgotten, not as a commitment to build in this order.
     test could honestly reach. A node-display ceiling with disclosure
     (never a silent first-N) is required — `MAX_NODES` is 4,000,000 and
     a plotted drawing routinely carries tens of thousands of anchors.
-    **Depends on 23.2** (level 3 is the level below level 2).
+    ~~**Depends on 23.2** (level 3 is the level below level 2).~~
+    **SUPERSEDED — CORRECTED IN PLACE 2026-08-06 (continuation 109).**
+    The struck text above is decision 023 §7.4's original wording, kept
+    visible because it is what a later filing read and mis-cited.
+    **23.3 depends on Pass 26.0 (the node rung), NOT on 23.2** — amended
+    at decision 025's registration (see that record's registration note
+    in this file, and `docs/decisions/025-…md` §1302: *"023 §7.4 says it
+    depends on 23.2. Under the ladder its real dependency is 26.0 …
+    a genuine unblocking — 23.3 no longer waits on the larger
+    container-shaped Pass with no payoff on the operator's own files."*).
+    **26.0 shipped 2026-08-05 as `c62c4d0`, so this dependency is
+    DISCHARGED and 23.3 is unblocked today.** `docs/decisions/023-…md`
+    §7.4 itself is **not** edited — the decisions directory is
+    append-only; this line is the canonical statement of 23.3's
+    dependency.
 
   **Librarian's read on slice ordering, asked for explicitly by the
   operator, not just filed as a fact:** decision 023 §7.1 orders **23.0
@@ -23321,6 +23394,197 @@ instrument would have fired"* is **replaced** by the enforceable form
 proposal's argument that the wrong-instrument / stale-input split is
 **not** worth making was **rejected** — both kinds are carried
 separately in R87's amended entry, because they have different remedies.
+
+### PROPOSED 2026-08-06 (continuation 109) — an amendment that lives in ONE location is not an amendment; it is a second, contradictory source — AWAITING ENGINEER RULING; NOTHING MINTED
+
+**Status AS FILED: a librarian PROPOSAL. It has NO number, is NOT in
+force, and amends nothing until the engineer rules.** Filed as a proposal
+rather than minted because the engineer's dispatch said so explicitly —
+*"Propose, do not mint"* — the same protocol used at continuations 100,
+101/102, 106 and 108. **The live ceiling at filing time is R158**
+(minted with Pass 43.0's glyph-authoring ruling), so **R159 is next
+free**; if this is accepted as a standalone rule it takes **R159** and
+pushes decision 030's three contingent candidates and the cross-RAG
+handoff proposal to **R160**. **Nothing is minted by this block.**
+
+#### The occurrence (one, and it is fully worked out)
+
+**Pass 23.3's dependency was amended from 23.2 to 26.0 on 2026-08-05**,
+at decision 025's registration. The amendment was written into **exactly
+one place** — the decision-025 registration note in this file, plus the
+decision record's own §1302. It was **not** written into:
+
+| Location | What it still said on 2026-08-06 |
+|---|---|
+| `docs/decisions/023-…md` §7.4 | *"Depends on 23.2 (level 3 is the level below level 2)"* — correctly, since the decisions directory is **append-only** and must not be edited |
+| `ROADMAP.md` Backlog, Pass 23.3's own entry | the same sentence, **copied out of 023 §7.4** — and this one was editable all along |
+
+**Consequence, measured:** on 2026-08-06 a filing about Pass 41.0 read
+the Backlog entry, saw the stale dependency, and reported that two
+discharges had shipped *"WITHOUT 23.2, which 23.3 lists as a hard
+dependency"* and that *"the same assumption may be over-strong elsewhere
+in decision 023's graph."* **Neither statement was true.** 26.0 shipped
+first (`git merge-base --is-ancestor c62c4d0 66cee16`), the graph was
+correct, and decision 023 §11's binding sentence never named 23.3 at
+all. **A superseded fact was cited as current a full day after it was
+superseded, by a reader doing exactly the right thing — reading the
+Backlog entry for the Pass in question.**
+
+#### The proposed text
+
+**When a fact recorded in more than one document is amended, the
+amendment is filed against EVERY editable location that states it, in
+the SAME filing — and where a location is append-only (the decisions
+directory), the editable location that mirrors it must carry the
+correction AND say that it, not the append-only original, is canonical.
+A single-site amendment does not correct the record; it forks it.**
+
+#### Why it is worth a number (the argument for accepting)
+
+1. **The append-only rule GUARANTEES this failure and no existing rule
+   catches it.** `docs/decisions/` cannot be edited (hard rule: history
+   is not rewritten), so every amendment to a decided fact necessarily
+   creates a second, older statement that still reads as authoritative.
+   The project's answer so far has been "the amendment is filed
+   elsewhere" — which is exactly the fork. **The `FEATURES.md`
+   maintenance contract is the only same-filing propagation obligation
+   this project has, and it covers capability rows only.**
+2. **The victim is the careful reader, not the careless one.** The
+   filing that got this wrong went to Pass 23.3's own Backlog entry —
+   the single most obvious place to look. A rule that only fires for
+   sloppy lookups would not be worth a number; this one fires for the
+   correct lookup.
+3. **Detection is nearly impossible after the fact.** Nothing about a
+   stale citation looks stale. There is no gate, no ledger count, and no
+   test; `tools/check-ledger-numbers.py` counts IDs, not agreement
+   between statements of the same fact.
+4. **The remedy is mechanical and cheap** — at amendment time, grep the
+   fact's distinctive phrase (*"Depends on 23.2"*) and fix or annotate
+   every hit. Under a minute, in the filing that is already open.
+
+#### Why it might be REFUSED (stated so the engineer can weigh it)
+
+1. **One occurrence.** The project's promotion bar is two, applied
+   repeatedly (R156's two mis-verifications; R87's four-then-five).
+   **The honest count here is one.**
+2. **It may be a restatement of the append-only convention rather than a
+   new obligation** — arguably "the roadmap is authoritative over a
+   superseded decision record" was already the intent, and what failed
+   was execution, not the rule set. If so, a scope note on the *Update
+   protocol* section is the right home, not a numbered rule.
+3. **It overlaps the `FEATURES.md` maintenance contract in shape** —
+   both are "propagate in the same filing." An engineer may prefer to
+   generalise that contract rather than mint a peer.
+
+**This librarian's recommendation:** **ACCEPT THE SUBSTANCE; prefer the
+*Update protocol* scope-note home over a number, at one occurrence.**
+The substance is not in doubt — it is measured, and the correction is
+already applied in three places above. What is arguable is whether a
+one-occurrence propagation duty earns a peer number when the same
+deciding argument the engineer used for the R87 and R156 amendments
+(*"a rule that only qualifies another rule is a scope note, not a
+peer"*) points at the *Update protocol* section here.
+
+**— END OF THE PROPOSAL AS FILED.**
+
+---
+
+### PROPOSED 2026-08-06 (continuation 109) — R87's operative failure is about competing EXPLANATIONS, not only about instruments — proposed as an R87 AMENDMENT, not a new number — AWAITING ENGINEER RULING; NOTHING MINTED
+
+**Status AS FILED: a librarian PROPOSAL. NO number, NOT in force.**
+Proposed deliberately as an **amendment to R87**, so that if accepted
+**nothing is minted and the ceiling stays R158** (R159 next free).
+
+#### Why this is being raised at all — R87 already contains the sentence
+
+R87's 2026-08-06 amendment states the operative failure in general
+terms already:
+
+> *"two explanations exist for one silence — 'the behaviour is absent'
+> and 'my instrument is wrong' — and the alarming one gets reported
+> without eliminating the boring one."*
+
+**But every one of its six occurrences is an INSTRUMENT** — a trace, a
+screenshot harness, a PowerShell filter, a stale coordinate. The rule's
+binding text is scoped to *"a diagnostic claim of the shape 'X did not
+run'"*, which is a claim about **running code**. **Two new occurrences
+are the same failure with no instrumented code anywhere in them.**
+
+#### The two new occurrences
+
+| # | Observation | Alarming explanation, reported | Dull explanation, true, checkable in <1 min |
+|---|---|---|---|
+| **A** | Pass 23.3's Backlog entry says *"Depends on 23.2"*; two discharges shipped without 23.2 | *"the dependency assumption may be over-strong elsewhere in decision 023's graph"* — **a claimed defect in a decision record's dependency model**, filed into `ROADMAP.md` | **the citation was stale.** The dependency was amended to 26.0 a day earlier, in one location only; 26.0 shipped first (ancestry-verified) |
+| **B** | The engineer had made several diagnostic errors during a long session | *"errors come from moving fast on a tired read"* — **an asserted causal link between context length and the agent's own reliability**, used repeatedly to justify scoping work down and delegating | **no such correlation existed.** On checking, the errors (invented DWM cause, tautological trace, stale coordinates) were **spread across the session, not clustered at the end** |
+
+**Occurrence A's instrument was a DOCUMENT**, and it failed in exactly
+R87's KIND B way — correct instrument, **stale input**. Occurrence B's
+instrument was **the agent's own model of itself**, and it failed in the
+KIND A way — the reading could only ever confirm the hypothesis, because
+no one had looked at *when* the errors actually happened.
+
+#### The proposed amendment text
+
+**Extend R87's binding scope from *"a diagnostic claim about code"* to
+*"any claim of cause"*, keeping the existing enforceable check and
+adding its non-code analogue:**
+
+> **Before filing an explanation for an observation, NAME the competing
+> mundane explanation and say how it was eliminated. Where the
+> observation is a diagnostic reading, the mundane candidate is *"my
+> instrument is wrong or its input is stale"* and the check is R87's
+> existing one — name the trace and the emitting path. Where the
+> observation is a DOCUMENT saying something surprising, the mundane
+> candidate is *"the citation is stale"* and the check is: find the most
+> recent statement of the same fact before believing the oldest one.
+> Where the observation is a claim about the AGENT'S OWN reliability,
+> the mundane candidate is *"the correlation was never measured"* and
+> the check is: list the instances and their positions before asserting
+> a trend.**
+
+#### Why an AMENDMENT and not R159
+
+**The same deciding argument the engineer has now applied three times**
+(R156 at continuation 101/102, R87 at 106, the glyph ruling at 108): *a
+rule that only qualifies another rule is a scope note, not a peer.* R87
+already contains the general sentence; what is missing is that its
+**binding text** and **all six of its occurrences** are code-shaped, so
+a reader looking up *"may I file this explanation?"* finds a rule about
+traces, decides it does not apply to a roadmap citation or to a claim
+about themselves, and makes the mistake while satisfying R87. **One rule
+carrying both makes that path structurally unavailable** — which is
+verbatim the argument that carried at continuation 106.
+
+#### Why it might be REFUSED
+
+1. **Both occurrences are the LIBRARIAN's/agent's own reasoning, not the
+   codebase's.** Every existing R87 row is a commit with a hash. These
+   two have no commit and no code, which may make them a different
+   species of finding — belonging in `C:\personal_rag\claude_code\`
+   (where a lesson has been written; see the report) rather than in a
+   project standing rule.
+2. **Occurrence B is arguably not an epistemics failure at all** but a
+   scoping heuristic that happened to be wrong. Erring toward smaller
+   scope is cheap; the cost of the false premise was near zero.
+3. **Broadening R87 to "any claim of cause" risks making it
+   unfalsifiable again** — the exact objection that killed *"prove the
+   instrument would have fired"* at continuation 106. The proposed text
+   answers this by giving each of the three observation kinds its own
+   concrete check, but an engineer may judge that three checks in one
+   rule is one rule too many.
+
+**This librarian's recommendation: ACCEPT AS AN R87 AMENDMENT, with the
+three-kinds-three-checks form above.** It costs no number, it moves no
+ceiling, and it closes the gap between R87's own general sentence and
+its code-shaped binding text — a gap that has now been walked into
+twice in one day by the agent that wrote the rule's entry.
+
+**A note on where the finding ALSO lives**, so it is not lost if this is
+refused: both occurrences are recorded as a lesson in
+`C:\personal_rag\claude_code\`, which is the cross-project home for
+agent-behaviour findings and survives any ruling made here.
+
+**— END OF THE PROPOSAL AS FILED.**
 
 ## Update protocol
 
