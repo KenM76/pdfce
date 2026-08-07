@@ -308,6 +308,22 @@ fn main() -> std::process::ExitCode {
         c.cullable_pct()
     );
     println!("  clip operations   : {}", c.clips);
+    {
+        // Hits + misses is the application count, so the denominator is
+        // stated rather than left to be inferred (hard rule 10).
+        let served = c.clip_cache_hits + c.clip_cache_misses;
+        if served > 0 {
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "counts fit f64 exactly far beyond any real page"
+            )]
+            let pct = c.clip_cache_hits as f64 * 100.0 / served as f64;
+            println!(
+                "    mask cache      : {} hits + {} built = {} applications ({:.2}% served)",
+                c.clip_cache_hits, c.clip_cache_misses, served, pct
+            );
+        }
+    }
     println!(
         "    mean bbox       : {:.2}% of page (individual), {:.2}% (accumulated)",
         c.mean_clip_indiv_pct(),

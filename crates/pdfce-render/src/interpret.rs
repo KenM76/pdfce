@@ -661,6 +661,7 @@ pub fn trace_paths(
         doc,
         fonts,
         text: None,
+        clip_cache: crate::clip_cache::ClipCache::new(),
         font_cache: HashMap::new(),
         depth: 0,
         active: Vec::new(),
@@ -711,6 +712,7 @@ fn run_nested(
         doc,
         fonts,
         text: None,
+        clip_cache: crate::clip_cache::ClipCache::new(),
         font_cache: HashMap::new(),
         depth,
         active,
@@ -808,6 +810,7 @@ pub fn run_form_at(
         doc,
         fonts,
         text: None,
+        clip_cache: crate::clip_cache::ClipCache::new(),
         font_cache: HashMap::new(),
         depth: 0,
         active: Vec::new(),
@@ -855,6 +858,11 @@ struct Interpreter<'a> {
     /// nested inside the page stops with it rather than running to
     /// completion inside an abandoned render.
     cancel: Option<&'a RenderCancel>,
+    /// Already-built clip masks, so an identical clip applied again
+    /// costs a pointer comparison instead of ~362 µs. Scoped to this
+    /// content stream: masks are keyed partly on device size, and a
+    /// cache outliving one render would be a leak and a hazard.
+    clip_cache: crate::clip_cache::ClipCache,
     /// `Tf` results keyed by resource name.
     ///
     /// Loading a font walks the whole §9.6.6 encoding ladder over 256
@@ -1800,7 +1808,14 @@ impl Interpreter<'_> {
                 // the ALREADY-Matrix-concatenated CTM (step b before
                 // step c — see the fn docs).
                 let form_ctm = inner.ctm;
-                intersect_clip(&mut inner, &path, FillRule::Winding, form_ctm, pixmap);
+                intersect_clip(
+                    &mut inner,
+                    &path,
+                    FillRule::Winding,
+                    form_ctm,
+                    pixmap,
+                    &mut self.clip_cache,
+                );
             }
             None => {
                 // `BBox` is Required (Table 95). Painting unclipped is
@@ -2149,7 +2164,14 @@ impl Interpreter<'_> {
 
         // NOW tighten the clip (§8.5.4: after the path is painted).
         if let Some(rule) = pending_clip {
-            intersect_clip(&mut self.gs.current, &path, rule, ctm, pixmap);
+            intersect_clip(
+                &mut self.gs.current,
+                &path,
+                rule,
+                ctm,
+                pixmap,
+                &mut self.clip_cache,
+            );
         }
     }
 }
@@ -2196,6 +2218,7 @@ fn intersect_clip(
     rule: FillRule,
     ctm: Transform,
     pixmap: &Pixmap,
+    cache: &mut crate::clip_cache::ClipCache,
 ) {
     // MEASUREMENT ABLATION — always false without the `profile` feature,
     // where this folds away entirely.
@@ -2245,6 +2268,36 @@ fn intersect_clip(
         pixmap.height(),
         state.clip.as_ref().map(std::sync::Arc::as_ptr),
     );
+
+    // Has this exact mask already been built under this exact incoming
+    // clip? On the reference CAD sheet the answer is yes 99.83% of the
+    // time — 24,128 applications over 40 distinct masks, one path alone
+    // accounting for 97.3% — and a hit returns the already-intersected
+    // `Arc`, skipping `Mask::new`, `fill_path` AND the multiply.
+    //
+    // The bbox is taken from the cache rather than recomputed below
+    // because it is a function of the same inputs: `clip` and
+    // `clip_bbox` are only ever written as a pair, so a given mask
+    // always carries the same bbox. See `ClipCache::get`.
+    let key =
+        crate::clip_cache::ClipCache::build_key(path, rule, ctm, pixmap.width(), pixmap.height());
+    if let Some((cached, bbox)) = cache.get(key, state.clip.as_ref()) {
+        // Still counted: the census measures how often a clip is
+        // APPLIED, and a served application is an application. Leaving
+        // it out would make the very repetition this cache exploits
+        // vanish from the instrument that found it.
+        if let Some((l, t, r, b)) = bbox {
+            let (w, h) = (pixmap.width() as f32, pixmap.height() as f32);
+            let page_area = w * h;
+            let indiv = ((r - l).max(0.0) * (b - t).max(0.0)) / page_area;
+            crate::profile::note_clip(indiv, indiv);
+        }
+        state.clip_bbox = bbox;
+        state.clip = Some(cached);
+        return;
+    }
+    let incoming = state.clip.clone();
+
     let timed = crate::profile::timing_enabled();
     let t0 = timed.then(std::time::Instant::now);
     let Some(mut mask) = Mask::new(pixmap.width(), pixmap.height()) else {
@@ -2333,7 +2386,19 @@ fn intersect_clip(
         let accum_area = ((accum.2 - accum.0).max(0.0) * (accum.3 - accum.1).max(0.0)) / page_area;
         crate::profile::note_clip(indiv, accum_area);
     }
-    state.clip = Some(std::sync::Arc::new(mask));
+    let built = std::sync::Arc::new(mask);
+    // Cached AFTER intersection, keyed on what was intersected WITH, so
+    // a hit can hand back this exact `Arc` rather than rebuilding and
+    // re-multiplying. `incoming` was cloned before `state.clip` was
+    // overwritten, and holding it keeps its address pinned so pointer
+    // identity stays sound (`clip_cache`'s ABA note).
+    cache.insert(
+        key,
+        incoming,
+        std::sync::Arc::clone(&built),
+        state.clip_bbox,
+    );
+    state.clip = Some(built);
 }
 
 /// Read a six-number `/Matrix` entry (Table 95) as a [`Transform`].

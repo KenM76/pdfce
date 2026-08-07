@@ -53,6 +53,9 @@
 
 pub mod annot;
 pub mod cancel;
+/// Reuse of identical clip masks within one render — see the module's
+/// own docs for the census that justified it.
+pub(crate) mod clip_cache;
 pub mod font;
 pub mod gstate;
 pub mod image;

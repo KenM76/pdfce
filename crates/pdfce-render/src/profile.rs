@@ -217,6 +217,14 @@ pub struct Counters {
     /// such cull was built. Kept as a counter so the next person to
     /// propose one gets the number instead of the intuition.
     pub paints_cullable: u64,
+    /// Clip applications served from the mask cache without rebuilding.
+    ///
+    /// The cache stores the mask AFTER intersection, so a hit skips
+    /// `Mask::new`, `fill_path` and the multiply together — the whole
+    /// ~362 µs, not the ~259 µs a build-only cache would save.
+    pub clip_cache_hits: u64,
+    /// Clip applications that had to build a mask.
+    pub clip_cache_misses: u64,
     /// `W`/`W*` clip operations applied.
     pub clips: u64,
     /// Sum over clips of (this clip path's device bbox area ÷ page area),
@@ -433,6 +441,8 @@ mod imp {
     pub(super) static CLIPS: AtomicU64 = AtomicU64::new(0);
     pub(super) static CLIP_INDIV: AtomicU64 = AtomicU64::new(0);
     pub(super) static CLIP_ACCUM: AtomicU64 = AtomicU64::new(0);
+    pub(super) static CLIP_CACHE_HIT: AtomicU64 = AtomicU64::new(0);
+    pub(super) static CLIP_CACHE_MISS: AtomicU64 = AtomicU64::new(0);
     pub(super) static CLIP_NEW_NS: AtomicU64 = AtomicU64::new(0);
     pub(super) static CLIP_FILL_NS: AtomicU64 = AtomicU64::new(0);
     pub(super) static CLIP_MUL_NS: AtomicU64 = AtomicU64::new(0);
@@ -508,6 +518,8 @@ mod imp {
             paints: PAINTS.load(Relaxed),
             paints_unclipped: PAINTS_UNCLIPPED.load(Relaxed),
             paints_cullable: PAINTS_CULLABLE.load(Relaxed),
+            clip_cache_hits: CLIP_CACHE_HIT.load(Relaxed),
+            clip_cache_misses: CLIP_CACHE_MISS.load(Relaxed),
             clips: CLIPS.load(Relaxed),
             clip_indiv_area_ppm: CLIP_INDIV.load(Relaxed),
             clip_accum_area_ppm: CLIP_ACCUM.load(Relaxed),
@@ -526,6 +538,8 @@ mod imp {
             &CLIPS,
             &CLIP_INDIV,
             &CLIP_ACCUM,
+            &CLIP_CACHE_HIT,
+            &CLIP_CACHE_MISS,
             &CLIP_NEW_NS,
             &CLIP_FILL_NS,
             &CLIP_MUL_NS,
@@ -688,6 +702,28 @@ pub(crate) fn note_paint(clipped: bool, cullable: bool) {
             imp::PAINTS_UNCLIPPED.fetch_add(1, Relaxed);
         } else if cullable {
             imp::PAINTS_CULLABLE.fetch_add(1, Relaxed);
+        }
+    }
+}
+
+/// Record whether a clip application was served from the cache.
+///
+/// Counted separately from [`note_clip`] because a hit and a miss are
+/// the same *application* — the census that justified the cache counts
+/// applications, and folding hits out of it would erase the repetition
+/// the cache exists to exploit.
+///
+/// No-op without the `profile` feature.
+#[inline]
+#[cfg_attr(not(feature = "profile"), allow(unused_variables))]
+pub(crate) fn note_clip_cache(hit: bool) {
+    #[cfg(feature = "profile")]
+    {
+        use std::sync::atomic::Ordering::Relaxed;
+        if hit {
+            imp::CLIP_CACHE_HIT.fetch_add(1, Relaxed);
+        } else {
+            imp::CLIP_CACHE_MISS.fetch_add(1, Relaxed);
         }
     }
 }
