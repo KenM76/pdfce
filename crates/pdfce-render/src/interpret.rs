@@ -1456,18 +1456,20 @@ impl Interpreter<'_> {
             crate::font::GlyphSource::Embedded => {}
         }
         let ctm = self.gs.current.ctm;
-        let clip = self.gs.current.clip.clone();
+        // BORROWED, never cloned — see `paint_path`'s note. A glyph is
+        // one more paint under the same page-sized mask.
+        let clip = self.gs.current.clip.as_ref();
         if self.gs.current.text.fills() {
             let paint = solid(self.gs.current.fill_color);
             // Glyph outlines are filled with the NONZERO winding rule
             // (§9.3.6: filling has "the same effects for a text object
             // as… for a path object"; counters in `o`/`e` are wound in
             // the opposite direction by the font, not by even-odd).
-            pixmap.fill_path(&path, &paint, FillRule::Winding, ctm, clip.as_ref());
+            pixmap.fill_path(&path, &paint, FillRule::Winding, ctm, clip);
         }
         if self.gs.current.text.strokes() {
             let paint = solid(self.gs.current.stroke_color);
-            pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip.as_ref());
+            pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }
     }
 
@@ -2045,14 +2047,29 @@ impl Interpreter<'_> {
 
         // Paint under the CURRENT clip (the deferred-W rule: the new
         // clip must NOT affect this paint).
-        let clip = self.gs.current.clip.clone();
+        //
+        // # BORROWED, never cloned
+        //
+        // `clip` is an `Option<tiny_skia::Mask>` holding a **page-sized**
+        // coverage buffer — one byte per device pixel. This used to be a
+        // `.clone()`, which meant every fill and every stroke memcpy'd the
+        // whole page before painting anything.
+        //
+        // Measured on a 129,515-path CAD drawing (2026-08-07): ~114,000
+        // paints × a 1 MB mask at scale 1 is ~108 GB of pointless memory
+        // traffic for a single page, and it scales with page area, so the
+        // cost of drawing one hairline grew with the size of the paper it
+        // was drawn on. Nothing needed the copy — `fill_path`/`stroke_path`
+        // take `Option<&Mask>`, and the clip is not mutated until
+        // `intersect_clip` below, which is after the last use.
+        let clip = self.gs.current.clip.as_ref();
         if fill && let Some(rule) = fill_rule {
             let paint = solid(self.gs.current.fill_color);
-            pixmap.fill_path(&path, &paint, rule, ctm, clip.as_ref());
+            pixmap.fill_path(&path, &paint, rule, ctm, clip);
         }
         if stroke {
             let paint = solid(self.gs.current.stroke_color);
-            pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip.as_ref());
+            pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }
 
         // NOW tighten the clip (§8.5.4: after the path is painted).
@@ -2092,9 +2109,49 @@ fn intersect_clip(
     };
     mask.fill_path(path, rule, true, ctm);
     if let Some(old) = &state.clip {
+        // Multiply ONLY inside the new path's device-space bounds.
+        //
+        // Outside them `fill_path` wrote nothing and `Mask::new` zeroed
+        // the buffer, so `new_px` is 0 there and `0 × old / 255 == 0` —
+        // the multiply is provably a no-op. Restricting the loop is an
+        // identity, not an approximation.
+        //
+        // It matters because clips in real drawings are SMALL relative to
+        // the paper. The CAD sheet this was measured on (2026-08-07) has
+        // 24,142 clip operations on a 1191×842 page; multiplying the full
+        // page each time is ~24 GB of work to combine rectangles that
+        // mostly cover a few percent of it. The whole-page loop made the
+        // cost of clipping a corner of the drawing depend on the size of
+        // the drawing.
+        let w = mask.width() as usize;
+        let h = mask.height() as usize;
+        let (x0, y0, x1, y1) = match path.bounds().transform(ctm) {
+            // Clamp to the mask; a clip may legitimately hang off-page.
+            Some(b) => (
+                (b.left().floor().max(0.0) as usize).min(w),
+                (b.top().floor().max(0.0) as usize).min(h),
+                ((b.right().ceil().max(0.0) as usize) + 1).min(w),
+                ((b.bottom().ceil().max(0.0) as usize) + 1).min(h),
+            ),
+            // No usable bounds: fall back to the whole page rather than
+            // silently skipping the intersection.
+            None => (0, 0, w, h),
+        };
+        // Row SLICES, not indexing. An indexed inner loop costs a bounds
+        // check per pixel and does not autovectorize; slicing the row once
+        // and zipping keeps the SIMD the full-page version got for free.
+        // Measured: the indexed form was SLOWER than the whole-page loop
+        // it replaced at 0.25x and 0.5x, because a vectorized pass over
+        // the whole page beats a scalar pass over part of it.
         let old_data = old.data();
-        for (new_px, old_px) in mask.data_mut().iter_mut().zip(old_data.iter()) {
-            *new_px = ((u16::from(*new_px) * u16::from(*old_px)) / 255) as u8;
+        let new_data = mask.data_mut();
+        for y in y0..y1 {
+            let row = y * w;
+            let new_row = &mut new_data[row + x0..row + x1];
+            let old_row = &old_data[row + x0..row + x1];
+            for (n, o) in new_row.iter_mut().zip(old_row.iter()) {
+                *n = ((u16::from(*n) * u16::from(*o)) / 255) as u8;
+            }
         }
     }
     state.clip = Some(mask);
