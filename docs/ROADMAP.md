@@ -92,6 +92,23 @@ free), operator questions stay **(bb)**. Re-measured by **running**
 `tools/check-ledger-numbers.py` before and after (R106/R133), not read out
 of prose.
 
+> **[★ AMENDED 2026-08-07 (twentieth filing) — `R166` HAS SINCE BEEN
+> MINTED, out of exactly the material this entry reports.** The ledger
+> sentence above is **true as of this filing** and is left as filed; it is
+> **not** a live ceiling claim. **The live ceiling is R166; R167 is next
+> free.** The rule is *a number whose instrument no longer exists is not
+> evidence* — the three two-orders-of-magnitude errors in this entry's own
+> headline are its three occurrences, and `tools/render-profile`, built
+> here, is the carrier that discharges it for the render subsystem.
+>
+> **Two pointers, because this entry's forward reference does not resolve
+> inside this file.** *"The rule judgement below"* was filed to
+> **`ARCHITECTURE.md` §12**, not to a later section of `ROADMAP.md`; the
+> argued proposal is there and the binding text is in `R166`'s entry under
+> *Standing rules*. Recorded rather than silently repaired, because a
+> reader who follows the phrase and finds nothing needs to know where it
+> went.]**
+
 #### ★ SAY THE UNGLAMOROUS THING FIRST: NOTHING GOT FASTER
 
 **1× is still ~10 s.** No optimisation was built, none was possible, and a
@@ -481,6 +498,16 @@ is one) stand as supporting reasons, not as the decision.
 **`R166` remains FREE and remains recorded as considered-and-refused for
 its own separate candidate.** The number is not consumed by either
 refusal.
+
+> **[★ AMENDED 2026-08-07 (twentieth filing) — `R166` IS NOW CONSUMED,
+> and by NEITHER of the two candidates this paragraph refuses.** Both
+> refusals stand exactly as filed. **`R166` was minted the same day for a
+> third candidate** — *a number whose instrument no longer exists is not
+> evidence* — which passes the *work-versus-care* test this paragraph
+> applies, in the opposite direction to both refusals. **Live ceiling
+> R166; R167 next free.** Full ruling, including why each of the
+> engineer's five objections was withdrawn, in `R166`'s own entry under
+> *Standing rules*, which is canonical.]**
 
 **★ NO PASS ID IS MINTED FOR THE REMAINING RENDER WORK, and the reason is
 now stronger than when it was first given.** A number assigned blind to a
@@ -901,6 +928,25 @@ were the obvious next moves and would have been aimed at 5% of the cost.**
 itself loses nothing — it is filed to `D:\dev\rag\rust\`, where the reader
 who needs it is the one doing the search. **`R166` stays free, and stays
 considered-and-refused for its own separate candidate.**
+
+> **[★ AMENDED 2026-08-07 (twentieth filing) — `R166` IS NO LONGER FREE.
+> THE ABLATION REFUSAL ABOVE STANDS UNCHANGED.** The ablation candidate is
+> still **REFUSED**, on the three grounds as filed, and nothing here
+> revives it. **`R166` was minted the same day for a THIRD, unrelated
+> candidate** — *a number whose instrument no longer exists is not
+> evidence* — so **the live ceiling is R166; R167 is next free.**
+>
+> **The two are close enough to be confused, so the boundary is stated.**
+> *"Ablate before optimising"* tells someone to **run a measurement**; it
+> commissions **work**, which is why it was refused here and stays refused.
+> `R166` tells someone **what they may not act on** when a measurement
+> cannot be repeated; it commissions **care**. **The ablation error that
+> produced the 10.1 s figure is an INSTANCE of R166** — the probe measured
+> construction plus use and did not outlive the question — **but the fix
+> for it is a harness, not an admonition**, exactly as this paragraph
+> argued. `tools/render-profile` is that harness, it now exists, and it is
+> recorded in R166's entry as the carrier that discharges the render
+> subsystem **and no other**.]**
 
 ### verification — THE FULL EXTERNAL CORPUS, SWEPT END TO END POST-FIX: **3,759 files written by pdfce and read back by an independent implementation — 0 regressions, 0 hangs, 502 improved** (no Pass ID, NO COMMIT — a measurement record, run by the OPERATOR; the entry that makes the three defect entries below mean something) — 2026-08-07, measured at `fa4f83c` / tree clean at `737f14a`, branch `pass-8-redaction`
 
@@ -2955,6 +3001,13 @@ for every output surface*** under *Backlog* — which surfaces have an
 independent judge today and which do not, each absence established by named
 grep. **This gate is one row of it.** See the ***RESOLVED 2026-08-07***
 section under *Standing rules* for the refusal's full reasoning.
+
+> **[★ AMENDED 2026-08-07 (twentieth filing) — the refusal above stands;
+> only the ledger clause is stale.** *"R166 NOT minted; ceiling stays
+> R165"* is **true of that ruling** and the *acquire-a-foreign-oracle*
+> candidate **remains refused**. **`R166` was minted the same day for an
+> unrelated candidate** (*a number whose instrument no longer exists is not
+> evidence*), so **the live ceiling is R166; R167 is next free**.]**
 
 #### ★ THE FIRST REAL RESULT — 115 pdfbox corpus files: **0 REGRESSIONS, 3 IMPROVED, 24 REFUSED by pdfce**
 
@@ -23111,6 +23164,16 @@ nothing gets forgotten, not as a commitment to build in this order.
   work is **scheduled**, not remembered. An admonition could not have
   produced the table below; that is the whole argument for the conversion.
 
+  > **[★ AMENDED 2026-08-07 (twentieth filing) — this Backlog entry is
+  > UNCHANGED; only the parenthetical ledger clause is stale.** The
+  > *acquire-a-foreign-oracle* candidate **remains refused** and this list
+  > remains what was filed instead. **`R166` was minted the same day for a
+  > different candidate** — *a number whose instrument no longer exists is
+  > not evidence* — so **the live ceiling is R166; R167 is next free.**
+  > **The two rulings share a test and split on its direction**: this one
+  > commissions work (refused, converted to the list below); `R166`
+  > commissions care (minted).]**
+
   **THE FINDING IT DISCHARGES**, in one sentence: *every test pdfce has reads
   pdfce's output with pdfce's own parser, and a closed loop cannot see a
   defect both halves share* — demonstrated **three times in one day, on
@@ -28901,6 +28964,174 @@ not a judgment call:**
   is renumbered.** Pass family stays **43**; decision records stay **031**;
   operator questions stay **(bb)**.
 
+  > **[★ AMENDED 2026-08-07 (twentieth filing) — `R166` IS NOW MINTED**
+  > (*a number whose instrument no longer exists is not evidence*,
+  > immediately below). **The ceiling is R166; R167 is next free.** Decision
+  > 030's three still-unminted contingent candidates and the
+  > cross-RAG-handoff proposal — recorded in the paragraph above as taking
+  > R166 — **now take R167**, by the same read-the-live-ceiling transfer
+  > (R106/R133) that has moved them R157 → R158 → R159 → R161 → R162 →
+  > R163 → R164 → R165 → R166 → R167. **This is the FIFTH such transfer
+  > this session. Nothing is renumbered**; the paragraph above is left
+  > exactly as filed.**]**
+
+- **R166 — A number whose instrument no longer exists is not evidence. It
+  may be REPORTED, but nothing may be SCOPED, ORDERED or BUILT on it until
+  a second measurement is possible (methodology; no decision number;
+  librarian-proposed WITH a recommendation TO MINT, ENGINEER-RULED IN after
+  every one of his own objections was tested and withdrawn; 2026-08-07,
+  three figures wrong by two orders of magnitude in one day across
+  `76200e9` / `4475fe6` / `6b33789`; carrier `tools/render-profile`).**
+
+  **The finding, in its enforceable form:**
+
+  > **Before a measured figure is allowed to rank work, justify a Pass,
+  > close an option or appear as a premise in a document, ask: *can this be
+  > measured again today, by someone who is not me?* If the probe was
+  > ad-hoc, deleted, uncommitted, or lives only in a fork or a scratch
+  > buffer, the number is a REPORT, not EVIDENCE. It may be stated, with
+  > its provenance named. It may NOT be the reason anything is scoped,
+  > ordered, refused or built. The obligation is discharged the moment a
+  > STANDING instrument exists that would produce the figure again — which
+  > is why this rule points at ARTIFACTS, not at vigilance.**
+
+  **The three occurrences, all on 2026-08-07, all load-bearing, all wrong
+  by two orders of magnitude.** The bar in this project is two; this
+  cleared it before lunch.
+
+  | # | figure as filed | figure on re-measurement | mechanism |
+  |---|---|---|---|
+  | 1 | `Mask::new` = **10.1 s** of the remaining 18 s | **1.02 s** | a bad ablation — the probe measured construction **plus** use |
+  | 2 | mean clip bbox = **0.663%** of the page | **66.36%** | a unit error — a fraction printed as a percent |
+  | 3 | clip cull rate = **73.71%** | **1.34%** | wrong state scope — the probe read the wrong graphics state |
+
+  **★ THE THIRD ONE NEVER REACHED A DOCUMENT, AND THAT CONTRAST IS THE
+  RULE'S OWN BEST ILLUSTRATION.** Errors 1 and 2 were filed, propagated —
+  error 2 into **four** documents and **eleven** locations — and became the
+  ranking premise for the renderer's entire remaining work order. Error 3
+  was identical in kind and was caught inside the fork **because a standing
+  instrument existed by then**. Nothing about the three errors differs
+  except whether a second measurement was cheap at the moment the number
+  was produced. **That is the whole rule, demonstrated rather than
+  argued.**
+
+  **★ WHY EACH OBJECTION FAILED — recorded because THIS is the reusable
+  part.** The engineer raised five grounds against minting, ruled them
+  himself, and reversed on all five. They are filed as a checklist for the
+  next candidate, not as a confession.
+
+  1. ***"There is no single mechanism to name."*** **Wrong, and it is
+     backwards.** Standing rules in this section name **CONDITIONS**, not
+     mechanisms. R162 asks *could my assertion ever have come out false?*
+     across every mechanism by which an absence can be vacuous; R164 asks
+     *does this verdict depend on its neighbours?* across every kind of
+     batch. Both span many mechanisms and neither is weakened by it.
+     **The diversity here — bad ablation, unit error, wrong state scope —
+     is precisely what makes this a RULE rather than a bug report**: three
+     unrelated mechanisms producing one condition is the signature of a
+     class, and a single mechanism would have argued for a fix instead.
+  2. ***The occurrence bar.*** **Passes, and by a WIDER margin than R164
+     did.** Three occurrences in one day against a two-occurrence bar —
+     and **R164 itself was minted on ONE**, with a documented overrule.
+     A candidate that clears the bar outright, on the same day a
+     one-occurrence candidate was let through, cannot be refused on
+     counting.
+  3. ***"It commissions work, not care."*** **THE DECISIVE ONE — and it
+     cuts the other way.** That ground was the stated reason for refusing
+     *both* the ablation candidate (*"ablate before optimising"*) and the
+     earlier R166 candidate (*"acquire a reader you did not write"*). Both
+     of those tell someone to **DO something**, and work is scheduled, not
+     remembered. **This one commissions CARE**: it constrains what may be
+     *believed* and *acted on*, it is honoured by **NOT ACTING**, and it
+     costs nothing to obey. **The engineer applied his own test and got the
+     SIGN wrong** — recorded plainly, because a test that is applied
+     without checking its direction will misfire again, and the next
+     candidate deserves the correction rather than the precedent.
+  4. ***R163's carrier.*** **Discharges the INSTANCE, not the CLASS.**
+     `tools/render-profile` is committed and even prints a note when clips
+     cover a large share of the page, so *this* premise cannot be silently
+     re-adopted. But R163's own stated limit is that it binds where a
+     compiler **or equivalently mechanical check** does the work, and a
+     harness is neither: **it only runs when someone runs it**, and it
+     guards **render** numbers only. The next load-bearing figure produced
+     by a deleted probe will be in the text pipeline, the writer or the
+     parser, and `render-profile` will be silent about it.
+  5. ***Redundancy against the family.*** **It does not reach.** R164
+     covers a verdict **contaminated by its neighbours** — it would have
+     caught error 1 and **neither** error 2 nor error 3. R162 governs
+     **absence** claims and their positive controls; **none of the three
+     was an absence claim.** R87 requires that a claim be **established
+     rather than inferred**, and **all three WERE established — once,
+     wrongly**, which is the exact case R87 does not reach. The uncovered
+     ground is *a verdict with no second opinion available at all*, as
+     against R164's *verdict contaminated by the company it kept*.
+
+  **★ THE LIMIT, STATED AS PART OF THE RULE.**
+
+  - **It does NOT forbid reporting a one-off number.** A figure measured
+    once, with its provenance named, is a legitimate thing to write down —
+    and this project writes plenty of them. What it forbids is the number
+    being the **reason** for a decision.
+  - **It does NOT require re-measuring before every mention.** The
+    obligation attaches at the moment a figure is used to scope, order,
+    refuse or justify, not at the moment it is quoted.
+  - **The three forbidden verbs are the whole scope: SCOPE, ORDER, BUILD.**
+    Ranking a work order, sizing a Pass, closing an option, justifying a
+    refusal.
+  - **It is satisfied by an ARTIFACT, not by vigilance.** The instant a
+    standing instrument exists that would produce the figure again, the
+    rule is discharged for that subsystem — permanently, and without anyone
+    remembering it. **That is deliberate**: a rule whose satisfaction
+    condition is "be careful" is a rule that decays, and this one is
+    designed to be retired subsystem by subsystem as harnesses land.
+  - **It says nothing about whether the number is RIGHT.** An
+    instrument-backed figure can still be wrong (R164 exists for one way).
+    This rule is about **re-measurability**, which is a property of the
+    instrument, not of the value.
+
+  **Where it sits relative to the neighbours it is most likely to be
+  confused with.** The *is-my-evidence-real?* family divides by **which way
+  the evidence fails**, and this is a fourth way:
+
+  - **Against R87** (*established, not inferred*) — R87 asks whether a
+    claim was measured at all. **All three occurrences WERE measured.**
+    R87 is satisfied and the number is still not evidence.
+  - **Against R159** (*a lenient reader repairs the reading on the way
+    out*) — no leniency was involved in any of the three; the probes
+    reported exactly what they computed.
+  - **Against R162** (*an absence proves nothing until the container is
+    shown capable*) — none of the three was an absence claim.
+  - **Against R164** (*a verdict contaminated by its neighbours*) — the
+    closest neighbour, and it catches **one** of the three. R164's subject
+    is a verdict whose value depends on **other inputs**; this rule's
+    subject is a verdict with **no second opinion available at all**.
+  - **Against R163** (*prefer a mechanical carrier to a rule*) — R163 is
+    the reason this rule points at artifacts. It was tested against R163
+    and survived because the available carrier binds one subsystem; **as
+    carriers accumulate, R163 progressively hollows this rule out, and that
+    is the intended end state.**
+
+  **See** `R87` / `R159` / `R162` / `R164` (the family this joins),
+  `R163` (the carrier preference that shapes its discharge condition),
+  `R106`/`R133` (the ceiling transfer below), `ARCHITECTURE.md` §12's
+  2026-08-07 entries for the argued proposal and the ruling, `FEATURES.md`'s
+  *Interactive-speed rendering* row (the work order this rule was born
+  policing), and — for the two measurements that produced it —
+  `D:\dev\rag\rust\tiny_skia_mask_pixmap_size_mismatch_drops_the_paint_silently.md`
+  and
+  `C:\personal_rag\pdf\lesson_20260807_cad_clip_geometry_census_66pct_page_bbox_single_subpath.md`.
+
+  **Ceiling is now R166** (was R165). **R167 is next free.** Decision
+  030's three still-unminted contingent candidates and the
+  cross-RAG-handoff proposal — last recorded as claiming R166 — **now take
+  R167**, by the same read-the-live-ceiling transfer (R106/R133) that has
+  moved them R157 → R158 → R159 → R161 → R162 → R163 → R164 → R165 →
+  R166 → R167. **This is the FIFTH such transfer this session, and saying
+  so is the point of stating it** — the claim has never been renumbered,
+  only re-pointed at the live ceiling. **Nothing is renumbered.** Pass
+  family stays **43**; decision records stay **031**; operator questions
+  stay **(bb)**.
+
 ### RESOLVED 2026-08-07 — *"acquire a reader you did not write, because your own coverage is correlated"* — **CONSIDERED AND REFUSED. R166 NOT MINTED; the ceiling stays R165.**
 
 **RULING (operator, 2026-08-07, sixteenth filing): REFUSED.** The candidate
@@ -28955,6 +29186,26 @@ decision 030's three still-unminted contingent candidates and the
 cross-RAG-handoff proposal **keep their existing claim on R166**, exactly as
 recorded in R165's entry above. **Nothing is renumbered.** Pass family stays
 **43**; decision records stay **031**; operator questions stay **(bb)**.
+
+> **[★ AMENDED 2026-08-07 (twentieth filing) — THE NUMBER `R166` IS NOW
+> CONSUMED, BY A DIFFERENT CANDIDATE. THIS REFUSAL IS UNTOUCHED.** The
+> *acquire-a-foreign-oracle* candidate recorded in this section **remains
+> REFUSED, on all four grounds above, and is not revived by anything
+> here.** What changed is only the ledger: **`R166` was minted the same day
+> for an unrelated candidate** — *a number whose instrument no longer
+> exists is not evidence* — so **the ceiling is R166 and R167 is next
+> free**, and the contingent claims recorded above as holding R166
+> **transfer to R167** (the fifth such transfer this session). **Nothing is
+> renumbered**; the paragraph above is left exactly as filed.
+>
+> **Read the two together, because they were decided on the SAME test and
+> came out opposite ways, which is the useful part.** Both were measured
+> against *does this commission WORK, or CARE?* This section refused its
+> candidate because *acquire a reader* commissions **work**, and work is
+> scheduled rather than remembered. `R166` was minted because *do not build
+> on an unrepeatable number* commissions **care**, is honoured by not
+> acting, and costs nothing. **The test is not a bar to clear; it has a
+> direction, and the direction is the answer.**]**
 
 **See** `R163` (the mechanical-carrier preference that decided it), `R87` /
 `R159` / `R162` / `R164` (the *is-my-evidence-real?* family the finding
@@ -30023,6 +30274,17 @@ than performed silently. Pass family stays **43**; decision records stay
 > unchanged in substance**; only the ceiling moved. The heading and the
 > paragraph above are left exactly as filed.**]**
 
+> **[★ AMENDED AGAIN 2026-08-07, twentieth filing — the ceiling moved
+> once more.** `R166` **is minted** (*a number whose instrument no longer
+> exists is not evidence*). **Ceiling R165 → R166; R167 next free**, and
+> the contingent claims **transfer R166 → R167** — the **fifth** such
+> transfer this session. **R164 itself is again unchanged in substance**,
+> and is cited in R166's entry as the nearest neighbour: R164 catches a
+> verdict **contaminated by its neighbours** and caught **one** of R166's
+> three occurrences; R166 catches a verdict with **no second opinion
+> available at all**, which is why the other two got through. The heading
+> and both paragraphs above are left exactly as filed.**]**
+
 **Three things the ruling settled that the proposal could only ask for,
 recorded here because each was a real cost:**
 
@@ -30237,6 +30499,16 @@ amendment will meet it. R159 was **not** minted; the ceiling stays
 > checker does not print. Amended here **because this section's own rule
 > demands it**: an amendment filed against fewer than every editable
 > location that states the fact forks the record.**]**
+
+> **[★ AMENDED AGAIN 2026-08-07, twentieth filing — same reason, one
+> ceiling later.** The sentence *"the ceiling stays R158"* in the body
+> above remains **true of its own ruling** and is still not a live claim;
+> the footer immediately above is likewise **true of the fifteenth
+> filing**. **The live ceiling is now `R166`** (R167 next free), `R166`
+> having been minted this filing. **Read from
+> `tools/check-ledger-numbers.py`, exit 0, not from prose** — and amended
+> here, again, because this section's own rule is the reason the whole
+> location set gets walked on every minting rather than the nearest one.]**
 
 **The occurrence it is derived from, in one paragraph, because the shape
 matters more than the instance.** Pass 23.3's dependency was amended from

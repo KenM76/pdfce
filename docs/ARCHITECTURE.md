@@ -9478,6 +9478,16 @@ with a forward pointer.
   one-occurrence claim against a two-occurrence bar; **R163** prefers a
   mechanical carrier) stand as support, not as the decision.
 
+  > **[★ AMENDED 2026-08-07 (twenty-third entry) — the ablation refusal
+  > STANDS; `R166` is no longer free.** *"Ablate before optimising"* remains
+  > **declined**, on this ground, unchanged. **`R166` was minted the same
+  > day for a third candidate** — *a number whose instrument no longer
+  > exists is not evidence* — which passes the **work-versus-care** test in
+  > the **opposite** direction: it is honoured by *not acting*, at zero
+  > cost. **Live ceiling R166; R167 next free.** The ablation error that
+  > produced the 10.1 s figure is an **instance** of R166, but its fix is
+  > the harness this paragraph asked for, not an admonition.]**
+
   **★ BYTE-IDENTITY IS A CLAIM ABOUT ALL PIXELS, SO ITS WITNESSES MUST SPAN
   ALL PIXEL-PRODUCING SURFACES.** The CAD sheet has **zero images and 242
   text elements**: it is an excellent instrument for path-and-clip cost
@@ -9703,3 +9713,98 @@ with a forward pointer.
   `fixtures/`, by the dispatch's explicit scope. The `crates/` and
   `tools/` corrections for the same 100× error arrived earlier, inside
   `6b33789`.
+
+  > **[★ RULED 2026-08-07 (twenty-third entry, below) — `R166` IS MINTED,
+  > AND THE OPERATOR REVERSED HIMSELF ON ALL FIVE OF HIS OWN OBJECTIONS.**
+  > The candidate recommended in *the rule judgement* above was ruled **IN**
+  > by the engineer. **Ceiling R165 → R166; R167 is next free**, and
+  > decision 030's three still-unminted contingent candidates plus the
+  > cross-RAG-handoff proposal **transfer R166 → R167** — the **fifth**
+  > such transfer this session. **Nothing is renumbered**; the entry above
+  > is left exactly as filed. Binding text and the full ruling live in
+  > `ROADMAP.md`'s *Standing rules*, `R166`, which is canonical.
+  >
+  > **The reversal that matters, recorded here because this entry is where
+  > the objections were tested:** the ground the operator had used to refuse
+  > *both* prior candidates — ***"it commissions work, not care"*** — is the
+  > one that **decided this candidate the other way**, and he said so
+  > himself. **He applied his own test and got the SIGN wrong.** A test with
+  > a direction, applied without checking the direction, will misfire again;
+  > it is filed as a checklist item rather than as a confession.]**
+
+- **2026-08-07 (twenty-third entry this day) — `R166` IS MINTED: A NUMBER
+  WHOSE INSTRUMENT NO LONGER EXISTS IS NOT EVIDENCE. It may be REPORTED,
+  but nothing may be SCOPED, ORDERED or BUILT on it until a second
+  measurement is possible.** No commit — a `docs/`-only filing over
+  `6502d51`. No Pass minted, no decision record, no operator question.
+  **Ceiling R165 → R166; R167 is next free**, and decision 030's three
+  contingent candidates plus the cross-RAG-handoff proposal **transfer
+  R166 → R167** (the **fifth** such transfer this session). Re-measured by
+  **running** `tools/check-ledger-numbers.py` (**exit 0**) and
+  `tools/check-passes-filed.py` (**exit 0**) before and after, per
+  R106/R133 — not read from prose.
+
+  **Why `R166` is architecture and not bookkeeping.** It constrains what
+  may enter a **work order** — which options get closed, which Passes get
+  sized, which subsystems get optimised. The renderer's entire remaining
+  plan was ranked, for a day, on a figure produced by a probe that no
+  longer existed; **item 1′ was scoped, dispatched and filed in four
+  documents on a number that was wrong by 100×.** A rule that governs which
+  measurements may rank work is a rule about how this project decides what
+  to build, which is §12's subject.
+
+  **The three occurrences** — `Mask::new` **10.1 s → 1.02 s**, mean clip
+  bbox **0.663% → 66.36%**, cull rate **73.71% → 1.34%** — are tabulated in
+  the twenty-second entry above. **The third never reached a document**,
+  because by then `tools/render-profile` existed and the fork caught it.
+  **Nothing distinguishes the three except whether a second measurement was
+  cheap at the moment the number was produced**, which is the rule stated
+  as an experiment rather than as an argument.
+
+  **★ THE ARCHITECTURAL CONSEQUENCE, AND IT IS THE REASON THE RULE POINTS
+  AT ARTIFACTS.** R166 is discharged, permanently and per-subsystem, by a
+  **standing instrument** — not by care. `tools/render-profile` discharges
+  it for `pdfce-render` and **for nothing else**: it only runs when someone
+  runs it, and it reports render numbers only. **The next load-bearing
+  figure produced by a deleted probe will be in the text pipeline, the
+  writer or the parser.** The design instruction that follows is concrete:
+  **when a subsystem's performance or census figures start ranking work, it
+  earns a committed harness before the ranking is acted on**, and the
+  harness is the cheaper answer than the rule every time (R163). **R166 is
+  written to be hollowed out by its own carriers**, and that is the
+  intended end state rather than a weakness.
+
+  **Its limit, because it is the part most likely to be over-read.** It
+  does **not** forbid reporting a one-off number, and it does **not**
+  require re-measurement before every mention. **The scope is three verbs
+  — scope, order, build.** A figure may be stated with its provenance
+  named; it may not be the *reason* for a decision.
+
+  **Where it sits in the *is-my-evidence-real?* family.** R87 asks whether
+  a claim was established at all — **all three occurrences were**. R159
+  asks whether a lenient reader repaired the reading — **no leniency was
+  involved**. R162 governs **absence** claims — **none of the three was
+  one**. R164 catches a verdict **contaminated by its neighbours** — it
+  catches occurrence 1 and **neither of the other two**. The uncovered
+  ground, and R166's subject, is **a verdict with no second opinion
+  available at all**.
+
+  **The proposal was filed with a recommendation TO MINT and the ruling
+  agreed** — the inverse of R165, which was minted against its proposer's
+  recommendation. Both are recorded because **the disposition is the
+  point**: a close call handed over with both sides argued is what this
+  project wants from a librarian, in either direction. Full text:
+  `ROADMAP.md` *Standing rules*, `R166`. Measurements:
+  `D:\dev\rag\rust\tiny_skia_mask_pixmap_size_mismatch_drops_the_paint_silently.md`
+  and
+  `C:\personal_rag\pdf\lesson_20260807_cad_clip_geometry_census_66pct_page_bbox_single_subpath.md`.
+
+  **Git and backup state — CHECKED, not inferred (hard rule 8 as amended,
+  `b1368ed`).** `git rev-parse HEAD` → **`6502d51`**; `git status
+  --porcelain` → **empty**, and **no engineering fork is live** — measured
+  by that command at dispatch time rather than asserted from memory, which
+  is the correction this session was owed twice. `git remote -v` →
+  **empty**; the bundle remains the only copy. A **fresh bundle was
+  created and verified** by this filing — see the **twentieth filing's**
+  `SESSION_LOG.md` entry for the tip check, which is the part
+  `git bundle verify` does **not** establish.
