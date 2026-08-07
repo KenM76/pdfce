@@ -19820,3 +19820,236 @@ operator questions **(bb)**. **Both checkers re-run after this filing:
 
 **Backup currency is not verifiable from the documents** — the engineer
 should check `D:\Dev\pdfce-backups\` if it matters.
+
+> **✅ BOTH FLAGGED ITEMS ABOVE ARE DISCHARGED by the NINTH filing, same
+> day (2026-08-07).** **`R163` IS MINTED** — the engineer ruled the
+> candidate this entry left open (*"I agree and I am ruling it"*), and the
+> **ceiling is now R163, R164 next free**. **`LEGAL.md` §6's opening
+> paragraph is CORRECTED**, along with every other editable `docs/`
+> location carrying the same stale claim. This entry is left exactly as
+> filed; see the ninth filing below.
+
+---
+
+## 2026-08-07 (ninth filing) — **`R163` IS MINTED** (prefer a compile error over a rule that asks a human to remember), the "still undecided" LICENCE claim is swept out of `docs/`, and §6.5.5's veraPDF correction gains its ATTRIBUTION
+
+**No code changed. No commit filed. No Pass shipped, no Pass ID minted, no
+decision record opened.** A documentation-correctness filing with three
+parts, dispatched by the engineer after the eighth filing named a
+standing-rule candidate and flagged one stale line.
+
+**Shipped:**
+- *(nothing — no Pass)*
+
+### 1. `R163` IS MINTED — the engineer ruled the candidate the eighth filing left open
+
+> **Prefer making the omission a COMPILE ERROR over writing a rule that
+> asks a human to remember.**
+
+**Ruling, in the engineer's own words:** *"You named it, judged it earned a
+number, and left R163 free rather than minting it. I agree and I am ruling
+it."* The two-step protocol (librarian names and argues, engineer rules)
+worked as designed and is left visible in the record — the eighth filing's
+*"IT IS NOT MINTED HERE"* block is annotated, not rewritten.
+
+**The argument, which is the reusable part:**
+
+1. **It is the COMPLEMENT of the R87 / R159 / R162 family, not a fourth
+   member.** All three of those ask *"is my evidence real?"* — after the
+   fact, about an artefact that already exists. R87: *did I look in the
+   right place?* R159: *did my reader repair the reading on the way out?*
+   R162: *could my assertion ever have come out false?* **R163 acts before
+   any evidence is needed**, removing the class of omission rather than
+   improving detection of it.
+2. **★ R160's own amendment already concedes the weaker form, in writing** —
+   the strongest item, because the project conceded it against itself:
+   *"a verbal warning was already given, in the dispatch, and was ignored.
+   A rule number would have been ignored the same way,"* and *"the
+   mitigation that would actually work is tooling."* **R163 generalises
+   that concession from dispatch discipline to code structure**, and turns
+   it from an apology into a first question.
+3. **Two instances in one day, both structural beating procedural** —
+   `FieldAuthorDisclosures::any()` becoming a **destructuring** so a new
+   field is a compile error (`8a8678e`), and the `git add -A` case whose
+   only working mitigation was agreed to be **mechanical** rather than a
+   rule. That meets the project's two-occurrence promotion bar (R156's two
+   mis-verifications; R87's four-then-five).
+
+**★ THE LIMIT IS INSIDE THE RULE, not beside it — stated because without it
+R163 will be over-applied.** It binds **only** where a compiler, or an
+equivalently mechanical gate (a failing test, a non-zero exit, a rejecting
+schema), **can** carry the obligation. **Where it cannot — dispatch
+discipline, screenshot/visual verification (R86), test-corpus sourcing
+(project rule 7), and judgment rules generally (R83/R124, R123, rule 4's
+disclosure duty) — a rule is still the right instrument, and R163 is NOT a
+licence to skip writing one.** The falsifiable test the rule carries:
+***name the construction that would refuse the omission.*** If it fits in a
+sentence, build it and skip the rule; if naming it takes a paragraph of
+hypotheticals, the rule is right and R163 has been satisfied by asking. A
+second limit is stated too: the construction must not be more fragile or
+more obscure than the omission it prevents. **R92 is R163's nearest
+neighbour** — both prefer removing the second place a fact can be stated
+over remembering to keep two places in agreement.
+
+**Stale-location amendments for the mint (four, append-only with dated
+markers, nothing deleted):** `ROADMAP.md`'s Pass 20.5 candidate block, its
+Ledger, and the Backlog bucket's F5 amendment; `ARCHITECTURE.md`'s tenth
+2026-08-07 entry (twice — the candidate paragraph and its "Nothing minted"
+ledger). Each said *R163 is free*; each now points at the ruling.
+
+### 2. The licence sweep — "still undecided" is six days stale, and it was in more than one place
+
+**The flagged line:** `LEGAL.md` **§6's opening paragraph** read *"pdfce's
+own license (§1, still undecided) determines what's even usable"* — wrong
+since **2026-08-01**, and wrong in the paragraph that introduces the entire
+dependency-licensing discipline. **§6.1's bullets carried the MIT
+consequence inline the whole time**, so a careful reader was not misled; a
+reader who stopped at the intro, or grepped it, was. **Fourth
+single-location-amendment failure in this project.**
+
+**★ HOW THE SET WAS ESTABLISHED (R87), and the honest limit on the
+completeness claim.** Four passes, **tracked files only** (`git grep`):
+three independent regex patterns (the canonical *licence…undecided*
+phrasing in both word orders and both spellings; a bare `-i undecided`
+sweep of the whole repo, which is what found `about.toml` and the
+`jbig2.rs` header; and the *not-open-source / OSS licen / licence…open
+item* family), **plus a fourth pass of simply READING §6 and §6.1 end to
+end.** **Pass four is the load-bearing one:** it found §6.1's heading
+(*"why it gates the §1 decision"*), which **matches none of the three
+patterns** — it states the staleness without using any of the stale words.
+**Therefore no "grep came back clean" claim is made.** The claim actually
+made is: *every location matching patterns 1–3 was enumerated and
+dispositioned, plus one found only by reading; further prose-only instances
+that no pattern would surface may exist.*
+
+**Corrected in place** (editable `docs/`, dated markers, original text
+struck-not-deleted): `LEGAL.md` §6's opening paragraph and §6.1's heading
+note; `PRIOR_ART.md`'s egui font-licence note; and
+`docs/ui_specs/gui-polish-current-featureset.md` **twice**, plus a
+correction footer on that document.
+
+**Deliberately NOT edited, each with its reason recorded:** `LEGAL.md` §7's
+two 2026-07-23 log lines (**correct at their date** — forward-pointer
+markers only, and the first records that **only the licence half is
+superseded**; its publish gate survives); `docs/decisions/*.md`, six files
+(**append-only by hard rule** — the editable mirrors carry the correction);
+`docs/SESSION_LOG.md`'s ~25 hits (append-only, every one a dated status
+line true on its own date).
+
+**★ SIX STALE STATEMENTS OUTSIDE `docs/` — FOUND, NOT FIXED, because the
+dispatch scoped this filing to `docs/`. These are OWED:**
+
+| File | What it still says |
+|---|---|
+| **`README.md`:46** | *"License status (currently undecided — do not publish)"* — **the worst one**: the repo's front door, and the first line a new reader or LLM sees about licensing |
+| `about.toml`:49 | the same *"(…undecided) software license"* sentence `PRIOR_ART.md` just had corrected |
+| `crates/pdfce-gui/src/ui_text.rs`:1142 | *"the project's licence is still undecided, CLAUDE.md rule 8"* — **shipped code**; the behaviour is still right, the stated reason is obsolete |
+| `crates/pdfce-core/src/image_codec/jbig2.rs`:14 | *"copyleft against an undecided `LEGAL.md` §1"* — the disqualification is now **stronger**, not weaker |
+| `.claude/agents/pdfce-engineer.md`:145, 411 | *"License status (undecided — don't publish)"* — read at the start of every engineering session |
+| `.claude/agents/pdfce-inkscape-librarian.md`:43 | *"pdfce's still-undecided license"* |
+
+Already self-corrected and needing nothing:
+`.claude/agent-memory/pdfce-librarian/project_uncommitted_repo_worktree_risk.md`
+(stale at line 24, corrected at line 36).
+
+**★ THE THROUGH-LINE, and the reason this is a decision-log entry rather
+than a typo fix:** in every one of these locations the *undecided licence*
+was doing duty as the reason **not to publish**. The licence decision
+removed that reason; **the publish gate survived it on its own footing — a
+separate, still-ungranted operator authorization** (§1, rule 8). Anything
+citing the undecided licence as its publish gate must be **re-pointed at
+the authorization, not simply deleted**, or the gate keeps its force and
+loses its stated basis. `ui_text.rs`'s empty-state comment is exactly that
+case: the *no release claim* behaviour is still correct.
+
+### 3. §6.5.5's veraPDF correction gains its ATTRIBUTION — the hazard was the reader's
+
+**Asked for by the engineer, about his own earlier claim.** §6.5.5 already
+recorded that veraPDF's CLI banner **names both licence branches** and is
+not misleading — **that reading is confirmed, not changed**, and nothing in
+it blamed veraPDF's wording. **What was missing is whose truncation it
+was:** the original GPL-only read came from a **`head -5`** invocation that
+cut at exactly line 5 and dropped line 6 (*"and the Mozilla Public License
+v2 or later."*). **The trap was set by the tool invocation, on the reader's
+own side of the pipe.** §6.5.5 now says so explicitly, and adds that a
+future reader must not "fix" the banner or file an upstream issue about it.
+
+**The generic hazard is kept rather than softened**, because the shape is
+reproducible: ***a truncated read of a WRAPPED sentence yields a complete,
+plausible, and WRONG sentence*** — one that carries **no syntactic signal
+that it was cut**. A truncated word announces itself; a truncated sentence
+does not. `head -n`, `--max-count`, a tail-limited capture and a preview
+pane all produce it. **Countermeasure: read claim-bearing tool output
+whole, or grep with trailing context (`-A2`); never quote the first
+matching line as the complete statement.**
+
+**RAG escalation:**
+`C:\personal_rag\claude_code\lesson_20260807_truncated_read_of_wrapped_sentence.md`
+(new) — **filed to `claude_code`, not `D:\dev\rag\rust\` and not
+`personal_rag\pdf\`**, because it is **tool-invocation methodology**:
+neither Rust/egui ecosystem nor PDF-producer behaviour. It is arguably the
+sharpest instance of the day's theme (*evidence that could not have come
+out differently*) precisely because the truncation was **self-inflicted by
+the invocation, not imposed by the data**.
+
+### Ledger
+
+**Standing-rule ceiling R162 → R163. R164 is next free.** Decision 030's
+three still-unminted contingent candidates and the cross-RAG-handoff
+proposal — last recorded as claiming **R163** — **now take R164**, by the
+same read-the-live-ceiling transfer (R106/R133) that has moved them
+R157 → R158 → R159 → R161 → R162 → R163 → R164. **Nothing is renumbered**,
+and **R163's slot was free**, so nothing is displaced. **This transfer has
+now happened twice in one day and is stated explicitly each time.**
+
+**No Pass ID minted** (Pass family **43**, 43.0 highest); **decision records
+stay 031**; **operator questions stay (bb)**. **`FEATURES.md` is
+deliberately UNCHANGED** — no capability moved, and a features row is not
+the right home for a methodology rule or a documentation correction.
+
+**Both checkers re-run after this filing:** `tools/check-ledger-numbers.py`
+→ **exit 0**, ceilings `Pass 43 / R163 / decision 031`, `--stats`
+`125 / 163 / 31` (**the rules count moved 162 → 163, exactly the delta one
+mint predicts — forecast before the run**, per the gate's own
+blind-spot lesson; the Pass-pair count moved 124 → 125 because this
+filing's amendments added one `(section, Pass ID)` pair, not a Pass);
+`tools/check-passes-filed.py` → **exit 0**, *"every Pass-claiming commit is
+filed"*, with its pre-existing benign `note` line (Pass 26.2) unchanged.
+
+**⚠ NOT MINE, reported not touched:** `git status` at the end of this
+filing shows **`crates/pdfce-gui/src/diag.rs` modified**. **This filing
+edited nothing outside `docs/`** (and `C:\personal_rag\claude_code\`), and
+`tools/` was left alone as instructed. Flagged so the engineer knows the
+tree is not clean and can attribute that change himself — **the librarian
+cannot and does not claim to know its provenance.**
+
+**Documents amended (six):** `ROADMAP.md` (R163 minted + three
+stale-location amendments), `ARCHITECTURE.md` (two stale-location
+amendments + a new §12 twelfth entry), `LEGAL.md` (§6 opening, §6.1 heading
+note, §6.5.5 attribution, §7 two markers + a new dated entry),
+`PRIOR_ART.md`, `docs/ui_specs/gui-polish-current-featureset.md`, and this
+log. **`tools/` was NOT touched** — the engineer holds it and commits it
+himself.
+
+**Still in flight / for next session:**
+
+- **OWED — the six out-of-`docs/` stale licence statements above**, led by
+  `README.md`. One-line fixes; they need an edit outside this filing's
+  scope, and `ui_text.rs`'s should be **re-pointed at the publish
+  authorization**, not deleted.
+- **ENGINEER CALL, still open — should `pdfce-ui-specialist` be obliged to
+  FILE its spec to `docs/ui_specs/`?** Unchanged from the eighth filing.
+- **OWED TOOLING, still open — `tools/gui-drive.ps1` should REJECT an
+  unrecognised step loudly** rather than dropping it silently; and the
+  R160-amendment guard against a fork staging paths outside its dispatch.
+  **Both are now R163-shaped**: each is an obligation a mechanical gate can
+  carry, which is exactly when R163 says not to settle for a rule.
+- **Pass 20.5's cut half** (GUI field deletion, per-type detail fields) and
+  **Pass 20.3 (F3)** — unchanged; F3's verb name is still **NOT RULED**.
+- **F0's disposition** — **still owed by the engineer**, now unchanged
+  across six filings.
+- **The rendered appearance of GUI-created fields is still NOT visually
+  verified** (eighth filing's owed verification), unchanged.
+
+**Backup currency is not verifiable from the documents** — the engineer
+should check `D:\Dev\pdfce-backups\` if it matters.

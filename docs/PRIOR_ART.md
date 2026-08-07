@@ -456,10 +456,17 @@ the same way, in minutes, whenever they next matter.
     `epaint_default_fonts` bundles fonts under OFL-1.1 and
     Ubuntu-font-1.0. These are **font-file** licenses (they permit
     embedding; attribution is satisfied by `THIRD_PARTY_LICENSES.md`) —
-    they do NOT constrain pdfce's own (still-undecided, §1/`LEGAL.md`
-    §1) *software* license the way a copyleft software dependency would.
+    they do NOT constrain pdfce's own (~~still-undecided,~~ **MIT since
+    2026-08-01 —** §1/`LEGAL.md` §1) *software* license the way a
+    copyleft software dependency would.
     Recorded explicitly so a future session doesn't misread them as
     copyleft contamination when scanning the generated attribution file.
+    **[⚠ CORRECTED 2026-08-07 — the struck words were stale for six days;
+    the finding itself is UNCHANGED and is if anything firmer under MIT.
+    Part of the licence sweep recorded in `LEGAL.md` §7's 2026-08-07
+    second entry. The identical sentence still stands, uncorrected, in
+    `about.toml` — outside this sweep's `docs/`-only scope, and flagged
+    there.]**
   - **Reaffirmed:** the `oxidize-pdf` audit (then the "OPEN QUESTION"
     above, since resolved 2026-07-30) remained the outstanding gate
     before Pass 1 — Pass 0 deliberately shipped a thin

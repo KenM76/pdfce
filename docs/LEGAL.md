@@ -201,10 +201,34 @@ filing is ever pursued (do the USPTO search then, not now).
 pdfce leans on the existing Rust/OSS ecosystem rather than
 reinventing everything (see `docs/PRIOR_ART.md` for the actual
 survey). Every dependency brings its own license, and pdfce's own
-license (§1, still undecided) determines what's even usable — this
-section is the binding discipline for that intersection.
+license — ~~(§1, still undecided)~~ **MIT, decided 2026-08-01 (§1)** —
+determines what's even usable; this section is the binding discipline
+for that intersection.
+
+> **⚠ CORRECTED 2026-08-07. The struck words above were WRONG for six
+> days.** §1 has read *"DECIDED: MIT"* since 2026-08-01, and §6.1 below
+> has carried the consequence inline the whole time — so no careful
+> reader was misled, but a reader who stopped at this paragraph was.
+> **This is a single-location-amendment failure**, the same defect the
+> *Update protocol*'s same-filing propagation duty exists to prevent, and
+> the fourth time this project has hit it. The original wording is struck
+> rather than deleted so the failure stays visible. **What pdfce's own
+> licence gates has NOT changed in substance** — §6.1 has stated the MIT
+> consequence (GPL/AGPL categorically out) since the decision was made.
+> Every other editable location carrying the stale claim was corrected in
+> the same filing; see §7's 2026-08-07 second entry for the full swept
+> set, the patterns used, and the stale statements outside `docs/` that
+> are reported rather than edited.
 
 ### 6.1 The permissive/copyleft split, and why it gates the §1 decision
+
+> **⚠ HEADING IS HISTORICAL, corrected 2026-08-07 — read it in the past
+> tense.** It gated the §1 decision; **§1 was decided (MIT) on
+> 2026-08-01**, so this split now runs the other way — it says what a
+> *dependency* may be, given a licence pdfce has already chosen, not what
+> pdfce's licence may be. The heading is left unedited because it is a
+> section anchor other documents link to. **The bullets below were already
+> correct** and were amended in place on the decision date.
 
 - **Permissive** (MIT, Apache-2.0, BSD-2/3-Clause, Zlib): safe to
   depend on regardless of what pdfce's own license ends up being.
@@ -437,6 +461,43 @@ installed `D:\tools\verapdf\verapdf.bat` with `--version` and with
 `--help` and read the complete output of each, rather than grepping for a
 licence keyword — the grep is the failure mode being described.
 
+**★ AMENDED 2026-08-07 (same day, later) — THE ATTRIBUTION, which is the
+part that was still missing: the hazard was the READER'S, not veraPDF's.**
+The engineer who made the original claim identified the exact mechanism
+and asked for it to be recorded: **the earlier read used `head -5`**,
+which cut the banner at exactly line 5 and dropped line 6 — the line
+carrying *"and the Mozilla Public License v2 or later."*
+
+**Nothing above blamed veraPDF's wording, and that reading is confirmed
+correct rather than changed:** this subsection already says the banner
+*"names BOTH branches. It is not misleading; it is line-wrapped."* **What
+is added is whose truncation it was.** The paragraph above describes the
+hazard generically (*"anyone who greps the banner, reads a truncated
+capture, or quotes the first matching line"*), which leaves open the
+reading that the *banner* set the trap. **It did not. The trap was set by
+the tool invocation, on the reader's own side of the pipe** — a
+line-limited read of output the reader chose to limit. veraPDF's text
+is fine, and a future reader must not "fix" the banner, file an upstream
+issue about it, or cite it as a licensing ambiguity.
+
+**Why the generic hazard is nevertheless kept, and not softened into
+"someone made a mistake":** the shape is **reproducible and
+self-inflicted**, which is the worst combination. *A truncated read of a
+WRAPPED sentence yields a complete, plausible, and WRONG sentence — one
+that carries no syntactic signal that it was cut.* A truncated word or a
+dangling clause announces itself; a truncated **sentence** does not.
+`head -n`, `--max-count`, a tail-limited capture, and a preview pane all
+produce it, and the reader has no cue to check. **The countermeasure is
+mechanical**: when a licence, a version, a warranty or any other
+claim-bearing line is read from tool output, read the output **whole**,
+or grep with trailing context (`-A2`), and never quote the first matching
+line as the complete statement.
+
+**Escalated as a cross-project finding to `C:\personal_rag\claude_code\`**
+— it is tool-invocation methodology, neither PDF-domain nor
+Rust-ecosystem, and this instance is its sharpest form because the
+truncation came from the invocation rather than from the data.
+
 #### 6.5.6 Two boundaries that must not be blurred
 
 - **§6.2's "stop and ask the user before adding copyleft" is SATISFIED,
@@ -467,11 +528,18 @@ licence keyword — the grep is the failure mode being described.
 - **2026-07-23** — Legal posture document created at project bootstrap.
   License: **undecided, open item**. No public commit/publish until
   decided. Spec-sourcing table established. Test-corpus rule established.
+  **[⚠ SUPERSEDED as to the licence by the 2026-08-01 entry below — MIT.
+  Marker added 2026-08-07; the entry itself is correct AS OF ITS DATE and
+  is not edited. The publish gate is NOT superseded: it survives the
+  licence decision as a separate, still-ungranted operator
+  authorization.]**
 - **2026-07-23 (same-session amendment)** — Added §6, open-source
   dependency licensing & attribution discipline, per user request to
   survey existing OSS projects for prior art and ensure proper
   crediting. Established: permissive-vs-copyleft classification gates
-  what's usable given pdfce's own (still undecided) license; no
+  what's usable given pdfce's own (still undecided **[⚠ as of 2026-07-23
+  only — MIT since 2026-08-01; marker added 2026-08-07, entry not
+  edited]**) license; no
   dependency added without a per-instance check, copyleft always
   flagged to the user; attribution via generated `cargo-about` output
   (`THIRD_PARTY_LICENSES.md`), not hand-maintained; research findings
@@ -561,3 +629,99 @@ licence keyword — the grep is the failure mode being described.
   repository** (established by reading every `git grep -i verapdf` hit
   over tracked files). See `ARCHITECTURE.md` §12's 2026-08-07 eleventh
   entry for the architectural-decision-log mirror.
+- **2026-08-07 (second entry this day) — THE "STILL UNDECIDED" LICENCE
+  CLAIM IS SWEPT OUT OF EVERY EDITABLE `docs/` LOCATION, six days late;
+  and §6.5.5's veraPDF correction gains its ATTRIBUTION.** No legal
+  position changes in this entry. **§1 has said MIT since 2026-08-01 and
+  is unchanged; the publish gate is unchanged and still ungranted.** What
+  changes is that the document stops contradicting itself.
+
+  **The defect.** §6's opening paragraph read *"pdfce's own license (§1,
+  still undecided) determines what's even usable"* — **wrong since
+  2026-08-01**, and wrong in the paragraph that introduces the whole
+  dependency-licensing discipline. **§6.1's bullets carried the MIT
+  consequence inline from the decision date**, so a reader who continued
+  past the intro got the right answer; a reader who stopped at the intro,
+  or grepped it, did not. **This is a single-location amendment** — the
+  failure mode the *Update protocol*'s same-filing propagation duty was
+  written for (`ROADMAP.md`), and the **fourth** occurrence in this
+  project.
+
+  **★ HOW THE SET WAS ESTABLISHED (R87 — stated so the completeness claim
+  is checkable, not asserted).** Four passes, **tracked files only**
+  (`git grep`, so untracked scratch and build output cannot inflate or
+  deflate the count):
+
+  | # | Pattern / method | What it was for |
+  |---|---|---|
+  | 1 | `licen[sc]e[^.]{0,40}(still )?(undecided\|not (yet )?decided\|to be decided\|TBD)` and its mirror image | the canonical phrasing, both word orders, both spellings |
+  | 2 | bare `-i undecided` over the whole repo | catches the claim when it is nowhere near the word *licence* (this is how `about.toml` and the `jbig2.rs` header were found) |
+  | 3 | `not .{0,20}open.?source`, `OSS licen`, `licen[sc]e[^.]{0,30}open item` | the *"must not be described as open source"* half of the same stale posture |
+  | 4 | **reading §6 and §6.1 end to end** | **this is the pass that found §6.1's heading** (*"why it gates the §1 decision"*), which **matches none of the three patterns** — it states the staleness without using any of the stale words |
+
+  **Pass 4 is the load-bearing one and the reason no "grep came back
+  clean" claim is made here.** A stale fact does not have to contain the
+  word that made it stale. **The honest completeness claim is therefore:
+  every location matching patterns 1–3 was enumerated and dispositioned,
+  plus one found only by reading. There may be further prose-only
+  instances that no pattern would surface**; that limit is stated rather
+  than papered over.
+
+  **Corrected in place (editable `docs/`, dated markers, text preserved —
+  nothing deleted):** §6's opening paragraph (struck + corrected, with the
+  failure named); §6.1's heading (historical-tense note beneath it — the
+  heading itself left intact because other documents anchor to it);
+  `docs/PRIOR_ART.md`'s egui font-licence note (*"pdfce's own
+  (still-undecided, §1/`LEGAL.md` §1) software license"*);
+  `docs/ui_specs/gui-polish-current-featureset.md` **twice** — §1's
+  empty-state-heading rationale and the `ui_text.rs` doc-comment it
+  specifies, which is **the upstream source of the stale comment now
+  living in shipped code**.
+
+  **Deliberately NOT edited, with the reason in each case:**
+  - **§7's two 2026-07-23 entries above** — a dated log entry that was
+    **correct at its date** is not a defect. Both get forward-pointer
+    markers; neither is edited. The first one's marker also records that
+    **only the licence half is superseded** — its publish gate survives.
+  - **`docs/decisions/*.md`** (six files carry the phrase) — **append-only
+    by hard rule; never edited.** Per the propagation duty, the editable
+    documents that mirror them (this file, `ROADMAP.md`, `ARCHITECTURE.md`)
+    are canonical and now carry the correction.
+  - **`docs/SESSION_LOG.md`** (~25 hits) — append-only, and every hit is a
+    dated *"still undecided"* status line that was true on its own date.
+    The 2026-08-01 entry records the decision.
+
+  **★ STALE STATEMENTS OUTSIDE `docs/` — FOUND, NOT FIXED, because this
+  filing was scoped to `docs/`. These are OWED and are the operator's /
+  engineer's to clear:**
+
+  | File | What it still says | Why it matters |
+  |---|---|---|
+  | **`README.md`** line 46 | *"`docs/LEGAL.md` \| License status (currently undecided — do not publish)"* | **The worst one.** The repo's front door, and the one line a new reader (human or LLM) reads about licensing before opening anything else. |
+  | `about.toml` line 49 | *"…pdfce's own (…undecided) software license…"* | inside the `cargo-about` config that generates `THIRD_PARTY_LICENSES.md` |
+  | `crates/pdfce-gui/src/ui_text.rs` line 1142 | *"no tagline, no 'open source'/release claim (the project's licence is still undecided, CLAUDE.md rule 8)"* | **shipped code.** The *behaviour* is still right — no release claim in the empty state, because the **publish** gate is what forbids it — but the stated **reason** is obsolete. |
+  | `crates/pdfce-core/src/image_codec/jbig2.rs` line 14 | *"copyleft against an undecided `LEGAL.md` §1"* | the disqualification still holds and is now **stronger**, not weaker: MIT forecloses GPL FFI outright |
+  | `.claude/agents/pdfce-engineer.md` lines 145, 411 | *"License status (undecided — don't publish)"* | read at the start of every engineering session |
+  | `.claude/agents/pdfce-inkscape-librarian.md` line 43 | *"pdfce's still-undecided license"* | |
+
+  **One is already self-corrected and needs nothing:**
+  `.claude/agent-memory/pdfce-librarian/project_uncommitted_repo_worktree_risk.md`
+  states the stale claim at line 24 and **corrects it at line 36**.
+
+  **The through-line worth keeping, and the reason this is filed as a
+  decision-log entry rather than a typo fix:** in every one of these
+  locations the *undecided licence* was doing duty as the reason **not to
+  publish**. The licence decision removed that reason, and the publish
+  gate survived it on its own footing — **a separate, still-ungranted
+  operator authorization** (§1, project rule 8). **Anything that cites the
+  undecided licence as its publish gate should be re-pointed at the
+  authorization, not simply deleted**, or the gate loses its stated basis
+  while remaining in force.
+
+  **Also in this filing: §6.5.5 gains the attribution it was missing** —
+  the veraPDF CLI banner is fine and names both branches; **the truncated
+  read was self-inflicted by a `head -5` invocation** that cut at line 5
+  and dropped line 6. The generalizable shape (*a truncated read of a
+  wrapped sentence yields a complete, plausible, wrong sentence*) is
+  escalated to `C:\personal_rag\claude_code\`. See `ARCHITECTURE.md`
+  §12's 2026-08-07 **twelfth** entry for the mirror of this record.

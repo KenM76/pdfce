@@ -296,7 +296,10 @@ of the app and it currently reads as inert rather than "ready."
 
 1. **App-name heading**, above the existing hint text, in the same
    centred block. Plain text, no slogan, no "open source"/release
-   claim (rule 8 / license still undecided) — just the name:
+   claim (rule 8 / ~~license still undecided~~ **license is MIT since
+   2026-08-01; the live reason is the still-ungranted PUBLISH
+   authorization, not the licence** — see the correction note at the end
+   of this document) — just the name:
 
    ```rust
    ui.centered_and_justified(|ui| {
@@ -362,6 +365,12 @@ document's Rust verbatim.
 /// Heading shown above the empty-canvas hint, before any file is open.
 /// Plain app name only — no tagline, no "open source"/release claim
 /// (the project's licence is still undecided).
+/// [⚠ 2026-08-07: that parenthetical is STALE — the licence is MIT
+///  (2026-08-01). The rule still holds; its reason is now the
+///  still-ungranted PUBLISH authorization. This spec's text is the
+///  UPSTREAM SOURCE of the identical stale comment now in shipped code
+///  at crates/pdfce-gui/src/ui_text.rs:1142, which is outside this
+///  sweep's docs/-only scope and is flagged as owed.]
 pub fn empty_state_heading() -> &'static str {
     "pdfce"
 }
@@ -806,3 +815,30 @@ explicitly not designing. P1 items are genuine but lower-stakes; take
 as many as time allows in priority order. P2 and the two out-of-scope
 items are recorded so they aren't lost, not because they belong in this
 Pass.
+
+---
+
+## ⚠ CORRECTION FOOTER — added 2026-08-07 by `pdfce-librarian` (licence sweep)
+
+**This spec was authored 2026-07-31 and is not otherwise re-opened.** Two
+places in it state that pdfce's own licence is *"still undecided"* (§P0-5's
+app-name-heading item and the `ui_text.rs` doc comment it specifies). **That
+was true when written and became false on 2026-08-01, when the operator
+chose MIT** (`LEGAL.md` §1).
+
+**Both are marked in place rather than rewritten** — the spec is a dated
+design artifact, and its reasoning at the time is part of the record.
+
+**The design decision itself is UNCHANGED and still correct: no "open
+source" or release claim in the empty state.** Only its *reason* moves.
+The gate was never really the licence — it is **project rule 8's publish
+authorization**, which is separate from the licence, was never granted, and
+is still not granted today. A future reader who sees "MIT" and concludes the
+tagline restriction lapsed would be wrong.
+
+**Downstream consequence, flagged not fixed:** this document's Rust snippet
+is the **upstream source** of the doc comment now shipping at
+`crates/pdfce-gui/src/ui_text.rs:1142`, which carries the stale
+parenthetical verbatim. That file is outside this sweep's `docs/`-only
+scope. Full swept set, method, and the other out-of-`docs/` residue:
+`LEGAL.md` §7's **2026-08-07 second entry**.

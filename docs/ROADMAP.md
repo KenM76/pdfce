@@ -157,6 +157,18 @@ discipline moves from *remembering* to *the type system*.
 > instruction, the librarian names the candidate and the engineer rules.
 > **R163 is the next free number** and is deliberately left free. See
 > *Ledger*, below, and the librarian's report for the argued case.
+>
+> **✅ RULED 2026-08-07, same day, by the engineer — R163 IS MINTED.**
+> *"You named it, judged it earned a number, and left R163 free rather
+> than minting it. I agree and I am ruling it."* The block above is left
+> exactly as filed, because the candidate-not-minted state was correct
+> at the moment it was written and the two-step (librarian names,
+> engineer rules) is the protocol working. **The rule now lives in
+> *Standing rules* as `R163`**, with its limit stated inside it: it
+> governs only cases a compiler (or an equivalently mechanical gate) can
+> carry — dispatch discipline, screenshot verification and corpus
+> sourcing stay rule-shaped, and R163 is **not** a licence to skip
+> writing a rule there. **Ceiling R162 → R163; R164 is next free.**
 
 #### `165dd49` — the GUI surface
 
@@ -355,6 +367,18 @@ ceiling unchanged at (bb).**
 
 **Both checkers re-run after this filing:** `check-ledger-numbers.py`
 **exit 0**, `check-passes-filed.py` **exit 0**.
+
+> **✅ SUPERSEDED IN ONE RESPECT, 2026-08-07 (same day, ninth filing) —
+> R163 IS MINTED.** The engineer ruled the candidate this ledger left
+> open: *"I agree and I am ruling it."* **The standing-rule ceiling is
+> now R163; R164 is next free**, and decision 030's three still-unminted
+> contingent candidates plus the cross-RAG-handoff proposal move to
+> **R164**. **Everything else in the paragraph above stands unchanged**
+> — no Pass ID minted, Pass family 43, decision records 031,
+> operator questions (bb). The paragraph is left as filed; it was
+> correct when written. Both checkers re-run after the minting filing:
+> `check-ledger-numbers.py` **exit 0**, `check-passes-filed.py`
+> **exit 0**.
 
 ### Pass 20.0 — the field-hierarchy correctness substrate, and the field-path resolver that COMPLETES Pass 20.1's P0 floor (core + CLI) — 2026-08-07, committed `a3d885b` (F0) and `f809857` (F1 completion), branch `pass-8-redaction`. **Pass 20.0 SHIPPED for the first time** — filed 2026-08-03, skipped through two prior slices, now built. **Pass 20.1 has its P0-blocking gap CLOSED but stays PARTIAL** — the resolver and the full collision branch decision 020 §3.3.1 called the floor now exist; `/TU` R105, `/Tabs` disclosure and the CLI verb-name question do not yet
 
@@ -19557,6 +19581,11 @@ nothing gets forgotten, not as a commitment to build in this order.
   leaves R163 free for the engineer to rule on** (*prefer making an
   omission a compile error over writing a rule that asks a human to
   remember*).
+  **✅ RULED THE SAME DAY (ninth filing) — that candidate IS NOW `R163`**,
+  minted in *Standing rules* with its own stated limit (it binds only
+  where a compiler or equivalently mechanical gate can carry the
+  obligation). **Ceiling R162 → R163; R164 is next free.** Nothing else
+  in this bullet changes.
   **PASS 20.5 IS PARTIAL BY CHOICE.** **Field DELETION in the Forms
   panel** — core-complete since `817b268`, scoped into F5 — **and the
   per-type detail fields** (multiline, initial state, the choice option
@@ -25317,6 +25346,124 @@ not a judgment call:**
   that has moved them R157 → R158 → R159 → R161 → R162 → R163. **Nothing
   is renumbered.** Pass family stays **43**; decision records stay
   **031**; operator questions stay **(bb)**.
+
+  > **✅ AMENDED 2026-08-07 (later the same day) — R163 IS NOW MINTED**
+  > (the compile-error-over-remembering rule, immediately below). **The
+  > ceiling is R163; R164 is next free.** Decision 030's three
+  > still-unminted contingent candidates and the cross-RAG-handoff
+  > proposal — recorded in the paragraph above as taking R163 — **now
+  > take R164**, by the same read-the-live-ceiling transfer (R106/R133)
+  > that has moved them R157 → R158 → R159 → R161 → R162 → R163 → R164.
+  > **Nothing is renumbered**; the paragraph above is left exactly as
+  > filed.
+
+- **R163 — Prefer making the omission a COMPILE ERROR over writing a rule
+  that asks a human to remember. Where the compiler can carry the
+  obligation, it must; a rule is the instrument of last resort, not the
+  first (methodology; no decision number; librarian-named, ENGINEER-RULED;
+  2026-08-07, Pass 20.5's `FieldAuthorDisclosures::any()` destructuring).**
+
+  **The finding, in its enforceable form:**
+
+  > **When a defect is "someone will forget to update site B after
+  > changing site A," the first question is whether the language can be
+  > made to REFUSE the omission — an exhaustive `match`, a destructuring
+  > pattern, a `#[non_exhaustive]`-plus-constructor, a newtype that cannot
+  > be built wrong, a `const` assertion. Only when no such construction
+  > exists does the obligation become a rule, a doc comment, or a review
+  > checklist. A rule is a request; a compile error is a guarantee.**
+
+  **Why this is a COMPLEMENT of the R87 / R159 / R162 family and not a
+  fourth member of it.** Those three all ask the same question after the
+  fact, about something already built: **is my evidence real?** R87 —
+  *did I look in the right place, and is there a duller explanation?*
+  R159 — *did my reader repair the reading on the way out?* R162 —
+  *could my assertion ever have come out false?* All three operate on an
+  artefact that exists and on evidence already gathered. **R163 operates
+  BEFORE any evidence is needed: it removes the class of omission rather
+  than improving the detection of it.** The family's unifying property is
+  *evidence that could not have come out differently is not evidence*;
+  R163's is *an obligation the machine can hold should not be held by a
+  person*. They meet only at the point where R163 fails to apply.
+
+  **The evidence, and the first item is the strongest because the project
+  already conceded it against itself.**
+
+  1. **R160's own amendment concedes the weaker form, in writing.** The
+     `git add -A` staging amendment records that *"a verbal warning was
+     already given, in the dispatch, and was ignored. A rule number would
+     have been ignored the same way,"* and that *"the mitigation that
+     would actually work is tooling."* **That is R163's thesis, stated as
+     a limit on a different rule.** R163 generalises the concession from
+     dispatch discipline to code structure, and turns it from an apology
+     into a first question.
+  2. **`FieldAuthorDisclosures::any()`** (`8a8678e`) omitted
+     `group_flags_ignored` — **the second instance of that same omission,
+     one field away**, the first having been fixed in
+     `report_field_disclosures` by a fork whose fix did not reach here.
+     The repair was **not** a corrected `||` chain plus a note asking the
+     next author to remember: `any()` became a **destructuring of the
+     struct**, so **adding a field without handling it here does not
+     compile.**
+  3. **The `git add -A` case, same day**, where the working mitigation was
+     agreed to be **mechanical** (stage by explicit path; a pre-commit
+     check refusing a `docs/` write from a `crates/`-scoped agent) rather
+     than a rule — and was flagged as owed tooling precisely because the
+     rule form had already failed.
+
+  Two instances in one day, both resolving the same way, against this
+  project's stated two-occurrence promotion bar (R156's two
+  mis-verifications; R87's four-then-five).
+
+  **★ THE LIMIT, STATED AS PART OF THE RULE because without it this will
+  be over-applied.** R163 governs **only** the cases where a compiler —
+  or an equivalently mechanical gate: a test that fails, a script that
+  exits non-zero, a schema that rejects — **can** carry the obligation.
+  **Where it cannot, a rule is still the right instrument and R163 is not
+  a licence to skip writing one.** Concretely out of R163's reach, and
+  named so the boundary is checkable rather than felt:
+
+  - **Dispatch discipline** — what a subagent is told, what a brief
+    asserts, how a hand-off is sized (R160's own domain).
+  - **Screenshot / visual verification** — R86's *look at it*; no type
+    system knows what a rendered glyph should look like.
+  - **Test-corpus sourcing and provenance** (project rule 7, `LEGAL.md`
+    §5) — a judgment about rights, not a shape.
+  - **Judgment rules generally** — R83/R124 (absent vs. greyed), R123
+    (properties, not competitors), rule 4's disclosure obligation.
+
+  **The honest test to apply before invoking R163:** *name the
+  construction that would refuse the omission.* If one can be named in a
+  sentence, build it and skip the rule. If naming it takes a paragraph of
+  hypotheticals, the rule is the right instrument and R163 has been
+  satisfied by asking.
+
+  **A second limit, because a compile error is not free.** The
+  construction must not be more fragile or more obscure than the omission
+  it prevents — a destructuring is right because it is the *natural* way
+  to read every field of a struct; a macro-generated cross-check that
+  nobody can debug is not. **R92 (one call site, not two) is R163's
+  nearest neighbour**: both prefer removing the second place a fact can
+  be stated over remembering to keep two places in agreement.
+
+  **Recorded in the author's favour, because the rule is about mechanism
+  and not blame:** the `any()` omission was **found by its own author
+  while reading the type to build on it, before any GUI code was
+  written**, and the structural repair was chosen without prompting. The
+  rule is minted because the *pattern* recurred, not because anyone
+  failed.
+
+  **See** `R160`'s staging amendment (the conceded weaker form), `R92`,
+  `R151`, and — for the family this rule complements rather than joins —
+  `R87`, `R159`, `R162`.
+
+  **Ceiling is now R163** (was R162). **R164 is next free.** Decision
+  030's three still-unminted contingent candidates and the
+  cross-RAG-handoff proposal — last recorded as claiming R163 — **now
+  take R164**, by the same read-the-live-ceiling transfer (R106/R133)
+  that has moved them R157 → R158 → R159 → R161 → R162 → R163 → R164.
+  **Nothing is renumbered.** Pass family stays **43**; decision records
+  stay **031**; operator questions stay **(bb)**.
 
 ### RESOLVED 2026-08-06 — a request to "look like <competitor>" is converted into neutral, operator-confirmed PROPERTIES before any design work — ACCEPTED AS AN AMENDMENT TO R123 IN PLACE; R158 NOT MINTED
 

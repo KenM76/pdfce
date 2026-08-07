@@ -8082,7 +8082,9 @@ with a forward pointer.
   one**, and the pattern — *prefer making the omission a compile error
   over writing a rule that asks a human to remember* — is **named as a
   standing-rule candidate and DELIBERATELY NOT MINTED**; **R163 is left
-  free for the engineer to rule.**
+  free for the engineer to rule.** **✅ RULED THE SAME DAY — see the
+  twelfth entry below: the candidate IS `R163`, and the ceiling is now
+  R163 (R164 next free).**
 
   **The authoring tool joins a NEW ribbon group beside `Forms`, not
   `Forms` itself, because `Forms` documents its own reason for existing as
@@ -8179,6 +8181,12 @@ with a forward pointer.
   operator questions stay **(bb)**. Full build record: `ROADMAP.md`'s
   `Pass 20.5 (PARTIAL)` *Shipped* entry.
 
+  > **✅ AMENDED 2026-08-07 (same day) — the "nothing minted" clause above
+  > is superseded in ONE respect: `R163` IS MINTED**, by the engineer's
+  > ruling on the candidate this entry named. **Ceiling R162 → R163; R164
+  > is next free.** Pass family (43), decision records (031) and operator
+  > questions ((bb)) are unchanged. See the twelfth entry below.
+
 - **2026-08-07 (eleventh entry this day) — veraPDF is ELECTED UNDER
   MPL-2.0, not GPL-3.0, and is an ARMS-LENGTH DEV-TIME TOOL.** Recorded in
   full in `LEGAL.md` §6.5 and §7; summarized here because it is the first
@@ -8203,3 +8211,71 @@ with a forward pointer.
   because a required gate would make it a de facto build dependency. **The
   veraPDF CORPUS (already in use under `LEGAL.md` §5) is a separate
   artifact with separate terms — do not conflate the two.**
+
+- **2026-08-07 (twelfth entry this day) — `R163` IS MINTED: prefer making
+  the omission a COMPILE ERROR over writing a rule that asks a human to
+  remember. Plus a documentation-correctness sweep: every editable
+  location still calling pdfce's licence UNDECIDED is corrected, six days
+  after the MIT decision.** No code changed; no Pass ID, no decision
+  record, no operator question minted. **Ceiling R162 → R163; R164 is next
+  free.**
+
+  **R163, and specifically its LIMIT, is the architectural content.** The
+  rule says that when a defect's shape is *"someone will forget to update
+  site B after changing site A,"* the first question is whether the
+  language can be made to **refuse** the omission — exhaustive `match`,
+  destructuring, newtype, `const` assertion — and that only when no such
+  construction exists does the obligation become a rule. **It is the
+  COMPLEMENT of the R87/R159/R162 family, not a fourth member:** those
+  three ask *is my evidence real?* after the fact; R163 removes the class
+  of omission before evidence is needed. **The evidence is two instances
+  in one day** — `FieldAuthorDisclosures::any()` becoming a destructuring
+  (`8a8678e`, the tenth entry above), and the `git add -A` case
+  whose only working mitigation was agreed to be mechanical — plus, and
+  this is the strongest item, **R160's own staging amendment already
+  concedes the weaker form in writing**: *"a verbal warning was already
+  given, in the dispatch, and was ignored. A rule number would have been
+  ignored the same way."* **R163 generalises that concession from dispatch
+  discipline to code structure.** ★ **The limit is inside the rule, not
+  beside it**: R163 binds only where a compiler or equivalently mechanical
+  gate *can* carry the obligation, and dispatch discipline, screenshot
+  verification (R86) and corpus sourcing (rule 7) stay rule-shaped —
+  **R163 is not a licence to skip writing a rule there.** Full text and
+  the falsifiable *name-the-construction* test: `ROADMAP.md` *Standing
+  rules*, `R163`.
+
+  **The licence sweep — a same-filing-propagation failure with a
+  measurable age.** `LEGAL.md` **§6's opening paragraph** still read
+  *"pdfce's own license (§1, still undecided)"* **six days after
+  2026-08-01's MIT decision**, which §1, §6.1 and §7's own 2026-08-01
+  entry all record correctly. **§6.1 carries the correction inline, so no
+  careful reader was misled — but a careless one was, and this is the
+  fourth time this project has hit a single-location amendment.** Swept
+  with three independent patterns over **tracked files only**
+  (`git grep`), and corrected in every **editable** `docs/` location:
+  `LEGAL.md` §6 opening, `PRIOR_ART.md`'s egui font-licence note, and
+  `docs/ui_specs/gui-polish-current-featureset.md` (twice). `LEGAL.md`
+  §7's two 2026-07-23 log lines were **correct at their date** and get
+  forward-pointer markers rather than edits, per the append-only
+  discipline; `docs/decisions/` is append-only by hard rule and is not
+  touched at all. **Six stale statements OUTSIDE `docs/` are reported,
+  not edited** (`README.md`, `about.toml`, `crates/pdfce-gui/src/
+  ui_text.rs`, `crates/pdfce-core/src/image_codec/jbig2.rs`, and two agent
+  files) — the dispatch scoped this filing to `docs/`. `README.md`'s is
+  the one that matters most: it is the first document a reader opens.
+  **Full record and the exact patterns used: `LEGAL.md` §7's 2026-08-07
+  second entry.**
+
+  **A reading-hazard correction is attributed to its real cause.**
+  `LEGAL.md` **§6.5.5** already recorded that veraPDF's CLI banner names
+  **both** licence branches and is not misleading. What it did not say is
+  **whose hazard it was**: the earlier GPL-only reading came from a
+  **`head -5`** invocation that cut at exactly line 5 and dropped line 6,
+  leaving *"Released under the GNU General Public License v3"* as a
+  complete, plausible, wrong sentence. **The truncation was self-inflicted
+  by the tool invocation, not by veraPDF's wording**, and §6.5.5 now says
+  so. **The generalizable shape — a truncated read of a WRAPPED sentence
+  yields a complete, plausible, WRONG sentence, and the truncation is
+  usually the reader's own `head`/`-n`/`--max-count` — is escalated to**
+  `C:\personal_rag\claude_code\` (tool-invocation methodology, neither
+  PDF- nor Rust-specific).
