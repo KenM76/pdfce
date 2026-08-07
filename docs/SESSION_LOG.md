@@ -22095,6 +22095,13 @@ naming its command:**
   `pdfce-ui-specialist` spec-filing call, F0's disposition, and the
   **`Acrobat_Features` stale-GAP dispatch**.
 
+> **[★ AMENDMENT FOOTER 2026-08-07 (twenty-first filing) — the
+> *"1 STILL OWED — `--ablate` plus a reported FLOOR, which is the R163
+> carrier"* line in this entry is DISCHARGED.** `fa17d54` built it; the
+> owed-tooling item is **CLOSED**. **The R163 bet — artifact over
+> admonition — is settled in the artifact's favour.** Nothing else in this
+> entry changes.]**
+
 ---
 
 ## 2026-08-07 — nineteenth filing: a figure this project filed in four documents was wrong by 100×, and the run that found it bought no milliseconds
@@ -22336,6 +22343,18 @@ retired no-shell disclaimer is not repeated.
   assign, and the case for deferring it is now twice-proven: **two
   successive "next steps" have been retired on measurement.**
 - **The bundle is one commit behind** — `6b33789` is not in it.
+
+> **[★ AMENDMENT FOOTER 2026-08-07 (twenty-first filing) — THE HARNESS
+> ITEM'S ONE REMAINING REQUIREMENT IS MET AND THE ITEM IS CLOSED.** This
+> entry's *"1 STILL OWED: `--ablate` plus a reported FLOOR"* was true as
+> filed. **`fa17d54` built it** — net is now **3 met, 1 part-met, 1
+> withdrawn, 0 owed**. **The floor it asked for is 0.49–0.53 s while pixels
+> vary 64× (scale-flat, per-operation), and clip construction is 86% of the
+> render** — a figure that **reproduces this entry's own per-phase sum
+> within 4% by a second method**, which is `R166`'s first exercise
+> returning a confirmation rather than a correction. Everything else in
+> this entry stands as filed. See the twenty-first filing below.]**
+
 - **Everything carried forward from the eighteenth filing is UNCHANGED**
   except the render order, the 0.663% figure and the harness item: the
   `UNESTABLISHED` foreign-oracle rows, the incremental-writer coverage
@@ -22557,3 +22576,296 @@ lesson, two amended, two indexes).
   name, Pass 38.3's blocked question **(ba)** and 38.5's two re-scope
   items, the `pdfce-ui-specialist` spec-filing call, F0's disposition, and
   the **`Acrobat_Features` stale-GAP dispatch**.
+
+> **[★ AMENDMENT FOOTER 2026-08-07 (twenty-first filing) — THE
+> `--ablate` + FLOOR ITEM IN *Still in flight* ABOVE IS DISCHARGED.**
+> `fa17d54` built it. **The owed-tooling item is CLOSED** (3 met, 1
+> part-met, 1 withdrawn, 0 owed) and should not be carried forward again.
+> **The floor is 0.49–0.53 s while pixels vary 64×** — scale-flat, and
+> clip construction is **86%** of the render. Everything else in that
+> section stands as filed. **This filing's own edits and the twentieth
+> filing's four `docs/` files were committed as `fa17d54`'s predecessor
+> `34c676d`; the bundle now trails `HEAD` by one commit** — see the
+> twenty-first filing's entry below for the checked figures.]**
+
+## 2026-08-07 (twenty-first filing) — **THE STILL-OWED ITEM IS DISCHARGED: `--ablate` + `--ablate-sweep` ship in `fa17d54`, and the FLOOR is 0.49–0.53 s WHILE PIXELS VARY 64×** — scale-flat, per-operation, 148,517 operators; **clip construction is ~8.4 s = 86% of the render and it REPRODUCES THE EARLIER PER-PHASE SUM WITHIN 4% BY A SECOND METHOD**, which is `R166`'s first exercise and it returns a CONFIRMATION. **Mask sampling is FREE.** **Tiling and low-resolution proxies are REFUTED as answers, not merely deprioritised.** **NOTHING MINTED — two candidates weighed, both declined; `R167` stays free**
+
+**Shipped:**
+- **No Pass ID.** `fa17d54` — `--ablate` / `--ablate-sweep` in
+  `tools/render-profile`, plus the `Ablation` type and its confound model
+  in the feature-gated `pdfce-render/profile`. **An out-of-tree tool and an
+  off-by-default flag: no operator capability, no behaviour change, and no
+  timing changed.** 1× is still ~10 s.
+
+**Ledger — re-measured by RUNNING both checkers, before and after:**
+- `tools/check-ledger-numbers.py` → **exit 0**, ceilings
+  `Pass 43 / R166 / decision 031`, unchanged before and after.
+- `tools/check-passes-filed.py` → **exit 0**, before and after.
+- **Standing rules stay R166; R167 is next free.** Pass family stays
+  **43**; decision records stay **031**; operator questions stay **(bb)**.
+
+### 1. ★ THE STILL-OWED ITEM IS DISCHARGED — checked off explicitly
+
+The *OWED TOOLING* item has been carried since the seventeenth filing and
+was reduced by the nineteenth to exactly one unmet requirement:
+**"ablate a named stage and report the FLOOR alongside the total."** That
+requirement was **the R163 mechanical carrier the ablation standing-rule
+candidate was refused IN FAVOUR OF.**
+
+| requirement | verdict at `fa17d54` |
+|---|---|
+| 1 — committed; survives the session | MET (`6b33789`) |
+| 2 — takes a PDF and a scale; reports the split | MET AND EXCEEDED (`6b33789`) |
+| 3 — read / parse / page-tree / rasterize separately | PART MET on a stated separability limit |
+| **4 — ablate a named stage, report the FLOOR** | **★ MET at `fa17d54`** |
+| 4b — per-phase timing | WITHDRAWN on the tool's own argument |
+
+**Net: 3 met, 1 part-met, 1 withdrawn, 0 owed. THE ITEM IS CLOSED**, and is
+marked closed on the item itself under *Next up* as well as in the
+`fa17d54` *Shipped* entry. **The refusal's bet — that an artifact would
+carry the obligation better than an admonition — is settled in the
+artifact's favour.**
+
+### 2. The floor, and the complete map
+
+```
+   0.25         62878       0.49s      7.72s per Mpx
+    0.5        250916       0.48s      1.91s
+      1       1002822       0.49s      0.48s
+      2       4011288       0.53s      0.13s
+```
+
+**0.49–0.53 s across a 64× pixel span.** Per-operation, not per-pixel:
+**148,517 content-stream operators**, identical work at every scale.
+**Pixels are essentially free.**
+
+| centre | at 1× |
+|---|---|
+| interpreter floor | **0.5 s** (scales with nothing) |
+| painting | **~0.8 s** |
+| mask sampling | **free — at the noise floor** |
+| **clip construction** | **~8.4 s = 86% of the render** |
+
+### 3. ★ The tool carries R164 STRUCTURALLY, and that makes it a different artifact
+
+`R164` was minted this morning and violated six hours later by this
+project. The harness does not warn about that class of error — it is built
+so the error cannot be made silently:
+
+- **every ablation implements `confounds()`**, printed **beside** the
+  delta on both output paths;
+- **only empty-confound rows are marked `attributable`**;
+- **`clip-sample` exists solely to BE such a row** — it builds the clip and
+  paints without sampling it, isolating sampling **the one way skipping
+  construction never can**; a unit test asserts its confound list is empty;
+- **an unknown `--ablate` token EXITS 2** — ignoring a typo would render
+  un-ablated and report a **zero delta**, reading as *"this centre is
+  free"*: **a wrong answer wearing the shape of a finding.**
+
+**The durable form: a tool built to DEFEAT a specific past error is a
+different artifact from one that merely measures.** Both produce numbers;
+only one makes the previous mistake expensive to repeat. **R163's
+preference for a mechanical carrier over a rule, one level down.**
+
+### 4. ★ It validated old numbers by a SECOND METHOD — `R166`'s whole point
+
+Clip construction **~8.4 s by ablation** against the per-phase sum
+**5.24 + 2.26 + 1.02 = 8.52 s** — **within 4%, by a different route.**
+`R166` requires a second measurement before a figure may scope, order or
+build; **this is one, and it agrees.** Worth filing precisely because it is
+the *uninteresting* outcome: **a rule that only ever fires on errors never
+shows what a healthy number looks like.** The renderer's remaining work
+order is now `R166`-clean.
+
+### 5. `--repeat 1` inflated a row by 58% — a cold-start artifact lands ENTIRELY in the delta
+
+`clip-build` read **1.17 s at `--repeat 1`** against **0.74 s at
+`--repeat 3`**. The tool now warns below `--repeat 2`, with both figures in
+the warning text.
+
+**Mechanism:** a delta is `baseline − ablated`; cold start is paid in the
+**first render only**, so it **does not cancel between the terms** and
+lands **entirely in the delta**. **A one-shot ablation systematically
+OVERSTATES whatever it ablated**, always in the direction that flatters the
+finding.
+
+**Filed with its limit attached: plausibly a CONTRIBUTING mechanism in the
+10.1 s error, NOT claimed as its cause.** The established cause is confound
+contamination (R164). The cold-start contribution to that specific run is
+unquantifiable now — **the probe is gone, which is `R166`'s own subject.**
+
+### 6. Mask sampling is free, and the way it is reported is the lesson
+
+It reports **`NOT RESOLVABLE at this sample size`**, with the delta, the
+base, and the knob that tightens the bound — not *"removes AT MOST
+−0.01 s"*.
+
+**A negative delta reads as a broken row and buries the finding.** The
+reader concludes the tool is miscounting and stops, losing the one useful
+fact in the row. **Naming the condition makes a null result legible as a
+result.** And it is a null result the people who commissioned it would have
+gotten wrong: a per-pixel multiply against a page-sized buffer on every
+paint looks expensive and is free. **The attributable row's first job was
+to overturn its author's guess.**
+
+### 7. ★ Tiling confirmed dead — and the CAVEAT matters more
+
+**Confirmed:** the floor is scale-flat, so **tiling cannot touch it**.
+Tiles render fewer **pixels**, not fewer **operators**.
+
+**The caveat that changes plans:** at **0.25× the FULL render is 2.57 s,
+not 0.67 s** — clip construction drops only **~4×** for a **16×** pixel
+reduction. **A low-resolution proxy is bounded below by ~2.6 s.**
+Progressive refinement and tiling **help less than pixel count suggests,
+and clips bind either way.**
+
+**Corrected in every location that implied otherwise:** `ROADMAP.md`'s
+*Next up* item 3 cell and a new amendment block over the whole table;
+`ARCHITECTURE.md` §3's `pdfce-render` block and §12's twenty-fourth entry;
+`FEATURES.md`'s *Interactive-speed rendering* row.
+
+### 8. The operator-facing answer, filed WITH its status
+
+**Non-clip work sums to ~1.3 s**, inside the reference's ~1.6 s.
+
+> **★ THAT IS ARITHMETIC OVER SEPARATELY MEASURED PARTS, NOT A
+> MEASUREMENT.** `floor 0.5 + painting 0.8`, each measured in a different
+> configuration, summed. **Nobody has rendered this file in 1.3 s.**
+> `R164` applies, **and the operator said so himself when he reported
+> it** — the qualification is his, not this librarian's, and it is filed
+> attached rather than stripped **because *"pdfce is 1.3 s away"* is
+> exactly the sentence that will get quoted.** The parts do reconcile with
+> the ~10 s total, which is real support. **The reference is
+> uninstrumented; ~1.6 s is context, not an acceptance criterion.**
+
+### 9. ★ NOTHING MINTED — two candidates weighed, both declined
+
+- **(A)** *"A one-shot measurement overstates whatever it ablated."*
+  **Declined.** A fact about a **method**, not a condition on care, and it
+  **already has a mechanical carrier** (the `--repeat < 2` warning).
+  **R163 is decisive** — redundant on the day it would be written.
+- **(B)** *"Report a null result by naming the condition, not by printing
+  a negative delta."* **Declined.** One occurrence against a
+  two-occurrence bar; **reporting-design craft no gate can check.**
+
+Both are recorded as findings so a future filing starts from the argument.
+**`R167` remains free.**
+
+### 10. Gates — the OPERATOR's, relayed (R87)
+
+`cargo test` **2157 passed / 0 failed** · `clippy` **0** ·
+`clippy --features profile` **0** · `fmt`, ui-strings, bypass-paths **0** ·
+`git status --porcelain` **0 lines** · **the ablation and the scale sweep
+were run by the OPERATOR.** `cargo tree` was **not** re-run: `fa17d54`
+touches three files and **no manifest** (`git show --stat fa17d54`), so no
+dependency changed.
+
+### 11. How the absences were established (R87) — with a shell, every claim naming its command
+
+**★ THIS FILING HAS A SHELL AND USED IT** (hard rule 8 as amended today,
+`b1368ed`).
+
+1. ***HEAD and the working tree.*** `git rev-parse HEAD` → **`fa17d54`**;
+   `git status --porcelain | wc -l` → **0**. **The dispatch stated a fork
+   IS live in `crates/` and `tools/`; at the instant these ran, both were
+   clean.** Both facts recorded. **The clean reading is a snapshot, not a
+   claim that no fork is live** — a fork between edits shows clean, and
+   this librarian was handed a wrong tree state twice today in the other
+   direction. **Nothing here describes or anticipates that fork's work.**
+   **★ AND THE CAVEAT PAID OFF WITHIN THE HOUR: re-run at the END of this
+   filing, `git status --porcelain` returns SEVEN lines** — this filing's
+   four `docs/` files plus `crates/pdfce-render/src/interpret.rs`,
+   `crates/pdfce-render/src/profile.rs` and
+   `tools/render-profile/src/main.rs`, **the fork, exactly where the
+   dispatch said.** Clean at the first check, dirty at the second, **with
+   no commit in between.** *A fork between edits*, demonstrated rather than
+   argued. **The dispatch was right; the first reading was merely early.**
+2. ***What the tool actually does.*** **Established by reading the
+   COMMITTED BLOBS** — `git show fa17d54:tools/render-profile/src/main.rs`
+   and `git show fa17d54:crates/pdfce-render/src/profile.rs` — deliberately
+   **not** the working tree, because a live fork can change a working copy
+   under a reader. Verified this way: `confounds()` printed beside every
+   delta; `attributable` only on an empty list; `clip-sample`'s
+   empty-confound unit test; `ExitCode::from(2)` on an unknown token; the
+   `--repeat < 2` warning carrying 1.17/0.74 s; the `NOT RESOLVABLE` branch.
+3. ***The ledger.*** **Established by RUNNING** both checkers (**exit 0**
+   each) before and after. Ceilings read from the tool, not from prose
+   (R106/R133).
+4. ***Remotes.*** `git remote -v` → **empty output.** No remote; publishing
+   remains ungiven.
+5. ***★ THE BACKUP — AND THE DISPATCH'S FILENAME DOES NOT EXIST.***
+   `ls D:\Dev\pdfce-backups\` shows **no `pdfce-20260807-1557.bundle`**.
+   The newest is **`pdfce-20260807-1552.bundle`**; its
+   `refs/heads/pass-8-redaction` is **`34c676d`** (`git bundle
+   list-heads`), and `git log --oneline 34c676d..HEAD` → **exactly one
+   commit**. **So the tip the dispatch quoted is right, the FILENAME is off
+   by five minutes, and the bundle is ONE COMMIT BEHIND.** Reported rather
+   than quietly corrected, because **a filename nobody can find is how a
+   restore fails.**
+6. ***And the dispatch's own caveat is correct and worth restating.*** A
+   tip matching `HEAD` **says nothing about uncommitted work** — a bundle
+   captures committed history only. The twentieth filing hit exactly this:
+   its four `docs/` edits were uncommitted at bundle time and absent from a
+   bundle whose tip matched `HEAD`. **This filing's edits are in the same
+   position: `docs/`-only, uncommitted, and in NO bundle.**
+7. ***`FEATURES.md`.*** **NO box changed and NO row added** — a dev tool is
+   not an operator capability, the **eighth** application of the
+   no-tooling-section precedent. One clause was appended to the
+   *Interactive-speed rendering* row, which is the row the floor governs.
+
+**Documents amended (four, all in-repo):** `ROADMAP.md` (new *Shipped*
+entry; the owed-tooling item CLOSED with its heading struck and its
+requirement-4 cell and Net line amended; the `6b33789` entry's discharge
+sentence footnoted; the *Next up* render table's item 3 cell and a new
+table-wide amendment block), `ARCHITECTURE.md` (§3's `pdfce-render` block +
+§12's twenty-fourth entry + an amendment footer on the twenty-third),
+`FEATURES.md` (one clause), `SESSION_LOG.md` (this entry + a footer on the
+twentieth). **No RAG file was written this filing** — see *For next
+session*.
+
+**Still in flight:**
+
+- **★ THIS FILING'S OWN EDITS ARE UNCOMMITTED AND UNBACKED-UP.** Four
+  `docs/` files. The bundle is the only copy and does not contain them.
+  **A commit and a fresh bundle are owed.**
+- **★ AN ENGINEERING FORK IS LIVE** in `crates/` and `tools/` per the
+  dispatch, diagnosing clip-construction cost — **clean at the instant
+  this filing looked, which proves nothing either way.** Re-establish the
+  tree before quoting anything here as current.
+- **THE OWED-TOOLING ITEM IS CLOSED — do not carry it forward again.**
+- **Sibling owed item, UNAFFECTED:** `tools/gui-drive.ps1`'s
+  build-or-assert-freshness obligation.
+- **`R166`'s carrier gap is unchanged.** `render-profile` now covers render
+  **completely**, and still covers **nothing else**. The text pipeline, the
+  writer and the parser have no standing instrument, so any load-bearing
+  figure from them remains `R166`-blocked from ranking work.
+- **The live render order is `2′` then `3`** — and `3` is now **refuted as
+  an answer**, not merely last. `1` and `1′` remain dead ends; **do not
+  re-scope either.**
+- **A Pass ID for the remaining render work** stays the engineer's to
+  assign.
+- **Everything else carried forward from the twentieth filing is
+  UNCHANGED**, including the `UNESTABLISHED` foreign-oracle rows, the
+  incremental-writer coverage boundary, Pass 20.5's remaining cut half and
+  its owed rendered-appearance check, the multi-page repeated-field
+  labelling gap, Pass 20.3's `/I`/`/TI`/push buttons, Pass 38.3's blocked
+  question **(ba)** and 38.5's two re-scope items, the
+  `pdfce-ui-specialist` spec-filing call, F0's disposition, and the
+  **`Acrobat_Features` stale-GAP dispatch**.
+
+**For next session:**
+
+- **Two RAG findings are owed and were NOT written this filing** (scope was
+  `docs/`-only by dispatch): **(a)** to `D:\dev\rag\rust\` — *a cold-start
+  artifact lands entirely in an ablation delta, so a one-shot ablation
+  overstates whatever it removed by (here) 58%*; **(b)** to
+  `D:\dev\rag\rust\` — *report a null result by naming the condition, not
+  by printing a negative delta.* Both are generalizable beyond pdfce
+  (any Rust benchmarking harness). **Flagged, not silently deferred.**
+- **Nothing needs an operator ruling from this filing.** Both rule
+  candidates were declined on stated grounds; if the operator disagrees
+  with either declination, the arguments are filed in the `fa17d54`
+  *Shipped* entry and `ARCHITECTURE.md` §12's twenty-fourth entry.
+- **One thing to correct at source:** the backup bundle the dispatch named
+  (`pdfce-20260807-1557.bundle`) does not exist on disk; the real one is
+  `pdfce-20260807-1552.bundle`.

@@ -262,6 +262,34 @@ D:\Dev\pdfce\
                                    cost.** See §12's 2026-08-07 twentieth and
                                    twenty-first entries and `ROADMAP.md`'s two
                                    *fix — RENDER PERFORMANCE* entries.
+                                   **★ AND THERE IS NOW A MEASURED FLOOR UNDER ALL
+                                   OF IT (2026-08-07, `fa17d54`,
+                                   `render-profile --ablate-sweep`): 0.49–0.53 s
+                                   while pixels vary 64×.** The floor is
+                                   **SCALE-FLAT**, therefore **per-operation** — it
+                                   is the cost of walking **148,517 content-stream
+                                   operators** and building their paths, and it is
+                                   identical at every scale. **Pixels are
+                                   essentially free here.** The complete map at 1×:
+                                   interpreter floor **0.5 s** · painting
+                                   **~0.8 s** · mask sampling **free, at the noise
+                                   floor** · **clip construction ~8.4 s = 86%** —
+                                   the last of which **reproduces the per-phase sum
+                                   above (5.24 + 2.26 + 1.02 = 8.52 s) within 4% by
+                                   a DIFFERENT METHOD**, which is the second
+                                   measurement **R166** requires before a figure may
+                                   order work. **The binding constraint on how this
+                                   crate may be optimised is therefore stronger than
+                                   "tiling addresses 5%": tiling and threading
+                                   cannot go BELOW the floor at all**, because they
+                                   render fewer pixels and not fewer operators.
+                                   **A low-resolution proxy is likewise bounded
+                                   below by ~2.6 s** — at 0.25× the full render is
+                                   **2.57 s, not 0.67 s**, because clip construction
+                                   drops only ~4× for a 16× pixel reduction. Anyone
+                                   reaching for a proxy or progressive refinement as
+                                   the answer to interactive speed should read that
+                                   sentence first. See §12's twenty-fourth entry.
                                    **`font\subset.rs` (Pass 21.0, FF-C, decision 021,
                                    commit `48c6b77`; body-section sync 2026-08-04
                                    continuation 77):** `plan_subset` parses an
@@ -9808,3 +9836,188 @@ with a forward pointer.
   created and verified** by this filing — see the **twentieth filing's**
   `SESSION_LOG.md` entry for the tip check, which is the part
   `git bundle verify` does **not** establish.
+
+  > **[★ AMENDED 2026-08-07 (twenty-fourth entry, below) — `R166`'s NAMED
+  > CARRIER IS NOW COMPLETE.** This entry said `tools/render-profile`
+  > discharges `R166` for `pdfce-render`; at the time it was **missing the
+  > ablation-and-floor half** that the owed-tooling item had carried unmet
+  > for four filings. **`fa17d54` built it**, and the first thing it did
+  > was **confirm** an existing figure by a second method within 4% rather
+  > than correct one. **The rest of this entry is unchanged**, including
+  > the carrier gap: `render-profile` still guards **render only**, and the
+  > text pipeline, the writer and the parser still have no standing
+  > instrument.]**
+
+- **2026-08-07 (twenty-fourth entry this day) — THE RENDERER HAS A
+  MEASURED FLOOR, AND IT IS SCALE-FLAT: 0.49–0.53 s WHILE PIXELS VARY 64×.
+  CLIP CONSTRUCTION IS ~8.4 s = 86% OF THE RENDER, CONFIRMED BY A SECOND
+  METHOD WITHIN 4%. TILING AND LOW-RESOLUTION PROXIES ARE REFUTED AS
+  ANSWERS, NOT MERELY DEPRIORITISED.** `fa17d54` — `--ablate` and
+  `--ablate-sweep` in `tools/render-profile`, plus the `Ablation` type and
+  its confound model in the feature-gated `pdfce-render/profile`. **NOTHING
+  MINTED — no Pass ID, no decision record, no operator question, and TWO
+  standing-rule candidates weighed and BOTH declined.** Ceilings unchanged
+  and **re-measured by running** `tools/check-ledger-numbers.py`
+  (**exit 0**) and `tools/check-passes-filed.py` (**exit 0**): Pass family
+  **43**, standing rules **R166** (**R167** next free), decision records
+  **031** (**032** next free), operator questions **(bb)**. Body-section
+  update filed in the SAME edit: §3's `pdfce-render` block. Full record:
+  `ROADMAP.md`'s *tooling — THE FLOOR…* Shipped entry.
+
+  **Why this is architecture and not a tooling note.** A floor is a
+  **constraint on what any optimisation of this crate can be worth**, and
+  it is the kind of fact that closes options permanently. Three of them
+  close here:
+
+  - **Tiling and threading cannot go below the floor at all.** The floor is
+    **per-operation**, not per-pixel — it is the cost of walking **148,517
+    content-stream operators** and constructing their paths, and it is the
+    same at 0.25× as at 2×. **Tiles render fewer PIXELS, not fewer
+    OPERATORS.** The prior entries ranked tiling last because it addressed
+    5%; this one says something stronger and more durable — **it addresses
+    a term that does not shrink.**
+  - **A low-resolution proxy is bounded below by ~2.6 s.** At 0.25× the
+    **full** render is **2.57 s, not 0.67 s**: clip construction drops only
+    about **4×** for a **16×** pixel reduction, because it is dominated by
+    per-clip fixed costs (three raster-pipeline compilations per
+    `Mask::fill_path`; `scan::path_aa::fill_path` already self-bounds to
+    `path.bounds()`). **Progressive refinement and proxies help less than
+    pixel count suggests, and clips bind either way.** Anything in these
+    documents implying otherwise is corrected by this entry.
+  - **Mask sampling is not a cost centre.** Measured **free, at the noise
+    floor**, by the one ablation that isolates it without confounds.
+
+  **The complete map at 1×, in one place:** interpreter floor **0.5 s**
+  (scales with nothing) · painting **~0.8 s** · mask sampling **free** ·
+  **clip construction ~8.4 s, 86% of the render.** **Clip construction IS
+  the render.**
+
+  **★ THE SECOND METHOD, AND WHY THIS ENTRY IS `R166`'s FIRST EXERCISE.**
+  Clip construction at **~8.4 s by ablation** reproduces the earlier
+  **per-phase sum of 8.52 s** (`fill_path` 5.24 + multiply 2.26 +
+  `Mask::new` 1.02) **within 4%** — two routes, one answer. `R166` was
+  minted one filing ago on three figures each wrong by two orders of
+  magnitude, and it says the obligation is discharged the moment a second
+  measurement is possible. **Its first exercise returns a CONFIRMATION
+  rather than a correction**, which is the outcome worth recording: a rule
+  that only ever fires on errors never demonstrates what a healthy number
+  looks like. **The renderer's remaining work order is now `R166`-clean**
+  where for four filings it was not.
+
+  **★ THE DESIGN FINDING, AND IT IS THE MOST TRANSFERABLE THING HERE: A
+  TOOL BUILT TO DEFEAT A SPECIFIC PAST ERROR IS A DIFFERENT ARTIFACT FROM
+  ONE THAT MERELY MEASURES.** `R164` was minted this morning and violated
+  six hours later by this project — `Mask::new` filed at 10.1 s, actually
+  1.02 s, because the ablation that produced it skipped clip construction
+  and thereby **also** stripped mask sampling from every later paint and
+  made every `q` clone cheap. **Construction plus use, attributed to
+  construction.** The harness does not warn about that class of error; it
+  **carries the rule structurally**:
+
+  1. **Every ablation implements `confounds()`**, and the tool prints the
+     list **beside the delta** on both output paths.
+  2. **Only rows with an EMPTY confound list are marked `attributable`** —
+     the output says *"no other cost centre changes with this."*
+  3. **`clip-sample` exists SOLELY to be such a row.** It builds the clip
+     and paints without sampling it, isolating sampling **the one way
+     skipping construction never can**. A unit test asserts its confound
+     list is empty and fails if a future change gives it a side effect.
+  4. **An unknown `--ablate` token EXITS 2.** Ignoring a typo would render
+     un-ablated, report a **zero delta**, and read as *"this centre is
+     free"* — **a wrong answer wearing the shape of a finding.**
+
+  **The generalisation, for the next harness this project builds:** a
+  measuring tool encodes a theory of how its reader will misread it.
+  Encoding the *specific* misreading that already cost this project a day
+  is cheap — a few dozen lines — and it is the difference between an
+  instrument and a number generator. **R163's preference for a mechanical
+  carrier over a rule is the same instinct one level down.**
+
+  **★ A COLD-START ARTIFACT LANDS ENTIRELY IN THE DELTA.** `clip-build`
+  read **1.17 s at `--repeat 1`** against **0.74 s at `--repeat 3`** — a
+  **58%** inflation. A delta is `baseline − ablated`; cold start is paid in
+  the first render only, so **it does not cancel between the terms**, and a
+  one-shot ablation **systematically overstates whatever it ablated**, in
+  the direction that always flatters the finding. The tool now warns below
+  `--repeat 2`, with those two figures in the warning text. **Filed with
+  its limit: this is plausibly a CONTRIBUTING mechanism in the 10.1 s
+  error and is NOT claimed as its cause** — the established cause is
+  confound contamination (R164), and the cold-start contribution to that
+  specific run is unquantifiable now because the probe is gone, which is
+  `R166`'s own subject.
+
+  **★ A REPORTING-DESIGN FINDING: NAME THE CONDITION, DO NOT PRINT A
+  NEGATIVE DELTA.** Mask sampling reports as **`NOT RESOLVABLE at this
+  sample size`**, with the delta and base beside it and the knob that
+  tightens the bound named, rather than as *"removes AT MOST −0.01 s"*.
+  **A negative delta reads as a broken row and buries the finding** — the
+  reader concludes the tool is miscounting and stops, losing the one useful
+  fact in the row. Naming the condition makes a null result **legible as a
+  result**.
+
+  **★ AND THE NULL RESULT OVERTURNED THE EXPECTATION OF THE PEOPLE WHO
+  WANTED IT.** A per-pixel multiply against a page-sized coverage buffer on
+  every paint is exactly the shape of thing that looks expensive. It is
+  free. **The attributable row's first job was to be wrong about its
+  author's guess**, which is the same property the `6b33789` entry praised
+  in the large-clip note.
+
+  **★ THE OPERATOR-FACING SUM, WITH ITS STATUS ATTACHED RATHER THAN
+  STRIPPED.** The non-clip work sums to about **1.3 s**, inside the
+  **~1.6 s** the reference product's authors report as cold-to-sharp.
+  **That is ARITHMETIC OVER SEPARATELY MEASURED PARTS, NOT A MEASUREMENT** —
+  `floor 0.5 + painting 0.8`, each measured in a different configuration,
+  summed; **nobody has rendered this file in 1.3 s.** `R164` applies to it,
+  and the operator said so himself when he reported it. The parts **do**
+  reconcile with the ~10 s total, which is real support. It is recorded
+  with the qualification **because *"pdfce is 1.3 s away"* is precisely the
+  sentence that will be quoted onward**, and because a sum of ablated runs
+  is the same reasoning shape that produced the 10.1 s error. **The
+  reference remains uninstrumented; ~1.6 s is context, not an acceptance
+  criterion.**
+
+  **★ NOTHING MINTED — two candidates weighed, both declined.**
+  **(A)** *"A one-shot measurement overstates whatever it ablated."* A fact
+  about a **method**, not a condition on care, and it **already has a
+  mechanical carrier** in the `--repeat < 2` warning — **R163 is
+  decisive**; the rule would be redundant on the day it was written.
+  **(B)** *"Report a null result by naming the condition, not by printing a
+  negative delta."* One occurrence against a two-occurrence bar,
+  **reporting-design craft** that no gate can check. Both are recorded as
+  findings so a future filing starts from the argument rather than from
+  scratch. **`R167` remains free.**
+
+  **What this filing did NOT establish.** Every performance number above is
+  the **operator's**, measured at `fa17d54` and relayed (R87) — the floor
+  table, the scale sweep, the 8.4 s clip figure, the 1.17/0.74 s repeat
+  comparison, and the gates (`cargo test` **2157 / 0 failed**; `clippy`,
+  `clippy --features profile`, `fmt`, ui-strings and bypass-paths all
+  **0**). **No render, no build and no test was run here.** The measurement
+  input is unchanged and remains a **MEASUREMENT INPUT, NOT A FIXTURE** —
+  outside the repository tree, untracked, inadmissible under rule 7 /
+  `LEGAL.md` §5 — so **every number is reproducible only on the operator's
+  machine, though now by a COMMITTED instrument rather than a deleted
+  one.** The tool's four behaviours listed above were verified here **by
+  reading the COMMITTED BLOBS** (`git show fa17d54:…`), deliberately not
+  the working tree, because a live fork can change a working copy under a
+  reader.
+
+  **Git and backup state — CHECKED, not inferred (hard rule 8 as amended,
+  `b1368ed`).** `git rev-parse HEAD` → **`fa17d54`**;
+  `git status --porcelain | wc -l` → **0**. **The dispatch stated that an
+  engineering fork IS live in `crates/` and `tools/` and that those trees
+  should be expected dirty; at the instant these commands ran, they were
+  clean.** Both are recorded, and **the clean reading is a snapshot, not a
+  claim that no fork is live** — a fork between edits shows clean.
+  **This entry describes `fa17d54` and nothing beyond it (R87).**
+  `git remote -v` → **empty**; the bundle is still the only copy. The
+  newest bundle is **`pdfce-20260807-1552.bundle`** — *not* the
+  `…-1557.bundle` the dispatch named, which does not exist — with
+  `refs/heads/pass-8-redaction` at **`34c676d`**, **one commit behind
+  `HEAD`** (`git bundle list-heads` + `git log --oneline 34c676d..HEAD`).
+  **A tip matching `HEAD` would still say nothing about uncommitted work:
+  a bundle captures committed history only, and this filing's own `docs/`
+  edits are uncommitted and in no bundle.**
+
+  **This filing edited `docs/` ONLY** — no `crates/`, no `tools/`, no
+  `fixtures/`, by the dispatch's explicit scope.

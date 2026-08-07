@@ -81,6 +81,317 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### tooling — THE FLOOR, AND A DELTA THAT HAS TO NAME WHAT ELSE IT REMOVED: `--ablate` / `--ablate-sweep` in `tools/render-profile`. **★ THE STILL-OWED ITEM IS DISCHARGED — the FOURTH requirement of the owed harness, and the R163 mechanical carrier the ablation rule candidate was refused IN FAVOUR OF, now exists.** **★ THE FLOOR IS 0.49–0.53 s WHILE PIXELS VARY 64× — the irreducible cost is walking 148,517 OPERATORS, and pixels are essentially free.** **★ CLIP CONSTRUCTION IS ~8.4 s = 86% OF THE RENDER, and that figure REPRODUCES THE EARLIER PER-PHASE SUM (5.24 + 2.26 + 1.02 = 8.52 s) WITHIN 4% BY A DIFFERENT METHOD — the second measurement `R166` asks for, and it agrees.** **★ MASK SAMPLING IS FREE, at the noise floor, and this librarian would have guessed wrong.** (no Pass ID — an out-of-tree tool plus an off-by-default feature flag; no shipped behaviour changes, no timing changed) — 2026-08-07, committed `fa17d54`, branch `pass-8-redaction`
+
+**Why this has no Pass ID.** Same class as the `6b33789` entry directly
+below it: it ships **no operator capability**. `tools/render-profile` is
+out of tree, `pdfce-render/profile` is off by default and the ablation
+predicates are `const false` when it is off — a test asserts that in both
+configurations, so **a shipping build cannot be talked into drawing a wrong
+picture**. **Nothing is minted by this filing** — Pass family stays **43**,
+standing rules stay **R166** (**R167** next free), decision records stay
+**031** (**032** next free), operator questions stay **(bb)**. Re-measured
+by **running** `tools/check-ledger-numbers.py` and
+`tools/check-passes-filed.py` before and after (R106/R133), not read out of
+prose.
+
+#### ★ THE STILL-OWED ITEM IS DISCHARGED, AND THAT IS THE HEADLINE
+
+The *OWED TOOLING* item under *Next up* has been carried since the
+seventeenth filing and reduced, by the nineteenth, to exactly one unmet
+requirement: **"ablate a named stage and report the FLOOR alongside the
+total."** That requirement was **the R163 mechanical carrier the ablation
+standing-rule candidate was refused IN FAVOUR OF** — the refusal's explicit
+bet was that an artifact would carry the obligation better than an
+admonition. **The bet is now settled: the artifact exists.**
+
+**Checked off explicitly, because a discharge that is not stated is a
+discharge nobody can rely on:**
+
+| requirement, as the owed item stated it | verdict at `fa17d54` |
+|---|---|
+| 1 — committed; survives the session | **MET** (`6b33789`) |
+| 2 — takes a PDF and a scale; reports the split | **MET AND EXCEEDED** (`6b33789`) |
+| 3 — reports read / parse / page-tree / rasterize separately | **PART MET on a stated separability limit** (`6b33789`) |
+| 4 — **ablate a named stage and report the FLOOR alongside the total** | **★ MET AT `fa17d54`. `--ablate <set>` and `--ablate-sweep`; the sweep prints a `FLOOR:` line with its spread against the pixel span, and states in the output whether the floor is scale-flat or area-scaling** |
+| 4b — per-phase timing | **WITHDRAWN** on the tool's own argument (nineteenth filing) |
+
+**Net: 3 met, 1 part-met, 1 withdrawn, 0 owed. THE ITEM IS CLOSED.** It is
+marked closed on the item itself under *Next up*, not only here.
+
+#### THE FLOOR — measured by the operator, on the reference CAD sheet
+
+```
+  scale        pixels      render     per Mpx
+   0.25         62878       0.49s      7.72s
+    0.5        250916       0.48s      1.91s
+      1       1002822       0.49s      0.48s
+      2       4011288       0.53s      0.13s
+```
+
+**0.49 s to 0.53 s while pixels vary 64×.** A 1.08× spread against a 64×
+pixel span. **The floor is PER-OPERATION cost, not per-pixel**: what it
+measures is walking **148,517 content-stream operators** and building their
+paths, and that work is identical at every scale. **Pixels are essentially
+free in this renderer.**
+
+#### THE COMPLETE MAP AT 1×, in one place for the first time
+
+| centre | cost at 1× | scales with |
+|---|---|---|
+| **interpreter floor** (operator walk + path construction) | **0.5 s** | **nothing** |
+| **painting** | **~0.8 s** | pixels |
+| **mask sampling** | **free — at the noise floor** | — |
+| **clip construction** | **~8.4 s — 86% of the render** | pixels (weakly: ~4× for a 16× pixel drop) |
+
+**Clip construction IS the render.** Everything else together is about
+1.3 s.
+
+#### 1. ★ THE TOOL CARRIES R164 STRUCTURALLY RATHER THAN BY INSTRUCTION — and that makes it a different artifact
+
+**R164** (*a verdict whose value depends on anything other than its own
+subject is not that subject's verdict*) was minted 2026-08-07 and was
+violated six hours later by this very project: `Mask::new` was filed at
+**10.1 s** and is **1.02 s**, because the ablation that produced it skipped
+clip construction — which *also* strips mask sampling from every later
+paint and makes every `q` clone cheap. **Construction plus use, attributed
+to construction.**
+
+The tool does not warn about that. **It is built so the mistake cannot be
+made silently:**
+
+- **Every ablation carries `confounds()`**, and the tool prints the list
+  **beside the number**, on both the single-ablation and the sweep paths.
+- **Only rows with an EMPTY confound list are marked `attributable`.** The
+  output says, in words, *"no other cost centre changes with this."*
+- **`clip-sample` exists solely to BE an attributable row.** It builds the
+  clip and paints without sampling it — isolating sampling **the one way
+  skipping construction never can**. A unit test asserts its confound list
+  is empty and would fail if a future change gave it a side effect.
+- **An unknown `--ablate` token EXITS 2.** It is rejected, never ignored: an
+  ignored typo would render un-ablated, report a **zero delta**, and read as
+  *"this centre is free"* — a wrong answer wearing the shape of a finding.
+- The sweep's closing note names the 10.1 s error by number and says *"only
+  rows marked 'attributable' support that reading."*
+
+**The durable form of this finding: a tool built to DEFEAT a specific past
+error is a different artifact from one that merely measures.** Both produce
+numbers. Only one of them makes the previous mistake expensive to repeat.
+The four behaviours above cost a few dozen lines and are the reason this
+entry can be trusted where the `76200e9` ablation could not.
+
+#### 2. ★ IT VALIDATED THE OLD NUMBERS BY A SECOND METHOD — which is R166's whole point
+
+**Clip construction at ~8.4 s reproduces the earlier per-phase sum within
+4%:** `fill_path` **5.24** + multiply **2.26** + `Mask::new` **1.02** =
+**8.52 s**, by phase timing; **~8.4 s**, by ablation. **Two methods, two
+routes, one answer.**
+
+**`R166` says a number whose instrument no longer exists is not evidence,
+and that the obligation is discharged the moment a second measurement is
+possible. This is that second measurement, and it agrees.** The rule was
+minted one filing ago on three figures that were each wrong by two orders
+of magnitude; **its first exercise returns a confirmation rather than a
+correction**, which is worth filing precisely because it is the
+uninteresting outcome. A rule that only ever fires on errors teaches
+nothing about what a healthy number looks like.
+
+#### 3. ★ `--repeat 1` INFLATED A ROW BY 58% — a cold-start artifact lands ENTIRELY in the delta
+
+`clip-build` read **1.17 s at `--repeat 1`** against **0.74 s at
+`--repeat 3`**. The tool now **warns below `--repeat 2`**, naming those two
+figures in the warning text so the reader sees the size of the effect
+rather than a generic caution.
+
+**The mechanism, stated generally, because it applies to every ablation
+anyone will ever run here:** a delta is `baseline − ablated`. A one-shot
+run pays cold start — allocator warm-up, page faults, code-cache misses —
+**in the first render only**, so the cost does not cancel between the two
+terms. **It lands entirely in the delta.** A one-shot ablation therefore
+**systematically OVERSTATES whatever it ablated**, in a direction that
+always flatters the finding.
+
+**Filed with its limit attached: this is plausibly a CONTRIBUTING mechanism
+in the 10.1 s error, and is NOT claimed as its cause.** The named cause of
+that error is confound contamination (R164), established by re-measurement.
+Cold start is a second mechanism pointing the same way, unquantified for
+that specific run and unquantifiable now — **the probe is gone, which is
+`R166`'s own subject.**
+
+#### 4. ★ MASK SAMPLING IS FREE, AND THE WAY IT IS REPORTED IS THE LESSON
+
+The tool reports sampling as **`NOT RESOLVABLE at this sample size`**,
+with the delta and the base beside it, rather than as *"removes AT MOST
+−0.01 s"*.
+
+**The reporting-design finding: a negative delta reads as a broken row and
+buries the finding.** A reader who meets `-0.01s` in a cost table concludes
+the tool is miscounting and stops reading the row — so the one genuinely
+useful fact in it, *this centre is at the noise floor*, is lost. Naming the
+condition instead makes the null result **legible as a result**. The output
+also says which knob tightens the bound (`--repeat`), so the reader knows
+the finding is a bound and not an absence.
+
+**And it is a null result this librarian would have gotten wrong.** Mask
+sampling — a per-pixel multiply against a page-sized coverage buffer, on
+every paint — is exactly the shape of thing that looks expensive. It is
+not. **`clip-sample` was built as the attributable row and its first job
+was to overturn the expectation of the person who wanted it.**
+
+#### 5. ★ THE TILING BELIEF IS CONFIRMED — AND THE CAVEAT MATTERS MORE
+
+**Confirmed:** the floor is **scale-flat**, so tiling cannot touch it.
+Tiles render fewer **pixels**, not fewer **operators**, and the floor is
+per-operator.
+
+**The caveat, which is the part that changes plans:** at **0.25× the FULL
+render is 2.57 s, not 0.67 s.** A 16× pixel reduction buys only about a
+**4×** drop in clip construction, because construction is dominated by
+per-clip fixed costs (three raster-pipeline compilations per
+`Mask::fill_path`, and `scan::path_aa::fill_path` already self-bounding to
+`path.bounds()` — see `D:\dev\rag\rust\tiny_skia_mask_pixmap_size_mismatch_drops_the_paint_silently.md`).
+
+**Therefore: a low-resolution proxy is bounded below by ~2.6 s.**
+Progressive refinement and tiling help **less than pixel count suggests**,
+and **clips bind either way**. Anything in these documents that implies a
+proxy or a tile is the answer to interactive speed is corrected by this
+entry — see the amended cells under *Next up*, `ARCHITECTURE.md` §3's
+`pdfce-render` block and §12's twenty-fourth entry, and `FEATURES.md`'s
+*Interactive-speed rendering* row.
+
+#### ★ THE OPERATOR-FACING ANSWER — and its status is flagged, not stripped
+
+**The non-clip work sums to about 1.3 s**, which is inside the ~1.6 s the
+reference product's authors report as cold-to-sharp. **If clip
+construction were free, pdfce would be in that neighbourhood.**
+
+> **★ THAT SENTENCE IS ARITHMETIC OVER SEPARATELY MEASURED PARTS, NOT A
+> MEASUREMENT. R164 APPLIES TO IT, AND THE OPERATOR SAID SO HIMSELF WHEN
+> HE REPORTED IT.** Nobody has rendered this file in 1.3 s. The figure is
+> `floor 0.5 + painting 0.8`, each measured in a different configuration,
+> summed. The parts **do** reconcile with the ~10 s total, which is real
+> support and not nothing — but a sum of ablated runs is exactly the
+> reasoning shape that produced the 10.1 s error, and it is filed with the
+> qualification attached **on purpose**. *"pdfce is 1.3 s away"* is the
+> sentence that will get quoted; **it must not travel without this
+> paragraph.**
+>
+> Also unchanged: **the reference is not instrumented.** Its authors
+> measure by screen capture and say separating the top three *"would take
+> a stopwatch."* **~1.6 s is context, not an acceptance criterion** — the
+> target is still *"feels instant"* (see the `76200e9` entry).
+
+#### Gates — measured by the ENGINEER at `fa17d54`, relayed here (R87)
+
+**This filing ran no build, no test and no render.** Every figure below is
+the operator's, read from its own exit code and relayed:
+
+- `cargo test` — **2157 passed, 0 failed**
+- `cargo clippy` — **0**; `cargo clippy --features profile` — **0**;
+  `cargo fmt`, `tools/check-ui-strings.sh`, `tools/check-bypass-paths.sh`
+  — all **0**
+- `git status --porcelain` — **0 lines**
+- **The ablation floor and the scale sweep above were run by the OPERATOR**,
+  not by this librarian.
+- `cargo tree` GUI-core separation: **not re-run this filing.** The commit
+  touches `pdfce-render` and `tools/`; the invariant was verified at
+  `6b33789` and no dependency was added (`Cargo.toml` is untouched by
+  `fa17d54` — established by `git show --stat fa17d54`, three files, none
+  of them a manifest).
+
+#### How this filing's own absences were established (R87)
+
+**★ THIS FILING HAS A SHELL AND USED IT** (hard rule 8 as amended today,
+`b1368ed`). Each claim names the command that produced it.
+
+1. ***HEAD, and the working tree.*** `git rev-parse HEAD` →
+   **`fa17d54632373ceec8d8d058694747893b3e942b`**;
+   `git status --porcelain | wc -l` → **0**. **★ THE DISPATCH WARNED THAT
+   AN ENGINEERING FORK IS LIVE IN `crates/` AND `tools/` AND THAT THOSE
+   TREES SHOULD BE EXPECTED DIRTY; AT THE INSTANT THIS FILING RAN THEM,
+   THEY WERE NOT.** Both facts are recorded. **The clean reading is a
+   snapshot at one instant and is NOT a claim that no fork is live** — a
+   fork between edits shows clean, and this librarian has been given a
+   wrong tree state twice today in the other direction. **R87: nothing in
+   this entry describes or anticipates that fork's work.** Everything here
+   is the state **at `fa17d54`** and nothing beyond it.
+
+   > **★ AND THE CAVEAT PAID OFF WITHIN THE HOUR.** Re-run at the END of
+   > this filing, `git status --porcelain` returns **seven** lines: the
+   > four `docs/` files this filing edited, plus
+   > `crates/pdfce-render/src/interpret.rs`,
+   > `crates/pdfce-render/src/profile.rs` and
+   > `tools/render-profile/src/main.rs` — **the fork, exactly where the
+   > dispatch said it would be.** The tree was clean at the first check and
+   > dirty at the second, **with no commit in between.** That is a *fork
+   > between edits*, demonstrated rather than argued, and it is why a
+   > clean `git status` is a **snapshot** and never a claim that no fork is
+   > live. **The dispatch was right and the first reading was merely
+   > early.** Filed because it is the same shape as `R166` one level
+   > down — *a single observation, however correctly made, is not a
+   > standing fact.*
+2. ***The tool's four R164-defeating behaviours.*** **Established by
+   reading the COMMITTED BLOBS**, not the working tree —
+   `git show fa17d54:tools/render-profile/src/main.rs` and
+   `git show fa17d54:crates/pdfce-render/src/profile.rs`. Chosen
+   deliberately: a live fork can change the working copy under a reader,
+   and a claim about what shipped must come from what shipped. Verified
+   this way: `confounds()` printed beside every delta; `attributable` only
+   on an empty list; `clip-sample`'s empty-confound unit test;
+   `std::process::ExitCode::from(2)` on an unknown token; the `--repeat
+   < 2` warning carrying the 1.17/0.74 s figures; the `NOT RESOLVABLE`
+   branch.
+3. ***The ledger.*** **Established by RUNNING** both
+   `tools/check-ledger-numbers.py` (**exit 0**) and
+   `tools/check-passes-filed.py` (**exit 0**) before and after this filing.
+   Ceilings read from the tool: **Pass 43 · R166 → next free R167 ·
+   decision 031 → next free 032.**
+4. ***Remotes.*** `git remote -v` → **empty output.** Still no remote
+   configured; publishing remains ungiven (`CLAUDE.md` rule 8).
+5. ***The backup bundle — and the dispatch's filename is wrong.***
+   `ls D:\Dev\pdfce-backups\` shows **no `pdfce-20260807-1557.bundle`**;
+   the newest is **`pdfce-20260807-1552.bundle`**. Its
+   `refs/heads/pass-8-redaction` is **`34c676d`**
+   (`git bundle list-heads`), and `git log --oneline 34c676d..HEAD` →
+   **exactly one commit, `fa17d54`**. **So: the bundle exists, the tip the
+   dispatch quoted is correct, the FILENAME is off by five minutes, and the
+   bundle is ONE COMMIT BEHIND.** Reported rather than repaired, because a
+   filename nobody can find is how a restore fails.
+6. ***And a tip matching `HEAD` would still say nothing about uncommitted
+   work.*** A bundle captures **committed history only**. The twentieth
+   filing recorded exactly this trap — its own four `docs/` edits were
+   uncommitted at bundle time and therefore absent from a bundle whose tip
+   matched `HEAD`. **This filing's edits are in the same position: they are
+   `docs/`-only, uncommitted, and in NO bundle.**
+7. ***Nothing was minted.*** **Established by running the checker**, not by
+   judgement alone. Two candidates were weighed and neither earns a number
+   — see *the rule judgement* below.
+
+#### ★ THE RULE JUDGEMENT — two candidates weighed, NEITHER MINTED
+
+Per the dispatch's explicit instruction: **nothing is minted unless it
+earns it; if something earns it, say so and do not mint. `R167` remains
+free.**
+
+**Candidate A — *"a one-shot measurement overstates whatever it
+ablated."*** **NOT MINTED, and it does not earn one.** It is a **fact
+about a method**, not a condition on care, and it already has a
+**mechanical carrier**: the tool warns below `--repeat 2` with the
+figures in the warning text. **R163 is decisive** — the carrier exists, so
+the rule is redundant on the day it would be written. It is filed as a
+finding above and as a `D:\dev\rag\rust\` candidate, not as `R167`.
+
+**Candidate B — *"report a null result by naming the condition, not by
+printing a negative delta."*** **NOT MINTED.** One occurrence against a
+two-occurrence bar; it is **reporting-design guidance**, which this project
+files as findings rather than as standing rules; and it **commissions
+craft** in a way that no gate can check. **Worth remembering, not worth a
+number.** Recorded here and in `SESSION_LOG.md` so the next tool author
+meets it.
+
+**Neither is close. Both are recorded so that a future filing that wants to
+mint either one starts from the argument rather than from scratch.**
+
 ### fix — THE CLIPS WERE NEVER SMALL, AND NOTHING COULD HAVE TOLD US: a committed render-profiling harness (`tools/render-profile` + a feature-gated `pdfce-render/profile` that compiles to nothing when off), and the retirement of the clip-extent optimisation it killed. **★ THIS RUN BOUGHT A CORRECTION AND AN INSTRUMENT, NOT MILLISECONDS — 1× STAYS ~10 s AND NOTHING GOT FASTER.** **★ A FIGURE THIS PROJECT FILED IN FOUR DOCUMENTS WAS WRONG BY 100×: mean clip bbox is 66.36% of the page, not 0.663%** — a fraction printed as a percent — and it was the *measured premise* of *Next up* item **1′**, now **RETIRED**. **★ THREE FIGURES WERE WRONG BY TWO ORDERS OF MAGNITUDE IN ONE DAY; the third was caught before it was reported, which is the only difference between them.** (no Pass ID — tooling plus a documentation correction; no shipped behaviour changes) — 2026-08-07, committed `6b33789`, branch `pass-8-redaction`
 
 **Why this has no Pass ID.** It ships **no capability**: an out-of-tree
@@ -200,6 +511,16 @@ the question you bring it will confirm whatever you brought.**
 1 withdrawn on the tool's own argument, and 1 — `--ablate` plus a reported
 FLOOR — STILL OWED.** Full requirement-by-requirement assessment is filed
 on the item itself under *Next up*; it is **not** closed.
+
+> **[★★ AMENDED 2026-08-07 (twenty-first filing) — THAT LAST REQUIREMENT
+> IS NOW MET AND THE ITEM IS CLOSED.** `fa17d54` added `--ablate` and
+> `--ablate-sweep` with a reported `FLOOR:` line. **Net is now 3 met,
+> 1 part-met, 1 withdrawn, 0 owed.** The paragraph above is **true as of
+> this filing** and is left as filed. **The floor it asked for is
+> 0.49–0.53 s while pixels vary 64× — scale-flat, per-operation** — and
+> clip construction is **86% of the render**, a figure that reproduces
+> this entry's own per-phase sum within 4% by a different method. See the
+> `fa17d54` *Shipped* entry at the top of this file.]**
 
 #### Gates — measured by the ENGINEER, relayed here (R87)
 
@@ -17716,7 +18037,38 @@ further measurements that would each have killed it alone** (see item 1′).
 | ~~**1**~~ | ~~Rectangle special-case for clips~~ | **★ DEAD END — DECLINED ON MEASUREMENT, do not pick this up** | **2.5% of clips are rectangles.** It would optimise one clip in forty. The **spec reasoning was sound** (§8.5.3.3.2 / §8.5.3.3.3 agree on a single closed convex subpath; §8.5.2 Table 59 makes `re` a complete subpath) and **the population was not** — a distinct failure mode from "the reasoning was wrong", and the reason this row is struck through rather than deleted |
 | ~~**1′**~~ | ~~**A clip mask sized to the clip, not to the page.** Mean clip bbox is **0.663% of the page** and every clip allocates a full-page buffer; `mask.fill_path` is **5.24 s** and `Mask::new` **1.02 s** at 1×, both scaling with **page area** rather than with clip area~~ | **★ RETIRED 2026-08-07 (`6b33789`) — DEAD END, DO NOT PICK THIS UP.** Not "annotated" — **retired**, because an engineer who read the struck cell as merely stale would build a mask-shrinking optimisation that **cannot work** | **THREE INDEPENDENT REFUTATIONS, ANY ONE OF WHICH IS FATAL.** **(a) SIZE — the premise is off by 100×:** mean clip bbox is **66.36% of the page**, not 0.663% (a fraction printed as a percent). First clips: 87%, 65%, 100%, 81%, 95%. A mask sized to a 66%-of-page clip **is** a page-sized mask. **(b) API — tiny-skia forbids it, and fails SILENTLY:** `RasterPipelineBlitter::new` checks mask size against pixmap size and returns `None` when they differ (`pipeline/blitter.rs:36-44`) — a `log::warn!` and a **dropped paint**, not an error. A smaller mask would have quietly stopped painting, and the render would have been *wrong*, not *slow*. **(c) COST — the saving does not exist:** `Mask::fill_path` costs the **same** on a 64×64 mask as on a page-sized one (**10.3 µs vs 8.3 µs**), because it is dominated by **three raster-pipeline compilations per call**, not by rasterization — `scan::path_aa::fill_path` **already** bounds itself to `path.bounds()`. And `Mask::new` at page size is **24.6 µs**, so its ~**1.02 s** is real and **irreducible without changing the representation**. **★ ONE MEASUREMENT WOULD HAVE FOUND ANY OF THE THREE.** None was made before the item was filed |
 | **2′** | **The cache cliff — MEASURED, PARTLY DISCHARGED, still open** | **★ MEASURED at `4475fe6`: 14.1× → 5.1×** | It **did not vanish, but it shrank by two-thirds**, and **2× improved more than 1× did** — the signature the working-set explanation predicts and a per-pixel one does not. **5.1× is still above the ~3.2× that quadrupling pixels costs at every other step**, so a working-set term survives. ~~**Re-measure again after 1′**~~ **★ 2026-08-07: 1′ is RETIRED, so there is nothing to re-measure *after* — 2′ is now the FIRST live item in this table** and is still a **measurement**, not work. `tools/render-profile`'s scale sweep is the instrument for it |
-| **3** | **Tiling and threading** | **UNCHANGED — still LAST** | With painting at **0.87 s** they still address **5%**. `4475fe6` deliberately chose **`Arc`, not `Rc`**, so `GraphicsState` stays **`Send`** and this item remains reachable without a second type change |
+| **3** | **Tiling and threading** | **UNCHANGED — still LAST, and now REFUTED AS AN ANSWER rather than merely deprioritised** | With painting at **0.87 s** they still address **5%**. `4475fe6` deliberately chose **`Arc`, not `Rc`**, so `GraphicsState` stays **`Send`** and this item remains reachable without a second type change. **★ AMENDED 2026-08-07 (`fa17d54`): the ablation floor is 0.49–0.53 s while pixels vary 64× — SCALE-FLAT, therefore PER-OPERATION. Tiles render fewer PIXELS, not fewer OPERATORS, so tiling cannot go below the floor at all.** And the caveat is the part that changes plans: **at 0.25× the FULL render is 2.57 s, not 0.67 s**, because clip construction drops only ~4× for a 16× pixel reduction. **A low-resolution proxy is bounded below by ~2.6 s.** Progressive refinement and tiling **help less than pixel count suggests, and clips bind either way** |
+
+> **★★ AMENDED 2026-08-07 (twenty-first filing, `fa17d54`) — THE WHOLE
+> TABLE NOW HAS A FLOOR UNDER IT, AND ANY READING THAT MAKES A PROXY OR A
+> TILE THE ANSWER IS CORRECTED.**
+>
+> **The complete map at 1×:** interpreter floor **0.5 s** (scales with
+> nothing) · painting **~0.8 s** · mask sampling **free, at the noise
+> floor** · **clip construction ~8.4 s = 86% of the render.**
+>
+> **Consequences for this table, in order of how much they change it:**
+>
+> 1. **Item 2′'s instrument is now complete.** `--ablate-sweep` reports the
+>    floor across scales beside the un-ablated total, which is exactly the
+>    shape the cache-cliff measurement needs. **2′ is still a MEASUREMENT,
+>    not work** — unchanged in that respect.
+> 2. **Item 3 is refuted as an answer, not merely ranked last** — see its
+>    amended cell above. **The floor is per-operation.**
+> 3. **Clip construction is confirmed as the whole target, by a SECOND
+>    METHOD.** ~8.4 s by ablation against 8.52 s by per-phase sum
+>    (`fill_path` 5.24 + multiply 2.26 + `Mask::new` 1.02) — **within 4%**.
+>    That is the second measurement **`R166`** requires before a figure may
+>    order work, and **it agrees**, so this table's ordering is now
+>    `R166`-clean where it previously was not.
+> 4. **Mask sampling is OFF the list of suspects.** Measured free, at the
+>    noise floor, by the one ablation that isolates it without confounds.
+>
+> **What is NOT resolved by any of this: the clip-representation line of
+> attack stays CLOSED** (items `1` and `1′` are dead ends — do not
+> re-scope either), and **no cheaper way to build a clip has been
+> identified.** The floor tells you what the ceiling on any fix is worth;
+> it does not name the fix.
 
 **⚠ AN ENGINEERING FORK WAS LIVE IN `crates/` WHEN THIS WAS FILED, working
 the item-1 change. This entry does NOT describe or anticipate its work
@@ -17756,7 +18108,32 @@ shown does not exist as work. **Pass IDs are permanent and never reused
 (hard rule 2)**, so the project would now carry a numbered Pass pointing at
 a dead end. The judgement is **ratified, not re-argued**.
 
-### ⚠ OWED TOOLING — a render-profiling harness that SURVIVES the session — **★ LARGELY DISCHARGED 2026-08-07 by `tools/render-profile` (`6b33789`); ONE OF THE FOUR REQUIREMENTS IS UNBUILT AND A SECOND WAS DECLINED WITH AN ARGUMENT**
+### ~~⚠ OWED TOOLING~~ — a render-profiling harness that SURVIVES the session — **★★ CLOSED 2026-08-07 (twenty-first filing) by `--ablate` + `--ablate-sweep` in `fa17d54`. THE LAST OWED REQUIREMENT IS DISCHARGED; 3 MET, 1 PART-MET, 1 WITHDRAWN, 0 OWED.** Retained in full below, unedited, because the requirement-by-requirement assessment and its intermediate states are the record (heading struck, body preserved)
+
+> **[★★ CLOSED 2026-08-07 (twenty-first filing), commit `fa17d54` — READ
+> THIS BEFORE THE ASSESSMENT BELOW, WHICH IS NOW HISTORY.**
+>
+> **Requirement 4 — *"ablate a named stage and report the FLOOR alongside
+> the total"* — IS MET.** `tools/render-profile` gained `--ablate <set>`
+> and `--ablate-sweep`; the sweep prints an explicit `FLOOR:` line with its
+> spread against the pixel span and states in the output whether the floor
+> is scale-flat or area-scaling. **The item is CLOSED, not reduced.**
+>
+> **This discharges the bet the ablation rule candidate was refused on.**
+> That candidate (*"before optimising a subsystem, establish its floor by
+> ablation"*) was declined partly because **R163 prefers a mechanical
+> carrier** and this harness was named as it. **The carrier now exists**,
+> so the obligation has an artifact where for four filings it had neither
+> a rule nor a tool. The refusal is **vindicated, not merely upheld.**
+>
+> **What the floor turned out to be: 0.49–0.53 s while pixels vary 64× —
+> scale-flat, per-operation, 148,517 operators.** Full numbers, the
+> complete cost map, and the four R164-defeating behaviours the tool was
+> built around are in the `fa17d54` *Shipped* entry at the top of this
+> file.
+>
+> **Sibling owed item, UNAFFECTED and still owed:**
+> `tools/gui-drive.ps1`'s build-or-assert-freshness obligation.]**
 
 > **★ DISCHARGE ASSESSMENT 2026-08-07 (nineteenth filing), REQUIREMENT BY
 > REQUIREMENT — because "closes the owed item" was asserted in the
@@ -17770,14 +18147,18 @@ a dead end. The judgement is **ratified, not re-argued**.
 > | 1 | **Committed; survives the session** | **MET.** `tools/render-profile/` is in git at `6b33789`. This is the requirement the whole item existed for |
 > | 2 | **Takes a PDF and a scale; reports the split** | **MET AND EXCEEDED.** `--page`, `--scales 0.25,0.5,1,2`, `--repeat N` (fastest-of-N, the right statistic for a deterministic workload under scheduling noise). A scale **sweep**, not a scale — which is what makes the cache cliff visible as *three smooth steps then a jump* rather than as one unexplained ratio |
 > | 3 | **Reports read / parse / page-tree / rasterize SEPARATELY** | **PARTLY MET, remainder ARGUED DOWN rather than forgotten.** It reports `load` (`Document::from_bytes` — object graph and xref) against `render`. Interpretation and rasterization are **not separable from outside**, because the interpreter paints as it walks; the page-tree walk is performed but not timed. The split it does report earned its keep immediately: `load` is **~0.005%** of the total, which retires "optimize the reader" without an experiment |
-> | 4 | **Ablate a named stage and report the FLOOR alongside the total** | **NOT MET — STILL OWED, and this is the one that matters.** There is no `--ablate` and no floor. **This was the R163 mechanical carrier the refused ablation rule candidate was refused *in favour of*** (see the `76200e9` entry's *Ledger*). Until it exists, the obligation "establish the floor before optimising" has **neither a rule nor an artifact** carrying it — the gap the refusal was explicitly betting against |
+> | 4 | **Ablate a named stage and report the FLOOR alongside the total** | ~~**NOT MET — STILL OWED, and this is the one that matters.** There is no `--ablate` and no floor.~~ **★★ MET 2026-08-07 at `fa17d54` — `--ablate` + `--ablate-sweep`, FLOOR reported with its spread against the pixel span.** **This was the R163 mechanical carrier the refused ablation rule candidate was refused *in favour of*** (see the `76200e9` entry's *Ledger*) — **and it now exists, which settles that bet.** The struck text is preserved because the four filings during which the obligation had *neither a rule nor an artifact* are the record |
 > | 4b | **PER-PHASE TIMING — the fourth capability THIS FILING ADDED** | **DELIBERATELY DECLINED, WITH A REASON THAT INDICTS THE REQUIREMENT.** The harness reports per-phase **counts and geometry** and refuses per-phase **timings**, on two grounds: timer calls inside a loop that runs **148,517 times perturb the thing being measured**, and per-phase timings **invite the subtract-two-totals reasoning that produced the 10.1 s error in the first place**. **That argument is accepted and the requirement is WITHDRAWN.** It was added by the eighteenth filing to prevent an R164 recurrence and would have made an R164 recurrence *cheaper to commit* — a requirement written by the same reasoning it was meant to guard against |
 >
-> **Net: 2 met, 1 part-met on a stated separability limit, 1 withdrawn,
+> ~~**Net: 2 met, 1 part-met on a stated separability limit, 1 withdrawn,
 > 1 STILL OWED (ablation + floor).** The item is **not closed**; it is
-> reduced to its fourth capability. **What was bought here is a correction
+> reduced to its fourth capability.~~ **★★ NET AT `fa17d54` (twenty-first
+> filing): 3 MET, 1 PART-MET on a stated separability limit, 1 WITHDRAWN,
+> 0 OWED. THE ITEM IS CLOSED.** The struck sentence was true at
+> `6b33789` and is left as filed. **What was bought here is a correction
 > and an instrument, not milliseconds** — see the `6b33789` *Shipped*
-> entry, which says so in its own headline.
+> entry, which says so in its own headline; **what `fa17d54` bought is the
+> instrument's missing half, and still not milliseconds.**
 >
 > **One capability was added that this item never asked for, and it is the
 > most valuable line in the tool:** the harness **prints an explicit note
