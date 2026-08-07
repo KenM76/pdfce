@@ -5294,6 +5294,26 @@ impl PdfceApp {
         let mut set_radio: Option<(String, String, String)> = None;
         let mut convert_rich: Option<(String, String, String)> = None;
         let mut set_choice: Option<(String, Vec<String>, String)> = None;
+        // (fqn, label, widget-count) and (fqn, index, label, clears-selection)
+        let mut delete_field: Option<(String, String, usize)> = None;
+        let mut delete_widget: Option<(String, usize, String)> = None;
+        // DELETION HAS ITS OWN GATE, and it is not `fill_refusal`'s.
+        //
+        // Filling takes the `/P`-aware certification gate; deleting a field
+        // is a structural change to the form, which is what a certification
+        // signature freezes, so core takes the STRICT gate. On a certified
+        // fillable form (`/P 2` — the ordinary real-world shape) filling is
+        // offered and deletion is refused, so reusing `fill_refusal_note`
+        // here would render an enabled button whose every press errors.
+        // Asked once per frame, like the fill gate, for the same reason: it
+        // is a property of the DOCUMENT, not of any one field.
+        let delete_refusal_note: Option<&'static str> = doc
+            .session
+            .deletion_refusal()
+            .map(|_| ui_text::form_delete_certification_disabled_tooltip());
+        // The master edit switch gates authoring the same way it gates every
+        // other mutation. Disabled-and-explained (R83), never hidden.
+        let deletes_enabled = doc.editing_enabled && delete_refusal_note.is_none();
         let drafts = &mut self.form_drafts;
 
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -5328,7 +5348,18 @@ impl PdfceApp {
                 // Every unfillable row is DISABLED AND EXPLAINED, never hidden
                 // (R83). An operator scrolling past a signature field should
                 // see that pdfce knows it is there.
-                if let Some(note) = fill_refusal_note.or_else(|| form_field_block_reason(field)) {
+                // NOT `continue` any more, and the reason is a capability
+                // boundary rather than a layout preference: these notes
+                // describe why a field cannot be FILLED — it is read-only, a
+                // signature, a push button, or the document forbids filling.
+                // None of them stops it being DELETED. `deletion_preflight`
+                // checks encryption and certification and nothing else, so a
+                // read-only field is deletable and skipping the row here
+                // denied an affordance the capability actually has, which is
+                // R83 read in the wrong direction.
+                let fill_blocked =
+                    fill_refusal_note.or_else(|| form_field_block_reason(field));
+                if let Some(note) = fill_blocked {
                     ui.add_enabled_ui(false, |ui| {
                         let mut shown = field.value.display_text();
                         if matches!(field.field_type, Some(pdfce_core::forms::FieldType::Text)) {
@@ -5340,10 +5371,9 @@ impl PdfceApp {
                         }
                     });
                     ui.label(egui::RichText::new(note).small().weak());
-                    ui.separator();
-                    continue;
                 }
 
+                if fill_blocked.is_none() {
                 match (field.field_type, field.button_kind) {
                     (Some(pdfce_core::forms::FieldType::Text), _) if field.is_rich_text() => {
                         // A rich-text field is NOT editable in place, and the
@@ -5665,10 +5695,167 @@ impl PdfceApp {
                     }
                     _ => {}
                 }
+                }
+
+                // -- DELETION. The field/widget distinction is STRUCTURAL. --
+                //
+                // The operator never has to work out which verb they are
+                // invoking, because the layout has already decided it:
+                //
+                //   * one widget  -> a single "Delete field". Deleting the
+                //     only widget IS deleting the field, and core agrees —
+                //     `delete_widget` on a one-widget field delegates to
+                //     `delete_field` rather than reimplementing it. Offering
+                //     both here would name a distinction with no consequence.
+                //   * many widgets -> a row per widget, each removing only
+                //     itself, with "Delete entire field" at the top level.
+                //
+                // So which operation fires is determined by WHICH ROW-LEVEL
+                // was clicked, not by reading a tooltip correctly.
+                let widget_count = field.widgets.len();
+                ui.add_enabled_ui(deletes_enabled, |ui| {
+                    if widget_count <= 1 {
+                        let b = ui.button(ui_text::form_delete_field_button());
+                        let b = match delete_refusal_note {
+                            Some(note) => b.on_disabled_hover_text(note),
+                            None => b.on_hover_text(ui_text::form_delete_whole_field_tooltip(
+                                widget_count.max(1),
+                            )),
+                        };
+                        diag::trace(|| {
+                            // ui-text-exempt: diagnostic trace, never displayed in the UI
+                            format!(
+                                "form-delete-field fqn={fqn:?} widgets={widget_count} \
+                                 enabled={deletes_enabled} rect={:?}",
+                                b.rect
+                            )
+                        });
+                        if b.clicked() {
+                            delete_field = Some((fqn.clone(), label.clone(), widget_count.max(1)));
+                        }
+                        return;
+                    }
+
+                    // Multi-widget: the per-widget rows first, then the
+                    // whole-field control. Indented so the nesting is visible
+                    // rather than inferred from the wording.
+                    ui.indent(("pdfce-widgets", &fqn), |ui| {
+                        for (i, w) in field.widgets.iter().enumerate() {
+                            let page = w.page.and_then(|p| page_numbers.get(&p)).copied();
+                            // A radio group's members are OPTIONS and are
+                            // identified by their on-state; any other
+                            // repeated field's members are just appearances
+                            // and are identified by position and page.
+                            let wl = match w.on_states.first() {
+                                Some(s) => ui_text::form_widget_option_label(
+                                    &String::from_utf8_lossy(s),
+                                    page,
+                                ),
+                                None => ui_text::form_widget_page_label(i + 1, page),
+                            };
+                            // Does THIS widget hold the field's selection?
+                            // Same test core uses in `delete_widget` — if it
+                            // does, removing it clears `/V` (§3.6.3 rule 2),
+                            // which is the one consequence here an operator
+                            // cannot predict from the control they clicked.
+                            let holds_selection = match &field.value {
+                                pdfce_core::forms::FieldValue::Name(v) => {
+                                    w.on_states.iter().any(|s| s == v)
+                                }
+                                _ => false,
+                            };
+                            ui.horizontal(|ui| {
+                                ui.label(&wl);
+                                let b = ui.button(ui_text::form_delete_widget_button());
+                                let b = match delete_refusal_note {
+                                    Some(note) => b.on_disabled_hover_text(note),
+                                    None if holds_selection => b.on_hover_text(
+                                        ui_text::form_delete_widget_clears_selection_tooltip(),
+                                    ),
+                                    None => {
+                                        b.on_hover_text(ui_text::form_delete_widget_tooltip())
+                                    }
+                                };
+                                diag::trace(|| {
+                                    // ui-text-exempt: diagnostic trace, never displayed in the UI
+                                    format!(
+                                        "form-delete-widget fqn={fqn:?} index={i} \
+                                         holds_selection={holds_selection} \
+                                         enabled={deletes_enabled} rect={:?}",
+                                        b.rect
+                                    )
+                                });
+                                if b.clicked() {
+                                    delete_widget = Some((fqn.clone(), i, label.clone()));
+                                }
+                            });
+                        }
+                    });
+                    let b = ui.button(ui_text::form_delete_whole_field_button());
+                    let b = match delete_refusal_note {
+                        Some(note) => b.on_disabled_hover_text(note),
+                        None => b.on_hover_text(ui_text::form_delete_whole_field_tooltip(
+                            widget_count,
+                        )),
+                    };
+                    diag::trace(|| {
+                        // ui-text-exempt: diagnostic trace, never displayed in the UI
+                        format!(
+                            "form-delete-whole-field fqn={fqn:?} widgets={widget_count} \
+                             enabled={deletes_enabled} rect={:?}",
+                            b.rect
+                        )
+                    });
+                    if b.clicked() {
+                        delete_field = Some((fqn.clone(), label.clone(), widget_count));
+                    }
+                });
                 ui.separator();
             }
         });
 
+        // Applied after the `form` borrow ends, like every other row action.
+        //
+        // Both report through `pending_note` rather than silently succeeding:
+        // deletion carries facts the operator did not ask for and cannot see
+        // the cause of — §3.6.3's cleared selection, and the grouping-node
+        // prune, which is not cosmetic because a named node with nothing
+        // under it still occupies its slot in the §12.7.3.2 name space and
+        // would refuse a later field wanting that name.
+        if let Some((fqn, label, widgets)) = delete_field {
+            doc.pending_note = Some(match doc.session.delete_field(&fqn) {
+                Ok(outcome) => {
+                    doc.refresh_pages();
+                    self.form_drafts.remove(&fqn);
+                    ui_text::form_field_deleted(&label, outcome.widgets_removed.max(widgets))
+                }
+                Err(err) => err.to_string(),
+            });
+        }
+        if let Some((fqn, index, label)) = delete_widget {
+            doc.pending_note = Some(match doc.session.delete_widget(&fqn, index) {
+                Ok(outcome) => {
+                    doc.refresh_pages();
+                    // The last-member case delegates to `delete_field` inside
+                    // core (§3.6.3 rule 3), so the same click can legitimately
+                    // remove the whole field. Reported as what HAPPENED, not
+                    // as what was clicked — an operator told "removed one
+                    // appearance" about a field that is now gone has been
+                    // misinformed by their own tool.
+                    if outcome.field_removed {
+                        self.form_drafts.remove(&fqn);
+                        ui_text::form_field_deleted(&label, outcome.widgets_removed)
+                    } else {
+                        ui_text::form_widget_deleted(
+                            &label,
+                            outcome.selection_cleared,
+                            outcome.emptied_parents,
+                        )
+                    }
+                }
+                Err(err) => err.to_string(),
+            });
+        }
         if let Some((fqn, text)) = fill {
             doc.pending_note = Some(match doc.session.fill_text_field(&fqn, &text) {
                 Ok(_) => {
@@ -8883,6 +9070,25 @@ impl eframe::App for PdfceApp {
         if let Status::Open(doc) = &mut self.status
             && let Some(note) = doc.pending_note.take()
         {
+            // TRACED, because this is the DISCLOSURE CHANNEL.
+            //
+            // Rule 4's obligations land here: the inferred value, the cleared
+            // selection, the released group name, the refusal a verb reported
+            // instead of succeeding. Every one of them reaches the operator as
+            // a `ui.label` in the status bar and, until this line existed, as
+            // nothing a behavioural harness could see — so a disclosure that
+            // silently stopped firing would look identical to one that fired
+            // and said something. That is exactly the shape R96 forbids for a
+            // wired-but-dead warning, and the shape R162 names for an
+            // assertion that cannot fail.
+            //
+            // Traced at the DRAIN rather than at each producer, deliberately:
+            // one choke point every note passes through cannot be forgotten by
+            // the next panel that adds one.
+            diag::trace(|| {
+                // ui-text-exempt: diagnostic trace, never displayed in the UI
+                format!("edit-note {note:?}")
+            });
             self.edit_note = Some(note);
         }
         // Pass 34.2: same channel, same reason, for a pane-raise request. The

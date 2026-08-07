@@ -6211,6 +6211,145 @@ pub fn forms_import_tooltip() -> &'static str {
 this document does not have are counted and skipped, never guessed at."
 }
 
+// ---------------------------------------------------------------------------
+// Field and widget DELETION (decision 020 F5 fast-follow)
+// ---------------------------------------------------------------------------
+//
+// Two verbs, and the whole difficulty is that an operator must never have to
+// work out which one they are about to invoke. The panel makes that
+// STRUCTURAL — a single-widget field offers only "Delete field", a
+// multi-widget field expands to a row per widget — so these strings never
+// have to carry a distinction the layout has already made.
+
+/// Row-level delete for a field with exactly ONE widget (Shape A).
+///
+/// Says "field", not "widget", because for this shape they are the same thing
+/// and core agrees: `delete_widget` on a one-widget field delegates to
+/// `delete_field` rather than reimplementing it. Offering "delete widget"
+/// here would name a distinction with no consequence.
+pub fn form_delete_field_button() -> &'static str {
+    "Delete field"
+}
+
+/// Row-level delete for a field with SEVERAL widgets — deletes all of them.
+///
+/// Named differently from the single-widget case on purpose. The word
+/// "entire" is doing real work: it sits directly above per-widget controls
+/// that delete only one, and an operator scanning the row needs the scope
+/// from the label rather than from having read the tooltip.
+pub fn form_delete_whole_field_button() -> &'static str {
+    "Delete entire field"
+}
+
+/// Its tooltip, which must state the SCOPE.
+///
+/// Flatten-weight (a rich, honest tooltip and one undo step), not redaction's
+/// blocking modal — deleting a field is fully visible the instant it happens
+/// and one undo away, so a confirm gate would be friction in front of a
+/// reversible act the operator just asked for. What it cannot leave implicit
+/// is *how much* vanishes: a field repeated across pages disappears from all
+/// of them, and an operator looking at page 1 has no way to see the other
+/// four appearances go.
+pub fn form_delete_whole_field_tooltip(widgets: usize) -> String {
+    format!(
+        "Delete this field and all {widgets} of its appearances across the document. The field \
+and its value are removed from the form. One undo reverses it. Note: with the normal save, the \
+field is still present in the file's earlier revision — deleting is not a way to remove \
+sensitive answers. Use Redact for that."
+    )
+}
+
+/// Per-widget delete inside an expanded multi-widget field.
+pub fn form_delete_widget_button() -> &'static str {
+    "Remove this appearance"
+}
+
+/// Its tooltip when removing this widget has NO side effect beyond itself.
+pub fn form_delete_widget_tooltip() -> &'static str {
+    "Remove just this appearance of the field. The field and its other appearances stay. One \
+undo reverses it."
+}
+
+/// Its tooltip when this widget currently HOLDS the field's selection.
+///
+/// The one genuinely non-obvious consequence in this surface, and the reason
+/// the control is not silently enabled. Deleting the widget whose on-state
+/// equals `/V` would leave `/V` naming a state no remaining widget can
+/// display — a malformed field — so core clears the selection (§3.6.3 rule
+/// 2). That is correct and it is also invisible: the operator clicks a
+/// control on one option and a *different* option visibly deselects.
+///
+/// Disclosed rather than gated, per rule 4 as narrowed by decision 024 §4.4:
+/// the result is fully visible on screen and one undo away, so it needs
+/// saying, not confirming.
+pub fn form_delete_widget_clears_selection_tooltip() -> &'static str {
+    "Remove just this appearance of the field. This one is currently selected, so removing it \
+also clears the field's selection — no option will be chosen afterwards. One undo reverses it."
+}
+
+/// Label for one widget sub-row of a multi-widget BUTTON field (a radio
+/// group), naming the option it represents.
+pub fn form_widget_option_label(state: &str, page: Option<usize>) -> String {
+    match page {
+        Some(n) => format!("Option “{state}” (page {n})"),
+        None => format!("Option “{state}”"),
+    }
+}
+
+/// Label for one widget sub-row of a non-button multi-widget field — the same
+/// field repeated across pages.
+pub fn form_widget_page_label(index: usize, page: Option<usize>) -> String {
+    match page {
+        Some(n) => format!("Appearance {index} (page {n})"),
+        None => format!("Appearance {index}"),
+    }
+}
+
+/// Status note after deleting a whole field.
+pub fn form_field_deleted(label: &str, widgets: usize) -> String {
+    if widgets == 1 {
+        format!("Deleted “{label}”.")
+    } else {
+        format!("Deleted “{label}” and its {widgets} appearances.")
+    }
+}
+
+/// Status note after deleting one widget of a multi-widget field.
+///
+/// Takes BOTH facts core reports, because both are things the operator did
+/// not ask for and cannot see the cause of. `selection_cleared` is §3.6.3
+/// rule 2. `emptied_parents` is the grouping-node prune — not cosmetic, as
+/// `FieldDeletion` says: a named node with nothing under it still occupies
+/// its slot in the §12.7.3.2 name space, so leaving one behind would refuse a
+/// later field that wanted the name. An operator who deletes `Address.City`
+/// and then cannot create `Address` deserves to have been told.
+pub fn form_widget_deleted(label: &str, selection_cleared: bool, emptied_parents: usize) -> String {
+    let mut s = format!("Removed one appearance of “{label}”.");
+    if selection_cleared {
+        s.push_str(
+            " Its selection was cleared, because the removed appearance was the selected one.",
+        );
+    }
+    if emptied_parents > 0 {
+        s.push_str(&format!(
+            " {emptied_parents} now-empty group name(s) were released and can be reused."
+        ));
+    }
+    s
+}
+
+/// Why the delete controls are disabled — the STRICT certification gate.
+///
+/// Deliberately distinct from [`form_field_certification_disabled_tooltip`],
+/// which explains a refusal to FILL. The two gates differ, and on a certified
+/// fillable form (`/P 2`, the ordinary case) filling is offered while deletion
+/// is refused — so a shared string would tell the operator the form cannot be
+/// filled while they are filling it.
+pub fn form_delete_certification_disabled_tooltip() -> &'static str {
+    "This document is certified, and its signature freezes the form's structure. Fields can \
+still be filled in, but none can be added or removed without invalidating the signature."
+}
+
 /// The file-dialog filter label for form data.
 pub fn forms_data_filter_label() -> &'static str {
     "Form data (FDF, XFDF)"

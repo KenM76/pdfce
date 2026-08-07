@@ -199,3 +199,35 @@ make while adding a key nobody can rotate.
 Two fields rather than one because deleting a text field and deleting a
 button travel slightly different paths in the panel, and a one-field
 fixture would let a regression in either hide.
+
+## `unfillable-fields-form.pdf` — rows that cannot be FILLED but can be DELETED
+
+Byte-authored by `tools/gen-form-undeletable-looking-fixture.py`.
+
+Four merged fields: `Locked` (text, `/Ff 1` read-only), `Approved`
+(`/FT /Sig`, unsigned), `Submit` (`/FT /Btn` `/Ff 65536`, push button),
+and `Notes` — an ordinary fillable field kept as a control.
+
+**The distinction it exists to pin down.** `deletion_preflight` checks
+encryption and certification and *nothing else* — no read-only test, no
+field-type test — so all three unfillable shapes are perfectly
+deletable. The forms panel used to `continue` past such rows after
+printing why they could not be filled, which also skipped the delete
+control and withheld an affordance the capability actually had. R83
+forbids offering what you cannot do; it does not license withholding
+what you can.
+
+Without a fixture carrying such a field the fix is invisible: every
+forms fixture before this one had only fillable fields, so a test would
+have had nothing to assert on and the regression could return
+unnoticed. **R162** — the container has to be shown capable of holding
+the thing.
+
+The control field is not decoration. If the panel ever stops rendering
+controls for *all* rows, `Notes` fails too and the fixture reports a
+blanket regression rather than letting it read as the fix working.
+
+All four are Shape A (merged field/widget), so each shows a single
+"Delete field" control — this fixture is about *which rows get a
+control*, not the single-vs-multi split, which `radio-group-form.pdf`
+covers.
