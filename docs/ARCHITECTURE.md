@@ -1285,6 +1285,27 @@ engineer as a candidate standing rule (**R165**) and **deliberately
 not minted** by the filing that found it; see `ROADMAP.md`'s *third
 defect the veraPDF gate found* entry, *Ledger*.
 
+**[★ AMENDED 2026-08-07, fifteenth filing — `R165` IS MINTED. The
+clause above is left exactly as filed; it is no longer current
+status.]** The generalisable form quoted above is now **standing rule
+`R165`**, ruled in by the operator against the filing librarian's own
+recommendation and on that librarian's own counter-argument. **Ceiling
+R164 → R165; R166 next free.** Two consequences bind **this section**:
+
+- **§5.6.1 is R165's WORKED EXAMPLE, and is named as such in the rule.**
+  The conflict resolved here — R165 pulling one way, §5.6's *do not
+  normalize what the operator did not ask about* pulling the other — is
+  the model for the next such conflict. **§5.6 remains the default;
+  R165 is the exception that must be ARGUED for**, per case, with the
+  ambiguous clause cited and the §5.1 save-mode contract checked.
+- **R165 does not widen this exception by one byte.** Its own limit
+  binds it to cases where the spec is **genuinely silent or
+  self-contradictory**, and the paragraph below (*what §5.6 is NOT
+  narrowed toward*) is unaffected: the trailing-space header, the
+  cross-reference form, object streams and the hybrid refusal are all
+  still outside it. **Binding text: `ROADMAP.md`, *Standing rules*,
+  `R165`.**
+
 **Also note what §5.6 is NOT narrowed toward.** No other normalisation
 is licensed by this: not the `%PDF-1.4 ` with a trailing space (still
 copied verbatim), not the cross-reference form, not object streams,
@@ -8758,7 +8779,10 @@ with a forward pointer.
   candidates plus the cross-RAG-handoff proposal **transfer R164 → R165**
   (the third such transfer this session, stated rather than performed
   silently). Pass family stays **43**; decision records stay **031**;
-  operator questions stay **(bb)**.
+  operator questions stay **(bb)**. **[★ AMENDED 2026-08-07, nineteenth
+  entry — `R165` IS NOW MINTED. Ceiling R164 → R165; R166 next free, and
+  the contingent claims transfer R165 → R166 — the FOURTH such transfer
+  this session. The clause above is left as filed.]**
 
   **Why this is architecture and not bookkeeping: it changes what the
   project will accept as a per-item measurement.** pdfce's verification
@@ -9034,5 +9058,131 @@ with a forward pointer.
   representing). Recommendation and the counter-arguments: `ROADMAP.md`,
   *third defect the veraPDF gate found*, *Ledger*.
 
+  > **[★ RULED 2026-08-07, nineteenth entry — `R165` IS MINTED, against
+  > the filing librarian's recommendation and on that librarian's own
+  > counter-argument. The paragraph above stays as the record of the
+  > candidate as PUT; it is no longer current status.]** The deciding
+  > asymmetry is the one the paragraph above already names: **the
+  > candidate refused two entries earlier was carried by R27 plus the
+  > resource-guard rule; this one is carried by nothing.** Full reasoning
+  > and the rule's LIMIT: the **nineteenth** 2026-08-07 entry, and
+  > `ROADMAP.md`'s *Standing rules*, `R165`.
+
   **This filing edited `docs/` and the RAG trees only**; the commit and
   every gate result quoted here are the engineer's.
+
+- **2026-08-07 (nineteenth entry this day) — `R165` IS MINTED: WHERE A
+  FORMAT SPEC LEAVES A QUESTION GENUINELY UNRESOLVED, EMIT THE FORM UNDER
+  WHICH THE COMPETING READINGS COINCIDE — not the form under which pdfce's
+  own reading is correct. And THE FULL EXTERNAL CORPUS IS SWEPT END TO END
+  AT ONE COMMIT: nine corpora, 3,759 files, 0 regressions, 0 hangs, 502
+  improved.** Librarian-proposed **with a recommendation AGAINST** at the
+  eighteenth entry, **OPERATOR-RULED IN** here. No Pass ID, no decision
+  record, no operator question, **no commit** — the sweep is a measurement
+  record. **Ceiling R164 → R165; R166 is next free**, and decision 030's
+  three contingent candidates plus the cross-RAG-handoff proposal
+  **transfer R165 → R166** (the **fourth** such transfer this session,
+  stated rather than performed silently). Pass family stays **43**;
+  decision records stay **031**; operator questions stay **(bb)**.
+
+  **Why `R165` is architecture and not bookkeeping: it constrains what
+  pdfce is allowed to EMIT, which no other rule in the project does.** The
+  existing instruments all govern something else. **R27** governs whether
+  pdfce **acts** when an input has no good reading. The
+  R87/R159/R162/R164 family governs whether a **measurement** is real.
+  **§5.6 governs not touching what the operator did not ask about** — and
+  it pointed **the wrong way** at the one case where the question arose,
+  which is the whole reason a rule was needed. R165 fills the gap between
+  *refusing* and *preserving*: **choosing a representation when the
+  standard declines to.**
+
+  **The rule, and its LIMIT, which is part of it.** *When the standard does
+  not settle how a value is interpreted and real readers are known to
+  differ, ship — where one exists — the encoding under which the competing
+  readings produce the same answer.* It binds **only** where the spec is
+  **genuinely silent or self-contradictory**; it is **not** licence to
+  deviate from a **clear** requirement because an implementation disagrees
+  (that stays R27's disclose-or-refuse), **not** engaged by pdfce merely
+  preferring a reading, and **not** a general normalisation licence — the
+  coinciding form must be reachable inside the **§5.1 contract of the save
+  mode in use**, which is exactly why the preamble drop is legal on
+  `save_full` and illegal on `save_incremental` and identity-append.
+
+  **★ IT CONFLICTS WITH §5's MINIMAL-DIFF POSTURE, AND §5.6.1 IS THE WORKED
+  EXAMPLE OF RESOLVING THAT CONFLICT.** §5.6.1 now carries that framing in
+  its own text: **§5.6 stays the default; R165 is the exception that must
+  be argued for, per case, with the ambiguous clause cited.** A rule that
+  can override a documented contract is exactly the kind that needs a
+  worked example attached, or the next invocation will be a preference
+  wearing a rule's number.
+
+  **★ THE ONE-OCCURRENCE BAR WAS OVERRULED — for the SECOND time in one
+  day — and the two reasons are different, which is why the precedent is
+  recorded rather than left to accumulate.** `R164` was minted on one
+  occurrence because **that occurrence had already produced a false report
+  to the operator**. `R165` is minted on one occurrence for a different
+  reason: **the single occurrence affected EVERY preamble-carrying file
+  pdfce has ever written.** A two-occurrence bar guards against minting
+  from a **coincidence**; a general principle about representing ambiguity
+  is not a coincidence awaiting corroboration. **The count of occurrences
+  and the reach of the occurrence are different measurements**, and the bar
+  reads the first while the ruling read the second.
+
+  **The disposition is the durable part.** The librarian **proposed the
+  candidate, recommended AGAINST it, and then supplied the argument that
+  overturned its own recommendation** — stating plainly that unlike the
+  candidate refused two entries earlier, this one *"is not already carried
+  elsewhere"*. The operator ruled it in **on that argument**, and named the
+  counter to the librarian's own R163 objection as the strongest part of
+  the filing: **neither §5.6.1 nor the `personal_rag/pdf` lesson is
+  CONSULTED when a new ambiguity is met in a different clause**, which is
+  precisely when the rule binds. R163 prefers a mechanical carrier over a
+  rule; **here there is no mechanical carrier** — §5.6.1 documents one
+  resolved case and cannot refuse a wrong choice in the next one.
+
+  **★ SECOND HALF — THE FULL EXTERNAL CORPUS, SWEPT AT ONE COMMIT.** Nine
+  corpora, measured post-fix **by the operator** at `fa4f83c`:
+  PDF/A-2b **982**, PDF/A-1b **569**, PDF/A-4 **484**, qpdf **560**,
+  PDF/UA-1 **295**, pdfium **288**, Isartor+PDF/UA-2+TWG+PDF/A-1a **459**,
+  pdfbox **115**, pdf20examples **7**. **3,759 files, 0 regressions, 0
+  hangs, 502 improved**, with roughly **157 refusals**, which are the
+  designed outcome (R27) and not failures.
+
+  **Two constraints on how that number may be read, both filed BEFORE the
+  number because it will be quoted later.**
+
+  1. **It is a PARSE gate, not a CONFORMANCE gate.** It proves an
+     independent implementation can **read** what pdfce writes. **It says
+     nothing about PDF/A conformance** — least of all for the **2,330**
+     files drawn outright from named PDF/A and PDF/UA conformance suites.
+     The conformance gate stays parked until `to-pdfa` and remains a
+     **separate tool**.
+  2. **The total is a SUM and is filed as one. R164 applies to it.** No
+     individual corpus's verdict may be read off the aggregate, and no
+     individual file's verdict off its corpus row. The librarian
+     **re-derived both totals** rather than inheriting them — 3,759 and 502
+     are **exact**, not approximate. **R164 being applied to the operator's
+     own headline number the day after it was minted is evidence the rule
+     is live rather than filed.**
+
+  **★ THE ARCHITECTURAL FINDING SITS ABOVE THE NUMBERS: all three defects
+  the gate found shared ONE shape — pdfce read its own broken output
+  perfectly.** `round-trip` reported **success**, rasters **matched**,
+  `extract-text` **worked**, and on the preamble defect `object_count()`
+  and `catalog()` **both passed** while the file was unopenable to an
+  outside reader. **Every in-house instrument agreed the files were fine.**
+  That is **the closed-loop argument this gate was built on, demonstrated
+  three times in one day on code that had already shipped** — not argued
+  from first principles. **It is the standing justification for keeping an
+  outside judge in the verification strategy**, and a future sweep that
+  finds nothing does not weaken it: a clean sweep is a fact about today,
+  the shape is a fact about the method.
+
+  **What this librarian did NOT establish, stated so the entry's evidence
+  has a visible edge:** every sweep figure above is the **operator's**,
+  run by him; **no sweep was run here**, and **no claim is made about the
+  working tree, the index, or any remote** — the `737f14a` tree state is
+  his report. The **only** number this filing owns is the arithmetic.
+
+  **This filing edited `docs/` ONLY** — no `crates/`, no `tools/`, no
+  `fixtures/`, and **no RAG tree**, by the dispatch's explicit scope.

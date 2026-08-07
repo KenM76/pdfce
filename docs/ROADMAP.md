@@ -81,6 +81,135 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### verification — THE FULL EXTERNAL CORPUS, SWEPT END TO END POST-FIX: **3,759 files written by pdfce and read back by an independent implementation — 0 regressions, 0 hangs, 502 improved** (no Pass ID, NO COMMIT — a measurement record, run by the OPERATOR; the entry that makes the three defect entries below mean something) — 2026-08-07, measured at `fa4f83c` / tree clean at `737f14a`, branch `pass-8-redaction`
+
+**Why NO Pass ID and no commit.** Nothing was built. This entry records
+**measurements the operator ran himself** across every external corpus the
+project holds, after the third defect was fixed. It is filed as a Shipped
+entry rather than as an amendment because it is **the first time the whole
+corpus has been swept at one commit** — the three defect entries below each
+report the corpus that found them, and none of them reports the set. **Pass
+family stays 43; the standing-rule ceiling moves R164 → R165 for an
+unrelated reason (see the entry below); decision records stay 031; operator
+questions stay (bb).**
+
+#### The measurements, per corpus — and the per-corpus row is the honest unit
+
+| corpus | files | regressions | hangs | improved |
+|---|---|---|---|---|
+| PDF/A-2b conformance | 982 | **0** | **0** | 0 |
+| PDF/A-1b conformance | 569 | **0** | **0** | 0 |
+| PDF/A-4 conformance | 484 | **0** | **0** | 0 |
+| qpdf | 560 | **0** | **0** | **275** |
+| PDF/UA-1 conformance | 295 | **0** | **0** | 0 |
+| pdfium | 288 | **0** | **0** | **223** |
+| Isartor + PDF/UA-2 + TWG + PDF/A-1a | 459 | **0** | **0** | **1** |
+| pdfbox | 115 | **0** | **0** | **3** |
+| pdf20examples | 7 | **0** | **0** | 0 |
+
+**Refusals totalled roughly 157 across the set and are NOT failures** — a
+refusal is pdfce declining, by name, to write something it cannot write
+honestly (R27). It is the designed outcome, and counting it against the
+sweep would penalise the behaviour the project wants.
+
+#### ★ WHAT THE TOTAL IS, AND WHAT IT IS NOT — filed before the number, because "3,759 clean" WILL be quoted later
+
+**1. It is a PARSE gate, not a CONFORMANCE gate.** It proves an independent
+implementation can **READ** what pdfce writes. **It says nothing whatever
+about PDF/A conformance** — least of all for the **2,330** files drawn
+outright from named PDF/A and PDF/UA conformance suites
+(982 + 569 + 484 + 295), or the mixed 459-file row beside them, whose
+provenance makes the misreading easy. The conformance gate stays
+**parked** until `to-pdfa`
+exists, and remains a **separate tool** by design (see the *veraPDF parse
+gate* tooling entry below). **A green parse sweep over a PDF/A corpus is
+not a PDF/A result.**
+
+**2. The total is a SUM, and is filed as one.** The operator computed it
+and flagged it as computed rather than measured. **This librarian
+re-derived it rather than inheriting it**, at his invitation:
+`982+569+484+560+295+288+459+115+7` = **3,759 exactly**, and
+`275+223+1+3` = **502 exactly**. **Both totals are exact, not approximate**
+— the "~" the dispatch carried is understatement, and is dropped here on a
+re-derivation rather than on trust. The nine per-corpus rows are the
+measurements; the two totals are arithmetic over them.
+
+**3. ★ R164 APPLIES TO THE OPERATOR'S OWN TOTAL, AND HE SAID SO FIRST.**
+*A verdict whose value depends on anything other than its subject is not
+evidence about that subject.* **No individual corpus's verdict may be read
+off the aggregate**, and no individual **file's** verdict may be read off
+its corpus row. The total is a legitimate aggregate — R164's own limit
+says *"15 of 560 files failed"* is a true and useful sentence — but it is
+usable **only** as a cross-check, never to assign a verdict downward.
+**The rule minted yesterday afternoon being applied to the operator's own
+headline number the same day is the strongest available evidence that it
+is a live instrument rather than a filed one.**
+
+#### ★ THE FINDING WORTH PRESERVING ABOVE THE NUMBERS — all three defects shared ONE shape
+
+**pdfce read its own broken output perfectly.** In every one of the three
+defects the veraPDF gate found:
+
+- **`round-trip` reported SUCCESS** — the verb whose entire job is
+  verifying the save invariant.
+- **Rasters matched.**
+- **`extract-text` worked.**
+- **`object_count()` and `catalog()` both passed** on the preamble defect,
+  where pdfce's output was *internally perfect and spec-literal* and still
+  unopenable by an outside reader.
+
+**Every in-house instrument agreed the files were fine.** That is **the
+closed-loop argument the gate was built on, demonstrated three times in one
+day, on code that had already shipped** — not argued from first principles,
+not inferred from a near miss. The gate's founding sentence was *"every test
+pdfce has reads pdfce's output with pdfce's own parser, and a closed loop
+cannot see a defect both halves share."* **Three defects, three
+corpora, one shape.**
+
+**Why this belongs above the totals:** a clean sweep is a fact about today.
+**The shape is a fact about the project's whole verification strategy**, and
+it is the reason the outside judge is not optional. A future sweep that
+finds nothing does not weaken it.
+
+#### How the absences were established (R87) — and the boundary of this librarian's evidence
+
+1. ***"0 regressions, 0 hangs, across all nine corpora."*** **Established by
+   the OPERATOR running every sweep himself** — *"I ran every number below
+   myself"* — at `fa4f83c`, with `--timeout` armed, which is the only form
+   of a completed-sweep claim available since `8cb779f`. **This librarian
+   ran no sweep and claims none.**
+2. ***"The totals are 3,759 and 502."*** **Established by this librarian
+   re-deriving the arithmetic**, not by accepting it: both sums were
+   recomputed from the nine rows above and matched exactly. This is the one
+   number in this entry that is this librarian's own.
+3. ***"Nothing else changed between the fix and the sweep."*** **NOT
+   established here, and not asserted.** The tree state (`737f14a`) is the
+   operator's report; **this librarian has no shell and cannot verify
+   working-tree, index, or commit state.** The measurements are attributed
+   to him throughout for that reason.
+4. ***"0 hangs is not vacuous."*** **Established by the instrument's own
+   history rather than by this run**: before `8cb779f` a stalled sweep
+   reported **nothing at all**, and the pdfium corpus had never once
+   completed. The hang counter is known capable of firing because it **did**
+   fire — on `bug_455199.pdf`, which is what produced the timeout flag in
+   the first place. **A "0 hangs" column from a harness that could not
+   report a hang would look identical**, which is precisely why that
+   history is cited here instead of assumed.
+
+#### Ledger
+
+**NOTHING MINTED BY THIS ENTRY.** No Pass ID, no standing rule, no decision
+record, no operator question. The R165 minting filed the same day belongs
+to the entry below and to *Standing rules*, not to this one.
+
+**`FEATURES.md` — NO row added and NO box changed, and the absence is
+established rather than assumed.** A corpus sweep is **verification, not an
+operator capability**; `FEATURES.md` has **no tooling section by design**,
+and this is the **fifth** time that precedent has been applied (the gate
+itself, the timeout flag, the fixture, the §6.1.12 run, and now the sweep).
+Ticking a box for "we measured harder" would be the exact over-optimism the
+file's maintenance contract forbids.
+
 ### fix — THE THIRD DEFECT THE veraPDF GATE FOUND, and the first one where **pdfce'S OUTPUT WAS NEVER WRONG**: a full rewrite stops carrying junk only pdfce can read past (no Pass ID — a correctness fix to the shipped full-rewrite save path that **REVERSES a deliberate `ARCHITECTURE.md` §5.6 contract**, plus a new gate-watched fixture; core + fixtures + tooling) — 2026-08-07, committed `fa4f83c`, branch `pass-8-redaction`
 
 **Why NO Pass ID.** Third in an established series, filed in exactly the
@@ -374,6 +503,41 @@ bar.** The three reasons, in order of weight:
 
 **ENGINEER: mint R165, or record the refusal, so the next filing does not
 re-open it.**
+
+> **✅ RULED 2026-08-07 (fifteenth filing) — MINTED AS `R165`, AGAINST THIS
+> LIBRARIAN'S RECOMMENDATION, ON THIS LIBRARIAN'S OWN ARGUMENT.** The
+> operator ruled it in. **The reasoning that decided it is recorded in
+> `R165`'s own entry in *Standing rules*, which is canonical**; the summary
+> here exists so the ledger above is not read as current.
+>
+> - **The deciding asymmetry is reason 2 above.** The candidate refused one
+>   filing earlier was **already carried** by R27 plus the resource-guard
+>   rule. This one is carried by **nothing**. *"That asymmetry is the whole
+>   ruling."*
+> - **Reason 3 was accepted and inverted.** §5.6 pointing the other way is
+>   not a reason to withhold the rule — it is the reason the rule is needed,
+>   because an engineer meeting a **new** ambiguity in a **different clause**
+>   follows §5.6's preserve-everything instinct back into the same hole.
+>   R27 governs *refusing*, not *representing*.
+> - **The counter in reason 3 was ruled the strongest part of the filing.**
+>   Neither §5.6.1 nor the `personal_rag/pdf` lesson is **consulted** when a
+>   new ambiguity is met elsewhere — which is exactly when the rule binds.
+> - **The one-occurrence objection is weaker here than it looks.** The
+>   single occurrence affected **every preamble-carrying file pdfce has ever
+>   written**. A two-occurrence bar guards against minting from a
+>   coincidence; this is a **general principle about representing
+>   ambiguity**, not a coincidence awaiting corroboration.
+> - **Its LIMIT is stated in the rule** so it is not over-applied: it binds
+>   only where the spec is **genuinely silent or self-contradictory** — not
+>   where pdfce merely prefers a reading, and never as licence to deviate
+>   from a clear requirement because an implementation disagrees.
+>
+> **Ceiling R164 → R165; R166 is next free.** Decision 030's three
+> contingent candidates plus the cross-RAG-handoff proposal **transfer
+> R165 → R166** — the **fourth** such transfer this session. **Nothing is
+> renumbered**; the ledger above is left exactly as filed. Pass family
+> stays **43**; decision records stay **031**; operator questions stay
+> **(bb)**.
 
 **`FEATURES.md` — ONE row's description amended, NO box changed, and the
 absence is established rather than assumed.** `grep -n -i "save\|rewrite"
@@ -1859,6 +2023,35 @@ than as R86. The ledger gate agrees by construction: it counts
 >   preservation ever returns.
 > - Full record: the ***third*** *defect the veraPDF gate found* entry at the
 >   top of *Shipped*.
+
+> **★ FURTHER AMENDED 2026-08-07 (fifteenth filing) — THE FULL CORPUS SET
+> HAS NOW BEEN SWEPT AT ONE COMMIT, AND EVERY SWEEP FIGURE FILED ABOVE IS
+> SUPERSEDED AS A DESCRIPTION OF COVERAGE.** Read this before quoting any
+> corpus count from this entry.
+>
+> - **NINE corpora, 3,759 files, 0 regressions, 0 hangs, 502 improved**,
+>   measured post-fix by the **operator** at `fa4f83c`. The figures filed
+>   above (115 pdfbox, then 560 qpdf, then 288 pdfium, then 569 PDF/A-1b)
+>   are each **true as filed** and each described the corpus available to
+>   that filing; **none of them described the set.** Per-corpus table and
+>   the two caveats that govern how the total may be read: the
+>   ***full external corpus, swept end to end*** entry at the top of
+>   *Shipped*.
+> - **The parse-vs-conformance boundary stated below is now load-bearing
+>   rather than precautionary.** **2,330** of those 3,759 files come from
+>   named PDF/A and PDF/UA **conformance** suites outright
+>   (982 + 569 + 484 + 295), and the mixed 459-file row (Isartor,
+>   PDF/UA-2, TWG, PDF/A-1a) is largely conformance material too —
+>   **2,789 files whose provenance invites the misreading.** **A green
+>   parse sweep over a
+>   conformance corpus is not a conformance result**, and the sentence
+>   below — *"the PDF/A CONFORMANCE gate remains unscoped Backlog"* —
+>   stands unchanged and is the reason this amendment exists.
+> - **The gate has now produced its first sweeps that found NOTHING**, in
+>   six of the nine corpora. **That is the intended steady state, not a
+>   sign the instrument stopped working**: the pdfium and qpdf improvement
+>   counts (223 and 275) are unchanged from their own entries, so the gate
+>   is demonstrably still distinguishing outcomes on this run.
 
 **Not a Pass, and the boundary is stated so the green is not overread.**
 This is the **parse** gate only. **The PDF/A CONFORMANCE gate remains
@@ -27392,6 +27585,158 @@ not a judgment call:**
   **Nothing is renumbered.** Pass family stays **43**; decision records
   stay **031**; operator questions stay **(bb)**.
 
+  > **✅ AMENDED 2026-08-07 (fifteenth filing) — R165 IS NOW MINTED** (the
+  > emit-the-coinciding-form rule, immediately below). **The ceiling is
+  > R165; R166 is next free.** Decision 030's three still-unminted
+  > contingent candidates and the cross-RAG-handoff proposal — recorded in
+  > the paragraph above as taking R165 — **now take R166**, by the same
+  > read-the-live-ceiling transfer (R106/R133) that has moved them
+  > R157 → R158 → R159 → R161 → R162 → R163 → R164 → R165 → R166.
+  > **Nothing is renumbered**; the paragraph above is left exactly as
+  > filed.
+
+- **R165 — Where a format spec leaves a question genuinely unresolved, emit
+  the form under which the competing readings COINCIDE — not the form under
+  which pdfce's own reading is correct (methodology / output policy; no
+  decision number; librarian-proposed with a recommendation AGAINST,
+  ENGINEER-RULED IN; 2026-08-07, `save_full`'s preamble drop / `fa4f83c`,
+  `ARCHITECTURE.md` §5.6.1).**
+
+  **The finding, in its enforceable form:**
+
+  > **When the standard does not settle how a value is to be interpreted,
+  > and real readers are known to differ, pdfce does not ship the encoding
+  > that is correct under pdfce's preferred reading. It ships — where one
+  > exists — the encoding under which the competing readings produce the
+  > SAME answer, so the output is unambiguous to every reader rather than
+  > correct only to those on pdfce's side. Where no coinciding form exists,
+  > the ambiguity is disclosed and, if it cannot be represented honestly,
+  > refused (R27).**
+
+  **The instance, and the reason it is worth a number even at one
+  occurrence.** ISO 32000-1 §7.5.4/§7.5.5 say cross-reference offsets are
+  measured *"from the beginning of the file"*, and the spec RAG
+  (`iso32000__s__7.5.md`) records the base as ***"a real, load-bearing
+  ambiguity. ISO 32000-1 gives no guidance"*** once the header is not at
+  byte 0. pdfce preserved any leading preamble through a full rewrite and
+  emitted **absolute** offsets — **correct**, exhaustively verified (all 17
+  entries plus `startxref` matched their true byte positions). veraPDF
+  reads those offsets as **header-relative whenever any preamble exists**
+  and could not open the file at all. The fix was not to switch sides: it
+  was to emit `%PDF-` **at byte 0**, where *absolute* and *header-relative*
+  are **the same number**. **The disagreement was not resolved — it was
+  made unable to matter.**
+
+  **★ THE LIMIT, STATED AS PART OF THE RULE, because this is the one most
+  likely to be over-applied.** R165 binds **only** where the spec is
+  **genuinely silent or self-contradictory** on the point. It is:
+
+  - **NOT** a licence to deviate from a **clear** spec requirement because
+    some implementation disagrees with it. Where the spec IS clear, follow
+    it, and **refuse or disclose the divergence** — that is R27's job, and
+    R165 does not touch it.
+  - **NOT** engaged by pdfce merely *preferring* a reading, or finding one
+    more convenient, or finding one better supported. The precondition is
+    that the standard does not decide, established by citation, not by
+    assertion.
+  - **NOT** a general normalisation licence. The coinciding form must be
+    reachable **inside the contract of the save mode being used** (§5.1) —
+    which is why the preamble drop is legal on `save_full` and illegal on
+    `save_incremental` and identity-append.
+
+  **The honest test to apply before invoking R165:** *name the clause, and
+  name the two readings.* If the clause can be cited and both readings can
+  be stated in a sentence each, the precondition holds. If the second
+  reading has to be constructed to justify the change, R165 is not what is
+  happening.
+
+  **★ IT CAN CONFLICT WITH §5's MINIMAL-DIFF POSTURE, AND §5.6.1 IS THE
+  WORKED EXAMPLE OF RESOLVING THAT CONFLICT.** `ARCHITECTURE.md` §5.6 says
+  ***do not normalize what the operator did not ask about***, and that
+  instruction pointed **the other way here** — a preamble is exactly such a
+  thing, and preserving it was a tested, reasoned contract with its
+  argument written down. **§5.6 was narrowed, at one named point, to make
+  room** (§5.6.1). Read the two together: **§5.6 is the default and R165 is
+  the exception that must be argued for**, per-case, with the clause cited
+  and the save-mode contract checked. **R165 is not a standing permission
+  to normalise; it is the shape of the argument that can earn one.**
+
+  **★ THE ONE-OCCURRENCE OBJECTION, OVERRULED WITH THE REASON — and this
+  is the second time in one day, so the precedent is stated rather than
+  left to accumulate.** This project's promotion bar is **two** (R156's two
+  mis-verifications; R87's four-then-five; R163's two-in-one-day). R165 has
+  **one measured instance**. The engineer's reasons:
+
+  1. **The single occurrence affected EVERY preamble-carrying file pdfce
+     has ever written.** A two-occurrence bar guards against minting from a
+     **coincidence**; this is a **general principle about representing
+     ambiguity**, not a coincidence awaiting corroboration. The count of
+     occurrences and the reach of the occurrence are different
+     measurements, and here they diverge sharply.
+  2. **Nothing else carries it — and that asymmetry is the whole ruling.**
+     The candidate refused one filing earlier (*bound an input-VALUE-driven
+     cost before incurring it*) was **already carried** by R27 plus the
+     resource-guard rule, which is why it was refused. This one is carried
+     by **nothing**.
+  3. **§5.6 actively pointed the other way** and had to be narrowed to make
+     room for the fix. Without a rule, an engineer meeting a **new**
+     ambiguity in a **different clause** follows §5.6's preserve-everything
+     instinct **straight back into the same hole**. R27 governs *refusing*,
+     not *representing*, and there is no third rule in between.
+  4. **The librarian's own counter-argument was the strongest part of the
+     case and is recorded as such.** The proposal noted that R165's content
+     was *already filed as substance* — in §5.6.1 and in the
+     `personal_rag/pdf` lesson — and that per **R163** an obligation an
+     artifact already carries does not also need a rule. **The counter that
+     overturned it: neither §5.6.1 nor the RAG lesson is CONSULTED when a
+     new ambiguity is met somewhere else**, which is precisely the moment
+     the rule binds. R163 prefers a mechanical carrier over a rule; **here
+     there is no mechanical carrier at all** — §5.6.1 documents one
+     resolved case and cannot refuse a wrong choice in the next one.
+
+  **Where it sits relative to the neighbours it is most likely to be
+  confused with.** All three are about what pdfce does when a file and the
+  standard do not line up, and they divide by **what is uncertain**:
+
+  - **Against R27** (*refuse what has no good reading, disclose what has
+    one*) — R27 governs whether pdfce acts at all when the **input** is
+    unreadable or ambiguous. R165 governs how pdfce **represents its own
+    output** when the **standard** is ambiguous. R27 is about refusing;
+    R165 is about representing. They meet only when no coinciding form
+    exists, at which point R165 hands off to R27.
+  - **Against §5.6** (*never normalize*) — the default, and the thing R165
+    is an exception to. See the conflict paragraph above.
+  - **Against the R87 / R159 / R162 / R164 family** (*is my evidence
+    real?*) — those govern **measurement**. R165 governs **emission**. It
+    is not a member and does not widen the family's sentence.
+
+  **Recorded in the librarian's favour, because the disposition is the
+  point:** the candidate was **proposed with a recommendation AGAINST
+  minting**, and the argument that overturned the recommendation was
+  supplied **by the same filing**, stated plainly *"because it is the
+  strongest case for R165"*. **A close call handed over with both sides
+  argued is the disposition this project wants**; the ruling is recorded
+  here so the next filing does not re-open it.
+
+  **See** `R27` (the refusal half), `R106`/`R133` (the ceiling transfer
+  below), `R163` (the mechanical-carrier preference this rule was tested
+  against and survived), `ARCHITECTURE.md` **§5.6.1** (the worked example
+  and the boundary), §5.1 (the save-mode contracts that decide where the
+  coinciding form may be emitted), and
+  `C:\personal_rag\pdf\lesson_20260807_verapdf_reads_xref_offsets_as_header_relative_when_a_preamble_exists.md`
+  for the veraPDF-specific measurement.
+
+  **Ceiling is now R165** (was R164). **R166 is next free.** Decision
+  030's three still-unminted contingent candidates and the
+  cross-RAG-handoff proposal — last recorded as claiming R165 — **now take
+  R166**, by the same read-the-live-ceiling transfer (R106/R133) that has
+  moved them R157 → R158 → R159 → R161 → R162 → R163 → R164 → R165 →
+  R166. **This is the FOURTH such transfer this session, and saying so is
+  the point of stating it** — the claim has never been renumbered, only
+  re-pointed at the live ceiling, exactly as R106/R133 require. **Nothing
+  is renumbered.** Pass family stays **43**; decision records stay **031**;
+  operator questions stay **(bb)**.
+
 ### RESOLVED 2026-08-06 — a request to "look like <competitor>" is converted into neutral, operator-confirmed PROPERTIES before any design work — ACCEPTED AS AN AMENDMENT TO R123 IN PLACE; R158 NOT MINTED
 
 **RULING (engineer, 2026-08-06, continuation 106): ACCEPTED, AS AN
@@ -28444,6 +28789,14 @@ proposal **transfer from R164 to R165**, by the read-the-live-ceiling rule
 than performed silently. Pass family stays **43**; decision records stay
 **031**; operator questions stay **(bb)**. **Nothing is renumbered.**
 
+> **[★ AMENDED 2026-08-07, fifteenth filing — the ceiling stated above and
+> in this record's HEADING is superseded.** `R165` **is minted** (*emit the
+> form under which the competing readings coincide*). **Ceiling R164 →
+> R165; R166 next free**, and the contingent claims **transfer R165 →
+> R166** — the **fourth** such transfer this session. **R164 itself is
+> unchanged in substance**; only the ceiling moved. The heading and the
+> paragraph above are left exactly as filed.**]**
+
 **Three things the ruling settled that the proposal could only ask for,
 recorded here because each was a real cost:**
 
@@ -28648,6 +29001,16 @@ about **how to file**, so it belongs where an agent performing an
 amendment will meet it. R159 was **not** minted; the ceiling stays
 **R158**. (Full ruling and the original proposal: the *RESOLVED
 2026-08-07* block in *Standing rules*.)
+
+> **[★ AMENDED 2026-08-07, fifteenth filing — the sentence *"the ceiling
+> stays R158"* is TRUE AS OF THAT RULING and is NOT a live ceiling
+> claim.** It records what that one refusal did to the ledger. **The live
+> ceiling is `R165`** (R166 next free), and the live ceiling is only ever
+> read from `tools/check-ledger-numbers.py`, never from prose — which is
+> what R106/R133 require and why this footer states no number that the
+> checker does not print. Amended here **because this section's own rule
+> demands it**: an amendment filed against fewer than every editable
+> location that states the fact forks the record.**]**
 
 **The occurrence it is derived from, in one paragraph, because the shape
 matters more than the instance.** Pass 23.3's dependency was amended from

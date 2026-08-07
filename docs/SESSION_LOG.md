@@ -21133,3 +21133,240 @@ amendments, three indices):**
 should check `D:\Dev\pdfce-backups\` if it matters. This filing edited
 `docs/` and the RAG trees only; **no claim is made here about the working
 tree, the index, or any remote.**
+
+> **[★ AMENDED 2026-08-07, fifteenth filing — the R165 candidate flagged
+> above under *Still in flight* is RULED: `R165` IS MINTED.** Ceiling
+> R164 → R165; R166 next free. **The entry above is left exactly as
+> filed**, including its recommendation against minting — the
+> recommendation was correct to make, and was overruled on this filing's
+> own counter-argument. See the fifteenth filing, below.**]**
+
+## 2026-08-07 (fifteenth filing) — **`R165` IS MINTED** (*where a format spec leaves a question genuinely unresolved, emit the form under which the competing readings COINCIDE*) — **ruled IN against this librarian's own recommendation, on this librarian's own counter-argument** — and **THE FULL EXTERNAL CORPUS IS SWEPT END TO END AT ONE COMMIT: nine corpora, 3,759 files, 0 regressions, 0 hangs, 502 improved**
+
+**Shipped:**
+
+- **Nothing built by this filing, and NO COMMIT is filed by it.** This is a
+  **ruling** plus a **measurement record**. The measurements are the
+  **operator's** — *"I ran every number below myself"* — taken post-fix at
+  `fa4f83c`, tree clean at `737f14a`.
+- **No agent was live while this filing ran**, stated because it is what
+  makes the append-only edits safe to make without a re-read race.
+
+**Decisions made this session:**
+
+- **★ `R165` IS MINTED — and the reasoning is what distinguishes it from
+  the candidate refused two filings ago.** The wording, as ruled:
+  ***Where a format spec leaves a question genuinely unresolved, emit the
+  form under which the competing readings COINCIDE — not the form under
+  which pdfce's own reading is correct.***
+  - **The deciding asymmetry: the earlier candidate was already carried by
+    R27 plus the resource-guard rule. This one is carried by NOTHING.**
+    *That asymmetry is the whole ruling.*
+  - **§5.6 actively pointed the other way** and had to be narrowed to make
+    room for the fix. Without a rule, an engineer meeting a **new**
+    ambiguity in a **different clause** follows §5.6's preserve-everything
+    instinct straight back into the same hole. **R27 governs *refusing*,
+    not *representing*.**
+  - **This librarian's own counter-argument was ruled the strongest part of
+    the filing**: neither §5.6.1 nor the `personal_rag/pdf` lesson is
+    **consulted** when a new ambiguity is met elsewhere — which is exactly
+    when the rule binds. R163 prefers a mechanical carrier over a rule;
+    **there is no mechanical carrier here.**
+  - **The one-occurrence objection is weaker than it looks.** The single
+    occurrence affected **every preamble-carrying file pdfce has ever
+    written**. A two-occurrence bar guards against minting from a
+    **coincidence**; this is a general principle about representing
+    ambiguity. **Second one-occurrence overrule in one day, and for a
+    DIFFERENT reason than R164's** (that one had already produced a false
+    report to the operator) — both precedents are now recorded so they do
+    not blur into "the bar is optional".
+- **★ ITS LIMIT IS PART OF THE RULE, or it will be over-applied.** R165
+  binds **only** where the spec is **genuinely silent or
+  self-contradictory** — **not** where pdfce merely prefers a reading, and
+  **never** as licence to deviate from a **clear** requirement because some
+  implementation disagrees. Where the spec IS clear: follow it, and refuse
+  or disclose the divergence (**R27**). **It can conflict with §5's
+  minimal-diff posture, as it did here**, and **§5.6.1 is the worked
+  example of resolving that conflict** — §5.6 stays the default, R165 is
+  the exception that must be argued for per case.
+- **The disposition is recorded as much as the ruling.** The candidate was
+  **proposed with a recommendation AGAINST**, and the argument that
+  overturned it was supplied by the same filing, stated plainly *"because
+  it is the strongest case for R165"*. **A close call handed over with both
+  sides argued is the disposition this project wants.**
+- **The sweep is filed as a Shipped entry, not as an amendment.** It is the
+  **first time the whole corpus set has been swept at one commit**; the
+  three defect entries each report the corpus that found them and none
+  reports the set. **No Pass ID** — nothing was built.
+
+**Findings + decisions:**
+
+- **THE FULL EXTERNAL CORPUS, POST-FIX.** PDF/A-2b **982** · PDF/A-1b
+  **569** · PDF/A-4 **484** · qpdf **560** · PDF/UA-1 **295** · pdfium
+  **288** · Isartor+PDF/UA-2+TWG+PDF/A-1a **459** · pdfbox **115** ·
+  pdf20examples **7**. **0 regressions and 0 hangs in every row**;
+  **502 improved** (275 qpdf, 223 pdfium, 3 pdfbox, 1 mixed). **Roughly 157
+  refusals, which are NOT failures** — a refusal is pdfce declining by name
+  to write what it cannot write honestly (R27).
+- **★ IT IS A PARSE GATE, NOT A CONFORMANCE GATE**, and this is filed
+  **above** the total because *"3,759 clean"* will be quoted later. It
+  proves an independent implementation can **READ** pdfce's output. **It
+  says nothing about PDF/A conformance** — least of all for the **2,330**
+  files drawn outright from named PDF/A and PDF/UA conformance suites. The
+  conformance gate stays **parked** until `to-pdfa`, and stays a
+  **separate tool**.
+- **★ THE TOTAL IS A SUM, AND R164 APPLIES TO IT — the operator said so
+  about his own number, and invited the check.** The nine per-corpus rows
+  are the measurements; the totals are arithmetic over them, and **no
+  individual corpus's verdict may be read off the aggregate.** **This
+  librarian re-derived both rather than inheriting them:**
+  `982+569+484+560+295+288+459+115+7` = **3,759 exactly**;
+  `275+223+1+3` = **502 exactly**. **Both are exact, so the "~" is dropped**
+  — on a re-derivation, not on trust. **R164 aimed at the operator's own
+  headline number the day after it was minted is the best available
+  evidence the rule is live rather than filed.**
+- **★ THE FINDING WORTH PRESERVING ABOVE THE NUMBERS — all three defects
+  shared ONE shape: pdfce read its own broken output perfectly.**
+  `round-trip` reported **success**; rasters **matched**; `extract-text`
+  **worked**; on the preamble defect `object_count()` and `catalog()`
+  **both passed** while the file was unopenable to an outside reader.
+  **Every in-house instrument agreed the files were fine.** That is **the
+  closed-loop argument the gate was built on, demonstrated three times in
+  one day on code that had already SHIPPED** — three defects, three
+  corpora, one shape. **A clean sweep is a fact about today; the shape is a
+  fact about the method**, and a future sweep that finds nothing does not
+  weaken it.
+- **The gate has now produced its first sweeps that found NOTHING**, in six
+  of nine corpora — **the intended steady state, not a sign it stopped
+  working.** The pdfium and qpdf improvement counts (223, 275) are
+  unchanged from their own entries, so the instrument is demonstrably still
+  distinguishing outcomes on this run.
+
+**Gates:**
+
+**Both ledger checkers re-run by THIS LIBRARIAN, before and after the
+filing, each read by its own exit code (R87):**
+
+| checker | before | after |
+|---|---|---|
+| `tools/check-ledger-numbers.py --stats` | **exit 0**, ceiling **R164** | **exit 0**, ceiling **R165** |
+| `tools/check-passes-filed.py` | **exit 0** | **exit 0** |
+
+**Ceilings after this filing, read from the checker's own output rather
+than from the file:** Pass **43**, standing rules **R165** (**R166** next
+free), decision records **031** (**032** next free), operator questions
+**(bb)**. **Parse stats: 165 standing rules defined** (was 164) — **the
+delta is exactly one**, predicted before the run, which is how a rule
+heading that failed to parse would have been caught.
+
+**★ THE GATE'S GRAMMAR WAS RESPECTED DELIBERATELY, because it has exited 1
+six times on this exact mistake.** `check-ledger-numbers.py` matches
+`^\s*- \*\*R(\d+)…—`, so a **comparison** bullet written in that shape
+parses as a rule **DEFINITION** and reports a duplicate. Every comparison
+bullet in R165's entry is written so it cannot parse as a definition
+(`- **Against R27** — …`), and the **165 = 164 + 1** count above is the
+proof it worked rather than an assumption that it did.
+
+**No `cargo` gate was run by this librarian and none is claimed** — this
+filing touched no code.
+
+**How the absences were established (R87):**
+
+1. ***"0 regressions, 0 hangs across all nine corpora"*** — **established
+   by the OPERATOR running every sweep himself** at `fa4f83c` with
+   `--timeout` armed, which is the only form of a completed-sweep claim
+   available since `8cb779f`. **This librarian ran no sweep and claims
+   none.**
+2. ***"The totals are 3,759 and 502"*** — **established by re-deriving
+   both sums here**, not by accepting them. The one number in the filing
+   this librarian owns.
+3. ***"0 hangs is not vacuous"*** — established from the **instrument's
+   history**, not from this run: before `8cb779f` a stalled sweep reported
+   **nothing at all** and pdfium had never completed; the hang counter is
+   known capable of firing because it **did** fire, on `bug_455199.pdf`.
+   **A "0 hangs" column from a harness that could not report a hang would
+   look identical** — R162's question aimed at a column.
+4. ***"`FEATURES.md` needs no change"*** — established by **reading the
+   file's section list** (`Document & pages`, `Text`, `Vector objects`,
+   `ce dimensions`, `Annotations & markup`, `Forms`, `Redaction &
+   security`, `Fonts & rendering`, `Shell & UX`, then `Planned`, `Cannot`,
+   `Will not`): **every section is capability-shaped and there is no
+   tooling section**, by design. Confirmed separately that the **Save** row
+   already carries the preamble-drop behaviour, filed by the fourteenth
+   filing.
+5. ***"No other document carries a stale R165-is-next-free claim"*** —
+   established by a **tracked-files grep** (`git grep -n "R165" -- docs/`)
+   rather than by recalling which files were touched; the live locations
+   were found and all amended (listed below). Historical ledger paragraphs
+   inside already-filed entries were **left as filed**, per the append-only
+   rule and the precedent R164's own minting set.
+6. ***"Nothing else changed between the fix and the sweep"*** — **NOT
+   established, and NOT asserted.** The `737f14a` tree state is the
+   operator's report; this librarian has **no shell view of the working
+   tree, the index, or any remote.**
+
+**Documents amended (three; `FEATURES.md` deliberately untouched):**
+
+- **`ROADMAP.md`** — (1) **`R165` MINTED** in *Standing rules*, with its
+  enforceable form, its **LIMIT**, its §5.6 conflict clause, the
+  one-occurrence overrule and its reason, the neighbour comparison
+  (R27 / §5.6 / the evidence family), and the ceiling-transfer paragraph;
+  (2) a **dated footer on R164's ceiling paragraph** (ceiling R164 → R165,
+  contingent claims R165 → R166); (3) a **✅ RULED footer** on the
+  fourteenth filing's *Ledger*, where the candidate was put; (4) a **new
+  *Shipped* entry at the top** for the full-corpus sweep; (5) a **★ FURTHER
+  AMENDED** block on the *veraPDF parse gate* tooling entry, because every
+  corpus figure filed there described the corpus available to that filing
+  and **none of them described the set**.
+- **`ARCHITECTURE.md`** — (1) **§5.6.1's contingent claim amended**: the
+  clause naming R165 as *"deliberately not minted"* is left as filed and
+  marked superseded, with the two consequences that bind that section (it
+  is R165's **worked example**; R165 widens the exception by **nothing**);
+  (2) a bracketed amendment on §12's **sixteenth** 2026-08-07 entry, whose
+  *"R165 is next free"* is now stale; (3) a **★ RULED** footer on §12's
+  **eighteenth** entry, where the candidate was put; (4) a **new
+  nineteenth** 2026-08-07 §12 entry carrying the minting, the sweep, and
+  the closed-loop finding.
+- **`SESSION_LOG.md`** — this entry, plus an amendment footer on the
+  fourteenth filing whose *Still in flight* item is now ruled.
+- **`FEATURES.md` — NO row added, NO box changed, and the absence is
+  established rather than assumed** (see R87 item 4 above). **A standing
+  rule is not a capability and a corpus sweep is not a capability**;
+  `FEATURES.md` has no tooling section by design, and this is the **fifth**
+  application of that precedent.
+
+**RAG escalations: NONE THIS FILING, and that is a SCOPE DECISION, not an
+omission.** The dispatch scoped this filing to `docs/`. **One finding is
+flagged as owed** so it is not lost: *all three gate-found defects shared
+the shape "the producer reads its own broken output perfectly, so every
+in-house instrument agrees"* — a general verification-methodology finding
+that belongs in `D:\dev\rag\rust\` beside
+`model_level_assertion_blind_to_normalized_away_defect.md` and
+`survivorship_check_over_what_you_have_cannot_see_what_you_reference.md`,
+**both of which carry adjacent instances but neither of which states the
+three-defect generalisation.** **Engineer: dispatch for the RAG write when
+scope allows.**
+
+**Still in flight / for next session:**
+
+- **The R165 ruling CLOSES the one item the fourteenth filing left open.**
+  It should not be carried forward again.
+- **NEW, and small: the RAG escalation above is OWED** — flagged, not
+  written, because this filing was scoped to `docs/`.
+- **The PDF/A conformance gate** remains unscoped Backlog, remains
+  deliberately a **separate tool**, and is now **the named limit on the
+  3,759-file result** rather than a general caveat.
+- **Everything else carried forward from the fourteenth filing is
+  UNCHANGED** — Pass 20.5's remaining cut half and its owed
+  rendered-appearance check, the multi-page repeated-field labelling gap,
+  `tools/gui-drive.ps1`'s build-or-assert-freshness item, Pass 20.3's
+  `/I`/`/TI`/push buttons and the unruled push-button verb name, the
+  `pdfce-ui-specialist` spec-filing call, F0's disposition, and the
+  **`Acrobat_Features` stale-GAP dispatch** recommended in *Update
+  protocol*.
+
+**Backup currency is not verifiable from the documents** — the engineer
+should check `D:\Dev\pdfce-backups\` if it matters. **This filing edited
+`docs/` ONLY** — no `crates/`, no `tools/`, no `fixtures/`, no RAG tree —
+and **no claim is made here about the working tree, the index, or any
+remote.**
