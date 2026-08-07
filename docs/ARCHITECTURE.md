@@ -413,6 +413,80 @@ D:\Dev\pdfce\
                                    above the 0.67 s naive pixel scaling
                                    predicts) holds either way.
                                    See §12's twenty-fifth entry.
+                                   **★★ THE CACHE IS BUILT, AND THIS
+                                   CRATE IS NOW FLOOR-BOUND (2026-08-07,
+                                   `ce57ed5`, **`Pass 45.0`**).**
+                                   `crates/pdfce-render/src/clip_cache.rs`
+                                   (414 lines) caches the mask **AFTER**
+                                   intersection, keyed on the build inputs
+                                   **plus which clip it is intersected
+                                   with**, bounded to **4 entries, LRU**,
+                                   and **owned by the `Interpreter`** so it
+                                   dies with the content stream —
+                                   deliberately **not global and not
+                                   `thread_local`**, because rendering moved
+                                   to a worker in **Pass 44.0** and masks are
+                                   keyed partly on device size.
+                                   **Result, two instruments, both filed:**
+                                   engineer end-to-end **1× 32,313 →
+                                   907 ms (35.63×)** and **2× 447,862
+                                   → 1,425 ms (314.3×)**; the
+                                   `render-profile` harness, render phase
+                                   only, **1× 10.68 → 0.79 s
+                                   (13.52×)** and **2× 58.52 →
+                                   1.30 s (45.02×)**. **The first pair is
+                                   DAY-CUMULATIVE over three fixes; the second
+                                   is THIS COMMIT ALONE**, and they differ by
+                                   a near-constant **117 ms at 1× / 125 ms
+                                   at 2×** of process start and PNG encode.
+                                   **Output BYTE-IDENTICAL — SHA-256
+                                   `9250a89f…`, the SAME hash as the
+                                   32.3 s render, plus an unchanged aggregate
+                                   over 115 synthetic fixtures.**
+                                   **★★ THE ABA HAZARD IS THE
+                                   LOAD-BEARING DESIGN DETAIL, not the
+                                   speed-up:** incoming-clip identity is
+                                   **pointer identity**, which can lose hits
+                                   and cannot invent one — but a **bare**
+                                   pointer would be **unsound**, since a
+                                   dropped mask's address can be reused and a
+                                   stale entry would then match a pointer that
+                                   means something else, **returning the wrong
+                                   clip and painting a silently wrong
+                                   picture**. **Each entry holds a strong
+                                   `Arc` to the incoming mask**, pinning the
+                                   address for as long as the entry can match.
+                                   **No timing would have shown that failure
+                                   — a wrong-mask hit is FASTER.**
+                                   **Measured hit rate 24,087 + 41 = 24,128 =
+                                   99.83%, EXACTLY the census ceiling**, the
+                                   41st build being the single eviction 4
+                                   slots make over 40 distinct keys; residual
+                                   clip cost **41 × 362 µs = 14.8 ms
+                                   = 1.9% of the render**, down from
+                                   **8.72 s = 86%**.
+                                   **★★ SO THE BINDING CONSTRAINT ON
+                                   THIS CRATE CHANGES: the floor is now the
+                                   COST.** 0.49–0.53 s against a 0.79 s
+                                   render — **62–67% of what is left**,
+                                   **maximum further speed-up at 1× =
+                                   0.79 ÷ 0.51 = 1.55×**, and the only
+                                   remaining target is the **operator walk**
+                                   (148,517 operators = **3.43 µs each**).
+                                   **★ AND THE ~1.7 s PROJECTION ABOVE IS
+                                   DISCHARGED BY MEASUREMENT, WHICH ALSO
+                                   ADJUDICATED AN EARLIER CORRECTION:** floor
+                                   0.51 + painting **0.27** = **0.78 s**
+                                   against **0.79 s** measured (**1.3% apart,
+                                   CONFIRMED**), while floor 0.51 + painting
+                                   **0.87** = **1.38 s** (**75% high,
+                                   REFUTED**) — so the **`R164` painting
+                                   correction, made on reasoning alone and
+                                   never independently measured, is now
+                                   confirmed**, and the projection was
+                                   conservative by 2.2× because it rested
+                                   on the uncorrected residual.
+                                   See §12's twenty-sixth entry.
                                    **`font\subset.rs` (Pass 21.0, FF-C, decision 021,
                                    commit `48c6b77`; body-section sync 2026-08-04
                                    continuation 77):** `plan_subset` parses an
@@ -11143,3 +11217,151 @@ with a forward pointer.
   consulting a ledger** — the last version of that ledger was wrong twice,
   and the correction to it was also wrong. Full table with nearest-neighbour
   files: §12 of the `1992d13` ROADMAP entry.
+
+- **2026-08-07 (twenty-sixth filing, `ce57ed5` + `c3d8853`) — THE CLIP-MASK
+  CACHE, `Pass 45.0`, AND A GATE THAT ASKED A COMMIT TO CONTAIN ITS OWN
+  HASH.** Two commits: the render optimisation the three-premise census
+  sequence was built to justify, and a ledger-gate fix.
+
+  **(1) ★★ AN `Arc` PINS THE KEY, AND THAT IS THE ENTRY'S MOST IMPORTANT
+  LINE.** `crates/pdfce-render/src/clip_cache.rs` keys the incoming clip by
+  **pointer identity** (`Arc::as_ptr`) — stricter than value equality, so it
+  can lose hits and cannot invent one. **A BARE POINTER WOULD BE UNSOUND:**
+  drop the incoming mask, let a later allocation reuse the address, and a
+  stale entry matches a pointer that now means something else — **ABA,
+  returning the wrong clip and painting a silently wrong picture.** Each
+  entry therefore holds a **strong `Arc` to the incoming mask**, pinning that
+  address for as long as the entry can be matched. **No timing number would
+  have shown this failure (a wrong-mask hit is FASTER), and none of the tests
+  the dispatch specified exercise address reuse.** Same class as
+  `6b33789`'s `RasterPipelineBlitter::new` returning `None` and dropping the
+  paint: **wrong output that no assertion in the render path is looking at.**
+  **The architectural rule this makes explicit: pointer-as-identity is a
+  correct optimisation and an incorrect key — the difference is ownership.**
+
+  **(2) ★★ WHAT IS CACHED IS THE MASK *AFTER* INTERSECTION**, so a hit skips
+  `Mask::new`, `fill_path` **and** the multiply — **362 µs each, not the
+  259 µs a build-only cache would save** (8.72 s vs 6.24 s over 24,087 hits).
+  **Sound only because `1992d13`'s census measured BOTH identities and found
+  40 of each** — build key (geometry + fill rule + CTM + mask size) and full
+  key (build key + incoming clip). **That equality is a property of THIS
+  document, not of PDF**; a file clipping one path under different
+  accumulated clips gets **fewer** hits and **cannot get WRONG ones**,
+  because the incoming clip is in the key.
+
+  **(3) ★★ THE RESULT, TWO INSTRUMENTS, NEITHER RECONCILED AWAY.**
+  ENGINEER, end to end (incl. process start + PNG encode): **1× 32,313 →
+  907 ms (35.63×)**, **2× 447,862 → 1,425 ms (314.3×)**. FORK's
+  `render-profile`, render phase only: **1× 10.68 → 0.79 s (13.52×)**, **2×
+  58.52 → 1.30 s (45.02×)**. **35.6×/314× are DAY-CUMULATIVE over three
+  fixes; 13.5×/45× are THIS COMMIT ALONE.** The after-figures differ by
+  **117 ms at 1× and 125 ms at 2×** (derived here, not relayed) — near
+  constant while pixels quadruple, consistent with **process start**
+  dominating rather than encode. **Output BYTE-IDENTICAL: SHA-256
+  `9250a89f…`, the same hash as the 32.3 s render this morning, plus an
+  unchanged aggregate over 115 synthetic fixtures** (the CAD sheet has zero
+  images and 242 text elements and cannot carry that claim alone).
+  **2178 tests / 0 failed = 2170 + the module's exactly 8 `#[test]`
+  functions.**
+
+  **(4) ★★ THE RENDER IS FLOOR-BOUND, WHICH CHANGES WHAT `pdfce-render`
+  OPTIMISATION MEANS FROM HERE.** Measured floor **0.49–0.53 s** (scale-flat
+  over a 64× pixel span; **148,517 operators = 3.43 µs each**) against
+  **0.79 s at 1×** — the floor is **62–67% of what remains**, and **the
+  maximum conceivable further speedup at 1× is 1.55×**. Clip construction,
+  86% of the render this morning, is now **41 rebuilt masks × 362 µs =
+  14.8 ms = 1.9%**. **Any future work must attack the operator walk itself,
+  and the headroom is small and known.**
+
+  **(5) ★ THE HIT RATE IS THE CENSUS CEILING, TO THE UNIT.** **24,087 hits +
+  41 builds = 24,128 = 99.830%** against the census ceiling **24,088 /
+  24,128 = 99.834%**; **the one-unit shortfall IS the single eviction a
+  4-slot cache makes over 40 distinct keys.** A predicted number confirmed to
+  the unit means the **model** of the workload was right, not merely its
+  magnitude.
+
+  **(6) Bounding and lifetime, with the reasons in the module's own docs.**
+  **`CAPACITY = 4`, LRU** — two entries serve 99.8%, so four is double the
+  measured need; **an entry pins ~2 MB at 1× and ~8 MB at 2×** (result *and*
+  incoming, one byte per device pixel), so four entries is **≤ ~8 MB at 1×
+  and ~32 MB at 2×**, against **38.3 MiB for all 40 (= 0.958 MiB each) for
+  ~0.2% more hits**. **Owned by the `Interpreter`**, so it dies with the
+  content stream — **not global and not `thread_local`**, because rendering
+  moved to a worker in **Pass 44.0**, masks are keyed partly on device size,
+  and **nothing outside one render should observe another render's masks**.
+  **LFU would also work; LRU was chosen for a hot-path-changes case that has
+  NOT been measured**, and the code says so rather than implying it.
+
+  **(7) ★★ A MEASUREMENT ADJUDICATED BETWEEN A FIGURE AND ITS OWN
+  CORRECTION, AND THE CORRECTION WON.** *floor 0.51 + painting **0.27*** =
+  **0.78 s** against the measured **0.79 s** (**1.3% apart, CONFIRMED**);
+  *floor 0.51 + painting **0.87*** = **1.38 s** (**75% high, REFUTED**);
+  adding the 0.015 s residual closes it to **0.795 s**. **The `R164` painting
+  correction was made on reasoning alone four filings ago and had never been
+  independently measured.** It now has been — and it also explains why the
+  previous filing's **~1.7 s projection was conservative by 2.2×**: that
+  projection rested on the uncorrected residual.
+
+  **(8) The gate fix, `c3d8853`.** `tools/check-passes-filed.py` joins on
+  *"this commit's short hash appears in `docs/ROADMAP.md`"*, which **a commit
+  that WRITES `ROADMAP.md` cannot satisfy** — the hash does not exist until
+  the commit does. **The defect was as old as the gate and had been latent
+  behind a NAMING HABIT**: filing commits are customarily subjected
+  `docs: …`, which the Pass-claim regex never matches, and it surfaced only
+  because `e7e74f2` was subjected `Pass 44.0: …`. **A habit was doing a
+  guard's job.** The exemption keys on the **diff** (`is_docs_only`), not the
+  subject — a commit touching only `docs/` cannot be a Pass's code half
+  whatever its subject says, while keying on the subject would rebuild the
+  same fragility. **Verified narrow rather than merely quiet:** `e7e74f2` and
+  `e6574b7` exempt at 4 files each, **`7926a78` NOT exempt at 4 files.**
+  **This answers the tooling ruling the twenty-fifth filing asked for, in
+  code, taking the exemption over the cite-it-next-filing convention on
+  `R163` grounds — a mechanical carrier beats a remembered obligation.**
+
+  **(9) `Pass 45.0` IS MINTED, scoped to `ce57ed5` only.** Family 45 was free
+  — **established by `git grep -n -E "Pass 45(\.|\b)"` over all tracked files
+  returning exit 1**, and by the ledger checker's ceiling of 44. **Every
+  clause of the four prior refusals' shared reason is false here**: in the
+  shipped crate, not behind a feature flag, behaviour changed materially, and
+  the GUI benefits with no change of its own. **One scope question is FLAGGED
+  for the engineer, not decided:** whether the ID should also cover
+  `76200e9` and `4475fe6` retroactively, on Pass 44.0's precedent. **Widening
+  later is a free amendment; narrowing is not.** **Rule candidate (ii)
+  (*choose a measurement's error direction against your own hypothesis*) is
+  HELD, NOT MINTED — `R167` stays free and reserved for it**, the trigger
+  being one independent second episode; the unbounded-final-bucket candidate
+  stays declined on `R163`.
+
+  **Git and backup state — CHECKED, not inferred (hard rule 8), and
+  TIMESTAMPED because a checked fact decays.** At the start of this filing:
+  `git rev-parse HEAD` → **`c3d8853`**; `git status --porcelain` → **0
+  lines**; `git remote -v` → **empty**. Newest bundle
+  (`ls -la D:\Dev\pdfce-backups\`): **`pdfce-20260807-1818.bundle`**, whose
+  `refs/heads/pass-8-redaction` is **`c3d8853…` = `HEAD` exactly**
+  (`git bundle list-heads`), with **`ce57ed5` an ancestor**
+  (`git merge-base --is-ancestor` → exit 0). **Both commits described here
+  are backed up.** **The clean tree remains a snapshot** — this filing reads
+  committed blobs only. **`docs/` ONLY was edited.** **SIX RAG findings are
+  OWED and unwritten** (three carried, three new: the ABA key, the
+  hash-over-printed-output contamination, and the gate precondition satisfied
+  by an unwritten convention); **their absence from `D:\dev\rag\rust\` was
+  established by `ls` and `grep`, with nearest-neighbour files named in §12
+  of the `ce57ed5` ROADMAP entry.**
+
+  **★★ THE SNAPSHOT EXPIRED INSIDE THIS FILING, FOR THE THIRD CONSECUTIVE
+  FILING.** `git rev-parse HEAD` re-run at the **end** returns **`9681112`**
+  — ***"the render worker starts saying what it did"***, 1 file,
+  `crates/pdfce-gui/src/render_worker.rs` **+23 / −0**, committed **18:33**,
+  landed mid-filing. `git status --porcelain` shows **exactly this filing's
+  four `docs/` files**. **Nothing in this entry is affected** — it describes
+  committed blobs, and neither `ce57ed5` nor `c3d8853` moved. **★ AND IT
+  CORROBORATES THE HEADLINE FIGURE FROM THE INSTRUMENT THE OPERATOR ACTUALLY
+  USES:** that commit records a live GUI trace on the same sheet —
+  `render-async-started gen=1 budget_ms=12` → **`render-async-done gen=1
+  ms=907 outcome=done`**, *"with the UI thread processing frames
+  throughout"*. **The 907 ms above was measured through the CLI; this is the
+  same figure through `pdfce-gui`'s worker**, which is the joint claim of
+  `Pass 44.0` and `Pass 45.0`. **`9681112` is OUT OF SCOPE here and remains
+  UNFILED — owed to the next filing** — and **the 18:18 bundle is therefore
+  one commit behind again.** **Both checkers were re-run after `HEAD` moved:
+  exit 0 and exit 0.**
