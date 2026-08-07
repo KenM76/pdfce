@@ -79,12 +79,60 @@ param(
     # Far enough negative to be off every plausible multi-monitor arrangement,
     # while still a real on-screen-coordinate window that lays out and
     # interacts normally.
-    [int]$X = -4000, [int]$Y = -4000, [int]$W = 1600, [int]$H = 1000
+    [int]$X = -4000, [int]$Y = -4000, [int]$W = 1600, [int]$H = 1000,
+    # Run against a binary older than the sources. Escape hatch only —
+    # see the staleness check below for why this defaults off.
+    [switch]$AllowStaleBinary
 )
 
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Exe)) { throw "no binary at $Exe — cargo build --release -p pdfce-gui" }
 if (-not (Test-Path $Pdf)) { throw "no document at $Pdf" }
+
+# ---------------------------------------------------------------------------
+# STALENESS GATE — refuse to drive a binary older than the code.
+#
+# This script defaults to target\release\. A developer who has been running
+# `cargo test` (debug) and then drives this harness is testing a build that
+# predates everything they just wrote — and the failure mode is the worst
+# kind: the traces they expect are simply ABSENT, which reads as "the feature
+# does not work" rather than "the feature was never compiled".
+#
+# That is not hypothetical. On 2026-08-07 an agent building the field-deletion
+# panel got zero `form-delete` traces and nearly concluded the controls did
+# not render. The binary predated every change it had made.
+#
+# R163 (prefer a compile error over a rule asking a human to remember): the
+# obligation "rebuild release before driving the GUI" is exactly the kind a
+# mechanical gate can carry, so it is carried here instead of written down
+# somewhere and forgotten. An absence is only evidence when the thing that
+# would have produced it was actually built.
+# ---------------------------------------------------------------------------
+$exeTime = (Get-Item $Exe).LastWriteTimeUtc
+$newestSrc = Get-ChildItem "$PSScriptRoot\..\crates" -Recurse -Include *.rs, Cargo.toml -File `
+    -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+if ($newestSrc -and $newestSrc.LastWriteTimeUtc -gt $exeTime) {
+    # The verb differs per path, because a warning that says "refusing to
+    # run" while it runs is itself a misleading instrument — which is the
+    # entire class of defect this gate exists to prevent.
+    $verb = if ($AllowStaleBinary) { "running anyway (-AllowStaleBinary)" } else { "refusing to run" }
+    $msg = @"
+STALE BINARY — $verb.
+
+  binary : $Exe
+           built $exeTime UTC
+  newest : $($newestSrc.FullName)
+           edited $($newestSrc.LastWriteTimeUtc) UTC
+
+The traces you are about to collect would describe code that is NOT the code
+you just wrote, and a missing trace would look exactly like a broken feature.
+
+  cargo build --release -p pdfce-gui
+
+Pass -AllowStaleBinary only if you intend to drive the older build.
+"@
+    if ($AllowStaleBinary) { Write-Warning $msg } else { throw $msg }
+}
 Remove-Item $Log -ErrorAction SilentlyContinue
 
 $env:PDFCE_DIAG = "1"
