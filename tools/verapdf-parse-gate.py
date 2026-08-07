@@ -52,9 +52,16 @@ exit status. This is **R162** ("an assertion that something is ABSENT
 proves nothing until the container has been shown capable of holding
 it") in the wild, on the day the rule was written.
 
-``self_test()`` below exists so that trap cannot silently reopen: it
-feeds the tool a deliberately broken file and **fails if the gate does
-not fail**. Run it with ``--self-test``.
+``self_test()`` below exists so that trap cannot silently reopen. It
+runs **both directions**, and both are necessary:
+
+* a deliberately broken file **must** be detected — otherwise every
+  "clean" result the gate has ever printed is vacuous;
+* a known-good document **must not** be — otherwise the gate flags
+  everything, and detecting the broken file proves nothing. A detector
+  that never says no is not a detector.
+
+Run it with ``--self-test``.
 
 WHY ``--mode full`` IS THE DEFAULT (the second trap)
 -----------------------------------------------------
@@ -336,10 +343,18 @@ def verapdf_parse_report(verapdf: Path, files: list[Path]) -> dict[str, tuple[in
 
     So:
 
-    * ``FAILED``  — counted by veraPDF. The document could not be opened.
-    * ``WARNED``  — a PARSE exception that veraPDF did not count. It got
-      in and hit something (a page-tree loop, in the measured case).
-    * ``OK``      — nothing to report.
+    * ``FAILED``  — veraPDF raised a PARSE exception for it.
+    * ``OK``      — nothing to report (the file simply does not appear).
+
+    **There used to be a third tier, ``WARNED``**, for a PARSE exception
+    veraPDF does not count in ``failedToParse``. It was removed, and the
+    reason is worth keeping: veraPDF reports the failure COUNT without
+    saying which job it belongs to, so promoting an exception to the
+    harder tier meant guessing from ``counted == len(results)`` — which
+    made **a file's grade depend on what else was in its 32-file batch.**
+    Input and output scans batch differently, so one file could grade
+    differently on each side and surface as a regression purely from
+    batching. An aggregate must not be attributed to an individual.
 
     The verdict is read from the XML body and never from the exit
     status — ``--off`` returns 0 for a file with no xref table. See the
@@ -427,17 +442,39 @@ def self_test(verapdf: Path) -> int:
                 file=sys.stderr,
             )
             return 1
-        (_name, (tier, msg)), = failures.items()
-        if tier != FAILED:
+        (_name, (_tier, msg)), = failures.items()
+
+        # THE SECOND DIRECTION, and it is the half that makes the first
+        # half mean anything.
+        #
+        # A previous version asserted here that the broken file's TIER was
+        # `FAILED` — which became unreachable the moment the two-tier model
+        # collapsed to a boolean, because `FAILED` is now the only value
+        # that can enter the results dict at all. The assertion could not
+        # come out false, so it tested nothing while reading like a real
+        # guard. **R162 committed by the fix for an R162 finding**, which is
+        # exactly how this class survives: the dead branch was created by
+        # a correct change and inherited its author's confidence.
+        #
+        # A tier assertion cannot be revived honestly, so the missing
+        # discrimination is supplied where it actually exists — the gate's
+        # real claim is "broken files appear, sound files do not", and a
+        # gate that reported EVERY file as unreadable would pass a
+        # one-directional test. So a known-good document is scanned too and
+        # must come back clean.
+        sound = Path(tmp) / "sound.pdf"
+        shutil.copy2(Path("fixtures/synthetic/forms/demo-form.pdf"), sound)
+        if verapdf_parse_report(verapdf, [sound]):
             print(
-                f"SELF-TEST FAILED: a file with no xref table was graded "
-                f"'{TIER_NAME[tier]}' rather than '{TIER_NAME[FAILED]}'. The "
-                f"tier reconciliation is wrong, so a genuinely unreadable "
-                f"file could be reported as a mere warning.",
+                "SELF-TEST FAILED: a known-good document was reported as a "
+                "parse failure. The gate flags everything, so its 'broken "
+                "file detected' result above proves nothing — a detector "
+                "that never says no is not a detector.",
                 file=sys.stderr,
             )
             return 1
-        print(f"self-test ok — gate grades a broken file '{TIER_NAME[tier]}': {msg}")
+
+        print(f"self-test ok — broken file detected, sound file clean: {msg}")
         return 0
 
 
