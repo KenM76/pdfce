@@ -24475,3 +24475,187 @@ document, not by the commit subject.**
   `check-ledger-numbers.py` → **exit 0**, ceilings **Pass 45 (highest 45.0) ·
   R166 (R167 next free) · decisions 031 (032 next free)**;
   `check-passes-filed.py` → **exit 0**.
+
+## 2026-08-07 (twenty-seventh filing) — **THE RENDER WORKER STARTS SAYING WHAT IT DID** (`9681112`), **`Pass 45.0` IS WIDENED TO THE WHOLE CLIP ARC BY ENGINEER RULING**, and **THE SIX-DEEP RAG DEBT IS DISCHARGED IN FULL — SEVEN FINDINGS WRITTEN, THREE FILES AMENDED.** **★★ THE RENDER PATH EMITTED NO DIAGNOSTIC TRACE AT ALL, AND ITS SILENCE WAS READ AS EVIDENCE THAT THE RENDER HAD WORKED — IT WAS NOT THE NULL RESULT OF AN EXPERIMENT, IT WAS THE ABSENCE OF ONE.** **★★ THIRD INSTANCE IN ONE DAY OF A CHANNEL BUILT FOR OBSERVABILITY BEING ITSELF UNOBSERVABLE**, after `edit_note` and the stale-binary trace — **a component built to make something else observable acquires NO observability from that purpose, and is LESS likely to get any, because its reason for existing reads as coverage.** **★★ IT DELIVERED THE FIRST IN-GUI MEASUREMENT OF THE OPERATOR'S ORIGINAL COMPLAINT: `render-async-done gen=1 ms=907 outcome=done`, UI thread processing frames throughout, against 32,313 ms with a frozen window this morning — THE SAME FIGURE THE CLI GAVE, NOW FROM THE INSTRUMENT THE OPERATOR ACTUALLY USES.** **★★ `Pass 45.0` NOW COVERS `76200e9` + `4475fe6` + `ce57ed5` — one arc, 1.71× · 1.72× · 13.52×, cumulatively 35.63× — AND THE WIDENING MINTED NOTHING.** **★ NOT widened to `1992d13` or `fa17d54`: instrumentation, and the four consecutive refusals over them are the calibration.** **★ THE SEVENTH RAG FINDING WAS ADDED ON THE ENGINEER'S QUESTION AND JUDGED IN: an unrelated measurement can adjudicate a dispute it had no stake in.** **⚠ NO GATE FIGURES EXIST FOR `9681112` AND A GREEN BUILD IS NOT CLAIMED.** **NOTHING MINTED — Pass 45, R166 (R167 free and reserved), decisions 031, question (bb)**
+
+**Shipped:**
+- **`9681112` — no Pass ID** — `crates/pdfce-gui/src/render_worker.rs`,
+  **1 file, +23 / −0, across exactly 3 emit sites = 7.7 lines per trace**
+  (`git show --numstat 9681112`). Three diagnostic traces: **`render-inline`**
+  (page beat the 12 ms budget and never touched the async path — which makes
+  Pass 44.0's *"nothing regresses when fast"* claim **checkable**),
+  **`render-async-started`** (**carrying `budget_ms=12`, so the threshold is
+  in the record rather than in a constant someone must look up**), and
+  **`render-async-done`** (elapsed ms + **`done` / `cancelled` / `failed` — a
+  distinction the shell ALREADY made and could not be seen making**).
+- **No Pass ID, deliberately.** Instrumentation only — no behaviour change, no
+  timing change, nothing operator-visible. **Same ground as `1992d13` (the
+  census) and `fa17d54` (the ablation harness)**, and the same dispatch that
+  widened `Pass 45.0` **explicitly declined** to widen it to either of those.
+  Filed as a full *Shipped* entry regardless, because **an entry's importance
+  and its Pass-ID eligibility are different questions** and this one carried
+  the day's load-bearing measurement.
+
+**Decisions made this filing:**
+- **★★ `Pass 45.0` IS WIDENED, BY EXPLICIT ENGINEER RULING, TO COVER
+  `76200e9` + `4475fe6` + `ce57ed5`.** The engineer's words: *"they are one
+  arc — the per-paint clip clone, `Arc<Mask>`, and the cache. Every one
+  attacks clip cost, every one is byte-identical, and cumulatively they are
+  32,313 ms → 907 ms."* **The twenty-sixth filing's objection — three
+  different fixes, not three layers — is overruled on a property it had
+  recorded but not weighed: `4475fe6` is what makes the cache EXPRESSIBLE**,
+  since a hit hands back a **shared** mask and that requires a shareable
+  clip.
+- **Filed with denominators (hard rule 10a): per-commit 1.71× (32,313 →
+  18,870 ms) · 1.72× (17.47 → 10.18 s) · 13.52× (10.68 → 0.79 s); the ID's
+  own figure 32,313 ms → 907 ms = 35.63×.** **And 1.71 × 1.72 × 13.52 = 39.8
+  is NOT the ID's figure** — the three "before" values come from **two
+  instruments and three tree states**, so the product is arithmetic over
+  separately-measured parts (`R164`'s shape). **Named rather than smoothed.**
+- **NOT widened to `1992d13` or `fa17d54`.** Instrumentation. An ID covering
+  the instruments as well as the fixes would mean *"work happened in this
+  area"*, which is not what a Pass ID means here.
+- **The precedent is now supported by TWO independent episodes** —
+  `Pass 44.0` over `e4256f2`, `Pass 45.0` over two commits — that *an ID
+  covers the ARC that produced the operator-visible change, not the commit
+  that happened to finish it*. **Recorded, deliberately NOT minted**; a third
+  instance can now be weighed against a written statement instead of a
+  recollection.
+- **NOTHING MINTED.** Ceilings **read by running the checker**: Pass family
+  **45** · standing rules **R166** (**R167** next free, **still reserved** for
+  the held error-direction candidate) · decisions **031** (**032** next free)
+  · operator questions **(bb)**. **Candidate (ii) stays HELD; the
+  unbounded-final-bucket candidate stays DECLINED on `R163`.** **Widening an
+  existing ID consumes no number** — which is the mechanical reason the
+  engineer's *"widening is free"* is true in this ledger.
+
+**Findings + decisions:**
+- **★★ THE ZEROTH LINK IN THE EMIT → EYEBALL CHAIN: DOES AN INSTRUMENT EXIST
+  AT ALL.** This project has been bitten four separate ways now — the trace
+  **name** (`9328038`), the **reader** (`37a49e6`), the **binary**
+  (`69db1c6`), and now **the instrument's existence** (`9681112`). The
+  newest is **upstream of all three** and is **the only one whose failure
+  looks exactly like a clean result**: every other link leaves a tell (a
+  stale timestamp, a parse error, a mismatched name); a missing instrument
+  leaves nothing, and nothing is what a healthy negative also looks like.
+- **★★ THE THREE OBSERVABILITY CHANNELS, IN ONE DAY, AND WHY THE SET IS THE
+  FINDING.** `edit_note` — the single choke point every rule-4 disclosure
+  reaches the operator through, untraced, so *fired* and *silently stopped
+  firing* were identical and every prior "disclosure verified" claim rested
+  on **code reading**. `gui-drive`'s trace file — non-empty, exit 0, zero
+  traces, because it could not observe **which binary it was observing**. The
+  **render worker** — built in Pass 44.0 to make a slow render observable and
+  interruptible, and mute about both. **The common property: each existed to
+  make something else visible, and each was invisible.**
+- **★★ 907 ms, IN THE GUI, ON THE SHEET THAT STARTED THIS.**
+  `render-async-started gen=1 budget_ms=12` → `render-async-done gen=1
+  ms=907 outcome=done`. **Two instruments now agree** — 907 ms through the
+  CLI (`Pass 45.0`'s entry) and 907 ms through `pdfce-gui`'s worker — and the
+  second is the one the operator's hands are on. **`outcome=done` carries the
+  `Pass 44.0` half** (the render finished on a worker and the window lived).
+  **907 against a 12 ms budget is 75.6× over**, so the async path is the one
+  that ran, **by design and not by accident.** ⚠ **Pass 44.0's owed
+  SCREENSHOT verification is untouched** — a trace proves the worker ran; it
+  does not prove the pixels are right.
+- **★ TWO PROCESS FAILURES, FILED WITH THE COMMIT, FROM THE SAME TEN
+  MINUTES.** **(a)** `build rc=0` read as a successful compile when it was
+  **`tail`'s** exit status — the **FOURTH** wrong reading that idiom has
+  produced in one day, one of which made **a hang look like a pass**. **The
+  count is the argument**: one is a slip, four in a day is a defect in the
+  tool, and the remedy is mechanical (`set -o pipefail`; or do not put a `|`
+  between the command and the `echo $?`). **(b)** An empty trace filter read
+  as evidence the render worked — **which happened to the person writing the
+  fix for it.** That is the strongest available argument that this class is
+  **not solved by knowing about it**; it is solved by the instrument
+  existing.
+- **★ THE RAG DEBT IS DISCHARGED: SIX OWED, SEVEN WRITTEN, NONE DROPPED.**
+  All to `D:\dev\rag\rust\`. New files: the unbounded final bucket · the
+  error-direction discipline (which **states its own `R167`-HELD status**, so
+  a future reader is not misled into thinking pdfce minted it) · the
+  self-referential gate join · **the ABA pointer key** · **hash-over-printed-
+  output contamination** · **a gate precondition satisfied by an unwritten
+  naming convention** · **and a seventh, the adjudication finding.**
+- **★★ WHY THE SEVENTH CLEARS THE BAR** (the engineer asked for a judgement,
+  not an assumption): **its value is provenance, not arithmetic.** A targeted
+  re-measurement is designed by someone who already knows which answer is
+  convenient — window, warm-up, what counts as "painting" are all degrees of
+  freedom pointed at the dispute. **A measurement taken for an unrelated
+  purpose has none of them pointed anywhere.** *floor 0.51 + painting
+  **0.27** = 0.78 s against a measured 0.79 s (1.3%)* versus *+ **0.87** =
+  1.38 s (75% high)* settles a correction that had sat **unverified for four
+  filings**, and it is **the only affordable way to meet the
+  a-correction-is-a-claim bar** when re-measuring costs hours. **The file
+  carries its limit as prominently as its technique:** if any term in the
+  identity was itself derived from the disputed figure, the verdict is
+  circular and confirms whatever it was seeded with.
+- **★ THREE FILES AMENDED RATHER THAN DUPLICATED, AND HARD RULE 4 PAID
+  AGAIN.** The absent-trace file gained the **zeroth link**; the
+  disclosure-channel file was **generalised past disclosures** to any
+  observability channel, with the day's three instances tabulated; and
+  `personal_rag\claude_code\`'s pipeline-exit-status lesson gained its
+  **fourth** instance — **a file its own author had written after the third
+  and then violated**, which is why that amendment's content is *the remedy
+  is mechanical, not attentional.*
+- **★ TIERING CHECKED PER FINDING, NOT ASSUMED.** All seven are
+  ecosystem/methodology; **nothing went to `C:\personal_rag\pdf\`.** The one
+  that most looked like a `pdf\` candidate is the ABA key — found in a
+  rasterizer — **but nothing in it is about PDF**: it is `Arc` identity and
+  allocator reuse, available in any memoizing Rust cache. The PDF-domain half
+  of that episode **was already filed**
+  (`lesson_20260807_cad_clip_geometry_census_66pct_page_bbox_single_subpath.md`).
+- **★ ABSENCE RE-ESTABLISHED FROM THE DIRECTORY, NOT THE DEBT TABLE (R87).**
+  That table has been wrong twice and its correction was wrong once, which is
+  the whole reason hard rule 10's corollary exists. So: `ls` → **75 entries**
+  before (74 findings + `index.md`); `grep -ril "\bABA\b"` → **no matches**;
+  `grep -ril "as_ptr|pointer identity"` → **no matches**;
+  `grep -ril "sha256sum|checksum"` → **one file, about verbatim provenance,
+  not about hashing printed output**. **After: 82 entries, 81 index bullets,
+  and an orphan sweep empty IN BOTH DIRECTIONS** — `comm -23` (files with no
+  bullet) and `comm -13` (bullets with no file) both returned nothing.
+
+**Still in flight:**
+- **⚠ NO GATE FIGURES EXIST FOR `9681112`.** `git show -s --format=%B
+  9681112` contains **no test, `fmt`, `clippy` or gate line** (established by
+  grepping that message, not by assuming); the dispatch relayed none; **this
+  filing ran no build, no test and no render.** The commit's own message
+  records that its **first compile FAILED**. `git status --porcelain` → **0
+  lines** says the tree is clean, **not that it builds. A green build for
+  `9681112` is UNVERIFIED and is not claimed.**
+- **Pass 44.0's owed SCREENSHOT verification of rendered behaviour** — still
+  open, and **not** discharged by `9681112`'s trace.
+- **Nothing needs an OPERATOR ruling from this filing.**
+
+**For next session:**
+- **Git and backup state — CHECKED, not inferred (hard rule 8), and
+  timestamped because a checked fact decays.** At the start of this filing:
+  `git rev-parse HEAD` → **`6efb9b3`**; `git status --porcelain` → **0
+  lines**; `git remote -v` → **empty output, exit 0 — bundles remain the only
+  copy of this repository.**
+- **★ AND THE DISPATCH'S BACKUP FIGURE IS CORRECTED BY ONE, IN THE SAFE
+  DIRECTION.** The dispatch said the newest bundle was *"two commits behind
+  now"*. **Checked:** `pdfce-20260807-1838.bundle`'s
+  `refs/heads/pass-8-redaction` is
+  **`9681112d43cb34d2ed4151099a60323f733189a8`** (`git bundle list-heads` —
+  **the tip was READ, not inferred from the filename's timestamp**), which is
+  **exactly `HEAD~1`**. So it is **ONE behind at this instant**, and becomes
+  two when this filing is committed — which is what the dispatch was
+  anticipating. **★ THE COMMIT THIS FILING DESCRIBES IS THEREFORE BACKED UP**,
+  superseding the previous filing's *"`9681112` is in no bundle"* (true at
+  18:18; the 18:38 bundle was taken after it). **Recorded because hard rule 8
+  cuts both ways** — a projection about disk is exactly what it exists to
+  keep out of the record, whoever makes it.
+- **The clean tree is a SNAPSHOT, and this filing has now watched one go
+  false mid-filing three consecutive times** in the entries above. The
+  dispatch stated no agent is live and the check agreed at the instant it
+  ran. **Every claim here about `9681112`, `ce57ed5`, `76200e9` and
+  `4475fe6` is read from COMMITTED BLOBS** (`git show`, `git log`,
+  `git bundle list-heads`), never the working tree.
+- **This filing edited `docs/` AND `D:\dev\rag\rust\` AND
+  `C:\personal_rag\claude_code\`** — **the first time in three filings that
+  the RAG tiers were in scope**, and the reason the debt could be discharged.
+  **No `crates/`, no `tools/`, no `fixtures/`, no agent files.**
+- **Both checkers re-run, before and after:** `check-ledger-numbers.py` →
+  **exit 0** / **exit 0**, ceilings **Pass 45 (highest 45.0) · R166 (R167 next
+  free) · decisions 031 (032 next free)**, with **5, 9, 9c, 10, 13, 22, 23,
+  31** claimed-but-unheaded and none of them affected;
+  `check-passes-filed.py` → **exit 0** / **exit 0**.

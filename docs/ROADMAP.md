@@ -81,6 +81,69 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### gui/tooling — **THE RENDER WORKER STARTS SAYING WHAT IT DID** — three diagnostic traces in `crates/pdfce-gui/src/render_worker.rs` (`render-inline`, `render-async-started`, `render-async-done`). **★★ THE RENDER PATH EMITTED NO DIAGNOSTIC TRACE AT ALL, AND THAT WAS DISCOVERED BY POINTING A FILTER AT IT AND READING THE SILENCE AS EVIDENCE THAT THE RENDER HAD WORKED. IT WAS NOT EVIDENCE — THE INSTRUMENT DID NOT EXIST.** **★★ THIRD INSTANCE IN ONE DAY OF A CHANNEL BUILT FOR OBSERVABILITY BEING ITSELF UNOBSERVABLE: `edit_note` (the rule-4 disclosure path, `69db1c6`), the stale-binary trace (`gui-drive` returning zero traces for code that was never built, same commit), and now THE WORKER WHOSE ENTIRE PURPOSE IS MAKING A SLOW RENDER OBSERVABLE AND INTERRUPTIBLE.** **★★ IT DELIVERED THE FIRST IN-GUI MEASUREMENT OF THE OPERATOR'S ORIGINAL COMPLAINT — `render-async-started gen=1 budget_ms=12` → `render-async-done gen=1 ms=907 outcome=done`, with the UI thread processing frames throughout. 907 ms through `pdfce-gui`'s worker against 907 ms through the CLI, on the same CAD sheet that took 32,313 ms with a frozen window this morning. THE END-TO-END VERIFICATION OF PASS 44.0 + PASS 45.0's JOINT CLAIM, FROM THE INSTRUMENT THE OPERATOR ACTUALLY USES.** **★ THE THRESHOLD IS IN THE RECORD RATHER THAN IN A CONSTANT — `render-async-started` carries `budget_ms=12`, so a reader of the trace never has to go find `IN_FRAME_BUDGET`.** **★ `render-inline` MAKES THE *"NOTHING REGRESSES WHEN FAST"* CLAIM CHECKABLE** — Pass 44.0 asserted that a page beating the 12 ms budget never touches the async path, and until this commit that assertion had no observable consequence. **★ `render-async-done` DISTINGUISHES done / cancelled / failed — a distinction the shell ALREADY MADE and could not be seen making.** **⚠ TWO PROCESS FAILURES ARE FILED WITH IT, from the same ten minutes, because they are the day's own lesson committed while writing about it: `build rc=0` was read as a successful compile when it was `tail`'s exit status (FOURTH wrong reading from that idiom today, once making a hang look like a pass), and an empty trace filter was read as evidence the render worked.** **⚠ NO GATE FIGURES EXIST FOR THIS COMMIT** — see the gates note below. (no Pass ID — GUI-only instrumentation, +23 / −0, no behaviour change and no timing change; the same class as `1992d13` and `fa17d54`, and NOT covered by `Pass 45.0`'s widening) — 2026-08-07, committed `9681112`, branch `pass-8-redaction`
+
+**Gates — ⚠ NONE, AND THAT IS STATED RATHER THAN PAPERED OVER.** `git show -s --format=%B 9681112` contains **no test, `fmt`, `clippy` or gate line** (established by grepping that message for `gate|tests|clippy|fmt` → **no matching line**); **the dispatch relayed none**; and **this filing ran no build, no test and no render**. What IS known: the commit's own message records that **the first compile FAILED** (the `Outcome` variants were guessed) and that the failure was read as success from `build rc=0` before the error text was read; the committed blob is the post-fix version. **`git status --porcelain` → 0 lines at `6efb9b3`**, which says the tree is clean, **not that it builds.** **A green build for `9681112` is UNVERIFIED and is not claimed.**
+
+**1 file changed, +23 / −0** (`git show --numstat 9681112`), all of it `crates/pdfce-gui/src/render_worker.rs`, **across exactly 3 emit sites** = **7.7 lines per trace** — each site is a `crate::diag::trace(|| …)` closure plus the `ui-text-exempt:` marker comment the string gate requires, and **the elapsed-time and outcome extraction that two of them need before they can say anything.**
+
+#### 1. ★★ The instrument did not exist, and its absence was read as a result
+
+The failure is not *"the trace was missing"*. It is that **a filter was pointed at the render path, returned nothing, and the nothing was read as confirmation.** Absence of output from an instrument that was never built says **nothing at all** about whether the page rendered, how long it took, or whether it ever went off-thread — it is the null result of an experiment that was not performed.
+
+**This is the fourth distinct link in the emit → eyeball chain this project has been bitten by, and it is UPSTREAM of all three others:**
+
+| link | how it failed here or before | commit |
+|---|---|---|
+| **the instrument does not exist** | the render path emits no trace; silence read as success | **`9681112`, this entry** |
+| build → artifact | the harness ran a **stale release binary** while the author built debug | `69db1c6` |
+| emit → filter → parse | a PowerShell filter returned **one element where an array was assumed**, so one match and no matches read identically | `37a49e6` |
+| the trace name | grepped for `plain-click` while the arm that runs emits `vector-click` | `9328038` |
+
+**The generalisable form, owed to `D:\dev\rag\rust\` and WRITTEN by this filing (§4):** *the zeroth link in the chain is whether an instrument exists at all, and it is the only link whose failure looks exactly like a clean result.*
+
+#### 2. ★★ Third instance in one day of an observability channel being unobservable
+
+The three are not merely similar; they share the property that makes the class worth a name — **each is a channel whose entire purpose is to let someone see something, and each was itself invisible.**
+
+- **`edit_note`** — the single choke point every rule-4 disclosure passes through on its way to the operator. Untraced, so *"the disclosure fired"* and *"the disclosure silently stopped firing"* produced identical evidence, and every prior "disclosure verified" claim rested on **code reading**.
+- **`gui-drive`'s trace file** — non-empty, exit 0, zero traces, because the process under test was built from older source. The harness that exists to observe the GUI could not observe **which binary it was observing.**
+- **the render worker** — built in Pass 44.0 specifically so a slow render would be **observable and interruptible**, and mute about both. It could not say whether it went off-thread, how long it took, or whether it was cancelled.
+
+**Stated as the rule: a component built to make something else observable acquires no observability from that purpose, and is in fact LESS likely to get any, because its own reason for existing reads as coverage.** Filed to `D:\dev\rag\rust\` as an amendment to the existing disclosure-channel finding (§4), not as a new file — hard rule 4.
+
+#### 3. ★★ What it measured, immediately, and why the number matters more than the traces
+
+```
+render-async-started gen=1 budget_ms=12
+render-async-done    gen=1 ms=907 outcome=done
+```
+
+**907 ms, in the GUI, on the CAD sheet the operator complained about**, with the UI thread processing frames throughout.
+
+**This is the first end-to-end verification of the operator's original report**, and it closes a gap that had been open all day:
+
+- **The 907 ms in `Pass 45.0`'s entry was measured through the CLI** (`render-page`, incl. process start + PNG encode). **This one is measured through `pdfce-gui`'s worker.** Two instruments, **the same figure**, and the second is the one the operator's hands are on.
+- **`outcome=done` is the half `Pass 44.0` claims**: the render completed on a worker rather than being cancelled or dying, **and the window stayed alive** — which is exactly the claim that was previously **⚠ UNVERIFIED BY SCREENSHOT** and is now carried by a trace instead.
+- **907 ms against `budget_ms=12` is 75.6× over budget**, so the async path is the one that ran, **as designed** — not a fast page accidentally taking the slow route.
+- **32,313 ms → 907 ms = 35.6× on the same document, same instrument class.** The morning figure was measured with the window frozen; this one was measured with it responsive. **Both are filed; neither is reconciled away.**
+
+**What is still NOT verified:** the *rendered appearance* — no screenshot was taken, and Pass 44.0's owed visual verification is **untouched by this commit**. A trace proves the worker ran and finished; it does not prove the pixels are right. That obligation stays open under Pass 44.0's ID.
+
+#### 4. The two process failures, filed because they are the day's own lesson
+
+**(a) `build rc=0` was `tail`'s exit status, not `cargo`'s.** The idiom is `cargo build … 2>&1 | tail -n N; echo "build rc=$?"` — in a pipeline, `$?` is the **last** command's status, and `tail` succeeds whenever it can read its input, which is **always**. **This is the FOURTH wrong reading the same idiom has produced today**, and one of those four made **a hang look like a pass**. The error text was the real signal and it said the `Outcome` variants had been guessed.
+
+**The count is the argument.** One occurrence is a slip; four in a day from one idiom is **a defect in the tool**, and the fix is mechanical rather than attentional — `set -o pipefail`, or `${PIPESTATUS[0]}`, or simply not piping the command whose status you intend to read. Amended into the existing `D:\dev\rag\rust\` file that already records the idiom (§4 below).
+
+**(b) An empty trace filter was read as evidence the render worked.** This is the same error as §1 and is listed separately because **it happened to the person writing the fix for it**, in the same ten minutes. **That is the strongest available argument that this class is not solved by knowing about it** — it is solved by the instrument existing, which is what the commit does.
+
+#### 5. Why no Pass ID
+
+**Instrumentation only.** No behaviour changed, no timing changed, nothing the operator can see is different — `crate::diag::trace` is a diagnostic sink, and the three call sites add lines to a trace file and nothing else. **This is the same reason `1992d13` (the census) and `fa17d54` (the ablation harness) were refused an ID**, and the dispatch that widened `Pass 45.0` **explicitly declined to widen it to either of them** on exactly this ground: *"the census and the harness are instrumentation, and your four refusals there are the calibration that makes 44.0 and 45.0 mean anything."*
+
+**`9681112` is on the same side of that line and is refused an ID for the same reason.** It is filed here in full — a Shipped entry, not a footnote — because **an entry's importance and its Pass-ID eligibility are different questions**, and this one delivered the day's most load-bearing measurement.
+
 ### tooling — **A GATE THAT ASKED A COMMIT TO CONTAIN ITS OWN HASH**: `tools/check-passes-filed.py` exempts docs-only commits from its join. **★★ THE DEFECT HAD BEEN LATENT BEHIND A NAMING HABIT FOR AS LONG AS THE GATE HAS EXISTED — filing commits are customarily subjected `docs: …`, which the Pass-claim regex never matches, so the unsatisfiable case never arose. A HABIT WAS DOING A GUARD'S JOB AND NOBODY KNEW.** **★★ FOUND BY RUNNING THE GATE, NOT BY READING IT** — it flagged `e7e74f2`, the commit that FILED Pass 44.0, as UNFILED. **★ THE EXEMPTION KEYS ON THE DIFF, NOT THE SUBJECT LINE**: a commit touching only `docs/` cannot be the code half of a Pass whatever its subject says, while keying on the subject would rebuild the same *it-happened-to-be-worded-safely* fragility it replaces. **★ VERIFIED NARROW RATHER THAN MERELY QUIET — `e7e74f2` and `e6574b7` are `docs_only=True` at 4 files each; `7926a78` is `docs_only=False` at 4 files, so a real Pass-claiming CODE commit is still asked to be filed.** (no Pass ID — ledger infrastructure, the same class as `91b142b` which built this gate and `0720adb` which fixed its `★` blind spot) — 2026-08-07, committed `c3d8853`, branch `pass-8-redaction`
 
 **Gates — RUN BY THIS FILING, not relayed.** `python tools/check-passes-filed.py`
@@ -180,7 +243,7 @@ now and would still fail on an unfiled code commit.**
   generalises past this gate and past this project, and no file in
   `D:\dev\rag\rust\` records it.
 
-### Pass 45.0 — **THE SAME CLIP MASK STOPS BEING BUILT TWENTY-FOUR THOUSAND TIMES** (render) — **★ THE ID IS MINTED HERE, AND IT IS THE FIRST ONE IN THIS SEQUENCE: four consecutive entries refused a Pass ID on the same precedent, and this one earns it because OPERATOR-VISIBLE BEHAVIOUR CHANGED MATERIALLY.** **★★ 1× 32,313 ms → 907 ms (35.6×) AND 2× 447,862 ms → 1,425 ms (314×), MEASURED END TO END BY THE ENGINEER; the fork's render-only harness says 10.68 s → 0.79 s (13.5×) and 58.52 s → 1.30 s (45.0×) — BOTH PAIRS ARE FILED WITH THEIR DENOMINATORS AND NEITHER IS RECONCILED AWAY.** **★★ THE ABA HAZARD THE FORK CAUGHT AND THE DISPATCH HAD NOT FLAGGED — keying the incoming clip by BARE POINTER is UNSOUND: drop the incoming mask, let a later allocation reuse the address, and a stale entry matches a pointer that now means something else. EACH ENTRY HOLDS A STRONG `Arc` TO PIN THE ADDRESS. THAT FAILURE WOULD HAVE PAINTED A SILENTLY WRONG PICTURE — no timing number and none of the tests the dispatch specified would have caught it.** **★★ THE RENDER IS NOW FLOOR-BOUND: 0.79 s against a MEASURED interpreter floor of 0.49–0.53 s, so the floor is 62–67% of what is left and the MAXIMUM remaining speedup at 1× is 1.55×. Further optimisation must attack the OPERATOR WALK (148,517 operators = 3.4 µs each), and the remaining headroom is small and KNOWN.** **★ HIT RATE 24,087 hits + 41 builds = 24,128 applications = 99.83%, EXACTLY THE CENSUS CEILING — and the 41st build is the SINGLE eviction 4 slots make over 40 distinct paths, a predicted number confirmed TO THE UNIT.** **★ A HIT RETURNS THE MASK *AFTER* INTERSECTION, so it skips `Mask::new`, `fill_path` AND the multiply — the whole 362 µs, not the 259 µs a build-only cache would save.** **★ THE THIRD PREMISE'S PAYOFF: rectangles died at 2.5%, mask-shrinking died at 66.36%, and THIS one survived measurement. THE SEQUENCE IS THE FINDING, AND THIS ENTRY IS ITS CONCLUSION.** **★ BYTE-IDENTICAL — SHA-256 `9250a89f…` on the 1× CAD render, THE SAME HASH AS THE 32.3 s RENDER TAKEN THIS MORNING, plus an unchanged aggregate over 115 synthetic fixtures.** **2178 tests / 0 failed.** — 2026-08-07, committed `ce57ed5`, branch `pass-8-redaction`
+### Pass 45.0 — **THE SAME CLIP MASK STOPS BEING BUILT TWENTY-FOUR THOUSAND TIMES** (render) — **★ THE ID IS MINTED HERE, AND IT IS THE FIRST ONE IN THIS SEQUENCE: four consecutive entries refused a Pass ID on the same precedent, and this one earns it because OPERATOR-VISIBLE BEHAVIOUR CHANGED MATERIALLY.** **★★ 1× 32,313 ms → 907 ms (35.6×) AND 2× 447,862 ms → 1,425 ms (314×), MEASURED END TO END BY THE ENGINEER; the fork's render-only harness says 10.68 s → 0.79 s (13.5×) and 58.52 s → 1.30 s (45.0×) — BOTH PAIRS ARE FILED WITH THEIR DENOMINATORS AND NEITHER IS RECONCILED AWAY.** **★★ THE ABA HAZARD THE FORK CAUGHT AND THE DISPATCH HAD NOT FLAGGED — keying the incoming clip by BARE POINTER is UNSOUND: drop the incoming mask, let a later allocation reuse the address, and a stale entry matches a pointer that now means something else. EACH ENTRY HOLDS A STRONG `Arc` TO PIN THE ADDRESS. THAT FAILURE WOULD HAVE PAINTED A SILENTLY WRONG PICTURE — no timing number and none of the tests the dispatch specified would have caught it.** **★★ THE RENDER IS NOW FLOOR-BOUND: 0.79 s against a MEASURED interpreter floor of 0.49–0.53 s, so the floor is 62–67% of what is left and the MAXIMUM remaining speedup at 1× is 1.55×. Further optimisation must attack the OPERATOR WALK (148,517 operators = 3.4 µs each), and the remaining headroom is small and KNOWN.** **★ HIT RATE 24,087 hits + 41 builds = 24,128 applications = 99.83%, EXACTLY THE CENSUS CEILING — and the 41st build is the SINGLE eviction 4 slots make over 40 distinct paths, a predicted number confirmed TO THE UNIT.** **★ A HIT RETURNS THE MASK *AFTER* INTERSECTION, so it skips `Mask::new`, `fill_path` AND the multiply — the whole 362 µs, not the 259 µs a build-only cache would save.** **★ THE THIRD PREMISE'S PAYOFF: rectangles died at 2.5%, mask-shrinking died at 66.36%, and THIS one survived measurement. THE SEQUENCE IS THE FINDING, AND THIS ENTRY IS ITS CONCLUSION.** **★ BYTE-IDENTICAL — SHA-256 `9250a89f…` on the 1× CAD render, THE SAME HASH AS THE 32.3 s RENDER TAKEN THIS MORNING, plus an unchanged aggregate over 115 synthetic fixtures.** **2178 tests / 0 failed.** — 2026-08-07, committed `ce57ed5`, branch `pass-8-redaction` — **[★★ SCOPE WIDENED 2026-08-07, twenty-seventh filing, BY EXPLICIT ENGINEER RULING: `Pass 45.0` NOW COVERS `76200e9` + `4475fe6` + `ce57ed5`, THE WHOLE CLIP-COST ARC. The two earlier commits are recorded against this ID RETROACTIVELY, exactly as `Pass 44.0` recorded `e4256f2`. THE CUMULATIVE FIGURE IS THE ID'S: 1× 32,313 ms → 907 ms (35.6×) over three commits; `ce57ed5` ALONE is 10.68 s → 0.79 s (13.5×) on the fork's harness, and BOTH REMAIN FILED. The individual entries stay exactly where they are and are not rewritten (hard rule 1); each gains its own retroactive-attachment note. **NOT widened to `1992d13` (the census) or `fa17d54` (the ablation harness) — those are INSTRUMENTATION, and the four consecutive Pass-ID refusals over them are the calibration that makes this ID mean anything.** Full ruling and its reasoning: §11's AMENDMENT BLOCK below.]**
 
 **Gates — the ENGINEER's, relayed under R87; no build, test or render was
 run by this filing.** `cargo test` **2178 passed / 0 failed** — **and the
@@ -544,6 +607,92 @@ Pass 44.0's were. **If the engineer wants the wider scope, it is an
 append-only amendment to this entry and costs nothing; the reverse is not
 true.**
 
+> **★★ AMENDMENT BLOCK — 2026-08-07, TWENTY-SEVENTH FILING: THE ENGINEER
+> RULED, AND HE RULED THE WIDER SCOPE. `Pass 45.0` COVERS `76200e9` +
+> `4475fe6` + `ce57ed5`.**
+>
+> **The ruling, in the engineer's own terms:** *"I am ruling the wider scope,
+> and your own note is why it is safe: widening is a free amendment,
+> narrowing is not. They are one arc — the per-paint clip clone, `Arc<Mask>`,
+> and the cache. Every one attacks clip cost, every one is byte-identical,
+> and cumulatively they are 32,313 ms → 907 ms."*
+>
+> **The reason the flag was right to be raised and the refusal was wrong to
+> be kept.** Paragraph (c) above — *"three different fixes to one subsystem,
+> not three layers of one design"* — was the load-bearing objection, and the
+> ruling overrules it on a property the filing had recorded but not weighed:
+> **all three commits attack the SAME COST and each is a strict prerequisite
+> for the next one's headline figure being what it is.**
+>
+> - **`76200e9`** removed a page-sized `clip.clone()` per paint and bounded
+>   the multiply to the path's device bounds. **1× 32,313 → 18,870 ms
+>   (−42%).**
+> - **`4475fe6`** made `GraphicsState.clip` an `Arc<Mask>`, so `q` needs a
+>   reference and not a buffer. **1× 17.47 → 10.18 s.** **And it is what
+>   makes the cache expressible at all** — a cache that hands back a shared
+>   mask requires the clip to be shareable, which is precisely what this
+>   commit built. `ce57ed5` could not have been written against a
+>   `Mask`-by-value graphics state.
+> - **`ce57ed5`** cached the intersected mask. **1× 10.68 → 0.79 s
+>   (harness), 907 ms end to end.**
+>
+> **Filed with denominators, per hard rule 10(a) — the ID's cumulative
+> figure BESIDE its per-commit form:**
+>
+> | commit | 1× before | 1× after | this commit's factor |
+> |---|---|---|---|
+> | `76200e9` | 32,313 ms | 18,870 ms | **1.71×** |
+> | `4475fe6` | 17.47 s | 10.18 s | **1.72×** |
+> | `ce57ed5` | 10.68 s | 0.79 s | **13.52×** |
+> | **`Pass 45.0`, all three** | **32,313 ms** | **907 ms** | **35.63×** |
+>
+> **1.71 × 1.72 × 13.52 = 39.8, against the 35.63× measured end to end.** The
+> product of the three does **not** equal the whole, and that is **stated
+> rather than smoothed**: the three "before" figures come from **two
+> different instruments** (the engineer's end-to-end `render-page` and the
+> fork's render-only harness) and from **three different tree states**, and
+> `4475fe6`'s 17.47 s starting point is itself lower than `76200e9`'s
+> 18,870 ms finishing point. **The 35.63× is the one MEASURED across the
+> whole arc; the 39.8 is arithmetic over parts measured separately, which is
+> exactly the `R164` shape, and it is not the ID's figure.**
+>
+> **What this amendment does NOT do, each stated so nobody has to infer it:**
+>
+> 1. **It does not rewrite the two earlier entries.** Hard rule 1 —
+>    the roadmap's *Shipped* section is append-only. `76200e9`'s and
+>    `4475fe6`'s entries stay exactly as filed, with their original
+>    *"no Pass ID"* parentheticals **left visible**, each gaining a dated
+>    retroactive-attachment note in the same style `e4256f2` carries. **The
+>    parenthetical was true when written and is now superseded; both facts
+>    are readable from the entry.**
+> 2. **It does not widen to `1992d13` or `fa17d54`, and the refusal is
+>    load-bearing.** The engineer: *"the census and the harness are
+>    instrumentation, and your four refusals there are the calibration that
+>    makes 44.0 and 45.0 mean anything."* An ID that covered the instruments
+>    as well as the fixes would mean **"work happened in this area"**, which
+>    is not what a Pass ID means in this project. **`6b33789`, `fa17d54`,
+>    `110b8c9` and `1992d13` remain ID-free, and so does `9681112`, filed at
+>    the top of *Shipped* this same filing on the identical ground.**
+> 3. **It does not re-open the `9681112` question.** That commit is GUI
+>    instrumentation with no behaviour change; it corroborates `Pass 45.0`'s
+>    number without being part of `Pass 45.0`'s work.
+> 4. **It mints nothing.** Pass family ceiling stays **45**, `R166` stays the
+>    rule ceiling with `R167` free and reserved, decisions stay **031**.
+>    **Widening an existing ID consumes no number** — which is the mechanical
+>    reason the engineer's *"widening is free"* is true in this ledger and not
+>    merely rhetorically.
+>
+> **And the precedent this sets, since Pass 44.0's was the one invoked:**
+> `Pass 44.0` minted at the last layer and reached back over `e4256f2`;
+> `Pass 45.0` mints at the last fix and reaches back over `76200e9` and
+> `4475fe6`. **The rule both instances imply — an ID covers the ARC that
+> produced the operator-visible change, not the commit that happened to
+> finish it — is now supported by two independent episodes**, which is the
+> bar this project requires before a pattern is treated as one. **It is NOT
+> minted as a standing rule here** (nothing is minted by this filing), but it
+> is recorded so a third instance can be weighed against a written statement
+> rather than a recollection.
+
 #### 12. Ledger — rulings recorded, checkers re-run, and the RAG debt
 
 **RULING RECORDED (1) — rule candidate (ii) is HELD, NOT MINTED.** The
@@ -601,6 +750,89 @@ each finding's distinctive terms.**
 the dispatch asked whether this filing adds more: IT DOES — three carried
 plus three new = SIX.** They are named here so the debt is a **record and not
 a memory**, which is the same reason the previous filing named its three.
+
+> **★★ AMENDMENT — 2026-08-07, TWENTY-SEVENTH FILING: THE DEBT IS DISCHARGED
+> IN FULL. ALL SIX ARE WRITTEN, PLUS A SEVENTH, AND THE TABLE ABOVE IS NOW
+> HISTORY RATHER THAN A LEDGER.** The dispatch that widened `Pass 45.0` also
+> put `D:\dev\rag\` in scope for the first time in three filings, with the
+> instruction *"six is a debt, not a quota — if one no longer clears the bar,
+> drop it and say why."* **None was dropped. All six cleared, one was added,
+> and three existing files were AMENDED rather than duplicated (hard rule 4).**
+>
+> | # | owed finding | written to | note |
+> |---|---|---|---|
+> | 1 | unbounded final bucket | `D:\dev\rag\rust\an_unbounded_final_bucket_cannot_answer_a_concentration_question.md` | **NEW** |
+> | 2 | error direction against your own hypothesis | `D:\dev\rag\rust\choose_a_measurements_error_direction_against_your_own_hypothesis.md` | **NEW** — states its `R167`-HELD status in the file, so a future reader is not misled into thinking pdfce minted it |
+> | 3 | a gate joining on a hash the commit itself writes | `D:\dev\rag\rust\a_gate_joining_on_a_hash_the_commit_itself_writes_is_unsatisfiable.md` | **NEW** — carries the `bool(files)` trap and the *verify-narrow-not-quiet* table |
+> | 4 | the ABA pointer key | `D:\dev\rag\rust\a_cache_keyed_on_a_pointer_must_hold_a_strong_reference_to_what_it_names.md` | **NEW** — filed to `rust\`, not `personal_rag\pdf\`: it is a **Rust concurrency/identity** finding about `Arc` and allocator reuse, and nothing in it is about PDF |
+> | 5 | hash-over-printed-output contamination | `D:\dev\rag\rust\an_aggregate_hash_over_printed_output_compares_names_as_well_as_content.md` | **NEW** — leads with the **silent twin**, since that is the half nobody can observe |
+> | 6 | a gate precondition satisfied by an unwritten naming convention | `D:\dev\rag\rust\a_gate_precondition_satisfied_by_an_unwritten_naming_convention.md` | **NEW** — kept SEPARATE from #3 deliberately; #3 is what the defect **was**, #6 is **why it stayed latent**, and #6's mirror image (`regression_test_guard_via_incidental_property_disarms_silently.md`) already existed with the **opposite failure direction** |
+> | **7** | **an unrelated measurement can adjudicate a dispute it took no part in** | `D:\dev\rag\rust\a_measurement_taken_for_an_unrelated_purpose_can_adjudicate_a_dispute_it_had_no_stake_in.md` | **NEW, ADDED BY THIS FILING** — the engineer asked whether it belonged; **judged YES.** See below |
+>
+> **THREE AMENDMENTS, not new files, because hard rule 4's check paid again:**
+>
+> - **`an_absent_trace_proves_nothing_until_you_confirm_which_trace_the_code_emits.md`**
+>   — a **ZEROTH LINK** added to its emit → eyeball chain: *does an instrument
+>   exist at all*. That file already enumerated four links and had been
+>   amended twice; the sixth instance (`9681112`) is **upstream of all of
+>   them**, and is **the only link whose failure looks exactly like a clean
+>   result.**
+> - **`disclosure_channel_with_no_trace_makes_fired_and_never_fired_identical.md`**
+>   — **generalised past disclosures** to any observability channel, with the
+>   day's three instances tabulated and the rule restated: *a component built
+>   to make something else observable acquires no observability from that
+>   purpose, and is LESS likely to get any, because its reason for existing
+>   reads as coverage.*
+> - **`C:\personal_rag\claude_code\lesson_20260807_pipeline_exit_status_belongs_to_the_last_element.md`**
+>   — the **fourth** `cmd | tail; echo $?` misreading in one day. **The file
+>   already existed and had been written after the third instance by the same
+>   author who then produced the fourth**, which is the amendment's actual
+>   content: **the remedy is mechanical, not attentional.**
+>
+> **★ ON FINDING 7, since the engineer asked for a judgement rather than an
+> assumption.** It clears the bar, and the reason is that its value does not
+> come from the arithmetic — it comes from **provenance**. A targeted
+> re-measurement is designed by someone who already knows which answer is
+> convenient; every choice in it (window, warm-up, what counts as
+> "painting") is a degree of freedom pointed at the dispute. **A measurement
+> taken for an unrelated purpose has none of them pointed anywhere**, which
+> is why *floor 0.51 + painting 0.27 = 0.78 s against a measured 0.79 s
+> (1.3%)* settles what *+ 0.87 = 1.38 s (75% high)* could not have settled
+> for itself. It is also the **only affordable way to meet the
+> a-correction-is-a-claim bar** when re-measuring costs hours — which is
+> exactly the situation the `R164` painting correction sat in **for four
+> filings**. The file carries the limit as prominently as the technique:
+> **if any term in the identity was itself derived from the disputed figure,
+> the verdict is circular and will confirm whatever it was seeded with.**
+>
+> **★ TIERING JUDGEMENT (rule 14 / the librarian's tier split), stated
+> because all seven went to the same tier and that could look like
+> inattention.** **All seven are ecosystem/methodology findings and none is
+> PDF-domain**, so **nothing was written to `C:\personal_rag\pdf\` by this
+> filing.** Checked per finding rather than assumed: #1/#2/#7 are measurement
+> and reporting methodology; #3/#6 are CI-gate design; #4 is Rust `Arc`
+> identity and allocator behaviour; #5 is shell verification hygiene. **The
+> one that most looked like a `pdf\` candidate is #4** — it was found in a
+> rasterizer — **but nothing in it is about PDF**; the same bug is available
+> in any memoizing cache in any Rust program, and the clip mask is incidental
+> to it. The pdfce-specific half of that episode (what the CAD sheet's clip
+> geometry actually looks like) **was already filed** at
+> `C:\personal_rag\pdf\lesson_20260807_cad_clip_geometry_census_66pct_page_bbox_single_subpath.md`.
+>
+> **★ ABSENCE RE-ESTABLISHED BEFORE WRITING, NOT INHERITED FROM THE TABLE
+> ABOVE (R87), because this file's own history is the reason not to trust a
+> ledger.** Hard rule 10's corollary — *a correction is a claim* — was earned
+> by this very debt ledger recording four findings as owed when one was
+> already on disk, and then correcting itself to "two written" when the
+> directory said one. **So the directory was read again, not the table:**
+> `ls D:\dev\rag\rust\` → **75 entries** (74 findings + `index.md`) before
+> this filing; `grep -ril "\bABA\b"` → **no matches**;
+> `grep -ril "sha256sum\|checksum"` → **one file, about verbatim provenance,
+> not about hashing printed output**; `grep -ril "as_ptr\|pointer identity"`
+> → **no matches**. **After writing: 82 entries (81 findings + `index.md`),
+> 81 index bullets, and an orphan sweep in BOTH directions returned empty** —
+> `comm -23` (files with no bullet) and `comm -13` (bullets with no file)
+> both produced **no output**.
 
 **★ GIT AND BACKUP STATE — CHECKED BY THIS FILING, NOT INFERRED (hard rule
 8), AND TIMESTAMPED BECAUSE A CHECKED FACT DECAYS.** At the start of this
@@ -2638,7 +2870,7 @@ which — so the old "no shell" disclaimer is not repeated here.
    one R87 claim here that rests on the operator's word rather than on a
    command, and it is flagged as such.
 
-### fix — RENDER PERFORMANCE (second): **THE CLIP STOPS BEING COPIED EVERY TIME THE GRAPHICS STATE IS SAVED** — `GraphicsState.clip` becomes `Arc<Mask>`; `q`/`Q` clone cost **6.80 s → 0.01 s**; 1× **17.47 → 10.18 s**, 2× **214.71 → 51.52 s**; from the ORIGINAL 32.3 s / 447.9 s baseline this is **3.2× at 1× and 8.7× at 2×**, output **BYTE-IDENTICAL across the CAD sheet AND 52 SYNTHETIC FIXTURES**. **★ THE DIRECTIVE'S PREMISE COLLAPSED ON MEASUREMENT AND THE WORK WAS DECLINED RATHER THAN BUILT: only 2.5% of this file's clips are rectangles.** **★ AND THE PRIOR ENTRY'S HEADLINE REMAINING-COST FIGURE IS WRONG — `Mask::new` is 1.02 s, not 10.1 s; an R164 instance, caught six hours after R164 was minted** (no Pass ID — a performance defect in shipped `pdfce-render` rasterization; render only, two files, 26 insertions) — 2026-08-07, committed `4475fe6`, branch `pass-8-redaction`
+### fix — RENDER PERFORMANCE (second): **THE CLIP STOPS BEING COPIED EVERY TIME THE GRAPHICS STATE IS SAVED** — `GraphicsState.clip` becomes `Arc<Mask>`; `q`/`Q` clone cost **6.80 s → 0.01 s**; 1× **17.47 → 10.18 s**, 2× **214.71 → 51.52 s**; from the ORIGINAL 32.3 s / 447.9 s baseline this is **3.2× at 1× and 8.7× at 2×**, output **BYTE-IDENTICAL across the CAD sheet AND 52 SYNTHETIC FIXTURES**. **★ THE DIRECTIVE'S PREMISE COLLAPSED ON MEASUREMENT AND THE WORK WAS DECLINED RATHER THAN BUILT: only 2.5% of this file's clips are rectangles.** **★ AND THE PRIOR ENTRY'S HEADLINE REMAINING-COST FIGURE IS WRONG — `Mask::new` is 1.02 s, not 10.1 s; an R164 instance, caught six hours after R164 was minted** ~~(no Pass ID — a performance defect in shipped `pdfce-render` rasterization; render only, two files, 26 insertions)~~ — 2026-08-07, committed `4475fe6`, branch `pass-8-redaction` — **[★★ THE ID IS NOW ASSIGNED, RETROACTIVELY: THIS COMMIT IS `Pass 45.0`, 2026-08-07, twenty-seventh filing, by explicit engineer ruling. `Pass 45.0` covers the whole clip-cost arc — `76200e9` + `4475fe6` + `ce57ed5` — on `Pass 44.0`'s precedent (which recorded `e4256f2` the same way). **This commit's own factor is 1× 17.47 → 10.18 s = 1.72×; the ID's cumulative figure is 32,313 → 907 ms = 35.63×, and both are filed.** **AND THIS COMMIT IS WHAT MADE THE CACHE EXPRESSIBLE** — `ce57ed5` hands back a SHARED mask on a hit, which requires the clip to be shareable, which is exactly what `Arc<Mask>` built here; a cache could not have been written against a `Mask`-by-value graphics state. **The struck parenthetical was TRUE WHEN WRITTEN** — no ID existed for this arc until `ce57ed5` landed — **and the entry below is otherwise UNEDITED** (hard rule 1: *Shipped* is append-only). Ruling and its arithmetic: the AMENDMENT BLOCK in §11 of the `ce57ed5` entry at the top of *Shipped*.]**
 
 **Why this has no Pass ID.** Same class as the entry below it and the
 three veraPDF-defect entries: a defect fix to code that had already
@@ -2927,7 +3159,7 @@ settles.**
    statement about one instant, not about the tree now. **This entry
    describes `4475fe6` and nothing beyond it (R87).**
 
-### fix — RENDER PERFORMANCE: **painting all 129,515 paths of a CAD drawing costs 0.87 SECONDS. THE CLIP MACHINERY WAS 95% OF RENDER TIME.** 1× 32,313 → 18,870 ms (−42%), 2× 447,862 → 214,714 ms (−52%), output BYTE-IDENTICAL (no Pass ID — a **performance** defect in shipped `pdfce-render` rasterization, found by an **OPERATOR QUESTION** rather than by a gate; render only, one file, 65 insertions) — 2026-08-07, committed `76200e9`, branch `pass-8-redaction` — **[★ HEADING AMENDED 2026-08-07, twenty-second filing (`110b8c9`): "PAINTING … COSTS 0.87 SECONDS" IS A MISLABEL. The 0.87 s is the *clips-off render total* — FLOOR PLUS PAINTING — which is exactly what this entry's own ablation table says on the row it came from. PAINTING ALONE IS ~0.27 s. The "clip machinery was 95%" claim and the two speed-ups are UNAFFECTED and stand. Heading left as filed; see the amendment block under *THE NUMBER THAT REFRAMES THE WHOLE QUESTION*.]**
+### fix — RENDER PERFORMANCE: **painting all 129,515 paths of a CAD drawing costs 0.87 SECONDS. THE CLIP MACHINERY WAS 95% OF RENDER TIME.** 1× 32,313 → 18,870 ms (−42%), 2× 447,862 → 214,714 ms (−52%), output BYTE-IDENTICAL (no Pass ID — a **performance** defect in shipped `pdfce-render` rasterization, found by an **OPERATOR QUESTION** rather than by a gate; render only, one file, 65 insertions) — 2026-08-07, committed `76200e9`, branch `pass-8-redaction` — **[★ HEADING AMENDED 2026-08-07, twenty-second filing (`110b8c9`): "PAINTING … COSTS 0.87 SECONDS" IS A MISLABEL. The 0.87 s is the *clips-off render total* — FLOOR PLUS PAINTING — which is exactly what this entry's own ablation table says on the row it came from. PAINTING ALONE IS ~0.27 s. The "clip machinery was 95%" claim and the two speed-ups are UNAFFECTED and stand. Heading left as filed; see the amendment block under *THE NUMBER THAT REFRAMES THE WHOLE QUESTION*.]** — **[★★ SECOND AMENDMENT, 2026-08-07, twenty-seventh filing: THE ID IS NOW ASSIGNED, RETROACTIVELY — THIS COMMIT IS `Pass 45.0`, by explicit engineer ruling. `Pass 45.0` covers the whole clip-cost arc — `76200e9` + `4475fe6` + `ce57ed5` — on `Pass 44.0`'s precedent (which recorded `e4256f2` the same way). **The heading's "(no Pass ID …)" parenthetical is SUPERSEDED and is deliberately left standing rather than struck**, because this heading already carries one amendment and a second strike-through would make it unreadable; read the parenthetical as a statement about the state of the ledger on the morning of 2026-08-07, which is what it was. **This commit's own factor is 1× 32,313 → 18,870 ms = 1.71×; the ID's cumulative figure over all three commits is 32,313 → 907 ms = 35.63×, and both are filed with their denominators.** **This is the FIRST commit of the arc and the one that established the target** — it is where *"the clip machinery was 95% of render time"* was measured, which is the finding the other two commits are answers to. Ruling and its arithmetic: the AMENDMENT BLOCK in §11 of the `ce57ed5` entry at the top of *Shipped*.]**
 
 **Why this has no Pass ID.** It is a defect fix to code that had already
 shipped (Pass 1 / 1.1 rasterization), which is the same class as the three
@@ -20433,9 +20665,18 @@ rather than encode. **Neither pair is reconciled away.**
 6. **★ THE PASS ID PROMISED BY THIS BLOCK IS MINTED: `Pass 45.0`**, scoped
    to `ce57ed5` only. **The three-times-ratified restraint is executed on
    its own stated terms** — *"the honest time to assign one is when the
-   cache lands"*. **One scope question is FLAGGED for the engineer, not
+   cache lands"*. ~~**One scope question is FLAGGED for the engineer, not
    decided**: whether `Pass 45.0` should also cover `76200e9` and `4475fe6`
-   retroactively, on Pass 44.0's precedent. See §11 of the `ce57ed5` entry.
+   retroactively, on Pass 44.0's precedent.~~ **★★ RULED 2026-08-07
+   (twenty-seventh filing): THE WIDER SCOPE. `Pass 45.0` covers `76200e9` +
+   `4475fe6` + `ce57ed5` — one arc, every commit attacking clip cost, every
+   commit byte-identical, cumulatively 32,313 ms → 907 ms (35.63×).** **NOT
+   widened to `1992d13` or `fa17d54` — instrumentation, and the four
+   consecutive ID refusals over them are the calibration that makes this ID
+   mean anything.** **Nothing was minted by the widening: an existing ID
+   growing to cover more commits consumes no number.** See §11 of the
+   `ce57ed5` entry — the AMENDMENT BLOCK carries the ruling, the per-commit
+   factors, and the reason 1.71 × 1.72 × 13.52 = 39.8 is NOT the ID's figure.
 7. **★ AND THE TREE STATE, CHECKED NOT ASSUMED:** at the start of this
    filing `git rev-parse HEAD` → **`c3d8853`**, `git status --porcelain` →
    **0 lines**, `git remote -v` → **empty**. **The newest bundle
