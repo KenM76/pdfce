@@ -22346,3 +22346,214 @@ retired no-shell disclaimer is not repeated.
   38.3's blocked question **(ba)** and 38.5's two re-scope items, the
   `pdfce-ui-specialist` spec-filing call, F0's disposition, and the
   **`Acrobat_Features` stale-GAP dispatch**.
+
+## 2026-08-07 (twentieth filing) — **`R166` IS MINTED**: *a number whose instrument no longer exists is not evidence — it may be reported, but nothing may be scoped, ordered or built on it until a second measurement is possible*. **Ruled IN after the engineer tested his own five objections and reversed on ALL of them, including the one he had used to refuse the two previous candidates.** Plus the two owed RAG findings, and a fresh backup whose TIP was checked, not just verified
+
+**Shipped:**
+- Nothing. `docs/`-only filing over `6502d51`, plus two cross-project RAG
+  files and four RAG amendments. **No commit, no Pass, no behaviour change.**
+
+**Ledger — re-measured by RUNNING both checkers, before and after:**
+- `tools/check-ledger-numbers.py` → **exit 0**, ceilings
+  `Pass 43 / R166 / decision 031` (before: `Pass 43 / R165 / decision 031`).
+- `tools/check-passes-filed.py` → **exit 0**, before and after.
+- **Standing rules R165 → R166. R167 is next free.** Pass family stays
+  **43**; decision records stay **031**; operator questions stay **(bb)**.
+- Decision 030's three still-unminted contingent candidates and the
+  cross-RAG-handoff proposal **transfer R166 → R167** — the **FIFTH** such
+  transfer this session, by the read-the-live-ceiling rule (R106/R133).
+  **Nothing is renumbered.**
+
+### 1. `R166` — and the reusable part is WHY EACH OBJECTION FAILED
+
+Binding text lives in `ROADMAP.md`'s *Standing rules*, `R166`, which is
+canonical. The argued proposal was filed one filing earlier in
+`ARCHITECTURE.md` §12 (twenty-second entry) **with a recommendation TO
+MINT** — the inverse of `R165`, which was minted *against* its proposer's
+recommendation. Both dispositions are recorded because a close call handed
+over with both sides argued is what this project wants, in either direction.
+
+**The three occurrences, all 2026-08-07, all load-bearing:** `Mask::new`
+**10.1 s → 1.02 s** (a bad ablation — construction plus use); mean clip
+bbox **0.663% → 66.36%** (a unit error — a fraction printed as a percent);
+clip cull rate **73.71% → 1.34%** (wrong state scope). **The bar here is
+two; this cleared it before lunch, and `R164` itself was minted on one.**
+
+**★ The third never reached a document**, because by then
+`tools/render-profile` existed and the fork caught it. **Nothing
+distinguishes the three except whether a second measurement was cheap at
+the moment the number was produced** — the rule stated as an experiment
+rather than as an argument.
+
+**The five objections, and why each failed** (filed as a checklist for the
+next candidate, not as a confession):
+
+1. ***"No single mechanism to name."*** Backwards. Rules here name
+   **conditions**, not mechanisms — R162 and R164 each span many. **The
+   mechanism diversity is what makes it a rule rather than a bug report.**
+2. ***The occurrence bar.*** Passes **wider than R164's**: three in one
+   day, and R164 was minted on one, with a documented overrule.
+3. ***"Commissions work, not care" — THE DECISIVE ONE, and it cuts the
+   other way.*** That ground refused *both* the ablation candidate and the
+   earlier R166 candidate, because each says **do something**. This one
+   commissions **care**: it constrains what may be believed and acted on,
+   is honoured by **not acting**, and costs nothing. **The engineer applied
+   his own test and got the SIGN wrong, and asked for that to be
+   recorded.** A test with a direction, applied without checking the
+   direction, will misfire again.
+4. ***R163's carrier.*** Discharges the **instance**, not the **class**:
+   `render-profile` only runs when someone runs it, and guards **render**
+   numbers only. The next figure from a deleted probe will be in the text
+   pipeline, the writer or the parser.
+5. ***Redundancy.*** R164 catches error 1 and **neither** of the others;
+   R162 governs **absence** claims and none of the three was one; R87
+   requires **establishment** and **all three were established — once,
+   wrongly.**
+
+**The limit, stated inside the rule:** it does **not** forbid reporting a
+one-off number, and does **not** require re-measuring before every mention.
+**The scope is three verbs — SCOPE, ORDER, BUILD.** And it is satisfied by
+an **artifact**, not by vigilance: the moment a standing instrument exists
+for a subsystem, the rule is discharged there, permanently. **`R166` is
+written to be hollowed out by its own carriers (R163), and that is the
+intended end state.**
+
+### 2. The two owed RAG findings — written, and four existing files corrected
+
+**Written:**
+- `D:\dev\rag\rust\tiny_skia_mask_pixmap_size_mismatch_drops_the_paint_silently.md`
+  — tiny-skia 0.11.4's clip-mask size contract. **A size contract enforced
+  by returning `None` is a CORRECTNESS trap, not a performance one:**
+  `RasterPipelineBlitter::new` returns `None` on a mask/pixmap mismatch →
+  a `log::warn!` and a **silently dropped paint**. Plus `Mask::fill_path`
+  being **compilation-dominated** (10.3 µs at 64×64 vs **8.3 µs**
+  page-sized; three raster-pipeline compilations per call;
+  `scan::path_aa::fill_path` already self-bounds to `path.bounds()`).
+- `C:\personal_rag\pdf\lesson_20260807_cad_clip_geometry_census_66pct_page_bbox_single_subpath.md`
+  — the empirical clip-geometry census: **66.36% mean bbox, 100%
+  single-subpath, mean 7 segments, 2.5% axis-aligned rectangles, `W*` over
+  `W` 24,125 to 17** — so **the canonical nonzero `re W n` idiom misses
+  99.93% of this file's clips.** Discharges the *Limits* item the
+  operator-count lesson explicitly left owed.
+
+Both cross-link to `R166`, since they are the measurements that produced it.
+
+**★ Four EXISTING RAG files carried now-falsified claims and were amended
+with dated footers (hard rule 4), because leaving them is the exact failure
+`R166` names:**
+- `pdf/lesson_20260807_cad_sheet_clips_..._w_star_dominant.md` — the 10.1 s
+  figure corrected, **and its "generalizable rule" (*size the clip
+  representation by the CLIP, not by the PAGE*) RETRACTED** — it is false
+  on the very file it was derived from.
+- `pdf/lesson_20260805_clip_paths_are_re_rectangles_...md` — the
+  *"overwhelmingly `re` rectangles"* headline scoped to **document-shaped
+  files**; 2.5% on CAD. **Its node-editing conclusion is unaffected.**
+- `pdf/index.md`, `rust/index.md` and `rust/constant_ratio_steps_...md` —
+  the 10.1 s term corrected; **the cache-boundary reading is unaffected**,
+  being derived from the ratio SHAPE, not from a phase timing.
+
+New index entries added to `rust/index.md`, `personal_rag/pdf/index.md` and
+the master `personal_rag/index.md`.
+
+### 3. Backup — created, verified, AND tip-checked, which are three different things
+
+**`D:\Dev\pdfce-backups\pdfce-20260807-1547.bundle`**, created with
+`git bundle create ... --all` (broader than the prior bundles: it carries
+`main` and seven stale worktree branches as well).
+
+- `git bundle verify` → **`...1547.bundle is okay`**, *"The bundle records a
+  complete history."*
+- **`git bundle list-heads` → `refs/heads/pass-8-redaction` at
+  `6502d510444598217084bfb8ae5318293dba06f2`; `git rev-parse HEAD` →
+  the SAME sha. `git log --oneline <tip>..HEAD` → 0 commits.**
+- **The tip check is reported separately ON PURPOSE**, per the dispatch:
+  `git bundle verify` passing establishes the bundle is *internally
+  consistent and self-contained*, **not that it contains the commits you
+  care about.** Only the sha comparison establishes that.
+- Supersedes `pdfce-20260807-1509.bundle`, which was at `7867ec4` — **two
+  commits behind, not one.** The prior filing reported "one commit behind"
+  and was correct *at `6b33789`*; `6502d51` landed after it.
+- **`git remote -v` → empty.** Still no remote; the bundle is the only copy.
+
+**★ CAVEAT, stated because the bundle is the only copy:** this filing's own
+edits to `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/FEATURES.md` and
+`docs/SESSION_LOG.md` were **uncommitted at bundle time and are therefore
+NOT in it.** A bundle captures committed history only. **They need a commit
+and a subsequent bundle** to be backed up at all.
+
+### 4. How the absences were established (R87) — with a shell, every claim naming its command
+
+**★ THIS FILING HAS A SHELL AND USED IT** (hard rule 8 as amended today,
+`b1368ed`). No no-shell disclaimer appears here, because repeating a retired
+premise is the failure the amendment was written about.
+
+1. ***"No engineering fork is live; the tree is clean at `6502d51`."***
+   **Established** by `git status --porcelain` → **empty** and
+   `git rev-parse HEAD` → `6502d510...`, run at dispatch time. **The
+   operator stated he had measured this rather than asserting it from
+   memory, having been wrong twice; this filing re-ran both commands rather
+   than inheriting the claim.**
+2. ***"`R166` was free before this filing."*** **Established by RUNNING**
+   `tools/check-ledger-numbers.py` → `standing rules: R165 -> next free is
+   R166`. Not read from prose (R106/R133).
+3. ***"Every location stating the live ceiling was amended."***
+   **Established** by tracked-files-only `git grep -n "R166" -- docs/` and
+   filtering for *next free* / *remains free* / *stays free* / *NOT
+   MINTED*. **Ten `ROADMAP.md` sites and six `ARCHITECTURE.md` sites
+   reviewed; the LIVE forward claims were amended, the per-filing
+   historical ledgers were LEFT AS FILED** — the distinction the R159
+   amend-every-location footer itself draws (*"true as of that ruling, and
+   NOT a live ceiling claim"*), and the same line the R163/R164/R165
+   mintings drew.
+4. ***"No existing RAG lesson already covers the clip-geometry census."***
+   **Established** by grepping `C:\personal_rag\pdf\` and
+   `D:\dev\rag\rust\` for `0.663` / `10.1 s` / `sized to the clip` — which
+   **also found the four stale files amended above.** Hard rule 4 says grep
+   the index before writing; here the grep changed the work.
+5. ***The backup tip.*** **Established** by `git bundle list-heads` plus
+   `git rev-parse HEAD` compared as strings, **not** by `git bundle
+   verify`, which cannot establish it.
+6. ***Every figure in `R166`'s occurrence table.*** **NOT established
+   here.** The 10.1/1.02 s, 0.663/66.36% and 73.71/1.34% pairs, the
+   microbenchmarks and the census are the **ENGINEER's**, measured at
+   `6b33789` and relayed. **This filing ran no build, no test, no render
+   and no census.**
+7. ***`FEATURES.md`.*** **NO box changed and NO row added** — a standing
+   rule is **not an operator capability**, the **seventh** application of
+   the no-tooling-section precedent. One clause was added to the
+   *Interactive-speed rendering* row noting that `R166` now governs its
+   work order, because that row is the thing the rule was born policing.
+
+**Documents amended (four in-repo, six RAG):** `ROADMAP.md` (`R166` minted
++ nine dated amendments), `ARCHITECTURE.md` (§12 twenty-third entry + two
+amendments), `FEATURES.md` (one clause), `SESSION_LOG.md` (this entry);
+`D:\dev\rag\rust\` (one new file, two amended), `C:\personal_rag\` (one new
+lesson, two amended, two indexes).
+
+**Still in flight / for next session:**
+
+- **`R166` is RULED — remove it from the awaiting-ruling list.** The
+  ceiling is **R166**; **R167** is next free.
+- **★ THIS FILING'S OWN EDITS ARE UNCOMMITTED AND UNBACKED-UP.** Four
+  `docs/` files. The bundle is the only copy and it does not contain them.
+- **STILL OWED — `--ablate` plus a reported FLOOR** in
+  `tools/render-profile`. Unchanged, and now doubly owed: it is the carrier
+  that would discharge `R166` for more of the render subsystem.
+- **`R166`'s carrier gap is the new standing item.** `render-profile`
+  covers render only. **The text pipeline, the writer and the parser have
+  no standing instrument**, so any load-bearing figure from them is
+  currently `R166`-blocked from ranking work. Candidate for the *Foreign
+  oracles for every output surface* Backlog list, which is the same shape.
+- **The live render order is `2'` then `3`.** `1` and `1'` are both dead
+  ends — **do not re-scope either.**
+- **A Pass ID for the remaining render work** stays the engineer's to
+  assign; the case for deferring is now twice-proven.
+- **Everything else carried forward from the nineteenth filing is
+  UNCHANGED**: the `UNESTABLISHED` foreign-oracle rows, the
+  incremental-writer coverage boundary, Pass 20.5's remaining cut half and
+  its owed rendered-appearance check, the multi-page repeated-field
+  labelling gap, `tools/gui-drive.ps1`'s build-or-assert-freshness item,
+  Pass 20.3's `/I`/`/TI`/push buttons and the unruled push-button verb
+  name, Pass 38.3's blocked question **(ba)** and 38.5's two re-scope
+  items, the `pdfce-ui-specialist` spec-filing call, F0's disposition, and
+  the **`Acrobat_Features` stale-GAP dispatch**.
