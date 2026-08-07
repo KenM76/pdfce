@@ -701,6 +701,24 @@ pub struct FieldAuthorDisclosures {
     /// A choice field was created with an EMPTY `/Opt` and therefore cannot
     /// be filled until options are added. Always `false` for other types.
     pub has_no_options: bool,
+    /// A radio member MERGED into an existing group carried group-behaviour
+    /// flags (`NoToggleToOff` / `RadiosInUnison`) that disagreed with the
+    /// group's own, and the group's won.
+    ///
+    /// # Why disclosed rather than refused, or silently applied
+    ///
+    /// The flags live on the FIELD (§12.7.4.2.1 Table 226), so the group has
+    /// exactly one set of them and the call that created it decided them.
+    /// Honouring a later member's flags would silently change how every
+    /// EXISTING member behaves — the second member quietly rewriting the
+    /// first — which is the sneaky outcome. Refusing outright would make the
+    /// obvious script (`--no-toggle-to-off` passed to every call in a loop)
+    /// fail on its second iteration for no real reason.
+    ///
+    /// So the group's flags stand and the divergence is REPORTED, which is
+    /// rule 4 applied exactly: pdfce made a choice the operator did not
+    /// specify, so the operator gets told.
+    pub group_flags_ignored: bool,
 }
 
 impl FieldAuthorDisclosures {
@@ -842,6 +860,172 @@ pub struct NewCheckBox {
     pub read_only: bool,
     /// `/Ff` bit 2 — the field must have a value when the form is submitted.
     pub required: bool,
+}
+
+/// The facts about an existing radio group that a joining member is checked
+/// against — see [`EditSession::radio_group_state`].
+struct RadioGroupState {
+    /// `/Ff` bit 26, read through the type-gated predicate.
+    in_unison: bool,
+    /// `/Ff` bit 15.
+    no_toggle_to_off: bool,
+    /// The group carries `/Opt` (Table 227), so its `/AP /N` keys are array
+    /// indices rather than export values.
+    positional_opt: bool,
+    /// Every on-state name any member widget currently offers.
+    on_states: Vec<Vec<u8>>,
+}
+
+/// One member of a **radio group** (§12.7.4.2.1) to be authored.
+///
+/// # A group is built by repeating this, not by declaring it
+///
+/// There is deliberately no `NewRadioGroup` taking a list of members. Decision
+/// 020 builds radio grouping **through the F1 merge primitive**, not a
+/// radio-specific path: the first [`EditSession::add_radio_button`] with a
+/// given `name` creates the field, and each later one with the SAME name
+/// merges another widget into it. That is the identical mechanism a check box
+/// repeated across pages uses, and it is why a radio group needs no code that
+/// knows what a radio group is.
+///
+/// The consequence worth stating: a one-member "group" is a legitimate
+/// intermediate state, not an error. A group under construction has to pass
+/// through it, and there is no point at which pdfce could know the operator
+/// was finished.
+///
+/// # `export_value` is the member's identity
+///
+/// It is simultaneously the `/AP /N` key, the `/AS` value when this member is
+/// chosen, and the field's `/V` — one string doing all three jobs
+/// (§12.7.4.2.1). Members are told apart by it and by nothing else, which is
+/// why two members may not share one unless [`radios_in_unison`] says so.
+///
+/// pdfce always writes these as NAMES. It never authors the positional `/Opt`
+/// form (Table 227) — see [`EditError::RadioGroupUsesPositionalOpt`].
+///
+/// [`radios_in_unison`]: NewRadioButton::radios_in_unison
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewRadioButton {
+    /// 0-based page index the widget is placed on.
+    pub page_index: usize,
+    /// The GROUP's partial name `/T` (§12.7.3.2) — shared by every member.
+    pub name: String,
+    /// This member's widget `/Rect` in default user space.
+    pub rect: page_tree::Rect,
+    /// This member's export value: its `/AP /N` key, its `/AS` when chosen,
+    /// and the `/V` the group takes. `Off` is reserved (§12.7.4.2.3).
+    pub export_value: String,
+    /// Whether this member is the group's initial selection.
+    pub selected: bool,
+    /// `/TU`, the alternate (accessibility / UI) name — an explicit DECISION,
+    /// not an option (R105). See [`TooltipChoice`].
+    pub tooltip: TooltipChoice,
+    /// `/Ff` bit 15 `NoToggleToOff` — once a member is chosen, clicking it
+    /// again does not clear the group (§12.7.4.2.1 Table 226).
+    ///
+    /// Only meaningful on the call that CREATES the group; a merge cannot
+    /// change a flag that already exists. See
+    /// [`FieldAuthorDisclosures::group_flags_ignored`].
+    pub no_toggle_to_off: bool,
+    /// `/Ff` bit 26 `RadiosInUnison` — members sharing an export value turn
+    /// on together (Table 226).
+    ///
+    /// **Bit 26 is overloaded**: on a text field the same bit means
+    /// `RichText`. It is only ever read back through
+    /// [`forms::Field::radios_in_unison`], which gates on the field type, so
+    /// the two can never be confused.
+    ///
+    /// Only meaningful on the call that creates the group.
+    pub radios_in_unison: bool,
+    /// `/Ff` bit 1 — the value may not be changed by the operator.
+    pub read_only: bool,
+    /// `/Ff` bit 2 — the field must have a value when the form is submitted.
+    pub required: bool,
+}
+
+impl NewRadioButton {
+    /// A member at `rect` on `page_index`, in group `name`, exporting
+    /// `export_value`, not selected.
+    #[must_use]
+    pub fn new(
+        page_index: usize,
+        name: impl Into<String>,
+        rect: page_tree::Rect,
+        export_value: impl Into<String>,
+    ) -> Self {
+        Self {
+            page_index,
+            name: name.into(),
+            rect,
+            export_value: export_value.into(),
+            selected: false,
+            tooltip: TooltipChoice::Undecided,
+            no_toggle_to_off: false,
+            radios_in_unison: false,
+            read_only: false,
+            required: false,
+        }
+    }
+
+    /// Make this member the group's initial selection.
+    #[must_use]
+    pub const fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    /// Set `/TU`, the accessibility name.
+    #[must_use]
+    pub fn with_tooltip(mut self, tooltip: impl Into<String>) -> Self {
+        self.tooltip = TooltipChoice::Text(tooltip.into());
+        self
+    }
+
+    /// Explicitly DECLINE an accessibility name (R105).
+    #[must_use]
+    pub fn declining_tooltip(mut self) -> Self {
+        self.tooltip = TooltipChoice::Declined;
+        self
+    }
+
+    /// Set the two group-behaviour flags. Only honoured on the call that
+    /// creates the group.
+    #[must_use]
+    pub const fn with_group_flags(mut self, no_toggle_to_off: bool, in_unison: bool) -> Self {
+        self.no_toggle_to_off = no_toggle_to_off;
+        self.radios_in_unison = in_unison;
+        self
+    }
+
+    /// Set the two general `/Ff` bits this type offers at creation.
+    #[must_use]
+    pub const fn with_flags(mut self, read_only: bool, required: bool) -> Self {
+        self.read_only = read_only;
+        self.required = required;
+        self
+    }
+
+    /// The resolved `/Ff` (§12.7.3.1 Table 221 + §12.7.4.2.1 Table 226).
+    ///
+    /// Bit 16 `Radio` is what makes this a radio group rather than a check
+    /// box — with both `Radio` and `Pushbutton` clear a `/Btn` IS a check box
+    /// (§12.7.4.2.1), so the bit is the entire type declaration.
+    fn field_flags(&self) -> i64 {
+        let mut ff = i64::from(forms::FieldFlags::RADIO);
+        if self.read_only {
+            ff |= i64::from(forms::FieldFlags::READ_ONLY);
+        }
+        if self.required {
+            ff |= i64::from(forms::FieldFlags::REQUIRED);
+        }
+        if self.no_toggle_to_off {
+            ff |= i64::from(forms::FieldFlags::NO_TOGGLE_TO_OFF);
+        }
+        if self.radios_in_unison {
+            ff |= i64::from(forms::FieldFlags::RADIOS_IN_UNISON);
+        }
+        ff
+    }
 }
 
 impl NewCheckBox {
@@ -1335,6 +1519,53 @@ pub enum EditError {
     /// was impossible instead of quietly getting a field that ignores it.
     #[error("the editable flag applies only to a combo box (drop-down), not to a list box")]
     ChoiceEditRequiresCombo,
+    /// A check box's on-state name was empty or was `Off`.
+    ///
+    /// §12.7.4.2.3: the off state *shall* be named `Off`, so it cannot also
+    /// name the on state — a box whose two states share a name has no way to
+    /// express "checked". An empty name is not a valid PDF name object here.
+    /// Two members of one radio group were given the same export value, and
+    /// the group is not `RadiosInUnison`.
+    ///
+    /// §12.7.4.2.1: a radio group's members are distinguished BY their
+    /// on-state names — that name is both the appearance key and the value
+    /// `/V` takes when that member is chosen. Two members sharing one means
+    /// `/V` cannot say which was chosen, and `set_button_state` would light
+    /// both.
+    ///
+    /// That is exactly what `RadiosInUnison` (`/Ff` bit 26) exists to request
+    /// deliberately, so this is refused only when the flag is absent — the
+    /// error names the flag rather than leaving the caller to find it.
+    #[error(
+        "radio group `{fqn}` already has a member exporting {state:?}; give this one a different export value, or create the group with radios-in-unison if they are meant to select together"
+    )]
+    RadioExportValueTaken {
+        /// The group's fully-qualified name.
+        fqn: String,
+        /// The export value already in use.
+        state: String,
+    },
+    /// A radio group already in the document names its states POSITIONALLY
+    /// (`/1`, `/2`, …) through `/Opt`, so pdfce cannot add a member to it.
+    ///
+    /// §12.7.4.2.1 Table 227 allows a button field's `/Opt` to supply export
+    /// values positionally: the `/AP /N` keys are then array INDICES and the
+    /// real export value is `/Opt[i]`. pdfce parses `/Opt` but has never
+    /// consulted it on the write side, so it cannot compute what index a new
+    /// member should take, nor what the existing members actually export.
+    ///
+    /// Decision 020 §8.3 requires this be implemented or explicitly refused,
+    /// and refusal is the honest half: authoring into such a group would
+    /// produce members whose export values pdfce itself cannot resolve.
+    /// Groups pdfce creates are always NAMED, never positional, so this can
+    /// only be reached on a foreign document.
+    #[error(
+        "radio group `{fqn}` names its states positionally through /Opt, which pdfce cannot extend; its export values are array positions pdfce does not write"
+    )]
+    RadioGroupUsesPositionalOpt {
+        /// The group's fully-qualified name.
+        fqn: String,
+    },
     /// A check box's on-state name was empty or was `Off`.
     ///
     /// §12.7.4.2.3: the off state *shall* be named `Off`, so it cannot also
@@ -4546,6 +4777,7 @@ impl EditSession {
             tagged_document: self.document_is_tagged(),
             structure_tab_order: self.page_uses_structure_tab_order(page_id),
             has_no_options: false,
+            group_flags_ignored: false,
         };
         Ok((page_id, slots, path, disclosures))
     }
@@ -5248,6 +5480,273 @@ impl EditSession {
             field_id,
             merged: false,
             disclosures,
+        })
+    }
+
+    /// Add one member to a **radio group** (§12.7.4.2.1), creating the group
+    /// if this is its first member.
+    ///
+    /// # The group is the merge primitive, not a radio feature
+    ///
+    /// This function contains no code that knows what a radio group is beyond
+    /// setting `/Ff` bit 16 and drawing a round widget. Grouping comes
+    /// entirely from F1's [`forms_author::resolve_field_path`]: a second call
+    /// with the same `name` resolves to
+    /// [`FieldPath::Terminal`](forms_author::FieldPath::Terminal) and merges,
+    /// promoting the field from Shape A to Shape B exactly as a repeated
+    /// check box does. Decision 020 requires this specifically — a
+    /// radio-specific grouping path would be a second mechanism for what
+    /// §12.7.3.2 already says a shared name means.
+    ///
+    /// Mutual exclusion likewise needs nothing here:
+    /// [`Self::set_button_state`] already sets each widget's `/AS` to the
+    /// requested state if that widget offers it and `/Off` otherwise, which
+    /// **is** radio behaviour. Authoring a real group is enough to make the
+    /// existing, unmodified fill path behave correctly.
+    ///
+    /// # What this refuses, and why each refusal exists
+    ///
+    /// - **A different field type under the name** — F1's collision rule,
+    ///   and buttons compare KIND, so a check box cannot join a radio group
+    ///   (they disagree about whether widgets toggle independently).
+    /// - **A duplicate export value** without `RadiosInUnison`
+    ///   ([`EditError::RadioExportValueTaken`]) — members are identified by
+    ///   that string alone.
+    /// - **A group whose states are positional `/Opt`**
+    ///   ([`EditError::RadioGroupUsesPositionalOpt`]) — decision 020 §8.3.
+    ///   Unreachable on pdfce-authored groups, which are always named.
+    ///
+    /// # Errors
+    ///
+    /// The three above, plus everything
+    /// [`Self::field_authoring_preflight`] raises: an empty name, an
+    /// undecided `/TU` (R105), a degenerate `/Rect`, a hybrid-XFA document,
+    /// and the encryption, **strict** certification and `/Size` guards.
+    /// `Off` as an export value is refused through
+    /// [`EditError::CheckBoxOnStateInvalid`] — the same reserved-name rule,
+    /// shared rather than duplicated.
+    pub fn add_radio_button(
+        &mut self,
+        spec: &NewRadioButton,
+    ) -> Result<FieldAuthorOutcome, EditError> {
+        // §12.7.4.2.3 reserves `Off`; a member exporting it could never be
+        // told apart from the group being empty.
+        if spec.export_value.trim().is_empty() || spec.export_value == "Off" {
+            return Err(EditError::CheckBoxOnStateInvalid {
+                name: spec.export_value.clone(),
+            });
+        }
+        let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
+        let (page_id, slots, path, mut disclosures) = self.field_authoring_preflight(
+            &spec.name,
+            spec.rect,
+            spec.page_index,
+            forms::FieldType::Button,
+            Some(forms::ButtonKind::Radio),
+            &spec.tooltip,
+        )?;
+
+        let (off, on) = annot_author::build_radio_button_appearances(w, h);
+        let off_id = ObjId::new(self.alloc_number()?, 0);
+        let on_id = ObjId::new(self.alloc_number()?, 0);
+
+        let mut stream_of = |state: annot_author::CheckBoxStateAppearance| {
+            let span = self.stage_bytes(&state.content);
+            let mut dict = state.ap_dict;
+            dict.insert(
+                Name::from(b"Length"),
+                Object::Integer(i64::try_from(state.content.len()).unwrap_or(i64::MAX)),
+            );
+            Object::Stream(Stream {
+                dict,
+                data_span: span,
+            })
+        };
+        let off_stream = stream_of(off);
+        let on_stream = stream_of(on);
+
+        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, &spec.tooltip);
+
+        // `/AP /N` keyed by state name — the member's export value and `Off`.
+        // NAMES, not strings: the single most common way a hand-built button
+        // comes out unrecognisable to a viewer.
+        let mut n = Dict::new();
+        n.insert(
+            Name::from(spec.export_value.as_bytes()),
+            Object::Reference(on_id),
+        );
+        n.insert(Name::from(b"Off"), Object::Reference(off_id));
+        let mut ap = Dict::new();
+        ap.insert(Name::from(b"N"), Object::Dict(n));
+        d.insert(Name::from(b"AP"), Object::Dict(ap));
+
+        let mut objects = vec![
+            ObjectWrite {
+                id: off_id,
+                before: None,
+                after: Some(off_stream),
+            },
+            ObjectWrite {
+                id: on_id,
+                before: None,
+                after: Some(on_stream),
+            },
+        ];
+
+        // ---- THE MERGE BRANCH: joining an existing group ----
+        if let FieldPath::Terminal { id, shape, .. } = path {
+            let existing = self.radio_group_state(id, &spec.name)?;
+
+            // Decision 020 §8.3: a positional-`/Opt` group cannot be extended,
+            // because pdfce does not write `/Opt` and cannot compute what
+            // index a new member would occupy.
+            if existing.positional_opt {
+                return Err(EditError::RadioGroupUsesPositionalOpt {
+                    fqn: spec.name.clone(),
+                });
+            }
+            // Members are told apart by export value alone, unless the group
+            // was deliberately created to select in unison.
+            if !existing.in_unison
+                && existing
+                    .on_states
+                    .iter()
+                    .any(|s| s == spec.export_value.as_bytes())
+            {
+                return Err(EditError::RadioExportValueTaken {
+                    fqn: spec.name.clone(),
+                    state: spec.export_value.clone(),
+                });
+            }
+            // The group's flags stand; a disagreement is reported, not applied
+            // — see `FieldAuthorDisclosures::group_flags_ignored`.
+            if spec.no_toggle_to_off != existing.no_toggle_to_off
+                || spec.radios_in_unison != existing.in_unison
+            {
+                disclosures.group_flags_ignored = true;
+            }
+
+            let mut widget = d;
+            // `/V` belongs to the FIELD, which already has one. `/AS` is this
+            // widget's own, and it is `Off` unless this call is choosing this
+            // member — a merge must not silently re-point a selection the
+            // earlier calls made.
+            let this_as: &[u8] = if spec.selected {
+                spec.export_value.as_bytes()
+            } else {
+                b"Off"
+            };
+            widget.insert(Name::from(b"AS"), Object::Name(Name::from(this_as)));
+
+            let (merge_writes, _new_widget) =
+                self.merge_widget_into_field(id, shape, widget, page_id, &slots)?;
+            objects.extend(merge_writes);
+
+            // Choosing this member on the way in re-points the group's `/V`
+            // and must clear every SIBLING's `/AS`, or two widgets paint as
+            // selected at once. That is `set_button_state`'s job and it is
+            // reached below, after the merge is committed, so it sees the
+            // group the merge actually produced rather than a prediction of
+            // it (R92: one path decides what "selected" looks like).
+            self.commit(Command {
+                kind: CommandKind::AddFormField,
+                objects,
+                removals: Vec::new(),
+                trailer: None,
+            });
+            if spec.selected {
+                self.set_button_state(&spec.name, &spec.export_value)?;
+            }
+            return Ok(FieldAuthorOutcome {
+                field_id: id,
+                merged: true,
+                disclosures,
+            });
+        }
+
+        // ---- CREATING THE GROUP: this is its first member ----
+        let FieldPath::Vacant { deepest, remaining } = path else {
+            return Err(FormAuthorError::NameIsGroupingNode {
+                fqn: spec.name.clone(),
+            }
+            .into());
+        };
+        let field_id = ObjId::new(self.alloc_number()?, 0);
+        let (parent_writes, parent, partial) =
+            self.place_new_field(deepest, &remaining, field_id)?;
+
+        let state = if spec.selected {
+            Name::from(spec.export_value.as_bytes())
+        } else {
+            Name::from(b"Off")
+        };
+        d.insert(Name::from(b"V"), Object::Name(state.clone()));
+        d.insert(Name::from(b"AS"), Object::Name(state));
+        d.insert(Name::from(b"FT"), Object::Name(Name::from(b"Btn")));
+        d.insert(Name::from(b"Ff"), Object::Integer(spec.field_flags()));
+        d.insert(
+            Name::from(b"T"),
+            Object::String(encode_text_string(&partial)),
+        );
+        if let Some(p) = parent {
+            d.insert(Name::from(b"Parent"), Object::Reference(p));
+        }
+
+        objects.push(ObjectWrite {
+            id: field_id,
+            before: None,
+            after: Some(Object::Dict(d)),
+        });
+        objects.extend(parent_writes);
+        objects.extend(self.annots_writes(page_id, field_id, &slots)?);
+
+        self.commit(Command {
+            kind: CommandKind::AddFormField,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(FieldAuthorOutcome {
+            field_id,
+            merged: false,
+            disclosures,
+        })
+    }
+
+    /// Read the facts about an existing radio group that a new member has to
+    /// be checked against.
+    ///
+    /// Read through [`forms::parse_acroform`] rather than off the raw dict so
+    /// that inherited flags and `/Kids` widgets are resolved the same way
+    /// every other consumer resolves them — a second, private reading of the
+    /// same graph is how two parts of a program come to disagree about what a
+    /// document says.
+    fn radio_group_state(&self, field_id: ObjId, fqn: &str) -> Result<RadioGroupState, EditError> {
+        let form =
+            forms::parse_acroform(&self.graph()).ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+        let field = form
+            .fields
+            .iter()
+            .find(|f| f.id == field_id)
+            .ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+        Ok(RadioGroupState {
+            // `radios_in_unison()` is the TYPE-GATED predicate: `/Ff` bit 26
+            // is `RichText` on a text field and only means unison on a radio,
+            // so the raw bit is never tested directly.
+            in_unison: field.radios_in_unison(),
+            no_toggle_to_off: field.flags.has(forms::FieldFlags::NO_TOGGLE_TO_OFF),
+            // A button field carrying `/Opt` is using Table 227's positional
+            // form: its `/AP /N` keys are indices into that array.
+            positional_opt: !field.options.is_empty(),
+            on_states: field
+                .widgets
+                .iter()
+                .flat_map(|w| w.on_states.iter().cloned())
+                .collect(),
         })
     }
 

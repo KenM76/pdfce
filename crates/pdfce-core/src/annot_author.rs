@@ -1434,6 +1434,111 @@ pub fn build_check_box_appearances(
     )
 }
 
+/// Build a radio button's **two** appearance states — on and off — as
+/// vector-drawn artwork (§12.7.4.2.3).
+///
+/// Returns `(off, on)`, matching [`build_check_box_appearances`]'s order so
+/// the two are interchangeable at the call site.
+///
+/// # Why a circle, and why that is not merely cosmetic
+///
+/// §12.7.4.2 gives radio buttons and check boxes the same `/FT /Btn` type and
+/// distinguishes them by `/Ff` bit 16 alone — nothing in the FILE says one
+/// should look round. The round/square convention is a viewer-and-toolkit
+/// one, and it is load-bearing for the operator rather than decorative: a
+/// check box means *"toggle me independently"* and a radio means *"choose one
+/// of these"*, and that difference is invisible until you click. A radio group
+/// drawn as square boxes is a form that lies about its own behaviour.
+///
+/// So pdfce draws the circle deliberately, and records that this is **pdfce's
+/// own design choice** rather than a spec requirement or an "Acrobat does it"
+/// parity claim (§3.6.3's discipline, applied to appearance rather than to
+/// deletion).
+///
+/// # The dot is FILLED, the ring is STROKED
+///
+/// Both states draw the ring so an unselected radio still reads as a control
+/// (the same reasoning as the check box's drawn off state — a blank one is
+/// indistinguishable from no field). Only the on state adds the centre dot.
+/// The dot is filled rather than stroked because a stroked small circle at
+/// typical widget sizes collapses into a smudge: at a 12pt widget the dot is
+/// ~3pt across, and a 1pt stroke centred on that path leaves almost no hole.
+///
+/// # Circle construction
+///
+/// Four cubic Béziers, the standard circle approximation with control points
+/// at `k = 0.5523 · r` — [`ContentBuilder`](crate::writer::content::ContentBuilder)
+/// offers `curve_to` and no arc operator, and PDF has no arc operator either
+/// (§8.5.2 gives only `m`, `l`, `c`, `v`, `y`, `h`, `re`), so every "circle"
+/// in a PDF is this approximation. Max radial error ≈ 0.027 %, far below a
+/// device pixel at any plausible widget size.
+///
+/// # Errors
+///
+/// Never — fixed geometry, no text laid out. Returns a plain pair, matching
+/// [`build_check_box_appearances`].
+#[must_use]
+pub fn build_radio_button_appearances(
+    width: f64,
+    height: f64,
+) -> (CheckBoxStateAppearance, CheckBoxStateAppearance) {
+    let (w, h) = (width.max(1.0), height.max(1.0));
+    let rect = Rect {
+        llx: 0.0,
+        lly: 0.0,
+        urx: w,
+        ury: h,
+    };
+    let (cx, cy) = (w / 2.0, h / 2.0);
+    // The half-unit inset keeps the 1.0-wide ring stroke inside the BBox, for
+    // the same reason the check box insets its border: a stroke straddles its
+    // path, so one drawn at the edge loses half its width to the clip.
+    let inset = 0.5;
+    let r = (w.min(h) / 2.0 - inset).max(0.5);
+
+    /// Append a circle of radius `r` centred at `(cx, cy)` as four Béziers.
+    fn circle(b: &mut ContentBuilder, cx: f64, cy: f64, r: f64) {
+        // The magic constant: the control-point offset that makes a cubic
+        // Bézier hug a quarter arc. 4/3·(√2 − 1).
+        let k = r * 0.552_284_749_830_793_4;
+        b.move_to(cx + r, cy);
+        b.curve_to(cx + r, cy + k, cx + k, cy + r, cx, cy + r);
+        b.curve_to(cx - k, cy + r, cx - r, cy + k, cx - r, cy);
+        b.curve_to(cx - r, cy - k, cx - k, cy - r, cx, cy - r);
+        b.curve_to(cx + k, cy - r, cx + r, cy - k, cx + r, cy);
+    }
+
+    let ring = |b: &mut ContentBuilder| {
+        b.set_stroke_gray(0.0);
+        b.set_line_width(1.0);
+        circle(b, cx, cy, r);
+        b.paint(Paint::Stroke);
+    };
+
+    let mut off = ContentBuilder::new();
+    ring(&mut off);
+
+    let mut on = ContentBuilder::new();
+    ring(&mut on);
+    // The dot at half the ring's radius — the conventional proportion, and
+    // large enough to stay visible when a form is printed at reduced scale.
+    on.set_fill_gray(0.0);
+    circle(&mut on, cx, cy, (r * 0.5).max(0.4));
+    on.paint(Paint::Fill);
+
+    // No /Resources entries: no font, XObject or colour space is named.
+    (
+        CheckBoxStateAppearance {
+            ap_dict: form_dict(rect, Dict::new()),
+            content: off.into_bytes(),
+        },
+        CheckBoxStateAppearance {
+            ap_dict: form_dict(rect, Dict::new()),
+            content: on.into_bytes(),
+        },
+    )
+}
+
 /// Generate a text/choice **widget field** appearance (§12.7.3.3) for Pass 7
 /// form fill.
 ///

@@ -8,8 +8,134 @@
 `pdfce-librarian` finalizes numbering)
 **Decision record number:** 020 (next sequential; 019 is the highest on disk)
 **Supersedes:** nothing. **Amends:** nothing.
+**AMENDED IN PLACE 2026-08-07** by an engineer ruling — **§0 below
+supersedes every `forms <verb>` CLI shape this document specifies.**
+Read §0 before acting on any CLI line in §6 or §11.
 **Depends on:** decision 009 (JS posture), decision 019 §3.7 (the FF-I cut),
 `ARCHITECTURE.md` §5 (round-trip), §12.7.3 spec RAG.
+
+---
+
+## §0 — AMENDMENT, 2026-08-07: the CLI verb shape is FLAT, not nested
+
+**Ruled by `pdfce-engineer`, 2026-08-07. Filed by `pdfce-librarian` the
+same day. This amendment is placed FIRST, ahead of the TL;DR, because
+the shape it corrects appears eleven times below and a reader who meets
+any of those before meeting this one will implement the wrong surface.**
+
+### What changed
+
+This document specified field creation as a **nested** CLI surface —
+`pdfce-cli forms add-field --type text|checkbox|choice …`, with sibling
+`forms remove-field`, `forms remove-widget`, `forms set-tab-order`,
+`forms rename-field`.
+
+What shipped in Pass 20.1 / 20.2 / 20.3 / 20.0 is **flat**:
+`add-text-field`, `add-check-box`, `add-choice-field`.
+
+**The FLAT shape stands. Every nested `forms <verb>` form specified in
+this document is SUPERSEDED.**
+
+### Why — and this is not "the shipped thing wins because it shipped"
+
+The reasoning is a measurement of the surface the new verbs had to join,
+taken from `crates/pdfce-cli/src/main.rs`'s `Command` enum (lines
+381–2414) rather than recalled:
+
+- **52 subcommands. Every one of them is flat.**
+- **Zero nesting** — `#[command(subcommand)]` occurs **0 times** in the
+  `Command` enum. There is no nested verb anywhere in `pdfce-cli`.
+- Two naming conventions already coexist and are both flat: **verb-first**
+  (`list-fields`, `fill-field`, `extract-text`, `render-page`,
+  `regenerate-appearances`, `export-data`, `import-data`) and
+  **noun-prefixed** (`dimension-add`, `dimension-offset`, `dimension-delete`,
+  `group-add`, `group-set-scale`, `layer-toggle`, `object-move`,
+  `subpath-delete`, `node-move`). Even the noun-prefixed family is a flat
+  hyphenated verb, not a parent command with children.
+- `forms add-field` would therefore be **the only nested verb in the
+  entire CLI**.
+
+**The load-bearing point: this document specified the nested form before
+the surface it had to join was examined.** Consistency with 52 shipped
+flat verbs beats consistency with a prediction made in the abstract. Had
+`pdfce-cli` been nested elsewhere — had `dimension` or `object` been
+parent commands with children — the ruling would have gone the other way,
+and `forms add-field` would have been right. It is the measurement that
+decides it, not the fact of having shipped.
+
+### This is REVERSIBLE and cheap to reverse — it is Ken's to overturn
+
+Recorded explicitly so nobody treats it as settled beyond appeal: there
+is **no release, no git remote, and no users** (project rule 8 —
+publishing still awaits Ken's explicit go-ahead). Renaming three clap
+variants and their tests is a small, mechanical change. If Ken prefers
+the nested form, the cost of reversing is hours, not a migration.
+
+### What this amendment does NOT do
+
+- It does **not** rename any shipped verb. `add-text-field`,
+  `add-check-box`, `add-choice-field` keep their names.
+- It does **not** mint a standing rule or a decision record. It is an
+  amendment to this record, not a new one.
+- It does **not** rule on any verb name that §6 does not itself specify.
+  See the mapping table below for exactly where the ruling stops.
+
+### Mapping — how each §6 CLI line reads after this amendment
+
+Read strictly. The left column is what §6 says; the right column is what
+it now means. Where the right column says **NOT RULED**, the engineer has
+not picked a name and one must not be invented.
+
+| §6 slice | Nested form as specified (SUPERSEDED) | Flat form that now applies |
+|---|---|---|
+| F1 | `forms add-field --type text …` | `add-text-field …` — **SHIPPED** |
+| F2 (checkbox) | `forms add-field --type checkbox …` | `add-check-box …` — **SHIPPED** |
+| F2 (radio) | repeated `add-field --type radio --name G --export-value V` | **NOT RULED.** See the radio caveat below — this is the one line where the flat translation is not mechanical. |
+| F2 (deletion) | `forms remove-field --name <fqn>`, `forms remove-widget --name <fqn> --index N` | `remove-field`, `remove-widget`. **Note the verb is REMOVE, not DELETE** — §6 says `remove-*` and this amendment does not change it. `delete-field` is not a name this document or this ruling authorises, notwithstanding that the CLI elsewhere uses `object-delete` / `node-delete` / `dimension-delete`; reconciling `remove` vs `delete` across the surface is a separate, unruled question. |
+| F3 (listbox/combobox) | `--type listbox\|combobox …` | `add-choice-field …` — **SHIPPED** (both list and combo behaviours live behind the one verb, via `--combo`-family flags) |
+| F3 (push button) | `--type pushbutton [--caption <s>]` | **NOT RULED** by name. The flat pattern implies `add-push-button`, but that is an inference from `add-check-box`, not an engineer ruling. |
+| F4 | `forms set-tab-order --mode …` / `--order …` | `set-tab-order …`. Reads cleanly flat; still BLOCKED on the `pdfce-spec-librarian` dispatch (§3.4.4) regardless of naming. |
+| F6 | `forms rename-field` | `rename-field`. Reads cleanly flat. |
+| F7 | `pdfce-cli merge --on-field-collision …` | **Unaffected** — already flat, `merge` is a shipped top-level verb. |
+
+### The radio caveat — flagged, not smoothed over
+
+§6's F2 does **not** specify a group-creating verb. It specifies radio
+grouping *"through the F1 merge primitive, not a radio-specific path —
+repeated `add-field --type radio --name G --export-value V`."* One call
+per **member**; the group is what the merge produces.
+
+That matters for naming, because the obvious-sounding flat name
+**`add-radio-group` would misdescribe the operation** — it names a group
+where §6 authors a member. A name faithful to §6 is member-shaped
+(`add-radio-button`, or `add-radio-field` by analogy with
+`add-choice-field`). **No name is ruled here.** Whoever scopes F2 picks
+one, and should pick it against §6's per-member merge model rather than
+against the word "group".
+
+### Bare `add-field` mentions elsewhere in this document
+
+Beyond the §6 CLI lines marked inline below, this document says
+`add-field` in narrative and acceptance prose — §4.1, §5.1, §6-F1's
+acceptance list, §6-F3's push-button paragraph, §8.2's `--comb` limit.
+Those are **generic references to "the field-creation verb"**, not
+surface specifications, and they are left as written rather than edited
+eleven times into unreadability. **Blanket rule: every bare `add-field`
+in this document reads as "the flat creation verb for the type under
+discussion"** — `add-text-field`, `add-check-box`, `add-choice-field`, or
+the not-yet-named radio/push-button verb. Flags spelled on those lines
+(`--comb`, `--export-value`, `--option`) are unaffected by this
+amendment; only the verb changes.
+
+### This CLOSES §11's standing open question
+
+§11's bullet — *"Whether `pdfce-cli`'s existing forms subcommands should
+move under a `forms` parent (`list-fields` → `forms list`)"* — is
+**CLOSED: no.** The same measurement settles both halves. The six shipped
+forms subcommands stay flat and top-level, and no `forms` parent is
+created for the authoring verbs either, so there is nothing left for them
+to migrate toward. `ROADMAP.md`'s open-operator-question **(q)**, which
+was the same question filed as a pointer, is closed with it.
 
 ---
 
@@ -1162,7 +1288,9 @@ fuzz target 13 re-run over the new shapes.
 - Certification gate: refuse at **any** `/DocMDP` tier and on any
   `/FieldMDP` (§3.6.2) — stricter than fill's `/P >= 2`.
 - `/XFA` present ⇒ refuse (§3.2.2).
-- CLI: `pdfce-cli forms add-field --type text --name <fqn> --page N
+- CLI: ~~`pdfce-cli forms add-field --type text …`~~ **[SUPERSEDED by §0,
+  2026-08-07 — the flat verb `add-text-field` stands; SHIPPED under that
+  name]**. Flags unchanged: `pdfce-cli add-text-field --name <fqn> --page N
   --rect x0,y0,x1,y1 (--tooltip <s>|--no-tooltip) [--value <s>]
   [--max-len N] [--multiline] [--required] [--readonly] [--font-size N]
   -o <out>`.
@@ -1201,11 +1329,17 @@ fuzz target 13 re-run over the new shapes.
 - Default on-state export value `Yes` (sourced default), overridable.
 - Radio grouping **through the F1 merge primitive**, not a radio-specific
   path — repeated `add-field --type radio --name G --export-value V`.
+  **[§0, 2026-08-07: the flat radio verb name is NOT RULED. This line
+  authors one radio MEMBER per call; `add-radio-group` would misdescribe
+  it. See §0's radio caveat before picking a name.]**
 - `remove-field` / `remove-widget` implementing §3.6.3's three rules.
-- CLI: `forms add-field --type checkbox|radio [--export-value V]
-  [--no-toggle-to-off] [--radios-in-unison]`,
-  `forms remove-field --name <fqn>`,
-  `forms remove-widget --name <fqn> --index N`.
+- CLI: ~~`forms add-field --type checkbox|radio …`, `forms remove-field`,
+  `forms remove-widget`~~ **[SUPERSEDED by §0, 2026-08-07 — flat verbs.]**
+  Checkbox SHIPPED as `add-check-box [--export-value V]
+  [--no-toggle-to-off]`. Radio: verb name NOT RULED (above);
+  `[--radios-in-unison]` unaffected. Deletion: `remove-field --name <fqn>`,
+  `remove-widget --name <fqn> --index N` — **`remove`, not `delete`**, per
+  §0's mapping table.
 
 **Acceptance:** a 3-member radio group authored by three CLI calls behaves
 mutually-exclusively on `set-button-state` and renders correct on/off
@@ -1228,8 +1362,12 @@ still skips buttons (unchanged `_ => continue`).
   executed** — decision 009 posture A, unchanged. `add-field --type
   pushbutton` therefore authors **no** action in this slice; binding one is
   a separate question decision 009 already constrains.
-- CLI: `--type listbox|combobox|pushbutton [--option export=display]...
-  [--multi-select] [--editable] [--caption <s>]`.
+- CLI: ~~`--type listbox|combobox|pushbutton …`~~ **[SUPERSEDED by §0,
+  2026-08-07 — flat verbs.]** Listbox + combobox SHIPPED as the single verb
+  `add-choice-field [--option export=display]... [--multi-select]
+  [--editable]`. Push button: verb name **NOT RULED** (the flat pattern
+  implies `add-push-button`, but §0 does not rule it); `[--caption <s>]`
+  unaffected.
 
 ### F4 — Tab order (core + CLI) — **BLOCKED on a spec-librarian dispatch**
 
@@ -1238,8 +1376,12 @@ still skips buttons (unchanged `_ => continue`).
 delta. Verified absent from the spec RAG this session. Implementing
 row/column sort from memory violates project rule 1.
 
-- `forms set-tab-order --mode structure|row|column --page N`
-- `forms set-tab-order --order f1,f2,f3 --page N` (explicit; realized as
+**[§0, 2026-08-07: `forms set-tab-order` → flat `set-tab-order`. Reads
+cleanly flat; the block below is otherwise unchanged, and F4 stays
+BLOCKED on the spec dispatch regardless of naming.]**
+
+- `set-tab-order --mode structure|row|column --page N`
+- `set-tab-order --order f1,f2,f3 --page N` (explicit; realized as
   `/Annots` position, which is also paint order — **disclose that**).
 - R104 enforced: creation never writes `/Tabs`.
 
@@ -1258,7 +1400,8 @@ application, against a purpose-built non-default fixture.
 ### F6 / F7 — fast-follows (not gating)
 
 - **F6** — `--defaults-from <field>` (the research's session-template
-  `should_have`), and `forms rename-field` (needs `Field.parent` from F0
+  `should_have`), and ~~`forms rename-field`~~ → flat **`rename-field`**
+  **[§0, 2026-08-07 — reads cleanly flat]** (needs `Field.parent` from F0
   for subtree renames).
 - **F7** — `pdfce-cli merge --on-field-collision rename|link|refuse` with
   disclosure both ways, plus the cross-type-collision warning (§3.6.1).
@@ -1482,10 +1625,18 @@ four Q6 items. None of them needs an operator answer to be correct.
 - **The GUI's placement interaction design** — `pdfce-ui-specialist`'s, at
   F5.
 - **FF-I's scope or timing** — §3.5.4 records a data point, nothing more.
-- **Whether `pdfce-cli`'s existing forms subcommands should move under a
+- ~~**Whether `pdfce-cli`'s existing forms subcommands should move under a
   `forms` parent** (`list-fields` → `forms list`). New authoring commands
   are proposed as `forms <verb>`; whether to migrate the six shipped ones
-  is a CLI-surface question for the librarian/engineer, not this decision.
+  is a CLI-surface question for the librarian/engineer, not this decision.~~
+  **CLOSED 2026-08-07 by §0 — the answer is NO.** The engineer ruling that
+  superseded the nested authoring verbs settles this half too: no `forms`
+  parent is created, so the six shipped forms subcommands stay flat and
+  top-level with nothing to migrate toward. This bullet is struck rather
+  than deleted because "this decision deliberately left the CLI surface
+  open" is context worth keeping — it is *why* the divergence went four
+  flaggings without being settled. `ROADMAP.md`'s open-operator-question
+  **(q)** is the same question and is closed with it.
 - **`Field.parent`'s use by the three setters** — added in F0, wired later
   (§8.4).
 
@@ -1607,7 +1758,7 @@ four Q6 items. None of them needs an operator answer to be correct.
     "why_not_text_only": "a lone text field never exercises the merge branch, which is the entire subject of Q1; deferring it ships the flat-write model for one slice, and even one slice authors documents that cannot be un-authored",
     "why_not_checkbox_in_p0": "text reuses the shipped 12.7.3.3 generator with zero new appearance machinery; checkbox needs a keyed /AP /N state sub-dictionary + check glyph — the first button appearance GENERATOR in the codebase (regenerate_appearances today does `_ => continue` for buttons)",
     "F0": {"name": "field-hierarchy correctness + authoring substrate", "surface": "core only", "rule_11_exempt": true, "exempt_precedent": "Pass 19.0", "fixes": ["consolidate fill_text_field's inlined regen loop (R92)", "mixed /Kids must not drop widget-kids", "remove_fields_from_form must prune empty-/Kids parents recursively", "add Field.parent"], "fixtures": ["3-kid widget field across 2 pages", "2-level hierarchy Personal.Address.Zip", "3-member radio group", "mixed field-kids + widget-kids node", "static-XFA hybrid"]},
-    "F1": {"name": "text-field creation + full collision branch", "surface": "core + CLI", "cli": "pdfce-cli forms add-field --type text --name <fqn> --page N --rect x0,y0,x1,y1 (--tooltip <s>|--no-tooltip) [--value] [--max-len] [--multiline] [--required] [--readonly] [--font-size] -o <out>"},
+    "F1": {"name": "text-field creation + full collision branch", "surface": "core + CLI", "cli": "pdfce-cli add-text-field --name <fqn> --page N --rect x0,y0,x1,y1 (--tooltip <s>|--no-tooltip) [--value] [--max-len] [--multiline] [--required] [--readonly] [--font-size] -o <out>", "cli_amended_2026_08_07": "verb was specified as 'forms add-field --type text'; SUPERSEDED by section 0 — flat verb 'add-text-field' stands, flags unchanged", "cli_superseded_original": "pdfce-cli forms add-field --type text --name <fqn> --page N --rect x0,y0,x1,y1 (--tooltip <s>|--no-tooltip) [--value] [--max-len] [--multiline] [--required] [--readonly] [--font-size] -o <out>"},
     "F2": {"name": "checkbox + radio creation, field/widget deletion", "surface": "core + CLI"},
     "F3": {"name": "choice fields + push buttons", "surface": "core + CLI"},
     "F4": {"name": "tab order", "surface": "core + CLI", "blocked_on": "pdfce-spec-librarian dispatch for Table 30 /Tabs, 14.7 structure-order derivation, ISO 32000-2 /Tabs delta — VERIFIED ABSENT from the spec RAG this session"},

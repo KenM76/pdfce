@@ -7743,6 +7743,9 @@ with a forward pointer.
   **What does NOT close:** the CLI verb-name question (`add-text-field`/
   `add-check-box`/`add-choice-field` vs decision 020's `forms add-field
   --type …`) is untouched, and Pass 20.1 stays PARTIAL on that basis alone.
+  **✅ AMENDED 2026-08-07 — that question is now CLOSED by the next entry
+  below: the flat shape is ruled to stand and decision 020's nested form
+  is superseded. Pass 20.1's PARTIAL status no longer rests on it.**
   **Nor does `/Tabs` tab-order authoring** — F4 remains blocked on the
   `pdfce-spec-librarian` dispatch named in the F0/F1 slice-order bullet
   above; only the disclosure that a field lacks a defined tab position
@@ -7751,3 +7754,57 @@ with a forward pointer.
   **No standing rule minted** — R105 was already filed by this same
   decision record; this entry is R105 reaching implementation, not a new
   rule being written.
+
+- **2026-08-07 (seventh entry) — the CLI verb shape for field creation is
+  ruled FLAT; decision 020's nested `forms add-field --type …` is
+  SUPERSEDED.** Ruled by `pdfce-engineer`; filed by `pdfce-librarian` the
+  same day. Decision 020 §6 specified field creation as a nested surface
+  (`pdfce-cli forms add-field --type text|checkbox|choice`, with sibling
+  `forms remove-field`, `forms set-tab-order`, `forms rename-field`). What
+  shipped across Passes 20.1/20.2/20.3/20.0 is flat: `add-text-field`,
+  `add-check-box`, `add-choice-field`. The divergence was flagged four
+  times without being settled, which meant it was being settled by
+  accretion — one more verb per slice.
+  **The flat shape stands.**
+  **The basis is a measurement of the surface the new verbs had to join,
+  not a preference.** `crates/pdfce-cli/src/main.rs`'s `Command` enum
+  (lines 381–2414) carries **52 subcommands; every one is flat**, and
+  `#[command(subcommand)]` occurs **zero** times in it. Two flat naming
+  conventions already coexist — verb-first (`list-fields`, `fill-field`,
+  `extract-text`, `regenerate-appearances`) and noun-prefixed
+  (`dimension-add`, `group-set-scale`, `object-move`, `node-delete`) — but
+  **nothing is nested under a noun subcommand.** `forms add-field` would
+  have been the only nested verb in the entire CLI.
+  **The reasoning worth preserving is not "the shipped thing wins because
+  it shipped."** Decision 020 specified the nested form *before the
+  surface it had to join was examined*; consistency with 52 shipped flat
+  verbs beats consistency with a prediction made in the abstract. Had
+  `pdfce-cli` been nested elsewhere, the ruling would have gone the other
+  way. This is the same failure mode as a spec written against a
+  remembered codebase rather than a read one — cheap to avoid by
+  measuring, expensive once three verbs have accreted.
+  **Reversible, and the operator's to overturn.** There is no release, no
+  git remote and no users (project rule 8 — publishing still awaits Ken's
+  go-ahead), so if Ken prefers the nested form the rename is three clap
+  variants plus their tests: hours, not a migration. Recorded explicitly
+  so this is not read as settled beyond appeal.
+  **Consequences filed with it:** decision 020 gains a **§0 amendment
+  placed ahead of its TL;DR** (so no reader meets the superseded shape
+  first), with a per-slice mapping table and inline `[SUPERSEDED]` markers
+  at every prescriptive CLI line in §6, including the machine-readable
+  JSON block's `F1.cli` field. Decision 020 §11's *"should the shipped
+  forms subcommands move under a `forms` parent"* bullet and
+  `ROADMAP.md` open-operator-question **(q)** are the same question and
+  are **CLOSED: no** — with no `forms` parent created, the six shipped
+  forms subcommands have nothing to migrate toward.
+  **Deliberately NOT ruled, and must not be inferred:** F2's radio verb
+  name (decision 020 §6 authors one radio **member** per call through the
+  F1 merge primitive, so `add-radio-group` would misdescribe the
+  operation), F3's push-button verb name, and whether `remove-*` or
+  `delete-*` is the house word for deletion (§6 says `remove-field` /
+  `remove-widget`; the CLI elsewhere says `object-delete` / `node-delete`
+  / `dimension-delete`). Those are picked when F2/F3 are scoped, against
+  §6's own text.
+  **Nothing minted** — no Pass ID, no standing rule, no new decision
+  record. This is an amendment to decision 020, and the ceilings stay
+  where they were (R160, decisions 031, Pass family 43).

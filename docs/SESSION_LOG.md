@@ -18959,3 +18959,186 @@ quiet.
   property editing (F6).
 - **Backup currency is not verifiable from here** — the engineer should
   check `D:\Dev\pdfce-backups\`.
+
+---
+
+## 2026-08-07 (sixth filing) — the CLI verb shape is RULED FLAT: decision 020's `forms add-field --type …` is superseded, and open question (q) closes
+
+**Scope of this filing, stated first because the previous filing was
+damaged by scope ambiguity:** this filing records **one engineer ruling
+and nothing else.** No commit is filed by it. `a3d885b`, `f809857`,
+`4f2b807`, `53caa48` and `50a5461` were already filed by `c62ff12` and
+are **not** re-filed, re-shipped, or re-counted here. No Pass entry is
+added or moved. The dispatch that produced this filing named its scope
+explicitly for that reason — see *Findings*, below.
+
+**Shipped:**
+- Nothing. This filing ships no code and files no commit.
+
+**Decisions made this session:**
+
+- **The CLI verb shape for form-field creation is FLAT. Decision 020's
+  nested `forms add-field --type text|checkbox|choice` is SUPERSEDED.**
+  `add-text-field` / `add-check-box` / `add-choice-field` stand as
+  shipped. Ruled by `pdfce-engineer`, filed by `pdfce-librarian`.
+
+  The divergence between what decision 020 specified and what shipped had
+  been flagged **four times** (the `8e799e9` entry, the `bca60c9` entry,
+  the `a3d885b`+`f809857` entry, and the `50a5461` entry) without being
+  settled, gaining one verb per slice. That is settlement by accretion,
+  which is the worst available way to settle a naming question because
+  the cost of reversing rises monotonically while nobody decides.
+
+  **The basis is measured, not recalled.** `crates/pdfce-cli/src/main.rs`'s
+  `Command` enum (lines 381–2414) carries **52 subcommands, every one
+  flat**, and `#[command(subcommand)]` occurs **zero** times within it.
+  Two flat conventions already coexist — verb-first (`list-fields`,
+  `fill-field`, `extract-text`, `render-page`, `regenerate-appearances`,
+  `export-data`, `import-data`) and noun-prefixed (`dimension-add`,
+  `dimension-offset`, `group-add`, `group-set-scale`, `layer-toggle`,
+  `object-move`, `subpath-delete`, `node-move`) — but **nothing anywhere
+  in the CLI is nested under a noun subcommand.** `forms add-field` would
+  have been the only nested verb in the whole surface.
+
+  **The reasoning worth keeping is not "shipped wins."** Decision 020
+  specified the nested form *before the surface it had to join was
+  examined*. Consistency with 52 shipped flat verbs beats consistency
+  with a prediction made in the abstract. **Had the CLI been nested
+  elsewhere, the ruling would have gone the other way** — the
+  measurement decides it, not the fact of having shipped first.
+
+  **Explicitly reversible, and Ken's to overturn.** No release, no git
+  remote, no users (project rule 8 — publishing still awaits his
+  go-ahead). Reversing is three clap variants and their tests: hours,
+  not a migration. This was recorded in every location so it is not read
+  as settled beyond appeal.
+
+- **Open operator question (q) is CLOSED**, together with decision 020
+  §11's *"should `pdfce-cli`'s existing forms subcommands move under a
+  `forms` parent (`list-fields` → `forms list`)"* bullet — the same
+  question filed in two places. **The answer is no.** With no `forms`
+  parent created for the authoring verbs, the six shipped forms
+  subcommands have nothing to migrate toward and stay flat and
+  top-level.
+
+**Findings + decisions:**
+
+- **What the ruling deliberately does NOT settle, recorded because the
+  dispatch specifically asked that it not be smoothed over.** The flat
+  convention implies flat names for the unbuilt verbs, but the *names*
+  are not ruled and were checked against decision 020 §6's own text
+  rather than invented:
+  - **Radio.** §6 does **not** specify a group-creating verb. It
+    specifies radio grouping *"through the F1 merge primitive, not a
+    radio-specific path — repeated `add-field --type radio --name G
+    --export-value V`"* — **one call per member**; the group is what the
+    merge produces. So the obvious-sounding `add-radio-group` would
+    **misdescribe the operation**: it names a group where §6 authors a
+    member. A faithful name is member-shaped (`add-radio-button`,
+    `add-radio-field`). **Not ruled here; F2's scoper picks it against
+    §6's merge model, not against the word "group".**
+  - **Deletion.** §6 says `remove-field` / `remove-widget` — **remove,
+    not delete.** The CLI elsewhere says `object-delete`, `node-delete`,
+    `dimension-delete`. Whether `remove-*` or `delete-*` is the house
+    word is a genuine, separate, unruled question; the ruling does not
+    authorise renaming §6's verbs to `delete-field`.
+  - **Push buttons.** §6 says `--type pushbutton`. The flat pattern
+    implies `add-push-button`, but that is an inference from
+    `add-check-box`, not a ruling.
+  - **Reading awkwardly flat:** none of §6's other surfaces do.
+    `set-tab-order` (F4) and `rename-field` (F6) read cleanly flat, and
+    F7's `merge --on-field-collision …` was already flat and is
+    unaffected.
+
+- **Where the superseded shape lived, and how the set was established
+  (R87).** Two greps over **tracked files only** — `git ls-files -z |
+  xargs -0 grep -n "add-field"` and a second pass for
+  `add-text-field|add-check-box|add-choice-field|verb shape`. Restricting
+  to `git ls-files` mattered: a naive recursive grep also returned five
+  stale copies under `.claude/worktrees/agent-*/docs/`, which are build
+  artifacts and were correctly excluded. **Six documents carried the old
+  shape; all six were amended in the same filing**, per the
+  single-location-amendment lesson this project has now learned three
+  times:
+  1. `docs/decisions/020-form-field-authoring.md` — **the authoritative
+     one.** Gained a **§0 amendment placed ahead of the TL;DR** (not
+     appended at the end — an engineer reading §6 must meet the
+     correction before the superseded text), a header pointer, a
+     per-slice mapping table, inline `[SUPERSEDED]` markers at every
+     prescriptive CLI line in §6 (F1, F2 ×2, F3, F4, F6), a struck §11
+     bullet, and an amended `F1.cli` field in the machine-readable JSON
+     block. The JSON was re-validated as parseable after editing.
+  2. `docs/ROADMAP.md` — seven locations: the ✅ RULING block on the
+     Pass 20.0 *Shipped* entry, the `bca60c9` entry's divergence
+     paragraph, the two `Does the CLI verb name stand?` open items
+     (Pass 20.1 and Pass 20.2+20.3 entries), the *In progress* owed
+     list, the Forms backlog bucket's owed list, both Pass 20.1
+     scorecard table rows, and open question **(q)**.
+  3. `docs/ARCHITECTURE.md` — the sixth-entry `What does NOT close`
+     marker, plus a **new §12 decision-log seventh entry** carrying the
+     full reasoning.
+  4. `docs/FEATURES.md` — both affected rows (the *Implemented*
+     field-creation row and the *Planned* authoring row).
+  5. `docs/SESSION_LOG.md` — this entry.
+  6. `docs/ui_specs/forms-panel.md` — **inspected and correctly left
+     alone.** Its line 664 mention of *"`pdfce-cli`'s own forms
+     surface"* is about whether `fill_text_field` should refuse
+     `RichText`, not about verb naming. Recorded so a future sweep does
+     not re-open it as a miss.
+
+- **Append-only discipline held throughout.** Nothing in *Shipped* or in
+  the session log was rewritten. Every correction is a dated marker
+  appended beside the original text, or a `~~strikethrough~~` with the
+  original preserved — because *why* a divergence went four flaggings
+  unsettled is context worth keeping, and deleting the flags deletes the
+  evidence that accretion was the failure mode.
+
+- **Nothing minted, deliberately.** No Pass ID, no standing rule, no
+  decision record. **Ceilings unchanged: R160, decisions 031, Pass
+  family 43.** The dispatch capped this explicitly and the cap was
+  honoured; a judgment that this warranted its own rule or record would
+  have been reported rather than acted on, and it is not warranted — an
+  amendment to decision 020 is the correct instrument, since the record
+  being corrected is decision 020 itself.
+
+- **Process finding, and the reason this dispatch was scoped so
+  narrowly.** Earlier the same day, **two librarians were dispatched
+  against the same three commits and ran concurrently** — one by the
+  orchestrator, one by an engineering fork — producing duplicate
+  `Pass 20.0` headings that turned `check-ledger-numbers.py` RED before
+  either filing finished. It resolved only because the second librarian
+  checked the gate rather than trusting its own work. **The fix applied
+  here: name exactly what a dispatch owns, and what it must not touch.**
+  This filing was given one ruling to record and an explicit list of
+  five commits *not* to re-file, and the collision did not recur.
+
+**Still in flight:**
+
+- **F0's disposition remains OPEN and is the engineer's** — owed
+  retroactively, deferred, or retired. Unaffected by this ruling and
+  deliberately left open in every location where the two questions were
+  filed as a pair, so closing one is not misread as closing both.
+- Forms authoring still owes: radio-group creation (F2, unblocked,
+  unbuilt), field/widget deletion, `/I`/`/TI`, push buttons, `/Tabs`
+  tab-order **authoring** (F4, still BLOCKED on a `pdfce-spec-librarian`
+  dispatch — distinct from the disclosure, which shipped in `50a5461`),
+  the GUI surface (F5, needs a `pdfce-ui-specialist` dispatch first),
+  and field property editing (F6).
+- Comb layout not driven from `/MaxLen`; positional-`/Opt` radio
+  authoring unresolved; inherited-`/V` writes still terminal-only
+  (`Field.parent` exists but the three setters do not use it).
+
+**For next session:**
+
+- **Ken may overturn this ruling at low cost** — surface it to him. If
+  he prefers `forms add-field --type …`, the rename is three clap
+  variants plus tests, and decision 020 §0 records the reversal path.
+- **The engineer still owes F0's disposition** — the one half of the
+  Pass 20.1 / 20.2+20.3 paired open question that this filing did not
+  close.
+- When F2 or F3 is scoped, **pick the radio and push-button verb names
+  against decision 020 §6's own text**, not by pattern-matching this
+  ruling. §6 authors a radio *member* per call; `add-radio-group` is the
+  wrong name for that operation.
+- **Backup currency is not verifiable from here** — the engineer should
+  check `D:\Dev\pdfce-backups\`.

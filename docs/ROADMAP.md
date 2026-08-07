@@ -94,7 +94,7 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 | Slice | Decision 020's definition | This filing |
 |---|---|---|
 | **Pass 20.0 (F0)** | Field-hierarchy correctness + the authoring substrate: five synthetic fixtures, four named fixes (regen-loop consolidation, mixed `/Kids`, empty-parent prune, `Field.parent`) | **All five fixtures + all four fixes land**, plus a fifth defect found empirically while re-testing the SHIPPED flatten path (below) — a fix decision 020 did not name because it did not know it existed |
-| **Pass 20.1 (F1)** | Text-field creation + the full collision branch — the P0 floor: `forms_author.rs`, `resolve_field_path`, `FieldPath`, all four outcomes live, Shape A→B promotion, dotted-name semantics, `/TU` mandatory-or-declined (R105), `/Tabs /S` + untagged disclosure, CLI `forms add-field --type text` | **The resolver, `FieldPath`, all four outcomes and Shape A→B promotion land** — across all three authoring verbs, not text alone. **`/TU` R105 handling and `/Tabs` disclosure are NOT in this commit.** The CLI verb is still `add-text-field`/`add-check-box`/`add-choice-field`, not `forms add-field --type …` — **now three verbs deep, unreconciled** |
+| **Pass 20.1 (F1)** | Text-field creation + the full collision branch — the P0 floor: `forms_author.rs`, `resolve_field_path`, `FieldPath`, all four outcomes live, Shape A→B promotion, dotted-name semantics, `/TU` mandatory-or-declined (R105), `/Tabs /S` + untagged disclosure, CLI `forms add-field --type text` | **The resolver, `FieldPath`, all four outcomes and Shape A→B promotion land** — across all three authoring verbs, not text alone. **`/TU` R105 handling and `/Tabs` disclosure are NOT in this commit.** The CLI verb is still `add-text-field`/`add-check-box`/`add-choice-field`, not `forms add-field --type …` — ~~**now three verbs deep, unreconciled**~~ **✅ RECONCILED 2026-08-07: the FLAT shape is RULED to stand; decision 020's nested spec (left column) is SUPERSEDED, not unmet. See `docs/decisions/020-form-field-authoring.md` §0** |
 
 > **⚠ TABLE ROW STALE as of the same day — read the THIRD addendum at the
 > end of this entry before quoting the row above.** `50a5461` closes the
@@ -764,6 +764,52 @@ filing. **This is an engineer ruling, not a librarian one; it stays
 recorded as owed against both Pass 20.1 and the operator-question list**,
 unchanged from the SECOND addendum's own statement of it.
 
+> ### ✅ RULED 2026-08-07 — the FLAT verb shape stands; decision 020's nested form is SUPERSEDED
+>
+> **Appended, not rewritten** — the paragraph above is left exactly as
+> filed, because "this went four flaggings without being settled" is the
+> context that explains why the ruling was needed at all.
+>
+> **`add-text-field` / `add-check-box` / `add-choice-field` stand.
+> `forms add-field --type …` is superseded.** Recorded in full at
+> **`docs/decisions/020-form-field-authoring.md` §0**, which is placed
+> ahead of that document's TL;DR so no reader meets the superseded shape
+> first.
+>
+> **The evidence, measured not recalled** (`crates/pdfce-cli/src/main.rs`,
+> `Command` enum, lines 381–2414): **52 subcommands, every one flat, and
+> `#[command(subcommand)]` occurs zero times.** Two flat conventions
+> already coexist — verb-first (`list-fields`, `fill-field`) and
+> noun-prefixed (`dimension-add`, `group-set-scale`, `object-move`) — but
+> **nothing is nested under a noun.** `forms add-field` would be the only
+> nested verb in the entire CLI.
+>
+> **The reasoning is not "shipped wins".** Decision 020 specified the
+> nested form *before the surface it had to join was examined*.
+> Consistency with 52 shipped flat verbs beats consistency with a
+> prediction made in the abstract. Had `pdfce-cli` been nested elsewhere,
+> the ruling would have gone the other way.
+>
+> **Reversible and cheap to reverse, and Ken's to overturn:** no release,
+> no remote, no users (rule 8). Renaming three clap variants and their
+> tests is hours, not a migration.
+>
+> **Nothing minted** — no Pass ID, no rule number, no decision record.
+> Ceiling stays R160 / decisions 031 / family 43.
+>
+> **This also CLOSES open operator question (q)** and decision 020 §11's
+> *"should the shipped forms subcommands move under a `forms` parent"*
+> bullet: the answer is **no**, and with no `forms` parent created there
+> is nothing for them to migrate toward.
+>
+> **What is NOT ruled:** the radio verb name (decision 020 §6 authors one
+> radio **member** per call through the merge primitive, so
+> `add-radio-group` would misdescribe it), the push-button verb name, and
+> whether `remove-*` or `delete-*` is the house word for deletion (§6 says
+> `remove-field` / `remove-widget`; the CLI elsewhere says
+> `object-delete` / `node-delete`). Whoever scopes F2/F3 picks those
+> against §6's own text — they must not be inferred from this ruling.
+
 Also still open, unchanged from the SECOND addendum: comb layout not
 driven from `/MaxLen`; positional-`/Opt` radio authoring unresolved;
 inherited-`/V` writes still terminal-only (`Field.parent` exists but the
@@ -1088,6 +1134,14 @@ instead of one. **This is the accretion the `8e799e9` entry predicted in
 writing**, and it is now more expensive to reverse than it was when
 flagged. Still the engineer's call — see *In progress*.
 
+> **✅ RULED 2026-08-07 — the divergence is resolved in FAVOUR of the flat
+> shape.** `add-check-box` / `add-choice-field` stand; decision 020's
+> `forms add-field --type …` is superseded. Measured evidence (52 flat
+> subcommands, zero nesting) and full reasoning:
+> `docs/decisions/020-form-field-authoring.md` §0, plus the ✅ RULING
+> block on the Pass 20.0 *Shipped* entry (top of *Shipped*). The
+> paragraph above stands as filed — it is the accretion record.
+
 #### Ledger — nothing MINTED, two IDs HEADED
 
 **No number of any kind is minted by this entry.** Pass family ceiling
@@ -1136,7 +1190,7 @@ number say it means?***
 | Filed slice | Decision 020's definition | `8e799e9` |
 |---|---|---|
 | **Pass 20.0 (F0)** | *"Field-hierarchy correctness + the authoring substrate (core only; CORRECTNESS ONLY, no operator surface)"*, rule-11 exempt: five synthetic fixtures, four named pre-existing fixes (regen-loop consolidation, mixed `/Kids`, empty-parent prune, `Field.parent`) | **NOT BUILT.** No fixture generator extended, none of the four fixes named in the commit, and the commit ships an operator surface — which F0 is defined as *not* having |
-| **Pass 20.1 (F1)** | *"Text-field creation + the full collision branch (core + CLI) — **the P0 floor**"*: `forms_author.rs`, `resolve_field_path`, `FieldPath`, **all four outcomes live**, Shape A→B promotion, dotted-name semantics, `/TU` mandatory-or-declined (R105), `/Tabs /S` + untagged disclosure, CLI `forms add-field --type text` | **PARTIAL.** Text-field creation, the `/DA`+`/MK`+baked-`/AP` creation floor, the `/DR` `/Helv` merge, `/AcroForm` creation, the XFA refusal and the strict certification gate **all landed**. **No resolver, no `FieldPath`, no `forms_author.rs`, no dotted-name semantics, no `/TU` R105 handling, no `/Tabs` disclosure**, and the CLI verb is `add-text-field`, not `forms add-field --type text` |
+| **Pass 20.1 (F1)** | *"Text-field creation + the full collision branch (core + CLI) — **the P0 floor**"*: `forms_author.rs`, `resolve_field_path`, `FieldPath`, **all four outcomes live**, Shape A→B promotion, dotted-name semantics, `/TU` mandatory-or-declined (R105), `/Tabs /S` + untagged disclosure, CLI `forms add-field --type text` | **PARTIAL.** Text-field creation, the `/DA`+`/MK`+baked-`/AP` creation floor, the `/DR` `/Helv` merge, `/AcroForm` creation, the XFA refusal and the strict certification gate **all landed**. **No resolver, no `FieldPath`, no `forms_author.rs`, no dotted-name semantics, no `/TU` R105 handling, no `/Tabs` disclosure**, and the CLI verb is `add-text-field`, not `forms add-field --type text` — **✅ 2026-08-07: that last item is no longer a MISS. The flat verb is RULED to stand and the left column's `forms add-field --type text` is SUPERSEDED (`docs/decisions/020-form-field-authoring.md` §0)** |
 
 **The mismatch is not incidental — decision 020 §3.3.1 refused this exact
 slicing by name**, and did so as its Q3 headline:
@@ -1185,6 +1239,13 @@ build records above rest on.
    by accretion. *(Nothing about that fork's content is anticipated here,
    per R87's amended form: this entry names only the naming question,
    which is visible in `8e799e9` alone.)*
+   **✅ ANSWERED 2026-08-07: YES, it stands.** The flat verb wins;
+   decision 020's nested form is superseded. See
+   `docs/decisions/020-form-field-authoring.md` §0 and the ✅ RULING block
+   on the Pass 20.0 *Shipped* entry. The prediction in this bullet was
+   right about the mechanism — it *was* being settled by accretion — and
+   wrong about which shape survives, because it reasoned from decision
+   020 rather than from the 52 flat verbs already in `pdfce-cli`.
 
 #### What shipped — the build record
 
@@ -1421,10 +1482,14 @@ repository said `8e799e9` was Pass 20.1.
 2. **Does the CLI verb name stand?** `add-text-field` /
    `add-check-box` / `add-choice-field` versus decision 020's
    `forms add-field --type …`. **Now three verbs deep.**
+   **✅ ANSWERED 2026-08-07: YES, the flat shape stands** — decision 020's
+   nested form is superseded (`docs/decisions/020-form-field-authoring.md`
+   §0). Item 1 (F0's disposition) is unaffected and remains open.
 
 Both are the engineer's, both are explicitly still open, and both are
 restated in *In progress* so they are not read as discharged by this
-ruling.
+ruling. **(Amended 2026-08-07: item 2 is now CLOSED — see the ✅ ANSWERED
+note on it. Item 1 remains open.)**
 
 ---
 
@@ -12915,11 +12980,16 @@ session will look, and because both will keep accreting cost:
   fixtures were meant to exercise the read paths against, and those paths
   have still never been run against authored output. See the ✅ RULING
   block on the Pass 20.1 *Shipped* entry.
-- **The CLI verb shape** — `add-text-field` / `add-check-box` /
+- ~~**The CLI verb shape** — `add-text-field` / `add-check-box` /
   `add-choice-field` versus decision 020's `forms add-field --type …`.
   **Three verbs now, one at the time it was first flagged.** Every
   further slice adds one. This is being settled by accretion whether or
-  not anyone settles it deliberately.
+  not anyone settles it deliberately.~~
+  **✅ RULED 2026-08-07 — CLOSED. The flat shape stands**; decision 020's
+  nested form is superseded (`docs/decisions/020-form-field-authoring.md`
+  §0). Struck rather than deleted because the accretion warning was
+  correct and is worth keeping as the reason the ruling happened.
+  **F0's disposition, above, remains OPEN.**
 
 **R87 applies to this entry:** the fork's work is in flight and **nothing
 about its content is anticipated here.** What is recorded is the
@@ -18659,6 +18729,15 @@ nothing gets forgotten, not as a commitment to build in this order.
   either F1 commit; and the CLI verb-name question (`add-text-field`/
   `add-check-box`/`add-choice-field` vs. `forms add-field --type …`),
   now three verbs deep and explicitly unreconciled by this filing.
+  **✅ AMENDED 2026-08-07: the CLI verb-name question is CLOSED — the flat
+  shape stands, decision 020's nested form superseded
+  (`docs/decisions/020-form-field-authoring.md` §0). It is struck from
+  this owed list. `/TU` R105 and the `/Tabs` disclosure also shipped
+  (`50a5461`). The rest of the list is unchanged and still owed** — and
+  note that F2's radio verb name, F3's push-button verb name, and the
+  `remove-*` vs `delete-*` house word are **NOT** settled by that ruling;
+  they are picked when those slices are scoped, against decision 020 §6's
+  own text.
 - **XFA** — legacy Adobe forms tech. **Verify current status before
   scoping** — Adobe has been deprecating XFA in Acrobat; consult the
   spec RAG + a fresh web check before committing engineering time here.
@@ -19398,7 +19477,7 @@ starting Pass 20.0):**
   ("Outstanding open items") was not edited by this filing — it is
   outside `pdfce-librarian`'s owned tiers; whoever acts on this answer
   should update both files together.
-- **(q) CLI surface migration — not an operator question, filed here
+- ~~**(q) CLI surface migration — not an operator question, filed here
   only so it isn't lost.** Decision 020 §11 flags that its six new
   `forms <verb>` authoring subcommands sit awkwardly next to the six
   already-shipped top-level forms subcommands (`list-fields`,
@@ -19406,7 +19485,19 @@ starting Pass 20.0):**
   under a `forms` parent for consistency. This is a CLI-surface
   question for the librarian/engineer to settle when F1 is actually
   built, not something needing Ken's input — recorded here only as a
-  pointer so it isn't rediscovered from scratch at F1 time.
+  pointer so it isn't rediscovered from scratch at F1 time.~~
+  **✅ CLOSED 2026-08-07 — the answer is NO.** F1 is now built, and the
+  engineer ruled the **flat** verb shape stands: `add-text-field` /
+  `add-check-box` / `add-choice-field`, with decision 020's
+  `forms add-field --type …` superseded. **No `forms` parent is created**,
+  so the six shipped forms subcommands have nothing to migrate toward and
+  stay flat and top-level. Measured basis: `crates/pdfce-cli/src/main.rs`
+  `Command` enum carries **52 subcommands, all flat, zero
+  `#[command(subcommand)]` nesting** — `forms add-field` would have been
+  the only nested verb in the CLI. Full record:
+  `docs/decisions/020-form-field-authoring.md` §0 (which also strikes the
+  §11 bullet this question mirrored). **Reversible and Ken's to overturn**
+  — no release, no remote, no users (rule 8); the rename is hours.
 
 **New this session (2026-08-03, decision 021 filed) — two items, both
 Ken's per `docs/decisions/README.md` (legal call / headline-capability
