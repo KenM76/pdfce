@@ -81,6 +81,170 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### fix — THE CLIPS WERE NEVER SMALL, AND NOTHING COULD HAVE TOLD US: a committed render-profiling harness (`tools/render-profile` + a feature-gated `pdfce-render/profile` that compiles to nothing when off), and the retirement of the clip-extent optimisation it killed. **★ THIS RUN BOUGHT A CORRECTION AND AN INSTRUMENT, NOT MILLISECONDS — 1× STAYS ~10 s AND NOTHING GOT FASTER.** **★ A FIGURE THIS PROJECT FILED IN FOUR DOCUMENTS WAS WRONG BY 100×: mean clip bbox is 66.36% of the page, not 0.663%** — a fraction printed as a percent — and it was the *measured premise* of *Next up* item **1′**, now **RETIRED**. **★ THREE FIGURES WERE WRONG BY TWO ORDERS OF MAGNITUDE IN ONE DAY; the third was caught before it was reported, which is the only difference between them.** (no Pass ID — tooling plus a documentation correction; no shipped behaviour changes) — 2026-08-07, committed `6b33789`, branch `pass-8-redaction`
+
+**Why this has no Pass ID.** It ships **no capability**: an out-of-tree
+tool, an off-by-default feature flag, and a corrected doc comment.
+**Nothing is minted by this filing** — Pass family stays **43**, standing
+rules stay **R165** (**R166** next free — see *the rule judgement* below,
+which does **not** take it), decision records stay **031** (**032** next
+free), operator questions stay **(bb)**. Re-measured by **running**
+`tools/check-ledger-numbers.py` before and after (R106/R133), not read out
+of prose.
+
+#### ★ SAY THE UNGLAMOROUS THING FIRST: NOTHING GOT FASTER
+
+**1× is still ~10 s.** No optimisation was built, none was possible, and a
+*Shipped* entry that let a reader infer a speedup from the word "profiling"
+would be false. What changed is that **a wrong number was found, a dead
+optimisation was killed before anyone spent a week on it, and the
+instrument that found it now lives in git.** That is the entire return, and
+it is worth more than the milliseconds would have been.
+
+#### The 100× error, and why it is filed as prominently as a feature
+
+| claim as filed | actual | how it went wrong |
+|---|---|---|
+| `Mask::new` is **10.1 s** of an 18 s render | **1.02 s** | an ablation that skipped `intersect_clip` entirely — which *also* makes every `q` clone cheap and lets tiny-skia skip mask sampling. Construction **plus** use, attributed to construction (**R164**) |
+| mean clip bbox is **0.663% of the page** | **66.36%** | **a fraction printed as a percent** |
+| clip-bbox cull hit rate **73.71%** | **1.34%** | the probe tracked a clip bbox in a thread-local that **only ever shrank and never widened on `Q`** — and `Q` reinstates a **larger** clip, so a bbox tracked outside the graphics state is monotonically wrong |
+
+**The first two were believed and acted on for hours. The third was caught
+before it was reported.** The difference is not care and not skill: **the
+third was measured a second time and the first two were not**, because the
+probes that produced them had already been deleted.
+
+**Concretely, on the reference CAD sheet the first clips cover 87%, 65%,
+100%, 81% and 95% of the paper**, and individual and accumulated bboxes
+**both** give 66.36% — so the figure is not an accumulation artifact.
+Clips are **most of the page**, not a corner of it.
+
+**Why the cull probe's error is a design lesson and not just a bug:** it is
+the reason `clip_bbox` is now a **`GraphicsState` field**. `q` and `Q` must
+carry it **exactly as they carry the mask** — any clip-derived quantity
+tracked outside the graphics state is wrong the first time `Q` restores a
+wider clip.
+
+#### The retired item had THREE independent refutations, and one measurement would have found any of them
+
+Item **1′** — *"size the mask to the clip, not the page"* — is **retired,
+not annotated**. Even had the size premise held, it was impossible:
+
+1. **SIZE.** Mean clip bbox **66.36%**. A mask sized to a 66%-of-page clip
+   **is** a page-sized mask.
+2. **API — and it fails SILENTLY.** `RasterPipelineBlitter::new` checks
+   mask size against pixmap size and returns `None` when they differ
+   (`pipeline/blitter.rs:36-44`) — a `log::warn!` and a **dropped paint**,
+   not an error. Handing tiny-skia a smaller mask does not fail loudly; it
+   **stops painting**. The bug would have been *wrong output*, not *slow
+   output*, and the only signal would have been a log line.
+3. **COST.** `Mask::fill_path` costs the **same** on a 64×64 mask as on a
+   page-sized one — **10.3 µs vs 8.3 µs** — because it is dominated by
+   **three raster-pipeline compilations per call**, not by rasterization.
+   `scan::path_aa::fill_path` **already** bounds itself to `path.bounds()`.
+   And `Mask::new` at page size is **24.6 µs**, so its ~**1.02 s** is real
+   and **irreducible without changing the representation**.
+
+**Three independent refutations — size, API, and cost — and a single
+measurement of any one of them would have killed the item before it was
+scoped.** None was made. That, and not the 100× itself, is the finding.
+
+#### `intersect_clip`'s comment, and the bound that survives it
+
+The same wrong premise was written into `intersect_clip`'s own doc comment
+as clips *"mostly cover a few percent"* of the paper. It was **corrected in
+place the same day it was written** — the shortest life any of the three
+errors had, and the only one caught by the author.
+
+**The bound that comment justifies REMAINS AN IDENTITY AND IS WORTH
+KEEPING.** Bounding the multiply to the new path's device bounds is exact —
+outside them the fresh mask is zero — and on this sheet it skips the
+**~34%** of the page outside the new path. **A third of the work, not two
+orders of magnitude.** A correct optimisation whose *stated motivation* was
+100× too generous is still a correct optimisation; the repair is to the
+sentence, not to the code.
+
+#### What was built
+
+`tools/render-profile` — out-of-tree, mirroring `tools/roundtrip` and
+`tools/font-parity` — plus a **feature-gated `pdfce-render/profile` that
+compiles to nothing when the feature is off**, so no shipping build carries
+instrumentation. It takes a PDF, a page and a **series of scales**, reports
+the load/render split and the **scaling curve**, and characterises the
+page's content by **counts and geometry rather than by per-phase timings**
+(deliberately — see the owed-tooling assessment under *Next up*).
+
+**Its most valuable behaviour is one nobody asked for: it prints an
+explicit note when clips cover a large share of the page**, so this
+premise cannot be silently re-adopted. **An instrument that only answers
+the question you bring it will confirm whatever you brought.**
+
+**Discharge of the owed harness item: 2 of 4 requirements met, 1 part-met,
+1 withdrawn on the tool's own argument, and 1 — `--ablate` plus a reported
+FLOOR — STILL OWED.** Full requirement-by-requirement assessment is filed
+on the item itself under *Next up*; it is **not** closed.
+
+#### Gates — measured by the ENGINEER, relayed here (R87)
+
+**This filing ran no build, no test and no render.** Every figure below is
+the engineer's, read from its own exit code:
+
+- `cargo test` **0** — **2153 passed, 0 failed**
+- `cargo fmt` **0**; `cargo clippy` **0**; `cargo clippy --features profile` **0**
+- `tools/check-ui-strings.sh` **0**; `tools/check-bypass-paths.sh` **0**
+- `cargo tree` on `pdfce-core` / `pdfce-render` **0 GUI matches** — the
+  GUI-core separation invariant (`CLAUDE.md` rule 2) holds
+- **Output byte-identical**: SHA-256 `9250a89f…` on the 1× CAD render, and
+  **all 59 renderable synthetic fixtures hash-identical** against a binary
+  built at **`4475fe6` in a worktree**. *(59 here against 52 in the
+  `4475fe6` entry — the wider fixture set is the one that can witness image
+  sampling, glyph rasterization and annotation appearance, which the CAD
+  sheet alone cannot.)*
+- **No performance change.** 1× stays ~10 s. Stated because its absence
+  would be read as an omission.
+- **R162 discharged by observation, not by assertion**: dividing ppm by
+  `1e6` instead of `1e4` makes the new test fail with *"half a page must
+  report as 50%, got 0.5"* — **the exact error that cost the day**, now
+  the thing the test is built to catch.
+
+#### How this filing's own absences were established (R87)
+
+**★ THIS FILING HAS A SHELL AND USES IT.** Hard rule 8 was amended earlier
+today (`b1368ed`) to require exactly that — check, then assert, and say
+which — so the old "no shell" disclaimer is not repeated here.
+
+1. ***The location set for the 0.663% error.*** **Established** by
+   **tracked-files-only** `git grep -nE "0\.66[0-9]|66\.36"` and
+   `git grep -niE "tiny clip|clips are (small|tiny)|few percent|mask sized
+   to the clip|sized to the clip"` across the repository. **Eleven
+   locations in four `docs/` files**, plus four already-corrected
+   locations in `crates/` and `tools/` that arrived with `6b33789`. The
+   query is recorded because the operator explicitly did not know the
+   extent of the seeding.
+2. ***"No other figure carries the same error."*** **Established** by
+   `git grep -nE "73\.71|1\.34|cull" -- docs/` → **zero matches**. The
+   cull-probe figure **was never filed** — it was caught inside the fork,
+   which is why it appears here for the first time as history rather than
+   as a correction.
+3. ***HEAD, and the working tree.*** `git rev-parse HEAD` → `6b33789…`;
+   `git status --porcelain` → **empty**. Asserted, not inferred.
+4. ***The backup bundle.*** `git bundle list-heads
+   D:\Dev\pdfce-backups\pdfce-20260807-1509.bundle` → `pass-8-redaction`
+   at **`7867ec4`**, and `git log --oneline 7867ec4..HEAD` → **exactly one
+   commit, `6b33789`**. **The bundle is one commit behind.** Checked with
+   the two commands named, per amended hard rule 8 — not inferred from the
+   session log, which is how this librarian got it wrong twice.
+5. ***Remotes.*** `git remote -v` → **empty**. Still no remote configured;
+   publishing remains ungiven (`CLAUDE.md` rule 8).
+6. ***The ledger.*** **Established by RUNNING** both
+   `tools/check-ledger-numbers.py` (**exit 0**) and
+   `tools/check-passes-filed.py` (**exit 0**) before and after this filing.
+7. ***No fork is live.*** **The operator stated this explicitly and
+   committed to it**, having been wrong twice earlier today. This filing
+   therefore describes `6b33789` as **current** rather than hedging — the
+   one R87 claim here that rests on the operator's word rather than on a
+   command, and it is flagged as such.
+
 ### fix — RENDER PERFORMANCE (second): **THE CLIP STOPS BEING COPIED EVERY TIME THE GRAPHICS STATE IS SAVED** — `GraphicsState.clip` becomes `Arc<Mask>`; `q`/`Q` clone cost **6.80 s → 0.01 s**; 1× **17.47 → 10.18 s**, 2× **214.71 → 51.52 s**; from the ORIGINAL 32.3 s / 447.9 s baseline this is **3.2× at 1× and 8.7× at 2×**, output **BYTE-IDENTICAL across the CAD sheet AND 52 SYNTHETIC FIXTURES**. **★ THE DIRECTIVE'S PREMISE COLLAPSED ON MEASUREMENT AND THE WORK WAS DECLINED RATHER THAN BUILT: only 2.5% of this file's clips are rectangles.** **★ AND THE PRIOR ENTRY'S HEADLINE REMAINING-COST FIGURE IS WRONG — `Mask::new` is 1.02 s, not 10.1 s; an R164 instance, caught six hours after R164 was minted** (no Pass ID — a performance defect in shipped `pdfce-render` rasterization; render only, two files, 26 insertions) — 2026-08-07, committed `4475fe6`, branch `pass-8-redaction`
 
 **Why this has no Pass ID.** Same class as the entry below it and the
@@ -108,7 +272,28 @@ built on it.
 | **axis-aligned rectangles** | **612 — 2.5%** |
 | single-subpath clips | **100%** |
 | mean segments per clip | **7** |
-| mean clip bounding box | **0.663% of the page** |
+| mean clip bounding box | ~~**0.663% of the page**~~ **★ WRONG BY 100×; CORRECTED 2026-08-07 (nineteenth filing, `6b33789`) → 66.36% OF THE PAGE.** A fraction printed as a percent. Struck, not deleted: the wrong figure is the record |
+
+> **★★ CORRECTION 2026-08-07 (nineteenth filing, commit `6b33789`) — THE
+> LAST ROW OF THAT TABLE WAS WRONG BY TWO ORDERS OF MAGNITUDE, AND THIS
+> FILING BUILT ITS WHOLE *Next up* ITEM 1′ ON IT.**
+>
+> **Mean clip bounding box is 66.36% of the page, not 0.663%.** A fraction
+> printed as a percent — off by exactly 100×. Measured concretely, the
+> sheet's first clips cover **87%, 65%, 100%, 81%, 95%**, and the
+> individual and accumulated bboxes **both** give 66.36%, so it is not an
+> accumulation artifact.
+>
+> **Clips are most of the paper, not a corner of it.** Every "tiny clips
+> in page-sized buffers" sentence downstream of this table is void. The
+> revised *Next up* item **1′** that this row was the measured premise for
+> is **RETIRED, not annotated** — see the *Next up* **RENDER PERFORMANCE**
+> entry.
+>
+> The other four rows of the table stand: 24,128 clip operations, 612
+> rectangles (2.5%), 100% single-subpath, mean 7 segments. **The census
+> was right about SHAPE and wrong about SIZE**, which is precisely why the
+> rectangle refutation survived and the extent argument did not.
 
 **A rectangle special-case would have optimised one clip in forty.** The
 fork **declined to build the commissioned change and stopped**, reporting
@@ -585,11 +770,18 @@ regressed, and without this note it would look like it had.
 >    rectangle special-case would have optimised one clip in forty. **The
 >    spec reasoning below is sound; the population it assumed is not.**
 >    100% of clips are single-subpath, mean 7 segments, mean bounding box
->    **0.663% of the page**.
+>    ~~**0.663% of the page**~~ **★ 66.36% — CORRECTED 2026-08-07,
+>    nineteenth filing, `6b33789`. A fraction printed as a percent.**
 >
 > Text preserved unamended below, because the flag that caught it and the
 > measurement that resolved it are together the record. **See the
 > *fix — RENDER PERFORMANCE (second)* Shipped entry above.**
+>
+> **★ AND A THIRD FIGURE IN THIS AMENDMENT BOX WAS ITSELF WRONG BY 100×**
+> — the bbox above. **The box that corrected one two-orders-of-magnitude
+> error carried another one**, filed the same day, and neither was caught
+> by re-reading. Both were caught by measuring a second time. See the
+> *fix — THE CLIPS WERE NEVER SMALL* Shipped entry.
 
 **`Mask::new` alone is 10.1 s of the remaining ~18 s.** *(← WRONG; 1.02 s.
 See the amendment box.)* Every one of the
@@ -600,7 +792,10 @@ is not. The order, and the order is the finding:
 1. **Stop allocating a page for a clip that covers a few percent of it.**
    Most PDF clips are `re W n` **rectangles that need no mask at all**; a
    rectangle intersected with a rectangle is a rectangle, and can be
-   carried as four numbers. *(← WRONG; 2.5%. See the amendment box.)*
+   carried as four numbers. *(← WRONG TWICE. Rectangles: 2.5%, see the
+   amendment box. **And "a few percent of it" is wrong by 100× — a clip
+   covers a mean 66.36% of the page**, corrected 2026-08-07, nineteenth
+   filing, `6b33789`. Both halves of this sentence are dead.)*
 2. **Then RE-MEASURE the cache cliff.** Working set is what put 2× over the
    L3 boundary. **It may vanish for free** — which is the whole reason this
    step is listed as a measurement and not as work.
@@ -17438,19 +17633,36 @@ and *"about 3×"* are supportable and a trailing digit is not.
 
 #### ★ THE REVISED ORDER — state at `4475fe6`, and THIS is the one to work
 
-**What the census replaced the rectangle premise with, and it is a better
+> **★★★ THE PARAGRAPH BELOW IS VOID — CORRECTED 2026-08-07 (nineteenth
+> filing, commit `6b33789`). MEAN CLIP BBOX IS 66.36% OF THE PAGE, NOT
+> 0.663%.** A fraction printed as a percent, off by exactly 100×. The
+> sheet's first clips measure **87%, 65%, 100%, 81%, 95%**; individual and
+> accumulated bboxes both give 66.36%, so it is not an accumulation
+> artifact. **Clips are most of the paper.** Item **1′** below, which this
+> paragraph was the measured premise for, is **RETIRED — see its row.**
+> Preserved struck, not deleted, because the false premise and its
+> refutation are together the record.
+
+~~**What the census replaced the rectangle premise with, and it is a better
 premise because it was measured:** **100% of clips are single-subpath, mean
 7 segments, and mean bounding box 0.663% OF THE PAGE.** The clips are
 **tiny and simple**; the buffers carrying them are **page-sized**. The
 mismatch is between clip **extent** and mask **extent** — *not* between
 clip **shape** and mask **shape**, which is what the rectangle idea
-assumed and what the 2.5% figure refutes.
+assumed and what the 2.5% figure refutes.~~
+
+**What actually survives of the census:** clips are **100% single-subpath,
+mean 7 segments** — simple in *shape*, and **not** small in *extent*. There
+is **no extent mismatch to exploit**: a mask sized to a 66%-of-page clip is
+a page-sized mask in all but name. The rectangle idea was refuted by the
+shape census; the extent idea is refuted by the size census, **and by two
+further measurements that would each have killed it alone** (see item 1′).
 
 | # | item | state | why it is in this position |
 |---|---|---|---|
 | ~~**1**~~ | ~~Rectangle special-case for clips~~ | **★ DEAD END — DECLINED ON MEASUREMENT, do not pick this up** | **2.5% of clips are rectangles.** It would optimise one clip in forty. The **spec reasoning was sound** (§8.5.3.3.2 / §8.5.3.3.3 agree on a single closed convex subpath; §8.5.2 Table 59 makes `re` a complete subpath) and **the population was not** — a distinct failure mode from "the reasoning was wrong", and the reason this row is struck through rather than deleted |
-| **1′** | **A clip mask sized to the clip, not to the page.** Mean clip bbox is **0.663% of the page** and every clip allocates a full-page buffer; `mask.fill_path` is **5.24 s** and `Mask::new` **1.02 s** at 1×, both scaling with **page area** rather than with clip area | **NOT SCOPED, NOT STARTED** | It is **the largest remaining cost now that the clone is gone**, and it follows from the *measured* geometry rather than from an assumed shape. It is a **representation** change (a mask plus an origin/extent, or a bounded sub-mask), and it does **not** need clips to be rectangles — it needs them to be **small**, which they measurably are |
-| **2′** | **The cache cliff — MEASURED, PARTLY DISCHARGED, still open** | **★ MEASURED at `4475fe6`: 14.1× → 5.1×** | It **did not vanish, but it shrank by two-thirds**, and **2× improved more than 1× did** — the signature the working-set explanation predicts and a per-pixel one does not. **5.1× is still above the ~3.2× that quadrupling pixels costs at every other step**, so a working-set term survives. **Re-measure again after 1′**, for the same reason it was listed as a measurement the first time |
+| ~~**1′**~~ | ~~**A clip mask sized to the clip, not to the page.** Mean clip bbox is **0.663% of the page** and every clip allocates a full-page buffer; `mask.fill_path` is **5.24 s** and `Mask::new` **1.02 s** at 1×, both scaling with **page area** rather than with clip area~~ | **★ RETIRED 2026-08-07 (`6b33789`) — DEAD END, DO NOT PICK THIS UP.** Not "annotated" — **retired**, because an engineer who read the struck cell as merely stale would build a mask-shrinking optimisation that **cannot work** | **THREE INDEPENDENT REFUTATIONS, ANY ONE OF WHICH IS FATAL.** **(a) SIZE — the premise is off by 100×:** mean clip bbox is **66.36% of the page**, not 0.663% (a fraction printed as a percent). First clips: 87%, 65%, 100%, 81%, 95%. A mask sized to a 66%-of-page clip **is** a page-sized mask. **(b) API — tiny-skia forbids it, and fails SILENTLY:** `RasterPipelineBlitter::new` checks mask size against pixmap size and returns `None` when they differ (`pipeline/blitter.rs:36-44`) — a `log::warn!` and a **dropped paint**, not an error. A smaller mask would have quietly stopped painting, and the render would have been *wrong*, not *slow*. **(c) COST — the saving does not exist:** `Mask::fill_path` costs the **same** on a 64×64 mask as on a page-sized one (**10.3 µs vs 8.3 µs**), because it is dominated by **three raster-pipeline compilations per call**, not by rasterization — `scan::path_aa::fill_path` **already** bounds itself to `path.bounds()`. And `Mask::new` at page size is **24.6 µs**, so its ~**1.02 s** is real and **irreducible without changing the representation**. **★ ONE MEASUREMENT WOULD HAVE FOUND ANY OF THE THREE.** None was made before the item was filed |
+| **2′** | **The cache cliff — MEASURED, PARTLY DISCHARGED, still open** | **★ MEASURED at `4475fe6`: 14.1× → 5.1×** | It **did not vanish, but it shrank by two-thirds**, and **2× improved more than 1× did** — the signature the working-set explanation predicts and a per-pixel one does not. **5.1× is still above the ~3.2× that quadrupling pixels costs at every other step**, so a working-set term survives. ~~**Re-measure again after 1′**~~ **★ 2026-08-07: 1′ is RETIRED, so there is nothing to re-measure *after* — 2′ is now the FIRST live item in this table** and is still a **measurement**, not work. `tools/render-profile`'s scale sweep is the instrument for it |
 | **3** | **Tiling and threading** | **UNCHANGED — still LAST** | With painting at **0.87 s** they still address **5%**. `4475fe6` deliberately chose **`Arc`, not `Rc`**, so `GraphicsState` stays **`Send`** and this item remains reachable without a second type change |
 
 **⚠ AN ENGINEERING FORK WAS LIVE IN `crates/` WHEN THIS WAS FILED, working
@@ -17468,6 +17680,16 @@ and nothing beyond it.** The eighteenth filing established the working tree
 clean at one instant (`git status --porcelain`) and asserts nothing about
 it now.
 
+**★ AMENDED AGAIN 2026-08-07 (nineteenth filing) — THAT FORK'S WORK IS
+FILED (`6b33789`) AND NO FORK IS LIVE.** The operator stated so explicitly
+and committed to it for the duration of this filing, having been wrong
+twice earlier the same day. **This filing therefore describes the tree at
+`6b33789` and claims that as current**, rather than hedging — checked, not
+assumed: `git rev-parse HEAD` → `6b33789…`, `git status --porcelain` →
+empty. **The live order in the table above is now `2′` then `3`.** Both
+`1` and `1′` are dead ends; **the clip-representation line of attack is
+CLOSED**, not paused.
+
 **No Pass ID is minted**, and the reason is not shyness: a number assigned
 blind, to work another tree is actively shaping, either collides or
 misdescribes. Un-numbered *Next up* items are established practice here
@@ -17481,7 +17703,35 @@ shown does not exist as work. **Pass IDs are permanent and never reused
 (hard rule 2)**, so the project would now carry a numbered Pass pointing at
 a dead end. The judgement is **ratified, not re-argued**.
 
-### ⚠ OWED TOOLING — a render-profiling harness that SURVIVES the session
+### ⚠ OWED TOOLING — a render-profiling harness that SURVIVES the session — **★ LARGELY DISCHARGED 2026-08-07 by `tools/render-profile` (`6b33789`); ONE OF THE FOUR REQUIREMENTS IS UNBUILT AND A SECOND WAS DECLINED WITH AN ARGUMENT**
+
+> **★ DISCHARGE ASSESSMENT 2026-08-07 (nineteenth filing), REQUIREMENT BY
+> REQUIREMENT — because "closes the owed item" was asserted in the
+> dispatch and this filing's job is to check it rather than repeat it.**
+> Built: `tools/render-profile` (out-of-tree harness, mirroring
+> `tools/roundtrip` and `tools/font-parity`) plus a feature-gated
+> `pdfce-render/profile` that **compiles to nothing when off**.
+>
+> | # | requirement, as this item stated it | verdict |
+> |---|---|---|
+> | 1 | **Committed; survives the session** | **MET.** `tools/render-profile/` is in git at `6b33789`. This is the requirement the whole item existed for |
+> | 2 | **Takes a PDF and a scale; reports the split** | **MET AND EXCEEDED.** `--page`, `--scales 0.25,0.5,1,2`, `--repeat N` (fastest-of-N, the right statistic for a deterministic workload under scheduling noise). A scale **sweep**, not a scale — which is what makes the cache cliff visible as *three smooth steps then a jump* rather than as one unexplained ratio |
+> | 3 | **Reports read / parse / page-tree / rasterize SEPARATELY** | **PARTLY MET, remainder ARGUED DOWN rather than forgotten.** It reports `load` (`Document::from_bytes` — object graph and xref) against `render`. Interpretation and rasterization are **not separable from outside**, because the interpreter paints as it walks; the page-tree walk is performed but not timed. The split it does report earned its keep immediately: `load` is **~0.005%** of the total, which retires "optimize the reader" without an experiment |
+> | 4 | **Ablate a named stage and report the FLOOR alongside the total** | **NOT MET — STILL OWED, and this is the one that matters.** There is no `--ablate` and no floor. **This was the R163 mechanical carrier the refused ablation rule candidate was refused *in favour of*** (see the `76200e9` entry's *Ledger*). Until it exists, the obligation "establish the floor before optimising" has **neither a rule nor an artifact** carrying it — the gap the refusal was explicitly betting against |
+> | 4b | **PER-PHASE TIMING — the fourth capability THIS FILING ADDED** | **DELIBERATELY DECLINED, WITH A REASON THAT INDICTS THE REQUIREMENT.** The harness reports per-phase **counts and geometry** and refuses per-phase **timings**, on two grounds: timer calls inside a loop that runs **148,517 times perturb the thing being measured**, and per-phase timings **invite the subtract-two-totals reasoning that produced the 10.1 s error in the first place**. **That argument is accepted and the requirement is WITHDRAWN.** It was added by the eighteenth filing to prevent an R164 recurrence and would have made an R164 recurrence *cheaper to commit* — a requirement written by the same reasoning it was meant to guard against |
+>
+> **Net: 2 met, 1 part-met on a stated separability limit, 1 withdrawn,
+> 1 STILL OWED (ablation + floor).** The item is **not closed**; it is
+> reduced to its fourth capability. **What was bought here is a correction
+> and an instrument, not milliseconds** — see the `6b33789` *Shipped*
+> entry, which says so in its own headline.
+>
+> **One capability was added that this item never asked for, and it is the
+> most valuable line in the tool:** the harness **prints an explicit note
+> when clips cover a large share of the page**, so the "clips are tiny"
+> premise cannot be silently re-adopted. **A harness that answers the
+> question is worth less than one that contradicts the answer you arrived
+> with.**
 
 The scratch `examples/profile_render.rs` that produced the parse-vs-render
 split **was never committed at all** — established by

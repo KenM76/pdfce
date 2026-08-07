@@ -21858,13 +21858,27 @@ the claim. **Re-established at `4475fe6`, not carried forward.**
   rectangle special-case would have optimised one clip in forty. The fork
   declined to build the commissioned change and stopped, reporting the
   number instead** — which is exactly what the flag was for.
-- **★ WHAT REPLACES THE RECTANGLE PREMISE IS BETTER, BECAUSE IT WAS
+- ~~**★ WHAT REPLACES THE RECTANGLE PREMISE IS BETTER, BECAUSE IT WAS
   MEASURED.** **100% of clips are single-subpath, mean 7 segments, mean
   bounding box 0.663% OF THE PAGE.** Tiny clips; page-sized buffers. **The
   mismatch is between clip EXTENT and mask EXTENT — not between clip SHAPE
   and mask SHAPE**, which is what the rectangle idea assumed. The revised
   item 1′ therefore does **not** require clips to be rectangles; it
-  requires them to be **small**, which they measurably are.
+  requires them to be **small**, which they measurably are.~~
+  **★★ CORRECTED 2026-08-07 (nineteenth filing, `6b33789`) — THE BOUNDING
+  BOX IS 66.36% OF THE PAGE, NOT 0.663%.** A fraction printed as a percent,
+  off by exactly 100×. First clips measure **87%, 65%, 100%, 81%, 95%**;
+  individual and accumulated bboxes both give 66.36%, so it is not an
+  accumulation artifact. **Clips are most of the paper.** *"Tiny clips;
+  page-sized buffers"* is void, and **item 1′ is RETIRED, not annotated** —
+  there is no extent mismatch to exploit. Two further refutations, either
+  fatal alone: tiny-skia **requires** mask size to equal pixmap size and
+  enforces it **silently** (`RasterPipelineBlitter::new` → `None`, a
+  `log::warn!` and a dropped paint), and `Mask::fill_path` costs the **same
+  on a 64×64 mask as page-sized** (10.3 µs vs 8.3 µs). **What survives of
+  the census is SHAPE — single-subpath, 7 segments — not SIZE.** Preserved
+  struck rather than deleted: the wrong premise and its refutation are
+  together the record.
 - **★ "SOUND REASONING, UNMEASURED POPULATION" IS A DISTINCT FAILURE MODE
   FROM "WRONG REASONING", and it is the most transferable thing here.** The
   spec half **held on checking**: ISO 32000-1 **§8.5.3.3.2** (nonzero) and
@@ -21978,7 +21992,12 @@ the claim. **Re-established at `4475fe6`, not carried forward.**
   **original order table PRESERVED and labelled NOT CURRENT**, a new
   **revised order** (1′ mask sized to the clip / 2′ cliff measured / 3
   unchanged) beside it, and the owed-harness entry gaining the R164 worked
-  example plus its fourth required capability.
+  example plus its fourth required capability. **★ CORRECTED 2026-08-07,
+  nineteenth filing: item `1′` is now RETIRED (its 0.663% premise is
+  66.36%), and the fourth required capability — per-phase TIMING — is
+  WITHDRAWN on the built harness's own argument that per-phase timings
+  invite the subtract-two-totals reasoning that produced the 10.1 s
+  error.**
 - `docs/FEATURES.md` — **same filing, per the maintenance contract.** The
   *Fonts & rendering* rasterize row gains `4475fe6`'s figures, the
   `Arc<Mask>` reasoning and the 52-fixture identity basis; the *Planned*
@@ -22038,14 +22057,28 @@ naming its command:**
 - **⚠ A FORK IS LIVE IN `crates/` on the NEXT render step.** Everything
   filed here is the state at **`4475fe6`** and nothing beyond it.
   **Re-establish before quoting.**
-- **The revised render order is 1′ / 2′ / 3** — mask sized to the clip
+- ~~**The revised render order is 1′ / 2′ / 3** — mask sized to the clip
   (measured premise: mean bbox **0.663% of the page**, 100% single-subpath,
   mean 7 segments); re-measure the cliff after it (**14.1× → 5.1×** so far,
   still above the ordinary ~3.2×); tiling and threading **last**, still
   addressing the 0.87 s **5%**. **The old item 1 is a DEAD END and is
-  struck, not deleted.**
-- **The render-profiling harness is still OWED, and is now the entry's own
-  worked example.** Minimum shape unchanged plus **per-phase timing**.
+  struck, not deleted.**~~
+  **★★ CORRECTED 2026-08-07 (nineteenth filing, `6b33789`) — THE ORDER IS
+  NOW `2′` THEN `3`.** The 0.663% premise is **66.36%** (a fraction printed
+  as a percent), so **`1′` is RETIRED alongside `1`** and the
+  clip-representation line of attack is **CLOSED**, not paused. `2′` (the
+  cache cliff, 14.1× → 5.1×, still above the ordinary ~3.2×) is now the
+  **first** live item and is still a **measurement**, not work; `3` (tiling
+  and threading) is unchanged and still last, still addressing the 0.87 s
+  **5%**.
+- ~~**The render-profiling harness is still OWED, and is now the entry's own
+  worked example.** Minimum shape unchanged plus **per-phase timing**.~~
+  **★ LARGELY DISCHARGED 2026-08-07 by `tools/render-profile` (`6b33789`):
+  2 of 4 requirements met, 1 part-met (interpretation and rasterization are
+  not separable from outside — the interpreter paints as it walks),
+  per-phase **timing WITHDRAWN** on the tool's own argument, and **one
+  STILL OWED — `--ablate` plus a reported FLOOR**, which is the R163
+  mechanical carrier the refused ablation rule was refused in favour of.**
 - **A Pass ID for the remaining render work** is still the engineer's to
   assign — deliberately not minted, and this filing is the evidence for why.
 - **`R166` remains FREE**, twice-declined-around: refused on its own
@@ -22053,6 +22086,258 @@ naming its command:**
   ablation candidate here.
 - **Everything carried forward from the seventeenth filing is UNCHANGED**
   except its item-1/item-2 render order and the 10.1 s figure — the
+  `UNESTABLISHED` foreign-oracle rows, the incremental-writer coverage
+  boundary, Pass 20.5's remaining cut half and its owed rendered-appearance
+  check, the multi-page repeated-field labelling gap,
+  `tools/gui-drive.ps1`'s build-or-assert-freshness item, Pass 20.3's
+  `/I`/`/TI`/push buttons and the unruled push-button verb name, Pass
+  38.3's blocked question **(ba)** and 38.5's two re-scope items, the
+  `pdfce-ui-specialist` spec-filing call, F0's disposition, and the
+  **`Acrobat_Features` stale-GAP dispatch**.
+
+---
+
+## 2026-08-07 — nineteenth filing: a figure this project filed in four documents was wrong by 100×, and the run that found it bought no milliseconds
+
+**★ READ THIS FIRST, because the headline is a correction and not a
+feature.** The operator supplied a figure — *mean clip bounding box =
+0.663% of the page* — and this librarian filed it in good faith, on his
+authority, as the **measured premise** of revised *Next up* item **1′**
+("a clip mask sized to the clip, not the page"). **It is 66.36%.** A
+fraction printed as a percent, off by exactly two orders of magnitude.
+**The premise is dead and the item is RETIRED, not annotated.**
+
+**Shipped:**
+
+- **`6b33789` — *the clips were never small, and nothing could have told
+  us*.** No Pass ID: it ships **no capability** — an out-of-tree profiling
+  harness (`tools/render-profile`), a feature-gated `pdfce-render/profile`
+  that **compiles to nothing when off**, and a corrected doc comment.
+  **NOTHING GOT FASTER. 1× is still ~10 s.** Said plainly here because a
+  *Shipped* entry containing the word "profiling" invites the opposite
+  inference, and it would be false. **This run bought a correction and an
+  instrument.**
+
+**Findings + decisions:**
+
+- **★ THREE FIGURES WERE WRONG BY TWO ORDERS OF MAGNITUDE IN ONE DAY, AND
+  ONLY ONE WAS CAUGHT.**
+
+  | # | as produced | actual | mechanism |
+  |---|---|---|---|
+  | 1 | `Mask::new` = **10.1 s** of an 18 s render | **1.02 s** | an ablation that moved three things and attributed all of it to one (**R164**) |
+  | 2 | mean clip bbox = **0.663% of the page** | **66.36%** | a fraction printed as a percent |
+  | 3 | cull hit rate = **73.71%** | **1.34%** | a clip bbox tracked in a thread-local that only ever **shrank** and **never widened on `Q`** — and `Q` reinstates a **larger** clip |
+
+  **Errors 1 and 2 were believed and acted on for hours. Error 3 was caught
+  inside the fork before it was reported.** The difference is **not care
+  and not skill** — error 3 was measured a **second** time and the other
+  two were not, because by then a committed harness existed and the probes
+  behind 1 and 2 had been deleted with the tree that produced them. The
+  fork's own sentence, preserved verbatim because it is the finding:
+
+  > *Two produced figures wrong by two orders of magnitude that were
+  > believed and acted on. Neither survived a second measurement — both
+  > survived because there was no second measurement to make.*
+
+- **★ ITEM 1′ HAD THREE INDEPENDENT REFUTATIONS AND ONE MEASUREMENT WOULD
+  HAVE FOUND ANY OF THEM.** Even had the size premise held:
+  1. **SIZE** — 66.36%. A mask sized to a 66%-of-page clip **is** a
+     page-sized mask. First clips: **87%, 65%, 100%, 81%, 95%**;
+     individual and accumulated bboxes both give 66.36%, so it is **not an
+     accumulation artifact**.
+  2. **API, AND IT FAILS SILENTLY** — tiny-skia's clip-mask/pixmap size
+     match is a **hard requirement**: `RasterPipelineBlitter::new` returns
+     `None` on a mismatch (`pipeline/blitter.rs:36-44`), producing a
+     `log::warn!` and a **dropped paint**, not an error. A smaller mask
+     would have quietly **stopped painting** — wrong output, not fast
+     output.
+  3. **COST** — `Mask::fill_path` costs the **same** on a 64×64 mask as
+     page-sized (**10.3 µs vs 8.3 µs**), being dominated by **three
+     raster-pipeline compilations per call**; `scan::path_aa::fill_path`
+     **already** bounds itself to `path.bounds()`. And `Mask::new` at page
+     size is **24.6 µs**, so its ~**1.02 s** is real and **irreducible
+     without changing the representation**.
+
+  **Retired, not annotated** — an engineer reading a merely-struck item as
+  stale would build a mask-shrinking optimisation that **cannot work**.
+  **The clip-representation line of attack is CLOSED.** The live render
+  order is now **`2′` (the cache cliff — a measurement) then `3` (tiling
+  and threading — still last, still aimed at the 0.87 s 5%).**
+
+- **★ THE COMMENT WAS WRONG; THE CODE IT JUSTIFIED IS RIGHT.**
+  `intersect_clip`'s doc comment claimed clips *"mostly cover a few
+  percent"* of the paper — **corrected in place the same day it was
+  written**, the shortest life of the three errors and the only one caught
+  by its own author. **The bound it justifies remains an IDENTITY worth
+  keeping**: it skips the **~34%** of the page outside the new path — **a
+  third of the work, not two orders of magnitude**. A correct optimisation
+  with a 100×-too-generous stated motivation needs its **sentence**
+  repaired, not its code reverted, and the repair must state the real
+  benefit or the next reader deletes the bound for underdelivering against
+  a number it never claimed.
+
+- **★ A DESIGN CONSEQUENCE, not just history.** Error 3 is why `clip_bbox`
+  is a **`GraphicsState` field** and not a thread-local: `q` and `Q` must
+  carry it **exactly as they carry the mask**. Generalised: **any cached
+  summary of a stacked, save/restore-scoped state must live in that
+  state**, or it diverges silently at the first restore.
+
+- **★ THE OWED HARNESS: LARGELY DISCHARGED, NOT CLOSED — checked
+  requirement by requirement rather than accepted from the dispatch.**
+  **2 met** (committed and survives the session; takes a PDF, page and a
+  **scale sweep** with fastest-of-N repeat), **1 part-met** (`load` vs
+  `render` — interpretation and rasterization are **not separable from
+  outside** because the interpreter paints as it walks; `load` turns out to
+  be **~0.005%**, which retires "optimize the reader" without an
+  experiment), **1 WITHDRAWN**, and **1 STILL OWED**: `--ablate` plus a
+  reported **FLOOR**, which is exactly the **R163 mechanical carrier the
+  refused ablation rule candidate was refused in favour of**. Until it
+  exists that obligation has **neither a rule nor an artifact**.
+
+- **★ THE WITHDRAWN REQUIREMENT IS ITSELF A FINDING.** The eighteenth
+  filing added **per-phase TIMING** as a fourth requirement, to prevent an
+  R164 recurrence. The built harness **declines it with an argument**:
+  timer calls inside a loop running **148,517 times perturb the thing being
+  measured**, and per-phase timings **invite the subtract-two-totals
+  reasoning that produced the 10.1 s error in the first place**. It reports
+  per-phase **counts and geometry** instead. **The argument is accepted and
+  the requirement is withdrawn** — a requirement written by the same
+  reasoning it was meant to guard against.
+
+- **★ THE HARNESS'S BEST BEHAVIOUR IS ONE NOBODY ASKED FOR:** it **prints
+  an explicit note when clips cover a large share of the page**, so this
+  premise cannot be silently re-adopted. **An instrument that only answers
+  the question you bring it will confirm whatever you brought.**
+
+**Decisions made this session:**
+
+- **`R166` is RECOMMENDED and NOT MINTED** — the operator rules, per the
+  dispatch. Candidate: ***a number whose instrument no longer exists is not
+  evidence — it may be reported, but nothing may be scoped, ordered or
+  built on it until a second measurement is possible.*** His own read was
+  tested rather than adopted, and **comes out half-right**:
+  - **The "no single mechanism to name" objection does not survive.**
+    Standing rules here name **conditions**, not mechanisms — `R162` asks
+    *could my assertion ever have come out false?*, `R164` asks *does this
+    verdict depend on its neighbours?*, each across many mechanisms.
+    Mechanism diversity is what makes a rule a rule rather than a bug
+    report.
+  - **The occurrence bar passes wider than `R164`'s did** — three in one
+    day, where `R164` was minted on one.
+  - **The work-versus-care test — the ground the ablation candidate was
+    actually refused on — comes out the OTHER WAY.** *"Ablate before
+    optimising"* commissions **work**; this commissions **care**, is
+    honoured by **not acting**, and costs nothing to obey.
+  - **`R163`'s carrier argument discharges the INSTANCE, not the CLASS.**
+    `tools/render-profile` now exists, but **it does not run unless someone
+    runs it** and it guards **render** numbers only; the next deleted probe
+    will be in the writer or the parser. And the operator's read treats
+    that argument as the ablation refusal's ground — **it was recorded
+    there as "support, not as the decision."**
+  - **Not redundant with the family**: `R164` would have caught error 1 and
+    **neither** 2 nor 3; `R162` covers absence claims and none of the three
+    was one; `R87` requires establishment and all three **were**
+    established — once, wrongly. **The uncovered ground is his own phrase:
+    a verdict with no second opinion available at all.**
+  - **If he declines, the honest record is that the class is then carried
+    by nothing.** Stated so it can be checked later rather than
+    rediscovered.
+
+**Files edited — `docs/` ONLY, by the dispatch's explicit scope:**
+
+- **`docs/ROADMAP.md`** — **seven locations.** (1) New *Shipped* entry at
+  the top for `6b33789`. (2) The census table's bbox row — struck and
+  corrected. (3) A correction box under that table. (4) The `76200e9`
+  amendment box's own restatement of the figure — *"the box that corrected
+  one 100× error carried another one."* (5) The original order's item 1,
+  now wrong **twice** (rectangles 2.5%, *and* "a few percent" → 66.36%).
+  (6) The revised-order preamble — struck, with what actually survives of
+  the census. (7) Item **1′** retired with its three refutations, `2′`
+  promoted to first live item, the R87 fork-live warning updated to
+  *no fork is live*, and the owed-harness item given a
+  requirement-by-requirement discharge assessment.
+- **`docs/FEATURES.md`** — **same filing, per the maintenance contract.**
+  The *Planned* **Interactive-speed rendering** row: `1′` struck and
+  retired with all three refutations, the live order restated as `2′`/`3`,
+  and the *"a fork is live"* warning replaced. **No box ticked, and none
+  should be** — `6b33789` delivers no capability. **No new row was added
+  for `tools/render-profile`**: `FEATURES.md` is capability-shaped for the
+  product, and a dev instrument is not a product capability.
+- **`docs/ARCHITECTURE.md`** — **§12's twenty-second 2026-08-07 entry AND
+  §3's `pdfce-render` body block, in the same edit** (decision log = audit
+  trail, body = living truth), plus an amendment header on the
+  twenty-first entry whose *What remains* argument the correction voids.
+- **`docs/SESSION_LOG.md`** — three dated correction markers on the
+  eighteenth filing's entry (original text struck, never deleted), plus
+  this entry.
+
+**How the location set was established (R87) — and the edge of this
+filing's evidence:**
+
+**★ THIS FILING HAS A SHELL AND USES IT.** Hard rule 8 was amended earlier
+today (`b1368ed`) to require **check, then assert, and say which**; the
+retired no-shell disclaimer is not repeated.
+
+1. ***The full extent of the 0.663% seeding*** — the operator explicitly
+   did not know it. **Established** by **tracked-files-only**
+   `git grep -nE "0\.66[0-9]|66\.36"` and
+   `git grep -niE "tiny clip|small clip|clips are (small|tiny)|few
+   percent|mask sized to the clip|clip-sized|sized to the clip"` over the
+   whole repository. Result: **eleven locations in four `docs/` files**
+   (`ROADMAP.md` ×6, `SESSION_LOG.md` ×3, `FEATURES.md` ×1,
+   `ARCHITECTURE.md` ×1), plus **four already-corrected locations** in
+   `crates/pdfce-render/src/{interpret,profile}.rs` and
+   `tools/render-profile/{README.md,src/main.rs}` that arrived with
+   `6b33789`. **His estimate of "at least one *Next up* item and one
+   *Planned* row" was low by a factor of five.**
+2. ***An ABSENCE, stated explicitly per R87*** — `git grep -nE
+   "73\.71|1\.34|cull" -- docs/` returns **zero matches**. **The cull-rate
+   error was never filed anywhere**, because the fork caught it before
+   reporting. It appears in this filing for the **first** time, as history
+   rather than as a correction — which is exactly the point being made
+   about it.
+3. ***HEAD and the working tree.*** `git rev-parse HEAD` → **`6b33789`**;
+   `git status --porcelain` → **empty**.
+4. ***The backup bundle.*** `git bundle list-heads
+   D:\Dev\pdfce-backups\pdfce-20260807-1509.bundle` → `pass-8-redaction`
+   at **`7867ec4`**; `git log --oneline 7867ec4..HEAD` → **exactly one
+   commit**. **The bundle is ONE commit behind, and the missing commit is
+   `6b33789` itself.** Checked with the two commands named — this is the
+   claim this librarian got wrong twice in consecutive filings by
+   inferring it from documents.
+5. ***Remotes.*** `git remote -v` → **empty. No remote configured**;
+   publishing remains ungiven (`CLAUDE.md` rule 8).
+6. ***The ledger.*** **Established by RUNNING** both checkers, before and
+   after (R106/R133): `tools/check-ledger-numbers.py` **exit 0**,
+   `tools/check-passes-filed.py` **exit 0**.
+7. ***Every performance number.*** **NOT established here** — all are the
+   **engineer's**, measured at `6b33789` and relayed: the 66.36% census,
+   the first-clip percentages, the 1.34% cull rate, the µs
+   microbenchmarks, the gates, the SHA-256 identity and the 59 fixtures.
+   **This filing ran no build, no test, no render and no census.**
+8. ***"No fork is live."*** **The operator stated it and committed to it**,
+   having been wrong twice earlier today. It is the **one** claim in this
+   filing resting on his word rather than on a command, and is flagged as
+   such rather than absorbed.
+
+**Still in flight / for next session:**
+
+- **`R166` awaits the operator's ruling.** Recommended, not minted;
+  ceiling stays **R165**.
+- **STILL OWED — `--ablate` plus a reported FLOOR** in
+  `tools/render-profile`. The only unmet requirement of the harness item,
+  and the one the refused ablation rule was refused in favour of.
+- **The live render order is `2′` then `3`.** `2′` is a **measurement**
+  (the 5.1× cliff against an ordinary ~3.2×), and `render-profile`'s scale
+  sweep is now the instrument for it. **`1` and `1′` are both dead ends —
+  do not re-scope either.**
+- **A Pass ID for the remaining render work** is still the engineer's to
+  assign, and the case for deferring it is now twice-proven: **two
+  successive "next steps" have been retired on measurement.**
+- **The bundle is one commit behind** — `6b33789` is not in it.
+- **Everything carried forward from the eighteenth filing is UNCHANGED**
+  except the render order, the 0.663% figure and the harness item: the
   `UNESTABLISHED` foreign-oracle rows, the incremental-writer coverage
   boundary, Pass 20.5's remaining cut half and its owed rendered-appearance
   check, the multi-page repeated-field labelling gap,

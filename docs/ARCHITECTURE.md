@@ -206,12 +206,57 @@ D:\Dev\pdfce\
                                    or annotation appearance, and a
                                    "no pixel anywhere changes" claim needs witnesses
                                    spanning the surfaces that produce pixels.
-                                   **What remains is still a REPRESENTATION change,
+                                   ~~**What remains is still a REPRESENTATION change,
                                    but a differently-shaped one:** clips are 100%
                                    single-subpath, mean 7 segments, mean bounding box
                                    **0.663% of the page**, so the mismatch is between
                                    clip EXTENT and mask EXTENT — not between clip
-                                   SHAPE and mask SHAPE.
+                                   SHAPE and mask SHAPE.~~
+                                   **★★ CORRECTED 2026-08-07 (`6b33789`) — THAT
+                                   STRUCK SENTENCE IS WRONG BY 100×, AND IT IS THE
+                                   SECOND WRONG FIGURE IN THIS SAME BLOCK.** Mean
+                                   clip bounding box is **66.36% of the page, not
+                                   0.663%** — a fraction printed as a percent. The
+                                   sheet's first clips cover **87%, 65%, 100%, 81%,
+                                   95%**; individual and accumulated bboxes both give
+                                   66.36%, so it is not an accumulation artifact.
+                                   **There is no EXTENT mismatch to exploit** — a
+                                   mask sized to a 66%-of-page clip is a page-sized
+                                   mask in all but name — and the follow-on
+                                   optimisation this sentence was the premise for is
+                                   **RETIRED** in `ROADMAP.md`'s *Next up*, not
+                                   merely annotated. **Two further, independent
+                                   refutations, either fatal on its own:** tiny-skia
+                                   requires the clip mask and the pixmap to be the
+                                   SAME SIZE and **enforces it SILENTLY** —
+                                   `RasterPipelineBlitter::new` returns `None` on a
+                                   mismatch (`pipeline/blitter.rs:36-44`), a
+                                   `log::warn!` and a **dropped paint**, so a smaller
+                                   mask produces WRONG output rather than fast output;
+                                   and the saving does not exist anyway —
+                                   `Mask::fill_path` costs **10.3 µs on a 64×64 mask
+                                   vs 8.3 µs page-sized**, being dominated by three
+                                   raster-pipeline compilations per call rather than
+                                   by rasterization, while `scan::path_aa::fill_path`
+                                   **already** bounds itself to `path.bounds()`.
+                                   `Mask::new` at page size is **24.6 µs**, so its
+                                   ~1.02 s is real and **irreducible without changing
+                                   the representation**. **The clip-representation
+                                   line of attack is CLOSED**; what survives of the
+                                   census is SHAPE (single-subpath, 7 segments), not
+                                   SIZE. The `intersect_clip` doc comment that
+                                   asserted clips *"mostly cover a few percent"* was
+                                   **corrected in place the same day it was written**,
+                                   and **the bound it justifies remains an IDENTITY
+                                   worth keeping** — it skips the ~34% outside the new
+                                   path, a third of the work rather than two orders of
+                                   magnitude. `clip_bbox` is a **`GraphicsState`
+                                   field** rather than a thread-local for a reason
+                                   found the hard way: any clip-derived quantity
+                                   tracked outside the graphics state is monotonically
+                                   wrong, because **`Q` reinstates a LARGER clip** and
+                                   a tracker that only ever shrinks never widens on it.
+                                   See §12's 2026-08-07 twenty-second entry.
                                    **Consequence for anyone optimising here: tiling
                                    and threading would today be aimed at 5% of the
                                    cost.** See §12's 2026-08-07 twentieth and
@@ -9472,3 +9517,189 @@ with a forward pointer.
 
   **This filing edited `docs/` ONLY** — no `crates/`, no `tools/`, no
   `fixtures/`, by the dispatch's explicit scope.
+
+  > **★ AMENDED 2026-08-07 (twenty-second entry, below) — THE FIRST
+  > PARAGRAPH OF THIS ENTRY'S *What remains* ARGUMENT IS VOID.** The
+  > "extent, not shape" reframing rested on a **mean clip bbox of 0.663% of
+  > the page**, which is **66.36%** — a fraction printed as a percent. The
+  > entry is preserved unedited above; the correction is the next entry.
+  > **The backup figure quoted in this paragraph is also superseded** —
+  > re-checked at `6b33789`, the newest bundle is
+  > `pdfce-20260807-1509.bundle`, **one commit behind**.
+
+- **2026-08-07 (twenty-second entry this day) — THREE FIGURES WRONG BY TWO
+  ORDERS OF MAGNITUDE IN ONE DAY, AND THE CONDITION THEY SHARE IS NOT A
+  METHOD BUT A LIFETIME: EACH WAS PRODUCED ONCE, BY AN INSTRUMENT THAT DID
+  NOT OUTLIVE THE QUESTION.** Commit `6b33789`. No behaviour changed, no
+  Pass minted, no decision record minted, **`R166` NOT MINTED — it is
+  RECOMMENDED and left to the operator** (see *the rule judgement* below).
+  **Ceiling unchanged: Pass 43, R165, decision 031, question (bb)** —
+  re-measured by running `tools/check-ledger-numbers.py`.
+
+  **The three errors, and the only difference between them:**
+
+  | # | figure as produced | actual | mechanism |
+  |---|---|---|---|
+  | 1 | `Mask::new` = **10.1 s** of an 18 s render | **1.02 s** | an ablation that moved three things and attributed all of it to one (**R164**) |
+  | 2 | mean clip bbox = **0.663% of the page** | **66.36%** | a fraction printed as a percent |
+  | 3 | clip-bbox cull hit rate = **73.71%** | **1.34%** | a clip bbox tracked in a thread-local that only ever **shrank**, never **widened on `Q`** — and `Q` reinstates a **larger** clip |
+
+  **The mechanisms are three different defects** — a contaminated ablation,
+  a unit error, a wrong state scope. **No single rule names all three**, and
+  that is the operator's own objection to minting one, correctly stated.
+  **But the mechanisms are not what they have in common.** Errors 1 and 2
+  were **believed and acted on for hours**; error 3 **was caught inside the
+  fork before it was reported**. The difference is **not care and not
+  skill** — it is that **error 3 was measured a second time and the other
+  two were not**, because by then a committed harness existed and the
+  probes behind 1 and 2 had already been deleted with the working tree that
+  produced them.
+
+  **The line worth preserving verbatim, from the fork's own summary:**
+
+  > *Two produced figures wrong by two orders of magnitude that were
+  > believed and acted on. Neither survived a second measurement — both
+  > survived because there was no second measurement to make.*
+
+  **★ CONSEQUENCE FOR THE RENDERER'S DESIGN, not only for its history.**
+  Error 3 is why **`clip_bbox` is a `GraphicsState` field** and not a
+  thread-local: `q` and `Q` must carry it **exactly as they carry the
+  mask**. Any clip-derived quantity tracked outside the graphics state is
+  **monotonically wrong**, because `Q` restores a *wider* clip and a
+  shrink-only tracker never widens. This generalises past clips — **any
+  cached summary of a stacked, save/restore-scoped state must live in that
+  state**, or it silently diverges at the first restore.
+
+  **★ THE RETIRED OPTIMISATION HAD THREE INDEPENDENT REFUTATIONS, AND THAT
+  IS THE ARCHITECTURAL CONTENT.** *"Size the mask to the clip, not the
+  page"* was **retired, not annotated**, because a struck-but-plausible item
+  gets rebuilt:
+  1. **Size** — 66.36%. A mask sized to a 66%-of-page clip **is** a
+     page-sized mask.
+  2. **API, and it fails SILENTLY** — tiny-skia requires clip-mask size to
+     equal pixmap size; `RasterPipelineBlitter::new` returns `None` on a
+     mismatch (`pipeline/blitter.rs:36-44`), producing a `log::warn!` and a
+     **dropped paint**. A smaller mask yields **wrong output, not fast
+     output**, detectable only in a log line. **This is the load-bearing
+     one for anyone touching tiny-skia here: a size contract enforced by a
+     returned `None` is a contract you will violate without a test.**
+  3. **Cost** — `Mask::fill_path` is **10.3 µs on 64×64 vs 8.3 µs
+     page-sized**, dominated by **three raster-pipeline compilations per
+     call** rather than by rasterization; `scan::path_aa::fill_path`
+     **already** bounds itself to `path.bounds()`. `Mask::new` at page size
+     is **24.6 µs**, so its ~1.02 s is real and **irreducible without
+     changing the representation**.
+
+  **Any ONE of the three would have killed the item, and one measurement
+  would have found any one of them.** None was made before it was scoped,
+  dispatched, and filed in four documents as the ranking premise for the
+  renderer's entire remaining work order.
+
+  **★ THE COMMENT WAS WRONG AND THE CODE IT JUSTIFIED IS RIGHT — keep
+  them apart.** `intersect_clip`'s doc comment claimed clips *"mostly cover
+  a few percent"* of the paper; it was **corrected in place the same day it
+  was written**, the shortest life of the three errors and the only one
+  caught by its own author. **The bound it justifies remains an IDENTITY
+  and stays**: bounding the multiply to the new path's device bounds is
+  exact — outside them the fresh mask is zero — and it skips the **~34%**
+  of the page outside the new path. **A third of the work, not two orders
+  of magnitude.** A correct optimisation with a 100×-too-generous stated
+  motivation needs its *sentence* repaired, not its code reverted; and the
+  repair must restate the real benefit, or the next reader deletes the
+  bound for underdelivering against a number it never claimed.
+
+  **★ THE RULE JUDGEMENT — RECOMMENDED, NOT MINTED, AND THE OPERATOR'S OWN
+  READ IS TESTED RATHER THAN ADOPTED (as he asked).** Candidate text:
+  ***a number whose instrument no longer exists is not evidence — it may be
+  reported, but nothing may be scoped, ordered or built on it until a
+  second measurement is possible.***
+
+  The operator's read was: *the mechanism differs each time, so there is no
+  single defect to name; but the condition is constant — a number produced
+  once, by instrumentation that does not outlive the question.* **The
+  condition half is right and the objection half does not survive testing.**
+  Standing rules in this project name **conditions**, not mechanisms:
+  `R162` asks *could my assertion ever have come out false?* across every
+  mechanism by which an absence can be vacuous; `R164` asks *does this
+  verdict depend on its neighbours?* across every kind of batch. **A rule
+  that names a condition is not weakened by mechanism diversity — that is
+  what makes it a rule rather than a bug report.**
+
+  Tested against the three grounds the ablation candidate was refused on
+  one filing ago, because that is the nearest precedent and the operator
+  named it:
+
+  1. **Occurrence bar — PASSES, and by a wider margin than R164 did.**
+     The ablation candidate had **one** occurrence against a two-occurrence
+     bar. This has **three in a single day**, and `R164` itself was minted
+     on **one**.
+  2. **Work versus care — PASSES, and this is the ground that actually
+     decided the refusal.** The ablation candidate was refused because
+     *"ablate before optimising"* **commissions WORK**, and work is
+     scheduled rather than remembered. **This candidate commissions
+     CARE**: it constrains what you may *believe* and *act on*, and it is
+     honoured by **not acting**, at zero cost. It tells nobody to run
+     anything. **The operator's read treats the R163-carrier argument as
+     the same ground the ablation candidate was refused on — it was not.
+     R163 was recorded there as "support, not as the decision."** The
+     decisive ground comes out the other way here.
+  3. **R163 prefers a mechanical carrier — PARTIALLY, AND ONLY LOCALLY.**
+     Unlike one filing ago, **the carrier now exists**:
+     `tools/render-profile` is committed and even **prints an explicit
+     note when clips cover a large share of the page**, so *this* premise
+     cannot be silently re-adopted. **But R163's own stated limit is that
+     it binds where a compiler or equivalently mechanical check does the
+     work**, and a harness is neither: **it does not run unless someone
+     runs it**, and it guards **render** numbers only. The next
+     load-bearing figure produced by a deleted probe will be in the text
+     pipeline, the writer, or the parser, and `render-profile` will be
+     silent about it. **R163 discharges the instance, not the class.**
+
+  **Tested for redundancy against the family, which is the strongest
+  argument against minting anything here — and it fails to reach:**
+  `R164` covers a verdict **contaminated by its neighbours**, and would
+  have caught error 1 and **neither** error 2 nor error 3. `R162` covers
+  **absence** assertions and their positive controls; none of the three was
+  an absence claim. `R87` requires that a claim be **established rather
+  than inferred**, and all three **were** established — by measurement,
+  once, wrongly. **The uncovered ground is exactly the operator's phrase:
+  a verdict with no second opinion available at all**, as against `R164`'s
+  verdict contaminated by the company it kept.
+
+  **Judgement: rule-shaped, and recommended.** **NOT MINTED — `R166`
+  remains free pending the operator's ruling**, per the dispatch's
+  constraint that nothing is minted unless he rules it. If he declines, the
+  honest record is that **the class is then carried by nothing**, since
+  `render-profile` binds one subsystem and no rule binds the rest — and
+  that is the bet, stated so it can be checked later rather than
+  rediscovered.
+
+  **What this filing did NOT establish (R87).** **Every measurement above
+  is the ENGINEER's**, taken at `6b33789` and relayed: the 66.36% census,
+  the 87/65/100/81/95% first clips, the 1.34% cull rate, the 10.3 µs /
+  8.3 µs / 24.6 µs microbenchmarks, the gates (`cargo test` **2153 passed,
+  0 failed**; `clippy` **0**; `clippy --features profile` **0**), the
+  SHA-256 identity on the CAD render and the **59** synthetic fixtures
+  hashed against a binary built at `4475fe6` in a worktree. **This filing
+  ran no build, no test, no render and no census.** The measurement input
+  remains a **measurement input, not a fixture** — outside the repository
+  tree, untracked, inadmissible under rule 7 / `LEGAL.md` §5 — so the
+  figures stay reproducible **only on the operator's machine**, which is
+  precisely the condition the candidate rule is about.
+
+  **Git and backup state — CHECKED, not inferred (hard rule 8 as amended
+  today, `b1368ed`; this filing has a shell and says so rather than
+  repeating the retired no-shell disclaimer).** `git rev-parse HEAD` →
+  **`6b33789`**; `git status --porcelain` → **empty**; `git remote -v` →
+  **empty, no remote configured**; `git bundle list-heads
+  D:\Dev\pdfce-backups\pdfce-20260807-1509.bundle` → `pass-8-redaction` at
+  **`7867ec4`**, and `git log --oneline 7867ec4..HEAD` → **one commit**.
+  **The bundle is ONE commit behind, and the missing commit is `6b33789`
+  itself.** **No engineering fork is live** — stated by the operator and
+  flagged as the one claim here resting on his word rather than on a
+  command.
+
+  **This filing edited `docs/` ONLY** — no `crates/`, no `tools/`, no
+  `fixtures/`, by the dispatch's explicit scope. The `crates/` and
+  `tools/` corrections for the same 100× error arrived earlier, inside
+  `6b33789`.
