@@ -288,14 +288,37 @@ def produce(cli: Path, src: Path, mode: str, dest: Path) -> str | None:
     return None
 
 
-def verapdf_parse_report(verapdf: Path, files: list[Path]) -> dict[str, str]:
-    """Run veraPDF in parse-only mode; return {file: parse-error}.
+# Parse outcomes, ORDERED worst-last so they can be compared directly.
+# veraPDF distinguishes two failure tiers and the distinction is load-
+# bearing here — see `verapdf_parse_report`.
+OK = 0
+WARNED = 1  # a PARSE taskException veraPDF does NOT count as a failure
+FAILED = 2  # counted in batchSummary/@failedToParse: could not open it
+TIER_NAME = {OK: "ok", WARNED: "parse-warning", FAILED: "unreadable"}
 
-    Only files that FAILED to parse appear in the returned mapping, so
-    an empty result means every file was readable.
+
+def verapdf_parse_report(verapdf: Path, files: list[Path]) -> dict[str, tuple[int, str]]:
+    """Run veraPDF in parse-only mode; return {file: (tier, message)}.
+
+    # Two failure tiers, because veraPDF has two and conflating them lies
+
+    Measured 2026-08-07 on `PDFBOX-6040-nodeloop.pdf`: veraPDF can emit
+    a ``taskException type="PARSE"`` for a document that it nonetheless
+    does **not** count in ``batchSummary/@failedToParse``. The first
+    version of this function treated any PARSE exception as a failure,
+    which made it stricter than veraPDF's own counter — and the
+    cross-check below caught the disagreement rather than letting either
+    number be believed.
+
+    So:
+
+    * ``FAILED``  — counted by veraPDF. The document could not be opened.
+    * ``WARNED``  — a PARSE exception that veraPDF did not count. It got
+      in and hit something (a page-tree loop, in the measured case).
+    * ``OK``      — nothing to report.
 
     The verdict is read from the XML body and never from the exit
-    status — `--off` returns 0 for a file with no xref table. See the
+    status — ``--off`` returns 0 for a file with no xref table. See the
     module docstring; this is the tool's central hazard.
     """
     proc = subprocess.run(
@@ -324,7 +347,7 @@ def verapdf_parse_report(verapdf: Path, files: list[Path]) -> dict[str, str]:
             f"stderr: {(proc.stderr or '').strip()[:300]}"
         ) from exc
 
-    failures: dict[str, str] = {}
+    results: dict[str, tuple[int, str]] = {}
     for job in report.iter("job"):
         item = job.find("item")
         name_el = item.find("name") if item is not None else None
@@ -333,22 +356,34 @@ def verapdf_parse_report(verapdf: Path, files: list[Path]) -> dict[str, str]:
             if task.get("type") == "PARSE":
                 msg_el = task.find("exceptionMessage")
                 msg = (msg_el.text or "").strip() if msg_el is not None else "parse failed"
-                failures[name] = msg
+                results[name] = (WARNED, msg)
 
-    # Cross-check against veraPDF's own count. If the summary says N
-    # files failed to parse and we extracted a different number, our
-    # extraction is wrong and reporting "clean" would be a lie.
+    # Promote to FAILED using veraPDF's OWN count, and cross-check.
+    #
+    # veraPDF reports the failure COUNT in the summary but does not mark
+    # which job it belongs to, so the tiers are reconciled rather than
+    # read directly: the number of exceptions must be at least the number
+    # veraPDF counted. If we extracted FEWER exceptions than veraPDF
+    # counted failures, some failure has no exception attached and
+    # reporting "clean" for it would be a lie.
     summary = report.find("batchSummary")
     if summary is not None:
-        claimed = int(summary.get("failedToParse", "0"))
-        if claimed != len(failures):
+        counted = int(summary.get("failedToParse", "0"))
+        if counted > len(results):
             raise RuntimeError(
                 f"extraction disagrees with veraPDF: batchSummary says "
-                f"failedToParse={claimed}, extracted {len(failures)}. "
-                f"The report format changed; fix the parser rather than "
-                f"trusting either number."
+                f"failedToParse={counted} but only {len(results)} PARSE "
+                f"exception(s) were found. A failure with no exception "
+                f"attached would be reported as clean. Fix the parser "
+                f"rather than trusting either number."
             )
-    return failures
+        # When every exception corresponds to a counted failure, they are
+        # all hard failures. When there are more exceptions than counted
+        # failures, the surplus are warnings — and we cannot tell WHICH,
+        # so the conservative reading applies only when counts align.
+        if counted == len(results) and counted > 0:
+            results = {k: (FAILED, m) for k, (_, m) in results.items()}
+    return results
 
 
 def self_test(verapdf: Path) -> int:
@@ -371,8 +406,17 @@ def self_test(verapdf: Path) -> int:
                 file=sys.stderr,
             )
             return 1
-        (name, msg), = failures.items()
-        print(f"self-test ok — gate detects a broken file: {msg}")
+        (_name, (tier, msg)), = failures.items()
+        if tier != FAILED:
+            print(
+                f"SELF-TEST FAILED: a file with no xref table was graded "
+                f"'{TIER_NAME[tier]}' rather than '{TIER_NAME[FAILED]}'. The "
+                f"tier reconciliation is wrong, so a genuinely unreadable "
+                f"file could be reported as a mere warning.",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"self-test ok — gate grades a broken file '{TIER_NAME[tier]}': {msg}")
         return 0
 
 
@@ -434,24 +478,62 @@ def main() -> int:
                 continue
             produced[dest.resolve()] = src
 
-        failures: list[ParseFailure] = []
-        batch: list[Path] = list(produced)
-        for start in range(0, len(batch), args.batch):
-            chunk = batch[start : start + args.batch]
-            for name, msg in verapdf_parse_report(verapdf, chunk).items():
-                src = produced.get(Path(name).resolve(), Path(name))
-                failures.append(ParseFailure(src, args.mode, msg))
+        # Judge pdfce against the INPUT'S baseline, not against perfection.
+        #
+        # This corpus is full of DELIBERATELY broken files — that is what a
+        # conformance corpus is for. Asking "does pdfce's output parse?"
+        # blames pdfce for damage it faithfully preserved from a file that
+        # never parsed to begin with. The question worth asking is the
+        # comparative one: **did pdfce make it worse?**
+        #
+        # Measured 2026-08-07 on `PDFBOX-6040-nodeloop.pdf`, which is why
+        # this is written this way: veraPDF cannot open the ORIGINAL at all
+        # ("can not locate xref table"), while pdfce's full rewrite of it
+        # opens fine and only reaches the page-tree loop the file genuinely
+        # contains. pdfce RECOVERED the xref. Under the absolute reading
+        # that file is a failure; under the comparative reading it is an
+        # improvement, and the comparative reading is the true one.
+        def scan(files: list[Path]) -> dict[str, tuple[int, str]]:
+            out: dict[str, tuple[int, str]] = {}
+            for start in range(0, len(files), args.batch):
+                out.update(verapdf_parse_report(verapdf, files[start : start + args.batch]))
+            return out
 
-        for f in failures:
-            print(f"FAIL  {f.source}  [--mode {f.mode}]\n      {f.message}")
+        after = scan(list(produced))
+        before = scan(list(produced.values()))
+
+        regressions: list[ParseFailure] = []
+        improvements = 0
+        preserved = 0
+        for out_path, src in produced.items():
+            tier_out = after.get(str(out_path), after.get(out_path.name, (OK, "")))[0]
+            msg_out = after.get(str(out_path), (OK, ""))[1]
+            tier_in = before.get(str(src.resolve()), before.get(str(src), (OK, "")))[0]
+            if tier_out > tier_in:
+                regressions.append(
+                    ParseFailure(
+                        src,
+                        args.mode,
+                        f"{TIER_NAME[tier_in]} -> {TIER_NAME[tier_out]}: {msg_out}",
+                    )
+                )
+            elif tier_out < tier_in:
+                improvements += 1
+            elif tier_out != OK:
+                preserved += 1
+
+        for f in regressions:
+            print(f"REGRESSION  {f.source}  [--mode {f.mode}]\n            {f.message}")
 
         print(
             f"\nverapdf-parse-gate: {len(produced)} file(s) written by pdfce "
-            f"and parsed by veraPDF {verapdf.name}, "
-            f"{len(failures)} unreadable, {refused} refused by pdfce "
-            f"(refusals are not failures)."
+            f"and read back by veraPDF {verapdf.name}.\n"
+            f"  {len(regressions)} regression(s)   <- the only failure condition\n"
+            f"  {improvements} improved (pdfce's output parses better than its input)\n"
+            f"  {preserved} pre-existing defect(s) faithfully preserved (not a failure)\n"
+            f"  {refused} refused by pdfce (refusals are not failures)"
         )
-        return 1 if failures else 0
+        return 1 if regressions else 0
     finally:
         if args.keep:
             print(f"produced files kept in {workdir}", file=sys.stderr)
