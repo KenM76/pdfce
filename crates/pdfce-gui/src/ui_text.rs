@@ -112,6 +112,52 @@ pub fn redaction_marks_pending(count: usize) -> String {
     )
 }
 
+/// Shown on the canvas when a background rasterization thread stopped
+/// without delivering pixels or an error — it panicked, or its channel
+/// closed under it.
+///
+/// Deliberately a *render* failure rather than silence: the alternative
+/// is a canvas that waits forever for a message that will never arrive,
+/// which presents as a hang — the exact failure moving rendering off
+/// the UI thread was meant to eliminate. Better to say the render did
+/// not complete and let the operator navigate away.
+pub fn canvas_render_worker_stopped() -> &'static str {
+    "The page could not be drawn: the renderer stopped unexpectedly"
+}
+
+/// Appended to the toolbar status while a background rasterization is
+/// still running and the canvas is therefore showing an older picture.
+///
+/// # Why this string exists, and why it is worded as a fact about the
+/// # PICTURE rather than about progress
+///
+/// Rendering moved off the UI thread so a slow page stops freezing the
+/// window (a real CAD sheet measures ~10 s at 1×). The cost is that the
+/// canvas can now be **out of date**, and rule 4 as narrowed by decision
+/// 024 §4.4 says a picture that is not of the current state must not
+/// silently pass as one.
+///
+/// A **zoom** in flight already discloses itself: the previous texture
+/// is drawn scaled with `TextureOptions::LINEAR`, so it reads as
+/// *soft* — visibly not final, at no cost. **An edit does not.** An
+/// edited page renders sharp and simply wrong: the operator places a
+/// field, the canvas shows the page without it, and nothing
+/// distinguishes that from the edit having failed. That is the case
+/// this line is for.
+///
+/// It says the canvas is behind rather than "rendering…" because the
+/// operator's question is *"did my edit take?"*, and the answer is yes —
+/// the document changed, the drawing has not caught up. Progress
+/// language answers a question nobody asked.
+///
+/// **Fixed position, never page-relative.** §4.4 exists because the
+/// operator objected to controls whose position derived from the
+/// document and therefore moved on every zoom and scroll. This lives in
+/// the status bar, which is exactly where it was last frame.
+pub fn status_canvas_behind() -> &'static str {
+    " — canvas still drawing; the page shown is not yet up to date"
+}
+
 /// Toolbar status after a failed open (damaged file, not a PDF,
 /// unreadable). Distinct from [`status_unsupported`]: this one means
 /// something is wrong with the *file*.

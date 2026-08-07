@@ -165,52 +165,39 @@ fn rasterize(
     Ok((texture, rendered.diagnostics))
 }
 
-/// Rasterize one page for the main canvas at `raster_scale` device
-/// pixels per PDF user-space unit (see
-/// [`crate::viewer::raster_scale`] — this is *not* the logical zoom).
+/// Upload pixels a background worker produced, as a [`PageTexture`].
 ///
-/// # Errors
+/// # Why this exists separately from the synchronous `rasterize`
 ///
-/// As [`rasterize`].
-// Eight parameters: each is a distinct, independent render input (the
-// context, the document, the page + its index, the scale, the annotation
-// toggle, the font environment, and that environment's generation as the
-// texture's staleness key). Grouping them into a struct would add
-// indirection without collapsing any genuine coupling — the generation is
-// carried alongside `fonts` only to become a `PageTexture` field, not
-// because they are one value — so the documented allow is the honest call.
-#[allow(clippy::too_many_arguments)]
-pub fn render_page_texture(
+/// Rasterization can happen on any thread; **texture upload cannot** —
+/// it needs an `egui::Context`, which belongs to the UI thread. That
+/// split is the whole reason `render_worker` returns a `Pixmap` rather
+/// than a `TextureHandle`, and this is the other half of it.
+///
+/// The premultiplied-alpha contract in this module's header applies
+/// here exactly as it does to the synchronous path: the same
+/// [`pixmap_to_color_image`] is used, so an off-thread render cannot
+/// acquire a different colour convention from an in-thread one. That is
+/// not a coincidence to preserve by review — it is one function.
+#[must_use]
+pub fn texture_from_pixels(
     ctx: &egui::Context,
-    doc: &DocumentView<'_>,
-    page: &Page,
-    page_index: usize,
-    raster_scale: f32,
-    annotations: bool,
-    fonts: &FontEnvironment,
-    font_env_generation: u64,
-) -> Result<PageTexture, String> {
-    // Texture names are single tokens on purpose: the `ui-strings` CI
-    // job (decision 002 R1) flags whitespace-bearing literals anywhere
-    // outside ui_text.rs, and an egui texture name is machine-facing,
-    // not user-facing — it should never be a candidate for the catalog.
-    let (texture, diagnostics) = rasterize(
-        ctx,
-        "pdfce-page",
-        doc,
-        page,
-        raster_scale,
-        annotations,
-        fonts,
-    )?;
-    Ok(PageTexture {
+    pixels: &crate::render_worker::RenderedPixels,
+) -> PageTexture {
+    let image = pixmap_to_color_image(&pixels.pixmap);
+    // Same texture name and filtering as the synchronous path: LINEAR is
+    // what makes a stale texture drawn at a new zoom read as *soft*
+    // rather than blocky, which is the free staleness signal the canvas
+    // relies on while a background render is in flight.
+    let texture = ctx.load_texture("pdfce-page", image, egui::TextureOptions::LINEAR);
+    PageTexture {
         texture,
-        page_index,
-        raster_scale,
-        annotations,
-        font_env_generation,
-        diagnostics,
-    })
+        page_index: pixels.page_index,
+        raster_scale: pixels.raster_scale,
+        annotations: pixels.annotations,
+        font_env_generation: pixels.font_env_generation,
+        diagnostics: pixels.diagnostics.clone(),
+    }
 }
 
 /// Lazily built, page-indexed cache of thumbnail textures for the rail.

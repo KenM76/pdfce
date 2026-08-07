@@ -228,6 +228,7 @@ mod object_provider;
 mod object_summary;
 mod raster;
 mod redact_apply;
+mod render_worker;
 mod ribbon;
 mod ui_text;
 mod vector_edit_tool;
@@ -235,6 +236,7 @@ mod viewer;
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
@@ -337,6 +339,21 @@ const DIMENSION_DRAG_COLOR: egui::Color32 = egui::Color32::from_rgb(210, 90, 40)
 /// soft interim image is never on screen long enough to look like the
 /// final result.
 const ZOOM_SETTLE: Duration = Duration::from_millis(150);
+
+/// How long a background render must be outstanding before the status
+/// bar says the canvas is behind.
+///
+/// Not zero, and the reason is the same one `ZOOM_SETTLE` is built on:
+/// a notice that appears and disappears within a few frames is worse
+/// than no notice, because it teaches the eye to filter that region.
+/// A render finishing inside the worker's in-frame budget never becomes
+/// in-flight at all, so this only gates the band between "fast enough
+/// to be invisible" and "slow enough to be worth saying".
+///
+/// Matched to `ZOOM_SETTLE` deliberately: that constant already encodes
+/// this project's answer to "how long before an interim image stops
+/// being a flicker and starts being a state the operator is sitting in".
+const CANVAS_BEHIND_NOTICE_AFTER: Duration = ZOOM_SETTLE;
 
 /// How many thumbnails may be rasterized in a single frame.
 ///
@@ -2250,7 +2267,31 @@ struct OpenDoc {
     /// §11.4). `pdfce-cli` uses the same type for the same reason, which
     /// is what makes "the GUI and the CLI cannot diverge" a structural
     /// claim rather than a promise.
-    session: EditSession,
+    ///
+    /// # Why an `Arc`
+    ///
+    /// A background rasterization must outlive the call that started
+    /// it, and `DocumentView<'a>` borrows its graph — so the worker is
+    /// handed a reference-counted session and calls `view()` on its own
+    /// thread. Shared ownership is the price of not freezing the window
+    /// on a page that takes 58 seconds.
+    ///
+    /// **Every mutation goes through [`OpenDoc::session_mut`]**, which
+    /// stops any in-flight render first. That is what keeps
+    /// `Arc::get_mut` infallible here: by construction no worker holds
+    /// a second reference at the moment an edit runs. Reads need no
+    /// ceremony — `Deref` yields `&EditSession` unchanged, which is why
+    /// 45 read-only call sites in this file did not have to move.
+    session: Arc<EditSession>,
+    /// The background rasterizer — the reason a slow page no longer
+    /// hangs the application.
+    ///
+    /// Its whole lifecycle is three places: `rasterize_current` starts
+    /// a render, the per-frame poll collects it, and
+    /// [`OpenDoc::session_mut`] cancels it. Keeping it to those three
+    /// is what makes the cancel-before-mutate invariant checkable by
+    /// reading one file.
+    render_worker: render_worker::RenderWorker,
     /// The flattened page list, in document order, inheritance resolved,
     /// **with unsaved `/Rotate` edits applied**.
     ///
@@ -2787,7 +2828,8 @@ impl OpenDoc {
         let view = ViewState::default();
         Self {
             path,
-            session,
+            session: Arc::new(session),
+            render_worker: render_worker::RenderWorker::default(),
             pages,
             properties_draft: Vec::new(),
             properties_lossy: false,
@@ -3450,6 +3492,46 @@ impl OpenDoc {
             .map_or((612.0, 792.0), viewer::page_extent_pts)
     }
 
+    /// The session, for mutation — **the one place an edit may begin**.
+    ///
+    /// # What this does and why it has to
+    ///
+    /// A background render holds a second reference to the session for
+    /// as long as it runs, so `Arc::get_mut` would fail while one is in
+    /// flight. This stops that render, waits for the thread to exit,
+    /// and only then hands out `&mut`.
+    ///
+    /// The three candidate rulings were weighed with numbers:
+    ///
+    /// - **Block the edit until the render finishes** — up to 58 s on a
+    ///   real CAD page. That is the freeze this machinery exists to
+    ///   remove, reintroduced through a different door.
+    /// - **Snapshot the session** — `EditSession` is deliberately not
+    ///   `Clone`, so this needs a new public deep-copy on the core
+    ///   type, and copies the document on every keystroke-sized edit.
+    /// - **Cancel, then mutate** — measured **28.9 ms** from `cancel()`
+    ///   to thread exit, against 10,367 ms to let a render finish.
+    ///
+    /// The third wins by three orders of magnitude, and it is why
+    /// cancellation had to actually stop work rather than merely
+    /// discard the result: if a cancelled render ran to completion, this
+    /// would be the first option wearing the third's name.
+    ///
+    /// # Why `expect` is honest here
+    ///
+    /// The only other `Arc` reference is the one a worker holds, and
+    /// `cancel_and_wait` joins that thread before returning. A panic
+    /// here would mean a render was started without going through
+    /// `rasterize_current`, or a handle was detached — both are bugs
+    /// this method cannot paper over, and silently cloning the session
+    /// instead would hide them behind a document-sized allocation.
+    fn session_mut(&mut self) -> &mut EditSession {
+        self.render_worker.cancel_and_wait();
+        Arc::get_mut(&mut self.session)
+            // ui-text-exempt: panic message for an internal invariant, never displayed
+            .expect("the render worker is joined before any mutation, so no clone survives")
+    }
+
     /// Rasterize the current page and replace the cached texture.
     ///
     /// A failure is recorded in `render_error` rather than propagated:
@@ -3473,24 +3555,29 @@ impl OpenDoc {
         // every single edit. The view composes the overlay and the R45
         // staging buffer, so authored dimensions, markup appearances,
         // spliced content streams and vector edits all resolve.
-        match raster::render_page_texture(
-            ctx,
-            &self.session.view(),
-            page,
-            self.view.page_index,
+        // Hand the page to a worker. `spawn` waits a bounded number of
+        // milliseconds inline, so a page that rasterizes quickly returns
+        // its pixels here and never touches the asynchronous path — the
+        // behaviour is identical to the synchronous code this replaced.
+        // A page that misses that budget returns `None` and is collected
+        // by `poll_render` on a later frame, with the previous texture
+        // staying on screen meanwhile.
+        let outcome = self.render_worker.spawn(render_worker::RenderRequest {
+            // `session.view()` is called ON THE WORKER, not here
+            // (decision 018 §1 still governs *which* revision renders —
+            // the view, never `document()`). Handing over the `Arc`
+            // rather than a `DocumentView` is what lets the borrow stay
+            // local to the worker thread.
+            session: Arc::clone(&self.session),
+            page: page.clone(),
+            page_index: self.view.page_index,
             raster_scale,
-            self.annotations_visible,
-            fonts,
+            annotations: self.annotations_visible,
+            fonts: fonts.clone(),
             font_env_generation,
-        ) {
-            Ok(texture) => {
-                self.page_texture = Some(texture);
-                self.render_error = None;
-            }
-            Err(message) => {
-                self.page_texture = None;
-                self.render_error = Some(message);
-            }
+        });
+        if let Some(result) = outcome {
+            self.absorb_render(ctx, result);
         }
         // Rasterization happens *after* the canvas has already been laid
         // out this frame (see `PdfceApp::ui`), so the new texture cannot
@@ -3500,6 +3587,41 @@ impl OpenDoc {
         // mouse" — the page would appear to take an arbitrarily long
         // time to show up.
         ctx.request_repaint();
+    }
+
+    /// Turn a finished rasterization into the cached texture.
+    ///
+    /// Shared by the in-frame fast path and the per-frame poll so the
+    /// two cannot drift: a render that beat the budget and one that
+    /// took a minute must produce exactly the same canvas state.
+    fn absorb_render(
+        &mut self,
+        ctx: &egui::Context,
+        result: Result<render_worker::RenderedPixels, String>,
+    ) {
+        match result {
+            Ok(pixels) => {
+                self.page_texture = Some(raster::texture_from_pixels(ctx, &pixels));
+                self.render_error = None;
+            }
+            Err(message) => {
+                self.page_texture = None;
+                self.render_error = Some(message);
+            }
+        }
+    }
+
+    /// Collect a background render, if one has finished.
+    ///
+    /// Called once per frame. Returns whether anything was absorbed, so
+    /// the caller can request the repaint that draws it — the same
+    /// reason `rasterize_current` requests one.
+    fn poll_render(&mut self, ctx: &egui::Context) -> bool {
+        let Some(result) = self.render_worker.poll() else {
+            return false;
+        };
+        self.absorb_render(ctx, result);
+        true
     }
 }
 
@@ -3974,7 +4096,7 @@ impl PdfceApp {
             // something that is not a dictionary). Reported through the
             // same channel as a save failure rather than silently
             // dropped — the operator pressed Apply and is owed an answer.
-            if let Err(err) = doc.session.set_info_field(field, wanted.as_deref()) {
+            if let Err(err) = doc.session_mut().set_info_field(field, wanted.as_deref()) {
                 self.save_result = Some(SaveOutcome::Failed(err.to_string()));
                 return;
             }
@@ -4004,7 +4126,7 @@ impl PdfceApp {
         if selection.is_empty() {
             return;
         }
-        match doc.session.delete_pages(&selection) {
+        match doc.session_mut().delete_pages(&selection) {
             Ok(outcome) => {
                 doc.refresh_pages();
                 doc.selected_pages.clear();
@@ -4057,7 +4179,7 @@ impl PdfceApp {
         let Status::Open(doc) = &mut self.status else {
             return;
         };
-        match doc.session.delete_object(page_index, object_index) {
+        match doc.session_mut().delete_object(page_index, object_index) {
             Ok(_) => {
                 doc.canvas_selection.clear();
                 doc.vector_drag = None;
@@ -4106,7 +4228,7 @@ impl PdfceApp {
         let Some(id) = doc.selected_dimension else {
             return;
         };
-        let outcome = doc.session.delete_dimension(id);
+        let outcome = doc.session_mut().delete_dimension(id);
         match outcome {
             Ok(()) => {
                 doc.selected_dimension = None;
@@ -4166,7 +4288,7 @@ impl PdfceApp {
             return;
         };
         let outcome = doc
-            .session
+            .session_mut()
             .delete_node(page_index, object_index, node_index);
         let reported = outcome
             .as_ref()
@@ -4228,7 +4350,7 @@ impl PdfceApp {
             return;
         };
         let outcome = doc
-            .session
+            .session_mut()
             .delete_subpath(page_index, object_index, subpath_index);
         let reported = outcome
             .as_ref()
@@ -4279,7 +4401,7 @@ impl PdfceApp {
         } else {
             doc.selection()
         };
-        match doc.session.rotate_pages(&pages, delta) {
+        match doc.session_mut().rotate_pages(&pages, delta) {
             Ok(_) => doc.refresh_pages(),
             Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
         }
@@ -4357,7 +4479,7 @@ impl PdfceApp {
                     color: Color::Rgb(1.0, 1.0, 0.0), // highlight default: yellow
                 },
             };
-            match doc.session.add_markup(page_index, &spec) {
+            match doc.session_mut().add_markup(page_index, &spec) {
                 Ok(_) => {
                     doc.author_jitter = doc.author_jitter.wrapping_add(1);
                     doc.refresh_pages();
@@ -4441,7 +4563,7 @@ impl PdfceApp {
                     color: Color::Rgb(0.80, 0.10, 0.10),
                 },
             };
-            match doc.session.add_text_annotation(page_index, &spec) {
+            match doc.session_mut().add_text_annotation(page_index, &spec) {
                 Ok(_) => {
                     doc.author_jitter = doc.author_jitter.wrapping_add(1);
                     doc.refresh_pages();
@@ -4513,7 +4635,7 @@ impl PdfceApp {
         order.extend(selection.iter().copied());
         order.extend(rest.iter().skip(at).copied());
 
-        match doc.session.reorder_pages(&order) {
+        match doc.session_mut().reorder_pages(&order) {
             Ok(()) => {
                 doc.refresh_pages();
                 // The selection follows the pages: after moving three
@@ -5823,7 +5945,7 @@ impl PdfceApp {
         // under it still occupies its slot in the §12.7.3.2 name space and
         // would refuse a later field wanting that name.
         if let Some((fqn, label, widgets)) = delete_field {
-            doc.pending_note = Some(match doc.session.delete_field(&fqn) {
+            doc.pending_note = Some(match doc.session_mut().delete_field(&fqn) {
                 Ok(outcome) => {
                     doc.refresh_pages();
                     self.form_drafts.remove(&fqn);
@@ -5833,7 +5955,7 @@ impl PdfceApp {
             });
         }
         if let Some((fqn, index, label)) = delete_widget {
-            doc.pending_note = Some(match doc.session.delete_widget(&fqn, index) {
+            doc.pending_note = Some(match doc.session_mut().delete_widget(&fqn, index) {
                 Ok(outcome) => {
                     doc.refresh_pages();
                     // The last-member case delegates to `delete_field` inside
@@ -5857,7 +5979,7 @@ impl PdfceApp {
             });
         }
         if let Some((fqn, text)) = fill {
-            doc.pending_note = Some(match doc.session.fill_text_field(&fqn, &text) {
+            doc.pending_note = Some(match doc.session_mut().fill_text_field(&fqn, &text) {
                 Ok(_) => {
                     doc.refresh_pages();
                     ui_text::form_field_filled(&fqn)
@@ -5871,7 +5993,7 @@ impl PdfceApp {
         if let Some((fqn, text, label)) = convert_rich {
             doc.pending_note = Some(
                 match doc
-                    .session
+                    .session_mut()
                     .fill_text_field_downgrading_rich_text(&fqn, &text)
                 {
                     Ok(_) => {
@@ -5883,7 +6005,7 @@ impl PdfceApp {
             );
         }
         if let Some((fqn, state, label)) = set_radio {
-            doc.pending_note = Some(match doc.session.set_button_state(&fqn, &state) {
+            doc.pending_note = Some(match doc.session_mut().set_button_state(&fqn, &state) {
                 Ok(()) => {
                     doc.refresh_pages();
                     if state == "Off" {
@@ -5897,7 +6019,7 @@ impl PdfceApp {
         }
         if let Some((fqn, values, label)) = set_choice {
             let refs: Vec<&str> = values.iter().map(String::as_str).collect();
-            doc.pending_note = Some(match doc.session.set_choice_value(&fqn, &refs) {
+            doc.pending_note = Some(match doc.session_mut().set_choice_value(&fqn, &refs) {
                 Ok(_) => {
                     doc.refresh_pages();
                     ui_text::form_field_choice_set(&label, values.len())
@@ -5910,7 +6032,7 @@ impl PdfceApp {
             // of every check box, whatever its ON state happens to be called.
             let target: &[u8] = if on { &on_state } else { b"Off" };
             let name = String::from_utf8_lossy(target).into_owned();
-            doc.pending_note = Some(match doc.session.set_button_state(&fqn, &name) {
+            doc.pending_note = Some(match doc.session_mut().set_button_state(&fqn, &name) {
                 Ok(()) => {
                     doc.refresh_pages();
                     if has_appearance {
@@ -5952,7 +6074,7 @@ impl PdfceApp {
             return;
         };
         diag::trace(|| "forms-flatten requested".to_owned());
-        match doc.session.flatten_fields(None) {
+        match doc.session_mut().flatten_fields(None) {
             Ok(outcome) => {
                 diag::trace(|| {
                     format!(
@@ -5990,7 +6112,7 @@ impl PdfceApp {
         let Status::Open(doc) = &mut self.status else {
             return;
         };
-        match doc.session.regenerate_appearances() {
+        match doc.session_mut().regenerate_appearances() {
             Ok(outcome) => {
                 doc.refresh_pages();
                 self.edit_note = Some(ui_text::forms_appearances_regenerated(
@@ -6120,7 +6242,7 @@ impl PdfceApp {
         };
         let rich = pdfce_core::forms::parse_acroform(&doc.session.graph())
             .map_or(0, |f| f.fields.iter().filter(|x| x.is_rich_text()).count());
-        match doc.session.import_form_data(&data) {
+        match doc.session_mut().import_form_data(&data) {
             Ok(outcome) => {
                 doc.refresh_pages();
                 // The drafts are cleared, not merged: they hold what the
@@ -6379,7 +6501,7 @@ impl PdfceApp {
             overlay_text: None,
             quadding: pdfce_core::vartext::Quadding::Left,
         };
-        match doc.session.add_redaction(page_index, &spec) {
+        match doc.session_mut().add_redaction(page_index, &spec) {
             Ok(_) => {
                 doc.refresh_pages();
                 self.edit_note = Some(ui_text::redact_whole_page_marked(page_index + 1));
@@ -6417,9 +6539,9 @@ impl PdfceApp {
         // casing of it marked, and over-marking is the safe direction of
         // error for a feature whose failure mode is leaving content behind.
         let marked = if self.redact_search_is_pattern {
-            doc.session.mark_redactions_by_pattern(&query, true)
+            doc.session_mut().mark_redactions_by_pattern(&query, true)
         } else {
-            doc.session.mark_redactions_by_search(&query, true)
+            doc.session_mut().mark_redactions_by_search(&query, true)
         };
         match marked {
             Ok(created) if created.is_empty() => {
@@ -6453,7 +6575,7 @@ impl PdfceApp {
             .iter()
             .find(|m| m.annot_id == annot_id)
             .map_or(0, |m| m.page_index + 1);
-        match doc.session.delete_redaction_mark(annot_id) {
+        match doc.session_mut().delete_redaction_mark(annot_id) {
             Ok(()) => {
                 doc.refresh_pages();
                 self.edit_note = Some(ui_text::redact_mark_removed(page_number));
@@ -7982,7 +8104,7 @@ impl PdfceApp {
                 } else {
                     doc.selection()
                 };
-                if let Err(err) = doc.session.rotate_pages(&pages, delta) {
+                if let Err(err) = doc.session_mut().rotate_pages(&pages, delta) {
                     doc.pending_note = Some(ui_text::rotation_refused(&err.to_string()));
                 }
                 doc.refresh_pages();
@@ -7991,13 +8113,13 @@ impl PdfceApp {
             // is re-bounded: a stale index would make the next batch
             // action address a page that no longer exists.
             Action::Undo => {
-                doc.session.undo();
+                doc.session_mut().undo();
                 doc.refresh_pages();
                 doc.clamp_selection();
                 doc.seed_properties_draft();
             }
             Action::Redo => {
-                doc.session.redo();
+                doc.session_mut().redo();
                 doc.refresh_pages();
                 doc.clamp_selection();
                 doc.seed_properties_draft();
@@ -8539,7 +8661,7 @@ fn commit_text_edit_draft(doc: &mut OpenDoc) -> CommitOutcome {
         EditRequest::find_replace(page_index, &pending.original_text, &pending.draft_text);
     req.pinned_span = pinned_span;
 
-    let outcome = match doc.session.edit_text(&req, &EditOptions::default()) {
+    let outcome = match doc.session_mut().edit_text(&req, &EditOptions::default()) {
         Ok(report) => {
             doc.refresh_pages();
             // Content changed: rebuild the extraction for the SAME page so the
@@ -8681,7 +8803,7 @@ fn commit_add_text_draft(
         }
     }
 
-    let outcome = match doc.session.add_text(&req) {
+    let outcome = match doc.session_mut().add_text(&req) {
         Ok(report) => {
             doc.refresh_pages();
             // The tool stays armed and keeps the operator's font/size choices
@@ -8748,7 +8870,7 @@ fn commit_measure_linear_draft(doc: &mut OpenDoc) -> CommitOutcome {
         .group(group)
         .map_or_else(String::new, |g| g.name.clone());
 
-    let outcome = match doc.session.add_dimension(page_index, group, kind) {
+    let outcome = match doc.session_mut().add_dimension(page_index, group, kind) {
         Ok(_) => {
             doc.refresh_pages(); // the page's `/Annots` changed
             if let Some(st) = doc.measure.as_mut() {
@@ -11822,12 +11944,31 @@ impl PdfceApp {
     fn status_summary(&self) -> String {
         match &self.status {
             Status::Idle => ui_text::status_idle().to_owned(),
-            Status::Open(doc) => ui_text::status_open(
-                &doc.path,
-                doc.session.document().version(),
-                doc.pages.len(),
-                doc.session.is_modified(),
-            ),
+            Status::Open(doc) => {
+                let mut line = ui_text::status_open(
+                    &doc.path,
+                    doc.session.document().version(),
+                    doc.pages.len(),
+                    doc.session.is_modified(),
+                );
+                // Disclose a stale canvas — but only once the delay is
+                // long enough for the operator to have noticed it. A
+                // render finishing inside the worker's in-frame budget
+                // never becomes in-flight at all, and one finishing a
+                // few frames later would make this flicker, which is
+                // worse than silence: a notice that appears and vanishes
+                // trains the eye to ignore it. See
+                // `ui_text::status_canvas_behind` for why the edit case
+                // needs this and the zoom case does not.
+                if doc
+                    .render_worker
+                    .in_flight_since()
+                    .is_some_and(|elapsed| elapsed >= CANVAS_BEHIND_NOTICE_AFTER)
+                {
+                    line.push_str(ui_text::status_canvas_behind());
+                }
+                line
+            }
             Status::Failed { path, .. } => ui_text::status_failed(path),
             Status::Unsupported { path, .. } => ui_text::status_unsupported(path),
         }
@@ -13143,6 +13284,23 @@ impl PdfceApp {
             return;
         };
 
+        // Collect a background render FIRST, before deciding staleness.
+        // Order matters: a render that finished since the last frame has
+        // already updated `page_texture`'s keys, so polling first is what
+        // stops the staleness test below from seeing the pre-render state
+        // and spawning a second render for a page that just arrived.
+        if doc.poll_render(ctx) {
+            ctx.request_repaint();
+        }
+        // While one is in flight, keep the frames coming. Nothing else
+        // wakes egui when a worker finishes — without this the finished
+        // page would sit in the channel until the operator moved the
+        // mouse, which is the same "arbitrarily long wait" the
+        // synchronous path's `request_repaint` exists to prevent.
+        if doc.render_worker.is_rendering() {
+            ctx.request_repaint();
+        }
+
         // Did the zoom change since last frame, and by what route?
         let now = Instant::now();
         if (doc.observed_zoom - doc.view.zoom).abs() > f32::EPSILON {
@@ -14285,7 +14443,10 @@ fn run_text_edit_tool(
                 Some(crop) => req.with_page_cropbox(crop),
                 None => req,
             };
-            match doc.session.reflow_block(page_index, block_index, &req) {
+            match doc
+                .session_mut()
+                .reflow_block(page_index, block_index, &req)
+            {
                 Ok(report) => {
                     doc.refresh_pages();
                     // Content changed — rebuild for the SAME page, exactly the
@@ -14354,7 +14515,10 @@ fn run_text_edit_tool(
     if let Some(op) = chosen
         && let Some(req) = format_req(op)
     {
-        match doc.session.format_text(&req, &FormatOptions::default()) {
+        match doc
+            .session_mut()
+            .format_text(&req, &FormatOptions::default())
+        {
             Ok(report) => {
                 doc.refresh_pages();
                 doc.build_text_edit_state();
@@ -15172,22 +15336,22 @@ fn commit_field_draft(doc: &mut OpenDoc) -> (CommitOutcome, Vec<String>) {
         NewFieldKind::Text => {
             let mut spec = NewTextField::new(page_index, &name, rect);
             spec.tooltip = tooltip;
-            doc.session.add_text_field(&spec)
+            doc.session_mut().add_text_field(&spec)
         }
         NewFieldKind::CheckBox => {
             let mut spec = NewCheckBox::new(page_index, &name, rect);
             spec.tooltip = tooltip;
-            doc.session.add_check_box(&spec)
+            doc.session_mut().add_check_box(&spec)
         }
         NewFieldKind::Radio => {
             let mut spec = NewRadioButton::new(page_index, &name, rect, &export_value);
             spec.tooltip = tooltip;
-            doc.session.add_radio_button(&spec)
+            doc.session_mut().add_radio_button(&spec)
         }
         NewFieldKind::Choice => {
             let mut spec = NewChoiceField::new(page_index, &name, rect, Vec::new());
             spec.tooltip = tooltip;
-            doc.session.add_choice_field(&spec)
+            doc.session_mut().add_choice_field(&spec)
         }
     };
 
@@ -18221,7 +18385,7 @@ fn run_vector_edit_tool(
         // explicit `ensure_object_provider` that follows only pulls the
         // rebuild into THIS frame rather than the next.
         Commit::Move { idx, dx, dy } => {
-            let outcome = doc.session.move_object(page_index, idx, dx, dy);
+            let outcome = doc.session_mut().move_object(page_index, idx, dx, dy);
             diag::trace(|| format!("commit-move idx={idx} dx={dx} dy={dy} -> {outcome:?}"));
             disclose_vector_edit(doc, outcome.as_deref().unwrap_or(&[]));
             doc.vector_drag = None;
@@ -18234,7 +18398,9 @@ fn run_vector_edit_tool(
             side,
             to,
         } => {
-            let outcome = doc.session.move_handle(page_index, idx, node, side, to);
+            let outcome = doc
+                .session_mut()
+                .move_handle(page_index, idx, node, side, to);
             diag::trace(|| {
                 format!(
                     "commit-handle idx={idx} node={node} side={side:?} to={to:?} -> {outcome:?}"
@@ -18246,7 +18412,7 @@ fn run_vector_edit_tool(
             doc.ensure_object_provider();
         }
         Commit::Node { idx, node, to } => {
-            let outcome = doc.session.move_node(page_index, idx, node, to);
+            let outcome = doc.session_mut().move_node(page_index, idx, node, to);
             diag::trace(|| format!("commit-node idx={idx} node={node} to={to:?} -> {outcome:?}"));
             disclose_vector_edit(doc, outcome.as_deref().unwrap_or(&[]));
             doc.vector_drag = None;
@@ -18263,7 +18429,9 @@ fn run_vector_edit_tool(
             // no caller. Same post-commit sequence as its siblings — the
             // decision 018 §10 hazard 2 audit applies identically, because
             // this is a real content-stream rewrite.
-            let outcome = doc.session.move_subpath(page_index, idx, subpath, dx, dy);
+            let outcome = doc
+                .session_mut()
+                .move_subpath(page_index, idx, subpath, dx, dy);
             diag::trace(|| {
                 format!("commit-subpath idx={idx} subpath={subpath} dx={dx} dy={dy} -> {outcome:?}")
             });
@@ -18495,7 +18663,7 @@ fn run_dimension_drag(
                 else {
                     return consumed;
                 };
-                let outcome = doc.session.place_dimension(id, offset, text_along);
+                let outcome = doc.session_mut().place_dimension(id, offset, text_along);
                 diag::trace(|| {
                     format!(
                         "commit-place-dimension id={id:?} offset={offset} along={text_along}                          -> {:?}",
@@ -19103,7 +19271,7 @@ fn run_measure_tool(
         // equivalence tests), from the accepted fit.
         let kind = doc.measure.as_ref().and_then(|s| s.circular.author());
         if let Some(kind) = kind {
-            match doc.session.add_dimension(page_index, group, kind) {
+            match doc.session_mut().add_dimension(page_index, group, kind) {
                 Ok(_) => {
                     doc.refresh_pages(); // the page's annots changed
                     if let Some(st) = doc.measure.as_mut() {
@@ -19124,7 +19292,7 @@ fn run_measure_tool(
         && let Some((scale, format)) = doc.measure.as_ref().and_then(|s| s.scale.commit())
     {
         {
-            match doc.session.set_group_scale(group, scale, format) {
+            match doc.session_mut().set_group_scale(group, scale, format) {
                 Ok(updated) => {
                     doc.refresh_pages(); // members' /AP regenerated
                     if let Some(st) = doc.measure.as_mut() {
@@ -19552,7 +19720,7 @@ fn selected_dimension_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
 
     if let Some(wants_diameter) = set_display {
         doc.pending_note = Some(
-            match doc.session.set_dimension_display(id, wants_diameter) {
+            match doc.session_mut().set_dimension_display(id, wants_diameter) {
                 Ok(()) => {
                     doc.refresh_pages();
                     ui_text::dimension_display_applied(wants_diameter)
@@ -19566,7 +19734,7 @@ fn selected_dimension_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
     }
     if let Some((o, t)) = commit_place {
         doc.dimension_place_draft = None;
-        match doc.session.place_dimension(id, o, t) {
+        match doc.session_mut().place_dimension(id, o, t) {
             Ok(()) => doc.refresh_pages(),
             Err(err) => doc.pending_note = Some(err.to_string()),
         }
@@ -19786,7 +19954,7 @@ fn dimension_groups_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
                 // sidecar from a newer build — looked exactly like the button
                 // not registering the click, and the operator's only recourse
                 // was to press it again and watch nothing happen again.
-                doc.pending_note = Some(match doc.session.add_dimension_group(&name, unit) {
+                doc.pending_note = Some(match doc.session_mut().add_dimension_group(&name, unit) {
                     Ok(_) => ui_text::group_created(&name),
                     Err(err) => err.to_string(),
                 });
@@ -19796,32 +19964,36 @@ fn dimension_groups_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
                 scale,
                 format,
             } => {
-                doc.pending_note = Some(match doc.session.set_group_scale(group, scale, format) {
-                    Ok(members) => {
-                        doc.refresh_pages();
-                        ui_text::group_scale_applied(members)
-                    }
-                    Err(err) => err.to_string(),
-                });
+                doc.pending_note = Some(
+                    match doc.session_mut().set_group_scale(group, scale, format) {
+                        Ok(members) => {
+                            doc.refresh_pages();
+                            ui_text::group_scale_applied(members)
+                        }
+                        Err(err) => err.to_string(),
+                    },
+                );
             }
             measure_tool::GroupAction::SetStandard { group, standard } => {
                 diag::trace(|| format!("group-set-standard group={group:?} standard={standard:?}"));
-                doc.pending_note = Some(match doc.session.set_group_standard(group, standard) {
-                    Ok(members) => {
-                        doc.refresh_pages();
-                        ui_text::group_standard_applied(standard, members)
-                    }
-                    // Reported, not swallowed. A refusal here is real — a
-                    // certified document, or a sidecar from a newer build —
-                    // and silence would look like the click missing.
-                    Err(err) => err.to_string(),
-                });
+                doc.pending_note = Some(
+                    match doc.session_mut().set_group_standard(group, standard) {
+                        Ok(members) => {
+                            doc.refresh_pages();
+                            ui_text::group_standard_applied(standard, members)
+                        }
+                        // Reported, not swallowed. A refusal here is real — a
+                        // certified document, or a sidecar from a newer build —
+                        // and silence would look like the click missing.
+                        Err(err) => err.to_string(),
+                    },
+                );
             }
             measure_tool::GroupAction::ToggleLayer { group, visible } => {
                 // The default group is deliberately un-hideable and the engine
                 // enforces it, so a `false` here is a refusal the operator
                 // should see rather than a click that appeared to do nothing.
-                match doc.session.toggle_dimension_layer(group, visible) {
+                match doc.session_mut().toggle_dimension_layer(group, visible) {
                     Ok(resulting) => {
                         doc.refresh_pages();
                         // The engine returns the RESULTING visibility, which
@@ -21465,7 +21637,7 @@ mod tests {
             panic!("no document in front");
         };
         front
-            .session
+            .session_mut()
             .set_info_field(pdfce_core::edit::InfoField::Title, Some("edited"))
             .expect("set a title on the active document");
 
@@ -21621,7 +21793,7 @@ mod tests {
             panic!("no document in front");
         };
         front
-            .session
+            .session_mut()
             .set_info_field(pdfce_core::edit::InfoField::Title, Some("edited"))
             .expect("edit the active document");
     }
