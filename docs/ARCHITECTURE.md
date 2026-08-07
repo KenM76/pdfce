@@ -3896,6 +3896,35 @@ with a forward pointer.
     rather than only in `ROADMAP.md` under the *Update protocol*'s
     same-filing propagation duty** — a forward pointer that fired once and
     was then left to age is the exact failure the duty exists to prevent.
+    **★ DISCHARGED 2026-08-07 (Pass 20.0 + Pass 20.1 (completion),
+    `a3d885b` + `f809857`) — the owed byte-grep test now exists, WITH A
+    NARROWING this paragraph must carry alongside it.** New fixture
+    `js-carriers-form.pdf` + test
+    `authoring_a_field_leaves_the_javascript_carriers_intact` proves
+    `/CO`, the field `/AA`, and both `/Names /JavaScript` streams
+    re-emit byte-identical after a field is authored. **The narrowing:**
+    when `/AcroForm` is a **direct dict inside the catalog** — the common
+    shape, and every fixture this project owns — the object pdfce
+    actually rewrites to append `/Fields` is the **catalog**, not
+    `/AcroForm` in isolation, so the catalog's OTHER sibling entries
+    re-serialize too and whitespace normalizes (`/Names << /JavaScript
+    7 0 R >>` becomes `/Names <</JavaScript 7 0 R>>`). **No JavaScript
+    content is altered and no reference breaks** — the JS streams
+    themselves are never rewritten, and the name tree still names the
+    same object. Decision 020 §7.2 asked for the AcroForm dict to be
+    re-emitted with only `/Fields` changed; what actually holds is the
+    same guarantee **one object up**, at the catalog, with whitespace
+    (not structure, not content) as the disclosed exception. **Read the
+    guarantee, going forward, as: decision 009's byte-verbatim JS-carrier
+    promise is now TEST-ENFORCED for the authoring path, not merely
+    structural-by-construction as it was for fill alone** — the
+    distinction this whole forward pointer exists to track. Full build
+    record: `ROADMAP.md`'s *Shipped* entry, same date.
+    **§4.1's "read from the crate on 2026-08-05" snapshot is now one
+    filing further stale** — `Field.parent`, `forms_author.rs` and the
+    resolver types are not reflected there. Flagged rather than resynced
+    in this filing; a full §4.1 resync was not part of this dispatch's
+    scope.
   - **(f) Additivity preserves R34/R46.** A new module + additive
     methods/variants + one new `pub fn`; the re-emission path and
     `add_markup`/`add_text_annotation` are byte-unchanged. Full-corpus R46
@@ -5616,6 +5645,26 @@ with a forward pointer.
     cut with FF-I, unchanged rationale — the test applied: does the
     proposal build a partial structure-tree writer? `/TU` does not;
     `/StructElem` does.
+    **★ IMPLEMENTED 2026-08-07, `50a5461`.** `TooltipChoice { Undecided,
+    Text(String), Declined }` replaces the bare `Option<String>` `/TU`
+    parameter on `NewTextField`/`NewCheckBox`/`NewChoiceField`; `Undecided`
+    is refused with `EditError::TooltipDecisionRequired`; CLI is
+    `--tooltip <text>` XOR `--no-tooltip` (clap `conflicts_with`).
+    **Declining writes NO `/TU` key, deliberately not an empty one** — an
+    empty `/TU` would make a screen reader announce an empty accessibility
+    name instead of falling back to `/T`, so writing `()` on decline would
+    be worse than writing nothing. The §3.4.3/§3.5.3 disclosures (this
+    bullet's own R104 paragraph above, and R105 here) also ship in the same
+    commit, unified across all three authoring verbs as
+    `FieldAuthorOutcome { field_id, merged, disclosures:
+    FieldAuthorDisclosures { tooltip_declined, tagged_document,
+    structure_tab_order, has_no_options } }`, retiring the choice-only
+    `ChoiceAuthorOutcome` Pass 20.2/20.3 had shipped. New fixture
+    `tagged-struct-tabs.pdf` makes both disclosures reachable at once (R96).
+    **Not implemented by this commit: `/Tabs` tab-order AUTHORING (F4) —
+    only the disclosure that a field has no defined tab position.** Full
+    build record: `ROADMAP.md`'s `Pass 20.0` *Shipped* entry, THIRD
+    addendum, same date.
   - **Dead-guard debt, the prospective form of R96 — new standing rule
     R103.** The parity research's `must_have` (a `/P` bit-6
     permission gate on field creation) would be dead code today: every
@@ -7534,3 +7583,171 @@ with a forward pointer.
   permits.** Rule 1 (spec fidelity) says what is legal; this says what is
   reachable, and the two can disagree in the direction of pdfce being
   stricter.
+
+- **2026-08-07 (fourth entry) — the write-side field-path resolver
+  ships; the O1 rejection ground the previous cap depended on is now
+  CLOSED, not merely capped.** Established by `a3d885b` (F0) + `f809857`
+  (F1 completion) — see `ROADMAP.md`'s `Pass 20.0 + Pass 20.1
+  (completion)` *Shipped* entry.
+  **The third 2026-08-07 entry above accepted a cap** — a total refusal
+  making decision 020's rejected O1 outcome unreachable, in place of
+  building the resolver — on the explicit condition that the resolver
+  remained owed and that capping not be mistaken for solving. **This
+  entry records that the resolver is now built**, and the safety property
+  the cap protected is now delivered by the mechanism decision 020
+  originally specified rather than by a refusal standing in for it:
+  `forms_author::resolve_field_path` classifies every add against the
+  live graph as Vacant → CREATE, same-type Terminal → MERGE (with Shape
+  A→B promotion), different-type Terminal → refuse
+  (`FieldTypeCollision`), or Grouping → refuse (`NameIsGroupingNode`),
+  **before** any write happens, across all three authoring verbs.
+  **What changed is the mechanism, not the guarantee.** Before this
+  filing, a same-name/same-type add was *reachable and stopped by a
+  guard* (Pass 20.2/20.3's shared preflight). After it, the duplicate-
+  identity document decision 020 rejected is *unreachable by
+  construction* — there is no code path left that could emit it, because
+  every write now resolves the name first. This is the distinction a
+  future reader should draw between "capped" and "closed": a cap makes a
+  bad outcome unreachable from where it currently sits; closing the gap
+  makes the surrounding mechanism incapable of producing it regardless of
+  how the call site changes later.
+  **This also converts §12.7.3.2's merge semantics — one field, one `/V`,
+  shared across widgets/pages — from a spec fact pdfce refused to
+  implement into a spec fact pdfce implements.** A radio group and a
+  page-number field repeated on every page are the two cases §12.7.3.2
+  names this mechanism for; both are now reachable through the same
+  primitive, though radio itself is not yet built on top of it (F2,
+  unblocked, unbuilt).
+  **The corollary from the third entry — "a cap not followed by
+  re-prioritisation is just a nicer-looking deferral" — is discharged by
+  this entry's own existence.** The cap was followed by exactly the
+  re-prioritisation it was conditioned on.
+
+- **2026-08-07 (fifth entry) — two defects found building the resolver
+  are RESTATEMENTS of already-filed rules, not new ones, and both
+  restatements are worth keeping because they occurred in code written
+  AFTER the rule was known.** Also from `a3d885b` + `f809857`.
+  **(1) N whole-object writes to one object in one command do not
+  compose — the SECOND occurrence of the 2026-08-07 (second entry) rule
+  above, this time inside the resolver itself.** Shape A→B promotion
+  retargets a page's `/Annots` to the promoted widget, then appends the
+  new widget: two whole-page-dict writes in one command, each computed
+  from pre-command state, so the append silently discarded the retarget.
+  **This is not a new failure mode** — it is the identical shape the R85
+  byte-level oracle caught in `flatten_fields` (F0, same filing), applied
+  to a different dictionary. **Worth recording precisely because of the
+  timing**: the rule was already filed in this same document before the
+  code that violates it a second time was written, which means "know the
+  rule" was not sufficient to avoid it — the rule needs a mechanical
+  check (a lint, a code-review question, or a type that forces a single
+  write), not only documentation. Fixed by folding retarget and append
+  into one write. Escalated as a Rust/state-management finding to
+  `D:\dev\rag\rust\n_sequential_whole_object_writes_in_one_command_do_not_compose.md`.
+  **(2) A model-level test assertion is blind to a defect the model
+  itself normalizes away — found in F0, not F1, but filed here alongside
+  its sibling because both are "the test suite agreed with the bug"
+  findings from the same filing.** `flatten_fields` left `/AcroForm
+  /Fields` naming two deleted objects; every existing forms test asserts
+  through `parse_acroform`, which resolves each `/Fields` entry and
+  silently drops what it cannot — so the test suite's own model-level
+  view of the document was a smaller, coincidentally-correct-looking form
+  with no evidence the file itself was wrong. **The generalisation:** any
+  test that asserts through a parser/projection which tolerates malformed
+  input inherits that tolerance as a blind spot; a defect that produces
+  exactly the input class the parser was built to shrug off is invisible
+  to every test built on top of it, however many such tests exist. The
+  regression test for this defect asserts on **bytes**, deliberately
+  bypassing the tolerant projection. Escalated to
+  `D:\dev\rag\rust\model_level_assertion_blind_to_normalized_away_defect.md`.
+  **Neither finding changes any standing rule number** — both are
+  read as sharpened restatements of the existing R85 oracle discipline
+  and the existing "second entry" command-boundary rule, not as new
+  architectural decisions in their own right.
+
+  **⚠ AMENDED 2026-08-07, same day, by a SECOND librarian filing the same
+  commits — the last sentence above is PARTLY SUPERSEDED. Finding (2)
+  DID mint a standing rule: R159.** The two filings ran concurrently and
+  reached different judgements on the same finding; both judgements are
+  recorded rather than one being quietly replaced, because the
+  disagreement is the useful part.
+
+  **The case for "no new number" (this entry's original position):**
+  finding (2) is the R85 byte-oracle discipline applied to a new
+  subsystem, and the project already knows to prefer byte-level proof.
+
+  **The case for minting, which was accepted and is now `ROADMAP.md`'s
+  R159:** R85 is a *specific instrument* — a preview-equals-saved oracle
+  for the renderer — not a general statement about **what your test
+  oracle is allowed to be**. Nothing in the rule set said *a lenient
+  parser used as a test oracle inherits its own leniency as a blind
+  spot*. **R87** governs whether the instrument was pointed at the thing;
+  R159 governs an instrument that **was** and **corrected the reading on
+  the way out**. **R92** and **R96** each explain one of the two defects'
+  *proximate* causes and neither covers the shared blindness that let
+  both ship. And the project's own minting bar is met on the face of it:
+  **the same pattern occurred twice in one commit and had already shipped
+  two defects** — R92 was minted on its second occurrence, R96 on its
+  first.
+
+  **The stronger form of this entry's own argument, which R159 adopts
+  rather than discards:** this entry observes that knowing a rule was not
+  sufficient to avoid violating it, and asks for a *mechanical* check.
+  R159 supplies the mechanical form — *name the repairs your parser
+  performs on the way in, and assert on bytes for every defect class it
+  would absorb* — which is checkable at review time in the way R87's
+  adopted wording is and its rejected wording was not.
+
+  **Also, a pointer correction:** the `ROADMAP.md` *Shipped* entry this
+  and the preceding entry cite as `Pass 20.0 + Pass 20.1 (completion)` is
+  now headed **`Pass 20.0 — …`**. The original heading declared a Pass ID
+  already headed elsewhere in *Shipped* and made
+  `check-ledger-numbers.py` fail; the content is unchanged. **R160** was
+  also minted the same day, from a process finding neither this entry nor
+  the filing that wrote it contains — see `ROADMAP.md` *Standing rules*.
+
+- **2026-08-07 (sixth entry) — R105 (`/TU` mandatory-or-declined) and the
+  §3.4.3/§3.5.3 disclosures SHIP, closing two of the third-entry's own
+  "still owed" list; the CLI verb-name question is the one item that does
+  not close.** Established by `50a5461`, engineering work that was already
+  live in `crates/pdfce-core/src/edit.rs` at the moment the fifth entry's
+  own concurrency note observed it.
+  **The mechanism is a sum type standing in for a boolean-shaped question
+  that is not actually boolean.** `Option<String>` on `/TU` cannot
+  distinguish "operator declined" from "operator was never asked," and for
+  this one field the distinction is load-bearing rather than cosmetic: per
+  decision 020 §3.5 (sourced to WebAIM), `/TU` — not the structure tree —
+  is what a screen reader reads for a form field, bypassing `/StructTree`
+  entirely. `TooltipChoice::Undecided` is therefore refused
+  (`EditError::TooltipDecisionRequired`), not defaulted and not merely
+  warned about; the asymmetry argument (the missing case is invisible to
+  the sighted operator and load-bearing for the blind one) is the same
+  shape rule 4's fuzzy-never-sneaky asymmetry already uses, applied here
+  to an omission rather than to an inference.
+  **A second, smaller finding worth keeping precisely because it is easy
+  to get backwards:** declining the tooltip writes **no** `/TU` key, not
+  an empty one. An empty `/TU ()` is a *worse* accessibility state than a
+  missing key, because several screen readers announce an empty name
+  rather than falling back to `/T` — so the "safe-looking" choice
+  (write something, even if blank) is the wrong one, and the correct
+  choice (write nothing) requires the declination to be recorded
+  somewhere else, which is what `FieldAuthorDisclosures.tooltip_declined`
+  is for.
+  **Surface consolidation, not scope growth:** all three authoring verbs
+  now share one outcome type, `FieldAuthorOutcome { field_id, merged,
+  disclosures }`, and the choice-only `ChoiceAuthorOutcome` Pass 20.2/20.3
+  shipped is retired into it. The CLI gained one `report_field_disclosures`
+  printer in place of three would-be copies — the same "a third hand-copied
+  block is where a disclosure silently goes missing" reasoning R159 already
+  states for a different subsystem (a lenient-parser test oracle), applied
+  here to a lenient-review-surface risk instead.
+  **What does NOT close:** the CLI verb-name question (`add-text-field`/
+  `add-check-box`/`add-choice-field` vs decision 020's `forms add-field
+  --type …`) is untouched, and Pass 20.1 stays PARTIAL on that basis alone.
+  **Nor does `/Tabs` tab-order authoring** — F4 remains blocked on the
+  `pdfce-spec-librarian` dispatch named in the F0/F1 slice-order bullet
+  above; only the disclosure that a field lacks a defined tab position
+  ships here, not the computation of tab order itself. Full build record:
+  `ROADMAP.md`'s `Pass 20.0` *Shipped* entry, THIRD addendum.
+  **No standing rule minted** — R105 was already filed by this same
+  decision record; this entry is R105 reaching implementation, not a new
+  rule being written.

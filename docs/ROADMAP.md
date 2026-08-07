@@ -81,6 +81,315 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 20.0 — the field-hierarchy correctness substrate, and the field-path resolver that COMPLETES Pass 20.1's P0 floor (core + CLI) — 2026-08-07, committed `a3d885b` (F0) and `f809857` (F1 completion), branch `pass-8-redaction`. **Pass 20.0 SHIPPED for the first time** — filed 2026-08-03, skipped through two prior slices, now built. **Pass 20.1 has its P0-blocking gap CLOSED but stays PARTIAL** — the resolver and the full collision branch decision 020 §3.3.1 called the floor now exist; `/TU` R105, `/Tabs` disclosure and the CLI verb-name question do not yet
+
+> **⚠ HEADING CORRECTED 2026-08-07, same day, by the following filing — read this before "restoring" it.** This entry was first written as `### Pass 20.0 + Pass 20.1 (completion) — …`, and that heading **broke `tools/check-ledger-numbers.py`**: the checker counts every Pass ID in a heading's **pre-em-dash prefix, per section**, and Pass 20.1 was already headed in *Shipped* by the `8e799e9` entry below — so the gate reported `DUPLICATE Pass 20.1 declared 2x in section [Shipped]` and exited 1. **The multi-ID heading shape is legal in general** (`Pass 17.1 + Pass 17.2`, and the `Pass 20.2 + Pass 20.3` entry below) — it is legal exactly when **neither** ID is already headed in the same section. **20.1 was.** The fix keeps every word of the record and moves `20.1`'s mention to the descriptive half, where the checker does not read it. Verified by re-running the gate. This is the **third** time a *Shipped* heading has had to change for the gate to see the ledger correctly (the first two: the `8e799e9` entry's `⚠ IDENTITY UNRESOLVED` prefix, and the `★`-prefix blind spot fixed in `0720adb`) — **a heading in this file is a machine-read declaration first and prose second.**
+
+**This is the fork named in the *In progress* entry above** (now annotated DISCHARGED, see below). **No number is minted.** Both IDs were filed 2026-08-03 by decision 020's Backlog amendment; 20.1 was already headed PARTIAL (`8e799e9`, ruled 2026-08-07) and this is its completion under the SAME ID, per hard rule 2 — it is 20.1's own unbuilt half, not different work. 20.0 receives its **first** Shipped heading.
+
+**Rule 11 (every capability ships its CLI subcommand) does not apply to `a3d885b`.** F0 is core-only, CORRECTNESS ONLY, and decision 020 defines it as having no operator surface at all — the same shape Pass 19.3's correctness-only slice was exempted on. Stated so the absence of a new CLI verb reads as reasoned, not missed.
+
+#### What each commit delivers, against decision 020's own definition
+
+| Slice | Decision 020's definition | This filing |
+|---|---|---|
+| **Pass 20.0 (F0)** | Field-hierarchy correctness + the authoring substrate: five synthetic fixtures, four named fixes (regen-loop consolidation, mixed `/Kids`, empty-parent prune, `Field.parent`) | **All five fixtures + all four fixes land**, plus a fifth defect found empirically while re-testing the SHIPPED flatten path (below) — a fix decision 020 did not name because it did not know it existed |
+| **Pass 20.1 (F1)** | Text-field creation + the full collision branch — the P0 floor: `forms_author.rs`, `resolve_field_path`, `FieldPath`, all four outcomes live, Shape A→B promotion, dotted-name semantics, `/TU` mandatory-or-declined (R105), `/Tabs /S` + untagged disclosure, CLI `forms add-field --type text` | **The resolver, `FieldPath`, all four outcomes and Shape A→B promotion land** — across all three authoring verbs, not text alone. **`/TU` R105 handling and `/Tabs` disclosure are NOT in this commit.** The CLI verb is still `add-text-field`/`add-check-box`/`add-choice-field`, not `forms add-field --type …` — **now three verbs deep, unreconciled** |
+
+> **⚠ TABLE ROW STALE as of the same day — read the THIRD addendum at the
+> end of this entry before quoting the row above.** `50a5461` closes the
+> `/TU` R105 and `/Tabs` disclosure gaps this row names. **The CLI
+> verb-name question is the only one of the three still open.** Left
+> in place rather than edited, per the append-only discipline this
+> section's own heading-correction block already explains — the
+> gap this row records was real at `f809857` and is the reason `50a5461`
+> exists.
+
+#### F0 — two defects, both MEASURED, not predicted
+
+New: `tools/gen-form-hierarchy-fixtures.py` and five byte-authored fixtures in `fixtures/synthetic/forms/` (`multi-widget-form.pdf` — 3 widgets/2 pages; `nested-form.pdf` — `Personal.Address.Zip`; `radio-group-form.pdf`; `mixed-kids-form.pdf`; `xfa-hybrid-form.pdf`), documented in `PROVENANCE.md`. **These exist because the organic corpus doesn't** — Pass 7.0's own census found **no nested field trees at all** (max 63 fields/file, one level deep, zero nesting), so every non-terminal branch of `forms::walk_field` had never executed against real data before this filing.
+
+1. **Mixed `/Kids` dropped a whole field.** §12.7.3.1 classifies each `/Kids` entry individually — a `/T` kid is a child field, a `/T`-less widget kid is one of the parent's own appearances — and nothing in the spec says a node must be one kind or the other. `walk_field` picked one: if any kid was a field it recursed and returned, so the node's own widgets were never modelled and never reached the projection. **Measured before the fix:** `list-fields` on `mixed-kids-form.pdf` reported `Order.Qty` alone, `fields=1`; `Order` — carrying `/V (ORD-77)` and a widget the page's `/Annots` still referenced — was absent, as it was from `regenerate-appearances` (`regenerated=1`). A viewer painted a field the form did not contain. **After:** `fields=2`, `regenerated=2`.
+2. **Flatten left `/AcroForm /Fields` naming DELETED objects.** Found by running the **shipped** flatten over the **shipped** `demo-form.pdf`: `/Fields [4 0 R 5 0 R]` survived while objects 4 and 5 were deleted. Cause: `acroform_id` returns the object that HOLDS the form, which for a direct `/AcroForm` is the **catalog** — one level above where `/Fields` actually lives. The removal path read `/Fields` off the catalog, found nothing there, and its guard never fired. **Why nothing caught it:** every existing forms test asserts through `parse_acroform`, which resolves each `/Fields` entry and silently drops the ones it can't — so the model-level assertion reported an empty, harmless form while the file on disk named deleted objects. The regression test for this asserts on **bytes**, for exactly that reason. Escalated as a generalizable finding — see RAG escalations, below.
+
+Also in F0, all named by decision 020 §4.3: **`Field.parent: Option<ObjId>`** added, populated from where the walk CAME rather than from a `/Parent` key a producer may omit or get wrong — substrate for inherited-`/V` writes and subtree rename, neither fixed here (decision 020 §8.4 names that limit explicitly). **Empty grouping nodes now cascade away recursively on removal** — a name with nothing left under it still occupies its slot in the FQN space and would refuse a later field that wants it. **`fill_text_field`'s inlined copy of the appearance loop is replaced by the shared `regen_field_appearance`** (R92 — one appearance-builder call site, not two). **Non-reference `/Fields` roots** (a bare dict where the spec allows an indirect reference) are now counted into a new `AcroForm.inline_field_roots` field instead of silently skipped.
+
+R85's byte-level oracle is extended with `fill_field_multi_widget_preview_equals_saved`, deliberately checking **page 2** — the page where "painted everything onto page 1" and "skipped the last widget" both show, and where page-1-only assertions would hide them. Fuzz target 13 re-run over the extended corpus.
+
+#### F1 — the mechanism changes, not the safety property
+
+New module `crates/pdfce-core/src/forms_author.rs`: `resolve_field_path`, `FieldPath` (`Vacant`/`Terminal`/`Grouping`), `FieldShape`, `FormAuthorError` (`thiserror`), `split_field_path`, `WIDGET_KEYS_TO_MOVE`, `FIELD_ONLY_KEYS`. Read-only against the graph; allocates and writes nothing itself.
+
+**The framing that belongs in this record, stated so a future reader does not read this as a loosening.** Slices 1 and 2 refused every same-name add, and that refusal was CORRECT for what it was — without a resolver, the only alternative to refusing was a duplicate-FQN document, which cannot be un-authored. What F1 changes is the **mechanism**, not the **safety property**: before, the duplicate-identity document was *reachable and stopped by a guard*; now it is *unreachable by construction*, because every authoring write resolves the name against the graph before deciding what to write at all.
+
+All four outcomes are live across all three verbs (`add_text_field`, `add_check_box`, `add_choice_field`): **Vacant → CREATE** (including dotted-path hierarchy creation, reusing existing grouping nodes); **same-type Terminal → MERGE** (with Shape A→B promotion); **different-type → `FieldTypeCollision`** (button fields compare KIND, so a check box cannot join a radio group); **Grouping → `NameIsGroupingNode`**. Both refusals are asserted FIRING, not merely defined (R96). `EditError::FieldNameAlreadyUsed` and `EditError::FieldNameTypeConflict` are **removed**, superseded by `EditError::FieldAuthoring(FormAuthorError)`.
+
+**Three defects found while building it:**
+
+1. **The page pointed at a dictionary that had stopped being one.** Shape A→B promotion retargets `/Annots` to the promoted widget, then appends the new widget — **two whole-page-dict writes in one command, each computed from pre-command state**, so the append silently replaced the retarget (`/Annots [<field> <new widget>]`, the retargeted entry gone). **This is the exact failure shape the R85 oracle caught in `flatten_fields`, recurring in new code**: N whole-object writes to one object in one command do not compose. `dict_is_widget`'s defensive `/Rect`-or-`/AP` fallback would have half-masked the symptom rather than surfaced it. Fixed by folding retarget + append into ONE write; the retarget is a REPLACE, so the field keeps its place in paint and tab order. Escalated as a generalizable finding — see RAG escalations, below.
+2. **`/Opt` rode along onto the widget kid.** Stripping `/T`/`/FT`/`/Kids` was not enough — the merge path is handed a dict that was built to be a merged field+widget and is now serving only as the widget half. A choice field's options belong to the FIELD, not the widget; a copy per widget means two `add-choice-field` calls under one name leave two disagreeing option lists with no rule for which one wins. Fixed by stripping `FIELD_ONLY_KEYS` as a set rather than three named keys.
+3. **`fill-field` and `add-text-field` had each other's `--help`.** The `fill-field` doc block sat above the wrong clap variant, so `fill-field --help` described nothing and `add-text-field --help` described filling. Operator-facing, shipped since slice 1, caught here.
+
+#### A narrowing of decision 020 §7.2, recorded because §7.2 as written cannot be met and a future reader should not conclude it was skipped
+
+§7.2 requires `/AcroForm` be re-emitted with only `/Fields` changed, every other key byte-preserved. **That holds** — `/CO` comes out byte-identical, verified. **What §7.2 did not anticipate:** when `/AcroForm` is a **direct dict inside the catalog** — the common shape, and every fixture in this repo — the object pdfce actually rewrites is the **catalog**, so its other entries re-serialize and whitespace normalizes: `/Names << /JavaScript 7 0 R >>` becomes `/Names <</JavaScript 7 0 R>>`. **No JavaScript is altered and no reference breaks** — the `/AA` field and both JS streams are not rewritten at all, and the name tree still names object 7. New fixture `js-carriers-form.pdf` + test `authoring_a_field_leaves_the_javascript_carriers_intact` asserts exactly that and documents in its own comment why it cannot assert more (whitespace normalization is real and disclosed, not hidden). **This is decision 009's byte-verbatim JS-carrier guarantee going from UNTESTED-after-authoring (both prior slices) to TEST-ENFORCED-with-a-stated-narrowing.** `ARCHITECTURE.md` §4/§12 updated in place this same filing, per the same-filing propagation duty, since the forward pointer decision 020 planted there named exactly this test as owed.
+
+#### Honest limits carried forward, unchanged
+
+Comb layout still not driven from `/MaxLen`; positional-`/Opt` radio authoring still unresolved; inherited-`/V` writes still terminal-only; `/Tabs` (F4) still blocked on a `pdfce-spec-librarian` dispatch. **F2's radio grouping is now UNBLOCKED** — the merge primitive it needed now exists — but is not built by this filing. Field/widget deletion (F2's other half), `/I`/`/TI`, push buttons (F3's other half), the GUI surface (F5), and field property editing (F6, the operator's own "editing" ask) are all still owed, unchanged.
+
+#### Verification — measured, not asserted
+
+```
+2105 tests passing (was 2054 at slice 2), 0 failures
+cargo fmt --all --check                                    clean
+cargo clippy --workspace --all-targets -- -D warnings       clean
+cargo tree -p pdfce-core / -p pdfce-render                  zero egui/eframe/winit/wgpu/glow matches (rule 2)
+fuzz target 13: 424,369 runs on the F0 code, 99,734 runs on the final code, 0 artifacts
+```
+
+**Verified in the real binary, not only by the suite:** create → merge → `list-fields` shows one field with two widgets → the **existing, unmodified** `fill-field` accepts it → `render-page` paints both as real glyph pixels (the R44 proof shape — a subsystem that predates the merge and knows nothing about it drives the result). **Merge also verified against three pre-existing documents**, not only synthetic fixtures: the shipped `demo-form.pdf`'s Shape A field, a 3-level nested field with an inherited `/FT`, and a Shape B field going 3→4 widgets across pages.
+
+**Backup currency is not verifiable from here** — the engineer should check `D:\Dev\pdfce-backups\` if it matters.
+
+#### RAG escalations, this filing
+
+- **`D:\dev\rag\rust\model_level_assertion_blind_to_normalized_away_defect.md`** (new) — the flatten defect: a test suite that asserts through a parser/model that silently drops what it can't resolve cannot see the defect the model normalizes away; only a byte-level assertion can.
+- **`D:\dev\rag\rust\n_sequential_whole_object_writes_in_one_command_do_not_compose.md`** (new) — the promotion defect: N writes to the SAME object in one command, each computed from pre-command state, is last-write-wins, not composition; fold into one write or thread state through.
+- Both indexed in `D:\dev\rag\rust\index.md` this filing.
+- No new `personal_rag/pdf` entry — both findings are Rust/software-engineering methodology, not PDF-producer-divergence-from-spec; they belong in the ecosystem tier, not the domain tier.
+
+#### Ledger — nothing minted
+
+Pass family ceiling unchanged at **43** (43.0 highest). **No Pass ID minted** — both IDs were filed 2026-08-03; this filing heads 20.0 for the first time and completes 20.1's already-headed entry under the same ID. Standing-rule ceiling unchanged at **R158** (R159 next free). Decision-record ceiling unchanged at **031**. Operator-question ceiling unchanged at **(bb)**.
+
+> **⚠ THE LEDGER PARAGRAPH ABOVE IS SUPERSEDED BY THE ADDENDUM BELOW.**
+> **R159 and R160 ARE MINTED** by the second filing of these same commits.
+> **The standing-rule ceiling is R160; R161 is next free.** Everything else
+> in the paragraph above stands (no Pass ID minted, decision ceiling 031,
+> operator-question ceiling (bb)).
+
+#### ★ ADDENDUM (2026-08-07, SECOND filing of these same commits) — a THIRD commit, the ENGINEER'S OWN gate measurement, TWO standing rules, and the Acrobat-RAG sweep
+
+**Why there is an addendum at all, stated first because it is itself a
+finding.** **Two `pdfce-librarian` instances were dispatched against the
+same three commits and ran CONCURRENTLY.** The first produced the entry
+above between roughly 06:44 and 06:47; the second was still reading `git
+show` output at the time and wrote its own full entry at 06:49, producing
+**two `Pass 20.0` headings in *Shipped*** — and, because the first
+heading declared `Pass 20.0 + Pass 20.1 (completion)` while 20.1 was
+already headed below, **`check-ledger-numbers.py` was left failing with
+`DUPLICATE Pass 20.1 declared 2x`** regardless of the second entry.
+
+**Resolved by the second librarian, in this order:** its own duplicate
+entry was **deleted in full** (the earlier filing landed first and the
+rest of that filing — `FEATURES.md`, `SESSION_LOG.md`,
+`ARCHITECTURE.md` — was already consistent with it); the surviving
+heading was **corrected** so only one Pass ID sits in the counted prefix
+(see the ⚠ block on the heading); the gate was **re-run to clean**; and
+the material the first filing did not have was folded in here rather
+than re-litigated. **Nothing was overwritten and nothing was lost.**
+See the ⚠ CONCURRENCY block at the end of this addendum — it is a
+process finding for the engineer, deliberately **not** minted as a rule.
+
+##### 1. A THIRD commit exists: `53caa48` — the merge gets an oracle, not just an eyeball (**no Pass ID**; 1 file, 59 insertions / 1 deletion)
+
+The entry above stops at `f809857`. **The engineer wrote a third commit
+himself**, and it is filed here as a **`no Pass ID`** verification
+hardening on shipped work — the same category as this section's `fix —`
+and `harden —` entries.
+
+**The gap it closes is in F1's own doc comment**, and it is a sharp one.
+F1 verified Shape A→B promotion by **rendering a page and looking at
+it**. That is the right first check and the wrong last one: the defect F1
+had *just fixed* — two whole-page `/Annots` writes, the append discarding
+the retarget — produces a document that **parses, reports one field with
+two widgets, and differs only in the picture**. F1 then argued that the
+merge primitive *generates* the multi-widget shape and added an R85
+oracle case for it — but that case is on the **FILL** side, and it
+renders a shape **a byte-authored fixture already contained**. It proves
+the fill path handles the shape and says nothing about whether pdfce
+**produces** it correctly. **The merge OPERATION had only an eyeball
+check.**
+
+The new case starts from `demo-form.pdf`'s one-widget `FullName` and
+makes **pdfce build the second widget**, so the promotion itself is what
+renders. **Page 0, deliberately, with both widgets on it:** a lost
+retarget drops the ORIGINAL widget while the appended one still paints,
+so a page holding only the new widget would look entirely correct.
+**It cannot pass vacuously** — `Visible::Yes` fails the case if the
+result is pixel-identical to the pristine base, and `widgets_updated ==
+2` fails it if the promotion did not happen and it is silently testing a
+plain fill.
+
+##### 2. Gates — RE-MEASURED BY THE ENGINEER AT `53caa48`, and the figure above is a FORK SELF-REPORT (R87)
+
+The verification block above (`2105 tests`, fmt/clippy/`cargo tree`) is
+**the fork's own claim**, and the fork that made it **hit its tool
+ceiling and died mid-verification** (§4, below) — so its gate claims had
+**no completed verification behind them**. The engineer re-ran everything
+himself at `53caa48` rather than accepting them:
+
+| Gate | Engineer-measured at `53caa48` |
+|---|---|
+| `cargo test --workspace` | **2106 tests, 0 failed** |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | **real exit 0** |
+| `cargo tree -p pdfce-core` | **zero GUI matches** (rule 2) |
+| `cargo tree -p pdfce-render` | **zero GUI matches** (rule 2) |
+| `check-ledger-numbers.py` / `check-passes-filed.py` | both green **at `4f2b807`** — the engineer will re-run both against this filing |
+
+**⚠ One figure is UNRECONCILED and is flagged rather than smoothed.** The
+engineer reports the progression **2054 → 2105 → 2106**. `f809857`'s
+message says 2105 (agrees) and `53caa48`'s says 2106 (agrees), but
+**`a3d885b`'s message says 2071**, which appears nowhere in that
+progression. **2106 at `53caa48` is the only engineer-measured count and
+is the number this project asserts.** `a3d885b`'s 2071 is a
+commit-message self-report, **uncorroborated**, and must not be quoted as
+measured. The fuzz figures above (424,369 / 99,734 runs) are likewise
+fork-reported.
+
+##### 3. ★ R159 IS MINTED — the two defects in `a3d885b` are ONE pattern, twice
+
+The entry above records both defects and escalates them to
+`D:\dev\rag\rust\` as two separate findings. **They are one pattern**, and
+it is the load-bearing finding of the whole slice:
+
+> **A test asserting through the parser cannot see a file the parser
+> silently repairs.**
+
+Every forms test in this project asserted through `parse_acroform`, and
+`parse_acroform` **drops `/Fields` entries that no longer resolve**. So a
+`/Fields` array naming deleted objects produced a *correct-looking model*
+from a *broken file* — and thirty-odd green tests agreed with it. The
+mixed-`/Kids` defect is the same mechanism pointed the other way: the
+lenient walk produced a model that was internally consistent and simply
+**smaller than the file**, and nothing compared the two. **That is why
+the flatten regression test asserts on BYTES.**
+
+**Filed as R159** in *Standing rules*. It is **adjacent to but distinct
+from** the R87 instrument-honesty family: R87 governs whether your
+instrument was pointed at the thing; **R159 governs an instrument that
+WAS pointed at the thing and corrected the reading on the way out.**
+R92 and R96 each cover one defect's *proximate* cause and neither covers
+the shared blindness.
+
+##### 4. ★ R160 IS MINTED — the fork that built F0 and F1 DIED MID-VERIFICATION
+
+**The fork hit its 200-tool-use ceiling and terminated.** Its final output
+was a fragment: *"let me confirm F0's fixes are still intact after F1's
+changes, and check the R85 oracle end-to-end."* **Two substantial commits
+— 21 files, ~4,100 insertions — existed with no report and no completed
+verification behind them.** Budget consumed: **67 minutes, 366k tokens,
+200 tool calls.**
+
+**Had the commits been taken as done, every finding in this entry would
+have been lost** — the five defects, the §7.2 narrowing, the
+`dict_is_widget` near-miss. None of it existed anywhere a document reads.
+
+**The one thing that saved it: the fork wrote its findings into COMMIT
+MESSAGES as it went**, rather than accumulating them for a final report.
+That is **R146's corollary** (*"write the commit message as though it is
+the only surviving record, because when the filing is skipped, it is"*)
+holding under a failure mode R146 never contemplated — R146 assumes a
+**live** agent who skipped a dispatch, not a **dead** one who can no
+longer make one.
+
+**Filed as R160.** R146 is its ancestor and is cross-referenced from it;
+R160 is not a restatement, because R146's remedy (dispatch the librarian
+in the same session) is **unavailable to an agent whose budget is already
+spent**, and R146's obligation lands on the **engineer** while R160's
+lands on the **fork and on whoever sizes it**.
+
+**Recorded in the fork's favour, explicitly:** it escalated the
+build-order re-sequencing rather than deciding it (already filed as a
+positive instance on the `bca60c9` entry), and it wrote durably as it
+went. **The failure is one of budget sizing and hand-off design, not of
+discipline.**
+
+##### 5. The Acrobat feature-parity RAG got two sweeps — filed here because the RAG lives OUTSIDE this repo
+
+`D:\Dev\Rag-Specialized\Acrobat_Features\` is outside `D:\Dev\pdfce\`, so
+nothing in the repo records that it changed. Two sweeps ran on 2026-08-07.
+
+**(a) A three-state GAP lifecycle is now FORMALISED** in that RAG's
+`_TEMPLATE.md` and `index.md`, and applies to **every** file in it going
+forward, not just the `forms__*` cluster it was born in:
+
+| State | Marker | Meaning |
+|---|---|---|
+| Open | `GAP` | Nobody has answered it |
+| Resolved | `RESOLVED [date] — <source>` | **An Acrobat fact was found** |
+| Discharged | `DISCHARGED [date] — decision N §X` | **pdfce decided independently**; Acrobat's answer no longer gates the work — and **may still be unsourced** |
+
+**The split was ruled by the librarian, and the reason is worth keeping.**
+**The barcode case proves it earns its keep:** decision 020 rules barcode
+field creation out of scope, so **the pdfce question is CLOSED while the
+Acrobat question stays genuinely UNSOURCED, merely moot.** One marker for
+both states erases the fact that nobody ever answered it. **Binding rule
+in that RAG: a `DISCHARGED` marker must state, in its own text, whether
+the Acrobat fact is still unknown.** (`STILL LIVE, checked [date]` is an
+optional annotation on a still-open GAP, not a fourth state.)
+
+**(b) The sweep found the RAG carried FOUR ACTIVE `must_have`
+recommendations that decision 020 had OVERRULED** — not merely stale
+markers, but live advice pointing the opposite way from the decision:
+
+1. **`forms__tab_order.md` said fields are *"always re-sorted"* into
+   natural position on insertion.** Decision 020 §3.4/**R104** found there
+   is **nothing stored to reorder** under `/Tabs S`/`R`/`C` — the order is
+   *computed by the consumer* from the mode. **A literal re-sort would
+   have violated minimal-diff (R32/R46) and changed the paint order of
+   unrelated annotations** — a visible change caused by a non-visible
+   feature. The RAG's own recommendation is now **corrected in place, not
+   merely adopted**.
+2. A **bit-6 permission gate** that would have been **R96 dead code**,
+   sitting behind an existing `/Encrypt` refusal the guarded case can
+   never survive.
+3. A **full-graph-replacement** field model, contradicting decision 020
+   **§O3**'s write-side-only resolver. **The librarian messaged the F1
+   fork mid-build about this one; it was already aligned.**
+4. The Combine-Files / encrypted-workflow pair, reframed as pdfce's own
+   documented design choice rather than something needing verification
+   against a live Acrobat install.
+
+**(c) Two gaps are STILL LIVE, and an engineer will walk into both:**
+
+- **Renaming a field into a collision with a DIFFERENT field.** Undecided
+  on **both** the Acrobat side and the pdfce side — decision 020 names
+  `forms rename-field` as F6 but never decides what a rename-into-
+  collision does, same-type or cross-type. **Real work when F6 is
+  scoped**, not before.
+- **What Acrobat's *"Unspecified"* tab-order state mechanically denotes.**
+  **Unsourced after two attempts.**
+
+##### 6. ⚠ CONCURRENCY — a process finding for the ENGINEER, deliberately NOT minted as a rule
+
+**Two librarians were dispatched against the same commits and neither
+knew about the other**, and the collision was only caught because the
+second one ran `check-ledger-numbers.py` before reporting. **The gate
+would have been left red either way** — the duplicate `Pass 20.1`
+declaration was created by the *first* filing's heading, independently of
+the second filing existing at all.
+
+**Also observed, and it contradicts the second dispatch's stated
+premise:** that dispatch said *"No agent is live in `crates/`"*, and
+`crates/pdfce-core/src/edit.rs` was **being actively modified throughout**
+— an engineering fork building `TooltipChoice` / `FieldAuthorDisclosures`,
+i.e. **R105, one of the three items this very entry records as missing.**
+The working tree was **not** clean at `53caa48` by the time this addendum
+was written.
+
+**Why no rule is minted for this.** R146's second corollary already names
+the same root cause one level over (*engineer and librarian writing to one
+branch with no handshake on what is being numbered*). Extending it to
+**librarian-vs-librarian**, or to dispatch-fan-out policy generally, is a
+statement about **how the engineer dispatches**, and this librarian's
+judgement is that it is his call to make, not one to mint on his behalf.
+**Flagged for a ruling.**
+
+---
+
 ### ⚠ FILING GAP #2 — FIVE commits of 2026-08-05 have NO *Shipped* entry, and TWO of them claim the SAME Pass ID (26.2). Found 2026-08-06, continuation 105; ~~**UNRESOLVED — the ID collision needs an ENGINEER RULING**~~ → **THE COLLISION IS RULED (2026-08-06, continuation 106): `f8bbdd4` BECOMES PASS 26.3.** The five commits' BUILD RECORDS remain OWED — see the ✅ RULING block below
 
 **Filed at the very head of *Shipped*, above the work it was found
@@ -318,6 +627,174 @@ rather than a change to the existing one.
 **Until then, read neither green line as discharge.**
 `check-passes-filed.py` proves a commit was **NOTICED**. Nothing this
 project owns proves a Pass was **FILED**.
+
+#### ★ ADDENDUM (2026-08-07, THIRD filing of this entry) — commit `50a5461` closes TWO of the THREE items the table above and the SECOND addendum both name as missing: `/TU` R105 handling and the `/Tabs` disclosure. **Pass 20.1 STAYS PARTIAL** — the CLI verb-name question is untouched
+
+**What this commit is, stated first because everything below explains
+it.** `50a5461` — *"the accessibility name stops being optional, and two
+silent facts start being said"* — is engineering work that was **already
+live and in progress during the SECOND addendum's own filing**: that
+addendum's own §6 CONCURRENCY note observed `crates/pdfce-core/src/edit.rs`
+being actively modified by a fork building `TooltipChoice` /
+`FieldAuthorDisclosures` at the moment it was written, and named it as
+*"R105, one of the three items this very entry records as missing."*
+This addendum is that fork's work, landed and filed.
+
+##### 1. `/TU` becomes mandatory-or-declined (R105), and the reasoning is the asymmetry, not the rule
+
+`TooltipChoice { Undecided, Text(String), Declined }` replaces the bare
+`Option<String>` `/TU` parameter on `NewTextField`, `NewCheckBox` and
+`NewChoiceField`. **Why an enum and not a richer `Option`:** an `Option`
+conflates *"the operator chose not to"* with *"nobody thought about it"*,
+and for `/TU` those are not equivalent — decision 020 §3.5's own finding,
+sourced to WebAIM, is that for form fields specifically it is `/TU`, not
+the structure tree, that assistive technology reads (screen readers
+announce through the interactive-field layer and bypass `/StructTree`
+entirely). **A missing `/TU` is invisible to the sighted operator who just
+created the field and load-bearing for the person who cannot see the
+form** — the same asymmetry pattern already governing redaction (rule 3)
+and fuzzy-never-sneaky (rule 4), applied to an omission rather than an
+inference. **That asymmetry is also the argument against a warning
+instead of a refusal**: a warning is read by the person for whom nothing
+is wrong. `Undecided` is refused outright, at authoring time, with
+`EditError::TooltipDecisionRequired` — not logged, not defaulted, not
+downgraded to an emitted-but-noted disclosure. CLI surface: `--tooltip
+<text>` XOR `--no-tooltip`, enforced by clap's own `conflicts_with` so
+supplying both is a CLI-level error before any core code runs, and
+supplying neither is the `TooltipDecisionRequired` refusal.
+
+**Declining writes NO `/TU` key — deliberately, not an empty one.** An
+empty `/TU (())` string is not the same absence as a missing key: several
+screen readers announce an empty accessibility name (silence, or "blank"),
+where a *missing* `/TU` falls back to announcing `/T`, the field's actual
+partial name. Writing `/TU ()` on decline would therefore make the
+declined case **worse** than doing nothing, not merely equivalent to it.
+The declination itself is not silent, though — it is recorded in
+`FieldAuthorDisclosures.tooltip_declined` and printed, so the choice
+leaves a trace in the tool's own output even though it leaves none in the
+PDF.
+
+##### 2. Two disclosures ship, kept deliberately SEPARATE rather than merged into one
+
+Decision 020 §3.5.3 (tagged-document disclosure) and §3.4.3 (`/Tabs /S` +
+untagged-field disclosure) both ship and **both are proven firing**, not
+merely defined — against the new `tagged-struct-tabs.pdf` fixture (below),
+which exists for exactly this, per R96. **Kept as two disclosures on
+purpose, not collapsed into one "this document has accessibility gaps"
+message:** absence from the tag tree is an accessibility gap in the
+general sense, but on a page whose `/Tabs` mode is `/S`, tab order is
+*computed from the tag tree* (§14.7, Table 30) — so an untagged field on
+that page has **no tab position at all**, undefined rather than last, and
+that is a **functional defect in the form itself**, independent of
+whether anyone using AT ever opens it. An operator told only *"this
+document is tagged and your field isn't in the tree"* would have no way
+to learn that the form will also tab unpredictably. **`/Tabs` is
+inheritable** (Table 30), so the lookup used to decide which disclosures
+apply walks page-tree ancestors rather than reading the immediate page
+dict alone — a page inheriting `/Tabs /S` from its parent `/Pages` node
+gets the same disclosure as one declaring it directly.
+
+##### 3. The authoring-verb surface is unified — one outcome type, one disclosure struct, one CLI printer
+
+All three creation verbs (`add_text_field`, `add_check_box`,
+`add_choice_field`) now return `FieldAuthorOutcome { field_id, merged,
+disclosures }`, where `disclosures: FieldAuthorDisclosures {
+tooltip_declined, tagged_document, structure_tab_order, has_no_options }`.
+**`ChoiceAuthorOutcome` — the choice-only outcome type Pass 20.2/20.3
+shipped — is RETIRED into this shared type.** The CLI gained ONE
+`report_field_disclosures` printer used by all three commands, replacing
+what would otherwise have been three copies of the same stderr/stdout
+logic. **The rationale is the same shape as the shared preflight R159
+already covers for the resolver itself**: a third hand-copied disclosure
+block is exactly where a disclosure goes missing, and it goes missing
+**silently**, because a disclosure that is never printed looks identical
+on screen to one that correctly did not apply. stdout gained four new
+key=value fields: `merged=`, `tagged=`, `struct_tabs=`, `tooltip_declined=`.
+**Every existing test in the suite now states an explicit tooltip
+decision** — the R105 refusal applies to pdfce's own test fixtures, not
+only to the operator; nothing in the suite is grandfathered around the
+mandatory-or-declined rule.
+
+##### 4. New fixture: `tagged-struct-tabs.pdf`
+
+`tools/gen-form-hierarchy-fixtures.py` gained a seventh generator,
+`fixture_tagged_struct_tabs`, alongside `fixture_js_carriers` (the
+decision-020 §7.2 byte-grep fixture the SECOND addendum's `js-carriers-
+form.pdf` discussion already covers, also undocumented in `PROVENANCE.md`
+until this filing). `tagged-struct-tabs.pdf` is a minimal well-formed
+document — `/StructTreeRoot << /K [] >>`, one page declaring `/Tabs /S`
+directly rather than inheriting it — built to be the smallest fixture
+that makes BOTH disclosures reachable at once; without it neither
+`tagged_document` nor `structure_tab_order` would ever fire in the test
+suite, which is precisely the "correct, wired, never fires" shape R96
+forbids. `PROVENANCE.md` entries for both new fixtures are added by this
+filing, same category (a) terms (wholly synthetic, byte-authored, no
+third-party source) as every fixture already in that file.
+
+##### Verification, measured, this filing
+
+```
+2116 tests passing (was 2106 at 53caa48), 0 failures
+cargo fmt --all --check                                    clean
+cargo clippy --workspace --all-targets -- -D warnings       clean
+cargo tree -p pdfce-core / -p pdfce-render                  zero egui/eframe/winit/wgpu/glow matches (rule 2)
+```
+
+**Verified in the release binary, not only by the suite:** omitting BOTH
+`--tooltip` and `--no-tooltip` refuses with exit 9 and writes nothing to
+the target file (the refusal is before any write, not a rollback after
+one); running `add-text-field` against `tagged-struct-tabs.pdf` prints
+all three disclosures on stderr and emits `tagged=1 struct_tabs=1
+tooltip_declined=1` on stdout, and still creates the field (a disclosure
+is not a refusal); running the same command against a plain, untagged
+document with `--tooltip` supplied prints **nothing at all** on either
+stream beyond ordinary success output — the quiet case stays quiet, which
+is what keeps a disclosure meaningful when it does fire (a tool that
+always prints something trains the operator to stop reading).
+
+##### What is STILL owed on Pass 20.1 — it stays PARTIAL, not because of this commit but despite it
+
+**The CLI verb-name question is untouched by `50a5461`** and is the last
+of the three items either addendum names. Three separate commands
+(`add-text-field` / `add-check-box` / `add-choice-field`) exist where
+decision 020 specifies one (`forms add-field --type …`), and the SECOND
+addendum's own count — *"four field verbs sitting outside a `forms`
+noun"* (`fill-field` plus the three `add-*`) — is unchanged by this
+filing. **This is an engineer ruling, not a librarian one; it stays
+recorded as owed against both Pass 20.1 and the operator-question list**,
+unchanged from the SECOND addendum's own statement of it.
+
+Also still open, unchanged from the SECOND addendum: comb layout not
+driven from `/MaxLen`; positional-`/Opt` radio authoring unresolved;
+inherited-`/V` writes still terminal-only (`Field.parent` exists but the
+three setters do not use it); **F4 `/Tabs` TAB-ORDER AUTHORING is still
+blocked on a `pdfce-spec-librarian` dispatch** — stated carefully because
+it is the exact trap `CLAUDE.md` rule 15's spirit warns against one level
+over: the `/Tabs` **disclosure** ships in this filing; the `/Tabs`
+**authoring** (computing and writing tab order) does not, and
+`FEATURES.md`'s Forms-P2 row for `/Tabs` computed tab order must not be
+read as touched by this entry.
+
+##### Two commits noted, already filed, no further action owed here
+
+`4f2b807` (this librarian's own prior docs filing for family 20) and
+`53caa48` (the merge-oracle hardening) are **both already recorded** —
+`53caa48` in the SECOND addendum's §1 above, in full, including its own
+anti-vacuity argument. Nothing about either changes as a result of this
+filing.
+
+##### Ledger — nothing minted
+
+No Pass ID minted (this is 20.1's own commit, per hard rule 2, same as
+the prior two filings on this entry). No standing rule minted — R105
+already exists (filed by decision 020, see *Standing rules*); this filing
+is R105's implementation, not a new rule. Pass family ceiling unchanged
+at **43**. Standing-rule ceiling unchanged at **R160** (R161 next free,
+per the SECOND addendum). Decision-record ceiling unchanged at **031**.
+Operator-question ceiling unchanged at **(bb)**.
+
+**Backup currency is not verifiable from here** — the engineer should
+check `D:\Dev\pdfce-backups\` if it matters.
 
 ### Pass 20.2 + Pass 20.3 — check boxes and choice fields, and the duplicate name that stops being allowed (core + CLI) — 2026-08-07, committed `bca60c9`, branch `pass-8-redaction`. **BOTH PARTIAL.** **No number is MINTED — both IDs were filed by decision 020 on 2026-08-03 and this filing HEADS them for the first time**, which is the first time family 20 has had a heading at all
 
@@ -12399,7 +12876,7 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 > emits* — is carried in `SESSION_LOG.md` continuation 105 and in the
 > standing-rule **proposal** at the end of *Standing rules*.
 
-### Pass 20.0 + Pass 20.1 (completion) — the field-path resolver and the substrate under it — **ENGINEER RULING 2026-08-07: THIS IS NOW THE PRIORITY**, and a fork is executing it
+### Pass 20.0 + Pass 20.1 (completion) — the field-path resolver and the substrate under it — **ENGINEER RULING 2026-08-07: THIS IS NOW THE PRIORITY**, and a fork is executing it — **SCOPE DELIVERED 2026-08-07 by `a3d885b` + `f809857`. See the Shipped entry at the head of *Shipped* for the delivery record.** Retained below in place (append-only discipline) because it is the record of how the priority call got made
 
 **Both IDs already exist** (decision 020's F0 and F1, filed 2026-08-03).
 **Nothing is minted.** 20.1 is *already headed* in *Shipped* as PARTIAL;
@@ -18164,6 +18641,24 @@ nothing gets forgotten, not as a commitment to build in this order.
   surface** (F5, still requires a `pdfce-ui-specialist` dispatch first),
   and **field property editing** (F6 — the operator's *"editing"*, still
   behind everything).
+  **★ AMENDMENT (2026-08-07, third filing) — F0 SHIPS, F1's resolver
+  SHIPS, and this list narrows.** `a3d885b` (F0) and `f809857` (F1
+  completion) — see the `Pass 20.0 + Pass 20.1 (completion)` entry at the
+  head of *Shipped*. **No longer owed:** the field-path resolver and the
+  four collision outcomes (all four are live across all three authoring
+  verbs); F0's five fixtures and four named fixes (plus a fifth,
+  empirically found: flatten's `/AcroForm /Fields` naming deleted
+  objects). **Radio groups are UNBLOCKED** — the merge primitive they
+  needed now exists — but radio itself is still unbuilt, so it stays on
+  this list as a live item, not a blocked one. **Still owed, unchanged:**
+  field/widget deletion, `/I`/`/TI`, push buttons, tab order (F4, still
+  BLOCKED on the spec-librarian dispatch), the GUI surface (F5), field
+  property editing (F6). **Newly named, not previously on this list:**
+  `/TU` mandatory-or-declined (R105) and `/Tabs /S` + untagged disclosure
+  — decision 020 §6 scoped both into F1 itself and neither shipped in
+  either F1 commit; and the CLI verb-name question (`add-text-field`/
+  `add-check-box`/`add-choice-field` vs. `forms add-field --type …`),
+  now three verbs deep and explicitly unreconciled by this filing.
 - **XFA** — legacy Adobe forms tech. **Verify current status before
   scoping** — Adobe has been deprecating XFA in Acrobat; consult the
   spec RAG + a fresh web check before committing engineering time here.
@@ -23486,6 +23981,137 @@ not a judgment call:**
   take R159**, by the same read-the-live-ceiling transfer
   (R106/R133) that moved them from R157 to R158 one continuation ago.
   **Nothing is renumbered.**
+  **SUPERSEDED 2026-08-07 by R159 and R160, minted below** — the
+  contingent candidates and the cross-RAG-handoff proposal **now take
+  R161**, by that same transfer. Nothing is renumbered.
+
+- **R159 — A test that asserts through a LENIENT parser cannot see a
+  file the parser silently repairs; a defect that lives in the BYTES
+  must be asserted in the BYTES (methodology; no decision number;
+  librarian-assigned; 2026-08-07, Pass 20.0 / decision 020 F0).**
+
+  **The finding, in its enforceable form:**
+
+  > **When a test asserts on a MODEL produced by parsing the artifact
+  > under test, it can only see defects the parser does not normalize,
+  > drop, repair, or route around. Before trusting such a test to
+  > protect a write path, NAME the specific repairs its parser performs
+  > on the way in — and for every defect class the parser would absorb,
+  > add an assertion on the SERIALIZED BYTES.**
+
+  **Two instances, in the same commit, and they are the same mechanism
+  pointed in opposite directions.**
+
+  **(1) The parser dropped what the file got wrong.** `flatten_fields`
+  left `/AcroForm /Fields [4 0 R 5 0 R]` naming objects it had just
+  deleted. **Every forms test in the project asserted through
+  `parse_acroform`, which resolves each `/Fields` entry and silently
+  drops the ones that do not resolve** — so the model reported an empty,
+  harmless form while the file on disk named deleted objects. **Thirty-odd
+  green tests agreed with each other and with nothing on disk.** The
+  regression test for it asserts on **bytes**, and that is the point of
+  the rule rather than an implementation detail of the fix.
+
+  **(2) The parser produced less than the file contained.** A mixed-
+  `/Kids` node's own widgets were never modelled, so `list-fields`
+  reported `fields=1` for a file whose page `/Annots` still referenced a
+  widget of a second field carrying `/V (ORD-77)`. **The model was
+  internally consistent and simply smaller than the file, and nothing
+  compared the two.** A conforming viewer painted a field pdfce reported
+  did not exist.
+
+  **Why this is NOT already covered.** **R87** (broadened 2026-08-06)
+  governs whether the instrument was **pointed at the thing**; R159
+  governs an instrument that **was** pointed at the thing and
+  **corrected the reading on the way out** — the trace fires, names the
+  right path, and reports a value the artifact does not have. **R92**
+  (hand-duplicated predicates) explains the mixed-`/Kids` walk's
+  proximate cause and **R96** (a guard behind a filter its case cannot
+  survive) explains the flatten guard's, and **neither covers the shared
+  blindness that let both ship**. **R44**'s "a subsystem that knows
+  nothing about the change drives the result" is the positive form of the
+  same instinct; R159 is the negative form, and states which subsystem
+  does not qualify: **your own parser.**
+
+  **Scope, so this does not become "assert bytes everywhere."** It binds
+  where a **write path** is under test and the parser is **lenient by
+  design** — which `pdfce-core`'s is, deliberately and correctly (Pass
+  13a/13b xref recovery, `/Contents` defect tolerance, the whole
+  lenient-reader posture `personal_rag/pdf` exists to record). **Leniency
+  on the read side is a feature; leniency in the test oracle is a
+  blindfold.** Model-level assertions remain the right default for read
+  paths and for behaviour the parser does not touch.
+
+  **Detection cost is near zero once stated:** ask, of any round-trip
+  test, *"what would this test say if the file were corrupt in the way
+  this code could corrupt it?"* Both defects answer *"green."*
+
+  See `D:\dev\rag\rust\model_level_assertion_blind_to_normalized_away_defect.md`
+  (written the same day by the concurrent filing) and
+  `C:\personal_rag\pdf\lesson_20260807_lenient_parser_hides_broken_file_from_its_own_tests.md`.
+
+- **R160 — A long-running agent's findings must be DURABLE before its
+  budget is spent, not delivered in a final report it may never write
+  (process; no decision number; librarian-assigned; 2026-08-07, the fork
+  that built decision 020's F0 and F1).**
+
+  **The instance.** The fork that built `a3d885b` and `f809857`
+  **hit its 200-tool-use ceiling and terminated mid-verification**. Its
+  final output was a fragment — *"let me confirm F0's fixes are still
+  intact after F1's changes, and check the R85 oracle end-to-end"* —
+  leaving **two substantial commits (21 files, ~4,100 insertions) with no
+  report and no completed verification behind them.** Budget consumed:
+  **67 minutes, 366k tokens, 200 tool calls.**
+
+  **What was at stake.** Five measured defects (two of them in code that
+  had ALREADY SHIPPED), the decision 020 §7.2 narrowing, and the
+  `dict_is_widget` near-miss. **None of it existed anywhere a document
+  reads.** Had the commits been accepted as done — which is the normal,
+  reasonable thing to do with commits that pass their gates — **all of it
+  would have been lost**, and the two shipped defects would have been
+  rediscovered by a user or not at all.
+
+  **What actually saved it, and is therefore the rule:** the fork
+  **wrote its findings into COMMIT MESSAGES as it went.**
+
+  > **An agent whose budget can plausibly run out before it reports must
+  > write each finding into a durable artifact AT THE MOMENT IT IS FOUND
+  > — a commit message, a doc edit, a scratch file — never into a
+  > running tally intended for a final summary. The final report is a
+  > convenience, not the record. And the agent DISPATCHING it must size
+  > the budget against the whole job including its hand-off, and must
+  > treat "commits exist, no report arrived" as UNVERIFIED work, not as
+  > finished work.**
+
+  **Why this is not R146.** **R146** says a Pass is not shipped until it
+  is filed, and its corollary says to write the commit message as though
+  it is the only surviving record *because when the filing is skipped, it
+  is*. **R146 assumes a LIVE agent who skipped a dispatch.** This is a
+  **DEAD** one that can no longer make it: R146's remedy — dispatch the
+  librarian in the same session — is **not available**, and R146's
+  obligation lands on the **engineer**, while R160's lands on the
+  **fork itself and on whoever sized it**. R146 is R160's ancestor and
+  the two are read together; neither restates the other.
+
+  **The engineer's own handling is the worked example of the second
+  half.** He **re-measured every gate himself at `53caa48`** rather than
+  accepting the fork's claims — and the claims turned out to be
+  *substantially* right and *not entirely* reconcilable (`a3d885b`'s
+  self-reported 2071 tests appears nowhere in the measured progression;
+  see the Pass 20.0 entry's addendum). **A gate claim from a process that
+  died before finishing its verification is a hypothesis.**
+
+  **Recorded in the fork's favour, because the rule is about mechanism
+  and not blame:** it escalated the build-order re-sequencing rather than
+  deciding it, and it wrote durably as it went. **The failure is budget
+  sizing and hand-off design.**
+
+  **Ceiling is now R160** (was R158). **R161 is next free.** Decision
+  030's three still-unminted contingent candidates and the
+  cross-RAG-handoff proposal — last recorded as claiming R159 — **now
+  take R161**, by the same read-the-live-ceiling transfer (R106/R133)
+  that has moved them R157 → R158 → R159 → R161. **Nothing is
+  renumbered.**
 
 ### RESOLVED 2026-08-06 — a request to "look like <competitor>" is converted into neutral, operator-confirmed PROPERTIES before any design work — ACCEPTED AS AN AMENDMENT TO R123 IN PLACE; R158 NOT MINTED
 
