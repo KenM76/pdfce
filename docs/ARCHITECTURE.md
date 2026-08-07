@@ -5693,6 +5693,23 @@ with a forward pointer.
     only the disclosure that a field has no defined tab position.** Full
     build record: `ROADMAP.md`'s `Pass 20.0` *Shipped* entry, THIRD
     addendum, same date.
+    **★ AMENDED 2026-08-07 (`69ab966`, then `8a8678e`) — THE STRUCT HAS
+    FIVE FIELDS, NOT FOUR, AND ITS PREDICATE IS NOW A DESTRUCTURING.**
+    The radio slice added **`group_flags_ignored`** (a joining member's
+    `NoToggleToOff`/`RadiosInUnison` are disclosed, not applied). The
+    four-field shape written above is the shape at `50a5461` and is left
+    as filed. **`FieldAuthorDisclosures::any()` had no arm for the new
+    field**, so the natural gate for a GUI disclosure block answered
+    `false` for a radio merge whose **only** disclosure was that pdfce had
+    overridden the operator's flags — **rule 4 failing closed**, and the
+    **second** instance of an omission whose first instance
+    (`report_field_disclosures`) had already been fixed. **`any()` is now
+    a DESTRUCTURING of the struct: adding a field without handling it here
+    is a compile error.** **Anyone adding a sixth field must expect the
+    compiler to stop them, and must not "fix" that by reintroducing a
+    `||` chain or a wildcard arm** — the exhaustiveness is the point.
+    Full build record: `ROADMAP.md`'s `Pass 20.5 (PARTIAL)` *Shipped*
+    entry.
   - **Dead-guard debt, the prospective form of R96 — new standing rule
     R103.** The parity research's `must_have` (a `/P` bit-6
     permission gate on field creation) would be dead code today: every
@@ -8040,3 +8057,149 @@ with a forward pointer.
   is still NOT RULED and must not be inferred from `add-radio-button`.**
   Full build record: `ROADMAP.md`'s COMPLETION ADDENDUM on the
   `Pass 20.2 + Pass 20.3` *Shipped* entry.
+
+- **2026-08-07 (tenth entry this day) — Pass 20.5 PARTIAL: the GUI can
+  CREATE form fields, and an exhaustiveness predicate becomes a
+  DESTRUCTURING so the next omission is a compile error**
+  (`8a8678e`+`165dd49`). Four decisions and one deliberate cut.
+
+  **`FieldAuthorDisclosures::any()` is now a destructuring, not a `||`
+  chain — and that is the architectural change, not the bug fix.** The
+  predicate omitted `group_flags_ignored`, the newest field, so the
+  natural gate for a GUI disclosure block answered **`false`** for a radio
+  merge whose **only** disclosure was that pdfce had overridden the
+  operator's flags — **project rule 4 failing closed.** It was the
+  **SECOND instance of the same omission, one field away**: the F2 fork
+  fixed `report_field_disclosures` and the fix did not reach `any()`,
+  which is **R162's shape** (the second instance survives the fix for the
+  first). **No existing test caught it because the one test producing
+  `group_flags_ignored` also calls `.declining_tooltip()`, so `any()` came
+  out true through a DIFFERENT field** — vacuous **by coincidence rather
+  than by construction**, which is why no reviewer would have seen it.
+  **The fix moves the discipline from remembering to the type system:
+  adding a struct field without handling it here no longer compiles.**
+  **This is the second time in one day a structural fix beat a procedural
+  one**, and the pattern — *prefer making the omission a compile error
+  over writing a rule that asks a human to remember* — is **named as a
+  standing-rule candidate and DELIBERATELY NOT MINTED**; **R163 is left
+  free for the engineer to rule.**
+
+  **The authoring tool joins a NEW ribbon group beside `Forms`, not
+  `Forms` itself, because `Forms` documents its own reason for existing as
+  arming no tool.** `RibbonGroup::Forms` states in its own doc comment
+  that filling *"works with no tool armed and never touches the canvas
+  gesture state"* and that `ContentTools` *"would promise a mode change
+  that does not happen"*. **Creating a field IS that mode change**, so
+  joining `Forms` would falsify the sentence justifying `Forms`. Not
+  `ContentTools` either: that group is page **content**, while a form
+  field is an `/AcroForm` entry that survives content edits and is removed
+  by flattening. **One tool for four types**, with the type a Tool-Options
+  control, because four tools would put four mutually-exclusive-in-
+  practice entries on `TOOL_PRECEDENCE` where three of the four
+  enabled-combinations mean nothing.
+
+  **★ THE AUTO-NAME SCANS THE EXISTING NAMESPACE RATHER THAN COUNTING —
+  a deliberate divergence from Acrobat, forced by pdfce's OWN merge
+  semantics.** Acrobat's auto-name is a session counter that does not
+  rescan (rename a box to `Check Box1`, make another, get `Check Box21`).
+  **Copying that would be actively unsafe HERE specifically**, because
+  **pdfce MERGES same-name same-type fields** (§12.7.3.2, shipped in F1):
+  a colliding stub would turn a click the operator believes creates a
+  **new** field into a **silent extra widget on an existing one**, arrived
+  at through a name **pdfce chose itself** — rule 4's exact failure mode.
+  **A parity claim would have been the wrong instinct**; the correct unit
+  of comparison was pdfce's own write-side behaviour, not Acrobat's UI.
+  Stub shape `Text1`/`CheckBox1`/`Radio1`/`Choice1` is pdfce's own pick,
+  **not** a parity claim — Acrobat's corpus disagrees with itself
+  (`Checkbox1` vs `Check Box1`).
+
+  **The merge disclosure can only appear AFTER a successful Accept, and no
+  preview is offered rather than an invented one.** `resolve_field_path`
+  runs **inside** the core verb, so whether an add creates or merges **is
+  not knowable until the call returns**. That is a genuine departure from
+  every other reviewable action in decision 024's table, recorded as such.
+  A GUI-side predicted "this will merge" would be a **second, divergent
+  implementation of the resolver** — R92's shape. Every control and
+  disclosure renders at a **fixed anchor inside the dock, never over the
+  page** (decision 024 §4.4). An **untouched** auto-name is disclosed as
+  an inference; an **edited** one is not, because that is direct
+  manipulation — and a **dirty bit is the only way to tell them apart
+  after the fact**, since the resulting `/T` is identical either way.
+
+  **Push button is ABSENT rather than greyed** — its verb name is still
+  NOT RULED, so there is no capability to point a control at (**R83**),
+  and **R124** says an empty control teaches nothing its absence does not.
+  **Default box sizes carry three different confidences, stated in the
+  code**: text `150x22` and check box / radio `18x18` are community-
+  sourced from the Acrobat RAG; **the choice default is DERIVED from the
+  text field and says so** — no figure exists at any confidence, and a
+  guess recorded as a guess is worth more than one dressed as parity.
+
+  **PARTIAL BY CHOICE.** Field **deletion** in the Forms panel was
+  core-complete (`817b268`) and scoped into this Pass, and was **cut**:
+  *"half of both is worse than all of one."* The per-type detail fields
+  (multiline, initial state, the choice option editor) were cut on the
+  same reasoning — an empty `/Opt` is an allowed, disclosed state. Both
+  stay owed **under Pass 20.5's own ID**, per hard rule 2.
+
+  **★ AN OWED VERIFICATION IS RECORDED RATHER THAN SMOOTHED OVER.** The
+  Pass was driven in the running application (**R86**) via
+  `tools/gui-drive.ps1`, and the traces establish the geometry
+  (`llx=76.8 lly=73.7 w=150 h=22`), the R105 gate (`can=false` → `can=true`),
+  the commit report (`name=Text1 merged=false notes=2`), the
+  anti-collision guarantee end to end (a second placement offers `Text2`,
+  unmerged), and that the pane's controls fit the compartment
+  (`x=8-149`). **The rendered appearance was NOT visually verified** — the
+  operator was at the machine with a file dialog open, the first capture
+  photographed his desktop, and continuing would have stolen his focus.
+  **That was the right call and is still a real gap**: three defects that
+  session were caught **only by looking**.
+
+  **Two harness findings, both about the observation harness attributing
+  its own defects to the application:** an **unparseable diag step is
+  SILENTLY DROPPED** (the absent trace reads as an application defect
+  until a known-good sibling is checked — an R87-family silence in the
+  *instrument*; generalizable half escalated to `D:\dev\rag\rust\`, and
+  the mechanical `gui-drive.ps1` fix is **flagged as owed tooling work,
+  not claimed as done**), and **the Edit tab is not active by default**,
+  so tool traces need `tab:edit` first.
+
+  **A process gap, named as such: `pdfce-ui-specialist` was dispatched and
+  filed NO spec document**, so its design exists only in a conversation
+  that compaction will discard. **`docs/ui_specs/` is where such a design
+  belongs** — twenty-one precedents including `forms-panel.md` for this
+  very feature family. **Not a criticism of the specialist**, which was
+  asked for a critique and gave one; **the filing obligation belongs in
+  the dispatch or in the agent file, and that is the engineer's call.**
+
+  **Nothing minted.** No Pass ID (20.5 was filed 2026-08-03 by decision
+  020's Backlog amendment and is headed here for the first time), **no
+  standing rule — R163 deliberately left free** for the compile-error
+  candidate above. Decision records stay **031**, Pass family stays **43**,
+  operator questions stay **(bb)**. Full build record: `ROADMAP.md`'s
+  `Pass 20.5 (PARTIAL)` *Shipped* entry.
+
+- **2026-08-07 (eleventh entry this day) — veraPDF is ELECTED UNDER
+  MPL-2.0, not GPL-3.0, and is an ARMS-LENGTH DEV-TIME TOOL.** Recorded in
+  full in `LEGAL.md` §6.5 and §7; summarized here because it is the first
+  time pdfce has taken a **licence election** under a dual-licensed
+  artifact, and because the six operational rules it produces constrain
+  packaging and `Cargo.toml` for the life of the project. **Every veraPDF
+  component is dual-licensed GPLv3+ / MPLv2+**; under a dual licence the
+  **recipient chooses**, and **an undocumented choice is an ambiguous
+  one**. MPL-2.0 is **file-level** weak copyleft and **§3.3 expressly
+  permits combination into a "Larger Work" under other terms** — no
+  propagation path to pdfce's MIT licence. **A second, independent
+  protection also holds**: the usage pattern triggers nothing even on the
+  GPL branch (GPL §0 affirms unlimited permission to **run** an unmodified
+  program; copyleft attaches to **distributing** a combined or derivative
+  work; the GPL reaches neither a program's output nor a program that
+  merely consumes it). **The enforceable rules:** never vendor/bundle/
+  redistribute; never link or embed; never copy source, validation
+  profiles or model files; separate process over the documented CLI
+  consuming XML; **dev-time only, never in any `Cargo.toml`** (so it will
+  correctly never appear in `THIRD_PARTY_LICENSES.md` — **do not "fix"
+  that**); and **the gate SKIPS rather than fails when veraPDF is absent**,
+  because a required gate would make it a de facto build dependency. **The
+  veraPDF CORPUS (already in use under `LEGAL.md` §5) is a separate
+  artifact with separate terms — do not conflate the two.**

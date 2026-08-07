@@ -81,6 +81,281 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 20.5 (PARTIAL) — form fields stop being a thing only the command line can make (GUI + core) — 2026-08-07, committed `8a8678e` (the disclosure predicate) and `165dd49` (the GUI surface), branch `pass-8-redaction`. **This entry gives Pass 20.5 its FIRST heading** — the ID was filed 2026-08-03 by decision 020's Backlog amendment and has been cited as owed in six later filings without ever being headed. **PARTIAL BY CHOICE, NOT BY OMISSION** — field deletion in the Forms panel was core-complete, scoped into this Pass, and deliberately cut; see *The cut*, below
+
+**No number is minted.** Pass 20.5 was filed 2026-08-03 as decision 020's
+**F5** (*"GUI authoring surface — requires a `pdfce-ui-specialist`
+dispatch first, rule: non-trivial UI"*). This filing heads it for the
+first time under that same ID, per hard rule 2. **The UI-specialist
+dispatch happened** and the surface below was designed against its
+critique — but see *A process gap*, below, for what that dispatch did
+**not** leave behind.
+
+**Rule 11 (every capability ships its CLI subcommand) is satisfied
+ALREADY, in the opposite direction from usual.** F5 is the shell catching
+up to a capability the CLI has had since `8e799e9` — six authoring verbs
+existed in `pdfce-core` and `pdfce-cli` with no way to reach them from the
+GUI. **This is the R151 shape** (a core API no shell reaches), and it is
+the reason the operator's own instruction — *"get form field
+creation/editing done next"* — was not yet answered for him: **the
+operator works in the GUI.**
+
+#### `8a8678e` — the disclosure predicate that could not see its newest field
+
+**The defect.** `FieldAuthorDisclosures::any()` omitted
+`group_flags_ignored` — the field the radio slice (`69ab966`) added. So
+the natural gate for a GUI disclosure block — *"is there anything to tell
+the operator?"*, which is what the predicate is **FOR** — answered
+**`false`** for a radio merge whose **only** disclosure was that pdfce had
+overridden the flags the operator passed. Project rule 4 states the
+obligation as *pdfce made a choice the operator did not specify, so the
+operator gets told*; **a silent `false` is that obligation failing
+closed.**
+
+**Found by reading the type to build F5 on it, before any GUI code was
+written** — which is the only reason it never reached an operator. It was
+**latent, not firing**: the CLI's prose path tests each field directly,
+and `any()`'s one live caller was a test asserting the negative.
+
+**This is the SECOND instance of the same omission, ONE FIELD AWAY — and
+that is R162's shape exactly.** The F2 fork found and fixed
+`report_field_disclosures` having no arm for `group_flags_ignored` while
+the machine-readable line had one. **That fix did not reach this
+occurrence.** R162's own derivation is *the second instance survives the
+fix for the first*; here the second instance was sitting in the same file,
+in a function whose entire job is to enumerate the struct.
+
+**Why no existing test caught it — this is the part worth preserving.**
+The one test that produces `group_flags_ignored` **also calls
+`.declining_tooltip()`**, so `tooltip_declined` was true as well and
+`any()` came out true **through a DIFFERENT field**. The assertion was
+**vacuous by coincidence rather than by construction** — nobody wrote a
+weak test, and no reviewer reading it would have seen anything wrong. Two
+independently-correct choices (assert the predicate; use the convenient
+fixture) composed into an assertion that could not fail for the reason it
+claimed to pass.
+
+**The new test isolates the field**: a real `/TU` on an **untagged**
+document for a **non-choice** type, making `group_flags_ignored` the
+**sole** disclosure — the only condition under which the omission is
+visible — and it asserts the four siblings are false so the assertion
+cannot be carried by one of them. Per **R162** it opens with a negative
+control proving this fixture and call shape **can** produce
+`any() == false`. **Verified by stashing the fix**: the test fails without
+it and passes with it, measured rather than reasoned.
+
+**★ THE FIX IS STRUCTURAL, AND THAT IS THE FINDING.** `any()` is now a
+**destructuring** of the struct rather than a corrected `||` chain.
+**Adding a field without handling it here is a compile error.** The
+discipline moves from *remembering* to *the type system*.
+
+> **This is the SECOND time in one day that a structural fix beat a
+> procedural one**, and the librarian judges the pattern —
+> ***prefer making the omission a compile error over writing a rule that
+> asks a human to remember*** — to have earned a standing-rule number.
+> **IT IS NOT MINTED HERE.** Per the dispatching engineer's explicit
+> instruction, the librarian names the candidate and the engineer rules.
+> **R163 is the next free number** and is deliberately left free. See
+> *Ledger*, below, and the librarian's report for the argued case.
+
+#### `165dd49` — the GUI surface
+
+`CanvasTool::PlaceField`, armed from a **NEW ribbon group beside Forms
+rather than inside it**. The reasoning is worth keeping because it is a
+constraint the code states about itself: `RibbonGroup::Forms` **documents
+its own reason for existing as arming no tool** — filling *"works with no
+tool armed and never touches the canvas gesture state"*, and putting it in
+`ContentTools` *"would promise a mode change that does not happen"*.
+**Creating a field IS that mode change**, so joining `Forms` would falsify
+the sentence that justifies `Forms`. Not `ContentTools` either — that
+group is page **CONTENT**, and a form field is an `/AcroForm` entry that
+survives content edits and is removed by flattening.
+
+**One tool for four types**, with the type a control in Tool Options.
+Four tools would put four mutually-exclusive-in-practice entries on
+`TOOL_PRECEDENCE`, where three of the four enabled-combinations mean
+nothing. It also matches how fields are actually placed: **arm once, place
+several.**
+
+**Push button is ABSENT rather than greyed.** Its verb name is still **NOT
+RULED** (F3's remainder), so there is no capability to point a control at
+(**R83**), and **R124** says an empty control teaches nothing its absence
+does not.
+
+**Default box sizes, and their provenance stated at three different
+confidences.** Click gives a type-dependent default box, drag an explicit
+one, and a **degenerate drag falls back to the default** rather than the
+zero-area rect core would refuse. Text `150x22` and check box / radio
+`18x18` come from the Acrobat RAG and are **community-sourced**;
+**the CHOICE default is DERIVED FROM THE TEXT FIELD AND SAYS SO IN THE
+CODE** — no figure for list/combo boxes exists at any confidence, and **a
+guess recorded as a guess is worth more than one dressed as parity.**
+
+**★ THE AUTO-NAME SCANS EXISTING NAMES AND CANNOT COLLIDE — a deliberate
+DIVERGENCE from Acrobat, and the reasoning is pdfce-specific.** Acrobat's
+auto-name is a **session counter that does not rescan**: an operator who
+renamed a box to `Check Box1` and made another got `Check Box21`. Copying
+that would be **actively unsafe HERE specifically**, because **pdfce
+MERGES same-name same-type fields** (§12.7.3.2, shipped in F1): a
+colliding stub would turn a click the operator believes creates a **new**
+field into a **silent extra widget on an existing one** — arrived at
+through a name **pdfce chose itself**. That is rule 4's exact failure
+mode. Stub shape `Text1`/`CheckBox1`/`Radio1`/`Choice1` is **pdfce's own
+pick, not a parity claim** — Acrobat's own corpus disagrees with itself
+(`Checkbox1` vs `Check Box1`).
+
+**An untouched auto-name is disclosed as an inference; an edited one is
+not**, because an edited name is **direct manipulation**, which decision
+024 §4.4 explicitly takes out of the confirm-step obligation. **A dirty
+bit is the only way to tell them apart after the fact**, since the
+resulting `/T` looks identical either way.
+
+**Every control and every disclosure renders at a FIXED anchor inside the
+dock, never over the page.** That is **decision 024 §4.4**, and it comes
+from the operator's own report that confirm controls moved with the
+document on every zoom and scroll — **the complaint was placement, not the
+confirm step.**
+
+**The merge disclosure can only appear AFTER a successful Accept**, and
+this is a real, stated difference from every other reviewable action in
+decision 024's table. `resolve_field_path` runs **inside** the core verb,
+so **whether an add creates or merges is not knowable until the call
+returns**. **No preview is offered rather than an invented one** — a
+predicted "this will merge" computed by the GUI would be a second,
+divergent implementation of the resolver, which is R92's shape.
+
+**Icon authored under R158** (`form-field.svg`). No existing asset reads
+as *"form field"*: `edit-objects.svg` promises vector editing, and a plain
+box would read as the **fill** surface — a different capability in a
+different group.
+
+#### The cut — a CHOICE with a reason, recorded so nobody re-files it as an omission
+
+**Field DELETION in the Forms panel was core-complete** (`delete_field` /
+`delete_widget` shipped in `817b268` the same day), **was scoped into this
+Pass, and was deliberately CUT.** The engineer's own statement of the
+reason: *"the creation surface is coherent without it, and half of both
+would be worse than all of one."*
+
+**Also cut, same reasoning:** the **per-type detail fields** — multiline
+(text), initial state (check box / radio), and the **choice option
+editor**. An empty `/Opt` is an **allowed, disclosed** state in the core
+verb, so a choice field created without options is a valid document, not a
+broken one.
+
+**This is why the heading says PARTIAL.** Pass 20.5 stays PARTIAL until
+the deletion surface and the detail fields land under the **same ID** —
+they are F5's own unbuilt half, not different work, per hard rule 2.
+
+#### Verification — what is ESTABLISHED, and the one thing that is OWED
+
+**Verified in the running application (R86)**, through `tools/gui-drive.ps1`
+rather than `gui-shot.ps1`. What the traces establish:
+
+| Claim | Trace |
+|---|---|
+| The toggle draws and arms | rect `646-743 x 35-53` |
+| A click places a real field **on the page**, not off it | `kind=Text llx=76.8 lly=73.7 w=150 h=22` |
+| **R105 is gated IN THE PANE**, not met as a surprise refusal | Accept `can=false` while the accessibility decision is open, `can=true` once made |
+| The commit reports what it did | `name=Text1 merged=false notes=2` |
+| **The anti-collision guarantee, END TO END** | a second placement offers `Text2`, also `merged=false` |
+| The pane's controls fit **inside the compartment** | controls trace at `x=8-149` |
+
+That last row is **the specific check owed** after a control built for a
+520 px window shipped clipped in a 370 px pane.
+
+> **⚠ OWED VERIFICATION — THE RENDERED APPEARANCE IS NOT VISUALLY
+> VERIFIED, AND THIS IS A REAL GAP RATHER THAN A FORMALITY.** No
+> screenshot was taken, **deliberately**: the operator was at the machine
+> with a file dialog open, `gui-shot.ps1`'s first capture **photographed
+> his desktop**, and continuing would have **stolen his focus**. That was
+> the right call at the time and is recorded as such — **but three defects
+> this session were caught ONLY by looking**, so a trace-only verification
+> is not equivalent here. **Someone owes this Pass a look at the rendered
+> pane and the placed field, at a moment when the operator is not at the
+> machine.** Filed as owed work, not as a completed gate.
+
+#### Gates — engineer-measured at `165dd49` and relayed (R87; the librarian did not run the build)
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | **2138 pass, 0 fail** (was 2137) |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets -- -D warnings` | **exit 0** |
+| `cargo tree -p pdfce-core` / `-p pdfce-render` | **zero GUI matches** — rule 2 invariant holds |
+| `tools/check-ledger-numbers.py` · `tools/check-passes-filed.py` | clean at `165dd49` |
+
+**The librarian re-ran only the two ledger checkers**, after this filing —
+see *Ledger*, below. **Build state and backup currency are not verifiable
+from a filing**; the engineer should check `D:\Dev\pdfce-backups\` if
+backup currency matters.
+
+#### Two harness findings — the observation harness attributing its own defects to the application
+
+Both concern `tools/gui-drive.ps1` + `diag.rs`, **not** egui and **not**
+Claude Code tooling, so their operational home is this entry:
+
+1. **★ AN UNPARSEABLE DIAG STEP IS SILENTLY DROPPED.** A malformed step
+   produces **no error** — the run completes, the trace the step would
+   have emitted is simply absent, and **an absent trace reads as a defect
+   in the application** until you check a known-good sibling step. **This
+   is an R87-family silence in the instrument itself**: the harness makes
+   its own input defect look like a finding about the system under test.
+   **The generalizable half is escalated** — see *RAG escalations*.
+   **The mechanical fix is a `gui-drive.ps1` change** (reject an
+   unrecognised step loudly rather than dropping it) and is **flagged to
+   the engineer as owed tooling work, not claimed as done.**
+2. **The Edit tab is not active by default**, so any trace of a tool that
+   lives under Edit needs **`tab:edit` first**. Purely pdfce-local; no RAG
+   escalation.
+
+#### A process gap — the UI-specialist design has no filed spec
+
+**`pdfce-ui-specialist` was dispatched and filed no spec document.** Its
+design existed only in its report, and therefore now exists only in the
+engineer's conversation — which compaction eventually discards.
+
+**`docs/ui_specs/` IS where such a design belongs.** The precedent is
+unambiguous and includes this exact feature family: `forms-panel.md`
+(Pass 37.2), `pass-7-form-fill.md`, `pass-14.3-text-edit-ui.md`,
+`pass-16.2-add-text-ui.md`, `pass-19.3-text-formatting-surface.md`,
+`shell-redesign.md`, and fifteen more. **Every non-trivial UI Pass before
+this one left a spec behind; this one did not.**
+
+**This is a process gap, NOT a criticism of the specialist** — the
+dispatch asked for a critique and got one, and no filing obligation was
+stated. **The obligation belongs in the dispatch, or in the specialist's
+agent file, and that is the engineer's call.** Named here so the next
+UI-specialist dispatch inherits the answer rather than re-deriving it.
+
+#### RAG escalations, this filing
+
+- **`D:\dev\rag\rust\harness_that_silently_drops_a_malformed_step_blames_the_system_under_test.md`**
+  (new) — harness finding 1's generalizable half: a driver that discards
+  an instruction it cannot parse, without erroring, converts *its own*
+  input defect into an apparent absence in the system under test. Indexed
+  in `D:\dev\rag\rust\index.md` this filing. **Filed to the ecosystem tier
+  (`rust`), not `egui\`** — nothing about it is egui-specific — and not to
+  `personal_rag/claude_code\`, which is Claude-Code tooling, not a
+  project's own test harness.
+- **No `personal_rag/pdf` entry.** Nothing in either commit is a finding
+  about how real-world PDF producers diverge from the spec; the
+  disclosure-predicate defect is software-engineering methodology and the
+  GUI surface is pdfce's own design.
+
+#### Ledger — nothing minted, and one candidate DELIBERATELY LEFT UNMINTED
+
+**No Pass ID minted** — 20.5 was filed 2026-08-03 and is headed here for
+the first time. **Pass family ceiling unchanged at 43** (43.0 highest).
+**Standing-rule ceiling unchanged at R162; R163 is next free and is left
+free on purpose** — the *make-the-omission-a-compile-error* candidate
+above is **named, argued, and NOT minted**, awaiting the engineer's
+ruling. **Decision-record ceiling unchanged at 031. Operator-question
+ceiling unchanged at (bb).**
+
+**Both checkers re-run after this filing:** `check-ledger-numbers.py`
+**exit 0**, `check-passes-filed.py` **exit 0**.
+
 ### Pass 20.0 — the field-hierarchy correctness substrate, and the field-path resolver that COMPLETES Pass 20.1's P0 floor (core + CLI) — 2026-08-07, committed `a3d885b` (F0) and `f809857` (F1 completion), branch `pass-8-redaction`. **Pass 20.0 SHIPPED for the first time** — filed 2026-08-03, skipped through two prior slices, now built. **Pass 20.1 has its P0-blocking gap CLOSED but stays PARTIAL** — the resolver and the full collision branch decision 020 §3.3.1 called the floor now exist; `/TU` R105, `/Tabs` disclosure and the CLI verb-name question do not yet
 
 > **⚠ HEADING CORRECTED 2026-08-07, same day, by the following filing — read this before "restoring" it.** This entry was first written as `### Pass 20.0 + Pass 20.1 (completion) — …`, and that heading **broke `tools/check-ledger-numbers.py`**: the checker counts every Pass ID in a heading's **pre-em-dash prefix, per section**, and Pass 20.1 was already headed in *Shipped* by the `8e799e9` entry below — so the gate reported `DUPLICATE Pass 20.1 declared 2x in section [Shipped]` and exited 1. **The multi-ID heading shape is legal in general** (`Pass 17.1 + Pass 17.2`, and the `Pass 20.2 + Pass 20.3` entry below) — it is legal exactly when **neither** ID is already headed in the same section. **20.1 was.** The fix keeps every word of the record and moves `20.1`'s mention to the descriptive half, where the checker does not read it. Verified by re-running the gate. This is the **third** time a *Shipped* heading has had to change for the gate to see the ledger correctly (the first two: the `8e799e9` entry's `⚠ IDENTITY UNRESOLVED` prefix, and the `★`-prefix blind spot fixed in `0720adb`) — **a heading in this file is a machine-read declaration first and prose second.**
@@ -149,6 +424,15 @@ Comb layout still not driven from `/MaxLen`; positional-`/Opt` radio authoring s
 > **Everything else in the paragraph above is unchanged and still owed**:
 > comb layout, inherited-`/V`, `/Tabs` authoring, `/I`/`/TI`, push buttons,
 > F5, F6.
+>
+> **✅ AMENDED AGAIN 2026-08-07 (eighth filing) — F5 IS NOW PARTLY BUILT
+> and comes off this list as *owed in full*.** **Pass 20.5 is HEADED and
+> PARTIAL** (`8a8678e`+`165dd49`) — the GUI **creation** surface exists;
+> **field DELETION in the Forms panel and the per-type detail fields were
+> deliberately CUT** and stay owed **under the same ID**. See the
+> `Pass 20.5 (PARTIAL)` entry at the head of *Shipped*. **Comb layout,
+> inherited-`/V`, `/Tabs` AUTHORING, `/I`/`/TI`, push buttons and F6 are
+> unchanged and still owed in full.**
 
 #### Verification — measured, not asserted
 
@@ -1165,6 +1449,17 @@ unchanged and correct; what changed is the *disclosure* burden, and the
 right place to discharge it is F5's GUI surface, which should say which
 field types show a border in pdfce's own renderer.
 
+> **⚠ AMENDED 2026-08-07 (eighth filing) — F5's GUI surface HAS NOW
+> SHIPPED (PARTIAL) AND DID NOT DISCHARGE THIS.** `165dd49`'s place-field
+> pane discloses the auto-name inference, the tooltip decision (R105) and
+> the post-Accept merge outcome — but **says nothing about which field
+> types paint a `/MK` border in pdfce's own renderer.** The obligation
+> named in the paragraph above is **still owed**, and it now has a
+> concrete, existing place to live (the Tool-Options place-field pane)
+> rather than a hypothetical one. **Left here rather than moved**, because
+> this paragraph is where the reasoning for the obligation lives. See the
+> `Pass 20.5 (PARTIAL)` entry at the head of *Shipped*.
+
 #### Gates — engineer-measured at `bca60c9` and relayed (R87; the librarian has no shell for build state)
 
 | Gate | Result |
@@ -1565,9 +1860,13 @@ listed in the mixed-commit table above. **LEGAL.md §5 / rule 7 unaffected.**
   terminal-only** (`Field.parent` exists; the setters still do not use it);
   **F4 `/Tabs` tab-order AUTHORING still BLOCKED** on a
   `pdfce-spec-librarian` dispatch (the *disclosure* shipped in `50a5461` and
-  is a different thing); **F5 GUI surface** still needs a
-  `pdfce-ui-specialist` dispatch first; **F6 field PROPERTY editing** — the
-  operator's own *"editing"* — still behind everything.
+  is a different thing); ~~**F5 GUI surface** still needs a
+  `pdfce-ui-specialist` dispatch first~~ **✅ AMENDED 2026-08-07 (eighth
+  filing): the `pdfce-ui-specialist` dispatch HAPPENED and F5's CREATION
+  surface is BUILT — `Pass 20.5 (PARTIAL)`, `8a8678e`+`165dd49`. What
+  stays owed under that same ID is the GUI DELETION surface and the
+  per-type detail fields, both deliberately CUT**; **F6 field PROPERTY
+  editing** — the operator's own *"editing"* — still behind everything.
 - **F0's disposition** (owed retroactively / deferred / retired) is **still
   owed by the engineer**, unchanged.
 
@@ -19242,6 +19541,41 @@ nothing gets forgotten, not as a commitment to build in this order.
   `--defaults-from` was deferred to). **Comb layout** (not driven from
   `/MaxLen`) and **inherited-`/V` writes** (still terminal-only) remain
   named limits.
+  **★ AMENDMENT (2026-08-07, EIGHTH filing) — F5 IS BUILT IN PART, AND
+  PASS 20.5 IS HEADED FOR THE FIRST TIME.** `8a8678e` + `165dd49` deliver
+  the **GUI CREATION surface**: `CanvasTool::PlaceField` armed from a new
+  ribbon group beside Forms, one tool for four types with the type a Tool-
+  Options control, click-for-default-box / drag-for-explicit, a
+  **collision-proof auto-name that SCANS rather than counting** (a
+  deliberate divergence from Acrobat, because pdfce **merges** same-name
+  same-type fields and a colliding stub would silently make a widget on an
+  existing field), and every control and disclosure at a **fixed anchor
+  inside the dock** per decision 024 §4.4. **Push button is ABSENT rather
+  than greyed** — R83/R124, its verb name is still NOT RULED. See the
+  `Pass 20.5 (PARTIAL)` entry at the head of *Shipped*. **No Pass ID
+  minted; no rule minted** — though the filing **names one candidate and
+  leaves R163 free for the engineer to rule on** (*prefer making an
+  omission a compile error over writing a rule that asks a human to
+  remember*).
+  **PASS 20.5 IS PARTIAL BY CHOICE.** **Field DELETION in the Forms
+  panel** — core-complete since `817b268`, scoped into F5 — **and the
+  per-type detail fields** (multiline, initial state, the choice option
+  editor) **were deliberately CUT**: *"half of both is worse than all of
+  one."* They stay owed **under Pass 20.5's own ID**, not as new work.
+  **One verification is OWED, and it is not a formality:** the rendered
+  appearance was **NOT** visually checked (the operator was at the machine
+  with a file dialog open and a capture would have photographed his
+  desktop and stolen his focus) — **three defects this session were caught
+  only by looking.**
+  **Still owed by this bucket, restated so the list is current:** **`/I`
+  and `/TI`**, **push buttons** (Pass 20.3's other half — verb name still
+  NOT RULED), **tab order AUTHORING** (F4, still **BLOCKED** on the
+  `pdfce-spec-librarian` `/Tabs` dispatch), **F5's own cut half** (GUI
+  deletion + per-type detail fields, under Pass 20.5), and **field
+  property editing** (F6 — the operator's own *"editing"*). **Comb
+  layout** and **inherited-`/V` writes** remain named limits. **Also
+  newly named:** the **`/MK`-border disclosure** the R43 amendment asked
+  F5's pane to carry — the pane now exists and does **not** carry it.
 - **XFA** — legacy Adobe forms tech. **Verify current status before
   scoping** — Adobe has been deprecating XFA in Acrobat; consult the
   spec RAG + a fresh web check before committing engineering time here.

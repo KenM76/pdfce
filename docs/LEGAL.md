@@ -188,6 +188,13 @@ filing is ever pursued (do the USPTO search then, not now).
   scratch/debug location — describe the bug and the minimal structural
   cause in the SESSION_LOG / lesson instead of committing the file
   itself.
+- **★ The veraPDF CORPUS named above is NOT the veraPDF VALIDATOR.** This
+  section governs the **corpus** (a rights-cleared source of fixture
+  PDFs, in use since 2026-07-30). The **validator application** — a
+  dual-licensed GPLv3+/MPLv2+ tool pdfce **runs** but never ships — is
+  governed by **§6.5**, which records pdfce's **MPL-2.0 election** and six
+  binding usage rules. **Two artifacts, two licence questions; do not
+  answer one with the other.**
 
 ## 6. Open-source dependency licensing & attribution
 
@@ -278,6 +285,183 @@ generated compliance artifact. Both matter; they serve different
 readers (an engineer deciding what to depend on, vs. a downstream
 user checking license compliance).
 
+### 6.5 veraPDF — the licence ELECTION, and the arms-length usage rules (2026-08-07, BINDING)
+
+**Operator request, verbatim, 2026-08-07:**
+
+> *"I would like you to run veraPDF's validator against our own output as
+> soon as it would make sense to do so."*
+> *"Install whatever you need to get veraPDF working."*
+> *"use verapdf in a way that wouldn't cause us to change our license in
+> order to stay conforming with it's tos."*
+
+That third sentence is the requirement this subsection discharges. It is
+recorded here rather than only in `ROADMAP.md` because it is a **licensing
+constraint on the project**, and because the answer has to survive being
+found by someone a year from now who has only the artifacts.
+
+#### 6.5.0 What is installed, and where — deliberately OUT of the repo tree
+
+| Fact | Value |
+|---|---|
+| Product | **veraPDF 1.30.2** (greenfield validator) |
+| Install path | **`D:\tools\verapdf`** — outside `D:\Dev\pdfce\`, deliberately |
+| Installer SHA-256 | `6cc6341cb1af644044054b81f00a6590a7918abb18f762243de115258bcad838` |
+| GPG | **Good signature**, RSA key `13DD102B4DD69354D12DE5A83184863278B17FE7`, *"Carl Wilson `<techlead@verapdf.org>`"* (veraPDF's tech lead) |
+| Runtime | Java **17.0.7** present |
+
+**The install path is part of the legal posture, not a convenience.** A
+copy inside the repo tree is one `git add -A` away from being
+**redistributed**, which rule 1 below forbids. Keeping it on a separate
+path makes the arms-length relationship a property of the filesystem
+rather than of anyone's memory.
+
+#### 6.5.1 THE LOAD-BEARING FACT — every veraPDF component is DUAL-licensed GPLv3+ / MPLv2+
+
+Verified per-repository by fetching each project's README from
+`raw.githubusercontent.com`: **`veraPDF-apps`**, **`veraPDF-library`**,
+**`veraPDF-model`**, **`veraPDF-parser`** — all four state dual
+licensing. The `veraPDF-library` README's own words:
+
+> *"The veraPDF PDF/A Validation Library is dual-licensed, see:*
+> *- GPLv3+ (`LICENSE.GPL`, GNU General Public License, version 3)*
+> *- MPLv2+ (`LICENSE.MPL`, Mozilla Public License, version 2.0)"*
+
+**`LICENSE.MPL` was additionally confirmed to EXIST in `veraPDF-apps`**
+(HTTP 200, *"Mozilla Public License, version 2.0"*), **because a README
+naming a licence is weaker evidence than the licence file being there.**
+
+**Independently re-confirmed from the INSTALLED BINARY** by the librarian,
+2026-08-07 — see §6.5.5 for the exact output and for a correction to how
+this banner had been characterised.
+
+#### 6.5.2 THE ELECTION — pdfce receives veraPDF under **MPL-2.0**, not GPL-3.0
+
+**Under a dual licence the RECIPIENT chooses. pdfce chooses MPL-2.0.**
+
+**An undocumented choice is an ambiguous one**, and ambiguity is the
+entire risk here: a future reader who finds only "veraPDF" and "GPL" in
+the same sentence will conclude pdfce has a licensing problem. **This
+subsection exists so that reader finds the election instead.**
+
+**Why MPL-2.0 is safe for an MIT project:** MPL-2.0 is **file-level** weak
+copyleft — its obligations attach to the *MPL-licensed files themselves*,
+not to everything they touch. **MPL-2.0 §3.3 expressly permits combining
+Covered Software into a "Larger Work" distributed under other terms.**
+**There is therefore no propagation path from veraPDF to pdfce's MIT
+licence** (§1), even in the counterfactual where pdfce did something
+closer than it does.
+
+#### 6.5.3 The SECOND, INDEPENDENT protection — the usage pattern triggers nothing even on the GPL branch
+
+**Recorded because either protection alone suffices, and a record with two
+independent legs does not fall over if one is later disputed.**
+
+- **GPL-3.0 §0 affirms unlimited permission to RUN the unmodified
+  program.** Running a validator is not a licensed act requiring
+  compliance.
+- **Copyleft attaches to DISTRIBUTING a combined or derivative work.**
+  pdfce distributes neither.
+- **The GPL reaches neither a program's OUTPUT nor a program that merely
+  CONSUMES that output.** A validation report is data about pdfce's file,
+  not a derivative of veraPDF.
+
+So even if the election in §6.5.2 were set aside entirely, the pattern in
+§6.5.4 rule 4 would still be clean.
+
+#### 6.5.4 THE ENFORCEABLE RULES — this is the operational answer
+
+**Binding on `pdfce-engineer` and every agent, for the life of the
+project.**
+
+1. **Never vendor, bundle, or redistribute veraPDF** — not in the repo,
+   not in a release, not in the single-folder portable package.
+2. **Never link or embed** any veraPDF jar, class, or code into a pdfce
+   binary.
+3. **Never copy its source, its validation profiles, or its model
+   files.** **Reimplementing from the ISO spec is fine; lifting profile
+   XML is not.** (This is the same read-vs-copy line §6.1 draws for
+   GPL/AGPL prior art, applied to an artifact pdfce actually executes.)
+4. **Separate process only**, invoked over the **documented CLI**, with
+   pdfce consuming the **XML report**. No in-process embedding, no JNI,
+   no shading.
+5. **DEV-TIME ONLY.** veraPDF is never a runtime dependency of pdfce and
+   **never appears in any `Cargo.toml`.** **It will therefore correctly
+   never appear in `THIRD_PARTY_LICENSES.md`** — `cargo-about` generates
+   that file from the Cargo dependency graph and can only see Cargo
+   dependencies. **This is stated explicitly so nobody "fixes" the
+   apparent omission by adding it**; adding it would be adding a
+   dependency that does not exist, and would misdescribe pdfce's
+   distributed artifact to its downstream users.
+6. **★ THE GATE MUST *SKIP*, NOT *FAIL*, WHEN veraPDF IS ABSENT.** A
+   required gate would make veraPDF a **de facto build dependency** —
+   muddying exactly the arms-length position §6.5.2/§6.5.3 rest on — and
+   would break anyone who clones the repository without it. **A skipped
+   gate must say it skipped and why**, so the skip is never mistaken for
+   a pass.
+
+#### 6.5.5 ⚠ A CORRECTION, recorded rather than quietly dropped — the CLI banner names BOTH branches
+
+**This subsection was drafted on the understanding that veraPDF's CLI
+startup banner *"says only 'Released under the GNU General Public License
+v3'"* and was therefore misleading about the dual licence. **The librarian
+checked the installed binary and that characterisation is NOT accurate at
+1.30.2.** `./verapdf.bat --version` and `--help` both emit, verbatim:**
+
+```
+veraPDF 1.30.2
+Built: Wed Jun 03 10:55:00 EDT 2026
+Developed and released by the veraPDF Consortium.
+Funded by the PREFORMA project.
+Released under the GNU General Public License v3
+and the Mozilla Public License v2 or later.
+```
+
+**The banner names BOTH branches. It is not misleading; it is
+line-wrapped.**
+
+**But the underlying concern is real, and is better stated once the
+mechanism is right.** The licence sentence **spans two lines**, and the
+first line — *"Released under the GNU General Public License v3"* — is a
+complete, plausible, and **wrong** sentence on its own. **Anyone who
+greps the banner, reads a truncated capture, or quotes the first matching
+line gets GPL-only.** That is exactly how the mischaracterisation above
+arose, and it is a **reproducible reading hazard**, not a one-off
+mistake. **The predictable failure mode stands, with a corrected cause:**
+someone finds a GPL-only fragment of this banner in a year and concludes
+pdfce has a licensing problem it never had. **§6.5.1 and §6.5.2 are the
+answer to give them.**
+
+**How the correction was established (R87):** the librarian ran the
+installed `D:\tools\verapdf\verapdf.bat` with `--version` and with
+`--help` and read the complete output of each, rather than grepping for a
+licence keyword — the grep is the failure mode being described.
+
+#### 6.5.6 Two boundaries that must not be blurred
+
+- **§6.2's "stop and ask the user before adding copyleft" is SATISFIED,
+  from the other direction: the OPERATOR REQUESTED IT.** The rule exists
+  so a copyleft artifact never enters the project on an agent's solo
+  judgment. Here the operator asked for veraPDF by name and simultaneously
+  set the constraint (*"in a way that wouldn't cause us to change our
+  license"*). **No further sign-off is outstanding for the arms-length,
+  dev-time-only use described above** — and §6.2 is **unchanged** for
+  anything else, including any future proposal to treat veraPDF as a real
+  dependency, which rules 1/2/5 forbid outright.
+- **The veraPDF CORPUS and the veraPDF VALIDATOR are SEPARATE ARTIFACTS
+  WITH SEPARATE TERMS. Do not conflate them.** The **corpus** has been in
+  use since 2026-07-30 as a test-fixture source under **§5** (which names
+  it as a rights-cleared corpus) and appears in ~100 places across this
+  repository — every one of those pre-existing references is to the
+  **corpus**, not the tool. This subsection governs the **validator
+  application** only, and is the **first** mention of it anywhere in the
+  repository. **Established by `git grep -i verapdf` over tracked files
+  and reading every hit (2026-08-07): all prior hits are corpus
+  references, the PDF/A spec-sourcing note in §2, or the `PRIOR_ART.md`
+  row about KillerPDF's own corpus testing. `git grep -E '\bMPL\b'`
+  confirms no prior MPL classification of veraPDF existed** (R87 — stated
+  so the absence is checkable rather than asserted).
+
 ## 7. Decision log
 
 - **2026-07-23** — Legal posture document created at project bootstrap.
@@ -324,3 +508,56 @@ user checking license compliance).
   publishing a release — that remains a separate, still-open operator
   authorization. See `ARCHITECTURE.md` §12 (2026-08-01 entry, same
   decision) for the architectural-decision-log mirror of this record.
+- **2026-08-07 — §6.5 added: the veraPDF LICENCE ELECTION and the
+  arms-length usage rules.** Prompted by the operator's direct request to
+  run veraPDF's validator against pdfce's own output, with the explicit
+  constraint *"use verapdf in a way that wouldn't cause us to change our
+  license in order to stay conforming with it's tos."* **veraPDF 1.30.2
+  (greenfield) is installed at `D:\tools\verapdf`, deliberately OUTSIDE
+  the repository tree**; installer SHA-256
+  `6cc6341cb1af644044054b81f00a6590a7918abb18f762243de115258bcad838`,
+  GPG-verified good signature from veraPDF's tech lead (RSA key
+  `13DD102B4DD69354D12DE5A83184863278B17FE7`).
+  **THE DECISION: pdfce receives veraPDF under MPL-2.0, NOT GPL-3.0.**
+  Every veraPDF component is dual-licensed **GPLv3+ / MPLv2+** (verified
+  per-repo across `veraPDF-apps`, `veraPDF-library`, `veraPDF-model`,
+  `veraPDF-parser`, plus confirmation that `LICENSE.MPL` actually exists
+  in `veraPDF-apps`, and independently re-confirmed from the installed
+  binary's own banner). **Under a dual licence the recipient chooses, and
+  an undocumented choice is an ambiguous one** — so the choice is made and
+  written down. MPL-2.0 is file-level weak copyleft and **§3.3 expressly
+  permits combination into a "Larger Work" under other terms**, so there
+  is **no propagation path to pdfce's MIT licence** (§1).
+  **A SECOND, INDEPENDENT protection is recorded because either alone
+  suffices:** the usage pattern triggers nothing even on the GPL branch —
+  GPL §0 affirms unlimited permission to **run** an unmodified program,
+  copyleft attaches to **distributing** a combined or derivative work, and
+  the GPL reaches neither a program's output nor a program that merely
+  consumes it.
+  **Six enforceable rules** (§6.5.4): no vendoring/bundling/
+  redistribution; no linking or embedding; no copying of source,
+  validation profiles or model files (**reimplementing from the ISO spec
+  is fine; lifting profile XML is not**); separate process over the
+  documented CLI consuming XML; **dev-time only, never in any
+  `Cargo.toml`** — so it will **correctly never appear in
+  `THIRD_PARTY_LICENSES.md`, and nobody should "fix" that**; and **the
+  gate must SKIP, not FAIL, when veraPDF is absent**, because a required
+  gate would make it a de facto build dependency and muddy the very
+  arms-length position this decision rests on.
+  **§6.2's "stop and ask before adding copyleft" is satisfied from the
+  other direction — the operator requested it**, and set the constraint
+  himself in the same breath. §6.2 is unchanged for everything else.
+  **⚠ ONE CORRECTION IS RECORDED RATHER THAN QUIETLY DROPPED (§6.5.5):**
+  the CLI banner had been characterised as naming GPL-3.0 only and being
+  misleading. **It is not — at 1.30.2 it names BOTH branches.** The
+  librarian verified this by running the installed binary. **The real
+  hazard is that the licence sentence is LINE-WRAPPED**, so its first line
+  (*"Released under the GNU General Public License v3"*) is a complete,
+  plausible, wrong sentence that any grep or truncated read will return on
+  its own. **The predictable failure mode stands with a corrected cause.**
+  **The veraPDF CORPUS (in use under §5 since 2026-07-30) and the veraPDF
+  VALIDATOR are separate artifacts with separate terms — §6.5 governs the
+  validator only, and is the first mention of the tool anywhere in this
+  repository** (established by reading every `git grep -i verapdf` hit
+  over tracked files). See `ARCHITECTURE.md` §12's 2026-08-07 eleventh
+  entry for the architectural-decision-log mirror.

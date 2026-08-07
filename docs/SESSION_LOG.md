@@ -19662,3 +19662,161 @@ R162 mint, the R160 amendment, and five stale-location amendments),
 
 **Backup currency is not verifiable from the documents** — the engineer
 should check `D:\Dev\pdfce-backups\` if it matters.
+
+## 2026-08-07 (eighth filing) — **PASS 20.5 HEADED, PARTIAL BY CHOICE**: form fields can now be created in the GUI (`165dd49`), the disclosure predicate that could not see its newest field becomes a DESTRUCTURING (`8a8678e`), and **veraPDF is ELECTED UNDER MPL-2.0** in `LEGAL.md` §6.5
+
+**Shipped:**
+- **Pass 20.5 (PARTIAL)** — decision 020's **F5**, creation half.
+  `8a8678e` (the disclosure predicate) + `165dd49` (the GUI surface).
+  **First heading this ID has ever had** — filed 2026-08-03, cited as
+  owed in six later filings, built now. **No Pass ID minted.**
+
+**Decisions made this session:**
+- **`FieldAuthorDisclosures::any()` is a DESTRUCTURING, not a `||`
+  chain.** Adding a struct field without handling it is now a **compile
+  error**. The discipline moves from *remembering* to *the type system*.
+- **The authoring tool joins a NEW ribbon group beside `Forms`, not
+  `Forms` itself** — `RibbonGroup::Forms` documents its own reason for
+  existing as **arming no tool**, and creating a field IS the mode change
+  that sentence denies. Not `ContentTools` either: that group is page
+  **content**, and a form field is an `/AcroForm` entry that survives
+  content edits and is removed by flattening.
+- **One tool for four types**, type selected in Tool Options — four tools
+  would put four mutually-exclusive-in-practice entries on
+  `TOOL_PRECEDENCE` where three of four combinations mean nothing.
+- **The auto-name SCANS rather than counting** — a deliberate divergence
+  from Acrobat's session counter, because **pdfce merges same-name
+  same-type fields** and a colliding stub would silently make a widget on
+  an existing field, through a name pdfce chose itself.
+- **Push button ABSENT rather than greyed** (R83 — no ruled verb name, so
+  no capability to point a control at; R124 — an empty control teaches
+  nothing its absence does not).
+- **veraPDF is received under MPL-2.0, not GPL-3.0** (`LEGAL.md` §6.5) —
+  see *Findings*, below.
+
+**Findings + decisions:**
+- **★ THE HEADLINE DEFECT IS R162'S SHAPE AGAIN, ONE FIELD AWAY.**
+  `any()` omitted `group_flags_ignored`, so the natural gate for a GUI
+  disclosure block answered **`false`** for a radio merge whose **only**
+  disclosure was that pdfce had overridden the operator's flags — **rule 4
+  failing closed.** The F2 fork had already fixed the *same* omission in
+  `report_field_disclosures`; **the fix did not reach `any()`.**
+- **★ WHY NO TEST CAUGHT IT — this is the part worth keeping.** The one
+  test producing `group_flags_ignored` **also calls
+  `.declining_tooltip()`**, so `any()` came out true **through a DIFFERENT
+  field**. **Vacuous by coincidence, not by construction** — two
+  individually-correct choices (assert the predicate; reuse the convenient
+  fixture) composed into an assertion that could not fail for the reason
+  it claimed to pass. No reviewer would have seen it.
+- **★ A STANDING-RULE CANDIDATE IS NAMED AND DELIBERATELY NOT MINTED:**
+  *prefer making the omission a compile error over writing a rule that
+  asks a human to remember.* **Second time in one day a structural fix
+  beat a procedural one.** **R163 is left free for the engineer to rule.**
+- **⚠ AN OWED VERIFICATION, recorded rather than smoothed over.** The
+  **rendered appearance is NOT visually verified.** Traces establish
+  geometry (`llx=76.8 lly=73.7 w=150 h=22`), the R105 gate (`can=false` →
+  `can=true`), the commit report (`name=Text1 merged=false notes=2`), the
+  anti-collision guarantee end to end (a second placement offers `Text2`,
+  unmerged), and that the pane's controls fit the compartment
+  (`x=8-149`). **No screenshot was taken deliberately** — the operator was
+  at the machine with a file dialog open, the first capture photographed
+  his desktop, and continuing would have stolen his focus. **Right call,
+  real gap: three defects this session were caught ONLY by looking.**
+- **Two harness findings — the observation harness attributing its own
+  defects to the application.** (1) **An unparseable diag step is SILENTLY
+  DROPPED**; the absent trace reads as an application defect until a
+  known-good sibling is checked — an **R87-family silence in the
+  instrument itself**. (2) **The Edit tab is not active by default**, so
+  tool traces need **`tab:edit` first**.
+- **A process gap: `pdfce-ui-specialist` was dispatched and filed NO spec
+  document.** Its design existed only in its report and now only in the
+  engineer's conversation, which compaction will discard.
+  **`docs/ui_specs/` IS where such a design belongs** — twenty-one
+  precedents including `forms-panel.md` for this same feature family.
+  **Not a criticism of the specialist** (it was asked for a critique and
+  gave one); the filing obligation belongs in the dispatch or the agent
+  file, **engineer's call**.
+- **★ veraPDF — THE LICENCE ELECTION (`LEGAL.md` §6.5, new, BINDING).**
+  Operator asked for veraPDF validation of pdfce's own output *"in a way
+  that wouldn't cause us to change our license."* **veraPDF 1.30.2 is
+  installed at `D:\tools\verapdf`, deliberately OUTSIDE the repo tree**
+  (SHA-256 `6cc6341c…d838`, GPG good signature from veraPDF's tech lead).
+  **Every component is dual-licensed GPLv3+ / MPLv2+**, verified per-repo
+  across `veraPDF-apps` / `-library` / `-model` / `-parser`, plus
+  confirmation that `LICENSE.MPL` **exists** in `veraPDF-apps`. **Under a
+  dual licence the recipient chooses, and an undocumented choice is an
+  ambiguous one — so pdfce ELECTS MPL-2.0.** MPL-2.0 is file-level weak
+  copyleft and **§3.3 expressly permits combination into a "Larger Work"
+  under other terms**: no propagation path to MIT. **A second,
+  independent protection is recorded** — the usage pattern triggers
+  nothing even on the GPL branch (GPL §0 = unlimited permission to
+  **run**; copyleft attaches to **distributing** a combined work; the GPL
+  reaches neither a program's output nor a program that merely consumes
+  it).
+- **★ A CORRECTION TO THE veraPDF SOURCING, verified by the librarian and
+  NOT quietly dropped.** The dispatch stated the CLI banner *"says only
+  'Released under the GNU General Public License v3'"* and is misleading.
+  **That is not accurate at 1.30.2 — the banner names BOTH branches**
+  (*"…GNU General Public License v3"* / *"and the Mozilla Public License
+  v2 or later."*), confirmed by running `--version` and `--help` on the
+  installed binary. **The underlying concern is real with a corrected
+  cause: the licence sentence is LINE-WRAPPED**, so its first line is a
+  complete, plausible, wrong sentence that any grep or truncated read
+  returns on its own. **That is a reproducible reading hazard, not a
+  one-off mistake** — and it is how the mischaracterisation arose.
+- **The veraPDF CORPUS and the veraPDF VALIDATOR are separate artifacts
+  with separate terms.** The corpus has been in use under `LEGAL.md` §5
+  since 2026-07-30 and appears ~100 times in this repo; **every one of
+  those is the corpus.** §6.5 is the **first** mention of the tool
+  anywhere in the repository — established by reading every
+  `git grep -i verapdf` hit over tracked files, and by a precise
+  word-boundary `MPL` grep returning no prior veraPDF classification
+  (R87).
+
+**Still in flight:**
+- **Pass 20.5's own cut half, under the SAME ID:** the **GUI deletion
+  surface** (core-complete since `817b268`, scoped in, cut — *"half of
+  both is worse than all of one"*) and the **per-type detail fields**
+  (multiline, initial state, the choice option editor). **A choice with a
+  reason, not an omission.**
+- **The OWED visual verification of Pass 20.5's rendered appearance**, at
+  a moment when the operator is not at the machine.
+- **The `/MK`-border disclosure** the R43 amendment asked F5's pane to
+  carry — the pane now exists and does **not** carry it.
+- **Pass 20.3 (F3)** — `/I`, `/TI`, push buttons. **Verb name still NOT
+  RULED**; R161 gives the shape, not the word.
+- **F4 `/Tabs` AUTHORING** — still BLOCKED on a `pdfce-spec-librarian`
+  dispatch. **F6 field PROPERTY editing** — the operator's own
+  *"editing"* — still behind everything.
+- **F0's disposition** (owed retroactively / deferred / retired) — **still
+  owed by the engineer**, now unchanged across five filings.
+
+**For next session:**
+- **ENGINEER RULING NEEDED — one standing-rule candidate**, named and left
+  unminted at **R163**: *prefer making the omission a compile error over
+  writing a rule that asks a human to remember.* The librarian judges it
+  earns a number; **the engineer decides.**
+- **ENGINEER CALL — should `pdfce-ui-specialist` be obliged to FILE its
+  spec to `docs/ui_specs/`?** Every prior non-trivial UI Pass left one;
+  this one did not, and the obligation is stated nowhere.
+- **OWED TOOLING — `tools/gui-drive.ps1` should REJECT an unrecognised
+  step loudly** instead of dropping it silently. **Flagged, not claimed as
+  done.**
+- **veraPDF is installed and the legal posture is settled** — the gate can
+  be built whenever it makes sense. **Build it to SKIP, not FAIL, when
+  veraPDF is absent** (`LEGAL.md` §6.5.4 rule 6): a required gate would
+  make it a de facto build dependency. **Never add it to a `Cargo.toml`**,
+  and expect it to be absent from `THIRD_PARTY_LICENSES.md` **by design**.
+- **`LEGAL.md` §6's opening paragraph still says pdfce's licence is
+  "§1, still undecided"** — stale since 2026-08-01. **Not corrected this
+  filing** (out of the dispatched scope), flagged for the next one; §6.1
+  already carries the correction inline, so a careful reader is not
+  misled.
+
+**Ledger — nothing minted.** Pass family **43**; standing rules **R162**
+(**R163 next free, deliberately left free**); decision records **031**;
+operator questions **(bb)**. **Both checkers re-run after this filing:
+`check-ledger-numbers.py` exit 0, `check-passes-filed.py` exit 0.**
+
+**Backup currency is not verifiable from the documents** — the engineer
+should check `D:\Dev\pdfce-backups\` if it matters.
