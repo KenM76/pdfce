@@ -75,8 +75,21 @@ LICENSING — WHY THIS IS A SEPARATE PROCESS AND WHY IT SKIPS
 veraPDF is dual-licensed **GPLv3+ / MPLv2+** (verified against every
 component repo's ``README`` and the presence of ``LICENSE.MPL`` in
 ``veraPDF-apps``). pdfce **elects MPL-2.0** — see ``docs/LEGAL.md``.
-The CLI's own startup banner names only GPL v3 and is misleading; it
-states one branch of a dual licence.
+
+Its startup banner states **both** branches::
+
+    Released under the GNU General Public License v3
+    and the Mozilla Public License v2 or later.
+
+An earlier version of this file claimed the banner named only GPL and
+was misleading. That was wrong, and the correction is kept here rather
+than quietly deleted because the *mechanism* is worth knowing: the
+licence sentence is **line-wrapped**, so a truncated read (``head -5``,
+cutting at exactly line 5) returns a complete, plausible, wrong
+sentence. Mid-word truncations announce themselves; a cut at a wrap
+point does not — and wrapping puts clause boundaries on line boundaries
+by construction, so the safe-looking truncation is the likely one.
+**Do not "fix" the banner or report it upstream.**
 
 pdfce therefore:
 
@@ -219,6 +232,16 @@ def build_cli(workdir: Path) -> Path:
         ["cargo", "build", "-q", "-p", "pdfce-cli"],
         capture_output=True,
         text=True,
+        # Decode as UTF-8 with replacement, NEVER the platform locale.
+        # `text=True` alone decodes with cp1252 on Windows, and a single
+        # byte outside that codepage (0x8f, hit on a real corpus file)
+        # raises UnicodeDecodeError inside a subprocess READER THREAD --
+        # so the traceback names threading.py and encodings/cp1252.py and
+        # never mentions this tool at all. A sweep exists to run bytes
+        # from producers we do not control; it must not assume its own
+        # locale can spell their output.
+        encoding="utf-8",
+        errors="replace",
     )
     if proc.returncode != 0:
         raise RuntimeError(
@@ -248,6 +271,16 @@ def produce(cli: Path, src: Path, mode: str, dest: Path) -> str | None:
         ],
         capture_output=True,
         text=True,
+        # Decode as UTF-8 with replacement, NEVER the platform locale.
+        # `text=True` alone decodes with cp1252 on Windows, and a single
+        # byte outside that codepage (0x8f, hit on a real corpus file)
+        # raises UnicodeDecodeError inside a subprocess READER THREAD --
+        # so the traceback names threading.py and encodings/cp1252.py and
+        # never mentions this tool at all. A sweep exists to run bytes
+        # from producers we do not control; it must not assume its own
+        # locale can spell their output.
+        encoding="utf-8",
+        errors="replace",
     )
     if proc.returncode != 0 or not dest.is_file():
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()
@@ -269,6 +302,16 @@ def verapdf_parse_report(verapdf: Path, files: list[Path]) -> dict[str, str]:
         [str(verapdf), "--off", *[str(f) for f in files]],
         capture_output=True,
         text=True,
+        # Decode as UTF-8 with replacement, NEVER the platform locale.
+        # `text=True` alone decodes with cp1252 on Windows, and a single
+        # byte outside that codepage (0x8f, hit on a real corpus file)
+        # raises UnicodeDecodeError inside a subprocess READER THREAD --
+        # so the traceback names threading.py and encodings/cp1252.py and
+        # never mentions this tool at all. A sweep exists to run bytes
+        # from producers we do not control; it must not assume its own
+        # locale can spell their output.
+        encoding="utf-8",
+        errors="replace",
     )
     try:
         report = ET.fromstring(proc.stdout)
