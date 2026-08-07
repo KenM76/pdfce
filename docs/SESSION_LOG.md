@@ -21370,3 +21370,160 @@ should check `D:\Dev\pdfce-backups\` if it matters. **This filing edited
 `docs/` ONLY** — no `crates/`, no `tools/`, no `fixtures/`, no RAG tree —
 and **no claim is made here about the working tree, the index, or any
 remote.**
+
+## 2026-08-07 (sixteenth filing) — **`R166` IS CONSIDERED AND REFUSED** (*acquire a reader you did not write*) — **the correlated-blindness finding is converted from an ADMONITION into a per-surface GAP LIST**, and the veraPDF gate's founding paragraph finally POINTS somewhere
+
+**Shipped:**
+- Nothing. **No Pass ID, no commit, no code.** This filing edited `docs/`
+  only, plus two files in the cross-project Rust RAG.
+
+**Decisions made this session:**
+
+- **★ `R166` CONSIDERED AND REFUSED — the candidate was *"acquire a reader
+  you did not write, because your own coverage is correlated."* The ceiling
+  stays `R165`; `R166` is next free and NO transfer occurs** (decision 030's
+  three contingent candidates and the cross-RAG-handoff proposal keep their
+  existing claim on `R166`). Ruled by the operator; recorded so the next
+  filing does not re-open it. Four reasons, in the order ruled:
+  1. **R163 APPLIED TO ITSELF — the deciding one.** `tools/verapdf-parse-gate.py`
+     **already exists and runs**. A rule saying *acquire a foreign oracle*
+     asks a human to remember **what a mechanical artifact now carries**,
+     which is precisely what R163 was minted to prefer against.
+  2. **Three defects, arguably ONE finding** — one gate, one day, one
+     investigation. The fifteenth filing flagged this itself; the flag was
+     ruled correct.
+  3. **THREE rules were minted this day already (R163, R164, R165)**, and
+     **two of the three needed a documented overrule to land.** The
+     two-occurrence bar exists to stop a productive day from inflating the
+     rule set.
+  4. **The claim says *acquire something*, which is WORK, not CARE.**
+     Standing rules constrain how work is done; they cannot commission it.
+     Work is **scheduled**, not remembered.
+
+  **The refusal is about the CARRIER, not the content.** The
+  correlated-blindness finding stands unchanged and is now cited from three
+  places.
+
+**Findings + decisions:**
+
+- **★ THE CONVERSION IS THE REAL OUTPUT OF THIS FILING.** Refusing the rule
+  left a real uncovered claim, so it was filed as **`ROADMAP.md` *Backlog* →
+  *Foreign oracles for every output surface*** — **unscoped, no Pass ID, no
+  sequencing implied.** Seven output surfaces enumerated with their
+  independent judge (or lack of one), plus one adjacent tool named so it is
+  not miscounted, plus one boundary inside the row that looks green:
+
+  | surface | judge |
+  |---|---|
+  | rendered raster | **pdfium** (`tools/render-parity/`, `tools/annot-pdfium-diff.py`) |
+  | saved PDF file structure | **veraPDF** (`tools/verapdf-parse-gate.py`), as of today |
+  | extracted text | **none** — asserted through pdfce's own extractor |
+  | form-data export (FDF/XFDF) | **none found in-repo; ever-run is UNESTABLISHED** |
+  | embedded/subset font programs | **indirect at best; strength UNESTABLISHED** |
+  | PDF/A output (`to-pdfa`) | **no output yet — and the oracle is ALREADY PARKED** |
+  | signed PDFs / PAdES (`sign`) | **no output yet** |
+
+- **★ HOW THE LIST WAS ESTABLISHED (R87), because a gap list is a claim.**
+  *A surface wrongly listed as unguarded sends someone to build a second
+  oracle; one wrongly listed as guarded is worse.* Surfaces from the
+  `Command` enum in `crates/pdfce-cli/src/main.rs`, reduced to *"what
+  ARTIFACT leaves pdfce that another program must read"*. Oracles from
+  `tools/` plus each harness's own header docstring. Absences by
+  **tracked-file** `git grep -ln` with the exact query recorded per row.
+  **Where a grep can only show that no harness in THIS REPO does it, the row
+  says `UNESTABLISHED`, not `none`.**
+
+- **★ ONE DISPATCH PREMISE WAS CORRECTED BY MEASUREMENT — SIGNATURES.** The
+  dispatch listed *"Signatures / PAdES — nothing"*, i.e. an unguarded
+  surface. **It is not unguarded — it does not exist.** `Command::Sign`
+  routes to `unimplemented_stub`, and `crates/pdfce-core/src/signature.rs`
+  opens **"This module verifies nothing"** (census / change-impact only; no
+  digest, no PKCS#7, no chain). **pdfce writes no signature today**, so there
+  is no output to judge — the same category as PDF/A, minus the parked
+  oracle. Filed in the row rather than silently corrected.
+
+- **A SECOND, SMALLER CORRECTION — `to-pdfa` and `validate-pdfa` ARE declared
+  in the CLI surface**, with `[not yet implemented]` doc comments, and both
+  route to `unimplemented_stub`. The dispatch's *"`to-pdfa` does not exist"*
+  is right about the **capability** and imprecise about the **surface**; the
+  row states it the precise way, because someone reading `--help` will see
+  the verb.
+
+- **★ A BOUNDARY INSIDE THE ROW THAT LOOKS COVERED, worth carrying forward.**
+  `tools/verapdf-parse-gate.py`'s own `MODE_NOTES` warns that `incremental`
+  **with no edits** hands veraPDF *the input file*. `--mode full` and
+  `--append-identity` are meaningfully covered. **Whether the INCREMENTAL
+  writer has been swept WITH REAL EDITS APPLIED is UNESTABLISHED from the
+  documents** — the §6.1.12 run records `--mode full` explicitly; the
+  nine-corpus sweep does not record its mode per corpus.
+
+- **`tools/difftest/` is a foreign reader pdfce ALREADY OWNS** (oxidize-pdf,
+  pinned `=4.2.1`, out-of-tree, advisory) — **but its own header says it runs
+  the same fixture PDFs through both parsers**, so it judges pdfce's **READ**
+  path, not anything pdfce **emits**. **Whether it has ever been pointed at
+  pdfce's own OUTPUT is UNESTABLISHED**, and if not, it is plausibly the
+  cheapest row on the list to close.
+
+- **THE OWED CROSS-REFERENCE IS FILED.** The veraPDF gate entry's founding
+  paragraph — *"every test pdfce has reads pdfce's output with pdfce's own
+  parser … a closed loop cannot see a defect both halves share"* — carried
+  the project-scoped claim and **pointed at nothing.** It now names
+  `D:\dev\rag\rust\producer_reads_its_own_broken_output_so_every_in_house_check_agrees.md`.
+  **R163 was raised against this and ruled not to apply: DISCOVERY IS
+  DIRECTIONAL** — the RAG file is found by someone searching cross-project
+  lessons, the ROADMAP paragraph by someone reading pdfce, and neither
+  reaches the other's reader. **A pointer is not an obligation, it is
+  navigation**; R163 governs obligations a mechanical artifact can carry.
+
+**Files edited:**
+- `docs/ROADMAP.md` — four locations: the veraPDF-gate tooling entry (the
+  cross-reference + the refusal pointer), *Standing rules* (new
+  `### RESOLVED 2026-08-07` section for the R166 refusal), *Backlog* (the new
+  *Foreign oracles for every output surface* entry), and a dated amendment
+  block on the *full external corpus, swept end to end* Shipped entry so a
+  reader who stops at the finding learns it was ruled on.
+- `D:\dev\rag\rust\producer_reads_its_own_broken_output_so_every_in_house_check_agrees.md`
+  — dated **AMENDED 2026-08-07** section: the *no pdfce standing rule states
+  this* line is now true **by decision rather than by omission**, plus the
+  generalisable half (*a claim that says acquire something is work, not care*)
+  and the gap-list conversion as the transferable move.
+- `D:\dev\rag\rust\index.md` — same amendment, one paragraph, on that file's
+  existing bullet.
+
+**`FEATURES.md` — NO row added and NO box changed, and the absence is
+established rather than assumed.** A **Backlog list of verification
+harnesses** is not an operator capability; `FEATURES.md` has **no tooling
+section by design**. This is the **sixth** application of that precedent (the
+gate, the timeout flag, the fixture, the §6.1.12 run, the sweep, and now this
+list).
+
+**Ledger after this filing** — re-measured by running
+`tools/check-ledger-numbers.py`, not read from the file. Pass family **43**;
+standing rules **R165** (**R166** next free, and now recorded as
+**considered-and-refused** rather than merely unclaimed); decision records
+**031** (**032** next free); operator questions **(bb)**. **NOTHING MINTED.**
+
+**Still in flight / for next session:**
+
+- **NEW — the `UNESTABLISHED` rows are invitations to check, not findings.**
+  Any row scoped into a Pass should **re-establish its absence at that time**
+  rather than trusting this snapshot.
+- **NEW — the incremental-writer coverage boundary** (above) is worth
+  settling before the saved-file row is quoted as fully green.
+- **The R166 refusal CLOSES the candidate the fifteenth filing left
+  unminted.** It should not be carried forward again.
+- **The PDF/A conformance gate** remains unscoped Backlog and remains
+  deliberately a **separate tool** — now also the *"oracle already waiting"*
+  row of the new Backlog entry.
+- **Everything else carried forward from the fifteenth filing is UNCHANGED** —
+  Pass 20.5's remaining cut half and its owed rendered-appearance check, the
+  multi-page repeated-field labelling gap, `tools/gui-drive.ps1`'s
+  build-or-assert-freshness item, Pass 20.3's `/I`/`/TI`/push buttons and the
+  unruled push-button verb name, the `pdfce-ui-specialist` spec-filing call,
+  F0's disposition, and the **`Acrobat_Features` stale-GAP dispatch**.
+
+**A performance fork is live in `crates/` and this filing did not touch it.**
+**Backup currency is not verifiable from the documents** — the engineer
+should check `D:\Dev\pdfce-backups\` if it matters. **Nothing was staged**,
+and **no claim is made here about the working tree, the index, or any
+remote.**
