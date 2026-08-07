@@ -1203,6 +1203,96 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// Author one member of a radio group (ISO 32000-1 §12.7.4.2.1).
+    ///
+    /// ONE CALL PER MEMBER, not per group. Repeat with the same `--name` and
+    /// a different `--export-value` to build the group up; the second call
+    /// merges a widget into the field the first created, exactly as a check
+    /// box repeated across pages does. There is no `add-radio-group` verb,
+    /// because there is no moment at which pdfce could know you were
+    /// finished — a one-member group is a legitimate intermediate state.
+    ///
+    /// Both appearance states are written per member, so the group is
+    /// immediately usable by `set-button-state` and correct in a viewer.
+    AddRadioButton {
+        /// Input PDF.
+        input: PathBuf,
+        /// The GROUP's fully-qualified name — shared by every member, and how
+        /// `set-button-state` and `list-fields` refer to it.
+        ///
+        /// A PERIOD SEPARATES LEVELS (§12.7.3.2): `Personal.Contact.Method`
+        /// creates the groups `Personal` and `Personal.Contact` and the field
+        /// `Method` inside it — reusing any that already exist.
+        ///
+        /// REUSING THIS NAME IS HOW A GROUP IS BUILT: each call adds a member.
+        /// A check box or a text field under the same name is refused — a
+        /// check box and a radio are both `/FT /Btn` and would otherwise
+        /// merge into one field whose widgets disagree about whether they
+        /// toggle independently or exclusively.
+        #[arg(long)]
+        name: String,
+        /// 1-based page number to place this member on.
+        ///
+        /// Members may sit on DIFFERENT pages; the group is one field
+        /// regardless.
+        #[arg(long)]
+        page: usize,
+        /// This member's rectangle in PDF user space, `llx,lly,urx,ury`.
+        #[arg(long, value_name = "LLX,LLY,URX,URY", allow_hyphen_values = true)]
+        rect: String,
+        /// This member's export value — its identity within the group.
+        ///
+        /// It is simultaneously the `/AP /N` key, the `/AS` when this member
+        /// is chosen, and the `/V` the group takes (§12.7.4.2.1). Members are
+        /// told apart by it and nothing else, so two members may not share
+        /// one unless `--radios-in-unison` says they select together.
+        ///
+        /// `Off` is reserved for the unselected state (§12.7.4.2.3).
+        #[arg(long)]
+        export_value: String,
+        /// Make this member the group's initial selection.
+        #[arg(long)]
+        selected: bool,
+        /// `/TU`, the accessibility name a screen reader announces.
+        #[arg(long)]
+        tooltip: Option<String>,
+        /// Explicitly DECLINE an accessibility name (R105).
+        ///
+        /// Exactly one of `--tooltip` / `--no-tooltip` is required.
+        #[arg(long, conflicts_with = "tooltip")]
+        no_tooltip: bool,
+        /// `/Ff` bit 15 — once a member is chosen, clicking it again does not
+        /// clear the group.
+        ///
+        /// Only the call that CREATES the group decides this; a later member
+        /// passing a different value is told its flag was ignored rather than
+        /// silently rewriting how the existing members behave.
+        #[arg(long)]
+        no_toggle_to_off: bool,
+        /// `/Ff` bit 26 — members sharing an export value turn on together.
+        ///
+        /// This is also what permits a duplicate `--export-value`, which is
+        /// otherwise refused. Only the creating call decides it.
+        #[arg(long)]
+        radios_in_unison: bool,
+        /// Mark the field read-only (`/Ff` bit 1).
+        #[arg(long)]
+        read_only: bool,
+        /// Mark the field required at submit time (`/Ff` bit 2).
+        #[arg(long)]
+        required: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the add reproduces the input byte for
+        /// byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// Author a new list box or drop-down (ISO 32000-1 §12.7.4.4).
     ///
     /// The field is created with its options and NO selection; `fill-field`
@@ -2940,6 +3030,39 @@ fn run() -> ExitCode {
             checked,
             tooltip: tooltip.as_deref(),
             no_tooltip,
+            read_only,
+            required,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
+        Command::AddRadioButton {
+            input,
+            name,
+            page,
+            rect,
+            export_value,
+            selected,
+            tooltip,
+            no_tooltip,
+            no_toggle_to_off,
+            radios_in_unison,
+            read_only,
+            required,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_add_radio_button(&AddRadioButtonArgs {
+            input: &input,
+            name: &name,
+            page,
+            rect: &rect,
+            export_value: &export_value,
+            selected,
+            tooltip: tooltip.as_deref(),
+            no_tooltip,
+            no_toggle_to_off,
+            radios_in_unison,
             read_only,
             required,
             output: &output,
@@ -8851,6 +8974,25 @@ struct AddChoiceFieldArgs<'a> {
     verify_undo: bool,
 }
 
+/// Borrowed argument bundle for [`cmd_add_radio_button`] (clippy arg-count).
+struct AddRadioButtonArgs<'a> {
+    input: &'a Path,
+    name: &'a str,
+    page: usize,
+    rect: &'a str,
+    export_value: &'a str,
+    selected: bool,
+    tooltip: Option<&'a str>,
+    no_tooltip: bool,
+    no_toggle_to_off: bool,
+    radios_in_unison: bool,
+    read_only: bool,
+    required: bool,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
 /// Parse `--page` (1-based) and `--rect` (`llx,lly,urx,ury`), the two
 /// arguments every field-authoring subcommand takes in the same form.
 ///
@@ -8960,6 +9102,100 @@ fn cmd_add_check_box(args: &AddCheckBoxArgs<'_>) -> u8 {
         u32::from(authored.disclosures.tagged_document),
         u32::from(authored.disclosures.structure_tab_order),
         u32::from(authored.disclosures.tooltip_declined),
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// `add-radio-button` — author ONE member of a radio group.
+///
+/// ## Contract
+///
+/// - Emits one `add-radio-button …` line with the usual save-report fields,
+///   then defers the exit code to [`finish_edit`].
+/// - **One invocation adds one MEMBER.** Repeating the verb with the same
+///   `--name` and a different `--export-value` is how a group is built; the
+///   `merged=` field in the output line says which happened, so a script can
+///   tell "created the group" from "joined it" without re-reading the file.
+/// - Refusals — an `Off` export value, a duplicate export value in a group
+///   that is not `--radios-in-unison`, a positional-`/Opt` group pdfce cannot
+///   extend, a name already used by a different field type or KIND, plus
+///   every structural refusal the sibling authoring verbs share — go through
+///   [`report_edit_error`] BEFORE any mutation.
+/// - `--page` is 1-BASED here and 0-based in the core call.
+fn cmd_add_radio_button(args: &AddRadioButtonArgs<'_>) -> u8 {
+    let (page_index, rect) = match parse_page_and_rect(args.input, args.page, args.rect) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let mut spec =
+        pdfce_core::edit::NewRadioButton::new(page_index, args.name, rect, args.export_value)
+            .selected(args.selected)
+            .with_group_flags(args.no_toggle_to_off, args.radios_in_unison)
+            .with_flags(args.read_only, args.required);
+    // R105, exactly as the sibling verbs: `clap`'s `conflicts_with` rules out
+    // BOTH being passed, so only "neither" can reach here, and it is refused
+    // rather than defaulted.
+    spec = match (args.tooltip, args.no_tooltip) {
+        (Some(t), _) => spec.with_tooltip(t),
+        (None, true) => spec.declining_tooltip(),
+        (None, false) => {
+            eprintln!(
+                "pdfce-cli: {}: decide about the accessibility name — pass --tooltip <text>, or --no-tooltip to decline it. It is what a screen reader announces for this field, so it is never defaulted silently.",
+                args.input.display()
+            );
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    let authored = match session.add_radio_button(&spec) {
+        Ok(o) => o,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    let field_id = authored.field_id;
+    report_field_disclosures(args.name, authored.disclosures);
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "add-radio-button {} name={:?} page={} rect={},{},{},{} export_value={:?} selected={} field={} {} merged={} tagged={} struct_tabs={} tooltip_declined={} flags_ignored={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.name,
+        args.page,
+        rect.llx,
+        rect.lly,
+        rect.urx,
+        rect.ury,
+        args.export_value,
+        u32::from(args.selected),
+        field_id.num,
+        field_id.generation,
+        u32::from(authored.merged),
+        u32::from(authored.disclosures.tagged_document),
+        u32::from(authored.disclosures.structure_tab_order),
+        u32::from(authored.disclosures.tooltip_declined),
+        u32::from(authored.disclosures.group_flags_ignored),
         args.mode.name(),
         args.output.display(),
         outcome.changed,
@@ -9120,6 +9356,11 @@ fn report_field_disclosures(name: &str, d: pdfce_core::edit::FieldAuthorDisclosu
     if d.has_no_options {
         eprintln!(
             "pdfce-cli: field {name:?}: this choice field has no options and cannot be filled until options are added"
+        );
+    }
+    if d.group_flags_ignored {
+        eprintln!(
+            "pdfce-cli: field {name:?}: this member joined an EXISTING radio group, so the group's own --no-toggle-to-off / --radios-in-unison settings apply and the ones passed here were ignored. Those flags live on the field, so honouring them now would have changed how the members already in the group behave."
         );
     }
 }

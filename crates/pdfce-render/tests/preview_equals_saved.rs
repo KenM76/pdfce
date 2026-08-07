@@ -242,7 +242,7 @@ use std::path::{Path, PathBuf};
 use pdfce_core::annot_author::{Color, MarkupSpec, TextAnnotSpec, TextMarkupKind};
 use pdfce_core::dimension::{DEFAULT_GROUP_ID, DimensionKind};
 use pdfce_core::document::Document;
-use pdfce_core::edit::{EditSession, NewTextField};
+use pdfce_core::edit::{EditSession, NewRadioButton, NewTextField};
 use pdfce_core::fontdata::Std14;
 use pdfce_core::page_tree::{self, Page, Rect};
 use pdfce_core::text_edit::{
@@ -916,6 +916,58 @@ fn field_merge_preview_equals_saved() {
     );
 
     check("field-merge", &s, 0, Visible::Yes);
+}
+
+/// **Radio selection** — a three-member group authored member by member,
+/// then one member chosen (decision 020's F2).
+///
+/// # Why this needs its own case, given the merge case above
+///
+/// [`field_merge_preview_equals_saved`] renders a merge whose widgets all
+/// paint the SAME thing. A radio group is the first authored shape whose
+/// widgets must paint DIFFERENTLY from one another at the same instant — one
+/// dot, two empty rings — and that difference is carried entirely by per-widget
+/// `/AS` values (§12.5.5) written in a single command.
+///
+/// That is a multi-write shape, and multi-writes to related objects computed
+/// from one pre-command snapshot are how this project's two worst rendering
+/// defects happened: `flatten_fields` overwriting its own `/Contents`,
+/// `/Resources` and `/Annots` writes so only the last survived, and F1's
+/// promotion discarding its `/Annots` retarget. Both produced documents that
+/// parsed, reported correct counts, and drew the wrong picture. `list-fields`
+/// saying `widgets=3 value=Green` cannot distinguish a group where one dot is
+/// painted from one where three are, or none.
+///
+/// # What a failure here would look like
+///
+/// If the `/AS` writes clobbered each other, the saved side would show a
+/// different set of filled dots than the preview — every member off, or the
+/// wrong member on. The [`Visible::Yes`] half separately guarantees the
+/// authored group is not invisible: three empty rings would still differ from
+/// the pristine page, so this case cannot pass by drawing nothing.
+#[test]
+fn radio_selection_preview_equals_saved() {
+    let mut s = session("dimension", "plain-base.pdf");
+    // Placed well inside a 400×400 page: a widget whose /Rect falls outside
+    // the page still reports as painted, so an off-page group would make this
+    // case assert on two identical blank rasters.
+    for (i, value) in ["Red", "Green", "Blue"].iter().enumerate() {
+        let top = 324.0 - (i as f64) * 40.0;
+        s.add_radio_button(
+            &NewRadioButton::new(
+                0,
+                "Pick",
+                Rect::from_corners(40.0, top - 24.0, 64.0, top),
+                *value,
+            )
+            .declining_tooltip(),
+        )
+        .expect("each call adds a member to the one group");
+    }
+    s.set_button_state("Pick", "Green")
+        .expect("the shipped fill path selects a member");
+
+    check("radio-selection", &s, 0, Visible::Yes);
 }
 
 /// `flatten` — burning a filled widget's appearance into page content and
