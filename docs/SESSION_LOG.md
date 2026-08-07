@@ -24659,3 +24659,263 @@ document, not by the commit subject.**
   free) · decisions 031 (032 next free)**, with **5, 9, 9c, 10, 13, 22, 23,
   31** claimed-but-unheaded and none of them affected;
   `check-passes-filed.py` → **exit 0** / **exit 0**.
+
+---
+
+## 2026-08-07 (twenty-eighth filing) — **A FIELD CAN BE RENAMED, AND A ONE-FIELD REQUEST SAYS WHEN IT RENAMED SIX** (`3d345aa`, **`Pass 20.6` HEADED AND PARTIAL**). **★★ THE OPERATOR'S OWN STANDING REQUEST — *"get form field creation/editing done next"* — IS BACK ON, AFTER THE RENDER-PERFORMANCE DETOUR. CREATION WAS COMPLETE; EDITING WAS NOT BUILT AT ALL, AND NOW HALF OF IT IS.** **★★ F6 IS *TWO* ITEMS, NOT FOUR, AND FOUR DOCUMENTS HAVE BEEN SAYING FOUR — MOVE, RESIZE AND RE-FLAG ARE *UNSCOPED*, NOT DEFERRED, AND THAT DIFFERENCE IS INVISIBLE FROM THE PLAN.** **★★ A SUBTREE RENAME IS *ONE OBJECT WRITE* — §12.7.3.2 DERIVES THE FQN BY DESCENT, SO CHANGING ONE `/T` RE-IDENTIFIES THE WHOLE SUBTREE WITHOUT TOUCHING A DESCENDANT OBJECT; `Field.parent` COMPUTES THE BLAST RADIUS, NOT THE WRITE.** **★ RENAME-INTO-COLLISION IS RULED: IT REFUSES — the asymmetry with `add-*` is the argument, and the branch is one `if`.** **★ AN ERROR MESSAGE THAT IS WRONG ABOUT *WHY* IS WORSE THAN A GENERIC ONE — `A.B` was told it *"contains an empty name segment"*, WHICH IT DOES NOT HAVE.** **★★ AND A FINDING ABOUT THIS PROJECT'S OWN CLAIMS: *"BYTE-IDENTICAL"* WAS ASSERTED ALL DAY AS THOUGH IT WERE A CORRECTNESS CLAIM. IT IS NOT — A RENDER BYTE-IDENTICAL TO A WRONG BASELINE IS EQUALLY BYTE-IDENTICAL, AND THE 907 ms CAD RENDER WAS FIRST *LOOKED AT* ~14 HOURS AFTER THE PROPERTY WAS ASSERTED. IT HAPPENED TO BE CORRECT.** **⚠ `--defaults-from` IS NOT BUILT — F6 IS HALF DONE.** **⚠ NO GUI, DELIBERATELY (R151).** **NOTHING MINTED — Pass 45 (highest 45.0; `20.6` was assigned 2026-08-03 and is USED), R166 (R167 free — the byte-identity finding was JUDGED to be a RAG finding, not a rule), decisions 031, question (bb)**
+
+**Shipped:**
+- **Pass 20.6 (PARTIAL)** — decision 020's **F6, rename half**.
+  `EditSession::rename_field` + `FieldRename` (`crates/pdfce-core/src/edit.rs`),
+  `FormAuthorError::{RenameCollision, DottedPartialName}`
+  (`crates/pdfce-core/src/forms_author.rs`), CLI `rename-field`
+  (`crates/pdfce-cli/src/main.rs`). **4 files, +456 / −0** — `edit.rs` 175 ·
+  `tests/form_field_hierarchy.rs` 130 · `main.rs` 112 · `forms_author.rs` 39
+  = **456 over 4 files = 114.0 lines per file**, and **456 for one delivered
+  verb plus its two refusals.** **`−0` everywhere: nothing was deleted.**
+- **The ID is USED, not minted.** `20.6` was assigned to F6 at decision-020
+  scoping on 2026-08-03 (`ROADMAP.md` Backlog, *"**Pass 20.6** (F6,
+  `--defaults-from`/`rename-field`) … named fast-follows, filed for numbering
+  stability only"*). **The Pass ceiling stays 45.**
+
+**Decisions made this filing:**
+- **★ RULED — A RENAME INTO AN OCCUPIED NAME REFUSES.** Not a merge, not an
+  auto-suffix. **Decision 020 named `rename-field` and never decided this**;
+  the fork implemented refuse and argued for it, and the engineer confirms.
+  **The argument is the asymmetry with creation, and it turns on what the
+  caller supplied.** A same-type `add-*` **merges** because the caller
+  supplied a *type and a name* — §12.7.3.2 makes same-FQN nodes
+  representations of **one** field, so merging **is the spec's own answer to
+  the request as stated**. A rename supplied **two identities** — a field to
+  keep and a name to move it to — so **merging destroys an identity never
+  offered up**, with nothing in the request saying how to reconcile two sets
+  of `/V`, `/Ff` and `/Kids`. **Auto-suffixing is refused separately, on rule
+  4**: `Name_2` is a name **the operator did not choose**, and a document
+  containing a name nobody typed is worse than a refusal. **The branch is one
+  `if`** — recorded because a ruling that is cheap to overturn deserves less
+  scepticism than one that is not.
+- **★★ SCOPE CORRECTION — F6 IS TWO ITEMS, AND FOUR DOCUMENTS SAY FOUR.**
+  Decision 020 §6's F6 bullet names **`--defaults-from <field>` and
+  `rename-field`**. That is all of it. `ROADMAP.md` (three places) and
+  `FEATURES.md` (one) have been writing F6 as *"rename, reflag, move,
+  resize"*. **All four amended this filing.**
+  **How the absence was established (R87), because an absence claim must say
+  how:** `git grep -n -iE "resize|reposition|move.*field|re-flag|change.*flag"
+  -- docs/decisions/020-form-field-authoring.md` → **16 hits, every one of
+  them something else** — the `remove-*`→`delete-*` house-word supersession
+  (11 hits), the Shape A→B promotion's *"move the annotation keys off the
+  field dict"* (2), and mid-group / last-member **deletion** rules (3).
+  **Tracked files only; the decision record is the right container** because
+  it carries a `## 6.` slice list with a per-slice CLI surface — the thing
+  that would have held the scope if it existed
+  (`absence_assertion_must_first_prove_the_container_could_have_held_it.md`).
+  **Why it is a numbered correction and not a footnote:** *deferred* and
+  *unscoped* read identically in a Backlog and are **opposite states of the
+  world** — deferred means someone decided it and put it later; **unscoped
+  means nobody ever decided it.** With both F6 items built, *"field property
+  editing is done"* would be **true of F6 and false of the capability**, and
+  an operator who tries to nudge a field 3 pt left would find nothing, with
+  **no roadmap entry anywhere explaining why.**
+  **Filed as owed an ENGINEER SCOPE CALL — a new slice, an amendment to
+  decision 020, or a named refusal — NOT as owed an implementation.** Not
+  resequenced by this filing.
+- **★ Decision 020's own text is amended in place**, since the record is
+  where the next scoper will look: its F6 bullet now carries (a) the
+  two-items-not-four correction with the grep, (b) the `Field.parent`
+  reason-correction, (c) the collision ruling, and (d) the
+  `DottedPartialName` refusal it did not anticipate.
+- **No new decision RECORD.** All three rulings are filed as an
+  `ARCHITECTURE.md` §12 dated entry plus an in-place amendment to decision
+  020 — two of them are rulings on an **open question inside an existing
+  record**, and the third corrects that record's **reading**, not its
+  content. **Decision records stay 031 (032 next free).**
+
+**Findings + decisions:**
+- **★★ A SUBTREE RENAME IS ONE OBJECT WRITE, AND DECISION 020 SAYS THE
+  OPPOSITE IN PASSING.** §12.7.3.2's fully-qualified name is **derived, not
+  stored** — there is no `/FQN` key; a consumer descends from
+  `/AcroForm /Fields` joining each node's `/T`. **A node's identity is a
+  function of the path taken to reach it**, so rewriting one node's `/T`
+  re-derives that node's FQN **and its entire subtree's**, and **the
+  subtree's objects are byte-unchanged — they were never storing the thing
+  that changed.** Verified end to end: `Personal.Address` → `Location` gives
+  **`Personal.Location.Zip`** and **`Personal.Location.City`**, with
+  **`Personal.Name` untouched** and **`descendants_renamed=2`** — **2
+  descendants re-identified over 1 object written.**
+  **The correction that makes it a finding rather than a note:** decision
+  020's F6 bullet says the rename *"needs `Field.parent` from F0 for subtree
+  renames"*, which **reads as** *the write walks down and fixes each child*.
+  **It does not.** `Field.parent` is what lets the verb **COUNT** the
+  affected descendants so rule 4 can disclose them. **Required by the
+  disclosure, not by the mutation.** The requirement was real and **its
+  stated reason was wrong** — the same shape as the librarian's own hard-rule
+  8 amendment earlier today: *an obligation that stayed correct while its
+  reason went stale.*
+- **★ RULE 4 IS WHY `descendants_renamed` EXISTS, and the reason is
+  unrepairable-by-design.** An operator who renames a group and is not told
+  six fields moved has **silently broken every FDF/XFDF key, every
+  `getField("…")` in document JavaScript, and every submit mapping** that
+  named the old FQN — and finds out when a round-trip drops data. **The spec
+  provides no mechanism to find or update those references**, which is
+  exactly why the count must be **disclosed** rather than the references
+  silently repaired.
+- **★ AN ERROR MESSAGE THAT IS WRONG ABOUT *WHY* IS WORSE THAN A GENERIC
+  ONE.** Introduced and fixed inside the one commit, recorded because **the
+  shape transfers**. Reusing `PeriodInPartialName` for a dotted input told an
+  `A.B` caller their input *"contains an empty name segment"* — **which `A.B`
+  does not have.** The two are different classes, and the difference is
+  **what the reader should do next**: `A..B` is **malformed** and there is a
+  typo to find; `A.B` is a **well-formed two-level PATH that simply is not a
+  PARTIAL name** (one segment by construction) and **there is no typo at
+  all** — the caller supplied the right string for the wrong parameter.
+  **A generic *"invalid name"* would have been unhelpful but not
+  misleading**; a message confidently wrong about the cause **spends the
+  reader's time in the wrong place, and the more they trust the tool the more
+  it costs.** `DottedPartialName` added, **with a test asserting the two
+  messages differ** — the whole content of the fix is that they are
+  distinguishable, and an untested distinction is one refactor from
+  collapsing back invisibly (both paths still `Err`; every `is_err()` stays
+  green).
+- **★ R162 DISCHARGED BY OBSERVATION, NOT BY ARGUMENT.** Disabling the
+  collision check, collapsing the dotted refusal into the period one, and
+  zeroing the descendant count **failed exactly the three new tests and left
+  the other 16 green** — **3 of 19 fail, 16 of 19 unaffected**, which is the
+  shape a non-vacuous suite is supposed to have: the new assertions bind the
+  new behaviour **and nothing else.**
+- **★ ASSERTIONS ARE ON THE SAVED BYTES (R159), and that is load-bearing
+  here.** `parse_acroform` would report the new names **just as happily if
+  the rename had reached only the in-memory model and never the file** —
+  which is precisely how the shipped flatten defect hid. Reading back through
+  the same projection that produced the change is a check that **cannot fail
+  for the reason you care about.**
+- **★★ THE OPERATOR'S OWN FINDING, AND IT IS ABOUT HIS OWN CLAIMS —
+  *"BYTE-IDENTICAL"* IS NOT A CORRECTNESS CLAIM.** Asserted repeatedly
+  through the render-performance arc as though it were. **It is not: a render
+  byte-identical to a WRONG baseline is equally byte-identical.** Six
+  optimisation commits were verified against a **32-second CAD render
+  produced that morning by the code under test, saved to PNG and hashed** —
+  a picture **nobody had looked at.** It was finally opened at the end of the
+  day and **is** correct (a Lithuanian ArchiCAD site plan: building outlines,
+  six colour-coded utility networks with their hatch legend, tree symbols,
+  coordinate table, dimension callouts, north arrow, title block). **"Happens
+  to be" is the whole finding** — the property was asserted roughly
+  **fourteen hours** before it was established, and the outcome was luck
+  rather than method. Had the morning render been dropping a layer, six
+  commits of *"byte-identical"* would have certified the dropped layer as
+  correct, in writing, six times.
+  **What it does NOT retract, and this is stated because the results are
+  still in the record:** the byte-identity results **stand as
+  change-detection**, which is exactly what they were for. A
+  behaviour-preserving optimisation genuinely needs to prove it preserved
+  behaviour, and byte-identity is the strongest available proof of **that**.
+  **The error is upgrading it to a claim it never made.**
+  **JUDGED — a RAG finding, not a standing rule. `R167` STAYS FREE.** The
+  reasoning, put on the record because the engineer asked for a judgement and
+  not a mint: **(i) it is NOT an R162 instance.** R162 is about a probe that
+  **cannot come out false**; a byte-diff **can** and does — change a pixel
+  and it goes red. Every standard vacuity check (mutate the code, confirm
+  red) **passes here.** The defect is in **what the true result is taken to
+  license**, not in the instrument, which makes it a **different shape** in
+  the same family. **(ii) It is nearer R166** (*a number whose instrument no
+  longer exists is not evidence*) — both are about the **scope of what a
+  measurement supports** — but R166 concerns a **vanished instrument** and
+  this concerns an **unvalidated reference**, so it is neither an instance
+  nor a duplicate. **(iii) The rule it would have to be commissions WORK,
+  not CARE** — *"validate every baseline before comparing against it"* is
+  open-ended (every snapshot, forever) and would be ignored, which is the
+  exact ground the ablation-rule candidate was declined on. **(iv) What
+  actually carries it is a WRITING convention already owned by hard rule
+  10** — name what the reference *is* inside the claim
+  (*"byte-identical to the 08:14 render, whose correctness is
+  UNESTABLISHED"*), plus **one look at the baseline when it is minted**.
+  Cost: one sentence. **If the engineer wants it as `R167` anyway, that is
+  his mint and the file is written to support it.**
+
+**RAG escalations, this filing:**
+- **`D:\dev\rag\rust\byte_identity_to_an_unvalidated_reference_is_change_detection_not_correctness.md`**
+  (new) — the finding above, with the distinction from the neighbouring
+  `git_stash_on_clean_tree_makes_before_after_comparison_vacuous.md` stated
+  explicitly (**that comparison cannot fail; this one can and still answers
+  a different question**), and the generalisations to `insta` snapshot
+  acceptance, approval/characterisation tests, cross-version diffs and
+  round-trip identity. Indexed.
+- **`D:\dev\rag\rust\an_error_variant_reused_for_a_neighbouring_input_class_misdescribes_the_input.md`**
+  (new) — the `A.B` / `A..B` shape, generalised: **one variant per reason a
+  caller would act differently, not per predicate that rejects**; when in
+  doubt **generic beats specific-and-wrong**. Notes why the class is easy to
+  introduce (`?` propagates a variant **without ever displaying it**, so the
+  message can be wrong for a long time before anyone reads it; and
+  **verifying that a refusal fired is not verifying its reason**). Indexed.
+- **`C:\personal_rag\pdf\lesson_20260807_fqn_derived_by_descent_makes_a_subtree_rename_one_object_write.md`**
+  (new) — the §12.7.3.2 structural finding, with the object-write table, the
+  `Field.parent` reason-correction, the refuse-vs-merge asymmetry, and the
+  round-trip trap (**do not "tidy" descendants — each one touched becomes a
+  dirty object in an incremental save for zero semantic gain**). Indexed in
+  both `C:\personal_rag\pdf\index.md` and the master `C:\personal_rag\index.md`.
+- **Nothing owed and unwritten from this filing.**
+
+**Still in flight:**
+- **`--defaults-from <field>` — NOT BUILT. F6 is HALF DONE**, and the roadmap
+  now says so in five places rather than reading as though editing is
+  complete.
+- **Field move / resize / re-flag — UNSCOPED**, and **owed an engineer scope
+  call** (slice / decision-020 amendment / named refusal). **Not deferred.
+  Nobody ever decided them.**
+- **No GUI half, by choice (R151).** F5's **per-type detail fields** are
+  still owed under **Pass 20.5's** ID, and stacking a second core-only
+  surface the shell cannot reach would repeat the exact pattern R151 exists
+  to stop. **What a GUI half would need, recorded so it is not re-derived:**
+  a rename affordance on the existing `forms_panel` rows, and
+  `descendants_renamed` surfaced — **that count already crosses the core
+  boundary on `FieldRename`, so the shell would only render it.**
+- **Unchanged and still owed:** `/I` and `/TI`; **push buttons** (verb name
+  still NOT RULED — R161 gives the shape, not the word); **tab-order
+  AUTHORING** (F4, still BLOCKED on the `pdfce-spec-librarian` `/Tabs`
+  dispatch); **F0's disposition** (owed retroactively / deferred / retired);
+  Pass 20.5's `/MK`-border disclosure, **rendered-appearance verification**
+  (untouched by this commit — a rename changes `/T`, not any `/AP`), and the
+  multi-page repeated-field row-label fixture.
+
+**For next session:**
+- **Two engineer calls are queued, and the second is the one that will cost
+  if it slips:** (1) build `--defaults-from` to close F6; (2) **rule on move
+  / resize / re-flag**, because until that ruling exists, closing F6 will
+  produce a *"field editing is done"* that is **true of the plan and false of
+  the product.**
+- **`R167` is free and the byte-identity candidate is written up but NOT
+  minted** — the judgement above says why, and the engineer can overturn it
+  in one line.
+
+**Filing hygiene:**
+- **Gates — relayed from the engineer at `3d345aa`, not measured here (R87).**
+  **2181 tests / 0 failed** (against **2178** at `ce57ed5` → **+3, all three
+  in `crates/pdfce-core/tests/form_field_hierarchy.rs`, which this filing
+  counted at 19** via `git show 3d345aa:… | grep -c '^#\[test\]'`, with the
+  three new names read from the diff); **clippy 0**; **both ledger checkers
+  0**; `fmt` / `ui-strings` / `bypass-paths` each read by its own exit code;
+  core and render GUI-free. **This filing ran no build and no test** — the
+  figures are the engineer's and are stated as his.
+- **Git and backup state — CHECKED, not inferred (hard rule 8), and
+  timestamped because a checked fact decays.** `git rev-parse HEAD` →
+  **`3d345aa`**; `git status --porcelain` → **0 lines** at the instant it ran
+  (**a snapshot, not a standing fact** — this filing has watched one go false
+  mid-filing on prior days); `git remote -v` → **empty, exit 0 — bundles
+  remain the only copy.** Newest bundle by `ls -la D:\Dev\pdfce-backups\` →
+  **`pdfce-20260807-1859.bundle`**, tip **READ by `git bundle list-heads`,
+  not inferred from the filename** → `refs/heads/pass-8-redaction` =
+  **`02a789d11914fd2fcd8a63dab24ea89b6eb824e9`** = **exactly `HEAD~1`.**
+  **★ THE DISPATCH'S "ONE BEHIND" FIGURE IS CONFIRMED, NOT CORRECTED** — the
+  previous filing's figure was the one that needed correcting, and this one
+  did not. **`3d345aa` is in NO bundle**; it becomes two behind the moment
+  this filing is committed.
+- **Every claim about `3d345aa` here is read from COMMITTED BLOBS**
+  (`git show`, `git log`, `git bundle list-heads`), never the working tree.
+- **This filing edited `docs/` (ROADMAP, FEATURES, ARCHITECTURE, SESSION_LOG,
+  decisions/020) AND `D:\dev\rag\rust\` AND `C:\personal_rag\pdf\` + the
+  master `C:\personal_rag\index.md`.** **No `crates/`, no `tools/`, no
+  `fixtures/`, no agent files.**
+- **Both checkers re-run, before and after:** `check-ledger-numbers.py` →
+  **exit 0** / **exit 0**, ceilings **Pass 45 (highest 45.0) · R166 (R167
+  next free) · decisions 031 (032 next free)**, with **5, 9, 9c, 10, 13, 22,
+  23, 31** claimed-but-unheaded and none of them affected;
+  `check-passes-filed.py` → **exit 0** / **exit 0**.

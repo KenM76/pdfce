@@ -1631,6 +1631,59 @@ application, against a purpose-built non-default fixture.
   `should_have`), and ~~`forms rename-field`~~ → flat **`rename-field`**
   **[§0, 2026-08-07 — reads cleanly flat]** (needs `Field.parent` from F0
   for subtree renames).
+
+  > **★★ AMENDED 2026-08-07 (`3d345aa`) — `rename-field` IS BUILT
+  > (`Pass 20.6`, PARTIAL); `--defaults-from` IS NOT. F6 is HALF DONE.**
+  >
+  > **THREE corrections to this bullet, all of them load-bearing:**
+  >
+  > **(a) This bullet is the WHOLE of F6, and other documents have been
+  > reading four items into it.** `ROADMAP.md` (three places) and
+  > `FEATURES.md` (one) wrote F6 as *"rename, reflag, move, resize"*.
+  > **`move`, `resize` and `re-flag` appear NOWHERE in this decision
+  > record** —
+  > `git grep -n -iE "resize|reposition|move.*field|re-flag|change.*flag"`
+  > over this file returns **16 hits, every one of them** the
+  > `remove-*`→`delete-*` supersession, §3.3.2/§5's *"move the annotation
+  > keys off the field dict"* promotion step, or a deletion rule. **They
+  > are UNSCOPED, not deferred.** Closing F6 will therefore **not** close
+  > the operator's *"creation/**editing**"* in the sense he is likeliest to
+  > mean it, and that gap is invisible from the plan unless it is written
+  > down. **Owed: an engineer scope call — a new slice, an amendment to
+  > this record, or a named refusal.**
+  >
+  > **(b) *"needs `Field.parent` from F0 for subtree renames"* is TRUE but
+  > its implied reason is WRONG.** A subtree rename is **ONE object
+  > write**. §12.7.3.2 derives the FQN by **descending** from
+  > `/AcroForm /Fields` and joining each node's `/T`, so rewriting one
+  > node's `/T` re-derives that node's identity **and every descendant's**
+  > without touching a single descendant object — they were never storing
+  > the thing that changed. `Field.parent` is what lets the verb **COUNT**
+  > the affected descendants so §3's rule-4 disclosure can report them
+  > (`FieldRename::descendants_renamed`). **Required by the disclosure,
+  > not by the mutation.** Verified: `Personal.Address` → `Location`
+  > yields `Personal.Location.Zip` + `Personal.Location.City`,
+  > `Personal.Name` untouched, `descendants_renamed=2`.
+  >
+  > **(c) The collision case this bullet never decided is now RULED:
+  > a rename onto an occupied name REFUSES** — `FormAuthorError::RenameCollision`.
+  > Not a merge, not an auto-suffix. **The asymmetry with `add-*` is the
+  > argument:** a same-type add merges because the caller supplied a *type
+  > and a name* and §12.7.3.2 makes same-FQN nodes one field, so merging
+  > answers the request as stated; a rename supplied **two identities**, so
+  > merging destroys one that was never offered up, with nothing in the
+  > request saying how to reconcile two sets of `/V`, `/Ff` and `/Kids`.
+  > Auto-suffixing is refused on rule 4 — `Name_2` is a name the operator
+  > did not choose. **The branch is one `if`, so overturning is cheap.**
+  > Full form: `ARCHITECTURE.md` §12's twenty-eighth-filing entry, and
+  > `ROADMAP.md`'s `Pass 20.6 (PARTIAL)` entry §3.
+  >
+  > **Also added by that commit and not anticipated here:**
+  > `FormAuthorError::DottedPartialName`, a refusal **separate from**
+  > `PeriodInPartialName`. `A..B` is malformed; `A.B` is a **well-formed
+  > path that simply is not a PARTIAL name**. Reusing the period error told
+  > an `A.B` caller their input *"contains an empty name segment"*, which
+  > it does not — sending them to hunt a typo that is not there.
 - **F7** — `pdfce-cli merge --on-field-collision rename|link|refuse` with
   disclosure both ways, plus the cross-type-collision warning (§3.6.1).
   Against the already-shipped merge; deliberately outside this family.

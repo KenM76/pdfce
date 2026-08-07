@@ -81,6 +81,85 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 20.6 (PARTIAL) — **A FIELD CAN BE RENAMED, AND A ONE-FIELD REQUEST SAYS WHEN IT RENAMED SIX** — `EditSession::rename_field` + `FieldRename` in `crates/pdfce-core/src/edit.rs`, `FormAuthorError::{RenameCollision, DottedPartialName}` in `crates/pdfce-core/src/forms_author.rs`, CLI `rename-field`. **★★ THIS RETURNS TO THE OPERATOR'S OWN STANDING REQUEST — *"get form field creation/editing done next"* — after the render-performance detour (Passes 44.0 and 45.0). CREATION WAS COMPLETE; EDITING WAS NOT BUILT AT ALL, AND NOW HALF OF IT IS.** **★★ F6 IS *TWO* ITEMS, NOT FOUR, AND THIS ROADMAP HAS BEEN SAYING FOUR — see §1 below. MOVE, RESIZE AND RE-FLAG ARE *UNSCOPED*, NOT DEFERRED, and the difference is that nobody could have seen it from the plan.** **★★ THE STRUCTURAL FINDING: A SUBTREE RENAME IS *ONE OBJECT WRITE*. §12.7.3.2 derives the fully-qualified name by walking DOWN from the `/AcroForm /Fields` roots appending each node's `/T`, so changing one node's partial name re-derives the identity of that node AND of every descendant WITHOUT TOUCHING A SINGLE DESCENDANT OBJECT** — `Personal.Address` → `Location` makes `Personal.Address.Zip` into `Personal.Location.Zip` and `Zip`'s dictionary is never written. **`Field.parent` is needed to compute the BLAST RADIUS, not to perform the write** — so decision 020's *"needs `Field.parent` from F0 for subtree renames"* was true for a different reason than it reads. **★ RULE 4 IS WHY `descendants_renamed` EXISTS**: an operator who renames a group and is not told six fields moved has silently broken every FDF, JavaScript reference and submit mapping that named them, and finds out when one stops matching. **★ ENGINEER RULING, RECORDED AS RULED: A RENAME INTO A COLLISION *REFUSES* — decision 020 left this open (see the F7 bucket note at line ~6166) and it is now closed.** **★ A DEFECT INTRODUCED AND FIXED IN THE SAME COMMIT, filed as a distinct shape: reusing `PeriodInPartialName` for `A.B` produced *"contains an empty name segment"* — WHICH `A.B` DOES NOT HAVE.** **⚠ `--defaults-from <field>` IS NOT BUILT. F6 IS HALF DONE, and this roadmap must not read as though editing is complete.** **⚠ NO GUI, DELIBERATELY (R151) — F5's own per-type detail fields are still owed and a second unreachable surface would repeat the pattern.** (Pass 20.6 — the ID was assigned to F6 at decision-020 scoping time on 2026-08-03 and is used, not minted) — 2026-08-07, committed `3d345aa`, branch `pass-8-redaction`
+
+**Gates — measured by the ENGINEER at `3d345aa` and relayed (R87; this filing ran no build and re-states his figures as HIS).** **2181 tests / 0 failed** — against **2178** at `ce57ed5`, so **+3 tests, all three in `crates/pdfce-core/tests/form_field_hierarchy.rs`, which now holds 19** (counted by `git show 3d345aa:crates/pdfce-core/tests/form_field_hierarchy.rs | grep -c '^#\[test\]'` → **19**, and the three new names read from the diff: `renaming_a_grouping_node_renames_its_whole_subtree`, `renaming_onto_an_occupied_name_is_refused`, `a_dotted_partial_name_and_a_malformed_one_refuse_differently`). **`clippy` 0 warnings · `fmt`, `ui-strings`, `bypass-paths` each read by its own exit code · `pdfce-core` and `pdfce-render` GUI-free.** **Both ledger checkers 0** (re-run by this filing, before and after — see *Ledger* below).
+
+**4 files changed, +456 / −0** (`git show --stat 3d345aa`), distributed **`edit.rs` 175 · `tests/form_field_hierarchy.rs` 130 · `main.rs` 112 · `forms_author.rs` 39** = **456 over 4 files = 114.0 lines per file**, and **456 over 1 delivered verb = the whole commit is one verb plus its two refusals.** **Nothing is deleted** — `−0` across all four, so this adds a capability and disturbs none.
+
+#### 1. ★★ F6 is TWO items, not four — and the roadmap's own phrasing is the source of the error
+
+**Decision 020 §6's F6 bullet names exactly two things**: `--defaults-from <field>` (the research's session-template `should_have`) and `rename-field`. That is the whole of F6.
+
+**This roadmap has repeatedly written F6 as *"rename, reflag, move, resize"*** — three places in `ROADMAP.md` (lines ~7014, ~7694, ~25464) and one in `FEATURES.md` (the *CREATE a form field* row's `no field PROPERTY editing (rename/reflag/move/resize)` parenthetical). **All four are amended by this filing.**
+
+**How the absence was established (R87), because an absence claim has to say how it was made:** `git grep -n -iE "resize|reposition|move.*field|re-flag|change.*flag" -- docs/decisions/020-form-field-authoring.md` — **16 hits, and every one of them is something else**: the `remove-*` → `delete-*` house-word supersession (lines 16, 34, 101, 194, 411, 506, 797, 1533, 1535, 1540, 1551), *"move the annotation keys off the field dict"* in the Shape A→B promotion algorithm (lines 749, 1981), and mid-group / last-member **deletion** rules (1205, 1215, 1218, 1451, 2065, 2066). **Tracked files only; the decision record is the container that would have held the scope if it existed** (`absence_assertion_must_first_prove_the_container_could_have_held_it.md`), and it holds a `## 6.` slice list with a per-slice CLI surface, so it is the right container.
+
+**Why the distinction is worth a numbered section rather than a footnote.** *Deferred* and *unscoped* are the same word to a reader of the Backlog and completely different states of the world. **Deferred means someone decided it and put it later; unscoped means nobody ever decided it.** With `--defaults-from` and `rename-field` both built, F6 would be **closed**, and *"field property editing is done"* would then be a **true statement about F6 and a false statement about the capability** — an operator who reads "editing shipped" and then tries to nudge a field 3 pt to the left finds nothing, with no roadmap entry anywhere explaining why. **That is a gap that would have been invisible from the plan**, which is exactly the failure class this project keeps paying for.
+
+**Filed as an owed engineer decision, NOT resequenced by this filing:** move / resize / re-flag need either a scope decision (a new slice, an amendment to decision 020, or a named refusal) or an explicit *"not planned"*. **They are added to the Backlog bucket's owed list below as UNSCOPED, distinct from the items marked still-owed-and-scoped.**
+
+#### 2. ★★ A rename is one object write — the mechanism, and why it is not obvious
+
+§12.7.3.2's fully-qualified name is **derived, not stored**. There is no `/FQN` key. A viewer computes it by descending from `/AcroForm /Fields` and joining each node's `/T` with `.`, so **a node's identity is a function of the path taken to reach it, not of anything written in the node.**
+
+The consequence is the finding: **rewriting one node's `/T` re-derives the FQN of that node and of its entire subtree, and the subtree's objects are byte-unchanged.** The descendants are not "updated" — they were never storing the thing that changed.
+
+**Verified end to end, on a two-level fixture:** `Personal.Address` → `Location` yields **`Personal.Location.Zip`** and **`Personal.Location.City`**, with **`Personal.Name` untouched**, and **`descendants_renamed=2`** — 2 descendants over 1 object written, which is the whole point of the section.
+
+**What this corrects in decision 020's own text.** §6's F6 bullet says the rename *"needs `Field.parent` from F0 for subtree renames"*, which reads as *the write has to walk down and fix each child*. **It does not.** `Field.parent` is what lets the verb **count** the affected descendants so rule 4 can disclose them — it is required by the **disclosure**, not by the **mutation**. The requirement was real and its stated reason was wrong, which is the same shape as hard rule 8's own amendment: **an obligation that stayed correct while its reason went stale.**
+
+#### 3. ★ The collision ruling — REFUSE, and the asymmetry with `add-*` is the argument
+
+**Decision 020 named `rename-field` but never decided what a rename into an occupied name does.** The fork implemented **refuse** and argued for it; **the engineer confirms, and this is filed as RULED rather than as an implementation detail** so a later session does not re-open it by accident.
+
+**The argument is the asymmetry with creation, and it turns on what the caller asked for:**
+
+| operation | what the caller supplied | why the outcome differs |
+|---|---|---|
+| `add-*` onto an existing same-type name | **a type and a name** | The caller asked for *a field of that name*. §12.7.3.2 makes same-FQN nodes representations of **one** field, so **merging is the spec's own answer** to the request as stated. |
+| `rename-field` onto an occupied name | **an existing field AND a new name** | The caller named **two** identities — one to keep, one to move it to. **Merging would destroy an identity that was never offered up**, and nothing in the request says how to reconcile two sets of `/V`, `/Ff` and `/Kids`. |
+
+**Auto-suffixing is rejected on the same ground and separately**: `Name_2` hands the operator a name **they did not choose**, silently — rule 4's exact prohibition, and worse than a refusal because the document now contains a name nobody typed.
+
+**The refusal is one `if`**, so overturning it costs one branch and a test. **Recorded so the cheapness is on the record** — a ruling that would be expensive to reverse deserves more scepticism than one that would not, and this one is at the cheap end.
+
+`FormAuthorError::RenameCollision { from, to }` — *"cannot rename `{from}` to `{to}`: a field already bears that name"*. **The fix is the operator's to choose**: delete or rename the occupant.
+
+#### 4. ★ An error message that is wrong about WHY is worse than a generic one
+
+**The defect, introduced and fixed inside the one commit, and recorded because the SHAPE is the transferable part.** The rename path initially reused `FormAuthorError::PeriodInPartialName` for a dotted input. Given `A.B`, that produced **"contains an empty name segment"**.
+
+**`A.B` does not have an empty name segment.**
+
+The two inputs are genuinely different classes, and the difference is **what the reader should do next**:
+
+- **`A..B`** is **malformed**. No reading of it is valid. There is a typo and the operator should find it.
+- **`A.B`** is a **well-formed two-level PATH** that simply **is not a PARTIAL name** — a partial name is one segment by construction. There is no typo. The operator supplied the right string for the wrong parameter.
+
+**Telling someone who typed `A.B` that it contains an empty segment sends them hunting a typo that is not there.** A *generic* "invalid name" would have been less helpful but **not misleading**; a message that is confidently wrong about the cause **spends the reader's time in the wrong place, and the more they trust the tool the more it costs.**
+
+`FormAuthorError::DottedPartialName` was added, **with a test that asserts the two messages differ** (`a_dotted_partial_name_and_a_malformed_one_refuse_differently`) — because the whole content of the fix is that they are distinguishable, and an untested distinction is one refactor away from collapsing back.
+
+#### 5. R162 discharged BY OBSERVATION, and R159 is why the assertions are where they are
+
+**R162 (the probe must be able to come out false) was discharged by running it, not by arguing it.** Disabling the collision check, collapsing the dotted refusal into the period one, and zeroing the descendant count **failed exactly the three new tests and left the other 16 in the file green** — **3 of 19 fail, 16 of 19 unaffected**, which is the shape a non-vacuous suite is supposed to have: the new assertions bind the new behaviour and nothing else.
+
+**The assertions are on the SAVED BYTES, not through `parse_acroform` — R159.** The projection would report the new names **just as happily if the rename had reached only the in-memory model and never the file**, which is precisely how the shipped flatten defect hid. Reading back through the same projection that produced the change is a check that cannot fail for the reason you care about.
+
+#### 6. ⚠ What is NOT built, said plainly
+
+- **`--defaults-from <field>` — NOT BUILT.** F6's other half, and the item F2's own defaults question was **deferred into**. **F6 is HALF DONE.**
+- **Move / resize / re-flag — UNSCOPED** (§1). Not deferred, not refused, not planned. **Owed a scope decision.**
+- **No GUI, and the omission is a choice, not an oversight (R151).** F5's per-type detail fields are **still owed under Pass 20.5's ID**, and stacking a second core-only surface the shell cannot reach would repeat the exact pattern R151 exists to stop. **What a GUI half would need, recorded so it is not re-derived:** a rename affordance on the existing `forms_panel` rows, and `descendants_renamed` surfaced — **that count already crosses the core boundary on `FieldRename`, so the shell would only render it**, not compute it.
+- **Rendered appearance** — unaffected by this commit and unverified by it; a rename changes `/T`, not any `/AP`. The Pass 20.5 visual-verification obligation is **untouched, not discharged.**
+
+#### Ledger
+
+**Re-measured by RUNNING `tools/check-ledger-numbers.py` and `tools/check-passes-filed.py`**, before and after this filing, not read from prose. **NOTHING MINTED.** Pass family **45** (highest ID **45.0**) — **`20.6` is a 2026-08-03 assignment being USED, and the Pass ceiling does not move for it**; standing rules **R166** (**R167** next free, and **still free after this filing** — see the *Judged* note in `SESSION_LOG.md`); decision records **031** (**032** next free); operator questions **(bb)**. Claimed-but-unheaded IDs **5, 9, 9c, 10, 13, 22, 23, 31** are unaffected.
+
+**Git and backup state — CHECKED by this filing, not inferred (hard rule 8), and timestamped because a checked fact decays.** `git rev-parse HEAD` → **`3d345aa`**; `git status --porcelain` → **0 lines**; `git remote -v` → **empty, exit 0 — bundles remain the only copy.** Newest bundle by `ls -la D:\Dev\pdfce-backups\` → **`pdfce-20260807-1859.bundle`**, whose `refs/heads/pass-8-redaction` is **`02a789d11914fd2fcd8a63dab24ea89b6eb824e9`** (**tip READ by `git bundle list-heads`, not inferred from the filename**) = **exactly `HEAD~1`**. **So it is ONE behind, the dispatch's figure is CONFIRMED rather than corrected, and `3d345aa` — the commit this entry describes — is in NO bundle.** It becomes two behind the moment this filing is committed.
+
 ### gui/tooling — **THE RENDER WORKER STARTS SAYING WHAT IT DID** — three diagnostic traces in `crates/pdfce-gui/src/render_worker.rs` (`render-inline`, `render-async-started`, `render-async-done`). **★★ THE RENDER PATH EMITTED NO DIAGNOSTIC TRACE AT ALL, AND THAT WAS DISCOVERED BY POINTING A FILTER AT IT AND READING THE SILENCE AS EVIDENCE THAT THE RENDER HAD WORKED. IT WAS NOT EVIDENCE — THE INSTRUMENT DID NOT EXIST.** **★★ THIRD INSTANCE IN ONE DAY OF A CHANNEL BUILT FOR OBSERVABILITY BEING ITSELF UNOBSERVABLE: `edit_note` (the rule-4 disclosure path, `69db1c6`), the stale-binary trace (`gui-drive` returning zero traces for code that was never built, same commit), and now THE WORKER WHOSE ENTIRE PURPOSE IS MAKING A SLOW RENDER OBSERVABLE AND INTERRUPTIBLE.** **★★ IT DELIVERED THE FIRST IN-GUI MEASUREMENT OF THE OPERATOR'S ORIGINAL COMPLAINT — `render-async-started gen=1 budget_ms=12` → `render-async-done gen=1 ms=907 outcome=done`, with the UI thread processing frames throughout. 907 ms through `pdfce-gui`'s worker against 907 ms through the CLI, on the same CAD sheet that took 32,313 ms with a frozen window this morning. THE END-TO-END VERIFICATION OF PASS 44.0 + PASS 45.0's JOINT CLAIM, FROM THE INSTRUMENT THE OPERATOR ACTUALLY USES.** **★ THE THRESHOLD IS IN THE RECORD RATHER THAN IN A CONSTANT — `render-async-started` carries `budget_ms=12`, so a reader of the trace never has to go find `IN_FRAME_BUDGET`.** **★ `render-inline` MAKES THE *"NOTHING REGRESSES WHEN FAST"* CLAIM CHECKABLE** — Pass 44.0 asserted that a page beating the 12 ms budget never touches the async path, and until this commit that assertion had no observable consequence. **★ `render-async-done` DISTINGUISHES done / cancelled / failed — a distinction the shell ALREADY MADE and could not be seen making.** **⚠ TWO PROCESS FAILURES ARE FILED WITH IT, from the same ten minutes, because they are the day's own lesson committed while writing about it: `build rc=0` was read as a successful compile when it was `tail`'s exit status (FOURTH wrong reading from that idiom today, once making a hang look like a pass), and an empty trace filter was read as evidence the render worked.** **⚠ NO GATE FIGURES EXIST FOR THIS COMMIT** — see the gates note below. (no Pass ID — GUI-only instrumentation, +23 / −0, no behaviour change and no timing change; the same class as `1992d13` and `fa17d54`, and NOT covered by `Pass 45.0`'s widening) — 2026-08-07, committed `9681112`, branch `pass-8-redaction`
 
 **Gates — ⚠ NONE, AND THAT IS STATED RATHER THAN PAPERED OVER.** `git show -s --format=%B 9681112` contains **no test, `fmt`, `clippy` or gate line** (established by grepping that message for `gate|tests|clippy|fmt` → **no matching line**); **the dispatch relayed none**; and **this filing ran no build, no test and no render**. What IS known: the commit's own message records that **the first compile FAILED** (the `Outcome` variants were guessed) and that the failure was read as success from `build rc=0` before the error text was read; the committed blob is the post-fix version. **`git status --porcelain` → 0 lines at `6efb9b3`**, which says the tree is clean, **not that it builds.** **A green build for `9681112` is UNVERIFIED and is not claimed.**
@@ -7014,6 +7093,18 @@ propagation duty.
 - **Field property EDITING** — rename, reflag, move, resize — which the
   operator asked for **by name** and decision 020 filed as the non-gating
   fast-follow F6.
+  > **★ CORRECTED 2026-08-07 (twenty-eighth filing, `3d345aa`) — THE
+  > FOUR-ITEM LIST IS THIS ROADMAP'S OWN INVENTION, NOT DECISION 020's.**
+  > **F6 is TWO items**: `--defaults-from <field>` and `rename-field`
+  > (decision 020 §6's F6 bullet). **`reflag`, `move` and `resize` appear
+  > NOWHERE in decision 020** — established by
+  > `git grep -n -iE "resize|reposition|move.*field|re-flag|change.*flag"`
+  > over that file: **16 hits, all of them the `remove-*`→`delete-*`
+  > supersession, the Shape A→B promotion's *"move the annotation keys"*, or
+  > deletion rules.** They are therefore **UNSCOPED, not deferred** — nobody
+  > ever decided them — and that is a materially different state from the
+  > rest of this list. **`rename-field` SHIPPED** (`3d345aa`, Pass 20.6
+  > PARTIAL — head of *Shipped*); `--defaults-from` did not.
 
 > **✅ AMENDED 2026-08-07 (same day, seventh filing).** Of the six items
 > above, **four are now discharged**: the resolver and F0's substrate
@@ -7694,6 +7785,13 @@ widget kids sharing one field); field **property editing** (rename,
 reflag, move, resize); the **GUI**, which already lists fields and has
 per-type rows to hang it on. Plus, from the table above: the resolver,
 dotted-name semantics, `/TU` R105, `/Tabs` disclosure, and all of F0.
+
+> **★ CORRECTED 2026-08-07 (twenty-eighth filing, `3d345aa`) — the
+> parenthetical *"(rename, reflag, move, resize)"* is NOT decision 020's
+> scope.** F6 is **two** items — `--defaults-from` and `rename-field`;
+> **move, resize and re-flag are UNSCOPED** (grep evidence in the Pass 20.6
+> entry at the head of *Shipped*, §1). **`rename-field` has since SHIPPED**;
+> `--defaults-from` has not.
 
 #### Gates — engineer-measured at `8e799e9` and relayed (R87; this librarian has no shell for build state)
 
@@ -19233,6 +19331,16 @@ reasoning for:**
    behind five slices — **so the resolver sits on the critical path of
    the operator's own request**, not merely on the plan's.
 
+   > **★ UPDATE 2026-08-07 (twenty-eighth filing, `3d345aa`) — EDITING HAS
+   > STARTED. `rename-field` ships; `--defaults-from` does not. F6 is HALF
+   > DONE (`Pass 20.6 PARTIAL`, head of *Shipped*).** And **F6 turns out to
+   > be TWO items, not the four this roadmap kept writing** — **move,
+   > resize and re-flag are UNSCOPED in decision 020**, so closing F6 will
+   > NOT close the operator's *"editing"* in the sense he is likeliest to
+   > mean it. **That is an engineer scope call now owed**, and it is filed
+   > in the Backlog bucket's owed list as UNSCOPED rather than as
+   > still-owed-and-scoped.
+
 **★ The slice-2 fork escalated this rather than deciding it, and that was
 correct.** Re-sequencing a decision record's build order is above a
 build-slice's level; the fork said so and handed it up. **Recorded as a
@@ -25461,7 +25569,11 @@ nothing gets forgotten, not as a commitment to build in this order.
   checkbox / radio (F2), choice + push buttons (F3), tab order (F4, still
   **BLOCKED** on the `pdfce-spec-librarian` `/Tabs` dispatch), the GUI
   surface (F5, still requires a `pdfce-ui-specialist` dispatch first),
-  and field **property editing** — rename, reflag, move, resize — which
+  and field **property editing** — rename, reflag, move, resize
+  [**★ CORRECTED 2026-08-07, twenty-eighth filing: that four-item list is
+  this roadmap's, not decision 020's. F6 = `--defaults-from` +
+  `rename-field`. Move / resize / re-flag are UNSCOPED — see the Pass 20.6
+  entry, §1, for the grep that establishes it**] — which
   the operator's own instruction names (*"creation/**editing**"*) and
   which decision 020 filed only as the non-gating fast-follow **F6**.
   **That last point is a scope gap worth the engineer's attention:** the
@@ -25617,6 +25729,48 @@ nothing gets forgotten, not as a commitment to build in this order.
   identity when `/P` is absent, **and no fixture exercises it.** See the
   `★ ADDENDUM` on the `Pass 20.5 (PARTIAL)` entry at the head of
   *Shipped*.
+  **★★ AMENDED 2026-08-07 (twenty-eighth filing) — F6 IS HEADED, HALF
+  BUILT, AND SMALLER THAN THIS BUCKET HAS BEEN SAYING.** `3d345aa` ships
+  **`rename-field`** (core `EditSession::rename_field` + CLI verb), which
+  is **one of F6's TWO items**. **Pass 20.6 is HEADED and PARTIAL** — the
+  ID was assigned at decision-020 scoping on 2026-08-03 and is **used, not
+  minted**. See the `Pass 20.6 (PARTIAL)` entry at the head of *Shipped*.
+  **The scope correction, which matters more than the delivery:** this
+  bucket (and three other places in this file) has written F6 as
+  *"rename, reflag, move, resize"*. **Decision 020 §6's F6 bullet names
+  exactly two things — `--defaults-from <field>` and `rename-field`.**
+  **`move`, `resize` and `re-flag` appear nowhere in decision 020**;
+  established by `git grep -n -iE "resize|reposition|move.*field|re-flag|change.*flag"`
+  over `docs/decisions/020-form-field-authoring.md` → **16 hits, every one
+  of them the `remove-*`→`delete-*` supersession, the Shape A→B
+  promotion's *"move the annotation keys off the field dict"*, or a
+  deletion rule.** So the owed list below splits in two, and the split is
+  the point: **deferred means someone decided it and put it later;
+  UNSCOPED means nobody ever decided it**, and only the second kind can
+  vanish from a plan without anyone noticing.
+  **STILL OWED AND SCOPED:** `--defaults-from <field>` (**F6's other
+  half — F6 IS HALF DONE**), `/I` and `/TI`, **push buttons** (verb name
+  still NOT RULED), **tab order AUTHORING** (F4, still BLOCKED on the
+  spec-librarian `/Tabs` dispatch), and Pass 20.5's residue (per-type
+  detail fields, `/MK`-border disclosure, rendered-appearance
+  verification, the multi-page repeated-field row-label fixture).
+  **UNSCOPED, AND OWED A DECISION RATHER THAN AN IMPLEMENTATION:** field
+  **move**, **resize** and **re-flag**. Each needs a scope call from the
+  engineer — a new slice, an amendment to decision 020, or a named
+  refusal. **They are NOT covered by closing F6**, and *"field editing is
+  done"* will be a true statement about F6 and a false statement about the
+  capability until they are ruled.
+  **RULED BY THIS COMMIT, recorded so it is not re-opened by accident:** a
+  **rename into an occupied name REFUSES** — it does not merge and does
+  not auto-suffix. Decision 020 named `rename-field` but never decided
+  this. **The argument is the asymmetry with `add-*`** (a same-type add
+  merges because the caller asked for *a field of that name*; a rename
+  named an existing field **and** a new one, so merging destroys an
+  identity never offered up) — full form in the Pass 20.6 entry §3 and in
+  `ARCHITECTURE.md` §12.
+  **No GUI half, deliberately (R151)** — F5's own cut is still open and a
+  second unreachable core surface would repeat the pattern R151 exists to
+  stop.
 - **XFA** — legacy Adobe forms tech. **Verify current status before
   scoping** — Adobe has been deprecating XFA in Acrobat; consult the
   spec RAG + a fresh web check before committing engineering time here.

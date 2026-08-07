@@ -11497,3 +11497,100 @@ with a forward pointer.
   and after:
   `check-ledger-numbers.py` exit 0 / exit 0, `check-passes-filed.py` exit 0 /
   exit 0.**
+
+- **2026-08-07 (twenty-eighth filing, `3d345aa`) — THREE DECISIONS ON FIELD
+  RENAMING, ONE OF WHICH IS A SCOPE CORRECTION TO DECISION 020 ITSELF.**
+  Filed as `ARCHITECTURE.md` §12 entries rather than as a new numbered
+  decision record: **decision records stay at 031 (032 next free), and
+  nothing is minted.** The first two are rulings on an open question inside
+  an existing decision record; the third corrects that record's reading, not
+  its content.
+
+  **(1) A rename into an occupied name REFUSES — it does not merge, and it
+  does not auto-suffix.** Decision 020 named `rename-field` (§6's F6) and
+  §0.1 ruled its flat spelling, but **never decided the collision case.**
+  The fork implemented refuse and argued for it; the engineer confirms.
+  **The argument is the asymmetry with creation, and it turns on what the
+  caller supplied.** A same-type `add-*` onto an existing name **merges**,
+  because the caller supplied a *type and a name* — they asked for a field
+  of that name, and §12.7.3.2 makes same-FQN nodes representations of one
+  field, so merging is the spec's own answer to the request as stated. A
+  `rename-field` supplied **two identities** — an existing field to keep and
+  a new name to move it to — so **merging would destroy an identity that was
+  never offered up**, with nothing in the request saying how to reconcile
+  two sets of `/V`, `/Ff` and `/Kids`. **Auto-suffixing (`Name_2`) is
+  rejected separately and on rule 4:** it hands the operator a name they did
+  not choose, silently, which is worse than a refusal because the document
+  then contains a name nobody typed. **The refusal is one `if`**, recorded
+  because a ruling that is cheap to overturn deserves less scepticism than
+  one that is not. Implemented as `FormAuthorError::RenameCollision`.
+
+  **(2) A dotted PATH and a MALFORMED name are separate refusals, because
+  the reader's next move differs.** `FormAuthorError::DottedPartialName` was
+  added after reusing `PeriodInPartialName` for `A.B` produced *"contains an
+  empty name segment"* — **which `A.B` does not have.** `A..B` is malformed
+  and there is a typo to find; `A.B` is a **well-formed two-level path that
+  simply is not a PARTIAL name** (one segment by construction) and there is
+  no typo at all. **An error message that is confidently wrong about the
+  cause is worse than a generic one**, because it spends the reader's time
+  in the wrong place, and the more they trust the tool the more it costs. A
+  test asserts the two messages differ, since an untested distinction is one
+  refactor from collapsing back.
+
+  **(3) SCOPE CORRECTION — decision 020's F6 is TWO items, and this
+  project's own documents have been reading it as four.** §6's F6 bullet
+  names `--defaults-from <field>` and `rename-field`. **`move`, `resize` and
+  `re-flag` appear nowhere in decision 020** — established by
+  `git grep -n -iE "resize|reposition|move.*field|re-flag|change.*flag" -- docs/decisions/020-form-field-authoring.md`,
+  which returns **16 hits, every one of them** the `remove-*`→`delete-*`
+  house-word supersession, the Shape A→B promotion's *"move the annotation
+  keys off the field dict"* step, or a mid-group/last-member **deletion**
+  rule. The four-item phrasing originated in `ROADMAP.md` (three places) and
+  propagated to `FEATURES.md` (one); all four are amended. **The correction
+  matters because *deferred* and *UNSCOPED* are indistinguishable to a
+  reader of the Backlog and are opposite states of the world** — deferred
+  means someone decided it and put it later; unscoped means nobody ever
+  decided it. With both F6 items built, *"field property editing is done"*
+  would be **true of F6 and false of the capability**, and no roadmap entry
+  anywhere would explain why nudging a field 3 pt left does nothing.
+  **Move / resize / re-flag are therefore filed as owed a SCOPE DECISION —
+  a new slice, an amendment to decision 020, or a named refusal — not as
+  owed an implementation.**
+
+  **The structural fact underneath all three, which belongs in the record
+  because decision 020 states its opposite in passing.** §12.7.3.2's
+  fully-qualified name is **derived, not stored** — there is no `/FQN` key;
+  a viewer descends from `/AcroForm /Fields` joining each node's `/T`. So
+  **rewriting one node's `/T` re-derives that node's identity AND its entire
+  subtree's, and the subtree's objects are byte-unchanged** — they were
+  never storing the thing that changed. **A subtree rename is ONE object
+  write.** Decision 020's F6 bullet says the rename *"needs `Field.parent`
+  from F0 for subtree renames"*, which reads as *the write walks down and
+  fixes each child*. **It does not.** `Field.parent` is what lets the verb
+  **count** the affected descendants so rule 4 can disclose them
+  (`FieldRename::descendants_renamed`) — required by the **disclosure**, not
+  by the **mutation**. **The requirement was real and its stated reason was
+  wrong**, which is the same shape as this librarian's hard rule 8 amendment
+  the same day: an obligation that stayed correct while its reason went
+  stale. Verified end to end: `Personal.Address` → `Location` yields
+  `Personal.Location.Zip` and `Personal.Location.City`, `Personal.Name`
+  untouched, **`descendants_renamed=2`** — 2 descendants re-identified over
+  1 object written.
+
+  **Body sections touched by this entry:** none. §4's API contract is not
+  restated here because `rename_field` is an `EditSession` verb of the same
+  shape as the shipped `delete_field`/`delete_widget`, and §4's forms
+  paragraph already describes that surface generically; **the capability-
+  level record is `FEATURES.md`'s new *RENAME a form field* row and
+  `ROADMAP.md`'s `Pass 20.6 (PARTIAL)` entry.**
+
+  **Git and backup state — CHECKED, not inferred (librarian hard rule 8).**
+  `git rev-parse HEAD` → **`3d345aa`**; `git status --porcelain` → **0
+  lines**; `git remote -v` → **empty, exit 0.** Newest bundle
+  (`ls -la D:\Dev\pdfce-backups\`) **`pdfce-20260807-1859.bundle`**, tip
+  **read by `git bundle list-heads`** → `refs/heads/pass-8-redaction` =
+  **`02a789d…`** = **exactly `HEAD~1`. The dispatch's "one behind" figure is
+  CONFIRMED, and `3d345aa` is in no bundle.** **Checkers re-run before and
+  after: `check-ledger-numbers.py` exit 0 / exit 0, `check-passes-filed.py`
+  exit 0 / exit 0.** **Gates relayed from the engineer, not measured here
+  (R87): 2181 tests / 0 failed, clippy 0, both ledger checkers 0.**
