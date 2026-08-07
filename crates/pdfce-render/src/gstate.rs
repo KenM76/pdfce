@@ -146,7 +146,27 @@ pub struct GraphicsState {
     /// (tiny-skia `Mask`) because PDF only ever intersects clips —
     /// never enlarges them (§8.5.4 NOTE 2) — so a mask composes by
     /// per-pixel multiplication without needing path booleans.
-    pub clip: Option<tiny_skia::Mask>,
+    ///
+    /// # Why `Arc`, and why sharing is sound
+    ///
+    /// A `Mask` is page-sized (one byte per pixel: ~1 MB at 1191×842),
+    /// and `q` pushes a **clone** of the whole graphics state. On a CAD
+    /// sheet measured 2026-08-07 that is 129,951 `q` operations against
+    /// a live clip — **6.8 seconds of pure memcpy**, the single largest
+    /// cost in a 17.5 s render, larger than rasterizing every clip path.
+    ///
+    /// Sharing is sound because **a clip is never mutated in place**.
+    /// `intersect_clip` builds a *fresh* mask and assigns it; the old
+    /// one is only ever read. So `q` needs a new *reference*, not a new
+    /// buffer, and `Q` drops one. No copy-on-write is required — there
+    /// is no write.
+    ///
+    /// This is why the type is `Arc<Mask>` and not `Rc<Mask>`: nothing
+    /// here is threaded today, but `pdfce-render` is a library whose
+    /// callers may render pages in parallel, and `Rc` would make
+    /// `GraphicsState` non-`Send` for a saving of one non-atomic
+    /// increment per `q`.
+    pub clip: Option<std::sync::Arc<tiny_skia::Mask>>,
     /// The nine §9.3 text-state parameters (module docs: they ARE
     /// graphics-state parameters, so `q`/`Q` save and restore them).
     pub text: crate::text::TextState,

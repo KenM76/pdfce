@@ -1458,7 +1458,7 @@ impl Interpreter<'_> {
         let ctm = self.gs.current.ctm;
         // BORROWED, never cloned — see `paint_path`'s note. A glyph is
         // one more paint under the same page-sized mask.
-        let clip = self.gs.current.clip.as_ref();
+        let clip = self.gs.current.clip.as_deref();
         if self.gs.current.text.fills() {
             let paint = solid(self.gs.current.fill_color);
             // Glyph outlines are filled with the NONZERO winding rule
@@ -1942,7 +1942,7 @@ impl Interpreter<'_> {
             &paint,
             FillRule::Winding,
             self.gs.current.ctm,
-            self.gs.current.clip.as_ref(),
+            self.gs.current.clip.as_deref(),
         );
     }
 
@@ -2012,7 +2012,7 @@ impl Interpreter<'_> {
             if pending_clip.is_some()
                 && let Some(mask) = Mask::new(pixmap.width(), pixmap.height())
             {
-                self.gs.current.clip = Some(mask);
+                self.gs.current.clip = Some(std::sync::Arc::new(mask));
             }
             return;
         };
@@ -2062,7 +2062,7 @@ impl Interpreter<'_> {
         // was drawn on. Nothing needed the copy — `fill_path`/`stroke_path`
         // take `Option<&Mask>`, and the clip is not mutated until
         // `intersect_clip` below, which is after the last use.
-        let clip = self.gs.current.clip.as_ref();
+        let clip = self.gs.current.clip.as_deref();
         if fill && let Some(rule) = fill_rule {
             let paint = solid(self.gs.current.fill_color);
             pixmap.fill_path(&path, &paint, rule, ctm, clip);
@@ -2154,7 +2154,7 @@ fn intersect_clip(
             }
         }
     }
-    state.clip = Some(mask);
+    state.clip = Some(std::sync::Arc::new(mask));
 }
 
 /// Read a six-number `/Matrix` entry (Table 95) as a [`Transform`].
