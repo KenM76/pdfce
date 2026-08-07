@@ -1321,6 +1321,48 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// **Rename a form field** (ISO 32000-1 §12.7.3.2).
+    ///
+    /// `--to` is a **partial** name — the one path segment this field
+    /// contributes — not a fully-qualified one. Renaming `Address.City` to
+    /// `Town` gives `Address.Town`; the field keeps its place in the tree,
+    /// and this verb deliberately cannot re-parent it.
+    ///
+    /// RENAMING A GROUP RENAMES EVERYTHING UNDER IT. §12.7.3.2 builds a
+    /// fully-qualified name by appending each node's partial name walking
+    /// down, so renaming `Address` re-derives `Address.City` as
+    /// `Location.City` — without writing to `City` at all. The output line
+    /// reports `descendants_renamed` for exactly this reason: a one-field
+    /// request can rename six, and every FDF, JavaScript reference and
+    /// submit mapping that named them stops matching.
+    ///
+    /// A rename onto a name something else already holds is REFUSED, not
+    /// merged — unlike `add-*`, which merges a same-type name because the
+    /// caller asked for a field of that name. Here they asked for an
+    /// existing field to take a new one, and fusing two identities is not
+    /// something the request describes.
+    RenameField {
+        /// Input PDF.
+        input: PathBuf,
+        /// The field's current fully-qualified name, as `list-fields`
+        /// reports it.
+        #[arg(long)]
+        name: String,
+        /// The new PARTIAL name — one segment, no periods.
+        #[arg(long = "to")]
+        to: String,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the rename reproduces the input byte
+        /// for byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// Delete ONE widget of a form field (ISO 32000-1 §12.5.6.19).
     ///
     /// The usual case is dropping a member from a radio group, or one of the
@@ -3153,6 +3195,14 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_delete_form_field(&input, &name, Some(index), &output, mode, verify_undo),
+        Command::RenameField {
+            input,
+            name,
+            to,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_rename_field(&input, &name, &to, &output, mode, verify_undo),
         Command::AddChoiceField {
             input,
             name,
@@ -9280,6 +9330,68 @@ fn cmd_add_check_box(args: &AddCheckBoxArgs<'_>) -> u8 {
         u32::from(outcome.undo_identical),
     );
     finish_edit(args.input, &outcome)
+}
+/// `rename-field` — change a field's partial name `/T` (decision 020's F6).
+///
+/// The disclosure this exists to carry is `descendants_renamed`. Renaming a
+/// grouping node re-derives every descendant's fully-qualified name without
+/// writing to one of them (§12.7.3.2), so the operator's one-field request
+/// can rename a subtree. Saying so is rule 4; leaving it to be discovered
+/// when an FDF stops matching is not.
+fn cmd_rename_field(
+    input: &Path,
+    name: &str,
+    to: &str,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let rename = match session.rename_field(name, to) {
+        Ok(r) => r,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    // In prose, for the person about to wonder why six fields moved. The
+    // machine-readable count is on the result line below.
+    if rename.descendants_renamed > 0 {
+        eprintln!(
+            "pdfce-cli: field {name:?}: {} field(s) beneath it now have different fully-qualified names, because §12.7.3.2 builds those names from this one — no object of theirs was written, but anything naming them (FDF, JavaScript, submit mappings) no longer matches",
+            rename.descendants_renamed
+        );
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "rename-field {} from={:?} to={:?} descendants_renamed={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        rename.from,
+        rename.to,
+        rename.descendants_renamed,
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
 }
 
 /// `delete-field` and `delete-widget` — the two deletion verbs, which differ

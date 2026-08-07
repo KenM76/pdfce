@@ -169,6 +169,45 @@ pub enum FormAuthorError {
         /// The fully-qualified name requested.
         fqn: String,
     },
+    /// A rename would land the field on a name something else already holds.
+    ///
+    /// **Refused rather than merged, and the asymmetry with creation is
+    /// deliberate.** A same-type `add-*` MERGES into an existing name, because
+    /// §12.7.3.2 makes same-FQN nodes representations of one field and the
+    /// caller asked for a field of that name. A rename did not: the operator
+    /// named an EXISTING field and a NEW name, and silently fusing it into an
+    /// unrelated field would destroy an identity they never offered up. The
+    /// two fields' values, flags and widgets would have to be reconciled, and
+    /// nothing in the request says how.
+    ///
+    /// Deleting or renaming the occupant is the fix, and it is the operator's
+    /// to choose.
+    #[error("cannot rename `{from}` to `{to}`: a field already bears that name")]
+    RenameCollision {
+        /// The fully-qualified name being renamed away from.
+        from: String,
+        /// The fully-qualified name it would have taken.
+        to: String,
+    },
+    /// A dotted PATH was supplied where a single partial name was required.
+    ///
+    /// Distinct from [`Self::PeriodInPartialName`], and the distinction is
+    /// the operator's next move. `A..B` is malformed — no reading of it is
+    /// valid. `A.B` is a perfectly well-formed two-level path; it is simply
+    /// not a **partial** name, which is one segment by §12.7.3.2's
+    /// construction. Telling someone who typed `A.B` that it "contains an
+    /// empty name segment" describes a defect their input does not have.
+    ///
+    /// A rename changes what one node contributes to the path. Accepting a
+    /// dotted name here would silently re-parent the field, which is a
+    /// different operation and one this verb does not offer.
+    #[error(
+        "`{supplied}` is a path, not a partial name: a rename sets the ONE segment this field contributes, so it cannot contain a period"
+    )]
+    DottedPartialName {
+        /// What was supplied in place of a single segment.
+        supplied: String,
+    },
     /// A path segment (a partial name `/T`) contains a period.
     ///
     /// §12.7.3.2 reserves the period as the path separator, so a `/T`

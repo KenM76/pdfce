@@ -287,6 +287,13 @@ pub enum CommandKind {
     ///
     /// Carries no payload, matching `AddFormField`: `CommandKind` is `Copy`.
     DeleteFormField,
+    /// A field's partial name `/T` was changed (decision 020's F6).
+    ///
+    /// Exactly one dictionary is written, however many fields the operator
+    /// sees renamed: §12.7.3.2 derives every descendant's fully-qualified
+    /// name from this node's, so the subtree follows without being touched.
+    /// One undo entry restores the whole apparent rename for the same reason.
+    RenameFormField,
     /// A text or choice field's value was set and its appearance
     /// regenerated (Pass 7, §12.7.3.3). One fill — the field's `/V` and
     /// every widget's `/AP` — is one undo entry.
@@ -4213,6 +4220,38 @@ pub struct FieldDeletion {
     pub emptied_parents: usize,
 }
 
+/// What a [`EditSession::rename_field`] changed.
+///
+/// # Why a rename is ONE object write, and this struct exists to say what
+/// else moved
+///
+/// §12.7.3.2 builds the fully-qualified name by walking DOWN the tree and
+/// appending each node's partial name `/T`. So changing one node's `/T`
+/// re-derives the FQN of that node **and of every descendant**, without
+/// touching a single descendant object. The write is one dictionary; the
+/// consequence is a subtree.
+///
+/// That is exactly the shape rule 4 exists for. An operator who renames
+/// `Address` and is not told that `Address.City` is now `Location.City` has
+/// had six fields renamed by a one-field request, and every FDF, every
+/// JavaScript reference and every submit mapping that named them is now
+/// pointing at nothing. [`descendants_renamed`](Self::descendants_renamed)
+/// is that disclosure, and it is why the count is returned rather than
+/// discarded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldRename {
+    /// The fully-qualified name before the rename.
+    pub from: String,
+    /// The fully-qualified name after it.
+    pub to: String,
+    /// Descendant fields whose fully-qualified name changed as a consequence,
+    /// **without any of their own objects being written**.
+    ///
+    /// Zero for a terminal field with no children — the common case, and the
+    /// one where the operator's mental model and the effect coincide.
+    pub descendants_renamed: usize,
+}
+
 /// (Pass 7.1, R48).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -5982,6 +6021,142 @@ impl EditSession {
     /// Shared so the two cannot drift about which documents refuse deletion —
     /// a certification gate honoured by one verb and not the other is worse
     /// than neither having it, because it reads as protection.
+    /// Rename a field, changing its partial name `/T` (decision 020's F6).
+    ///
+    /// # One write, a subtree of consequence
+    ///
+    /// §12.7.3.2 constructs the fully-qualified name by walking DOWN from the
+    /// `/AcroForm /Fields` roots and appending each node's `/T`. A rename
+    /// therefore writes **exactly one dictionary** — the target's — and every
+    /// descendant's FQN re-derives from the new prefix with no object of
+    /// theirs touched.
+    ///
+    /// This is why [`FieldRename::descendants_renamed`] is returned rather
+    /// than discarded: a one-field request can rename six fields, and an
+    /// operator not told so has silently broken every FDF, JavaScript
+    /// reference and submit mapping that named them (rule 4).
+    ///
+    /// `new_partial` is a **partial** name, not an FQN — the one path segment
+    /// this node contributes. Renaming `Address.City` to `Town` yields
+    /// `Address.Town`; the field does not move in the tree, and this verb
+    /// deliberately cannot re-parent it.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::forms_author::FormAuthorError::PeriodInPartialName`] when
+    /// `new_partial` contains a period — §12.7.3.2 reserves it as the path
+    /// separator, so a `/T` holding one has no unambiguous FQN, and there is
+    /// no escape;
+    /// [`crate::forms_author::FormAuthorError::EmptyName`] for an empty one;
+    /// [`crate::forms_author::FormAuthorError::RenameCollision`] when
+    /// something already bears the destination name — refused, never merged,
+    /// for the reason on that variant;
+    /// [`EditError::FieldNotFound`] when nothing bears `fqn`; plus the
+    /// encryption and **strict** certification guards, because a rename is a
+    /// structural change to the form and that is precisely what a
+    /// certification signature freezes.
+    pub fn rename_field(&mut self, fqn: &str, new_partial: &str) -> Result<FieldRename, EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        // A partial name is ONE segment. Routing it through the same splitter
+        // the authoring paths use means the period rule, the empty rule and
+        // the depth rule cannot drift between create and rename — and a
+        // caller who passes a dotted name here gets the period refusal rather
+        // than a silently re-parented field.
+        let segments = forms_author::split_field_path(new_partial)?;
+        // Destructured rather than length-checked-then-indexed: "exactly one
+        // segment" IS the requirement, and binding it that way removes the
+        // panic path instead of guarding it.
+        let [only_segment] = segments.as_slice() else {
+            return Err(FormAuthorError::DottedPartialName {
+                supplied: new_partial.to_owned(),
+            }
+            .into());
+        };
+        let only_segment = only_segment.clone();
+
+        // What does the OLD name denote? A grouping node is renameable too —
+        // it is the case that moves a whole subtree — so this accepts both,
+        // and only `Vacant` is a failure.
+        let target = match forms_author::resolve_field_path(&self.graph(), fqn)? {
+            FieldPath::Terminal { id, .. } | FieldPath::Grouping { id } => id,
+            FieldPath::Vacant { .. } => {
+                return Err(EditError::FieldNotFound {
+                    name: fqn.to_owned(),
+                });
+            }
+        };
+
+        // The destination FQN: the same path with its LAST segment replaced.
+        let mut path = forms_author::split_field_path(fqn)?;
+        path.pop();
+        path.push(only_segment.clone());
+        let new_fqn = path.join(".");
+
+        if new_fqn == fqn {
+            // A no-op rename reaches neither the undo stack nor the file.
+            return Ok(FieldRename {
+                from: fqn.to_owned(),
+                to: new_fqn,
+                descendants_renamed: 0,
+            });
+        }
+
+        // Refused, not merged. See `RenameCollision`.
+        if !matches!(
+            forms_author::resolve_field_path(&self.graph(), &new_fqn)?,
+            FieldPath::Vacant { .. }
+        ) {
+            return Err(FormAuthorError::RenameCollision {
+                from: fqn.to_owned(),
+                to: new_fqn,
+            }
+            .into());
+        }
+
+        // The blast radius, counted BEFORE the write, off the reader's
+        // projection. A descendant is anything whose FQN sits under this
+        // node's path — `Address` renames `Address.City`, but not `Addressed`,
+        // which is why the prefix carries the separator.
+        let prefix = format!("{fqn}.");
+        let descendants_renamed = forms::parse_acroform(&self.graph())
+            .map(|form| {
+                form.fields
+                    .iter()
+                    .filter(|f| f.fully_qualified_name.starts_with(&prefix))
+                    .count()
+            })
+            .unwrap_or(0);
+
+        let Some(Object::Dict(dict)) = self.value(target) else {
+            return Err(EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            });
+        };
+        let mut dict = dict.clone();
+        dict.insert(Name::from(b"T"), Object::String(only_segment.into_bytes()));
+
+        self.commit(Command {
+            kind: CommandKind::RenameFormField,
+            objects: vec![ObjectWrite {
+                id: target,
+                before: self.state.get(&target).cloned(),
+                after: Some(Object::Dict(dict)),
+            }],
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(FieldRename {
+            from: fqn.to_owned(),
+            to: new_fqn,
+            descendants_renamed,
+        })
+    }
+
     fn deletion_preflight(&mut self, fqn: &str) -> Result<(forms::Field, ()), EditError> {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(EditError::DocumentEncrypted);

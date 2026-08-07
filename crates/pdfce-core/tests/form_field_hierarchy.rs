@@ -564,3 +564,133 @@ fn flatten_clears_the_fields_array_in_the_saved_bytes() {
         &window[..120.min(window.len())],
     );
 }
+
+// ===========================================================================
+// F6 — rename (decision 020 §6, `rename-field`)
+// ===========================================================================
+
+/// Renaming a GROUPING node re-derives every descendant's fully-qualified
+/// name — while writing exactly one dictionary.
+///
+/// # Why this is the test that matters, and why it asserts on BYTES
+///
+/// §12.7.3.2 builds the FQN by walking DOWN and appending each node's `/T`.
+/// So the whole subtree's identity changes off one write, and the descendants'
+/// own objects are never touched. That is a fact about the FILE, and
+/// `parse_acroform` cannot witness it: the projection would report the new
+/// names just as happily if the rename had been applied only to the in-memory
+/// model and never reached a saved byte. **R159** — the shipped `flatten`
+/// defect hid behind exactly that projection, so the assertion is on the
+/// serialized `/T`.
+///
+/// The count is the disclosure. `Personal.Address` → `Personal.Location`
+/// renames two fields the operator did not name, and an operator not told so
+/// has silently broken every FDF and submit mapping that referenced them.
+#[test]
+fn renaming_a_grouping_node_renames_its_whole_subtree() {
+    let mut s = session("nested-form.pdf");
+    let before = names(&form(&s));
+    assert!(
+        before.contains(&"Personal.Address.Zip".to_owned()),
+        "fixture precondition: the subtree exists; have {before:?}",
+    );
+
+    let outcome = s
+        .rename_field("Personal.Address", "Location")
+        .expect("renaming a grouping node is allowed");
+
+    assert_eq!(outcome.from, "Personal.Address");
+    assert_eq!(outcome.to, "Personal.Location");
+    assert_eq!(
+        outcome.descendants_renamed, 2,
+        "Zip and City are renamed by a request that named neither",
+    );
+
+    let after = names(&form(&s));
+    assert!(
+        after.contains(&"Personal.Location.Zip".to_owned())
+            && after.contains(&"Personal.Location.City".to_owned()),
+        "the subtree did not follow its parent: {after:?}",
+    );
+    assert!(
+        after.contains(&"Personal.Name".to_owned()),
+        "a sibling outside the renamed subtree must not move: {after:?}",
+    );
+
+    // The byte-level half. `/T (Location)` must be IN THE FILE, not merely in
+    // the projection — and `Address` must be gone from it.
+    let doc = Document::load(&fixture("nested-form.pdf")).expect("reload for the writer");
+    let (bytes, _) = save_full(&doc, &s.dirty_set(), &SaveOptions::identity()).expect("save");
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        text.contains("/T (Location)"),
+        "the new partial name never reached the saved bytes",
+    );
+    assert!(
+        !text.contains("/T (Address)"),
+        "the old partial name survives in the saved bytes",
+    );
+}
+
+/// A rename onto an occupied name is REFUSED, not merged.
+///
+/// The asymmetry with `add-*` is deliberate and is the whole content of this
+/// test: a same-type `add-text-field` MERGES into an existing name, because
+/// §12.7.3.2 makes same-FQN nodes representations of one field and the caller
+/// asked for a field of that name. A rename did not — it named an existing
+/// field and a new name — so fusing two identities would destroy one the
+/// operator never offered.
+#[test]
+fn renaming_onto_an_occupied_name_is_refused() {
+    let mut s = session("nested-form.pdf");
+    let err = s
+        .rename_field("Personal.Address.City", "Zip")
+        .expect_err("Personal.Address.Zip is taken");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("already bears that name"),
+        "a collision must say the name is taken, got: {msg}",
+    );
+
+    // And the refusal must be BEFORE any mutation — a half-applied rename is
+    // worse than a refused one.
+    let after = names(&form(&s));
+    assert!(
+        after.contains(&"Personal.Address.City".to_owned()),
+        "the field moved despite the refusal: {after:?}",
+    );
+}
+
+/// A dotted name and a malformed one are DIFFERENT refusals.
+///
+/// `A.B` is a well-formed two-level path that is simply not a *partial* name;
+/// `A..B` has no valid reading at all. Telling the first operator that their
+/// input "contains an empty name segment" describes a defect it does not
+/// have, and sends them looking for a typo that is not there.
+#[test]
+fn a_dotted_partial_name_and_a_malformed_one_refuse_differently() {
+    let mut s = session("nested-form.pdf");
+
+    let dotted = s
+        .rename_field("Personal.Name", "A.B")
+        .expect_err("a partial name is one segment")
+        .to_string();
+    assert!(
+        dotted.contains("is a path, not a partial name"),
+        "a well-formed path needs its own refusal, got: {dotted}",
+    );
+
+    let malformed = s
+        .rename_field("Personal.Name", "A..B")
+        .expect_err("an empty segment is malformed")
+        .to_string();
+    assert!(
+        malformed.contains("empty name segment"),
+        "a malformed name keeps the segment refusal, got: {malformed}",
+    );
+
+    assert_ne!(
+        dotted, malformed,
+        "the two cases must not share a message; that is the point",
+    );
+}
