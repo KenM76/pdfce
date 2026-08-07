@@ -850,15 +850,33 @@ fn a_base_file_with_no_trailing_eol_gets_a_separator_before_the_append() {
 }
 
 #[test]
-fn a_file_with_leading_junk_keeps_it_through_a_full_rewrite() {
-    // pdfce's header probe tolerates bytes before `%PDF-` (it scans a
-    // 1 KiB window), and §5 says do not normalize what the operator did
-    // not ask about — so a full rewrite must carry that prefix through.
-    // The emitted offsets are absolute from byte 0, as §7.5.5 requires
-    // ("the byte offset ... from the beginning of the file"), NOT from
-    // the header marker; getting that wrong shifts every object by the
-    // prefix length and the file still *looks* fine until an object is
-    // resolved.
+fn a_full_rewrite_drops_bytes_before_the_header() {
+    // REVERSED 2026-08-07. This test used to assert the opposite — that a
+    // full rewrite carries a preamble through — on the reasoning that
+    // pdfce's probe tolerates bytes before `%PDF-` and §5 says do not
+    // normalize what the operator did not ask about. The emitted offsets
+    // were absolute from byte 0, exactly as §7.5.4/§7.5.5 require.
+    //
+    // That was self-consistent and spec-literal and still produced files
+    // an independent reader could not open. Measured with veraPDF: a
+    // minimal 3-object file with correct absolute offsets and 19 bytes of
+    // junk ahead of the header fails with "can not locate xref table";
+    // the identical file with the junk removed parses clean. veraPDF
+    // treats offsets as HEADER-RELATIVE whenever a preamble exists, so
+    // preserving one is a defect generator, not a courtesy.
+    //
+    // `iso32000__s__7.5.md` records this as a real ambiguity that ISO
+    // 32000-1 does not resolve. Dropping the preamble makes the two
+    // readings COINCIDE — with the header at byte 0 the absolute and
+    // header-relative offsets are the same number — so the output is
+    // unambiguous to every reader rather than correct only under the
+    // reading pdfce happens to prefer. It also stops re-emitting the
+    // §7.5.2 violation ("The first line of a PDF file shall be a header")
+    // that the operator never asked pdfce to preserve.
+    //
+    // Only a FULL rewrite may do this: it promises per-object identity,
+    // not whole-file identity. `assert_identity_save_is_byte_identical`
+    // below still pins the incremental path, which must keep the preamble.
     //
     // Built byte-wise rather than by rewriting text: the §7.5.2 binary
     // comment line is deliberately not valid UTF-8.
@@ -892,19 +910,44 @@ fn a_file_with_leading_junk_keeps_it_through_a_full_rewrite() {
     assert_identity_save_is_byte_identical(&buf);
 
     let (out, _) = save_full(&doc, &DirtySet::empty(), &SaveOptions::identity()).unwrap();
-    let mut want = JUNK.to_vec();
-    want.extend_from_slice(HEADER);
-    assert!(out.starts_with(&want));
+
+    // The header is at byte 0 and the junk is gone entirely — asserted on
+    // BYTES, not through pdfce's reader (R159). pdfce reads its own
+    // preamble-bearing output perfectly; that is precisely why this defect
+    // needed an outside judge to surface at all.
+    assert!(
+        out.starts_with(HEADER),
+        "a full rewrite must emit `%PDF-` at byte 0, got {:?}",
+        &out[..out.len().min(24)]
+    );
+    assert!(
+        !out.windows(JUNK.len()).any(|w| w == JUNK),
+        "the preamble must not survive anywhere in the rewritten file"
+    );
+
     let back = Document::from_bytes(out.clone()).unwrap();
     assert_eq!(back.object_count(), 3);
     // The catalog must actually resolve — the assertion that catches an
     // offset base-point error, which object_count alone would not.
     assert!(back.catalog().is_ok());
-    // And the emitted offset for object 1 accounts for the prefix.
-    let Some(XrefEntry::InUse { offset, .. }) = back.xref().get(1) else {
-        panic!("object 1 has no in-use entry");
-    };
-    assert!(offset as usize >= JUNK.len());
+
+    // Every in-use offset must land exactly on its own `N 0 obj`. This is
+    // the assertion with teeth: it fails both if the offsets keep a
+    // now-absent prefix baked in, and if the header were dropped without
+    // recomputing them. `object_count` and `catalog()` both pass in that
+    // state, because pdfce's own loader recovers from it.
+    for num in 1u32..=3 {
+        let Some(XrefEntry::InUse { offset, .. }) = back.xref().get(num) else {
+            panic!("object {num} has no in-use entry");
+        };
+        let at = offset as usize;
+        let want = format!("{num} 0 obj");
+        assert!(
+            out[at..].starts_with(want.as_bytes()),
+            "xref says object {num} is at byte {at}, but that is {:?}",
+            String::from_utf8_lossy(&out[at..(at + 12).min(out.len())])
+        );
+    }
 }
 
 #[test]

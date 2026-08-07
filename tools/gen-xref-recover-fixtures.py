@@ -22,6 +22,7 @@ third-party content). Regenerate with
 | xref-stream-corrupt.pdf       | pure xref-stream, stream data undecodable| OPENS (XrefStreamDecode) — file-lvl+ObjStm|
 | duplicate-superseded.pdf      | object 3 defined twice + no `startxref`  | OPENS, last-wins picks the 2nd def        |
 | offset-start.pdf              | >1 KiB leading junk before `%PDF-`       | OPENS (MissingHeader, offset_start)       |
+| header-preamble.pdf           | 12-byte preamble, offsets absolute      | OPENS STRICT; a full rewrite must drop it |
 | unrecoverable-no-catalog.pdf  | objects but no `/Type /Catalog`, no sxr  | REFUSES clean (NoCatalog)                 |
 
 The `offset-shifted-startxref` fixture reproduces the canonical real-world
@@ -235,6 +236,37 @@ def fx_offset_start():
     return junk + valid
 
 
+def fx_header_preamble():
+    """A VALID classic file preceded by a SHORT preamble, so the `%PDF-`
+    header is still inside the 1 KiB probe window and the file loads on the
+    STRICT path — unlike `offset-start.pdf`, whose >1 KiB junk defeats the
+    probe and routes through recovery instead.
+
+    Offsets are ABSOLUTE from byte 0, exactly as §7.5.4/§7.5.5 require, so
+    the file is spec-correct as written. Nothing here is damaged.
+
+    This is the veraPDF-gate control for the 2026-08-07 header-preamble fix.
+    veraPDF cannot open this INPUT ("can not locate xref table") because it
+    reads offsets as header-relative whenever a preamble exists. pdfce's full
+    rewrite must therefore emit `%PDF-` at byte 0 and drop the preamble, at
+    which point both readings coincide and the OUTPUT parses everywhere.
+    A regression restoring preamble preservation flips this file from
+    `improved` to a regression in the sweep, so the gate keeps watching it.
+    """
+    junk = b"%% preamble\n"
+    objs = one_page_objects()
+    body, off = emit_bodies(objs)
+    # Shift every recorded offset by the preamble so they stay ABSOLUTE.
+    off = {n: o + len(junk) for n, o in off.items()}
+    size = max(objs) + 1
+    buf = bytearray(junk) + body
+    xref_at = len(buf)
+    buf += classic_xref(off, size)
+    buf += classic_trailer(size)
+    buf += b"startxref\n%d\n%%%%EOF\n" % xref_at
+    return bytes(buf)
+
+
 def fx_unrecoverable_no_catalog():
     """Objects present but NONE is a `/Type /Catalog`, no `trailer` keyword,
     no `startxref`. Recovery finds objects but no catalog → clean refusal.
@@ -423,6 +455,7 @@ FIXTURES = {
     "xref-stream-corrupt.pdf": fx_xref_stream_corrupt,
     "duplicate-superseded.pdf": fx_duplicate_superseded,
     "offset-start.pdf": fx_offset_start,
+    "header-preamble.pdf": fx_header_preamble,
     "unrecoverable-no-catalog.pdf": fx_unrecoverable_no_catalog,
     "missing-endobj-page-tree.pdf": fx_missing_endobj_on_page_tree,
 }

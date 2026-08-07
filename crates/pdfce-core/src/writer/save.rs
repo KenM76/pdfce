@@ -554,15 +554,17 @@ pub fn save_full(
 
     // The header region.
     //
-    // Normal path: copied verbatim, so the `%PDF-M.N` line is preserved
-    // exactly (never re-derived — re-deriving would normalize a `%PDF-1.4 `
-    // with trailing space, or drop leading junk the header probe tolerates)
-    // along with the §7.5.2 binary-comment line.
+    // Normal path: copied verbatim FROM THE `%PDF-` MARKER, so the
+    // `%PDF-M.N` line is preserved exactly (never re-derived — re-deriving
+    // would normalize a `%PDF-1.4 ` with trailing space) along with the
+    // §7.5.2 binary-comment line. Any bytes BEFORE the marker are dropped;
+    // see `header_span` for the measurement that forced that, and for why
+    // only a full rewrite is allowed to do it.
     //
     // Recovered path (decision 013): a recovered file's base cross-reference
     // was invalid, so §5.6's "never normalize" does not bind it — and its
     // header may be absent or buried behind >1 KiB of leading junk (the
-    // offset-start case, where `header_prefix_len` finds no marker in its
+    // offset-start case, where `header_span` finds no marker in its
     // window and would copy nothing, yielding a headerless rewrite that
     // re-triggers recovery on reload). Emit a fresh, clean `%PDF-<version>`
     // header + binary marker so the rewrite loads via the STRICT path.
@@ -572,7 +574,7 @@ pub fn save_full(
         h
     } else {
         let mut h = base
-            .get(..header_prefix_len(base))
+            .get(header_span(base))
             .unwrap_or(b"%PDF-1.7\n")
             .to_vec();
         if !matches!(h.last(), Some(b'\n' | b'\r')) {
@@ -1143,9 +1145,9 @@ fn bump_size(trailer: &mut Dict, highest: u32) {
     trailer.insert(Name::from(b"Size"), Object::Integer(current.max(needed)));
 }
 
-/// Length of the header region to copy verbatim into a full rewrite:
-/// everything up to and including the `%PDF-M.N` line, plus the
-/// §7.5.2 binary-comment line if one follows.
+/// Byte range of the header region to copy verbatim into a full rewrite:
+/// from the `%PDF-M.N` marker through that line, plus the §7.5.2
+/// binary-comment line if one follows.
 ///
 /// §7.5.2: *"If a PDF file contains binary data, as most do, the header
 /// line shall be immediately followed by a comment line containing at
@@ -1154,15 +1156,47 @@ fn bump_size(trailer: &mut Dict, highest: u32) {
 /// like a text file to transfer tools that inspect it, which is exactly
 /// what it exists to prevent.
 ///
-/// Bytes *before* the header marker are preserved too. pdfce's header
-/// probe tolerates a leading BOM or whitespace, and §5 says do not
-/// normalize what the operator did not ask about.
-fn header_prefix_len(buf: &[u8]) -> usize {
+/// # Bytes BEFORE the marker are deliberately DROPPED (changed 2026-08-07)
+///
+/// This used to return a length from byte 0, carrying any leading junk
+/// through, on the reasoning that pdfce's probe tolerates a preamble and
+/// §5 says not to normalize what the operator did not ask about. That was
+/// wrong, and the measurement that settled it is worth keeping:
+///
+/// **veraPDF cannot open ANY file that has a preamble and spec-literal
+/// offsets** — not merely one whose producer wrote header-relative
+/// offsets. A minimal 3-object file, offsets absolute from byte 0 exactly
+/// as §7.5.4/§7.5.5 require, with 19 bytes of junk ahead of `%PDF-`:
+/// *"can not locate xref table"*. The identical file with the junk removed
+/// parses clean. So an independent, conformance-focused reader treats
+/// offsets as **header-relative** whenever a preamble exists.
+///
+/// That makes preamble preservation a defect generator rather than a
+/// courtesy. `iso32000__s__7.5.md` records the ambiguity as real and
+/// **unresolved by ISO 32000-1** — the spec position is byte 0, but the
+/// spec gives no guidance for readers that disagree, and a file pdfce
+/// writes has to be readable by the readers that exist.
+///
+/// Dropping the preamble makes the two interpretations **coincide**:
+/// with the header at byte 0, absolute and header-relative are the same
+/// number, and every reader agrees. It also stops re-emitting a §7.5.2
+/// violation ("The first line of a PDF file shall be a header") that the
+/// operator never asked pdfce to preserve.
+///
+/// # Why only a FULL rewrite may do this
+///
+/// `save_full` promises per-object-definition byte identity, a reloadable
+/// file and an identical raster — explicitly **not** whole-file identity,
+/// because offsets legitimately move. Removing a preamble is inside that
+/// contract. Incremental and identity-append saves promise byte identity
+/// or byte-prefix behaviour and **must** carry the preamble through; they
+/// do not call this function.
+fn header_span(buf: &[u8]) -> core::ops::Range<usize> {
     let window = buf
         .get(..buf.len().min(crate::HEADER_SCAN_WINDOW))
         .unwrap_or(buf);
     let Some(marker) = window.windows(5).position(|w| w == b"%PDF-") else {
-        return 0;
+        return 0..0;
     };
     let mut pos = marker;
     // End of the header line.
@@ -1177,7 +1211,7 @@ fn header_prefix_len(buf: &[u8]) -> usize {
         }
         pos = skip_eol(buf, pos);
     }
-    pos
+    marker..pos
 }
 
 /// Advance past one EOL marker (CR, LF, or CRLF — §7.2.2's rule that
@@ -1545,16 +1579,32 @@ mod tests {
     }
 
     #[test]
-    fn header_prefix_handles_all_three_shapes() {
-        assert_eq!(header_prefix_len(b"%PDF-1.7\nrest"), 9);
-        assert_eq!(
-            header_prefix_len(b"%PDF-1.7\r\n%\x80\x81\x82\x83\r\nrest"),
-            17
-        );
+    fn header_span_handles_all_three_shapes() {
+        assert_eq!(header_span(b"%PDF-1.7\nrest"), 0..9);
+        assert_eq!(header_span(b"%PDF-1.7\r\n%\x80\x81\x82\x83\r\nrest"), 0..17);
         // No header at all: copy nothing rather than guessing.
-        assert_eq!(header_prefix_len(b"not a pdf"), 0);
+        assert_eq!(header_span(b"not a pdf"), 0..0);
         // A non-comment second line is not swallowed.
-        assert_eq!(header_prefix_len(b"%PDF-1.4\n1 0 obj\n"), 9);
+        assert_eq!(header_span(b"%PDF-1.4\n1 0 obj\n"), 0..9);
+    }
+
+    /// The span STARTS at the marker, so a preamble is excluded.
+    ///
+    /// This is the unit-level statement of the 2026-08-07 change. Without
+    /// it the only coverage would be the end-to-end rewrite test, and a
+    /// regression that reintroduced `..end` would still satisfy every
+    /// assertion above — all four of those cases have the marker at byte
+    /// 0, where `0..end` and `..end` are indistinguishable.
+    #[test]
+    fn header_span_excludes_bytes_before_the_marker() {
+        assert_eq!(header_span(b" %PDF-1.4\nrest"), 1..10);
+        assert_eq!(header_span(b"JUNK\n%PDF-1.4\nrest"), 5..14);
+        // With the binary-comment line, still measured from the marker.
+        // 3-byte BOM, then `%PDF-1.7\n` (9) and `%\x80\x81\x82\x83\n` (6).
+        assert_eq!(
+            header_span(b"\xEF\xBB\xBF%PDF-1.7\n%\x80\x81\x82\x83\n"),
+            3..18
+        );
     }
 
     #[test]

@@ -18,6 +18,7 @@ headers or refuse it cleanly.
 | `xref-stream-corrupt.pdf` | pure xref-stream, undecodable stream data; obj 6 in an ObjStm | `XrefStreamDecode` | OPENS — recovers file-level objects + the ObjStm member; trailer from the `/Type /XRef` dict |
 | `duplicate-superseded.pdf` | object 3 defined twice, no `startxref` | `StartxrefNotFound` | OPENS; last-valid-wins picks `/Note (SECOND)` |
 | `offset-start.pdf` | >1 KiB leading junk before `%PDF-` | header probe `MissingHeader` | OPENS via header-independent recovery; `offset_start` = true |
+| `header-preamble.pdf` | **nothing is damaged** — a valid classic file behind a 12-byte preamble, offsets absolute from byte 0 per §7.5.4 | none — loads on the strict path (the preamble is inside the 1 KiB probe window, unlike `offset-start.pdf`) | OPENS STRICT; a **full rewrite must emit `%PDF-` at byte 0 and drop the preamble** |
 | `missing-endobj-page-tree.pdf` | the `/Pages` node (object 2) has no `endobj`; no xref | `StartxrefNotFound` | OPENS — object 2 is bounded at the next `N G obj` header and KEPT; `missing_endobj_recovered` = 1 |
 | `unrecoverable-no-catalog.pdf` | objects but no `/Type /Catalog`, no `trailer`, no `startxref` | `StartxrefNotFound` | REFUSES clean (`RecoverError::NoCatalog`) |
 | `crlf-shifted-lengths.pdf` | whole-file LF→CRLF conversion of a valid file: offsets shift AND every `/Length` goes stale | `NotAnXrefSection` | OPENS; all 4 objects recovered; `stream_lengths_recovered` = 1; text extractable |
@@ -85,3 +86,35 @@ bound to the corpus file would silently not run.
 caps a PDF integer at 2,147,483,647, so this object number is one MORE
 than the largest integer the spec permits — unrepresentable as a
 conforming PDF integer, not merely improbable.
+
+## `header-preamble.pdf` — the one fixture here that is not damaged
+
+Every other file in this directory is broken on purpose. This one is a
+**valid, spec-correct classic PDF**: its offsets are absolute from byte 0
+exactly as §7.5.4 and §7.5.5 require ("the byte offset … from the
+beginning of the file"), and nothing about it needs recovery. Its only
+unusual property is 12 bytes of comment ahead of `%PDF-`, which is
+inside pdfce's 1 KiB probe window — so unlike `offset-start.pdf` it
+loads on the **strict** path, and the writer used to carry the preamble
+through into a full rewrite.
+
+It is here because being spec-correct was not enough. **veraPDF cannot
+open it** — *"can not locate xref table"* — and the identical file with
+the preamble removed parses clean, so an independent conformance-focused
+reader treats offsets as **header-relative** whenever a preamble exists.
+`iso32000__s__7.5.md` already records this offset-base question as a
+real ambiguity that ISO 32000-1 does not resolve; this fixture is the
+executable form of that note.
+
+pdfce's answer (2026-08-07): a **full rewrite drops the preamble**, which
+makes the two readings coincide — with the header at byte 0, absolute and
+header-relative are the same number — so the output is unambiguous to
+every reader instead of correct only under pdfce's preferred reading.
+Incremental and identity-append saves still preserve it, because they
+promise byte identity and a byte-prefix respectively.
+
+In a `verapdf-parse-gate` sweep this file therefore reports as
+**improved**: veraPDF cannot read the input and can read pdfce's output.
+A regression that restored preamble preservation flips it to a
+regression, which is why the fixture lives on disk rather than only
+inside the test that builds one inline.
