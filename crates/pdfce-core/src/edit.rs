@@ -261,6 +261,15 @@ pub enum CommandKind {
         /// Which markup subtype was added, for an undo-control label.
         kind: AnnotKind,
     },
+    /// A NEW form field was authored onto a page: the merged field/widget
+    /// dictionary, its baked `/AP`, the page's `/Annots` patch and the
+    /// `/AcroForm` `/Fields` registration, all as ONE undo entry.
+    ///
+    /// Additive (R46): no existing content stream or object is rewritten.
+    /// Carries no payload: `CommandKind` is `Copy`, and a `String` name
+    /// would force that off for the sake of an undo LABEL — a bad trade,
+    /// since the label can be generic while `Copy` is relied on throughout.
+    AddFormField,
     /// A text or choice field's value was set and its appearance
     /// regenerated (Pass 7, §12.7.3.3). One fill — the field's `/V` and
     /// every widget's `/AP` — is one undo entry.
@@ -537,6 +546,115 @@ struct ObjectWrite {
     after: Option<Object>,
 }
 
+/// What to author when creating a new **text** form field (§12.7.4.3).
+///
+/// Construct with [`NewTextField::new`] and refine with the `with_*`
+/// builders. `#[non_exhaustive]` so a struct literal is not usable
+/// out-of-crate and later fields never break callers — the same shape
+/// [`crate::text_edit::AddTextRequest`] uses.
+///
+/// # The defaults are Acrobat's, deliberately
+///
+/// `Acrobat_Features/forms__field_creation_minimums.md` records that Acrobat
+/// *"never leaves a newly-created field in a bare/incomplete state"* — it
+/// writes a complete `/DA` and `/MK` at placement time. Its text-field floor
+/// is **Helvetica, size 0 (auto), black, thin solid border, no fill**, and
+/// these defaults match it.
+///
+/// Size **0** is not a placeholder: §12.7.3.3 makes it the auto-size trigger,
+/// and [`crate::vartext::build_variable_text`] already implements that path
+/// (it is what a fill uses), so a field created here auto-sizes its text the
+/// same way a filled one does.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct NewTextField {
+    /// 0-based page index the widget is placed on.
+    pub page_index: usize,
+    /// The field's partial name `/T`, which is also its fully-qualified name
+    /// for a top-level field (§12.7.3.2).
+    pub name: String,
+    /// The widget's `/Rect` in default user space.
+    pub rect: page_tree::Rect,
+    /// Initial value `/V`. Empty means the field is created unfilled.
+    pub value: String,
+    /// `/MaxLen` — the maximum character count (§12.7.4.3 Table 229).
+    pub max_len: Option<i64>,
+    /// `/TU`, the alternate (accessibility / UI) name. Screen readers
+    /// announce this in preference to `/T`, which is why it is offered at
+    /// creation rather than only as a later edit.
+    pub tooltip: Option<String>,
+    /// `/Ff` bit 13 — the field accepts multiple lines.
+    pub multiline: bool,
+    /// `/Ff` bit 1 — the value may not be changed by the operator.
+    pub read_only: bool,
+    /// `/Ff` bit 2 — the field must have a value when the form is submitted.
+    pub required: bool,
+}
+
+impl NewTextField {
+    /// A field at `rect` on `page_index`, named `name`, with Acrobat's
+    /// creation-floor defaults and no value.
+    #[must_use]
+    pub fn new(page_index: usize, name: impl Into<String>, rect: page_tree::Rect) -> Self {
+        Self {
+            page_index,
+            name: name.into(),
+            rect,
+            value: String::new(),
+            max_len: None,
+            tooltip: None,
+            multiline: false,
+            read_only: false,
+            required: false,
+        }
+    }
+
+    /// Set the initial value.
+    #[must_use]
+    pub fn with_value(mut self, value: impl Into<String>) -> Self {
+        self.value = value.into();
+        self
+    }
+
+    /// Set `/MaxLen`.
+    #[must_use]
+    pub const fn with_max_len(mut self, max_len: i64) -> Self {
+        self.max_len = Some(max_len);
+        self
+    }
+
+    /// Set `/TU`, the accessibility name.
+    #[must_use]
+    pub fn with_tooltip(mut self, tooltip: impl Into<String>) -> Self {
+        self.tooltip = Some(tooltip.into());
+        self
+    }
+
+    /// Set the three `/Ff` bits this type offers at creation.
+    #[must_use]
+    pub const fn with_flags(mut self, multiline: bool, read_only: bool, required: bool) -> Self {
+        self.multiline = multiline;
+        self.read_only = read_only;
+        self.required = required;
+        self
+    }
+
+    /// The resolved `/Ff` value (§12.7.3.1 Table 221, §12.7.4.3 Table 228).
+    fn field_flags(&self) -> i64 {
+        let mut ff = 0i64;
+        if self.read_only {
+            ff |= i64::from(forms::FieldFlags::READ_ONLY);
+        }
+        if self.required {
+            ff |= i64::from(forms::FieldFlags::REQUIRED);
+        }
+        if self.multiline {
+            ff |= i64::from(forms::FieldFlags::MULTILINE);
+        }
+        ff
+    }
+}
+
 /// One object-existence change inside a [`Command`].
 #[derive(Debug, Clone, Copy)]
 struct Removal {
@@ -673,6 +791,73 @@ pub enum EditError {
         /// The dimension id.
         id: u32,
     },
+    /// Field authoring was asked for on a document carrying an **XFA**
+    /// layer (§12.7.8).
+    ///
+    /// # Refused by name, on pdfce's own capability boundary
+    ///
+    /// Decision 020 settled this and it is not a scope cut. A hybrid
+    /// XFA/AcroForm document describes its fields TWICE — once in the
+    /// AcroForm dictionaries and once in the XFA XML. pdfce can write the
+    /// AcroForm half and cannot write the XFA half, so adding a field would
+    /// leave an XFA-aware viewer and a plain viewer reporting **different
+    /// field counts for the same file**.
+    ///
+    /// A one-sided add is therefore worse than no add: it produces a
+    /// document whose two descriptions of itself disagree, and neither
+    /// viewer can tell it has happened.
+    #[error(
+        "document {name:?} carries an XFA form layer; pdfce can author the AcroForm half but not the XFA half, and adding only one would make XFA-aware and plain viewers disagree about this document's fields"
+    )]
+    FieldAuthoringRefusedXfa {
+        /// A short description of where the XFA was found.
+        name: String,
+    },
+    /// A new field named an existing field of a DIFFERENT type.
+    ///
+    /// # Why this is a refusal and same-type is not
+    ///
+    /// §12.7.3.2: fields sharing a fully-qualified name are **one logical
+    /// field** — they share `/V`, and a value change on one is a value
+    /// change on all. That is the intended mechanism behind radio groups and
+    /// a page-number field repeated on every page, so a same-name,
+    /// same-type add is a legitimate MERGE rather than a collision.
+    ///
+    /// Across types it cannot mean anything: one `/V` cannot simultaneously
+    /// be a text string and a button on-state name. Acrobat refuses this
+    /// case too, with a named error, and pdfce matches that behaviour rather
+    /// than inventing a rename the operator did not ask for.
+    #[error(
+        "a {existing} field named {name:?} already exists; a field of a different type cannot share its name, because same-named fields are one field and share one value"
+    )]
+    FieldNameTypeConflict {
+        /// The fully-qualified name that collided.
+        name: String,
+        /// The existing field's type, as a short token.
+        existing: &'static str,
+    },
+    /// A new field's `/Rect` is degenerate (zero or negative extent).
+    ///
+    /// A zero-area rectangle is meaningful for a **signature** field
+    /// (§12.7.4.5 makes it deliberate invisibility) but not for one pdfce is
+    /// authoring for an operator to type into: it would create a field that
+    /// exists, accepts a value, and can never be seen or clicked.
+    #[error(
+        "the new field's rectangle has no area ({w} x {h}); it would be invisible and unclickable"
+    )]
+    FieldRectDegenerate {
+        /// Width in user-space units.
+        w: f64,
+        /// Height in user-space units.
+        h: f64,
+    },
+    /// A new field was given an empty name.
+    ///
+    /// §12.7.3.2 builds the fully-qualified name from `/T`; a terminal field
+    /// with no `/T` anywhere on its path has no addressable name, so nothing
+    /// could later fill, export or delete it by name.
+    #[error("a new field needs a name — without one it cannot be filled, exported or referred to")]
+    FieldNameEmpty,
     /// A ce-dimension operation named a group the sidecar model does not
     /// contain (Pass 25.5).
     #[error("no ce dimension group with id {id} exists in this document")]
@@ -3417,6 +3602,362 @@ impl EditSession {
                 .iter()
                 .zip(after.iter())
                 .any(|(a, b)| a.id != b.id || a.parent != b.parent)
+    }
+
+    /// **Author a new text form field** onto a page — the field dictionary,
+    /// its widget annotation, its baked `/AP`, the page's `/Annots` entry and
+    /// the `/AcroForm` `/Fields` registration, as ONE undoable command.
+    ///
+    /// Returns the created field/widget object id.
+    ///
+    /// # A field is three things, and all three must land together
+    ///
+    /// §12.7.2 requires the field in `/AcroForm` `/Fields`; §12.5.6.19
+    /// requires a widget annotation in the page's `/Annots` for it to appear
+    /// on a page at all. A field registered but not annotated is invisible; a
+    /// widget annotated but not registered is not a form field. Both halves
+    /// plus the appearance go in one `Command`, so an undo cannot leave the
+    /// document in either broken state.
+    ///
+    /// # MERGED field+widget (§12.5.6.19), not two objects
+    ///
+    /// *"when a field has only a single associated widget annotation, the
+    /// contents of the field dictionary and the annotation dictionary may be
+    /// merged into a single dictionary."* A field created here has exactly
+    /// one widget, so the merged form is the correct and simpler shape — and
+    /// it is the shape `forms.rs` already calls Shape A and reports as
+    /// `Widget::merged`.
+    ///
+    /// # It authors an `/AP`, and does NOT set `/NeedAppearances`
+    ///
+    /// This is forced by pdfce's own standing rules rather than chosen.
+    /// **R43**: a widget with `/MK` but no `/AP` is the canonical
+    /// named-not-painted case, and pdfce does not build the dynamic
+    /// appearance at display time. **R51**: `/NeedAppearances` is *reported,
+    /// not auto-generated*. So a field created without an `/AP` would be
+    /// invisible in pdfce's own renderer — and setting `/NeedAppearances`
+    /// would be asking every other viewer to do work pdfce has told itself
+    /// not to do.
+    ///
+    /// The appearance is built by [`crate::vartext::build_variable_text`] —
+    /// the SAME path a fill uses (R92's one-regenerator discipline), so a
+    /// created field and a filled one cannot disagree about how a value is
+    /// drawn.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::FieldNameEmpty`] for a nameless field;
+    /// [`EditError::FieldRectDegenerate`] for a zero-area rectangle;
+    /// [`EditError::FieldAuthoringRefusedXfa`] on a hybrid XFA document
+    /// (decision 020 — see that variant for why a one-sided add is worse
+    /// than none); [`EditError::FieldNameTypeConflict`] when the name is
+    /// already used by a field of a different type; plus the encryption,
+    /// **strict** certification and `/Size`-suppression guards.
+    ///
+    /// # Why the STRICT certification gate, not the fill gate
+    ///
+    /// [`Self::fill_refusal`] uses the `/P`-aware gate, which permits filling
+    /// a certified document at `/P >= 2` — because filling is what such a
+    /// document is often certified TO allow. Creating a field is a
+    /// **structural** change to the form itself, which is precisely what a
+    /// certification signature exists to freeze. So this takes
+    /// `check_certification`, the same gate `add_markup` and `flatten_fields`
+    /// take.
+    pub fn add_text_field(&mut self, spec: &NewTextField) -> Result<ObjId, EditError> {
+        if spec.name.trim().is_empty() {
+            return Err(EditError::FieldNameEmpty);
+        }
+        let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
+        if w <= 0.0 || h <= 0.0 {
+            return Err(EditError::FieldRectDegenerate { w, h });
+        }
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+
+        // XFA and same-name checks both read the CURRENT form, so they see
+        // fields added earlier in this session, not just those in the file.
+        let form = forms::parse_acroform(&self.graph());
+        if let Some(f) = &form
+            && f.xfa.is_present()
+        {
+            return Err(EditError::FieldAuthoringRefusedXfa {
+                name: "/AcroForm /XFA".to_owned(),
+            });
+        }
+        if let Some(f) = &form
+            && let Some(clash) = f
+                .fields
+                .iter()
+                .find(|x| x.fully_qualified_name == spec.name)
+            && !matches!(clash.field_type, Some(forms::FieldType::Text))
+        {
+            return Err(EditError::FieldNameTypeConflict {
+                name: spec.name.clone(),
+                existing: match clash.field_type {
+                    Some(forms::FieldType::Button) => "button",
+                    Some(forms::FieldType::Choice) => "choice",
+                    Some(forms::FieldType::Signature) => "signature",
+                    Some(forms::FieldType::Text) | None => "text",
+                },
+            });
+        }
+
+        let slots = self.page_slots()?;
+        let page_id = slots
+            .get(spec.page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: spec.page_index,
+                count: slots.len(),
+            })?
+            .id;
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+
+        // The `/DA` Acrobat's floor specifies: Helvetica, size 0 (auto), black.
+        let da = crate::vartext::default_appearance_string(
+            b"Helv",
+            0.0,
+            crate::vartext::TextColor::Gray(0.0),
+        );
+        let resources = [crate::vartext::FontResource {
+            name: b"Helv".to_vec(),
+            font: crate::fontdata::Std14::Helvetica,
+        }];
+        // THE SAME builder a fill uses (R92: one regenerator, never two).
+        // A created field and a filled one therefore cannot disagree about
+        // how a value is drawn — which they could if this hand-assembled its
+        // own appearance dict.
+        let appearance = annot_author::build_field_text_appearance(
+            w,
+            h,
+            &spec.value,
+            &da,
+            crate::vartext::Quadding::Left,
+            spec.multiline,
+            &resources,
+        )?;
+
+        let ap_id = ObjId::new(self.alloc_number()?, 0);
+        let field_id = ObjId::new(self.alloc_number()?, 0);
+
+        let ap_span = self.stage_bytes(&appearance.content);
+        let mut ap_dict = appearance.ap_dict;
+        ap_dict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(appearance.content.len()).unwrap_or(i64::MAX)),
+        );
+        let ap_stream = Object::Stream(Stream {
+            dict: ap_dict,
+            data_span: ap_span,
+        });
+
+        // The MERGED field + widget dictionary (§12.5.6.19).
+        let mut d = Dict::new();
+        d.insert(Name::from(b"Type"), Object::Name(Name::from(b"Annot")));
+        d.insert(Name::from(b"Subtype"), Object::Name(Name::from(b"Widget")));
+        d.insert(Name::from(b"FT"), Object::Name(Name::from(b"Tx")));
+        d.insert(
+            Name::from(b"T"),
+            Object::String(encode_text_string(&spec.name)),
+        );
+        d.insert(
+            Name::from(b"Rect"),
+            Object::Array(vec![
+                Object::Real(spec.rect.llx),
+                Object::Real(spec.rect.lly),
+                Object::Real(spec.rect.urx),
+                Object::Real(spec.rect.ury),
+            ]),
+        );
+        d.insert(Name::from(b"P"), Object::Reference(page_id));
+        d.insert(Name::from(b"DA"), Object::String(da.clone()));
+        d.insert(Name::from(b"Ff"), Object::Integer(spec.field_flags()));
+        // §12.5.3 Table 165 bit 3 (Print). Without it the field is on screen
+        // and absent from paper, which is not what an operator placing a form
+        // field means — and is a difference they would not see until printing.
+        d.insert(Name::from(b"F"), Object::Integer(4));
+        d.insert(
+            Name::from(b"V"),
+            Object::String(encode_text_string(&spec.value)),
+        );
+        if let Some(max) = spec.max_len {
+            d.insert(Name::from(b"MaxLen"), Object::Integer(max));
+        }
+        if let Some(tu) = &spec.tooltip {
+            d.insert(Name::from(b"TU"), Object::String(encode_text_string(tu)));
+        }
+        // `/MK` with a black border colour and no fill — Acrobat's documented
+        // creation floor.
+        //
+        // HONEST LIMIT, verified by rendering: **pdfce does not paint this.**
+        // R43 makes `/MK`-without-`/AP` the canonical named-not-painted case
+        // and pdfce declines to build the dynamic appearance at display time,
+        // so the border is present in the FILE for viewers that honour `/MK`
+        // and is invisible in pdfce's own renderer. A created field therefore
+        // shows its value but no box around it here.
+        //
+        // Writing it anyway is still right: the alternative is a file that is
+        // less complete than Acrobat's for no gain. Painting the border into
+        // the `/AP` instead would mean either changing the SHARED appearance
+        // builder — which fill also uses, so every refilled field in every
+        // document would gain a border it never had — or building a second
+        // appearance generator, which is exactly what R92 forbids. Neither is
+        // a slice-1 trade.
+        let mut mk = Dict::new();
+        mk.insert(
+            Name::from(b"BC"),
+            Object::Array(vec![
+                Object::Real(0.0),
+                Object::Real(0.0),
+                Object::Real(0.0),
+            ]),
+        );
+        d.insert(Name::from(b"MK"), Object::Dict(mk));
+        let mut ap = Dict::new();
+        ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+        d.insert(Name::from(b"AP"), Object::Dict(ap));
+
+        let mut objects = vec![
+            ObjectWrite {
+                id: ap_id,
+                before: None,
+                after: Some(ap_stream),
+            },
+            ObjectWrite {
+                id: field_id,
+                before: None,
+                after: Some(Object::Dict(d)),
+            },
+        ];
+        objects.extend(self.annots_writes(page_id, field_id, &slots)?);
+        objects.push(self.acroform_register_write(field_id)?);
+
+        self.commit(Command {
+            kind: CommandKind::AddFormField,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(field_id)
+    }
+
+    /// Register `field_id` in the catalog's `/AcroForm` `/Fields`, creating
+    /// the `/AcroForm` dictionary (with `/DR` and `/DA`) when the document
+    /// has none.
+    ///
+    /// # Why `/DR` matters and is not optional
+    ///
+    /// §12.7.3.3: a variable-text field's `/DA` names a font (`/Helv` here)
+    /// that must be resolvable in the AcroForm's `/DR` `/Font`. Writing the
+    /// `/DA` without the matching `/DR` entry produces a field whose
+    /// appearance pdfce can regenerate (its `/AP` carries its own resources)
+    /// but which another viewer re-generating from `/DA` cannot resolve —
+    /// a document that works here and not elsewhere.
+    fn acroform_register_write(&mut self, field_id: ObjId) -> Result<ObjectWrite, EditError> {
+        let graph = self.graph();
+        let catalog_id = graph.catalog_id().ok_or(EditError::NotADictionary {
+            id: ObjId::new(0, 0),
+            key: "Root",
+        })?;
+        let catalog = graph
+            .resolved(catalog_id)
+            .as_dict()
+            .ok_or(EditError::NotADictionary {
+                id: catalog_id,
+                key: "AcroForm",
+            })?
+            .clone();
+        let existing = catalog.get(b"AcroForm").cloned();
+
+        match existing {
+            // An /AcroForm that is an indirect object: append to its /Fields.
+            Some(Object::Reference(af_id)) => {
+                let graph = self.graph();
+                let mut af = graph
+                    .resolved(af_id)
+                    .as_dict()
+                    .ok_or(EditError::NotADictionary {
+                        id: af_id,
+                        key: "AcroForm",
+                    })?
+                    .clone();
+                let mut fields = match af.get(b"Fields") {
+                    Some(Object::Array(a)) => a.clone(),
+                    _ => Vec::new(),
+                };
+                fields.push(Object::Reference(field_id));
+                af.insert(Name::from(b"Fields"), Object::Array(fields));
+                Self::ensure_default_resources(&mut af);
+                let before = self.state.get(&af_id).cloned();
+                Ok(ObjectWrite {
+                    id: af_id,
+                    before,
+                    after: Some(Object::Dict(af)),
+                })
+            }
+            // Inline /AcroForm, or none at all: write it into the catalog.
+            other => {
+                let mut cat = catalog;
+                let mut af = match other {
+                    Some(Object::Dict(d)) => d,
+                    _ => Dict::new(),
+                };
+                let mut fields = match af.get(b"Fields") {
+                    Some(Object::Array(a)) => a.clone(),
+                    _ => Vec::new(),
+                };
+                fields.push(Object::Reference(field_id));
+                af.insert(Name::from(b"Fields"), Object::Array(fields));
+                Self::ensure_default_resources(&mut af);
+                cat.insert(Name::from(b"AcroForm"), Object::Dict(af));
+                let before = self.state.get(&catalog_id).cloned();
+                Ok(ObjectWrite {
+                    id: catalog_id,
+                    before,
+                    after: Some(Object::Dict(cat)),
+                })
+            }
+        }
+    }
+
+    /// Ensure an `/AcroForm` carries a `/DA` and a `/DR` `/Font` `/Helv` the
+    /// authored fields' `/DA` can resolve against (§12.7.3.3).
+    ///
+    /// Only ADDS what is missing — an existing `/DR` or `/DA` belongs to the
+    /// document's own author and is left exactly as found.
+    fn ensure_default_resources(af: &mut Dict) {
+        if af.get(b"DA").is_none() {
+            af.insert(
+                Name::from(b"DA"),
+                Object::String(crate::vartext::default_appearance_string(
+                    b"Helv",
+                    0.0,
+                    crate::vartext::TextColor::Gray(0.0),
+                )),
+            );
+        }
+        let mut dr = match af.get(b"DR") {
+            Some(Object::Dict(d)) => d.clone(),
+            _ => Dict::new(),
+        };
+        let mut fonts = match dr.get(b"Font") {
+            Some(Object::Dict(d)) => d.clone(),
+            _ => Dict::new(),
+        };
+        if fonts.get(b"Helv").is_none() {
+            fonts.insert(
+                Name::from(b"Helv"),
+                Object::Dict(crate::vartext::standard14_font_dict(
+                    crate::fontdata::Std14::Helvetica,
+                )),
+            );
+        }
+        dr.insert(Name::from(b"Font"), Object::Dict(fonts));
+        af.insert(Name::from(b"DR"), Object::Dict(dr));
     }
 
     /// Author a geometric-markup annotation onto a page (Pass 6.1).

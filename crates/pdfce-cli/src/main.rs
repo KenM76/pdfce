@@ -1057,6 +1057,64 @@ enum Command {
     /// the on-state name, e.g. `Yes`, or `Off`/`on`/`true`/`1`). Saves
     /// incrementally by default (the minimal-diff path). Never flattens —
     /// the fields stay interactive.
+    /// **Create a new text form field** (§12.7.2 + §12.5.6.19).
+    ///
+    /// Writes a merged field/widget dictionary, registers it in the
+    /// document's `/AcroForm` `/Fields` (creating the `/AcroForm` if the
+    /// document has none), adds it to the page's `/Annots`, and bakes an
+    /// appearance — all additively, leaving every existing byte in place.
+    ///
+    /// Defaults match Acrobat's documented creation floor: Helvetica at size
+    /// 0 (auto-size), black, thin solid border. The field is immediately
+    /// fillable with `fill-field`.
+    ///
+    /// Refused by name on a document carrying an XFA layer (pdfce can write
+    /// the AcroForm half but not the XFA half, and one-sided is worse than
+    /// neither), and when the name is already used by a field of a different
+    /// type.
+    AddTextField {
+        /// Input PDF.
+        input: PathBuf,
+        /// The field's name — also how `fill-field` and `list-fields` will
+        /// refer to it.
+        #[arg(long)]
+        name: String,
+        /// 1-based page number to place the field on.
+        #[arg(long)]
+        page: usize,
+        /// The field rectangle in PDF user space, `llx,lly,urx,ury`.
+        #[arg(long, value_name = "LLX,LLY,URX,URY", allow_hyphen_values = true)]
+        rect: String,
+        /// Initial value. Omitted leaves the field empty.
+        #[arg(long)]
+        value: Option<String>,
+        /// `/MaxLen` — maximum character count.
+        #[arg(long)]
+        max_len: Option<i64>,
+        /// `/TU`, the accessibility name a screen reader announces.
+        #[arg(long)]
+        tooltip: Option<String>,
+        /// Accept multiple lines (`/Ff` bit 13).
+        #[arg(long)]
+        multiline: bool,
+        /// Mark the field read-only (`/Ff` bit 1).
+        #[arg(long)]
+        read_only: bool,
+        /// Mark the field required at submit time (`/Ff` bit 2).
+        #[arg(long)]
+        required: bool,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the add reproduces the input byte for
+        /// byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     FillField {
         /// Input PDF.
         input: PathBuf,
@@ -2643,6 +2701,35 @@ fn run() -> ExitCode {
             input,
             fillable_only,
         } => cmd_list_fields(&input, fillable_only),
+        Command::AddTextField {
+            input,
+            name,
+            page,
+            rect,
+            value,
+            max_len,
+            tooltip,
+            multiline,
+            read_only,
+            required,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_add_text_field(&AddTextFieldArgs {
+            input: &input,
+            name: &name,
+            page,
+            rect: &rect,
+            value: value.as_deref(),
+            max_len,
+            tooltip: tooltip.as_deref(),
+            multiline,
+            read_only,
+            required,
+            output: &output,
+            mode,
+            verify_undo,
+        }),
         Command::FillField {
             input,
             sets,
@@ -8446,6 +8533,116 @@ fn cmd_dimension_offset(args: &DimensionOffsetArgs<'_>) -> u8 {
         args.dimension,
         args.offset,
         args.text_along,
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
+/// Borrowed argument bundle for [`cmd_add_text_field`] (clippy arg-count).
+struct AddTextFieldArgs<'a> {
+    input: &'a Path,
+    name: &'a str,
+    page: usize,
+    rect: &'a str,
+    value: Option<&'a str>,
+    max_len: Option<i64>,
+    tooltip: Option<&'a str>,
+    multiline: bool,
+    read_only: bool,
+    required: bool,
+    output: &'a Path,
+    mode: SaveMode,
+    verify_undo: bool,
+}
+
+/// `add-text-field` — author a new text form field.
+///
+/// ## Contract
+///
+/// - Emits one `add-text-field …` line with the usual save-report fields,
+///   then defers the exit code to [`finish_edit`].
+/// - Every refusal — XFA present, a name already used by a different field
+///   type, a degenerate rectangle, an empty name, a page out of range —
+///   goes through [`report_edit_error`] BEFORE any mutation, with the same
+///   message and exit code the GUI will surface.
+/// - `--page` is 1-BASED here and 0-based in the core call, matching every
+///   other page-taking subcommand in this CLI.
+fn cmd_add_text_field(args: &AddTextFieldArgs<'_>) -> u8 {
+    let Some(page_index) = args.page.checked_sub(1) else {
+        eprintln!(
+            "pdfce-cli: {}: --page is 1-based; 0 is not a page",
+            args.input.display()
+        );
+        return exit::EDIT_REFUSED;
+    };
+    let parts: Vec<f64> = args
+        .rect
+        .split(',')
+        .filter_map(|t| t.trim().parse::<f64>().ok())
+        .collect();
+    let [llx, lly, urx, ury] = parts[..] else {
+        eprintln!(
+            "pdfce-cli: {}: --rect needs four numbers as LLX,LLY,URX,URY",
+            args.input.display()
+        );
+        return exit::EDIT_REFUSED;
+    };
+
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let mut spec = pdfce_core::edit::NewTextField::new(
+        page_index,
+        args.name,
+        pdfce_core::page_tree::Rect { llx, lly, urx, ury },
+    )
+    .with_flags(args.multiline, args.read_only, args.required);
+    if let Some(v) = args.value {
+        spec = spec.with_value(v);
+    }
+    if let Some(m) = args.max_len {
+        spec = spec.with_max_len(m);
+    }
+    if let Some(t) = args.tooltip {
+        spec = spec.with_tooltip(t);
+    }
+
+    let field_id = match session.add_text_field(&spec) {
+        Ok(id) => id,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "add-text-field {} name={:?} page={} rect={},{},{},{} field={} {} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.name,
+        args.page,
+        llx,
+        lly,
+        urx,
+        ury,
+        field_id.num,
+        field_id.generation,
         args.mode.name(),
         args.output.display(),
         outcome.changed,
