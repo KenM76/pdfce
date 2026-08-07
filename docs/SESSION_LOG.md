@@ -21527,3 +21527,215 @@ standing rules **R165** (**R166** next free, and now recorded as
 should check `D:\Dev\pdfce-backups\` if it matters. **Nothing was staged**,
 and **no claim is made here about the working tree, the index, or any
 remote.**
+
+## 2026-08-07 (seventeenth filing) — **THE RENDERER'S COST CENTRE IS NAMED, AND IT IS NEITHER THE PARSER NOR A DEPENDENCY**: painting all 129,515 paths of a CAD sheet costs **0.87 s** — **the clip machinery was 95% of render time** (`76200e9`; 1× 32,313 → 18,870 ms, 2× 447,862 → 214,714 ms, **output BYTE-IDENTICAL**). Found by an **OPERATOR QUESTION**, not a gate. **NOTHING MINTED; one rule candidate PUT AND DECLINED**, with the harness named as the carrier instead
+
+**Shipped:**
+- **`76200e9` — fix, no Pass ID** (a performance defect in shipped
+  `pdfce-render` rasterization; one file, 65 insertions). Same class as the
+  three veraPDF-defect entries and `7d3e44c`: a defect fix to
+  already-shipped code, filed without an ID.
+
+**Decisions made this session:**
+
+- **NOTHING MINTED.** Pass family **43**; standing rules **R165**
+  (**R166** next free, still *considered-and-refused* for its own separate
+  candidate); decision records **031** (**032** next free); operator
+  questions **(bb)**. **Re-measured by RUNNING
+  `tools/check-ledger-numbers.py` before and after this filing, not read
+  from prose** (R106/R133).
+- **★ ONE STANDING-RULE CANDIDATE PUT TO THE ENGINEER AND RECOMMENDED
+  AGAINST** — *"before optimising a subsystem, establish its FLOOR by
+  ablation."* The case for it is the strongest sentence in the filing:
+  **tiling and threading were the obvious next moves and would have been
+  aimed at 5% of the cost.** Three arguments against, in order:
+  1. **One occurrence against a two-occurrence bar**, one day after three
+     rules were minted and the sixteenth filing named exactly that hazard.
+  2. **It commissions WORK, not CARE** — the ground `R166` was refused on
+     the entry before. *"Perform this measurement"* is scheduled, not
+     remembered.
+  3. **R163 prefers a mechanical carrier**, and a plausible one exists: a
+     profiling harness that reports a floor alongside a total. **It does
+     not exist today**, so it is filed as owed — **build the artifact, do
+     not mint the rule.**
+- **No Pass ID minted for the REMAINING work either**, and the reason is
+  stated rather than left to look like caution: a number assigned blind, to
+  work another tree is actively shaping, either collides or misdescribes.
+  Un-numbered *Next up* items are established practice here (`move_nodes`,
+  `EditSession::insert_pages`). **Flagged to the engineer to assign one
+  when the shape settles.**
+
+**Findings + decisions:**
+
+- **★ PARSE IS NOT THE PROBLEM, AND MEASURING THAT FIRST REDIRECTED
+  EVERYTHING.** Read ~3 ms, parse ~1.7 ms, page tree ~17 µs — **~5 ms, or
+  ~0.005% of the 32 s.** A 5.7 MB PDF parses in under two milliseconds.
+  Tokenizer, xref, object streams and filters — everything instinct reaches
+  for — are four orders of magnitude from mattering on this file.
+- **★ THE NUMBER: painting all 129,515 paths costs 0.87 s.** Established by
+  **ablation**, not attribution: baseline **18.04 s** → mask allocation
+  only **10.99 s** → `intersect_clip` skipped entirely **0.87 s**. A
+  profiler attributes samples inside a build where every stage still
+  exists; an ablation removes the suspect and yields a **floor**, and only
+  a floor bounds what any candidate optimisation can be worth.
+- **★ THE ORDER OF THE REMAINING WORK IS THE MOST REUSABLE OUTPUT.**
+  `Mask::new` alone is **10.1 s of the remaining ~18 s** (24,142
+  allocate-and-zero passes over a page-sized buffer). So: (1) stop
+  allocating a page per clip — most PDF clips are `re W n` rectangles
+  needing no mask at all; (2) **re-measure** the cache cliff, which may
+  vanish for free; (3) **tiling and threading LAST** — with painting at
+  0.87 s they would today optimise the **5%**.
+- **★ THE SHAPE OF THE SCALING CURVE NAMED THE MECHANISM.** 0.25×→0.5×→1×
+  cost 3.23× and 3.14× per step (pixels quadrupling each time); 2× cost
+  **14.1×**. ***A quadratic term would have shown at every step.***
+  Superlinearity appearing once, at one boundary, after constant-ratio
+  steps is a **threshold** — working set ~6 MB → ~24 MB, past L3 — **not a
+  complexity class.** Reading it as "quadratic in area" would have
+  prescribed tiling, i.e. the 5% already excluded.
+- **★ A CORRECTION TO THE ENGINEER'S OWN HYPOTHESIS, filed at his
+  instruction: RIGHT IN MECHANISM, WRONG IN LOCATION.** *Full-canvas masks,
+  cost = elements × page area* — correct, and it aimed the ablation
+  correctly. It placed the cost **inside `tiny-skia`**. It is **pdfce's own
+  `GraphicsState.clip`**, an `Option<tiny_skia::Mask>`. **No dependency was
+  at fault and none was changed.** Worth keeping because a correct
+  mechanism attached to the wrong owner sends the next investigator
+  upstream to read a third-party crate carefully and find nothing wrong
+  with it.
+- **★ THE COUNTERINTUITIVE SUB-FINDING** — the first bounded loop used
+  indexing and was **SLOWER than the whole-page version** at 0.25× and
+  0.5×. A bounds check per pixel defeats autovectorization, so **a
+  vectorized pass over the whole page beat a scalar pass over part of it.**
+  Row slices fixed it. **Judged a Rust/codegen fact, not a PDF one**, per
+  the dispatch's explicit request that the destination be judged — filed to
+  `D:\dev\rag\rust\`.
+- **★ THE CONTENT PROFILE, and two facts in it beat the totals.** 129,758
+  objects / **129,515 paths** / 242 text / **0 images** / 1 form XObject;
+  **24,142 clip operations** (`W*` ×24,125, `W` ×17), 110,995 strokes,
+  ~129,970 `q`/`Q`, **105,599 `gs`**. **Zero images** makes this a clean
+  instrument for path+clip cost alone. **`W*` outnumbers `W` 1,418 to 1** —
+  this producer clips even-odd essentially always, which is *not* what the
+  canonical `re W n` idiom leads a reader to expect, and any fast path
+  keyed on `W` alone would miss 99.93% of the clips.
+- **★ A MEASUREMENT SPREAD IS RECORDED RATHER THAN RESOLVED.** The commit
+  measured **18,870 ms** at 1×; the engineer's independent re-run at the
+  same commit measured **19,276 ms** — **2.2% apart**. Both filed. **"About
+  −40%" is the honest form; the trailing digit of "−42%" is noise.**
+  Recorded because a later filing measuring 19,500 ms has *not* regressed,
+  and without the note it would look like it had.
+- **Semantics preservation was PROVED, not argued** — byte-identical 1× PNG
+  by SHA-256, re-verified by the engineer at `76200e9`, plus the R85
+  preview-equals-saved oracle and render-parity suites unchanged. **A
+  performance change that alters one pixel is a rendering change wearing a
+  performance change's commit message**; the hash is what separates them.
+- **The measurement input is filed as an INPUT, NOT A FIXTURE (rule 7).**
+  `D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf`, **5,724,699
+  bytes**, ArchiCAD, 1191×842 pt — outside the repository tree, untracked,
+  inadmissible under `LEGAL.md` §5. **Consequence: every number is
+  reproducible only on the operator's machine.** The content profile above
+  is the specification a synthetic stand-in would have to meet.
+- **The reference benchmark is NOT instrumented, so the target is a
+  FEELING.** Its authors measure by screen capture and say separating the
+  top three *"would take a stopwatch."* Their ~1.6 s cold-to-sharp on an M4
+  Pro is context, **not an acceptance criterion** — quoting it numerically
+  would attribute a precision the source does not have.
+- **⚠ OWED TOOLING — the profiling harness never existed.**
+  `examples/profile_render.rs` is absent from `git ls-files` **and**
+  `git log --all --diff-filter=A` returns nothing for that path on any
+  branch: **it was never committed at all.** The parse/render split, the
+  ablation and the scale sweep are the three measurements that made this
+  entry possible, and **not one is reproducible without rebuilding the
+  instrument.** Filed under *Next up* with a minimum shape, beside
+  `tools/gui-drive.ps1`'s build-or-assert-freshness item.
+
+**Files edited:**
+- `docs/ROADMAP.md` — **two locations.** New *Shipped* entry at the top
+  (*fix — RENDER PERFORMANCE*), and **two new *Next up* entries**: the
+  three-item remaining-work order, and the owed render-profiling harness.
+- `docs/FEATURES.md` — **same filing, per the maintenance contract.** The
+  *Fonts & rendering* rasterize row carries the measured figures and the
+  parse-is-not-the-cost fact; **one new *Planned* row** —
+  *Interactive-speed rendering of a large CAD drawing*, `core [ ]`,
+  `cli —`, `gui —` (the work is entirely in `pdfce-render`, so **both
+  shells get it with no change of their own** — the `—` is a shape
+  mismatch, **not** "no benefit", and the row says so).
+- `docs/ARCHITECTURE.md` — **§12 twentieth 2026-08-07 entry AND the §3
+  `pdfce-render` body block, in the same edit** (decision log = audit
+  trail, body = living truth; both change together).
+- `C:\personal_rag\pdf\lesson_20260807_cad_sheet_clips_per_element_24142_clips_one_page_w_star_dominant.md`
+  — new lesson (the PDF-domain half: producer behaviour + the
+  clip-representation consequence).
+- `C:\personal_rag\pdf\lesson_20260805_clip_paths_are_re_rectangles_and_lifting_a_refusal_removed_the_guard.md`
+  — **dated AMENDED 2026-08-07 section rather than a duplicate lesson**
+  (hard rule 4): density, the `W*` dominance, and an explicit statement
+  that its `re`-vs-non-`re` limit is **NOT discharged**.
+- `C:\personal_rag\pdf\index.md`, `C:\personal_rag\index.md` — subject and
+  master index entries.
+- `D:\dev\rag\rust\` — **four new findings**, judged Rust/ecosystem rather
+  than PDF-domain:
+  `ablate_the_suspect_to_find_the_floor_before_optimizing_anything.md`,
+  `constant_ratio_steps_then_a_cliff_is_a_cache_boundary_not_an_exponent.md`,
+  `bounded_scalar_loop_loses_to_the_whole_range_autovectorized_one.md`,
+  `clone_of_a_value_sized_by_the_data_is_invisible_at_the_call_site.md`,
+  plus `index.md`.
+
+**How the absences were established (R87) — and this filing HAD A SHELL,
+unlike the fifteenth and sixteenth, so it does not repeat their
+disclaimer:**
+
+1. ***"No prior `docs/` entry covers render performance."***
+   **Established** by tracked-files-only
+   `git grep -l -i -e ncored -e 'clip\.clone' -e intersect_clip -e 'Mask::new' -e autovector -e profile_render -- docs/`
+   → **exit 1, zero matches.**
+2. ***"The benchmark file is not a fixture and not committed."***
+   **Established** by `git ls-files` matching nothing for `ncored` or
+   `benchmark`, plus the path lying outside the repository tree; size read
+   from disk.
+3. ***"`examples/profile_render.rs` never existed in git."***
+   **Established** by an **all-branch add** search
+   (`git log --all --diff-filter=A`), not a HEAD check — a HEAD check
+   cannot distinguish *deleted* from *never added*, and the difference
+   changes what is owed.
+4. ***"Nothing minted."*** **Established by RUNNING the checker**, twice.
+5. ***Every performance number.*** **NOT established here** — the ablation,
+   the scale sweep, the content profile, the gates, the SHA-256 identity
+   and the 19,276 ms re-run are all the **ENGINEER's**, measured at
+   `76200e9` and relayed. **This filing ran no render and no benchmark.**
+6. ***The state of `crates/`.*** **NOT established and NOT asserted.**
+
+**Gates for `76200e9` — each read by its OWN exit code, measured by the
+engineer and relayed:** `cargo test` **2150 / 0 failed**;
+`cargo fmt --check` **0**; `cargo clippy -- -D warnings` **0**;
+`tools/check-ui-strings.sh` **0**; `tools/check-bypass-paths.sh` **0**;
+GUI-core separation — core and render **GUI-free**.
+
+**Still in flight / for next session:**
+
+- **⚠ AN ENGINEERING FORK WAS LIVE IN `crates/` AT FILING TIME, working the
+  item-1 clip-representation change. This filing does NOT describe or
+  anticipate its work (R87).** *Scoped, not started* is the state **at
+  `76200e9`** and nothing more. **Re-establish before quoting** — a stale
+  "not started" reads as a gap that does not exist, which is precisely the
+  failure the *Update protocol*'s propagation duty already records twice.
+- **NEW — the "most clips are rectangles" premise is UNCENSUSED.** It is
+  the basis of the largest remaining optimisation, and the census done here
+  counts the *marking operator* (`W` vs `W*`), **not the clip geometry**.
+  Worth measuring before building on it.
+- **NEW — the render-profiling harness** is owed, and it is also the
+  mechanical carrier that made the rule candidate refusable. Both reasons
+  point the same way.
+- **NEW — a Pass ID for the remaining render work** is the engineer's to
+  assign; deliberately not minted here.
+- **Everything carried forward from the sixteenth filing is UNCHANGED** —
+  the `UNESTABLISHED` foreign-oracle rows, the incremental-writer coverage
+  boundary, Pass 20.5's remaining cut half and its owed rendered-appearance
+  check, the multi-page repeated-field labelling gap,
+  `tools/gui-drive.ps1`'s build-or-assert-freshness item, Pass 20.3's
+  `/I`/`/TI`/push buttons and the unruled push-button verb name, the
+  `pdfce-ui-specialist` spec-filing call, F0's disposition, and the
+  **`Acrobat_Features` stale-GAP dispatch**.
+
+**Backup currency is not verifiable from the documents** — the engineer
+should check `D:\Dev\pdfce-backups\` if it matters. **Nothing was staged**,
+and **no claim is made here about the working tree, the index, or any
+remote.** **An engineering fork was live in `crates/` and this filing did
+not touch it.**

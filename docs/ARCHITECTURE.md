@@ -154,6 +154,30 @@ D:\Dev\pdfce\
                                    concern (`MAX_XOBJECT_DEPTH`, §10.1), distinct from
                                    pdfce-core's parse-time recursion guards (page-tree
                                    depth, xref/ObjStm cycles).
+                                   **★ Implementation note (measured 2026-08-07,
+                                   `76200e9`) — THE CLIP'S REPRESENTATION IS THIS
+                                   CRATE'S COST CENTRE.** The graphics-state clip is
+                                   an `Option<tiny_skia::Mask>`: a PAGE-SIZED coverage
+                                   buffer, one byte per device pixel. On a
+                                   129,515-path CAD sheet the clip machinery was
+                                   **95% of render time** — painting every path costs
+                                   **0.87 s** against an 18.04 s total — while read +
+                                   parse + page tree together were **~0.005%**. Two
+                                   semantics-preserving fixes landed in
+                                   `interpret.rs`: a per-paint `clip.clone()` became a
+                                   borrow (~108 GB of memcpy for one page, scaling
+                                   with page AREA), and `intersect_clip`'s multiply is
+                                   bounded to the path's device bounds — an IDENTITY,
+                                   since outside them the fresh mask is zero. Output
+                                   byte-identical (SHA-256). **`Mask::new` alone
+                                   remains 10.1 s of the remaining ~18 s**; reducing
+                                   it is a REPRESENTATION change (most clips are
+                                   `re W n` rectangles needing no mask at all) and was
+                                   deliberately not folded into that commit.
+                                   **Consequence for anyone optimising here: tiling
+                                   and threading would today be aimed at 5% of the
+                                   cost.** See §12's 2026-08-07 twentieth entry and
+                                   `ROADMAP.md`'s *fix — RENDER PERFORMANCE*.
                                    **`font\subset.rs` (Pass 21.0, FF-C, decision 021,
                                    commit `48c6b77`; body-section sync 2026-08-04
                                    continuation 77):** `plan_subset` parses an
@@ -9186,3 +9210,92 @@ with a forward pointer.
 
   **This filing edited `docs/` ONLY** — no `crates/`, no `tools/`, no
   `fixtures/`, and **no RAG tree**, by the dispatch's explicit scope.
+
+- **2026-08-07 (twentieth entry this day) — THE RENDERER'S COST CENTRE IS
+  NAMED, AND IT IS pdfce'S OWN CLIP REPRESENTATION, NOT ITS PARSER AND NOT
+  A DEPENDENCY: painting all 129,515 paths of a CAD sheet costs 0.87 s;
+  the clip machinery was 95% of render time** (`76200e9`; 1× 32,313 →
+  18,870 ms, 2× 447,862 → 214,714 ms, **output byte-identical**).
+  **NOTHING MINTED — no Pass ID, no decision record, no operator question,
+  and one standing-rule candidate PUT AND DECLINED.** Ceilings unchanged:
+  Pass family **43**, standing rules **R165** (**R166** next free, still
+  considered-and-refused for its own separate candidate), decision records
+  **031** (**032** next free), operator questions **(bb)**. Body-section
+  update filed in the SAME edit: §3's `pdfce-render` block. Full record:
+  `ROADMAP.md`'s *fix — RENDER PERFORMANCE* Shipped entry.
+
+  **Why this is architecture and not a bug note.** The finding is about a
+  **representation**, and the representation is pdfce's own: the
+  graphics-state clip is an `Option<tiny_skia::Mask>`, a page-sized
+  coverage buffer at one byte per device pixel. Both fixes are local —
+  a per-paint `.clone()` became a borrow (≈108 GB of memcpy for a single
+  page, scaling with page **area**, so drawing one hairline cost more on
+  bigger paper), and `intersect_clip`'s multiply is now bounded to the
+  path's device bounds (**an identity, not an approximation**: outside them
+  `Mask::new` had zeroed the buffer and `0 × old / 255 == 0`). **What
+  remains is not local.** `Mask::new` alone is **10.1 s of the remaining
+  ~18 s** — 24,142 allocate-and-zero passes over a page-sized buffer — and
+  removing it means changing what a clip *is*, since most PDF clips are
+  `re W n` rectangles that need no mask at all.
+
+  **★ THE ORDER IS THE DURABLE PART, AND IT INVERTS THE OBVIOUS ONE.**
+  With painting measured at **0.87 s**, tiling and threading — the two
+  moves a renderer-performance discussion reaches for first — would today
+  be optimising **5%** of the cost. The sequence is therefore: (1) stop
+  allocating a page per clip; (2) **re-measure** the cache cliff, which may
+  vanish for free; (3) tiling and threading, **last**. Recorded in
+  `ARCHITECTURE.md` because it is a constraint on how this crate is allowed
+  to be optimised, not a to-do.
+
+  **★ THE MEASUREMENT METHOD IS WHY THE CLAIM IS MAKEABLE — ABLATION, NOT
+  ATTRIBUTION.** Baseline 18.04 s → allocation only 10.99 s →
+  `intersect_clip` skipped entirely **0.87 s**. A profiler attributes
+  samples to frames; an ablation removes the suspect and measures what
+  remains, which yields a **floor**, and only a floor bounds what any
+  candidate optimisation can be worth. **Parse was split out the same way
+  and eliminated first**: read ~3 ms, parse ~1.7 ms, page tree ~17 µs —
+  **~0.005% of 32 s**, four orders of magnitude from mattering. Had that
+  been assumed rather than measured, the work would have gone into the
+  tokenizer and produced nothing.
+
+  **★ THE SHAPE OF THE SCALING CURVE NAMED THE MECHANISM, and the
+  conclusion is less transferable than the reasoning.** 0.25×→0.5×→1×
+  cost 3.23× and 3.14× per step; 2× cost **14.1×**. *A quadratic term
+  would have shown at every step.* Superlinearity appearing once, at one
+  boundary, after three constant-ratio steps, is a **threshold**, not a
+  complexity class — working set ~6 MB → ~24 MB, past L3. **Reading it as
+  "quadratic in area" would have prescribed tiling**, i.e. the 5% the
+  ablation had already excluded.
+
+  **A PREDICTION IS RECORDED BESIDE ITS RESULT: the hypothesis was RIGHT IN
+  MECHANISM AND WRONG IN LOCATION.** *Full-canvas masks, cost = elements ×
+  page area* — correct, and it aimed the ablation correctly. It placed the
+  cost **inside `tiny-skia`**. **No dependency was at fault and none was
+  changed.** Filed because a correct mechanism attached to the wrong owner
+  sends the next investigator upstream to read a crate's source and find
+  nothing wrong with it.
+
+  **THE RULE CANDIDATE, AND WHY IT WAS DECLINED RATHER THAN LEFT
+  UNMENTIONED.** *"Before optimising a subsystem, establish its floor by
+  ablation."* One occurrence against a two-occurrence bar; it **commissions
+  work rather than constraining care**, which is the exact ground `R166`
+  was refused on the entry before; and **R163 prefers a mechanical
+  carrier** — a profiling harness reporting a floor beside a total would
+  carry it without a rule. That harness **does not exist and never did**
+  (`git log --all --diff-filter=A -- '*profile_render*'` returns nothing on
+  any branch), so it is filed as owed under `ROADMAP.md` *Next up* —
+  **build the artifact, do not mint the rule.**
+
+  **What this filing did NOT establish.** Every performance number above is
+  the **engineer's**, measured at `76200e9` and relayed (R87); **no render
+  and no benchmark was run here.** The measurement input —
+  `D:\Dev\temp\pdfce\ncored-benchmark-cad-drawing.pdf`, 5,724,699 bytes —
+  is a **MEASUREMENT INPUT, NOT A FIXTURE**: outside the repository tree,
+  untracked, and inadmissible under rule 7 / `LEGAL.md` §5, so **every
+  number is reproducible only on the operator's machine**. An engineering
+  fork was live in `crates/` at filing time; **this entry describes the
+  state at `76200e9` and nothing about that fork's work**, and **no claim
+  is made about the working tree, the index, or any remote.**
+
+  **This filing edited `docs/` plus the cross-project Rust RAG and
+  `C:\personal_rag\pdf\`** — no `crates/`, no `tools/`, no `fixtures/`.
