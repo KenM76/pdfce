@@ -350,6 +350,43 @@ D:\Dev\pdfce\
                                    path. Measure the repetition BEFORE
                                    building anything** (`R166` applied
                                    prospectively).
+                                   **★★ THE CENSUS IS RUN AND THE BLOCK IS
+                                   DISCHARGED 2026-08-07 (`1992d13`) — AND
+                                   THE PREMISE SURVIVED, THE FIRST OF THREE
+                                   THAT HAS.** **24,128 applications over 40
+                                   distinct build keys = 603.20 per key;
+                                   24,088 repeats = 99.83%.** **But the mean
+                                   hides the shape: top-1 = 97.3%, top-2 =
+                                   99.8%, and 37 of the 40 keys are applied
+                                   EXACTLY ONCE**, so **a 2-entry cache
+                                   serves 99.8% over ~1.9 MiB** (38.3 MiB ÷
+                                   40 = 0.958 MiB per mask), not the 40-entry
+                                   38.3 MiB the working set implies. **And a
+                                   hit is worth the WHOLE operation, not 72%
+                                   of it: a second key including the INCOMING
+                                   clip returns 40 distinct (path, incoming
+                                   clip) pairs — IDENTICAL to the 40 build
+                                   keys — so every re-application is under
+                                   the SAME incoming clip, the FINAL mask is
+                                   identical, and a hit can SHARE THE
+                                   EXISTING `Arc`: 361 µs/clip (8.72 s ÷
+                                   24,128), not the 259 µs (6.25 s ÷ 24,128)
+                                   a build-only cache would save.** `q`/`Q`
+                                   was checked and does **not** already solve
+                                   it — restore is free since `4475fe6`, but
+                                   **every `W`/`W*` calls `intersect_clip`
+                                   regardless**. **Both identity choices
+                                   UNDERSTATE repetition by construction**
+                                   (bit-exact coordinates; `Arc`-pointer
+                                   incoming identity), so **99.83% and 40 are
+                                   LOWER BOUNDS**. ⚠ **The ~10 s → ~1.7 s
+                                   projection is ARITHMETIC over separately
+                                   measured parts (99.83% × 345.6 µs mean =
+                                   8.34 s over 24,128 removed, against 1×
+                                   totals of 9.28–10.18 s), one instrument
+                                   each, and is EXPLICITLY UNVERIFIED — no
+                                   cache exists and nothing has been
+                                   re-rendered** (`R166` still governs).
                                    **★★ AND THE SCALING LAW EXPLAINS WHY
                                    FEWER PIXELS BUY SO LITTLE.** Per 4×
                                    pixels: `Mask::new` 4.3×, 7.9×
@@ -10925,3 +10962,184 @@ with a forward pointer.
 
   **This filing edited `docs/` ONLY** — no `crates/`, no `tools/`, no
   `fixtures/`, no agent files, by the dispatch's explicit scope.
+
+- **2026-08-07 (twenty-eighth entry this day) — ONE CLIP PATH IS 97.3% OF
+  THE WORK AND IT IS REBUILT EVERY TIME. THE THIRD OPTIMISATION PREMISE
+  CENSUSED BEFORE BEING BUILT ON, AND THE FIRST TO SURVIVE. ★★ THE MEAN HID
+  THE SHAPE (603.20 APPLICATIONS PER PATH READS AS BROAD REUSE; IT IS ONE
+  PATH AND 37 SINGLETONS), AND THE HISTOGRAM COULD NOT HAVE REVEALED IT
+  BECAUSE ITS LAST BUCKET IS UNBOUNDED. ★★ A HIT CAN SHARE THE `Arc`, SO IT
+  IS WORTH THE WHOLE 361 µs, NOT THE 259 µs A BUILD-ONLY CACHE WOULD SAVE.
+  ⚠ THE ~10 s → ~1.7 s PROJECTION IS ARITHMETIC, NOT A MEASUREMENT.**
+  `1992d13` — `crates/pdfce-render/{profile.rs,interpret.rs}`,
+  `tools/render-profile/src/main.rs`. **3 files, +374 / −0**, of which
+  `profile.rs` is **+255 (68.2%)**, the harness **+107 (28.6%)** and the
+  rasterizer **+12 (3.2%) — one feature-gated call.** **No Pass ID** — the
+  fourth consecutive application of the *out-of-tree tool plus an
+  off-by-default feature flag* precedent (`110b8c9`, `fa17d54`, `6b33789`),
+  and the restraint `Pass 44.0`'s entry names as the calibration that makes
+  that ID mean something. **No body section of this document changes**: no
+  public API moved (§4.1 stands), no crate boundary moved (§3 stands),
+  nothing in `pdfce-core` was touched, and the render invariant is
+  untouched — **the commit adds counters, not behaviour.**
+
+  **The decisions, as decisions.**
+
+  **★★ (1) IDENTITY IS THE *BUILD* KEY, AND THE INCOMING CLIP IS
+  DELIBERATELY EXCLUDED FROM IT.** The key is *path verbs + points, fill
+  rule, CTM, mask dimensions* — the tuple that determines the freshly filled
+  mask **before** intersection. Including the clip already in force would
+  measure the **intersected** result, which **chains**: identical paths under
+  different accumulated clips give different final masks, so a key that
+  included it would answer a question about history rather than about what a
+  cache of `Mask::new` + `fill_path` can serve. **The exclusion is what makes
+  the number an upper bound on addressable repetition rather than an
+  estimate of a particular cache's hit rate.**
+
+  **★★ (2) A SECOND KEY *INCLUDING* THE INCOMING CLIP WAS TAKEN ANYWAY, AND
+  IT ENLARGED THE PRIZE RATHER THAN QUALIFYING IT.** It returned **40
+  distinct (path, incoming clip) pairs — identical to the 40 build keys.**
+  Every re-application therefore happens under the **same** incoming clip,
+  the **final** mask is identical, and a hit can **share the existing
+  `Arc`**: no allocation, no copy, no `fill_path`, no multiply. **The whole
+  361 µs per clip (8.72 s ÷ 24,128), not the 259 µs (6.25 s ÷ 24,128 =
+  72%)** a build-only cache would save; the remaining **102 µs (2.46 s ÷
+  24,128)** is the multiply, and **259 + 102 = 361**, which closes against
+  the twenty-fifth entry's timed phases by division rather than by new
+  measurement. **The reusable shape: a disambiguating second key can turn out
+  to be the more valuable measurement, so take it even when the first key
+  already answers the question you asked.**
+
+  **★★ (3) THE MEAN WAS THE TRAP, AND SO WAS THE HISTOGRAM.** **24,128
+  applications over 40 distinct paths = 603.20 per path; 24,088 repeats =
+  99.83%.** But **top-1 = 97.3%, top-2 = 99.8%, and 37 of 40 paths are
+  applied exactly once** — so **a 2-entry cache serves 99.8% for ~1.9 MiB**
+  (38.3 MiB ÷ 40 = 0.958 MiB per mask; × 2 = 1.92 MiB), where the mean
+  implies a 40-entry 38.3 MiB structure. **Those are different engineering
+  problems and the mean is compatible with both.** `clip_reuse_hist` could
+  not have separated them either: **its final bucket is `65+`, so *"2 paths
+  applied 65 or more times"* is equally consistent with 130 applications and
+  with 24,000** — a 185× span, and the span **is** the question. **That is
+  why `clip_top_counts` carries the raw top-8 counts beside the histogram,
+  and the counter's own doc comment says so.** **A bucketed distribution with
+  an open final bucket cannot answer a concentration question.**
+
+  **★★ (4) THE METHODOLOGY WAS STACKED AGAINST THE ANSWER IT RETURNED, AND
+  THAT IS WHY THE ANSWER IS LOAD-BEARING.** Coordinates compare
+  **bit-exactly** (`f32::to_bits`) because two points differing in the last
+  ulp produce different coverage, and **treating them as equal would
+  OVERSTATE repetition — the direction that would wrongly justify building.**
+  Incoming-clip identity is the **`Arc` pointer**, **stricter** than value
+  equality, so it **UNDERSTATES** hits and **cannot manufacture one**.
+  **Both choices point away from the conclusion the fork reached**, which
+  makes **99.83% and 40 LOWER BOUNDS**, not estimates. **A census whose
+  tolerances are tuned toward its hypothesis proves nothing; one tuned
+  against it and still returning 99.83% has answered the objection before it
+  was raised.** *(This was weighed as a standing-rule candidate and
+  DECLINED — see the `1992d13` ROADMAP entry §7. `R167` stays free and the
+  candidate is recommended for re-put on its next independent instance.)*
+
+  **(5) `q`/`Q` WAS CHECKED AND DOES NOT ALREADY SOLVE IT — the question was
+  asked, not assumed away.** Since `4475fe6` made `GraphicsState.clip` an
+  `Arc<Mask>`, a `Q` **restore** is free. But `q`/`Q` dedupes **restores**
+  and **no rebuilds**: **every `W`/`W*` operator calls `intersect_clip`
+  regardless**, so all 24,128 applications are genuine, unavoided
+  `Mask::new` + `fill_path` + multiply. **The addressable repetition is the
+  full naive rate, not a reduced remainder.** Recorded because it was the
+  plausible reason the entire idea might have been redundant.
+
+  **(6) THREE SELF-CHECKS, ALL RECORDED.** **(a)** A degenerate 64-bit key
+  would present as one entry with 24,128 hits and **no singletons**; **37
+  singletons** are the observable a collapsing hash destroys first. **(b)**
+  Counts were **identical at `--repeat 1` and `--repeat 3`**, testing by name
+  for the counter-reset defect found earlier the same day, which produced
+  right-looking percentages beside wrong counts. **(c) ★ AN INDEPENDENT
+  FIGURE FROM A DIFFERENT FILING CORROBORATES THIS ONE**: the mean
+  **individual** clip bbox (**66.36%**) equals the mean **accumulated** bbox,
+  a coincidence noted and unexplained in the nineteenth entry. **top-1 =
+  97.3% explains it** — one dominant clip applied at or near base state makes
+  the accumulated clip *be* that individual clip almost everywhere. **Two
+  measurements taken days apart, by different code, for unrelated reasons,
+  are consistent only under this census's answer.**
+
+  **⚠ (7) THE PROJECTION IS FILED WITH ITS QUALIFICATION INSEPARABLE.**
+  **Roughly 10 s → ~1.7 s at 1×**, made of **99.83%** (this census, one
+  instrument) and **345.6 µs** mean clip cost (**8.34 s over 24,128**, the
+  `fa17d54` ablation, one instrument) = **~8.33 s removed**, against 1×
+  totals on record between **9.28 and 10.18 s** — a band the *"~1.7 s"* sits
+  inside. **It is arithmetic over separately measured parts, NOT a
+  measurement: no cache exists, nothing has been re-rendered, and nobody has
+  observed this file render in 1.7 s.** **`R166` governs it** — it may be
+  reported and may scope nothing. **Unmodelled second-order costs**, stated
+  so it is not read as a floor: a hit still pays a hash and a map probe
+  24,128 times; `Mask::new`'s memset disappears only if the cached `Arc`
+  genuinely outlives its uses; and **the 40-key census is ONE FILE** —
+  whether the shape generalises is not measured here and is not claimed.
+
+  **(8) THE SEQUENCE IS THE FINDING, NOT THIS RESULT.** Three premises
+  censused before being built on, same day, same file: **rectangles 2.5%
+  (DECLINED, `4475fe6`)** · **clip bbox 66.36% not 0.663%, 100× wrong across
+  four documents (RETIRED, `6b33789`)** · **repetition 99.83% (SURVIVES,
+  `1992d13`)**. **The first two create the value of the third.** And the
+  third was **blocked by name, in writing, before it was run** — the
+  twenty-fifth entry's *"measure how many of the 24,128 are re-applications
+  BEFORE building anything; if it is low, the idea dies exactly the way the
+  rectangle premise did"*. **A prospective census requirement was written
+  down, survived a filing, and was then actually performed.** The two prior
+  censuses were run *after* their premises had been filed as fact.
+
+  **★ (9) A GATE BLIND SPOT, FOUND BY RUNNING IT.**
+  `tools/check-passes-filed.py` exited **1**, reporting `e7e74f2` (**the
+  docs commit that FILED `Pass 44.0`**) as UNFILED. **Not a filing gap: the
+  checker's join key is "this commit's short hash appears in
+  `docs/ROADMAP.md`", and `e7e74f2` IS the commit that writes
+  `docs/ROADMAP.md`** — it would have to contain its own hash. **A gate
+  joining a commit to the document that commit edits is unsatisfiable by the
+  editing commit and can only go green on the NEXT filing**, which is what
+  this filing performed by citing `e7e74f2` in the `Pass 44.0` entry. It
+  surfaced now only because that commit's subject was `Pass 44.0: …` rather
+  than the customary `docs: …`. **The fix — an exemption for docs-only
+  commits, or a convention that a filing commit is cited by the following
+  filing — is a TOOLING RULING, flagged to the engineer, not taken by this
+  filing.** Both checkers exit **0** afterwards.
+
+  **Git and backup state — CHECKED, not inferred (hard rule 8 as amended,
+  `b1368ed`), and TIMESTAMPED because a checked fact decays.** At the start
+  of this filing: `git rev-parse HEAD` → **`1992d13`**;
+  `git status --porcelain` → **0 lines**; `git remote -v` → **empty**,
+  bundles remain the only copy. Newest bundle (`ls D:\Dev\pdfce-backups\`,
+  filename READ rather than composed): **`pdfce-20260807-1751.bundle`**,
+  `refs/heads/pass-8-redaction` at **`e7e74f2`** (`git bundle list-heads`) —
+  **ONE COMMIT BEHIND `HEAD`** (`git log --oneline e7e74f2..HEAD` → one
+  line). **`1992d13` is in NO bundle**: it was committed **17:56** and the
+  bundle taken **17:51**. **The clean tree is a SNAPSHOT** — the dispatch
+  states an engineering fork is live in `crates/pdfce-render` and
+  `tools/render-profile` building the cache this census justifies, and the
+  previous entry recorded a tree going dirty *during* a filing. **Every
+  claim in this entry is read from committed blobs** (`git show 1992d13:…`,
+  `git diff e7e74f2..1992d13`), never the working tree.
+
+  **★★ AND THE SNAPSHOT EXPIRED AGAIN, INSIDE THIS FILING, FOR THE SECOND
+  CONSECUTIVE TIME — WHICH MAKES IT A PATTERN RATHER THAN AN INCIDENT.**
+  `git status --porcelain` re-run at the **end** returns **9 lines**: this
+  filing's **4 `docs/` files**, plus **5 files it never touched** —
+  `crates/pdfce-render/src/{interpret.rs,lib.rs,profile.rs}` and
+  `tools/render-profile/src/main.rs` modified, and
+  **`crates/pdfce-render/src/clip_cache.rs` UNTRACKED.** **The cache this
+  census justifies is being written as this entry is filed**, and the new
+  module's name says so plainly. `HEAD` is **unchanged at `1992d13`**, so
+  **nothing in this entry is affected** — it describes committed blobs only.
+  **Recorded rather than quietly corrected**, because the entire content of
+  hard rule 8's amendment is that a checked fact decays: the clean tree was
+  checked, reported, and then false, **within one filing, twice running.**
+  **`clip_cache.rs` is on disk, in no commit, and in no bundle.**
+
+  **This filing edited `docs/` ONLY** — no `crates/`, no `tools/`, no
+  `fixtures/`, no agent files, by the dispatch's explicit scope. **THREE RAG
+  findings are consequently OWED and NOT written** (the unbounded-final-bucket
+  reporting lesson; the error-direction-in-identity-choice methodology; the
+  self-referential gate join). **Their absence from `D:\dev\rag\rust\` was
+  established by `ls` on the directory and `grep -ril` over it, not by
+  consulting a ledger** — the last version of that ledger was wrong twice,
+  and the correction to it was also wrong. Full table with nearest-neighbour
+  files: §12 of the `1992d13` ROADMAP entry.
