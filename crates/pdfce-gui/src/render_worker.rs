@@ -253,9 +253,21 @@ impl RenderWorker {
                 // Finished inside the budget: join immediately so no
                 // thread outlives the call, and return inline.
                 let _ = handle.join();
+                let elapsed_ms = started.elapsed().as_millis();
+                // ui-text-exempt: diagnostic trace, never displayed in the UI
+                crate::diag::trace(|| {
+                    format!("render-inline gen={generation} ms={elapsed_ms} async=0")
+                });
                 Self::outcome_to_result(outcome)
             }
             Err(RecvTimeoutError::Timeout) => {
+                // ui-text-exempt: diagnostic trace, never displayed in the UI
+                crate::diag::trace(|| {
+                    format!(
+                        "render-async-started gen={generation} budget_ms={}",
+                        IN_FRAME_BUDGET.as_millis()
+                    )
+                });
                 self.in_flight = Some(InFlight {
                     rx,
                     cancel,
@@ -290,6 +302,17 @@ impl RenderWorker {
                 if let Some(handle) = flight.handle.take() {
                     let _ = handle.join();
                 }
+                let elapsed_ms = flight.started.elapsed().as_millis();
+                let generation = flight.generation;
+                let kind = match &outcome {
+                    Outcome::Done(_) => "done",
+                    Outcome::Cancelled => "cancelled",
+                    Outcome::Failed(_) => "failed",
+                };
+                // ui-text-exempt: diagnostic trace, never displayed in the UI
+                crate::diag::trace(|| {
+                    format!("render-async-done gen={generation} ms={elapsed_ms} outcome={kind}")
+                });
                 Self::outcome_to_result(outcome)
             }
             Err(std::sync::mpsc::TryRecvError::Empty) => None,
