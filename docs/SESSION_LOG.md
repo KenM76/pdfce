@@ -20053,3 +20053,290 @@ himself.
 
 **Backup currency is not verifiable from the documents** — the engineer
 should check `D:\Dev\pdfce-backups\` if it matters.
+
+## 2026-08-07 (tenth filing) — **PASS 20.5's CUT IS HALF DISCHARGED**: field deletion reaches the GUI (`fc51786`+`69db1c6`), pdfce gets its **FIRST OUTSIDE READER** (the veraPDF parse gate, `9dcab62`→`1f5f1e5`, **115 corpus files: 0 regressions, 3 IMPROVED**), the harness stops dropping steps silently (`b4d6d61`), the licence sweep reaches outside `docs/` (`f51675d`), and **R83 gains an AMENDMENT rather than a successor**
+
+**Six commits filed.** Working tree was clean at `69db1c6` when the
+dispatch was issued; **no agent was live** — the engineer serialised
+deliberately so `docs/` was uncontested for this filing. **No Pass ID
+minted, no standing-rule number minted, no decision record opened, no
+operator question opened.**
+
+**Shipped:**
+- *(no new Pass)* — **Pass 20.5 (PARTIAL) is AMENDED, not completed**:
+  the cut's **deletion** half landed, the cut's **detail-fields** half did
+  not.
+- `### tooling — the veraPDF parse gate` — no Pass ID, verification
+  infrastructure, same class as `tools/check-passes-filed.py`.
+- `### fix — the diag harness stops silently dropping steps` — no Pass ID;
+  **discharges the OWED TOOLING item** the eighth filing opened.
+- `### docs/fix — six stale "licence undecided" statements outside
+  docs/` — no Pass ID; **discharges the OWED item** the ninth filing
+  opened.
+
+### 1. Pass 20.5's deletion surface — and THREE planning premises the fork corrected by reading the code
+
+**The judgement asked for, and given: this AMENDS Pass 20.5, it does not
+complete it.** *The cut* named **two** things — the deletion surface
+**and** the per-type detail fields (multiline, initial state, choice
+option editor). Only the first landed. **PARTIAL stands.** Filed as an
+`★ ADDENDUM` inside the existing entry rather than a new
+`### Pass 20.5 —` heading, because the ledger gate counts Pass IDs in a
+heading's pre-em-dash prefix per section and 20.5 is already headed in
+*Shipped* — a second heading exits 1.
+
+**★ Premise 1 — the panel `continue`d past read-only, signature and
+push-button rows, and that also skipped the DELETE control.**
+`deletion_preflight` checks **encryption and certification and nothing
+else**; all three kinds are deletable. **The withholding looked like R83
+compliance and was its exact inverse.** The fork's formulation is kept
+verbatim: ***"R83 forbids offering what you cannot do; it does not license
+withholding what you can."***
+
+**★ Premise 2 — `FieldDeletion` carries TWO disclosures, not one.**
+`selection_cleared` (§3.6.3 rule 2) was named in planning;
+**`emptied_parents`** is the other, and **its own doc comment calls it
+"not cosmetic"** — a named node with nothing under it still occupies its
+§12.7.3.2 name-space slot, so an operator who deletes `Address.City` and
+then **cannot create `Address`** deserves to have been told. Both are now
+reported.
+
+**★ Premise 3 — the gap was a MISSING CAPABILITY, not a missing surface.**
+Deletion uses the **strict** certification gate; filling uses the
+**`/P`-aware** one. On a **certified fillable form at `/P 2`** — the
+ordinary case — filling is permitted and deletion refused, and **the GUI
+had no way to ask**: `fill_refusal` was `pub`, the strict gate had no
+public query. `EditSession::deletion_refusal()` is new (`fc51786`), and
+returns the **`EditError`** rather than a bool for the reason its sibling
+documents — a shell forced to invent wording is how two messages drift.
+
+**All three were found by reading the code the plan was about** (R143's
+shape), which is why three planning errors cost nothing.
+
+### 2. ★ THE SHARPEST METHODOLOGICAL FINDING — R162 hiding in a FIXTURE CHOICE
+
+**Every certification fixture in the corpus was `/P 1`** (*"no changes
+permitted"*), **which refuses BOTH operations.** A test written against it
+**passes whether or not the gates differ, and would keep passing if
+someone collapsed one into the other tomorrow.**
+
+This is R162 in a form the rule had not been shown in: **the vacuity is in
+a file the test merely opens, not in the test body**, so the test *reads
+correctly* and no reviewer sees anything wrong. **`/P 2` is the only level
+at which the two gates disagree**, so `certified-p2-form.pdf` was
+byte-authored to carry exactly it. **Three tests, each blocking a
+different vacuous pass:** the divergence; `/P 1` proving the split is
+caused by the **LEVEL** rather than by accidental strictness; an
+uncertified form proving the gate is not simply **stuck on**.
+
+**Second fixture, same discipline:** `unfillable-fields-form.pdf` exists
+because **no fixture had a read-only or signature field**, so the
+`continue` fix was **invisible to the suite and could have silently
+regressed.**
+
+**The reusable question, filed to the PDF RAG:** *for any rule with N
+outcomes, does the corpus contain an input for EACH — or does every
+fixture land on the same outcome?*
+
+### 3. Two INSTRUMENT findings — one of them arguably R87's worst instance
+
+1. **A stale binary lied.** `tools/gui-drive.ps1` runs
+   `target\release\`; the fork had built **debug**. Zero `form-delete`
+   traces, and it **nearly concluded the delete controls did not render**.
+   **An absence that meant nothing about the code.** **OWED TOOLING,
+   flagged not fixed:** `gui-drive.ps1` should **build or assert
+   freshness** — and it is **R163-shaped**, so a rule would be the wrong
+   instrument.
+2. **★ `edit_note` had NO diag trace — and it is the RULE-4 DISCLOSURE
+   CHANNEL.** Every disclosure obligation in the GUI reaches the operator
+   through it, and **none was visible to a behavioural harness**, so **a
+   disclosure that silently stopped firing looked identical to one that
+   fired.** Now traced at the **single drain point** rather than per
+   producer, so the next panel to add a note cannot forget it. **This is
+   R87's family and arguably its worst instance to date: the channel that
+   exists to make pdfce honest was itself unobservable** — every prior
+   "disclosure verified" claim about the GUI rested on reading code.
+
+### 4. The veraPDF parse gate — the first outside judge this project has ever had
+
+**Not filed as a Pass** (the engineer's framing, and the librarian
+concurs): it is verification infrastructure, the same class as
+`tools/roundtrip` and `tools/check-passes-filed.py`. **It is the PARSE
+gate only — the PDF/A CONFORMANCE gate remains unscoped Backlog** and will
+be a separate tool when `to-pdfa` ships.
+
+**Why it exists, in one line worth preserving:** **every test pdfce has
+reads pdfce's output with pdfce's own parser, and a closed loop cannot see
+a defect both halves share.** **R159 is the proof, not the hypothesis** —
+flatten left `/Fields` naming deleted objects and every forms test passed.
+
+**★ FIRST REAL RESULT — 115 pdfbox corpus files: 0 REGRESSIONS, 3
+IMPROVED, 24 REFUSED.** *Improved* = veraPDF reads pdfce's output and
+**could not read the original**. That is **the xref-recovery machinery
+confirmed by an independent implementation**, and evidence pdfce's own
+parser is structurally incapable of producing.
+
+**★ The design lesson is the COMPARATIVE REFRAMING.** The gate first
+asked *"does pdfce's output parse?"* — wrong, because **a conformance
+corpus is full of deliberately broken files**, so that blames pdfce for
+damage it faithfully preserved. **`PDFBOX-6040-nodeloop.pdf` proves it
+with opposite verdicts**: veraPDF cannot open the **ORIGINAL** (*"can not
+locate xref table"*); pdfce's rewrite **opens fine** and reaches only the
+page-tree loop **the file genuinely contains**. **Absolute reading:
+failure. Comparative reading: improvement.** Inputs are now scanned too,
+and the only failure condition is **worse than it went in**.
+
+**Three defects in the engineer's own tool, all recorded:**
+
+1. **`--off` returns exit 0 for a file with no xref table** (valid → 0,
+   garbage → 0). The verdict is only in the XML body — **the obvious gate
+   passes everything forever.** R162 on the day it was written, hence
+   `--self-test`, which **fails if the gate does not fail**, and now also
+   asserts the **TIER**.
+2. **veraPDF has TWO parse tiers and they were conflated** — a
+   `taskException type="PARSE"` it does **not** count in `failedToParse`.
+   **The engineer's own cross-check caught it** rather than letting either
+   number be believed.
+3. **`text=True` decodes with the platform locale (cp1252).** Byte `0x8f`
+   from a real corpus file killed the sweep **with a traceback naming
+   `threading.py` and `encodings/cp1252.py` and never the tool**, because
+   the decode happens in a subprocess **reader thread**.
+
+**A build-collision finding worth an ecosystem entry:** `cargo run` per
+file held `target/debug/pdfce-cli.exe` for a whole sweep, so a concurrent
+`cargo test` died with **`Access is denied (os error 5)`** — an error
+naming a FILE PERMISSION problem **with no hint another job caused it**.
+The engineer hit it himself and briefly read it as a code defect. Now
+builds once and runs a private copy.
+
+### 5. Two failures of the engineer's own discipline, filed as his
+
+- **`b4d6d61` shipped with `check-ui-strings.sh` RED** — fmt, clippy and
+  tests were run, that gate was not. Fixed in `f51675d`. **A
+  gate-SELECTION failure, not a code failure**, and the reason every gate
+  table filed since names each gate individually.
+- **Twice an "exit 0" was printed that was `tail`'s status, not the
+  command's**, and a blank result was nearly read as clean. **Escalated**
+  — the shell-idiom hazard earns a `personal_rag/claude_code` entry
+  because it produced a confident wrong reading **twice in one session**.
+
+### 6. The licence corrections (`f51675d`) — six statements, none deleted
+
+**In every one the undecided licence was doing duty as THE REASON NOT TO
+PUBLISH.** MIT removed the reason but **not the restriction** — the
+operator's go-ahead is a separate act and has not been given — so each was
+**RE-POINTED at the still-ungranted authorization** rather than losing a
+live restriction along with a dead reason. **Two got STRONGER**
+(`jbig2.rs` and the Inkscape librarian's gate: an MIT project cannot link
+GPL **at all**). **Two were in `.claude/agents/` files read at every
+session start**, so the wrong statement was being **re-taught daily**.
+
+### 7. The judgement calls the dispatch asked for
+
+**(a) Pass ID — AMENDS Pass 20.5, mints nothing.** See §1.
+
+**(b) The R83 sharpening — an AMENDMENT INSIDE R83, not a new number.**
+R164 was free and was **deliberately not taken**. The argument: it is a
+**scope clarification of R83's own sentence** (it says what R83 does
+*not* say), it has **no life apart from R83**, and **a separate number
+would be consultable without its qualifier — which is the failure it
+exists to prevent.** Precedent: **R85's own in-place `AMENDMENT`**. The
+ledger gate agrees by construction — it counts `- **RNN — ` definitions,
+so an in-bullet amendment is not a duplicate. **If the engineer disagrees
+and wants a number, it is R164 and this filing did not take it.**
+
+**(c) The veraPDF gate is NOT a Pass.** Concurred, and filed with the
+existing non-Pass `### tooling —` precedent (`91b142b`).
+
+**(d) The `text=True` locale finding → `C:\personal_rag\python\`, not
+`D:\dev\rag\rust\` and not `claude_code\`.** It is a **Python-toolchain**
+property of `subprocess` — neither Rust/Cargo ecosystem nor Claude-Code
+tooling. `python\` is owned by `troubleshooting-librarian`;
+**cross-subject filing is flagged in the librarian's report**, not hidden.
+
+**(e) The pipeline-exit-status hazard DOES earn a `claude_code` entry** —
+two confident wrong readings in one session, and it is the same family as
+the same-day wrapped-sentence lesson (*the invocation set the trap on the
+reader's side of the pipe*).
+
+### 8. RAG escalations (nine files + five indices)
+
+**`D:\dev\rag\rust\`** (three new, all indexed):
+`cargo_run_per_item_sweep_holds_target_exe_and_breaks_concurrent_cargo_test.md`;
+`harness_pinned_to_a_build_profile_runs_a_stale_binary_from_the_other_profile.md`;
+`disclosure_channel_with_no_trace_makes_fired_and_never_fired_identical.md`.
+Plus a **dated amendment** to
+`an_absent_trace_proves_nothing_until_you_confirm_which_trace_the_code_emits.md`
+extending its emit→eyeball chain **backwards** to *build → artifact →
+process* (hard rule 4: amend, don't duplicate).
+
+**`C:\personal_rag\pdf\`** (four new, indexed in the subject and master
+indices): the comparative-gate criterion; the `/P 1`-only fixture corpus;
+veraPDF's exit-code silence; veraPDF's two parse tiers.
+
+**`C:\personal_rag\python\`** (one new): the `subprocess` locale decode.
+**`C:\personal_rag\claude_code\`** (one new): the pipeline exit status.
+
+### Ledger
+
+**No Pass ID minted** — Pass family ceiling **43** (43.0 highest).
+**No standing-rule number minted — ceiling R163, R164 next free**; R83
+gains an in-place amendment, which the gate does not count as a
+definition. **Decision records stay 031. Operator questions stay (bb).**
+**`ARCHITECTURE.md` §12 gains its THIRTEENTH and FOURTEENTH 2026-08-07
+entries**, plus a forward-pointer blockquote on the **first** entry of the
+day (its predicted hazard materialised in a different shape — no verb
+called the wrong gate; the wrong gate was the only one a shell could
+ask).
+
+**`FEATURES.md` changed:** the *DELETE a form field or a single widget*
+row goes **`gui` `[ ]` → `[x]`** with the struck-through cut note kept
+(append-only), and the *Form field creation/authoring* Planned row is
+amended to narrow what stays owed. **The veraPDF gate gets NO features
+row** — a verification harness is not an operator capability and
+`FEATURES.md` has no tooling section by design.
+
+**Both checkers re-run after this filing:** `tools/check-ledger-numbers.py`
+→ **exit 0**; `tools/check-passes-filed.py` → **exit 0**. Ceilings and
+`--stats` reported in the librarian's report.
+
+**Documents amended (six):** `ROADMAP.md` (Pass 20.5 addendum + heading
+blockquote + *The cut*'s discharge marker + the discharged harness bullet
++ three new *Shipped* entries + the R83 amendment + the Backlog F5 bullet
++ two further stale-location markers), `FEATURES.md` (two rows),
+`ARCHITECTURE.md` (two new §12 entries + two amendment markers on earlier
+entries), `LEGAL.md` (the six-owed-statements table gets its ✅ discharge
+block; the table itself left as filed), `docs/SESSION_LOG.md` (this
+entry), and the five RAG indices above.
+**`tools/`, `crates/` and `fixtures/` were NOT touched** — the engineer
+holds those.
+
+**Still in flight / for next session:**
+
+- **OWED VERIFICATION, now for BOTH halves of Pass 20.5 — the rendered
+  appearance is still NOT visually checked.** The operator appeared to be
+  at the machine and `gui-shot.ps1` needs the foreground. **Three defects
+  this session were caught only by looking**, so this is not a formality.
+- **OWED, newly named — per-widget rows for a MULTI-PAGE repeated field
+  are labelled from POSITION rather than page identity when `/P` is
+  absent, and no fixture exercises it.**
+- **OWED TOOLING, new — `tools/gui-drive.ps1` should BUILD or ASSERT
+  FRESHNESS.** R163-shaped. (The *step-dropping* tooling item is
+  **DISCHARGED** by `b4d6d61`, in `diag.rs` rather than the file the item
+  named.)
+- **Pass 20.5's remaining cut half** — the per-type detail fields
+  (multiline, initial state, choice option editor) — and the
+  **`/MK`-border disclosure** the R43 amendment asked F5's pane to carry.
+- **Pass 20.3 (F3)** — `/I`, `/TI`, push buttons; **the push-button verb
+  name is still NOT RULED.**
+- **ENGINEER CALL, still open — should `pdfce-ui-specialist` be obliged to
+  FILE its spec to `docs/ui_specs/`?** Unchanged since the eighth filing.
+- **F0's disposition** — **still owed by the engineer**, now unchanged
+  across seven filings.
+- **The PDF/A conformance gate** remains unscoped Backlog, and is
+  deliberately a **separate tool** from the parse gate.
+
+**Backup currency is not verifiable from the documents** — the engineer
+should check `D:\Dev\pdfce-backups\` if it matters. **Working-tree state
+at the end of this filing is likewise not asserted here**; this filing
+edited `docs/` and the five RAG trees only.

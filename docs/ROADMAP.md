@@ -83,6 +83,14 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ### Pass 20.5 (PARTIAL) — form fields stop being a thing only the command line can make (GUI + core) — 2026-08-07, committed `8a8678e` (the disclosure predicate) and `165dd49` (the GUI surface), branch `pass-8-redaction`. **This entry gives Pass 20.5 its FIRST heading** — the ID was filed 2026-08-03 by decision 020's Backlog amendment and has been cited as owed in six later filings without ever being headed. **PARTIAL BY CHOICE, NOT BY OMISSION** — field deletion in the Forms panel was core-complete, scoped into this Pass, and deliberately cut; see *The cut*, below
 
+> **★ SUPERSEDED IN PART, SAME DAY (tenth filing) — READ THE `★ ADDENDUM`
+> AT THE END OF THIS ENTRY BEFORE QUOTING *The cut*.** `fc51786` +
+> `69db1c6` built **the deletion half of the cut**, under this same ID.
+> **Pass 20.5 IS STILL PARTIAL** — the cut's *other* half (the per-type
+> detail fields: multiline, initial state, the choice option editor) did
+> **not** land, and the rendered-appearance verification is still owed.
+> Everything below stands as filed; it was correct when written.
+
 **No number is minted.** Pass 20.5 was filed 2026-08-03 as decision 020's
 **F5** (*"GUI authoring surface — requires a `pdfce-ui-specialist`
 dispatch first, rule: non-trivial UI"*). This filing heads it for the
@@ -259,6 +267,13 @@ broken one.
 the deletion surface and the detail fields land under the **same ID** —
 they are F5's own unbuilt half, not different work, per hard rule 2.
 
+> **✅ HALF DISCHARGED THE SAME DAY (tenth filing) — THE DELETION SURFACE
+> LANDED** (`fc51786`+`69db1c6`), under this ID exactly as this section
+> said it would. **The per-type detail fields did NOT**, so **Pass 20.5
+> is still PARTIAL** and this section's "until" clause still binds — on
+> one item instead of two. Full record: the `★ ADDENDUM` at the end of
+> this entry.
+
 #### Verification — what is ESTABLISHED, and the one thing that is OWED
 
 **Verified in the running application (R86)**, through `tools/gui-drive.ps1`
@@ -317,6 +332,15 @@ Claude Code tooling, so their operational home is this entry:
    **The mechanical fix is a `gui-drive.ps1` change** (reject an
    unrecognised step loudly rather than dropping it) and is **flagged to
    the engineer as owed tooling work, not claimed as done.**
+   **✅ DISCHARGED SAME DAY by `b4d6d61`** — see the `### fix — the diag
+   harness stops silently dropping steps` entry below. **It landed in
+   `crates/pdfce-gui/src/diag.rs`, not `gui-drive.ps1`**: the drop was in
+   `parse_script`, the actual parser, not in the PowerShell driver this
+   bullet named. The item is closed; the wrong file name is left in place
+   rather than corrected, because it is the record of what was believed.
+   **A DIFFERENT `gui-drive.ps1` obligation opened the same day and is
+   OPEN** — it runs `target\release\` and will silently drive a stale
+   binary; see the addendum's *Two INSTRUMENT findings*.
 2. **The Edit tab is not active by default**, so any trace of a tool that
    lives under Edit needs **`tab:edit` first**. Purely pdfce-local; no RAG
    escalation.
@@ -379,6 +403,448 @@ ceiling unchanged at (bb).**
 > correct when written. Both checkers re-run after the minting filing:
 > `check-ledger-numbers.py` **exit 0**, `check-passes-filed.py`
 > **exit 0**.
+
+#### ★ ADDENDUM — 2026-08-07 (tenth filing), `fc51786` + `69db1c6`: THE DELETION HALF OF THE CUT LANDS. **Pass 20.5 STAYS PARTIAL** — the per-type detail fields are the cut's *other* half and did NOT land
+
+**No number is minted.** This is F5's own unbuilt half, built under the
+same ID per hard rule 2, exactly as *The cut* above said it would be. It is
+filed as an ADDENDUM and not as a new `### Pass 20.5 —` heading for the
+mechanical reason the `Pass 20.0` entry below documents at length: the
+ledger gate counts Pass IDs in a heading's **pre-em-dash prefix, per
+section**, and `Pass 20.5` is already headed in *Shipped* by this entry —
+a second heading would report `DUPLICATE Pass 20.5 declared 2x in section
+[Shipped]` and exit 1.
+
+**What the heading's PARTIAL now means, restated so it is not read as
+stale.** *The cut* named **two** things: the **deletion surface** and the
+**per-type detail fields** (multiline, initial state, the choice option
+editor). **Only the first has landed.** Pass 20.5 remains PARTIAL on the
+second, and on the still-owed rendered-appearance verification below.
+
+##### `fc51786` — the question a delete control has to ask, which is not the one fill asks
+
+**This is a MISSING CAPABILITY, not merely a missing surface, and that is
+the finding.** `EditSession::fill_refusal()` was public; **the gate
+deletion actually uses was not.** They are deliberately different gates —
+the distinction is `ARCHITECTURE.md` §12's *2026-08-07 (first entry)*
+(fill-shaped operations take the `/P`-aware gate, structure-shaped
+operations take the strict one) — so **a GUI panel that reused
+`fill_refusal` would render an ENABLED delete button whose every press
+returns the same error.**
+
+**The case is the ordinary one, not a corner.** On a **certified fillable
+form at `/P 2`** — which is what a form certified *for completion* looks
+like — **filling is permitted and deletion is refused**, and until
+`fc51786` **the GUI had no way to ask.** `EditSession::deletion_refusal()`
+joins `fill_refusal()` as a pure per-frame query, and returns the
+**`EditError`** rather than a bool, for the reason its sibling already
+documents: **a shell forced to invent its own wording is how the engine's
+message and the surface's message drift apart** (R92's shape).
+
+**★ THE FIXTURE FINDING IS THE SHARPEST METHODOLOGICAL RESULT OF THE
+SESSION, and it is R162 in a form the rule had not yet been shown in.**
+**Every certification fixture in the corpus was `/P 1`** — *"no changes
+permitted"* — **which refuses BOTH operations.** A test written against a
+`/P 1` fixture therefore **passes whether or not the two gates differ at
+all**, and **would keep passing if someone collapsed one gate into the
+other tomorrow.** That is an assertion that cannot come out false, hiding
+inside a fixture choice rather than inside a test body — which is a
+**harder** place to see it than any prior R162 instance, because the test
+reads correctly and the defect is in a file it merely opens. **`/P 2` is
+the only level at which the two gates disagree**, so
+`fixtures/synthetic/forms/certified-p2-form.pdf` is byte-authored
+(`tools/gen-form-certified-p2-fixture.py`) to carry exactly that.
+
+**Three tests, each blocking a different way of passing vacuously** — the
+shape R162 asks for, applied without being reminded:
+
+| Test | The vacuous pass it blocks |
+|---|---|
+| `/P 2` certified form | the two gates never actually diverge |
+| `/P 1` certified form | the divergence is caused by `deletion_refusal` being stricter **by accident**, not by the **LEVEL** |
+| uncertified form | `deletion_refusal` is simply **stuck on** — refusing every document pdfce ever opens, with the suite still green |
+
+**The `/P 2` test also drives `delete_field` itself, not only the query.**
+A gate that predicts a refusal the verb does not make would **disable a
+control that would have worked**; both must refuse, **and for the same
+reason**, or the disabled control explains itself with the wrong sentence.
+
+##### `69db1c6` — the GUI surface, and THREE planning premises the fork corrected by reading the code
+
+**The field/widget distinction is made STRUCTURAL rather than a checkbox
+the operator has to read correctly.** One widget → a single **"Delete
+field"** (deleting the only widget **is** deleting the field, and core
+agrees — `delete_widget` on a one-widget field **delegates to**
+`delete_field` rather than reimplementing it). Several widgets → **a row
+each**, every one removing only itself, with **"Delete entire field"** at
+the top level. **Which verb fires is decided by which row-level was
+clicked**, not by a mode the operator has to hold in mind.
+
+**Rule 4 as narrowed by decision 024 §4.4: no modal, no confirm gate.**
+The result is fully visible and one undo away. The one consequence that is
+**NOT predictable from the control clicked** — removing the widget holding
+a radio group's selection clears the group — **gets a tooltip that says so
+before the click, and the status note says it again after.**
+
+**★ PREMISE 1 CORRECTED — the panel `continue`d past every row it could
+not FILL, and that also skipped the DELETE control.** Read-only, signature
+and push-button rows were being withheld an affordance **the capability
+actually had**: `deletion_preflight` checks **encryption and certification
+and nothing else**, so all three are deletable. The fork's own
+formulation is kept verbatim because it is a genuine sharpening of the
+rule's scope, not a restatement of it:
+
+> **R83 forbids offering what you cannot do; it does not license
+> withholding what you can.**
+
+**This is filed as an AMENDMENT TO R83 ITSELF, not as a new standing-rule
+number** — see *Standing rules*, and the *Ledger* below for the argued
+reason a separate number would have been the wrong instrument.
+
+**★ PREMISE 2 CORRECTED — `FieldDeletion` carries TWO disclosures, not
+one.** The planning note named `selection_cleared` (§3.6.3 rule 2). The
+other is **`emptied_parents`**, the grouping-node prune, **and
+`FieldDeletion`'s own doc comment calls it "not cosmetic"**: a named node
+with nothing under it **still occupies its slot in the §12.7.3.2 name
+space**, so an operator who deletes `Address.City` and then **cannot
+create `Address`** deserves to have been told. **Both are reported.**
+
+**★ PREMISE 3 CORRECTED — the missing thing was a capability, not a
+surface** (`fc51786`, above). Recorded as a numbered premise because all
+three were found the same way — **by reading the code the plan was about**
+— which is R143's shape and the reason the plan's three errors cost
+nothing.
+
+##### Two INSTRUMENT findings — both R87's family, and one of them is arguably its worst instance
+
+1. **★ A STALE BINARY LIED, and the absence it produced meant NOTHING
+   about the code.** `tools/gui-drive.ps1` runs `target\release\`; the
+   fork had built **debug**. The run completed, and produced **zero
+   `form-delete` traces** — from which it **nearly concluded the delete
+   controls did not render at all.** The trace was innocent, the harness
+   was innocent, the code was innocent: **the binary being driven was not
+   the binary that had been written.** This extends the project's
+   absent-trace family **backwards past the emit point**, to the build
+   artefact. **`gui-drive.ps1` should either BUILD or ASSERT FRESHNESS —
+   flagged to the engineer as OWED TOOLING, not claimed as done**, and it
+   is **R163-shaped**: a mechanical gate can carry this obligation, so a
+   rule is the wrong instrument.
+2. **★ `edit_note` HAD NO DIAG TRACE — AND IT IS THE RULE-4 DISCLOSURE
+   CHANNEL.** Every rule-4 obligation in the GUI reaches the operator
+   through it, and **none of them was visible to a behavioural harness**,
+   so **a disclosure that silently stopped firing looked identical to one
+   that fired.** It is now traced **at its single drain point** rather
+   than per producer, so **the next panel to add a note cannot forget
+   it** (R163's construction, applied). **This is R87's family and
+   arguably its worst instance to date: the channel that exists to make
+   pdfce honest was itself unobservable**, which means every prior
+   "disclosure verified" claim about the GUI rested on reading the code
+   rather than on watching it fire.
+
+##### Verification — what the traces ESTABLISH, and what is still OWED
+
+**Verified in the running application (R86)** via `tools/gui-drive.ps1` —
+**traces, not pixels:**
+
+| Claim | What was observed |
+|---|---|
+| The field/widget split is real end to end | a radio group with **3 widget rows** → delete the **selected** one → **2 widgets remain, both `on=false`** |
+| The §3.6.3 rule-2 disclosure actually fires | note: *"Its selection was cleared, because the removed appearance was the selected one."* |
+| **The two gates diverge IN THE PANE, exactly as `fc51786` predicts** | `/P 2` certified form → **fill control renders, delete control `enabled=false`** |
+| **The R83 claim is DEMONSTRATED, not asserted** | `unfillable-fields-form.pdf` → **all four rows enabled**, and deleting the **read-only** one really removes it |
+
+**`fixtures/synthetic/forms/unfillable-fields-form.pdf` exists for an R162
+reason too** (`tools/gen-form-undeletable-looking-fixture.py`): **no
+fixture in the corpus had a read-only or signature field**, so the
+`continue` fix was **invisible to the suite and could have silently
+regressed** the moment someone re-added the skip.
+
+> **⚠ OWED VERIFICATION, CARRIED FORWARD UNCHANGED — THE RENDERED
+> APPEARANCE IS STILL NOT VISUALLY VERIFIED.** Same reason as the parent
+> entry: the operator appeared to be at the machine and `gui-shot.ps1`
+> needs the foreground. **Three defects this session were caught ONLY by
+> looking**, so a trace-only verification is not equivalent here. This is
+> now owed for **both** halves of Pass 20.5.
+
+> **⚠ ALSO OWED, NEWLY NAMED — per-widget rows for a MULTI-PAGE repeated
+> field are labelled from POSITION rather than page identity when `/P` is
+> absent, and NO FIXTURE EXERCISES IT.** A field repeated on every page
+> (the §12.7.3.2 merge case F1 shipped, and the canonical reason merging
+> exists at all) is therefore the one shape whose row labels are
+> **unverified by construction**. Filed as owed, with the fixture named as
+> the missing half — per R162, the gap is not closed by reasoning about
+> the labelling code.
+
+##### Gates — engineer-measured at `69db1c6`, EACH READ BY ITS OWN EXIT CODE, and relayed (R87; the librarian did not run the build)
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | **2145 pass, 0 failed** (was 2138 at `165dd49`) |
+| `cargo fmt --all --check` | **exit 0** |
+| `cargo clippy --workspace --all-targets -- -D warnings` | **exit 0** |
+| `tools/check-ui-strings.sh` | **exit 0** |
+| `tools/check-bypass-paths.sh` | **exit 0** |
+| `tools/check-ledger-numbers.py` · `tools/check-passes-filed.py` | **exit 0** each |
+| `cargo tree -p pdfce-core` / `-p pdfce-render` | **zero GUI matches** — project rule 2's invariant holds |
+
+**"Each read by its own exit code" is not boilerplate here.** The same
+session produced two readings of an exit status that belonged to `tail`
+rather than to the command being gated (see the `f51675d` entry below),
+and one commit (`b4d6d61`) that shipped with `check-ui-strings.sh`
+**red** because that gate was not among the ones run. The per-gate exit
+code is the correction, stated so a future reader knows why the phrasing
+is laboured.
+
+##### RAG escalations, this addendum
+
+- **`D:\dev\rag\rust\harness_pinned_to_a_build_profile_runs_a_stale_binary_from_the_other_profile.md`**
+  (new) — instrument finding 1's generalizable half.
+- **`D:\dev\rag\rust\disclosure_channel_with_no_trace_makes_fired_and_never_fired_identical.md`**
+  (new) — instrument finding 2's generalizable half.
+- **`C:\personal_rag\pdf\lesson_20260807_certification_p_level_fixture_corpus_all_p1_cannot_distinguish_two_gates.md`**
+  (new) — the `/P 1`-only fixture corpus, filed to the **PDF-domain** tier
+  because the discriminating fact is `/DocMDP` `/P` semantics, not a
+  language or harness property.
+
+##### Ledger — nothing minted; R83 gains an AMENDMENT rather than a successor
+
+**No Pass ID minted** (Pass family ceiling unchanged at **43**, 43.0
+highest). **No standing-rule number minted — ceiling unchanged at R163,
+R164 is next free.** **Decision-record ceiling unchanged at 031.**
+**Operator-question ceiling unchanged at (bb).**
+
+**The R83 sharpening is filed as an amendment INSIDE R83, and the choice
+is argued rather than assumed**, because the engineer asked for the
+judgement and not the outcome. It is a **scope clarification of R83's own
+sentence** — it tells a reader what R83 does *not* say — and it has **no
+life apart from R83**: a reader who has R83 in hand needs this clause
+attached to it, not filed eighty rules away where the person about to
+withhold a control will never meet it. **A separate number would create
+exactly the failure it warns about** — a rule consulted without its
+qualifier. **The precedent is R85's in-place `AMENDMENT`** (2026-08-03),
+which recorded a structural exception inside the rule it qualifies rather
+than as R86. The ledger gate agrees by construction: it counts
+`- **RNN — ` definitions, so an in-bullet amendment is not a duplicate.
+
+**Both checkers re-run after this filing:** `check-ledger-numbers.py`
+**exit 0**, `check-passes-filed.py` **exit 0**.
+
+### tooling — the veraPDF parse gate: the first OUTSIDE reader pdfce's bytes have ever had (no Pass ID — verification infrastructure, the same class as `tools/check-passes-filed.py`) — 2026-08-07, committed `9dcab62` (the gate), `b4d6d61` (the build-lock half), `6ca17e1` (the decode fix) and `1f5f1e5` (the COMPARATIVE reframing), branch `pass-8-redaction`
+
+**Not a Pass, and the boundary is stated so the green is not overread.**
+This is the **parse** gate only. **The PDF/A CONFORMANCE gate remains
+unscoped Backlog** — veraPDF exists to judge PDF/A, pdfce does not write
+PDF/A yet, and a PDF/A profile run against ordinary output reports a wall
+of failures that are **not defects** (no XMP, no `/OutputIntent`,
+unembedded fonts — all correct for a file that never claimed conformance).
+`--off` runs the parser alone. When `to-pdfa` ships, the conformance gate
+is a **separate tool**, because the two answer different questions and a
+failure in each means something different.
+
+**Why it exists, in the one sentence worth preserving:** **every test pdfce
+has reads pdfce's output with pdfce's own parser** — round-trip reloads
+through `pdfce-core`, the forms tests assert through `parse_acroform`,
+redaction reads back with the lexer that wrote it — and **a closed loop
+cannot see a defect both halves share.** **R159 is the proof, not the
+hypothesis**: flatten left `/AcroForm /Fields` naming deleted objects and
+**every forms test passed**, because `parse_acroform` drops entries that no
+longer resolve. The model looked right while the file was wrong.
+
+#### ★ THE FIRST REAL RESULT — 115 pdfbox corpus files: **0 REGRESSIONS, 3 IMPROVED, 24 REFUSED by pdfce**
+
+**"Improved" means veraPDF can read pdfce's output but could NOT read the
+original.** That is **pdfce's xref-recovery machinery confirmed by an
+independent implementation written by people who have never seen this
+repository** — and it is **the first outside judge this project has ever
+had.** Recorded as a headline result rather than a test count, because a
+number produced by pdfce's own parser could not have said it.
+
+#### ★ THE DESIGN LESSON IS THE COMPARATIVE REFRAMING (`1f5f1e5`)
+
+**The gate first asked *"does pdfce's output parse?"* — and that was the
+wrong question.** A conformance corpus is **full of deliberately broken
+files** (that is what it is *for*), so the absolute reading **blames pdfce
+for damage it faithfully preserved** from a file that never parsed to begin
+with.
+
+**`PDFBOX-6040-nodeloop.pdf` proves it, and one file is enough because the
+two readings give opposite verdicts on it.** veraPDF **cannot open the
+ORIGINAL** (*"can not locate xref table"*). pdfce's full rewrite of it
+**opens fine**, and only reaches the page-tree loop **the file genuinely
+contains** — pdfce **recovered the xref**, and inventing a page tree would
+have been the wrong thing to do. **Under the absolute reading that file is
+a failure. Under the comparative one it is an improvement.**
+
+So **every input is now scanned as well as every output**, and the **only**
+failure condition is a file that came out **WORSE than it went in**.
+Improvements and faithfully-preserved defects are **counted and reported
+separately**, because *"pdfce's output parses better than its input"* is
+evidence about the recovery machinery that an absolute gate would have
+thrown away.
+
+#### Three defects in the tool itself — all three worth recording, and all three found by the tool's own guards
+
+1. **★ `--off` RETURNS EXIT 0 FOR A FILE WITH NO XREF TABLE.** Measured:
+   valid → 0, garbage → 0. **The parse verdict lives only in the XML
+   body.** The obvious gate — read the exit code — therefore **passes
+   everything, forever.** That is **R162 on the day R162 was written**,
+   which is why the tool ships **`--self-test`**: it feeds itself a broken
+   file and **FAILS IF THE GATE DOES NOT FAIL**. Since `1f5f1e5` the
+   self-test also **asserts the TIER**, not merely that something was
+   detected — a file with no xref table graded as a mere *warning* would
+   mean the reconciliation is broken and an unreadable file could pass.
+2. **★ veraPDF HAS TWO PARSE-FAILURE TIERS AND THE ENGINEER HAD CONFLATED
+   THEM.** It emits a `taskException type="PARSE"` for a document it does
+   **NOT** count in `batchSummary/@failedToParse` — measured on
+   `PDFBOX-6040-nodeloop.pdf`. The extraction was therefore **stricter
+   than veraPDF's own counter.** **The cross-check the engineer had built
+   into the tool fired on its first real corpus run and caught his own
+   wrong assumption**, refusing to let **either** number be believed
+   rather than reporting a clean sweep built on a bad reading. That is the
+   guard working exactly as designed, and it is why the finding is a
+   recorded result instead of a silent miscount.
+3. **★ `text=True` DECODES WITH THE PLATFORM LOCALE (cp1252 on Windows).**
+   A real corpus file emitted byte `0x8f`, which cp1252 cannot map, and
+   **the sweep died with a traceback naming `threading.py` and
+   `encodings/cp1252.py` and never mentioning the tool at all** — because
+   the decode happens in a **subprocess READER THREAD**. **That is the
+   entire point of a corpus sweep inverted:** it exists to run bytes from
+   **producers we do not control**, so assuming those bytes are spellable
+   in the developer's codepage is precisely the wrong assumption. All
+   three subprocess sites now decode UTF-8 with replacement (`6ca17e1`).
+
+#### ★ A BUILD-COLLISION FINDING — an error message that names a FILE PERMISSION problem and is caused by another job
+
+The gate originally ran **`cargo run` per file**, which holds
+`target/debug/pdfce-cli.exe` **for the length of a whole sweep**. A
+concurrent `cargo test` in the same repo therefore died with
+**`failed to remove file … Access is denied (os error 5)`** — **an error
+naming a file-permission problem with no hint that another job is the
+cause.** The engineer hit it himself and **briefly read it as a code
+defect**. It also **re-resolved cargo dependencies per file**, which
+dominated the runtime of the actual work. It now **builds once and runs a
+private copy from its own temp dir**, so `target/` is untouched for the
+whole run and a developer can build and test normally while a long sweep is
+in flight. **Escalated to the ecosystem tier** — see *RAG escalations*.
+
+#### Licensing posture — recorded here because it constrains how the gate may ever be used
+
+veraPDF is **dual-licensed GPLv3+/MPLv2+**; **pdfce elects MPL-2.0**,
+invokes it as a **separate process**, never links or redistributes it, and
+installs it **out of tree**. **The gate SKIPS rather than fails when
+veraPDF is absent** — a required gate would make it a *de facto* build
+dependency, muddying the arms-length position and breaking anyone cloning
+without a Java runtime. Full record: `LEGAL.md` §6.5 (filed at the eighth
+filing) and §6.5.5's attribution correction (ninth filing).
+
+#### RAG escalations, this entry
+
+- **`D:\dev\rag\rust\cargo_run_per_item_sweep_holds_target_exe_and_breaks_concurrent_cargo_test.md`**
+  (new) — the build-collision finding. Ecosystem tier: it is a Cargo +
+  Windows file-locking property, nothing about it is pdfce-specific.
+- **`C:\personal_rag\python\lesson_20260807_subprocess_text_true_locale_decode_dies_in_a_reader_thread.md`**
+  (new) — defect 3. **Filed to `python\`, and the choice is a judgement the
+  engineer asked for**: it is neither Rust/Cargo ecosystem
+  (`D:\dev\rag\rust\`) nor Claude-Code tooling
+  (`C:\personal_rag\claude_code\`) — it is a **Python-toolchain** property
+  of `subprocess`, and `python\` is the subject that exists for exactly
+  that. See the librarian's report for the cross-subject note.
+- **`C:\personal_rag\pdf\lesson_20260807_verapdf_off_mode_exit_code_carries_no_parse_verdict.md`**,
+  **`…_verapdf_two_parse_failure_tiers_taskexception_vs_failedtoparse.md`**
+  and **`…_conformance_corpus_gate_must_be_comparative_not_absolute.md`**
+  (three new) — defects 1 and 2 and the reframing. **PDF-domain tier**:
+  all three are empirical facts about how a real PDF validator behaves and
+  how a real conformance corpus must be read, useful to any future
+  PDF-touching project.
+
+#### Ledger
+
+**No Pass ID minted, no rule minted, no decision record opened.** This is
+tooling, and the precedent for filing tooling in *Shipped* without a Pass
+ID is `tools/check-passes-filed.py` (`91b142b`, 2026-08-06) three entries
+of that class below. **`FEATURES.md` is deliberately unchanged by this
+entry** — a verification harness is not an operator capability, and
+`FEATURES.md` has no tooling section by design.
+
+### fix — the diag harness stops silently dropping steps, and the gate stops holding the build lock (no Pass ID — DISCHARGES the OWED TOOLING item filed at Pass 20.5, in a different file than the item named) — 2026-08-07, committed `b4d6d61`, branch `pass-8-redaction`
+
+**This closes the item the eighth filing left owed** — *"`tools/gui-drive.ps1`
+should REJECT an unrecognised step loudly rather than dropping it"* — and
+**the file it landed in is not the file the item named**, which is worth
+one sentence: the drop happened in **`crates/pdfce-gui/src/diag.rs`**'s
+`parse_script`, the actual parser, not in the PowerShell driver that feeds
+it. **An owed item that names the wrong file is still discharged when the
+behaviour changes**; recorded so nobody re-opens it looking for a
+`gui-drive.ps1` diff.
+
+**What changed, and what deliberately did not.** `diag.rs` dropped
+unparseable steps with `filter_map`, and **its doc comment justified it** —
+*"a harness that dies on a typo mid-investigation wastes a whole run, and
+the trace shows which steps actually ran."* **The first clause is right.
+The second was not a mitigation**: an absent trace line is
+**indistinguishable** from a step that ran and produced no output, so **a
+typo presents as A FEATURE FAILING TO RESPOND.** A fork wrote
+`placefield` for `tool:placefield`, read the resulting silence as a defect
+in the tool-arming code, and **caught it only by running a known-good
+sibling step and noticing the difference — which is luck, not method.**
+
+**The non-fatal posture is UNCHANGED and still correct.** What changed is
+that **every dropped step now announces itself**: `parse_script` returns
+`(steps, rejected)` rather than tracing as a side effect, so **the rejects
+are a value a caller has to handle** — and it is **unit-testable without an
+egui context, an env var, or captured stderr.** **Empty segments are NOT
+rejects**: a trailing `;` is punctuation, not a typo, and **a warning that
+fires on well-formed scripts trains the reader to skip the line that
+matters.**
+
+**Three tests, one of them there purely so the others mean something
+(R162):** the typo test **would pass identically if `tool:` had never been
+a valid verb**, so a second test proves the correct spelling parses.
+
+**The gate's build-lock half of this commit** is filed with the veraPDF
+entry above, where its reasoning belongs.
+
+> **⚠ THIS COMMIT SHIPPED WITH A GATE RED, and the record says so.**
+> `tools/check-ui-strings.sh` was failing on the `diag.rs` trace string
+> added here — `cargo fmt`, `clippy` and the tests were run, **that gate
+> was not.** Fixed in `f51675d` (next entry). Recorded rather than
+> quietly repaired: **the failure was a gate-selection failure, not a
+> code failure**, and it is the reason every gate table filed after it
+> names each gate individually.
+
+### docs/fix — six stale "licence undecided" statements OUTSIDE `docs/`, none deleted and two made STRONGER (no Pass ID — a documentation-correctness fix, plus the `check-ui-strings.sh` repair the previous commit owed) — 2026-08-07, committed `f51675d`, branch `pass-8-redaction`
+
+**This discharges the OWED item the ninth filing left open**, which found
+these six while scoped to `docs/` and could not fix them there.
+
+**★ NONE WAS DELETED, AND THAT IS THE WHOLE POINT.** In every one of the
+six locations, **the undecided licence was doing duty as THE REASON NOT TO
+PUBLISH.** The MIT decision (2026-08-01) **removed the reason but not the
+restriction**: the operator's go-ahead is a **separate act**, has not been
+given, and there is still no remote configured. So **each site was
+RE-POINTED at the still-ungranted authorization** rather than losing a live
+restriction along with a dead reason.
+
+| Location | Disposition |
+|---|---|
+| `README.md`:46 | **the repo's front door** — re-pointed |
+| `about.toml`:49 | re-pointed |
+| `crates/pdfce-gui/src/ui_text.rs`:1142 | **behaviour kept VERBATIM**, only the stated reason replaced — and it **records why**, so nobody "simplifies" the comment away and takes the restriction with it |
+| `crates/pdfce-core/src/image_codec/jbig2.rs`:14 | **STRONGER** — GPL-3.0 `jbig2dec` bindings were disqualified *"against an undecided `LEGAL.md` §1"*; **under MIT an MIT project cannot link GPL-3.0 at all**, so what was a risk pending a decision is a **categorical bar** |
+| `.claude/agents/pdfce-engineer.md`:145, 411 | re-pointed — **read at the start of every engineering session** |
+| `.claude/agents/pdfce-inkscape-librarian.md`:43 | **STRONGER**, same reasoning as `jbig2.rs` (R61's GPL-2.0-or-later gate) |
+
+**★ TWO OF THE SIX WERE IN `.claude/agents/` FILES READ AT EVERY SESSION
+START**, so **the wrong statement was being re-taught daily** — which is
+the reason a stale line in an agent file is not the same severity as a
+stale line in a document nobody opens.
+
+**Also in this commit: the `check-ui-strings.sh` failure `b4d6d61`
+introduced**, and **every gate re-run reading its OWN exit code.** The
+engineer's own note on why that phrasing is laboured: **an earlier probe in
+this session printed `exit 0` that was actually `tail`'s status — the
+second time that day a check reported on something it could not see.**
+Escalated: `C:\personal_rag\claude_code\lesson_20260807_pipeline_exit_status_belongs_to_the_last_element.md`.
 
 ### Pass 20.0 — the field-hierarchy correctness substrate, and the field-path resolver that COMPLETES Pass 20.1's P0 floor (core + CLI) — 2026-08-07, committed `a3d885b` (F0) and `f809857` (F1 completion), branch `pass-8-redaction`. **Pass 20.0 SHIPPED for the first time** — filed 2026-08-03, skipped through two prior slices, now built. **Pass 20.1 has its P0-blocking gap CLOSED but stays PARTIAL** — the resolver and the full collision branch decision 020 §3.3.1 called the floor now exist; `/TU` R105, `/Tabs` disclosure and the CLI verb-name question do not yet
 
@@ -457,6 +923,12 @@ Comb layout still not driven from `/MaxLen`; positional-`/Opt` radio authoring s
 > `Pass 20.5 (PARTIAL)` entry at the head of *Shipped*. **Comb layout,
 > inherited-`/V`, `/Tabs` AUTHORING, `/I`/`/TI`, push buttons and F6 are
 > unchanged and still owed in full.**
+>
+> **✅ AMENDED A THIRD TIME, 2026-08-07 (tenth filing) — THE GUI DELETION
+> SURFACE IS BUILT** (`fc51786`+`69db1c6`), so of the two cut items only
+> the **per-type detail fields** remain owed under Pass 20.5's ID.
+> **Pass 20.5 is still PARTIAL.** See the `★ ADDENDUM` at the end of that
+> entry. Everything else in this block is unchanged.
 
 #### Verification — measured, not asserted
 
@@ -1891,6 +2363,10 @@ listed in the mixed-commit table above. **LEGAL.md §5 / rule 7 unaffected.**
   stays owed under that same ID is the GUI DELETION surface and the
   per-type detail fields, both deliberately CUT**; **F6 field PROPERTY
   editing** — the operator's own *"editing"* — still behind everything.
+  **✅ AMENDED AGAIN 2026-08-07 (tenth filing): the GUI DELETION SURFACE
+  IS BUILT** (`fc51786`+`69db1c6`) — **only the per-type detail fields
+  stay owed** under Pass 20.5's ID, which remains PARTIAL. **F6 and the
+  rest of this bullet are unchanged.**
 - **F0's disposition** (owed retroactively / deferred / retired) is **still
   owed by the engineer**, unchanged.
 
@@ -19605,6 +20081,22 @@ nothing gets forgotten, not as a commitment to build in this order.
   layout** and **inherited-`/V` writes** remain named limits. **Also
   newly named:** the **`/MK`-border disclosure** the R43 amendment asked
   F5's pane to carry — the pane now exists and does **not** carry it.
+  **★ AMENDED 2026-08-07 (tenth filing) — F5's CUT IS NOW HALF
+  DISCHARGED.** `fc51786` + `69db1c6` built **the GUI DELETION surface**
+  (field/widget split made structural by row level; read-only, signature
+  and push-button rows now reach the control — an **R83 amendment**, see
+  *Standing rules*; both `FieldDeletion` disclosures reported; a new
+  `EditSession::deletion_refusal()` so the pane can ask the **strict**
+  certification gate rather than the `/P`-aware one filling uses).
+  **Pass 20.5 STAYS PARTIAL**, and what is still owed under its ID
+  narrows to: **the per-type detail fields** (multiline, initial state,
+  the choice option editor), **the `/MK`-border disclosure** above, and
+  **the rendered-appearance verification**, which is now owed for *both*
+  halves. **Newly named, also owed:** per-widget rows for a **multi-page
+  repeated field** are labelled from **position** rather than page
+  identity when `/P` is absent, **and no fixture exercises it.** See the
+  `★ ADDENDUM` on the `Pass 20.5 (PARTIAL)` entry at the head of
+  *Shipped*.
 - **XFA** — legacy Adobe forms tech. **Verify current status before
   scoping** — Adobe has been deprecating XFA in Acrobat; consult the
   spec RAG + a fresh web check before committing engineering time here.
@@ -22033,6 +22525,35 @@ not a judgment call:**
 - **R83 — No affordance without the capability (decision 017, 2026-08-02;
   librarian-assigned number).** No drag cursor, drag-highlight, or
   resize handle for an interaction that is not implemented.
+  **★ AMENDMENT (2026-08-07, tenth filing, `69db1c6`) — R83 IS
+  ONE-DIRECTIONAL, AND IT HAD BEEN READ AS SYMMETRIC.** The clause, in the
+  wording the fork that found it used:
+  > **R83 forbids offering what you cannot do; it does not license
+  > withholding what you can.**
+
+  **How the misreading happened, which is the part worth keeping.** The
+  GUI Forms panel `continue`d past every row it could not **FILL** —
+  read-only, signature and push-button fields — and that skip **also
+  removed the DELETE control**, which those rows were fully entitled to:
+  `deletion_preflight` checks **encryption and certification and nothing
+  else**, so **all three kinds are deletable.** The withholding looked
+  like R83 compliance and was **the exact inverse of it** — R83 exists so
+  a control never promises a capability that is absent, **not** so a
+  present capability goes unoffered because a *neighbouring* one is
+  absent. **The tell is that the skip was keyed on a DIFFERENT verb's
+  eligibility than the control it suppressed.**
+  **The enforceable form, checkable at review time:** when a row, mode or
+  object is skipped, **name the verb whose refusal justifies the skip, and
+  confirm it is the verb the suppressed control invokes.** If they differ,
+  R83 is not the reason — **R124** is the next question (does the control
+  teach anything by being present-and-disabled?), and the answer is
+  usually *disable and explain*, not *hide*.
+  **Filed as an amendment INSIDE R83 rather than as a successor number**
+  (R164 was free and was deliberately not taken): this is a scope
+  clarification of R83's own sentence, it has no meaning apart from R83,
+  and a separate number would be consultable **without** its qualifier —
+  which is the failure it exists to prevent. Precedent: R85's own in-place
+  `AMENDMENT`.
 - **R84 — Selected state is never colour alone (decision 017, 2026-08-02;
   librarian-assigned number).** Pair it with a weight or glyph cue —
   the GUI-polish audit already flagged colour-fill-only selected state

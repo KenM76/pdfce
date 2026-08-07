@@ -695,6 +695,19 @@ truncation came from the invocation rather than from the data.
   filing was scoped to `docs/`. These are OWED and are the operator's /
   engineer's to clear:**
 
+  > **✅ ALL SIX CLEARED 2026-08-07, same day, by commit `f51675d`** —
+  > **NONE was deleted.** In every one the undecided licence was doing
+  > duty as *the reason not to publish*; MIT removed the reason but **not
+  > the restriction**, so each was **RE-POINTED at the still-ungranted
+  > operator authorization**. **Two got STRONGER** — `jbig2.rs` and
+  > `.claude/agents/pdfce-inkscape-librarian.md`: an MIT project cannot
+  > link GPL **at all**, so a risk-pending-a-decision became a categorical
+  > bar. **`ui_text.rs` keeps its no-release-claim behaviour verbatim**
+  > and records why, so nobody "simplifies" the comment away and takes the
+  > restriction with it. The table below is left exactly as filed — it is
+  > the record of what was found. See `ROADMAP.md`'s
+  > `### docs/fix — six stale "licence undecided" statements` entry.
+
   | File | What it still says | Why it matters |
   |---|---|---|
   | **`README.md`** line 46 | *"`docs/LEGAL.md` \| License status (currently undecided — do not publish)"* | **The worst one.** The repo's front door, and the one line a new reader (human or LLM) reads about licensing before opening anything else. |

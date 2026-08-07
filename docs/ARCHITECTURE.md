@@ -7544,6 +7544,17 @@ with a forward pointer.
   two implementations) that the shared appearance builder avoids by
   construction. **If a third authoring verb picks the wrong gate, promote
   the choice into the type system rather than fixing the call site.**
+  > **★ FORWARD POINTER, 2026-08-07 (tenth filing) — THE HAZARD
+  > MATERIALISED IN A DIFFERENT SHAPE THAN THIS PARAGRAPH PREDICTED, and
+  > the difference is instructive.** No verb called the wrong gate. **The
+  > wrong gate was the only one a SHELL COULD ASK**: `fill_refusal` was
+  > `pub`, the strict gate `deletion_preflight` uses had no public query,
+  > so the GUI could render a delete control it could not gate correctly
+  > — and on a certified fillable form at **`/P 2`**, the ordinary case,
+  > the two answers differ. Closed by `EditSession::deletion_refusal()`
+  > (`fc51786`). **See the thirteenth entry this day** for the
+  > generalisation (*every gate in a divergent set needs a public query*)
+  > and for the `/P 1`-only fixture-corpus finding.
 
 - **2026-08-07 (second entry)** — **A form field is THREE writes and they
   are ONE undoable command.** Also from `8e799e9`.
@@ -8143,6 +8154,11 @@ with a forward pointer.
   (multiline, initial state, the choice option editor) were cut on the
   same reasoning — an empty `/Opt` is an allowed, disclosed state. Both
   stay owed **under Pass 20.5's own ID**, per hard rule 2.
+  > **✅ AMENDED 2026-08-07 (tenth filing) — the DELETION half is now
+  > BUILT** (`fc51786`+`69db1c6`; see the **thirteenth** entry this day).
+  > **Only the per-type detail fields stay owed**, and **Pass 20.5 is
+  > still PARTIAL**. The paragraph above is left as filed; it was correct
+  > when written.
 
   **★ AN OWED VERIFICATION IS RECORDED RATHER THAN SMOOTHED OVER.** The
   Pass was driven in the running application (**R86**) via
@@ -8279,3 +8295,147 @@ with a forward pointer.
   usually the reader's own `head`/`-n`/`--max-count` — is escalated to**
   `C:\personal_rag\claude_code\` (tool-invocation methodology, neither
   PDF- nor Rust-specific).
+
+- **2026-08-07 (thirteenth entry this day) — A GATE THAT DIVERGES FROM
+  ITS SIBLING MUST BE ASKABLE, OR THE DIVERGENCE IS A TRAP FOR EVERY
+  SHELL. Plus: a fixture corpus that cannot distinguish two gates makes
+  every test of the distinction vacuous.** Established by `fc51786` +
+  `69db1c6` (the Pass 20.5 deletion surface — see `ROADMAP.md`'s
+  `★ ADDENDUM` on the `Pass 20.5 (PARTIAL)` entry). **No Pass ID, no
+  decision record, no rule number minted; R83 gains an in-place
+  amendment.**
+
+  **The first entry of this day established the RULE** — fill-shaped
+  operations take the `/P`-aware certification gate, structure-shaped
+  operations take the strict one — **and named where it could go wrong
+  later: a future authoring verb calling `fill_refusal` because it was
+  written by copying a fill path.** The real manifestation was **a
+  different shape, and a more expensive one**: nobody called the wrong
+  gate. **The wrong gate was the only one a SHELL could ask.**
+  `EditSession::fill_refusal()` was `pub`; `deletion_preflight`'s strict
+  gate had **no public query at all**. So a GUI panel could render a
+  delete control it had **no way to gate correctly** — and on the
+  ordinary real-world shape (**a certified fillable form at `/P 2`**) the
+  correct answers *differ*: fill is permitted, deletion is refused.
+
+  **The generalisation, which is why this is an architecture entry and
+  not a commit note:** *when two operations take different preflight
+  gates, EVERY gate in the divergent set needs a public per-frame query —
+  not just the first one a shell happened to need.* A gate with no query
+  is not merely inconvenient; it **forces the shell to pick the query it
+  can reach**, which is the wrong one, and the resulting control is
+  enabled and useless. `deletion_refusal()` returns the **`EditError`**,
+  not a bool, for the same reason `fill_refusal()` does: **a shell forced
+  to invent its own wording is how the engine's message and the surface's
+  message drift apart** (R92).
+
+  **★ The fixture finding is the durable half, and it generalises past
+  forms.** **Every certification fixture in the corpus was `/P 1`**
+  (*"no changes permitted"*), which **refuses BOTH operations** — so any
+  test written against it **passes whether or not the two gates differ,
+  and would keep passing if someone collapsed one into the other.** That
+  is **R162 hiding in a FIXTURE CHOICE rather than in a test body**,
+  which is materially harder to see: the test reads correctly, and the
+  vacuity lives in a file it merely opens. **`/P 2` is the only level at
+  which the two gates disagree**, so `certified-p2-form.pdf` was
+  byte-authored to carry exactly it, with three tests blocking three
+  different vacuous passes (divergence; the split is caused by the LEVEL;
+  the gate is not simply stuck on). **The reusable question: for any rule
+  with N outcomes, does the corpus contain an input for each — or does
+  every fixture land on the same outcome?**
+
+  **R83 is amended, not extended.** The same commit found the Forms panel
+  `continue`ing past read-only, signature and push-button rows and
+  thereby withholding the **delete** control those rows were entitled to
+  (`deletion_preflight` checks encryption and certification and nothing
+  else). **R83 forbids offering what you cannot do; it does not license
+  withholding what you can.** Filed inside R83 — see `ROADMAP.md`
+  *Standing rules* — because it is a scope clarification with no meaning
+  apart from the rule it qualifies.
+
+  **★ And the disclosure channel itself was unobservable.** `edit_note`
+  is how **every** rule-4 disclosure in the GUI reaches the operator, and
+  it emitted **no diagnostic trace** — so **a disclosure that silently
+  stopped firing was indistinguishable from one that fired.** It is now
+  traced at its **single drain point** rather than per producer, which is
+  R163's construction applied: the next panel to add a note cannot forget
+  it. **This is R87's family and arguably its worst instance to date** —
+  the channel that exists to make pdfce honest was the one channel no
+  behavioural harness could see.
+
+  **Honest edge:** §4's API sync does not list **either** refusal query —
+  `fill_refusal` and `deletion_refusal` are both inside §4(I)'s
+  *"`EditSession`'s other 57 `pub fn`s"* gap, which predates this entry
+  and is unchanged by it. Recorded so the addition is not mistaken for a
+  §4 update.
+
+- **2026-08-07 (fourteenth entry this day) — VALIDATION AGAINST A
+  CONFORMANCE CORPUS IS COMPARATIVE, NOT ABSOLUTE: the question is "did
+  pdfce make it worse", never "is the output perfect". Plus: pdfce
+  acquires its first OUTSIDE reader.** Established by `9dcab62` →
+  `b4d6d61` → `6ca17e1` → `1f5f1e5` (`tools/verapdf-parse-gate.py`).
+  **No Pass ID — verification infrastructure, the same class as
+  `tools/check-passes-filed.py`.**
+
+  **The architectural gap it closes.** **Every test pdfce has reads
+  pdfce's output with pdfce's own parser.** Round-trip reloads through
+  `pdfce-core`; the forms tests assert through `parse_acroform`;
+  redaction reads back with the lexer that wrote it. **A closed loop
+  cannot see a defect both halves share** — and that is measured, not
+  feared: **R159 exists because flatten left `/AcroForm /Fields` naming
+  deleted objects and every forms test passed**, since `parse_acroform`
+  drops entries that no longer resolve. **The model looked right while
+  the file was wrong.** An external parser is therefore a **distinct
+  verification tier**, not a redundant one.
+
+  **★ The criterion is the design content.** The gate first asked *"does
+  pdfce's output parse?"* — wrong, because **a conformance corpus is full
+  of deliberately broken files** (that is its purpose), so an absolute
+  reading **blames pdfce for damage it faithfully preserved.**
+  `PDFBOX-6040-nodeloop.pdf` settles it with opposite verdicts under the
+  two readings: veraPDF **cannot open the ORIGINAL** (*"can not locate
+  xref table"*), while **pdfce's rewrite opens fine** and reaches only the
+  page-tree loop **the file genuinely contains** — pdfce recovered the
+  xref, and inventing a page tree would have been wrong. **Absolute:
+  failure. Comparative: improvement.** Every input is now scanned as well
+  as every output; the **only** failure condition is a file that came out
+  **worse than it went in**, with improvements and preserved defects
+  counted separately.
+
+  **First real result — 115 pdfbox files: 0 regressions, 3 IMPROVED, 24
+  refused by pdfce.** "Improved" = veraPDF reads pdfce's output and could
+  not read the input. **That is `recover.rs` confirmed by an independent
+  implementation** — evidence pdfce's own parser is structurally incapable
+  of producing.
+
+  **Three tool defects, recorded because each would have produced a gate
+  that passes forever.** (1) **`--off` returns exit 0 for a file with no
+  xref table** — valid → 0, garbage → 0; the verdict is only in the XML
+  body. That is **R162 on the day it was written**, hence `--self-test`,
+  which **fails if the gate does not fail**, and now also asserts the
+  **tier**. (2) **veraPDF has TWO parse-failure tiers** — a
+  `taskException type="PARSE"` it does **not** count in
+  `batchSummary/@failedToParse` — and the tool's own cross-check **caught
+  the engineer's conflation on the first real corpus run**, refusing to
+  let either number be believed. (3) **`subprocess(text=True)` decodes
+  with the platform locale**, so byte `0x8f` from a real corpus file
+  killed the sweep with a traceback naming `threading.py` — the decode
+  happens in a **reader thread**, so the tool was never mentioned. **A
+  sweep whose purpose is running bytes from producers we do not control
+  must not assume its own codepage can spell them.**
+
+  **A build-collision property worth knowing before writing any other
+  sweep:** `cargo run` per file holds `target/debug/pdfce-cli.exe` for the
+  whole sweep, so a concurrent `cargo test` dies with
+  **`Access is denied (os error 5)`** — an error naming a *file
+  permission* problem with **no hint another job caused it**. The gate now
+  **builds once and runs a private copy from its own temp dir.**
+  Escalated to `D:\dev\rag\rust\`.
+
+  **Scope boundary, stated so the green is not overread: this is the
+  PARSE gate only.** The **PDF/A conformance gate remains unscoped
+  Backlog** and will be a **separate tool** when `to-pdfa` ships, because
+  a PDF/A profile run against non-PDF/A output reports failures that are
+  not defects. Licensing posture (MPL-2.0 elected, separate process,
+  never linked or redistributed, **skips rather than fails when absent**):
+  `LEGAL.md` §6.5.
