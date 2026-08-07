@@ -397,6 +397,76 @@ has both a subject-index entry and a master-index entry, and that
    the two new subdir `index.md` files, by contrast, are yours to
    edit directly — same as any other `D:/dev/rag/<tool>/` maintainer.)
 
+10. **File every figure in a form that can DISAGREE with something.**
+
+    **Added 2026-08-07.** Two conventions, both nearly free, both about the
+    *shape* a number is written in rather than about auditing anything
+    afterwards. They bind on every filing you make — `ROADMAP.md`,
+    `SESSION_LOG.md`, `ARCHITECTURE.md` §12, and every RAG tier.
+
+    **(a) File a total BESIDE its per-item form.** Write *"5.24 s over
+    24,128 clips = 217 µs each"*, never bare *"5.24 s"*. And **record the
+    denominator** — without it the division is impossible, not merely
+    unperformed.
+
+    **(b) Put the qualifier in the TABLE LABEL, not only in the prose
+    beside it.** The label is what gets quoted.
+
+    **The reason, which is the part that makes this checkable rather than
+    stylistic.** A total and a per-item mean are the same fact in two
+    forms. **Review is an operation on ONE claim** — a reviewer asks *is
+    this true?* and checks it against the world. **Consistency is an
+    operation on a SET** — *can all of these be true at once?* — and it is
+    answered by arithmetic BETWEEN records. **Nothing in an append-only
+    record performs that operation.** Filing does not, indexing does not,
+    amending does not, and a reader arriving at one entry has no reason to
+    fetch the other. Writing both forms **converts the set-property into a
+    single-claim property**, which is the only kind ordinary review can
+    catch.
+
+    **What it cost to learn.** `mask.fill_path` was filed at **5.24 s over
+    24,128 clips** in one RAG file and **8.3 µs page-sized** in another —
+    **217 µs vs 8.3 µs, a 26× contradiction**, carried openly for two
+    filings, the two figures **217 lines apart in the same `index.md`**.
+    Both measured correctly, both reviewed, neither wrong on its own
+    terms. **The correction required no new measurement, only division.**
+    By then the wrong figure had been a work-order ranking key for six
+    hours and had dispatched a fork on a false premise. Separately, an
+    ablation row labelled *"clip intersection skipped entirely"* (floor
+    **plus** painting, by construction) sat three lines above prose reading
+    *"painting costs 0.87 s"* — **the correct reading printed above the
+    incorrect one for four filings, and the prose is the half that
+    travelled.**
+
+    **No checker exists and none is coming — this is deliberate, so do not
+    propose one.** Extraction is the entire job (prose, tables, amendment
+    footers, commit messages, mixed units); **cross-configuration
+    comparison manufactures contradictions rather than finding them**
+    (1× vs 2×, before vs after a fix), and a gate that cries wolf enforces
+    nothing (`D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md`);
+    the identity set is **not enumerable in advance**; and building one
+    commissions *work* rather than *care*. **These two conventions are the
+    carrier instead.** Cost: one division at write time.
+
+    **Corollary, learned the same day and aimed at this very rule: A
+    CORRECTION IS A CLAIM.** It earns the same sourcing bar as the thing it
+    corrects, and **it must name its world-source in the correction
+    itself** — *"by `stat` on the directory"*, not *"corrected"*. This
+    file's own debt ledger recorded four RAG findings as owed when one was
+    already on disk; the correction to that ledger then said two were
+    already written when the directory said one. **Naming the failure does
+    not perform the check** — the correction was issued by someone who had
+    just written *"I read the ledger instead of the directory"*. A
+    correction arrives labelled *verified* and is therefore believed harder
+    than what it replaced.
+
+    **Full derivation, all four instances:**
+    `D:\dev\rag\rust\a_record_can_carry_its_own_refutation_because_review_checks_claims_against_the_world.md`.
+    **Project-visible half:** `docs/ROADMAP.md`'s *Update protocol*,
+    section *"How a figure is filed"*. Same reason hard rule 8 is stated
+    with its evidence: **a rule whose reason is not written down is a rule
+    nobody can check.**
+
 ## Coordinating with other librarians / the spec-librarian
 
 - **`pdfce-acrobat-librarian`** owns

@@ -81,6 +81,207 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### render — **A RENDER CAN BE STOPPED, AND STOPPING IT STOPS THE WORK**: `ObjectGraph: Send + Sync` · `RenderCancel` (`Arc<AtomicBool>`) in `pdfce-render` · `RenderOptions.cancel` defaulting to `None`. **★ NOT A SPEEDUP — nothing here makes a render faster; it makes one INTERRUPTIBLE, which is the difference between an application that is slow and one that is DEAD.** **★★ LAYERS 1 AND 2 ONLY — LAYER 3 WAS DELIBERATELY CUT, SO THE GUI STILL FREEZES.** **Measured: pre-cancelled 322 ms against 10,367 ms uncancelled; 28.9 ms from `cancel()` to thread exit MID-RENDER.** **★★ THE TEST FINDING: disabling the `break` left `a_pre_cancelled_render_returns_cancelled` PASSING IDENTICALLY while the render took 10,227 ms instead of 322 ms — a 32× behavioural difference the assertion could not see — so the load-bearing assertion moved to PIXELS.** **★ THE EDIT-COLLISION SHAPE IS RULED WITH A NUMBER: cancel, wait, mutate — 28.9 ms against ~58 s for blocking.** **★ THIS ONE CHANGES `pdfce-core`'s PUBLIC API, unlike the three no-ID entries below it — the Pass-ID argument is recorded, and the ID is the engineer's to mint** (no Pass ID assigned) — 2026-08-07, committed `e4256f2`, branch `pass-8-redaction`
+
+**Gates — the ENGINEER's, relayed under R87; no build, render or test was
+run by this filing.** `cargo test` **2166 passed / 0 failed** · `clippy`
+**0** · `cargo tree` **0 GUI matches for `pdfce-core` and for
+`pdfce-render`** · **R85 24 cases green** · `fmt`, `ui-strings`,
+`bypass-paths` each read by its own exit code. **7 files changed, +477 /
+−4.**
+
+**Why the `cargo tree` result is worth reading rather than skimming.**
+This is exactly the commit class that could have broken the GUI-core
+separation invariant (`ARCHITECTURE.md` §3, `CLAUDE.md` rule 2):
+`RenderCancel` is a **concurrency primitive**, and the reflex in that
+position is to reach for a runtime or an executor. It is an
+`Arc<AtomicBool>` — **no windowing, no runtime, no executor** — so it also
+works unchanged under wasm, which is the property that keeps the eventual
+web fork a shell-crate swap rather than a rewrite.
+
+**Nothing is minted.** Pass family stays **43**, standing rules stay
+**R166** (**R167** next free), decision records stay **031** (**032** next
+free), operator questions stay **(bb)**.
+
+#### 1. ★ WHAT DID NOT SHIP, STATED FIRST, BECAUSE THE NUMBERS INVITE THE OPPOSITE READING
+
+**The GUI still freezes.** The operator's report was *"it took minutes to
+try and update the view and hung the entire gui"*; measured, that page is
+**~10 s at 1× and ~58 s at 2×**, synchronous on the UI thread. **Layer 3 —
+`Arc<EditSession>`, the worker thread, the channel, the generation
+counter — does not exist**, and lives in `pdfce-gui`.
+
+What `e4256f2` delivers is the **mechanism a worker will need**. A reader
+who sees *"322 ms against 10,367 ms"* and stops there will conclude the
+operator's report is resolved. **It is not.**
+
+#### 2. `ObjectGraph: Send + Sync` — the bound records a property every implementor already had
+
+**Only the trait OBJECT was ever the obstacle.** `Document`,
+`EditSession`, `SessionGraph`, `PendingGraph` and the test graphs are all
+already thread-safe. `DocumentView` holds `&dyn ObjectGraph`, and **an
+unbounded `dyn Trait` is neither `Send` nor `Sync` regardless of what
+implements it** — so the supertrait does not add a requirement, it stops
+**erasing** one.
+
+**Verified by compile probe BEFORE and AFTER, not inherited from that
+argument.** `DocumentView<'static>` went from failing both bounds to
+satisfying both, with **zero errors across the workspace**. The reasoning
+predicts the outcome; the probe establishes it, and R87 is the reason the
+difference is recorded.
+
+**★ THE TIMING ARGUMENT.** Adding a supertrait to a public trait is
+**breaking for downstream implementors**. With **no git remote and no
+release**, the affected implementor set is **exactly this repository's,
+and it is empty**. This is the cheapest moment the bound will ever have,
+and the cost grows monotonically from here. Rust API guideline
+**`C-SEND-SYNC`** asks for `Send`/`Sync` where possible and for exceptions
+to be documented — **the rationale is on the trait** (`CLAUDE.md` rule 10).
+
+**This is a `pdfce-core` PUBLIC API CHANGE**, and it is why this entry
+carries a Pass-ID argument where the three below it carry a Pass-ID
+refusal. See §6.
+
+#### 3. `RenderCancel` — and a default that is a safety property, not a convenience
+
+`RenderOptions.cancel` defaults to **`None`**. Every existing caller
+therefore keeps a render that **cannot** be interrupted, so **the CLI, the
+round-trip oracle and the R85 harness cannot acquire a new failure mode
+from this field existing.** For a caller passing no token the check is
+`Option::is_some_and` on a `None`: **one always-false branch, no atomic at
+all.**
+
+The poll sits **between operators**, one **relaxed** load. Relaxed is
+correct rather than merely cheap: **the flag carries no data and guards no
+memory**, so a late answer costs one more operator. Granularity is bounded
+by a single operation — **~360 µs per clip × 24,128 clips = the 8.7 s of
+clip construction** the previous filing measured — so **worst-case
+cancellation latency is about a third of a millisecond, not the render.**
+
+**Measured:** pre-cancelled **322 ms** against **10,367 ms** uncancelled;
+**28.9 ms** from `cancel()` to thread exit **mid-render**. Cancellation
+**stops the work rather than discarding the result** — a thrown-away
+render still occupies a core and still delays whatever was asked for next.
+
+#### 4. ★★ THE TEST FINDING — a green test that survived its own feature being disabled
+
+**A *"green is not evidence"* instance with an unusually clean proof, and
+the part of this commit most worth preserving.**
+
+Disabling the `break` left **`a_pre_cancelled_render_returns_cancelled`
+passing IDENTICALLY** — same `Some(Cancelled)` — while the render took
+**10,227 ms instead of 322 ms**. **A 32× behavioural difference, invisible
+to the assertion**, because `lib.rs` checks the flag **after** the loop:
+the error variant is right whether or not any work was skipped. **Three of
+the four tests in the file had this property.**
+
+So the load-bearing assertion moved to **PIXELS**: a cancelled render must
+leave the paper **blank**, plus a **companion assertion that the fixture
+paints something when NOT cancelled** — without which *"cancelled paints
+nothing"* is trivially true of an empty page. **Verified failing without
+the `break` and passing with it.**
+
+**★ PIXELS RATHER THAN ELAPSED TIME, ON PURPOSE — and the reason is
+fixture provenance, not taste.** A timing assertion needs a page slow
+enough to clear the noise, and **the only such page here is an uncommitted
+benchmark file**. A test keyed to it **would silently not run on a fresh
+clone**. **That is `R162` and the fixture-provenance rule (`CLAUDE.md`
+rule 7 / `LEGAL.md` §5) applied together** — and the resolution is not a
+compromise: the pixel assertion is **stronger**, because it tests what the
+feature claims to do rather than a proxy for it.
+
+#### 5. ★ THE EDIT-COLLISION QUESTION IS RULED — with a number, not a preference
+
+What happens when an edit arrives while a background render holds the
+graph. **Ruled: cancel the render, wait, then mutate. One choke point**,
+costing the measured **28.9 ms** from `cancel()` to thread exit **against
+~58 s** for the blocking alternative.
+
+The two rejected shapes, with their real reasons:
+
+- **Snapshot the session** — `EditSession` is **not `Clone`**, so this
+  needs a **new public deep-copy** on the largest type in the crate. A
+  public API addition to avoid a 28.9 ms wait.
+- **`Arc::get_mut`** — **~40 sites.** Wrong shape: it spreads a
+  concurrency concern across the entire mutation surface in order to
+  serialise something already serialised by one flag.
+
+**The measurement is what makes this a ruling rather than a judgement
+call.** The alternatives were being weighed against an unknown, and the
+unknown came in **three orders of magnitude below** the thing it was
+competing with.
+
+#### 6. THE PASS-ID QUESTION — argued here, DECIDED by the engineer
+
+**Nothing is minted by this filing.** The argument is recorded so the
+ruling rests on evidence rather than on the precedent of the three entries
+below.
+
+**For an ID, and this is genuinely new:** `e4256f2` **changes
+`pdfce-core`'s public API.** A supertrait on a public trait is
+semver-breaking; `RenderCancel` and `RenderOptions.cancel` are new public
+surface in a shipping crate. The three preceding no-ID entries
+(`110b8c9`, `fa17d54`, `6b33789`) were each justified as *"an out-of-tree
+tool plus an off-by-default feature flag; no shipped behaviour changes"* —
+**that justification does not reach this commit.**
+
+**Against an ID:** **no operator-visible capability changed.** A Pass whose
+acceptance criterion is *"the GUI no longer freezes"* would be **failed by
+this commit**, and an ID spent here becomes either a permanently
+half-satisfied ID or the first of two IDs for one feature.
+
+**The librarian's reading, offered and not acted on:** **one ID covering
+all three layers, minted when layer 3 lands, with `e4256f2` recorded
+against it retroactively** — the shape already used for Pass 20.2
+(PARTIAL → COMPLETE). **The public-API change needs `ARCHITECTURE.md` §4
+to reflect it regardless of how the ID question resolves, and it does, this
+filing.**
+
+#### 7. One deleted doc comment — the single-location-amendment failure, inside a crate this time
+
+`e4256f2` deletes a doc comment claiming `render-profile` *"prints the
+un-instrumented total beside it"*. **It cannot**: `timing_enabled()` is
+`cfg!(feature = "profile")`, a **compile-time constant**, so one
+invocation yields one total. **The claim was unimplementable rather than
+stale**, and **the same sentence had already been corrected in
+`profile.rs` — this copy survived.** That is this file's own *same-filing
+propagation duty* failing exactly as written, **between two files in one
+crate rather than between two documents.** Overhead was measured across
+builds instead and is **below this machine's noise**.
+
+**This discharges the first of the twenty-second filing's two open
+engineer rulings** (*fix the doc comment now, or fold it into the fork's
+next commit* — **folded in**). **The second — which 0.25× total stands,
+2.57 s or ~2.23 s — is still open.**
+
+#### 8. Ledger housekeeping — the owed RAG findings, and a correction that was also wrong
+
+The twenty-second filing declared **four** RAG findings owed and **none
+written**. **One was already on disk when that was written.** A dispatched
+*correction* then said **two** were already written; **the directory says
+one.** **All four are now written and indexed** in `D:\dev\rag\rust\`.
+
+**Established by `stat` on the directory and by reading the files — not by
+consulting the record that was wrong.** Full table, method and limits: the
+amendment footers on the twenty-first and twenty-second `SESSION_LOG.md`
+entries, and §12's twenty-sixth entry. **The transferable half — *naming
+the failure does not perform the check; a correction is a claim and must
+name its world-source* — is filed as instance (4) on the existing RAG
+finding `a_record_can_carry_its_own_refutation_…`, and its two practical
+conventions are adopted in *Update protocol*, below.**
+
+**Git and backup state — CHECKED, not inferred (hard rule 8).**
+`git rev-parse HEAD` → **`e4256f2`**. `git remote -v` → **empty**; bundles
+are still the only copy. `git status --porcelain` → **three lines, all in
+`crates/pdfce-gui`** (`main.rs`, `raster.rs` modified; `render_worker.rs`
+untracked) — **the live layer-3 fork, exactly as the dispatch stated.**
+The newest bundle is **`pdfce-20260807-1706.bundle`** (`ls`
+`D:\Dev\pdfce-backups\`), with `refs/heads/pass-8-redaction` at
+**`78ca1bf`** — **one commit behind `HEAD`** (`git bundle list-heads` +
+`git log --oneline 78ca1bf..HEAD`). **`e4256f2`, the commit this entry is
+about, is in NO bundle**, and neither is the live fork — **a bundle
+captures committed history only.**
+
 ### tooling — `fill_path` IS THE MISSING TWO-THIRDS, AND THE CLIPS ARE ALL THE SAME SIZE: per-phase clip timing + a per-clip histogram in `tools/render-profile`. **★ THE 86% IS BROKEN DOWN AND THE ARITHMETIC CLOSES: `Mask::new` 1.03 s (11.8%) · `fill_path` 5.22 s (59.9%) · multiply 2.46 s (28.3%) = 8.72 s, and sum + floor = 9.26 s against a 9.49 s render.** **★ TWO MORE FILED FIGURES ARE WRONG — `fill_path` per call was filed at 8–10 µs and is 216 µs (22×), and "painting ~0.8 s" is ~0.27 s. That is FOUR corrections in one day.** **★ THE `fill_path` ERROR HAS A NEW SHAPE: THE EXPERIMENT VARIED THE WRONG DIMENSION — buffer size, when the cost is set by the path's EDGES.** **★ AND THE CONTRADICTION WAS ALREADY IN THIS FILE: `mask.fill_path 5.24 s` ÷ 24,128 clips = 217 µs, filed 217 lines from "8.3 µs page-sized". ONE DIVISION WOULD HAVE FOUND IT.** **★★ THE PER-CLIP DISTRIBUTION IS UNIFORM — 85.0% in 256–512 µs, p90 and p99 both under 1024 µs, only 108 of 24,128 over a millisecond. THERE IS NO TAIL TO HUNT, so any fix must change the work done for ALL 24,128.** **★★ `fill_path` GROWS 2× PER 4× PIXELS — it tracks the LINEAR dimension, because the scanline converter follows the path's PERIMETER. At 0.25× it is still 56% of the whole render, which is the MEASURED reason proxies and culling underdeliver.** (no Pass ID — an out-of-tree tool plus an off-by-default feature flag; no shipped behaviour changes, no timing changed) — 2026-08-07, committed `110b8c9`, branch `pass-8-redaction`
 
 **Why this has no Pass ID.** Identical class to the two entries below it
@@ -31567,3 +31768,91 @@ paid.** This instance had the first and never got the second.
 that GAP as closed by decision 020 §6 F3 and sweep the file's remaining
 GAP markers for the same condition. **Nothing else in the project will
 notice.**
+
+### How a figure is filed (added 2026-08-07, twenty-third filing — ADOPTED AS STANDING PRACTICE, DELIBERATELY NOT A NUMBERED RULE)
+
+**Two conventions, both nearly free, both about the SHAPE a number is
+written in rather than about checking anything after the fact. `R167` is
+NOT minted; the ceiling stays `R166`.** They live here, beside the
+same-filing propagation duty, for the same reason that duty does: **this is
+a rule about how to file, so it belongs where an agent performing a filing
+will meet it.** The binding statement for the agent that performs filings is
+`.claude/agents/pdfce-librarian.md` **hard rule 10**; this is its
+project-visible half, so a reader auditing a filing can see what the filing
+was supposed to do.
+
+**1. FILE A TOTAL BESIDE ITS PER-ITEM FORM.**
+
+> Write ***"5.24 s over 24,128 clips = 217 µs each"***, not ***"5.24 s"***.
+
+**Why this is the whole mechanism, and not merely tidy.** A total and a
+per-item mean are **the same fact in two forms**. Filing only one of them is
+what makes a contradiction between two filings **unreachable** — not merely
+unnoticed. Writing both **converts a SET-property (two filed numbers
+disagree) into a SINGLE-CLAIM property (this line is wrong)**, and ordinary
+one-claim review — the only kind of review anyone actually performs — can
+catch the second and can never catch the first.
+
+**The instance it was derived from.** `mask.fill_path` was filed at
+**5.24 s over 24,128 clips** in one RAG file and at **8.3 µs page-sized** in
+another. **5.24 s ÷ 24,128 = 217 µs. A 26× contradiction**, carried openly
+for **two filings**, with the two figures **217 lines apart in the same
+`index.md`**. Both were measured correctly; both were reviewed; neither was
+wrong *on its own terms*. **The correction required no new measurement, only
+division** — and the wrong figure had by then been the ranking key for a
+work order for six hours and had **dispatched a fork on a false premise**.
+**Had this convention existed, the contradiction would have been on the line
+where it was written.**
+
+**Corollary, because the division needs it: RECORD THE DENOMINATOR.** Had
+`24,128` not been filed, the contradiction would have been **genuinely**
+unreachable rather than merely unreached.
+
+**2. PUT THE QUALIFIER IN THE TABLE LABEL, BECAUSE THE LABEL IS WHAT GETS
+QUOTED.**
+
+**The instance.** An ablation row's own label read ***"clip intersection
+skipped entirely"*** — which is exactly right, and by construction means
+*floor **plus** painting*. **Three lines below it**, prose read *"Painting
+all 129,515 paths costs 0.87 seconds."* Painting alone is **~0.27 s**; the
+floor is ~0.54 s. **The correct reading was printed above the incorrect one
+for four filings, and the prose is the half that travelled** — into
+`FEATURES.md`, into two decision entries, and into the sizing of every
+painting-side optimisation.
+
+**When a table row's label and the sentence under it can be read
+independently, they will be.** So the qualifier goes in the **label**.
+
+#### ★ NO CHECKER WAS BUILT, AND THE REASONS ARE RECORDED SO NOBODY RE-OPENS IT
+
+A gate that extracts filed quantities and evaluates derived identities is
+**conceivable, not cheap, and was judged NOT warranted** (R163's
+carrier question, asked and answered):
+
+1. **Extraction IS the job.** The figures live in English prose, markdown
+   tables, amendment footers and commit messages, in units that vary (`s`,
+   `µs`, `%`, `×`).
+2. **Cross-configuration comparison MANUFACTURES contradictions rather than
+   finding them.** 1× vs 2×; before vs after a fix; `--repeat 1` vs
+   `--repeat 3`. Comparing two figures from different configurations
+   produces false positives by construction, and **a gate that cries wolf
+   enforces nothing** (`D:\dev\rag\rust\ci_gate_red_at_baseline_enforces_nothing.md`).
+3. **The identity set is not enumerable in advance.** `total ÷ count` was
+   obvious *after* the fact. Label-vs-prose is not an arithmetic identity at
+   all, and the third instance in the same family (a doc comment refuted by
+   `cfg!`) is a program-analysis question. **A carrier that catches only the
+   first is not a carrier for this finding.**
+4. **It commissions WORK, not CARE** — the same ground on which this project
+   declined three standing-rule candidates in one week. A rule cannot
+   schedule the building of a checker, and until the checker exists the rule
+   is a reminder.
+
+**These two conventions ARE the carrier — not a checker that computes
+consistency, but a filing shape that makes a contradiction land inside a
+single expression.** Cost: one division at write time.
+
+**Full derivation, with all four instances:**
+`D:\dev\rag\rust\a_record_can_carry_its_own_refutation_because_review_checks_claims_against_the_world.md`.
+**Sibling in this section:** the same-filing propagation duty above — that
+one stops a fact being stated inconsistently **across documents**; this one
+stops a figure being stated in a form that **cannot** be checked at all.

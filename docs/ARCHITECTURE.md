@@ -1177,6 +1177,85 @@ widened to print these (`list-annotations` gains `contents=`/`author=` in
 Pass 38.5) — a live instance of the **R151** core-ahead-of-shell pattern,
 recorded rather than rounded up.
 
+### (K) `e4256f2` — ★★ BREAKING for downstream implementors: `ObjectGraph` gains `Send + Sync`; `pdfce-render` gains `RenderCancel` and `RenderOptions.cancel` — 2026-08-07
+
+**Two public-surface changes, in two crates, taken together because the
+first exists only to enable the second.**
+
+**1. `pdfce_core::graph::ObjectGraph: Send + Sync` (supertrait added).**
+
+**Breaking in the semver sense** — a supertrait on a public trait is a new
+obligation on every downstream implementor — **and additive in practice**,
+because it does not add a requirement so much as stop **erasing** one.
+`Document`, `EditSession`, `SessionGraph`, `PendingGraph` and the test
+graphs were all already thread-safe. The obstacle was **only the trait
+object**: `DocumentView` holds `&dyn ObjectGraph`, and **an unbounded
+`dyn Trait` is neither `Send` nor `Sync` regardless of what implements
+it.**
+
+**Established by compile probe before and after**, not by the argument
+above: `DocumentView<'static>` went from failing both bounds to satisfying
+both, **zero errors across the workspace**.
+
+**Why NOW is the whole justification, and it is a timing argument rather
+than a design one.** With **no git remote and no release**, the affected
+implementor set is **exactly this repository's, and it is empty**. That is
+the cheapest this bound will ever be, and the cost grows monotonically
+from here. Rust API guideline **`C-SEND-SYNC`** asks for `Send`/`Sync`
+where possible and for exceptions to be documented — **the rationale lives
+on the trait** (`CLAUDE.md` rule 10, §8).
+
+**2. `pdfce_render::RenderCancel` + `RenderOptions.cancel: Option<RenderCancel>`.**
+
+A plain **`Arc<AtomicBool>`** (`crates/pdfce-render/src/cancel.rs`). **No
+windowing, no async runtime, no executor** — so **§3's GUI-core separation
+invariant holds** (verified: `cargo tree` reports **0 GUI matches** for
+both `pdfce-core` and `pdfce-render` at this commit), and it compiles and
+behaves identically under **wasm**, which is the property that keeps the
+eventual web fork a shell-crate swap.
+
+**`cancel` defaults to `None`, and that default is a SAFETY property, not
+ergonomics.** Every existing caller keeps a render that cannot be
+interrupted, so **the CLI, the round-trip oracle and the R85 harness
+cannot acquire a new failure mode from this field existing.** For a caller
+passing no token the check is `Option::is_some_and` on a `None` — one
+always-false branch, **no atomic executed at all**.
+
+The poll sits **between content-stream operators**, one **relaxed** load.
+Relaxed rather than acquire because **the flag carries no data and guards
+no memory**; a late answer costs one more operator. Cancellation
+granularity is bounded by a single operation — at **~360 µs per clip ×
+24,128 clips** on the CAD reference sheet — so **worst-case latency is
+about a third of a millisecond, not the render.**
+
+**Measured** (engineer's figures, relayed under R87): pre-cancelled
+**322 ms** against **10,367 ms** uncancelled; **28.9 ms** from `cancel()`
+to thread exit **mid-render**.
+
+**What this does NOT do, stated because the numbers invite the opposite
+reading: the GUI still freezes.** These are layers 1 and 2 of off-thread
+rasterization. **Layer 3 — `Arc<EditSession>`, a worker thread, a channel
+and a generation counter — does not exist**, and lives in `pdfce-gui`.
+Nothing here makes a render faster; it makes one **interruptible**.
+
+**Consequent design ruling, recorded here because it constrains layer 3.**
+On an edit arriving while a background render holds the graph: **cancel the
+render, wait, then mutate — one choke point.** The measured **28.9 ms**
+wait is what makes this a ruling rather than a preference; the
+alternatives were being weighed against an unknown that turned out to be
+**three orders of magnitude below ~58 s of blocking.** Rejected:
+snapshotting the session (**`EditSession` is not `Clone`** — this would
+need a new public deep-copy on the crate's largest type, a public API
+addition taken to avoid a 28.9 ms wait) and **`Arc::get_mut` at ~40
+sites** (spreads a concurrency concern across the whole mutation surface
+to serialise what one flag already serialises).
+
+**No Pass ID assigned** — the argument both ways is recorded in
+`ROADMAP.md`'s *Shipped* entry §6; **the librarian's non-binding reading
+is one ID covering all three layers, minted when layer 3 lands.** This
+subsection exists regardless of that ruling, because **the public API
+changed and §4.1 is the living truth.**
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a
@@ -10428,3 +10507,137 @@ with a forward pointer.
 
   **This filing edited `docs/` ONLY** — no `crates/`, no `tools/`, no
   `fixtures/`, by the dispatch's explicit scope.
+
+- **2026-08-07 (twenty-sixth entry this day) — A RENDER CAN BE STOPPED, AND
+  STOPPING IT STOPS THE WORK. `ObjectGraph` GAINS `Send + Sync` AND
+  `pdfce-render` GAINS `RenderCancel` — LAYERS 1 AND 2 OF OFF-THREAD
+  RASTERIZATION, WITH LAYER 3 DELIBERATELY CUT, SO THE GUI STILL FREEZES.
+  ★ THE FIRST OF THE RECENT NO-ID COMMITS THAT ACTUALLY CHANGES
+  `pdfce-core`'s PUBLIC API. ★★ A GREEN TEST SURVIVED ITS OWN FEATURE BEING
+  DISABLED — 32× SLOWER, SAME ASSERTION, SAME RESULT — SO THE LOAD-BEARING
+  ASSERTION MOVED TO PIXELS.** `e4256f2` — `crates/pdfce-core/src/graph.rs`,
+  `crates/pdfce-render/{cancel.rs,lib.rs,interpret.rs,annot.rs,font/mod.rs}`,
+  and `crates/pdfce-render/tests/cancel_stops_the_work.rs`. **7 files,
+  +477 / −4.** **Full API description: §4.1 subsection (K)**, added this
+  filing, because the public surface changed and §4.1 is the living truth.
+
+  **The decisions, as decisions.**
+
+  **(1) Take the `Send + Sync` bound NOW, on a timing argument.** A
+  supertrait on a public trait is breaking for downstream implementors.
+  **With no remote and no release, the affected implementor set is exactly
+  this repository's, and it is empty.** That is the cheapest the bound will
+  ever be, and the cost grows monotonically. Only the **trait object** was
+  ever the obstacle — every implementor was already thread-safe, and
+  `&dyn ObjectGraph` erased that. **Verified by compile probe before and
+  after** (R87: the argument predicts, the probe establishes), rationale on
+  the trait per **`C-SEND-SYNC`**.
+
+  **(2) `RenderCancel` is an `Arc<AtomicBool>` — no runtime, no executor.**
+  §3 holds (`cargo tree`: **0 GUI matches** for core and render) and it
+  works unchanged under wasm. **`RenderOptions.cancel` defaults to `None`
+  as a safety property**: the CLI, the round-trip oracle and the R85
+  harness **cannot acquire a new failure mode from the field existing.**
+
+  **(3) The edit-collision shape is RULED — cancel, wait, mutate.** One
+  choke point, **28.9 ms measured against ~58 s** for blocking. Rejected:
+  snapshotting (`EditSession` is not `Clone`; needs a new public deep-copy
+  to avoid a 28.9 ms wait) and `Arc::get_mut` at ~40 sites (wrong shape —
+  spreads concurrency across the mutation surface to serialise what one
+  flag already serialises). **The number is what makes it a ruling rather
+  than a judgement call.**
+
+  **★★ (4) THE TEST FINDING, which is the durable part.** Disabling the
+  `break` left `a_pre_cancelled_render_returns_cancelled` **passing
+  identically** — same `Some(Cancelled)` — while the render took
+  **10,227 ms instead of 322 ms**. `lib.rs` checks the flag **after** the
+  loop, so the error variant is right whether or not any work was skipped;
+  **three of the four tests had this property.** The assertion therefore
+  moved to **PIXELS** — a cancelled render leaves the paper blank, with a
+  **companion assertion that the fixture paints when NOT cancelled**,
+  without which the claim is trivially true of an empty page. Verified
+  failing without the `break` and passing with it. **Pixels rather than
+  elapsed time DELIBERATELY: a timing assertion needs a page slow enough to
+  clear the noise, and the only such page is an UNCOMMITTED benchmark file,
+  so the test would silently not run on a fresh clone.** That is **`R162`
+  and the fixture-provenance rule (`CLAUDE.md` rule 7 / `LEGAL.md` §5)
+  applied together** — and the pixel assertion is **stronger**, not a
+  compromise: it tests what the feature claims to do rather than a proxy.
+
+  **(5) One doc comment deleted — the single-location-amendment failure
+  INSIDE a crate.** The claim that `render-profile` *"prints the
+  un-instrumented total beside it"* is **unimplementable, not stale**
+  (`timing_enabled()` is `cfg!(...)`, a compile-time constant), and **the
+  same sentence had already been corrected in `profile.rs`.** This
+  **discharges the first of the twenty-second filing's two open engineer
+  rulings**; the second — **which 0.25× total stands, 2.57 s or ~2.23 s** —
+  **remains open.**
+
+  **NOTHING MINTED — but this one carries a Pass-ID ARGUMENT rather than a
+  Pass-ID refusal**, unlike `110b8c9`/`fa17d54`/`6b33789`, whose shared
+  justification (*"out-of-tree tool plus an off-by-default feature flag; no
+  shipped behaviour changes"*) **does not reach this commit**: the public
+  API changed. Against: **no operator-visible capability changed**, and a
+  Pass with the acceptance criterion *"the GUI no longer freezes"* would be
+  **failed by this commit**. **Librarian's non-binding reading: one ID
+  covering all three layers, minted when layer 3 lands, `e4256f2` recorded
+  against it retroactively** (the Pass 20.2 PARTIAL→COMPLETE shape). **The
+  ID is the engineer's.** Ceilings unchanged and **re-measured by running**
+  `tools/check-ledger-numbers.py` and `tools/check-passes-filed.py` (exit
+  codes in the *Shipped* entry): Pass **43**, **R166** (R167 next free),
+  decision **031** (032 next free), operator question **(bb)**.
+
+  **★ LEDGER CORRECTION FILED THIS ENTRY — and the correction to it was
+  ALSO wrong.** The twenty-second filing declared **four** RAG findings owed
+  and **none written**; **one was already on disk when that sentence was
+  committed.** The dispatched correction then said **two** were already
+  written, *"at 16:37 and 16:38"*; **the directory says one.** Established
+  by **`stat -c '%w %n' *.md` across `D:\dev\rag\rust\`, `D:\dev\rag\egui\`
+  and `C:\personal_rag\pdf\`** (NTFS creation times) against
+  **`git log --format=%cI 78ca1bf` → `17:06:24`**:
+  `name_the_null_result_…` born **16:38:35** (28 min BEFORE — the ledger was
+  false); `one_shot_ablation_…` born **17:18:02** (12 min AFTER — the ledger
+  was true and the correction false); `an_experiment_must_vary_…`
+  **17:15:56** and `counters_reset_per_outer_loop_…` **17:16:37**. **`16:37`
+  is no file's birth time in any of the three trees.** **All four are now
+  written and indexed; the debt is closed.** **Limits, because they bound
+  the claim:** `%w` survives in-place overwrite and rename, so a 17:18 birth
+  means first creation or delete-then-recreate; and **`D:\dev\rag\` is not a
+  git repository**, so the filesystem is the only witness. **The
+  transferable half — *naming the failure does not perform the check; a
+  correction is a claim and must name its world-source* — is filed as
+  instance (4) on the existing RAG finding
+  `a_record_can_carry_its_own_refutation_…`, and its two practical
+  conventions are ADOPTED** into `ROADMAP.md`'s *Update protocol* (*"How a
+  figure is filed"*) and `.claude/agents/pdfce-librarian.md` **hard rule
+  10**: *file a total beside its per-item form*, and *put the qualifier in
+  the table label*. **NO CHECKER WAS BUILT, deliberately** — extraction is
+  the whole job, cross-configuration comparison manufactures contradictions,
+  the identity set is not enumerable in advance, and a checker commissions
+  work rather than care. **The conventions are the carrier.**
+
+  **What this filing did NOT establish.** Every gate and every performance
+  figure above is the **engineer's**, measured at `e4256f2` and relayed
+  (**R87**): `cargo test` **2166 / 0 failed**, `clippy` **0**, `cargo tree`
+  **0 GUI matches** for core and render, **R85 24 cases green**, and the
+  322 / 10,367 / 28.9 ms measurements. **No build, no render and no test was
+  run here.** The benchmark page remains a **MEASUREMENT INPUT, NOT A
+  FIXTURE** — outside the tree, untracked, inadmissible under rule 7 /
+  `LEGAL.md` §5 — which is precisely the constraint that forced (4)'s pixel
+  assertion.
+
+  **Git and backup state — CHECKED, not inferred (hard rule 8 as amended,
+  `b1368ed`).** `git rev-parse HEAD` → **`e4256f2`**. `git remote -v` →
+  **empty**; bundles remain the only copy. `git status --porcelain` →
+  **three lines, all in `crates/pdfce-gui`** (`main.rs`, `raster.rs`
+  modified; `render_worker.rs` untracked) — **the live layer-3 fork, as the
+  dispatch stated.** Newest bundle (`ls D:\Dev\pdfce-backups\`):
+  **`pdfce-20260807-1706.bundle`**, `refs/heads/pass-8-redaction` at
+  **`78ca1bf`** — **one commit behind `HEAD`** (`git bundle list-heads` +
+  `git log --oneline 78ca1bf..HEAD`, which returns exactly `e4256f2`).
+  **`e4256f2` is in NO bundle**, and neither is the live fork — a bundle
+  captures committed history only.
+
+  **This filing edited `docs/` and `.claude/agents/pdfce-librarian.md`
+  only** — the agent file by the dispatch's explicit permission, for hard
+  rule 10. No `crates/`, no `tools/`, no `fixtures/`.
