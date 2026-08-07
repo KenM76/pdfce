@@ -81,6 +81,309 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### fix — THE THIRD DEFECT THE veraPDF GATE FOUND, and the first one where **pdfce'S OUTPUT WAS NEVER WRONG**: a full rewrite stops carrying junk only pdfce can read past (no Pass ID — a correctness fix to the shipped full-rewrite save path that **REVERSES a deliberate `ARCHITECTURE.md` §5.6 contract**, plus a new gate-watched fixture; core + fixtures + tooling) — 2026-08-07, committed `fa4f83c`, branch `pass-8-redaction`
+
+**Why NO Pass ID.** Third in an established series, filed in exactly the
+shape of the two entries below: a **defect found by a gate**, where the gate
+itself is filed **as tooling with no Pass ID**. The dispatch left the call to
+this librarian and named the precedent; nothing about this commit breaks it.
+**Pass family stays 43; R164 stays the standing-rule ceiling; decision records
+stay 031; operator questions stay (bb). NOTHING IS MINTED — and one candidate
+is put to the ENGINEER rather than taken; see *Ledger*, below.**
+
+#### ★ TWO OF THE ENGINEER'S DISPATCH PREMISES WERE WRONG, AND THE FORK ESTABLISHED BOTH — filed first, because they change what the defect WAS
+
+The dispatch that opened this work is on record; both of its load-bearing
+premises were corrected by measurement before the fix was written. **They are
+filed as corrections to the engineer, at his instruction**, on the same
+principle as the *"ten regressions"* correction two entries below: *this
+project's record of its own instruments is the thing that makes the next
+instrument believable.*
+
+1. **PREMISE: "pdfce's output was miswritten."** **FALSE.** Every one of the
+   **17** cross-reference offsets in the output, and `startxref`, matched its
+   **true absolute byte position** — checked entry by entry, not sampled.
+   **The INPUT is the malformed party**: `6-1-2-t01-fail-a.pdf` carries
+   **header-relative entries with an absolute `startxref`**, a combination no
+   reading of §7.5.4/§7.5.5 makes conformant. **pdfce was the spec-literal
+   one throughout**, and the fix is not a repair of a writer bug.
+2. **PREMISE: "this is about that corpus file's offset convention."**
+   **FALSE, and this is the correction that matters** — it makes the defect
+   an order of magnitude larger than the file that exposed it. The fork built
+   a **minimal 3-object file with CORRECT ABSOLUTE offsets** and **19 bytes
+   of junk** ahead of `%PDF-`. veraPDF: ***"can not locate xref table."***
+   Junk removed, everything else identical: **`failedToParse="0"`**.
+   **veraPDF reads offsets as HEADER-RELATIVE whenever ANY preamble exists**,
+   regardless of what the producer intended — so **every preamble-preserving
+   file pdfce has ever written was unreadable to it**, not merely ones
+   derived from header-relative inputs.
+
+**The second correction is why a one-file regression justified changing a
+contract.** Under the first reading the fix would have been "handle a broken
+corpus file". Under the measured reading it is *"pdfce has been emitting
+files an independent conformance reader cannot open, for as long as it has
+had a full-rewrite path"* — and the corpus file was simply the first input
+whose shape made that visible to the gate.
+
+#### The spec position — no `pdfce-spec-librarian` dispatch was needed, and stating why is part of the record
+
+**The RAG already covered it, exactly.** `iso32000__s__7.5.4.md` names
+***"Offset base ambiguity when the header is not at byte 0"*** and forwards
+to `iso32000__s__7.5.md`, which records it as ***"a real, load-bearing
+ambiguity. ISO 32000-1 gives no guidance"*** — and, remarkably, already
+says where the answer belongs: *"Empirical resolution belongs in
+`C:\personal_rag\pdf\`; the spec position (offsets are from byte 0 of the
+file) is recorded here."* **This filing pays that forward reference** (see
+*RAG escalations*).
+
+Two facts follow, and both are load-bearing:
+
+- **The spec text is uniform and unambiguous about the base**: offsets are
+  *"from the beginning of the **file**"* (§7.5.4, §7.5.5). **pdfce's reading
+  was correct.**
+- **pdfce's own 1 KiB header tolerance is Acrobat PRACTICE, not normative.**
+  The same RAG file flags the ISO 32000-2 citation once used for it as
+  **NEEDS VERIFICATION** and recommends the honest framing: *"tolerance is
+  common reader practice (Acrobat scans the first 1024 bytes), not required
+  by ISO 32000-1 §7.5.2."* **So the tolerance that let the preamble through
+  was never a spec obligation to preserve it.**
+
+#### ★ THE FIX — and the reason it is the right shape rather than a capitulation
+
+`header_prefix_len(buf) -> usize` becomes **`header_span(buf) -> Range<usize>`**,
+returning **`marker..end`** instead of `0..end`. A **full rewrite** therefore
+emits `%PDF-` **at byte 0** and drops the preamble entirely.
+
+**The argument in one sentence, because it is the transferable part:**
+preserving the preamble **picks pdfce's side of an argument the spec does not
+settle**, and ships files only readers on that side can open; **dropping it
+makes the two readings COINCIDE** — with the header at byte 0, *absolute* and
+*header-relative* are **the same number** — so the output is **unambiguous to
+every reader** instead of correct only under pdfce's preferred reading.
+
+**It also stops re-emitting a §7.5.2 violation** — *"The first line of a PDF
+file shall be a header"* — that **the operator never asked pdfce to
+preserve.** Carrying it forward was pdfce choosing, on the operator's behalf,
+to keep a defect.
+
+**Only a FULL rewrite may do this, and the boundary is asserted, not
+asserted-about.** §5.1's three contracts are the whole reason this is legal:
+`save_full` promises **per-object-definition byte identity, a reloadable file
+and an identical raster — explicitly NOT whole-file identity**, because
+offsets legitimately move. Removing a preamble is inside that promise.
+**`save_incremental` and identity-append promise whole-file identity and a
+byte-prefix respectively, still carry the preamble through, and do not call
+`header_span` at all** — pinned by `assert_identity_save_is_byte_identical`
+in the same test, not by a comment.
+
+#### ★ IT REVERSED A DELIBERATE, REASONED CONTRACT — and the handling is the part to keep
+
+`a_file_with_leading_junk_keeps_it_through_a_full_rewrite` was **not an
+oversight**. It was a tested contract with its reasoning written down,
+citing **§5.6's *"do not normalize what the operator did not ask about"***,
+and it explicitly warned that emitting header-relative offsets *"shifts every
+object by the prefix length and the file still looks fine until an object is
+resolved."* **That reasoning was sound. The conclusion was still wrong.**
+
+**The fork INVERTED the test rather than deleting it, and the inversion
+carries WHY** — the original premise, the veraPDF measurement that overturned
+it, the spec-RAG citation, and the boundary that keeps incremental saves
+unchanged, all in the test's own comment block. It is now named
+`a_full_rewrite_drops_bytes_before_the_header`.
+
+**Record this as the correct handling of a contract that turns out to be
+wrong.** A deleted test leaves the next author free to re-derive the original
+reasoning from §5.6 — which is *still in the document, still correct in
+general* — and re-introduce the defect with full confidence. **A reversed
+test is the only artifact that says "we tried that, here is the measurement
+that killed it."** Filed to `D:\dev\rag\rust\` as a general practice.
+
+#### R162 AT TWO LEVELS — and a SELF-CATCH worth recording
+
+**Discharged by observation, both levels, with `marker..pos` reverted to
+`0..pos`:**
+
+| level | assertion | with the fix reverted |
+|---|---|---|
+| integration | `a_full_rewrite_drops_bytes_before_the_header` | **FAILS** on the byte assertion |
+| unit | `header_span_excludes_bytes_before_the_marker` | **FAILS** on the span |
+| unit (pre-existing) | `header_span_handles_all_three_shapes` | **PASSES EITHER WAY** |
+
+**★ The third row is the finding.** All four of the pre-existing shape test's
+cases put the marker **at byte 0**, where `0..end` and `marker..end` are
+**indistinguishable** — so the suite that already existed could not tell the
+old implementation from the new one. **That is exactly why the second unit
+test had to exist**, and it is a shape that generalises: *when a change alters
+what a function RETURNS, the existing tests may all sit at the point where
+the two return values are equal.* Filed as a new instance on the
+`sign_test_omitting_the_zero_case…` lesson, whose cardinal-direction finding
+is the same blindness in a different domain.
+
+**★ AND THE NEW TEST CAUGHT ITS OWN AUTHOR.** One of the fork's expected
+values was wrong — the BOM case is **`3..18`**, not `3..21` — and the test
+failed on the author's arithmetic, not on the code. **A test that can catch
+the person writing it is a test whose value space is real**, which is the
+strongest available evidence that the second unit test was not itself
+decorative.
+
+**The new assertions are on BYTES, not through pdfce's reader (R159), and the
+reason is unusually pointed here:** *pdfce reads its own preamble-bearing
+output perfectly.* `object_count()` and `catalog()` **both pass in the broken
+state**, because pdfce's loader recovers from it. **The closed loop could
+never have seen this defect, which is the entire thesis of the gate.** Each
+in-use offset is now checked to land exactly on its own `N 0 obj`.
+
+#### Sweeps — one regression found, one regression fixed, nothing else moved
+
+| corpus | files | before | after |
+|---|---|---|---|
+| **PDF/A-1b conformance** | **569** | **1 regression**, 0 hangs | **0 regressions** |
+| qpdf | 560 | 0 regressions, 275 improved | **unchanged** |
+| pdfium | 288 | 0 regressions, 223 improved | **unchanged** |
+| synthetic `xref-recover` | 11 | — | **0 regressions, 8 improved** |
+
+**The two unchanged rows are a result, not filler.** A change to the header
+region of every full rewrite is exactly the kind of edit that trades one
+corpus's green for another's, and both large corpora were re-swept to show it
+did not. **The PDF/A-1b corpus is the third to be swept end to end**, and it
+is the one that found this.
+
+#### ★ THE NEW FIXTURE IS THE ONLY UNDAMAGED FILE IN `xref-recover/`, AND THAT IS DELIBERATE
+
+`fixtures/synthetic/xref-recover/header-preamble.pdf`. **Every other file in
+that directory is broken on purpose.** This one is **valid and spec-correct**
+— offsets absolute from byte 0 exactly as §7.5.4/§7.5.5 require, nothing
+needing recovery. **Its sole oddity is a 12-byte preamble**, short enough to
+sit **inside** the 1 KiB probe window, so it loads on the **STRICT** path
+where its neighbour `offset-start.pdf` (>1 KiB of junk) routes through
+recovery instead. **That distinction is the fixture's whole job:** it isolates
+the writer's behaviour from the recovery machinery, so a failure here cannot
+be a parse failure wearing a writer's name.
+
+**It is ON DISK rather than inline so the GATE KEEPS WATCHING IT.** In a
+`verapdf-parse-gate` sweep it reports as **`improved`** — veraPDF cannot read
+the input and can read pdfce's output — and **a regression that restored
+preamble preservation flips it to a regression.** An inline test proves the
+behaviour once; a fixture on disk enlists the outside judge permanently.
+**Record this as a design of the fixture, not an accident of where it was
+written.**
+
+#### Gates — measured by the ENGINEER at `fa4f83c`, each read by its OWN exit code (R87)
+
+| Gate | Result |
+|---|---|
+| `cargo test` (workspace) | **2150 passed, 0 failed** |
+| `cargo fmt --check` | **exit 0** |
+| `cargo clippy -- -D warnings` | **exit 0** |
+| `tools/check-ui-strings.sh` | **exit 0** |
+| `tools/check-bypass-paths.sh` | **exit 0** |
+| `tools/check-ledger-numbers.py` | **exit 0** |
+| both `cargo tree` GUI-separation invariants | **exit 0** |
+| PDF/A-1b sweep (569 files) | **1 regression → 0** |
+| qpdf (560) / pdfium (288) re-sweeps | **unchanged** |
+
+**Test count 2149 → 2150** — one new unit test, matching the one shape the
+pre-existing suite could not distinguish. **Both ledger checkers re-run by
+THIS LIBRARIAN after the filing** — results and ceilings in *Ledger*, below.
+
+#### How the absences were established (R87)
+
+1. ***"Nothing but a full rewrite drops the preamble."*** Established from
+   the **call graph, not from intent** — a tracked-files grep for
+   `header_span` across `crates/` by this librarian returns **exactly one
+   production call site**, `writer/save.rs:577` inside `save_full`, plus its
+   two unit tests. The incremental and identity-append paths never reach it,
+   and the identity assertion in the same test fails if that ever changes.
+2. ***"qpdf and pdfium are unchanged."*** Established by **re-running both
+   sweeps** at `fa4f83c` with `--timeout` armed, not by reasoning that the
+   change only touches files with preambles. **Both completed**, which is the
+   only form of that claim available since `8cb779f`.
+3. ***"The output's offsets were correct all along"*** (correction 1 above).
+   Established by checking **all 17 entries and `startxref`** against their
+   true byte positions — an exhaustive check, not a sample, which is what
+   makes it capable of having come out the other way.
+
+#### RAG escalations, this entry
+
+**New — PDF domain (`C:\personal_rag\pdf\`):**
+
+- `lesson_20260807_verapdf_reads_xref_offsets_as_header_relative_when_a_preamble_exists.md`
+  — the empirical resolution `iso32000__s__7.5.md` explicitly delegates to
+  this tree: the measurement in both directions, the consequence (*every*
+  preamble-preserving file is affected), and the general principle —
+  **where a format spec leaves an offset base ambiguous, emit the form under
+  which the competing readings COINCIDE**, rather than the form under which
+  your own reading is correct.
+
+**New — ecosystem (`D:\dev\rag\rust\`):**
+
+- `reverse_a_wrong_contract_test_in_place_rather_than_deleting_it.md` — the
+  practice above: a test that pins a deliberate decision **is** the record of
+  that decision, so reversing it must carry the original reasoning and the
+  measurement that overturned it. Deleting it re-arms the next author.
+
+**AMENDED, per the same-filing propagation duty (dated footers, nothing
+deleted):**
+
+- `D:\dev\rag\rust\sign_test_omitting_the_zero_case_is_invisible_to_off_axis_fixtures.md`
+  — new instance: **every existing case sat at the degenerate point where the
+  two candidate return values are EQUAL** (marker at byte 0 ⇒ length and
+  range-start indistinguishable), so the suite could not tell the
+  implementations apart.
+- `D:\dev\rag\rust\absence_assertion_must_first_prove_the_container_could_have_held_it.md`
+  — new instance class, from **Part 2** below: the same vacuity question
+  applied to a **corpus sweep** rather than to a test. *"0 refused across 44
+  files"* is indistinguishable from *"the guard cannot fire"* until the guard
+  is shown firing on something.
+
+#### Ledger
+
+**NOTHING MINTED.** No Pass ID, no standing rule, no decision record, no
+operator question. **Ceilings after this filing, re-measured by running the
+checker rather than read from the file:** Pass **43**, standing rules
+**R164** (**R165** next free), decision records **031** (**032** next free),
+operator questions **(bb)**.
+
+**★ ONE CANDIDATE IS PUT TO THE ENGINEER RATHER THAN TAKEN, and this
+librarian's recommendation is stated so the decision is cheap.** The
+candidate:
+
+> ***Where a format spec leaves a question genuinely unresolved, pdfce emits
+> the form under which the competing readings COINCIDE — not the form under
+> which pdfce's own reading is correct.***
+
+**Recommendation: DO NOT MINT YET — one occurrence against a two-occurrence
+bar.** The three reasons, in order of weight:
+
+1. **One occurrence.** The bar is two (restated in the entry below); R164's
+   one-occurrence exception was granted because that occurrence had **already
+   produced a false report to the operator**. This one produced **bad output
+   files**, which is arguably worse, and the engineer may rule on that
+   difference — but it is a ruling, not a default.
+2. **It is not covered by an existing rule, which is the argument FOR it.**
+   §5.6 (*never normalize*) pointed the **other way** and had to be narrowed;
+   R27 is about refusing, not about choosing a representation. **Stated
+   plainly because it is the strongest case for R165:** unlike the candidate
+   refused in the entry below, this one is **not already carried elsewhere.**
+3. **Its content is currently filed as substance, not as a rule** — the
+   §5.6 narrowing in `ARCHITECTURE.md` and the `personal_rag/pdf` lesson both
+   carry it, and per **R163** a note a mechanical artifact already carries
+   does not automatically need a rule asking a human to remember it. **The
+   counter: neither of those artifacts is consulted when a NEW ambiguity is
+   met in a different clause**, which is exactly when the rule would bind.
+
+**ENGINEER: mint R165, or record the refusal, so the next filing does not
+re-open it.**
+
+**`FEATURES.md` — ONE row's description amended, NO box changed, and the
+absence is established rather than assumed.** `grep -n -i "save\|rewrite"
+docs/FEATURES.md` locates the **Save** row, already `[x] [x] [x] [x]`. This
+work **changes what a shipped capability emits** — it does not add or remove
+a capability — so the honest edit names the new behaviour in that row and
+**ticks nothing.** **The fixture and the gate get no row**, on the precedent
+this file has now set four times: *a verification harness is not an operator
+capability, and `FEATURES.md` has no tooling section by design.*
+
 ### fix — THE SECOND DEFECT THE veraPDF GATE FOUND, and the worst one yet: a 1.2 KB FILE MADE pdfce HANG — plus the sweep that found it, which had been silently testing NOTHING after file 87 (no Pass ID — a spec-sourced bound on the shipped full-rewrite save path, and a per-file budget for `tools/verapdf-parse-gate.py`; core + tooling) — 2026-08-07, committed `0df6158` (the refusal) and `8cb779f` (the timeout), branch `pass-8-redaction`
 
 **Why NO Pass ID, stated first because the dispatch left the call to this
@@ -360,6 +663,49 @@ coming out false.** Cheap to close — one targeted sweep of
 `veraPDF-corpus/*/6.1 File structure/6.1.12 Implementation limits/`.
 **ENGINEER: run it, or rule the argument sufficient and say so, so the item
 does not sit open indefinitely.**
+
+> **★ DISCHARGED 2026-08-07 (fourteenth filing) — THE ENGINEER RAN IT RATHER
+> THAN WAIVING IT. Nothing above is retracted; the item is CLOSED and the
+> paragraph stays as the record of why it was owed.**
+>
+> **The run.** All **44** files from the four `*6.1.12*` directories —
+> `Isartor test files/PDFA-1b`, `PDF_A-1b`, `PDF_A-2b`, `PDF_A-4` — collected
+> and swept through the gate at `--mode full`.
+>
+> | measure | result |
+> |---|---|
+> | files | **44** |
+> | hangs | **0** |
+> | regressions | **0** |
+> | preserved | **0** |
+> | **REFUSED by pdfce** | **★ 0** |
+>
+> **`0 refused` is the load-bearing number.** The whole question was whether
+> `MAX_REWRITE_OBJECT_NUMBER` rejects anything in the implementation-limits
+> suite — the suite that exists precisely to catch guards chosen by intuition,
+> and the one that caught `MAX_TOKEN_LEN` and `MAX_XOBJECT_DEPTH`. **It
+> rejects nothing.**
+>
+> **★ AND THE RESULT IS NOT VACUOUS, WHICH IS THE HALF WORTH RECORDING.** A
+> sweep reporting *"0 refused"* would look **exactly the same** if the guard
+> could never fire at all — that is R162's question aimed at a corpus run
+> instead of at an assertion, and it is the same trap the rule's own
+> discharge could have fallen into. **It can fire: `bug_455199.pdf` IS
+> refused by it, verified separately.** **Fires on a real file, silent across
+> all 44** — a **two-sided** result, which is what the standing rule was
+> actually asking for and what the argument in the doc comment could never
+> have supplied.
+>
+> **What this closes, precisely.** The owed item above was never a doubt about
+> the bound's *value* — Annex C Table C.1 is a sound source and the headroom
+> argument was strong. It was a doubt about **whether a claim had been shown
+> capable of coming out false.** It has been. **The rule is discharged in the
+> form it asks for: a measurement, in both directions.**
+>
+> Propagated in the same filing to `ARCHITECTURE.md` §10.1 (the guard's own
+> bullet), `ARCHITECTURE.md` §12's seventeenth 2026-08-07 entry (where the
+> item was also recorded as owed), the *Standing rules* resource-guard bullet
+> (now carrying a third validation record), and `SESSION_LOG.md`.
 
 #### A finding filed against the ENGINEER'S OWN shell habit, at his instruction
 
@@ -1491,6 +1837,28 @@ than as R86. The ledger gate agrees by construction: it counts
 >   completes now: **288 files, 0 hangs, 0 regressions, 223 improved.**
 > - Full record, including the defect the budget exposed: the ***second***
 >   *defect the veraPDF gate found* entry at the top of *Shipped*.
+
+> **★ FURTHER AMENDED 2026-08-07 (fourteenth filing), `fa4f83c` — A THIRD
+> DEFECT, A THIRD CORPUS, AND THE GATE'S MOST VALUABLE CATCH SO FAR.**
+>
+> - **The PDF/A-1b conformance corpus (569 files) has now been swept end to
+>   end**, joining qpdf (560) and pdfium (288). It found **1 regression**,
+>   since fixed to **0**. **Three corpora, three defects, one each** — the
+>   gate has not yet produced a sweep that found nothing.
+> - **This catch is the one that most clearly could not have come from
+>   inside.** In the two defects above, pdfce's output was genuinely
+>   malformed. Here **pdfce's output was internally perfect and spec-literal**
+>   — every offset absolute and correct — and **veraPDF still could not open
+>   it**, because it reads offsets as **header-relative whenever a preamble
+>   exists**. **pdfce's own reader parses that output flawlessly**, so no test
+>   pdfce could have written would have failed. *That is the closed-loop
+>   argument in this entry, demonstrated rather than argued.*
+> - **The gate gains a permanent watcher rather than only a verdict:**
+>   `fixtures/synthetic/xref-recover/header-preamble.pdf` reports as
+>   **`improved`** in every sweep, and flips to a **regression** if preamble
+>   preservation ever returns.
+> - Full record: the ***third*** *defect the veraPDF gate found* entry at the
+>   top of *Shipped*.
 
 **Not a Pass, and the boundary is stated so the green is not overread.**
 This is the **parse** gate only. **The PDF/A CONFORMANCE gate remains
@@ -22606,6 +22974,22 @@ not a judgment call:**
   item 5, 2026-07-30). Any new depth/count/size guard added to
   `pdfce-core` or `pdfce-render` gets a corpus run against this suite
   specifically before it ships, not just the general corpus.
+  **★ THIRD VALIDATION, 2026-08-07 — and the first that PASSED rather
+  than exposing a bad bound.** `save::MAX_REWRITE_OBJECT_NUMBER`
+  (8,388,607, `0df6158`) was swept against all **44** files of the four
+  `*6.1.12*` directories (`Isartor test files/PDFA-1b`, `PDF_A-1b`,
+  `PDF_A-2b`, `PDF_A-4`) at `--mode full`: **0 hangs, 0 regressions,
+  0 REFUSED.** **The run was NOT vacuous, and that half is the rule's
+  real content:** *"0 refused"* is indistinguishable from *"the guard
+  cannot fire"* until the guard is shown firing, and it fires —
+  `bug_455199.pdf` is refused by it, verified separately. **Two-sided,
+  which is what this bullet asks for.** It also settles a question the
+  bullet had left implicit: **an ARGUMENT for headroom is not the run.**
+  This guard's bound came from Annex C Table C.1 rather than from
+  intuition — the strongest possible sourcing, and the exact defect the
+  two incidents above were about — and the rule still asked for the
+  measurement, correctly. See the *second defect the veraPDF gate found*
+  entry in *Shipped* for the discharge record.
 - **Undo/redo is command-log-based, built into the first editing
   Pass, not retrofitted.** The dirty-set for incremental save is
   computed as a diff against the base revision at save time, never as
