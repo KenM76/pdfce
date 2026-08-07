@@ -169,15 +169,54 @@ D:\Dev\pdfce\
                                    with page AREA), and `intersect_clip`'s multiply is
                                    bounded to the path's device bounds — an IDENTITY,
                                    since outside them the fresh mask is zero. Output
-                                   byte-identical (SHA-256). **`Mask::new` alone
+                                   byte-identical (SHA-256). ~~**`Mask::new` alone
                                    remains 10.1 s of the remaining ~18 s**; reducing
                                    it is a REPRESENTATION change (most clips are
                                    `re W n` rectangles needing no mask at all) and was
-                                   deliberately not folded into that commit.
+                                   deliberately not folded into that commit.~~
+                                   **★ CORRECTED 2026-08-07 (`4475fe6`) — BOTH CLAUSES
+                                   IN THAT STRUCK SENTENCE WERE WRONG.** `Mask::new`
+                                   is **1.02 s, not 10.1 s** (the 10.1 s came from an
+                                   ablation that measured construction PLUS use — an
+                                   **R164** instance), and only **612 of 24,128 clips
+                                   — 2.5% — are rectangles**, so the rectangle
+                                   special-case was **declined on measurement, not
+                                   built**. The real 1× distribution was **`q`/`Q`
+                                   gstate clone 6.80 s**, `mask.fill_path` 5.24 s,
+                                   multiply 2.26 s, `Mask::new` 1.02 s. **The clone
+                                   was the cost, and `4475fe6` removed it by making
+                                   the clip an `Arc<Mask>`** — sound because a clip is
+                                   never mutated in place (`intersect_clip` builds a
+                                   FRESH mask and assigns it; the old one is only
+                                   read), so `q` needs a reference, not a buffer, and
+                                   no copy-on-write is required because there is no
+                                   write. **`Arc` rather than `Rc` is a deliberate
+                                   architectural choice: it keeps
+                                   `GraphicsState: Send`**, which is what leaves
+                                   off-thread page rendering reachable without a
+                                   second type change; the cost is one atomic
+                                   increment per `q`. Result: `q`/`Q` clone
+                                   **6.80 s → 0.01 s**, 1× **17.47 → 10.18 s**, 2×
+                                   **214.71 → 51.52 s**, and the 1×→2× cache cliff
+                                   **14.1× → 5.1×** (reduced, not gone). Output
+                                   byte-identical on the CAD sheet **and on 52
+                                   synthetic fixtures** — that page has zero images
+                                   and 242 text elements, so it cannot witness a
+                                   regression in image sampling, glyph rasterization
+                                   or annotation appearance, and a
+                                   "no pixel anywhere changes" claim needs witnesses
+                                   spanning the surfaces that produce pixels.
+                                   **What remains is still a REPRESENTATION change,
+                                   but a differently-shaped one:** clips are 100%
+                                   single-subpath, mean 7 segments, mean bounding box
+                                   **0.663% of the page**, so the mismatch is between
+                                   clip EXTENT and mask EXTENT — not between clip
+                                   SHAPE and mask SHAPE.
                                    **Consequence for anyone optimising here: tiling
                                    and threading would today be aimed at 5% of the
-                                   cost.** See §12's 2026-08-07 twentieth entry and
-                                   `ROADMAP.md`'s *fix — RENDER PERFORMANCE*.
+                                   cost.** See §12's 2026-08-07 twentieth and
+                                   twenty-first entries and `ROADMAP.md`'s two
+                                   *fix — RENDER PERFORMANCE* entries.
                                    **`font\subset.rs` (Pass 21.0, FF-C, decision 021,
                                    commit `48c6b77`; body-section sync 2026-08-04
                                    continuation 77):** `plan_subset` parses an
@@ -9233,10 +9272,14 @@ with a forward pointer.
   bigger paper), and `intersect_clip`'s multiply is now bounded to the
   path's device bounds (**an identity, not an approximation**: outside them
   `Mask::new` had zeroed the buffer and `0 × old / 255 == 0`). **What
-  remains is not local.** `Mask::new` alone is **10.1 s of the remaining
+  remains is not local.** ~~`Mask::new` alone is **10.1 s of the remaining
   ~18 s** — 24,142 allocate-and-zero passes over a page-sized buffer — and
   removing it means changing what a clip *is*, since most PDF clips are
-  `re W n` rectangles that need no mask at all.
+  `re W n` rectangles that need no mask at all.~~ **★ CORRECTED
+  2026-08-07 by the twenty-first entry (`4475fe6`): `Mask::new` is
+  1.02 s, not 10.1 s (an R164 instance), and 2.5% of clips are
+  rectangles, not most. The struck sentence is preserved because the
+  correction is the record. See the entry below.**
 
   **★ THE ORDER IS THE DURABLE PART, AND IT INVERTS THE OBVIOUS ONE.**
   With painting measured at **0.87 s**, tiling and threading — the two
@@ -9299,3 +9342,133 @@ with a forward pointer.
 
   **This filing edited `docs/` plus the cross-project Rust RAG and
   `C:\personal_rag\pdf\`** — no `crates/`, no `tools/`, no `fixtures/`.
+
+- **2026-08-07 (twenty-first entry this day) — THE CLIP BECOMES SHARED
+  RATHER THAN COPIED (`Arc<Mask>`), AND THE PREMISE THE PRECEDING ENTRY
+  HANDED FORWARD IS FALSIFIED BY MEASUREMENT** (`4475fe6`; `q`/`Q` clone
+  **6.80 s → 0.01 s**, 1× **17.47 → 10.18 s**, 2× **214.71 → 51.52 s**,
+  **~3× and ~8.7× from the original baseline**, output **byte-identical on
+  the CAD sheet and on 52 synthetic fixtures**). **NOTHING MINTED — no Pass
+  ID, no decision record, no operator question.** Ceilings unchanged and
+  **re-measured by running `tools/check-ledger-numbers.py`**: Pass family
+  **43**, standing rules **R165** (**R166** next free, still
+  considered-and-refused for its own separate candidate), decision records
+  **031** (**032** next free), operator questions **(bb)**. Body-section
+  update filed in the SAME edit: §3's `pdfce-render` block, which also
+  carries the correction below. Full record: `ROADMAP.md`'s *fix — RENDER
+  PERFORMANCE (second)* Shipped entry.
+
+  **Why this is architecture and not a bug note.** It is a **type change
+  that encodes a mutation contract**. `GraphicsState.clip` was an owned
+  `Option<Mask>` and is now shared behind an `Arc`. **Sharing is sound
+  because a clip is never mutated in place**: `intersect_clip` builds a
+  **fresh** mask and **assigns** it, and the old mask is only ever **read**.
+  `q` therefore needs a **new reference, not a new buffer**, and — the part
+  worth keeping — **no copy-on-write machinery is required, because there
+  is no write**. The `Arc` is the type finally admitting what the code
+  always did.
+
+  **★ `Arc`, NOT `Rc`, AND THE REASON IS A FUTURE INVARIANT.** `Rc` is
+  cheaper (non-atomic refcount) and would have measured the same today.
+  `Arc` keeps **`GraphicsState: Send`**, which is the precondition for
+  rendering pages off the main thread — the last item on this crate's
+  optimisation order. **Picking `Rc` would have made that item require a
+  second type change**, so a marginal present saving would have bought a
+  future migration. Cost of the choice: **one atomic increment per `q`**,
+  against a 6.79 s saving.
+
+  **★ A DIRECTIVE WAS DECLINED ON MEASUREMENT, AND THE FLAG THAT MADE THAT
+  POSSIBLE WAS FILED ONE COMMIT EARLIER.** The twentieth entry handed
+  forward *"most PDF clips are `re W n` rectangles needing no mask at
+  all"*, and the same filing **flagged that sentence as UNCENSUSED** — the
+  census behind it had counted the marking **operator** (`W` vs `W*`), not
+  the clip **geometry**. **Measured: 612 of 24,128 clip operations — 2.5% —
+  are axis-aligned rectangles.** A rectangle special-case would have
+  optimised one clip in forty; **the work was reported rather than built.**
+
+  **★ THE FAILURE MODE IS "SOUND REASONING, UNMEASURED POPULATION", AND IT
+  IS DISTINCT FROM "WRONG REASONING".** The spec half of the argument
+  **held on checking**: ISO 32000-1 **§8.5.3.3.2** (nonzero) and
+  **§8.5.3.3.3** (even-odd) agree on a single closed convex subpath, and
+  **§8.5.2 Table 59** makes `re` *"a rectangle as a complete subpath"*.
+  Every step is correct. **What was never true is that real files contain
+  such clips in quantity.** A valid derivation over an unmeasured
+  population yields a correct theorem about an almost-empty set — and it
+  passes every review that checks derivations. **Recorded here because it
+  is a constraint on how this project is allowed to justify an
+  optimisation: a spec citation licenses the transformation, it does not
+  license the schedule.**
+
+  **★ AN R164 INSTANCE, CAUGHT SIX HOURS AFTER R164 WAS MINTED, BY THE SAME
+  INVESTIGATION.** The twentieth entry's **`Mask::new` = 10.1 s** is
+  **wrong; it is 1.02 s**. The 10.1 s was read off an ablation that skipped
+  `intersect_clip` **entirely** — which also leaves the clip `None`, making
+  every `q` clone cheap and letting tiny-skia skip mask sampling. **It
+  measured construction PLUS use and attributed all of it to
+  construction**, which is exactly what R164 forbids. True 1× distribution:
+  **`q`/`Q` gstate clone 6.80 s**, `mask.fill_path` 5.24 s, multiply
+  2.26 s, **`Mask::new` 1.02 s** (15.32 s of 17.47 s accounted). **The
+  figure was the ranking key for the whole remaining work order**, so the
+  error did not merely misstate a cost — it misdirected the plan.
+  **Amended in every location it reached** (`ROADMAP.md` ×2,
+  `FEATURES.md` ×2, `ARCHITECTURE.md` ×2, `SESSION_LOG.md` ×1).
+
+  **★ WHAT THAT INSTANCE ARGUES FOR, AND IT IS AN ARTIFACT, NOT A RULE.**
+  R164 worked — it caught its own author's error. But the error **survived
+  six hours and reached four documents**, and it survived **only because no
+  standing instrument existed to re-check it against**: the ablation died
+  with the working tree that produced it. The owed render-profiling harness
+  (`ROADMAP.md` *Next up*) is therefore **promoted from convenience to
+  consequence**, and gains a fourth required capability — **per-phase
+  timing, not only a total and an ablation floor** — because phase timing
+  produced the correct number and difference-of-ablations produced the
+  wrong one. **The harness must make the right method the cheap one.**
+
+  **★ THE STANDING-RULE CANDIDATE IS NOW FORMALLY REFUSED.** *"Before
+  optimising a subsystem, establish its floor by ablation."* **Declined**,
+  on the second of the three grounds the twentieth entry gave: **it
+  commissions WORK, not CARE** — the exact ground `R166` was refused on one
+  filing earlier, and **minting this after refusing that would be
+  incoherent**. `R166` **remains free**. The other two grounds (a
+  one-occurrence claim against a two-occurrence bar; **R163** prefers a
+  mechanical carrier) stand as support, not as the decision.
+
+  **★ BYTE-IDENTITY IS A CLAIM ABOUT ALL PIXELS, SO ITS WITNESSES MUST SPAN
+  ALL PIXEL-PRODUCING SURFACES.** The CAD sheet has **zero images and 242
+  text elements**: it is an excellent instrument for path-and-clip cost
+  *because* it is narrow, and that same narrowness makes it **unable to
+  witness** a regression in image sampling, glyph rasterization or
+  annotation appearance. Identity was therefore carried by **52 synthetic
+  fixtures** spanning JPX, bilevel, annotations, text, vector and CMYK, in
+  addition to the sheet. **The benchmark proves the optimisation; the
+  corpus proves the absence of collateral damage. Two claims, two
+  witnesses.**
+
+  **★ A MEASUREMENT-SPREAD DISCIPLINE, RECORDED AS A QUOTING RULE.** Four
+  figures now exist for `76200e9` at 1× — **17.47 / 18.04 / 18.87 /
+  19.28 s**, about a **10% spread**, from a mix of instrumented and plain
+  builds that **nobody has separated and this entry does not pretend to**.
+  Consequence: **at 1×, quote one significant figure.** *"About −40%"* and
+  *"about 3× from the original"* are supportable; a trailing digit is
+  noise, and a later filing measuring 11 s has not regressed. The 2×
+  figures move by margins far larger than the spread and are safe as
+  stated.
+
+  **What this filing did NOT establish.** Every performance number above is
+  the **engineer's**, measured at `4475fe6` and relayed (R87): the census,
+  the phase timings, the scale sweep, the gates (`cargo test` **2150 / 0
+  failed**, `cargo clippy -- -D warnings` **0**) and every SHA-256. **No
+  render, no benchmark and no census was run here.** The measurement input
+  is unchanged and is still a **MEASUREMENT INPUT, NOT A FIXTURE** —
+  outside the repository tree, untracked, inadmissible under rule 7 /
+  `LEGAL.md` §5 — so **every number remains reproducible only on the
+  operator's machine**. **An engineering fork is live in `crates/` on the
+  next render step; this entry describes `4475fe6` and nothing beyond it.**
+  Checked rather than inferred (hard rule 8, as amended 2026-08-07):
+  `git remote -v` is **empty — no remote configured**, and the newest
+  bundle in `D:\Dev\pdfce-backups\` is `pdfce-20260806-1646.bundle`, whose
+  `pass-8-redaction` head is **43 commits behind** this branch's `HEAD`
+  (`git rev-list --count a8d74b7..HEAD`).
+
+  **This filing edited `docs/` ONLY** — no `crates/`, no `tools/`, no
+  `fixtures/`, by the dispatch's explicit scope.

@@ -21528,7 +21528,7 @@ should check `D:\Dev\pdfce-backups\` if it matters. **Nothing was staged**,
 and **no claim is made here about the working tree, the index, or any
 remote.**
 
-## 2026-08-07 (seventeenth filing) — **THE RENDERER'S COST CENTRE IS NAMED, AND IT IS NEITHER THE PARSER NOR A DEPENDENCY**: painting all 129,515 paths of a CAD sheet costs **0.87 s** — **the clip machinery was 95% of render time** (`76200e9`; 1× 32,313 → 18,870 ms, 2× 447,862 → 214,714 ms, **output BYTE-IDENTICAL**). Found by an **OPERATOR QUESTION**, not a gate. **NOTHING MINTED; one rule candidate PUT AND DECLINED**, with the harness named as the carrier instead
+## 2026-08-07 (seventeenth filing) — **THE RENDERER'S COST CENTRE IS NAMED, AND IT IS NEITHER THE PARSER NOR A DEPENDENCY**: painting all 129,515 paths of a CAD sheet costs **0.87 s** — **the clip machinery was 95% of render time** (`76200e9`; 1× 32,313 → 18,870 ms, 2× 447,862 → 214,714 ms, **output BYTE-IDENTICAL**). Found by an **OPERATOR QUESTION**, not a gate. **NOTHING MINTED; one rule candidate PUT AND DECLINED**, with the harness named as the carrier instead — **[★ AMENDED 2026-08-07, eighteenth filing: the `Mask::new` = 10.1 s figure in this entry is WRONG (it is 1.02 s — an R164 instance), and the "most clips are `re W n` rectangles" premise this entry FLAGGED AS UNCENSUSED has been MEASURED AND FALSIFIED (2.5%). The rule candidate is now formally REFUSED and `R166` stays free. Ceilings unchanged: R165, decisions 031, Pass family 43. Heading left as filed; see the amendment footer at the end of this entry.]**
 
 **Shipped:**
 - **`76200e9` — fix, no Pass ID** (a performance defect in shipped
@@ -21579,6 +21579,11 @@ remote.**
   exists; an ablation removes the suspect and yields a **floor**, and only
   a floor bounds what any candidate optimisation can be worth.
 - **★ THE ORDER OF THE REMAINING WORK IS THE MOST REUSABLE OUTPUT.**
+  **[★ AMENDED 2026-08-07, eighteenth filing — THE TWO FACTS THIS BULLET
+  RANKS ON ARE BOTH WRONG: `Mask::new` is 1.02 s, NOT 10.1 s (an R164
+  instance), and 612 of 24,128 clips — 2.5%, NOT "most" — are rectangles.
+  The real 1× leader was the `q`/`Q` gstate clone at 6.80 s, now removed.
+  Text preserved; see the amendment footer at the end of this entry.]**
   `Mask::new` alone is **10.1 s of the remaining ~18 s** (24,142
   allocate-and-zero passes over a page-sized buffer). So: (1) stop
   allocating a page per clip — most PDF clips are `re W n` rectangles
@@ -21739,3 +21744,320 @@ should check `D:\Dev\pdfce-backups\` if it matters. **Nothing was staged**,
 and **no claim is made here about the working tree, the index, or any
 remote.** **An engineering fork was live in `crates/` and this filing did
 not touch it.**
+
+---
+
+### ★ AMENDMENT FOOTER — added 2026-08-07 by the eighteenth filing (`4475fe6`). The entry above is preserved unedited apart from two inline markers; this footer carries the corrections.
+
+**1. `Mask::new` is 1.02 s, NOT 10.1 s — and this is an R164 instance.**
+The 10.1 s figure was read off an **ablation that skipped `intersect_clip`
+entirely**, which also leaves the clip `None`, making every `q` clone cheap
+and letting tiny-skia skip mask sampling. **It measured construction PLUS
+use and attributed all of it to construction** — precisely what R164
+forbids. The true 1× distribution, measured by **phase** rather than by
+**difference**:
+
+| phase | 1× |
+|---|---|
+| `q`/`Q` gstate clone | **6.80 s** (129,951 clones) |
+| `mask.fill_path` | 5.24 s |
+| multiply loop | 2.26 s |
+| **`Mask::new`** | **1.02 s** |
+| accounted | 15.32 s of 17.47 s |
+
+**The figure was the RANKING KEY for the remaining work order**, so it did
+not merely misstate a cost — it put the wrong item first. **Amended in
+every location it reached**: `ROADMAP.md` (the `76200e9` Shipped entry and
+the *Next up* table), `FEATURES.md` (rasterize row and Planned row),
+`ARCHITECTURE.md` (§3 body block and §12's twentieth entry), and this
+entry.
+
+**★ R164 was minted the SAME MORNING, by THIS investigation, and it caught
+an error THIS investigation made — six hours later.** The rule worked. What
+failed is that **no standing instrument existed to re-check the number
+against**: the ablation was thrown away with the working tree that produced
+it. **That is the argument for the owed profiling harness, made concrete**,
+and the harness gains a fourth required capability as a result —
+**per-phase timing, not only a total and an ablation floor.**
+
+**2. The UNCENSUSED-PREMISE FLAG in this entry's *Still in flight* section
+was RIGHT, and the measurement came back NEGATIVE.** The flag said *"most
+PDF clips are `re W n` rectangles"* was uncensused — the census here counted
+the marking **operator**, not the clip **geometry** — and asked for it to be
+measured before anything was built on it.
+
+**Measured: 612 of 24,128 clip operations — 2.5% — are axis-aligned
+rectangles.** A rectangle special-case would have optimised **one clip in
+forty**. **The fork declined to build it and stopped**, which is the outcome
+the flag existed to produce. **The spec half of the argument HELD** —
+§8.5.3.3.2 and §8.5.3.3.3 agree on a single closed convex subpath, §8.5.2
+Table 59 makes `re` a complete subpath — so this is *"sound reasoning,
+unmeasured population"*, a **distinct failure mode from "wrong reasoning"**
+and one that passes every review that checks derivations.
+
+**3. This entry's `W*` observation SURVIVES AND GAINS FORCE.** `W*` × 24,125
+against `W` × 17 stands, and now has a partner: **keying on the canonical
+nonzero `re W n` idiom misses 99.93% of this file's clips by OPERATOR and
+97.5% by GEOMETRY.** Both halves of the idiom are wrong for this producer.
+
+**4. The rule candidate PUT here is now formally REFUSED**, on the second of
+the three grounds this entry gave — **it commissions WORK, not CARE**, the
+exact ground `R166` was refused on one filing earlier. **`R166` remains
+free.** **No Pass ID** was minted for the remaining render work, and this
+entry's judgement is **ratified**: a number minted then would today point at
+a dead end, permanently (hard rule 2).
+
+**5. "`examples/profile_render.rs` was deleted" is replaced everywhere by
+"never entered git at all"** — the all-branch add search
+(`git log --all --diff-filter=A`) was always the evidence and is now also
+the claim. **Re-established at `4475fe6`, not carried forward.**
+
+## 2026-08-07 (eighteenth filing) — **THE UNCENSUSED-PREMISE FLAG WAS RIGHT, AND THE MEASUREMENT CAME BACK NEGATIVE: 2.5% of clips are rectangles, so the commissioned optimisation was DECLINED, NOT BUILT.** `4475fe6` shipped the bigger one instead — **`Arc<Mask>`: `q`/`Q` clone 6.80 s → 0.01 s, 1× 17.47 → 10.18 s, 2× 214.71 → 51.52 s, ~3× and ~8.7× from the original baseline, BYTE-IDENTICAL across 52 FIXTURES.** **A PRIOR FILING IS CORRECTED IN SIX PLACES — `Mask::new` is 1.02 s, NOT 10.1 s — an R164 instance caught SIX HOURS after R164 was minted, by the same investigation.** **NOTHING MINTED; the ablation rule candidate FORMALLY REFUSED; `R166` STAYS FREE**
+
+**Shipped:**
+- **`4475fe6` — fix, no Pass ID** (a performance defect in shipped
+  `pdfce-render` rasterization; two files, 26 insertions). Same class as
+  `76200e9`, the three veraPDF-defect entries and `7d3e44c`.
+
+**Decisions made this session:**
+
+- **NOTHING MINTED.** Pass family **43**; standing rules **R165**
+  (**R166** next free); decision records **031** (**032** next free);
+  operator questions **(bb)**. **Re-measured by RUNNING
+  `tools/check-ledger-numbers.py` and `tools/check-passes-filed.py` before
+  and after this filing** — both **exit 0** — not read from prose
+  (R106/R133).
+- **★ THE ABLATION RULE CANDIDATE IS FORMALLY REFUSED**, ratifying the
+  seventeenth filing's own recommendation against it. *"Before optimising a
+  subsystem, establish its FLOOR by ablation."* **The decider is the second
+  of its three grounds: it commissions WORK, not CARE** — the exact ground
+  **`R166`** was refused on **one filing earlier**, and **minting this after
+  refusing that would be incoherent.** Two candidates of one shape cannot
+  get two answers. The first ground (one occurrence against a
+  two-occurrence bar) and the third (**R163** prefers a mechanical carrier
+  — the profiling harness) stand as **support, not as the decision**.
+  **`R166` remains free** and remains recorded as considered-and-refused
+  for its own separate candidate.
+- **★ NO PASS ID for the remaining render work — the seventeenth filing's
+  judgement STANDS and is now EVIDENCED.** A number minted one commit ago
+  would have been minted for **rectangle special-casing**, which
+  measurement has since shown does not exist as work. **Pass IDs are
+  permanent and never reused (hard rule 2)**, so the project would now be
+  carrying a numbered Pass pointing at a dead end. **Ratified, not
+  re-argued.** The engineer assigns one when the shape settles.
+
+**Findings + decisions:**
+
+- **★ THE CENSUS, AND IT KILLED THE LARGEST REMAINING OPTIMISATION BEFORE
+  IT WAS BUILT.** **Of 24,128 clip operations, 612 — 2.5% — are
+  axis-aligned rectangles.** The seventeenth filing's item 1 rested on
+  *"most PDF clips are `re W n` rectangles needing no mask at all"*, and
+  that same filing **flagged the sentence as UNCENSUSED** (the census
+  behind it counted the marking **operator**, `W` vs `W*`, not the clip
+  **geometry**) and asked for it to be measured first. **It was. A
+  rectangle special-case would have optimised one clip in forty. The fork
+  declined to build the commissioned change and stopped, reporting the
+  number instead** — which is exactly what the flag was for.
+- **★ WHAT REPLACES THE RECTANGLE PREMISE IS BETTER, BECAUSE IT WAS
+  MEASURED.** **100% of clips are single-subpath, mean 7 segments, mean
+  bounding box 0.663% OF THE PAGE.** Tiny clips; page-sized buffers. **The
+  mismatch is between clip EXTENT and mask EXTENT — not between clip SHAPE
+  and mask SHAPE**, which is what the rectangle idea assumed. The revised
+  item 1′ therefore does **not** require clips to be rectangles; it
+  requires them to be **small**, which they measurably are.
+- **★ "SOUND REASONING, UNMEASURED POPULATION" IS A DISTINCT FAILURE MODE
+  FROM "WRONG REASONING", and it is the most transferable thing here.** The
+  spec half **held on checking**: ISO 32000-1 **§8.5.3.3.2** (nonzero) and
+  **§8.5.3.3.3** (even-odd) agree on a single closed convex subpath — a ray
+  from inside crosses once, from outside 0 or 2 — and **§8.5.2 Table 59**
+  makes `re` *"a rectangle as a complete subpath"*. Every step is correct.
+  **What was never true is that real files contain such clips in
+  quantity.** A valid derivation over an unmeasured population yields a
+  correct theorem about an almost-empty set, **and it passes every review
+  that checks derivations.** A spec citation licenses the *transformation*;
+  it does not license the *schedule*.
+- **★ THE `W*` FINDING SURVIVES AND GAINS FORCE.** `W*` × 24,125 against
+  `W` × 17 stands. Combined with the geometry census: **keying on the
+  canonical nonzero `re W n` idiom misses 99.93% of this file's clips by
+  OPERATOR and 97.5% by GEOMETRY.** Both halves of the idiom are wrong for
+  this producer, which is a stronger statement than either half alone.
+- **★ THE R164 INSTANCE — a prior filing's headline remaining-cost figure
+  is WRONG, and the correction is the more useful half of this entry.**
+  **`Mask::new` is 1.02 s, not 10.1 s.** The 10.1 s came from an **ablation
+  that skipped `intersect_clip` entirely**, which also leaves the clip
+  `None` — making every `q` clone cheap **and** letting tiny-skia skip mask
+  sampling. **It measured construction PLUS use and attributed all of it to
+  construction.** True 1× distribution: **`q`/`Q` gstate clone 6.80 s**
+  (129,951 clones), `mask.fill_path` **5.24 s**, multiply **2.26 s**,
+  `Mask::new` **1.02 s** — 15.32 s of 17.47 s accounted. **The wrong figure
+  was the RANKING KEY for the entire remaining work order**: it put
+  allocation first when the real leader was the clone.
+- **★ R164, MINTED THIS MORNING, CAUGHT AN ERROR MADE BY THE SAME
+  INVESTIGATION SIX HOURS LATER — and the error survived ONLY because no
+  standing harness existed to re-check it against.** The rule worked. The
+  ablation did not: it was thrown away with the working tree that produced
+  it, so nothing could re-run it and nothing could disagree with it, and
+  the figure propagated to four documents. **This is the argument for the
+  owed profiling tool, made concrete rather than asserted**, and it adds a
+  **fourth required capability** to that tool's minimum shape: **per-phase
+  timing, not only a total and an ablation floor.** Phase timing produced
+  the correct number; difference-of-ablations produced the wrong one. **The
+  harness must make the right method the cheap one.**
+- **★ THE CHANGE ITSELF: `GraphicsState.clip` becomes `Arc<Mask>`, and the
+  soundness argument is about MUTATION, not about testing.** A clip is
+  **never mutated in place** — `intersect_clip` builds a **fresh** mask and
+  **assigns** it; the old one is only ever **read**. So `q` needs a **new
+  reference, not a new buffer**, and **no copy-on-write is required because
+  there is no write.** The `Arc` is the type admitting what the code
+  already did.
+- **★ `Arc` NOT `Rc`, AND THE REASON IS A FUTURE INVARIANT.** `Rc` is
+  cheaper and would measure the same today. **`Arc` keeps
+  `GraphicsState: Send`**, which is the precondition for off-thread page
+  rendering — **item 3 of the remaining order**. Choosing `Rc` would have
+  made the last item on the list need a second type change. Cost: **one
+  atomic increment per `q`**, against a 6.79 s saving.
+- **★ THE CACHE CLIFF MOVED, AND THE DIRECTION CONFIRMS THE MECHANISM.**
+  1×→2× was **14.1×**; it is now **5.1×**. **2× improved more than 1× did**
+  — the signature the working-set explanation predicts and a per-pixel
+  explanation does not, because the gstate stack no longer holds duplicate
+  page-sized masks and the configuration furthest past L3 gained most. **A
+  mechanism that predicts which scale benefits most and is then right about
+  it has confirmed itself.** The cliff is **reduced, not gone** (5.1× still
+  exceeds the ~3.2× a pixel-quadrupling costs elsewhere), so the
+  seventeenth filing's item 2 is **measured and partly discharged, not
+  closed**.
+- **★ BYTE-IDENTITY WAS CARRIED BY 52 FIXTURES, NOT BY THE BENCHMARK — and
+  the reasoning is the general form.** Identity verified by SHA-256 on the
+  1× CAD render **and across 52 synthetic fixtures** spanning **JPX,
+  bilevel, annotations, text, vector, CMYK**. **The CAD sheet has zero
+  images and 242 text elements**, so it **cannot witness** a regression in
+  image sampling, glyph rasterization or annotation appearance. **The claim
+  is "no pixel anywhere changes"; the witnesses must therefore span the
+  surfaces that produce pixels, not the one that produced the bug.** The
+  benchmark proves the optimisation; the corpus proves the absence of
+  collateral damage. **Two claims, two witnesses.**
+- **★ THE 1× MEASUREMENT SPREAD IS NOW FOUR FIGURES WIDE, AND IT BECOMES A
+  QUOTING RULE.** For **one** commit (`76200e9`) at **one** scale this
+  project has filed **17.47 s**, **18.04 s**, **18,870 ms** and
+  **19,276 ms** — about **10%**. Some is instrumentation (a phase-timed
+  build is not a plain one), some is machine noise; **neither is separated
+  here and this filing does not pretend to separate them.** Consequence:
+  **at 1×, quote ONE significant figure.** *"About −40%"*, *"about 3× from
+  the original"* — supportable. *"−42%"* — not. A later filing measuring
+  11 s at 1× has **not** regressed. The 2× figures move by margins far
+  larger than the spread and are safe as stated. **Four numbers for one
+  commit exist because four ad-hoc instruments produced them — the harness
+  argument again.**
+- **★ "`examples/profile_render.rs` was DELETED" is replaced by "it NEVER
+  ENTERED GIT AT ALL", everywhere it appeared.** The all-branch add search
+  was always the evidence; it is now also the claim. **Re-established here,
+  not carried forward:** `git log --all --diff-filter=A -- '*profile_render*'`
+  returns nothing on any branch, and `git ls-files` matches nothing. An
+  all-branch add search is **strictly stronger** than a HEAD absence, and
+  the difference changes what is owed — **rebuild, not recover**.
+- **★ THIS LIBRARIAN'S AGENT FILE HAS ALREADY BEEN RECONCILED, and the
+  dispatch did not know it.** The dispatch said *"your agent file's hard
+  rule 8 says you have no shell, and my dispatches keep giving you one — I
+  will reconcile the agent file; do not edit it."* **It is already done**,
+  at **`b1368ed`** (*"the librarian's no-shell rule outlives the fact it
+  was built on"*, 30 insertions / 9 deletions,
+  `.claude/agents/pdfce-librarian.md`, working tree **clean**). Hard rule 8
+  now reads *"never assert backup or git state you have not CHECKED"* —
+  **with a shell, look, then assert, and say which**; the forbidden move is
+  the middle one, a confident figure **inferred from documents**. **This
+  filing followed the amended rule** (see *How the absences were
+  established*, items 6–7). **Nothing was edited in `.claude/`.**
+
+**Files edited:**
+- `docs/ROADMAP.md` — **four locations.** (1) New *Shipped* entry at the
+  top, *fix — RENDER PERFORMANCE (second)*. (2) The `76200e9` *Shipped*
+  entry's *What remains* section — **dated amendment box + inline
+  markers**, original text preserved. (3) The `76200e9` entry's owed-tooling
+  paragraph — *"was deleted"* → *"never entered git at all"*. (4) The
+  *Next up* **RENDER PERFORMANCE** entry — amendment box at the head, the
+  **original order table PRESERVED and labelled NOT CURRENT**, a new
+  **revised order** (1′ mask sized to the clip / 2′ cliff measured / 3
+  unchanged) beside it, and the owed-harness entry gaining the R164 worked
+  example plus its fourth required capability.
+- `docs/FEATURES.md` — **same filing, per the maintenance contract.** The
+  *Fonts & rendering* rasterize row gains `4475fe6`'s figures, the
+  `Arc<Mask>` reasoning and the 52-fixture identity basis; the *Planned*
+  **Interactive-speed rendering** row has **both halves of its item 1
+  struck and replaced** by the revised order. **No box ticked** — the
+  capability is not delivered, only made ~3× cheaper.
+- `docs/ARCHITECTURE.md` — **§12 twenty-first 2026-08-07 entry AND §3's
+  `pdfce-render` body block, in the same edit** (decision log = audit
+  trail, body = living truth), plus the **10.1 s correction inside §12's
+  twentieth entry**.
+- `docs/SESSION_LOG.md` — this entry, plus the seventeenth filing's
+  **heading marker, inline bullet marker and dated amendment footer**
+  (append-only; nothing rewritten).
+- **No RAG tree touched, no `crates/`, no `tools/`, no `fixtures/`** — the
+  dispatch scoped this filing to `docs/`.
+
+**How the absences were established (R87) — with a shell, every claim
+naming its command:**
+
+1. ***"No prior `docs/` entry records the census or the `Arc<Mask>`
+   change."*** **Established** by tracked-files-only
+   `git grep -n -i -e 4475fe6 -e 'Arc<Mask>' -e '0\.663' -e '24,128' -- docs/`
+   → no match on any term.
+2. ***"Every location carrying 10.1 s was found."*** **Established** by
+   tracked-files-only `git grep -n -e '10\.1 s' -e '10\.1s' -- docs/` →
+   **six product matches** (`ARCHITECTURE.md` ×2, `FEATURES.md` ×1,
+   `ROADMAP.md` ×2, `SESSION_LOG.md` ×1), **all six amended**. Two further
+   hits were `§8.10.1` section numbers, not this figure.
+3. ***"`examples/profile_render.rs` never entered git."*** **RE-ESTABLISHED
+   at `4475fe6`** by `git log --all --diff-filter=A -- '*profile_render*'`
+   (nothing, any branch) and `git ls-files` (no match) — **not carried
+   forward from the prior filing.**
+4. ***"Nothing minted."*** **Established by RUNNING**
+   `tools/check-ledger-numbers.py` (**exit 0**, ceilings: Pass 43 / R165 /
+   decision 031) and `tools/check-passes-filed.py` (**exit 0**), before and
+   after.
+5. ***Every performance number.*** **NOT established here.** The census,
+   the phase timings, the scale sweep, the gates (`cargo test` **2150 / 0
+   failed**; `cargo clippy -- -D warnings` **0**), the 10,269 ms re-run and
+   every SHA-256 are the **ENGINEER'S**, measured at `4475fe6` and relayed.
+   **This filing ran no render, no benchmark and no census.**
+6. ***Remote and backup currency — CHECKED, not inferred*** (hard rule 8 as
+   amended at `b1368ed`). `git remote -v` → **empty; no remote
+   configured.** Newest bundle in `D:\Dev\pdfce-backups\` is
+   **`pdfce-20260806-1646.bundle`** (2026-08-06 16:46); its
+   `pass-8-redaction` head is `a8d74b7`, and
+   `git rev-list --count a8d74b7..HEAD` → **43 commits behind.** **A fresh
+   bundle is advisable** — this is a checked figure, not a document-derived
+   one.
+7. ***The state of `crates/`.*** `git status --porcelain` was **empty at
+   the instant it ran**, which is a statement about one instant and not
+   about the tree now. **An engineering fork is live on the next render
+   step; this filing does not describe or anticipate its work (R87).**
+
+**Still in flight / for next session:**
+
+- **⚠ A FORK IS LIVE IN `crates/` on the NEXT render step.** Everything
+  filed here is the state at **`4475fe6`** and nothing beyond it.
+  **Re-establish before quoting.**
+- **The revised render order is 1′ / 2′ / 3** — mask sized to the clip
+  (measured premise: mean bbox **0.663% of the page**, 100% single-subpath,
+  mean 7 segments); re-measure the cliff after it (**14.1× → 5.1×** so far,
+  still above the ordinary ~3.2×); tiling and threading **last**, still
+  addressing the 0.87 s **5%**. **The old item 1 is a DEAD END and is
+  struck, not deleted.**
+- **The render-profiling harness is still OWED, and is now the entry's own
+  worked example.** Minimum shape unchanged plus **per-phase timing**.
+- **A Pass ID for the remaining render work** is still the engineer's to
+  assign — deliberately not minted, and this filing is the evidence for why.
+- **`R166` remains FREE**, twice-declined-around: refused on its own
+  candidate at the sixteenth filing, and refused as the ground for the
+  ablation candidate here.
+- **Everything carried forward from the seventeenth filing is UNCHANGED**
+  except its item-1/item-2 render order and the 10.1 s figure — the
+  `UNESTABLISHED` foreign-oracle rows, the incremental-writer coverage
+  boundary, Pass 20.5's remaining cut half and its owed rendered-appearance
+  check, the multi-page repeated-field labelling gap,
+  `tools/gui-drive.ps1`'s build-or-assert-freshness item, Pass 20.3's
+  `/I`/`/TI`/push buttons and the unruled push-button verb name, Pass
+  38.3's blocked question **(ba)** and 38.5's two re-scope items, the
+  `pdfce-ui-specialist` spec-filing call, F0's disposition, and the
+  **`Acrobat_Features` stale-GAP dispatch**.
