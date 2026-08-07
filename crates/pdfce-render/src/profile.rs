@@ -244,6 +244,64 @@ pub struct Counters {
     /// with the one already in force.
     pub clip_mul_ns: u64,
 
+    /// Distinct clip **build keys** seen — see [`note_clip_identity`]
+    /// for what identity means and why.
+    ///
+    /// Divide [`Self::clips`] by this for applications per distinct
+    /// path; both are reported together because a hit rate alone cannot
+    /// tell a cheap cache from an impossible one.
+    pub clip_distinct: u64,
+    /// Clip applications whose build key had already been seen — the
+    /// share a cache could serve.
+    pub clip_repeats: u64,
+    /// Sum over DISTINCT keys of the mask bytes one cached mask would
+    /// occupy (mask width × height, one byte per pixel).
+    ///
+    /// This is the working-set size, and it decides feasibility
+    /// **independently of the hit rate**: a 95% hit rate over 20,000
+    /// distinct page-sized masks is 20 GB and not cacheable at any sane
+    /// budget.
+    pub clip_distinct_mask_bytes: u64,
+    /// Distinct (build key, **incoming clip**) pairs — the identity of
+    /// the FINAL intersected mask, after the multiply.
+    ///
+    /// This is the number that decides the *form* of any cache:
+    ///
+    /// * If this is much larger than [`Self::clip_distinct`], the same
+    ///   path is being applied under different accumulated clips, so a
+    ///   cache can only serve the freshly-filled mask and each hit must
+    ///   still **copy** it before multiplying — saving `fill_path` but
+    ///   paying a page-sized memcpy.
+    /// * If this is comparable, the final masks repeat too, and a hit
+    ///   can **share the existing `Arc`** — no allocation, no copy, no
+    ///   multiply. That is the whole of clip construction, not 57% of it.
+    ///
+    /// Incoming identity is the `Arc` **pointer**, which is stricter
+    /// than value equality: two structurally identical masks at
+    /// different addresses count as different. That **understates**
+    /// repetition, which is the safe direction — it cannot wrongly
+    /// justify building the cache.
+    pub clip_full_distinct: u64,
+    /// Applications whose (build key, incoming clip) pair had already
+    /// been seen — servable by sharing an `Arc` rather than by copying.
+    pub clip_full_repeats: u64,
+    /// Distinct keys bucketed by how many times each was applied.
+    ///
+    /// A mean cannot distinguish "every path used twice" from "one path
+    /// used 24,000 times and 20,000 used once" — the first is a modest
+    /// uniform win, the second is a single hot entry and a long tail
+    /// that mostly wastes memory. Edges are [`CLIP_REUSE_EDGES`].
+    pub clip_reuse_hist: [u64; CLIP_REUSE_BUCKETS],
+    /// Application counts of the [`CLIP_TOP_N`] most-applied distinct
+    /// paths, descending.
+    ///
+    /// The histogram's last bucket is unbounded, so it cannot answer
+    /// *how small a bounded cache could be*: "2 paths applied 65+
+    /// times" is equally consistent with 130 applications and 24,000.
+    /// That difference decides whether a 2-entry cache is worth having
+    /// or useless, so the raw counts are carried rather than derived.
+    pub clip_top_counts: [u64; CLIP_TOP_N],
+
     /// Per-clip total nanoseconds, bucketed by magnitude.
     ///
     /// # Why a histogram and not just a mean
@@ -259,6 +317,16 @@ pub struct Counters {
     /// unbounded.
     pub clip_hist: [u64; CLIP_BUCKETS],
 }
+
+/// How many of the most-applied distinct clip paths are reported.
+pub const CLIP_TOP_N: usize = 8;
+
+/// Number of clip-reuse buckets.
+pub const CLIP_REUSE_BUCKETS: usize = 8;
+
+/// Lower edges of [`Counters::clip_reuse_hist`]: a distinct key applied
+/// `n` times lands in the last bucket whose edge is `<= n`.
+pub const CLIP_REUSE_EDGES: [u64; CLIP_REUSE_BUCKETS] = [1, 2, 3, 5, 9, 17, 33, 65];
 
 /// Number of per-clip timing buckets.
 pub const CLIP_BUCKETS: usize = 9;
@@ -301,6 +369,33 @@ impl Counters {
     #[must_use]
     pub fn clip_phase_ns(&self) -> u64 {
         self.clip_new_ns + self.clip_fill_ns + self.clip_mul_ns
+    }
+
+    /// Clip applications per distinct build key — the per-item form of
+    /// [`Self::clips`] over [`Self::clip_distinct`].
+    ///
+    /// **1.0 means every clip path is unique and a cache can serve
+    /// nothing.** Reported beside the two totals per the filing
+    /// convention: a ratio written next to its inputs makes a
+    /// contradiction visible on the line where it is written, which is
+    /// how a 26× discrepancy between two separately-correct figures
+    /// survived two filings 217 lines apart.
+    #[must_use]
+    pub fn clip_applications_per_distinct(&self) -> f64 {
+        if self.clip_distinct == 0 {
+            return 0.0;
+        }
+        self.clips as f64 / self.clip_distinct as f64
+    }
+
+    /// Share of clip applications a perfect cache could serve, as a
+    /// percentage — the ceiling on any dedup scheme.
+    #[must_use]
+    pub fn clip_repeat_pct(&self) -> f64 {
+        if self.clips == 0 {
+            return 0.0;
+        }
+        self.clip_repeats as f64 * 100.0 / self.clips as f64
     }
 
     /// The per-clip cost at the given percentile, in microseconds,
@@ -348,12 +443,68 @@ mod imp {
     const ZERO: AtomicU64 = AtomicU64::new(0);
     pub(super) static CLIP_HIST: [AtomicU64; super::CLIP_BUCKETS] = [ZERO; super::CLIP_BUCKETS];
 
+    /// Clip build keys seen, mapped to how many times each was applied,
+    /// and the mask bytes one cached copy of each would occupy.
+    ///
+    /// A `Mutex<HashMap>` rather than atomics because the question is
+    /// *how many distinct values*, which no counter answers. The lock is
+    /// taken 24,128 times over work averaging ~350 µs, so it is ~1e-4 of
+    /// the measured quantity — the same regime that justifies the phase
+    /// timers, and the opposite of the 148,517-iteration paint loop
+    /// where a timer would be a large fraction of the thing measured.
+    pub(super) static CLIP_KEYS: std::sync::Mutex<Option<HashMap<u64, (u32, u64)>>> =
+        std::sync::Mutex::new(None);
+
+    use std::collections::HashMap;
+
     pub(super) fn snapshot() -> super::Counters {
         let mut hist = [0u64; super::CLIP_BUCKETS];
         for (dst, src) in hist.iter_mut().zip(CLIP_HIST.iter()) {
             *dst = src.load(Relaxed);
         }
+        let mut reuse = [0u64; super::CLIP_REUSE_BUCKETS];
+        let mut distinct = 0u64;
+        let mut repeats = 0u64;
+        let mut mask_bytes = 0u64;
+        let mut top = [0u64; super::CLIP_TOP_N];
+        let mut full_distinct = 0u64;
+        let mut full_repeats = 0u64;
+        if let Ok(guard) = CLIP_FULL_KEYS.lock()
+            && let Some(map) = guard.as_ref()
+        {
+            full_distinct = map.len() as u64;
+            for &n in map.values() {
+                full_repeats += u64::from(n).saturating_sub(1);
+            }
+        }
+        if let Ok(guard) = CLIP_KEYS.lock()
+            && let Some(map) = guard.as_ref()
+        {
+            distinct = map.len() as u64;
+            for &(n, bytes) in map.values() {
+                repeats += u64::from(n).saturating_sub(1);
+                mask_bytes += bytes;
+                let b = super::CLIP_REUSE_EDGES
+                    .iter()
+                    .rposition(|&e| u64::from(n) >= e)
+                    .unwrap_or(0);
+                reuse[b] += 1;
+            }
+            // Top-N by application count, descending.
+            let mut counts: Vec<u64> = map.values().map(|&(n, _)| u64::from(n)).collect();
+            counts.sort_unstable_by(|a, b| b.cmp(a));
+            for (dst, src) in top.iter_mut().zip(counts) {
+                *dst = src;
+            }
+        }
         super::Counters {
+            clip_distinct: distinct,
+            clip_repeats: repeats,
+            clip_distinct_mask_bytes: mask_bytes,
+            clip_reuse_hist: reuse,
+            clip_top_counts: top,
+            clip_full_distinct: full_distinct,
+            clip_full_repeats: full_repeats,
             paints: PAINTS.load(Relaxed),
             paints_unclipped: PAINTS_UNCLIPPED.load(Relaxed),
             paints_cullable: PAINTS_CULLABLE.load(Relaxed),
@@ -383,6 +534,32 @@ mod imp {
         }
         for b in CLIP_HIST.iter() {
             b.store(0, Relaxed);
+        }
+        if let Ok(mut guard) = CLIP_KEYS.lock() {
+            *guard = Some(HashMap::new());
+        }
+        if let Ok(mut guard) = CLIP_FULL_KEYS.lock() {
+            *guard = Some(HashMap::new());
+        }
+    }
+
+    pub(super) fn note_identity(key: u64, mask_bytes: u64) {
+        if let Ok(mut guard) = CLIP_KEYS.lock() {
+            let map = guard.get_or_insert_with(HashMap::new);
+            let e = map.entry(key).or_insert((0, mask_bytes));
+            e.0 += 1;
+        }
+    }
+
+    /// Distinct (build key, incoming clip) pairs — the identity of the
+    /// FINAL intersected mask.
+    pub(super) static CLIP_FULL_KEYS: std::sync::Mutex<Option<HashMap<u64, u32>>> =
+        std::sync::Mutex::new(None);
+
+    pub(super) fn note_full_identity(key: u64) {
+        if let Ok(mut guard) = CLIP_FULL_KEYS.lock() {
+            let map = guard.get_or_insert_with(HashMap::new);
+            *map.entry(key).or_insert(0) += 1;
         }
     }
 
@@ -562,6 +739,84 @@ pub(crate) fn note_clip_phases(new_ns: u64, fill_ns: u64, mul_ns: u64) {
             .position(|&e| total_us < e)
             .unwrap_or(CLIP_BUCKETS - 1);
         imp::CLIP_HIST[bucket].fetch_add(1, Relaxed);
+    }
+}
+
+/// Record one clip application under its **build key**, and the bytes a
+/// single cached mask for it would occupy.
+///
+/// # What identity means here, and why this tuple
+///
+/// The mask `intersect_clip` produces before intersection is
+/// `Mask::new(w, h)` followed by `fill_path(path, rule, aa, ctm)`. That
+/// result is determined **exactly** by:
+///
+/// * the path's verbs and points (its geometry in user space),
+/// * the fill rule — `W` and `W*` give different coverage for a
+///   self-intersecting path,
+/// * the CTM, because the mask is in **device** space: the same
+///   geometry under a different transform is a different picture, and
+///   treating those as equal would be a cache that returns the wrong
+///   mask,
+/// * the mask dimensions, which move with render scale.
+///
+/// **The clip already in force is deliberately NOT part of the key.**
+/// That would be the identity of the *intersected* result, which chains:
+/// two identical paths applied under different accumulated clips give
+/// different final masks. Keying on the build inputs measures what a
+/// cache of `Mask::new` + `fill_path` could serve — **259 µs of the
+/// 361 µs per clip, 72%** — and leaves the 102 µs multiply outside,
+/// because the multiply is what makes the result context-dependent.
+///
+/// So this counts the *addressable* repetition, and it is an upper
+/// bound on a real cache's hit rate rather than an estimate of it.
+///
+/// No-op without the `profile` feature.
+#[inline]
+#[cfg_attr(not(feature = "profile"), allow(unused_variables))]
+pub(crate) fn note_clip_identity(
+    path: &tiny_skia::Path,
+    rule_is_even_odd: bool,
+    ctm: tiny_skia::Transform,
+    mask_w: u32,
+    mask_h: u32,
+    incoming_clip: Option<*const tiny_skia::Mask>,
+) {
+    #[cfg(feature = "profile")]
+    {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        // `PathVerb` is not re-exported by `tiny_skia`, so the slice's
+        // element type stays inferred here rather than being named in
+        // the signature — hence taking `&Path` instead of its parts.
+        for v in path.verbs() {
+            (*v as u8).hash(&mut h);
+        }
+        // `to_bits` because f32 is not Hash, and because bit-exactness
+        // is the right comparison: two coordinates differing in the last
+        // ulp produce different coverage, so treating them as equal
+        // would OVERSTATE repetition — the direction that would wrongly
+        // justify building the cache.
+        for p in path.points() {
+            p.x.to_bits().hash(&mut h);
+            p.y.to_bits().hash(&mut h);
+        }
+        rule_is_even_odd.hash(&mut h);
+        for f in [ctm.sx, ctm.kx, ctm.ky, ctm.sy, ctm.tx, ctm.ty] {
+            f.to_bits().hash(&mut h);
+        }
+        mask_w.hash(&mut h);
+        mask_h.hash(&mut h);
+        let build_key = h.finish();
+        imp::note_identity(build_key, u64::from(mask_w) * u64::from(mask_h));
+
+        // The final mask's identity: the build inputs PLUS which clip it
+        // is being intersected with. Pointer identity understates
+        // repetition (see `Counters::clip_full_distinct`), which is the
+        // direction that cannot wrongly justify a cache.
+        build_key.hash(&mut h);
+        (incoming_clip.map_or(0usize, |p| p as usize)).hash(&mut h);
+        imp::note_full_identity(h.finish());
     }
 }
 

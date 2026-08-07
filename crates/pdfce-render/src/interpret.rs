@@ -2233,6 +2233,18 @@ fn intersect_clip(
     // 9.28 s un-instrumented — **below this machine's noise**, so the
     // ~1e-4 the arithmetic predicts is not resolvable here and is not
     // claimed to be.
+    // Census of how often the same mask gets rebuilt. Keyed on the
+    // BUILD inputs only — see `profile::note_clip_identity` for why the
+    // clip already in force is excluded — so it measures what a cache of
+    // `Mask::new` + `fill_path` could serve, not the whole operation.
+    crate::profile::note_clip_identity(
+        path,
+        matches!(rule, FillRule::EvenOdd),
+        ctm,
+        pixmap.width(),
+        pixmap.height(),
+        state.clip.as_ref().map(std::sync::Arc::as_ptr),
+    );
     let timed = crate::profile::timing_enabled();
     let t0 = timed.then(std::time::Instant::now);
     let Some(mut mask) = Mask::new(pixmap.width(), pixmap.height()) else {

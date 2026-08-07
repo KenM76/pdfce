@@ -321,6 +321,10 @@ fn main() -> std::process::ExitCode {
         );
     }
 
+    if c.clips > 0 && c.clip_distinct > 0 {
+        report_clip_reuse(&c);
+    }
+
     if c.clips > 0 && c.clip_phase_ns() > 0 {
         report_clip_phases(&c);
     }
@@ -535,6 +539,109 @@ fn run_ablation_sweep(
 /// removes other things with it: an upper bound (R164). These are direct
 /// timings — nothing is removed, so nothing is confounded, and the three
 /// phases sum to a checkable total.
+/// Report clip-path repetition — the census that decides whether a mask
+/// cache is worth building.
+///
+/// Prints the working-set size **beside** the hit rate, because they
+/// decide different things and either alone is misleading: a 95% hit
+/// rate over 20,000 distinct page-sized masks is 20 GB and infeasible,
+/// while a 40% hit rate over 200 masks is cheap and worth having.
+fn report_clip_reuse(c: &pdfce_render::profile::Counters) {
+    use pdfce_render::profile::CLIP_REUSE_EDGES;
+    println!();
+    println!("clip reuse (build key = path geometry + fill rule + CTM + mask size):");
+    // Hard rule 10: the totals and their derived per-item form on one
+    // line, so a contradiction between them is visible where it is
+    // written rather than 200 lines away.
+    println!(
+        "  {} applications over {} distinct paths = {:.2} per path",
+        c.clips,
+        c.clip_distinct,
+        c.clip_applications_per_distinct()
+    );
+    println!(
+        "  repeats           : {} ({:.2}% of applications — the CEILING on any cache)",
+        c.clip_repeats,
+        c.clip_repeat_pct()
+    );
+    let mb = c.clip_distinct_mask_bytes as f64 / (1024.0 * 1024.0);
+    println!(
+        "  working set       : {:.1} MiB if every distinct mask were cached",
+        mb
+    );
+    // The number that decides the FORM of a cache: whether a hit can
+    // share an Arc (free) or must copy a page-sized mask before the
+    // multiply mutates it (saves fill_path, pays a memcpy).
+    let full_repeat_pct = if c.clips == 0 {
+        0.0
+    } else {
+        c.clip_full_repeats as f64 * 100.0 / c.clips as f64
+    };
+    println!(
+        "  final-mask reuse  : {} distinct (path, incoming clip) pairs, {:.2}% repeat",
+        c.clip_full_distinct, full_repeat_pct
+    );
+
+    // How concentrated the reuse is decides how SMALL a bounded cache
+    // can be, which the histogram's unbounded last bucket cannot say.
+    let top: Vec<u64> = c.clip_top_counts.iter().copied().filter(|&n| n > 0).collect();
+    if !top.is_empty() && c.clips > 0 {
+        let mut cum = 0u64;
+        print!("  concentration     :");
+        for (i, &n) in top.iter().enumerate() {
+            cum += n;
+            print!(
+                " top-{}={:.1}%",
+                i + 1,
+                cum as f64 * 100.0 / c.clips as f64
+            );
+        }
+        println!();
+    }
+
+    println!("  distinct paths by how many times each is applied:");
+    for (i, &n) in c.clip_reuse_hist.iter().enumerate() {
+        if n == 0 {
+            continue;
+        }
+        let lo = CLIP_REUSE_EDGES[i];
+        let label = match CLIP_REUSE_EDGES.get(i + 1) {
+            Some(&hi) if hi == lo + 1 => format!("{lo}"),
+            Some(&hi) => format!("{lo}-{}", hi - 1),
+            None => format!("{lo}+"),
+        };
+        println!(
+            "    applied {label:>6}x : {n} paths ({:.1}%)",
+            n as f64 * 100.0 / c.clip_distinct as f64
+        );
+    }
+
+    // The verdict, stated by the tool rather than left to the reader —
+    // two optimizations have already been scoped on unmeasured clip
+    // premises and killed once measured.
+    println!();
+    if c.clip_repeat_pct() < 5.0 {
+        println!(
+            "  VERDICT: clip paths are essentially all unique. A mask cache cannot\n  \
+             serve {:.2}% of applications and is not worth building for this file.",
+            c.clip_repeat_pct()
+        );
+    } else if mb > 512.0 {
+        println!(
+            "  VERDICT: {:.2}% of applications repeat, but caching every distinct mask\n  \
+             costs {mb:.1} MiB. A bounded cache is the only viable form; measure the\n  \
+             hit rate under that bound before building.",
+            c.clip_repeat_pct()
+        );
+    } else {
+        println!(
+            "  VERDICT: {:.2}% of applications repeat over a {mb:.1} MiB working set.\n  \
+             A mask cache is worth costing out.",
+            c.clip_repeat_pct()
+        );
+    }
+}
+
 fn report_clip_phases(c: &pdfce_render::profile::Counters) {
     use pdfce_render::profile::{CLIP_BUCKET_EDGES_US, CLIP_BUCKETS};
 
