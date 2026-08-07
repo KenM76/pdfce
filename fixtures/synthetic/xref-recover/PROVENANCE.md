@@ -56,3 +56,32 @@ own output — found pdfce writing a document whose catalog said
 `endobj` made `confirm_candidates` drop the object, and the writer
 emitted the dangling reference without complaint; veraPDF could recover
 the original and could not recover pdfce's rewrite of it.
+
+`huge-object-number.pdf` (added 2026-08-07, `tools/gen-huge-objnum-fixture.py`)
+is the **writer-side** counterpart, and unlike everything else in this
+folder it is deliberately NOT damaged: it loads on the clean strict path
+with no recovery at all. That is the point — the refusal it exercises is
+a *save* refusal, and a fixture that failed to parse would prove nothing
+about the writer.
+
+Six ordinary objects, one of them numbered **2147483648 = 2³¹**, reached
+through a conforming two-subsection classic table (`0 5`, then
+`2147483648 1`) — §7.5.4 permits "one or more subsections … in any
+order". §7.5.4's completeness requirement then obliges a single-section
+full rewrite to emit one entry per object number from 0 to the highest,
+so this 639-byte document asks for **2,147,483,649** cross-reference
+entries, roughly 40 GB.
+
+Found via pdfium's `bug_455199.pdf` during a `verapdf-parse-gate` sweep,
+which stalled on that one file for over thirty minutes. Measured at
+~27 MB/s of steady allocation with the CPU pinned — not an infinite
+loop, which is what made it dangerous: it looks like progress the whole
+way down, and in the GUI it is an unrecoverable freeze. The synthetic
+copy exists because `fixtures/external/` is fetched by
+`fixtures/fetch-corpora.sh` and is absent on a fresh clone, so a test
+bound to the corpus file would silently not run.
+
+2³¹ is chosen rather than an arbitrary large number: Annex C Table C.1
+caps a PDF integer at 2,147,483,647, so this object number is one MORE
+than the largest integer the spec permits — unrepresentable as a
+conforming PDF integer, not merely improbable.

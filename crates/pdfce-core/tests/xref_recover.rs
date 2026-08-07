@@ -401,3 +401,76 @@ fn missing_endobj_on_page_tree_is_recovered_and_saved() {
         "the reloaded catalog's /Pages must resolve to a dictionary",
     );
 }
+
+/// A full rewrite REFUSES a file whose highest object number would make
+/// the cross-reference table astronomically large — instead of grinding.
+///
+/// # The defect this pins
+///
+/// §7.5.4 obliges a single-section full rewrite to emit one entry per
+/// object number from 0 to the highest **defined in the file**, "even if
+/// one or more of the object numbers in this range do not actually occur".
+/// The writer's cost is therefore set by the largest object NUMBER, not by
+/// how many objects exist — so a 639-byte document naming
+/// `2147483648 0 obj` asks for 2,147,483,649 entries, about 40 GB.
+///
+/// Found by `tools/verapdf-parse-gate.py` on pdfium's `bug_455199.pdf`,
+/// which stalled a corpus sweep for over thirty minutes. Measured at
+/// ~27 MB/s of steady allocation with the CPU pinned: **not an infinite
+/// loop**, which is exactly what made it dangerous — it looks like
+/// progress the whole way down, and in the GUI it is an unrecoverable
+/// freeze with no error, no cancel and no save.
+///
+/// # Why this test is not vacuous (R162)
+///
+/// Two halves, and the second is what gives the first meaning:
+///
+/// 1. The document must **LOAD CLEANLY** — no recovery. If it failed to
+///    parse, the refusal below would be a parse failure wearing a
+///    writer's name, and the test would pass while proving nothing about
+///    the writer.
+/// 2. The refusal must be **this** refusal, by variant, not merely some
+///    `Err`. A test asserting `is_err()` would have passed before the fix
+///    existed only by hanging, and would keep passing if the guard were
+///    later replaced by an unrelated failure.
+///
+/// Verified to fail without the fix by the only means available for a
+/// non-terminating defect: with the guard removed this call does not
+/// return, and the CLI equivalent was measured hanging past 30 minutes.
+#[test]
+fn full_rewrite_refuses_an_astronomical_object_number() {
+    let bytes = fixture("huge-object-number.pdf");
+    let doc = Document::from_bytes(bytes).expect("the fixture must parse on the STRICT path");
+
+    // Half one: it really did load without recovery, so what follows is a
+    // writer verdict rather than a reader one.
+    assert!(
+        doc.recovery().is_none(),
+        "this fixture must load with NO cross-reference recovery — if it \
+         needed recovery, the refusal below would prove nothing about the \
+         writer, only that a damaged file was rejected",
+    );
+
+    let err = save_full(&doc, &DirtySet::empty(), &SaveOptions::identity())
+        .expect_err("a full rewrite must REFUSE rather than build a 2-billion-entry table");
+
+    // Half two: the specific refusal, by variant.
+    match err {
+        WriteError::ObjectNumberTooLarge { num, max } => {
+            assert_eq!(
+                num, 2_147_483_648,
+                "the offending object number is reported"
+            );
+            assert!(
+                max < num,
+                "the bound must be below the offending number, or the guard \
+                 could not have fired on it",
+            );
+        }
+        other => panic!(
+            "expected ObjectNumberTooLarge, got {other:?} — any other error \
+             means the hang is being avoided for an unrelated reason and this \
+             test is no longer pinning the defect it names"
+        ),
+    }
+}

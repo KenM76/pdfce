@@ -161,6 +161,41 @@ use crate::xref::{SectionShape, XrefEntry};
 use super::encoder::IdentityEncoder;
 use super::{DirtySet, ProducerPolicy, SaveOptions, WriteError, serialize, xref_out};
 
+/// Largest object number [`save_full`] will build a cross-reference
+/// table up to before refusing (ISO 32000-1 Annex C, Table C.1).
+///
+/// # Why a bound is structurally necessary here
+///
+/// §7.5.4's completeness requirement makes a single-section full rewrite
+/// emit one entry per object number from 0 to the highest one **defined
+/// in the file** — "even if one or more of the object numbers in this
+/// range do not actually occur". The cost is therefore driven by the
+/// largest object NUMBER, not by the object COUNT, and the largest
+/// number is chosen by whoever wrote the input.
+///
+/// # Where the value comes from — sourced, not guessed
+///
+/// Annex C Table C.1 gives **8,388,607 (2²³ − 1) maximum indirect
+/// objects**, a legacy Acrobat architectural limit. A file whose highest
+/// object number exceeds that cannot have a conforming object *count*
+/// either, so the bound refuses nothing a conforming producer can make.
+///
+/// The same table caps an integer at 2,147,483,647 (2³¹ − 1), which is
+/// worth knowing for the file that prompted this: pdfium's
+/// `bug_455199.pdf` names `2147483648 0 obj` — one MORE than the largest
+/// integer the spec permits, so the object number is not merely
+/// implausible, it is unrepresentable as a conforming PDF integer.
+///
+/// Deliberately **not** clamped to the object count: a sparse-but-small
+/// file with one high number is exactly the adversarial shape this
+/// guards, and a count-based bound would let it through.
+///
+/// Sized in the spirit of [`crate::forms::MAX_FORM_FIELDS`] and
+/// [`crate::annot::MAX_ANNOTS_PER_PAGE`] — far above any conformant
+/// corpus, so the veraPDF §6.1.12 implementation-limits suite keeps
+/// comfortable headroom.
+pub const MAX_REWRITE_OBJECT_NUMBER: u32 = 8_388_607;
+
 /// What a save actually did — the honest report the CLI, the GUI and
 /// the corpus harness all print.
 ///
@@ -742,6 +777,35 @@ pub fn save_full(
         .max()
         .max(xref_stream_id.map(|id| id.num))
         .unwrap_or(0);
+    // THE HOLE-FILLING LOOP BELOW IS O(highest), AND `highest` IS CHOSEN
+    // BY THE INPUT FILE. Guard it before it runs.
+    //
+    // The completeness obligation above is real and is why the loop
+    // exists — but it makes the writer's cost a function of the largest
+    // object NUMBER in the file, not of how many objects the file
+    // actually contains. A 1.2 KB document naming one object
+    // `2147483648 0 obj` therefore asks pdfce to emit 2,147,483,649
+    // cross-reference entries: measured at ~27 MB/s of steady allocation
+    // with the CPU pinned, which is roughly an hour of grinding before
+    // the allocator gives up. Not an infinite loop — worse in one
+    // respect, because it looks like progress.
+    //
+    // That is a real corpus file (pdfium's `bug_455199.pdf`), and the
+    // consequence in the GUI is an unrecoverable freeze: no error, no
+    // cancel, no save.
+    //
+    // So this refuses by name (R27) rather than grinding. Refusal is the
+    // honest outcome: complying literally would emit a ~40 GB
+    // cross-reference table for a 1.2 KB input, and quietly emitting a
+    // SPARSE table instead would violate §7.5.4's completeness
+    // requirement for a single-section full rewrite — trading a hang for
+    // a malformed file.
+    if highest > MAX_REWRITE_OBJECT_NUMBER {
+        return Err(WriteError::ObjectNumberTooLarge {
+            num: highest,
+            max: MAX_REWRITE_OBJECT_NUMBER,
+        });
+    }
     entries.entry(0).or_insert(XrefEntry::Free {
         next_free: 0,
         generation: 65_535,

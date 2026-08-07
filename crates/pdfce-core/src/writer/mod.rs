@@ -641,6 +641,39 @@ pub enum WriteError {
          use incremental save, which appends a conforming classic update section"
     )]
     HybridFullRewrite,
+    /// A full rewrite was asked to build a cross-reference table up to an
+    /// object number beyond [`save::MAX_REWRITE_OBJECT_NUMBER`].
+    ///
+    /// §7.5.4 requires a single-section full rewrite to carry one entry
+    /// per object number from 0 to the highest defined in the file, so
+    /// the writer's cost is set by the largest object NUMBER rather than
+    /// by how many objects the file contains. A small file naming one
+    /// enormous number therefore asks for an enormous table: pdfium's
+    /// `bug_455199.pdf` is 1.2 KB, names `2147483648 0 obj`, and would
+    /// require 2,147,483,649 entries — measured at ~27 MB/s of steady
+    /// allocation with the CPU pinned, i.e. about an hour of apparent
+    /// progress before the allocator gives up.
+    ///
+    /// Refusing by name is the honest outcome, and the alternatives are
+    /// both worse: grinding is an unrecoverable freeze in the GUI, and
+    /// emitting a sparse table instead would break §7.5.4's completeness
+    /// requirement — trading a hang for a malformed file.
+    ///
+    /// **Reading such a file is unaffected**; this bounds the writer
+    /// only. `inspect` and `extract-text` both succeed on the file above.
+    #[error(
+        "object number {num} exceeds the largest a full rewrite will build a \
+         cross-reference table up to ({max}, ISO 32000-1 Annex C Table C.1 \
+         maximum indirect objects); §7.5.4 requires one entry per number from \
+         0, so this file would need a table of {} entries",
+        u64::from(*num) + 1
+    )]
+    ObjectNumberTooLarge {
+        /// The highest object number the document defines.
+        num: u32,
+        /// The bound that was exceeded.
+        max: u32,
+    },
     /// The document's cross-reference table names an object the loader
     /// did not parse — the table and the object map disagree.
     #[error("cross-reference entry for object {num} has no corresponding parsed object")]
