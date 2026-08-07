@@ -271,6 +271,22 @@ pub enum CommandKind {
     /// would force that off for the sake of an undo LABEL — a bad trade,
     /// since the label can be generic while `Copy` is relied on throughout.
     AddFormField,
+    /// A form field, or ONE of its widgets, was deleted (decision 020
+    /// §3.6.3): the widget(s) un-listed from their pages' `/Annots`, the
+    /// field's `/Kids` or `/AcroForm /Fields` registration patched, any
+    /// grouping node the removal emptied pruned, and — when the deleted
+    /// widget held the field's value — `/V` and the survivors' `/AS` cleared
+    /// to `/Off`, all as ONE undo entry.
+    ///
+    /// SUBTRACTIVE, and therefore the deliberate counterpart to
+    /// [`Self::AddFormField`]'s R46 additivity: this is one of the few
+    /// commands that removes objects rather than appending. Everything it
+    /// touches goes in one entry for the same reason creation does — a field
+    /// registered but not annotated, or annotated but not registered, is a
+    /// document no undo can repair.
+    ///
+    /// Carries no payload, matching `AddFormField`: `CommandKind` is `Copy`.
+    DeleteFormField,
     /// A text or choice field's value was set and its appearance
     /// regenerated (Pass 7, §12.7.3.3). One fill — the field's `/V` and
     /// every widget's `/AP` — is one undo entry.
@@ -1524,6 +1540,22 @@ pub enum EditError {
     /// §12.7.4.2.3: the off state *shall* be named `Off`, so it cannot also
     /// name the on state — a box whose two states share a name has no way to
     /// express "checked". An empty name is not a valid PDF name object here.
+    /// A widget index was past the end of the field's widget list.
+    ///
+    /// The index is into the field's widgets as [`forms::Field::widgets`]
+    /// reports them — the same order `list-fields` shows — so an operator can
+    /// see what they are choosing between before choosing.
+    #[error(
+        "field `{name}` has {widgets} widget(s), so there is no widget {index} to delete (they are numbered from 0)"
+    )]
+    WidgetIndexOutOfRange {
+        /// The field's fully-qualified name.
+        name: String,
+        /// The index asked for.
+        index: usize,
+        /// How many widgets the field actually has.
+        widgets: usize,
+    },
     /// Two members of one radio group were given the same export value, and
     /// the group is not `RadiosInUnison`.
     ///
@@ -4122,6 +4154,35 @@ pub struct ImportOutcome {
 }
 
 /// What a [`flatten_fields`](EditSession::flatten_fields) operation did
+/// What a field or widget deletion actually did (decision 020 §3.6.3).
+///
+/// Returned rather than inferred, because the two facts an operator cannot
+/// see afterwards — that a selection was cleared, and that emptied grouping
+/// nodes went with it — are exactly the ones that change what the document
+/// means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FieldDeletion {
+    /// Widget annotations un-listed from their pages and deleted.
+    pub widgets_removed: usize,
+    /// The field itself was removed from the form — either because the whole
+    /// field was the target, or because its last widget was.
+    pub field_removed: bool,
+    /// **§3.6.3's disclosure.** The deleted widget held the field's `/V`, so
+    /// the value pointed at a state no remaining widget could display. `/V`
+    /// was set to `/Off` and every remaining kid's `/AS` with it.
+    ///
+    /// Silently leaving the dangling `/V` would be sneaky; silently clearing
+    /// it would also be. Hence a fact the caller must surface.
+    pub selection_cleared: bool,
+    /// Grouping nodes that became childless and were pruned with the field.
+    ///
+    /// Not cosmetic: a named node with nothing under it still occupies its
+    /// slot in the §12.7.3.2 FQN space, so leaving one behind would refuse a
+    /// later field that wanted the name.
+    pub emptied_parents: usize,
+}
+
 /// (Pass 7.1, R48).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -5711,6 +5772,247 @@ impl EditSession {
             merged: false,
             disclosures,
         })
+    }
+
+    /// Delete a whole field: every widget, the field dictionary, its
+    /// registration, and any grouping node it leaves empty (§3.6.3).
+    ///
+    /// # One command, for the same reason creation is one
+    ///
+    /// A field un-listed from `/AcroForm /Fields` but still annotated on a
+    /// page is a widget no form owns; annotated nowhere but still registered
+    /// is a field with no way to reach it. Either half alone is a document no
+    /// undo can repair, so both go in a single [`Command`].
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::FieldNotFound`] when nothing bears the name; plus the
+    /// encryption and **strict** certification guards — deleting a field is a
+    /// structural change to the form, which is precisely what a certification
+    /// signature freezes.
+    pub fn delete_field(&mut self, fqn: &str) -> Result<FieldDeletion, EditError> {
+        let (field, _) = self.deletion_preflight(fqn)?;
+        let slots = self.page_slots()?;
+
+        let widget_ids: Vec<ObjId> = field
+            .widgets
+            .iter()
+            .filter(|w| !w.merged)
+            .map(|w| w.id)
+            .collect();
+        let objects = self.unlist_widgets(&field.widgets, &slots)?;
+
+        let (form_writes, emptied) = self.remove_fields_from_form(&[field.id])?;
+        let mut objects = objects;
+        objects.extend(form_writes);
+
+        // The field dict, its non-merged widgets, and every grouping node the
+        // removal emptied. A merged widget IS the field dict, so it is not
+        // deleted twice.
+        let removals: Vec<Removal> = std::iter::once(field.id)
+            .chain(widget_ids.iter().copied())
+            .chain(emptied.iter().copied())
+            .filter(|id| self.base.get(*id).is_some() || self.state.contains_key(id))
+            .map(|id| Removal {
+                id,
+                was_deleted: self.deleted.contains(&id),
+                is_deleted: true,
+            })
+            .collect();
+
+        self.commit(Command {
+            kind: CommandKind::DeleteFormField,
+            objects,
+            removals,
+            trailer: None,
+        });
+        Ok(FieldDeletion {
+            widgets_removed: field.widgets.len(),
+            field_removed: true,
+            selection_cleared: false,
+            emptied_parents: emptied.len(),
+        })
+    }
+
+    /// Delete ONE widget of a field, by its index in the field's widget list
+    /// (§3.6.3's mid-group and last-member rules).
+    ///
+    /// # The three rules, and which one fires
+    ///
+    /// 1. **Mid-group.** The widget leaves the field's `/Kids` and its page's
+    ///    `/Annots`, and its object is deleted. Remaining members are
+    ///    otherwise untouched.
+    /// 2. **The deleted widget held the selection.** Its on-state equalled
+    ///    the field's `/V`, so `/V` now names a state **no remaining widget
+    ///    can display** — a malformed field. `/V` becomes `/Off`, every
+    ///    remaining kid's `/AS` becomes `/Off`, and
+    ///    [`FieldDeletion::selection_cleared`] says so.
+    /// 3. **Last member.** There is no field left to hold, so this becomes
+    ///    [`Self::delete_field`] — including its grouping-node prune. The
+    ///    same rule for any field type, not a radio special case.
+    ///
+    /// **No Shape B→A collapse** (R102): a group that falls from three
+    /// members to one stays a `/Kids` parent. Collapsing it would rewrite
+    /// object identities the operator never asked to change, and the shape is
+    /// legal either way.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::FieldNotFound`] when nothing bears the name;
+    /// [`EditError::WidgetIndexOutOfRange`] when the field has no such
+    /// widget; plus the encryption and strict certification guards.
+    pub fn delete_widget(&mut self, fqn: &str, index: usize) -> Result<FieldDeletion, EditError> {
+        let (field, _) = self.deletion_preflight(fqn)?;
+        let Some(widget) = field.widgets.get(index).cloned() else {
+            return Err(EditError::WidgetIndexOutOfRange {
+                name: fqn.to_owned(),
+                index,
+                widgets: field.widgets.len(),
+            });
+        };
+
+        // Rule 3: the last widget takes the whole field with it. Delegated
+        // rather than reimplemented, so the two paths cannot disagree about
+        // what "gone" means.
+        if field.widgets.len() == 1 {
+            return self.delete_field(fqn);
+        }
+
+        let slots = self.page_slots()?;
+        let mut objects = self.unlist_widgets(std::slice::from_ref(&widget), &slots)?;
+
+        // Rule 2: did this widget hold the field's value?
+        let held_selection = match &field.value {
+            forms::FieldValue::Name(v) => widget.on_states.iter().any(|s| s == v),
+            _ => false,
+        };
+
+        // The field dict loses this kid from /Kids, and (rule 2) its /V.
+        let Some(Object::Dict(field_dict)) = self.value(field.id) else {
+            return Err(EditError::NotADictionary {
+                id: field.id,
+                key: "Kids",
+            });
+        };
+        let mut updated = field_dict.clone();
+        if let Some(Object::Array(kids)) = updated.get(b"Kids").cloned() {
+            let pruned: Vec<Object> = kids
+                .into_iter()
+                .filter(|o| o.as_reference() != Some(widget.id))
+                .collect();
+            updated.insert(Name::from(b"Kids"), Object::Array(pruned));
+        }
+        if held_selection {
+            updated.insert(Name::from(b"V"), Object::Name(Name::from(b"Off")));
+        }
+        objects.push(ObjectWrite {
+            id: field.id,
+            before: self.state.get(&field.id).cloned(),
+            after: Some(Object::Dict(updated)),
+        });
+
+        // Rule 2 continued: every REMAINING kid goes to /Off, because the
+        // value they were agreeing with no longer exists.
+        if held_selection {
+            for w in field.widgets.iter().filter(|w| w.id != widget.id) {
+                objects.push(self.set_widget_as(w.id, b"Off")?);
+            }
+        }
+
+        let removals = if widget.merged {
+            // Unreachable while the single-widget case is delegated above — a
+            // merged widget IS the field dict, so a field with two widgets
+            // has none. Guarded rather than assumed: deleting the field dict
+            // here would take the surviving members with it.
+            Vec::new()
+        } else {
+            vec![Removal {
+                id: widget.id,
+                was_deleted: self.deleted.contains(&widget.id),
+                is_deleted: true,
+            }]
+        };
+
+        self.commit(Command {
+            kind: CommandKind::DeleteFormField,
+            objects,
+            removals,
+            trailer: None,
+        });
+        Ok(FieldDeletion {
+            widgets_removed: 1,
+            field_removed: false,
+            selection_cleared: held_selection,
+            emptied_parents: 0,
+        })
+    }
+
+    /// The guards and lookup both deletion entry points share.
+    ///
+    /// Shared so the two cannot drift about which documents refuse deletion —
+    /// a certification gate honoured by one verb and not the other is worse
+    /// than neither having it, because it reads as protection.
+    fn deletion_preflight(&mut self, fqn: &str) -> Result<(forms::Field, ()), EditError> {
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        // STRICT, not the `/P`-aware fill gate: removing a field changes the
+        // form's structure, which is what certification exists to freeze.
+        self.check_certification()?;
+        let form =
+            forms::parse_acroform(&self.graph()).ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+        let field = form
+            .fields
+            .iter()
+            .find(|f| f.fully_qualified_name == fqn)
+            .cloned()
+            .ok_or_else(|| EditError::FieldNotFound {
+                name: fqn.to_owned(),
+            })?;
+        Ok((field, ()))
+    }
+
+    /// Un-list `widgets` from whichever pages carry them, returning the page
+    /// writes.
+    ///
+    /// Grouped by page so each page is written ONCE. Two writes to one page
+    /// dict computed from the same pre-command state overwrite rather than
+    /// compose — the defect that broke `flatten_fields` and again F1's
+    /// promotion, both of which produced documents that parsed and drew the
+    /// wrong picture.
+    fn unlist_widgets(
+        &self,
+        widgets: &[forms::Widget],
+        slots: &[PageSlot],
+    ) -> Result<Vec<ObjectWrite>, EditError> {
+        let mut by_page: BTreeMap<ObjId, Vec<ObjId>> = BTreeMap::new();
+        for w in widgets {
+            if let Some(page_id) = self.page_of_widget(w, slots) {
+                by_page.entry(page_id).or_default().push(w.id);
+            }
+        }
+        let mut writes = Vec::new();
+        for (page_id, ids) in by_page {
+            let Some(Object::Dict(page_dict)) = self.value(page_id) else {
+                continue;
+            };
+            let mut updated = page_dict.clone();
+            // An indirect `/Annots` array shared between pages is its own
+            // object and returns its own write; an inline one is composed
+            // into the page dict here.
+            if let Some(shared) = self.remove_from_annots(&mut updated, &ids)? {
+                writes.push(shared);
+            } else {
+                writes.push(ObjectWrite {
+                    id: page_id,
+                    before: self.state.get(&page_id).cloned(),
+                    after: Some(Object::Dict(updated)),
+                });
+            }
+        }
+        Ok(writes)
     }
 
     /// Read the facts about an existing radio group that a new member has to

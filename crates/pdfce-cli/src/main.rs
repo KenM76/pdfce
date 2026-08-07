@@ -1293,6 +1293,75 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// Delete a form field entirely (ISO 32000-1 §12.7.3).
+    ///
+    /// Removes every widget from its page, the field dictionary, its
+    /// `/AcroForm /Fields` registration, and any grouping node left childless
+    /// — a named node owning nothing still occupies its slot in the
+    /// fully-qualified-name space and would refuse a later field wanting the
+    /// name.
+    ///
+    /// To remove ONE member of a radio group rather than the group, use
+    /// `delete-widget`.
+    DeleteField {
+        /// Input PDF.
+        input: PathBuf,
+        /// The field's fully-qualified name, as `list-fields` reports it.
+        #[arg(long)]
+        name: String,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the deletion reproduces the input byte
+        /// for byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
+    /// Delete ONE widget of a form field (ISO 32000-1 §12.5.6.19).
+    ///
+    /// The usual case is dropping a member from a radio group, or one of the
+    /// several places a check box appears across a form's pages.
+    ///
+    /// THREE THINGS CAN HAPPEN, and the output line says which:
+    ///
+    /// - Normally the widget goes and the field stays.
+    /// - If the deleted widget held the field's VALUE, that value would name
+    ///   a state no remaining widget can display, so it is cleared to `Off`
+    ///   along with every survivor's appearance state — and
+    ///   `selection_cleared=1` reports it.
+    /// - If it was the LAST widget, the field goes too, exactly as
+    ///   `delete-field` would.
+    ///
+    /// A group reduced to one member keeps its `/Kids` structure rather than
+    /// collapsing back into a single merged dictionary: both shapes are
+    /// legal, so the deletion does not rewrite object identities nobody asked
+    /// it to change.
+    DeleteWidget {
+        /// Input PDF.
+        input: PathBuf,
+        /// The field's fully-qualified name, as `list-fields` reports it.
+        #[arg(long)]
+        name: String,
+        /// Which widget to remove, numbered from 0 in the order
+        /// `list-fields` reports the field's widgets.
+        #[arg(long)]
+        index: usize,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the deletion reproduces the input byte
+        /// for byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// Author a new list box or drop-down (ISO 32000-1 §12.7.4.4).
     ///
     /// The field is created with its options and NO selection; `fill-field`
@@ -3069,6 +3138,21 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         }),
+        Command::DeleteField {
+            input,
+            name,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_delete_form_field(&input, &name, None, &output, mode, verify_undo),
+        Command::DeleteWidget {
+            input,
+            name,
+            index,
+            output,
+            mode,
+            verify_undo,
+        } => cmd_delete_form_field(&input, &name, Some(index), &output, mode, verify_undo),
         Command::AddChoiceField {
             input,
             name,
@@ -9112,6 +9196,104 @@ fn cmd_add_check_box(args: &AddCheckBoxArgs<'_>) -> u8 {
         u32::from(outcome.undo_identical),
     );
     finish_edit(args.input, &outcome)
+}
+
+/// `delete-field` and `delete-widget` — the two deletion verbs, which differ
+/// only in whether an index was given.
+///
+/// ## Why ONE function behind two subcommands
+///
+/// They are the same operation with a different scope, and §3.6.3 makes the
+/// last-member case of `delete-widget` *become* `delete-field` — so a second
+/// implementation would be two code paths that have to agree about what
+/// "gone" means, which is the kind of agreement that quietly lapses. The
+/// subcommands stay separate at the surface because `--index` is meaningless
+/// for one of them and mandatory for the other, and an optional index whose
+/// absence silently means "delete everything" is a footgun.
+///
+/// ## Contract
+///
+/// - Emits one `delete-field …` / `delete-widget …` line carrying
+///   `widgets_removed=`, `field_removed=`, `selection_cleared=` and
+///   `emptied_parents=`, then defers the exit code to [`finish_edit`].
+/// - `selection_cleared=1` is §3.6.3's required disclosure and is ALSO
+///   printed in prose to stderr — a value the operator set, silently
+///   discarded, is exactly what rule 4 forbids.
+/// - Refusals — no such field, an index past the end, an encrypted or
+///   certified document — go through [`report_edit_error`] before any
+///   mutation.
+fn cmd_delete_form_field(
+    input: &Path,
+    name: &str,
+    index: Option<usize>,
+    output: &Path,
+    mode: SaveMode,
+    verify_undo: bool,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let outcome_of_delete = match index {
+        Some(i) => session.delete_widget(name, i),
+        None => session.delete_field(name),
+    };
+    let deletion = match outcome_of_delete {
+        Ok(d) => d,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    // §3.6.3's disclosure, in prose. The machine-readable field below is for
+    // scripts; this is for the person who is about to wonder why the form
+    // came back blank.
+    if deletion.selection_cleared {
+        eprintln!(
+            "pdfce-cli: field {name:?}: the widget you deleted held this field's selected value, which no remaining widget can display — the selection has been cleared to Off"
+        );
+    }
+    if deletion.emptied_parents > 0 {
+        eprintln!(
+            "pdfce-cli: field {name:?}: {} grouping node(s) were left with no fields beneath them and were removed as well — a named node owning nothing still occupies its slot in the field-name space",
+            deletion.emptied_parents
+        );
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    let verb = if index.is_some() {
+        "delete-widget"
+    } else {
+        "delete-field"
+    };
+    println!(
+        "{verb} {} name={:?} index={} widgets_removed={} field_removed={} selection_cleared={} emptied_parents={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        input.display(),
+        name,
+        index.map_or_else(|| "-".to_owned(), |i| i.to_string()),
+        deletion.widgets_removed,
+        u32::from(deletion.field_removed),
+        u32::from(deletion.selection_cleared),
+        deletion.emptied_parents,
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
 }
 
 /// `add-radio-button` — author ONE member of a radio group.

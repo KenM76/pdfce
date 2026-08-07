@@ -438,3 +438,277 @@ fn a_group_round_trips_through_save_and_reload() {
     );
     assert_eq!(g.button_kind, Some(ButtonKind::Radio));
 }
+
+// =====================================================================
+// Deletion (decision 020 F2 / §3.6.3)
+// =====================================================================
+
+/// Mid-group deletion: the group survives, one member lighter, still Shape B.
+#[test]
+fn deleting_a_mid_group_member_leaves_the_rest_untouched() {
+    let mut s = group_of(&["Red", "Green", "Blue"]);
+    let out = s.delete_widget("Colour", 1).expect("delete member 1");
+
+    assert_eq!(out.widgets_removed, 1);
+    assert!(
+        !out.field_removed,
+        "two members remain, so the field remains"
+    );
+    assert!(
+        !out.selection_cleared,
+        "nothing was selected, so nothing could be cleared"
+    );
+
+    let g = the_group(&s, "Colour");
+    assert_eq!(g.widgets.len(), 2, "3 - 1 = 2");
+    let mut left: Vec<String> = g
+        .widgets
+        .iter()
+        .flat_map(|w| w.on_states.iter())
+        .map(|s| String::from_utf8_lossy(s).into_owned())
+        .collect();
+    left.sort();
+    assert_eq!(
+        left,
+        vec!["Blue".to_owned(), "Red".to_owned()],
+        "the deleted member is the one that went"
+    );
+}
+
+/// R102: a group falling to ONE member stays Shape B rather than collapsing.
+///
+/// Collapsing would rewrite object identities the operator never asked to
+/// change, and both shapes are legal, so the deletion has no business
+/// choosing.
+#[test]
+fn a_group_reduced_to_one_member_does_not_collapse_to_shape_a() {
+    let mut s = group_of(&["Red", "Green", "Blue"]);
+    s.delete_widget("Colour", 2).unwrap();
+    s.delete_widget("Colour", 1).unwrap();
+
+    let g = the_group(&s, "Colour");
+    assert_eq!(g.widgets.len(), 1);
+    assert!(
+        !g.widgets[0].merged,
+        "R102: 3 -> 1 keeps the /Kids parent; it does not become its own widget"
+    );
+}
+
+/// §3.6.3's disclosure: deleting the SELECTED member clears the value, and
+/// says so.
+///
+/// Without this the field's `/V` would name a state no remaining widget can
+/// display — a malformed field that still parses.
+#[test]
+fn deleting_the_selected_member_clears_the_value_and_discloses_it() {
+    let mut s = group_of(&["Red", "Green", "Blue"]);
+    s.set_button_state("Colour", "Green").unwrap();
+
+    // Find which widget offers Green, rather than assuming widget order.
+    let g = the_group(&s, "Colour");
+    let idx = g
+        .widgets
+        .iter()
+        .position(|w| w.on_states.iter().any(|st| st == b"Green"))
+        .expect("some widget offers Green");
+
+    let out = s
+        .delete_widget("Colour", idx)
+        .expect("delete the selection");
+    assert!(
+        out.selection_cleared,
+        "the group's selection went with the widget, and that must be REPORTED"
+    );
+
+    let g = the_group(&s, "Colour");
+    assert_eq!(
+        g.value,
+        FieldValue::Name(b"Off".to_vec()),
+        "/V must not keep naming a state no remaining widget can display"
+    );
+    let graph = s.graph();
+    for w in &g.widgets {
+        let appearance_state = graph
+            .resolved(w.id)
+            .as_dict()
+            .and_then(|d| d.get(b"AS"))
+            .and_then(Object::as_name)
+            .map(|n| n.as_bytes().to_vec())
+            .unwrap();
+        assert_eq!(
+            appearance_state, b"Off",
+            "every survivor goes to Off with the value they were agreeing with"
+        );
+    }
+}
+
+/// Deleting a member that did NOT hold the selection leaves it alone.
+#[test]
+fn deleting_an_unselected_member_keeps_the_selection() {
+    let mut s = group_of(&["Red", "Green", "Blue"]);
+    s.set_button_state("Colour", "Red").unwrap();
+    let g = the_group(&s, "Colour");
+    let idx = g
+        .widgets
+        .iter()
+        .position(|w| w.on_states.iter().any(|st| st == b"Blue"))
+        .unwrap();
+
+    let out = s.delete_widget("Colour", idx).unwrap();
+    assert!(!out.selection_cleared);
+    assert_eq!(
+        the_group(&s, "Colour").value,
+        FieldValue::Name(b"Red".to_vec()),
+        "an unrelated member leaving must not disturb the choice"
+    );
+}
+
+/// Last-member deletion takes the field with it (§3.6.3 rule 3), by the same
+/// rule for any field type rather than a radio special case.
+#[test]
+fn deleting_the_last_member_removes_the_field() {
+    let mut s = group_of(&["Red"]);
+    let out = s
+        .delete_widget("Colour", 0)
+        .expect("delete the only member");
+    assert!(out.field_removed, "no members left means no field left");
+
+    let form = forms::parse_acroform(&s.graph());
+    let still_there = form
+        .iter()
+        .flat_map(|f| f.fields.iter())
+        .any(|f| f.fully_qualified_name == "Colour");
+    assert!(!still_there, "the field must be gone from the form");
+}
+
+/// An index past the end is refused by name, with the count.
+#[test]
+fn a_widget_index_past_the_end_is_refused() {
+    let mut s = group_of(&["Red", "Green"]);
+    let err = s
+        .delete_widget("Colour", 7)
+        .expect_err("there is no widget 7");
+    assert!(
+        matches!(err, EditError::WidgetIndexOutOfRange { widgets: 2, .. }),
+        "the refusal must carry the real count; got {err:?}"
+    );
+}
+
+/// Deleting a whole group removes every widget AND leaves no dangling
+/// reference in the saved BYTES.
+///
+/// # Why this asserts on bytes rather than through the parser
+///
+/// This is F0's lesson, and it was learned from a shipped defect: flatten
+/// left `/AcroForm /Fields` naming deleted objects, and every forms test
+/// passed anyway because they all asserted through `parse_acroform`, which
+/// silently drops entries that no longer resolve. The MODEL looked right
+/// while the FILE was wrong. A parser that repairs on the way past cannot be
+/// the witness for a write path.
+#[test]
+fn deleting_a_group_leaves_no_dangling_reference_in_the_bytes() {
+    let mut s = group_of(&["Red", "Green", "Blue"]);
+    let widget_ids: Vec<u32> = the_group(&s, "Colour")
+        .widgets
+        .iter()
+        .map(|w| w.id.num)
+        .collect();
+    let field_id = the_group(&s, "Colour").id.num;
+
+    let out = s.delete_field("Colour").expect("delete the whole group");
+    assert_eq!(out.widgets_removed, 3);
+    assert!(out.field_removed);
+
+    let (bytes, _) = s
+        .to_incremental_bytes(&pdfce_core::writer::SaveOptions::identity())
+        .expect("save");
+    let reloaded = EditSession::new(Document::from_bytes(bytes).expect("reload"));
+    let graph = reloaded.graph();
+
+    // Read the CONTAINERS RAW. Not through `parse_acroform` — that is the
+    // repairing reader whose leniency hid the shipped flatten defect, so it
+    // cannot be the witness here. `/Fields` and `/Annots` are read straight
+    // off the dictionaries and inspected for references by number.
+    let gone: Vec<u32> = widget_ids
+        .iter()
+        .copied()
+        .chain(std::iter::once(field_id))
+        .collect();
+
+    /// Object numbers an array-valued key of `dict` references.
+    fn refs_of<G: ObjectGraph + ?Sized>(graph: &G, dict: &Object, key: &[u8]) -> Vec<u32> {
+        let Some(v) = dict.as_dict().and_then(|d| d.get(key)) else {
+            return Vec::new();
+        };
+        match graph.resolve(v) {
+            Object::Array(a) => a
+                .iter()
+                .filter_map(|o| o.as_reference().map(|r| r.num))
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    // FIRST, PROVE THE INSTRUMENT WORKS. A loop over an empty array asserts
+    // nothing, so "no dangling reference found" is only meaningful once
+    // `refs_of` has been shown to find references at all. Re-derived from the
+    // PRE-deletion document, where all four objects are certainly present.
+    {
+        let before = EditSession::new(
+            Document::from_bytes(
+                group_of(&["Red", "Green", "Blue"])
+                    .to_incremental_bytes(&pdfce_core::writer::SaveOptions::identity())
+                    .expect("save the undeleted group")
+                    .0,
+            )
+            .expect("reload"),
+        );
+        let bg = before.graph();
+        let found: Vec<u32> = pdfce_core::page_tree::pages_in(&bg)
+            .expect("page tree")
+            .iter()
+            .flat_map(|p| refs_of(&bg, &bg.resolved(p.id).clone(), b"Annots"))
+            .collect();
+        assert_eq!(
+            found.len(),
+            3,
+            "precondition: before deletion the page's /Annots must name the \
+             three widgets, or the checks below are looking at nothing"
+        );
+    }
+
+    // `/AcroForm /Fields` — the container the shipped flatten got wrong.
+    let acroform = graph
+        .catalog_dict()
+        .and_then(|c| c.get(b"AcroForm"))
+        .map(|a| graph.resolve(a).clone())
+        .unwrap_or(Object::Null);
+    for num in refs_of(&graph, &acroform, b"Fields") {
+        assert!(
+            !gone.contains(&num),
+            "/AcroForm /Fields still names deleted object {num} — the exact \
+             shape of the shipped flatten defect, and invisible to any test \
+             that reads through parse_acroform"
+        );
+    }
+
+    // Every page's `/Annots`.
+    for page in pdfce_core::page_tree::pages_in(&graph).expect("page tree") {
+        let page_obj = graph.resolved(page.id).clone();
+        for num in refs_of(&graph, &page_obj, b"Annots") {
+            assert!(
+                !gone.contains(&num),
+                "a page's /Annots still names deleted object {num} — the page \
+                 would paint a widget belonging to no field"
+            );
+        }
+    }
+
+    assert!(
+        !forms::parse_acroform(&graph)
+            .iter()
+            .flat_map(|f| f.fields.iter())
+            .any(|f| f.fully_qualified_name == "Colour"),
+        "the group must be gone after a reload too"
+    );
+}
