@@ -3884,6 +3884,18 @@ with a forward pointer.
     **Owed:** the byte-grep test, against a fixture that actually carries
     `/CO`//`/AA`//`/Names /JavaScript`. Until it exists, do not cite
     decision 009's structural honouring as covering the authoring path.
+    **★ RE-MEASURED 2026-08-07 at `bca60c9` (Pass 20.2 + 20.3) — STILL
+    ABSENT, AND THE EXPOSURE HAS TRIPLED.** `add_check_box` and
+    `add_choice_field` ship, and **both append to `/AcroForm /Fields`**,
+    so **three** verbs now write the dict that was previously written by
+    none. `crates/pdfce-core/tests/form_field_authoring.rs` was re-grepped
+    at `bca60c9` for `/CO`, `/AA`, `Names` and `JavaScript` across all
+    **34** `#[test]` functions — **no match**. Same instrument, same
+    caveat (**a read of the test file, not a run of the code**), same
+    conclusion, three times the surface. **This paragraph is updated here
+    rather than only in `ROADMAP.md` under the *Update protocol*'s
+    same-filing propagation duty** — a forward pointer that fired once and
+    was then left to age is the exact failure the duty exists to prevent.
   - **(f) Additivity preserves R34/R46.** A new module + additive
     methods/variants + one new `pub fn`; the re-emission path and
     `add_markup`/`add_text_annotation` are byte-unchanged. Full-corpus R46
@@ -7464,3 +7476,61 @@ with a forward pointer.
   its own `/AP`, **would never notice**. That is the failure mode this
   entry most wants recorded: **a document that works in the tool that
   wrote it and nowhere else, invisible to that tool's own tests.**
+
+- **2026-08-07 (third entry)** — **When a decision record REJECTS a write
+  model, a refusal that makes the rejected shape UNREACHABLE is a
+  legitimate cap — but only when the shape becomes IMPOSSIBLE, not merely
+  unlikely.** Established by `bca60c9` (Pass 20.2 + Pass 20.3, check-box
+  and choice-field creation — see `ROADMAP.md`'s *Shipped* entry).
+  **The situation, because the rule only makes sense against it.**
+  Decision 020 §3.3.1 rejected the flat-append authoring model — outcome
+  **O1** — in unusually strong terms: *"Even one slice of that authors
+  documents that cannot be un-authored."* Pass 20.1 shipped that model
+  anyway, and it was **emitting O1 in fact**, not in theory: two
+  same-named `add-text-field`/`add-check-box` calls produced two
+  top-level fields sharing one fully-qualified name, which §12.7.3.2
+  makes the field's **identity**. Verified by reproduction before any
+  code changed.
+  **The choice was pivot or cap.** Pivoting meant stopping to build the
+  write-side field-path resolver decision 020 §6 F1 specifies. Capping
+  meant keeping the flat model and **refusing** every same-name add, in
+  one shared preflight, for all three authoring verbs.
+  **Capping was chosen, and the test that justifies it is the one worth
+  carrying forward: with the refusal in place, O1's rejection ground goes
+  to ZERO.** Flat-append **plus a total refusal** cannot emit a
+  duplicate-identity document *at all* — not rarely, not usually-not.
+  What remains is a **missing capability**, and a missing capability and a
+  deferred corruption are categorically different objects: the first
+  produces an error message, the second produces files in someone's
+  archive that cannot be repaired, because nothing records which of two
+  identically-named fields the operator meant.
+  **The two conditions this rule carries, so it is not read as a licence
+  to defer any hard branch:**
+  1. **The refusal must be TOTAL and must sit in ONE place.** Here it is a
+     single `field_authoring_preflight` called by all three verbs. A
+     per-verb refusal would be a claim about three code paths rather than
+     a property of the subsystem, and the next verb would forget.
+  2. **Nothing built may become waste.** The keyed `/AP /N` sub-dictionary,
+     the button appearance generator, `/Opt` encoding and the flag mapping
+     are all required whatever shape the resolver eventually takes,
+     because none of them sits on the resolver's side of the design. If
+     capping had meant building throwaway structure, pivoting would have
+     been correct.
+  **The corollary that makes this safe to reuse:** a cap converts a
+  correctness debt into a **capability** debt, and capability debt must
+  then be tracked as owed work with its blocker named. Here the resolver
+  is owed, **radio groups are BLOCKED on it** (decision 020 F2 requires
+  them built from the merge primitive), and the engineer's response to
+  this entry's own filing was to make F0+F1 the priority. **A cap that is
+  not followed by that re-prioritisation is just a nicer-looking
+  deferral.**
+  **A second, smaller rule from the same commit, filed here because it
+  generalises past forms:** `ChoiceOptionDuplicate` refuses a repeated
+  `/Opt` export value **even though §12.7.4.4 permits it**, because
+  pdfce's own fill verb resolves a requested value to the **first** match
+  — so a duplicate authors an option the operator can see and can never
+  choose. **An authoring verb must be checked against what the project's
+  OWN consuming paths can address, not only against what the spec
+  permits.** Rule 1 (spec fidelity) says what is legal; this says what is
+  reachable, and the two can disagree in the direction of pdfce being
+  stricter.

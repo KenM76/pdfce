@@ -18364,3 +18364,196 @@ subject, and the R87 occurrence-C meta-finding was carried in a dispatch
 that no document records. **Record this so a future session inherits the
 cadence rather than rediscovering it** — continuation 109 made the same
 note, and this is its first confirmation.
+
+## 2026-08-07 (second filing) — check boxes and choice fields (`bca60c9`): **Pass 20.2 + Pass 20.3 HEADED, both PARTIAL**; **Pass 20.1's identity RULED**; **Pass 20.1's duplicate-name defect CONFIRMED and CAPPED**; F0+F1 made the priority
+
+**This is the second filing of 2026-08-07.** The first (above) carried
+`8e799e9`. **The continuation counter is deliberately not resumed** — it
+was last used at **109** (2026-08-06) and the first 2026-08-07 entry
+dropped it; inventing 110 here would silently claim that entry was
+numbered when it was not. Filings on this date are identified by order,
+not by counter.
+
+**Operator instruction — unchanged, no new operator input this stretch:**
+
+> *"get form field creation/editing done next."*
+
+Restated verbatim rather than summarised because it is the one input that
+cannot be re-derived from disk, and because **it is the load-bearing
+premise of this session's re-prioritisation** (below): the operator asked
+for creation *and editing*, and editing is decision 020's F6.
+
+### Shipped
+
+- **Check-box and choice-field creation — core + CLI** (`bca60c9`).
+  `EditSession::add_check_box`, `EditSession::add_choice_field`,
+  `pdfce-cli add-check-box` / `add-choice-field`, plus a new
+  `crates/pdfce-cli/tests/add_fields.rs`. 5 files, **2,615 insertions /
+  78 deletions**.
+  **Filed as Pass 20.2 + Pass 20.3, BOTH PARTIAL.** 20.2 gets the
+  **check-box half** of decision 020's F2 (radio is **BLOCKED** on the F1
+  merge primitive; deletion and button `/Opt` untouched); 20.3 gets the
+  **choice half** of F3 (no `/I`, no `/TI`, no push buttons).
+  Gates (engineer-measured at `bca60c9`, relayed per R87): **2054 tests
+  pass, 0 fail** (was 2019); `clippy --workspace --all-targets -D
+  warnings` clean; `cargo tree -p pdfce-core` shows **zero GUI matches**.
+  **The test arithmetic reconciles exactly and was checked, not assumed:**
+  the core forms file went 11 → **34** `#[test]` fns (+23), the new CLI
+  file has **12**, and 23 + 12 = 35 = 2054 − 2019.
+
+### Rulings filed this filing
+
+- **`8e799e9` IS Pass 20.1, PARTIAL** (engineer). The prior filing
+  **withheld** the ID and recommended exactly this; the engineer's next
+  dispatch supplied it as settled. **Recorded plainly that the two
+  statements disagree about who assigned it** — before the ✅ RULING block
+  went in, no file in the repository said `8e799e9` was Pass 20.1.
+  **The heading had to be amended, not merely footnoted:**
+  `check-ledger-numbers.py` only sees a Pass ID in a heading that
+  *starts* with `Pass`, so while the entry read `⚠ IDENTITY UNRESOLVED`
+  the ruled ID stayed invisible to the very gate that reports family 20's
+  state.
+- **F0 + F1 is now the PRIORITY** (engineer), ahead of finishing F2/F3,
+  and a fork is executing it. Three reasons, all recorded in *In
+  progress*: radio groups are blocked on the F1 merge primitive; same-name
+  merge is a real capability currently refused; and the operator's
+  *"editing"* is F6, behind five slices, so the resolver sits on the
+  critical path of **the operator's own request**.
+  **The slice-2 fork escalated this rather than deciding it, and that was
+  correct** — re-sequencing a decision record's build order is above a
+  build slice's level. Filed as a **positive** instance: this project's
+  failures in this area have all run the other way.
+
+### Findings
+
+- **★ Pass 20.1's ⚠ FLAG 1 was a REAL DEFECT, and the flag's shape is why
+  it got fixed.** The flag said the same-name/same-type path was *"neither
+  a merge nor a refusal"*, that the alarming reading (*"pdfce authors
+  decision 020's rejected outcome O1 today"*) and the dull one (*"I
+  misread the control flow"*) both fit, and that **one test decides it**.
+  The fork ran it before touching anything: two same-named
+  `add-check-box` calls, the second **succeeded**, `list-fields` reported
+  `fields=2`. **Alarming reading correct.**
+  **This is R87's amended form working end to end for the first time** —
+  the flag asserted nothing it could not prove, named the instrument, and
+  named the one experiment; the next worker ran the experiment.
+- **The fix is one shared preflight and it is DELIBERATELY WIDER than the
+  slice.** `field_authoring_preflight` is called by all three verbs, so
+  slice 1's text field is refused too. **Leaving `add-text-field` able to
+  emit duplicates while `add-check-box` refused would be an incoherent
+  surface** — an operator cannot be expected to know which verb is safe.
+  The preflight reads the **CURRENT** form, so two adds in one session
+  cannot walk past the guard.
+- **★ The cap-vs-pivot argument, accepted and filed to `ARCHITECTURE.md`
+  §12:** with a **total** refusal in one place, O1's rejection ground goes
+  to **zero** — flat-append plus refusal cannot emit a duplicate-identity
+  document at all. What remains is a **missing capability** (honest,
+  visible, reversible), which is categorically not a **deferred
+  corruption**. Two conditions carried with the rule: the refusal must be
+  total and single-sited, and **nothing built may become waste** (the
+  keyed `/AP`, button generator, `/Opt` encoding and flags are needed
+  whatever the resolver looks like). **Corollary:** a cap converts a
+  correctness debt into a capability debt, which must then be tracked with
+  its blocker named — *a cap not followed by re-prioritisation is just a
+  nicer-looking deferral.* It **was** followed by one, the same day.
+- **★ A THIRD conflict the prior filing had not flagged — a RAG GAP marker
+  that outlived the decision closing it.** `Acrobat_Features/
+  forms__field_creation_minimums.md` flags empty `/Opt` as *"a real edge
+  case … pdfce must decide deliberately"*; decision 020 §6 F3 **had
+  already decided it on 2026-08-03** — allowed and disclosed, with the
+  warning text. The fork had decided to **REFUSE**, then reversed and used
+  F3's wording verbatim. **Filed as the second instance of the
+  same-filing propagation duty**, with the extension it forces: *an
+  obligation marker is not a fact — it is a claim that a decision is still
+  OPEN, and its staleness actively commissions a redecision that can come
+  out the other way.* **Annotating a discharged GAP is part of discharging
+  it.** Not fixed here (`Acrobat_Features` is
+  `pdfce-acrobat-librarian`'s) — **dispatch recommended**.
+- **Verified by RENDERING, not just by a green suite:** an empty box, a
+  ticked box with the drawn check, and a choice field showing **"Mexico"**
+  while `/V` holds **`MX`**. **The third is the load-bearing one** — the
+  export/display split is the whole point of `/Opt`'s two-element form and
+  is exactly what a parse-back test cannot distinguish from a field
+  storing the display string twice.
+- **The check is VECTOR-DRAWN, and R92 is the reason.**
+  `Std14::ZapfDingbats` is reachable, but the only appearance generator is
+  Latin-only and raises on a symbolic font, so a glyph-drawn check needs a
+  **second** generator. Decision 020 F2 said *"decide in-slice, cite the
+  choice"*; this is the citation.
+- **★ An honest asymmetry the render exposed — R43 now has an
+  INTRA-FEATURE instance.** A check box's border paints (it is vector
+  artwork **inside `/AP`**); a choice field's does not (it is `/MK` `/BC`,
+  R43's canonical named-not-painted case). Two fields authored one command
+  apart, same render, one boxed and one not. **Up to now R43's consequence
+  was only visible by comparing pdfce to another viewer.** No rule number
+  minted — R43's text is unchanged and correct; what grew is the
+  **disclosure** burden, and F5's GUI is where it should be discharged.
+- **`/Sort` SORTS the array rather than only setting the flag** —
+  §12.7.4.4 makes display order = array order, so the bit alone changes
+  nothing an operator can see.
+- **★ `ChoiceOptionDuplicate` is pdfce choosing to be STRICTER than the
+  spec, for a reason internal to pdfce.** §12.7.4.4 permits a repeated
+  `/Opt` export; pdfce's own fill verb resolves to the **first** match, so
+  a duplicate authors an option the operator can see and can never choose.
+  **An authoring verb must be checked against what the project's own
+  CONSUMING paths can address, not only against what the spec permits.**
+  Filed to `ARCHITECTURE.md` §12 as the smaller of that entry's two rules.
+- **⚠ Decision 020's required JS-carrier test is STILL ABSENT, and the
+  exposure has TRIPLED.** Re-grepped `form_field_authoring.rs` at
+  `bca60c9` for `/CO`, `/AA`, `Names`, `JavaScript` across all 34 tests —
+  **no match**. At `8e799e9` one verb appended to `/AcroForm /Fields`;
+  **three do now**. Instrument named, R87: **a read of the test file, not
+  a run of the code.** `ARCHITECTURE.md` §4's forward-pointer paragraph
+  updated in place this filing.
+
+### Ledger — nothing MINTED; two IDs HEADED
+
+Pass family ceiling **43** (unchanged). **Pass 20.2 and Pass 20.3 are
+HEADED for the first time** — both were *filed* 2026-08-03 by decision
+020's Backlog amendment, so this is a heading, not a mint. Standing rules
+**R158** (R159 next free) — the R43 note is a reading amendment and the
+propagation-duty second instance is an extension in substance; neither
+mints. Decision records **031**. Operator questions **(bb)**.
+
+**★ Family 20 stops being `CLAIMED BUT NOT YET HEADED`** — the condition
+`check-ledger-numbers.py` had reported since 2026-08-03 and which the
+`8e799e9` filing explicitly could not clear. **Note what cleared it: a
+heading, not a commit.** Two commits of family-20 work existed before this
+filing and neither moved that line.
+
+### Still in flight
+
+- A fork is executing **F0 + F1** in `crates/`. **Nothing about its
+  content is anticipated here (R87).**
+- **Two engineer rulings still OWED**, both restated in *In progress*
+  because that is where the next session looks:
+  **(a) F0's disposition** — owed retroactively, deferred, or retired. It
+  was **skipped, which is not one of the three**. Decision 020 §4.3's
+  argument (*"code paths that have never run against the shapes authoring
+  will create"*) has **strengthened**: three field types' worth of such
+  shapes now exist and those paths remain unrun.
+  **(b) The CLI verb shape** — `add-text-field` / `add-check-box` /
+  `add-choice-field` versus `forms add-field --type …`. **Three verbs
+  now, one when first flagged.** Being settled by accretion.
+- **Owed tests:** decision 020's `/CO`//`/AA`//`/Names /JavaScript`
+  byte-grep (above). ⚠ FLAG 1's test is **discharged** — it was run, and
+  it failed, which is why the preflight exists.
+- **Recommended dispatch:** `pdfce-acrobat-librarian`, to annotate the
+  discharged empty-`/Opt` GAP in `forms__field_creation_minimums.md` and
+  sweep that file's other GAP markers for the same condition.
+- Carried forward untouched: **(ba)** shell-redesign property 4;
+  **(bb)** R124 greyed placeholders; **Pass 38.5's two INVALIDATED
+  items**; the five **OWED build records** from FILING GAP #2.
+
+### For next session
+
+- **Rule F0** and **rule the CLI verb shape** — both listed above, both
+  getting more expensive per slice.
+- **Decide whether field property EDITING is pulled forward.** The
+  operator asked for it **by name**; decision 020 has it at F6. The F0+F1
+  priority call is partly justified *by* that request, which makes the
+  question sharper, not softer.
+- **Radio groups the moment the merge primitive lands** — they are
+  blocked on it and on nothing else.
+- **Backup currency is not verifiable from here** — check
+  `D:\Dev\pdfce-backups\` if it matters.

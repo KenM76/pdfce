@@ -319,7 +319,315 @@ rather than a change to the existing one.
 `check-passes-filed.py` proves a commit was **NOTICED**. Nothing this
 project owns proves a Pass was **FILED**.
 
-### ⚠ IDENTITY UNRESOLVED — form fields can be CREATED, not only filled (core + CLI, text fields) — 2026-08-07, committed `8e799e9`, branch `pass-8-redaction`. **NO Pass ID is minted by this filing.** The **20.x family already exists for exactly this work** and `8e799e9` matches neither of its first two slices as filed. **ENGINEER RULING NEEDED** — recommendation below
+### Pass 20.2 + Pass 20.3 — check boxes and choice fields, and the duplicate name that stops being allowed (core + CLI) — 2026-08-07, committed `bca60c9`, branch `pass-8-redaction`. **BOTH PARTIAL.** **No number is MINTED — both IDs were filed by decision 020 on 2026-08-03 and this filing HEADS them for the first time**, which is the first time family 20 has had a heading at all
+
+**Slice 2 of the operator's field-creation request** (*"get form field
+creation/editing done next."*). `EditSession::add_check_box` and
+`EditSession::add_choice_field` in `pdfce-core`, `add-check-box` and
+`add-choice-field` in `pdfce-cli` (rule 11 satisfied for both), 5 files,
+**2,615 insertions / 78 deletions**.
+
+#### Why two IDs and not one new one — the 26.2 ruling's own test, applied a second time
+
+**The test is *what does the document that DEFINED the number say it
+means?*** Decision 020 §6 defines **F2** as *"Checkbox + radio creation,
+and field/widget deletion"* and **F3** as *"Choice fields + push
+buttons"*, and the Backlog's 2026-08-03 amendment already assigned
+**F2 → Pass 20.2** and **F3 → Pass 20.3**. `bca60c9` is the **check-box
+half of 20.2** and the **choice half of 20.3** — not different work under
+spoken-for numbers, but those numbers' own work, built incompletely and
+built together.
+
+**Minting a third number for "check boxes and choice fields" would have
+been the actively worse choice**, and for the same reason the 20.1
+recommendation gave: a fresh ID makes 20.2 and 20.3 look entirely ahead
+of us when both creation floors are behind us, and it strands the
+capability under a number decision 020 never mentions. **A partial with
+its debt written down is more honest than a clean number with the debt
+invisible.** `check-ledger-numbers.py` explicitly supports a heading
+declaring more than one Pass (*"Pass 17.1 + Pass 17.2"*), so this shape
+costs the gate nothing.
+
+**Both are PARTIAL, and here is exactly which half of each is missing:**
+
+| Slice | Decision 020's definition | `bca60c9` |
+|---|---|---|
+| **Pass 20.2 (F2)** | checkbox creation + **radio grouping through the F1 merge primitive** + `remove-field` / `remove-widget` (§3.6.3's three rules) + button `/Opt` positional on-state mapping | **Check box only.** Keyed `/AP /N` sub-dictionary with `/Off` always present and `/AS` set — the *"first button appearance generator"* F2 asked for — plus on-state validation. **Radio is BLOCKED, not skipped**: F2 requires it be built *from the F1 merge primitive*, which does not exist. **No deletion verbs. No button `/Opt`.** |
+| **Pass 20.3 (F3)** | listbox/combo `/Opt` (export↔display), `/Ff` Combo/Edit/MultiSelect/Sort, **`/I` and `/TI`**, **push buttons** | **Choice fields only.** `/Opt` export↔display pairs, all four `/Ff` flags, and **empty `/Opt` allowed + disclosed using F3's warning text verbatim**. **No `/I`, no `/TI`, no push buttons.** |
+
+#### ★ THE HEADLINE IS THE REFUSAL, NOT THE TWO NEW FIELD TYPES
+
+**Slice 1's ⚠ FLAG (filed below, on the `8e799e9` entry) was a REAL
+DEFECT, and it is now CAPPED.** That flag said the same-name/same-type
+path was *"neither a merge nor a refusal"*, that the alarming reading
+(*"pdfce authors decision 020's rejected outcome O1 today"*) and the dull
+one (*"I misread the control flow"*) both fit a read of the source, and
+that **one test decides it**.
+
+**The fork ran that test before changing anything.** Two `add-check-box`
+calls with the same name; the second **succeeded**; `list-fields`
+reported `fields=2`. **The alarming reading was correct.** Slice 1 was
+emitting two top-level fields sharing one fully-qualified name — which
+§12.7.3.2 makes the field's **identity**, with no disambiguator.
+
+**★ Record the process outcome, not only the technical one.** A flag
+filed *with its evidence and its own dull alternative attached* was
+picked up by the next worker, converted into a two-command reproduction,
+and closed in one slice. That is the shape R87's amendment prescribes
+working end to end for the first time: the flag did not assert a defect
+it could not prove, and it did not shrug either — **it named the
+instrument and the one experiment that would settle it**, and the
+experiment got run.
+
+**The fix is one shared preflight, and it is DELIBERATELY WIDER than the
+slice.** `field_authoring_preflight` is extracted and called by **all
+three** authoring verbs — `add_text_field` (4053), `add_check_box`
+(4371), `add_choice_field` (4534) — so slice 1's text field is refused
+too. **The fork widened its own scope on purpose and the reason is
+correct:** leaving `add-text-field` able to emit duplicates while
+`add-check-box` refused would be an incoherent surface, and an operator
+cannot be expected to know which verb is safe this week.
+
+**Two errors, not one, because they are two different problems:**
+`FieldNameTypeConflict` (different type — *"a mistake the operator can
+fix by renaming"*) and the new `FieldNameAlreadyUsed` (same type —
+*"a merge pdfce cannot yet perform"*). The second's doc comment says so
+in as many words, which is what keeps it from reading as a permanent
+design position.
+
+**The preflight reads the CURRENT form, not the file as loaded** — so the
+XFA and same-name checks both see fields added earlier in the same
+session, not merely those already on disk. Without that, two adds in one
+session would have walked straight past the guard.
+
+#### ★ THE ARGUMENT FOR CAPPING RATHER THAN PIVOTING — accepted by the engineer, and recorded because it is reusable
+
+The fork could have stopped and built the resolver. It argued for capping
+instead, and the argument is worth carrying:
+
+1. **With the refusal in place, O1's rejection ground goes to ZERO.**
+   Decision 020 §3.3.1 rejected the flat-append model because it *"authors
+   documents that cannot be un-authored"*. **Flat-append plus a refusal
+   cannot emit that shape at all.** The model that remains is not a
+   deferred corruption; it is a **missing capability** — honest, visible,
+   reversible — and those are categorically different things. The one
+   leaves damage in operators' files; the other leaves an error message.
+2. **Nothing built becomes waste.** The keyed `/AP` sub-dictionary, the
+   button appearance generator, `/Opt` encoding and the flag mapping are
+   required by F2/F3 **whatever shape the resolver takes**, because none
+   of them is on the resolver's side of the design.
+
+**The generalisation, stated so a future slice can reuse it:** when a
+decision record rejects a write model, a **refusal that makes the
+rejected shape unreachable** is a legitimate cap — but only when it can
+be shown the rejected shape is now *impossible*, not merely *unlikely*.
+Filed as an `ARCHITECTURE.md` §12 decision-log entry this same filing.
+
+#### ★ A THIRD CONFLICT THE FORK FOUND, WHICH THE PRIOR FILING HAD NOT FLAGGED — a RAG GAP marker that outlived the decision closing it
+
+The fork initially decided to **REFUSE** an empty `/Opt`, on the strength
+of `D:\Dev\Rag-Specialized\Acrobat_Features\forms__field_creation_minimums.md`,
+which says of a zero-option choice field:
+
+> *"**GAP, flagged explicitly**: this is a real edge case (what does an
+> empty dropdown even mean to fill-time code) pdfce must decide
+> deliberately rather than infer."*
+
+**That GAP had already been closed — against the fork's instinct —
+four days earlier.** Decision 020 §6's F3 rules *"**Empty `/Opt` is
+ALLOWED and disclosed**"* and even supplies the warning wording. The fork
+reversed to match and used F3's text **verbatim**:
+
+> *"this choice field has no options and cannot be filled until options
+> are added."*
+
+**This is the same-filing propagation duty's shape in a new pair of
+documents, and it is filed as a second instance at the foot of this
+document** (see *Same-filing propagation duty*). The first instance was
+`ROADMAP.md` carrying a sentence copied from an append-only decision
+record and left stale. This one is **a RAG obligation marker that was
+discharged in a decision record and never annotated on the producing
+side** — so the RAG still recruits the next reader into re-deciding a
+closed question, and the *careful* reader is again the victim, because
+only someone who actually consults the RAG can be misled by it.
+
+**Not fixed by this filing, because the file is not mine.**
+`Acrobat_Features` is `pdfce-acrobat-librarian`'s exclusive territory.
+**Recommended dispatch:** annotate that GAP as *closed 2026-08-03 by
+decision 020 §6 F3 — allowed and disclosed*, and sweep the file's other
+GAP markers for the same condition. **Named here rather than silently
+left**, because nothing else in the project will notice.
+
+#### What a check box IS, structurally — three ways copying the text-field code produces a field that parses and does not work
+
+1. **`/V` is a NAME, not a string** (`Object::Name`, not a text string) —
+   the commit calls this *"the single most common way a hand-written check
+   box comes out unrecognisable."* `/AS` is written too, **even though it
+   equals `/V`**, because they answer different questions: `/V` is the
+   field's value, `/AS` (§12.5.5) is the annotation's current appearance,
+   **and a viewer paints from `/AS`**.
+2. **`/AP /N` is a SUB-DICTIONARY keyed by state name, not a stream.**
+   `/Off` is always present.
+3. **The appearance is CHOSEN, never GENERATED.** Buttons never go near
+   the variable-text generator — which is why the shared-builder R92
+   constraint that governs text and choice fields does not reach them.
+
+**The check mark is VECTOR-DRAWN, and the reason is R92, not aesthetics.**
+`Std14::ZapfDingbats` is reachable through `basefont_to_std14`, so the
+glyph route was available — but this crate's only appearance generator is
+Latin-only and raises on a symbolic font, so a glyph-drawn check needs a
+**second generator**, which **R92 forbids**. Decision 020's F2 said
+*"decide in-slice, cite the choice"*; this is the citation.
+
+#### Three new refusals, and one of them is pdfce choosing to be STRICTER than the spec — for a reason internal to pdfce
+
+- **`CheckBoxOnStateInvalid`** — an empty on-state name, or `Off`.
+  §12.7.4.2.3 reserves `Off` for the off state, so a box whose two states
+  share a name **has no way to express "checked"**.
+- **`ChoiceEditRequiresCombo`** — `Edit` without `Combo`. §12.7.4.4
+  Table 230 says `Edit` is *"used only if the Combo flag is on"*; a list
+  box has no text entry to make editable. **Refused rather than silently
+  dropped**, so the caller learns the combination was impossible instead
+  of quietly receiving a field that ignores it.
+- **★ `ChoiceOptionDuplicate`** — the same export value listed twice.
+  **§12.7.4.4 does not forbid this.** pdfce refuses anyway, because
+  **pdfce's own fill verb resolves a requested value to the FIRST
+  match** — so a duplicate export authors an option the operator can see
+  and can never choose. **This is worth more than its two lines of code:
+  it is an authoring refusal derived from an invariant of a DIFFERENT
+  subsystem**, and it generalises — every authoring verb the 20.x family
+  still owes should be checked against what the *fill* path can actually
+  address, not only against what the spec permits. Rule 1 says what is
+  legal; this says what is reachable.
+
+#### `/Sort` SORTS the array — it does not merely set the flag
+
+§12.7.4.4: a reader *"shall display the options in the order in which
+they occur in the `Opt` array."* Setting the `Sort` bit and leaving the
+array unsorted therefore changes **nothing an operator can see**. The
+implementation sorts `options` by display string before writing. **A
+spec-fidelity trap of exactly the kind rule 1 exists for**: the flag is
+metadata about how the array was produced, not an instruction to the
+viewer.
+
+#### Verified by RENDERING, not merely by a green suite
+
+Three things were looked at, not just asserted:
+
+- an **empty** check box;
+- a **ticked** check box, with the drawn check visible;
+- a choice field displaying **"Mexico"** while `/V` holds **`MX`**.
+
+**The third is the load-bearing one.** The export/display split is the
+whole point of `/Opt`'s two-element form, and it is the one property that
+a parse-back test cannot distinguish from a field that stores the display
+string twice. **Seeing `Mexico` on the page while the value is `MX`
+proves the split end to end.**
+
+#### ★ AN HONEST ASYMMETRY THE RENDER EXPOSED — a check box's border paints, a choice field's does not
+
+Same document, same filing, two authored fields, **one shows a box and
+one does not.** The cause is **WHERE the border lives**, not a bug:
+
+- a check box's border is **vector artwork inside its `/AP` stream**,
+  because its appearance is hand-drawn anyway;
+- a choice or text field's border is **`/MK` `/BC`**, which **R43** makes
+  the canonical *named-not-painted* case — pdfce declines to synthesise a
+  dynamic appearance from `/MK` at display time, so the border is in the
+  **file** for viewers that honour it and **invisible here**.
+
+**Closing the gap is still refused, and still for R92's reason:** it would
+mean putting a border into the **shared** variable-text builder — which
+**fill** also uses, so every refilled field in every document would gain a
+border it never had — or writing a second generator. Documented at
+`add_choice_field` rather than left to be discovered.
+
+**★ AMENDMENT TO R43'S READING (2026-08-07) — the named-not-painted case
+now has an INTRA-FEATURE instance, and that is a harder thing to explain
+than the inter-feature one.** Up to now R43's consequence was visible only
+by comparing pdfce against another viewer. It is now visible **inside a
+single pdfce render, between two fields the same operator authored one
+command apart.** An operator who sees a box around his check box and none
+around his drop-down has no way to reach *"the borders live in different
+dictionaries"* unaided. **No rule number is minted** — R43's text is
+unchanged and correct; what changed is the *disclosure* burden, and the
+right place to discharge it is F5's GUI surface, which should say which
+field types show a border in pdfce's own renderer.
+
+#### Gates — engineer-measured at `bca60c9` and relayed (R87; the librarian has no shell for build state)
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | **2054 pass, 0 fail** (was 2019) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `cargo tree -p pdfce-core` | **zero GUI matches** — rule 2 invariant holds |
+
+**★ The test arithmetic reconciles exactly, and it was checked rather than
+assumed.** `crates/pdfce-core/tests/form_field_authoring.rs` now holds
+**34** `#[test]` functions (11 at `8e799e9`, so **+23**) and the new
+`crates/pdfce-cli/tests/add_fields.rs` holds **12**. 23 + 12 = **35**,
+and 2054 − 2019 = **35**. Stated because a relayed count that reconciles
+against two independently-countable files is a materially stronger claim
+than a relayed count that does not.
+
+**Backup currency is not verifiable from here** — the engineer should
+check `D:\Dev\pdfce-backups\` if it matters.
+
+#### ⚠ STILL ABSENT AT `bca60c9` — decision 020's required JS-carrier test, re-measured this filing
+
+Slice 1's ⚠ FLAG 2 recorded that decision 020 §1.2.6/§7.2 **required F1 to
+add a byte-grep test** proving `/CO`, `/AA` and `/Names /JavaScript`
+re-emit verbatim after a field is authored, and that the test was absent.
+**It is still absent** — `crates/pdfce-core/tests/form_field_authoring.rs`
+re-grepped at `bca60c9` for `/CO`, `/AA`, `Names` and `JavaScript`:
+**no match across all 34 tests.**
+
+**And the exposure has TRIPLED, which is why this is restated rather than
+left to the earlier entry.** At `8e799e9` exactly one verb appended to
+`/AcroForm /Fields`. **Three do now.** Decision 009 permanently forbids
+pdfce executing document JavaScript; the compensating promise is that
+pdfce **preserves** it byte-for-byte. A regression here is **silent,
+unowned, and lands in someone else's viewer.** `ARCHITECTURE.md` §4's
+forward-pointer paragraph is updated in place this same filing, per the
+propagation duty.
+
+#### Owed, named by the commit rather than left to be discovered
+
+- **The resolver (decision 020 F1)** and **F0's substrate before it** —
+  now the declared priority; see *In progress*.
+- **Radio groups — BLOCKED**, not deferred: F2 requires them built from
+  the F1 merge primitive.
+- **`/I` and `/TI`** (choice selection indices).
+- **Push buttons** (F3's other half).
+- **Field and widget deletion** (F2's other half).
+- **Field property EDITING** — rename, reflag, move, resize — which the
+  operator asked for **by name** and decision 020 filed as the non-gating
+  fast-follow F6.
+
+**The CLI shape still diverges from decision 020** — `add-check-box` /
+`add-choice-field` versus `forms add-field --type checkbox|listbox|…`.
+**Inherited from slice 1, not introduced here**, and now at three verbs
+instead of one. **This is the accretion the `8e799e9` entry predicted in
+writing**, and it is now more expensive to reverse than it was when
+flagged. Still the engineer's call — see *In progress*.
+
+#### Ledger — nothing MINTED, two IDs HEADED
+
+**No number of any kind is minted by this entry.** Pass family ceiling
+**unchanged at 43** (43.0 highest). **Pass 20.2 and Pass 20.3 are HEADED
+for the first time** — both were filed on 2026-08-03 by decision 020's
+Backlog amendment, so this is a heading, not a mint. Standing-rule ceiling
+**R158** (R159 next free) — the R43 note above is a reading amendment and
+mints nothing. Decision-record ceiling **031**. Operator-question ceiling
+**(bb)**.
+
+**★ Family 20 stops being `CLAIMED BUT NOT YET HEADED` with this entry** —
+the condition `tools/check-ledger-numbers.py` had reported since
+2026-08-03, and which the `8e799e9` filing explicitly could not clear.
+**Note what actually cleared it: a heading, not a commit.** Two commits of
+family-20 work existed before this filing and neither moved that line.
+
+### Pass 20.1 (PARTIAL) — form fields can be CREATED, not only filled (core + CLI, text fields) — 2026-08-07, committed `8e799e9`, branch `pass-8-redaction`. **HEADING AMENDED IN PLACE 2026-08-07** — this entry was filed as *"⚠ IDENTITY UNRESOLVED … NO Pass ID is minted by this filing … ENGINEER RULING NEEDED"* and the recommendation it made was **ACCEPTED IN FULL** by the engineer the same day. The body below is unchanged; the ✅ RULING block is appended at its end. **The heading had to change, not merely gain a footer** — `check-ledger-numbers.py` only sees a Pass ID in a heading that *starts* with `Pass`, so while this entry read `⚠ IDENTITY UNRESOLVED` the ruled ID was invisible to the very gate that reports family 20's state
 
 **The build record is filed; the identity is not.** These are separable
 and this filing deliberately separates them. What the engineer measured
@@ -606,6 +914,61 @@ recurring a third time: **a shipped capability with no Pass heading is
 invisible to both gates**, and `8e799e9`'s subject line claims no Pass, so
 `check-passes-filed.py` will not even look for it. **This entry is the
 only thing tracking it.**
+
+---
+
+#### ✅ RULING (engineer, 2026-08-07) — `8e799e9` **IS Pass 20.1, PARTIAL**. The recommendation above was accepted in full; the heading is amended, the body is untouched
+
+**No number is minted.** 20.1 was filed on 2026-08-03 by decision 020's
+Backlog amendment; this ruling **assigns an existing ID to a commit**,
+which is the same act the 26.2 collision ruling performed and is
+explicitly the engineer's, not a librarian's.
+
+**Recorded plainly, because the sequence matters more than the outcome:**
+the filing above **withheld** the ID and said so; the engineer's next
+dispatch **supplied** it, as a settled fact (*"Last filing you assigned
+`8e799e9` = Pass 20.1 PARTIAL"*). The two statements disagree about who
+assigned it. **The ruling is what makes it true, and this block is where
+it becomes true in the documents** — before this block, no file in the
+repository said `8e799e9` was Pass 20.1.
+
+**What the ruling does NOT settle, carried forward as still owed:**
+
+1. **Is F0 (Pass 20.0) owed retroactively, deferred, or retired?** It was
+   **skipped, not decided**, and skipping is not one of the three
+   answers. Decision 020 §4.3's argument for F0 is *"F0 addresses code
+   paths that have never run against the shapes authoring will create"* —
+   and authoring has now created **three** field types' worth of such
+   shapes while those paths remain unrun. **The argument for F0 has
+   strengthened, not weakened, since it was skipped.**
+2. **Does the CLI verb name stand?** `add-text-field` /
+   `add-check-box` / `add-choice-field` versus decision 020's
+   `forms add-field --type …`. **Now three verbs deep.**
+
+Both are the engineer's, both are explicitly still open, and both are
+restated in *In progress* so they are not read as discharged by this
+ruling.
+
+---
+
+#### ✅ ⚠ FLAG 1 IS RESOLVED (2026-08-07, by `bca60c9`) — the alarming reading was the correct one
+
+The ⚠ FLAG above said the same-name/same-type path was *"neither a merge
+nor a refusal"*, that the reading might be wrong, and that **one test
+decides it**. **The test was run** — two same-named `add-check-box` calls;
+the second succeeded; `list-fields` reported `fields=2`. **`8e799e9` was
+emitting decision 020's rejected outcome O1.**
+
+**Pass 20.1's own defect is therefore CAPPED by Pass 20.2/20.3's shared
+preflight** (see that entry at the head of *Shipped*): all three authoring
+verbs now refuse a same-name add. **What is fixed is the emission, not the
+capability** — the merge §12.7.3.2 describes is still owed, and radio
+groups are blocked on it.
+
+**Read this as the flag working, not as the flag being wrong.** It refused
+to assert a defect it had only read for, it named the one experiment, and
+the experiment was cheap enough that the next worker ran it before
+touching anything else.
 
 ### Pass 43.0 — the ribbon owns the surfaces, the Tool tab shows them, and the object tree finally nests (GUI) — 2026-08-06, committed `37a49e6`, branch `pass-8-redaction`
 
@@ -12036,6 +12399,56 @@ to a dedicated `oxidize-pdf` audit that remains the gate before Pass 1.
 > emits* — is carried in `SESSION_LOG.md` continuation 105 and in the
 > standing-rule **proposal** at the end of *Standing rules*.
 
+### Pass 20.0 + Pass 20.1 (completion) — the field-path resolver and the substrate under it — **ENGINEER RULING 2026-08-07: THIS IS NOW THE PRIORITY**, and a fork is executing it
+
+**Both IDs already exist** (decision 020's F0 and F1, filed 2026-08-03).
+**Nothing is minted.** 20.1 is *already headed* in *Shipped* as PARTIAL;
+this entry tracks the **remainder** of it plus the substrate that was
+supposed to precede it.
+
+**The engineer's reasons, recorded verbatim in substance because a
+re-planning call is exactly the thing a future session will want the
+reasoning for:**
+
+1. **Radio groups are BLOCKED on the F1 merge primitive.** Decision 020's
+   F2 requires them built *from* that primitive rather than by a
+   radio-specific path, so no amount of button work reaches them.
+2. **Same-name merge is a real capability that is currently REFUSED.**
+   Pass 20.2/20.3's shared preflight caps the damage; it does not deliver
+   the merge §12.7.3.2 describes, which is how one check box appears on
+   every page of a form.
+3. **The operator asked for creation AND EDITING** (*"get form field
+   creation/editing done next"*). Editing is decision 020's **F6**,
+   behind five slices — **so the resolver sits on the critical path of
+   the operator's own request**, not merely on the plan's.
+
+**★ The slice-2 fork escalated this rather than deciding it, and that was
+correct.** Re-sequencing a decision record's build order is above a
+build-slice's level; the fork said so and handed it up. **Recorded as a
+positive instance** — the project's failures in this area have all been
+the other direction (work that quietly renumbered or resequenced itself
+and was discovered later by someone reading `git log` against the plan).
+
+**Two rulings still OWED by the engineer, and NOT resolved by this
+priority call** — restated here because *In progress* is where the next
+session will look, and because both will keep accreting cost:
+
+- **F0's disposition — owed retroactively, deferred, or retired?** It was
+  **skipped, not decided.** Three field types now exist that F0's
+  fixtures were meant to exercise the read paths against, and those paths
+  have still never been run against authored output. See the ✅ RULING
+  block on the Pass 20.1 *Shipped* entry.
+- **The CLI verb shape** — `add-text-field` / `add-check-box` /
+  `add-choice-field` versus decision 020's `forms add-field --type …`.
+  **Three verbs now, one at the time it was first flagged.** Every
+  further slice adds one. This is being settled by accretion whether or
+  not anyone settles it deliberately.
+
+**R87 applies to this entry:** the fork's work is in flight and **nothing
+about its content is anticipated here.** What is recorded is the
+engineer's *decision to prioritise it* and the two rulings that remain
+open — both of which are visible from the documents alone.
+
 ### Pass 21.1 — FF-C composite-run editability under verified-injective `/ToUnicode` (decision 021 R110; promoted from ★ Pass 21.x's Next-up slice list, 2026-08-04, on Pass 21.0's ship) — **SCOPE DISCHARGED 2026-08-05 by Pass 29.0 (`a104536`). See the Pass 29.0 Shipped entry (top of Shipped) for the delivery record.** Retained below in place (append-only discipline) because its continuation-76 and continuation-78 build logs ARE the record of how 29.0's substrate got built
 
 **Why this entry is annotated rather than moved.** Pass 21.1's remaining
@@ -17727,6 +18140,30 @@ nothing gets forgotten, not as a commitment to build in this order.
   **That last point is a scope gap worth the engineer's attention:** the
   operator asked for editing in the same breath as creation, and decision
   020 ranked editing behind five slices. **Flagged, not resequenced.**
+  **★ AMENDMENT (2026-08-07, second filing) — THE PARAGRAPH DIRECTLY
+  ABOVE IS NOW PARTLY STALE, and is corrected here rather than rewritten
+  (append-only).** Three things changed the same day:
+  **(1) The identity question is RULED** — `8e799e9` **is Pass 20.1,
+  PARTIAL** (engineer, 2026-08-07). The *"until the engineer rules"*
+  clause above is discharged. **(2) Checkbox and choice creation
+  SHIPPED** in `bca60c9` — so *"checkbox / radio (F2), choice + push
+  buttons (F3)"* is no longer wholly owed. **Pass 20.2 and Pass 20.3 are
+  now HEADED in *Shipped*, both PARTIAL**: the check-box half of F2 and
+  the choice half of F3 are built; **radio is BLOCKED** on the F1 merge
+  primitive, and field/widget deletion, `/I`, `/TI` and push buttons are
+  untouched. **(3) The build order is RE-SEQUENCED by engineer ruling** —
+  **F0 + F1 (Pass 20.0 + 20.1's remainder) is now the declared
+  priority**, ahead of finishing F2/F3, because radio is blocked on F1's
+  merge primitive and because the operator's *"editing"* sits at F6
+  behind five slices. See *In progress*.
+  **Still owed by this bucket, restated so the list is current:** the
+  **field-path resolver and the four collision outcomes** (F1's unbuilt
+  half), **all of F0**, **radio groups**, **field/widget deletion**,
+  **`/I` and `/TI`**, **push buttons**, **tab order** (F4, still
+  **BLOCKED** on the `pdfce-spec-librarian` `/Tabs` dispatch), the **GUI
+  surface** (F5, still requires a `pdfce-ui-specialist` dispatch first),
+  and **field property editing** (F6 — the operator's *"editing"*, still
+  behind everything).
 - **XFA** — legacy Adobe forms tech. **Verify current status before
   scoping** — Adobe has been deprecating XFA in Acrobat; consult the
   spec RAG + a fresh web check before committing engineering time here.
@@ -24158,3 +24595,53 @@ any fact stated in more than one place. **Read them as one discipline.**
 **Related:** **R87**'s 2026-08-07 broadening — the *reporting* half of the
 same failure. This duty stops the stale statement existing; R87's
 document-kind check stops a reader believing it once it does.
+
+#### ★ SECOND INSTANCE (2026-08-07, found by the Pass 20.2/20.3 fork) — a RAG **GAP marker** that outlived the decision closing it. Different pair of documents, same failure
+
+The founding instance was a **fact** copied from an append-only decision
+record into `ROADMAP.md` and left stale (*"Depends on 23.2"*). This one is
+an **obligation**, and it ran the other way:
+
+- **The producing side** —
+  `D:\Dev\Rag-Specialized\Acrobat_Features\forms__field_creation_minimums.md`
+  wrote, of a zero-option choice field: *"**GAP, flagged explicitly**:
+  this is a real edge case … pdfce must decide deliberately rather than
+  infer."*
+- **The consuming side** — decision 020 §6 F3 **decided it on 2026-08-03**:
+  *"Empty `/Opt` is ALLOWED and disclosed"*, with the exact warning text.
+- **Nothing propagated back.** Four days later the fork building choice
+  fields read the RAG, took the GAP at face value, and **decided to
+  REFUSE** — the opposite of the ruling. It caught its own error only by
+  re-reading decision 020 for an unrelated reason, and reversed.
+
+**Why this earns a note here rather than a shrug.** The duty as written
+covers *facts* stated in two documents. **An obligation marker is not a
+fact — it is a claim that a decision is still OPEN**, and it is the one
+kind of statement whose staleness actively recruits work. A stale fact
+misleads a reader; **a stale GAP marker commissions a redecision, and the
+redecision can come out the other way**, which is exactly what happened.
+
+**So the duty extends, in substance and without a new number:** *when a
+decision record CLOSES a question that some other document flagged as
+open, the closure is filed against the flagging document in the same
+filing — or, where that document belongs to another agent, the dispatch
+to annotate it is named in the filing.* **Annotating a discharged GAP is
+part of discharging it.**
+
+**Same asymmetry as the founding instance, and worth naming again: the
+victim is the CAREFUL reader.** Only an agent who actually consults the
+Acrobat RAG before deciding can be misled by a stale GAP in it. The one
+who decides from memory sails past.
+
+**Its sibling one level up:** the 2026-08-06 `FEATURES.md` Acrobat-column
+finding — *an obligation recorded only on the producing side is not
+recorded at all*. **Read together, the pair says an obligation needs a
+record on BOTH sides: one that says it is owed, and one that says it was
+paid.** This instance had the first and never got the second.
+
+**Not fixed by the filing that found it** — `Acrobat_Features` is
+`pdfce-acrobat-librarian`'s exclusive territory, the same way
+`PDF_Spec` is `pdfce-spec-librarian`'s. **Dispatch recommended:** annotate
+that GAP as closed by decision 020 §6 F3 and sweep the file's remaining
+GAP markers for the same condition. **Nothing else in the project will
+notice.**
