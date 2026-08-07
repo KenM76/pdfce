@@ -739,12 +739,42 @@ pub struct FieldAuthorDisclosures {
 
 impl FieldAuthorDisclosures {
     /// Whether there is anything at all to tell the operator.
+    ///
+    /// # Destructured deliberately, so a new field cannot be forgotten
+    ///
+    /// This was written as a chain of `self.field ||` and **omitted
+    /// [`Self::group_flags_ignored`]** — the newest field, added by the radio
+    /// slice. A caller gating its whole disclosure block on `any()` (which is
+    /// exactly what this predicate exists for) would therefore have shown
+    /// NOTHING for a radio member whose only disclosure was that its
+    /// group-behaviour flags were overridden. Rule 4 states the obligation as
+    /// *pdfce made a choice the operator did not specify, so the operator gets
+    /// told*; a silent `false` here is that obligation failing closed.
+    ///
+    /// The same omission had already happened once, one field away: the CLI's
+    /// `report_field_disclosures` had no arm for `group_flags_ignored` while
+    /// the machine-readable line did. Fixing that occurrence did not reach
+    /// this one — R162's shape, where the second instance survives the fix for
+    /// the first, and the reason this is a destructuring rather than a
+    /// corrected `||` chain.
+    ///
+    /// **Destructuring makes the next omission a compile error.** Adding a
+    /// field to the struct without adding it here fails to build, so the
+    /// discipline is enforced by the type rather than by remembering.
     #[must_use]
     pub const fn any(self) -> bool {
-        self.tooltip_declined
-            || self.tagged_document
-            || self.structure_tab_order
-            || self.has_no_options
+        let Self {
+            tooltip_declined,
+            tagged_document,
+            structure_tab_order,
+            has_no_options,
+            group_flags_ignored,
+        } = self;
+        tooltip_declined
+            || tagged_document
+            || structure_tab_order
+            || has_no_options
+            || group_flags_ignored
     }
 }
 

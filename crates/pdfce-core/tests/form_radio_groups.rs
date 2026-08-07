@@ -364,6 +364,78 @@ fn disagreeing_group_flags_on_a_merge_are_disclosed_not_applied() {
     );
 }
 
+/// `group_flags_ignored` ALONE must make [`FieldAuthorDisclosures::any`]
+/// report true.
+///
+/// # Why this needs its own test when the one above already sets the flag
+///
+/// [`disagreeing_group_flags_on_a_merge_are_disclosed_not_applied`] calls
+/// `.declining_tooltip()`, so `tooltip_declined` is also true there and
+/// `any()` came out true **through a different field**. `any()` in fact
+/// omitted `group_flags_ignored` entirely, and no test noticed, because no
+/// test had ever produced it as the SOLE disclosure — which is exactly the
+/// condition under which the omission bites.
+///
+/// So this supplies a real `/TU`, on an untagged document, for a non-choice
+/// type: every other disclosure is structurally false and the assertion is
+/// carried by the one field under test. A GUI gating its disclosure block on
+/// `any()` — the predicate's whole purpose — would otherwise have told the
+/// operator nothing about a flag override pdfce performed.
+///
+/// **R162**: the negative control below is not decoration. It establishes
+/// that this session and this call shape CAN produce `any() == false`, so the
+/// positive assertion is capable of failing rather than true by construction.
+#[test]
+fn group_flags_ignored_alone_is_reported_by_any() {
+    let mut s = session("dimension/plain-base.pdf");
+
+    // The negative control, FIRST: same fixture, same type, agreeing flags,
+    // a real tooltip. If this came out true, the positive case below would
+    // prove nothing about `group_flags_ignored` specifically.
+    let quiet = s
+        .add_radio_button(
+            &NewRadioButton::new(0, "Colour", member_rect(0), "Red")
+                .with_tooltip("Colour choice")
+                .with_group_flags(true, false),
+        )
+        .unwrap();
+    assert!(
+        !quiet.disclosures.any(),
+        "control: a first member with a supplied /TU on an untagged document \
+         has nothing to disclose — if this is true, the case below cannot \
+         isolate group_flags_ignored"
+    );
+
+    let out = s
+        .add_radio_button(
+            &NewRadioButton::new(0, "Colour", member_rect(1), "Green")
+                .with_tooltip("Colour choice")
+                .with_group_flags(false, false),
+        )
+        .unwrap();
+
+    assert!(out.merged, "precondition: the merge branch");
+    assert!(
+        out.disclosures.group_flags_ignored,
+        "precondition: the flag under test is the one that fired"
+    );
+    assert!(
+        !out.disclosures.tooltip_declined
+            && !out.disclosures.tagged_document
+            && !out.disclosures.structure_tab_order
+            && !out.disclosures.has_no_options,
+        "precondition: group_flags_ignored is the SOLE disclosure, so any() \
+         cannot be carried by a sibling field"
+    );
+
+    assert!(
+        out.disclosures.any(),
+        "any() must see group_flags_ignored. It did not, and a caller gating \
+         its disclosure block on any() would have silently dropped a choice \
+         pdfce made that the operator did not specify (rule 4)"
+    );
+}
+
 /// Agreeing flags produce no disclosure — the common scripted case, where
 /// every call in a loop passes the same flags, must stay quiet.
 #[test]
