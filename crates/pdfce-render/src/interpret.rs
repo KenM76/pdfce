@@ -126,6 +126,7 @@ use tiny_skia::{
     PathBuilder, Pattern, Pixmap, Rect, SpreadMode, Stroke, StrokeDash, Transform,
 };
 
+use crate::cancel::RenderCancel;
 use crate::font::FontEnvironment;
 use crate::font::program::FontProgram;
 use crate::gstate::{GStateStack, GraphicsState, LineCap, LineJoin, Rgb};
@@ -565,6 +566,7 @@ pub fn run(
     fonts: &FontEnvironment,
     initial: GraphicsState,
     pixmap: &mut Pixmap,
+    cancel: Option<&RenderCancel>,
 ) -> Diagnostics {
     run_nested(
         doc,
@@ -575,6 +577,7 @@ pub fn run(
         pixmap,
         0,
         Vec::new(),
+        cancel,
     )
 }
 
@@ -662,6 +665,9 @@ pub fn trace_paths(
         depth: 0,
         active: Vec::new(),
         trace: Some(Vec::new()),
+        // `trace_paths` is a diagnostic walk with no pixels and no
+        // operator waiting on it; there is nothing to cancel.
+        cancel: None,
     };
     for op in content.operations() {
         interp.execute(&op, content, &mut pixmap);
@@ -689,6 +695,7 @@ fn run_nested(
     pixmap: &mut Pixmap,
     depth: usize,
     active: Vec<ObjId>,
+    cancel: Option<&RenderCancel>,
 ) -> Diagnostics {
     let mut interp = Interpreter {
         gs: GStateStack::new(initial),
@@ -708,8 +715,23 @@ fn run_nested(
         depth,
         active,
         trace: None,
+        cancel,
     };
     for op in content.operations() {
+        // THE CANCELLATION POLL. One relaxed load per operator — see
+        // `crate::cancel`'s module docs for why that ordering is correct
+        // rather than merely cheap, and why between-operators is the
+        // right granularity (a single clip costs ~360 us, so the worst
+        // case latency is a third of a millisecond, not the render).
+        //
+        // Breaking rather than returning leaves `interp.diag` intact, so
+        // the caller still learns what was attempted. The half-painted
+        // pixmap is the caller's to discard — `render_page_with_view`
+        // turns a set flag into `RenderError::Cancelled` rather than
+        // handing anyone a partial picture.
+        if interp.cancel.is_some_and(RenderCancel::is_cancelled) {
+            break;
+        }
         interp.execute(&op, content, pixmap);
     }
     interp.diag
@@ -755,6 +777,13 @@ fn run_nested(
 /// for its content), which the caller merges into the page's. `forms_
 /// rendered` is incremented by `do_form`, so an appearance is also counted
 /// as a form — correct, because an appearance *is* a form XObject.
+///
+/// Over clippy's argument bound by one, since 2026-08-07's cancellation
+/// parameter — the same `#[allow]` [`run_nested`] already carries, for
+/// the same reason: these are the renderer's internal recursion seams,
+/// and bundling their arguments into a struct would put a layer of
+/// indirection between `do_form` and the state it is threading.
+#[allow(clippy::too_many_arguments)]
 pub fn run_form_at(
     doc: &DocumentView<'_>,
     stream: &Stream,
@@ -763,6 +792,7 @@ pub fn run_form_at(
     fonts: &FontEnvironment,
     initial: GraphicsState,
     pixmap: &mut Pixmap,
+    cancel: Option<&RenderCancel>,
 ) -> Diagnostics {
     let mut interp = Interpreter {
         gs: GStateStack::new(initial),
@@ -782,6 +812,10 @@ pub fn run_form_at(
         depth: 0,
         active: Vec::new(),
         trace: None,
+        // Threaded so an annotation appearance stops with the page it is
+        // being painted onto. `do_form` recurses into `run_nested`, which
+        // is where the poll actually lives.
+        cancel,
     };
     interp.do_form(id, stream, pixmap);
     interp.diag
@@ -817,6 +851,10 @@ struct Interpreter<'a> {
     /// operators detect the "shall only appear within text objects"
     /// violation without a separate flag.
     text: Option<TextObject>,
+    /// The caller's cancellation flag, threaded down so a form XObject
+    /// nested inside the page stops with it rather than running to
+    /// completion inside an abandoned render.
+    cancel: Option<&'a RenderCancel>,
     /// `Tf` results keyed by resource name.
     ///
     /// Loading a font walks the whole §9.6.6 encoding ladder over 256
@@ -1806,6 +1844,7 @@ impl Interpreter<'_> {
             pixmap,
             self.depth + 1,
             active,
+            self.cancel,
         );
         self.diag.merge(nested);
         self.diag.forms_rendered += 1;
@@ -2178,9 +2217,22 @@ fn intersect_clip(
     // An ablation of one phase removes others with it and yields an upper
     // bound (R164); a timer removes nothing and confounds nothing. Clips
     // run 24,128 times over ~350 µs each, so a ~25 ns timer is ~1e-4 of
-    // the measured quantity, and `render-profile` prints the
+    // the measured quantity.
+    //
+    // This comment used to add that `render-profile` "prints the
     // un-instrumented total beside it so the overhead is shown, not
-    // argued.
+    // argued". **It cannot** — `timing_enabled()` is
+    // `cfg!(feature = "profile")`, a compile-time constant, so one
+    // invocation only ever produces one of the two totals. The claim was
+    // unimplementable rather than merely stale, and the same sentence
+    // was already corrected in `profile.rs`; this copy survived, which
+    // is the single-location-amendment failure again.
+    //
+    // The overhead was measured instead, across builds: three
+    // instrumented runs at 9.49 / 9.52 / 10.04 s (5.8% spread) against
+    // 9.28 s un-instrumented — **below this machine's noise**, so the
+    // ~1e-4 the arithmetic predicts is not resolvable here and is not
+    // claimed to be.
     let timed = crate::profile::timing_enabled();
     let t0 = timed.then(std::time::Instant::now);
     let Some(mut mask) = Mask::new(pixmap.width(), pixmap.height()) else {

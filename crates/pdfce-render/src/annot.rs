@@ -99,6 +99,13 @@ const MIN_BOX_EXTENT: f32 = 1e-6;
 /// honest about what it is *not* showing (R50/R27), and the pre-6.0
 /// content-only raster is reproduced exactly because no appearance pixels
 /// are laid down.
+///
+/// Over clippy's argument bound by one, since 2026-08-07's cancellation
+/// parameter. Same `#[allow]` and same reasoning as
+/// [`crate::interpret::run_nested`]: this is one link in the renderer's
+/// argument-threading chain, and a params struct here would only move
+/// the list somewhere less visible.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn survey_page_annotations(
     doc: &DocumentView<'_>,
     page: &Page,
@@ -107,6 +114,7 @@ pub(crate) fn survey_page_annotations(
     paint: bool,
     diag: &mut Diagnostics,
     pixmap: &mut Pixmap,
+    cancel: Option<&crate::cancel::RenderCancel>,
 ) {
     // Pass 12.M2 (§8.11.3.3): the set of optional-content groups the catalog
     // /OCProperties /D config leaves OFF by default. An annotation whose /OC
@@ -150,7 +158,9 @@ pub(crate) fn survey_page_annotations(
                 // mean something when painting is enabled; when suppressed
                 // the annotation is disclosed by `annotations_total` alone.
                 if paint {
-                    paint_appearance(doc, page, base_ctm, fonts, annot, *stream_id, diag, pixmap);
+                    paint_appearance(
+                        doc, page, base_ctm, fonts, annot, *stream_id, diag, pixmap, cancel,
+                    );
                 }
             }
             // R43 named-not-painted, counted by subtype — the measured
@@ -183,6 +193,7 @@ fn paint_appearance(
     stream_id: Option<ObjId>,
     diag: &mut Diagnostics,
     pixmap: &mut Pixmap,
+    cancel: Option<&crate::cancel::RenderCancel>,
 ) {
     // /Rect is Required (Table 164) and is the §12.5.5 placement target.
     let Some(rect) = annot.rect else {
@@ -238,6 +249,7 @@ fn paint_appearance(
         fonts,
         initial,
         pixmap,
+        cancel,
     );
     diag.merge(sub);
     diag.annotations_painted += 1;

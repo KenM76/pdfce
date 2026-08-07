@@ -285,6 +285,16 @@ pub struct RenderOptions {
     /// the GUI's annotation-visibility toggle), which keeps the round-trip
     /// raster oracle's self-comparison and any A/B baseline reproducible.
     pub annotations: bool,
+    /// An optional flag the render polls between operators so a caller
+    /// can abandon it in flight ([`crate::cancel::RenderCancel`]).
+    ///
+    /// **`None` by default**, which is not merely a neutral default: it
+    /// means every existing caller — the CLI, the round-trip oracle,
+    /// the R85 preview-equals-saved harness — keeps a render that cannot
+    /// be interrupted, so none of them can acquire a new failure mode
+    /// from this field existing. Only a caller that opts in can be
+    /// cancelled.
+    pub cancel: Option<crate::cancel::RenderCancel>,
 }
 
 impl Default for RenderOptions {
@@ -296,6 +306,7 @@ impl Default for RenderOptions {
         Self {
             fonts: FontEnvironment::default(),
             annotations: true,
+            cancel: None,
         }
     }
 }
@@ -314,6 +325,17 @@ impl RenderOptions {
     #[must_use]
     pub fn with_annotations(mut self, annotations: bool) -> Self {
         self.annotations = annotations;
+        self
+    }
+
+    /// Attach a cancellation flag, returning `self` for chaining.
+    ///
+    /// Same consuming-builder reason as [`Self::with_annotations`]:
+    /// [`RenderOptions`] is `#[non_exhaustive]`, so an out-of-crate
+    /// caller cannot reach the field with struct-update syntax.
+    #[must_use]
+    pub fn with_cancel(mut self, cancel: crate::cancel::RenderCancel) -> Self {
+        self.cancel = Some(cancel);
         self
     }
 }

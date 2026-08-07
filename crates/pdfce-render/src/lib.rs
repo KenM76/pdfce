@@ -52,6 +52,7 @@
 #![forbid(unsafe_code)]
 
 pub mod annot;
+pub mod cancel;
 pub mod font;
 pub mod gstate;
 pub mod image;
@@ -103,6 +104,17 @@ pub enum RenderError {
     /// The page's content streams failed to decode or tokenize.
     #[error(transparent)]
     Content(#[from] pdfce_core::content::ContentError),
+    /// The caller asked for this render to stop
+    /// ([`cancel::RenderCancel`]).
+    ///
+    /// **Not a failure.** It means the answer stopped being wanted —
+    /// the operator zoomed again, edited, or closed the document — and
+    /// a caller should discard it silently rather than surfacing it. It
+    /// is an error variant only because a cancelled render has no
+    /// pixmap to return, and inventing a half-painted one would be
+    /// worse than saying so.
+    #[error("render cancelled by the caller")]
+    Cancelled,
     /// `CropBox × scale` exceeds [`MAX_PIXMAP_EDGE`] or is empty.
     #[error("requested raster size {width}x{height} is empty or exceeds MAX_PIXMAP_EDGE")]
     BadRasterSize {
@@ -228,6 +240,7 @@ pub fn render_page_with_view(
         &options.fonts,
         initial,
         &mut pixmap,
+        options.cancel.as_ref(),
     );
     // Carry the page-level omission into the render diagnostics. The
     // interpreter cannot observe it — the streams it never received leave
@@ -251,7 +264,25 @@ pub fn render_page_with_view(
         options.annotations,
         &mut diagnostics,
         &mut pixmap,
+        options.cancel.as_ref(),
     );
+
+    // THE ONE PLACE A CANCELLED RENDER BECOMES AN ERROR.
+    //
+    // The interpreter stops early and returns its diagnostics; it never
+    // decides what that means. Here, at the only entry point that hands
+    // out a `RenderedPage`, a set flag becomes `Cancelled` instead — so
+    // no caller can be handed a half-painted pixmap and mistake it for
+    // the page. Checked AFTER the work rather than before, because a
+    // render cancelled on its last operator is still cancelled, and a
+    // partial raster is exactly what must not escape.
+    if options
+        .cancel
+        .as_ref()
+        .is_some_and(cancel::RenderCancel::is_cancelled)
+    {
+        return Err(RenderError::Cancelled);
+    }
 
     Ok(RenderedPage {
         pixmap,

@@ -76,7 +76,44 @@ use crate::object::{Dict, ObjId, Object};
 /// # Ok(())
 /// # }
 /// ```
-pub trait ObjectGraph {
+///
+/// # Thread safety — why this trait requires `Send + Sync`
+///
+/// **The bound exists so a page can be rasterized off the UI thread.**
+/// A GUI that rasterizes inline freezes for the length of the render,
+/// and on a real CAD sheet that is ~10 s at 1× and ~58 s at 2× — not a
+/// slow redraw but a dead application, with no repaint, no progress and
+/// no way to cancel. Moving that work to a worker requires the rendered
+/// value to cross a thread boundary, and
+/// [`DocumentView`](crate::view::DocumentView) is what crosses.
+///
+/// **Only the trait object was ever the obstacle.** `Document`,
+/// `EditSession`, `SessionGraph`, `PendingGraph` and the test graphs
+/// were all already thread-safe; `DocumentView<'a>` holds
+/// `&'a dyn ObjectGraph`, and an unbounded `dyn Trait` is neither
+/// `Send` nor `Sync` regardless of what implements it. Adding the
+/// supertrait compiled with **zero errors** across the workspace — it
+/// records a property every implementor already had rather than
+/// imposing a new one.
+///
+/// **Why now.** Adding a supertrait bound to a public trait is a
+/// breaking change for downstream implementors. pdfce has no remote and
+/// no release (`LEGAL.md` rule 8 — publishing awaits an explicit
+/// go-ahead), so the set of affected implementors is exactly the ones
+/// in this repository, and it is empty. This is the cheapest moment
+/// this bound will ever have.
+///
+/// **The cost, stated.** Any future `ObjectGraph` implementor must be
+/// thread-safe. That forecloses one holding an `Rc`, a `RefCell`, or a
+/// non-thread-safe foreign handle. Rust API guideline **`C-SEND-SYNC`**
+/// asks for types to be `Send`/`Sync` where possible and for deliberate
+/// exceptions to be documented; an object graph is plain data behind an
+/// accessor, so an implementor that could not meet this would be the
+/// surprising one.
+pub trait ObjectGraph: Send + Sync {
+    // ^^^^^^^^^^^^ Added 2026-08-07. See the `# Thread safety` section
+    // in this trait's doc comment above for why, and why now.
+
     /// The current value of `id`, or `None` when this view has no such
     /// object.
     ///
