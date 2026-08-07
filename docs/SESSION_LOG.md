@@ -18163,3 +18163,204 @@ since the engineer asked:
 - **Re-scope Pass 23.3** and the two INVALIDATED Pass 38.5 items.
 - **Answer (ba) and (bb)** — both still open.
 - **File the form-field-creation fork** when it commits.
+
+## 2026-08-07 — form fields can be CREATED, not only filled (`8e799e9`); two rulings filed; an identity question and two acceptance-criterion misses raised
+
+**Operator instruction this session, verbatim**, because it is the one
+input that cannot be re-derived from disk:
+
+> *"get form field creation/editing done next."*
+> *"don't worry about session limits. we haven't run into them at all on
+> the current plan."*
+> *"you should check in with the librarian regularly so you don't have to
+> worry context compression."*
+
+**All three matter and none is decoration.** The first **answers open
+operator question (m)** — the one question this project had marked *"do
+NOT start until answered, because starting is not reversible"* — and it
+answers it in the affirmative, by name. The second **retires the
+scoping-by-fatigue heuristic** that continuation 109 recorded as an
+unmeasured causal claim (R87 occurrence B): the operator has now said
+directly that the constraint being scoped around **does not exist**. The
+third **is the reason this entry exists at all**, and is now the standing
+cadence.
+
+### Shipped
+
+- **Form-field CREATION — core + CLI, text fields only** (`8e799e9`).
+  `NewTextField`, `EditSession::add_text_field`, `pdfce-cli
+  add-text-field`, `crates/pdfce-core/tests/form_field_authoring.rs`.
+  1051 insertions, three files, **no deletions**. **⚠ NO Pass ID
+  assigned — see below.**
+  Gates (engineer-measured at `8e799e9`, relayed per R87): **2019 tests
+  pass, 0 fail** (11 new); `fmt`, `clippy --workspace --all-targets -D
+  warnings`, `check-ui-strings` all clean; `cargo tree -p pdfce-core`
+  shows **zero GUI matches**; `--verify-undo` reports `undo_identical=1`.
+
+### ★ The identity question — why nothing was minted
+
+**The 20.x family already exists for this work.** Decision 020
+(2026-08-03) scoped form-field authoring into `Pass 20.0`–`20.7`; those
+IDs are filed in *Backlog* and `check-ledger-numbers.py` lists family 20
+under `CLAIMED BUT NOT YET HEADED`. **`8e799e9` matches neither of the
+first two slices as filed:**
+
+- **Pass 20.0 (F0)** — the correctness substrate, five fixtures, four
+  named pre-existing fixes, *no operator surface*. **Skipped entirely**,
+  and the commit ships an operator surface.
+- **Pass 20.1 (F1)** — text-field creation *through the resolver, with
+  all four collision outcomes live*, which decision 020 §3.3.1 called
+  **the P0 floor** and refused by name to split. **Shipped without the
+  resolver and without the collision branch.**
+
+**Nothing was minted.** Hard rule 2 plus the Pass-26.2 collision ruling
+put identity assignment with the engineer, not the librarian.
+**Recommendation filed in `ROADMAP.md`:** rule it **Pass 20.1, PARTIAL**,
+with the unmet F1 criteria enumerated in the heading, and file the F0
+skip as a separate, explicit deviation — because unlike `f8bbdd4`/26.2
+this is 20.1's own work built incompletely, not different work under a
+spoken-for number, and a partial with its debt written down beats a clean
+number with the debt invisible.
+
+### Findings
+
+- **★ THREE RAG corrections, each of which would have shipped a valid
+  and wrong file.** (1) **Acrobat never creates a bare field** — it
+  writes a complete `/DA` and `/MK` at placement; the engineer's instinct
+  was a minimal dict. (2) **The text-field size floor is 0, and 0 is the
+  auto-size trigger**, not a size — and `build_field_text_appearance`
+  already implements it because *fill* uses it. (3) **Name collisions are
+  TWO cases**: §12.7.3.2 makes same-named fields **one field sharing one
+  `/V`**, so same-type is a legitimate merge and only different-type is
+  impossible. **The generalisation: spec-fidelity tells you what is
+  legal; the Acrobat RAG tells you what is right. A file can satisfy the
+  first completely and still be the wrong file.**
+- **★ The certification gate splits on STRUCTURE vs USE.** `fill_refusal`
+  is `/P`-aware and permits filling a certified document at `/P >= 2`,
+  because filling is often what such a document is certified TO allow.
+  Creating a field is a **structural** change — precisely what the
+  signature freezes — so `add_text_field` takes the strict
+  `check_certification`. **Filed as an `ARCHITECTURE.md` §12 decision
+  entry**, because it decides the gate for every remaining 20.x verb.
+- **★ The proof is the FILL, not the unit tests.** The existing,
+  unmodified `fill-field` verb accepted the new field. A dictionary that
+  merely parses can pass `list-fields`; only a real field survives being
+  driven by a subsystem that predates it. **This is the R44 proof shape
+  applied to authoring.**
+- **An honest limit, found by RENDERING rather than assumed:** the `/MK`
+  border does **not** paint (R43's named-not-painted case). Kept anyway,
+  because painting it would mean changing the **shared** appearance
+  builder that *fill* uses — every refilled field everywhere would gain a
+  border it never had — or writing a second generator, which **R92**
+  forbids. **A rule collision resolved in favour of R92, and recorded as
+  one.**
+- **⚠ FLAG 1 — same-name/same-type is neither a merge nor a refusal.**
+  Read from `edit.rs` at `8e799e9`: the clash guard returns only when the
+  existing field is *not* a text field, so a same-type collision falls
+  through and appends a second `/Fields` entry under the same `/T`.
+  Decision 020 §3.3.1 names that outcome **O1** and says one slice of it
+  *"authors documents that cannot be un-authored."* **A read, not a run —
+  no test covers the path. Filed as a question with its evidence, not as
+  a defect.**
+- **⚠ FLAG 2 — decision 020's own required test is MISSING, and this one
+  is a measured absence.** §1.2.6/§7.2 wrote a forward pointer into
+  `ARCHITECTURE.md` §4 predicting that field creation would break
+  decision 009's compensating promise (`/CO`, `/AA`, `/Names
+  /JavaScript` re-emit byte-verbatim) and that *"no test existing today
+  will go red when it does."* F1 was required to add a byte-grep test.
+  **Grepped `form_field_authoring.rs` for `/CO`, `/AA`, `Names`,
+  `JavaScript` — no match.** The guarantee may still hold; **nothing
+  checks it.** §4's paragraph corrected in place this filing.
+- **A scope gap the operator's own words open:** he said
+  *"creation/**editing**"*. Decision 020 ranks field **property editing**
+  (rename, reflag, move, resize) behind five slices, as the non-gating
+  fast-follow **F6**. **Flagged, not resequenced.**
+
+### Decisions made this session (rulings received, both filed)
+
+- **(a) R87 BROADENED from *"a diagnostic claim about code"* to *"any
+  claim of cause"* — ACCEPTED AS AN AMENDMENT IN PLACE. R159 NOT
+  minted.** Adopted in the librarian's **three-observation-kinds /
+  three-concrete-checks** form, **verbatim** — the first proposal this
+  project has adopted with its wording unchanged. The carrying argument
+  was that R87's binding text and all six occurrences were code-shaped,
+  so a reader could satisfy R87 and still make the mistake on a stale
+  document citation.
+- **A THIRD non-code occurrence landed with the ruling and is filed as
+  occurrence C:** the engineer's dispatch asserted ISO 32000-1
+  §12.5.6.19 was **missing** from the spec RAG and instructed a
+  `pdfce-spec-librarian` dispatch to close the gap. **It is not
+  missing** — `iso32000__s__12.5.6.md` carries Table 188, Table 189
+  `/MK` and the merge rule. **A filename listing was read as a content
+  inventory.** The fork checked and saved the dispatch.
+- **★ THE META-FINDING, filed as its own paragraph in R87.** That was the
+  **third time in one day** a dispatch carried a wrong premise that the
+  **subagent** caught (with the Pass 23.3 line numbers and the
+  `plain-click` trace name). The pattern is not only *"the alarming
+  explanation gets reported"* — it is that **dispatches carry unverified
+  premises and the catch rate depends on the subagent being sceptical of
+  its brief**, which is a fragile place for correctness to live: a
+  subagent is selected for compliance, so the failure mode is a *dutiful*
+  agent acting on the premise. **Concrete remedy now in R87: a dispatch
+  asserting something is ABSENT must state how the absence was
+  established.** All three of the day's occurrences would have been
+  stopped by that one clause.
+- **(b) The single-location-amendment duty — ACCEPTED AS SUBSTANCE,
+  REFUSED A NUMBER; filed in the *Update protocol* section.** One
+  occurrence against a two-occurrence bar, and — the deciding reason —
+  **it is a rule about how to file, so it belongs where an agent
+  performing an amendment will meet it**, not in a rule list consulted at
+  a different moment. Same reasoning as R86's scope note and R123's
+  positive half. **It is not a weaker outcome:** *Update protocol* is
+  where the `FEATURES.md` maintenance contract already lives, and the new
+  duty is that contract generalised from capability rows to any fact
+  stated in more than one place. **It fired on this very filing** —
+  `ARCHITECTURE.md` §4's decision-020 forward pointer.
+
+### Ledger — nothing minted
+
+Pass family ceiling **43** (unchanged). Standing rules **R158** (R159 next
+free) — both rulings were an amendment and a scope note. Decision records
+**031**. Operator questions **(bb)** — **(m) moved to ANSWERED**, which
+changes no ceiling.
+
+### Still in flight
+
+- A fork is building **checkbox/choice field creation** in `crates/`.
+  Nothing about its content is anticipated here (R87).
+- **`8e799e9` has no Pass ID**, and therefore no gate tracks it: its
+  subject line claims no Pass, so `check-passes-filed.py` will not look
+  for it, and family 20 stays `CLAIMED BUT NOT YET HEADED` regardless.
+  **The `ROADMAP.md` entry is the only thing tracking it.**
+- Carried forward untouched: **(ba)** shell-redesign property 4;
+  **(bb)** R124 greyed placeholders; **Pass 38.5's two INVALIDATED
+  items** (the four-compartment height tuning and collapse-state reset
+  both name a layout Pass 43.0 deleted) — still need an engineer
+  re-scope or a retirement.
+- The five **OWED build records** from FILING GAP #2 are still owed.
+
+### For next session
+
+- **Rule the identity of `8e799e9`** — recommendation: Pass 20.1 PARTIAL,
+  plus a separate, explicit F0-skip deviation.
+- **Rule on F0**: owed retroactively, deferred, or retired.
+- **Rule on the CLI verb name** — `add-text-field` vs decision 020's
+  `forms add-field --type text`. The fork building checkbox/choice will
+  settle this by accretion if nobody settles it deliberately.
+- **Two tests to write**: the same-name/same-type behaviour (flag 1), and
+  decision 020's required `/CO`//`/AA`//`/Names /JavaScript` byte-grep
+  (flag 2).
+- **Decide whether field property EDITING is pulled forward** — the
+  operator asked for it by name; decision 020 has it at F6.
+
+### ★ On the cadence — it worked, and this entry is the evidence
+
+The operator's instruction to *"check in with the librarian regularly"*
+produced this filing mid-work rather than at a session boundary. **Two of
+the four most valuable items above would not have survived to a
+compaction-time capture**: the ⚠ FLAG-2 forward-pointer miss was found by
+grepping a test file that was only interesting *while* the commit was the
+subject, and the R87 occurrence-C meta-finding was carried in a dispatch
+that no document records. **Record this so a future session inherits the
+cadence rather than rediscovering it** — continuation 109 made the same
+note, and this is its first confirmation.

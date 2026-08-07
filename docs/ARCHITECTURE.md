@@ -3856,6 +3856,34 @@ with a forward pointer.
     F1 ships so a future reader does not inherit the stronger,
     now-partial claim. See the decision-020 entry below for the full
     finding.
+    **★ THE FORWARD POINTER HAS FIRED — 2026-08-07, `8e799e9`. Read the
+    paragraph above as NO LONGER FULLY TRUE.** `EditSession::add_text_field`
+    ships (core + CLI, text fields; **no Pass ID assigned yet** — see
+    `ROADMAP.md`'s ⚠ IDENTITY UNRESOLVED entry) and it **does append to
+    `/AcroForm /Fields`**, and creates the `/AcroForm` dict outright when
+    the document has none. **So the write decision 020 predicted has
+    happened.**
+    **The guarantee splits in two, and only one half survives:**
+    - **"Fill never touches the AcroForm dict" — STILL TRUE**, and still
+      structural. `fill_text_field` mutates `/V`//`/AP`//`/AS` only;
+      nothing in `8e799e9` changed it.
+    - **"`/CO`//`/AA`//`/Names /JavaScript` re-emit byte-verbatim" — NOW
+      UNTESTED after an authoring write.** Decision 020 §1.2.6/§7.2
+      required F1 to add a dedicated byte-grep test proving exactly this.
+      **That test is absent.**
+    **Instrument named, per R87:** `crates/pdfce-core/tests/form_field_authoring.rs`
+    at `8e799e9` was grepped for `/CO`, `/AA`, `Names` and `JavaScript` —
+    **no match**; its eleven test functions cover parse-back, registration,
+    additivity, properties, fill-through, undo, append-to-existing-form and
+    four refusals, and **none names this concern**. This is a **read of the
+    test file, not a run of the code** — the guarantee may well still hold
+    in fact. **What is established is that nothing checks it**, which is
+    the precise thing decision 020 wrote this forward pointer to prevent:
+    *"because it held by construction rather than by assertion, no test
+    existing today will go red when it does [stop holding]."*
+    **Owed:** the byte-grep test, against a fixture that actually carries
+    `/CO`//`/AA`//`/Names /JavaScript`. Until it exists, do not cite
+    decision 009's structural honouring as covering the authoring path.
   - **(f) Additivity preserves R34/R46.** A new module + additive
     methods/variants + one new `pub fn`; the re-emission path and
     `add_markup`/`add_text_annotation` are byte-unchanged. Full-corpus R46
@@ -7376,3 +7404,63 @@ with a forward pointer.
   count. **And a retired helper's tests MOVED rather than dying with
   it** — `display_row_for_target`'s front-most-first assertions now sit
   on `build_object_tree_rows`, which owns that ordering.
+
+- **2026-08-07 (first entry)** — **A certified document's signature
+  freezes STRUCTURE, not USE: fill-shaped operations take the `/P`-aware
+  gate, structure-shaped operations take the strict one.** Established by
+  `8e799e9` (form-field creation, core + CLI — see `ROADMAP.md`'s
+  ⚠ IDENTITY UNRESOLVED entry at the head of *Shipped*; **no Pass ID
+  assigned yet**).
+  **The distinction, and why it is not a matter of taste.** `EditSession`
+  now has two certification gates and they are not interchangeable.
+  `fill_refusal` is `/P`-aware and **permits** editing a certified
+  document at `/P >= 2` — correctly, because §12.8.2.2's `/DocMDP`
+  transform parameter **exists to say "filling is allowed"**; a form
+  certified for completion that refused to be completed would be useless.
+  `check_certification` is strict and refuses at **any** `/DocMDP` tier
+  and on any `/FieldMDP`. `add_text_field` takes the **strict** one,
+  joining `add_markup` and `flatten_fields`.
+  **The generalisation, which is the reason this is a decision-log entry
+  and not a code comment:** *"does this change what the document SAYS, or
+  what the FORM IS?"* is the only question to ask when choosing a gate.
+  Setting `/V` on an existing field is a use of the form the certifier
+  anticipated and priced in. **Adding a field changes the set of things
+  the document can say** — which is precisely what a certification
+  signature is for. **Every remaining authoring verb in the decision-020
+  family (checkbox/radio/choice creation, field deletion, rename, move,
+  resize, tab-order rewrite) is structure-shaped and takes the strict
+  gate**; the only 20.x verbs that could take the `/P`-aware one are
+  value-setting verbs, and those already exist.
+  **Where this could go wrong later, stated now:** the two gates are
+  distinguished by which function is called, not by a type. Nothing stops
+  a future authoring verb calling `fill_refusal` because it was written by
+  copying a fill path — the same **R92**-shaped hazard (one behaviour,
+  two implementations) that the shared appearance builder avoids by
+  construction. **If a third authoring verb picks the wrong gate, promote
+  the choice into the type system rather than fixing the call site.**
+
+- **2026-08-07 (second entry)** — **A form field is THREE writes and they
+  are ONE undoable command.** Also from `8e799e9`.
+  §12.7.2 requires the field in `/AcroForm /Fields`; §12.5.6.19 requires a
+  widget annotation in the page's `/Annots` for it to appear on a page at
+  all; and pdfce's own **R43** requires a baked `/AP`, because a widget
+  with `/MK` and no `/AP` is this project's canonical named-not-painted
+  case. **Registered-but-not-annotated is invisible. Annotated-but-not-
+  registered is not a form field.** So all three writes go in one
+  `Command`: **an undo must not be able to reach either half-state.**
+  **This is the general shape for every authoring verb whose product is
+  defined by entries in two or more dictionaries** — the ce-dimension
+  authoring path (annotation + `/AP` + `/PieceInfo` sidecar, deleted
+  together at Pass 25.6) is the same rule already in force elsewhere, and
+  the two should be read as one convention rather than as two local
+  choices. **The test for it is not "did the write succeed" but "what does
+  ONE Ctrl+Z produce"** — a command boundary in the wrong place yields a
+  document that is valid PDF and is not a form, which no round-trip or
+  parse test would catch.
+  **`/AcroForm` is created with `/DR /Font /Helv` when the document has
+  none, and that is a correctness requirement, not a nicety:** §12.7.3.3
+  requires the `/DA`'s font to resolve in `/DR`. Without it, a viewer
+  regenerating the appearance from `/DA` cannot — and pdfce, which bakes
+  its own `/AP`, **would never notice**. That is the failure mode this
+  entry most wants recorded: **a document that works in the tool that
+  wrote it and nowhere else, invisible to that tool's own tests.**
