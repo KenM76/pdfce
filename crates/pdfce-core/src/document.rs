@@ -85,7 +85,7 @@ use std::path::Path;
 use crate::linearization::{self, Linearization};
 use crate::object::{Dict, IndirectObject, ObjId, Object, Provenance};
 use crate::objstm::{ObjStmError, ObjectStream};
-use crate::parser::{ParseError, Parser, StreamLengthPolicy};
+use crate::parser::{ParseError, Parser, StreamLengthPolicy, TerminatorPolicy};
 use crate::recover::{self, RecoveryReport};
 use crate::view::DocumentView;
 use crate::xref::{self, SectionShape, XrefEntry, XrefError, XrefErrorKind, XrefTable};
@@ -341,14 +341,24 @@ impl Document {
         } else {
             StreamLengthPolicy::Strict
         };
+        // The missing-`endobj` leniency travels with the length leniency,
+        // and for exactly the same stated reason: an object `recover`'s
+        // confirmation step accepted must not be rejected on re-parse
+        // here, or the recovery costs the whole document.
+        let terminator_policy = if recovery.is_some() {
+            TerminatorPolicy::RecoverAtNextHeader
+        } else {
+            TerminatorPolicy::Strict
+        };
         let mut objects: HashMap<ObjId, IndirectObject> = HashMap::new();
         let mut compressed: Vec<(u32, u32, u32)> = Vec::new();
         for (num, entry) in table.iter() {
             match entry {
                 XrefEntry::InUse { offset, generation } => {
                     let id = ObjId::new(num, generation);
-                    let (io, _recovered) = parse_object_at(&buf, &table, offset, length_policy)
-                        .map_err(|source| DocError::BadObject { id, offset, source })?;
+                    let (io, _repairs) =
+                        parse_object_at(&buf, &table, offset, length_policy, terminator_policy)
+                            .map_err(|source| DocError::BadObject { id, offset, source })?;
                     if io.id != id {
                         return Err(DocError::ObjectIdMismatch {
                             expected: id,
@@ -889,7 +899,8 @@ pub(crate) fn parse_object_at(
     table: &XrefTable,
     offset: u64,
     policy: StreamLengthPolicy,
-) -> Result<(IndirectObject, usize), ParseError> {
+    terminator: TerminatorPolicy,
+) -> Result<(IndirectObject, ParseRepairs), ParseError> {
     let offset = usize::try_from(offset).unwrap_or(usize::MAX);
     let mut resolve_length = |id: ObjId| -> Option<i64> {
         let XrefEntry::InUse {
@@ -909,9 +920,35 @@ pub(crate) fn parse_object_at(
         (io.id == id).then_some(())?;
         io.value.as_int()
     };
-    let mut parser = Parser::at(buf, offset).with_stream_length_policy(policy);
+    let mut parser = Parser::at(buf, offset)
+        .with_stream_length_policy(policy)
+        .with_terminator_policy(terminator);
     let io = parser.parse_indirect_object(&mut resolve_length)?;
-    Ok((io, parser.stream_lengths_recovered()))
+    Ok((
+        io,
+        ParseRepairs {
+            stream_lengths: parser.stream_lengths_recovered(),
+            missing_endobj: parser.missing_endobj_recovered(),
+        },
+    ))
+}
+
+/// How much repair a single object's parse needed.
+///
+/// Every field counts a place where the file contradicted itself or
+/// omitted something §7.3.10 requires, and pdfce chose to continue rather
+/// than refuse. **All of them are zero under the strict policies**, so a
+/// non-zero total is proof the file was damaged — which is why these are
+/// carried out to the recovery report and disclosed (R20,
+/// fuzzy-never-sneaky) instead of being absorbed silently.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct ParseRepairs {
+    /// Stream extents re-derived from `endstream` because `/Length` was
+    /// unusable ([`StreamLengthPolicy::RecoverFromEndstream`]).
+    pub stream_lengths: usize,
+    /// Definitions accepted with no `endobj` keyword
+    /// ([`TerminatorPolicy::RecoverAtNextHeader`]).
+    pub missing_endobj: usize,
 }
 
 /// Parse a catalog `/Version` name (`1.7`, `2.0`) into a version pair.

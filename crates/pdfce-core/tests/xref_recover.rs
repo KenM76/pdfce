@@ -316,3 +316,88 @@ fn unrecoverable_no_catalog_refuses_clean() {
         "expected a clean NoCatalog refusal, got {err:?}"
     );
 }
+
+/// The `/Pages` node has no `endobj`, and pdfce must not lose it — nor
+/// write a catalog naming an object it dropped.
+///
+/// # The defect this exists for
+///
+/// Found 2026-08-07 by `tools/verapdf-parse-gate.py`, the first
+/// independent judge of pdfce's own output. On qpdf's `bad6.pdf` pdfce
+/// wrote a document whose catalog said `/Pages 2 0 R` while object 2 was
+/// **absent from the file**: the missing `endobj` made
+/// `confirm_candidates` drop it, and the writer emitted the dangling
+/// reference without complaint. veraPDF could recover the original and
+/// could not recover pdfce's rewrite of it — a file made strictly worse
+/// by passing through pdfce.
+///
+/// # Why this asserts on BYTES (R159)
+///
+/// Every forms/round-trip test that missed the equivalent flatten defect
+/// asserted through pdfce's own model, and `Document::get` follows
+/// §7.3.10 by resolving a dangling reference to **null rather than an
+/// error**. So a model-level check cannot distinguish "object 2 is
+/// present" from "object 2 is missing and reads as null" — the exact
+/// blindness R159 was minted for. The assertion is therefore on the saved
+/// bytes.
+#[test]
+fn missing_endobj_on_page_tree_is_recovered_and_saved() {
+    let doc = assert_recovers("missing-endobj-page-tree.pdf");
+    let r = doc.recovery().unwrap();
+
+    assert_eq!(
+        r.missing_endobj_recovered, 1,
+        "exactly one definition (the /Pages node) omits endobj, and the \
+         repair must be COUNTED so it can be disclosed (R20) rather than \
+         silently absorbed",
+    );
+    assert_eq!(
+        doc.object_count(),
+        4,
+        "all four objects survive; before the fix object 2 was dropped and \
+         this was 3",
+    );
+
+    // R162: prove the container could hold the thing being asserted.
+    // "object 2 is in the file" means nothing unless the catalog actually
+    // asks for object 2 — otherwise this test would pass against a
+    // document that never referenced it.
+    let root = doc.catalog().expect("recovered document resolves /Root");
+    let pages_ref = root
+        .get(b"Pages")
+        .and_then(Object::as_reference)
+        .expect("the catalog names a /Pages object");
+    assert_eq!(
+        pages_ref.num, 2,
+        "the fixture's catalog must reference object 2 for this test to \
+         be about anything",
+    );
+
+    let bytes = save_full(&doc, &DirtySet::empty(), &SaveOptions::default())
+        .expect("a recovered document saves by full rewrite")
+        .0;
+
+    // The byte-level claim. A dangling /Pages resolves to null under
+    // §7.3.10, so only the bytes can answer this.
+    let has_obj_2 = bytes.windows(b"2 0 obj".len()).any(|w| w == b"2 0 obj");
+    assert!(
+        has_obj_2,
+        "the saved file must DEFINE object 2, not merely reference it — \
+         the catalog says /Pages 2 0 R, and a file that names a page tree \
+         it does not contain is unreadable to any conforming reader",
+    );
+
+    // And the document pdfce wrote must be one pdfce can read back with
+    // its page tree intact — the property that was actually broken.
+    let back = Document::from_bytes(bytes).expect("saved file reloads");
+    let reloaded_pages = back
+        .catalog()
+        .ok()
+        .and_then(|c| c.get(b"Pages").cloned())
+        .map(|p| back.resolve(&p).as_dict().is_some())
+        .unwrap_or(false);
+    assert!(
+        reloaded_pages,
+        "the reloaded catalog's /Pages must resolve to a dictionary",
+    );
+}

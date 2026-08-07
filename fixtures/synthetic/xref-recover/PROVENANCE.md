@@ -18,6 +18,7 @@ headers or refuse it cleanly.
 | `xref-stream-corrupt.pdf` | pure xref-stream, undecodable stream data; obj 6 in an ObjStm | `XrefStreamDecode` | OPENS — recovers file-level objects + the ObjStm member; trailer from the `/Type /XRef` dict |
 | `duplicate-superseded.pdf` | object 3 defined twice, no `startxref` | `StartxrefNotFound` | OPENS; last-valid-wins picks `/Note (SECOND)` |
 | `offset-start.pdf` | >1 KiB leading junk before `%PDF-` | header probe `MissingHeader` | OPENS via header-independent recovery; `offset_start` = true |
+| `missing-endobj-page-tree.pdf` | the `/Pages` node (object 2) has no `endobj`; no xref | `StartxrefNotFound` | OPENS — object 2 is bounded at the next `N G obj` header and KEPT; `missing_endobj_recovered` = 1 |
 | `unrecoverable-no-catalog.pdf` | objects but no `/Type /Catalog`, no `trailer`, no `startxref` | `StartxrefNotFound` | REFUSES clean (`RecoverError::NoCatalog`) |
 | `crlf-shifted-lengths.pdf` | whole-file LF→CRLF conversion of a valid file: offsets shift AND every `/Length` goes stale | `NotAnXrefSection` | OPENS; all 4 objects recovered; `stream_lengths_recovered` = 1; text extractable |
 | `dangling-contents.pdf` | **xref is VALID**; page's `/Contents 4 0 R` names an object the table marks free | none — loads on the strict path | one page, `contents` empty, `contents_unresolved` = 1 |
@@ -46,3 +47,12 @@ neither a stream nor an array of streams"):
 `qpdf/add-contents.pdf` stores `startxref 685` while byte 685 lands inside
 `...endobj\r\n8 0 obj` (a 39-byte LF→CRLF forward shift). Here the shift is
 synthesized by pointing `startxref` at a body object's dictionary.
+
+`missing-endobj-page-tree.pdf` models qpdf's `bad6.pdf`, reduced to the
+one thing that matters. It was added 2026-08-07 after
+`tools/verapdf-parse-gate.py` — the first independent judge of pdfce's
+own output — found pdfce writing a document whose catalog said
+`/Pages 2 0 R` while object 2 was ABSENT from the file. The missing
+`endobj` made `confirm_candidates` drop the object, and the writer
+emitted the dangling reference without complaint; veraPDF could recover
+the original and could not recover pdfce's rewrite of it.

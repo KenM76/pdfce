@@ -205,6 +205,55 @@ pub enum StreamLengthPolicy {
     RecoverFromEndstream,
 }
 
+/// What to do when an indirect object's `endobj` keyword is missing.
+///
+/// §7.3.10 requires a definition to be `N G obj … endobj`, so a body that
+/// runs straight into the next `N G obj` header is malformed. But the
+/// object *itself* may have parsed perfectly — the damage is a missing
+/// four-byte keyword, not a corrupt value — and refusing it costs the
+/// operator the whole object.
+///
+/// **The default is and must stay [`TerminatorPolicy::Strict`]**, for the
+/// same reason [`StreamLengthPolicy::Strict`] is: on a cleanly-loading
+/// file a missing `endobj` is real damage the operator should hear about,
+/// and accepting it would put an inferred extent into the writer's
+/// byte-identical re-emission path and break the round-trip/minimal-diff
+/// invariant (`ARCHITECTURE.md` §5).
+///
+/// # Why the lenient policy exists
+///
+/// It was added 2026-08-07 after the veraPDF parse gate found pdfce
+/// writing a document whose catalog said `/Pages 2 0 R` while object 2
+/// was **absent from the file**. The input (qpdf's `bad6.pdf`) omits
+/// exactly one `endobj` — the one after the `/Pages` node — so
+/// `confirm_candidates` dropped the object as unparseable and the writer
+/// emitted a catalog pointing at nothing. veraPDF could recover the
+/// original and could not recover pdfce's rewrite of it, which is a
+/// document made strictly worse by passing through pdfce.
+///
+/// Like [`StreamLengthPolicy::RecoverFromEndstream`], this is reachable
+/// **only** from the rebuild-by-scan recovery path, where the file's
+/// cross-reference machinery has already been proven unparseable and no
+/// byte-identical re-emission is on the table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum TerminatorPolicy {
+    /// A missing `endobj` is [`ParseErrorKind::MissingEndobj`]. The
+    /// default, and the only policy the clean load path ever uses.
+    #[default]
+    Strict,
+    /// Accept a definition whose body parsed cleanly but whose `endobj` is
+    /// missing, **provided the terminator looks like the start of the next
+    /// object header** (an integer) or the buffer ended.
+    ///
+    /// The integer guard is what keeps this from swallowing arbitrary
+    /// garbage: `2 0 obj << … >> 3 0 obj` recovers, while a body followed
+    /// by an unexpected keyword still fails. Every such repair is counted
+    /// in [`Parser::missing_endobj_recovered`] so it can be disclosed
+    /// (R20, fuzzy-never-sneaky) rather than silently absorbed.
+    RecoverAtNextHeader,
+}
+
 /// Recursive-descent parser over a byte buffer.
 ///
 /// Create positioned at an offset ([`Parser::at`]) and call one of the
@@ -223,6 +272,12 @@ pub struct Parser<'a> {
     /// How many streams this parser re-derived an extent for. Only ever
     /// non-zero under [`StreamLengthPolicy::RecoverFromEndstream`].
     stream_lengths_recovered: usize,
+    /// Strictness for a missing `endobj`. Strict unless a caller opted in
+    /// via [`Parser::with_terminator_policy`].
+    terminator_policy: TerminatorPolicy,
+    /// How many definitions this parser accepted without an `endobj`. Only
+    /// ever non-zero under [`TerminatorPolicy::RecoverAtNextHeader`].
+    missing_endobj_recovered: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -235,6 +290,8 @@ impl<'a> Parser<'a> {
             peeked: Vec::new(),
             stream_length_policy: StreamLengthPolicy::Strict,
             stream_lengths_recovered: 0,
+            terminator_policy: TerminatorPolicy::Strict,
+            missing_endobj_recovered: 0,
         }
     }
 
@@ -258,6 +315,26 @@ impl<'a> Parser<'a> {
     #[must_use]
     pub const fn stream_lengths_recovered(&self) -> usize {
         self.stream_lengths_recovered
+    }
+
+    /// Set the missing-`endobj` policy (builder form).
+    ///
+    /// See [`TerminatorPolicy`] for why the non-default value is
+    /// restricted to the recovery path.
+    #[must_use]
+    pub const fn with_terminator_policy(mut self, policy: TerminatorPolicy) -> Self {
+        self.terminator_policy = policy;
+        self
+    }
+
+    /// How many definitions this parser accepted with no `endobj`.
+    ///
+    /// Always `0` under [`TerminatorPolicy::Strict`], so a non-zero value
+    /// is proof the file omitted a required keyword. Callers propagate it
+    /// into the counted disclosure a front end shows the operator.
+    #[must_use]
+    pub const fn missing_endobj_recovered(&self) -> usize {
+        self.missing_endobj_recovered
     }
 
     /// Current absolute offset for diagnostics: the start of the oldest
@@ -569,6 +646,34 @@ impl<'a> Parser<'a> {
                 id,
                 value: Object::Stream(stream),
                 provenance,
+            });
+        }
+        // --- no terminator: policy decides -------------------------------
+        //
+        // Under RecoverAtNextHeader, a body that parsed cleanly and is
+        // followed by what looks like the next object header is accepted.
+        // The integer guard matters: `2 0 obj << … >> 3 0 obj` recovers,
+        // while a body followed by an unexpected keyword still fails, so
+        // this cannot swallow arbitrary trailing garbage.
+        //
+        // The provenance is RecoveredFile, NOT File, and that is
+        // load-bearing rather than cosmetic. These source bytes do not
+        // contain an `endobj`, so re-emitting them verbatim would copy the
+        // malformation into the saved file and produce a document pdfce
+        // could not reload — the same trap the stream-length repair above
+        // documents. RecoveredFile forces the writer to re-serialize.
+        if self.terminator_policy == TerminatorPolicy::RecoverAtNextHeader
+            && matches!(term.kind, TokenKind::Integer(_))
+        {
+            self.missing_endobj_recovered += 1;
+            return Ok(IndirectObject {
+                id,
+                value,
+                // Ends where the value ended — `term` is the NEXT object's
+                // first token and must not be claimed by this one.
+                provenance: Provenance::RecoveredFile(ByteSpan::from_range(
+                    num_tok.span.start..term.span.start,
+                )),
             });
         }
         Err(ParseError::new(
@@ -900,6 +1005,58 @@ mod tests {
             d.get(b"Root").unwrap().as_reference(),
             Some(ObjId::new(2, 0))
         );
+    }
+
+    /// A missing `endobj` is an error on the STRICT path, and stays one.
+    ///
+    /// The recovery leniency added 2026-08-07 must not leak into clean
+    /// loading. On a file whose xref parses, a missing terminator is real
+    /// damage the operator should hear about, and accepting it would put an
+    /// inferred extent into the writer's byte-identical re-emission path
+    /// and break the round-trip invariant (`ARCHITECTURE.md` §5).
+    #[test]
+    fn missing_endobj_is_refused_under_the_default_policy() {
+        let buf: &[u8] = b"2 0 obj
+<< /Type /Pages >>
+3 0 obj
+<< >>
+endobj
+";
+        let err = Parser::at(buf, 0)
+            .parse_indirect_object(&mut |_| None)
+            .expect_err("strict parsing must refuse a definition with no endobj");
+        assert_eq!(err.kind, ParseErrorKind::MissingEndobj);
+    }
+
+    /// The same bytes are ACCEPTED under the recovery policy, and counted.
+    ///
+    /// Paired with the test above deliberately: together they prove the
+    /// difference is caused by the POLICY and not by something incidental
+    /// about the input. Either test alone would pass against a parser that
+    /// ignored the policy entirely in one direction.
+    #[test]
+    fn missing_endobj_is_recovered_and_counted_under_the_lenient_policy() {
+        let buf: &[u8] = b"2 0 obj
+<< /Type /Pages >>
+3 0 obj
+<< >>
+endobj
+";
+        let mut parser =
+            Parser::at(buf, 0).with_terminator_policy(TerminatorPolicy::RecoverAtNextHeader);
+        let io = parser
+            .parse_indirect_object(&mut |_| None)
+            .expect("the lenient policy accepts a body that parsed cleanly");
+        assert_eq!(io.id, ObjId::new(2, 0));
+        assert_eq!(parser.missing_endobj_recovered(), 1);
+        // The extent must stop before `3 0 obj` — claiming the next
+        // object's header would corrupt whatever re-parses this span.
+        let Provenance::RecoveredFile(span) = io.provenance else {
+            panic!(
+                "a terminator-less definition must be RecoveredFile, so the writer                     re-serializes instead of copying bytes that lack an endobj"
+            );
+        };
+        assert!(span.end() <= buf.windows(7).position(|w| w == b"3 0 obj").unwrap());
     }
 
     // ---- strictness ----

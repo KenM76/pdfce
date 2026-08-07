@@ -384,6 +384,35 @@ def fx_dangling_contents_array():
     return bytes(buf)
 
 
+def fx_missing_endobj_on_page_tree():
+    """The `/Pages` node's `endobj` is missing; everything else is valid.
+
+    Models qpdf's `bad6.pdf`, reduced to the one thing that matters. The
+    catalog says `/Pages 2 0 R`, and object 2's definition runs straight
+    into `3 0 obj` with no terminator -- so a parser that requires
+    `endobj` (ISO 32000-1 s7.3.10) drops object 2 as unparseable.
+
+    WHY THIS FIXTURE EXISTS. Until 2026-08-07 pdfce dropped it, and then
+    WROTE a file whose catalog still said `/Pages 2 0 R` while object 2
+    was absent -- a document strictly worse than the input, because
+    veraPDF could recover the original and could not recover pdfce's
+    rewrite of it. Found by `tools/verapdf-parse-gate.py`, which was the
+    first outside judge of pdfce's own output.
+
+    The xref is also removed, because that is what forces the recovery
+    path where the leniency lives; with a valid xref the strict loader is
+    used and must still refuse (see the paired test).
+    """
+    objs = one_page_objects()
+    buf = bytearray(HEADER)
+    for n in sorted(objs):
+        buf += b"%d 0 obj\n" % n + objs[n]
+        # Object 2 — and only object 2 — loses its terminator.
+        buf += b"\n" if n == 2 else b"\nendobj\n"
+    buf += b"trailer\n<< /Size %d /Root 1 0 R >>\n" % (max(objs) + 1)
+    return bytes(buf)
+
+
 FIXTURES = {
     "offset-shifted-startxref.pdf": fx_offset_shifted_startxref,
     "crlf-shifted-lengths.pdf": fx_crlf_shifted_lengths,
@@ -395,6 +424,7 @@ FIXTURES = {
     "duplicate-superseded.pdf": fx_duplicate_superseded,
     "offset-start.pdf": fx_offset_start,
     "unrecoverable-no-catalog.pdf": fx_unrecoverable_no_catalog,
+    "missing-endobj-page-tree.pdf": fx_missing_endobj_on_page_tree,
 }
 
 

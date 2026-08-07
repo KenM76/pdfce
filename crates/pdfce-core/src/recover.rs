@@ -124,7 +124,7 @@ use crate::document::parse_object_at;
 use crate::lexer::{is_delimiter, is_regular, is_whitespace};
 use crate::object::{Dict, Name, ObjId, Object};
 use crate::objstm::ObjectStream;
-use crate::parser::{Parser, StreamLengthPolicy};
+use crate::parser::{Parser, StreamLengthPolicy, TerminatorPolicy};
 use crate::xref::{MAX_XREF_ENTRIES, XrefEntry, XrefErrorKind, XrefTable};
 
 /// Why the strict load failed, carried into the [`RecoveryReport`] so the
@@ -223,6 +223,15 @@ pub struct RecoveryReport {
     /// (R20) because the two can differ, most visibly for a stream whose
     /// binary data happens to contain the bytes `endstream`.
     pub stream_lengths_recovered: usize,
+    /// How many definitions were accepted with **no `endobj` keyword**
+    /// (§7.3.10 requires one).
+    ///
+    /// Non-zero means the file omitted a required terminator and pdfce
+    /// bounded the object at the next `N G obj` header instead of dropping
+    /// it. Dropping is what pdfce used to do, and it is how a document
+    /// whose catalog named an absent `/Pages` object got written — see
+    /// [`crate::parser::TerminatorPolicy`]. Disclosed, never silent (R20).
+    pub missing_endobj_recovered: usize,
     /// Where the recovered trailer's keys came from.
     pub trailer_source: TrailerSource,
     /// Whether the `%PDF-` marker was not at byte 0 (offset-start /
@@ -331,6 +340,9 @@ struct Confirmed {
     /// Carried per-object so the report can sum over the objects actually
     /// kept, rather than over superseded duplicates the document never sees.
     lengths_recovered: usize,
+    /// Whether THIS object was accepted with no `endobj` keyword (0 or 1).
+    /// Same per-object carriage, same reason.
+    missing_endobj: usize,
 }
 
 /// Reconstruct a cross-reference table + trailer from a full-buffer scan.
@@ -387,6 +399,7 @@ pub fn recover(buf: &[u8], reason: RecoveryReason) -> Result<RecoveredXref, Reco
     // Sum over the objects actually KEPT (superseded duplicates are not in
     // the loaded document, so counting them would overstate the repair).
     let stream_lengths_recovered = confirmed.values().map(|c| c.lengths_recovered).sum();
+    let missing_endobj_recovered = confirmed.values().map(|c| c.missing_endobj).sum();
 
     Ok(RecoveredXref {
         table: XrefTable::from_entries(entries),
@@ -401,6 +414,7 @@ pub fn recover(buf: &[u8], reason: RecoveryReason) -> Result<RecoveredXref, Reco
             trailer_source,
             offset_start,
             stream_lengths_recovered,
+            missing_endobj_recovered,
         },
     })
 }
@@ -533,11 +547,17 @@ fn confirm_candidates(
         // was later converted to CRLF, so every stream is one byte per line
         // longer than it claims. Confirming such an object under the strict
         // policy discards a perfectly readable content stream.
-        let (io, lengths_recovered) = match parse_object_at(
+        let (io, repairs) = match parse_object_at(
             buf,
             &length_table,
             c.offset as u64,
             StreamLengthPolicy::RecoverFromEndstream,
+            // A definition whose `endobj` is missing but whose body parsed
+            // cleanly is kept. Dropping it costs the whole object, and when
+            // that object is the `/Pages` node the catalog is left naming
+            // nothing — the defect the veraPDF gate found on qpdf's
+            // `bad6.pdf`. See `TerminatorPolicy`.
+            TerminatorPolicy::RecoverAtNextHeader,
         ) {
             Ok(pair) => pair,
             Err(_) => continue, // false positive / unparseable — drop
@@ -554,7 +574,8 @@ fn confirm_candidates(
                     id: c.id,
                     offset: c.offset,
                     value: io.value,
-                    lengths_recovered,
+                    lengths_recovered: repairs.stream_lengths,
+                    missing_endobj: repairs.missing_endobj,
                 },
             )
             .is_some()
