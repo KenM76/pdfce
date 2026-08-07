@@ -290,6 +290,92 @@ D:\Dev\pdfce\
                                    reaching for a proxy or progressive refinement as
                                    the answer to interactive speed should read that
                                    sentence first. See §12's twenty-fourth entry.
+                                   **★★ AND THE 86% IS NOW BROKEN DOWN
+                                   (2026-08-07, `110b8c9`, per-phase timing
+                                   rather than ablation — a timer removes
+                                   nothing, an ablation removes other things
+                                   with it, R164). At 1× over 24,128 clips:
+                                   `Mask::new` 1.03 s (42.7 µs, 11.8%) ·
+                                   `fill_path` 5.22 s (216.4 µs, 59.9%) ·
+                                   the multiply 2.46 s (102.0 µs, 28.3%) =
+                                   8.72 s (361.2 µs per clip). Sum + floor =
+                                   9.26 s against a 9.49 s render — THE
+                                   ARITHMETIC CLOSES**, and the ~0.23 s
+                                   residual is the corrected painting figure.
+                                   **★ TWO FIGURES IN THIS BLOCK ARE
+                                   CORRECTED BY THAT RUN.** (i) `fill_path`
+                                   at **10.3 µs / 8.3 µs** above is what a
+                                   SMALL path costs; in this workload it is
+                                   **216.4 µs — wrong by ~22×**. **The
+                                   conclusion that pair supported is still
+                                   TRUE and still fatal to the clip-sized-mask
+                                   idea:** buffer size does not drive the
+                                   cost. What drives it is the PATH — **an
+                                   anti-aliased scanline fill costs what the
+                                   path's EDGES cost, not what the buffer
+                                   costs** — and the original experiment
+                                   varied the buffer while holding the path
+                                   fixed, so it was right about the ratio and
+                                   wrong about the magnitude. (ii) **Painting
+                                   is ~0.27 s, not ~0.8 s**: the 0.81 s was
+                                   the whole `clip-build`-ablated render,
+                                   floor PLUS painting (**R164**, third
+                                   instance that day); ablating `paint` alone
+                                   moves the total 9.28 → 9.32 s, inside
+                                   noise. **Consequence: tiling and threading
+                                   address UNDER 3%, not 5% — the ordering is
+                                   unchanged and the margin grew.**
+                                   **★★ THE CONSTRAINT THAT SHAPES ANY FUTURE
+                                   OPTIMISATION OF THIS CRATE: THE PER-CLIP
+                                   COST DISTRIBUTION IS UNIFORM.** 85.0% of
+                                   clips fall in 256–512 µs and 14.4% in
+                                   512–1024 µs; **p90 and p99 are both under
+                                   1024 µs**; only **108 of 24,128** exceed a
+                                   millisecond and only **36** fall below
+                                   256 µs — **99.85% inside a single 4× band.
+                                   There is no tail and no head.** So there is
+                                   **no pathological special case to find and
+                                   fix**, and **anything that helps must
+                                   change the work done for ALL 24,128
+                                   clips.** That forecloses fast paths as a
+                                   category (items 1 and 1′ in `ROADMAP.md`
+                                   were both special-case proposals, both
+                                   killed by a census; this is the third
+                                   census and it kills the category), and it
+                                   is why the live candidate is
+                                   **deduplication of already-built clip
+                                   masks — BLOCKED, deliberately, on a census
+                                   of how many of the 24,128 are
+                                   re-applications of an already-built clip
+                                   path. Measure the repetition BEFORE
+                                   building anything** (`R166` applied
+                                   prospectively).
+                                   **★★ AND THE SCALING LAW EXPLAINS WHY
+                                   FEWER PIXELS BUY SO LITTLE.** Per 4×
+                                   pixels: `Mask::new` 4.3×, 7.9×
+                                   (**superlinear**) · `fill_path` 1.98×,
+                                   2.11× (**~2× — it tracks the LINEAR
+                                   dimension**) · the multiply 4.0×, 4.4×
+                                   (**area-bound**). **The scanline
+                                   converter's cost follows the path's
+                                   PERIMETER and the number of scanlines it
+                                   spans, not the buffer it writes into** —
+                                   which is why `fill_path` dominates at every
+                                   scale and is **still 56% of the entire
+                                   render at 0.25×**. **This is the MEASURED
+                                   mechanism behind the "proxies underdeliver"
+                                   claim above, which until now rested on a
+                                   total rather than on a law.** ⚠ One figure
+                                   is **UNRECONCILED**: 56% at 0.25× with
+                                   `fill_path` = 1.25 s implies a 0.25× total
+                                   of ~2.23 s, against the 2.57 s recorded
+                                   above — **13% apart, outside this machine's
+                                   5.8% spread, and no denominator was
+                                   stated.** Neither is retired here; the
+                                   qualitative conclusion (both are ~3.5×
+                                   above the 0.67 s naive pixel scaling
+                                   predicts) holds either way.
+                                   See §12's twenty-fifth entry.
                                    **`font\subset.rs` (Pass 21.0, FF-C, decision 021,
                                    commit `48c6b77`; body-section sync 2026-08-04
                                    continuation 77):** `plan_subset` parses an
@@ -10018,6 +10104,327 @@ with a forward pointer.
   **A tip matching `HEAD` would still say nothing about uncommitted work:
   a bundle captures committed history only, and this filing's own `docs/`
   edits are uncommitted and in no bundle.**
+
+  **This filing edited `docs/` ONLY** — no `crates/`, no `tools/`, no
+  `fixtures/`, by the dispatch's explicit scope.
+
+  > **[★ AMENDED 2026-08-07 (twenty-fifth entry, below) — ONE FIGURE IN
+  > THIS ENTRY IS CORRECTED, ONE IS FLAGGED UNRECONCILED, AND THE REST IS
+  > CONFIRMED BY A THIRD ROUTE.**
+  > **CORRECTED:** *painting **~0.8 s*** in this entry's complete map is
+  > **~0.27 s**. The 0.81 s was the whole `clip-build`-ablated render —
+  > **floor PLUS painting** — which is **`R164` a third time in one day**,
+  > the same shape as the 10.1 s error this entry was partly written about.
+  > Ablating `paint` alone moves the total 9.28 → 9.32 s, **inside noise**.
+  > **Consequence: the tiling/threading item addresses under 3%, not 5% —
+  > direction unchanged, margin grew.**
+  > **CONFIRMED:** the per-phase sum this entry validated by ablation
+  > re-measures directly at **5.22 + 2.46 + 1.03 = 8.72 s**, and **sum +
+  > floor = 9.26 s against a 9.49 s render.** A **third** independent route
+  > to the same 86%.
+  > **⚠ UNRECONCILED:** this entry's **2.57 s at 0.25×** — the basis of
+  > *"a low-resolution proxy is bounded below by ~2.6 s"* — against the
+  > **~2.23 s** implied by `110b8c9`'s *"`fill_path` is 56% of the whole
+  > render at 0.25×"* with `fill_path` = 1.25 s. **13% apart, outside the
+  > 5.8% spread this entry itself measured.** No denominator was stated;
+  > **neither figure is retired here and the engineer should say which
+  > stands.** The conclusion is unaffected — **2.2 s and 2.6 s are both
+  > ~3.5× above the 0.67 s naive pixel-count scaling predicts.**
+  > **STRENGTHENED:** this entry argued that proxies underdeliver from a
+  > *total*; the twenty-fifth supplies the **law** —
+  > **`fill_path` grows ~2× per 4× pixels because the scanline converter
+  > follows the path's PERIMETER.** **Everything else in this entry stands
+  > unchanged**, including both `R164`-carrier design findings and both
+  > declined rule candidates.]**
+
+- **2026-08-07 (twenty-fifth entry this day) — THE 86% IS BROKEN DOWN AND
+  THE ARITHMETIC CLOSES: `fill_path` IS 59.9% OF CLIP CONSTRUCTION AND WAS
+  FILED 22× TOO LOW. THE PER-CLIP DISTRIBUTION IS UNIFORM — NO TAIL, NO
+  HEAD — SO NO FAST PATH CAN EXIST AND ANY FIX MUST CHANGE THE WORK FOR ALL
+  24,128 CLIPS. `fill_path` TRACKS THE LINEAR DIMENSION, WHICH IS THE
+  MEASURED REASON PROXIES AND CULLING UNDERDELIVER.** `110b8c9` — per-phase
+  clip timing behind `#[cfg(feature = "profile")]` in
+  `crates/pdfce-render/src/interpret.rs`, a per-clip histogram in
+  `crates/pdfce-render/src/profile.rs`, and their reporting in
+  `tools/render-profile/src/main.rs`. **NOTHING MINTED — no Pass ID, no
+  decision number, no operator question, and THREE standing-rule candidates
+  weighed and ALL THREE declined.** Ceilings unchanged and **re-measured by
+  running** `tools/check-ledger-numbers.py` (**exit 0**) and
+  `tools/check-passes-filed.py` (**exit 0**): Pass family **43**, standing
+  rules **R166** (**R167** next free), decision records **031** (**032**
+  next free), operator questions **(bb)**. Body-section update filed in the
+  SAME edit: §3's `pdfce-render` block. Full record: `ROADMAP.md`'s
+  *tooling — `fill_path` IS THE MISSING TWO-THIRDS…* Shipped entry.
+
+  **Why this is architecture and not a measurement note.** The twenty-fourth
+  entry established a **floor** — a bound on what any optimisation of this
+  crate can be worth. This one establishes a **distribution and a scaling
+  law**, and between them they close a *category* of fix rather than an
+  instance of one. That is the kind of fact that survives every future
+  refactor of this crate, because it is a property of the algorithm
+  tiny-skia implements, not of pdfce's arrangement of calls to it.
+
+  **THE BREAKDOWN, at 1× over 24,128 clips:**
+
+  | phase | total | per clip | share |
+  |---|---|---|---|
+  | `Mask::new` | 1.03 s | 42.7 µs | 11.8% |
+  | **`fill_path`** | **5.22 s** | **216.4 µs** | **59.9%** |
+  | the multiply | 2.46 s | 102.0 µs | 28.3% |
+  | **sum** | **8.72 s** | **361.2 µs** | |
+
+  **Sum + floor (0.54 s) = 9.26 s against a 9.49 s render.** The arithmetic
+  closes to **97.6%**, and the **0.23 s residual is filled by the corrected
+  painting figure of ~0.27 s** — so the complete 1× map now reconciles to
+  **about half a percent**. **That closure is the check that makes the table
+  worth believing**, and it is precisely what the previous numbers lacked:
+  `Mask::new` 24.6 µs + `fill_path` 8–10 µs + multiply 94 µs summed to
+  **~130 µs** against a **348 µs** mean. **A per-phase table that does not
+  sum to the whole is not a breakdown; it is three numbers next to each
+  other.**
+
+  **★★ CORRECTION ONE, AND IT IS A FAILURE SHAPE THIS PROJECT HAS NOT SEEN
+  BEFORE: THE EXPERIMENT VARIED THE WRONG DIMENSION.** `Mask::fill_path` was
+  filed at **8.3 µs page-sized / 10.3 µs on a 64×64 mask**; here it is
+  **216.4 µs — wrong by ~22×**. The original measurement compared a **small
+  path** in a 64×64 mask against a **small path** in a page-sized one. **It
+  varied the BUFFER and held the PATH fixed.** In this file the path covers
+  **66% of a megapixel page**, and:
+
+  > **An anti-aliased scanline fill costs what the PATH'S EDGES cost, not
+  > what the BUFFER costs.**
+
+  **Distinguish this from the day's other three errors, because filing it
+  under one of them loses the lesson.** It is not a miscalculation (the
+  0.663% fraction-as-percent), not a confounded ablation (**R164**), and not
+  a vanished instrument (**R166**). It is an **experimental-design** failure:
+  the hypothesis concerned the cost of *filling this path*, and the
+  experiment manipulated *the size of the thing filled into*.
+
+  **★ AND THE CONCLUSION THAT MEASUREMENT SUPPORTED IS TRUE — THE
+  CLIP-SIZED-MASK DEAD END STAYS CLOSED.** *Buffer size does not drive
+  `fill_path`'s cost* and *cost follows the path's edges* are **the same
+  fact from two sides**. Refutation (c) of `ROADMAP.md`'s retired item `1′`
+  therefore stands unchanged. **What does not transfer is the absolute
+  figure** — 8.3 µs is what a *small* path costs, quoted as though it were
+  what *this file's* clips cost. **A number can be right about a ratio and
+  wrong about a magnitude, and the two travel together in one sentence.**
+
+  **★★ AND THE CONTRADICTION WAS ALREADY FULLY PRESENT IN THIS PROJECT'S
+  OWN FILED NUMBERS.** `mask.fill_path` **5.24 s** ÷ **24,128** clips =
+  **217 µs**, filed in `ROADMAP.md`'s `4475fe6` entry; **8.3 µs** was filed
+  one entry later, **217 lines away in the same file**, and
+  24,128 × 8.3 µs = **0.20 s**. **A 26× internal contradiction carried
+  openly for two filings, because nobody ever put the two figures in the
+  same expression.** The transferable instruction is not *"measure more"*
+  but **"divide the totals you already have by the counts you already
+  have"** — a consistency check with no measurement cost at all, for which
+  this project had every input. Note that **5.24 s was correct all along**
+  and re-measures at **5.22 s**: the phase *totals* were never wrong.
+
+  **★ CORRECTION TWO — PAINTING IS ~0.27 s, AND THE 0.87 s HEADLINE WAS
+  MISLABELLED FROM ITS FIRST FILING.** Painting was filed at **~0.8 s**
+  (twenty-fourth entry) and before that as *"painting all 129,515 paths
+  costs 0.87 SECONDS"* (`76200e9`, including in that entry's `ROADMAP.md`
+  heading). **It is ~0.27 s**; ablating `paint` alone moves the total
+  9.28 → 9.32 s, **inside noise**. Both older figures were **floor PLUS
+  painting** — **`R164`, third instance in one day.** **The `76200e9` case
+  is the instructive one: that entry's own ablation table labels the row
+  "`intersect_clip` skipped entirely"**, which is by construction the whole
+  render minus clips. **The number was right; the sentence attached to it
+  was wrong, and the correct reading was printed three lines below the
+  incorrect one for four filings.** So *"0.87 s is the answer to how fast
+  could this page possibly get"* **remains TRUE** (it claims a floor, and a
+  clips-off total is a floor) while *"painting costs 0.87 s"* is **false**.
+  **Consequence: tiling and threading address under 3%, not 5%** — and the
+  twenty-fourth entry already showed they cannot reach below the floor at
+  all, so the case against them is over-determined.
+
+  **★★ THE FINDING THAT CHANGES THE PLAN: THE PER-CLIP DISTRIBUTION IS
+  UNIFORM.** 36 clips below 256 µs (**0.15%**) · **20,512 in 256–512 µs
+  (85.0%)** · 3,472 in 512–1024 µs (14.4%) · **108 above 1024 µs (0.4%)**.
+  p50 under 512 µs; **p90 and p99 both under 1024 µs**; **99.85% of all
+  24,128 clips sit inside a single 4× band.**
+
+  > **This is not 24,000 cheap clips plus 128 catastrophic ones. There is no
+  > tail, and no head. THEREFORE THERE IS NO PATHOLOGICAL SPECIAL CASE TO
+  > FIND AND FIX, AND ANYTHING THAT HELPS MUST CHANGE THE WORK DONE FOR ALL
+  > 24,128 CLIPS.**
+
+  **That is a standing constraint on every future proposal for this crate**,
+  and it is why the live candidate is deduplication rather than a fast path:
+  **a fast path's target population does not exist.** Note the pattern —
+  `ROADMAP.md`'s items `1` (rectangle special-case) and `1′` (clip-sized
+  mask) were **both special-case proposals, and both were killed by a
+  census rather than by an implementation attempt.** This is the third
+  census, and it kills the **category** rather than one member of it. **A
+  distribution is a cheaper thing to measure than any of the three
+  optimisations it forecloses.**
+
+  **★★ THE SCALING LAW, AND IT REPLACES A HAND-WAVE WITH A MECHANISM.** Per
+  4× pixels: `Mask::new` **4.3×, 7.9×** (superlinear) · **`fill_path` 1.98×,
+  2.11×** · the multiply **4.0×, 4.4×** (area-bound).
+
+  > **`fill_path` grows ~2× per 4× pixels. It tracks the LINEAR dimension,
+  > because the scanline converter's cost follows the path's PERIMETER and
+  > the number of scanlines it spans — not the area of the buffer.**
+
+  **This is why it dominates at every scale, and at 0.25× it is still 56% of
+  the entire render.** The twenty-fourth entry asserted that culling and
+  low-resolution proxies underdeliver and supported it with a *total*; this
+  supplies the **law** that makes the assertion predictive rather than
+  observed. **Anything in these documents still resting on the hand-waved
+  version is corrected by this entry.**
+
+  **⚠ ONE FIGURE IS UNRECONCILED AND IS FLAGGED RATHER THAN SMOOTHED.**
+  *"56% at 0.25×"* with `fill_path` = 1.25 s implies a 0.25× total of
+  ~**2.23 s**; the only 0.25× total on record is **2.57 s** (`fa17d54`),
+  which supports *"a proxy is bounded below by ~2.6 s"*. **13% apart,
+  outside the 5.8% spread measured on this machine.** Both may be right —
+  different builds, possibly different repeat counts, and
+  0.03 + 1.25 + 0.14 + floor 0.49 + painting ~0.27 = **2.18 s** supports the
+  lower one — **but no denominator was stated, so neither is retired here.**
+  **The engineer should state which 0.25× total stands.** The conclusion
+  holds either way: **2.2 s and 2.6 s are both ~3.5× above the 0.67 s a
+  naive pixel-count scaling predicts.**
+
+  **★ METHOD — TIMED, NOT ABLATED, AND THAT IS THE LOAD-BEARING DECISION.**
+
+  > **An ablation answers *"what stops happening"*, and removes other things
+  > with it (`R164`). A timer removes nothing.**
+
+  With **four figures corrected in one day and three of them ablation
+  artifacts**, the choice of instrument is the substance of this commit, not
+  a detail of it.
+
+  **★ AND A MEASUREMENT POLICY INHERITS THE REGIME IT WAS WRITTEN FOR.**
+  `profile.rs` carried a **blanket** refusal to time sub-phases — *"timer
+  calls inside a loop that runs 148,517 times perturb the thing being
+  measured"*. **That was correct for the regime it was written about: the
+  per-paint loop, 148,517 iterations of sub-microsecond work.** **Clip
+  construction is the opposite regime** — 24,128 iterations of **~360 µs**,
+  where a ~25 ns timer is ~1e-4 of the measured quantity. **The policy was
+  sound and its SCOPE was unstated**, so it read as universal and would have
+  forbidden the one measurement that closed the arithmetic. **A blanket rule
+  written inside an instrument is a rule about a regime; write the regime
+  down or it will be applied to the wrong one.**
+
+  **★ AN INSTRUMENT DEFECT THAT FIRED UNDER THE TOOL'S OWN RECOMMENDED
+  SETTING.** Counters were reset **once per scale**, not **once per
+  repeat**, so `--repeat 3` — the setting the tool itself recommends, and
+  which the previous entry added a warning to encourage — reported
+  **445,551 paints and 72,384 clips** instead of **148,517 and 24,128**.
+  **The reason it went unnoticed is the finding: derived percentages
+  survived it**, because numerator and denominator both scaled. **Wrong
+  numbers sitting beside right ones, in one output block, with nothing to
+  tell them apart.** And the compounding shape: *the advice given for
+  accurate timings silently corrupted the content block* — a recommendation
+  that improves one half of an output while corrupting the other is worse
+  than either a plain defect or plain bad advice, because the improvement is
+  what gets followed. Fixed in this commit.
+
+  **★ THE INSTRUMENTATION OVERHEAD WAS MEASURED, NOT ASSERTED — AND ONE
+  PAIR WOULD HAVE BEEN WRONG.** Three instrumented invocations at 1× gave
+  **9.49 / 9.52 / 10.04 s** — a **5.8% spread** — against **9.28 s**
+  un-instrumented, which is **2.2% from the instrumented best and therefore
+  INSIDE the spread**. **So the honest claim is "not distinguishable from
+  variance", not a percentage**; the arithmetic predicts ~1e-4, the
+  measurement can only say *below this machine's noise*, and **the
+  measurement is what stands.** **A single before/after pair would have read
+  "6% overhead" (10.04 vs 9.28) and been wrong.** **That is `R166`'s
+  cold-start lesson recurring in a different guise** — there a one-shot
+  *ablation* inflated a delta by 58%; here a one-shot *comparison* invents
+  an overhead that does not exist. **Same root: one measurement of a noisy
+  quantity, treated as the quantity.** Cross-referenced deliberately,
+  because the two look unrelated until they are set side by side. A doc
+  comment written the same session claiming the harness *"reports the
+  un-instrumented total beside the instrumented one"* was **false** and was
+  corrected in place in `profile.rs`.
+
+  **★ THE RECOMMENDATION, WITH ITS GUARD, FILED TOGETHER.** **Avoid
+  rebuilding masks at all** — deduplicate/cache already-built clip masks,
+  because uniform per-clip cost means that is the only lever reaching all
+  24,128. **BUT: MEASURE HOW MANY OF THE 24,128 ARE RE-APPLICATIONS OF AN
+  ALREADY-BUILT CLIP PATH BEFORE BUILDING ANYTHING.** If repetition is high
+  this is a large win; **if it is low the idea dies exactly the way the
+  rectangle premise did.** **This is `R166` applied PROSPECTIVELY, and the
+  second time in one day a premise has been required to be censused before
+  being built on.** Ranked after that census, and read as a shape rather
+  than a queue because **the biggest number is the least reachable**:
+  `Mask::new` (**11.8%**, superlinear, ~24 GB of memset at 1× — but masks
+  are `Arc`'d since `4475fe6`, so **lifetime needs care**) · the multiply
+  (**28.3%**, already bbox-bounded by `76200e9`, **limited headroom**) ·
+  **`fill_path` itself (59.9% — hardest, because the cost sits inside
+  tiny-skia's scanline converter rather than in pdfce code).**
+
+  **★ NOTHING MINTED — THREE CANDIDATES WEIGHED, ALL THREE DECLINED.**
+  **(C)** *"An experiment must vary the dimension the hypothesis is
+  about."* **The closest call.** A genuinely new failure shape, distinct
+  from `R164` and `R166`, and **no mechanical carrier can check it**, so
+  `R163` does not dispose of it. **It fails on the two-occurrence bar** —
+  the same bar candidate (B) was declined on one entry ago, and declining
+  (C) on it is what keeps the bar meaningful. **The second-occurrence
+  trigger is named so the next filing need not re-derive it: any future
+  figure refuted by re-running its own experiment with a DIFFERENT variable
+  held fixed. If that happens, mint it.** **(D)** *"A measurement policy
+  inherits the regime it was written for."* One occurrence, and it is advice
+  about writing doc comments — craft, not a condition on care. **(E)** *"A
+  tool's own recommended setting must be exercised by its own tests."*
+  **`R163` is decisive** — the carrier is a test asserting the counts at
+  `--repeat 3` equal those at `--repeat 1`, so the rule would be redundant
+  the day it was written; **filed as owed tooling instead.** All three are
+  recorded so a future filing starts from the argument. **`R167` remains
+  free.**
+
+  **★ STILL OWED, AND ONE ITEM IS A FALSE SENTENCE IN THE SHIPPED CRATE.**
+  The corrected doc comment was fixed in **one of two places**. The claim
+  that *"`render-profile` prints the un-instrumented total beside it so the
+  overhead is shown, not argued"* **survives at `110b8c9` in
+  `crates/pdfce-render/src/interpret.rs`, lines 2181–2183.** Established by
+  reading **committed blobs**, not the working tree:
+  `git show 110b8c9:tools/render-profile/src/main.rs` contains **no
+  occurrence of "instrument" at all**, and none of its ~60 `println!` sites
+  emits such a total; and `profile.rs`'s `timing_enabled()` is
+  **`cfg!(feature = "profile")`, a compile-time constant**, so **a single
+  invocation cannot produce both an instrumented and an un-instrumented
+  total** — the 9.28 s figure came from a separately-built binary. **The
+  surviving sentence is not merely stale; it is structurally impossible, and
+  it is in the shipped crate rather than in the out-of-tree tool.** **Not
+  fixed here** — this filing's scope is `docs/` only and a fork is live in
+  `crates/`. Also owed: the `--repeat` regression test named in (E), and a
+  ruling on which 0.25× total stands.
+
+  **What this filing did NOT establish.** Every performance number above is
+  the **operator's/engineer's**, measured at `110b8c9` and relayed (R87) —
+  the phase table, the histogram, the scale sweep, the three instrumented
+  invocations, and the gates (`cargo test` **2157 passed / 0 failed**,
+  `clippy` **0**). **No render, no build and no test was run here.** The
+  measurement input remains a **MEASUREMENT INPUT, NOT A FIXTURE** —
+  outside the repository tree, untracked, inadmissible under rule 7 /
+  `LEGAL.md` §5 — so **every number is reproducible only on the operator's
+  machine, though by a committed instrument.** `cargo tree` was **not**
+  re-run: `110b8c9` touches **three files and no manifest**
+  (`git show --stat 110b8c9`), so no dependency changed and the
+  GUI-core separation invariant is untouched.
+
+  **Git and backup state — CHECKED, not inferred (hard rule 8 as amended,
+  `b1368ed`).** `git rev-parse HEAD` → **`110b8c9`**;
+  `git status --porcelain` → **two lines**,
+  `crates/pdfce-core/src/graph.rs` modified and
+  `crates/pdfce-render/src/cancel.rs` untracked. **AN ENGINEERING FORK IS
+  LIVE in `crates/pdfce-gui`, `pdfce-core` and `pdfce-render`, building
+  off-thread rasterization, exactly as the dispatch stated — and unlike the
+  previous two filings the dirty state was visible at FIRST look.** **This
+  entry describes `110b8c9` and nothing beyond it (R87)**, established from
+  committed blobs. `git remote -v` → **empty**; the bundle is still the only
+  copy. The newest bundle is **`pdfce-20260807-1635.bundle`** — **the
+  filename the dispatch named, and this time it exists** — with
+  `refs/heads/pass-8-redaction` at **`1f63aff`**, **one commit behind
+  `HEAD`** (`git bundle list-heads` + `git log --oneline 1f63aff..HEAD`).
+  **`110b8c9`, the commit this entry is about, is in NO bundle**, and
+  neither are this filing's `docs/` edits. **A tip matching `HEAD` would
+  still say nothing about uncommitted work: a bundle captures committed
+  history only, and there is uncommitted work in `crates/` right now.**
 
   **This filing edited `docs/` ONLY** — no `crates/`, no `tools/`, no
   `fixtures/`, by the dispatch's explicit scope.
