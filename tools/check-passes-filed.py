@@ -113,7 +113,32 @@ def main() -> int:
         if m:
             claimed.append((short, m.group(1), subject.strip()))
 
-    unfiled = [c for c in claimed if c[0] not in roadmap]
+    # A DOCS-ONLY COMMIT CANNOT SATISFY THIS JOIN, so it is not asked to.
+    #
+    # The join key is "this commit's short hash appears in ROADMAP.md". A
+    # commit that WRITES ROADMAP.md would have to contain its own hash to
+    # pass — which is impossible, because the hash is not known until the
+    # commit exists. So the filing commit for a Pass is *structurally*
+    # unsatisfiable by this gate, and can only go green on the NEXT filing,
+    # if one ever comes.
+    #
+    # Found 2026-08-07 by running the gate, not by reading it: `e7e74f2`
+    # filed Pass 44.0 and was flagged UNFILED by the very check that its
+    # own content satisfies for the code commits. It surfaced only because
+    # that commit was subjected `Pass 44.0: …` rather than the usual
+    # `docs: …` — so the defect had been latent behind a naming habit, and
+    # a habit is not a guard.
+    #
+    # The exemption is on the DIFF, not the subject line, deliberately: a
+    # commit that touches only `docs/` cannot be the code half of a Pass by
+    # definition, whatever its subject says. Keying on the subject would
+    # re-introduce the same "it happened to be worded safely" fragility
+    # this replaces.
+    def is_docs_only(short: str) -> bool:
+        files = git("show", "--pretty=", "--name-only", short).split()
+        return bool(files) and all(f.startswith("docs/") for f in files)
+
+    unfiled = [c for c in claimed if c[0] not in roadmap and not is_docs_only(c[0])]
 
     # Multiple commits per Pass is NORMAL and correct here — Pass 34.1
     # shipped in four slices, Pass 27.2 in two ticks — so a repeated ID is
