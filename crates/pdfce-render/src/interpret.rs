@@ -1463,7 +1463,16 @@ impl Interpreter<'_> {
             clip.is_some(),
             paint_is_cullable(&path, ctm, self.gs.current.clip_bbox),
         );
-        if self.gs.current.text.fills() {
+        // MEASUREMENT ABLATIONS — see `paint_path`. A glyph is one more
+        // paint under the same mask, so it must honour the same switches
+        // or the floor would silently include text rasterization.
+        let clip = if crate::profile::skip_clip_sample() {
+            None
+        } else {
+            clip
+        };
+        let skip_paint = crate::profile::skip_paint();
+        if !skip_paint && self.gs.current.text.fills() {
             let paint = solid(self.gs.current.fill_color);
             // Glyph outlines are filled with the NONZERO winding rule
             // (§9.3.6: filling has "the same effects for a text object
@@ -1471,7 +1480,7 @@ impl Interpreter<'_> {
             // the opposite direction by the font, not by even-odd).
             pixmap.fill_path(&path, &paint, FillRule::Winding, ctm, clip);
         }
-        if self.gs.current.text.strokes() {
+        if !skip_paint && self.gs.current.text.strokes() {
             let paint = solid(self.gs.current.stroke_color);
             pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }
@@ -2077,11 +2086,24 @@ impl Interpreter<'_> {
             clip.is_some(),
             paint_is_cullable(&path, ctm, self.gs.current.clip_bbox),
         );
-        if fill && let Some(rule) = fill_rule {
+        // MEASUREMENT ABLATIONS — both fold away without `profile`.
+        // `clip-sample` keeps the mask built and drops only the
+        // per-pixel sampling, which is what isolates sampling cost from
+        // construction cost; skipping construction cannot.
+        let clip = if crate::profile::skip_clip_sample() {
+            None
+        } else {
+            clip
+        };
+        let skip_paint = crate::profile::skip_paint();
+        if !skip_paint
+            && fill
+            && let Some(rule) = fill_rule
+        {
             let paint = solid(self.gs.current.fill_color);
             pixmap.fill_path(&path, &paint, rule, ctm, clip);
         }
-        if stroke {
+        if !skip_paint && stroke {
             let paint = solid(self.gs.current.stroke_color);
             pixmap.stroke_path(&path, &paint, &self.stroke_params(), ctm, clip);
         }
@@ -2136,6 +2158,18 @@ fn intersect_clip(
     ctm: Transform,
     pixmap: &Pixmap,
 ) {
+    // MEASUREMENT ABLATION — always false without the `profile` feature,
+    // where this folds away entirely.
+    //
+    // Returning here leaves `state.clip` at `None`, which is exactly the
+    // confound that produced the day's worst number: it suppresses not
+    // only mask construction but clip SAMPLING in every later paint and
+    // the `Arc` clone in every `q`. `Ablation::confounds` names all
+    // three so a delta measured this way cannot be read as the cost of
+    // construction alone (R164).
+    if crate::profile::skip_clip_build() {
+        return;
+    }
     let Some(mut mask) = Mask::new(pixmap.width(), pixmap.height()) else {
         return;
     };

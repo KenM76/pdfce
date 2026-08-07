@@ -43,6 +43,144 @@
 //! **Counts and geometry are cheap and honest; timings belong at the
 //! whole-render boundary**, where `tools/render-profile` takes them.
 
+/// One switchable cost centre in the rasterizer.
+///
+/// # What an ablation is FOR, and the trap it exists to close
+///
+/// Turning a cost centre off and re-rendering gives you a difference.
+/// **That difference is an upper bound on what the centre costs, never
+/// its value** — because removing one thing can remove others with it.
+///
+/// This is not a theoretical caveat. It is the single worst measurement
+/// error of 2026-08-07: `Mask::new` was reported at **10.1 s of an 18 s
+/// render** and it is **1.02 s**. The probe skipped [`Ablation::CLIP_BUILD`],
+/// which does not only stop the mask being built — it leaves
+/// `state.clip` at `None`, so every subsequent paint also skips mask
+/// *sampling*, and every `q` skips the `Arc` clone. Three effects, one
+/// number, all of it attributed to construction (**R164**).
+///
+/// So every variant here carries [`Ablation::confounds`], and the
+/// consumer is expected to print it beside the number. A delta without
+/// its confound is not a measurement.
+///
+/// # The FLOOR
+///
+/// With every centre off, what remains is content-stream interpretation
+/// and path construction: the cost of *walking* the page. **No
+/// rasterization change can go below that** without changing the
+/// interpreter, which makes it the first number worth knowing before
+/// scoping any render optimization — and the reason a standing-rule
+/// candidate ("establish the floor by ablation before optimising") was
+/// refused in favour of this artifact carrying it mechanically (R163).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Ablation {
+    /// Skip [`intersect_clip`](crate) entirely — no `Mask::new`, no
+    /// `Mask::fill_path`, no multiply.
+    pub clip_build: bool,
+    /// Build the clip as normal but paint with `None` — isolates
+    /// tiny-skia's per-pixel mask sampling from the cost of *making*
+    /// the mask.
+    pub clip_sample: bool,
+    /// Skip `fill_path`/`stroke_path` on the page pixmap. Clip
+    /// construction is unaffected (it fills into its own mask).
+    pub paint: bool,
+}
+
+impl Ablation {
+    /// Nothing suppressed — the ordinary render.
+    pub const NONE: Self = Self {
+        clip_build: false,
+        clip_sample: false,
+        paint: false,
+    };
+    /// Every centre off. What remains is the floor.
+    pub const ALL: Self = Self {
+        clip_build: true,
+        clip_sample: true,
+        paint: true,
+    };
+
+    /// True when nothing is suppressed.
+    #[must_use]
+    pub fn is_none(&self) -> bool {
+        *self == Self::NONE
+    }
+
+    /// Parse a comma-separated set: `clip-build`, `clip-sample`,
+    /// `paint`, `all`, `none`. Returns `Err` with the offending token.
+    ///
+    /// # Errors
+    ///
+    /// Returns the unrecognised token, so a caller can reject a typo
+    /// rather than silently measuring an un-ablated render and
+    /// reporting it as ablated — which would produce a delta of zero
+    /// and read as "this centre is free".
+    pub fn parse(spec: &str) -> Result<Self, String> {
+        let mut a = Self::NONE;
+        for tok in spec.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            match tok {
+                "clip-build" => a.clip_build = true,
+                "clip-sample" => a.clip_sample = true,
+                "paint" => a.paint = true,
+                "all" => a = Self::ALL,
+                "none" => a = Self::NONE,
+                other => return Err(other.to_owned()),
+            }
+        }
+        Ok(a)
+    }
+
+    /// Short label for a results table.
+    #[must_use]
+    pub fn label(&self) -> String {
+        if self.is_none() {
+            return "none".to_owned();
+        }
+        if *self == Self::ALL {
+            return "ALL (floor)".to_owned();
+        }
+        let mut parts = Vec::new();
+        if self.clip_build {
+            parts.push("clip-build");
+        }
+        if self.clip_sample {
+            parts.push("clip-sample");
+        }
+        if self.paint {
+            parts.push("paint");
+        }
+        parts.join("+")
+    }
+
+    /// What this ablation suppresses **in addition to** its headline —
+    /// the confounds that make its delta an upper bound rather than a
+    /// value.
+    ///
+    /// Empty means the delta is attributable to the named centre alone.
+    #[must_use]
+    pub fn confounds(&self) -> Vec<&'static str> {
+        let mut v = Vec::new();
+        if self.clip_build && !self.clip_sample {
+            // The one that produced the 10.1 s error.
+            v.push("clip sampling in every later paint (state.clip stays None)");
+            v.push("the Arc clone in every q/Q");
+        }
+        if self.paint && !self.clip_sample {
+            v.push("mask sampling for the paints that no longer happen");
+        }
+        v
+    }
+
+    /// True when the rendered output is no longer the correct picture.
+    ///
+    /// Every ablation makes it wrong; this exists so a consumer has to
+    /// say so rather than let a screenshot escape.
+    #[must_use]
+    pub fn output_is_wrong(&self) -> bool {
+        !self.is_none()
+    }
+}
+
 /// Everything the renderer reports about one rasterization.
 ///
 /// Counts, not times — see the module docs on why timing lives at the
@@ -143,6 +281,28 @@ mod imp {
             c.store(0, Relaxed);
         }
     }
+
+    /// Bit 0 `clip_build`, bit 1 `clip_sample`, bit 2 `paint`.
+    ///
+    /// A single atomic rather than three: the predicates are read once
+    /// per paint in a 148,517-iteration loop, and one relaxed load that
+    /// stays in a register beats three that do not.
+    pub(super) static ABLATE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+    pub(super) fn set_ablation(a: super::Ablation) {
+        let bits =
+            u8::from(a.clip_build) | (u8::from(a.clip_sample) << 1) | (u8::from(a.paint) << 2);
+        ABLATE.store(bits, Relaxed);
+    }
+
+    pub(super) fn ablation() -> super::Ablation {
+        let b = ABLATE.load(Relaxed);
+        super::Ablation {
+            clip_build: b & 1 != 0,
+            clip_sample: b & 2 != 0,
+            paint: b & 4 != 0,
+        }
+    }
 }
 
 /// Read the counters accumulated since the last [`reset`].
@@ -164,6 +324,74 @@ pub fn snapshot() -> Counters {
 pub fn reset() {
     #[cfg(feature = "profile")]
     imp::reset();
+}
+
+/// Install an ablation set for subsequent renders.
+///
+/// **No-op without the `profile` feature**, so a shipping build cannot
+/// be talked into rendering a wrong picture: the predicates below are
+/// `const false` there and every guarded branch folds away.
+#[cfg_attr(not(feature = "profile"), allow(unused_variables))]
+pub fn set_ablation(a: Ablation) {
+    #[cfg(feature = "profile")]
+    imp::set_ablation(a);
+}
+
+/// The ablation set currently installed. Always [`Ablation::NONE`]
+/// without the `profile` feature.
+#[must_use]
+pub fn ablation() -> Ablation {
+    #[cfg(feature = "profile")]
+    {
+        imp::ablation()
+    }
+    #[cfg(not(feature = "profile"))]
+    {
+        Ablation::NONE
+    }
+}
+
+/// Skip clip construction entirely.
+///
+/// **Reads `false` as a compile-time constant without the feature**, so
+/// `if skip_clip_build() { return; }` leaves no branch in a shipping
+/// build.
+#[inline(always)]
+pub(crate) fn skip_clip_build() -> bool {
+    #[cfg(feature = "profile")]
+    {
+        imp::ABLATE.load(std::sync::atomic::Ordering::Relaxed) & 1 != 0
+    }
+    #[cfg(not(feature = "profile"))]
+    {
+        false
+    }
+}
+
+/// Paint with no clip mask even though one was built.
+#[inline(always)]
+pub(crate) fn skip_clip_sample() -> bool {
+    #[cfg(feature = "profile")]
+    {
+        imp::ABLATE.load(std::sync::atomic::Ordering::Relaxed) & 2 != 0
+    }
+    #[cfg(not(feature = "profile"))]
+    {
+        false
+    }
+}
+
+/// Skip painting to the page pixmap.
+#[inline(always)]
+pub(crate) fn skip_paint() -> bool {
+    #[cfg(feature = "profile")]
+    {
+        imp::ABLATE.load(std::sync::atomic::Ordering::Relaxed) & 4 != 0
+    }
+    #[cfg(not(feature = "profile"))]
+    {
+        false
+    }
 }
 
 /// Record one paint. `cullable` is true when the paint's device bounds
@@ -250,5 +478,95 @@ mod tests {
         assert_eq!(c.mean_clip_indiv_pct(), 0.0);
         assert_eq!(c.mean_clip_accum_pct(), 0.0);
         assert_eq!(c.cullable_pct(), 0.0);
+    }
+
+    /// `clip-build` must declare that it also kills clip SAMPLING.
+    ///
+    /// This is the day's worst measurement error encoded as a test.
+    /// `Mask::new` was reported at 10.1 s of an 18 s render — it is
+    /// 1.02 s — because the probe skipped clip construction and read the
+    /// whole difference as construction cost, when it had also removed
+    /// per-pixel mask sampling from every later paint and the `Arc`
+    /// clone from every `q`.
+    ///
+    /// If this list is ever emptied, a consumer printing
+    /// `confounds()` beside the delta shows nothing, and the number
+    /// reads as attributable. That is precisely how it read the first
+    /// time.
+    #[test]
+    fn clip_build_ablation_declares_the_sampling_confound() {
+        let c = Ablation {
+            clip_build: true,
+            ..Ablation::NONE
+        }
+        .confounds();
+        assert!(
+            c.iter().any(|s| s.contains("sampling")),
+            "clip-build suppresses mask sampling too and must say so; got {c:?}"
+        );
+        assert!(
+            c.iter().any(|s| s.contains("q/Q")),
+            "clip-build also skips the Arc clone in q/Q; got {c:?}"
+        );
+    }
+
+    /// `clip-sample` alone has NO confound — that is the entire reason
+    /// it exists as a separate switch.
+    ///
+    /// Construction still happens, so its delta is attributable to
+    /// sampling. An empty confound list here is the tool's only honest
+    /// route to a per-centre cost, and if this ever grows an entry the
+    /// separation has been broken.
+    #[test]
+    fn clip_sample_ablation_is_attributable() {
+        let c = Ablation {
+            clip_sample: true,
+            ..Ablation::NONE
+        }
+        .confounds();
+        assert!(
+            c.is_empty(),
+            "clip-sample must isolate sampling with no side effects; got {c:?}"
+        );
+    }
+
+    /// A typo must be REJECTED, not silently ignored.
+    ///
+    /// Ignoring it would run an un-ablated render, report a delta of
+    /// zero, and read as "this cost centre is free" — a wrong answer
+    /// that looks like a finding.
+    #[test]
+    fn an_unknown_ablation_token_is_an_error_not_a_no_op() {
+        assert!(Ablation::parse("clip-buidl").is_err());
+        assert_eq!(Ablation::parse("clip-buidl").unwrap_err(), "clip-buidl");
+        assert_eq!(
+            Ablation::parse("clip-build,paint").unwrap(),
+            Ablation {
+                clip_build: true,
+                paint: true,
+                clip_sample: false
+            }
+        );
+        assert_eq!(Ablation::parse("all").unwrap(), Ablation::ALL);
+    }
+
+    /// **Without the `profile` feature, ablation cannot be turned on.**
+    ///
+    /// A shipping build must be unable to render a deliberately wrong
+    /// picture, whatever it is asked to do. This test runs in BOTH
+    /// configurations and asserts the appropriate one, so the guarantee
+    /// is checked rather than assumed from the `cfg` blocks.
+    #[test]
+    fn a_shipping_build_cannot_be_ablated() {
+        set_ablation(Ablation::ALL);
+        let got = ablation();
+        #[cfg(not(feature = "profile"))]
+        assert!(
+            got.is_none(),
+            "without the profile feature, ablation must be inert; got {got:?}"
+        );
+        #[cfg(feature = "profile")]
+        assert_eq!(got, Ablation::ALL);
+        set_ablation(Ablation::NONE);
     }
 }

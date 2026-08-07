@@ -42,10 +42,41 @@
 //! xref only. When `load` is a rounding error, optimizing the reader is
 //! wasted effort, and on the reference sheet it is ~0.005%.
 //!
+//! ## `--ablate` — the FLOOR, and why a delta is never a value
+//!
+//! Ablation switches a cost centre off and re-renders. **The difference
+//! is an upper bound on that centre's cost, never its value**, because
+//! removing one thing can remove others with it — and that is not a
+//! caveat, it is the day's worst error: `Mask::new` was reported at
+//! 10.1 s because skipping clip construction *also* removed clip
+//! sampling from every later paint and the `Arc` clone from every `q`.
+//!
+//! So this mode never prints a bare delta. Every row carries what its
+//! ablation additionally suppressed, and rows with no confound are
+//! marked as attributable — currently only `clip-sample`, which is
+//! exactly why it exists as a switch separate from `clip-build`.
+//!
+//! **The floor** is every centre off: content-stream interpretation and
+//! path construction, the cost of *walking* the page. Nothing done to
+//! the rasterizer can go below it. Two things make it the number to get
+//! first:
+//!
+//! - It bounds the win. An optimization targeting a centre worth less
+//!   than `total − floor` cannot deliver more than that, whatever it
+//!   does.
+//! - **It is scale-flat if it is per-operation.** Run `--ablate-sweep`
+//!   across scales: a floor that barely moves between 0.25× and 2× is
+//!   fixed per-operation cost, which tiling and low-resolution proxies
+//!   *cannot* reduce — they render fewer pixels, not fewer operators.
+//!   That is the standing answer to "would tiling help", and it is
+//!   measured here rather than argued.
+//!
 //! ## Usage
 //!
 //! ```text
 //! cargo run --release -- <file.pdf> [--page N] [--scales 0.25,0.5,1,2] [--repeat N]
+//! cargo run --release -- <file.pdf> --ablate-sweep [--scales …]
+//! cargo run --release -- <file.pdf> --ablate clip-build,paint
 //! ```
 //!
 //! Exits 2 on a usage or load error, 0 otherwise. It reports; it does
@@ -56,7 +87,33 @@ use std::time::Instant;
 use pdfce_core::document::Document;
 use pdfce_core::page_tree;
 use pdfce_core::view::DocumentView;
+use pdfce_render::profile::Ablation;
 use pdfce_render::{RenderOptions, profile, render_page_with_view};
+
+/// The ablations a sweep runs, in the order the table prints them.
+///
+/// `clip-sample` sits above `clip-build` deliberately: it is the only
+/// row whose delta is attributable, so a reader meets an honest number
+/// before meeting a confounded one.
+const SWEEP: &[Ablation] = &[
+    Ablation::NONE,
+    Ablation {
+        clip_sample: true,
+        clip_build: false,
+        paint: false,
+    },
+    Ablation {
+        clip_build: true,
+        clip_sample: false,
+        paint: false,
+    },
+    Ablation {
+        paint: true,
+        clip_build: false,
+        clip_sample: false,
+    },
+    Ablation::ALL,
+];
 
 fn main() -> std::process::ExitCode {
     let mut args = std::env::args().skip(1);
@@ -64,9 +121,31 @@ fn main() -> std::process::ExitCode {
     let mut page_index: usize = 0;
     let mut scales: Vec<f32> = vec![0.25, 0.5, 1.0, 2.0];
     let mut repeat: usize = 1;
+    let mut ablate: Option<Ablation> = None;
+    let mut ablate_sweep = false;
 
     while let Some(a) = args.next() {
         match a.as_str() {
+            "--ablate" => {
+                let Some(spec) = args.next() else {
+                    eprintln!("--ablate needs a set: clip-build,clip-sample,paint,all,none");
+                    return std::process::ExitCode::from(2);
+                };
+                match Ablation::parse(&spec) {
+                    Ok(a) => ablate = Some(a),
+                    Err(bad) => {
+                        // Rejected, never ignored: an ignored typo runs an
+                        // un-ablated render and reports a zero delta, which
+                        // reads as "this centre is free".
+                        eprintln!(
+                            "unknown ablation '{bad}' — expected any of \
+                             clip-build, clip-sample, paint, all, none"
+                        );
+                        return std::process::ExitCode::from(2);
+                    }
+                }
+            }
+            "--ablate-sweep" => ablate_sweep = true,
             "--page" => {
                 page_index = args.next().and_then(|v| v.parse().ok()).unwrap_or(0);
             }
@@ -80,7 +159,11 @@ fn main() -> std::process::ExitCode {
             }
             "-h" | "--help" => {
                 eprintln!(
-                    "render-profile <file.pdf> [--page N] [--scales 0.25,0.5,1,2] [--repeat N]"
+                    "render-profile <file.pdf> [--page N] [--scales 0.25,0.5,1,2] [--repeat N]\n\
+                                               [--ablate SET | --ablate-sweep]\n\
+                     \n\
+                     SET is a comma list of: clip-build, clip-sample, paint, all, none\n\
+                     --ablate-sweep runs each in turn and reports the FLOOR."
                 );
                 return std::process::ExitCode::SUCCESS;
             }
@@ -131,6 +214,31 @@ fn main() -> std::process::ExitCode {
     println!("bytes     : {input_len}");
     println!("pages     : {}, profiling page {page_index}", pages.len());
     println!("load      : {:.3} ms  (object graph + xref only)", load.as_secs_f64() * 1e3);
+
+    // A single --ablate applies to the scale table below. Say so before
+    // the numbers, not after: a reader who scrolls to the table must not
+    // be able to mistake an ablated row for a real render.
+    if let Some(a) = ablate {
+        profile::set_ablation(a);
+        println!();
+        println!("ABLATED   : {}  <-- THE NUMBERS BELOW ARE NOT A REAL RENDER", a.label());
+        if a.output_is_wrong() {
+            println!("            the rendered picture is WRONG by construction; do not screenshot it");
+        }
+        let confounds = a.confounds();
+        if confounds.is_empty() {
+            println!("            attributable: no other cost centre changes with this");
+        } else {
+            println!("            ALSO suppresses:");
+            for c in confounds {
+                println!("              - {c}");
+            }
+            println!(
+                "            so any difference from a baseline is an UPPER BOUND on this\n            \
+                 centre's cost, never its value (R164)"
+            );
+        }
+    }
     println!();
     println!(
         "{:>7}  {:>12}  {:>10}  {:>8}  {:>9}",
@@ -196,5 +304,195 @@ fn main() -> std::process::ExitCode {
         );
     }
 
+    if ablate_sweep {
+        run_ablation_sweep(&view, page, &scales, repeat, &opts);
+    }
+
+    // Leave the renderer un-ablated for anything that runs after us.
+    profile::set_ablation(Ablation::NONE);
     std::process::ExitCode::SUCCESS
+}
+
+/// Time one render, returning seconds (best of `repeat`).
+fn time_render(
+    view: &DocumentView<'_>,
+    page: &page_tree::Page,
+    scale: f32,
+    repeat: usize,
+    opts: &RenderOptions,
+) -> Option<f64> {
+    let mut best = f64::MAX;
+    for _ in 0..repeat {
+        let t = Instant::now();
+        render_page_with_view(view, page, scale, opts).ok()?;
+        best = best.min(t.elapsed().as_secs_f64());
+    }
+    Some(best)
+}
+
+/// Run every ablation at every scale and report the floor.
+///
+/// Prints deltas only as **upper bounds**, each with what its ablation
+/// additionally suppressed — see the module docs for the 10.1 s error
+/// this shape exists to prevent.
+fn run_ablation_sweep(
+    view: &DocumentView<'_>,
+    page: &page_tree::Page,
+    scales: &[f32],
+    repeat: usize,
+    opts: &RenderOptions,
+) {
+    println!();
+    println!("ablation sweep");
+    println!(
+        "  Every ablated render draws a WRONG PICTURE by construction. These are\n  \
+         measurements, not output — do not screenshot one."
+    );
+    if repeat < 2 {
+        // Cold-start noise lands ENTIRELY in the delta. Measured on the
+        // reference sheet: clip-build read 1.17s at --repeat 1 and 0.74s
+        // at --repeat 3 — a 58% inflation of the row, and therefore of
+        // every difference taken from it. A single run is fine for the
+        // scale curve above, where the shape survives; it is not fine
+        // here, where the whole output is differences.
+        println!();
+        println!(
+            "  WARNING: --repeat 1. Cold-start cost falls entirely into the deltas below.\n  \
+             On the reference sheet clip-build read 1.17s at --repeat 1 and 0.74s at\n  \
+             --repeat 3. Use --repeat 3 or more before quoting anything from this table."
+        );
+    }
+    println!();
+
+    print!("{:>7}", "scale");
+    for a in SWEEP {
+        print!("  {:>13}", a.label());
+    }
+    println!();
+
+    // rows[ablation_index] = times across scales, for the floor analysis.
+    let mut floor_times: Vec<f64> = Vec::new();
+    let mut base_times: Vec<f64> = Vec::new();
+    let mut last_row: Vec<f64> = Vec::new();
+
+    for &scale in scales {
+        print!("{scale:>7}");
+        let mut row = Vec::new();
+        for a in SWEEP {
+            profile::set_ablation(*a);
+            match time_render(view, page, scale, repeat, opts) {
+                Some(s) => {
+                    print!("  {s:>12.2}s");
+                    row.push(s);
+                }
+                None => {
+                    print!("  {:>13}", "err");
+                    row.push(f64::NAN);
+                }
+            }
+        }
+        println!();
+        if let (Some(&b), Some(&f)) = (row.first(), row.last()) {
+            base_times.push(b);
+            floor_times.push(f);
+        }
+        last_row = row;
+    }
+    profile::set_ablation(Ablation::NONE);
+
+    // --- The floor, and what its flatness means -------------------------
+    if let (Some(&lo), Some(&hi)) = (
+        floor_times
+            .iter()
+            .min_by(|a, b| a.total_cmp(b)),
+        floor_times
+            .iter()
+            .max_by(|a, b| a.total_cmp(b)),
+    ) && lo > 0.0
+    {
+        let spread = hi / lo;
+        let px_span = match (scales.first(), scales.last()) {
+            (Some(&a), Some(&b)) if a > 0.0 => f64::from((b / a) * (b / a)),
+            _ => 1.0,
+        };
+        println!();
+        println!(
+            "FLOOR: {lo:.2}s .. {hi:.2}s  ({spread:.2}x spread while pixels vary {px_span:.0}x)"
+        );
+        println!(
+            "  Content-stream interpretation and path construction only. No change to\n  \
+             the rasterizer can go below this without changing the interpreter."
+        );
+        // The tiling question, settled by measurement rather than argument.
+        if spread < px_span / 4.0 {
+            println!();
+            println!(
+                "  => The floor is SCALE-FLAT: it is PER-OPERATION cost, not per-pixel.\n     \
+                 Tiling and low-resolution proxies render fewer PIXELS, not fewer\n     \
+                 OPERATORS, so they cannot reduce it. A proxy at the smallest scale\n     \
+                 above still costs at least the floor."
+            );
+        } else {
+            println!();
+            println!(
+                "  => The floor SCALES with area, so it is not a per-operation term.\n     \
+                 Rendering less area would reduce it proportionally."
+            );
+        }
+        if let Some(&base) = base_times.last() {
+            println!();
+            println!(
+                "  At the largest scale the floor is {:.1}% of the un-ablated render.",
+                hi * 100.0 / base
+            );
+        }
+    }
+
+    // --- Per-ablation detail, deltas as upper bounds only ---------------
+    println!();
+    println!("what each ablation suppressed, at the largest scale");
+    let base = last_row.first().copied().unwrap_or(f64::NAN);
+    for (a, &t) in SWEEP.iter().zip(last_row.iter()) {
+        if a.is_none() {
+            continue;
+        }
+        println!();
+        println!("  {} — {:.2}s", a.label(), t);
+        // NEVER a bare delta. The word "at most" is load-bearing.
+        //
+        // A delta at or below noise is a FINDING, not a broken row: it
+        // says the centre is not resolvable at this sample size, which
+        // is the honest reading of a negative number. Printing
+        // "removes AT MOST -0.01s" instead reads as an error and buries
+        // the result — measured on the reference sheet, where clip
+        // sampling came out free.
+        let delta = base - t;
+        let noise = base * 0.02;
+        if delta <= noise {
+            println!(
+                "    NOT RESOLVABLE at this sample size (delta {delta:+.2}s on a {base:.2}s\n    \
+                 baseline, at or below noise) — this centre is too cheap to measure here,\n    \
+                 which is itself the finding. Raise --repeat to tighten the bound."
+            );
+        } else {
+            println!(
+                "    removes AT MOST {delta:.2}s of the {base:.2}s baseline — an upper bound, not a value"
+            );
+        }
+        let confounds = a.confounds();
+        if confounds.is_empty() {
+            println!("    attributable: no other cost centre changes with it");
+        } else {
+            println!("    ALSO SUPPRESSES (why the figure is only a bound):");
+            for c in confounds {
+                println!("      - {c}");
+            }
+        }
+    }
+    println!();
+    println!(
+        "  A delta is what STOPPED HAPPENING, which is not the same as what the named\n  \
+         centre costs. Reading one as the other reported Mask::new at 10.1s when it is\n  \
+         1.02s (R164). Only rows marked 'attributable' support that reading."
+    );
 }
