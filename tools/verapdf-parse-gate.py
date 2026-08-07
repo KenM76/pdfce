@@ -190,7 +190,50 @@ def collect_inputs(paths: list[str], limit: int | None) -> list[Path]:
     return out[:limit] if limit else out
 
 
-def produce(src: Path, mode: str, dest: Path) -> str | None:
+def build_cli(workdir: Path) -> Path:
+    """Build `pdfce-cli` once and return a PRIVATE COPY of the binary.
+
+    # Why a copy, and why not `cargo run` per file
+
+    The obvious implementation calls ``cargo run -p pdfce-cli`` for each
+    input. That is wrong in two compounding ways, both measured on
+    2026-08-07 rather than predicted:
+
+    1. **It holds the build artifact hostage.** A sweep of a few hundred
+       files keeps ``target/debug/pdfce-cli.exe`` in use for many
+       minutes, and any concurrent ``cargo test`` in the same repository
+       dies with ``failed to remove file ... Access is denied
+       (os error 5)`` on Windows, because it cannot relink a running
+       binary. That failure names a *file permission* problem and gives
+       no hint that another job is the cause — a genuinely confusing
+       error for anyone who did not start the sweep.
+    2. **It re-runs cargo's dependency resolution every single time**,
+       which dominates the runtime of the actual work.
+
+    Building once and running a copy out of the sweep's own temp
+    directory fixes both: ``target/`` is untouched for the whole run, so
+    a developer can build and test normally while a long sweep is in
+    flight.
+    """
+    proc = subprocess.run(
+        ["cargo", "build", "-q", "-p", "pdfce-cli"],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"cargo build -p pdfce-cli failed:\n{proc.stderr or proc.stdout}"
+        )
+    exe = "pdfce-cli.exe" if os.name == "nt" else "pdfce-cli"
+    built = Path("target") / "debug" / exe
+    if not built.is_file():
+        raise RuntimeError(f"built pdfce-cli not found at {built}")
+    private = workdir / exe
+    shutil.copy2(built, private)
+    return private
+
+
+def produce(cli: Path, src: Path, mode: str, dest: Path) -> str | None:
     """Have pdfce WRITE `src` to `dest` in `mode`.
 
     Returns None on success, or a reason string. A pdfce refusal is
@@ -200,7 +243,7 @@ def produce(src: Path, mode: str, dest: Path) -> str | None:
     """
     proc = subprocess.run(
         [
-            "cargo", "run", "-q", "-p", "pdfce-cli", "--",
+            str(cli),
             "round-trip", "--mode", mode, "-o", str(dest), str(src),
         ],
         capture_output=True,
@@ -334,9 +377,14 @@ def main() -> int:
     produced: dict[Path, Path] = {}
     refused = 0
     try:
+        try:
+            cli = build_cli(workdir)
+        except RuntimeError as exc:
+            print(f"harness error: {exc}", file=sys.stderr)
+            return 2
         for i, src in enumerate(inputs):
             dest = workdir / f"{i:05d}-{src.name}"
-            reason = produce(src, args.mode, dest)
+            reason = produce(cli, src, args.mode, dest)
             if reason is not None:
                 # A refusal is a correct outcome, not a gate failure.
                 refused += 1

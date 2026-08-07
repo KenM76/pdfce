@@ -230,12 +230,38 @@ impl Script {
     /// Parse the environment's script, or `None` if none was requested.
     ///
     /// Unparseable steps are skipped rather than fatal: a harness that dies on
-    /// a typo mid-investigation wastes a whole run, and the trace shows which
-    /// steps actually ran.
+    /// a typo mid-investigation wastes a whole run.
+    ///
+    /// # But the skip is ANNOUNCED, and it did not used to be
+    ///
+    /// This doc comment used to end "...and the trace shows which steps
+    /// actually ran", offering that as the mitigation. It was not one. An
+    /// absent trace line is indistinguishable from a step that ran and
+    /// produced no output, so a typo presented as **a feature failing to
+    /// respond** rather than as a step that never executed.
+    ///
+    /// That cost a real investigation on 2026-08-07: a `placefield` step
+    /// (correct spelling was `tool:placefield`) was dropped here, and the
+    /// resulting silence was read as a defect in the tool-arming code. It was
+    /// caught only by running a known-good sibling step and noticing the
+    /// difference — which is luck, not method.
+    ///
+    /// So every dropped step now emits a trace line naming it. The
+    /// non-fatal posture is unchanged and still correct; what changed is that
+    /// the harness no longer stays quiet about disobeying its instructions.
+    /// This is the earliest question in the "green is not evidence" family —
+    /// **did my instruction ever execute at all?** — and it has to be
+    /// answerable before any later reading of the trace means anything.
     pub fn from_env() -> Option<Self> {
         // ui-text-exempt: environment variable name, never displayed
         let raw = std::env::var("PDFCE_DIAG_SCRIPT").ok()?;
-        let steps: Vec<Step> = raw.split(';').filter_map(parse_step).collect();
+        let (steps, rejected) = parse_script(&raw);
+        for bad in &rejected {
+            // NOT silent. See this function's doc comment: the whole point is
+            // that a dropped step announces itself, because the failure it
+            // produces otherwise looks like a bug in the feature under test.
+            trace(|| format!("script-step-UNPARSEABLE step={bad:?} skipped=1"));
+        }
         if steps.is_empty() {
             return None;
         }
@@ -254,6 +280,33 @@ impl Script {
         }
         step
     }
+}
+
+/// Split a raw script into the steps that parsed and the ones that did NOT.
+///
+/// Returns `(steps, rejected)` rather than just the steps, so the rejects are
+/// a **value the caller must deal with** instead of a side effect it may
+/// forget. [`Script::from_env`] traces every reject; a future caller that
+/// ignores the second element is at least doing so visibly.
+///
+/// Empty segments are not rejects — a trailing `;`, or the empty string from
+/// `"a;;b"`, is punctuation rather than a typo, and reporting those as
+/// unparseable would be noise that trains the reader to ignore the warning.
+/// That distinction is the difference between a signal and a nag.
+///
+/// Kept a free function, like [`parse_step`], so it is unit-testable without
+/// an egui context, an environment variable, or captured stderr.
+fn parse_script(raw: &str) -> (Vec<Step>, Vec<String>) {
+    let mut steps = Vec::new();
+    let mut rejected = Vec::new();
+    for segment in raw.split(';') {
+        match parse_step(segment) {
+            Some(step) => steps.push(step),
+            None if segment.trim().is_empty() => {}
+            None => rejected.push(segment.trim().to_owned()),
+        }
+    }
+    (steps, rejected)
 }
 
 /// Parse one `verb:args` step. Kept a free function so it is unit-testable
@@ -411,5 +464,68 @@ mod tests {
         assert_eq!(s.advance(), Some(Step::Delete));
         assert_eq!(s.advance(), None);
         assert_eq!(s.advance(), None, "exhaustion must be stable, not a cycle");
+    }
+
+    /// The real typo, from the real investigation it cost.
+    ///
+    /// On 2026-08-07 a script step was written `placefield` when the verb is
+    /// `tool:placefield`. It was dropped silently, and the resulting absence
+    /// of tool-arming traces was read as a defect in the tool-arming code —
+    /// caught only by running a known-good sibling step and noticing the
+    /// difference.
+    ///
+    /// This asserts the two halves that make that impossible to repeat: the
+    /// bad step is REPORTED, and the good steps around it still run (the
+    /// non-fatal posture, which is deliberate and must not regress into
+    /// aborting the whole script).
+    #[test]
+    fn an_unparseable_step_is_reported_and_does_not_stop_the_script() {
+        let (steps, rejected) = parse_script("wait;placefield;wait");
+        assert_eq!(
+            rejected,
+            vec!["placefield".to_owned()],
+            "a step the parser cannot read must come back as a REJECT the \
+             caller has to handle, never be dropped on the floor — an absent \
+             trace line is indistinguishable from a step that ran and did \
+             nothing, which is exactly how this typo was misread as a bug in \
+             the feature under test",
+        );
+        assert_eq!(
+            steps.len(),
+            2,
+            "the surrounding steps must still run: dying on a typo \
+             mid-investigation wastes a whole run, which is why the skip is \
+             non-fatal and only its SILENCE was the defect",
+        );
+    }
+
+    /// The correctly-spelled verb parses — which is what makes the test above
+    /// mean something.
+    ///
+    /// R162: without this, `an_unparseable_step_is_reported…` would pass
+    /// identically if `tool:` had never been a valid verb at all, and would
+    /// be asserting nothing about the typo it names.
+    #[test]
+    fn the_correctly_spelled_verb_parses_so_the_typo_test_is_not_vacuous() {
+        let (steps, rejected) = parse_script("tool:placefield");
+        assert!(
+            rejected.is_empty(),
+            "`tool:placefield` is the CORRECT spelling; if it rejects here \
+             then the typo test above proves nothing about spelling",
+        );
+        assert_eq!(steps.len(), 1);
+    }
+
+    /// Punctuation is not a typo.
+    ///
+    /// A trailing `;` and the empty segment in `a;;b` are both routine. If
+    /// those were reported the warning would fire on well-formed scripts,
+    /// and a warning that cries wolf is worse than no warning — it teaches
+    /// the reader to skip exactly the line that matters.
+    #[test]
+    fn empty_segments_are_punctuation_not_rejects() {
+        let (steps, rejected) = parse_script("wait;;wait;");
+        assert!(rejected.is_empty(), "empty segments must not be reported");
+        assert_eq!(steps.len(), 2);
     }
 }
