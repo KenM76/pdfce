@@ -82,6 +82,7 @@ pub mod filters;
 pub mod font_embed;
 pub mod fontdata;
 pub mod forms;
+pub mod forms_author;
 pub mod graph;
 pub mod image_codec;
 pub mod lexer;

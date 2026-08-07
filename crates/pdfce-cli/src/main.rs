@@ -1049,14 +1049,6 @@ enum Command {
         fillable_only: bool,
     },
 
-    /// Fill one or more interactive-form fields and save (Pass 7).
-    ///
-    /// Each `--set NAME=VALUE` sets a field by fully-qualified name: a text
-    /// or choice field's value is set and its appearance regenerated
-    /// (§12.7.3.3); a check-box/radio field's state is selected (VALUE is
-    /// the on-state name, e.g. `Yes`, or `Off`/`on`/`true`/`1`). Saves
-    /// incrementally by default (the minimal-diff path). Never flattens —
-    /// the fields stay interactive.
     /// **Create a new text form field** (§12.7.2 + §12.5.6.19).
     ///
     /// Writes a merged field/widget dictionary, registers it in the
@@ -1070,13 +1062,26 @@ enum Command {
     ///
     /// Refused by name on a document carrying an XFA layer (pdfce can write
     /// the AcroForm half but not the XFA half, and one-sided is worse than
-    /// neither), and when the name is already used by a field of a different
-    /// type.
+    /// neither), when the name is already used by a field of a DIFFERENT
+    /// type, and when the name belongs to a group that contains other fields.
+    /// The same name and the SAME type is not a refusal — it merges.
     AddTextField {
         /// Input PDF.
         input: PathBuf,
-        /// The field's name — also how `fill-field` and `list-fields` will
-        /// refer to it.
+        /// The field's fully-qualified name — also how `fill-field` and
+        /// `list-fields` refer to it.
+        ///
+        /// A PERIOD SEPARATES LEVELS (§12.7.3.2): `Personal.Address.Zip`
+        /// creates the group `Personal`, the group `Personal.Address`, and
+        /// the field `Zip` inside it — reusing any of those that already
+        /// exist. A name segment may not itself contain a period, so a
+        /// leading, trailing or doubled one is refused rather than guessed at.
+        ///
+        /// REUSING AN EXISTING NAME OF THE SAME TYPE MERGES: a second widget
+        /// is attached to the same field rather than a second field created.
+        /// One value, two places to see and edit it — which is how a check box
+        /// appears on every page of a form. A different type under the same
+        /// name is refused, and so is a name that belongs to a group.
         #[arg(long)]
         name: String,
         /// 1-based page number to place the field on.
@@ -1123,8 +1128,20 @@ enum Command {
     AddCheckBox {
         /// Input PDF.
         input: PathBuf,
-        /// The field's name — also how `fill-field` and `list-fields` will
-        /// refer to it.
+        /// The field's fully-qualified name — also how `fill-field` and
+        /// `list-fields` refer to it.
+        ///
+        /// A PERIOD SEPARATES LEVELS (§12.7.3.2): `Personal.Address.Zip`
+        /// creates the group `Personal`, the group `Personal.Address`, and
+        /// the field `Zip` inside it — reusing any of those that already
+        /// exist. A name segment may not itself contain a period, so a
+        /// leading, trailing or doubled one is refused rather than guessed at.
+        ///
+        /// REUSING AN EXISTING NAME OF THE SAME TYPE MERGES: a second widget
+        /// is attached to the same field rather than a second field created.
+        /// One value, two places to see and edit it — which is how a check box
+        /// appears on every page of a form. A different type under the same
+        /// name is refused, and so is a name that belongs to a group.
         #[arg(long)]
         name: String,
         /// 1-based page number to place the box on.
@@ -1171,7 +1188,20 @@ enum Command {
     AddChoiceField {
         /// Input PDF.
         input: PathBuf,
-        /// The field's name.
+        /// The field's fully-qualified name — also how `fill-field` and
+        /// `list-fields` refer to it.
+        ///
+        /// A PERIOD SEPARATES LEVELS (§12.7.3.2): `Personal.Address.Zip`
+        /// creates the group `Personal`, the group `Personal.Address`, and
+        /// the field `Zip` inside it — reusing any of those that already
+        /// exist. A name segment may not itself contain a period, so a
+        /// leading, trailing or doubled one is refused rather than guessed at.
+        ///
+        /// REUSING AN EXISTING NAME OF THE SAME TYPE MERGES: a second widget
+        /// is attached to the same field rather than a second field created.
+        /// One value, two places to see and edit it — which is how a check box
+        /// appears on every page of a form. A different type under the same
+        /// name is refused, and so is a name that belongs to a group.
         #[arg(long)]
         name: String,
         /// 1-based page number to place the field on.
@@ -1229,6 +1259,14 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// Fill one or more interactive-form fields and save (Pass 7).
+    ///
+    /// Each `--set NAME=VALUE` sets a field by fully-qualified name: a text
+    /// or choice field's value is set and its appearance regenerated
+    /// (§12.7.3.3); a check-box/radio field's state is selected (VALUE is
+    /// the on-state name, e.g. `Yes`, or `Off`/`on`/`true`/`1`). Saves
+    /// incrementally by default (the minimal-diff path). Never flattens —
+    /// the fields stay interactive.
     FillField {
         /// Input PDF.
         input: PathBuf,

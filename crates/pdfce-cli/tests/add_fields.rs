@@ -440,14 +440,31 @@ fn a_choice_field_with_no_options_succeeds_and_warns() {
     assert!(list_fields(&output).contains("name=Country type=Ch"));
 }
 
-/// A same-name add is REFUSED for every authoring subcommand.
+/// A same-name add MERGES, for every authoring subcommand — end to end.
 ///
-/// §12.7.3.2 makes the fully-qualified name a field's identity; appending a
-/// second same-named field would emit a document with two fields and one
-/// identity, which cannot be un-authored. The merge that should happen needs
-/// a resolver pdfce does not have yet.
+/// # This test used to assert a refusal, and the inversion is the deliverable
+///
+/// §12.7.3.2 makes the fully-qualified name a field's IDENTITY, so a second
+/// same-named field would give a document two fields with one identity and no
+/// disambiguator. pdfce refused that, correctly, while it lacked a write-side
+/// resolver to do the alternative.
+///
+/// The resolver exists now, so a same-name same-type add does what the spec
+/// says it means: it attaches ANOTHER WIDGET to the one field. One `/V`, two
+/// places to see and edit it — which is how a reference number repeats in a
+/// header and how a check box appears on every page.
+///
+/// # Why the fill at the end is the load-bearing assertion
+///
+/// `list-fields` reporting one field with two widgets proves the merge PARSES.
+/// It does not prove the result is a real field. Running the **existing,
+/// unmodified `fill-field` verb** over it does: that verb knows nothing about
+/// authoring, resolves by fully-qualified name, and fans out over
+/// `field.widgets`. If it reports two widgets updated, then the merged field
+/// is addressable, correctly typed, and correctly shaped by the same code path
+/// every pre-existing document goes through.
 #[test]
-fn a_duplicate_field_name_is_refused_by_every_subcommand() {
+fn a_duplicate_field_name_merges_for_every_subcommand() {
     let (dir, input) = TempDir::seeded("dup");
     let input_s = input.display().to_string();
 
@@ -490,17 +507,243 @@ fn a_duplicate_field_name_is_refused_by_every_subcommand() {
         let out = run(&b);
         assert_eq!(
             code(&out),
-            EDIT_REFUSED,
-            "{cmd} must refuse a duplicate name: {}",
-            stdout(&out)
+            0,
+            "{cmd} must MERGE a same-name same-type add: {}",
+            stderr(&out)
         );
-        assert!(!second.exists(), "{cmd} must not write a duplicate file");
-        // The first file is untouched and still single-identity.
-        let fields = list_fields(&first);
+        assert!(second.exists(), "{cmd} wrote no output");
+
+        // ONE field, TWO widgets — not two fields sharing an identity.
+        let fields = list_fields(&second);
         assert!(
             fields.contains("fields=1"),
-            "{cmd} left exactly one field: {fields}"
+            "{cmd} must leave exactly one field: {fields}"
         );
+        assert!(
+            fields.contains("widgets=2"),
+            "{cmd} must leave that field with both widgets: {fields}"
+        );
+    }
+}
+
+/// The merged text field is fillable through the UNMODIFIED fill verb, and
+/// the fill reaches BOTH widgets.
+///
+/// Split from the loop above because only a text field has a fill verb that
+/// reports a widget count; running it is what turns "the merge parses" into
+/// "the merge produced a real field".
+#[test]
+fn a_merged_field_fills_through_the_existing_verb_and_paints_both_widgets() {
+    let (dir, input) = TempDir::seeded("mergefill");
+    let input_s = input.display().to_string();
+    let one = dir.join("one.pdf");
+    let one_s = one.display().to_string();
+    let two = dir.join("two.pdf");
+    let two_s = two.display().to_string();
+    let filled = dir.join("filled.pdf");
+    let filled_s = filled.display().to_string();
+
+    let out = run(&[
+        "add-text-field",
+        &input_s,
+        "--name",
+        "Ref",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,180,44",
+        "-o",
+        &one_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let out = run(&[
+        "add-text-field",
+        &one_s,
+        "--name",
+        "Ref",
+        "--page",
+        "1",
+        "--rect",
+        "20,60,180,84",
+        "-o",
+        &two_s,
+    ]);
+    assert_eq!(code(&out), 0, "the merge: {}", stderr(&out));
+
+    // THE PROOF: a verb that knows nothing about authoring accepts it.
+    let out = run(&["fill-field", &two_s, "--set", "Ref=R-2000", "-o", &filled_s]);
+    assert_eq!(
+        code(&out),
+        0,
+        "fill must accept the merged field: {}",
+        stderr(&out)
+    );
+
+    let fields = list_fields(&filled);
+    assert!(
+        fields.contains("fields=1") && fields.contains("widgets=2"),
+        "still one field with two widgets after the fill: {fields}"
+    );
+    assert!(
+        fields.contains("value=R-2000"),
+        "the shared value reached the field: {fields}"
+    );
+    assert!(
+        fields.contains("ap=1"),
+        "both widgets carry a regenerated appearance: {fields}"
+    );
+}
+
+/// A dotted name creates a HIERARCHY, and `list-fields` reports the composed
+/// fully-qualified name.
+///
+/// §12.7.3.2 reserves the period as the path separator, so pdfce adopts the
+/// spec's own model: `a.b.c` means non-terminal `a`, non-terminal `a.b`,
+/// terminal `c`. The operator is told what the dot did rather than having to
+/// infer it.
+#[test]
+fn a_dotted_name_creates_a_hierarchy() {
+    let (dir, input) = TempDir::seeded("dotted");
+    let input_s = input.display().to_string();
+    let out_path = dir.join("nested.pdf");
+    let out_s = out_path.display().to_string();
+
+    let out = run(&[
+        "add-text-field",
+        &input_s,
+        "--name",
+        "Personal.Address.Zip",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,180,44",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    let fields = list_fields(&out_path);
+    assert!(
+        fields.contains("name=Personal.Address.Zip"),
+        "the composed FQN, not a flat /T: {fields}"
+    );
+    assert!(fields.contains("fields=1"), "one TERMINAL field: {fields}");
+
+    // A SECOND field under the SAME group reuses the existing nodes rather
+    // than creating a parallel `Personal`. A duplicated group would give both
+    // terminals ambiguous ancestry.
+    let two = dir.join("two.pdf");
+    let two_s = two.display().to_string();
+    let out = run(&[
+        "add-text-field",
+        &out_s,
+        "--name",
+        "Personal.Address.City",
+        "--page",
+        "1",
+        "--rect",
+        "20,60,180,84",
+        "-o",
+        &two_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let fields = list_fields(&two);
+    assert!(
+        fields.contains("name=Personal.Address.Zip")
+            && fields.contains("name=Personal.Address.City")
+            && fields.contains("fields=2"),
+        "both terminals under ONE group: {fields}"
+    );
+}
+
+/// A name that belongs to a GROUPING node is refused by name.
+///
+/// With `Personal.Address.Zip` present, `Personal` names a container. A
+/// request for a terminal field called `Personal` is neither a same-type merge
+/// nor a different-type collision: Table 220 gives a non-terminal no type of
+/// its own. Acrobat has no such branch because it never exposes hierarchy
+/// authoring; pdfce does, so pdfce needs it.
+#[test]
+fn a_grouping_node_name_cannot_become_a_field() {
+    let (dir, input) = TempDir::seeded("group");
+    let input_s = input.display().to_string();
+    let nested = dir.join("nested.pdf");
+    let nested_s = nested.display().to_string();
+    let refused = dir.join("refused.pdf");
+    let refused_s = refused.display().to_string();
+
+    let out = run(&[
+        "add-text-field",
+        &input_s,
+        "--name",
+        "Personal.Address.Zip",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,180,44",
+        "-o",
+        &nested_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    let out = run(&[
+        "add-text-field",
+        &nested_s,
+        "--name",
+        "Personal",
+        "--page",
+        "1",
+        "--rect",
+        "20,60,180,84",
+        "-o",
+        &refused_s,
+    ]);
+    assert_eq!(
+        code(&out),
+        EDIT_REFUSED,
+        "a grouping node's name must be refused: {}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("names a group"),
+        "and the reason must say so: {}",
+        stderr(&out)
+    );
+    assert!(!refused.exists(), "a refusal writes nothing");
+}
+
+/// A partial name containing a period is refused — every way it can arise.
+///
+/// §12.7.3.2 reserves the period as the path separator, so a leading,
+/// trailing or doubled one produces an EMPTY segment: a field whose partial
+/// name is the empty string, which is not a name. There is deliberately no
+/// escape hatch; one would author exactly the ambiguity the spec avoids.
+#[test]
+fn an_empty_path_segment_is_refused() {
+    let (dir, input) = TempDir::seeded("dots");
+    let input_s = input.display().to_string();
+    for bad in [".Leading", "Trailing.", "Doubled..Up"] {
+        let out_path = dir.join("x.pdf");
+        let out_s = out_path.display().to_string();
+        let out = run(&[
+            "add-text-field",
+            &input_s,
+            "--name",
+            bad,
+            "--page",
+            "1",
+            "--rect",
+            "20,20,180,44",
+            "-o",
+            &out_s,
+        ]);
+        assert_eq!(
+            code(&out),
+            EDIT_REFUSED,
+            "{bad} must be refused: {}",
+            stdout(&out)
+        );
+        assert!(!out_path.exists(), "{bad}: a refusal writes nothing");
     }
 }
 

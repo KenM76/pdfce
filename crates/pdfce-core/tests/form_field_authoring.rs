@@ -20,6 +20,7 @@ use pdfce_core::edit::{
     ChoiceOption, EditError, EditSession, NewCheckBox, NewChoiceField, NewTextField,
 };
 use pdfce_core::forms::{self, ButtonKind, FieldFlags, FieldType, FieldValue};
+use pdfce_core::forms_author::FormAuthorError;
 use pdfce_core::graph::ObjectGraph;
 use pdfce_core::object::{Name, Object};
 use pdfce_core::page_tree::Rect;
@@ -265,9 +266,15 @@ fn a_name_used_by_a_different_field_type_is_refused_by_name() {
         .add_text_field(&NewTextField::new(0, "Subscribe", rect()))
         .expect_err("a text field may not take a button's name");
     assert!(
-        matches!(err, EditError::FieldNameTypeConflict { ref name, existing }
-            if name == "Subscribe" && existing == "button"),
-        "expected FieldNameTypeConflict, got {err:?}"
+        matches!(
+            err,
+            EditError::FieldAuthoring(FormAuthorError::FieldTypeCollision {
+                ref fqn,
+                existing,
+                requested,
+            }) if fqn == "Subscribe" && existing == "check box" && requested == "text"
+        ),
+        "expected FieldTypeCollision, got {err:?}"
     );
     assert!(!s.is_modified(), "a refusal writes nothing");
 }
@@ -735,55 +742,76 @@ fn one_undo_removes_the_entire_choice_field() {
     );
 }
 
-/// A name already used by the SAME type is refused too, for all three verbs.
+/// A name already used by the SAME type MERGES, for all three verbs.
 ///
-/// §12.7.3.2 makes the fully-qualified name a field's identity, so appending
-/// a second same-named field emits a document with two fields and one
-/// identity. The merge that SHOULD happen needs a resolver pdfce does not
-/// have; until it does, refusing keeps the damage out of the files.
+/// # This test used to assert the opposite, and the change is the point
+///
+/// It previously asserted `FieldNameAlreadyUsed` for each of the three verbs.
+/// That refusal was correct while it stood: §12.7.3.2 makes the
+/// fully-qualified name a field's IDENTITY, so appending a second same-named
+/// field emits a document with two fields and one identity and no
+/// disambiguator — which cannot be un-authored, because nothing records which
+/// of the two the operator meant.
+///
+/// The write-side resolver now exists, so the same-name same-type add does
+/// what §12.7.3.2 says it means: it MERGES, attaching another widget to the
+/// one field. That is not a loosening of a safety rule — the duplicate-FQN
+/// document is now unreachable by CONSTRUCTION (every authoring write
+/// resolves the name against the graph before deciding what to write) rather
+/// than merely refused by a guard.
+///
+/// The identity assertion the old pair of tests made is kept verbatim and
+/// strengthened: still exactly ONE field of that name, now with TWO widgets
+/// rather than one.
 #[test]
-fn a_name_already_used_by_the_same_type_is_refused() {
+fn a_name_already_used_by_the_same_type_merges_into_one_field() {
+    // TEXT.
     let mut s = session("dimension/plain-base.pdf");
     s.add_text_field(&NewTextField::new(0, "Dup", rect()))
         .expect("first text field");
-    assert!(matches!(
-        s.add_text_field(&NewTextField::new(0, "Dup", rect2())),
-        Err(EditError::FieldNameAlreadyUsed { .. })
-    ));
+    s.add_text_field(&NewTextField::new(0, "Dup", rect2()))
+        .expect("the second text field must MERGE, not be refused");
+    assert_merged(&s, "Dup", "text");
 
+    // CHECK BOX.
     let mut s = session("dimension/plain-base.pdf");
     s.add_check_box(&NewCheckBox::new(0, "Dup", rect2()))
         .expect("first check box");
-    assert!(matches!(
-        s.add_check_box(&NewCheckBox::new(0, "Dup", rect())),
-        Err(EditError::FieldNameAlreadyUsed { .. })
-    ));
+    s.add_check_box(&NewCheckBox::new(0, "Dup", rect()))
+        .expect("the second check box must MERGE");
+    assert_merged(&s, "Dup", "check box");
 
+    // CHOICE.
     let mut s = session("dimension/plain-base.pdf");
     s.add_choice_field(&NewChoiceField::new(0, "Dup", rect(), countries()))
         .expect("first choice field");
-    assert!(matches!(
-        s.add_choice_field(&NewChoiceField::new(0, "Dup", rect2(), countries())),
-        Err(EditError::FieldNameAlreadyUsed { .. })
-    ));
+    s.add_choice_field(&NewChoiceField::new(0, "Dup", rect2(), countries()))
+        .expect("the second choice field must MERGE");
+    assert_merged(&s, "Dup", "choice");
 }
 
-/// The refusal really does keep the file single-identity: after a refused
-/// duplicate the form still holds exactly ONE field of that name.
-#[test]
-fn a_refused_duplicate_leaves_exactly_one_field() {
-    let mut s = session("dimension/plain-base.pdf");
-    s.add_text_field(&NewTextField::new(0, "Dup", rect()))
-        .expect("first");
-    let _ = s.add_text_field(&NewTextField::new(0, "Dup", rect2()));
+/// Exactly ONE field of this name, carrying TWO widgets.
+///
+/// Both halves are load-bearing and they fail differently: two fields means
+/// the duplicate-identity document the resolver exists to prevent, and one
+/// widget means the merge silently discarded the placement the operator just
+/// asked for.
+fn assert_merged(s: &EditSession, fqn: &str, label: &str) {
     let form = forms::parse_acroform(&s.graph()).expect("form");
+    let matching: Vec<_> = form
+        .fields
+        .iter()
+        .filter(|f| f.fully_qualified_name == fqn)
+        .collect();
     assert_eq!(
-        form.fields
-            .iter()
-            .filter(|f| f.fully_qualified_name == "Dup")
-            .count(),
+        matching.len(),
         1,
-        "a refused add must not have appended anything"
+        "{label}: a merge must leave ONE field, not two identities",
+    );
+    assert_eq!(
+        matching[0].widgets.len(),
+        2,
+        "{label}: the merged field must carry both widgets",
     );
 }
 
@@ -799,12 +827,18 @@ fn a_name_used_by_another_field_type_is_refused_for_both_new_types() {
     let err = s
         .add_check_box(&NewCheckBox::new(0, "Shared", rect2()))
         .expect_err("check box must not steal a text field's name");
-    assert!(matches!(err, EditError::FieldNameTypeConflict { .. }));
+    assert!(matches!(
+        err,
+        EditError::FieldAuthoring(FormAuthorError::FieldTypeCollision { .. })
+    ));
 
     let err = s
         .add_choice_field(&NewChoiceField::new(0, "Shared", rect2(), countries()))
         .expect_err("choice must not steal a text field's name");
-    assert!(matches!(err, EditError::FieldNameTypeConflict { .. }));
+    assert!(matches!(
+        err,
+        EditError::FieldAuthoring(FormAuthorError::FieldTypeCollision { .. })
+    ));
 }
 
 /// Both new types run the SAME preflight as slice 1, so the structural

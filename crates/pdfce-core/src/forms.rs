@@ -226,8 +226,15 @@ impl FieldType {
     }
 
     /// Parse an `/FT` name.
+    ///
+    /// `pub(crate)` rather than private so the write-side resolver
+    /// (`forms_author`) classifies a type with the SAME function the reader
+    /// does. Two classifiers that could drift would mean a node the
+    /// projection lists as a text field and the authoring path is willing to
+    /// merge a check box into. Not `pub`: the public surface stays as
+    /// shipped (rule 10) — an outside caller has `Field::field_type` already.
     #[must_use]
-    fn from_name(name: &[u8]) -> Option<Self> {
+    pub(crate) fn from_name(name: &[u8]) -> Option<Self> {
         match name {
             b"Btn" => Some(Self::Button),
             b"Tx" => Some(Self::Text),
@@ -260,8 +267,12 @@ pub enum ButtonKind {
 
 impl ButtonKind {
     /// Classify a button from its resolved `/Ff`.
+    ///
+    /// `pub(crate)` for the same reason as [`FieldType::from_name`]: the
+    /// resolver must decide "is this the same kind of button?" exactly as the
+    /// reader decides "what kind of button is this?".
     #[must_use]
-    fn from_flags(flags: FieldFlags) -> Self {
+    pub(crate) fn from_flags(flags: FieldFlags) -> Self {
         if flags.has(FieldFlags::PUSHBUTTON) {
             Self::Push
         } else if flags.has(FieldFlags::RADIO) {

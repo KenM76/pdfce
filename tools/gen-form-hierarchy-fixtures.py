@@ -403,6 +403,67 @@ def fixture_xfa_hybrid() -> bytes:
     return assemble(objs)
 
 
+
+# ---------------------------------------------------------------------------
+# (f) The decision-009 JavaScript carriers, for the byte-verbatim test.
+# ---------------------------------------------------------------------------
+def fixture_js_carriers() -> bytes:
+    """An AcroForm carrying every JavaScript hook pdfce promises not to touch.
+
+    Pass 7.0 guarantees that the three JS carriers — `/AcroForm /CO`, a field
+    `/AA`, and the document `/Names /JavaScript` tree — are re-emitted BYTE
+    VERBATIM. Decision 009 forbids executing embedded PDF JavaScript
+    permanently, so recognising and preserving them is the whole of pdfce's
+    contract with them.
+
+    That guarantee held STRUCTURALLY, not by assertion: filling a field never
+    writes the `/AcroForm` dictionary at all, so there was nothing that could
+    disturb `/CO`. Field CREATION must write `/AcroForm /Fields`. The
+    guarantee therefore stops being structural the moment authoring ships —
+    and because it was never asserted, **no existing test goes red**. That is
+    the exact shape of a promise that quietly stops holding, which is why
+    decision 020 §7.2 made a byte-grep test mandatory in this slice.
+
+    Every carrier is placed where authoring will actually pass close to it:
+
+    * `/CO` sits in the `/AcroForm` dict that field registration rewrites;
+    * `/AA` sits on a field, alongside the `/Fields` array that grows;
+    * `/Names /JavaScript` sits in the CATALOG, which the `/AcroForm`-absent
+      creation path writes.
+
+    The JavaScript itself is inert and deliberately trivial. pdfce must never
+    parse it, so its content buys no coverage — its BYTES are the whole test.
+    """
+    objs: dict[int, bytes] = {}
+    objs[1] = (
+        b"<< /Type /Catalog /Pages 2 0 R /Names << /JavaScript 7 0 R >> "
+        b"/AcroForm << /Fields [4 0 R 5 0 R] /CO [5 0 R 4 0 R] "
+        b"/DA (/Helv 0 Tf 0 g) " + DR + b" >> >>"
+    )
+    objs[2] = b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
+    objs[3] = (
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << >> "
+        b"/Annots [4 0 R 5 0 R] >>"
+    )
+    objs[4] = (
+        b"<< /FT /Tx /T (Price) /V (10.00) /Type /Annot /Subtype /Widget "
+        b"/Rect [20 150 140 172] /P 3 0 R /F 4 >>"
+    )
+    # `/AA` with a `/C` calculate hook and a `/F` format hook - the two an
+    # ordinary calculated field carries.
+    objs[5] = (
+        b"<< /FT /Tx /T (Total) /V (20.00) /Type /Annot /Subtype /Widget "
+        b"/Rect [20 110 140 132] /P 3 0 R /F 4 "
+        b"/AA << /C << /S /JavaScript /JS 8 0 R >> "
+        b"/F << /S /JavaScript /JS (AFNumber_Format\(2, 0, 0, 0, $, true\);) >> >> >>"
+    )
+    objs[6] = stream_obj(b"<<", b"BT ET")
+    # The document-level name tree.
+    objs[7] = b"<< /Names [(docInit) 9 0 R] >>"
+    objs[8] = stream_obj(b"<<", b"event.value = 2 * this.getField('Price').value;")
+    objs[9] = b"<< /S /JavaScript /JS (console.println\('init'\);) >>"
+    return assemble(objs)
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     write("multi-widget-form.pdf", fixture_multi_widget())
@@ -410,6 +471,7 @@ def main() -> int:
     write("radio-group-form.pdf", fixture_radio_group())
     write("mixed-kids-form.pdf", fixture_mixed_kids())
     write("xfa-hybrid-form.pdf", fixture_xfa_hybrid())
+    write("js-carriers-form.pdf", fixture_js_carriers())
     return 0
 
 

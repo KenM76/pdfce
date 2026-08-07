@@ -134,6 +134,7 @@ use crate::dimension::{
 use crate::document::Document;
 use crate::fontdata::Std14;
 use crate::forms::{self, ButtonKind, Field, FieldType};
+use crate::forms_author::{self, FieldPath, FieldShape, FormAuthorError};
 use crate::graph::ObjectGraph;
 use crate::object::{Dict, IndirectObject, Name, ObjId, Object, Stream};
 use crate::page_tree::{self, Page, PageSlot, PageTreeError};
@@ -1121,29 +1122,6 @@ pub enum EditError {
         /// A short description of where the XFA was found.
         name: String,
     },
-    /// A new field named an existing field of a DIFFERENT type.
-    ///
-    /// # Why this is a refusal and same-type is not
-    ///
-    /// §12.7.3.2: fields sharing a fully-qualified name are **one logical
-    /// field** — they share `/V`, and a value change on one is a value
-    /// change on all. That is the intended mechanism behind radio groups and
-    /// a page-number field repeated on every page, so a same-name,
-    /// same-type add is a legitimate MERGE rather than a collision.
-    ///
-    /// Across types it cannot mean anything: one `/V` cannot simultaneously
-    /// be a text string and a button on-state name. Acrobat refuses this
-    /// case too, with a named error, and pdfce matches that behaviour rather
-    /// than inventing a rename the operator did not ask for.
-    #[error(
-        "a {existing} field named {name:?} already exists; a field of a different type cannot share its name, because same-named fields are one field and share one value"
-    )]
-    FieldNameTypeConflict {
-        /// The fully-qualified name that collided.
-        name: String,
-        /// The existing field's type, as a short token.
-        existing: &'static str,
-    },
     /// A new field's `/Rect` is degenerate (zero or negative extent).
     ///
     /// A zero-area rectangle is meaningful for a **signature** field
@@ -1159,37 +1137,30 @@ pub enum EditError {
         /// Height in user-space units.
         h: f64,
     },
-    /// The requested field name is already used by a field of the SAME type.
+    /// An authoring write could not resolve its name against the field tree.
     ///
-    /// # This refusal is standing in for a capability pdfce owes
+    /// # What replaced a refusal here, and why it is not a loosening
     ///
-    /// §12.7.3.2 makes the fully-qualified name a field's IDENTITY. Two
-    /// top-level fields sharing a `/T` therefore have the same identity and
-    /// no disambiguator — a shape the spec does not define, and one pdfce's
-    /// own reader survives only by accident: the setters filter by FQN and
-    /// write to EVERY match, which is a defensive coping mechanism for
-    /// malformed third-party input, not an intended result.
+    /// This used to be `FieldNameAlreadyUsed`: a same-name, same-type add was
+    /// REFUSED, because merging needs a write-side resolver pdfce did not
+    /// have. That refusal was correct while it stood — the alternative was
+    /// appending a second top-level field with the same `/T`, and §12.7.3.2
+    /// makes the fully-qualified name a field's IDENTITY, so two of them have
+    /// one identity and no disambiguator. Nothing records which the operator
+    /// meant, so it cannot be un-authored.
     ///
-    /// What a same-name add SHOULD do is **merge**: §12.7.3.2 makes two
-    /// widgets sharing a name two views of one field, which is how a check
-    /// box appears on every page of a form and is the mechanism a radio group
-    /// is built from. That merge needs a write-side resolver pdfce does not
-    /// have yet.
+    /// The resolver now exists ([`crate::forms_author::resolve_field_path`]),
+    /// so a same-name same-type add MERGES — which is what §12.7.3.2 says it
+    /// means, and is how a check box appears on every page of a form and how
+    /// a radio group is built. The duplicate-identity document is not merely
+    /// refused any more; it is unreachable, because every authoring write
+    /// resolves the name against the graph before it decides what to write.
     ///
-    /// Until it exists, this refuses. The choice is between a **missing
-    /// capability**, which is honest, visible and reversible, and a
-    /// **malformed document**, which cannot be un-authored — you cannot
-    /// retroactively decide which of two same-named fields the operator
-    /// meant. Refusing keeps the damage out of the files.
-    #[error(
-        "a {existing} field named {name:?} already exists; pdfce cannot yet merge a second widget into an existing field"
-    )]
-    FieldNameAlreadyUsed {
-        /// The fully-qualified name that is already taken.
-        name: String,
-        /// The existing field's type, for the message.
-        existing: &'static str,
-    },
+    /// What remains here are the collisions that are still genuinely
+    /// impossible — a different TYPE under the same name, and a name that
+    /// belongs to a grouping node — plus the malformed-path refusals.
+    #[error(transparent)]
+    FieldAuthoring(#[from] crate::forms_author::FormAuthorError),
     /// `Edit` was asked for on a list box rather than a combo box.
     ///
     /// §12.7.4.4 Table 230 says the `Edit` flag is *"used only if the Combo
@@ -4035,7 +4006,7 @@ impl EditSession {
     /// [`EditError::FieldRectDegenerate`] for a zero-area rectangle;
     /// [`EditError::FieldAuthoringRefusedXfa`] on a hybrid XFA document
     /// (decision 020 — see that variant for why a one-sided add is worse
-    /// than none); [`EditError::FieldNameTypeConflict`] when the name is
+    /// than none); [`crate::forms_author::FormAuthorError::FieldTypeCollision`] when the name is
     /// already used by a field of a different type; plus the encryption,
     /// **strict** certification and `/Size`-suppression guards.
     ///
@@ -4050,11 +4021,12 @@ impl EditSession {
     /// take.
     pub fn add_text_field(&mut self, spec: &NewTextField) -> Result<ObjId, EditError> {
         let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
-        let (page_id, slots) = self.field_authoring_preflight(
+        let (page_id, slots, path) = self.field_authoring_preflight(
             &spec.name,
             spec.rect,
             spec.page_index,
             forms::FieldType::Text,
+            None,
         )?;
 
         // The `/DA` Acrobat's floor specifies: Helvetica, size 0 (auto), black.
@@ -4082,7 +4054,6 @@ impl EditSession {
         )?;
 
         let ap_id = ObjId::new(self.alloc_number()?, 0);
-        let field_id = ObjId::new(self.alloc_number()?, 0);
 
         let ap_span = self.stage_bytes(&appearance.content);
         let mut ap_dict = appearance.ap_dict;
@@ -4095,15 +4066,81 @@ impl EditSession {
             data_span: ap_span,
         });
 
+        // THE MERGE BRANCH. An existing same-type terminal gets ANOTHER
+        // WIDGET, not another field: §12.7.3.2 makes two widgets sharing a
+        // name two views of ONE field, sharing one `/V`. This is how a
+        // reference number repeats in a header and how a check box appears on
+        // every page — and it is a capability, not a tolerated degeneracy.
+        if let FieldPath::Terminal { id, shape, .. } = path {
+            let mut w =
+                Self::widget_base_dict(&spec.name, spec.rect, page_id, spec.tooltip.as_ref());
+            // The widget carries the LOOK; the field keeps the name and the
+            // value. `widget_base_dict` writes a `/T` because a merged
+            // (Shape A) field needs one — a widget kid must not have one
+            // (R101), and `merge_widget_into_field` strips it.
+            let mut ap = Dict::new();
+            ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+            w.insert(Name::from(b"AP"), Object::Dict(ap));
+            let mut mk = Dict::new();
+            mk.insert(
+                Name::from(b"BC"),
+                Object::Array(vec![
+                    Object::Real(0.0),
+                    Object::Real(0.0),
+                    Object::Real(0.0),
+                ]),
+            );
+            w.insert(Name::from(b"MK"), Object::Dict(mk));
+
+            let mut objects = vec![ObjectWrite {
+                id: ap_id,
+                before: None,
+                after: Some(ap_stream),
+            }];
+            let (merge_writes, _widget_id) =
+                self.merge_widget_into_field(id, shape, w, page_id, &slots)?;
+            objects.extend(merge_writes);
+            self.commit(Command {
+                kind: CommandKind::AddFormField,
+                objects,
+                removals: Vec::new(),
+                trailer: None,
+            });
+            return Ok(id);
+        }
+
+        // THE CREATE BRANCH. Any intermediate grouping nodes a dotted path
+        // needs are created first, so the terminal can hang from the right
+        // parent and carry only its OWN partial name.
+        let FieldPath::Vacant { deepest, remaining } = path else {
+            // Unreachable: the preflight refuses `Grouping` and a mismatched
+            // `Terminal`, and the matching `Terminal` returned above. Stated
+            // as a refusal rather than a panic — this crate is panic-free.
+            return Err(FormAuthorError::NameIsGroupingNode {
+                fqn: spec.name.clone(),
+            }
+            .into());
+        };
+        let field_id = ObjId::new(self.alloc_number()?, 0);
+        let (parent_writes, parent, partial) =
+            self.place_new_field(deepest, &remaining, field_id)?;
+
         // The MERGED field + widget dictionary (§12.5.6.19).
         let mut d = Dict::new();
         d.insert(Name::from(b"Type"), Object::Name(Name::from(b"Annot")));
         d.insert(Name::from(b"Subtype"), Object::Name(Name::from(b"Widget")));
         d.insert(Name::from(b"FT"), Object::Name(Name::from(b"Tx")));
+        // The terminal's OWN partial name — the last path segment, never
+        // the dotted string. §12.7.3.2 composes the FQN from the ancestors'
+        // `/T`s, so writing `Personal.Address.Zip` as a `/T` under `Address`
+        // would yield the FQN `Personal.Address.Personal.Address.Zip`.
         d.insert(
             Name::from(b"T"),
-            Object::String(encode_text_string(&spec.name)),
+            Object::String(encode_text_string(&partial)),
         );
+        if let Some(p) = parent {
+            d.insert(Name::from(b"Parent"), Object::Reference(p));
+        }
         d.insert(
             Name::from(b"Rect"),
             Object::Array(vec![
@@ -4173,8 +4210,8 @@ impl EditSession {
                 after: Some(Object::Dict(d)),
             },
         ];
+        objects.extend(parent_writes);
         objects.extend(self.annots_writes(page_id, field_id, &slots)?);
-        objects.push(self.acroform_register_write(field_id)?);
 
         self.commit(Command {
             kind: CommandKind::AddFormField,
@@ -4230,7 +4267,8 @@ impl EditSession {
     /// In evaluation order: [`EditError::FieldNameEmpty`],
     /// [`EditError::FieldRectDegenerate`], [`EditError::DocumentEncrypted`],
     /// a certification refusal, [`EditError::FieldAuthoringRefusedXfa`],
-    /// [`EditError::FieldNameTypeConflict`], [`EditError::PageOutOfRange`],
+    /// a [`crate::forms_author::FormAuthorError`] collision refusal,
+    /// [`EditError::PageOutOfRange`],
     /// and [`EditError::ObjectCreationWouldExposeHiddenObjects`].
     fn field_authoring_preflight(
         &mut self,
@@ -4238,7 +4276,8 @@ impl EditSession {
         rect: page_tree::Rect,
         page_index: usize,
         want: forms::FieldType,
-    ) -> Result<(ObjId, Vec<PageSlot>), EditError> {
+        want_button: Option<forms::ButtonKind>,
+    ) -> Result<(ObjId, Vec<PageSlot>, forms_author::FieldPath), EditError> {
         if name.trim().is_empty() {
             return Err(EditError::FieldNameEmpty);
         }
@@ -4261,30 +4300,36 @@ impl EditSession {
                 name: "/AcroForm /XFA".to_owned(),
             });
         }
-        if let Some(f) = &form
-            && let Some(clash) = f.fields.iter().find(|x| x.fully_qualified_name == name)
-        {
-            let existing = match clash.field_type {
-                Some(forms::FieldType::Button) => "button",
-                Some(forms::FieldType::Choice) => "choice",
-                Some(forms::FieldType::Signature) => "signature",
-                Some(forms::FieldType::Text) | None => "text",
-            };
-            // A DIFFERENT type and the SAME type are both refused, by
-            // different names, because they are different problems: the first
-            // is a mistake the operator can fix by renaming, the second is a
-            // merge pdfce cannot yet perform.
-            return Err(if clash.field_type == Some(want) {
-                EditError::FieldNameAlreadyUsed {
-                    name: name.to_owned(),
-                    existing,
+        // THE RESOLVER (R100). Every authoring write learns what its name
+        // currently denotes here and nowhere else, so the collision branch
+        // exists once and cannot drift between the verbs that use it.
+        let path = forms_author::resolve_field_path(&self.graph(), name)?;
+        match &path {
+            // A grouping node cannot become a field: Table 220 gives a
+            // non-terminal no type of its own, and it is the container the
+            // fields beneath it hang from.
+            forms_author::FieldPath::Grouping { .. } => {
+                return Err(forms_author::FormAuthorError::NameIsGroupingNode {
+                    fqn: name.to_owned(),
                 }
-            } else {
-                EditError::FieldNameTypeConflict {
-                    name: name.to_owned(),
-                    existing,
+                .into());
+            }
+            // A terminal of a DIFFERENT type. Not merged, because
+            // §12.7.3.2 makes same-FQN nodes representations of ONE field,
+            // and one field has one type — one `/V` cannot simultaneously be
+            // a text string and a button on-state.
+            forms_author::FieldPath::Terminal { ft, kind, .. }
+                if !Self::types_merge(*ft, *kind, want, want_button) =>
+            {
+                return Err(forms_author::FormAuthorError::FieldTypeCollision {
+                    fqn: name.to_owned(),
+                    existing: Self::type_token(*ft, *kind),
+                    requested: Self::type_token(Some(want), want_button),
                 }
-            });
+                .into());
+            }
+            // Vacant (create) or a same-type terminal (merge). Both proceed.
+            _ => {}
         }
 
         let slots = self.page_slots()?;
@@ -4299,7 +4344,438 @@ impl EditSession {
         if suppressed > 0 {
             return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
         }
-        Ok((page_id, slots))
+        Ok((page_id, slots, path))
+    }
+
+    /// Whether an existing field's type accepts a merge from a requested one.
+    ///
+    /// `/FT` alone does not decide it for buttons: a check box and a radio
+    /// group are both `/FT /Btn`, and merging one into the other would give a
+    /// single field widgets that disagree about what they are — a check box
+    /// toggles independently, a radio member is mutually exclusive with its
+    /// siblings, and one `/V` cannot mean both.
+    ///
+    /// A field with NO resolvable `/FT` never accepts a merge. That is
+    /// malformed input, and attaching a widget to it would make pdfce a
+    /// second author of a field it cannot classify.
+    fn types_merge(
+        existing_ft: Option<forms::FieldType>,
+        existing_kind: Option<forms::ButtonKind>,
+        want: forms::FieldType,
+        want_kind: Option<forms::ButtonKind>,
+    ) -> bool {
+        if existing_ft != Some(want) {
+            return false;
+        }
+        if want == forms::FieldType::Button {
+            return existing_kind == want_kind;
+        }
+        true
+    }
+
+    /// A short operator-facing token for a field type, distinguishing the
+    /// three button kinds — because "a button field already exists" would not
+    /// tell an operator why their radio button collided with a check box.
+    fn type_token(ft: Option<forms::FieldType>, kind: Option<forms::ButtonKind>) -> &'static str {
+        match ft {
+            Some(forms::FieldType::Button) => match kind {
+                Some(forms::ButtonKind::Radio) => "radio button",
+                Some(forms::ButtonKind::Push) => "push button",
+                _ => "check box",
+            },
+            Some(forms::FieldType::Choice) => "choice",
+            Some(forms::FieldType::Signature) => "signature",
+            Some(forms::FieldType::Text) => "text",
+            None => "untyped",
+        }
+    }
+
+    /// Attach a widget to an EXISTING field, promoting Shape A to Shape B if
+    /// it is still merged (decision 020 §3.1.5 — the load-bearing primitive).
+    ///
+    /// # What a merge is, and why it is not an append
+    ///
+    /// §12.7.3.2 makes two widgets sharing a fully-qualified name **two views
+    /// of one field**. That is not a degenerate case to be tolerated — it is
+    /// how a check box appears on every page of a form, how a reference
+    /// number repeats in a header, and how a radio group is built. The whole
+    /// group shares one `/V`, so setting it changes every view at once.
+    ///
+    /// §12.5.6.19 lets a field and its SOLE widget live in one dictionary
+    /// (Shape A, "merged"), and Table 220 permits that **only** while there
+    /// is exactly one widget. So attaching a second is a **split**:
+    ///
+    /// 1. Allocate a widget object and MOVE the annotation keys onto it
+    ///    ([`crate::forms_author::WIDGET_KEYS_TO_MOVE`]). Field keys — `/FT`,
+    ///    `/T`, `/Ff`, `/V`, `/DV`, `/AA`, `/Opt`, `/MaxLen`, `/Q` — stay,
+    ///    because the field is what owns a name and a value.
+    /// 2. Remove those keys from the field dictionary.
+    /// 3. Write `/Kids [widget1 widget2]` on the field, `/Parent` on each.
+    /// 4. **Retarget the page's `/Annots`.** This is the step that is easy to
+    ///    miss and expensive to miss: the existing `/Annots` entry references
+    ///    the merged dict, which after step 2 is no longer an annotation. Left
+    ///    alone, the page points at a dictionary with no `/Subtype /Widget` —
+    ///    and `dict_is_widget`'s defensive "or it has `/Rect` or `/AP`"
+    ///    fallback would PARTIALLY mask it, giving a document that half-works
+    ///    in pdfce and misbehaves elsewhere.
+    /// 5. Add the new widget to its page's `/Annots`.
+    ///
+    /// A field already in Shape B skips steps 1-4: it has `/Kids` already, so
+    /// this is a genuine append.
+    ///
+    /// # Never collapsed back (R102)
+    ///
+    /// Nothing here ever turns Shape B back into Shape A. `ARCHITECTURE.md`
+    /// §5.6 — "never normalize" — forbids rewriting two objects for a purely
+    /// cosmetic tidy-up, and a 2->1 deletion leaving Shape B intact is
+    /// correct, not a leftover.
+    ///
+    /// Returns the writes plus the new widget's id.
+    fn merge_widget_into_field(
+        &mut self,
+        field_id: ObjId,
+        shape: FieldShape,
+        widget_extra: Dict,
+        page_id: ObjId,
+        slots: &[PageSlot],
+    ) -> Result<(Vec<ObjectWrite>, ObjId), EditError> {
+        let mut writes = Vec::new();
+        let new_widget_id = ObjId::new(self.alloc_number()?, 0);
+        // Whether the promotion's page write already carried the new widget's
+        // `/Annots` entry, so it is not appended a second time below.
+        let mut appended_here = false;
+
+        let Some(Object::Dict(field_dict)) = self.value(field_id) else {
+            return Err(EditError::NotADictionary {
+                id: field_id,
+                key: "Kids",
+            });
+        };
+        let field_dict = field_dict.clone();
+        let mut updated_field = field_dict.clone();
+
+        // Build the new widget: the caller's keys (rect, appearance, /MK, /P)
+        // plus the wiring that makes it a kid of this field.
+        let mut new_widget = widget_extra;
+        new_widget.insert(Name::from(b"Type"), Object::Name(Name::from(b"Annot")));
+        new_widget.insert(Name::from(b"Subtype"), Object::Name(Name::from(b"Widget")));
+        new_widget.insert(Name::from(b"Parent"), Object::Reference(field_id));
+        // STRIP EVERY FIELD KEY. The callers hand this path a dictionary they
+        // built to be a MERGED field+widget (§12.5.6.19); it is about to be
+        // only the widget half, and the field half already exists.
+        //
+        // `/T`, `/FT` and `/Kids` are the load-bearing three (R101): the
+        // reader classifies a `/Kids` entry as a child FIELD when it carries
+        // any of them, so a widget written with a `/T` would not be a second
+        // view of this field — it would be a second field underneath it,
+        // silently, with the FQN `Ref.Ref`.
+        //
+        // The rest matter to the operator rather than to the parser. `/Opt`
+        // is the one that surfaced the list: a choice field's options belong
+        // to the FIELD, and a copy on each widget means two `add-choice-field`
+        // calls under one name leave two disagreeing option lists in one
+        // document with no rule for which wins.
+        for key in forms_author::FIELD_ONLY_KEYS {
+            new_widget.remove(key);
+        }
+
+        let mut kids: Vec<Object> = match shape {
+            FieldShape::MergedSingleWidget => {
+                // THE PROMOTION. Move the annotation keys off the field.
+                let promoted_id = ObjId::new(self.alloc_number()?, 0);
+                let mut promoted = Dict::new();
+                promoted.insert(Name::from(b"Type"), Object::Name(Name::from(b"Annot")));
+                promoted.insert(Name::from(b"Subtype"), Object::Name(Name::from(b"Widget")));
+                promoted.insert(Name::from(b"Parent"), Object::Reference(field_id));
+                for key in forms_author::WIDGET_KEYS_TO_MOVE {
+                    if let Some(v) = field_dict.get(key) {
+                        promoted.insert(Name::from(*key), v.clone());
+                    }
+                    updated_field.remove(key);
+                }
+                // `/Type /Annot` goes too. It is not in the move list because
+                // the new widget gets a FRESH one written rather than a moved
+                // one (so a document that omitted it does not have the
+                // omission propagated) — but leaving it on the field dict
+                // would label a dictionary that is no longer an annotation as
+                // one, which is exactly the confusion `dict_is_widget`'s
+                // defensive fallback then has to guess its way out of.
+                updated_field.remove(b"Type");
+                writes.push(ObjectWrite {
+                    id: promoted_id,
+                    before: None,
+                    after: Some(Object::Dict(promoted)),
+                });
+
+                // STEP 4 — retarget every page that referenced the field
+                // dict as an annotation. `/P` names the page it was on; when
+                // the dict had no `/P`, every page is checked, because an
+                // `/Annots` entry with no back-reference is still an entry.
+                let old_page = field_dict.get(b"P").and_then(Object::as_reference);
+                let candidates: Vec<ObjId> = match old_page {
+                    Some(p) => vec![p],
+                    None => slots.iter().map(|sl| sl.id).collect(),
+                };
+                for page in candidates {
+                    // THE RETARGET AND THE APPEND ARE ONE WRITE when they
+                    // land on the same page — and they usually do, because
+                    // the common merge puts the second widget on the page the
+                    // first is already on.
+                    //
+                    // Two separate whole-dictionary writes to one page in one
+                    // command do not compose: each is computed from the
+                    // pre-command state, so applying both leaves only the
+                    // last. That is not hypothetical — it is precisely the
+                    // defect the R85 preview-equals-saved oracle caught in
+                    // `flatten_fields`, where three page writes in one command
+                    // meant every flattened form lost its visible values. Here
+                    // it showed as `/Annots [<field> <new widget>]`: the
+                    // append had silently replaced the retarget, so the page
+                    // still pointed at a dictionary that was no longer an
+                    // annotation.
+                    let also_append = (page == page_id).then_some(new_widget_id);
+                    writes.extend(self.retarget_annot(page, field_id, promoted_id, also_append)?);
+                    if also_append.is_some() {
+                        appended_here = true;
+                    }
+                }
+                vec![Object::Reference(promoted_id)]
+            }
+            FieldShape::KidsWidgets { .. } => field_dict
+                .get(b"Kids")
+                .map(|o| self.graph().resolve(o).clone())
+                .and_then(|o| o.as_array().map(<[Object]>::to_vec))
+                .unwrap_or_default(),
+        };
+
+        kids.push(Object::Reference(new_widget_id));
+        updated_field.insert(Name::from(b"Kids"), Object::Array(kids));
+
+        writes.push(ObjectWrite {
+            id: new_widget_id,
+            before: None,
+            after: Some(Object::Dict(new_widget)),
+        });
+        writes.push(ObjectWrite {
+            id: field_id,
+            before: self.state.get(&field_id).cloned(),
+            after: Some(Object::Dict(updated_field)),
+        });
+        if !appended_here {
+            writes.extend(self.annots_writes(page_id, new_widget_id, slots)?);
+        }
+        Ok((writes, new_widget_id))
+    }
+
+    /// Replace one `/Annots` entry with another and — optionally, in the
+    /// SAME write — append a further one.
+    ///
+    /// Used by the Shape A→B promotion to point the page at the widget that
+    /// took over the field dictionary's annotation role.
+    ///
+    /// # Two reasons the shape is what it is
+    ///
+    /// **A replace, not a remove-plus-append.** `/Annots` order is paint
+    /// order, and (absent `/Tabs`) tab order — so removing the old entry and
+    /// pushing a new one would silently move the field to the end of both.
+    /// The operator asked to add a second view of a field, not to reorder the
+    /// page.
+    ///
+    /// **The append is folded in rather than left to a second call.** Two
+    /// whole-dictionary writes to one page dict in one command do not
+    /// compose: both are computed from the pre-command state, so applying
+    /// them leaves only the last. This is the same failure the R85 oracle
+    /// caught in `flatten_fields`, and it showed here as a page whose
+    /// `/Annots` still named the field dictionary that had just stopped being
+    /// an annotation.
+    fn retarget_annot(
+        &mut self,
+        page_id: ObjId,
+        from: ObjId,
+        to: ObjId,
+        append: Option<ObjId>,
+    ) -> Result<Vec<ObjectWrite>, EditError> {
+        let Some(Object::Dict(page)) = self.value(page_id) else {
+            return Ok(Vec::new());
+        };
+        let page = page.clone();
+        let swap = |entries: &[Object]| -> (Vec<Object>, bool) {
+            let mut hit = false;
+            let mut out: Vec<Object> = entries
+                .iter()
+                .map(|o| {
+                    if o.as_reference() == Some(from) {
+                        hit = true;
+                        Object::Reference(to)
+                    } else {
+                        o.clone()
+                    }
+                })
+                .collect();
+            if let Some(extra) = append {
+                out.push(Object::Reference(extra));
+                hit = true;
+            }
+            (out, hit)
+        };
+        match page.get(b"Annots").cloned() {
+            Some(Object::Array(entries)) => {
+                let (kept, hit) = swap(&entries);
+                if !hit {
+                    return Ok(Vec::new());
+                }
+                let mut updated = page;
+                updated.insert(Name::from(b"Annots"), Object::Array(kept));
+                Ok(vec![ObjectWrite {
+                    id: page_id,
+                    before: self.state.get(&page_id).cloned(),
+                    after: Some(Object::Dict(updated)),
+                }])
+            }
+            Some(Object::Reference(arr_id)) => {
+                let entries = self
+                    .value(arr_id)
+                    .and_then(Object::as_array)
+                    .map(<[Object]>::to_vec)
+                    .unwrap_or_default();
+                let (kept, hit) = swap(&entries);
+                if !hit {
+                    return Ok(Vec::new());
+                }
+                Ok(vec![ObjectWrite {
+                    id: arr_id,
+                    before: self.state.get(&arr_id).cloned(),
+                    after: Some(Object::Array(kept)),
+                }])
+            }
+            _ => Ok(Vec::new()),
+        }
+    }
+
+    /// Build everything a new terminal field needs to HANG somewhere: the
+    /// intermediate grouping nodes a dotted path requires, the `/Kids` links
+    /// down to the field, and the `/AcroForm /Fields` registration of
+    /// whichever node is the root (§3.1.4).
+    ///
+    /// # Why this is one function and not "create parents, then register"
+    ///
+    /// The first draft split it, and the split was wrong in a way worth
+    /// recording: the registration step read the parent back with
+    /// `self.value(parent_id)` to append to its `/Kids`, and a parent this
+    /// same call had just created is NOT there to read — its `ObjectWrite` is
+    /// still pending in the command being assembled, and `self.value` sees
+    /// committed state. Creating `Personal.Address.Zip` on a formless page
+    /// therefore failed with *"object 6 0 is not a dictionary, so /Kids
+    /// cannot be set on it"*.
+    ///
+    /// So the chain is wired at BUILD time instead: each created node is
+    /// emitted with its `/Kids` already pointing at the next one down, and
+    /// the only dictionary read back is one that genuinely pre-existed.
+    ///
+    /// # What comes back
+    ///
+    /// The writes, the parent the terminal hangs from (`None` ⇒ it is itself
+    /// a `/Fields` root), and the terminal's OWN partial name — the LAST path
+    /// segment, never the dotted string. §12.7.3.2 composes the FQN from the
+    /// ancestors' `/T`s, so writing `Personal.Address.Zip` as a `/T` under
+    /// `Address` would yield `Personal.Address.Personal.Address.Zip`.
+    ///
+    /// # The registration rule
+    ///
+    /// §12.7.3.1 makes `/Fields` the ROOT list. A node that has a `/Parent`
+    /// must NOT also appear there: the walk would reach it twice and give it
+    /// two fully-qualified names. So exactly one node is registered — the
+    /// topmost one this call created — and nothing is registered at all when
+    /// the path hangs off an existing node, because that node's own root is
+    /// already listed.
+    fn place_new_field(
+        &mut self,
+        deepest: Option<ObjId>,
+        remaining: &[String],
+        field_id: ObjId,
+    ) -> Result<(Vec<ObjectWrite>, Option<ObjId>, String), EditError> {
+        let mut writes = Vec::new();
+        let Some((terminal, groups)) = remaining.split_last() else {
+            return Err(EditError::FieldNameEmpty);
+        };
+
+        // Allocate every grouping node first, so each can name the next.
+        let mut group_ids = Vec::with_capacity(groups.len());
+        for _ in groups {
+            group_ids.push(ObjId::new(self.alloc_number()?, 0));
+        }
+
+        for (i, segment) in groups.iter().enumerate() {
+            let Some(id) = group_ids.get(i).copied() else {
+                continue;
+            };
+            let mut d = Dict::new();
+            d.insert(
+                Name::from(b"T"),
+                Object::String(encode_text_string(segment)),
+            );
+            // NO `/FT`: Table 220 — a non-terminal field has no type of its
+            // own. Writing one would make every terminal beneath it inherit a
+            // type the operator never asked these siblings to share.
+            let child = group_ids.get(i + 1).copied().unwrap_or(field_id);
+            d.insert(
+                Name::from(b"Kids"),
+                Object::Array(vec![Object::Reference(child)]),
+            );
+            // The first group's parent is whatever already existed; the rest
+            // chain to the group above them.
+            let parent = if i == 0 {
+                deepest
+            } else {
+                group_ids.get(i - 1).copied()
+            };
+            if let Some(p) = parent {
+                d.insert(Name::from(b"Parent"), Object::Reference(p));
+            }
+            writes.push(ObjectWrite {
+                id,
+                before: None,
+                after: Some(Object::Dict(d)),
+            });
+        }
+
+        // The node the terminal hangs from: the last group created, or the
+        // pre-existing `deepest` when the path needed no new groups.
+        let field_parent = group_ids.last().copied().or(deepest);
+
+        // The topmost node this call introduced — the one that needs a home.
+        let root_of_new_chain = group_ids.first().copied().unwrap_or(field_id);
+
+        match deepest {
+            // Hanging off something that already exists: append to ITS
+            // `/Kids`. That object is committed, so reading it back is safe.
+            Some(existing) => {
+                let Some(Object::Dict(pd)) = self.value(existing) else {
+                    return Err(EditError::NotADictionary {
+                        id: existing,
+                        key: "Kids",
+                    });
+                };
+                let mut updated = pd.clone();
+                let mut kids: Vec<Object> = pd
+                    .get(b"Kids")
+                    .map(|o| self.graph().resolve(o).clone())
+                    .and_then(|o| o.as_array().map(<[Object]>::to_vec))
+                    .unwrap_or_default();
+                kids.push(Object::Reference(root_of_new_chain));
+                updated.insert(Name::from(b"Kids"), Object::Array(kids));
+                let before = self.state.get(&existing).cloned();
+                writes.push(ObjectWrite {
+                    id: existing,
+                    before,
+                    after: Some(Object::Dict(updated)),
+                });
+            }
+            // Nothing on the path existed: the chain's top is a new root.
+            None => writes.push(self.acroform_register_write(root_of_new_chain)?),
+        }
+
+        Ok((writes, field_parent, terminal.clone()))
     }
 
     /// The `/Rect`, `/P`, `/T`, `/F` and `/TU` entries every authored widget
@@ -4368,11 +4844,17 @@ impl EditSession {
             });
         }
         let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
-        let (page_id, slots) = self.field_authoring_preflight(
+        // A check box is `/Btn` with neither `Radio` nor `Pushbutton`
+        // (§12.7.4.2.1), and the KIND is part of merge compatibility: a radio
+        // group is also `/FT /Btn`, and merging a check box into one would
+        // give a single field widgets that disagree about whether they toggle
+        // independently or exclusively.
+        let (page_id, slots, path) = self.field_authoring_preflight(
             &spec.name,
             spec.rect,
             spec.page_index,
             forms::FieldType::Button,
+            Some(forms::ButtonKind::Check),
         )?;
 
         // VECTOR artwork, not a ZapfDingbats glyph — see
@@ -4381,7 +4863,6 @@ impl EditSession {
         let (off, on) = annot_author::build_check_box_appearances(w, h);
         let off_id = ObjId::new(self.alloc_number()?, 0);
         let on_id = ObjId::new(self.alloc_number()?, 0);
-        let field_id = ObjId::new(self.alloc_number()?, 0);
 
         let mut stream_of = |state: annot_author::CheckBoxStateAppearance| {
             let span = self.stage_bytes(&state.content);
@@ -4399,8 +4880,6 @@ impl EditSession {
         let on_stream = stream_of(on);
 
         let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, spec.tooltip.as_ref());
-        d.insert(Name::from(b"FT"), Object::Name(Name::from(b"Btn")));
-        d.insert(Name::from(b"Ff"), Object::Integer(spec.field_flags()));
 
         // `/V` and `/AS` are NAMES here, not strings — the single most
         // common way a hand-written check box comes out unrecognisable.
@@ -4438,14 +4917,66 @@ impl EditSession {
                 before: None,
                 after: Some(on_stream),
             },
-            ObjectWrite {
-                id: field_id,
-                before: None,
-                after: Some(Object::Dict(d)),
-            },
         ];
+
+        // THE MERGE BRANCH — the same box on a second page, sharing one
+        // `/V`, which is what makes ticking it tick both.
+        //
+        // `/V` and `/AS` are removed from the incoming widget dict: the VALUE
+        // belongs to the field (it is shared), and the merged field already
+        // has one. `/AS` is re-derived per widget by `set_button_state`, and
+        // seeding it here from this call's `--checked` would let a second add
+        // silently change the state the first one set.
+        if let FieldPath::Terminal { id, shape, .. } = path {
+            let mut w = d;
+            w.remove(b"V");
+            w.remove(b"AS");
+            let existing_state = self
+                .value(id)
+                .and_then(Object::as_dict)
+                .and_then(|fd| fd.get(b"V"))
+                .and_then(Object::as_name)
+                .map_or_else(|| Name::from(b"Off"), |n| Name::from(n.as_bytes()));
+            w.insert(Name::from(b"AS"), Object::Name(existing_state));
+            let (merge_writes, _widget) =
+                self.merge_widget_into_field(id, shape, w, page_id, &slots)?;
+            objects.extend(merge_writes);
+            self.commit(Command {
+                kind: CommandKind::AddFormField,
+                objects,
+                removals: Vec::new(),
+                trailer: None,
+            });
+            return Ok(id);
+        }
+
+        let FieldPath::Vacant { deepest, remaining } = path else {
+            return Err(FormAuthorError::NameIsGroupingNode {
+                fqn: spec.name.clone(),
+            }
+            .into());
+        };
+        let field_id = ObjId::new(self.alloc_number()?, 0);
+        let (parent_writes, parent, partial) =
+            self.place_new_field(deepest, &remaining, field_id)?;
+
+        d.insert(Name::from(b"FT"), Object::Name(Name::from(b"Btn")));
+        d.insert(Name::from(b"Ff"), Object::Integer(spec.field_flags()));
+        d.insert(
+            Name::from(b"T"),
+            Object::String(encode_text_string(&partial)),
+        );
+        if let Some(p) = parent {
+            d.insert(Name::from(b"Parent"), Object::Reference(p));
+        }
+
+        objects.push(ObjectWrite {
+            id: field_id,
+            before: None,
+            after: Some(Object::Dict(d)),
+        });
+        objects.extend(parent_writes);
         objects.extend(self.annots_writes(page_id, field_id, &slots)?);
-        objects.push(self.acroform_register_write(field_id)?);
 
         self.commit(Command {
             kind: CommandKind::AddFormField,
@@ -4531,11 +5062,12 @@ impl EditSession {
             }
         }
         let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
-        let (page_id, slots) = self.field_authoring_preflight(
+        let (page_id, slots, path) = self.field_authoring_preflight(
             &spec.name,
             spec.rect,
             spec.page_index,
             forms::FieldType::Choice,
+            None,
         )?;
 
         // SORT THE ARRAY, do not merely flag it. §12.7.4.4: a reader "shall
@@ -4567,7 +5099,6 @@ impl EditSession {
         )?;
 
         let ap_id = ObjId::new(self.alloc_number()?, 0);
-        let field_id = ObjId::new(self.alloc_number()?, 0);
         let ap_span = self.stage_bytes(&appearance.content);
         let mut ap_dict = appearance.ap_dict;
         ap_dict.insert(
@@ -4580,8 +5111,6 @@ impl EditSession {
         });
 
         let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, spec.tooltip.as_ref());
-        d.insert(Name::from(b"FT"), Object::Name(Name::from(b"Ch")));
-        d.insert(Name::from(b"Ff"), Object::Integer(spec.field_flags()));
         d.insert(Name::from(b"DA"), Object::String(da.clone()));
         // §12.7.4.4: an element is `(Display)` when export and display
         // coincide, or `[(export) (display)]` when they differ. Writing the
@@ -4620,20 +5149,69 @@ impl EditSession {
         ap.insert(Name::from(b"N"), Object::Reference(ap_id));
         d.insert(Name::from(b"AP"), Object::Dict(ap));
 
-        let mut objects = vec![
-            ObjectWrite {
-                id: ap_id,
-                before: None,
-                after: Some(ap_stream),
-            },
-            ObjectWrite {
-                id: field_id,
-                before: None,
-                after: Some(Object::Dict(d)),
-            },
-        ];
+        let mut objects = vec![ObjectWrite {
+            id: ap_id,
+            before: None,
+            after: Some(ap_stream),
+        }];
+
+        // THE MERGE BRANCH. The second widget carries the LOOK; `/Opt` and
+        // `/Ff` stay on the field, because the option list and the combo/
+        // list-box mode belong to the field, not to a view of it. A second
+        // add with a DIFFERENT `--option` set therefore does not silently
+        // rewrite the first one's options — it adds a place to show them.
+        if let FieldPath::Terminal { id, shape, .. } = path {
+            let (merge_writes, _widget) =
+                self.merge_widget_into_field(id, shape, d, page_id, &slots)?;
+            objects.extend(merge_writes);
+            self.commit(Command {
+                kind: CommandKind::AddFormField,
+                objects,
+                removals: Vec::new(),
+                trailer: None,
+            });
+            // A merge adds a WIDGET, never options — `/Opt` stays on the
+            // field — so the empty-options disclosure reports the field's
+            // existing state, not this call's argument list.
+            let has_no_options = self
+                .value(id)
+                .and_then(Object::as_dict)
+                .and_then(|fd| fd.get(b"Opt").map(|o| self.graph().resolve(o).clone()))
+                .and_then(|o| o.as_array().map(<[Object]>::len))
+                .is_none_or(|n| n == 0);
+            return Ok(ChoiceAuthorOutcome {
+                field_id: id,
+                has_no_options,
+            });
+        }
+
+        let FieldPath::Vacant { deepest, remaining } = path else {
+            return Err(FormAuthorError::NameIsGroupingNode {
+                fqn: spec.name.clone(),
+            }
+            .into());
+        };
+        let field_id = ObjId::new(self.alloc_number()?, 0);
+        let (parent_writes, parent, partial) =
+            self.place_new_field(deepest, &remaining, field_id)?;
+
+        d.insert(Name::from(b"FT"), Object::Name(Name::from(b"Ch")));
+        d.insert(Name::from(b"Ff"), Object::Integer(spec.field_flags()));
+        d.insert(
+            Name::from(b"T"),
+            Object::String(encode_text_string(&partial)),
+        );
+        if let Some(p) = parent {
+            d.insert(Name::from(b"Parent"), Object::Reference(p));
+        }
+
+        objects.push(ObjectWrite {
+            id: field_id,
+            before: None,
+            after: Some(Object::Dict(d)),
+        });
+        objects.extend(parent_writes);
         objects.extend(self.annots_writes(page_id, field_id, &slots)?);
-        objects.push(self.acroform_register_write(field_id)?);
 
         self.commit(Command {
             kind: CommandKind::AddFormField,
