@@ -2172,6 +2172,35 @@ this. Concretely:
   `MAX_TOKEN_LEN`) — see the `ROADMAP.md` standing rule requiring
   every new resource guard to be run against that suite specifically
   before shipping.
+- **★ Concrete instance (added 2026-08-07, `0df6158`) — the first guard
+  in this codebase motivated by a SPEC OBLIGATION rather than by a bomb,
+  and the first on the WRITE side: `save::MAX_REWRITE_OBJECT_NUMBER` =
+  8,388,607.** §7.5.4 obliges a single-section full rewrite to emit one
+  cross-reference entry per object number **from 0 to the file's
+  maximum**, so `save_full`'s hole-filling loop is **O(largest object
+  NUMBER), not O(object count)** — and the largest number is chosen by
+  whoever wrote the input. pdfium's **1.2 KB** `bug_455199.pdf` names
+  `2147483648 0 obj` (2³¹) and therefore asks for **2,147,483,649**
+  entries: measured at **~27 MB/s of steady allocation, CPU pinned** —
+  about an hour and 40 GB. **Not an infinite loop, which is what made it
+  survive:** it looks like progress the whole way down, so a liveness or
+  progress check cannot detect this class and **only a wall-clock budget
+  can**. In the GUI it is an unrecoverable freeze with no error, no
+  cancel and no save. **Refused by name (R27)** rather than complied with
+  — a sparse table would be malformed (§7.5.4) and compact renumbering
+  would break §5's per-object byte-identity contract. The value is
+  **sourced from Annex C Table C.1's maximum indirect objects (2²³ − 1)**,
+  not guessed, and **deliberately not clamped to the object COUNT**
+  (a sparse-but-small file with one enormous number is exactly the
+  adversarial shape). The same table caps a PDF **integer** at
+  2,147,483,647, so that file's object number is **one more than the spec
+  permits** — unrepresentable, not merely improbable, which is why the
+  guard refuses nothing a conforming producer can write. **Reading is
+  unaffected**; `inspect` and `extract-text` both succeed on the file.
+  **The §6.1.12 implementation-limits run this bullet's own standing rule
+  requires is OWED for this guard** — what exists is an argument for
+  headroom in the constant's doc comment, not the measurement; see §12's
+  seventeenth 2026-08-07 entry.
 
 ### 10.2 Fuzz-testing (required, not optional, before Pass 1 ships)
 
@@ -8733,3 +8762,95 @@ with a forward pointer.
 
   **This filing edited `docs/` and the RAG trees only**; the `b92c313`
   commit and every gate result quoted here are the engineer's.
+- **2026-08-07 (seventeenth entry this day) — THE FULL-REWRITE WRITER
+  GAINS A SPEC-SOURCED BOUND, AND THE CHOICE IS *REFUSE*, NOT *REPAIR*
+  — a 1.2 KB file used to cost an hour and 40 GB** (`0df6158`; harness
+  half `8cb779f`). **The second defect the veraPDF parse gate found, and
+  the first one that was a HANG.** Full record: the *second defect the
+  veraPDF gate found* entry at the top of `ROADMAP.md`'s *Shipped*.
+
+  **The architectural content, stated as the invariant it touches.**
+  `save_full` fills cross-reference holes with `for num in 0..=highest`
+  where `highest` is the largest object **NUMBER** in the file, so the
+  **writer's cost is O(largest object number), not O(object count)** —
+  and the largest number is **chosen by whoever wrote the input**.
+  pdfium's `bug_455199.pdf` names `2147483648 0 obj` (2³¹), asking for
+  2,147,483,649 `BTreeMap` entries. Measured: **~27 MB/s of steady
+  allocation with the CPU pinned**, i.e. roughly an hour and 40 GB before
+  the allocator gives up. **Not an infinite loop** — which is what made
+  it survive: *it looks like progress the whole way down*, so a liveness
+  or progress check cannot see it and only a **wall-clock budget** can.
+
+  **The loop is §7.5.4's completeness requirement and was NOT removed.**
+  A single-section full rewrite must carry one entry per object number
+  from 0 to the file's maximum, *"even if one or more of the object
+  numbers in this range do not actually occur"*. Both ways of complying
+  cheaply are worse, and each breaks a different thing this document
+  guarantees:
+
+  - **A sparse table** (`build_runs` would emit one) **trades a hang for
+    a malformed file** — §7.5.4 is not satisfied by a table that skips
+    numbers.
+  - **Compact renumbering breaks §5's per-object byte-identity
+    contract** — an object pdfce did not logically touch must come back
+    byte-identical, and its number is part of what identifies it.
+
+  **So the path is BOUNDED and REFUSED BY NAME (R27), and the bound is
+  SOURCED:** `save::MAX_REWRITE_OBJECT_NUMBER = 8_388_607`, from **ISO
+  32000-1 Annex C Table C.1's maximum indirect objects (2²³ − 1)** —
+  the same construction as `MAX_FORM_FIELDS` / `MAX_ANNOTS_PER_PAGE` /
+  `MAX_XOBJECT_DEPTH` (§10.1). New variant
+  `WriteError::ObjectNumberTooLarge { num, max }`. **Deliberately not
+  clamped to the object COUNT**: a sparse-but-small file with one
+  enormous number is precisely the adversarial shape, and a count-based
+  bound would pass it through.
+
+  **★ The fact that makes the refusal correct rather than merely
+  conservative.** Table C.1 caps a PDF **integer** at 2,147,483,647, so
+  the file's 2,147,483,648 is **one MORE than the largest integer the
+  spec permits**. The object number is **unrepresentable as a conforming
+  PDF integer** — the guard therefore refuses **nothing a conforming
+  producer can write**, and costs the corpus nothing.
+
+  **The refusal bounds the WRITER only. Reading is untouched** — `inspect`
+  and `extract-text` were both run on the file and both succeed. §10.1's
+  guard family gains a member whose motivation is a **spec obligation**
+  rather than a decompression bomb, which is a new reason for a guard in
+  this codebase and worth noting as such.
+
+  **★ An OWED verification, opened by this filing.** The *Standing rules*
+  resource-guard bullet requires every new depth/count/size guard to get a
+  run against veraPDF's **§6.1.12 implementation-limits** suite before it
+  ships. **What exists is an ARGUMENT for headroom, in the constant's own
+  doc comment — not the run.** The argument is strong (the bound comes
+  from Annex C, not from intuition, which is the exact defect that rule was
+  written after), but **R162's question applies to a rule's discharge as
+  much as to a test**: the claim *"§6.1.12 has comfortable headroom"* has
+  not been shown capable of coming out false. **Engineer: run it, or rule
+  the argument sufficient.**
+
+  **Harness half — the gate stops lying about how far it got.**
+  `tools/verapdf-parse-gate.py` gains **`--timeout` (default 120 s)**; a
+  hang is a **reported finding naming the file, RANKED ABOVE
+  REGRESSIONS**, because *a bad file can be inspected but a
+  non-terminating save is an unrecoverable GUI freeze*. Before this, a
+  stalled run **reported nothing at all** — the pdfium sweep stopped at
+  file **87 of 331** and the remaining 244 were silently never tested,
+  indistinguishable from a clean pass. **R162 at the harness level.**
+  Verified in both directions (0.01 s budget → three known-good files
+  report as hangs, exit 1; default → clean, exit 0), on the
+  *a-detector-that-never-says-no-is-not-a-detector* discipline set the
+  previous day. **Both corpora now complete for the first time:**
+  pdfium **288 files, 0 hangs, 0 regressions, 223 improved**; qpdf
+  **560 files, 0 hangs, 0 regressions, 275 improved**.
+
+  **Nothing minted, and one candidate was refused a number deliberately**
+  — *"bound an input-VALUE-driven cost before incurring it"* is already
+  carried by R27 plus the resource-guard rule, has one occurrence against
+  a two-occurrence bar, and its transferable content is a **technique**
+  (wall-clock budget over liveness check) filed in `D:\dev\rag\rust\`
+  rather than a rule. Per **R163**, an obligation a mechanical guard
+  already carries does not also need a rule asking a human to remember it.
+
+  **This filing edited `docs/` and the RAG trees only**; both commits and
+  every gate result quoted here are the engineer's.

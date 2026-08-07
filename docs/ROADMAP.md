@@ -81,6 +81,421 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### fix — THE SECOND DEFECT THE veraPDF GATE FOUND, and the worst one yet: a 1.2 KB FILE MADE pdfce HANG — plus the sweep that found it, which had been silently testing NOTHING after file 87 (no Pass ID — a spec-sourced bound on the shipped full-rewrite save path, and a per-file budget for `tools/verapdf-parse-gate.py`; core + tooling) — 2026-08-07, committed `0df6158` (the refusal) and `8cb779f` (the timeout), branch `pass-8-redaction`
+
+**Why NO Pass ID, stated first because the dispatch left the call to this
+librarian.** Identical reasoning to the entry immediately below, and
+deliberately the same shape: this is a **defect found by a gate**, and the
+gate that found it is itself filed **as tooling with no Pass ID**. A Pass is
+*"a scoped unit of engineering work with acceptance criteria"* (Glossary);
+neither commit here was scoped in advance, both were **provoked by an
+instrument**. Filing the gate's second catch above the instrument that
+produced it would invert the ledger the same way filing the first would
+have. **Pass family stays 43; R164 stays the standing-rule ceiling; decision
+records stay 031; operator questions stay (bb). NOTHING IS MINTED — and one
+candidate was considered and REFUSED a number; see *Ledger*, below.**
+
+**Filed as ONE entry across TWO commits, on purpose — and the pairing is
+tighter here than in the entry below.** `0df6158` is the defect. `8cb779f`
+is **the reason the defect nearly went unrecorded**: the sweep that found it
+had no per-file budget, so it stalled on that one file and **reported
+nothing at all** — including nothing about the 86 files it had already
+finished. Split apart, one reads as a bounds check and the other as a CLI
+flag. Together they are the finding: **the instrument that caught the hang
+was itself being silenced by it.**
+
+#### ★ THE HEADLINE — a 1.2 KB file, an hour, and 40 GB
+
+`bug_455199.pdf` is a file **pdfium ships as a test case**. It is **1.2 KB**.
+`pdfce-cli round-trip --mode full` on it **never returned.**
+
+**Where it actually spun, MEASURED rather than reasoned.** `save_full` fills
+cross-reference holes with `for num in 0..=highest`, where `highest` is the
+largest object **NUMBER** in the file. `bug_455199.pdf` contains
+**`2147483648 0 obj`** — **2³¹** — so that loop asks for **2,147,483,649
+`BTreeMap` entries**.
+
+**★ IT WAS NOT AN INFINITE LOOP, AND THAT DISTINCTION IS THE MOST
+TRANSFERABLE THING IN THIS ENTRY.** Working set climbed a **straight
+~27 MB/s** with the CPU pinned at 100% (5.9 s CPU per 6 s wall) — roughly
+**an hour and 40 GB** before the allocator would have given up. **It looks
+like progress the whole way down.** That is why it survived every earlier
+sweep, and it is why the instrument that catches this class must be a
+**wall-clock budget** and **not** a liveness or progress check: a progress
+check would have watched it allocate steadily and concluded it was working.
+In the GUI the same code path is an **unrecoverable freeze — no error, no
+cancel, no save.**
+
+#### THE FIX IS A REFUSAL, NOT A REPAIR — and the reasoning is the part to keep
+
+**The loop is SPEC-MANDATED and was not removed.** Per the spec RAG,
+**§7.5.4's completeness requirement** obliges the cross-reference table to
+carry one entry per object number **from 0 to the maximum defined in the
+file**, *"even if one or more of the object numbers in this range do not
+actually occur"* — and for a **single-section full rewrite** that obligation
+lands **entirely** in that loop.
+
+**Both alternatives to refusing are worse, and each is worse in a different
+direction:**
+
+- **Emit SPARSE subsections instead.** `build_runs` would happily do it.
+  This **trades a hang for a malformed file** — §7.5.4's completeness
+  requirement is not satisfied by a table that skips numbers, so pdfce would
+  be writing non-conforming output to avoid an expensive one.
+- **Renumber compactly.** This **breaks the per-object byte-identity
+  contract** (`ARCHITECTURE.md` §5): an object pdfce did not logically touch
+  must be re-emitted byte-identical, and an object's number is part of what
+  identifies it.
+
+**So the cost is BOUNDED and the file is REFUSED BY NAME (R27).**
+`save::MAX_REWRITE_OBJECT_NUMBER = 8_388_607`, **sourced from ISO 32000-1
+Annex C Table C.1's maximum indirect objects (2²³ − 1)** — not guessed, and
+sized in the **spirit of the existing `MAX_FORM_FIELDS` /
+`MAX_ANNOTS_PER_PAGE` / `MAX_XOBJECT_DEPTH` guards**. New error variant:
+`WriteError::ObjectNumberTooLarge { num, max }`, whose message names the
+number, the bound, the Annex C source, **and the table size the file would
+have required**.
+
+**Deliberately NOT clamped to the object COUNT**, and the reason is the file
+itself: *a sparse-but-small document with one enormous number is exactly the
+adversarial shape this guards*, and a count-based bound would let it
+straight through.
+
+#### ★ THE DETAIL THAT MAKES REFUSAL CORRECT RATHER THAN MERELY CONSERVATIVE
+
+**Table C.1 caps a PDF integer at 2,147,483,647 (2³¹ − 1). The file's object
+number is 2,147,483,648.** It is **one more than the largest integer the
+spec permits.**
+
+That changes the character of the refusal completely. pdfce is not declining
+an unusual-but-legal file — **the object number is UNREPRESENTABLE as a
+conforming PDF integer**, so no conforming producer can make one, and the
+bound refuses **nothing a conforming producer can write**. A file whose
+highest object number exceeds 8,388,607 also cannot have a conforming object
+*count*. **The guard costs the corpus nothing.**
+
+#### READING IS UNTOUCHED — this bounds the WRITER only
+
+`inspect` and `extract-text` **both still succeed on `bug_455199.pdf`.** The
+parser has no such loop and never did. **Stated explicitly because a
+refusal filed under "we can't handle this file" would be wrong**: pdfce can
+read it fine; it declines to *rewrite* it.
+
+#### ★ BOTH CORPORA NOW COMPLETE — and pdfium had NEVER completed a sweep before today
+
+| corpus | hangs | regressions | improved | preserved | refused by pdfce |
+|---|---|---|---|---|---|
+| **pdfium (288 files)** | **0** | **0** | **223** | 22 | 43 |
+| **qpdf (560 files)** | **0** | **0** | **275** | 15 | 79 |
+
+**The pdfium line is a first, not a repeat.** Every prior attempt **stalled
+on file 87** and was killed; the corpus has never once been swept end to
+end. **No sibling hangs were found** — see *How the absences were
+established*, below, for the method rather than the claim.
+
+The qpdf line is **unchanged from the entry below** (275/15/79 with 0
+regressions), which is the correct outcome: this work bounds a path that
+corpus never reached.
+
+#### THE FIXTURE IS SYNTHETIC AND DELIBERATELY UNDAMAGED — R162 applied to fixture PROVENANCE
+
+Two separate choices, and each closes a different way for the test to be
+worthless:
+
+1. **Synthetic, not the corpus file.** `fixtures/external/` is **fetched by
+   a script and absent on a fresh clone**, so a test bound to the corpus
+   file would **silently not run** — green, forever, on any machine that
+   never ran the fetch. That is **exactly the shape the guard exists
+   against**, arriving from the fixture's provenance rather than from the
+   assertion's arithmetic. `tools/gen-huge-objnum-fixture.py` builds
+   `fixtures/synthetic/xref-recover/huge-object-number.pdf` — six objects,
+   one numbered 2³¹, reached through a **conforming two-subsection** xref
+   table.
+2. **Undamaged, not malformed.** The fixture **loads on the strict path
+   with NO recovery.** A fixture that failed to parse would make the
+   refusal **a parse error wearing a writer's name** — the test would pass
+   while proving nothing whatsoever about the writer.
+
+**Worth recording as a general practice, and filed as one** (see *RAG
+escalations*): *a regression test's fixture must be reachable on a fresh
+clone, or the test is a claim about the developer's disk rather than about
+the code.*
+
+#### THE TEST PROVES THE REFUSAL IS THE WRITER'S VERDICT — and R162 is discharged BY OBSERVATION
+
+The test does three things, and the third is the one usually skipped:
+
+1. **Asserts the document loaded WITHOUT recovery** — the positive control.
+   Without it, the refusal below is about a parse failure.
+2. **Matches the refusal by ERROR VARIANT** (`WriteError::ObjectNumberTooLarge`),
+   not by message substring or by "some error occurred" — **so it cannot
+   pass by rejecting the file for an unrelated reason.**
+3. **Non-vacuity established by BREAKING it, not by reading it.** With the
+   guard removed the test **does not return**; cargo's harness prints *"has
+   been running for over 60 seconds"* and the process is killed with **exit
+   143**. **This is the third such discharge in three days**, and the only
+   one of the three where the failure mode of the un-guarded code is
+   *non-termination* rather than a failed assertion — which is a harder
+   thing to observe deliberately and was observed anyway.
+
+#### HARNESS HARDENING (`8cb779f`) — the sweep stops lying about how far it got
+
+**`--timeout SECONDS` (default 120) added to `tools/verapdf-parse-gate.py`.**
+A hang is now a **reported finding naming the file**, counted separately and
+**RANKED ABOVE REGRESSIONS**.
+
+**The ranking is deliberate and is the substantive judgement in this
+commit:** *a bad file can be inspected; a non-terminating save is an
+unrecoverable freeze in the GUI.* A regression tells you the output is
+wrong. A hang tells you **the operator's application is gone**, with no
+error, no cancel and no save.
+
+**★ WHY THIS MATTERED — R162 AT THE HARNESS LEVEL, and arguably R164 too.**
+The sweep that found the hang **stalled on file 87 of 331 and reported
+NOTHING**, because results are only printed at the end. Everything after
+file 86 was **silently never tested**, and from the outside **a sweep that
+stopped at 87 and a sweep that passed all 331 look identical.** The only
+reason anyone noticed was a process listing showing one `pdfce-cli.exe`
+alive far longer than any file should take.
+
+**The R164 reading is the sharper one and is offered rather than asserted:**
+the sweep's verdict on files 1–86 **was withheld because of an unrelated
+file**. Those 86 verdicts existed, were correct, and were **never reported —
+their availability was a function of a batch-mate.** That is not the
+aggregate-attributed-to-an-individual mechanism R164 names, so **it is
+recorded as an adjacent shape and NOT claimed as an R164 instance**; see
+*Ledger*.
+
+**Verified in BOTH directions rather than assumed** — the discipline
+established the day before by `b92c313`'s *"a detector that never says no is
+not a detector"*:
+
+| budget | three known-good files | exit |
+|---|---|---|
+| `--timeout 0.01` | **all three reported as HANGS** | **1** |
+| default (120 s) | **all three clean** | **0** |
+
+**A hang-detector that never fires and one that fires on everything are both
+useless, and only running both proves it is neither.**
+
+**Both exit codes read DIRECTLY, not through a pipeline** — see *A finding
+filed against the engineer's own shell habit*, below.
+
+#### Gates — measured by the ENGINEER at `8cb779f`, each read by its OWN exit code (R87)
+
+| Gate | Result |
+|---|---|
+| `cargo test` (workspace) | **2149 passed, 0 failed** |
+| `cargo fmt --check` | **exit 0** |
+| `cargo clippy -- -D warnings` | **exit 0** |
+| `tools/check-ui-strings.sh` | **exit 0** |
+| `tools/check-bypass-paths.sh` | **exit 0** |
+| `tools/check-ledger-numbers.py` | **exit 0** |
+| pdfium sweep (288 files) | table above — **first ever completion** |
+| qpdf sweep (560 files) | table above |
+| failing reproducer, re-run by the engineer | **refuses in under a second** |
+
+**Test count 2148 → 2149** — one new test, matching the one new refusal.
+
+**"Each read by its OWN exit code" is load-bearing here for a second
+reason**, beyond the usual one: **the engineer also re-ran the failing
+reproducer himself and watched it refuse**, rather than inferring from a
+green suite that the specific file was fixed. A passing test proves the
+synthetic fixture is refused; only running `bug_455199.pdf` proves the file
+that started this is.
+
+**Both ledger checkers re-run by THIS LIBRARIAN after the filing** — results
+and ceilings in *Ledger*, below, and in the report.
+
+#### How the absences were established (R87) — the method, not the conclusion
+
+Three negative claims appear above. Each was established, not assumed:
+
+1. **"No sibling hangs found in either corpus."** Established by the two
+   sweeps **completing**, both with `--timeout` armed — i.e. by the very
+   instrument whose absence caused the original silence. Before `8cb779f`
+   this claim could not have been made at all, because a stalled sweep
+   reports nothing. **This is the strongest form available: the absence is
+   backed by an instrument that has been shown to fire.**
+2. **"No sibling hole-filling loop elsewhere in `pdfce-core` has an
+   input-controlled bound."** Established by this librarian with a
+   tracked-files grep for the loop's shape (`0..=highest`) across
+   `crates/`, which returns **exactly two** hits:
+   `writer/save.rs:813` (the one now guarded) and
+   `pageops/assemble.rs:1134`. **The second is SAFE BY CONSTRUCTION and
+   was read to confirm it, not assumed:** its `highest` comes from
+   `self.objects.keys().max()`, and every number in that map is issued by
+   `Copier::reserve()`, a monotone counter starting at 1. **Its bound is
+   the object COUNT, which pdfce chooses — not an object NUMBER, which the
+   input chooses.** That is the whole distinction the defect turns on, and
+   the assembler is on the correct side of it.
+3. **"Reading is unaffected."** Established by the engineer **running**
+   `inspect` and `extract-text` on `bug_455199.pdf` and getting output —
+   not by reasoning that the parser has no such loop.
+
+#### ★ AN ITEM THIS FILING OPENS AND OWES BACK TO THE ENGINEER — the §6.1.12 run was ARGUED, not RUN
+
+**A standing rule in this file** (see *Standing rules*, the resource-guard
+bullet) reads: ***"Any new depth/count/size guard added to `pdfce-core` or
+`pdfce-render` gets a corpus run against [veraPDF's §6.1.12
+implementation-limits] suite specifically before it ships, not just the
+general corpus."***
+
+`MAX_REWRITE_OBJECT_NUMBER` is a new count guard. **What the dispatch
+supplied was an ARGUMENT for headroom** — the constant's own doc comment
+says it is *"far above any conformant corpus, so the veraPDF §6.1.12
+implementation-limits suite keeps comfortable headroom"* — **and an argument
+is not the run the rule asks for.**
+
+**This is flagged rather than treated as a failure, and the distinction is
+worth stating.** The rule was written after **two** incidents
+(`MAX_TOKEN_LEN` at 8 KiB, `MAX_XOBJECT_DEPTH` at 16) in which a guard was
+chosen **by intuition** and rejected a conformant file. **This guard was
+chosen from Annex C Table C.1**, which is the exact defect the rule exists to
+prevent, and the argument above is a strong one: a file exceeding 8,388,607
+cannot have a conforming object count either. **But the rule as written asks
+for a measurement, and R162's own question applies to the rule's discharge:
+the claim "§6.1.12 has comfortable headroom" has not been shown capable of
+coming out false.** Cheap to close — one targeted sweep of
+`veraPDF-corpus/*/6.1 File structure/6.1.12 Implementation limits/`.
+**ENGINEER: run it, or rule the argument sufficient and say so, so the item
+does not sit open indefinitely.**
+
+#### A finding filed against the ENGINEER'S OWN shell habit, at his instruction
+
+**Three times this session `cmd | tail; echo $?` reported `tail`'s status
+rather than the command's — and once that made a HANG LOOK LIKE A PASS.**
+
+Filed as the engineer's, in the ledger rather than left in a conversation,
+on the same principle as the *"ten regressions"* correction below: **this
+project's record of its own instruments is the thing that makes the next
+instrument believable.**
+
+**It is R164's family**, and the mapping is exact: a verdict whose value
+depended on **something other than its subject** — here, on the last element
+of a pipeline rather than on the command being judged. **No number is minted
+for it.** A lesson already exists from an earlier filing this same day
+(`C:\personal_rag\claude_code\lesson_20260807_pipeline_exit_status_belongs_to_the_last_element.md`),
+so per hard rule 4 it is **AMENDED, not duplicated** — the new instance is
+the hang-looked-like-a-pass one, which is materially worse than the two
+already recorded there, because the two earlier ones produced a wrong
+*status* and this one produced a wrong *conclusion about termination*.
+
+#### A measurement finding that nearly refuted the correct hypothesis — and it is a WINDOWS TOOLING fact, not a pdfce one
+
+**The fork's first measurement said memory was FLAT**, which would have
+falsified the allocation theory outright and sent the investigation
+somewhere else entirely. **The cause: it read `ps -W` column 4 as RSS. It is
+WINPID.** A process ID was being reported as megabytes — a plausible-looking
+number in a plausible-looking column.
+
+**The real figure came from `Get-Process … WorkingSet64`**, and only then did
+the ~27 MB/s straight-line growth appear.
+
+**Judged NOT a pdfce finding and filed accordingly** (see *RAG escalations*):
+this is a property of Git-Bash's `ps -W` on Windows and belongs to the
+Claude-Code tooling subject, where the harness-and-measurement family already
+lives. **Recorded here only because the near-miss is the point** — the
+correct hypothesis was one bad column-read away from being abandoned, and
+the thing that saved it was **cross-checking the measurement with a second
+instrument** rather than trusting the first.
+
+#### RAG escalations, this entry
+
+**New — PDF domain (`C:\personal_rag\pdf\`):**
+
+- `lesson_20260807_xref_completeness_makes_writer_cost_a_function_of_the_largest_object_number.md`
+  — the domain finding: §7.5.4's completeness requirement makes a
+  full-rewrite writer's cost **O(largest object NUMBER)**, not O(object
+  count); a real 1.2 KB pdfium test file exploits it; and 2³¹ is **one more
+  than Table C.1's integer maximum**, so the number is unrepresentable
+  rather than merely large. Useful to **any** PDF-writing project, not just
+  pdfce.
+
+**New — ecosystem (`D:\dev\rag\rust\`):**
+
+- `loop_bound_from_an_input_value_not_input_size_is_an_input_controlled_cost.md`
+  — the general form, and the reason it is filed at ecosystem tier: nothing
+  about *"the loop's trip count comes from a VALUE in the input rather than
+  from the input's SIZE"* is PDF-specific. Includes the
+  **steady-allocation-looks-like-progress** observation and the consequence
+  for detector design (**wall-clock budget, not liveness**).
+- `batch_harness_without_a_per_item_budget_withholds_every_later_verdict.md`
+  — the harness form: results reported only at the end + no per-item budget
+  = a stalled run is **indistinguishable from a passing run**, and every
+  completed item's verdict is lost. Sibling of the existing
+  `harness_that_silently_drops_a_malformed_step_blames_the_system_under_test.md`.
+- `regression_test_fixture_fetched_by_a_script_silently_does_not_run.md`
+  — the fixture-provenance practice: a test bound to a
+  gitignored/script-fetched corpus is **green on every machine that never
+  ran the fetch**.
+
+**New — Claude Code tooling (`C:\personal_rag\claude_code\`):**
+
+- `lesson_20260807_ps_w_column_four_is_winpid_not_rss.md` — the measurement
+  trap, with the `Get-Process WorkingSet64` replacement.
+
+**AMENDED, per the same-filing propagation duty (dated footers, nothing
+deleted):**
+
+- `C:\personal_rag\claude_code\lesson_20260807_pipeline_exit_status_belongs_to_the_last_element.md`
+  — third instance, and the worst: **a hang read as a pass.**
+- `D:\dev\rag\rust\prove_test_suite_non_vacuous_by_deliberately_breaking_the_thing_it_tests.md`
+  — third instance, and the first where the un-guarded failure mode is
+  **non-termination** (cargo's 60-second notice, exit 143) rather than a
+  failed assertion.
+
+#### Ledger
+
+**NOTHING MINTED.** No Pass ID, no standing rule, no decision record, no
+operator question. **Ceilings after this filing, re-measured by running the
+checker rather than read from the file:** Pass **43**, standing rules
+**R164** (**R165** next free), decision records **031** (**032** next free),
+operator questions **(bb)**.
+
+**★ ONE CANDIDATE WAS CONSIDERED AND REFUSED A NUMBER, and the reasoning is
+recorded so the next filing does not re-open it.** The candidate:
+***a cost that is a function of an input VALUE rather than of input SIZE
+must be bounded before it is incurred, and the bound must be sourced.***
+Three reasons it does not earn R165:
+
+1. **The project already has the rule, in force and applied here.** The
+   resource-guard bullet in *Standing rules* covers *"any new
+   depth/count/size guard"*, and **R27** already covers refusing by name.
+   This defect was fixed **by applying existing rules**, not by discovering
+   a gap in them — the only novelty is that the guard's necessity came from
+   a **spec obligation** rather than from a decompression bomb.
+2. **The promotion bar is two occurrences**, and this is one. R164's
+   one-occurrence exception was granted because that occurrence had
+   **already produced a false report to the operator**; this one produced a
+   stalled sweep, which is bad but was caught before anything was told to
+   anyone.
+3. **The transferable content is not rule-shaped, it is FACT-shaped** — *a
+   steady allocation looks like progress, so use a wall-clock budget rather
+   than a liveness check.* That is a technique, and it is filed as one in
+   `D:\dev\rag\rust\`. **Per R163's construction, a note that a mechanical
+   guard already carries does not also need a rule asking a human to
+   remember it.**
+
+**The R164-adjacent reading of the stalled sweep is likewise NOT claimed as
+an instance.** R164's named mechanism is *an aggregate attributed to an
+individual*; here no aggregate was attributed to anything, the verdicts were
+simply **never emitted**. It is **the same family and a different
+mechanism**, and inflating an instance count is exactly the move that makes
+a rule's evidence base unreliable. **Recorded as adjacent; ENGINEER may rule
+otherwise.**
+
+**`FEATURES.md` — ONE row's description amended, NO box changed, and the
+absence is established rather than assumed.** `grep -n -i
+"save\|refus" docs/FEATURES.md` locates the **Save** row (*"Save
+(incremental-by-default or full-rewrite)"*), which already reads
+`[x] [x] [x] [x]`. This work **adds a refusal to a shipped capability** — it
+does not add a capability and does not remove one — so the honest edit is to
+name the bound in that row's description and **tick nothing**. **The
+veraPDF gate gets no row at all**, on the precedent this file has now set
+three times: *a verification harness is not an operator capability, and
+`FEATURES.md` has no tooling section by design.*
+
 ### fix — THE FIRST DEFECT THE veraPDF GATE FOUND, and the two instruments that called it clean (no Pass ID — a correctness fix to shipped Pass 13a/13b cross-reference recovery, a correctness fix to the shipped `round-trip` verb, and a false-positive fix to `tools/verapdf-parse-gate.py`; core + CLI + tooling) — 2026-08-07, committed `49dfe81` (the parser) and `23a5812` (both instruments), branch `pass-8-redaction`
 
 **Why NO Pass ID, stated first because the engineer left the call to this
@@ -1052,6 +1467,30 @@ than as R86. The ledger gate agrees by construction: it counts
 > - **The batching mechanism named in correction 1 is now `R164`**, a
 >   standing rule, minted the same day: *an aggregate must never be
 >   attributed to an individual.*
+
+> **★ FURTHER AMENDED 2026-08-07 (thirteenth filing), `8cb779f` — THE GATE
+> GAINS A PER-FILE BUDGET, AND THE ENTRY BELOW OVERSTATES WHAT ITS SWEEPS
+> PROVED.** Read this before quoting any sweep result filed above.
+>
+> - **`--timeout SECONDS` (default 120) added.** A hang is now a **reported
+>   finding naming the file**, counted separately and **RANKED ABOVE
+>   REGRESSIONS** — *a bad file can be inspected; a non-terminating save is
+>   an unrecoverable freeze in the GUI.* **Exit code 1 now means "pdfce made
+>   a file worse than its input, **or never terminated on one**"**, and the
+>   documented meaning of exit 0 widens correspondingly to *"no regressions
+>   **and no hangs**."*
+> - **Every sweep run before `8cb779f` had NO per-file budget, and a stalled
+>   run reported NOTHING — including nothing about the files it had already
+>   finished.** The pdfium sweep **stalled on file 87 of 331** and the
+>   remaining 244 were **silently never examined**, while the tool looked
+>   from the outside exactly like a sweep still working. **That is R162 at
+>   the harness level**, and it means no pre-`8cb779f` sweep result should
+>   be read as covering its whole corpus unless the run is known to have
+>   printed a report.
+> - **The pdfium corpus had never once completed** before 2026-08-07. It
+>   completes now: **288 files, 0 hangs, 0 regressions, 223 improved.**
+> - Full record, including the defect the budget exposed: the ***second***
+>   *defect the veraPDF gate found* entry at the top of *Shipped*.
 
 **Not a Pass, and the boundary is stated so the green is not overread.**
 This is the **parse** gate only. **The PDF/A CONFORMANCE gate remains
