@@ -12095,9 +12095,18 @@ standing rule, no decision record. The rulings below sit **inside** decision
 open, and answering an open question inside a decided scope is a ruling,
 not a new decision.
 
-**Filed by the engineer.** The session forbids subagent dispatch, so
+**Filed by the engineer.** ~~The session forbids subagent dispatch, so~~
 `pdfce-librarian`'s cross-document sweep did not happen. See
 `SESSION_LOG.md`'s thirty-second filing for which locations were walked.
+
+> **⚠ CORRECTED SAME DAY BY THE OPERATOR — the struck clause was the
+> engineer's INFERENCE about its own session, not a fact, and subagents
+> were in use in this window.** The consequence is unchanged and still
+> true (no librarian sweep for this filing); only the reason was wrong,
+> and it was wrong in a way nobody but the operator could have checked.
+> **Standing consequence for this log: a constraint an agent infers about
+> its own environment is not a fact and does not get recorded as one.**
+> Full form in `ROADMAP.md`'s `Pass 20.3` COMPLETION ADDENDUM.
 
 ---
 

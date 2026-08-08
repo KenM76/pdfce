@@ -25841,3 +25841,67 @@ no build, no test, no clippy and no render, and claims none.**
   comment. **Kept as a named absence rather than deleted** — "no `/I`
   here" IS the behaviour, and a test that merely stopped checking would
   let the key come back.
+
+#### ⚠ AMENDMENT FOOTER — 2026-08-08, same day, ON THE OPERATOR'S CORRECTION: this entry's *Filing hygiene* reason is WRONG; its consequence is right
+
+Appended rather than edited in place, per this file's own header (*"never
+overwrite or reorder a prior entry; corrections get a dated amendment
+footer"*). **The headline and body above are unchanged, including the
+`⚠ FILED BY THE ENGINEER` clause that carries the error** — striking it
+would hide that the record ever said it.
+
+**What was written.** Both the headline and *Filing hygiene* stated that
+*"the session forbids subagent dispatch"* / *"the session's configuration
+forbids dispatching subagents"*, offered as the reason `pdfce-librarian`
+was not dispatched for a Pass completion that `CLAUDE.md` rule 5 requires
+one for.
+
+**What the operator said.** *"this session's window was using sub agents
+before I cleared it."* **There was no prohibition.** The engineer had read
+a session tool-usage instruction as a session-wide ban on dispatching this
+project's own librarian, and wrote that reading into three documents
+(`ROADMAP.md`, `ARCHITECTURE.md` §12, and this entry) **as a fact about the
+session**.
+
+**What is unchanged, and it is the load-bearing half.** The librarian's
+cross-document sweep **still did not happen** for the thirty-second filing.
+Every caveat that depends on that stands exactly as written: a stale
+statement of a fact corrected in that filing may survive somewhere it did
+not walk, and the walked-location list above is still the complete one.
+**What changes is only that nothing forced it** — it was the engineer's
+call, and it is now recorded as a call rather than as a constraint.
+
+**★ The finding, and why it earns a footer rather than a quiet fix.** This
+is the *reason-stale-while-conclusion-holds* shape the thirty-first filing
+recorded twice in one day (`move_dimension`'s doc comment; *"copy the
+common subset"* having an empty right-hand side). This instance differs in
+**where it landed**:
+
+- Those two were claims about **the codebase**. Anyone can re-derive a
+  codebase claim from the codebase, so a wrong reason there is
+  self-correcting on contact with a careful reader.
+- This one was a claim about **the environment that produced the filing**.
+  It is checkable by **exactly one person**, and only for as long as they
+  remember what the session was configured to do. Left alone it would have
+  been permanent, unfalsifiable, and load-bearing for anyone later asking
+  *"why did the engineer file this directly?"*
+
+**★ The rule it implies, stated but deliberately NOT minted as `Rnn`:**
+**a constraint an agent INFERS about its own environment is not a fact and
+does not go in the record as one.** Either the operator stated it — in
+which case cite them — or it is the agent's reading of an instruction, in
+which case it is labelled as a reading. This is one occurrence and the
+project's bar for a standing rule has repeatedly been a second; **`R167`
+stays free for a fifth consecutive filing.** Flagged here so the second
+instance, if it comes, has something to be a second instance *of*.
+
+**Amended locations, walked in this correction:** `ROADMAP.md` (the
+`Pass 20.3` COMPLETION ADDENDUM — struck clause plus a correction block
+carrying the full form), `ARCHITECTURE.md` §12 (struck clause plus a
+pointer), and this footer. **Grep phrase for anyone checking the
+propagation was complete: `forbids subagent dispatch` /
+`configuration forbids`.** Both now appear only inside struck text or
+inside a correction block that says they are struck.
+
+**Ledger untouched.** Nothing minted, nothing renumbered; this is filing
+thirty-two's own footer and does not claim ordinal thirty-three.

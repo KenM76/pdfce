@@ -7807,13 +7807,38 @@ as `Pass 20.0 + Pass 20.1 (completion)` did. **No number is minted.** F3
 was assigned `Pass 20.3` by decision 020's Backlog amendment on
 2026-08-03; this is that ID's unbuilt remainder arriving.
 
-**Filed by the ENGINEER, not by `pdfce-librarian`.** The session's
+**Filed by the ENGINEER, not by `pdfce-librarian`.** ~~The session's
 configuration forbids dispatching subagents, which the project's own
-`CLAUDE.md` rule 5 otherwise requires for every Pass completion. Recorded
-here rather than left to be inferred from the absence of a librarian
-voice: **this filing has not had the librarian's cross-document sweep**,
-so if a stale statement of a fact corrected below survives somewhere this
-addendum did not walk, it is that gap and not a fresh fork.
+`CLAUDE.md` rule 5 otherwise requires for every Pass completion.~~
+Recorded here rather than left to be inferred from the absence of a
+librarian voice: **this filing has not had the librarian's cross-document
+sweep**, so if a stale statement of a fact corrected below survives
+somewhere this addendum did not walk, it is that gap and not a fresh fork.
+
+> **⚠ CORRECTION, 2026-08-08, same day, by the operator — THE REASON ABOVE
+> IS WRONG AND THE CONSEQUENCE IS RIGHT.** The engineer read a session
+> tool-usage instruction as a **session-wide prohibition on dispatching
+> this project's own librarian**, and wrote that reading into three
+> documents as a fact about the session. The operator's correction:
+> **subagents were in use in this window.** There was no such prohibition
+> to report.
+>
+> **What does not change:** the librarian's cross-document sweep still did
+> not happen for this filing, so the caveat in the paragraph above stands
+> on its own terms. **What does change: nothing forced that**, so it was
+> the engineer's call and is recorded as one.
+>
+> **★ The shape, since this document has a name for it:** this is the same
+> *reason-stale-while-conclusion-holds* correction the thirty-first filing
+> recorded twice (`move_dimension`'s doc comment; *"copy the common
+> subset"*). It is worth one more line because of where it landed —
+> **a claim about the ENVIRONMENT, in the permanent ledger, that the
+> environment's owner had to correct.** A statement about the codebase can
+> be re-derived by anyone from the codebase; a statement about the session
+> that produced a filing is checkable by exactly one person, and only while
+> they still remember. **Constraints an agent INFERS about its own
+> environment do not belong in the record as facts** — either the operator
+> stated it, or it is the agent's reading and gets labelled as one.
 
 ---
 
