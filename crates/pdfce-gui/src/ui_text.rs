@@ -7061,6 +7061,36 @@ pub fn create_field_export_value_tooltip() -> &'static str {
     "What the form records when this button is the one picked. Every button in a group shares the group's name and is told apart by this value."
 }
 
+/// The single letter drawn in a form-field's editor chrome, naming its KIND
+/// (Pass 47.3, R167).
+///
+/// A rectangle says *"a field is here"* and not *"which kind"* — and the kinds
+/// behave differently enough that confusing them costs the operator time: a
+/// check box is a two-state toggle, a choice field cannot be filled at all
+/// until it has options, a push button can never be filled by anything.
+///
+/// One letter rather than an icon because a widget is often 18×18 pt, where a
+/// glyph is a smudge and a letter is still legible — and because it costs no
+/// atlas lookup per widget on a page that may carry hundreds.
+pub fn form_field_chrome_letter(
+    field_type: Option<pdfce_core::forms::FieldType>,
+    button: Option<pdfce_core::forms::ButtonKind>,
+) -> &'static str {
+    use pdfce_core::forms::{ButtonKind, FieldType};
+    match (field_type, button) {
+        (Some(FieldType::Text), _) => "T",
+        (Some(FieldType::Choice), _) => "C",
+        (Some(FieldType::Signature), _) => "S",
+        (Some(FieldType::Button), Some(ButtonKind::Check)) => "X",
+        (Some(FieldType::Button), Some(ButtonKind::Radio)) => "O",
+        (Some(FieldType::Button), Some(ButtonKind::Push)) => "B",
+        // A widget whose field has no `/FT` anywhere on its inheritance
+        // chain. Malformed, and drawn anyway — the operator is better served
+        // seeing that something is there than having pdfce quietly skip it.
+        _ => "?",
+    }
+}
+
 /// Heading of the Create Field pane's option editor (Pass 47.4).
 ///
 /// The editor exists because without it every choice field this pane created

@@ -657,6 +657,19 @@ struct PdfceApp {
     /// picked Edit Text means the tool, and would otherwise find the pane
     /// stuck on metadata.
     pane_subject: ribbon::PaneSubject,
+    /// The form field whose chrome is drawn HIGHLIGHTED on the canvas — set
+    /// by hovering its row in the Forms panel (Pass 47.3).
+    ///
+    /// This is the panel→canvas half of *"which rectangle is this row?"*. The
+    /// canvas→panel direction (click a widget, its row scrolls into view) is
+    /// NOT built and cannot be until widgets become canvas-selectable, which
+    /// they are not — the hit-tester covers page content objects only. Named
+    /// here so the asymmetry is a known gap rather than something rediscovered
+    /// as a bug.
+    ///
+    /// Frame state: set during the panel's draw, consumed by the canvas draw
+    /// later in the same frame, cleared at the start of the next.
+    highlighted_field: Option<pdfce_core::object::ObjId>,
     /// The reset-layout chooser's pending selection, `None` when closed
     /// (Pass 24.1).
     pending_reset: Option<ribbon::ResetScope>,
@@ -1129,6 +1142,7 @@ impl Default for PdfceApp {
             left_dock_pixels_per_point: 1.0,
             ribbon_tab: ribbon::RibbonTab::default(),
             pane_subject: ribbon::PaneSubject::default(),
+            highlighted_field: None,
             pending_reset: None,
             save_result: None,
             // The dock starts CLOSED: progressive disclosure, and the
@@ -5379,8 +5393,18 @@ impl PdfceApp {
     /// often than an alphabetical sort would. Computed `/Tabs` ordering is a
     /// named P2 residual.
     fn forms_panel(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        // Which row the pointer is over THIS frame, collected during the draw
+        // and written back to `self.highlighted_field` at the end (Pass 47.3).
+        //
+        // Accumulated locally rather than assigned as rows are drawn because
+        // `self.status` is borrowed mutably for the whole body — the same
+        // reason `actions` is a `Vec` the caller drains rather than a direct
+        // dispatch. Cleared to `None` when nothing is hovered, so the
+        // highlight follows the pointer off the list.
+        let mut hovered_field: Option<pdfce_core::object::ObjId> = None;
         let Status::Open(doc) = &mut self.status else {
             ui.label(ui_text::forms_no_document());
+            self.highlighted_field = None;
             return;
         };
         ui.heading(ui_text::forms_panel_heading());
@@ -5547,7 +5571,20 @@ impl PdfceApp {
                 if field.flags.has(pdfce_core::forms::FieldFlags::REQUIRED) {
                     label.push_str(ui_text::form_field_required_marker());
                 }
-                ui.label(&label)
+                // Hovering the row HIGHLIGHTS its rectangle on the page
+                // (Pass 47.3). This is the answer to "which of these is the
+                // one I am about to type into" on a form whose fields the
+                // document draws no border for — before this Pass the panel
+                // and the page had no visible connection at all, and the
+                // operator could fill a field they could not locate.
+                //
+                // Hover rather than click: it costs nothing, needs no
+                // selection state, and is reversible by moving the mouse.
+                let row = ui.label(&label);
+                if row.hovered() {
+                    hovered_field = Some(field.id);
+                }
+                row
                     .on_hover_text(ui_text::form_field_row_tooltip(&fqn));
 
                 // Every unfillable row is DISABLED AND EXPLAINED, never hidden
@@ -6127,6 +6164,12 @@ impl PdfceApp {
                 Err(err) => err.to_string(),
             });
         }
+
+        // Publish the hover to the canvas overlay (Pass 47.3). Written on
+        // EVERY frame the panel draws, including when nothing is hovered, so
+        // the highlight follows the pointer off the list instead of sticking
+        // to the last row touched.
+        self.highlighted_field = hovered_field;
     }
 
     /// **Flatten the form** — burn every field's appearance into page content
@@ -12968,6 +13011,11 @@ impl PdfceApp {
     /// across it is what makes zooming feel continuous. See the module
     /// docs.
     fn canvas(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        // Read off `self` BEFORE the `Status::Open(doc)` borrow below: both
+        // are app-level fields, and once `self.status` is destructured they
+        // cannot be reached through the same borrow.
+        let form_pane_subject = self.pane_subject;
+        let form_highlight = self.highlighted_field;
         match &self.status {
             Status::Idle => {
                 // P0-5: a real empty state — the app name, an inline Open
@@ -13513,6 +13561,13 @@ impl PdfceApp {
             // Still drawn here even though `run_vector_edit_tool` draws its
             // own: it also covers the marquee-selection case, and the call is
             // idempotent (it paints from current state, holding none).
+            // Form-field chrome UNDER the selection outlines, so a selected
+            // object's outline is never hidden beneath a field's dashes
+            // (Pass 47.3, R167). Gated on the form context — see
+            // `form_context_active`.
+            if form_context_active(form_pane_subject, doc) {
+                draw_form_field_chrome(doc, ui, image_rect, extent, zoom, form_highlight);
+            }
             draw_selection_outlines(
                 doc,
                 ui,
@@ -17777,6 +17832,168 @@ fn disclose_vector_edit(doc: &mut OpenDoc, disclosures: &[String]) {
     }
     // ui-text-exempt: a separator between core-authored sentences, not a message
     doc.pending_note = Some(disclosures.join(" "));
+}
+
+/// Draw the **editor chrome** for every form-field widget on the current page
+/// — a dashed, tinted outline and a type letter — so a field the document
+/// gives no visible border can still be found (Pass 47.3, standing rule
+/// **R167**).
+///
+/// # The defect this exists for, observed rather than argued
+///
+/// `fixtures/synthetic/forms/demo-form.pdf` has two fields. Opened in pdfce on
+/// 2026-08-08, the canvas showed **one** — the check box, whose appearance is
+/// vector artwork pdfce draws. The text field was not faint or unstyled; it
+/// was **absent**, and the status bar said so in the application's own words:
+///
+/// ```text
+/// 1 annotation(s) have no appearance stream pdfce can paint, so nothing was
+/// drawn for them (pdfce never invents a look): Widget ×1.
+/// ```
+///
+/// Meanwhile the Forms panel listed *"Full name (p. 1)"* with a working text
+/// box. **The operator could type a value into a field they could not
+/// locate.** For a form editor that is close to disqualifying, and it is the
+/// direct cause of the operator's *"feels incomplete"* report.
+///
+/// # R43 is NOT the bug, and is not changed
+///
+/// R43 says pdfce renders an annotation from its `/AP` or not at all — it
+/// never synthesises appearance from `/MK`. That is a real spec-fidelity
+/// property worth protecting: a border pdfce invented would be a border the
+/// document does not have, and would then differ from every other viewer.
+///
+/// The bug was that **nothing ever filled the gap R43 deliberately leaves.**
+/// R167 is the companion rule that authorises this layer, on three conditions,
+/// all met here:
+///
+/// 1. **Never written.** This paints into the frame and touches no object. No
+///    `/AP`, no `/MK`, no dirty bit — the document is byte-identical whether
+///    this ran or not.
+/// 2. **Unmistakably chrome.** A DASHED stroke in a distinct hue. The dash is
+///    the load-bearing half: no PDF producer emits a dashed hairline as a
+///    field border by convention, so the outline cannot be mistaken for the
+///    document's own artwork the way a solid rectangle could.
+/// 3. **Editing context only.** Gated on [`form_context_active`], so a plain
+///    viewing session shows exactly what R43 already guarantees and nothing
+///    more.
+///
+/// # Why the type letter, and why not an icon
+///
+/// A rectangle says *"a field is here"* and not *"which kind"*, and the kinds
+/// behave so differently that confusing them wastes the operator's time — a
+/// check box is a two-state toggle, a choice field cannot be filled at all
+/// without options. A single letter is legible at the size a widget actually
+/// occupies (often 18×18 pt) where a glyph would be a smudge, and it costs no
+/// icon-atlas lookup per widget on a page that may carry hundreds.
+/// Whether a **form-editing context** is active, which is what gates the
+/// field chrome (Pass 47.3, R167 condition 3).
+///
+/// Two states qualify, and both mean the operator is working ON the form
+/// rather than reading the document:
+///
+/// - the **Forms panel** is the visible pane subject — they are looking at a
+///   list of fields and need to know which row is which rectangle;
+/// - the **Create Field** tool is armed — they are placing fields and need to
+///   see the ones already there, if only to avoid landing on top of one.
+///
+/// Outside those, nothing is drawn and a plain viewing session shows exactly
+/// what R43 guarantees. That gate is the whole reason R167 can authorise this
+/// layer without weakening R43: the chrome is never present when someone is
+/// simply reading a PDF.
+fn form_context_active(app_subject: ribbon::PaneSubject, doc: &OpenDoc) -> bool {
+    app_subject == ribbon::PaneSubject::Forms || doc.active_tool() == Some(CanvasTool::PlaceField)
+}
+
+fn draw_form_field_chrome(
+    doc: &OpenDoc,
+    ui: &egui::Ui,
+    image_rect: egui::Rect,
+    extent: (f32, f32),
+    zoom: f32,
+    highlight: Option<pdfce_core::object::ObjId>,
+) {
+    let Some(page) = doc.pages.get(doc.view.page_index) else {
+        return;
+    };
+    let Some(form) = pdfce_core::forms::parse_acroform(&doc.session.graph()) else {
+        return;
+    };
+    let painter = ui.painter_at(image_rect);
+    let base = ui.visuals().selection.stroke.color;
+    // A hue of its own, distinct from the object-selection accent, because it
+    // means something different: "a control lives here", not "this is
+    // selected". R84 — the dash carries the distinction too, not colour alone.
+    let chrome = egui::Color32::from_rgb(150, 90, 200);
+
+    let page_index = doc.view.page_index;
+    let Some(page_id) = doc.pages.get(page_index).map(|p| p.id) else {
+        return;
+    };
+    for field in &form.fields {
+        for widget in &field.widgets {
+            // Only this page's widgets. `/P` is authoritative when present;
+            // without it the widget is skipped rather than guessed onto the
+            // current page, which would draw a box over a field that is
+            // somewhere else entirely.
+            // `/P` is authoritative when present; without it the widget is
+            // SKIPPED rather than guessed onto the current page, which would
+            // draw a box over a field that lives somewhere else entirely.
+            // Same identity the Forms panel's "(p. N)" suffix resolves.
+            if widget.page != Some(page_id) {
+                continue;
+            }
+            let Some(rect) = widget.rect else {
+                continue;
+            };
+            let to_screen = |x: f64, y: f64| -> Option<egui::Pos2> {
+                #[allow(
+                    clippy::cast_possible_truncation,
+                    reason = "page coordinates are f32 on the canvas side already" // ui-text-exempt: clippy lint justification, never displayed
+                )]
+                let p = egui::pos2(x as f32, y as f32);
+                viewer::pdf_space_to_canvas(p, page)
+                    .map(|c| viewer::page_to_screen(c, image_rect, extent, zoom))
+            };
+            let (Some(a), Some(b)) = (to_screen(rect.llx, rect.lly), to_screen(rect.urx, rect.ury))
+            else {
+                continue;
+            };
+            let r = egui::Rect::from_two_pos(a, b);
+            let highlighted = highlight == Some(field.id);
+            let colour = if highlighted { base } else { chrome };
+            let width = if highlighted { 2.0 } else { 1.0 };
+            // Dashed, per R167 condition (2). Drawn as four dashed segments
+            // rather than a stroked rect because egui has no dashed-rect
+            // primitive.
+            let dash = 4.0;
+            let gap = 3.0;
+            for (p0, p1) in [
+                (r.left_top(), r.right_top()),
+                (r.right_top(), r.right_bottom()),
+                (r.right_bottom(), r.left_bottom()),
+                (r.left_bottom(), r.left_top()),
+            ] {
+                painter.extend(egui::Shape::dashed_line(
+                    &[p0, p1],
+                    egui::Stroke::new(width, colour),
+                    dash,
+                    gap,
+                ));
+            }
+            // The type letter, at the widget's top-left, only when the box is
+            // big enough to hold it without covering the field's own content.
+            if r.width() > 14.0 && r.height() > 12.0 {
+                painter.text(
+                    r.left_top() + egui::vec2(2.0, 1.0),
+                    egui::Align2::LEFT_TOP,
+                    ui_text::form_field_chrome_letter(field.field_type, field.button_kind),
+                    egui::FontId::monospace(9.0),
+                    colour,
+                );
+            }
+        }
+    }
 }
 
 fn draw_selection_outlines(
