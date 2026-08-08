@@ -1859,6 +1859,26 @@ pub fn ribbon_group_fonts() -> &'static str {
 pub fn ribbon_group_protect() -> &'static str {
     "Protect"
 }
+/// Tooltip on the ribbon's collapse chevron while the band is SHOWING
+/// (Pass 47.2).
+///
+/// Names the space it buys, because that is the reason to want it: a
+/// captioned two-row band costs vertical room against a large CAD sheet,
+/// which is the trade the operator accepted when he asked for the toggle.
+pub fn ribbon_collapse_tooltip() -> &'static str {
+    "Collapse the ribbon — hides the command band and keeps the tabs, giving the page more room. Click the chevron again to bring it back."
+}
+
+/// Tooltip on the ribbon's collapse chevron while the band is HIDDEN
+/// (Pass 47.2).
+///
+/// Says plainly that the chevron is the way back. It is the only way back —
+/// clicking a tab does not temporarily reveal the band the way Office does —
+/// so the tooltip must not imply otherwise.
+pub fn ribbon_expand_tooltip() -> &'static str {
+    "Show the ribbon — brings the command band back under the tabs."
+}
+
 /// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_show() -> &'static str {
     "Show"

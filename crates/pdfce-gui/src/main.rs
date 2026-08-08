@@ -444,6 +444,12 @@ const LEFT_DOCK_DEFAULT_WIDTH_PTS: f32 = 380.0;
 /// the footer eat the page. ~8 lines before it scrolls.
 const STATUS_BAR_MAX_HEIGHT: f32 = 220.0;
 
+/// Vertical gap between a ribbon group's controls and its caption (Pass
+/// 47.2). Small enough that the caption reads as belonging to the row above
+/// it rather than floating between two groups — which is the whole job the
+/// caption does.
+const RIBBON_CAPTION_GAP: f32 = 2.0;
+
 /// Launch the shell, optionally opening a file named on the command line.
 ///
 /// ## The one argument, and why it is not a `clap` surface
@@ -888,6 +894,20 @@ struct PdfceApp {
     /// Session state, same progressive-disclosure default as
     /// `properties_open`.
     shortcuts_open: bool,
+    /// Whether the ribbon's control band is collapsed to just the tab strip
+    /// (Pass 47.2), Office's own `Ctrl+F1` behaviour.
+    ///
+    /// The operator's answer to decision 033 §7 Q4 accepted a two-row band
+    /// with captions — which costs vertical space against a large CAD sheet —
+    /// **plus a collapse toggle**, so density is a per-session choice rather
+    /// than a design decision baked in. That is why this is a toggle and not
+    /// a "compact mode" preference: a preference would need persistence,
+    /// which pdfce does not have (R15 is unbuilt), and would then be a
+    /// setting that silently forgets itself.
+    ///
+    /// Session state, deliberately, and consistent with every other view
+    /// toggle here.
+    ribbon_collapsed: bool,
     /// The window/taskbar title last pushed to the platform layer (P0-3).
     ///
     /// The wanted title is recomputed from `status` every frame, but is
@@ -1089,6 +1109,11 @@ impl Default for PdfceApp {
         Self {
             status: Status::Idle,
             rail_expanded: true,
+            // The band starts SHOWING. A ribbon whose commands are hidden on
+            // first run is a ribbon nobody finds, and the whole point of Pass
+            // 47.2 is that the band should be legible — collapsing is the
+            // operator's deliberate choice for room, not a default.
+            ribbon_collapsed: false,
             diag_script: diag::Script::from_env(),
             diagnostics_expanded: false,
             selection_notes_expanded: false,
@@ -3654,6 +3679,8 @@ enum Action {
     /// only one that gets debounced.
     ZoomBy(f32),
     ToggleRail,
+    /// Collapse or restore the ribbon's control band (Pass 47.2).
+    ToggleRibbonCollapsed,
     /// Show or hide annotation appearances on the canvas (Pass 6.0,
     /// §12.5). A **view-state** control: changes pixels, not bytes, so it
     /// carries no undo entry — it only re-rasterizes the current page.
@@ -7543,6 +7570,10 @@ impl PdfceApp {
                 self.rail_expanded = !self.rail_expanded;
                 return;
             }
+            Action::ToggleRibbonCollapsed => {
+                self.ribbon_collapsed = !self.ribbon_collapsed;
+                return;
+            }
             Action::ToggleAnnotations => {
                 // View-state only: flip the per-document flag; the texture
                 // staleness check in `settle_and_rasterize` sees `t.
@@ -8061,6 +8092,7 @@ impl PdfceApp {
             // rather than `&mut OpenDoc`.
             Action::Open
             | Action::ToggleRail
+            | Action::ToggleRibbonCollapsed
             | Action::ToggleAnnotations
             | Action::ToggleShowPoints
             | Action::ToggleProperties
@@ -10017,13 +10049,40 @@ impl PdfceApp {
             }
             // The document summary stays at the far right of the strip, where
             // it has always been — it describes the file, not the tab, so it
-            // must not move when the tab does.
+            // must not move when the tab does. The collapse chevron sits
+            // between the tabs and the summary, which is where Office puts
+            // its own.
             let summary = self.status_summary();
+            let collapsed = self.ribbon_collapsed;
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(summary);
+                let (glyph, tip) = if collapsed {
+                    (icons::Icon::ChevronDown, ui_text::ribbon_expand_tooltip())
+                } else {
+                    (icons::Icon::ChevronUp, ui_text::ribbon_collapse_tooltip())
+                };
+                if Self::icon_button(ui, glyph, tip).clicked() {
+                    actions.push(Action::ToggleRibbonCollapsed);
+                }
             });
         });
         ui.separator();
+        // COLLAPSED: the tab strip stays, the band goes. Office's Ctrl+F1.
+        //
+        // The band is not emitted at all rather than hidden with zero height,
+        // which is the same discipline R125 applies to inactive tabs — a
+        // control that is not emitted is not in the focus chain, so a
+        // collapsed ribbon does not leave a dozen invisible Tab stops behind.
+        //
+        // ⚠ NAMED SIMPLIFICATION: Office also shows the band TEMPORARILY when
+        // a tab is clicked while collapsed, then re-hides it after a command.
+        // That needs a transient "showing over the document" overlay state
+        // with its own dismissal rules, and is deliberately not built here.
+        // The chevron is the only way back, and it stays visible while
+        // collapsed precisely so the way back is never hidden.
+        if self.ribbon_collapsed {
+            return;
+        }
 
         // ---- Row 2: the active tab's band ------------------------------
         ui.horizontal(|ui| {
@@ -10034,36 +10093,76 @@ impl PdfceApp {
         });
     }
 
-    /// Every toolbar control, in group order, laid into the wrapping row
-    /// [`Self::toolbar`] builds.
+    /// Lay one ribbon group out as Office lays one out: its controls in a
+    /// row, its **caption beneath them**, and a vertical rule separating it
+    /// from the next group (Pass 47.2).
     ///
-    /// Split out from [`Self::toolbar`] purely so the layout scaffolding
-    /// and the control list can each be read without the other; the
-    /// grouping, ordering and `ui.separator()` convention are unchanged
-    /// from before the icon swap (the ui-spec explicitly does not
-    /// reorder or regroup anything — it only assigns an image to each
-    /// existing control).
-    /// Whether `group` shows on `tab`, emitting its caption when it does
-    /// (Pass 24.1).
+    /// # What was wrong with the shape this replaces
     ///
-    /// One call site per group, replacing a bare `tab.shows(..)` test, so a
-    /// group cannot appear without its caption — which is the difference
-    /// between a ribbon and a toolbar someone filtered. The caption is the
-    /// only thing telling an operator that "Aa" and "I⁺ Aa" are two members of
-    /// **Content** rather than two unrelated buttons.
+    /// The predecessor was a `-> bool` predicate that emitted the caption
+    /// *inline, to the LEFT of* the group's controls, in a single flat row.
+    /// Captured from the running application on 2026-08-08 that produces:
     ///
-    /// Emits a separator BEFORE the caption rather than after, so the band
-    /// never ends with a trailing divider and the first group never starts
-    /// with one.
-    fn ribbon_group(ui: &mut egui::Ui, tab: ribbon::RibbonTab, group: ribbon::RibbonGroup) -> bool {
+    /// ```text
+    /// File [Open…] [Save a copy…] Document [Properties] Clipboard [Copy this page's text] …
+    /// ```
+    ///
+    /// — a ~26 px strip in which the captions read as just more small controls
+    /// and **the grouping is invisible**. The whole band parses as an
+    /// undifferentiated toolbar with a tab strip above it, which is precisely
+    /// the operator's *"doesn't look like Office"* complaint: the one
+    /// structural cue a ribbon has — a labelled block of related controls —
+    /// was the thing being dropped.
+    ///
+    /// # Why a closure rather than the `-> bool` gate it replaces
+    ///
+    /// Immediate mode. To put the caption *under* the controls, the controls
+    /// must be emitted inside a vertical container that is still open when the
+    /// caption is written; a predicate returning `bool` has already returned
+    /// before the body runs. That is the whole reason for the signature
+    /// change — the group set, the ordering and the separator convention are
+    /// unchanged.
+    ///
+    /// # It also closes a class of defect by construction
+    ///
+    /// Two sites previously bypassed the predicate and therefore drew no
+    /// caption at all: `LayoutReset` used a bare `tab.shows(..)`, and `Show`
+    /// and `Panels` shared one `shows(A) || shows(B)` block. Both were visible
+    /// in the 2026-08-08 capture as unlabelled floating controls. With the
+    /// body handed to this function there is no longer a code path that shows
+    /// a group without captioning it.
+    fn ribbon_group_ui(
+        ui: &mut egui::Ui,
+        tab: ribbon::RibbonTab,
+        group: ribbon::RibbonGroup,
+        body: impl FnOnce(&mut egui::Ui),
+    ) {
         if !tab.shows(group) {
-            return false;
+            return;
         }
+        // Separator BEFORE the caption rather than after, so the band never
+        // ends with a trailing rule and the first group never starts with one.
         if tab.groups().first() != Some(&group) {
             ui.separator();
         }
-        ui.label(egui::RichText::new(group.caption()).weak().small());
-        true
+        ui.vertical(|ui| {
+            // The controls row FIRST, and its measured width is what the
+            // caption is then centred within. Office centres a group caption
+            // under its group, and doing that here needs the row's width,
+            // which in immediate mode only exists after the row is emitted —
+            // hence measure-then-allocate rather than a `vertical_centered`
+            // wrapper, which would justify to the whole remaining band and
+            // scatter the captions across the window.
+            let row = ui.horizontal(|ui| body(ui)).response.rect;
+            ui.add_space(RIBBON_CAPTION_GAP);
+            ui.allocate_ui_with_layout(
+                egui::vec2(row.width(), 0.0),
+                egui::Layout::top_down(egui::Align::Center),
+                |ui| {
+                    ui.label(egui::RichText::new(group.caption()).weak().small());
+                },
+            );
+        });
     }
 
     /// The **Quick Access Toolbar** — Open, Save a copy, Undo, Redo — drawn
@@ -10246,6 +10345,18 @@ impl PdfceApp {
         });
     }
 
+    /// Every toolbar control, in group order, laid into the wrapping row
+    /// [`Self::toolbar`] builds.
+    ///
+    /// Split out from [`Self::toolbar`] purely so the layout scaffolding and
+    /// the control list can each be read without the other.
+    ///
+    /// **Pass 47.2 changed the shape of every call site here** — each group
+    /// now hands its body to [`Self::ribbon_group_ui`] as a closure instead of
+    /// sitting behind an `if` predicate, so the caption can be drawn beneath
+    /// the controls rather than inline before them. The group set and the
+    /// ordering are unchanged; what moved is where the caption goes and
+    /// which code path is capable of omitting it (none).
     fn toolbar_controls(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         use ribbon::RibbonGroup as RG;
         let tab = self.ribbon_tab;
@@ -10270,10 +10381,15 @@ impl PdfceApp {
             // the Quick Access Toolbar (Pass 47.1). Moved, not mirrored: a
             // command in two places is R123's two-mental-models failure.
 
-            if tab.shows(RG::Show) || tab.shows(RG::Panels) {
-                // Group: view (rail toggle, annotation-visibility). These
-                // govern what is on screen rather than the document, per the
-                // placement taxonomy (view-state → toolbar view group).
+            // ★ SPLIT INTO ITS TWO DECLARED GROUPS (Pass 47.2).
+            //
+            // This was ONE `tab.shows(A) || tab.shows(B)` block covering two
+            // declared groups, so NEITHER caption was ever emitted — on the
+            // View tab the four leftmost controls floated with no label of any
+            // kind, confirmed in the 2026-08-08 capture. `Panels` governs which
+            // DOCKS are visible; `Show` governs what is drawn OVER the page.
+            // Two different questions, and the captions are what say so.
+            Self::ribbon_group_ui(ui, tab, RG::Panels, |ui| {
                 if Self::icon_button(ui, icons::Icon::Sidebar, ui_text::rail_toggle_tooltip())
                     .clicked()
                 {
@@ -10298,6 +10414,8 @@ impl PdfceApp {
                 if b.clicked() {
                     actions.push(Action::ToggleObjectsSidebar);
                 }
+            });
+            Self::ribbon_group_ui(ui, tab, RG::Show, |ui| {
                 // Annotation-visibility toggle (Pass 6.0). A `SelectableLabel`
                 // rather than a plain button: on a lightly-annotated page,
                 // flipping it can produce no visible canvas change, so the
@@ -10340,15 +10458,14 @@ impl PdfceApp {
                         actions.push(Action::ToggleShowPoints);
                     }
                 }
-                ui.separator();
-            }
+            });
 
             // RG::Navigate and RG::Zoom are GONE from the ribbon — page
             // navigation and zoom moved to the STATUS BAR (Pass 47.1), where
             // every mainstream PDF reader puts them and where they are
             // reachable from every tab. See `status_view_controls`.
             if let Status::Open(doc) = &self.status {
-                if Self::ribbon_group(ui, tab, RG::Pages) {
+                Self::ribbon_group_ui(ui, tab, RG::Pages, |ui| {
                     // Group: edit. A new group rather than additions to an
                     // existing one, exactly as the module docs anticipated:
                     // rotation acts on the document, whereas everything to
@@ -10378,8 +10495,8 @@ impl PdfceApp {
                     // Decision 017 §8.3 keeps this control and its shortcut as
                     // the Properties entry point and changes only where they
                     // lead. Its selected state is now DERIVED from the dock —
-                }
-                if Self::ribbon_group(ui, tab, RG::DocumentProperties) {
+                });
+                Self::ribbon_group_ui(ui, tab, RG::DocumentProperties, |ui| {
                     // "the dock is open AND Properties is its front tab" — so
                     // the toggle reports what is on screen rather than a
                     // separate boolean that could disagree with it.
@@ -10396,8 +10513,8 @@ impl PdfceApp {
                     {
                         actions.push(Action::ToggleProperties);
                     }
-                }
-                if Self::ribbon_group(ui, tab, RG::Markup) {
+                });
+                Self::ribbon_group_ui(ui, tab, RG::Markup, |ui| {
                     // Pass 6.1 markup authoring — an edit tool, so it lives in
                     // the toolbar edit group per the settled placement taxonomy
                     // (edit → toolbar; ARCHITECTURE.md §12 continuation-23). A
@@ -10441,9 +10558,9 @@ impl PdfceApp {
                         ui.label(ui_text::markup_color_label());
                         ui.color_edit_button_srgba(&mut self.markup_color);
                     });
-                }
+                });
 
-                if Self::ribbon_group(ui, tab, RG::CommentsList) {
+                Self::ribbon_group_ui(ui, tab, RG::CommentsList, |ui| {
                     // The entry point to the Comments pane. Disabled with a
                     // reason when there are no pages (R83) — a control that
                     // vanishes teaches nothing, a disabled one teaches what
@@ -10460,9 +10577,9 @@ impl PdfceApp {
                             actions.push(Action::ToggleCommentsPanel);
                         }
                     });
-                }
+                });
 
-                if Self::ribbon_group(ui, tab, RG::Notes) {
+                Self::ribbon_group_ui(ui, tab, RG::Notes, |ui| {
                     // Pass 6.2 text-bearing authoring — the same edit-group,
                     // same minimal-affordance approach as Markup. A menu opens
                     // the text-entry popup; the actual authoring happens on
@@ -10505,9 +10622,9 @@ impl PdfceApp {
                             }
                         }
                     });
-                }
+                });
 
-                if Self::ribbon_group(ui, tab, RG::ContentTools) {
+                Self::ribbon_group_ui(ui, tab, RG::ContentTools, |ui| {
                     // THE MASTER EDIT SWITCH, first in the group because it
                     // governs everything after it. The operator: "should have
                     // one toggle to turn all edits on or off."
@@ -10601,9 +10718,9 @@ impl PdfceApp {
                             actions.push(Action::SelectCanvasTool(Some(CanvasTool::VectorEdit)));
                         }
                     });
-                }
+                });
 
-                if Self::ribbon_group(ui, tab, RG::MeasureTools) {
+                Self::ribbon_group_ui(ui, tab, RG::MeasureTools, |ui| {
                     // Pass 12.M2 Measure ▾ — a menu (not four toolbar icons) for the
                     // three dimension tools (ui-spec §1.2, rule 3: dimensioning is
                     // used in short deliberate bursts, so it earns a menu, not
@@ -10682,9 +10799,9 @@ impl PdfceApp {
                             actions.push(Action::ToggleDimensionGroups);
                         }
                     });
-                }
+                });
 
-                if Self::ribbon_group(ui, tab, RG::Forms) {
+                Self::ribbon_group_ui(ui, tab, RG::Forms, |ui| {
                     // The entry point to the Forms pane. Disabled with a
                     // reason when the document has no pages (R83), for the
                     // same reason every other document-scoped control here is:
@@ -10702,9 +10819,9 @@ impl PdfceApp {
                             actions.push(Action::ToggleFormsPanel);
                         }
                     });
-                }
+                });
 
-                if Self::ribbon_group(ui, tab, RG::FormsAuthor) {
+                Self::ribbon_group_ui(ui, tab, RG::FormsAuthor, |ui| {
                     // Decision 020 F5's Create Field tool. A toggle, the same
                     // widget as every other tool arming control, and disabled
                     // with a reason when there are no pages (R83) rather than
@@ -10729,9 +10846,9 @@ impl PdfceApp {
                             actions.push(Action::SelectCanvasTool(Some(CanvasTool::PlaceField)));
                         }
                     });
-                }
+                });
 
-                if Self::ribbon_group(ui, tab, RG::Protect) {
+                Self::ribbon_group_ui(ui, tab, RG::Protect, |ui| {
                     // Pass 8.1 redaction (ui-spec §3.1) — the entry point to the
                     // dock's Redact panel.
                     //
@@ -10779,7 +10896,7 @@ impl PdfceApp {
                         actions.push(Action::ToggleRedactPanel);
                     }
                     ui.separator();
-                }
+                });
 
                 // RG::History is GONE from the ribbon — Undo and Redo moved to
                 // the Quick Access Toolbar (Pass 47.1). This was the single
@@ -10788,7 +10905,7 @@ impl PdfceApp {
                 // undo without leaving their work.
             }
 
-            if Self::ribbon_group(ui, tab, RG::Clipboard) {
+            Self::ribbon_group_ui(ui, tab, RG::Clipboard, |ui| {
                 // P1-4: a fixed space before the ungrouped-utility cluster,
                 // emitted unconditionally so the cluster starts from the same
                 // offset whether or not a document is open (Copy-text only
@@ -10840,9 +10957,9 @@ impl PdfceApp {
                         actions.push(Action::CopyText(CopyScope::Document));
                     }
                 }
-            }
+            });
 
-            if Self::ribbon_group(ui, tab, RG::Batch) {
+            Self::ribbon_group_ui(ui, tab, RG::Batch, |ui| {
                 // The whole of Pass 3.2's toolbar growth: ONE toggle. Every
                 // other new capability lives on the thumbnails (page-scoped)
                 // or in the dock this opens (file-scoped). The toolbar is
@@ -10858,7 +10975,7 @@ impl PdfceApp {
                 {
                     actions.push(Action::ToggleTools);
                 }
-            }
+            });
 
             // Fonts — Tools ▸ Fonts (Pass 24.1 follow-up).
             //
@@ -10876,8 +10993,8 @@ impl PdfceApp {
             // opening it on whatever the operator last had open: a control
             // named "Font folders…" that lands somewhere else is a control
             // that lied.
-            if Self::ribbon_group(ui, tab, RG::Fonts)
-                && ui
+            Self::ribbon_group_ui(ui, tab, RG::Fonts, |ui| {
+                if ui
                     .add(Self::icon_text(
                         ui,
                         icons::Icon::FontFolders,
@@ -10885,22 +11002,31 @@ impl PdfceApp {
                     ))
                     .on_hover_text(ui_text::font_folders_intro())
                     .clicked()
-            {
-                actions.push(Action::OpenFontFolders);
-            }
+                {
+                    actions.push(Action::OpenFontFolders);
+                }
+            });
             // Reset layout… — File ▸ Layout (Pass 24.1). Opens the chooser
             // rather than acting immediately: it is the one control here whose
             // effect the operator cannot see until after it happens, and
             // "reset the layout" now means more than it used to.
-            if tab.shows(RG::LayoutReset)
-                && ui
+            // ★ THIS SITE USED A BARE `tab.shows(..)` AND THEREFORE NEVER
+            // DREW ITS CAPTION OR ITS SEPARATOR — visible in the 2026-08-08
+            // capture as a "Reset layout…" button floating unlabelled between
+            // Clipboard and Help. Routing it through the helper like every
+            // other group fixes it BY CONSTRUCTION: there is no longer a code
+            // path that shows a group without captioning it, which is the
+            // difference between a ribbon and a toolbar someone filtered.
+            Self::ribbon_group_ui(ui, tab, RG::LayoutReset, |ui| {
+                if ui
                     .button(ui_text::reset_layout_button())
                     .on_hover_text(ui_text::reset_layout_tooltip())
                     .clicked()
-            {
-                actions.push(Action::OpenResetLayout);
-            }
-            if Self::ribbon_group(ui, tab, RG::Help) {
+                {
+                    actions.push(Action::OpenResetLayout);
+                }
+            });
+            Self::ribbon_group_ui(ui, tab, RG::Help, |ui| {
                 // Keyboard-shortcuts reference (P1-2), the other ungrouped
                 // utility control: a disclosure surface, not an edit or a
                 // document-scoped tool, so it sits beside Tools rather than in
@@ -10911,7 +11037,7 @@ impl PdfceApp {
                 {
                     self.shortcuts_open = !self.shortcuts_open;
                 }
-            }
+            });
             // The status summary is NOT emitted here — it is pinned to
             // the row's right edge by [`Self::toolbar`]'s outer
             // right-to-left layout, so that it cannot join the wrap flow

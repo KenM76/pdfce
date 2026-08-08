@@ -397,7 +397,13 @@ impl RibbonTab {
             ],
             Self::Measure => &[RibbonGroup::MeasureTools],
             Self::Tools => &[RibbonGroup::Batch, RibbonGroup::Fonts, RibbonGroup::Protect],
-            Self::View => &[RibbonGroup::Show, RibbonGroup::Panels],
+            // Panels BEFORE Show, matching the order `toolbar_controls`
+            // renders them. This list and the render order must agree: they
+            // disagreed once before (File was declared FileOps/Clipboard/
+            // Document and rendered FileOps/Document/Clipboard) and only a
+            // screenshot caught it, because the separator logic reads the
+            // FIRST entry to decide which group skips its leading rule.
+            Self::View => &[RibbonGroup::Panels, RibbonGroup::Show],
         }
     }
 
