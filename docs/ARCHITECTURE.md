@@ -11594,3 +11594,147 @@ with a forward pointer.
   after: `check-ledger-numbers.py` exit 0 / exit 0, `check-passes-filed.py`
   exit 0 / exit 0.** **Gates relayed from the engineer, not measured here
   (R87): 2181 tests / 0 failed, clippy 0, both ledger checkers 0.**
+
+### 2026-08-07 (twenty-ninth filing) — **geometry manipulation is its own capability, not a forms one: `Pass 46.0` + `Pass 46.1` filed on the operator's request; re-flag stays unscoped; `R167` stays free**
+
+**Operator request, verbatim:** ***"form fields and everything else should be
+draggable and resizeable."*** It arrived **minutes after** `ROADMAP.md`'s
+twenty-eighth filing recorded field move / resize / re-flag as **UNSCOPED —
+not deferred, not refused, not planned** — and it is **wider than the gap as
+filed**, naming *everything else* rather than only fields.
+
+**RULING 1 — this is a NAMED plan entry, NOT an amendment to decision 020.**
+Decision 020 governs **authoring**: bringing a field into existence, its
+name-collision resolver, its per-type minimums. **Changing a placed widget's
+`/Rect` is geometry manipulation.** The same verb that moves a widget moves a
+highlight, an ink stroke and a redaction mark — **§12.5.2 Table 164 makes
+`/Rect` Required on every annotation subtype** — and decision 020 has no
+authority over any of those. **Filing it inside 020 would put it where nobody
+scoping *editing* would look**, which is the failure the twenty-eighth filing
+was written to prevent. Filed instead as a *Next up* entry and as two Pass
+IDs.
+
+**⚠ THE NARROWING: RE-FLAG IS NOT COVERED AND STAYS UNSCOPED.** The operator's
+sentence is about **geometry**. **`/Ff` bit editing** (read-only, required,
+multiline, comb, `RadiosInUnison`) **has no geometric component** and belongs
+to the forms domain in a way `/Rect` does not. **Folding it into a geometry
+Pass because it sat beside move and resize in one earlier sentence would be
+scope drift, not scoping.** It remains owed a decision — a new F-slice under
+decision 020, or a named refusal. Three items went in as unscoped; **two came
+out scoped and one did not**, which is the state the record must preserve.
+
+**RULING 2 — `R167` stays free.** The byte-identity candidate the
+twenty-eighth filing wrote up is **a RAG finding, not a standing rule**. Its
+four grounds hold and **the third decides it: *"validate every baseline"
+commissions WORK, not CARE*** — the exact ground the **ablation candidate**
+was refused on **the same day**. **Refusing it there and minting it here would
+make the bar decorative**, and a bar that bends to whoever happens to be
+filing enforces nothing. **Ceiling stays `R166`; `R167` next free.** Second
+consecutive filing to leave it free, both for the same stated reason.
+
+**THE ARCHITECTURAL CONTENT — why this is two Passes and not one, and it is
+not "fields vs. everything else".** The boundary is **where the geometry is
+stored**:
+
+- **Family (a) — dictionary-`/Rect`.** Four numbers in an annotation
+  dictionary. **`Pass 46.0`.** Members: form-field widgets, markup
+  annotations, redaction marks, links, ce dimensions, popups.
+- **Family (b) — content-stream.** Coordinate operands inside a page content
+  stream. **`Pass 46.1`.** Members: vector paths, text, images, form XObjects.
+
+**A form-field widget is family (a) and so is a highlight; a vector path is
+family (b). The operator's "everything else" straddles both.**
+
+**THE FINDING THAT MAKES FAMILY (a) NOT THE EASY ONE — normative, not an
+implementation detail.** **§12.5.5's placement algorithm, step (b)** computes a
+matrix **A** that maps the transformed appearance box's lower-left and
+upper-right corners onto `/Rect`'s corners **independently in x and y**.
+Therefore **enlarging `/Rect` does not reveal more artwork — it
+ANISOTROPICALLY STRETCHES the artwork already present.** The spec RAG
+(`PDF_Spec/iso32000/iso32000__s__12.5.5.md`) states it outright: *"aspect
+ratio is not preserved. This is normative, not a bug."* Because **R43** paints
+an annotation from its appearance stream **or not at all**, every
+pdfce-authored annotation carries a baked `/AP` — so **a resize is a
+REGENERATE, not a `/Rect` write.** A `/Rect`-only resize yields stretched
+arrowheads, stretched glyphs and stretched border strokes: **plausible at
+1.05×, obviously broken at 3×**, which passes a casual test and fails the
+operator's real one. **The regeneration path is the bulk of `Pass 46.0`, not
+the array write** — and `annot_author`'s builders being pure and deterministic
+(the property `move_dimension` already relies on) is the asset it spends.
+
+**THE FINDING THAT MAKES FAMILY (b) HARD — line width, checked against the
+spec rather than assumed.** A resize is either an **operand rewrite**
+(geometry scales, **the stroke does not**) or a **wrapping `q … cm … Q`**
+(**the stroke scales too**), and the two are **not interchangeable**.
+§8.4.3.2 (quoted in `PDF_Spec/iso32000/iso32000__s__8.4.md`) puts line width
+in **user-space units**, so: a `cm` scales every stroke; an **anisotropic**
+`cm` makes stroke thickness **orientation-dependent**; and **a line width of
+0** — *"the thinnest line that can be rendered at device resolution: 1 device
+pixel wide"*, ubiquitous in the CAD output that is this project's real
+corpus — **is not a number a scale can act on at all.** §8.4.3.5's miter limit
+is a *ratio to line width* and §8.4.3.4's join angle is measured *in user
+space*, so a non-uniform scale can visibly change corner shape with nothing
+about the miter limit edited. **A named refusal of non-uniform scale on
+stroked content is a legitimate third outcome** (decision 027). **The
+mechanism choice determines the data model, not just the implementation, and
+must be ruled before `Pass 46.1`'s core verb starts.**
+
+**THE GUI IS AN AXIS, NOT A THIRD FAMILY — and a drag needs NO confirm step.**
+Recorded so nobody rebuilds the box decision 024 §4.4 removed. **Rule 4 as
+narrowed by §4.4 explicitly permits direct manipulation whose result is
+visible and undoable**; §4.4's own words: it *"does not require a two-click
+confirmation for a direct manipulation whose result is fully visible on the
+canvas and reversible in one undo."* **What still binds:** nothing floats over
+the canvas (readouts, disclosures and refusals live in the tool's dock
+compartment at a fixed anchor), and **an INFERRED resize — a snap, a
+match-to-neighbour, an aspect-lock nobody asked for — is rule 4's territory in
+full.** The **GUI half ships WITH each family**, per **R151**, which exists
+because `move_subpath` sat callerless in core from Pass 28.0 until Pass 36.0.
+
+**⚠ ONE OWED RULING RAISED, NOT ADJUDICATED.**
+`EditSession::move_dimension`'s doc comment says patching `/Rect` alone *"would
+slide the box and leave the drawing inside it exactly where it was"*. **Read
+against §12.5.5(b) that appears too strong** — with `/BBox = /Rect_old` and
+identity `/Matrix`, translating `/Rect` makes **A** a pure translation.
+**The verb's BEHAVIOUR is not in question** (regeneration is correct either
+way: `/L`'s endpoints and the `/PieceInfo` sidecar go stale, and §12.5.6.7
+makes `/L` authoritative for any viewer that regenerates). **Its stated REASON
+is** — the recurring shape of *an obligation that stayed correct while its
+reason went stale*, the same shape as this librarian's own hard-rule-8
+amendment.
+
+**Body sections touched by this entry:** none. §4's API contract is not
+restated, because **no verb exists yet** — these are plan entries and ticking
+§4 for them would be the over-optimism `FEATURES.md`'s own maintenance
+contract forbids. **The capability-level record is `FEATURES.md`'s two new
+`Pass 46.0` / `Pass 46.1` *Planned* rows and `ROADMAP.md`'s *OPERATOR REQUEST
+2026-08-07* entry at the head of *Next up*.**
+
+**Git and backup state — CHECKED, not inferred (librarian hard rule 8).**
+`git rev-parse HEAD` → **`247b8fa`** — **not the `8689f76` the dispatch
+named**, because the `--defaults-from` fork committed mid-filing; the
+dispatch's figure was correct when written and **went stale during the work**,
+which is precisely why the rule forbids inferring disk state from documents.
+`git status --porcelain` → **0 lines**; `git remote -v` → **empty, exit 0.**
+Newest bundle (`ls -la D:\Dev\pdfce-backups\`) **`pdfce-20260807-1941.bundle`**
+(8,483,256 bytes), tip **read by `git bundle list-heads`** →
+`refs/heads/pass-8-redaction` = **`8689f764…`** = **exactly `HEAD~1`; the
+dispatch's bundle-tip figure is CONFIRMED, and `247b8fa` is in no bundle.**
+**Checkers re-run before and after: `check-ledger-numbers.py` exit 0 / exit 0,
+`check-passes-filed.py` exit 0 / exit 0.** **Ceilings after, quoted from the
+checker rather than restated:** *"Pass families with headings: up to **46**
+(highest ID **`46.0`**)"* and *"Pass families MENTIONED: up to **46** (highest
+ID **`46.2`**)"* · **`R166`** (**`R167`** next free) · decisions **`031`**
+(**`032`** next free). **Those two lines disagree by design:** `46.1` is filed
+but the heading parser reads only the first ID of a `Pass 46.0–46.1` range
+(same as the existing `Pass 24.0–24.5`), and **`46.2` is not filed at all** —
+it is named in prose as *free*, which reserves the number against reuse
+(project rule 2) without assigning it. **`46.2` remains available and
+deliberately unminted.** **A gate fix was made in passing and measured:** the
+entry was first written with the project's usual `### ★ Pass …` decoration,
+the checker proved it **invisible** (headings ceiling stuck at **45**, `46`
+listed as claimed-but-unheaded — the ten-heading `collect_passes` defect
+already in *Backlog*), the heading was rewritten to lead with `Pass`, and the
+same checker then read **46**. **The Backlog defect is not fixed; these two
+IDs are simply not an eleventh instance of it.** **No gates measured by this
+filing — it ran no build and no test, and claims none.**
