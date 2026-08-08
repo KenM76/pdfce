@@ -961,3 +961,158 @@ fn all_three_field_types_coexist_and_the_result_reopens() {
     let country = field_named(&reopened, "Country").expect("choice survives");
     assert_eq!(country.options.len(), 3);
 }
+
+// ===========================================================================
+// F6 — `--defaults-from`
+// ===========================================================================
+
+/// Saving and re-reading, so an assertion is about the FILE and not the model.
+///
+/// R159: `parse_acroform` would report a copied option list just as happily
+/// if the copy never reached the bytes, because it reads the same in-memory
+/// graph the edit wrote to. Round-tripping is what makes the claim about the
+/// document.
+fn saved_bytes(session: &mut EditSession) -> Vec<u8> {
+    session
+        .to_incremental_bytes(&pdfce_core::writer::SaveOptions::identity())
+        .expect("save")
+        .0
+}
+
+/// The flagship case: a choice field's `/Opt` copies, export≠display intact,
+/// and it is in the saved bytes rather than merely in the model.
+#[test]
+fn a_choice_option_list_copies_into_the_saved_bytes() {
+    let mut s = session("forms/radio-choice-form.pdf");
+    let defaults = s
+        .field_defaults("Country")
+        .expect("Country is a choice field");
+    assert_eq!(
+        defaults.options.len(),
+        3,
+        "the template's own list is the thing being copied; if this is 0 the \
+         test proves nothing about copying",
+    );
+
+    let mut spec = NewChoiceField::new(0, "Country2", rect(), Vec::new()).declining_tooltip();
+    let applied = spec.apply_defaults(&defaults);
+    assert!(!applied.type_mismatch, "choice -> choice is a match");
+    s.add_choice_field(&spec).expect("author");
+
+    let bytes = saved_bytes(&mut s);
+    let text = String::from_utf8_lossy(&bytes);
+    // Export and display DIFFER for these entries, so finding the pair in the
+    // file proves both halves survived — a copy that collapsed them to one
+    // string would still contain "Canada" and would still pass a weaker test.
+    assert!(
+        text.contains("(CA) (Canada)"),
+        "the copied /Opt must reach the file with its export/display pair intact",
+    );
+    assert!(text.contains("(MX) (Mexico)"), "second pair");
+    assert!(text.contains("(AR) (Argentina)"), "third pair");
+}
+
+/// A template of a different type copies NOTHING, and says so.
+///
+/// Not a partial copy: every property the four specs share is a boolean and
+/// no boolean copies, so there is no common subset left to transfer.
+#[test]
+fn a_different_type_copies_nothing_and_discloses_it() {
+    let s = session("forms/radio-choice-form.pdf");
+    let from_text = s.field_defaults("Notes").expect("Notes is a text field");
+    assert_eq!(from_text.field_type, Some(FieldType::Text));
+
+    let mut spec = NewChoiceField::new(0, "Mismatched", rect(), Vec::new()).declining_tooltip();
+    let applied = spec.apply_defaults(&from_text);
+
+    assert!(
+        applied.type_mismatch,
+        "a text template must report that it contributed nothing to a choice field",
+    );
+    assert!(
+        spec.options.is_empty(),
+        "nothing may transfer across a type boundary",
+    );
+}
+
+/// A radio template contributes nothing even to another radio field.
+///
+/// The types MATCH here; the copyable set is simply empty, because a radio
+/// field's only non-boolean property is a per-widget export value and
+/// `field_defaults` names a field. Reported the same way, because the fact
+/// the operator needs — "you asked for defaults and got none" — is the same.
+#[test]
+fn a_radio_template_contributes_nothing() {
+    let s = session("forms/radio-choice-form.pdf");
+    let defaults = s.field_defaults("Colour").expect("Colour is a radio group");
+    assert_eq!(defaults.button_kind, Some(ButtonKind::Radio));
+
+    let mut spec = NewChoiceField::new(0, "FromRadio", rect(), Vec::new()).declining_tooltip();
+    assert!(spec.apply_defaults(&defaults).type_mismatch);
+    assert!(spec.options.is_empty());
+}
+
+/// The accessibility name is NEVER copied — R105's purpose, not just its
+/// mechanism.
+///
+/// A copied `/TU` would leave the operator with an accessibility name they
+/// never chose while every mechanical check still passed. The template here
+/// HAS a tooltip precondition-checked below, so a failure to copy cannot be
+/// mistaken for the template having nothing to give.
+#[test]
+fn the_accessibility_name_is_never_copied() {
+    let mut s = session("forms/demo-form.pdf");
+    let mut source = NewTextField::new(0, "Template", rect()).with_tooltip("Announce me");
+    source.max_len = Some(42);
+    s.add_text_field(&source).expect("author the template");
+
+    let template = field_named(&s, "Template").expect("template exists");
+    assert!(
+        template.alternate_name.is_some(),
+        "precondition: the template must HAVE a /TU, or this test cannot \
+         distinguish 'not copied' from 'nothing to copy'",
+    );
+
+    let defaults = s.field_defaults("Template").expect("read defaults");
+    let mut spec = NewTextField::new(0, "Copy", rect()).declining_tooltip();
+    spec.apply_defaults(&defaults);
+    s.add_text_field(&spec).expect("author the copy");
+
+    let copy = field_named(&s, "Copy").expect("copy exists");
+    assert_eq!(
+        copy.alternate_name, None,
+        "R105: a copied tooltip satisfies the mechanism while defeating the \
+         purpose — the operator would carry an accessibility name they never \
+         decided",
+    );
+    assert_eq!(copy.max_len, Some(42), "but /MaxLen does copy");
+}
+
+/// Explicit arguments beat the template — it fills gaps, it does not overrule.
+#[test]
+fn an_explicit_value_is_not_overwritten_by_the_template() {
+    let mut s = session("forms/demo-form.pdf");
+    let mut source = NewTextField::new(0, "T", rect()).declining_tooltip();
+    source.max_len = Some(10);
+    s.add_text_field(&source).expect("author");
+
+    let defaults = s.field_defaults("T").expect("read");
+    let mut spec = NewTextField::new(0, "Explicit", rect()).declining_tooltip();
+    spec.max_len = Some(99);
+    spec.apply_defaults(&defaults);
+    assert_eq!(
+        spec.max_len,
+        Some(99),
+        "the operator spoke about THIS field; a template must not overrule it",
+    );
+}
+
+/// A template that does not exist is refused, not treated as empty.
+#[test]
+fn a_missing_template_is_refused() {
+    let s = session("forms/demo-form.pdf");
+    assert!(matches!(
+        s.field_defaults("NoSuchField"),
+        Err(EditError::FieldNotFound { .. })
+    ));
+}

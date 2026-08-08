@@ -1119,6 +1119,25 @@ enum Command {
         /// Mark the field required at submit time (`/Ff` bit 2).
         #[arg(long)]
         required: bool,
+        /// Pre-fill this field's properties from an existing field.
+        ///
+        /// Copies only NON-BOOLEAN, TYPE-MATCHED data — `--max-len` for a
+        /// text field, the option list for a choice field, the on-state for
+        /// a check box. A radio template copies nothing.
+        ///
+        /// Yes/no properties are never copied, and that is deliberate: these
+        /// are presence flags, so a copied `--multiline` could be added but
+        /// never turned off, and a single-line field could not be made from
+        /// a multiline template. The accessibility name is never copied
+        /// either — deciding it is the whole point of requiring
+        /// `--tooltip`/`--no-tooltip`, and inheriting someone else's answer
+        /// is not deciding.
+        ///
+        /// Anything given explicitly wins; this only fills gaps. When the
+        /// template contributes nothing, it says so rather than silently
+        /// doing nothing.
+        #[arg(long, value_name = "FIELD")]
+        defaults_from: Option<String>,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -1191,6 +1210,25 @@ enum Command {
         /// Mark the field required at submit time (`/Ff` bit 2).
         #[arg(long)]
         required: bool,
+        /// Pre-fill this field's properties from an existing field.
+        ///
+        /// Copies only NON-BOOLEAN, TYPE-MATCHED data — `--max-len` for a
+        /// text field, the option list for a choice field, the on-state for
+        /// a check box. A radio template copies nothing.
+        ///
+        /// Yes/no properties are never copied, and that is deliberate: these
+        /// are presence flags, so a copied `--multiline` could be added but
+        /// never turned off, and a single-line field could not be made from
+        /// a multiline template. The accessibility name is never copied
+        /// either — deciding it is the whole point of requiring
+        /// `--tooltip`/`--no-tooltip`, and inheriting someone else's answer
+        /// is not deciding.
+        ///
+        /// Anything given explicitly wins; this only fills gaps. When the
+        /// template contributes nothing, it says so rather than silently
+        /// doing nothing.
+        #[arg(long, value_name = "FIELD")]
+        defaults_from: Option<String>,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -1281,6 +1319,25 @@ enum Command {
         /// Mark the field required at submit time (`/Ff` bit 2).
         #[arg(long)]
         required: bool,
+        /// Pre-fill this field's properties from an existing field.
+        ///
+        /// Copies only NON-BOOLEAN, TYPE-MATCHED data — `--max-len` for a
+        /// text field, the option list for a choice field, the on-state for
+        /// a check box. A radio template copies nothing.
+        ///
+        /// Yes/no properties are never copied, and that is deliberate: these
+        /// are presence flags, so a copied `--multiline` could be added but
+        /// never turned off, and a single-line field could not be made from
+        /// a multiline template. The accessibility name is never copied
+        /// either — deciding it is the whole point of requiring
+        /// `--tooltip`/`--no-tooltip`, and inheriting someone else's answer
+        /// is not deciding.
+        ///
+        /// Anything given explicitly wins; this only fills gaps. When the
+        /// template contributes nothing, it says so rather than silently
+        /// doing nothing.
+        #[arg(long, value_name = "FIELD")]
+        defaults_from: Option<String>,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -1481,6 +1538,25 @@ enum Command {
         /// Mark the field required at submit time (`/Ff` bit 2).
         #[arg(long)]
         required: bool,
+        /// Pre-fill this field's properties from an existing field.
+        ///
+        /// Copies only NON-BOOLEAN, TYPE-MATCHED data — `--max-len` for a
+        /// text field, the option list for a choice field, the on-state for
+        /// a check box. A radio template copies nothing.
+        ///
+        /// Yes/no properties are never copied, and that is deliberate: these
+        /// are presence flags, so a copied `--multiline` could be added but
+        /// never turned off, and a single-line field could not be made from
+        /// a multiline template. The accessibility name is never copied
+        /// either — deciding it is the whole point of requiring
+        /// `--tooltip`/`--no-tooltip`, and inheriting someone else's answer
+        /// is not deciding.
+        ///
+        /// Anything given explicitly wins; this only fills gaps. When the
+        /// template contributes nothing, it says so rather than silently
+        /// doing nothing.
+        #[arg(long, value_name = "FIELD")]
+        defaults_from: Option<String>,
         /// Output path.
         #[arg(short, long)]
         output: PathBuf,
@@ -3101,6 +3177,7 @@ fn run() -> ExitCode {
             required,
             output,
             mode,
+            defaults_from,
             verify_undo,
         } => cmd_add_text_field(&AddTextFieldArgs {
             input: &input,
@@ -3116,6 +3193,7 @@ fn run() -> ExitCode {
             required,
             output: &output,
             mode,
+            defaults_from: defaults_from.as_deref(),
             verify_undo,
         }),
         Command::AddCheckBox {
@@ -3131,6 +3209,7 @@ fn run() -> ExitCode {
             required,
             output,
             mode,
+            defaults_from,
             verify_undo,
         } => cmd_add_check_box(&AddCheckBoxArgs {
             input: &input,
@@ -3145,6 +3224,7 @@ fn run() -> ExitCode {
             required,
             output: &output,
             mode,
+            defaults_from: defaults_from.as_deref(),
             verify_undo,
         }),
         Command::AddRadioButton {
@@ -3162,6 +3242,7 @@ fn run() -> ExitCode {
             required,
             output,
             mode,
+            defaults_from,
             verify_undo,
         } => cmd_add_radio_button(&AddRadioButtonArgs {
             input: &input,
@@ -3178,6 +3259,7 @@ fn run() -> ExitCode {
             required,
             output: &output,
             mode,
+            defaults_from: defaults_from.as_deref(),
             verify_undo,
         }),
         Command::DeleteField {
@@ -3219,6 +3301,7 @@ fn run() -> ExitCode {
             required,
             output,
             mode,
+            defaults_from,
             verify_undo,
         } => cmd_add_choice_field(&AddChoiceFieldArgs {
             input: &input,
@@ -3236,6 +3319,7 @@ fn run() -> ExitCode {
             required,
             output: &output,
             mode,
+            defaults_from: defaults_from.as_deref(),
             verify_undo,
         }),
         Command::FillField {
@@ -9152,6 +9236,7 @@ struct AddTextFieldArgs<'a> {
     required: bool,
     output: &'a Path,
     mode: SaveMode,
+    defaults_from: Option<&'a str>,
     verify_undo: bool,
 }
 
@@ -9169,6 +9254,7 @@ struct AddCheckBoxArgs<'a> {
     required: bool,
     output: &'a Path,
     mode: SaveMode,
+    defaults_from: Option<&'a str>,
     verify_undo: bool,
 }
 
@@ -9189,6 +9275,7 @@ struct AddChoiceFieldArgs<'a> {
     required: bool,
     output: &'a Path,
     mode: SaveMode,
+    defaults_from: Option<&'a str>,
     verify_undo: bool,
 }
 
@@ -9208,6 +9295,7 @@ struct AddRadioButtonArgs<'a> {
     required: bool,
     output: &'a Path,
     mode: SaveMode,
+    defaults_from: Option<&'a str>,
     verify_undo: bool,
 }
 
@@ -9285,12 +9373,28 @@ fn cmd_add_check_box(args: &AddCheckBoxArgs<'_>) -> u8 {
         }
     };
 
+    // Applied to the SPEC before authoring, so everything downstream
+    // — the merge check, the appearance build, the undo entry — sees
+    // one fully-formed request rather than a partially-defaulted one.
+    let defaults = match read_defaults(&session, args.input, args.defaults_from) {
+        Ok(d) => d,
+        Err(code) => return code,
+    };
+    let applied = defaults
+        .map(|d| spec.apply_defaults(&d))
+        .unwrap_or_default();
     let authored = match session.add_check_box(&spec) {
         Ok(o) => o,
         Err(err) => return report_edit_error(args.input, &err),
     };
     let field_id = authored.field_id;
-    report_field_disclosures(args.name, authored.disclosures);
+    // Folded into the SAME disclosure struct the core produced, not
+    // reported alongside it: one channel, so `any()` still answers for
+    // everything and a caller gating on it cannot miss half the facts.
+    let mut disclosures = authored.disclosures;
+    disclosures.defaults_type_mismatch = applied.type_mismatch;
+    disclosures.defaults_on_state_ambiguous = applied.on_state_ambiguous;
+    report_field_disclosures(args.name, disclosures);
     let outcome = match save_edited(
         &mut session,
         &source,
@@ -9538,12 +9642,28 @@ fn cmd_add_radio_button(args: &AddRadioButtonArgs<'_>) -> u8 {
         }
     };
 
+    // Applied to the SPEC before authoring, so everything downstream
+    // — the merge check, the appearance build, the undo entry — sees
+    // one fully-formed request rather than a partially-defaulted one.
+    let defaults = match read_defaults(&session, args.input, args.defaults_from) {
+        Ok(d) => d,
+        Err(code) => return code,
+    };
+    let applied = defaults
+        .map(|d| spec.apply_defaults(&d))
+        .unwrap_or_default();
     let authored = match session.add_radio_button(&spec) {
         Ok(o) => o,
         Err(err) => return report_edit_error(args.input, &err),
     };
     let field_id = authored.field_id;
-    report_field_disclosures(args.name, authored.disclosures);
+    // Folded into the SAME disclosure struct the core produced, not
+    // reported alongside it: one channel, so `any()` still answers for
+    // everything and a caller gating on it cannot miss half the facts.
+    let mut disclosures = authored.disclosures;
+    disclosures.defaults_type_mismatch = applied.type_mismatch;
+    disclosures.defaults_on_state_ambiguous = applied.on_state_ambiguous;
+    report_field_disclosures(args.name, disclosures);
     let outcome = match save_edited(
         &mut session,
         &source,
@@ -9647,6 +9767,16 @@ fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
         }
     };
 
+    // Applied to the SPEC before authoring, so everything downstream
+    // — the merge check, the appearance build, the undo entry — sees
+    // one fully-formed request rather than a partially-defaulted one.
+    let defaults = match read_defaults(&session, args.input, args.defaults_from) {
+        Ok(d) => d,
+        Err(code) => return code,
+    };
+    let applied = defaults
+        .map(|d| spec.apply_defaults(&d))
+        .unwrap_or_default();
     let authored = match session.add_choice_field(&spec) {
         Ok(outcome) => outcome,
         Err(err) => return report_edit_error(args.input, &err),
@@ -9655,7 +9785,13 @@ fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
     // R4 + decision 020 §3.4.3/§3.5.3: everything pdfce knows and the
     // operator cannot see is said at the moment it happens, not left to be
     // discovered later.
-    report_field_disclosures(args.name, authored.disclosures);
+    // Folded into the SAME disclosure struct the core produced, not
+    // reported alongside it: one channel, so `any()` still answers for
+    // everything and a caller gating on it cannot miss half the facts.
+    let mut disclosures = authored.disclosures;
+    disclosures.defaults_type_mismatch = applied.type_mismatch;
+    disclosures.defaults_on_state_ambiguous = applied.on_state_ambiguous;
+    report_field_disclosures(args.name, disclosures);
     let outcome = match save_edited(
         &mut session,
         &source,
@@ -9677,7 +9813,11 @@ fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
         rect.lly,
         rect.urx,
         rect.ury,
-        args.options.len(),
+        // The SPEC's count, not the argument count. `--defaults-from` can
+        // fill this list, and a summary reading `options=0` beside a file
+        // carrying three of them is the shape where a wrong number sits next
+        // to a right one and nobody notices.
+        spec.options.len(),
         u32::from(authored.disclosures.has_no_options),
         u32::from(args.combo),
         u32::from(args.editable),
@@ -9715,6 +9855,28 @@ fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
 /// Copied per verb, the third copy is where one of them goes missing, and it
 /// would go missing SILENTLY: a disclosure that is never printed looks
 /// exactly like a disclosure that did not apply.
+/// Read a `--defaults-from` template, or `None` when the flag was absent.
+///
+/// Separated from the four creation commands so the lookup, the
+/// field-not-found refusal and the "flag absent" case are decided once. A
+/// template that does not exist is an ERROR, not an empty default: the
+/// operator named a field, and silently proceeding with nothing copied would
+/// be indistinguishable from a successful copy of a field that has no
+/// copyable properties.
+fn read_defaults(
+    session: &pdfce_core::edit::EditSession,
+    input: &Path,
+    from: Option<&str>,
+) -> Result<Option<pdfce_core::edit::FieldDefaults>, u8> {
+    match from {
+        None => Ok(None),
+        Some(name) => match session.field_defaults(name) {
+            Ok(defaults) => Ok(Some(defaults)),
+            Err(err) => Err(report_edit_error(input, &err)),
+        },
+    }
+}
+
 fn report_field_disclosures(name: &str, d: pdfce_core::edit::FieldAuthorDisclosures) {
     if d.tooltip_declined {
         eprintln!(
@@ -9739,6 +9901,16 @@ fn report_field_disclosures(name: &str, d: pdfce_core::edit::FieldAuthorDisclosu
     if d.group_flags_ignored {
         eprintln!(
             "pdfce-cli: field {name:?}: this member joined an EXISTING radio group, so the group's own --no-toggle-to-off / --radios-in-unison settings apply and the ones passed here were ignored. Those flags live on the field, so honouring them now would have changed how the members already in the group behave."
+        );
+    }
+    if d.defaults_type_mismatch {
+        eprintln!(
+            "pdfce-cli: field {name:?}: --defaults-from copied NOTHING. Every property the field types share is a yes/no flag, and those are never copied (a --flag cannot express 'off'), so the only copyable properties are type-specific: --max-len for text, the option list for choice, the on-state for a check box. A radio template has nothing to copy at all."
+        );
+    }
+    if d.defaults_on_state_ambiguous {
+        eprintln!(
+            "pdfce-cli: field {name:?}: the --defaults-from check box has widgets with DIFFERENT on-state names, and the first one was used. A check box normally uses one on-state everywhere it appears, so a template that does not is worth a look."
         );
     }
 }
@@ -9796,12 +9968,28 @@ fn cmd_add_text_field(args: &AddTextFieldArgs<'_>) -> u8 {
         }
     };
 
+    // Applied to the SPEC before authoring, so everything downstream
+    // — the merge check, the appearance build, the undo entry — sees
+    // one fully-formed request rather than a partially-defaulted one.
+    let defaults = match read_defaults(&session, args.input, args.defaults_from) {
+        Ok(d) => d,
+        Err(code) => return code,
+    };
+    let applied = defaults
+        .map(|d| spec.apply_defaults(&d))
+        .unwrap_or_default();
     let authored = match session.add_text_field(&spec) {
         Ok(o) => o,
         Err(err) => return report_edit_error(args.input, &err),
     };
     let field_id = authored.field_id;
-    report_field_disclosures(args.name, authored.disclosures);
+    // Folded into the SAME disclosure struct the core produced, not
+    // reported alongside it: one channel, so `any()` still answers for
+    // everything and a caller gating on it cannot miss half the facts.
+    let mut disclosures = authored.disclosures;
+    disclosures.defaults_type_mismatch = applied.type_mismatch;
+    disclosures.defaults_on_state_ambiguous = applied.on_state_ambiguous;
+    report_field_disclosures(args.name, disclosures);
     let outcome = match save_edited(
         &mut session,
         &source,

@@ -742,6 +742,69 @@ pub struct FieldAuthorDisclosures {
     /// rule 4 applied exactly: pdfce made a choice the operator did not
     /// specify, so the operator gets told.
     pub group_flags_ignored: bool,
+    /// `--defaults-from` named a template of a **different field type**, so
+    /// **nothing was copied**.
+    ///
+    /// Not a partial copy — a total one. Every property the four creation
+    /// specs share is a boolean, and every boolean is excluded (see
+    /// [`EditSession::field_defaults`]), so the only copyable properties are
+    /// type-specific. A text template therefore contributes nothing at all to
+    /// a choice field.
+    ///
+    /// Disclosed rather than refused: the operator's other flags are still
+    /// valid and the field they asked for is still the field they get. But
+    /// they asked for defaults and received none, and rule 4 says that gets
+    /// said.
+    pub defaults_type_mismatch: bool,
+    /// The check-box template's widgets define **different on-state names**,
+    /// and the first widget's was used.
+    ///
+    /// A check box's widgets normally share one on-state — that is what makes
+    /// the box mean the same thing on every page it appears on — so a
+    /// template where they disagree is saying something unusual. pdfce picks
+    /// one, which is a choice the operator did not specify.
+    pub defaults_on_state_ambiguous: bool,
+}
+
+/// What applying a [`FieldDefaults`] actually did, for the caller to fold
+/// into its disclosures.
+///
+/// Returned rather than mutated-in-place-and-forgotten: the two facts here
+/// are the ones rule 4 obliges the operator to be told, and returning them
+/// makes ignoring them a visible act rather than an omission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DefaultsApplied {
+    /// The template was a different type, so nothing transferred.
+    pub type_mismatch: bool,
+    /// The check-box template's widgets disagreed on the on-state name.
+    pub on_state_ambiguous: bool,
+}
+
+/// The copyable properties of an existing field, for `--defaults-from`.
+///
+/// Produced by [`EditSession::field_defaults`], which documents what is in
+/// here and — more importantly — what is deliberately not.
+///
+/// Carries the source's type so the applier can tell a real copy from a
+/// mismatch: the type is the whole gate, since every copyable property is
+/// type-specific.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct FieldDefaults {
+    /// The template's `/FT`, or `None` for a malformed field.
+    pub field_type: Option<FieldType>,
+    /// Which button the template is, when it is one — a check box's
+    /// on-state must not be handed to a radio member.
+    pub button_kind: Option<ButtonKind>,
+    /// `/MaxLen`, for a text template.
+    pub max_len: Option<i64>,
+    /// `/Opt`, for a choice template. The case that makes the flag worth
+    /// having: a fifty-entry option list is the thing nobody wants to retype.
+    pub options: Vec<forms::ChoiceOption>,
+    /// The on-state name, for a check-box template, read from the first
+    /// widget.
+    pub on_state: Option<Vec<u8>>,
+    /// Whether the template's widgets disagreed about that name.
+    pub on_state_ambiguous: bool,
 }
 
 impl FieldAuthorDisclosures {
@@ -776,16 +839,44 @@ impl FieldAuthorDisclosures {
             structure_tab_order,
             has_no_options,
             group_flags_ignored,
+            defaults_type_mismatch,
+            defaults_on_state_ambiguous,
         } = self;
         tooltip_declined
             || tagged_document
             || structure_tab_order
             || has_no_options
             || group_flags_ignored
+            || defaults_type_mismatch
+            || defaults_on_state_ambiguous
     }
 }
 
 impl NewTextField {
+    /// Copy this type's shareable properties out of a template field.
+    ///
+    /// `/MaxLen` only — see [`EditSession::field_defaults`] for why the list
+    /// is this short and what is deliberately excluded. Returns what it did
+    /// so the caller can disclose it.
+    ///
+    /// A template of any other type sets `type_mismatch` and changes
+    /// nothing: there is no property a text field shares with a check box
+    /// that is not a boolean, and booleans do not copy.
+    pub fn apply_defaults(&mut self, defaults: &FieldDefaults) -> DefaultsApplied {
+        if defaults.field_type != Some(FieldType::Text) {
+            return DefaultsApplied {
+                type_mismatch: true,
+                on_state_ambiguous: false,
+            };
+        }
+        // Only fills a gap. An explicit `--max-len` on the command line is
+        // the operator speaking about THIS field, and a template must not
+        // overrule it.
+        if self.max_len.is_none() {
+            self.max_len = defaults.max_len;
+        }
+        DefaultsApplied::default()
+    }
     /// A field at `rect` on `page_index`, named `name`, with Acrobat's
     /// creation-floor defaults and no value.
     #[must_use]
@@ -997,6 +1088,27 @@ pub struct NewRadioButton {
 }
 
 impl NewRadioButton {
+    /// A radio template contributes **nothing**, and this says so rather
+    /// than leaving the absence to be inferred.
+    ///
+    /// Its only non-boolean property is the export value, and there is no
+    /// field-level one to copy: on-states live per widget
+    /// ([`forms::Widget::on_states`]), so a radio *field* has one export
+    /// value per member while `--defaults-from <field>` names a field. A
+    /// copy would either collide with
+    /// [`FormAuthorError::RadioExportValueTaken`] inside the same group or
+    /// be arbitrary across groups.
+    ///
+    /// So this always reports `type_mismatch` — including for a radio
+    /// template, where the types DO match but the copyable set is empty.
+    /// "You asked for defaults and got none" is the fact the operator needs,
+    /// and it is true either way.
+    pub fn apply_defaults(&mut self, _defaults: &FieldDefaults) -> DefaultsApplied {
+        DefaultsApplied {
+            type_mismatch: true,
+            on_state_ambiguous: false,
+        }
+    }
     /// A member at `rect` on `page_index`, in group `name`, exporting
     /// `export_value`, not selected.
     #[must_use]
@@ -1082,6 +1194,39 @@ impl NewRadioButton {
 }
 
 impl NewCheckBox {
+    /// Copy this type's shareable properties out of a template field.
+    ///
+    /// The on-state name only, read from the template's first widget. See
+    /// [`EditSession::field_defaults`] for the exclusions — in particular
+    /// `checked`, which is a *value* and does not copy.
+    ///
+    /// Propagates the template's widget disagreement so the caller discloses
+    /// it: pdfce picked one of several names, which is a choice the operator
+    /// did not make.
+    pub fn apply_defaults(&mut self, defaults: &FieldDefaults) -> DefaultsApplied {
+        if defaults.field_type != Some(FieldType::Button)
+            || defaults.button_kind != Some(ButtonKind::Check)
+        {
+            return DefaultsApplied {
+                type_mismatch: true,
+                on_state_ambiguous: false,
+            };
+        }
+        let mut applied = DefaultsApplied {
+            type_mismatch: false,
+            on_state_ambiguous: defaults.on_state_ambiguous,
+        };
+        // The spec's on_state is a String and the model's is raw bytes: a
+        // name that is not UTF-8 is left behind rather than lossily
+        // converted, because a mangled on-state names a state the `/AP /N`
+        // subdictionary does not have, and the box would never tick.
+        match defaults.on_state.as_deref().map(std::str::from_utf8) {
+            Some(Ok(name)) if self.on_state.is_empty() => name.clone_into(&mut self.on_state),
+            Some(Err(_)) => applied.type_mismatch = true,
+            _ => {}
+        }
+        applied
+    }
     /// An unchecked box at `rect` on `page_index`, on-state `Yes`.
     #[must_use]
     pub fn new(page_index: usize, name: impl Into<String>, rect: page_tree::Rect) -> Self {
@@ -1270,6 +1415,56 @@ pub struct NewChoiceField {
 }
 
 impl NewChoiceField {
+    /// Copy this type's shareable properties out of a template field.
+    ///
+    /// `/Opt` only — the flagship case for `--defaults-from`, because a
+    /// fifty-entry option list is the thing nobody wants to retype. See
+    /// [`EditSession::field_defaults`] for the exclusions.
+    ///
+    /// The `Sort`, `Combo`, `Edit` and `MultiSelect` flags do NOT come with
+    /// it: they are booleans, and a presence flag cannot express "off".
+    pub fn apply_defaults(&mut self, defaults: &FieldDefaults) -> DefaultsApplied {
+        if defaults.field_type != Some(FieldType::Choice) {
+            return DefaultsApplied {
+                type_mismatch: true,
+                on_state_ambiguous: false,
+            };
+        }
+        // Only fills a gap — explicit `--option` arguments win. Note this
+        // means an operator who wants a template's list MINUS one entry has
+        // to supply the whole list; copying is all-or-nothing by design,
+        // since a partial merge would have no rule for ordering and §12.7.4.4
+        // says readers never re-sort `/Opt`.
+        if !self.options.is_empty() {
+            return DefaultsApplied::default();
+        }
+        // `/Opt` entries are §7.9.2 text strings on the model side and
+        // `String`s on the spec side. A list containing a name that is not
+        // UTF-8 is NOT copied and is reported: a lossily-converted export
+        // value is a value the form would submit and no consumer expects,
+        // which is worse than copying nothing. All-or-nothing, so the list
+        // that lands is either the template's or the operator's.
+        let converted: Option<Vec<ChoiceOption>> = defaults
+            .options
+            .iter()
+            .map(|o| {
+                Some(ChoiceOption {
+                    export: std::str::from_utf8(&o.export).ok()?.to_owned(),
+                    display: std::str::from_utf8(&o.display).ok()?.to_owned(),
+                })
+            })
+            .collect();
+        match converted {
+            Some(options) => {
+                self.options = options;
+                DefaultsApplied::default()
+            }
+            None => DefaultsApplied {
+                type_mismatch: true,
+                on_state_ambiguous: false,
+            },
+        }
+    }
     /// A list box at `rect` on `page_index` offering `options`.
     #[must_use]
     pub fn new(
@@ -4908,6 +5103,11 @@ impl EditSession {
             structure_tab_order: self.page_uses_structure_tab_order(page_id),
             has_no_options: false,
             group_flags_ignored: false,
+            // Set by the CALLER, not the preflight: `--defaults-from` is
+            // applied to the spec before the spec reaches this point, so the
+            // preflight cannot see whether a template contributed anything.
+            defaults_type_mismatch: false,
+            defaults_on_state_ambiguous: false,
         };
         Ok((page_id, slots, path, disclosures))
     }
@@ -6218,6 +6418,93 @@ impl EditSession {
             }
         }
         Ok(writes)
+    }
+
+    /// Read the copyable properties of an existing field, to pre-fill a new
+    /// field's spec (decision 020's F6 `--defaults-from`).
+    ///
+    /// # What copies, and why the list is this short
+    ///
+    /// Only **non-boolean data**, and only within a matching field type:
+    /// `/MaxLen` for text, `/Opt` for choice, the on-state name for a check
+    /// box. A radio field contributes **nothing**. Everything else is
+    /// excluded for a stated reason, and the exclusions are the design:
+    ///
+    /// **Every boolean is excluded.** The CLI's flags are *presence* flags
+    /// (`#[arg(long)] multiline: bool`), so absence and explicit-false are
+    /// the same token. Copying them would let `--defaults-from` **add** a
+    /// property but never turn one off — a single-line field could not be
+    /// created from a multiline template. That is a one-way trap, it is
+    /// operator-facing, and it is expensive to reverse once scripts depend
+    /// on it. **If `--no-*` pairs are ever added across the creation verbs,
+    /// this exclusion should be revisited** — the trap is a property of the
+    /// flag shape, not of the idea.
+    ///
+    /// **`/TU` is excluded**, and this one is load-bearing. R105 exists so
+    /// an accessibility name is never a silent default — *"'I never
+    /// considered it' cannot happen silently"*. A copied tooltip would
+    /// satisfy R105's mechanism while defeating its purpose, and that holds
+    /// for a copied *declination* too: inheriting "no tooltip" is still a
+    /// decision the operator never made.
+    ///
+    /// **`/V`, `checked` and `selected` are excluded** — a value is content,
+    /// not a default.
+    ///
+    /// **`/AA` is excluded** — decision 020 §F3 rules that push-button
+    /// creation authors no action under decision 009 posture A, so copying
+    /// `/AA` would author actions through the back door.
+    ///
+    /// **The radio export value is excluded because there is nothing to
+    /// copy.** On-states live per *widget* ([`forms::Widget::on_states`]),
+    /// so a radio *field* has N export values, one per member, and
+    /// `--defaults-from <field>` names a field. A copy would either collide
+    /// with [`FormAuthorError::RadioExportValueTaken`] within the same group
+    /// or be arbitrary across groups.
+    ///
+    /// # The consequence worth stating
+    ///
+    /// Because every shared property is a boolean and every copyable one is
+    /// type-specific, **there is no common subset**: a template of a
+    /// different type contributes nothing at all. That is disclosed rather
+    /// than silently producing a bare field
+    /// ([`FieldAuthorDisclosures::defaults_type_mismatch`]).
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::FieldNotFound`] when `source` names no terminal field.
+    /// A grouping node is not a field and is refused the same way.
+    pub fn field_defaults(&self, source: &str) -> Result<FieldDefaults, EditError> {
+        let not_found = || EditError::FieldNotFound {
+            name: source.to_owned(),
+        };
+        let form = forms::parse_acroform(&self.graph()).ok_or_else(not_found)?;
+        let field = form
+            .fields
+            .iter()
+            .find(|f| f.fully_qualified_name == source)
+            .ok_or_else(not_found)?;
+
+        // The on-state is read from the FIRST widget, and the disagreement is
+        // reported rather than resolved. A check box's widgets normally share
+        // one on-state name — that is what makes the box mean the same thing
+        // on every page it appears on — so a document where they differ is
+        // saying something unusual, and picking one silently would hide it.
+        let mut on_state = None;
+        let mut on_state_ambiguous = false;
+        if matches!(field.button_kind, Some(ButtonKind::Check)) {
+            let mut states = field.widgets.iter().filter_map(|w| w.on_states.first());
+            on_state = states.next().cloned();
+            on_state_ambiguous = states.any(|s| Some(s) != on_state.as_ref());
+        }
+
+        Ok(FieldDefaults {
+            field_type: field.field_type,
+            button_kind: field.button_kind,
+            max_len: field.max_len,
+            options: field.options.clone(),
+            on_state,
+            on_state_ambiguous,
+        })
     }
 
     /// Read the facts about an existing radio group that a new member has to
