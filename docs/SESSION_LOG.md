@@ -25961,3 +25961,161 @@ restriction rather than around it). `check-passes-filed.py` likewise exit 0.
 **Nothing is renumbered, nothing is minted, and `R167` is free** — which is
 the only part of the sentence that ever mattered, and the only part with a
 machine behind it.
+
+## 2026-08-08 (thirty-third filing) — decision 033 filed: the GUI's usability gap, ledgered as a PLAN, not a shipment — `R167`+`R168` minted, R124 amended, R125 scope-noted, `Pass 47.0–47.10` filed, four new operator questions
+
+**Nothing in this filing is SHIPPED.** The engineer dispatched a live
+observation (release build, `demo-form.pdf`, `PrintWindow` per tab) plus
+three prior agent reports (UI design, a GUI call-graph audit, vendor
+ribbon/context-menu research) into
+`docs/decisions/033-gui-usability-and-the-workspace-that-does-nothing.md`,
+on the operator's direct instruction to plan an improved GUI layout/
+feature set **and** *"rewrite any rules about the GUI that make it less
+usable and user friendly."* This filing is the ledger side of that
+decision record: rule minting/amendment, Pass-ID assignment, and the
+`FEATURES.md` gap inventory it commissions. No code changed.
+
+**Shipped:**
+- None. Decision 033 itself was already committed as HEAD by the
+  engineer before this dispatch (`check-ledger-numbers.py` reported
+  decision ceiling 033 in that commit, per the dispatch brief). This
+  filing's own edits are `docs/ROADMAP.md`, `docs/FEATURES.md` and this
+  entry — ledger/plan filings, not a Pass shipment.
+
+**Decisions made this session:**
+- **R124 AMENDED, not replaced** (decision 033 §5.1): the old
+  unconditional "empty space stays empty" now governs only UNSCOPED
+  work. Scoped work (a filed Pass ID) may show a **planned-treatment**
+  ribbon control — reduced opacity + dashed outline + disabled, tooltip
+  citing the Pass ID — while context menus keep the opposite convention
+  (omit, don't disable). Struck-and-annotated in place, per house style;
+  every word of the original rule survives, readable.
+- **R125 gains a scope note, not a rewrite** (decision 033 §5.2): the
+  rule (only the active tab's band is emitted) now explicitly excludes
+  Quick Access Toolbar controls, which are fixed chrome regardless of
+  active tab. R125's own load-bearing reasoning (egui has no focus-group
+  primitive) is untouched.
+- **Two new standing rules minted: R167 and R168.** R167 (decision 033
+  §5.3) makes editor-drawn chrome — dashed outlines, type glyphs, resize
+  handles — a companion to R43/R44, not an exception to either: never
+  written to `/AP`, never a style the document's own renderer could
+  produce, editing-context only. R168 (decision 033 §5.4) requires a
+  verb offered on an N-target selection to act on the whole selection or
+  refuse with a stated reason — an application of R83's 2026-08-07
+  amendment to verb SCOPE rather than verb EXISTENCE.
+- **Open operator question (bb) RULED, not silently.** The operator's
+  rewrite-the-rules instruction is read as the ruling on "do unbuilt
+  features get placeholders" (R124's amendment is the answer). Filed as
+  **RULED-PENDING-CONFIRMATION**, a status distinct from RESOLVED,
+  because decision 033 §7 Q1 explicitly asks the operator to confirm
+  this reading rather than assuming it — the instruction said "the GUI,"
+  not "R124 specifically," and reading a general instruction as a
+  specific rule ruling is an inference this filing states plainly rather
+  than launders as a direct answer.
+- **Four new open operator questions minted: (bd)–(bg)** — QAT contents,
+  marquee direction-sensitivity vs. full-enclosure, ribbon density/
+  compact-mode, and contextual-tab breadth (one reduced slot vs. decision
+  024's full Family-B design). All five of decision 033 §7's questions
+  (bb, bd–bg) now live in `ROADMAP.md`'s *Open operator questions*, not
+  only inside the decision record — the dispatch's own constraint.
+- **Eleven Pass IDs filed under one new family, `47`**: `Pass 47.0–47.4`
+  under *Next up* (decision 033's P0 — a silent-data-loss correctness
+  fix, QAT restore, ribbon legibility, editor chrome, a choice-field
+  `/Opt` bug fix), `Pass 47.5–47.10` under *Backlog* (P1/P2 — right-click
+  menus, canvas-selectable widgets, one contextual tab, R124's
+  planned-treatment styling, Alt KeyTips, Objects-tree editing verbs).
+  Two items decision 033 named were **already-filed remainders and got
+  no new ID**: per-type field properties stays `Pass 20.5`'s own debt,
+  and the general `delete_annotation` core verb stays `Pass 38.5`'s.
+
+**Findings + decisions (carried from decision 033, worth preserving here
+independently of that document):**
+- **Reading the code told us what the GUI does; only looking told us
+  what it IS.** Three separate agent reports (a UI-design pass, a full
+  GUI call-graph audit, vendor-convention research) described the
+  command surface accurately in code terms — group names, call sites,
+  emission gates — and not one of them conveyed that on screen it reads
+  as a single-row toolbar with small grey inline captions, not a ribbon.
+  The engineer's own live capture (`PrintWindow` per tab) is what
+  surfaced §1.1–§1.3 of decision 033. Grepping a UI's structure and
+  looking at its rendered output are different instruments, and this
+  project's usual verification habit (read the code, run the tests)
+  covers the first and not the second.
+- **A standing rule optimised for one honesty and paid for it in the
+  reported symptom — and the disconfirming evidence came from outside
+  the project.** R124 (no placeholders for unbuilt work) was written to
+  stop a control from promising a capability that does not exist. It was
+  correct on that axis and produced, as a side effect, a ribbon that
+  cannot look structured while ~30 commands sit against 6 tabs — the
+  exact "feels incomplete" the operator reported. Nobody had checked
+  Microsoft's own ribbon guidance until this session's research agent
+  did; it says the opposite for the ribbon specifically (disable, never
+  hide). The fix isn't "R124 was wrong" — it's "R124 was one rule
+  governing two surfaces with opposite correct answers," which decision
+  033 §5.1 now encodes directly instead of leaving to the ribbon's
+  disadvantage.
+- **A specialist's design advice was wrong on contextual tabs and
+  flagged its own basis as "my own memory" — and that flag is what
+  triggered the check that caught it.** Self-declared provenance turned
+  a wrong answer into a cheap one: the claim carried its own asterisk,
+  so verifying it (rather than trusting it) was the obvious next step,
+  and decision 033 §3.3's reduced-form design is what survived the
+  check. Worth a general note for how this project uses specialist
+  dispatches — an agent that names "I am recalling this, not sourcing
+  it" is doing exactly the disclosure CLAUDE.md rule 4 asks of pdfce
+  itself, pointed at its own output instead of the document.
+- New RAG registered: `D:\Dev\Rag-Specialized\Ribbon_UX\` (index +
+  `office_ribbon.md`, `pdf_xchange_editor.md`, `context_menus.md`,
+  `multi_select.md`, `acrobat_form_editing.md`), built by the research
+  agent this session. **Carries an explicit confidence caveat, preserved
+  rather than smoothed**: all Adobe-sourced content is search-excerpt,
+  not verbatim (helpx.adobe.com refused every fetch), with a ranked
+  verification-debt list. Cited directly in R124's amendment (the
+  Microsoft ribbon-guidance quote) and Pass 47.2's Ledger entry. **No
+  dedicated librarian agent owns this RAG** the way `pdfce-spec-
+  librarian`/`pdfce-acrobat-librarian`/`pdfce-inkscape-librarian` own
+  theirs — flagged for the engineer/operator below, not resolved here.
+
+**Still in flight:**
+- Nothing from decision 033 is built. `Pass 47.0–47.4` are the next
+  engineering work; `Pass 47.5–47.10` are Backlog, not committed to a
+  build order.
+- `Pass 46.0`/`46.1` (drag/resize) and `Pass 20.5`'s per-type field
+  properties remain exactly as they stood before this filing — this
+  session only added cross-references (form-field resize's second
+  prerequisite, `Pass 47.6`; per-type properties' second reason,
+  decision 033 §3.6).
+- Both project checkers (`tools/check-ledger-numbers.py`,
+  `tools/check-passes-filed.py`) were **NOT RUN** by this filing — no
+  Bash tool was available to this dispatch. Ceilings above were derived
+  by reading `docs/ROADMAP.md`/`docs/decisions/` directly and applying
+  the first checker's own documented parsing rules by hand (read from
+  its own source this filing, not quoted from prose elsewhere). See the
+  *Ledger* block under `ROADMAP.md`'s new Backlog entry for the full
+  figure-by-figure derivation. **Backup/git working-tree state is not
+  asserted anywhere in this filing** — no shell, hard rule 8.
+
+**For next session:**
+- **Run both checkers with a shell before treating any ceiling above as
+  gate-clean.** This filing's arithmetic is a substitute for the
+  instrument, not the instrument (see hard rule 10's own reasoning).
+- **Five operator questions are waiting**: (bb) R124-reading
+  confirmation, (bd) QAT contents, (be) marquee direction-sensitivity,
+  (bf) ribbon density/compact mode, (bg) contextual-tab breadth. All
+  five default to a stated fallback if unanswered — see each entry in
+  `ROADMAP.md`'s *Open operator questions*.
+- **Flag for the operator, not resolved here (hard rule 9's flag-don't-
+  edit posture, extended by analogy): `C:\Users\Ken\.claude\CLAUDE.md`
+  is not touched by this filing and does not need to be** — the new
+  `D:\Dev\Rag-Specialized\Ribbon_UX\` RAG is project-local reference
+  material, not a `C:\personal_rag\` subject, so the global-config
+  registration rule that applies to a NEW personal_rag subject does not
+  apply here. What IS worth the operator's or engineer's attention:
+  **no agent owns `Ribbon_UX` the way the other three feature-parity
+  RAGs are each owned** — if it is meant to grow past this session's
+  five files, `D:\Dev\pdfce\CLAUDE.md`'s agent roster is the place to
+  decide that, and this librarian does not own that file.
+- Engineer to pick up `Pass 47.0` first — it is the prerequisite this
+  filing itself made explicit for `Pass 47.5`, and it is a silent-data-
+  loss correctness defect (5-object Delete removes 1), the highest-
+  severity item in the whole plan.

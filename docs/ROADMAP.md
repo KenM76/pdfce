@@ -21073,6 +21073,50 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
+### Pass 47.0–47.4 — ★★ DECISION 033 P0 — GUI usability: multi-target correctness fix, QAT restore, ribbon legibility, editor chrome, choice-field `/Opt` bug (decision 033, filed 2026-08-08 on the operator's direct instruction to plan an improved GUI layout/feature set AND *"rewrite any rules about the GUI that make it less usable and user friendly"*)
+
+**Source: `docs/decisions/033-gui-usability-and-the-workspace-that-does-
+nothing.md` §6 P0 list.** Read that document first — this entry
+files its five items as Pass IDs and does not re-derive their reasoning.
+**The heading leads with `Pass`, per the Pass 46.0–46.1 precedent, so
+`tools/check-ledger-numbers.py`'s `collect_passes` (anchored on
+`^#{2,4} (?:★ )?Pass `) can see the family; it registers `47.0` for the
+family and the remaining four sub-IDs are *mentioned*, not individually
+headed, until each ships — same convention as the 20.x/26.x arcs.**
+
+**No shell rewrite. Every item is additive to a structurally sound
+shell** (decision 033 §3) — the tab taxonomy, the two-dock split, the
+icon set and the Forms panel's fill surface are explicitly NOT causes
+and are not touched by any of the five items below.
+
+| Pass | What | Governing rule/decision | Cost (decision 033 §2) |
+|---|---|---|---|
+| `Pass 47.0` | **Multi-target verbs act on the whole selection or refuse — `delete_selected_object` (`main.rs:4174`) and the drag handler (`main.rs:17806`) currently read `.iter().next()`, so a 5-object Delete removes one with no message.** | **R168** (new, minted this filing) | small |
+| `Pass 47.1` | **Quick Access Toolbar restored** — Open, Save, Undo, Redo, page nav, zoom promoted OUT of the tab-gated ribbon bands into fixed chrome, per decision 024 §3.5(d)'s original spec, which was never built (zero `quick_access\|QAT` hits anywhere in the crate before this filing). | **R125 scope note** (new, this filing) | small — a placement move of already-wired controls, per R123 (one command, one place) |
+| `Pass 47.2` | **Ribbon groups become legible as a ribbon** — two-row group bodies, captions **centred beneath** each group (not inline-left, tiny, and grey), vertical separators, mixed large/small button forms. Fixes the three groups that render with NO caption at all (`Show`+`Panels` sharing one block, `LayoutReset` bypassing the group helper) by construction — there stops being a code path that skips it. No tab moves, no command moves between tabs; a rendering change to `ribbon_group` only. | Sourced from `D:\Dev\Rag-Specialized\Ribbon_UX\office_ribbon.md` | medium |
+| `Pass 47.3` | **Editor chrome for form-field widgets** — a dashed, tinted outline + type glyph drawn by the editor for every widget, whenever a form context is active; makes the Forms panel's rows locatable on the page and is the prerequisite `Pass 47.6`'s resize handles need. | **R167** (new, minted this filing) | small–medium |
+| `Pass 47.4` | **Choice-field `/Opt` bug in the Create Field pane** — `commit_field_draft` (`main.rs:15352`) passes `Vec::new()` for `/Opt` UNCONDITIONALLY, so every choice field the GUI creates has zero options and can never be filled. **This is a FUNCTIONAL BUG, not a gap** — core already discloses it (`has_no_options`) but the GUI offers no way to avoid triggering it. | — | small |
+
+**Two sequencing facts, established by this filing, carried forward into
+*Backlog* below so they are not lost in re-scoping:**
+1. **`Pass 47.0` ships before `Pass 47.5`** (right-click menus, filed
+   under *Backlog*, below) — a context menu built against today's
+   `.next()`-reading verbs would offer *"Delete selected (N)"* over a
+   control that deletes one, which is exactly what R168 forbids
+   promising.
+2. **Form-field resize has TWO prerequisites, not one.** `Pass 46.0`'s
+   own core resize verb (unbuilt) is the first and was already named.
+   **The second — widgets becoming canvas-selectable at all — had no
+   name anywhere in this file before decision 033**; the hit-tester
+   covers page content objects only (`object_provider.rs:470-508`).
+   Filed as `Pass 47.6` under *Backlog*, below.
+
+**What P0 does NOT include, named so it is not silently expected:**
+right-click menus, canvas-selectable widgets, the contextual ribbon
+tab, R124's planned-treatment styling, Alt KeyTips and Objects-tree
+editing verbs are all P1/P2 — see the *Backlog* entry filed alongside
+this one.
+
 ### Pass 46.0–46.1 — ★★ OPERATOR REQUEST 2026-08-07 — ***"form fields and everything else should be draggable and resizeable"*** — **46.0** = the `/Rect` family, **46.1** = the content-stream family. **THE GAP WAS NAMED IN THIS FILE AND THE OPERATOR SCOPED IT WITHIN MINUTES.**
 
 > **★★ AMENDED 2026-08-07 (thirty-first filing, `fd6eadd`) — `Pass 46.0` IS NO
@@ -25837,6 +25881,101 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **GUI usability P1/P2 — decision 033 §6 (filed 2026-08-08).** Six new
+  Pass IDs plus two cross-references to already-filed remainders. P0 of
+  this same plan is filed under *Next up* as `Pass 47.0–47.4`; read
+  `docs/decisions/033-gui-usability-and-the-workspace-that-does-
+  nothing.md` first.
+
+  **Two sequencing facts, load-bearing, restated here so re-scoping does
+  not lose them (both established at `Pass 47.0–47.4`'s filing):**
+  - **Form-field resize has TWO prerequisites, not one** — `Pass 46.0`'s
+    own core resize verb (unbuilt) **and** `Pass 47.6` below (widgets
+    becoming canvas-selectable at all — they are not, today; the
+    hit-tester covers page content objects only,
+    `object_provider.rs:470-508`). The second prerequisite had no name
+    anywhere in this file before decision 033.
+  - **`Pass 47.5` must not ship before `Pass 47.0`** (filed under *Next
+    up*) — a right-click menu built against today's `.iter().next()`-
+    reading verbs would expose *"Delete selected (N)"* over a control
+    that deletes one, promising exactly what **R168** forbids.
+
+  | Pass | What | Blocked on |
+  |---|---|---|
+  | `Pass 47.5` | **Right-click context menus, canvas AND Objects tree.** Entries mapped only to verbs that exist: empty page → Fit/Zoom/Rotate; one object → Delete, Properties; N objects → "Delete selected (N)"; widget → Edit in Forms panel, Delete. Objects-tree menu mirrors the canvas set for that row's type plus "Reveal on canvas" (decision 033 §3.5). | `Pass 47.0` |
+  | `Pass 47.6` | **Widgets — and the rest of family (a): markup annotations, redaction marks, links, ce dimensions — become canvas-selectable.** Today the hit-tester covers page content objects only; annotations/widgets/redaction marks/links are not canvas-selectable at all (decision 033 §1.4). The named prerequisite for form-field resize. | — |
+  | `Pass 47.7` | **One contextual ribbon tab, reduced form** — a single slot at the right of the strip, `▸ <armed tool>`, auto-activating on tool-arm and restoring the prior fixed tab on disappearance (decision 024 §3.3(b) rule 1, incl. its egui focus-drop caveat). Holds the armed tool's identity and a "bring to front" for the Tool pane only — not the tool's controls, which stay in the dock (decision 033 §3.3). The six-tab cap survives; this is a separate rendering region, not a seventh `RibbonTab` variant. | — |
+  | `Pass 47.8` | **R124's planned-treatment control style, applied to the scoped gaps already named elsewhere in this file** — reduced opacity + dashed outline + disabled, tooltip citing the Pass ID. `add-push-button`'s palette entry first, since its core verb shipped 2026-08-08 and the recorded reason for the palette's absence has expired. | R124's `★ AMENDMENT` (Standing rules) |
+  | *(`Pass 20.5`)* | Per-type field properties in the Create Field pane — multiline, initial state, the choice-option editor, incl. `/Opt` authoring (decision 033 §3.6). **Already `Pass 20.5`'s own owed remainder** (see *Planned*, below) — decision 033 adds no new ID, only a second reason to do it. | — |
+
+  **P2 — named so it is not lost, not a commitment to build:**
+  - Form-field resize (GUI half) — **already `Pass 46.0`'s own remaining
+    scope**; now additionally blocked on `Pass 47.6` as well as its core
+    resize verb. No new ID.
+  - `Pass 47.9` — **Alt-key KeyTips.** Genuinely absent, real Office
+    parity — and egui 0.35 has no focus-group primitive (R125's own
+    sourcing), so this is bespoke Alt-state tracking across every
+    button. Explicitly **not** a driver of "feels incomplete" (decision
+    033 §4).
+  - `Pass 47.10` — **Objects-tree editing verbs.** Today: select and
+    expand, nothing else. Same verb set as the matching canvas row for
+    that type, mirrored, never a diverging second set (decision 033
+    §3.5).
+  - `delete_annotation` core verb — **already `Pass 38.5`'s own owed
+    remainder** (see *Planned*, below; the Comments panel cannot finish
+    without it). No new ID.
+
+  **Not attempted by any item above, named so it is not silently
+  expected (decision 033 §4):** no backstage/File-menu view (File stays
+  a ribbon tab, decision 024 §3.5); no ribbon customisation/persistence;
+  post-2023 Acrobat is not used as a ribbon reference (it replaced its
+  own ribbon with an "All tools" rail) — it remains the reference for
+  form-editing *semantics* only.
+
+  #### Ledger
+
+  **`tools/check-ledger-numbers.py` was NOT RUN by this filing — no
+  Bash tool was available to this dispatch.** Per hard rule 8's
+  amendment (*"if you have a shell, look… if you do not, write it plainly
+  and stop"*), that is stated rather than papered over. What follows is
+  **not** a checker run; it is this figure derived by reading
+  `docs/ROADMAP.md` and `docs/decisions/` directly and applying the
+  checker's own documented parsing rules by hand (its `collect_rules`/
+  `collect_passes`/`collect_decisions` regexes, read from
+  `tools/check-ledger-numbers.py` itself this filing) — a substitute for
+  running it, not a quotation of a ceiling stated in prose elsewhere,
+  which R106/R133 forbid.
+  - **Standing rules:** highest definition found is `R166` (line 33490,
+    pre-filing) → **R167 and R168 minted this filing** → next free
+    **R169**.
+  - **Decision records:** highest file in `docs/decisions/` is `033`
+    (this decision) → next free **034**. No new decision record filed
+    this session.
+  - **Pass families:** highest HEADED family before this filing was
+    `46` (highest heading `46.1`; `46.2` mentioned-not-headed, reserved
+    for the resize-handle substrate, still unminted) → **family `47`
+    minted this filing**, headed as `Pass 47.0–47.4`; sub-IDs `47.1`
+    through `47.10` are **mentioned, not individually headed** — normal
+    for a filed-but-unbuilt arc, same convention as the 20.x/26.x
+    families.
+  - **SESSION_LOG filing ordinals:** highest heading found is
+    `(thirty-second filing)` (2026-08-08) → this librarian filing is
+    **`(thirty-third filing)`**, appended to `SESSION_LOG.md` in the
+    same session.
+  - **Operator questions:** highest lettered item before this filing was
+    `(bc)` → **(bd)–(bg) minted this filing** → next free **(bh)**.
+  **Recommendation to the engineer: re-run `tools/check-ledger-
+  numbers.py` (and `check-passes-filed.py`) with a shell before treating
+  any of the above as gate-clean** — this filing's arithmetic is a
+  substitute for the instrument, not the instrument.
+
+  **Five questions are the operator's, not filed as Pass work — decision
+  033 §7 in full, filed into `Open operator questions` below as (bb)
+  [R124 confirmation, RULED-PENDING-CONFIRMATION already] and new items
+  (bd)–(bg)** (QAT contents; marquee direction-sensitivity vs.
+  full-enclosure; ribbon density/compact-mode; one contextual tab vs.
+  the full decision 024 Family-B design).
+
 - **`Acrobat_Features` coverage gaps — ELEVEN buckets with zero
   dedicated files, and every `FEATURES.md` Acrobat verdict touching them
   is provisional (filed 2026-08-06, no Pass number assigned).** Surfaced
@@ -27751,6 +27890,24 @@ nothing gets forgotten, not as a commitment to build in this order.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
+**RULED this session (2026-08-08, thirty-third filing) — PENDING
+CONFIRMATION, deliberately not filed as RESOLVED:**
+- **(bb) R124 — do unbuilt features get greyed placeholders in the
+  command surface, or does empty space stay empty? — RULED, via decision
+  033 §5.1, by a different door than a direct answer.** The operator's
+  2026-08-08 instruction (*"Rewrite any rules about the GUI that make it
+  less usable and user friendly"*, decision 033 §0) is read by this
+  filing as the ruling: R124 is amended (see *Standing rules*, R124's
+  own `★ AMENDMENT` block, above) to split by surface — a ribbon control
+  for scoped work may show a planned-treatment placeholder citing a
+  filed Pass ID; a context menu omits an inapplicable entry instead.
+  **This is RULED-PENDING-CONFIRMATION, not RESOLVED** — decision 033 §7
+  question 1 explicitly asks the operator to confirm this reading is
+  what he meant, or say he meant something narrower. Keep this
+  distinction visible: do not read (bb) as closed the way (a)/(aw)/(ax)/
+  (ay)/(bc) below are closed, until that confirmation lands. Full
+  ruling text at the item's own entry, below.
+
 **RESOLVED this session (continuation 108, 2026-08-06) — no longer open:**
 - **(bc) Modeless editing — should clicking a TEXT object with no tool
   armed begin text editing? — RESOLVED, ANSWERED *NO*: a TOGGLE, like the
@@ -28634,6 +28791,14 @@ not a judgment call:**
   stands**, empty space stays empty, and every future surface is designed
   to it — which makes a later reversal a broad, not a local, change.
 
+  **★ RULED 2026-08-08 (decision 033 §5.1), PENDING CONFIRMATION — see
+  the bucket note at the top of this section and R124's own `★
+  AMENDMENT` block in *Standing rules*.** Not filed as RESOLVED: decision
+  033 §7 question 1 asks the operator to confirm this reading rather
+  than assuming it is what *"rewrite any rules about the GUI that make
+  it less usable"* meant. Default-if-unanswered above is superseded by
+  that pending confirmation, not by silence.
+
 - **(bc) Modeless editing — should clicking a TEXT object with no tool
   armed begin text editing?** **Filed 2026-08-06 with Pass 40.0**, which
   built the object-editing half of your *"we should be able to activate
@@ -28659,6 +28824,38 @@ not a judgment call:**
   a mode change triggered by a click is exactly the class of "the
   software did something I did not ask for" that rule 4 exists to catch,
   and it deserves a decision.
+
+- **(bd) The QAT contents.** Filed 2026-08-08 with decision 033 §7 Q2,
+  alongside `Pass 47.1` (QAT restore) under *Next up*. Open, Save, Undo,
+  Redo, page nav, zoom is decision 024 §3.5(d)'s original list. Anything
+  you want added or dropped before `Pass 47.1` builds it? *Default if
+  unanswered:* decision 024's list, unchanged.
+
+- **(be) Marquee semantics have no industry consensus.** Filed
+  2026-08-08 with decision 033 §7 Q3. AutoCAD makes drag DIRECTION
+  decide (left-to-right encloses, right-to-left crosses); Illustrator
+  touches by default; Inkscape encloses by default. pdfce currently
+  requires **full enclosure**, unconditionally. Keep it, or adopt
+  direction-sensitive selection? *Default if unanswered:* full
+  enclosure stands.
+
+- **(bf) Ribbon density.** Filed 2026-08-08 with decision 033 §7 Q4,
+  alongside `Pass 47.2` (ribbon group legibility) under *Next up*. A
+  two-row band with captions centred beneath each group — the fix for
+  the three uncaptioned groups and the "reads as a toolbar, not a
+  ribbon" complaint — costs ~60 px of vertical space against a large CAD
+  sheet. Worth it as filed, or do you want a compact mode? *Default if
+  unanswered:* the two-row band ships as `Pass 47.2` specifies it.
+
+- **(bg) Contextual tabs: one reduced slot, or the full decision 024
+  design?** Filed 2026-08-08 with decision 033 §7 Q5, alongside `Pass
+  47.7` under *Backlog*. §3.3 of decision 033 proposes ONE contextual
+  slot deliberately (`▸ <armed tool>`, identity + "bring to front" only
+  — the tool's controls stay in the dock). Family B (a tab per selection
+  KIND) is decision 024's fuller design, bigger and later, and stays
+  blocked on Passes 22.0/23.2 either way. *Default if unanswered:* the
+  reduced form ships as `Pass 47.7`; Family B stays in *Backlog*,
+  unscoped.
 
   *Default if unanswered:* **it stays unwired.** Text editing keeps
   requiring the Edit Text tool to be armed; everything else — select,
@@ -31060,14 +31257,64 @@ not a judgment call:**
 
 - **R124 — Empty space in the command surface stays empty (decision 024
   §7, filed 2026-08-04, continuation 81; librarian-assigned number).**
-  A ribbon group is never padded with disabled placeholders for unbuilt
-  features, and a sparse tab is not a defect. This is R83's application
+  ~~A ribbon group is never padded with disabled placeholders for
+  unbuilt features, and a sparse tab is not a defect.~~ **AMENDED
+  2026-08-08 — see the block immediately below; the struck sentence now
+  holds for UNSCOPED work only.** This is R83's application
   to a surface that — unlike a full toolbar row — has **visible free
   space and therefore actively invites the violation**. A greyed
   control for a feature that does not exist promises a capability; a
-  gap promises nothing, which is the truth. Directly relevant because
-  pdfce has ~30 toolbar commands against six proposed tabs, so the
-  surface will genuinely look sparse and the temptation is real.
+  gap promises nothing, which is the truth — **for work with no filed
+  Pass ID.** Directly relevant because pdfce has ~30 toolbar commands
+  against six proposed tabs, so the surface will genuinely look sparse
+  and the temptation is real.
+
+  **★ AMENDMENT (2026-08-08, decision 033 §5.1; librarian-filed on the
+  engineer's dispatch, itself acting on the operator's direct 2026-08-08
+  instruction to *"rewrite any rules about the GUI that make it less
+  usable and user friendly"* — decision 033 §0) — R124 IS SPLIT BY
+  SURFACE, and empty-stays-empty now governs UNSCOPED work only.**
+
+  **Why it changed.** The pre-amendment rule conflated *unscoped* work
+  (no Pass ID, no plan) with *filed, sequenced* work (a Pass ID exists)
+  — and, decisively, **Microsoft's own ribbon guidance says the opposite
+  of the pre-amendment rule for the ribbon specifically: a command
+  should be DISABLED, never HIDDEN**, because hiding *"makes the ribbon
+  presentation unstable."* Sourced from the new
+  `D:\Dev\Rag-Specialized\Ribbon_UX\office_ribbon.md` — **the strongest
+  evidence in decision 033 and it came from OUTSIDE the project**;
+  nobody had consulted vendor ribbon guidance before this session. The
+  pre-amendment rule optimised for one kind of honesty (never falsely
+  promise a capability) and paid for it in exactly the symptom the
+  operator reported — a command band that reads as an undifferentiated
+  row of small grey-captioned buttons rather than a structured ribbon
+  (decision 033 §1.1–§1.2, observed live, not inferred from code).
+
+  **The amended rule, in full — this is now R124's governing text:**
+  > **Empty space stays empty for UNSCOPED work; scoped work may show a
+  > *planned* control; and the rule differs by surface.**
+  > - **Ribbon / command bands:** a capability with a filed Pass ID may
+  >   appear as a control in a visually distinct **planned** treatment —
+  >   reduced opacity **and** a dashed outline **and** disabled, never a
+  >   plain greyed clone — whose tooltip names the Pass ID and states
+  >   plainly that it is not yet built. A capability with **no** Pass ID
+  >   stays absent, exactly as the original rule said.
+  > - **Context menus:** the inverse. Inapplicable entries are
+  >   **omitted**, not disabled — except the standard editing verbs,
+  >   which stay present and disabled so their absence is never mistaken
+  >   for a missing feature.
+  > - **Mechanically checkable:** a planned-treatment control that
+  >   cannot cite a Pass ID in its own tooltip is not compliant and must
+  >   be removed, not left.
+
+  **This closes open operator question (bb)** (*"the operator asked for
+  placeholders, the engineer argued against, and the operator has not
+  ruled"*) **by a different door than a direct answer** — decision 033
+  reads the operator's rewrite-the-rules instruction as the ruling.
+  **RULED-PENDING-CONFIRMATION, not silently closed**: decision 033 §7
+  question 1 asks the operator to confirm this reading is what he meant,
+  or say he meant something narrower. See *Open operator questions*,
+  below, for the visible marker.
 
 - **R125 — Only the ACTIVE tab's band is emitted (decision 024 §7,
   filed 2026-08-04, continuation 81; librarian-assigned number,
@@ -31110,6 +31357,24 @@ not a judgment call:**
   `RG::ContentTools` block, gated on the active tab being Edit) were both
   named **first**, which is what turned *"the toggle does not work"* into
   *"the block never ran."* Escalated to `D:\dev\rag\egui\`.
+
+  **★ SCOPE NOTE (2026-08-08, decision 033 §5.2; librarian-filed) — R125
+  GOVERNS TAB-BAND CONTROLS ONLY.** Append, not a rewrite — R125's own
+  reasoning above (immediate-mode non-emission is the *only* available
+  mechanism, per the verified absence of an egui focus-group/tab-index
+  primitive) is unaffected and stays load-bearing for every inactive-tab
+  control. Nothing in R125's original text exempted the Quick Access
+  Toolbar, and that omission is plausibly *how* decision 024 §3.5(d)'s
+  QAT quietly became tab-gated ribbon groups instead of fixed chrome —
+  observed live 2026-08-08: `Go to ‹ Page 1 of 1 ›`, the whole `Zoom`
+  group and Undo/Redo each exist on only one or two of six tabs, so an
+  operator on Measure (the operator's own stated primary activity) has
+  no undo, no zoom and no page controls without a tab switch (decision
+  033 §1.2). This note closes that gap:
+  > **R125 governs tab-band controls only.** Controls designated Quick
+  > Access by decision 024 §3.5(d) — Open, Save, Undo, Redo, page
+  > navigation, zoom — are fixed chrome, emitted every frame regardless
+  > of the active tab.
 
 - **R126 — Every canvas gesture predicate is BUTTON-QUALIFIED (Pass
   18.9, 2026-08-04, continuation 81; librarian-assigned number).**
@@ -34970,6 +35235,59 @@ and
 `C:\personal_rag\pdf\lesson_20260807_verapdf_batchsummary_count_has_no_job_attribution.md`.
 
 **— END OF THE PROPOSAL AS FILED.**
+
+- **R167 — Editor chrome is drawn ABOUT the document, never FROM it; R43
+  does not govern it (decision 033 §5.3, filed 2026-08-08; librarian-
+  assigned number). A COMPANION to R43 and R44 — not an amendment to
+  either.** R43 says an annotation/widget is rendered from its `/AP` or
+  not at all; R44 says a generated appearance written to the file is
+  never silently different from what is displayed. Neither speaks to an
+  overlay the EDITOR paints that is never written to any object — and
+  that gap is what left a form-field widget with no paintable `/AP`
+  literally invisible on the canvas (decision 033 §1.3, observed live:
+  *"the operator can type a value into a field they cannot locate on the
+  page"*). R43 was working exactly as designed to produce that result,
+  and for a form *editor* it is close to disqualifying on its own.
+  **The rule:** an overlay painted each frame to show something R43
+  declines to synthesise — a dashed outline for a widget with no
+  paintable `/AP`, a type glyph, a resize handle, a selection highlight
+  — is permitted and encouraged, on three conditions: (1) it is never
+  written to any `/AP` or any object; (2) it is unmistakably chrome — a
+  distinct hue and a non-solid stroke, never a style the document's own
+  renderer could produce; (3) it draws only in an editing context, so a
+  plain viewing session shows exactly what R43 already guarantees.
+  **R43 is kept unchanged** — the defect this rule answers was never
+  R43 itself, it was that nothing filled the gap R43 deliberately
+  leaves. Prerequisite for a resize handle on any family-(a) object
+  (`Pass 46.0`/`Pass 47.6`): a resize handle on an invisible rectangle
+  is unusable.
+
+- **R168 — A verb offered on an N-target selection acts on the whole
+  selection, or refuses with a stated reason, never a silent subset
+  (decision 033 §5.4, filed 2026-08-08; librarian-assigned number). An
+  APPLICATION of R83's 2026-08-07 amendment to verb SCOPE rather than
+  verb EXISTENCE, not a peer of unrelated shape.** R83's amendment gave
+  the checkable form for a control that promises a capability it does
+  not have: name the verb whose refusal justifies a skip, and confirm
+  it is the verb the suppressed control invokes. This rule points the
+  same shape at a different failure: a control that visibly applies to
+  N targets and silently affects one misrepresents its SCOPE as surely
+  as R83 forbids misrepresenting its EXISTENCE. **Found live, not
+  hypothetically** (decision 033 §1.4): `delete_selected_object`
+  (`main.rs:4174`) and the drag handler (`main.rs:17806`) both read
+  `canvas_selection.iter().next()` — select five objects, press Delete,
+  one disappears, no message. Marquee and Shift-extend genuinely build
+  a multi-object selection; only the verbs narrow it. **Checkable at
+  review:** any verb site reading a selection via `.next()`/`.first()`
+  rather than iterating must have its triggering control gated to
+  single-target selections; if the control is offered while N > 1, the
+  mismatch IS the defect. Filed as a NEW rule rather than an R83
+  sub-clause because it governs a distinct property (scope, not
+  existence) a reader searching R83 for *"does my multi-select delete
+  work"* would not find there. First consumer: `Pass 47.0`, filed ahead
+  of `Pass 47.5`'s right-click menus for exactly this reason — a menu
+  built against today's verbs would offer *"Delete selected (N)"* over
+  a control that deletes one.
 
 ## Update protocol
 

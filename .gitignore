@@ -71,3 +71,11 @@ tools/observations/
 
 # fontfile-census build artefacts (out-of-tree tool, same as tools/tw-census)
 tools/fontfile-census/target/
+
+# Python bytecode caches from the tools/ scripts (check-ledger-numbers.py,
+# check-passes-filed.py, the gen-*-fixtures.py generators). Regenerated on
+# every run and interpreter-version-specific, so tracking them would produce
+# a diff whenever anyone runs a gate on a different Python. Same tracked-tool
+# / untracked-output split as the corpus-harness out-* rules above.
+__pycache__/
+*.py[cod]
