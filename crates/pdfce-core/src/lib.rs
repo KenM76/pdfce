@@ -73,6 +73,7 @@
 
 pub mod annot;
 pub mod annot_author;
+pub mod color;
 pub mod content;
 pub mod dimension;
 pub mod document;

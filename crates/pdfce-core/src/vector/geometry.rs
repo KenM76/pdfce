@@ -361,10 +361,13 @@ impl Bounds {
 /// of an object's paint colour at paint time (§8.6.4 device colours),
 /// captured for display/inspection.
 ///
-/// Uses the SAME naive un-colour-managed conversions as the Pass 1
-/// renderer (`from_gray`/`from_rgb`/`from_cmyk`) so a decomposed object's
-/// recorded colour matches the pixel the renderer paints; real colour
-/// management is later work in both places.
+/// Every constructor delegates to [`crate::color`], which is also what
+/// `pdfce-render`'s graphics state calls, so a decomposed object's recorded
+/// colour is the pixel the renderer paints **by construction** rather than by
+/// two copies of a formula staying in sync. That mattered: until 2026-08-08
+/// these were two hand-copied implementations of the naive additive CMYK
+/// conversion, and calibrating one without the other would have made the
+/// object model's reported colour disagree with the canvas.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rgb {
     /// Red, 0.0–1.0.
@@ -383,33 +386,28 @@ impl Rgb {
         b: 0.0,
     };
 
-    /// From a DeviceGray value (`g`/`G`).
+    /// Build from a `[r, g, b]` triple as [`crate::color`] returns one.
+    const fn from_triple([r, g, b]: [f32; 3]) -> Self {
+        Self { r, g, b }
+    }
+
+    /// From a DeviceGray value (`g`/`G`) — §8.6.4.2.
     #[must_use]
     pub fn from_gray(v: f32) -> Self {
-        let v = v.clamp(0.0, 1.0);
-        Self { r: v, g: v, b: v }
+        Self::from_triple(crate::color::gray_to_srgb(v))
     }
 
-    /// From DeviceRGB components (`rg`/`RG`).
+    /// From DeviceRGB components (`rg`/`RG`) — §8.6.4.3.
     #[must_use]
     pub fn from_rgb(r: f32, g: f32, b: f32) -> Self {
-        Self {
-            r: r.clamp(0.0, 1.0),
-            g: g.clamp(0.0, 1.0),
-            b: b.clamp(0.0, 1.0),
-        }
+        Self::from_triple(crate::color::rgb_to_srgb(r, g, b))
     }
 
-    /// From DeviceCMYK components (`k`/`K`) via the naive additive
-    /// conversion `1 − min(1, x + k)` — the documented Pass 1
-    /// simplification shared with `pdfce-render`.
+    /// From DeviceCMYK components (`k`/`K`) — §8.6.4.4, via the calibrated
+    /// conversion in [`crate::color::cmyk_to_srgb`].
     #[must_use]
     pub fn from_cmyk(c: f32, m: f32, y: f32, k: f32) -> Self {
-        Self {
-            r: 1.0 - (c + k).min(1.0),
-            g: 1.0 - (m + k).min(1.0),
-            b: 1.0 - (y + k).min(1.0),
-        }
+        Self::from_triple(crate::color::cmyk_to_srgb(c, m, y, k))
     }
 }
 

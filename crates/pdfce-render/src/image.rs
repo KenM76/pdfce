@@ -1333,9 +1333,11 @@ impl Space {
             // panicking keeps this total.
             Self::Gray | Self::Indexed(_) => Rgb::from_gray(c(0)),
             Self::Rgb => Rgb::from_rgb(c(0), c(1), c(2)),
-            // The same naive, un-colour-managed conversion the `k`/`K`
-            // operators use, so an image and a filled rectangle of the
-            // "same" CMYK agree on screen (gstate.rs module docs).
+            // The same calibrated conversion the `k`/`K` operators use —
+            // one function in `pdfce_core::color`, reached through the
+            // same `Rgb` constructor — so an image and a filled rectangle
+            // of the "same" CMYK agree on screen by construction rather
+            // than by two formulas being kept in step (gstate.rs docs).
             Self::Cmyk => Rgb::from_cmyk(c(0), c(1), c(2), c(3)),
         }
     }

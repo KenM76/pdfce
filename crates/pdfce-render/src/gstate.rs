@@ -39,10 +39,23 @@
 //! Device colour spaces only (§8.6.4): DeviceGray, DeviceRGB,
 //! DeviceCMYK, set by `g`/`G`, `rg`/`RG`, `k`/`K` (Table 74). Initial
 //! colour is black in every device space (§8.6.4: gray 0 / RGB 0,0,0 /
-//! CMYK 0,0,0,1). Colours are stored converted to RGB at set time —
-//! the naive un-colour-managed CMYK→RGB conversion
-//! (`1 − min(1, x + k)`) is a documented Pass 1 simplification; real
-//! colour management is a later Pass.
+//! CMYK 0,0,0,1). Colours are stored converted to RGB at set time.
+//!
+//! **The conversion itself is not here.** All three device spaces
+//! delegate to [`pdfce_core::color`], which is the single conversion
+//! site in the project — the `k`/`K` operators, `DeviceCMYK` image
+//! samples, and `pdfce-core`'s decomposed-object colour record all pass
+//! through the same function. Two CMYK conversions that disagree would
+//! paint a filled rectangle and an image of the "same" CMYK in visibly
+//! different colours within one document, which is precisely the class
+//! of divergence this crate exists to avoid.
+//!
+//! Note the consequence for `DeviceCMYK`'s initial colour: CMYK
+//! `(0,0,0,1)` is solid **black ink**, which the calibrated conversion
+//! renders as a warm near-black rather than `#000000`. That is the
+//! reference behaviour, not a defect — see `pdfce_core::color`'s module
+//! docs §1–§2 for why an untagged device colour has no "correct" RGB
+//! and pdfce is therefore choosing rather than matching.
 
 use tiny_skia::Transform;
 
@@ -88,33 +101,29 @@ impl Rgb {
         b: 0.0,
     };
 
-    /// From a DeviceGray value (`g`/`G`): gray 0 = black, 1 = white.
+    /// Build from a `[r, g, b]` triple as [`pdfce_core::color`] returns one.
+    const fn from_triple([r, g, b]: [f32; 3]) -> Self {
+        Self { r, g, b }
+    }
+
+    /// From a DeviceGray value (`g`/`G`): gray 0 = black, 1 = white
+    /// (§8.6.4.2).
     #[must_use]
     pub fn from_gray(v: f32) -> Self {
-        let v = v.clamp(0.0, 1.0);
-        Self { r: v, g: v, b: v }
+        Self::from_triple(pdfce_core::color::gray_to_srgb(v))
     }
 
-    /// From DeviceRGB components (`rg`/`RG`).
+    /// From DeviceRGB components (`rg`/`RG`) — §8.6.4.3.
     #[must_use]
     pub fn from_rgb(r: f32, g: f32, b: f32) -> Self {
-        Self {
-            r: r.clamp(0.0, 1.0),
-            g: g.clamp(0.0, 1.0),
-            b: b.clamp(0.0, 1.0),
-        }
+        Self::from_triple(pdfce_core::color::rgb_to_srgb(r, g, b))
     }
 
-    /// From DeviceCMYK components (`k`/`K`) via the naive additive
-    /// conversion `component = 1 − min(1, x + k)` — the documented
-    /// un-colour-managed Pass 1 simplification (module docs).
+    /// From DeviceCMYK components (`k`/`K`) — §8.6.4.4, via the calibrated
+    /// conversion in [`pdfce_core::color::cmyk_to_srgb`] (module docs).
     #[must_use]
     pub fn from_cmyk(c: f32, m: f32, y: f32, k: f32) -> Self {
-        Self {
-            r: 1.0 - (c + k).min(1.0),
-            g: 1.0 - (m + k).min(1.0),
-            b: 1.0 - (y + k).min(1.0),
-        }
+        Self::from_triple(pdfce_core::color::cmyk_to_srgb(c, m, y, k))
     }
 }
 

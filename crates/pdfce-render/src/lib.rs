@@ -1377,21 +1377,76 @@ mod tests {
     }
 
     #[test]
-    fn cmyk_image_uses_the_same_naive_conversion_as_the_k_operator() {
-        // gstate.rs's documented Pass 1 simplification:
-        // component = 1 − min(1, x + k).
+    fn cmyk_image_uses_the_same_conversion_as_the_k_operator() {
+        // THE point of this test is the word "same". `DeviceCMYK` image
+        // samples and the `k` operator are two entirely different code paths
+        // — one goes through `image::Space::to_rgb` per sample, the other
+        // through `interpret`'s operator dispatch — and both must land on the
+        // single conversion in `pdfce_core::color`. Two conversions that
+        // disagree would paint an image and a filled rectangle of the same
+        // CMYK in different colours inside one document, which is the exact
+        // failure this crate's single-conversion-site rule exists to prevent.
+        //
+        // So the expectation is not a hard-coded triple: it is the OTHER
+        // path's output, rendered from a content stream in the same layout.
+        // A future change to the conversion moves both sides together and
+        // this test keeps passing; a change that forks them fails it, which
+        // is the only thing it can usefully detect.
         let data = [
-            0xFF, 0x00, 0x00, 0x00, // cyan   → (0,255,255)
-            0x00, 0xFF, 0x00, 0x00, // magenta→ (255,0,255)
-            0x00, 0x00, 0xFF, 0x00, // yellow → (255,255,0)
-            0x00, 0x00, 0x00, 0xFF, // black  → (0,0,0)
+            0xFF, 0x00, 0x00, 0x00, // solid cyan
+            0x00, 0xFF, 0x00, 0x00, // solid magenta
+            0x00, 0x00, 0xFF, 0x00, // solid yellow
+            0x00, 0x00, 0x00, 0xFF, // solid black ink
         ];
-        let (_, q) = quadrants(
+        let (_, from_image) = quadrants(
             &image_dict("/ColorSpace /DeviceCMYK /BitsPerComponent 8"),
             &data,
             "",
         );
-        assert_eq!(q, [(0, 255, 255), (255, 0, 255), (255, 255, 0), (0, 0, 0)]);
+
+        // The same four inks as `k`-operator fills, one per quadrant of the
+        // same 100×100 page (`FULL_PAGE_CM` is a 100-unit square).
+        let (doc, page) = doc_with_content(
+            "1 0 0 0 k 0 50 50 50 re f \
+             0 1 0 0 k 50 50 50 50 re f \
+             0 0 1 0 k 0 0 50 50 re f \
+             0 0 0 1 k 50 0 50 50 re f",
+            "",
+        );
+        let out = render_page(&doc, &page, 1.0).unwrap();
+        let from_operator = [
+            pixel(&out.pixmap, 25, 25),
+            pixel(&out.pixmap, 75, 25),
+            pixel(&out.pixmap, 25, 75),
+            pixel(&out.pixmap, 75, 75),
+        ];
+        // Equal to within ±1 per channel, and the ±1 is NOT colour slack.
+        // The two paths reach the pixmap by different routes: an image sample
+        // is written as a `ColorU8` directly, whereas a fill goes through
+        // tiny-skia's premultiplied `PremultipliedColorU8`, whose
+        // multiply-then-divide-by-alpha round trip loses up to one 8-bit step.
+        // Measured here as `(237,2,140)` from the image vs `(237,1,140)` from
+        // the fill for solid magenta. That is a rasterizer quantisation
+        // artefact that predates this test and is invisible on screen; a real
+        // conversion fork would show up as tens of steps, not one. Asserting
+        // exact equality would therefore be asserting something about
+        // tiny-skia's premultiply rounding, not about colour agreement.
+        for (i, (img, op)) in from_image.iter().zip(&from_operator).enumerate() {
+            let d = [
+                (i32::from(img.0) - i32::from(op.0)).abs(),
+                (i32::from(img.1) - i32::from(op.1)).abs(),
+                (i32::from(img.2) - i32::from(op.2)).abs(),
+            ];
+            assert!(
+                d.iter().all(|&v| v <= 1),
+                "quadrant {i}: image {img:?} vs k-operator {op:?} differ by {d:?}"
+            );
+        }
+
+        // And pin ONE landmark absolutely, so a fork that broke both paths
+        // identically still fails: solid cyan ink is the reference's
+        // (0, 174, 239), not the naive additive formula's (0, 255, 255).
+        assert_eq!(from_image[0], (0, 174, 239), "solid cyan");
     }
 
     #[test]
@@ -2015,9 +2070,22 @@ mod tests {
         assert_eq!(out.diagnostics.images_rendered, 1);
         let q = jpx_probes(&out);
         // Sample 0 is pure cyan ink; sample 3 is pure black ink; sample
-        // 7 is no ink at all.
-        assert!(q[0].0 < 60 && q[0].1 > 200, "sample 0 cyan: {:?}", q[0]);
-        assert_eq!(q[3], (0, 0, 0), "sample 3 K=255");
+        // 7 is no ink at all. The bounds are the CALIBRATED conversion's
+        // (`pdfce_core::color`): solid cyan is (0, 174, 239) — cyan-ish but
+        // well short of the naive formula's (0, 255, 255) — and solid black
+        // ink alone is the reference's warm near-black (35, 31, 32), NOT
+        // #000000. Only "no ink" is still exactly paper white, which is
+        // pinned in the table precisely because it is observable.
+        assert!(
+            q[0].0 < 40 && q[0].1 > 150 && q[0].2 > 200,
+            "sample 0 cyan: {:?}",
+            q[0]
+        );
+        assert!(
+            q[3].0 < 50 && q[3].1 < 50 && q[3].2 < 50,
+            "sample 3 K=255 (near-black, not pure black): {:?}",
+            q[3]
+        );
         assert_eq!(q[7], (255, 255, 255), "sample 7 no ink");
     }
 
