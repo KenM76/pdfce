@@ -242,8 +242,9 @@ use std::path::{Path, PathBuf};
 use pdfce_core::annot_author::{Color, MarkupSpec, TextAnnotSpec, TextMarkupKind};
 use pdfce_core::dimension::{DEFAULT_GROUP_ID, DimensionKind};
 use pdfce_core::document::Document;
-use pdfce_core::edit::{EditSession, NewRadioButton, NewTextField};
+use pdfce_core::edit::{EditSession, NewImage, NewRadioButton, NewTextField};
 use pdfce_core::fontdata::Std14;
+use pdfce_core::image_import;
 use pdfce_core::page_tree::{self, Page, Rect};
 use pdfce_core::text_edit::{
     AddTextRequest, EditOptions, EditRequest, FormatOptions, FormatRequest, MetricSpec,
@@ -1053,6 +1054,85 @@ fn redaction_mark_preview_equals_saved() {
         "the fixture contains the word the search marks"
     );
     check("redact-mark", &s, 0, Visible::Yes);
+}
+
+// =====================================================================
+// Image placement — the transparency round trip, end to end
+// =====================================================================
+//
+// These two close the loop the `transparency_not_previewed` disclosure
+// was opened for. `EditSession::add_image` wrote correct transparency
+// from the day it shipped; `pdfce-render` deferred it, so a transparent
+// PNG looked opaque in pdfce and right in Acrobat — the file was correct
+// and the preview lied about it. The dedicated pixel proofs live in
+// `image_transparency.rs`; what these add is the OPERATOR'S OWN PATH:
+// import a real PNG, place it, and require the preview and the saved
+// file to agree.
+//
+// Worth noting what R85 does and does not catch here. Before this Pass
+// both sides rendered the image opaque, so both were wrong in the SAME
+// way and R85 passed — a reminder that "preview equals saved" is a
+// consistency oracle, not a correctness one. The correctness assertion
+// is `Visible::Yes` plus `image_transparency.rs`'s pixel values; R85's
+// job is to guarantee that whatever transparency the renderer does apply
+// survives the staging → incremental-save → reload round trip, where the
+// `/SMask` reaches the two sides through entirely different lookups (the
+// session overlay's R45 staging half versus an appended revision).
+
+/// `add-image` with an alpha channel — a `/DeviceRGB` base plus a
+/// separate 8-bit `/SMask` (§8.9.5 Table 89), the shape a colour-type-6
+/// PNG becomes.
+///
+/// The mask is a session-created stream, so on the preview side it is
+/// reached through the overlay and on the saved side through the appended
+/// revision. A `StreamSource` bug that served the base buffer for a
+/// staged span would decode the mask as garbage on exactly one of the two
+/// and show up here as a pixel difference.
+#[test]
+fn add_image_with_smask_preview_equals_saved() {
+    let bytes = std::fs::read(fixture("images", "rgba8.png")).expect("fixture reads");
+    let img = image_import::import(&bytes).expect("rgba8.png imports");
+    let mut s = session("addtext", "plain.pdf");
+    s.add_image(&NewImage::new(
+        0,
+        Rect {
+            llx: 100.0,
+            lly: 500.0,
+            urx: 280.0,
+            ury: 620.0,
+        },
+        &img,
+    ))
+    .expect("add_image applies");
+    check("add-image (/SMask)", &s, 0, Visible::Yes);
+}
+
+/// `add-image` with a single transparent colour — a colour-key `/Mask`
+/// array (§8.9.6.4), the shape a `tRNS` chunk on a truecolour PNG
+/// becomes.
+///
+/// A different mechanism entirely from the case above: no second stream,
+/// no alpha samples, just a range test against the base image's own
+/// pre-`/Decode` values. It is included because the two share no code
+/// below `image::decode` and a regression in one would not touch the
+/// other.
+#[test]
+fn add_image_with_colour_key_mask_preview_equals_saved() {
+    let bytes = std::fs::read(fixture("images", "rgb-trns.png")).expect("fixture reads");
+    let img = image_import::import(&bytes).expect("rgb-trns.png imports");
+    let mut s = session("addtext", "plain.pdf");
+    s.add_image(&NewImage::new(
+        0,
+        Rect {
+            llx: 100.0,
+            lly: 500.0,
+            urx: 280.0,
+            ury: 620.0,
+        },
+        &img,
+    ))
+    .expect("add_image applies");
+    check("add-image (colour-key /Mask)", &s, 0, Visible::Yes);
 }
 
 // =====================================================================

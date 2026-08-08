@@ -140,6 +140,7 @@ use pdfce_core::view::DocumentView;
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
 use crate::gstate::Rgb;
+use crate::mask::{self, AlphaPlane};
 
 /// Maximum `Width × Height` accepted for a single image (pdfce policy,
 /// ARCHITECTURE.md §10.1).
@@ -218,6 +219,47 @@ pub enum ImageError {
     TooLarge,
 }
 
+/// Which of §8.9.6.1's transparency mechanisms supplied an image's alpha.
+///
+/// Exactly one can be in force per image — `/SMask` and `/Mask` are
+/// separate entries and `/Mask` is either a stream or an array, never
+/// both — so this is an `Option<MaskApplied>` on [`ImageNotes`] rather
+/// than a set of independent flags. The precedence when a document names
+/// more than one is documented on [`decode`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum MaskApplied {
+    /// `/SMask` — a separate greyscale image, one continuous alpha per
+    /// sample (§8.9.5 Table 89, §11.6.5.3). The mechanism a transparent
+    /// PNG's alpha channel becomes.
+    SoftMask,
+    /// `/Mask` as a stream — a separate 1-bit stencil selecting which
+    /// base texels paint (§8.9.6.3). Binary, never partial.
+    Stencil,
+    /// `/Mask` as an array — ranges of the base image's own
+    /// pre-`/Decode` samples that vanish (§8.9.6.4). The mechanism a
+    /// single-transparent-colour PNG (`tRNS` on a truecolour image)
+    /// becomes.
+    ColourKey,
+    /// A JPX codestream's own opacity channel, switched on by
+    /// `/SMaskInData 1` (Table 89). Not a dictionary entry at all — the
+    /// alpha travels inside the image's own bytes.
+    EmbeddedAlpha,
+}
+
+impl MaskApplied {
+    /// A stable, greppable name for the diagnostics surfaces.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::SoftMask => "smask",
+            Self::Stencil => "stencil",
+            Self::ColourKey => "colour-key",
+            Self::EmbeddedAlpha => "jpx-embedded-alpha",
+        }
+    }
+}
+
 /// Divergences that did **not** stop the image from being drawn.
 ///
 /// Distinct from [`ImageError`] because the operator's question is
@@ -231,19 +273,57 @@ pub struct ImageNotes {
     /// stream is malformed, but refusing to draw the 90% that *is*
     /// present helps nobody.)
     pub truncated: bool,
-    /// The image carries `/SMask` or `/Mask` (§8.9.6.3/§8.9.6.4/clause
-    /// 11), **or** a JPX codestream carrying its own opacity channel
-    /// that `/SMaskInData` switched on (Table 89). Transparency is not
-    /// implemented in this slice, so the base image was drawn **fully
-    /// opaque** — visually wrong wherever the mask would have hidden
-    /// something.
+    /// Which transparency mechanism produced this image's alpha, or
+    /// `None` for an image that is opaque because the document says so.
     ///
-    /// The JPX case belongs here rather than in a separate note because
-    /// the operator's question and the visual outcome are identical:
-    /// soft-mask data exists, it was not composited. Where the data
-    /// *lives* — a sibling stream or the image's own codestream — is a
-    /// distinction only the decoder cares about.
-    pub mask_deferred: bool,
+    /// Census, not shortfall: every variant means pdfce **did** the
+    /// work. The shortfall twin is
+    /// [`mask_refused`](ImageNotes::mask_refused).
+    pub mask_applied: Option<MaskApplied>,
+    /// A `/SMask` or `/Mask` was present and could **not** be turned
+    /// into alpha, so the base image was drawn **fully opaque** —
+    /// visually wrong wherever the mask would have hidden something.
+    /// The payload is [`crate::mask::MaskRefusal::key`], a stable name
+    /// so occurrences can be counted **by reason** (rule R27).
+    ///
+    /// This is the residue of the pre-transparency build's blanket
+    /// `mask_deferred`: that note fired for every masked image, because
+    /// none were composited. It now fires only for the ones pdfce
+    /// genuinely could not handle.
+    pub mask_refused: Option<&'static str>,
+    /// The mask's pixel dimensions differed from the base image's, so
+    /// its samples were point-sampled across the base's grid
+    /// (§8.9.6.3: "need not have the same resolution … their boundaries
+    /// on the page will coincide"). Conformant and common; recorded
+    /// because a resampled mask cannot be pixel-exact and a parity
+    /// investigation should not have to re-derive why.
+    pub mask_resampled: bool,
+    /// The `/SMask` carried `/Matte` (Table 146) and pdfce **undid the
+    /// preblend** per §11.6.5.3's `c = m + (c′ − m)/α`.
+    ///
+    /// Census, not shortfall — but recorded, because a `/Matte` image's
+    /// partially-transparent samples are reconstructed by a division
+    /// that amplifies quantisation error by `1/α`. A parity
+    /// investigation that finds a `/Matte` image disagreeing with
+    /// another engine in its near-transparent fringes should know that
+    /// before spending an afternoon on it.
+    pub matte_undone: bool,
+    /// A `/Matte` was present and **not** undone, with the reason.
+    ///
+    /// The alpha is applied either way — that half is conformant
+    /// regardless — so the picture's *shape* is right and only the
+    /// colours in the partially-transparent regions stay shifted toward
+    /// the matte colour. Reasons: `"matte/dimension-mismatch"` (Table
+    /// 145 makes equal dimensions a `shall` when `/Matte` is present, so
+    /// a mismatch means the file is wrong about one of the two, and
+    /// dividing by a resampled α would use the wrong α for every
+    /// sample), `"matte/indexed"` (spec ambiguity `SM-A4`: Table 146
+    /// counts `n` from the parent's `/ColorSpace`, which for `Indexed`
+    /// is **1**, while §11.6.5.3 requires the *colour table* values to
+    /// be preblended, which needs the base space's `n` — the two rules
+    /// contradict and pdfce will not pick a side silently), and
+    /// `"matte/length"` (the array is not `n` long).
+    pub matte_not_undone: Option<&'static str>,
     /// At least one sample indexed past the end of a short `Indexed`
     /// lookup table and was painted black (`color__indexed.md`: real
     /// producers trim trailing unused palette entries).
@@ -281,14 +361,24 @@ pub struct ImageNotes {
     /// drawn, from the preblended colour channels exactly as stored —
     /// which is what it genuinely looks like composited over that
     /// backdrop, so the picture is right wherever it is opaque and
-    /// shows the backdrop where it is not. What is missing is the
-    /// un-premultiplication and the soft mask, which need clause 11's
-    /// transparency model (`ROADMAP.md` Pass 1.1 item 6.3).
+    /// shows the backdrop where it is not.
     ///
-    /// Separate from [`mask_deferred`](ImageNotes::mask_deferred)
-    /// because the divergence is different in kind: `mask_deferred`
-    /// means "correct colours, missing transparency", this means "the
-    /// colours themselves have a backdrop mixed into them".
+    /// **Still deferred after the transparency Pass, and for a reason
+    /// that has nothing to do with clause 11.** §11.6.5.3's
+    /// un-premultiply is now implemented ([`crate::mask::undo_matte`])
+    /// and would apply here unchanged — but it needs the opacity channel
+    /// and the matte colour, and neither is available: Table 89's
+    /// `/SMaskInData 2` names a *premultiplied* opacity channel type
+    /// that `hayro-jpeg2000` does not parse, so the codec layer leaves
+    /// `CodedImage::embedded_alpha` as `None`, and a JPX codestream
+    /// carries no `/Matte` (that entry lives on a soft-mask image
+    /// dictionary, which this construct does not have). The blocker is a
+    /// decoder gap, not a spec gap.
+    ///
+    /// Separate from [`mask_refused`](ImageNotes::mask_refused) because
+    /// the divergence is different in kind: a refused mask means
+    /// "correct colours, missing transparency", this means "the colours
+    /// themselves have a backdrop mixed into them".
     pub jpx_smask_in_data_preblended: bool,
     /// LZW framing anomalies in the byte-stream part of the chain — a
     /// stream with no `ClearCode`, or one that ended with no
@@ -324,9 +414,50 @@ pub struct DecodedImage {
 ///   stencil-mask path (§8.9.6.2) and ignored otherwise.
 /// - `origin` selects §8.9.7's stricter inline-image filter rules.
 ///
+/// ## Transparency precedence when a document names more than one
+///
+/// §8.9.6 is silent on this, and `iso32000__s__8.9.5.2.md` carried it as
+/// an open gap until 2026-08-08 — but the answer is **normative and
+/// verbatim**, it simply lives in Table 89's `SMask` row rather than in
+/// §8.9.6 where a reader would look for it:
+///
+/// > "shall **override** the current soft mask in the graphics state,
+/// > **as well as the image's `Mask` entry, if any**. However, the other
+/// > transparency-related graphics state parameters — blend mode and
+/// > alpha constant — shall remain in effect."
+///
+/// §11.6.4.3 says the same thing independently. So co-presence is
+/// **legal, not an error**: the loser is ignored, and — R34 — must still
+/// round-trip byte-identical, which it does here because nothing in this
+/// path writes.
+///
+/// The ladder pdfce walks:
+///
+/// 1. **`/ImageMask true`** short-circuits everything — such an image
+///    has no colour, so there is nothing for a mask to make transparent
+///    (and §8.9.6.2 forbids it carrying `/Mask` at all).
+/// 2. **`/SMask`** (and `/SMaskInData` ≠ 0), by the quotation above.
+/// 3. **`/Mask`** — stream (stencil) or array (colour key), dispatched
+///    on the resolved type as §8.9.6.1 requires.
+/// 4. **The JPX codestream's own opacity channel**, when
+///    `/SMaskInData 1` switched it on (Table 89).
+///
+/// Below all of that sits the ExtGState soft mask and then 1.0, neither
+/// of which this Pass implements — see the module docs of
+/// [`crate::mask`] and `iso32000__ref__image_transparency.md`.
+///
+/// A mechanism that is present but refused (see
+/// [`crate::mask::MaskRefusal`]) does **not** fall through to the next
+/// one: the document named a mechanism, pdfce could not honour it, and
+/// quietly substituting a different one would be exactly the kind of
+/// plausible-looking guess `fuzzy, never sneaky` forbids. The refusal is
+/// recorded in [`ImageNotes::mask_refused`] and the image draws opaque.
+///
 /// # Errors
 ///
 /// [`ImageError`] — see its variants. Every one means "nothing drawn".
+/// A mask that cannot be decoded is **not** one of them: the picture is
+/// still drawn, and the shortfall is a note rather than an error.
 pub fn decode(
     doc: &DocumentView<'_>,
     dict: &Dict,
@@ -358,24 +489,10 @@ pub fn decode(
         lzw_framing_anomalies: coded.notes.lzw_framing_anomalies,
         ..ImageNotes::default()
     };
-    // §8.9.6: `Mask` (explicit or colour-key) and `SMask` (soft) both
-    // hide parts of the base image. Recognized and reported; the base
-    // image still draws, opaque.
-    //
-    // `CodedImage::embedded_alpha` is the third source of the same
-    // divergence and the only one that is not a dictionary entry: a JPX
-    // codestream's own opacity channel, which the codec layer surfaces
-    // only when `/SMaskInData` says to (Table 89 — the default of 0
-    // means "shall be ignored", so a JPX image with alpha inside it and
-    // no `/SMaskInData` is correctly drawn opaque and is NOT a deferred
-    // mask).
-    if dict.get(b"SMask").is_some() || dict.get(b"Mask").is_some() || coded.embedded_alpha.is_some()
-    {
-        notes.mask_deferred = true;
-    }
-
     // §8.9.6.2: an image mask is a completely different object — no
     // colour space, no colour conversion, `Decode` is a polarity bit.
+    // Step 1 of the precedence ladder in this function's docs: it
+    // short-circuits before any mask is even looked for.
     if matches!(
         dict.get(b"ImageMask").map(|o| doc.resolve(o)),
         Some(Object::Boolean(true))
@@ -383,7 +500,152 @@ pub fn decode(
         return decode_stencil(dict, &coded, width, height, fill, notes);
     }
 
-    decode_sampled(doc, dict, &coded, width, height, resources, notes)
+    let mut tr = resolve_transparency(doc, dict, &coded, resources, &mut notes);
+    if let Some(plane) = &tr.alpha
+        && plane.dimensions() != (width, height)
+    {
+        notes.mask_resampled = true;
+        // Table 145's `Width` row: "**If a `Matte` entry … is present,
+        // shall be the same as the `Width` value of the parent image**;
+        // otherwise independent of it." A mismatched `/Matte` mask is
+        // therefore non-conformant, and un-premultiplying with a
+        // resampled α would divide each sample by an alpha that is not
+        // its own — recovering colours from the wrong equation. The
+        // ALPHA is still honoured (that half is conformant either way);
+        // only the colour correction is dropped, by name.
+        if tr.matte.is_some() {
+            tr.matte = None;
+            notes.matte_not_undone = Some("matte/dimension-mismatch");
+        }
+    }
+
+    decode_sampled(
+        doc,
+        dict,
+        &coded,
+        width,
+        height,
+        resources,
+        notes,
+        tr.alpha.as_ref(),
+        tr.colour_key,
+        tr.matte.as_deref(),
+    )
+}
+
+/// Whichever alpha source won [`decode`]'s precedence ladder, plus the
+/// `/Matte` that may travel with a soft mask.
+///
+/// A struct rather than a tuple because the three fields are not
+/// interchangeable and two of them are `Option`s of the same shape —
+/// exactly the situation where a positional return silently swaps under
+/// a later edit.
+struct Transparency<'a> {
+    /// Per-texel alpha, for the three mechanisms that have one.
+    alpha: Option<AlphaPlane>,
+    /// The un-parsed colour-key `/Mask` array (§8.9.6.4), which cannot
+    /// become a plane — see [`resolve_transparency`].
+    colour_key: Option<&'a Object>,
+    /// `/Matte` (Table 146), in the **parent image's** colour space.
+    matte: Option<Vec<f32>>,
+}
+
+/// Walk the precedence ladder documented on [`decode`] and produce
+/// whichever alpha source wins.
+///
+/// Returns the resolved [`AlphaPlane`] for the three per-sample
+/// mechanisms, **or** the un-parsed `/Mask` array object for colour-key
+/// masking — which cannot become a plane here, because §8.9.6.4's ranges
+/// are tested against the base image's own pre-`/Decode` samples and
+/// those only exist inside [`decode_sampled`]'s pixel loop.
+///
+/// Every refusal is recorded in `notes` and none of them falls through
+/// to the next mechanism (see [`decode`]'s precedence section for why).
+fn resolve_transparency<'a>(
+    doc: &DocumentView<'a>,
+    dict: &'a Dict,
+    coded: &CodedImage,
+    resources: &Dict,
+    notes: &mut ImageNotes,
+) -> Transparency<'a> {
+    let none = Transparency {
+        alpha: None,
+        colour_key: None,
+        matte: None,
+    };
+
+    // Rung 2 — `/SMask`.
+    if let Some(entry) = dict.get(b"SMask") {
+        return match mask::soft_mask_plane(doc, entry, resources) {
+            Ok(soft) => {
+                notes.mask_applied = Some(MaskApplied::SoftMask);
+                Transparency {
+                    alpha: Some(soft.plane),
+                    colour_key: None,
+                    matte: soft.matte,
+                }
+            }
+            Err(err) => {
+                notes.mask_refused = Some(err.key());
+                none
+            }
+        };
+    }
+
+    // Rung 3 — `/Mask`, dispatched on its resolved type (§8.9.6.1: a
+    // stream is an explicit mask, an array is a colour-key mask).
+    if let Some(entry) = dict.get(b"Mask") {
+        return match doc.resolve(entry) {
+            Object::Array(_) => {
+                // Parsed in `decode_sampled`, where the component count
+                // is known; the entry is carried, not the ranges.
+                notes.mask_applied = Some(MaskApplied::ColourKey);
+                Transparency {
+                    colour_key: Some(entry),
+                    ..none
+                }
+            }
+            _ => match mask::stencil_plane(doc, entry) {
+                Ok(plane) => {
+                    notes.mask_applied = Some(MaskApplied::Stencil);
+                    Transparency {
+                        alpha: Some(plane),
+                        ..none
+                    }
+                }
+                Err(err) => {
+                    notes.mask_refused = Some(err.key());
+                    none
+                }
+            },
+        };
+    }
+
+    // Rung 4 — the JPX codestream's own opacity channel. Present only
+    // when `/SMaskInData` is 1 (Table 89: the default of 0 means the
+    // channel "shall be ignored", so a JPX image with alpha inside it
+    // and no `/SMaskInData` is CORRECTLY drawn opaque and is not a
+    // shortfall). `/SMaskInData 2` leaves this `None` and is reported
+    // through `jpx_smask_in_data_preblended` instead — those colour
+    // samples carry a backdrop that needs `/Matte` to undo.
+    if let Some(bytes) = &coded.embedded_alpha {
+        match AlphaPlane::from_bytes(coded.width, coded.height, bytes.clone()) {
+            Some(plane) => {
+                notes.mask_applied = Some(MaskApplied::EmbeddedAlpha);
+                return Transparency {
+                    alpha: Some(plane),
+                    ..none
+                };
+            }
+            None => {
+                // A short opacity channel is a codec bug, not a
+                // document defect; named all the same.
+                notes.mask_refused = Some("mask/short-embedded-alpha");
+            }
+        }
+    }
+
+    none
 }
 
 /// The physical layout of the sample bytes in hand.
@@ -598,6 +860,22 @@ fn decode_stencil(
 // ---------------------------------------------------------------------------
 
 /// Build the RGBA texels for a colour image.
+///
+/// `alpha` is a resolved soft/stencil/embedded alpha plane, sampled per
+/// texel across the base's grid; `colour_key_entry` is the un-parsed
+/// `/Mask` array for §8.9.6.4 masking. At most one of them is ever
+/// `Some` — [`resolve_transparency`] enforces the precedence.
+///
+/// Both are applied **in the existing pixel loop**, not in a second pass
+/// over the pixmap. That is a deliberate performance choice as much as a
+/// tidiness one: the loop already reads every raw sample (which is what
+/// colour-key masking needs) and already writes every texel (which is
+/// what alpha needs), so transparency costs one array index and one
+/// multiply per texel rather than a whole extra traversal of a
+/// potentially 40-megapixel buffer.
+#[allow(clippy::too_many_arguments)] // Each argument is a distinct input
+// the loop genuinely needs; bundling them into a struct would move the
+// same seven values behind one name without removing any of them.
 fn decode_sampled(
     doc: &DocumentView<'_>,
     dict: &Dict,
@@ -606,6 +884,9 @@ fn decode_sampled(
     height: u32,
     resources: &Dict,
     mut notes: ImageNotes,
+    alpha: Option<&AlphaPlane>,
+    colour_key_entry: Option<&Object>,
+    matte: Option<&[f32]>,
 ) -> Result<DecodedImage, ImageError> {
     let data = &coded.samples;
     // Table 89 makes this filter — and only this filter — able to
@@ -722,6 +1003,58 @@ fn decode_sampled(
     // colour maths at all.
     let palette = space.palette();
 
+    // §8.9.6.4's ranges are counted against the IMAGE's colour space, so
+    // the component count is the one resolved above — 1 for `Indexed`
+    // (the index), not the base space's width. A length mismatch drops
+    // the mask by name rather than masking the wrong colours.
+    let colour_key = match colour_key_entry {
+        Some(entry) => match mask::ColourKey::parse(doc, entry, components) {
+            Ok(key) => Some(key),
+            Err(err) => {
+                notes.mask_applied = None;
+                notes.mask_refused = Some(err.key());
+                None
+            }
+        },
+        None => None,
+    };
+
+    // §11.6.5.3's un-premultiply, validated once rather than per texel.
+    // Two ways it is dropped here, both named:
+    //
+    // - `Indexed`: spec ambiguity SM-A4. Table 146 counts `/Matte`'s `n`
+    //   from the parent's `/ColorSpace`, which for `Indexed` is 1 (the
+    //   index); §11.6.5.3 says "the colour values in the colour table
+    //   (not the index values themselves) shall be preblended", which
+    //   needs the BASE space's `n`. Those cannot both be satisfied, and
+    //   un-premultiplying a palette index is meaningless in any reading.
+    // - a length that is not `n`: Table 146 is exact about it, and a
+    //   short array would apply the matte to a prefix of the components,
+    //   producing a colour cast on some channels and not others.
+    let matte = match matte {
+        None => None,
+        Some(_) if palette.is_some() => {
+            notes.matte_not_undone = Some("matte/indexed");
+            None
+        }
+        Some(m) if m.len() != components => {
+            notes.matte_not_undone = Some("matte/length");
+            None
+        }
+        Some(m) => {
+            notes.matte_undone = true;
+            Some(m)
+        }
+    };
+
+    // Hoisted out of the pixel loop so the overwhelmingly common
+    // no-colour-key case pays a perfectly-predicted loop-invariant
+    // branch rather than two stack stores per component per texel. On a
+    // 40-megapixel CMYK image that is 320 million stores avoided; this
+    // project has already had one render-performance emergency and the
+    // cheapest time to not create the next one is now.
+    let keying = colour_key.is_some();
+
     let mut pixmap = Pixmap::new(width, height).ok_or(ImageError::TooLarge)?;
     let mut out_of_range = false;
     let texels = pixmap.pixels_mut();
@@ -730,6 +1063,16 @@ fn decode_sampled(
         let row_bit_base = y.saturating_mul(stride).saturating_mul(8);
         for x in 0..width as usize {
             let first = x.saturating_mul(layout.components);
+            // Read the plane BEFORE the colour work: §11.6.5.3's
+            // un-premultiply divides by this very value, and it must be
+            // applied before the colour-space conversion below.
+            let plane_alpha = alpha.map_or(255u8, |p| p.at(x as u32, y as u32, width, height));
+            // The pre-`/Decode` integers, kept alive across the colour
+            // conversion because §8.9.6.4 tests THESE, not the colours
+            // they become ("representing colour values BEFORE decoding
+            // with the `Decode` array"). Filling it is skipped entirely
+            // when no colour-key mask is in force.
+            let mut raw_comps = [0u32; 4];
             let rgb = match &palette {
                 Some(table) => {
                     // Indexed: one component, and after the (default:
@@ -740,6 +1083,9 @@ fn decode_sampled(
                         row_bit_base + first * layout.bits as usize,
                         layout.bits,
                     );
+                    if keying && let Some(slot) = raw_comps.first_mut() {
+                        *slot = raw;
+                    }
                     let (dmin, slope) = ramp.first().copied().unwrap_or((0.0, 1.0));
                     let value = dmin + raw as f32 * slope;
                     let index = value.round().max(0.0) as usize;
@@ -759,6 +1105,9 @@ fn decode_sampled(
                             row_bit_base + (first + c) * layout.bits as usize,
                             layout.bits,
                         );
+                        if keying && let Some(slot) = raw_comps.get_mut(c) {
+                            *slot = raw;
+                        }
                         let (dmin, slope) = ramp.get(c).copied().unwrap_or((0.0, 1.0));
                         // §8.9.5.2's output clamping: "if an output
                         // value falls outside the range allowed for a
@@ -768,11 +1117,28 @@ fn decode_sampled(
                             *slot = (dmin + raw as f32 * slope).clamp(0.0, 1.0);
                         }
                     }
+                    // §11.6.5.3: "If a colour conversion is required,
+                    // inversion of the preblending shall precede the
+                    // colour conversion", and it is done "in the colour
+                    // space specified by the parent image's ColorSpace
+                    // entry" — which is exactly the state `comps` is in
+                    // on this line and nowhere after it.
+                    if let Some(m) = matte {
+                        mask::undo_matte(&mut comps, components.min(4), m, plane_alpha);
+                    }
                     space.to_rgb(&comps)
                 }
             };
+            // Alpha, in the order the precedence ladder resolved: a
+            // colour-key hit is absolute (0 or 255, §8.9.6.4 has no
+            // partial state), otherwise the plane's sample, otherwise
+            // opaque.
+            let a = match &colour_key {
+                Some(key) if key.masks(&raw_comps[..readable.min(4)]) => 0,
+                _ => plane_alpha,
+            };
             if let Some(slot) = texels.get_mut(y * width as usize + x) {
-                *slot = premultiplied(rgb, 255);
+                *slot = premultiplied(rgb, a);
             }
         }
     }
@@ -788,7 +1154,13 @@ fn decode_sampled(
 /// image — a 3-pixel-wide 1-bpc image has a 1-byte stride with 5
 /// padding bits on every row, and computing it image-wide instead
 /// shears the picture diagonally.
-fn row_stride(width: u32, components: usize, bpc: u32) -> Result<usize, ImageError> {
+///
+/// `pub(crate)` for [`crate::mask`], which unpacks `/SMask` and `/Mask`
+/// samples under exactly the same §8.9.3 rules. Sharing the function is
+/// the point: a mask whose stride was computed differently from the base
+/// image's would shear against it, and that is the sort of divergence
+/// two copies of "the same" arithmetic produce.
+pub(crate) fn row_stride(width: u32, components: usize, bpc: u32) -> Result<usize, ImageError> {
     let bits = u64::from(width)
         .checked_mul(components as u64)
         .and_then(|v| v.checked_mul(u64::from(bpc)))
@@ -806,7 +1178,10 @@ fn row_stride(width: u32, components: usize, bpc: u32) -> Result<usize, ImageErr
 /// Out-of-range reads return **0** rather than failing: the caller has
 /// already flagged the stream as truncated, and returning a value keeps
 /// the surviving majority of the image on the page.
-fn read_sample(data: &[u8], bit_offset: usize, bpc: u32) -> u32 {
+///
+/// `pub(crate)` for [`crate::mask`] — see [`row_stride`] for why the
+/// mask path shares this rather than restating it.
+pub(crate) fn read_sample(data: &[u8], bit_offset: usize, bpc: u32) -> u32 {
     let byte_index = bit_offset / 8;
     let at = |i: usize| u32::from(data.get(i).copied().unwrap_or(0));
     match bpc {
@@ -827,7 +1202,11 @@ fn read_sample(data: &[u8], bit_offset: usize, bpc: u32) -> u32 {
 /// inversion idiom, not a malformed rectangle — the exact opposite of
 /// §7.9.5's rule for `/BBox` and `/MediaBox`, and confusing the two is
 /// the named trap in `iso32000__s__8.9.5.2.md`.
-fn decode_pairs(dict: &Dict) -> Option<Vec<(f32, f32)>> {
+///
+/// `pub(crate)` for [`crate::mask`]: a soft mask's `/Decode` inverts
+/// alpha by the same `Dmin > Dmax` idiom, and a stencil mask's is a
+/// polarity switch read from the same pair.
+pub(crate) fn decode_pairs(dict: &Dict) -> Option<Vec<(f32, f32)>> {
     let items = dict.get(b"Decode")?.as_array()?;
     if items.len() < 2 {
         return None;
@@ -846,13 +1225,33 @@ fn decode_pairs(dict: &Dict) -> Option<Vec<(f32, f32)>> {
 
 /// Pack an [`Rgb`] plus alpha into a tiny-skia premultiplied texel.
 ///
-/// Alpha is 255 in every path this slice produces except a stencil
-/// mask's transparent texels, so the premultiplication is the identity
-/// and the components are just rounded — but going through
-/// `from_rgba` keeps the invariant (`component ≤ alpha`) enforced by
-/// the type rather than by convention.
+/// ## This is a MULTIPLY, and it has to be
+///
+/// tiny-skia stores colours **premultiplied**: the stored component is
+/// `colour × alpha`, not the colour with an alpha stapled beside it.
+/// Before transparency landed, every texel this module produced had
+/// `alpha == 255` (a stencil mask's transparent texels being explicitly
+/// `TRANSPARENT` rather than routed through here), so the function could
+/// get away with `min(round(v × 255), alpha)` — a *clamp*, which is
+/// exactly right at `alpha == 255` and exactly right at the extremes
+/// `v == 0` and `v == 1`, and wrong everywhere else.
+///
+/// That is a genuinely nasty shape of bug: mid-grey at half alpha would
+/// have come out as `min(128, 128) = 128` — full-strength grey, twice as
+/// bright as the correct `0.5 × 128 = 64` — while every pure black, pure
+/// white and fully-opaque pixel stayed right. A test over a black-and-
+/// white checkerboard would have passed. The fixtures therefore use a
+/// deliberately mid-toned ramp (`tools/gen-image-fixtures.py`'s
+/// `alpha_at`), which is the only kind of data that can catch it.
+///
+/// Multiplying by `alpha` (0–255) rather than by 255 and then scaling
+/// keeps the type's own invariant — `component ≤ alpha` — true by
+/// construction rather than by a `min` that hides the arithmetic error.
+/// At `alpha == 255` the result is bit-identical to the old code, so no
+/// opaque image moved a single pixel when this changed.
 fn premultiplied(c: Rgb, alpha: u8) -> PremultipliedColorU8 {
-    let q = |v: f32| ((v.clamp(0.0, 1.0) * 255.0).round() as u8).min(alpha);
+    let a = f32::from(alpha);
+    let q = |v: f32| (v.clamp(0.0, 1.0) * a).round() as u8;
     PremultipliedColorU8::from_rgba(q(c.r), q(c.g), q(c.b), alpha)
         .unwrap_or(PremultipliedColorU8::TRANSPARENT)
 }
@@ -869,8 +1268,12 @@ fn premultiplied(c: Rgb, alpha: u8) -> PremultipliedColorU8 {
 /// device spaces, their CIE-based aliases handled by the same maths,
 /// `ICCBased` through its `N`-component fallback, and `Indexed` over
 /// any of those.
+///
+/// `pub(crate)` for [`crate::mask`], which needs exactly one thing from
+/// it: [`Space::components`], to enforce that an `/SMask`'s colour space
+/// carries one component per sample.
 #[derive(Debug, Clone)]
-enum Space {
+pub(crate) enum Space {
     /// `DeviceGray` / `CalGray` / `ICCBased` with `N 1`.
     Gray,
     /// `DeviceRGB` / `CalRGB` / `ICCBased` with `N 3`.
@@ -889,7 +1292,7 @@ impl Space {
     /// count. That distinction drives the row stride, the `Decode`
     /// array length, and the predictor's `/Colors`, and getting it
     /// wrong shears the image (`color__indexed.md`).
-    const fn components(&self) -> usize {
+    pub(crate) const fn components(&self) -> usize {
         match self {
             Self::Gray | Self::Indexed(_) => 1,
             Self::Rgb => 3,
@@ -994,7 +1397,12 @@ fn codestream_space(coded: &CodedImage) -> Result<Space, ImageError> {
 /// `[/Indexed base hival lookup]` array. `depth` guards the nesting
 /// (`Indexed` over `ICCBased` is two levels; a self-referential named
 /// resource is unbounded).
-fn resolve_space(
+///
+/// `pub(crate)` for [`crate::mask`]: a soft mask has its own
+/// `/ColorSpace`, resolved by the same rules (including the named-
+/// resource hop), and only then checked for the single-component
+/// constraint §8.9.5 Table 89 puts on it.
+pub(crate) fn resolve_space(
     doc: &DocumentView<'_>,
     obj: &Object,
     resources: &Dict,

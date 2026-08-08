@@ -343,6 +343,61 @@ pub struct Diagnostics {
     /// without an `EndOfInformation`. Both are recovered, both are
     /// non-conformant, both are reported.
     pub lzw_framing_anomalies: usize,
+
+    // ---- image transparency (§8.9.6, §11.6.5.3) ----------------------
+    //
+    // A census pair plus two texture counters. `images_masked` counts
+    // success and deliberately prints no warning — decision 006 §4.4's
+    // lesson, that a note on verified-correct volume trains an operator
+    // to ignore the channel. `images_mask_unsupported` is the shortfall
+    // twin and always names its reason.
+    /// Sampled images whose transparency pdfce **composited**: an
+    /// `/SMask`, an explicit `/Mask` stencil, a colour-key `/Mask`, or a
+    /// JPX in-codestream opacity channel. A subset of
+    /// [`Diagnostics::images_rendered`].
+    pub images_masked: usize,
+    /// Of [`Diagnostics::images_masked`], the breakdown by mechanism,
+    /// keyed by [`crate::image::MaskApplied::key`] (`"smask"`,
+    /// `"stencil"`, `"colour-key"`, `"jpx-embedded-alpha"`). A
+    /// `BTreeMap` so a batch report's key order is deterministic.
+    ///
+    /// Which mechanism a corpus actually uses is the measurement that
+    /// should drive any future optimisation here, so it is recorded
+    /// rather than guessed at.
+    pub mask_applied: BTreeMap<&'static str, usize>,
+    /// Images carrying a `/SMask` or `/Mask` that pdfce could **not**
+    /// turn into alpha, so the base image was drawn **fully opaque** —
+    /// visually wrong wherever the mask would have hidden something.
+    /// The image-transparency twin of
+    /// [`Diagnostics::images_unsupported`], separate because the
+    /// operator's question differs: "is this picture missing?" versus
+    /// "is this picture too solid?"
+    pub images_mask_unsupported: usize,
+    /// Of [`Diagnostics::images_mask_unsupported`], the breakdown by
+    /// reason, keyed by [`crate::mask::MaskRefusal::key`] (rule R27:
+    /// "the mask is 40 gigapixels" and "the mask is in a colour space
+    /// pdfce refuses" lead to different next actions).
+    pub mask_refused: BTreeMap<&'static str, usize>,
+    /// Masks whose pixel dimensions differed from their base image's and
+    /// were therefore point-sampled across it (§8.9.6.3: "need not have
+    /// the same resolution … their boundaries on the page will
+    /// coincide"). Conformant and common; counted so a pixel-parity
+    /// investigation can tell a resampling difference from a decode one
+    /// without re-deriving why.
+    pub masks_resampled: usize,
+    /// `/SMask`s carrying `/Matte` whose preblend pdfce **undid**
+    /// (§11.6.5.3's `c = m + (c′ − m)/α`). Census, not shortfall — but
+    /// worth counting, because the reconstruction amplifies quantisation
+    /// error by `1/α` in near-transparent regions and a parity
+    /// investigation should know when it is looking at one.
+    pub mattes_undone: usize,
+    /// `/SMask`s carrying `/Matte` whose preblend pdfce did **not** undo
+    /// — a dimension mismatch (Table 145 makes equality a `shall` when
+    /// `/Matte` is present), an `Indexed` parent (spec ambiguity
+    /// `SM-A4`), or a wrong-length array. The alpha is applied either
+    /// way; only the colour correction is missing, and the reason is in
+    /// [`Diagnostics::image_notes`].
+    pub mattes_not_undone: usize,
     /// First few distinct reasons behind `images_unsupported`, plus the
     /// softer per-image divergences ([`crate::image::ImageNotes`]:
     /// deferred `/SMask`, truncated samples, short palette). Named
@@ -431,10 +486,34 @@ impl Diagnostics {
 
     /// Record the soft divergences of one successfully drawn image.
     fn note_image_divergence(&mut self, notes: ImageNotes) {
-        if notes.mask_deferred {
-            self.note_image(
-                "/SMask, /Mask or JPX in-codestream opacity not applied (drawn opaque)",
-            );
+        // Transparency census (Pass 1.1 item 6.3). `images_masked` is
+        // volume, not shortfall — the same treatment decision 006 §4.4
+        // gave the benign YCCK census, and for the same reason: a note
+        // on every correctly-composited transparent image would cry wolf
+        // on known-good files. Only the refusals below get a note.
+        if let Some(kind) = notes.mask_applied {
+            self.images_masked += 1;
+            *self.mask_applied.entry(kind.key()).or_insert(0) += 1;
+        }
+        if let Some(reason) = notes.mask_refused {
+            self.images_mask_unsupported += 1;
+            *self.mask_refused.entry(reason).or_insert(0) += 1;
+            self.note_image(&format!(
+                "/SMask or /Mask present but not applied ({reason}); base image drawn opaque"
+            ));
+        }
+        if notes.mask_resampled {
+            self.masks_resampled += 1;
+        }
+        if notes.matte_undone {
+            self.mattes_undone += 1;
+        }
+        if let Some(reason) = notes.matte_not_undone {
+            self.mattes_not_undone += 1;
+            self.note_image(&format!(
+                "/SMask carries /Matte but the preblend was NOT undone ({reason}); \
+alpha applied, colours stay shifted toward the matte colour"
+            ));
         }
         if notes.jpx_smask_in_data_preblended {
             self.jpx_smask_in_data_preblended += 1;
@@ -501,6 +580,17 @@ polarity unverifiable (decision 006 R30)",
         self.dct_cmyk_polarity_unverifiable += other.dct_cmyk_polarity_unverifiable;
         self.jpx_smask_in_data_preblended += other.jpx_smask_in_data_preblended;
         self.lzw_framing_anomalies += other.lzw_framing_anomalies;
+        self.images_masked += other.images_masked;
+        self.images_mask_unsupported += other.images_mask_unsupported;
+        self.masks_resampled += other.masks_resampled;
+        self.mattes_undone += other.mattes_undone;
+        self.mattes_not_undone += other.mattes_not_undone;
+        for (kind, count) in other.mask_applied {
+            *self.mask_applied.entry(kind).or_insert(0) += count;
+        }
+        for (reason, count) in other.mask_refused {
+            *self.mask_refused.entry(reason).or_insert(0) += count;
+        }
         for (feature, count) in other.codec_feature_unsupported {
             *self.codec_feature_unsupported.entry(feature).or_insert(0) += count;
         }

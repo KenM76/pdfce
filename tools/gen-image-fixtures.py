@@ -102,6 +102,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / "fixtures" / "synthetic" / "images"
+TRANSPARENCY_OUT = REPO / "fixtures" / "synthetic" / "transparency"
 
 
 # ---------------------------------------------------------------------------
@@ -471,6 +472,354 @@ def _patch_sof(data: bytes, marker: int) -> bytes:
 
 
 # ---------------------------------------------------------------------------
+# Transparency render fixtures — PDFs, for `pdfce-render`'s mask path
+# ---------------------------------------------------------------------------
+#
+# Everything above this line feeds the image *import* path: raster files
+# that `pdfce-core::image_import` turns INTO a PDF. Everything below feeds
+# the *render* path: PDFs that `pdfce-render` turns into pixels. They live
+# in one script because they share one question — "did the alpha survive?"
+# — and splitting them would let the two halves drift.
+#
+# WHY THE BACKDROP IS BLUE AND NOT WHITE
+# --------------------------------------
+# This is the whole point of the fixture design, and it is worth stating
+# plainly: **a renderer that ignores alpha entirely passes a white-on-white
+# transparency test.** Draw a transparent white-ish image over a white page
+# and the correct output and the broken output are the same pixels. Every
+# page here therefore paints an opaque PURE BLUE rectangle first and places
+# a PURE RED image over it, so the composite value at every probe point is
+# a direct readout of the alpha that was applied:
+#
+#     tiny-skia stores premultiplied RGBA and composites SourceOver:
+#         dst' = src + dst x (1 - a)
+#     src = premultiplied pure red at alpha a  =  (a, 0, 0, a)
+#     dst = opaque pure blue                   =  (0, 0, 255, 255)
+#     dst' = (a, 0, 255 - a, 255)
+#
+# So the rendered pixel's RED channel *is* the alpha, and its BLUE channel
+# is 255 minus it. A test can assert the alpha directly instead of
+# asserting a colour and hoping.
+#
+# WHY THE ALPHAS ARE 0 / 85 / 170 / 255
+# -------------------------------------
+# Binary alpha (0 or 255 only) cannot catch a premultiplication bug: at
+# both extremes `clamp(v x 255, a)` and `v x a` agree. The two intermediate
+# values are what make a mid-tone wrong if the multiply is wrong — see
+# `premultiplied()`'s doc comment in `crates/pdfce-render/src/image.rs`,
+# which describes exactly the bug these two samples exist to catch.
+#
+# GEOMETRY
+# --------
+# A 100 x 40 pt page; a 4 x 1 image placed by `80 0 0 20 10 10 cm` so each
+# image column occupies a 20 pt-wide band. At render scale 1.0 the four
+# band centres are device pixels (20, 20), (40, 20), (60, 20) and (80, 20),
+# all far from any band boundary so nearest-neighbour sampling and
+# anti-aliasing cannot make the probe ambiguous.
+
+PAGE_W, PAGE_H = 100, 40
+
+# Backdrop, then image. Two `q`/`Q` pairs so neither leaks state into the
+# other — the image is placed by the CTM alone (§8.9.4), and a stray fill
+# colour would silently change what a stencil mask paints.
+TRANSPARENCY_CONTENT = (
+    "q 0 0 1 rg 10 10 80 20 re f Q\n"  # opaque blue backdrop
+    "q 80 0 0 20 10 10 cm /Im0 Do Q\n"  # the image, over it
+)
+
+# 4 x 1 DeviceRGB, every pixel pure red — so the rendered red channel is
+# the applied alpha and nothing else.
+RED_STRIP = bytes([255, 0, 0] * 4)
+
+# 4 x 1 DeviceRGB: red, green, red, blue. For colour-key masking, where
+# the ranges name a COLOUR rather than a position.
+MIXED_STRIP = bytes(
+    [255, 0, 0, 0, 255, 0, 255, 0, 0, 0, 0, 255]  # noqa: E501 - one pixel per group
+)
+
+# The alpha ramp: fully transparent, two intermediates, fully opaque.
+ALPHA_RAMP = bytes([0, 85, 170, 255])
+
+
+def _pdf(objects: list[bytes], root: int = 1) -> bytes:
+    """Assemble a classic-xref PDF from 1-based object bodies.
+
+    Deliberately minimal (§7.5.4 cross-reference table, no object streams,
+    no compression on the structure) so a fixture stays readable in a hex
+    editor and a failing test can be diagnosed by eye. Mirrors the helper
+    in `tools/gen-bilevel-fixtures.py`; kept as a local copy rather than
+    shared because these generators are hand-run scripts, not a package,
+    and an import between them would make each one depend on the other's
+    working directory.
+    """
+    buf = bytearray(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
+    offsets = []
+    for i, body in enumerate(objects, start=1):
+        offsets.append(len(buf))
+        buf += f"{i} 0 obj\n".encode("ascii") + body + b"\nendobj\n"
+    xref_at = len(buf)
+    buf += f"xref\n0 {len(objects) + 1}\n".encode("ascii")
+    buf += b"0000000000 65535 f \n"
+    for off in offsets:
+        buf += f"{off:010} 00000 n \n".encode("ascii")
+    buf += (
+        f"trailer\n<< /Size {len(objects) + 1} /Root {root} 0 R >>\n"
+        f"startxref\n{xref_at}\n%%EOF\n"
+    ).encode("ascii")
+    return bytes(buf)
+
+
+def _stream(dict_entries: str, data: bytes) -> bytes:
+    return (
+        f"<< {dict_entries} /Length {len(data)} >>\nstream\n".encode("ascii")
+        + data
+        + b"\nendstream"
+    )
+
+
+def _transparency_pdf(
+    image_dict: str, image_data: bytes, extra: list[bytes] | None = None
+) -> bytes:
+    """One page: blue backdrop, `/Im0` (object 5) placed over it.
+
+    `extra` supplies objects 6, 7, … — the mask streams an image
+    dictionary refers to.
+    """
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {PAGE_W} {PAGE_H}] "
+        f"/Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>".encode("ascii"),
+        _stream("", TRANSPARENCY_CONTENT.encode("ascii")),
+        _stream(image_dict, image_data),
+    ]
+    objs.extend(extra or [])
+    return _pdf(objs)
+
+
+BASE_RGB = "/Type /XObject /Subtype /Image /Width 4 /Height 1 /BitsPerComponent 8"
+
+
+def transparency_pdfs() -> dict[str, bytes]:
+    """The render-path transparency fixtures. Keys are file names.
+
+    Each one isolates ONE decision in `pdfce-render`'s mask path, so a
+    failure names its own cause:
+
+    smask-ramp.pdf          The main event. `/SMask`, same dimensions,
+                            8-bit `DeviceGray`, the 0/85/170/255 ramp.
+                            Proves alpha is applied AND premultiplied.
+    smask-decode.pdf        Identical, plus `/Decode [1 0]` on the MASK.
+                            §8.9.5.2's inversion idiom applied to alpha:
+                            the ramp must come out reversed. A build that
+                            normalizes the pair to `[0 1]` (the `/BBox`
+                            habit, §7.9.5) renders this identically to
+                            `smask-ramp.pdf`, which is the whole test.
+    smask-small.pdf         A 2 x 1 `/SMask` over the 4 x 1 base.
+                            §8.9.6.3: "need not have the same
+                            resolution … their boundaries on the page
+                            will coincide." Indexing 1:1 reads past the
+                            end of a 2-sample mask and yields alpha 0 for
+                            the right-hand half.
+    smask-large.pdf         An 8 x 1 `/SMask` over the 4 x 1 base — the
+                            other direction, where the mask must be
+                            point-sampled DOWN.
+    smask-matte.pdf         `/SMask` carrying `/Matte` — preblended
+                            ("premultiplied") colour, undone per
+                            §11.6.5.3's `c = m + (c' - m)/a`. The matte
+                            is WHITE for the reason spelled out at the
+                            fixture itself: a black matte makes the
+                            preblend a no-op against tiny-skia's own
+                            premultiplied storage.
+    smask-matte-mismatch.pdf
+                            `/Matte` with a 2 x 1 mask over a 4 x 1
+                            base. Table 145 makes equal dimensions a
+                            SHALL when `/Matte` is present, so the
+                            inversion is dropped BY NAME while the alpha
+                            still applies.
+    smask-16bit.pdf         A 16-bit `/SMask`. Table 145 puts no value
+                            restriction on the mask's
+                            `/BitsPerComponent`, and pdfce's own importer
+                            writes one for a 16-bit RGBA PNG.
+    smask-indexed.pdf       `/SMask` over an `/Indexed` base — the
+                            palette fast path is a separate arm of the
+                            pixel loop and needs its own proof that alpha
+                            reaches it.
+    smask-rgb-refused.pdf   `/SMask` whose `/ColorSpace` is `DeviceRGB`.
+                            Three components cannot be one alpha and
+                            pdfce will not pick a channel: refused by
+                            name, base drawn opaque.
+    stencil-mask.pdf        `/Mask` as a stream (§8.9.6.3), 1-bit,
+                            samples 0,1,0,1. Default `/Decode [0 1]`
+                            means 0 SHOWS the base image.
+    stencil-mask-decode.pdf The same stencil with `/Decode [1 0]`. The
+                            polarity must flip. Rendering these two the
+                            same is the classic silent-inversion bug.
+    colour-key.pdf          `/Mask` as an array (§8.9.6.4) over a
+                            red/green/red/blue strip, masking pure red.
+                            Position-independent: it is the COLOUR that
+                            vanishes.
+    colour-key-indexed.pdf  The same mechanism over an `/Indexed` image,
+                            where n is 1 (the INDEX) and not the base
+                            space's 3. A reader that used the base
+                            space's component count reads a 2-entry array
+                            as malformed and masks nothing.
+    """
+    out: dict[str, bytes] = {}
+
+    def smask_obj(width: int, data: bytes, extra: str = "") -> bytes:
+        return _stream(
+            f"/Type /XObject /Subtype /Image /Width {width} /Height 1 "
+            f"/ColorSpace /DeviceGray /BitsPerComponent 8 {extra}",
+            data,
+        )
+
+    out["smask-ramp.pdf"] = _transparency_pdf(
+        f"{BASE_RGB} /ColorSpace /DeviceRGB /SMask 6 0 R",
+        RED_STRIP,
+        [smask_obj(4, ALPHA_RAMP)],
+    )
+    out["smask-decode.pdf"] = _transparency_pdf(
+        f"{BASE_RGB} /ColorSpace /DeviceRGB /SMask 6 0 R",
+        RED_STRIP,
+        [smask_obj(4, ALPHA_RAMP, "/Decode [1 0]")],
+    )
+    # 2 x 1 mask: sample 0 covers base columns 0-1, sample 1 covers 2-3.
+    out["smask-small.pdf"] = _transparency_pdf(
+        f"{BASE_RGB} /ColorSpace /DeviceRGB /SMask 6 0 R",
+        RED_STRIP,
+        [smask_obj(2, bytes([0, 255]))],
+    )
+    # 8 x 1 mask: base column i takes mask sample 2i+1 (the sample
+    # containing the base texel's centre).
+    out["smask-large.pdf"] = _transparency_pdf(
+        f"{BASE_RGB} /ColorSpace /DeviceRGB /SMask 6 0 R",
+        RED_STRIP,
+        [smask_obj(8, bytes([9, 0, 9, 85, 9, 170, 9, 255]))],
+    )
+    # /Matte, and the ONE colour that makes it testable.
+    #
+    # §11.6.5.3's preblend is `c' = m + a x (c - m)`. With a BLACK matte
+    # that reduces to `c' = a x c` — which is exactly premultiplied-alpha
+    # storage, i.e. exactly the form tiny-skia wants anyway. A black-matte
+    # fixture therefore renders identically whether the preblend is undone
+    # or not, and would prove nothing. With a WHITE matte the two diverge
+    # in the GREEN and BLUE channels of a red image, which is what makes
+    # the assertion possible.
+    #
+    # Original colour c = pure red; m = white; alpha = 0, 85, 170, 255:
+    #     r' = 1 + a x (1 - 1) = 1
+    #     g' = b' = 1 + a x (0 - 1) = 1 - a
+    # so the stored strip ramps from white to red as alpha rises, and
+    # undoing it must recover pure red at every sample.
+    matte_strip = bytes(
+        [
+            255, 255, 255,  # a = 0    -> the matte colour itself
+            255, 170, 170,  # a = 85
+            255, 85, 85,    # a = 170
+            255, 0, 0,      # a = 255  -> untouched
+        ]
+    )
+    out["smask-matte.pdf"] = _transparency_pdf(
+        f"{BASE_RGB} /ColorSpace /DeviceRGB /SMask 6 0 R",
+        matte_strip,
+        [smask_obj(4, ALPHA_RAMP, "/Matte [1 1 1]")],
+    )
+    # Table 145's `Width` row makes equal dimensions a SHALL when /Matte
+    # is present. This one breaks it (2 x 1 mask, 4 x 1 base), so the
+    # alpha still applies and the preblend inversion is dropped by name —
+    # dividing by a resampled alpha would use the wrong alpha for every
+    # sample.
+    out["smask-matte-mismatch.pdf"] = _transparency_pdf(
+        f"{BASE_RGB} /ColorSpace /DeviceRGB /SMask 6 0 R",
+        matte_strip,
+        [smask_obj(2, bytes([0, 255]), "/Matte [1 1 1]")],
+    )
+    # 16-bit soft mask. Table 145 says `BitsPerComponent` is "Required"
+    # and imposes NO value restriction, so Table 89's 1/2/4/8/16 all
+    # apply — and pdfce's OWN importer writes a 16-bit /SMask for a
+    # colour-type-6 16-bit PNG (`rgba16.png`), which makes this the
+    # operator's real path rather than a spec curiosity. Samples are
+    # big-endian (§8.9.3) and are `v x 257` so they scale back to the
+    # same 0/85/170/255 ramp.
+    out["smask-16bit.pdf"] = _transparency_pdf(
+        f"{BASE_RGB} /ColorSpace /DeviceRGB /SMask 6 0 R",
+        RED_STRIP,
+        [
+            _stream(
+                "/Type /XObject /Subtype /Image /Width 4 /Height 1 "
+                "/ColorSpace /DeviceGray /BitsPerComponent 16",
+                b"".join(struct.pack(">H", v * 257) for v in (0, 85, 170, 255)),
+            )
+        ],
+    )
+    # A soft mask over an INDEXED base. The palette fast path is a
+    # separate arm of the pixel loop from the component path, so "alpha
+    # reaches the palette branch too" is a distinct fact needing a
+    # distinct fixture — and it is the shape `indexed-trns.png` (palette
+    # tRNS) becomes: a passed-through indexed base plus a decoded 8-bit
+    # /SMask. Palette entry 0 is red, so every band is red and the ramp
+    # reads exactly as it does for the DeviceRGB cases.
+    out["smask-indexed.pdf"] = _transparency_pdf(
+        "/Type /XObject /Subtype /Image /Width 4 /Height 1 /BitsPerComponent 8 "
+        "/ColorSpace [/Indexed /DeviceRGB 2 <FF0000 00FF00 0000FF>] /SMask 6 0 R",
+        bytes([0, 0, 0, 0]),
+        [smask_obj(4, ALPHA_RAMP)],
+    )
+    out["smask-rgb-refused.pdf"] = _transparency_pdf(
+        f"{BASE_RGB} /ColorSpace /DeviceRGB /SMask 6 0 R",
+        RED_STRIP,
+        [
+            _stream(
+                "/Type /XObject /Subtype /Image /Width 4 /Height 1 "
+                "/ColorSpace /DeviceRGB /BitsPerComponent 8",
+                bytes([0, 0, 0, 85, 85, 85, 170, 170, 170, 255, 255, 255]),
+            )
+        ],
+    )
+
+    # A 4 x 1 one-bit stencil, samples 0,1,0,1 packed high-order first
+    # into a single byte with four bits of row padding (§8.9.3).
+    stencil_bits = bytes([0b0101_0000])
+
+    def stencil_obj(extra: str = "") -> bytes:
+        return _stream(
+            f"/Type /XObject /Subtype /Image /Width 4 /Height 1 "
+            f"/ImageMask true /BitsPerComponent 1 {extra}",
+            stencil_bits,
+        )
+
+    out["stencil-mask.pdf"] = _transparency_pdf(
+        f"{BASE_RGB} /ColorSpace /DeviceRGB /Mask 6 0 R",
+        RED_STRIP,
+        [stencil_obj()],
+    )
+    out["stencil-mask-decode.pdf"] = _transparency_pdf(
+        f"{BASE_RGB} /ColorSpace /DeviceRGB /Mask 6 0 R",
+        RED_STRIP,
+        [stencil_obj("/Decode [1 0]")],
+    )
+
+    # Colour key: mask pure red only. Ranges are inclusive and are read
+    # BEFORE `/Decode` (§8.9.6.4), which is why they are 255/0/0 rather
+    # than 1.0/0.0/0.0.
+    out["colour-key.pdf"] = _transparency_pdf(
+        f"{BASE_RGB} /ColorSpace /DeviceRGB /Mask [255 255 0 0 0 0]",
+        MIXED_STRIP,
+        [],
+    )
+    # Indexed: palette entry 0 is red, 1 green, 2 blue. Indices 0,1,0,2.
+    # n = 1 (the index), so the array is TWO integers, not six.
+    out["colour-key-indexed.pdf"] = _transparency_pdf(
+        f"/Type /XObject /Subtype /Image /Width 4 /Height 1 /BitsPerComponent 8 "
+        f"/ColorSpace [/Indexed /DeviceRGB 2 <FF0000 00FF00 0000FF>] /Mask [0 0]",
+        bytes([0, 1, 0, 2]),
+        [],
+    )
+    return out
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
@@ -529,6 +878,12 @@ def main() -> None:
     for name, data in sorted(files.items()):
         (OUT / name).write_bytes(data)
         print(f"{name:24} {len(data):>7} bytes")
+
+    # --- transparency render fixtures (PDFs, not rasters) --------------
+    TRANSPARENCY_OUT.mkdir(parents=True, exist_ok=True)
+    for name, data in sorted(transparency_pdfs().items()):
+        (TRANSPARENCY_OUT / name).write_bytes(data)
+        print(f"transparency/{name:24} {len(data):>7} bytes")
 
 
 def _adam7(width: int, height: int, rows: list[bytes]) -> bytes:

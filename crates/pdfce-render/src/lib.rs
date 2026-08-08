@@ -60,6 +60,7 @@ pub mod font;
 pub mod gstate;
 pub mod image;
 pub mod interpret;
+pub mod mask;
 pub mod profile;
 pub mod text;
 
@@ -1908,13 +1909,21 @@ mod tests {
     }
 
     #[test]
-    fn jpx_in_codestream_alpha_is_ignored_by_default_and_deferred_when_switched_on() {
+    fn jpx_in_codestream_alpha_is_ignored_by_default_and_composited_when_switched_on() {
         // `/SMaskInData`'s default of 0 means "encoded soft-mask image
         // information shall be ignored", so an RGBA codestream with no
-        // `/SMaskInData` is an ordinary opaque image and is NOT a
-        // deferred mask. With `/SMaskInData 1` the same bytes carry a
-        // soft mask pdfce cannot composite yet, which IS one.
-        for (entry, expect_deferred) in [("", false), ("/SMaskInData 1", true)] {
+        // `/SMaskInData` is an ordinary OPAQUE image — a decoder that
+        // always composites the alpha it found is wrong in exactly the
+        // way that looks right. With `/SMaskInData 1` the same bytes
+        // carry a soft mask, and since Pass 1.1 item 6.3 pdfce
+        // composites it.
+        //
+        // The fixture's alpha runs 255, 170, 85, 0, 0, 85, 170, 255
+        // against colours red, green, blue, white, cyan, magenta,
+        // yellow, black. Sample 4 (cyan at alpha 0) is the
+        // discriminating probe: opaque it is cyan, composited it is the
+        // white page.
+        for (entry, expect_alpha) in [("", false), ("/SMaskInData 1", true)] {
             let (doc, page) = doc_with_xobject(
                 &format!("q {FULL_PAGE_CM} /X1 Do Q"),
                 &jpx_dict(entry),
@@ -1922,24 +1931,51 @@ mod tests {
             );
             let out = render_page(&doc, &page, 1.0).unwrap();
             assert_eq!(out.diagnostics.images_rendered, 1, "{entry:?}");
-            let deferred = out
-                .diagnostics
-                .image_notes
-                .iter()
-                .any(|n| n.contains("drawn opaque"));
             assert_eq!(
-                deferred, expect_deferred,
+                out.diagnostics.mask_applied.get("jpx-embedded-alpha"),
+                expect_alpha.then_some(&1),
                 "{entry:?}: {:?}",
-                out.diagnostics.image_notes
+                out.diagnostics.mask_applied
+            );
+            assert_eq!(
+                out.diagnostics.images_mask_unsupported, 0,
+                "{entry:?}: nothing here is a refusal"
             );
             // Either way the colours are the colour channels, not the
             // colour channels shifted along by an interleaved alpha.
             let q = jpx_probes(&out);
             assert!(
                 q[0].0 > 200 && q[0].1 < 60,
-                "{entry:?} sample 0: {:?}",
+                "{entry:?} sample 0 (alpha 255 either way) must be red: {:?}",
                 q[0]
             );
+            // Sample 4: cyan at alpha 0.
+            let (r, g, b) = q[4];
+            if expect_alpha {
+                assert!(
+                    r > 250 && g > 250 && b > 250,
+                    "/SMaskInData 1 must make sample 4 vanish into the white page: {:?}",
+                    q[4]
+                );
+            } else {
+                assert!(
+                    r < 60 && g > 200 && b > 200,
+                    "with no /SMaskInData sample 4 must stay cyan: {:?}",
+                    q[4]
+                );
+            }
+            // Sample 2: blue at alpha 85 — an INTERMEDIATE value, so it
+            // is the one that separates "alpha applied" from "alpha
+            // applied and premultiplied correctly". Over white,
+            // 85/255 of blue leaves r = g = 170.
+            if expect_alpha {
+                let (r, g, b) = q[2];
+                assert!(
+                    r.abs_diff(170) <= 3 && g.abs_diff(170) <= 3 && b > 250,
+                    "sample 2 must be blue at one third opacity over white: {:?}",
+                    q[2]
+                );
+            }
         }
     }
 
@@ -2223,10 +2259,17 @@ mod tests {
     }
 
     #[test]
-    fn soft_masked_image_draws_opaque_and_discloses_it() {
-        // §8.9.6 / clause 11: transparency is not in this slice, so the
-        // base image is painted fully opaque — visually wrong wherever
-        // the mask would have hidden something, hence the note.
+    fn soft_masked_image_composites_its_alpha() {
+        // §8.9.6 / §11.6.5.3, Pass 1.1 item 6.3. THE regression this
+        // Pass exists to prevent: before it, this page rendered as a
+        // solid black square because `/SMask` was recognized, counted,
+        // and then ignored.
+        //
+        // A 2 x 2 all-black image with an `/SMask` of
+        // `[0xFF, 0x00, 0xFF, 0x00]` — opaque, transparent, opaque,
+        // transparent in sample order — over the white page. The
+        // quadrant probes therefore alternate black and white, which no
+        // opaque render can produce.
         let (doc, page) = doc_with_extra_objects(
             &format!("q {FULL_PAGE_CM} /X1 Do Q"),
             "/Resources << /XObject << /X1 5 0 R >> >>",
@@ -2249,13 +2292,29 @@ mod tests {
         );
         let out = render_page(&doc, &page, 1.0).unwrap();
         assert_eq!(out.diagnostics.images_rendered, 1);
-        assert_eq!(pixel(&out.pixmap, 75, 25), (0, 0, 0), "drawn opaque");
+        assert_eq!(out.diagnostics.images_masked, 1);
+        assert_eq!(out.diagnostics.mask_applied.get("smask"), Some(&1));
+        assert_eq!(out.diagnostics.images_mask_unsupported, 0);
+        assert_eq!(pixel(&out.pixmap, 25, 25), (0, 0, 0), "sample 0: opaque");
+        assert_eq!(
+            pixel(&out.pixmap, 75, 25),
+            (255, 255, 255),
+            "sample 1: fully transparent, the white page must show through"
+        );
+        assert_eq!(pixel(&out.pixmap, 25, 75), (0, 0, 0), "sample 2: opaque");
+        assert_eq!(
+            pixel(&out.pixmap, 75, 75),
+            (255, 255, 255),
+            "sample 3: fully transparent"
+        );
+        // A composited mask is verified-correct volume, not a shortfall
+        // — no note attaches (decision 006 §4.4's cried-wolf lesson).
         assert!(
-            out.diagnostics
+            !out.diagnostics
                 .image_notes
                 .iter()
-                .any(|n| n.contains("SMask")),
-            "the deferral must be disclosed: {:?}",
+                .any(|n| n.contains("drawn opaque")),
+            "a mask that WAS applied must not be reported as deferred: {:?}",
             out.diagnostics.image_notes
         );
     }
