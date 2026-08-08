@@ -7709,12 +7709,19 @@ listed in the mixed-commit table above. **LEGAL.md §5 / rule 7 unaffected.**
 
 ##### Still owed in F2's own neighbourhood, and immediately around it
 
-- **`/I` and `/TI`** (choice selection indices) — **Pass 20.3, still
-  PARTIAL.**
-- **Push buttons** — Pass 20.3's other half. **Its verb name remains NOT
+- ~~**`/I` and `/TI`** (choice selection indices) — **Pass 20.3, still
+  PARTIAL.**~~ **[★★ DISCHARGED 2026-08-08 (`baeb624`) — BOTH BUILT, and
+  `/I` turned out to be not merely absent but WRONG in two ways. See the
+  `Pass 20.3` COMPLETION ADDENDUM at the end of this entry.]**
+- ~~**Push buttons** — Pass 20.3's other half. **Its verb name remains NOT
   RULED**, deliberately, and **must not be inferred from
   `add-radio-button`.** R161 supplies the *shape* (forms is verb-first, so
-  `add-<thing>`); it does not supply the **word**.
+  `add-<thing>`); it does not supply the **word**.~~ **[★★ DISCHARGED
+  2026-08-08 (`baeb624`) — BUILT, and the verb name is RULED
+  `add-push-button` by the engineer. The ruling and its reasoning are in
+  the COMPLETION ADDENDUM at the end of this entry; the caution above was
+  right that R161 supplies the shape and not the word, and the word was
+  chosen rather than inferred.]**
 - ~~**F2's own `--defaults-from`** — deferred to **F6**, where decision 020
   filed the property-editing family.~~ **[★★ DISCHARGED 2026-08-07
   (thirty-first filing, `247b8fa`) — BUILT, on all four creation verbs. The
@@ -7787,6 +7794,351 @@ R157 → R158 → R159 → R161 → R162 → R163. **Nothing is renumbered.**
 
 **Backup currency is not verifiable from here** — the engineer should check
 `D:\Dev\pdfce-backups\` if it matters.
+
+#### ★★ COMPLETION ADDENDUM — 2026-08-08, `baeb624`: **Pass 20.3 IS NO LONGER PARTIAL.** Push buttons, `/I` and `/TI` all land, and `/I` turns out to have been not merely missing but WRONG in two ways. **F3 IS CLOSED, and with it the last unbuildable standard Acrobat field type**
+
+**Filed as an ADDENDUM and not as a new `### Pass 20.3 —` heading**, for
+the mechanical reason this entry's neighbours document at length:
+`tools/check-ledger-numbers.py` counts every Pass ID in a heading's
+**pre-em-dash prefix, per top-level section**, and `Pass 20.3` is already
+headed in *Shipped* — by this entry. A second heading would report
+`DUPLICATE Pass 20.3 declared 2x in section [Shipped]` and exit 1, exactly
+as `Pass 20.0 + Pass 20.1 (completion)` did. **No number is minted.** F3
+was assigned `Pass 20.3` by decision 020's Backlog amendment on
+2026-08-03; this is that ID's unbuilt remainder arriving.
+
+**Filed by the ENGINEER, not by `pdfce-librarian`.** The session's
+configuration forbids dispatching subagents, which the project's own
+`CLAUDE.md` rule 5 otherwise requires for every Pass completion. Recorded
+here rather than left to be inferred from the absence of a librarian
+voice: **this filing has not had the librarian's cross-document sweep**,
+so if a stale statement of a fact corrected below survives somewhere this
+addendum did not walk, it is that gap and not a fresh fork.
+
+---
+
+##### 1. What F3 asked for, and what arrived
+
+Decision 020 §6 defines **F3** as *"Choice fields + push buttons (core +
+CLI)"*: listbox/combo `/Opt` with export↔display pairs, the four choice
+`/Ff` flags, **`/I` and `/TI`**, and **push buttons** authoring no action.
+`bca60c9` delivered the choice half and this entry's own table records the
+remainder as *"No `/I`, no `/TI`, no push buttons."* All three are now
+built.
+
+| F3 item | State before `baeb624` | Now |
+|---|---|---|
+| `/Opt` export↔display, `Combo`/`Edit`/`MultiSelect`/`Sort` | SHIPPED (`bca60c9`) | unchanged |
+| **`/I`** | **written, and wrong twice over** — see §3 | sorted ascending, deduplicated, **multi-select only**, cleared unconditionally otherwise |
+| **`/TI`** | **never written** | derived on list-box fill, absent when the selection is already in the first window, **removed** when a later fill returns to the top |
+| **Push buttons** | not built; **verb name NOT RULED** | `EditSession::add_push_button` + `NewPushButton`, CLI **`add-push-button`** (RULED, §5) |
+
+**What F3 did NOT ask for and did not get: an action.** Decision 020 §F3
+is explicit that *"`add-field --type pushbutton` therefore authors **no**
+action in this slice"*, under decision 009 posture A. That is honoured,
+and it is the source of this Pass's one genuinely novel disclosure (§4).
+
+---
+
+##### 2. The push button is the type defined by what it does NOT have
+
+§12.7.4.2.2: a push button *"retains no permanent value"* and therefore
+*"shall not use the `V` and `DV` entries."* Every structural difference
+from its two `/FT /Btn` siblings follows from that one sentence, and each
+one is a place where copying `add_check_box` would have produced something
+that parses and misbehaves:
+
+- **No `/V`, no `/DV`, no `/AS`** — *absent*, not written as `/Off`. `/AS`
+  selects an appearance **state** (§12.5.5); with no value there is no
+  state to select.
+- **`/AP` `/N` is a plain stream**, not the state-keyed sub-dictionary
+  §12.7.4.2.3 gives check boxes and radios. This is the one place the
+  three button kinds diverge **structurally** rather than only by a flag
+  bit.
+- **Nothing can fill it.** `set_button_state` already gated on
+  `ButtonKind::Check | Radio` and so already refused this — a refusal that
+  *predates* the slice and that **creation is what made reachable**:
+  before `baeb624` no pdfce-authored document could contain a push button
+  to refuse.
+
+**★ The value-absence is asserted against the DICTIONARY, not the model.**
+`FieldValue::Absent` is what `parse_acroform` reports for a `/V` of `/Off`
+as well, so a model-level assertion would have passed for a button
+carrying the check box's value keys — which is precisely the defect the
+copy-paste would have introduced. R159's shape, applied to a key's absence
+rather than to a byte's spelling.
+
+---
+
+##### 3. `/I` was not missing. It was written, and wrong twice
+
+This is the finding worth keeping from the slice, because the roadmap said
+*"no `/I`"* and the roadmap was wrong — `set_choice_value` had been
+writing one since Pass 7.1.
+
+**(a) Unsorted.** Table 231: *"an array of integers, **sorted in ascending
+order**"*. The indices were collected in the order the caller named the
+selections, so `--set Pick=Argentina|Canada` against `[CA MX AR]` emitted
+**`[2 0]`** — which to a conforming reader is a cue that the array is not
+to be trusted.
+
+**★ And the fix is asymmetric in a way that is easy to get backwards.**
+`/I` is sorted; **`/V` is NOT**. They answer different questions: `/V` is
+the caller's list of exported values, `/I` is a spec-shaped index set.
+Sorting `/V` to match would have changed the data the form submits in
+order to make an index array tidy. The test asserts both halves in one
+function so the pairing cannot drift.
+
+**(b) Written on single-select fields.** Table 231 scopes `/I` to
+`MultiSelect` and adds that when the items `/I` identifies differ from
+those in `/V`, ***"the `V` entry shall be used."*** So on a single-select
+field `/I` restated a fact `/V` already carried unambiguously, and its only
+defined behaviour on disagreement was **to be ignored** — a redundant key
+whose sole effect was to give a later editor a second place to forget to
+update. It is now removed, and **the removal is unconditional rather than
+"remove what we wrote"**: that is what clears a stale `/I` left behind by
+another producer, which is the case that actually bites.
+
+**★ Both defects were invisible in pdfce and visible in Acrobat.** pdfce's
+own list-box appearance paints the *selected values*, not a scrollable
+option list, so neither key changes a single pixel it draws. Acrobat
+renders a list box as a **live control from `/Opt` regardless of `/AP`**.
+That asymmetry is the whole reason this area needed tests of its own: the
+project's usual "render it and look" verification is structurally incapable
+of catching anything here.
+
+---
+
+##### 4. `/TI` — a derived value, and why it is reported rather than silent
+
+Table 231: `/TI` is *"the index in `Opt` of the first visible option"* for
+a scrollable list box, defaulting to 0. It was never written. Fill the
+fortieth option of a fifty-option list and the operator opens the form to a
+window showing options one through six **with no visible selection at
+all**.
+
+**The rule, stated so it is checkable:**
+
+1. `visible` = how many option rows the widget's first `/Rect` shows at the
+   resolved `/DA` size, via a new
+   `vartext::visible_line_count(box_h, size)`.
+2. If the lowest selected index is `< visible`, it is already on screen ⇒
+   **the key is absent**, which is Table 231's stated default of 0. Not
+   written as `0`.
+3. Otherwise `min(first, count - visible)` — scroll to put it at the top of
+   the window, **clamped** so a selection near the END of the list does not
+   scroll past the last option.
+4. **And REMOVED when a later fill lands back in the first window.** This
+   is the case an *"only write when scrolling"* implementation gets wrong:
+   it writes on the first fill and never takes the key back, so the form
+   opens scrolled past a selection sitting at the top.
+
+**★ `visible_line_count` is a `vartext` function and not a call-site
+computation — deliberately.** The fold's position is a function of `TEXT_PAD` and
+`LINE_FACTOR`, two **private** constants belonging to the layout engine. A
+caller re-deriving the count from its own idea of leading would disagree
+with the generator the moment either constant moved, and the disagreement
+would surface as a list box scrolled to the wrong place: quiet, plausible,
+and attributable to almost anything.
+
+**★ Two approximations are named rather than left implicit.** `/TI` is a
+**field** key while `/Rect` is a **widget** one, so a list box shown in two
+places at two sizes has one top index — `widgets[0]` wins, the same
+compromise `field_defaults` makes for the on state. And the font size is
+the resolved `/DA` size, auto-sized against that same widget.
+
+**★ It is reported in `FillOutcome::top_index` even though nothing about
+it is a guess.** Rule 4's obligation is that the operator can SEE what
+pdfce decided; a scroll position that appears only inside a saved
+dictionary is invisible until a *different program* renders it. The CLI
+says so in words on `fill-field`.
+
+---
+
+##### 5. ENGINEER RULINGS, recorded as ruled
+
+**Ruling 1 — the verb is `add-push-button`.** This entry's own *Still
+owed* block said the name *"remains NOT RULED, deliberately, and must not
+be inferred from `add-radio-button`"* — R161 supplies the **shape**
+(forms is verb-first, `add-<thing>`), not the **word**. The word is chosen,
+not inferred: **"push button" is the spec's own two-word term**
+(§12.7.4.2.2's heading and Table 226's `Pushbutton` flag), it is Acrobat's
+label, and the alternative `add-button` is actively wrong because a check
+box and a radio are also buttons. Consistent with `add-check-box` and
+`add-radio-button`, which likewise hyphenate the spec's own noun phrase.
+
+**Ruling 2 — a push button has no `--required`, and the refusal is BY
+CONSTRUCTION.** `/Ff` bit 2 (`Required`, Table 221) means *the field shall
+have a value at export time*; a push button never has a value under any
+circumstance, so a required one states a condition **no operator action can
+satisfy** — a form that can never be submitted, for a reason no viewer will
+explain. Decision 027's rule is *refuse what has no good reading*; this has
+none.
+
+**★ But it is refused by making the state UNREPRESENTABLE, not by adding
+an error variant.** `NewPushButton` has no `required` field and its
+`with_flags` takes one boolean where the other four types take two. A state
+that cannot be built needs no runtime check, produces no error message
+anyone has to read, and cannot be reached by a future caller who did not
+read this ruling. `read_only` is kept because on a button it DOES have a
+reading — bit 1 makes the control inert, which is a real thing to want for
+a button whose action is not yet bound.
+
+**Ruling 3 — a merged push-button widget keeps its OWN caption.** `/MK` is
+a widget key (Table 189), so a second `add-push-button` under the same name
+gives the second view its own `/CA`. **This is deliberately the opposite of
+the on-state case**, where a merged check box does NOT get its own state
+name: those widgets are views of one **exported value** and must agree,
+while these are views of one **action** and need not. One button, pressed
+in two places, may legitimately read *Submit* in the header and *Send* in
+the footer.
+
+---
+
+##### 6. `forms::Widget` now models `/MK` `/CA` — one key out of eleven, and the reason it is exactly one
+
+Table 189 carries `/CA`, `/BC`, `/BG`, `/R`, `/RC`, `/AC`, `/I`, `/RI`,
+`/IX`, `/IF` and `/TP`. Ten of those are cosmetic and R43 is the standing
+rule that pdfce does not synthesise appearance from `/MK` at display time —
+modelling them would add read-path surface nothing consumes.
+
+**`/CA` is different because on a push button it is not cosmetic.** With no
+`/V` in any state, the caption is the button's **only human-readable
+identity**: without it, every push button in a form lists identically and
+the only thing distinguishing *Submit* from *Reset* is a string buried in
+an appearance stream. It is also the only property `--defaults-from` can
+copy from a push-button template — without it that flag would have been the
+push button's version of the radio case, a flag that always reports
+"nothing copied".
+
+Read on **every** widget rather than only on buttons: `/MK` is legal on any
+widget annotation, and a type-gated reader would mean the model silently
+disagreeing with the file for the non-button case. Surfaced as a new
+trailing `caption=` column on `list-fields`' per-field line — **appended
+last**, so a parser reading through `aa=` is unaffected.
+
+---
+
+##### 7. `--defaults-from` now covers all FIVE creation verbs, and the caption is the only thing it copies
+
+`FieldDefaults` gains `caption`, read from the first widget that has one.
+The exclusion list is unchanged and still load-bearing: every boolean stays
+excluded (a presence flag cannot express *off*), `/TU` stays excluded
+(R105 — a copied tooltip satisfies the mechanism and defeats the purpose),
+and `/AA` stays excluded (F3 authors no action, and copying one would
+author actions through the back door).
+
+**★ A caption disagreement across widgets is NOT disclosed, and the
+on-state disagreement still is.** The two look symmetrical and are not: an
+on-state name is the button's **exported value**, so widgets that disagree
+export different data for one field — a defect worth naming. A caption is a
+**label**, and Ruling 3 above makes disagreeing captions a supported
+arrangement. Adding a disclosure for it would train the operator to dismiss
+the class of disclosure the on-state one belongs to.
+
+---
+
+##### 8. Verified by RENDERING, not argued from the spec — and this is the family's first such verification
+
+Four push buttons were created on `fixtures/synthetic/dimension/plain-base.pdf`
+and the page rasterised at scale 2 (`render-page`, `annots_painted=1` per
+widget). All four paint as intended: grey plate, black keyline,
+**vertically centred** caption.
+
+| case | result |
+|---|---|
+| normal (220×40, *"Submit Application"*) | plate + centred caption |
+| **empty caption** | blank plate, no text, no artefact |
+| **caption wider than the plate** (80 pt wide, 26-character caption) | clipped at the `/BBox`, **left-anchored** |
+| **short plate** (220×14) | caption auto-sized down, still centred |
+
+**★ The overflow behaviour is a finding, not an accident.**
+`Quadding::Center` computes `x = ((w - line_width) / 2).max(TEXT_PAD)`, so
+once the caption exceeds the plate the centring **clamps to the left pad**
+and the tail is clipped off the right. That is the better of the two
+available behaviours: a genuinely centred overlong caption would lose its
+first AND last words and read as a meaningless middle fragment, whereas
+this shows the operator the START of their caption and makes the truncation
+legible. Nothing shrinks the text to fit — `/MK` `/CA` is not variable text
+and §12.7.3.3's auto-size is a function of the box **height**; a
+width-fitting pass would be a second heuristic, applied to one field type,
+with no spec behind it.
+
+**⚠ This discharges the rendered-appearance obligation for the PUSH BUTTON
+ONLY.** `Pass 20.5`'s standing *"the rendered appearance is not visually
+verified"* item covers the whole authoring family and is **not** discharged
+by this. It is now one type smaller.
+
+---
+
+##### 9. What this does NOT do
+
+- **No GUI (R151).** `add-push-button` is a fifth core/CLI surface the
+  shell cannot reach, and Pass 20.5's per-type detail fields are still
+  owed. The GUI's field-type palette shows push button **absent rather
+  than greyed** (R83/R124) and that stays true — the reason recorded for
+  the absence was *"its verb name is still NOT RULED"*, and **that reason
+  has now expired**, so the palette entry is a live, cheap, un-taken
+  follow-up rather than a standing refusal.
+- **No action authoring, and that is decision 009, not a gap.** Every push
+  button pdfce creates is inert. See §4's disclosure.
+- **No `/TI` on creation.** A new list box has no selection, so Table 231's
+  default of 0 is already correct and writing the key would be noise.
+- **`/MK` borders still do not paint (R43).** The push button's plate is
+  vector artwork **inside** its `/AP`, exactly as a check box's border is;
+  `/MK` `/BC` and `/BG` are written alongside for viewers that synthesise
+  their own appearance. `annot_author::PUSH_BUTTON_PLATE_GRAY` is public
+  precisely so the baked look and the declared look cannot drift — the
+  same value has to appear in both, and two literals would let them
+  disagree in a way only visible in a different viewer.
+- **F4 (`/Tabs` tab-order AUTHORING) remains BLOCKED** on a
+  `pdfce-spec-librarian` dispatch. Untouched.
+
+---
+
+##### 10. Tests
+
+**24 new core tests** — `crates/pdfce-core/tests/form_push_buttons.rs` (14)
+and `crates/pdfce-core/tests/form_choice_indices.rs` (10) — plus **8 CLI
+integration tests** appended to `crates/pdfce-cli/tests/add_fields.rs`.
+
+**★ One pre-existing unit test was INVERTED, deliberately.**
+`edit::tests::choice_single_select_stores_export_and_index` asserted
+`i[0].as_int() == Some(1)` — the single-select `/I` §3(b) removes. It is
+renamed `…_stores_the_export_and_no_index_array` and now asserts the key's
+**absence**, with the Table 231 citation in the test's own doc comment.
+**Kept as a named absence rather than deleted**, because "no `/I` here" IS
+the behaviour and a test that merely stopped checking would let the key
+come back.
+
+**★ Two `/TI` tests initially failed on the TEST's arithmetic, not the
+code's.** They assumed a 60-point-tall list box shows six rows; it shows
+**four** (`auto_size` clamps to 12 pt, `LINE_FACTOR` is 1.15). Fixed by
+asking `visible_line_count` rather than hard-coding a count — which is the
+same argument §4 makes for the function existing at all, arriving from the
+other direction.
+
+`cargo fmt --check` clean, `cargo clippy --workspace --all-targets -D
+warnings` clean, full workspace suite green (1025 core unit tests + every
+integration binary). `cargo tree -p pdfce-core` / `-p pdfce-render` carry
+no GUI dependency (rule 2 — no `Cargo.toml` was touched, checked anyway).
+
+---
+
+##### 11. Ledger
+
+**No Pass ID minted** — this completes an ID filed 2026-08-03 and headed by
+the entry above. **No standing rule minted.** **No decision record
+minted** — the three rulings in §5 are engineer rulings inside an existing
+decision's scope (020 §F3), recorded here, not new decisions. Ceilings, read
+from `tools/check-ledger-numbers.py` and not from prose: Pass families to
+**46**, standing rules **R166** (R167 next free), decision records **032**
+(033 next free), SESSION_LOG filings **32** after this one.
+
+**Backup state — CHECKED, not inferred.** `git remote -v` is empty; bundles
+in `D:\Dev\pdfce-backups\` remain the only copy, and `baeb624` is in none of
+them.
+
 
 ### Pass 20.1 (PARTIAL) — form fields can be CREATED, not only filled (core + CLI, text fields) — 2026-08-07, committed `8e799e9`, branch `pass-8-redaction`. **HEADING AMENDED IN PLACE 2026-08-07** — this entry was filed as *"⚠ IDENTITY UNRESOLVED … NO Pass ID is minted by this filing … ENGINEER RULING NEEDED"* and the recommendation it made was **ACCEPTED IN FULL** by the engineer the same day. The body below is unchanged; the ✅ RULING block is appended at its end. **The heading had to change, not merely gain a footer** — `check-ledger-numbers.py` only sees a Pass ID in a heading that *starts* with `Pass`, so while this entry read `⚠ IDENTITY UNRESOLVED` the ruled ID was invisible to the very gate that reports family 20's state
 

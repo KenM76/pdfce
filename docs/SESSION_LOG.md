@@ -25617,3 +25617,227 @@ no build, no test, no clippy and no render, and claims none.**
   *Planned* row moves `[ ] [ ] [ ]` → **`◐ ◐ [ ]`**, because move-for-widgets
   is a real partial delivery of that row's capability and rounding it either
   way would misinform.
+
+## 2026-08-08 (thirty-second filing) — **THE LAST BUTTON KIND, AND TWO KEYS THAT WERE ONLY EVER WRONG SOMEWHERE ELSE** (`baeb624`, **`Pass 20.3` COMPLETE, F3 CLOSED**). **★★ PUSH BUTTONS SHIP, AND WITH THEM THE LAST STANDARD ACROBAT FIELD TYPE PDFCE COULD NOT CREATE** — text, check box, radio, list box, combo box, push button; only signature (deferred, decision 020 §10.3) and barcode (refused, §10.4) remain unbuilt, both by prior decision. **★★ `/I` WAS NOT MISSING — IT WAS BEING WRITTEN, AND IT WAS WRONG TWICE: UNSORTED WHERE TABLE 231 SAYS *"SORTED IN ASCENDING ORDER"*, AND PRESENT ON SINGLE-SELECT FIELDS WHERE TABLE 231 SCOPES IT TO `MultiSelect` AND SAYS `/V` WINS ON CONFLICT. THE ROADMAP SAID *"no `/I`"* AND THE ROADMAP WAS WRONG.** **★★ BOTH DEFECTS WERE INVISIBLE IN PDFCE AND VISIBLE IN ACROBAT — pdfce's list-box appearance paints the SELECTED VALUES, Acrobat renders a live control from `/Opt` REGARDLESS OF `/AP`, so the project's usual render-and-look verification is STRUCTURALLY INCAPABLE of catching anything in this area.** **★★ A PUSH BUTTON HAS NO `--required`, AND THE REFUSAL IS *BY CONSTRUCTION* — no struct field, no setter, therefore no error variant and no message anyone has to read.** **★ THREE ENGINEER RULINGS DELIVERED: the verb is `add-push-button` (CHOSEN, not inferred — the entry it closes explicitly forbade inferring it); a required push button is unrepresentable; a merged widget keeps its OWN caption, deliberately the opposite of the on-state rule.** **★ VERIFIED BY RENDERING AT FOUR SIZES — the family's FIRST such verification, and it discharges `Pass 20.5`'s obligation for exactly one type.** **⚠ FILED BY THE ENGINEER, NOT `pdfce-librarian` — the session forbids subagent dispatch, so this filing has NOT had the librarian's cross-document sweep.** **⚠ NO GUI (R151) — a fifth core/CLI surface the shell cannot reach.** **NOTHING MINTED — Pass 46 (highest `46.0`; `20.3` was assigned 2026-08-03 and is USED), R166 (R167 free — a FOURTH consecutive filing), decisions `032` (`033` next free), question (bb)**
+
+**Shipped:**
+- **`Pass 20.3` COMPLETE** (`baeb624`) — decision 020's **F3**, its unbuilt
+  half. Filed as a **COMPLETION ADDENDUM** on the existing
+  `Pass 20.2 + Pass 20.3` *Shipped* entry, not as a new heading, because
+  `check-ledger-numbers.py` counts Pass IDs in a heading's pre-em-dash
+  prefix per section and `20.3` is already headed there — the same
+  mechanical constraint the `Pass 20.0 + Pass 20.1 (completion)` entry
+  documents.
+- **Push button creation** — `EditSession::add_push_button`,
+  `NewPushButton`, `annot_author::build_push_button_appearance`, CLI
+  `add-push-button`. Merge, `--defaults-from`, undo, R105 and every
+  shared preflight refusal come for free from the existing substrate;
+  the verb adds no refusal of its own.
+- **`/I` corrected** — sorted ascending, deduplicated, **multi-select
+  only**, and cleared **unconditionally** otherwise (which is what clears
+  a stale one left by another producer).
+- **`/TI` implemented** — derived on list-box fill, absent when the
+  selection already fits the first window, removed when a later fill
+  returns to the top, reported in `FillOutcome::top_index`.
+- **`forms::Widget::caption`** — `/MK` `/CA`, one key out of Table 189's
+  eleven, plus a trailing `caption=` column on `list-fields`.
+- **`vartext::visible_line_count`** — the fold's position, computed
+  beside the private `TEXT_PAD`/`LINE_FACTOR` it depends on.
+
+**Findings worth keeping:**
+
+- **★★ A ROADMAP THAT SAYS A THING IS *MISSING* CAN BE HIDING THAT IT IS
+  *WRONG*, AND THE SECOND IS THE WORSE STATE.** This entry's own *Still
+  owed* block read *"**`/I` and `/TI`** (choice selection indices) —
+  **Pass 20.3, still PARTIAL**"*, which a reader parses as *neither key is
+  written*. `/TI` genuinely was not. **`/I` had been written on every
+  choice fill since Pass 7.1** — unsorted, and on field types Table 231
+  excludes. The gap between *absent* and *present-and-wrong* matters
+  because they have opposite risk profiles: an absent key degrades
+  gracefully (a reader falls back to `/V`), a wrong one is data a
+  conforming reader may act on. **The plan was written from the SLICE's
+  acceptance criteria, not from the code**, and the slice had no reason to
+  mention a key an earlier slice had already touched.
+- **★★ A DEFECT CLASS THE PROJECT'S BEST VERIFICATION HABIT CANNOT SEE.**
+  pdfce's strongest check is *render it and look* — it has caught real
+  defects repeatedly, and `Pass 20.5`'s outstanding obligation is stated
+  in exactly those terms. **It is worth nothing here.** pdfce paints a
+  list box's selected values; Acrobat paints a live scrollable control
+  from `/Opt` **regardless of `/AP`**. So `/I` and `/TI` change **not one
+  pixel** pdfce draws, and could have been arbitrarily wrong through any
+  number of visual verifications. The general shape: **a verification
+  technique's coverage is bounded by what the verifying program consumes,
+  and the parity target consuming MORE than pdfce does is exactly the
+  case where pdfce's own instruments go blind.** Byte assertions against
+  the saved dictionary are the only instrument that works here, which is
+  R159 arriving from a direction it was not written for.
+- **★★ REFUSING BY CONSTRUCTION BEATS REFUSING BY ERROR, WHEN THE STATE
+  IS GENUINELY UNREACHABLE.** A `Required` push button is nonsense —
+  `/Ff` bit 2 means *shall have a value at export* and §12.7.4.2.2 says a
+  push button never has one, so it states a condition no operator action
+  can satisfy, in a form that will never submit, for a reason no viewer
+  explains. The obvious implementation is an `EditError` variant. **The
+  better one is a struct with no such field**: `NewPushButton::with_flags`
+  takes ONE boolean where the other four types take two. No runtime
+  check, no message to write or translate, no test for a branch, **and it
+  cannot be reached by a future caller who never read the ruling.** The
+  discriminator for when this applies: the state must be *nonsensical*
+  rather than merely *invalid* — an invalid state is one the operator
+  might legitimately attempt and deserves an explanation of; a
+  nonsensical one is a shape the type should not have had.
+- **★ A DISCLOSURE THAT IS TRUE 100% OF THE TIME IS THE ONE MOST AT RISK
+  OF BEING OPTIMISED AWAY.** Every pdfce push button is inert — decision
+  009 posture A means no action is ever authored — so `push_button_inert`
+  is unconditionally `true`. A flag that never varies reads as noise and
+  invites exactly two bad moves: fold it into documentation, or make it
+  conditional on something and get the condition wrong. It is kept as a
+  first-class disclosure **and put on the machine-readable line**
+  (`inert=1`) rather than only on stderr, because this is the one
+  creation verb whose SUCCESS has a caveat, and **a caveat delivered only
+  on the human channel is one automation cannot see**.
+- **★ TWO KEYS ON THE SAME DICTIONARY, ONE SORTED AND ONE NOT — AND THE
+  ASYMMETRY IS THE CORRECT ANSWER.** `/I` is sorted ascending (Table 231
+  requires it); **`/V` is deliberately left in the caller's order.** They
+  answer different questions: `/V` is the list of values the form will
+  SUBMIT, `/I` is a spec-shaped index set. Sorting `/V` to match would
+  have **changed the submitted data in order to make an index array
+  tidy** — a tidiness-driven correctness regression, and one that would
+  have passed any test asserting only that the right options were
+  selected. Both halves are asserted in one test function so the pairing
+  cannot drift.
+- **★ TWO TESTS FAILED ON THE TEST'S ARITHMETIC, AND THE FIX WAS THE SAME
+  ARGUMENT THE CODE HAD ALREADY MADE.** The `/TI` tests assumed a
+  60-point list box shows six rows; it shows **four** (`auto_size` clamps
+  to 12 pt, `LINE_FACTOR` is 1.15). The repair was to ask
+  `visible_line_count` instead of hard-coding a count — **which is
+  verbatim the reason that function exists rather than being inlined at
+  the call site.** A test that hard-codes a layout constant is the same
+  defect as a caller that re-derives one, arriving from the other
+  direction, and it showed up within an hour of the function being
+  written to prevent it.
+- **★ THE OVERFLOWING-CAPTION BEHAVIOUR IS A FINDING, NOT AN ACCIDENT.**
+  A caption wider than its plate clips **left-anchored**, because
+  `Quadding::Center` computes `x = ((w - line_width) / 2).max(TEXT_PAD)`
+  and the clamp takes over once the line exceeds the box. That is the
+  better of the two available behaviours and worth recording as such: a
+  genuinely centred overlong caption loses its FIRST and LAST words and
+  reads as a meaningless middle fragment, while this shows the operator
+  the start and makes the truncation legible. **Nothing shrinks the text
+  to fit** — §12.7.3.3's auto-size is a function of box HEIGHT, and a
+  width-fitting pass would be a second heuristic for one field type with
+  no spec behind it.
+- **★ ONE KEY OUT OF ELEVEN, AND THE COUNT IS THE ARGUMENT.** `/MK`
+  (Table 189) has eleven entries; ten are cosmetic and R43 means pdfce
+  never synthesises appearance from them, so modelling them adds read
+  surface nothing consumes. **`/CA` is the exception because on a push
+  button it is not cosmetic** — with no `/V` in any state it is the
+  button's only human-readable identity, the only thing distinguishing
+  *Submit* from *Reset* in a field list, and the only property
+  `--defaults-from` could copy from a push-button template. Modelled on
+  **every** widget rather than only on buttons, because `/MK` is legal on
+  any widget annotation and a type-gated reader would make the model
+  silently disagree with the file.
+- **★ A CAPTION DISAGREEMENT IS NOT DISCLOSED WHILE AN ON-STATE
+  DISAGREEMENT IS, AND THE SYMMETRY IS FALSE.** Both are widget-level
+  strings read from `widgets[0]` for `--defaults-from`. An on-state name
+  is the button's **exported value**, so widgets that disagree export
+  different data for one field — a defect worth naming. A caption is a
+  **label**, and one button legitimately reads *Submit* in a header and
+  *Send* in a footer. **Disclosing the second would train the operator to
+  dismiss the class the first belongs to**, which is how a disclosure
+  system loses its signal.
+
+**Findings escalated:**
+- **NONE, and that is a reasoned refusal rather than an omission.** Every
+  finding above is either a **spec fact** (Table 231's `/I` scoping and
+  ordering, §12.7.4.2.2's value-lessness, Table 189's `/CA`) — which is
+  `pdfce-spec-librarian`'s exclusive territory under hard rule 6, not the
+  engineer's to write into a RAG — or a **project-methodology** finding
+  about pdfce's own verification habits, which belongs in this log and in
+  `ROADMAP.md` where it has been filed. **Nothing here is a real-world
+  producer diverging from the spec**, which is `C:\personal_rag\pdf\`'s
+  entire scope, and nothing is a Rust/Cargo or egui fact.
+  - **⚠ ONE CANDIDATE IS FLAGGED AND NOT WRITTEN**: *a verification
+    technique's coverage is bounded by what the verifying program
+    consumes* is general enough for `D:\dev\rag\rust\`, but it is a
+    **single occurrence** and this project's RAG bar has repeatedly been
+    a second instance. Left for the engineer or librarian to judge.
+
+**Still in flight:**
+- **`Pass 20.5` stays PARTIAL** — the per-type detail fields are still
+  owed, and the rendered-appearance obligation is **one type smaller, not
+  discharged**.
+- **`Pass 46.0` is PARTIAL and most of it is ahead** — resize for every
+  family, move for markup annotations, redaction marks and links, the
+  whole GUI, and both owed sub-decisions.
+- **`Pass 46.1` is BLOCKED** on decision `032` (OPEN, awaiting the
+  operator).
+- **RE-FLAG IS STILL UNSCOPED** — the sole survivor of the twenty-eighth
+  filing's three, now outliving both siblings by two filings. `/Ff` bit
+  editing has no geometric component, so `Pass 46.0` does not cover it.
+  **It needs a new F-slice under decision 020 or a named refusal.**
+- **F4 (`/Tabs` tab-order AUTHORING) is still BLOCKED** on a
+  `pdfce-spec-librarian` dispatch. Untouched by this filing.
+- **R151 pressure is higher again, not lower** — `rename_field`,
+  `--defaults-from`, `move_widget` and now `add_push_button` are **four**
+  core/CLI surfaces the shell cannot reach.
+- **The push-button GUI palette entry is now CHEAP and un-taken.** R83/R124
+  recorded push button as *absent rather than greyed* because *"its verb
+  name is still NOT RULED"*. **That reason has expired.**
+
+**For next session:**
+- **Decide re-flag** — slice or named refusal. It is the last of the
+  twenty-eighth filing's three and has now outlived both siblings.
+- **Take the GUI palette entry**, or record why not. It is one type in an
+  existing list, and its stated blocker is gone.
+- **Pick up resize** (`Pass 46.0` §3 first — widgets are the cheap half
+  and markup is not).
+- **Take a bundle.** `git remote -v` is empty and `baeb624` is in no
+  bundle; the count of unbacked commits has grown again.
+
+**Filing hygiene:**
+- **⚠⚠ THIS FILING WAS MADE BY THE ENGINEER, NOT `pdfce-librarian`.** The
+  session's configuration forbids dispatching subagents, which
+  `CLAUDE.md` rule 5 otherwise requires for every Pass completion.
+  Recorded rather than left to be inferred: **the librarian's
+  cross-document sweep did not happen**, so a stale statement of a fact
+  corrected here may survive somewhere this filing did not walk. The
+  locations that WERE walked: `ROADMAP.md` (the `Pass 20.2 + Pass 20.3`
+  entry's *Still owed* block and a new COMPLETION ADDENDUM),
+  `FEATURES.md` (the *CREATE* row's limits list, its push-button-palette
+  note, its `--defaults-from` clause, plus three new rows), and this file.
+  **`docs/decisions/020-form-field-authoring.md` was NOT edited** — it is
+  append-only and its F3 text is unchanged; `ROADMAP.md`'s addendum is
+  canonical where the two now differ.
+- **Ledger — read from `tools/check-ledger-numbers.py`, exit 0 both before
+  and after, never from prose.** Pass families to **46** (highest `46.0`),
+  standing rules **R166** (R167 next free — a **fourth** consecutive
+  filing leaving it untouched), decision records **032** (033 next free),
+  SESSION_LOG filings **32** with this one. **Nothing minted.** `Pass 20.3`
+  was assigned by decision 020's Backlog amendment on 2026-08-03 and is
+  **used, not minted**.
+- **`check-passes-filed.py` was run and reported `baeb624` UNFILED before
+  this filing** — correctly, since the commit names `Pass 20.3` and the
+  ROADMAP had no completion record for it. Re-run after.
+- **Gate figures are CHECKED, not claimed.** `cargo fmt --all -- --check`
+  clean; `cargo clippy --workspace --all-targets -- -D warnings` clean;
+  full `cargo test --workspace` green — 1025 core unit tests plus every
+  integration binary, 0 failed, 1 pre-existing ignored.
+  `cargo tree -p pdfce-core` and `-p pdfce-render` carry no
+  egui/eframe/winit/wgpu edge (rule 2; no `Cargo.toml` was touched, checked
+  anyway).
+- **`—` vs `[ ]` audit performed on `FEATURES.md`** for the rows this
+  filing touched. **Result: two of the three new rows are `—`, not `[ ]`,
+  and that is the shape distinction, not a gap.** `/I`//`TI` and the
+  `/MK /CA` read are fill-path and read-path byte semantics with **no
+  operator-facing control of their own** — there is nothing for a GUI to
+  expose, so `[ ]` would report a missing feature that does not exist.
+  The *CREATE a PUSH BUTTON* row is `[ ]` on `gui`, which IS a real gap.
+- **One pre-existing test was inverted, deliberately, and that is called
+  out because inverting a test is normally a smell.**
+  `edit::tests::choice_single_select_stores_export_and_index` asserted the
+  single-select `/I` this filing removes; it is renamed and now asserts
+  the key's **absence**, with the Table 231 citation in its own doc
+  comment. **Kept as a named absence rather than deleted** — "no `/I`
+  here" IS the behaviour, and a test that merely stopped checking would
+  let the key come back.

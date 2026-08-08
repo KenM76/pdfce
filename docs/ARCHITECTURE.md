@@ -12085,3 +12085,150 @@ to **46** (highest ID **`46.0`**)"* · *"Pass families MENTIONED: up to **46**
 (**`033`** next free) — **`032` was minted by the concurrent filing, not by
 this one.** **No gates measured by this filing: it ran no build, no test and no
 render, and every figure above is relayed from the engineer as HIS (R87).**
+
+### 2026-08-08 (thirty-second filing, `baeb624`) — **`Pass 20.3` COMPLETES and F3 CLOSES: three engineer rulings on push buttons, and a correction to a plan that said a key was MISSING when it was WRONG**
+
+**Nothing is minted.** `Pass 20.3` was assigned by decision 020's Backlog
+amendment on 2026-08-03; this is its unbuilt remainder arriving. No
+standing rule, no decision record. The rulings below sit **inside** decision
+020 §F3's already-decided scope — they answer questions that record left
+open, and answering an open question inside a decided scope is a ruling,
+not a new decision.
+
+**Filed by the engineer.** The session forbids subagent dispatch, so
+`pdfce-librarian`'s cross-document sweep did not happen. See
+`SESSION_LOG.md`'s thirty-second filing for which locations were walked.
+
+---
+
+#### Ruling 1 — the CLI verb is `add-push-button`
+
+The `Pass 20.2 + Pass 20.3` *Shipped* entry's own *Still owed* block said
+the name *"remains NOT RULED, deliberately, and must not be inferred from
+`add-radio-button`"*, on the grounds that **R161 supplies the shape and not
+the word**. That caution was right and is honoured: the word is chosen, and
+here is the choosing.
+
+- ***"push button"* is the spec's own two-word term** — §12.7.4.2.2's
+  heading, and Table 226's `Pushbutton` flag name. It is also Acrobat's
+  label for the type.
+- **`add-button` is actively wrong**, not merely shorter: a check box and a
+  radio button are *also* `/FT /Btn` fields, so the unqualified noun names
+  three things and creates one.
+- **Hyphenating the spec's noun phrase is what the two sibling verbs
+  already do** — `add-check-box`, `add-radio-button`. Consistency here is
+  not decoration; the verb list is the operator's mental model of the type
+  system, and a fourth verb formed differently would imply a fourth kind of
+  thing.
+
+**Cheap to overturn** — one `clap` variant name and one `println!` prefix.
+
+#### Ruling 2 — a push button has no `Required`, and the state is UNREPRESENTABLE rather than refused
+
+`/Ff` bit 2 (`Required`, Table 221) means *the field shall have a value at
+the time it is exported*. §12.7.4.2.2 says a push button *"retains no
+permanent value"* and *"shall not use the `V` and `DV` entries"*. So a
+required push button asserts a condition **no operator action can ever
+satisfy** — a form that can never be submitted, for a reason no viewer will
+explain. Decision 027's rule is *refuse what has no good reading*; this has
+none.
+
+**★ The mechanism is the part worth recording.** The obvious implementation
+is an `EditError` variant. The chosen one is a **struct with no such
+field**: `NewPushButton::with_flags` takes ONE boolean where the other four
+creation specs take two. Consequences:
+
+- no runtime check, no error message to write, no branch to test;
+- **the state cannot be reached by a future caller who never read this
+  ruling**, which an error variant does not achieve — it only tells them
+  afterwards;
+- the type documents the constraint by its shape, so the doc comment
+  explains *why the field is absent* rather than *why a value is rejected*.
+
+**The discriminator for when this generalises**, since it does not always:
+the state must be **nonsensical**, not merely **invalid**. An invalid state
+is one an operator might legitimately attempt and deserves an explanation
+of — an `Off` check-box on-state, `Edit` without `Combo`. A nonsensical one
+is a shape the type should not have had. Only the second should be designed
+out; designing out the first replaces a good error message with a compile
+error the operator never sees.
+
+**`read_only` IS kept**, because on a button bit 1 has a real reading: the
+control renders and cannot be activated, which is exactly what one wants
+for a button whose action is not yet bound.
+
+#### Ruling 3 — a merged push-button widget keeps its OWN caption
+
+`/MK` is a **widget** key (Table 189), so a second `add_push_button` under
+an existing name gives the second view its own `/CA`. One field, one
+action, two plates that may read *Submit* in a header and *Send* in a
+footer.
+
+**★ This is deliberately the OPPOSITE of the on-state rule**, and the two
+are worth stating together because they look symmetrical and are not:
+
+| | what the widgets are views of | must they agree? |
+|---|---|---|
+| check-box on-state | one **exported value** | **yes** — `add_check_box`'s merge branch strips `/V` and `/AS` from the incoming widget for exactly this reason |
+| push-button caption | one **action** | **no** — nothing about the field's behaviour depends on the label |
+
+The same asymmetry decides a disclosure: `field_defaults` reports an
+on-state disagreement (`defaults_on_state_ambiguous`) and **deliberately
+does not report a caption disagreement**. Widgets exporting different data
+for one field is a defect; widgets labelled differently is a supported
+arrangement, and disclosing it would train the operator to dismiss the
+class the on-state disclosure belongs to.
+
+---
+
+#### A correction to the record, not to the code: the plan said `/I` was MISSING; it was WRONG
+
+The `Pass 20.2 + Pass 20.3` entry listed *"**`/I` and `/TI`** (choice
+selection indices) — **Pass 20.3, still PARTIAL**"*, which reads as *neither
+key is written*. `/TI` genuinely was not. **`/I` had been written on every
+choice fill since Pass 7.1** — in the caller's selection order where Table
+231 requires ascending, and on single-select fields where Table 231 scopes
+it to `MultiSelect` and adds that `/V` wins on conflict.
+
+**★ The two states have opposite risk profiles**, which is why the
+distinction is worth a decision-log entry rather than a footnote. An absent
+key degrades gracefully — a reader falls back to `/V`, which is what Table
+231 tells it to do anyway. A **present and wrong** key is data a conforming
+reader may act on.
+
+**How the record came to be wrong**: the plan was written from the SLICE's
+acceptance criteria, and the slice had no reason to mention a key an
+*earlier* slice had already touched. **A per-slice plan describes what a
+slice will ADD; it is not a statement about what the codebase currently
+DOES**, and it will be read as one.
+
+---
+
+#### The verification note, recorded because it bounds a habit the project relies on
+
+pdfce's strongest verification is *render it and look*. It is **worth
+nothing** for `/I` and `/TI`: pdfce's list-box appearance paints the
+selected values, while Acrobat renders a live scrollable control from
+`/Opt` **regardless of `/AP`**. Neither key changes a pixel pdfce draws.
+
+**The general form: a verification technique's coverage is bounded by what
+the verifying program consumes — and the parity target consuming MORE than
+pdfce does is exactly the case where pdfce's own instruments go blind.**
+Byte assertions against the saved dictionary are the only instrument that
+works here (R159, arriving from a direction it was not written for).
+
+Not minted as a standing rule on one occurrence; flagged in
+`SESSION_LOG.md` as a RAG candidate awaiting a second instance.
+
+---
+
+#### What §12 does NOT record from this filing
+
+The push button's structural facts — no `/V`/`/DV`/`/AS`, `/AP /N` as a
+plain stream rather than a state-keyed sub-dictionary, `/MK /CA` as the
+caption — are **canonical spec content**, not architectural decisions.
+They live in the code's doc comments with their §-citations and in
+`ROADMAP.md`'s COMPLETION ADDENDUM. The `/TI` derivation rule is likewise
+an implementation of Table 231, not a choice between architectures; it is
+stated in full at `EditSession::derive_top_index` and summarised in the
+addendum.
