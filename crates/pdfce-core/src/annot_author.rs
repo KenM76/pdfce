@@ -1539,6 +1539,200 @@ pub fn build_radio_button_appearances(
     )
 }
 
+/// Build a **push button's** single appearance stream (§12.7.4.2.2): a
+/// filled, bordered plate with the `/MK` `/CA` caption centred on it.
+///
+/// # Why this returns ONE stream, not a keyed sub-dictionary
+///
+/// Check boxes and radio buttons return a *pair* because §12.7.4.2.3 makes
+/// their `/AP` `/N` a dictionary keyed by state name and `/AS` selects the
+/// entry to paint. A push button **has no states** — §12.7.4.2.2 is explicit
+/// that it *"retains no permanent value"* and so *"shall not use the `V` and
+/// `DV` entries"*. With no `/V` there is nothing for `/AS` to track, so its
+/// `/AP` `/N` is a plain stream, the same shape a text field's is. This is
+/// the one place where the three `/FT /Btn` kinds diverge structurally rather
+/// than only by a flag bit, and getting it wrong produces a button that some
+/// viewers paint and others leave blank.
+///
+/// # The caption goes through the SHARED variable-text generator (R92)
+///
+/// A caption is not variable text in the §12.7.3.3 sense — it comes from
+/// `/MK` `/CA`, not from `/V`, and it never changes when the form is filled.
+/// It is nonetheless laid out by [`vartext::build_variable_text`] rather than
+/// by a private text emitter, because R92's rule is about *how many text
+/// layout engines this crate contains*, not about which dictionary key the
+/// string came from. A second emitter would mean a second set of encoding,
+/// metrics and clipping bugs to find.
+///
+/// [`vartext::build_variable_text`]: crate::vartext::build_variable_text
+///
+/// # Vertical centring, and the trap inside it
+///
+/// [`vartext::build_variable_text`] places its first baseline at the TOP of
+/// the box it is given, which is right for a text field and wrong for a
+/// button caption. The fix is the same one the stamp-label builder uses: lay
+/// the caption
+/// into a band exactly one line high ([`vartext::text_band_height`]) and
+/// translate that band to the vertical centre.
+///
+/// The trap is auto-size. If the caller's `/DA` says `0 Tf` (auto), the size
+/// must be resolved **here**, against the WIDGET height, before the band is
+/// measured — and then handed to the generator as an explicit size. Passing
+/// the auto `/DA` straight through would make the generator re-derive the
+/// size from the *band's* height, which is itself a function of the size it
+/// would have picked; the two disagree and the caption comes out mis-sized
+/// inside a band built for a different one.
+///
+/// # A caption wider than the plate is CLIPPED, and reads left-to-right
+///
+/// Verified by rendering, not assumed. [`Quadding::Center`] computes the
+/// line's x as `((w - line_width) / 2).max(TEXT_PAD)`, so once the caption is
+/// wider than the plate the centring clamps to the left pad and the overflow
+/// is clipped off the right by the form XObject's `/BBox`. The operator sees
+/// the START of their caption and can tell it was truncated.
+///
+/// That is the better of the two available behaviours and it is not an
+/// accident of the clamp: a genuinely centred overlong caption would lose its
+/// first and last words to the clip and read as a meaningless middle
+/// fragment. Nothing shrinks the text to fit, because `/MK` `/CA` is not
+/// variable text and the auto-size heuristic is a function of the box HEIGHT
+/// (§12.7.3.3 mandates only that much) — a width-fitting pass would be a
+/// second heuristic, applied to one field type, with no spec behind it.
+///
+/// # The plate is drawn, not left to `/MK`
+///
+/// `/MK` `/BG` and `/BC` are written by the caller as well, for viewers that
+/// synthesise a dynamic appearance. They are not what makes the button
+/// visible in pdfce: R43 is the standing named-not-painted rule — pdfce
+/// declines to synthesise appearance from `/MK` at display time — so the
+/// plate is vector artwork inside this stream, exactly as a check box's
+/// border is. A push button whose only border was `/MK` `/BC` would be an
+/// invisible click target in pdfce's own renderer, which for a control whose
+/// entire purpose is to be clicked is worse than for any other field type.
+///
+/// # Errors
+///
+/// Any [`VarTextError`] from the generator — a malformed `/DA`, a `/DA` font
+/// name absent from `resources`, or a symbolic font this Latin-only
+/// generator cannot lay out.
+pub fn build_push_button_appearance(
+    width: f64,
+    height: f64,
+    caption: &str,
+    da: &[u8],
+    resources: &[FontResource],
+) -> Result<FieldAppearance, VarTextError> {
+    // A widget /Rect can be degenerate; floor each axis at one point so the
+    // /AP BBox stays a §12.5.5 positive result (WF4), matching
+    // `build_field_text_appearance`'s posture.
+    let (w, h) = (width.max(1.0), height.max(1.0));
+    let bbox = Rect {
+        llx: 0.0,
+        lly: 0.0,
+        urx: w,
+        ury: h,
+    };
+
+    // THE PLATE. A light-grey fill with a black keyline is the conventional
+    // button look every desktop toolkit converges on, and it is pdfce's own
+    // design choice rather than a spec requirement or a parity claim — the
+    // same discipline `build_radio_button_appearances` records for drawing a
+    // circle. The half-unit inset keeps the 1.0-wide stroke inside the BBox:
+    // a stroke straddles its path, so one drawn at the edge loses half its
+    // width to the form XObject's clip.
+    let inset = 0.5;
+    let mut plate = ContentBuilder::new();
+    plate.set_fill_gray(PUSH_BUTTON_PLATE_GRAY);
+    plate.rect(0.0, 0.0, w, h);
+    plate.paint(Paint::Fill);
+    plate.set_stroke_gray(0.0);
+    plate.set_line_width(1.0);
+    plate.rect(inset, inset, w - 2.0 * inset, h - 2.0 * inset);
+    plate.paint(Paint::Stroke);
+    let mut content = plate.into_bytes();
+
+    // THE CAPTION. Resolved size first (see the auto-size trap above), then a
+    // one-line band, then the translate.
+    let parsed = vartext::parse_default_appearance(da)?;
+    let size = if parsed.font_size > 0.0 {
+        parsed.font_size
+    } else {
+        vartext::auto_size(h)
+    };
+    let font = resources
+        .iter()
+        .find(|r| r.name == parsed.font_name)
+        .map_or(Std14::Helvetica, |r| r.font);
+    let resolved_da = vartext::default_appearance_string(
+        &parsed.font_name,
+        size,
+        parsed.color.unwrap_or(TextColor::Gray(0.0)),
+    );
+
+    let band_h = vartext::text_band_height(font, size);
+    let band = Rect {
+        llx: 0.0,
+        lly: 0.0,
+        urx: w,
+        ury: band_h,
+    };
+    let va = vartext::build_variable_text(
+        band,
+        caption,
+        &resolved_da,
+        Quadding::Center,
+        false,
+        resources,
+    )?;
+
+    // `dy` may be negative when the caption's band is taller than the widget
+    // — a two-point-high button with an eight-point caption. The band is
+    // translated anyway rather than clamped to zero: centring an oversized
+    // line means it overflows equally top and bottom, and the form XObject's
+    // BBox clips both. Clamping would push the whole overflow out of the
+    // bottom, which reads as a caption that is missing rather than one that
+    // does not fit.
+    let dy = (h - band_h) / 2.0;
+    let mut open = ContentBuilder::new();
+    open.save_state();
+    open.concat_matrix(1.0, 0.0, 0.0, 1.0, 0.0, dy);
+    content.extend_from_slice(&open.into_bytes());
+    content.extend_from_slice(&va.content);
+    let mut close = ContentBuilder::new();
+    close.restore_state();
+    content.extend_from_slice(&close.into_bytes());
+
+    Ok(FieldAppearance {
+        ap_dict: form_dict(bbox, va.resources),
+        content,
+        applied_autosize: va.applied_autosize.or({
+            // The generator saw an explicit size (this function resolved it),
+            // so it reports no auto-size of its own. The DISCLOSURE is still
+            // owed when the caller's /DA asked for one — VT1 is about the
+            // operator learning that a size was chosen for them, and who did
+            // the choosing is not the part they need told.
+            if parsed.font_size > 0.0 {
+                None
+            } else {
+                Some(size)
+            }
+        }),
+        unencodable_chars: va.unencodable_chars,
+    })
+}
+
+/// The plate grey a push button is drawn on. Light enough that black
+/// caption text stays legible, dark enough to read as a raised control
+/// against white paper.
+///
+/// Public because the same value has to appear TWICE in a created button —
+/// once as the fill inside the `/AP` stream this module builds, and once as
+/// the widget's `/MK` `/BG` for viewers that synthesise their own appearance
+/// instead. Two literals would let the baked look and the declared look
+/// drift apart, and the drift would only show up in a different viewer than
+/// the one it was authored in.
+pub const PUSH_BUTTON_PLATE_GRAY: f64 = 0.85;
+
 /// Generate a text/choice **widget field** appearance (§12.7.3.3) for Pass 7
 /// form fill.
 ///

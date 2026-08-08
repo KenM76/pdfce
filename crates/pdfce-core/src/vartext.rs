@@ -283,6 +283,45 @@ pub fn text_band_height(font: Std14, size: f64) -> f64 {
     ascent + descent + 2.0 * TEXT_PAD
 }
 
+/// How many lines of `size`-point text fit in a box `box_h` points tall,
+/// using the SAME padding and leading [`build_variable_text`] lays lines out
+/// with.
+///
+/// # Why this exists rather than being computed at the call site
+///
+/// Its one caller is the `/TI` (top index) derivation for a scrollable list
+/// box (§12.7.4.4 Table 231): to know whether the selected option is below
+/// the fold, you must know where the fold is, and the fold is a function of
+/// [`TEXT_PAD`] and [`LINE_FACTOR`] — two private constants that belong to
+/// the layout engine. A caller that re-derived the count from its own idea of
+/// leading would disagree with the generator the moment either constant
+/// changed, and the disagreement would show up as a list box scrolled to the
+/// wrong place: quiet, plausible, and attributable to almost anything.
+///
+/// # Always at least one
+///
+/// A box too short for a single line still shows part of one, and a visible
+/// count of zero would make the caller's arithmetic divide the option list
+/// into windows of nothing. One is the honest floor: whatever is on screen,
+/// it is some of the first visible option.
+#[must_use]
+pub fn visible_line_count(box_h: f64, size: f64) -> usize {
+    if size <= 0.0 || !size.is_finite() || !box_h.is_finite() {
+        return 1;
+    }
+    let usable = box_h - 2.0 * TEXT_PAD;
+    let lines = (usable / (size * LINE_FACTOR)).floor();
+    if lines >= 1.0 {
+        // Bounded above so the `as` conversion cannot saturate on a
+        // pathological `/Rect`; a list box with more than this many visible
+        // rows is not a case any real form reaches, and the clamp keeps the
+        // conversion total rather than platform-dependent.
+        lines.min(4096.0) as usize
+    } else {
+        1
+    }
+}
+
 /// Build a `/DA` default-appearance string from friendly parameters:
 /// `/name size Tf` + the colour's non-stroking operator. Used by the
 /// ergonomic authoring path (a fresh FreeText/Stamp) so the generated

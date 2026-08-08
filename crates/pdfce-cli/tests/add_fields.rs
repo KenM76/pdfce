@@ -1074,3 +1074,362 @@ fn a_tagged_structure_tab_order_page_discloses_both_conditions() {
 
     assert!(list_fields(&out_path).contains("name=Ref"));
 }
+
+// ---------------------------------------------------------------------------
+// add-push-button
+// ---------------------------------------------------------------------------
+
+/// The round trip: `add-push-button` creates a button that `list-fields`
+/// reads back as a push button carrying its caption.
+///
+/// The caption assertion is the one that matters here. A push button has no
+/// `/V` in any state (§12.7.4.2.2), so `list-fields` would otherwise print
+/// every push button in a form identically — the caption is the only column
+/// that tells *Submit* from *Reset*.
+#[test]
+fn add_push_button_creates_a_button_that_list_fields_reads_back() {
+    let (dir, input) = TempDir::seeded("push");
+    let input_s = input.display().to_string();
+    let out_path = dir.join("out.pdf");
+    let out_s = out_path.display().to_string();
+
+    let out = run(&[
+        "add-push-button",
+        &input_s,
+        "--name",
+        "Submit",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,120,44",
+        "--caption",
+        "Send it",
+        "--no-tooltip",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(code(&out), 0, "add-push-button failed: {}", stderr(&out));
+
+    let line = stdout(&out);
+    assert!(line.contains("add-push-button "), "reports its own name");
+    assert!(line.contains("caption=\"Send it\""), "{line}");
+    assert!(line.contains("merged=0"), "a first add creates: {line}");
+
+    let listed = list_fields(&out_path);
+    assert!(listed.contains("name=Submit"), "{listed}");
+    assert!(listed.contains("button=push"), "{listed}");
+    assert!(
+        listed.contains("caption=Send"),
+        "the caption is listed (token-sanitised): {listed}"
+    );
+    assert!(
+        listed.contains("fillable=0"),
+        "nothing can fill a push button: {listed}"
+    );
+}
+
+/// The inert disclosure reaches BOTH channels.
+///
+/// This is the one creation verb whose success has a caveat that is true
+/// every single time, and a caveat delivered only on stderr is one that a
+/// script capturing stdout cannot see. So `inert=1` is a field on the
+/// machine-readable line, not only a sentence.
+#[test]
+fn a_push_button_reports_that_it_is_inert_on_both_channels() {
+    let (dir, input) = TempDir::seeded("inert");
+    let input_s = input.display().to_string();
+    let out_path = dir.join("out.pdf");
+    let out_s = out_path.display().to_string();
+
+    let out = run(&[
+        "add-push-button",
+        &input_s,
+        "--name",
+        "Submit",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,120,44",
+        "--caption",
+        "Send it",
+        "--no-tooltip",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("NO ACTION"),
+        "said in words: {}",
+        stderr(&out)
+    );
+    assert!(
+        stdout(&out).contains("inert=1"),
+        "and machine-readably: {}",
+        stdout(&out)
+    );
+}
+
+/// An empty caption is created and disclosed — a blank plate is real, and it
+/// is also what a forgotten `--caption` looks like.
+#[test]
+fn an_empty_caption_is_created_and_disclosed() {
+    let (dir, input) = TempDir::seeded("nocap");
+    let input_s = input.display().to_string();
+    let out_path = dir.join("out.pdf");
+    let out_s = out_path.display().to_string();
+
+    let out = run(&[
+        "add-push-button",
+        &input_s,
+        "--name",
+        "Blank",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,120,44",
+        "--no-tooltip",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(
+        code(&out),
+        0,
+        "an empty caption is not a refusal: {}",
+        stderr(&out)
+    );
+    assert!(out_path.exists());
+    assert!(stdout(&out).contains("no_caption=1"), "{}", stdout(&out));
+    assert!(
+        stderr(&out).contains("--caption"),
+        "the disclosure names the flag that would fix it: {}",
+        stderr(&out)
+    );
+}
+
+/// R105 applies to this verb too: neither `--tooltip` nor `--no-tooltip` is
+/// refused, with no output file written.
+#[test]
+fn add_push_button_refuses_an_undecided_accessibility_name() {
+    let (dir, input) = TempDir::seeded("push-r105");
+    let input_s = input.display().to_string();
+    let out_path = dir.join("out.pdf");
+    let out_s = out_path.display().to_string();
+
+    let out = run(&[
+        "add-push-button",
+        &input_s,
+        "--name",
+        "Submit",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,120,44",
+        "--caption",
+        "Send it",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(code(&out), EDIT_REFUSED, "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("--no-tooltip"),
+        "the refusal names both ways out: {}",
+        stderr(&out)
+    );
+    assert!(
+        !out_path.exists(),
+        "a refusal must not leave a plausible-looking artefact behind"
+    );
+}
+
+/// `--verify-undo` reports `undo_identical=1`: authoring a push button is
+/// additive and exactly reversible (R46).
+#[test]
+fn add_push_button_undo_reproduces_the_input_byte_for_byte() {
+    let (dir, input) = TempDir::seeded("push-undo");
+    let input_s = input.display().to_string();
+    let out_path = dir.join("out.pdf");
+    let out_s = out_path.display().to_string();
+
+    let out = run(&[
+        "add-push-button",
+        &input_s,
+        "--name",
+        "Submit",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,120,44",
+        "--caption",
+        "Send it",
+        "--no-tooltip",
+        "--verify-undo",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(
+        stdout(&out).contains("undo_identical=1"),
+        "{}",
+        stdout(&out)
+    );
+}
+
+/// A second `add-push-button` under the same name MERGES, and the merged
+/// widget keeps its own caption rather than relabelling the first.
+#[test]
+fn a_second_push_button_of_the_same_name_merges_and_keeps_its_own_caption() {
+    let (dir, input) = TempDir::seeded("push-merge");
+    let input_s = input.display().to_string();
+    let mid = dir.join("mid.pdf");
+    let mid_s = mid.display().to_string();
+    let out_path = dir.join("out.pdf");
+    let out_s = out_path.display().to_string();
+
+    let out = run(&[
+        "add-push-button",
+        &input_s,
+        "--name",
+        "Submit",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,120,44",
+        "--caption",
+        "Send it",
+        "--no-tooltip",
+        "-o",
+        &mid_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    let out = run(&[
+        "add-push-button",
+        &mid_s,
+        "--name",
+        "Submit",
+        "--page",
+        "1",
+        "--rect",
+        "20,120,120,144",
+        "--caption",
+        "Go",
+        "--no-tooltip",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(stdout(&out).contains("merged=1"), "{}", stdout(&out));
+
+    let listed = list_fields(&out_path);
+    assert!(
+        listed.matches("name=Submit").count() == 1,
+        "one FIELD, not two: {listed}"
+    );
+    assert!(listed.contains("widgets=2"), "with two views: {listed}");
+}
+
+/// `--defaults-from` copies a push button's caption, and the copy is
+/// reported against the SPEC's caption rather than the (empty) argument.
+#[test]
+fn add_push_button_defaults_from_copies_the_caption() {
+    let (dir, input) = TempDir::seeded("push-defaults");
+    let input_s = input.display().to_string();
+    let mid = dir.join("mid.pdf");
+    let mid_s = mid.display().to_string();
+    let out_path = dir.join("out.pdf");
+    let out_s = out_path.display().to_string();
+
+    let out = run(&[
+        "add-push-button",
+        &input_s,
+        "--name",
+        "Template",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,120,44",
+        "--caption",
+        "Submit application",
+        "--no-tooltip",
+        "-o",
+        &mid_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    let out = run(&[
+        "add-push-button",
+        &mid_s,
+        "--name",
+        "Copy",
+        "--page",
+        "1",
+        "--rect",
+        "20,120,120,144",
+        "--defaults-from",
+        "Template",
+        "--no-tooltip",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let o = stdout(&out);
+    assert!(
+        o.contains("caption=\"Submit application\""),
+        "the report prints the caption that LANDED, not the empty argument \
+         it was given: {o}"
+    );
+    assert!(
+        o.contains("no_caption=0"),
+        "and the empty-caption disclosure is computed after the copy: {o}"
+    );
+}
+
+/// A push button cannot take a name a check box already holds, and the
+/// refusal names both kinds.
+#[test]
+fn add_push_button_refuses_a_name_held_by_a_check_box() {
+    let (dir, input) = TempDir::seeded("push-collide");
+    let input_s = input.display().to_string();
+    let mid = dir.join("mid.pdf");
+    let mid_s = mid.display().to_string();
+    let out_path = dir.join("out.pdf");
+    let out_s = out_path.display().to_string();
+
+    let out = run(&[
+        "add-check-box",
+        &input_s,
+        "--name",
+        "Agree",
+        "--page",
+        "1",
+        "--rect",
+        "20,20,40,40",
+        "--no-tooltip",
+        "-o",
+        &mid_s,
+    ]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+
+    let out = run(&[
+        "add-push-button",
+        &mid_s,
+        "--name",
+        "Agree",
+        "--page",
+        "1",
+        "--rect",
+        "20,120,120,144",
+        "--caption",
+        "Go",
+        "--no-tooltip",
+        "-o",
+        &out_s,
+    ]);
+    assert_eq!(code(&out), EDIT_REFUSED, "{}", stderr(&out));
+    let e = stderr(&out);
+    assert!(
+        e.contains("check box") && e.contains("push button"),
+        "the refusal names BOTH kinds: {e}"
+    );
+    assert!(!out_path.exists());
+}

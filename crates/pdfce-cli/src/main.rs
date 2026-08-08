@@ -1503,6 +1503,96 @@ enum Command {
         mode: SaveMode,
     },
 
+    /// Author a new push button (ISO 32000-1 §12.7.4.2.2).
+    ///
+    /// The button is created WITH NO ACTION and does nothing when clicked —
+    /// pdfce recognises and preserves actions but never authors one. What
+    /// this makes is a valid, inert control: a placeholder to be wired up
+    /// elsewhere, and that is stated on every run rather than left to be
+    /// discovered.
+    ///
+    /// A push button has no value in any state (§12.7.4.2.2 — it "shall not
+    /// use the V and DV entries"), so `fill-field` cannot target it and
+    /// there is no `--required` flag: a field that can never hold a value
+    /// cannot be required to hold one.
+    AddPushButton {
+        /// Input PDF.
+        input: PathBuf,
+        /// The field's fully-qualified name — also how `list-fields` refers
+        /// to it. This is the SCRIPT-FACING identifier, not the label; the
+        /// label is `--caption`.
+        ///
+        /// A PERIOD SEPARATES LEVELS (§12.7.3.2): `Form.Actions.Submit`
+        /// creates the group `Form`, the group `Form.Actions`, and the field
+        /// `Submit` inside it — reusing any of those that already exist. A
+        /// name segment may not itself contain a period, so a leading,
+        /// trailing or doubled one is refused rather than guessed at.
+        ///
+        /// REUSING AN EXISTING PUSH BUTTON'S NAME MERGES: a second widget is
+        /// attached to the same field rather than a second field created —
+        /// one button, two places to press it. Each widget keeps its OWN
+        /// caption, because the caption is a widget property (/MK /CA); the
+        /// second add therefore does not relabel the first. A different type
+        /// under the same name is refused, and so is a name that belongs to
+        /// a group.
+        #[arg(long)]
+        name: String,
+        /// 1-based page number to place the button on.
+        #[arg(long)]
+        page: usize,
+        /// The button rectangle in PDF user space, `llx,lly,urx,ury`.
+        #[arg(long, value_name = "LLX,LLY,URX,URY", allow_hyphen_values = true)]
+        rect: String,
+        /// The text printed on the button (`/MK` `/CA`).
+        ///
+        /// Distinct from `--name` (the script identifier) and `--tooltip`
+        /// (what a screen reader announces). Defaulting any of the three
+        /// from another would put an identifier on a control a person reads,
+        /// so none of them is derived from the others.
+        ///
+        /// An empty caption is allowed and produces a blank plate; it is
+        /// reported, because a blank button and a forgotten `--caption` are
+        /// the same bytes.
+        #[arg(long, default_value = "")]
+        caption: String,
+        /// `/TU`, the accessibility name a screen reader announces.
+        #[arg(long)]
+        tooltip: Option<String>,
+        /// Explicitly DECLINE an accessibility name (R105).
+        ///
+        /// Exactly one of `--tooltip` / `--no-tooltip` is required. Omitting
+        /// both is an error, never a silent default. This bites harder on a
+        /// push button than on any other type: its `/T` is usually a script
+        /// identifier and its caption is usually a bare verb, so a
+        /// screen-reader user with neither a tooltip nor a meaningful name
+        /// has nothing at all to go on.
+        #[arg(long, conflicts_with = "tooltip")]
+        no_tooltip: bool,
+        /// Mark the button read-only (`/Ff` bit 1) — it renders but cannot
+        /// be activated.
+        #[arg(long)]
+        read_only: bool,
+        /// Pre-fill this button's properties from an existing push button.
+        ///
+        /// Copies the CAPTION and nothing else — it is the only non-boolean
+        /// property a push button has. A template of any other type (or a
+        /// captionless push button) contributes nothing and says so.
+        ///
+        /// An explicit `--caption` wins; this only fills a gap.
+        #[arg(long, value_name = "FIELD")]
+        defaults_from: Option<String>,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+        /// Also verify that undoing the add reproduces the input byte for
+        /// byte.
+        #[arg(long)]
+        verify_undo: bool,
+    },
+
     /// Author a new list box or drop-down (ISO 32000-1 §12.7.4.4).
     ///
     /// The field is created with its options and NO selection; `fill-field`
@@ -3336,6 +3426,33 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_rename_field(&input, &name, &to, &output, mode, verify_undo),
+        Command::AddPushButton {
+            input,
+            name,
+            page,
+            rect,
+            caption,
+            tooltip,
+            no_tooltip,
+            read_only,
+            output,
+            mode,
+            defaults_from,
+            verify_undo,
+        } => cmd_add_push_button(&AddPushButtonArgs {
+            input: &input,
+            name: &name,
+            page,
+            rect: &rect,
+            caption: &caption,
+            tooltip: tooltip.as_deref(),
+            no_tooltip,
+            read_only,
+            output: &output,
+            mode,
+            defaults_from: defaults_from.as_deref(),
+            verify_undo,
+        }),
         Command::AddChoiceField {
             input,
             name,
@@ -4714,9 +4831,26 @@ fn cmd_list_fields(input: &Path, fillable_only: bool) -> u8 {
                 sanitize_token(&v)
             }
         };
+        // `/MK` `/CA`, from the first widget that has one. Appended LAST so
+        // a parser reading through `aa=` is unaffected.
+        //
+        // Worth a column of its own because `value=` cannot carry it: a push
+        // button has no `/V` in any state (§12.7.4.2.2), so without this
+        // every push button in a form lists identically and the only thing
+        // telling *Submit* from *Reset* is a string inside an appearance
+        // stream. `-` for a field with no caption, which for a non-button is
+        // every one of them.
+        let caption = field
+            .widgets
+            .iter()
+            .find_map(|w| w.caption.as_deref())
+            .map_or_else(
+                || "-".to_owned(),
+                |c| sanitize_token(&String::from_utf8_lossy(c)),
+            );
         println!(
             "field name={name} type={ty} button={button} flags=0x{:X} value={value} \
-widgets={} ap={} fillable={} readonly={} aa={}",
+widgets={} ap={} fillable={} readonly={} aa={} caption={caption}",
             field.flags.0,
             field.widgets.len(),
             u32::from(field.has_appearance()),
@@ -4897,6 +5031,13 @@ fn disclose_fill(name: &str, out: &pdfce_core::edit::FillOutcome) {
             "pdfce-cli: field {name:?}: {} character(s) had no WinAnsi code and were substituted \
 with '?' (Base-14 Latin only)",
             out.unencodable_chars
+        );
+    }
+    if let Some(ti) = out.top_index {
+        eprintln!(
+            "pdfce-cli: field {name:?}: this list box was SCROLLED to option {ti} (/TI) so the \
+selection is on screen — the selected option sits below the first visible window at this \
+field's size. pdfce derived the position; nothing about the field's value changed."
         );
     }
 }
@@ -9330,6 +9471,22 @@ struct AddChoiceFieldArgs<'a> {
     verify_undo: bool,
 }
 
+/// Borrowed argument bundle for [`cmd_add_push_button`] (clippy arg-count).
+struct AddPushButtonArgs<'a> {
+    input: &'a Path,
+    name: &'a str,
+    page: usize,
+    rect: &'a str,
+    caption: &'a str,
+    tooltip: Option<&'a str>,
+    no_tooltip: bool,
+    read_only: bool,
+    output: &'a Path,
+    mode: SaveMode,
+    defaults_from: Option<&'a str>,
+    verify_undo: bool,
+}
+
 /// Borrowed argument bundle for [`cmd_add_radio_button`] (clippy arg-count).
 struct AddRadioButtonArgs<'a> {
     input: &'a Path,
@@ -9959,6 +10116,119 @@ fn cmd_add_choice_field(args: &AddChoiceFieldArgs<'_>) -> u8 {
     finish_edit(args.input, &outcome)
 }
 
+/// `add-push-button` — author a new push button (§12.7.4.2.2).
+///
+/// ## Contract
+///
+/// - Emits one `add-push-button …` line with the usual save-report fields,
+///   then defers the exit code to [`finish_edit`].
+/// - Every refusal — XFA present, a name already used by a different field
+///   type or by a grouping node, a degenerate rectangle, an empty name, a
+///   page out of range, an undecided accessibility name — goes through
+///   [`report_edit_error`] (or the R105 branch below) BEFORE any mutation.
+/// - `--page` is 1-BASED here and 0-based in the core call.
+/// - **`inert=1` on every successful run.** The machine-readable line
+///   carries the fact as a field and not only as a stderr sentence, so a
+///   script that captures stdout and discards stderr still learns that the
+///   button it just made does nothing. This is the one creation verb whose
+///   success has a caveat that is true 100% of the time, and a caveat only
+///   ever delivered on the human channel is one that automation cannot see.
+fn cmd_add_push_button(args: &AddPushButtonArgs<'_>) -> u8 {
+    let (page_index, rect) = match parse_page_and_rect(args.input, args.page, args.rect) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let (source, mut session) = match open_for_edit(args.input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let mut spec = pdfce_core::edit::NewPushButton::new(page_index, args.name, rect, args.caption)
+        .with_flags(args.read_only);
+    // R105: exactly one of the two must have been chosen. `clap`'s
+    // `conflicts_with` rules out BOTH; only "neither" can reach here, and it
+    // is refused rather than defaulted.
+    spec = match (args.tooltip, args.no_tooltip) {
+        (Some(t), _) => spec.with_tooltip(t),
+        (None, true) => spec.declining_tooltip(),
+        (None, false) => {
+            eprintln!(
+                "pdfce-cli: {}: decide about the accessibility name — pass --tooltip <text>, or --no-tooltip to decline it. It is what a screen reader announces for this field, so it is never defaulted silently.",
+                args.input.display()
+            );
+            return exit::EDIT_REFUSED;
+        }
+    };
+
+    // Applied to the SPEC before authoring, so everything downstream sees one
+    // fully-formed request rather than a partially-defaulted one — and so the
+    // empty-caption disclosure is computed against the caption that actually
+    // lands, not against the argument.
+    let defaults = match read_defaults(&session, args.input, args.defaults_from) {
+        Ok(d) => d,
+        Err(code) => return code,
+    };
+    let applied = defaults
+        .map(|d| spec.apply_defaults(&d))
+        .unwrap_or_default();
+    let authored = match session.add_push_button(&spec) {
+        Ok(outcome) => outcome,
+        Err(err) => return report_edit_error(args.input, &err),
+    };
+    let field_id = authored.field_id;
+    // Folded into the SAME disclosure struct the core produced, not reported
+    // alongside it: one channel, so `any()` still answers for everything.
+    let mut disclosures = authored.disclosures;
+    disclosures.defaults_type_mismatch = applied.type_mismatch;
+    disclosures.defaults_on_state_ambiguous = applied.on_state_ambiguous;
+    report_field_disclosures(args.name, disclosures);
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        args.output,
+        args.mode,
+        ProducerArg::Preserve,
+        args.verify_undo,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "add-push-button {} name={:?} page={} rect={},{},{},{} caption={:?} no_caption={} inert={} read_only={} field={} {} merged={} tagged={} struct_tabs={} tooltip_declined={} mode={} -> {}; changed={} objects={} appended={} out_bytes={} undo_verified={} undo_identical={}",
+        args.input.display(),
+        args.name,
+        args.page,
+        rect.llx,
+        rect.lly,
+        rect.urx,
+        rect.ury,
+        // The SPEC's caption, not the argument. `--defaults-from` can fill
+        // it, and a summary printing the empty argument beside a file
+        // carrying a copied caption is the wrong-number-next-to-a-right-one
+        // shape the choice verb's `options=` count already had once.
+        spec.caption,
+        u32::from(authored.disclosures.push_button_no_caption),
+        u32::from(authored.disclosures.push_button_inert),
+        u32::from(args.read_only),
+        field_id.num,
+        field_id.generation,
+        u32::from(authored.merged),
+        u32::from(authored.disclosures.tagged_document),
+        u32::from(authored.disclosures.structure_tab_order),
+        u32::from(authored.disclosures.tooltip_declined),
+        args.mode.name(),
+        args.output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
+        u32::from(outcome.undo_verified),
+        u32::from(outcome.undo_identical),
+    );
+    finish_edit(args.input, &outcome)
+}
+
 /// Print every disclosure a field-creation call owes the operator.
 ///
 /// # Why this is one function rather than three copies
@@ -10023,12 +10293,22 @@ fn report_field_disclosures(name: &str, d: pdfce_core::edit::FieldAuthorDisclosu
     }
     if d.defaults_type_mismatch {
         eprintln!(
-            "pdfce-cli: field {name:?}: --defaults-from copied NOTHING. Every property the field types share is a yes/no flag, and those are never copied (a --flag cannot express 'off'), so the only copyable properties are type-specific: --max-len for text, the option list for choice, the on-state for a check box. A radio template has nothing to copy at all."
+            "pdfce-cli: field {name:?}: --defaults-from copied NOTHING. Every property the field types share is a yes/no flag, and those are never copied (a --flag cannot express 'off'), so the only copyable properties are type-specific: --max-len for text, the option list for choice, the on-state for a check box, the caption for a push button. A radio template has nothing to copy at all."
         );
     }
     if d.defaults_on_state_ambiguous {
         eprintln!(
             "pdfce-cli: field {name:?}: the --defaults-from check box has widgets with DIFFERENT on-state names, and the first one was used. A check box normally uses one on-state everywhere it appears, so a template that does not is worth a look."
+        );
+    }
+    if d.push_button_inert {
+        eprintln!(
+            "pdfce-cli: field {name:?}: this push button has NO ACTION and does nothing when clicked. pdfce recognises and preserves actions but never authors one, so what was created is a valid, inert button — a placeholder to be wired up elsewhere, not a working submit or reset."
+        );
+    }
+    if d.push_button_no_caption {
+        eprintln!(
+            "pdfce-cli: field {name:?}: this push button has an EMPTY caption and will render as a blank plate. Pass --caption <text> if that was not intended."
         );
     }
 }

@@ -381,6 +381,30 @@ pub struct Widget {
     pub on_states: Vec<Vec<u8>>,
     /// `/P` — the page this widget appears on, if present (§12.5.6.19).
     pub page: Option<ObjId>,
+    /// `/MK` `/CA` — the widget's **normal caption** (Table 189), as raw
+    /// §7.9.2 text-string bytes. `None` when absent.
+    ///
+    /// # Why only this one key out of `/MK`
+    ///
+    /// `/MK` (the appearance-characteristics dictionary, Table 189) also
+    /// carries `/BC`, `/BG`, `/R`, `/RC`, `/AC`, `/I`, `/RI`, `/IX`, `/IF`
+    /// and `/TP`. Every one of those is **cosmetic**, and R43 is the standing
+    /// rule that pdfce does not synthesise appearance from `/MK` at display
+    /// time — it paints the baked `/AP`. Modelling them would add read-path
+    /// surface that nothing consumes.
+    ///
+    /// `/CA` is different because on a **push button** it is not cosmetic: it
+    /// is the button's only human-readable identity. A push button has no
+    /// `/V` at all (§12.7.4.2.2), so `/CA` is the sole thing distinguishing
+    /// *Submit* from *Reset* to anyone reading the field list — and the only
+    /// property `--defaults-from` could copy from a push-button template.
+    /// Modelling it is what lets a caption be listed, copied and compared
+    /// rather than being visible only as pixels inside an appearance stream.
+    ///
+    /// Read on every widget rather than only on buttons: `/MK` is legal on
+    /// any widget annotation, and a type-gated reader would mean the model
+    /// silently disagreeing with the file for the non-button case.
+    pub caption: Option<Vec<u8>>,
     /// Whether the widget carries a usable normal appearance (`/AP` `/N`
     /// resolving to a stream, or a state subdictionary). The measured demand
     /// signal for regeneration.
@@ -1103,6 +1127,16 @@ fn model_widget<G: ObjectGraph + ?Sized>(
         .and_then(Object::as_name)
         .map(|n| n.as_bytes().to_vec());
     let page = dict.get(b"P").and_then(Object::as_reference);
+    // `/MK` `/CA` (Table 189). Resolved through the graph like every other
+    // key here, because a producer is free to make `/MK` an indirect object
+    // and a direct-only read would report "no caption" for a file that has
+    // one.
+    let caption = dict
+        .get(b"MK")
+        .map(|o| graph.resolve(o))
+        .and_then(Object::as_dict)
+        .and_then(|mk| mk.get(b"CA").map(|o| graph.resolve(o)))
+        .and_then(string_bytes);
     let (has_normal_appearance, on_states) = appearance_of(graph, dict);
     Widget {
         id,
@@ -1110,6 +1144,7 @@ fn model_widget<G: ObjectGraph + ?Sized>(
         appearance_state,
         on_states,
         page,
+        caption,
         has_normal_appearance,
         merged,
     }

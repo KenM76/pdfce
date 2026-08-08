@@ -774,6 +774,36 @@ pub struct FieldAuthorDisclosures {
     /// template where they disagree is saying something unusual. pdfce picks
     /// one, which is a choice the operator did not specify.
     pub defaults_on_state_ambiguous: bool,
+    /// A **push button** was created, and it has **no action** — clicking it
+    /// does nothing. Always `false` for other types.
+    ///
+    /// # Why this is disclosed on EVERY push button rather than being a limit
+    ///
+    /// Every other field type pdfce authors is complete on creation: a text
+    /// field can be typed into, a check box ticked, a choice field selected
+    /// from. A push button's entire function is its action, and decision 009
+    /// posture A means pdfce never authors one — so this is the only creation
+    /// verb whose successful result is a control that does not work.
+    ///
+    /// That is not a defect and the button is not malformed; §12.7.4.2.2
+    /// makes an action-less push button perfectly valid, and a placeholder to
+    /// be wired up later is a legitimate thing to author. But it is the exact
+    /// shape rule 4 exists for — pdfce did something the operator did not ask
+    /// for (nothing) and would otherwise discover by clicking.
+    ///
+    /// Not suppressible and not conditional: there is no state in which a
+    /// pdfce-authored push button HAS an action, so a flag that were
+    /// sometimes false would only mean the disclosure had a bug.
+    pub push_button_inert: bool,
+    /// A push button was created with an **empty `/MK` `/CA`** — a blank
+    /// plate with no label. Always `false` for other types.
+    ///
+    /// Allowed rather than refused, for the same reason an empty `/Opt` is
+    /// (see [`Self::has_no_options`]): it is a real intermediate state, and
+    /// the spec permits it. Disclosed because a blank button and a forgotten
+    /// `--caption` are the same bytes, and only the operator knows which one
+    /// this was.
+    pub push_button_no_caption: bool,
 }
 
 /// What applying a [`FieldDefaults`] actually did, for the caller to fold
@@ -815,6 +845,21 @@ pub struct FieldDefaults {
     pub on_state: Option<Vec<u8>>,
     /// Whether the template's widgets disagreed about that name.
     pub on_state_ambiguous: bool,
+    /// `/MK` `/CA`, for a push-button template, read from the first widget.
+    ///
+    /// A push button's ONLY copyable property. It has no `/V` (§12.7.4.2.2),
+    /// no `/MaxLen` and no `/Opt`, and its remaining creation inputs are
+    /// booleans — which [`EditSession::field_defaults`] excludes wholesale.
+    /// Without this, `--defaults-from` against a push button would be the
+    /// fifth creation verb's version of the radio case: a flag that always
+    /// reports "nothing copied".
+    ///
+    /// Read from the first widget for the same reason [`Self::on_state`] is:
+    /// `/MK` is a WIDGET key, so a button shown on three pages has three of
+    /// them. Unlike the on state, a disagreement is NOT reported — see
+    /// [`EditSession::field_defaults`] for why the two are treated
+    /// differently.
+    pub caption: Option<Vec<u8>>,
 }
 
 impl FieldAuthorDisclosures {
@@ -851,6 +896,8 @@ impl FieldAuthorDisclosures {
             group_flags_ignored,
             defaults_type_mismatch,
             defaults_on_state_ambiguous,
+            push_button_inert,
+            push_button_no_caption,
         } = self;
         tooltip_declined
             || tagged_document
@@ -859,6 +906,8 @@ impl FieldAuthorDisclosures {
             || group_flags_ignored
             || defaults_type_mismatch
             || defaults_on_state_ambiguous
+            || push_button_inert
+            || push_button_no_caption
     }
 }
 
@@ -1567,6 +1616,198 @@ impl NewChoiceField {
         }
         if self.multi_select {
             ff |= i64::from(forms::FieldFlags::MULTI_SELECT);
+        }
+        ff
+    }
+}
+
+/// A **push button** to be created by [`EditSession::add_push_button`]
+/// (§12.7.4.2.2).
+///
+/// # The type that is defined by what it does NOT have
+///
+/// Every other field type is characterised by its value: a text field's `/V`
+/// is a string, a check box's is a name, a choice field's is a string or an
+/// array. §12.7.4.2.2 says a push button *"retains no permanent value"* and
+/// therefore *"shall not use the `V` and `DV` entries"* — so a push button is
+/// the one `/FT /Btn` kind with no value at all, ever, in any state.
+///
+/// Three consequences follow, and each one is a place where copying the check
+/// box's code would produce something that parses and misbehaves:
+///
+/// 1. **No `/V`, no `/DV`, no `/AS`.** `/AS` selects an appearance state
+///    (§12.5.5); with no value there is no state to select.
+/// 2. **`/AP` `/N` is a plain stream**, not the state-keyed sub-dictionary
+///    §12.7.4.2.3 gives check boxes and radios. See
+///    [`annot_author::build_push_button_appearance`].
+/// 3. **Nothing can fill it.** [`EditSession::set_button_state`] already
+///    refuses a [`ButtonKind::Push`] field, and that refusal predates this
+///    type — it is not something creation had to add.
+///
+/// # There is no `required` flag here, and its absence is the design
+///
+/// `/Ff` bit 2 (`Required`, Table 221) means *the field shall have a value
+/// when the form is submitted*. A push button never has a value under any
+/// circumstances, so a required push button states a condition that cannot be
+/// satisfied by any operator action — a form that can never be submitted, for
+/// a reason no viewer will explain.
+///
+/// Decision 027's rule is *refuse what has no good reading, disclose what has
+/// one*. This has no good reading, so it is refused — but refused **by
+/// construction** rather than by an error variant, because a state that
+/// cannot be built needs no runtime check and produces no error message
+/// anyone has to read. [`Self::read_only`] is kept, because on a button it
+/// DOES have a reading: bit 1 makes the control inert, which is a real thing
+/// to want for a button whose action is not yet bound.
+///
+/// # The caption is `/MK` `/CA`, and it is not the field's name
+///
+/// `/T` identifies the field to scripts, `/TU` is what a screen reader
+/// announces, and `/CA` is what is printed on the plate. They are three
+/// different strings for three different audiences, and defaulting any of
+/// them from another would be the sneaky kind of convenience: a button named
+/// `btnSubmit1` should not read `btnSubmit1` to the person clicking it.
+///
+/// An **empty caption is allowed and disclosed** — a blank plate is a
+/// legitimate thing to author (an icon button whose artwork comes later), but
+/// it is also exactly what a forgotten `--caption` looks like, so it is
+/// reported rather than assumed deliberate.
+///
+/// # No action is authored, ever (decision 009 posture A, decision 020 §F3)
+///
+/// A push button's entire purpose is to trigger an action — submit, reset,
+/// JavaScript, navigate — and pdfce writes **none** of them. Actions are
+/// recognised and round-tripped, never executed and, at creation, never
+/// authored. So what this creates is a real, valid, inert button: correct in
+/// every viewer, and doing nothing when clicked.
+///
+/// That is disclosed on every single creation
+/// ([`FieldAuthorDisclosures::push_button_inert`]) rather than documented
+/// once here, because "the button I just made does nothing" is not a fact an
+/// operator should have to find in a doc comment.
+///
+/// [`ButtonKind::Push`]: forms::ButtonKind::Push
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewPushButton {
+    /// 0-based page index the widget is placed on.
+    pub page_index: usize,
+    /// The field's partial name `/T` (§12.7.3.2).
+    pub name: String,
+    /// The widget's `/Rect` in default user space.
+    pub rect: page_tree::Rect,
+    /// `/MK` `/CA` — the text printed on the button.
+    ///
+    /// Empty is allowed and disclosed; see the type's documentation.
+    pub caption: String,
+    /// `/TU`, the alternate (accessibility / UI) name — as an explicit
+    /// DECISION, not an option (R105). See [`TooltipChoice`].
+    ///
+    /// Load-bearing here in a way it is not for other types: a push button's
+    /// `/T` is typically a script identifier and its `/CA` is typically a
+    /// verb, so a screen-reader user with neither has nothing at all.
+    pub tooltip: TooltipChoice,
+    /// `/Ff` bit 1 — the button is inert and cannot be activated.
+    pub read_only: bool,
+}
+
+impl NewPushButton {
+    /// Copy this type's shareable properties out of a template field.
+    ///
+    /// The caption only — it is the sole non-boolean property a push button
+    /// has (see [`FieldDefaults::caption`]). Only fills a gap: an explicit
+    /// `--caption` wins, and a template of any other type contributes
+    /// nothing and says so.
+    pub fn apply_defaults(&mut self, defaults: &FieldDefaults) -> DefaultsApplied {
+        if defaults.field_type != Some(FieldType::Button)
+            || defaults.button_kind != Some(forms::ButtonKind::Push)
+        {
+            return DefaultsApplied {
+                type_mismatch: true,
+                on_state_ambiguous: false,
+            };
+        }
+        // An explicitly-supplied caption wins; so does an explicitly-supplied
+        // EMPTY one, which is why this checks the caller's string rather than
+        // testing the template's for content.
+        if !self.caption.is_empty() {
+            return DefaultsApplied::default();
+        }
+        // A caption that is not UTF-8 is NOT copied, and the mismatch is
+        // reported. The same rule `/Opt` follows: a lossily-converted string
+        // that lands on a control is a wrong label presented as a right one.
+        match defaults
+            .caption
+            .as_deref()
+            .and_then(|c| std::str::from_utf8(c).ok())
+        {
+            Some(caption) => {
+                self.caption = caption.to_owned();
+                DefaultsApplied::default()
+            }
+            // A push-button template with no caption at all reaches here too,
+            // and reporting `type_mismatch` for it is honest under that
+            // field's own documentation: the flag means "you asked for
+            // defaults and got none", which is exactly what happened.
+            None => DefaultsApplied {
+                type_mismatch: true,
+                on_state_ambiguous: false,
+            },
+        }
+    }
+
+    /// A push button at `rect` on `page_index`, captioned `caption`.
+    #[must_use]
+    pub fn new(
+        page_index: usize,
+        name: impl Into<String>,
+        rect: page_tree::Rect,
+        caption: impl Into<String>,
+    ) -> Self {
+        Self {
+            page_index,
+            name: name.into(),
+            rect,
+            caption: caption.into(),
+            tooltip: TooltipChoice::Undecided,
+            read_only: false,
+        }
+    }
+
+    /// Set `/TU`, the accessibility name.
+    #[must_use]
+    pub fn with_tooltip(mut self, tooltip: impl Into<String>) -> Self {
+        self.tooltip = TooltipChoice::Text(tooltip.into());
+        self
+    }
+
+    /// Explicitly DECLINE an accessibility name (R105).
+    #[must_use]
+    pub fn declining_tooltip(mut self) -> Self {
+        self.tooltip = TooltipChoice::Declined;
+        self
+    }
+
+    /// Set `/Ff` bit 1 — the button is inert and cannot be activated.
+    ///
+    /// Takes one boolean where the other four types take two, because
+    /// `Required` is not offered on this type at all; see the type's
+    /// documentation for why that is a design decision rather than an
+    /// omission.
+    #[must_use]
+    pub const fn with_flags(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
+
+    /// The resolved `/Ff` (§12.7.3.1 Table 221, §12.7.4.2 Table 226).
+    ///
+    /// `Pushbutton` (bit 17) is always set — it is what makes a `/Btn` field
+    /// a push button rather than a check box, and it is not optional the way
+    /// `Radio` is on a radio member.
+    fn field_flags(&self) -> i64 {
+        let mut ff = i64::from(forms::FieldFlags::PUSHBUTTON);
+        if self.read_only {
+            ff |= i64::from(forms::FieldFlags::READ_ONLY);
         }
         ff
     }
@@ -4382,6 +4623,17 @@ pub struct FillOutcome {
     /// How many characters of the filled text had no `WinAnsi` code and were
     /// substituted with `?` (the named Base-14-Latin limit, disclosed).
     pub unencodable_chars: usize,
+    /// The `/TI` top index written on a scrollable list box so the selection
+    /// is on screen (§12.7.4.4 Table 231), or `None` when the key was left
+    /// absent — its default of 0, a combo box, or no matched selection.
+    ///
+    /// Reported because it is document state pdfce derived and wrote without
+    /// being asked to. It is not a guess — the derivation is stated in full
+    /// at [`EditSession::derive_top_index`] — but rule 4's obligation is
+    /// about the operator being able to SEE what pdfce decided, and a scroll
+    /// position that appears only inside a saved dictionary is invisible
+    /// until a different program renders it.
+    pub top_index: Option<i64>,
 }
 
 /// What a [`regenerate_appearances`](EditSession::regenerate_appearances)
@@ -5152,6 +5404,11 @@ impl EditSession {
             // preflight cannot see whether a template contributed anything.
             defaults_type_mismatch: false,
             defaults_on_state_ambiguous: false,
+            // Set by `add_push_button`, which is the only caller that can
+            // know: the preflight is shared by all five creation verbs and
+            // sees a `FieldType`, not a spec.
+            push_button_inert: false,
+            push_button_no_caption: false,
         };
         Ok((page_id, slots, path, disclosures))
     }
@@ -6648,6 +6905,26 @@ impl EditSession {
             on_state_ambiguous = states.any(|s| Some(s) != on_state.as_ref());
         }
 
+        // The caption, for a push-button template. Read from the first widget
+        // that HAS one rather than from `widgets[0]` unconditionally: an
+        // absent `/MK` on the first widget is not evidence the button is
+        // captionless, only that this particular view of it is.
+        //
+        // # Why a disagreement is not reported the way the on state's is
+        //
+        // The two look symmetrical and are not. An on-state name is the
+        // button's EXPORTED VALUE — widgets that disagree about it export
+        // different data for the same field, which is a defect worth naming.
+        // A caption is a LABEL, and a button legitimately reads *Submit* on
+        // page 1 and *Send* on page 12 without anything being wrong. Adding a
+        // disclosure for it would train the operator to dismiss the class of
+        // disclosure that the on-state one belongs to.
+        let caption = if matches!(field.button_kind, Some(ButtonKind::Push)) {
+            field.widgets.iter().find_map(|w| w.caption.clone())
+        } else {
+            None
+        };
+
         Ok(FieldDefaults {
             field_type: field.field_type,
             button_kind: field.button_kind,
@@ -6655,7 +6932,71 @@ impl EditSession {
             options: field.options.clone(),
             on_state,
             on_state_ambiguous,
+            caption,
         })
+    }
+
+    /// Derive the `/TI` top index that puts a list box's first selected
+    /// option on screen (§12.7.4.4 Table 231).
+    ///
+    /// Returns `None` for "leave the key absent", which Table 231 defines as
+    /// index 0 — the top of the list. That is the answer whenever the
+    /// selection already fits in the first visible window, whenever nothing
+    /// matched an option, and whenever the widget geometry cannot be read.
+    ///
+    /// # The derivation, in full
+    ///
+    /// 1. `visible` = how many option rows the widget's first `/Rect` can
+    ///    show at the resolved `/DA` size
+    ///    ([`vartext::visible_line_count`](crate::vartext::visible_line_count)),
+    ///    which uses the same padding and leading the appearance generator
+    ///    lays lines out with.
+    /// 2. If the lowest selected index is `< visible`, it is already in the
+    ///    first window ⇒ `None`.
+    /// 3. Otherwise the window scrolls to put it at the top —
+    ///    `min(first, count - visible)`. The clamp is what keeps a selection
+    ///    near the END of the list visible: scrolling to `first` there would
+    ///    place the window past the last option, and the clamp lands it on
+    ///    the last full page, which still contains `first`.
+    ///
+    /// # Why the `/DA` size is resolved here and not taken from the caller
+    ///
+    /// The caller has an `applied_autosize` from the appearance generator,
+    /// and it is the WRONG number to use: it is whatever size the generator
+    /// chose for the text it was given — the selected values, one per line —
+    /// while `/TI` counts rows of the OPTION LIST as a viewer would lay them
+    /// out. The two coincide today because both go through
+    /// [`auto_size`](crate::vartext::auto_size) on the same box, and reusing
+    /// the caller's value would make that coincidence load-bearing.
+    fn derive_top_index(&self, field: &Field, indices: &[i64], default_da: &[u8]) -> Option<i64> {
+        let first = *indices.first()?;
+        let count = i64::try_from(field.options.len()).ok()?;
+        // `/TI` is a FIELD key and `/Rect` a widget one, so a field with
+        // several views has to pick one. The first widget, for the same
+        // reason `field_defaults` reads the on state from it.
+        let rect = field.widgets.first().and_then(|w| w.rect)?;
+        let height = rect.ury - rect.lly;
+        if height <= 0.0 {
+            return None;
+        }
+        let da = field.default_appearance.as_deref().unwrap_or(default_da);
+        // A `/DA` that will not parse is not a reason to refuse the fill —
+        // the appearance generator will raise that separately if it matters.
+        // Here it simply means the fold cannot be located, so the list is
+        // left unscrolled.
+        let parsed = crate::vartext::parse_default_appearance(da).ok()?;
+        let size = if parsed.font_size > 0.0 {
+            parsed.font_size
+        } else {
+            crate::vartext::auto_size(height)
+        };
+        let visible = i64::try_from(crate::vartext::visible_line_count(height, size)).ok()?;
+        if first < visible {
+            return None;
+        }
+        // `count - visible` is positive here: `first < count` (it indexes
+        // `/Opt`) and `first >= visible`, so `count > visible`.
+        Some(first.min(count - visible))
     }
 
     /// Read the facts about an existing radio group that a new member has to
@@ -6692,6 +7033,210 @@ impl EditSession {
                 .iter()
                 .flat_map(|w| w.on_states.iter().cloned())
                 .collect(),
+        })
+    }
+
+    /// Create a **push button** on a page (§12.7.4.2.2), returning the new
+    /// field's object id.
+    ///
+    /// Completes the `/FT /Btn` family: check box, radio button and now push
+    /// button are the three kinds §12.7.4.2.1 distinguishes by `/Ff` bits
+    /// 16 and 17, and this is the last of them pdfce could not author.
+    ///
+    /// # What makes this structurally unlike the other two buttons
+    ///
+    /// [`NewPushButton`] documents the value-less-ness at length; the parts
+    /// that show up as CODE here are:
+    ///
+    /// - **No `/V`, no `/DV`, no `/AS` is written** — not "written as `Off`",
+    ///   absent. §12.7.4.2.2: a push button *"shall not use the `V` and `DV`
+    ///   entries"*.
+    /// - **`/AP` `/N` is a reference to a stream**, not a sub-dictionary of
+    ///   state names. One appearance, because there are no states.
+    /// - **The merge branch strips nothing.** A check-box merge removes `/V`
+    ///   and `/AS` from the incoming widget because the value belongs to the
+    ///   field; there is no value here, so a second widget carries only its
+    ///   own look — its own `/Rect`, its own `/MK`, its own `/AP` — and that
+    ///   is the whole of it.
+    ///
+    /// # A merged widget gets its OWN caption, and that is deliberate
+    ///
+    /// `/MK` is a widget key (Table 189), so a second `add_push_button` with
+    /// the same name gives the second view its own `/CA` rather than sharing
+    /// the first's. That is the honest reading of where the key lives, and it
+    /// is also useful: one field, one action, two plates that can read
+    /// *Submit* in the header and *Send* in the footer.
+    ///
+    /// It is worth stating because it differs from the on-state case, where a
+    /// merged check box deliberately does NOT get its own state name — there,
+    /// the widgets are views of one exported value and must agree; here they
+    /// are views of one action and need not.
+    ///
+    /// # Errors
+    ///
+    /// A [`VarTextError`](crate::vartext::VarTextError) from the caption
+    /// generator, plus every refusal from
+    /// [`Self::field_authoring_preflight`] — an empty name, an undecided
+    /// `/TU` (R105), a degenerate `/Rect`, a hybrid-XFA document, a name held
+    /// by a different field type or by a grouping node, and the encryption,
+    /// strict-certification and `/Size` guards.
+    ///
+    /// There is deliberately **no refusal specific to this type**. The one
+    /// nonsensical state — a `Required` push button — is unrepresentable
+    /// rather than rejected; see [`NewPushButton`].
+    pub fn add_push_button(
+        &mut self,
+        spec: &NewPushButton,
+    ) -> Result<FieldAuthorOutcome, EditError> {
+        let (w, h) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
+        let (page_id, slots, path, disclosures) = self.field_authoring_preflight(
+            &spec.name,
+            spec.rect,
+            spec.page_index,
+            forms::FieldType::Button,
+            Some(forms::ButtonKind::Push),
+            &spec.tooltip,
+        )?;
+        // Every disclosure this type owes, folded in once so the create and
+        // merge branches cannot drift apart on them. `push_button_inert` is
+        // unconditional by design — see the field's own documentation.
+        let disclosures = FieldAuthorDisclosures {
+            push_button_inert: true,
+            push_button_no_caption: spec.caption.is_empty(),
+            ..disclosures
+        };
+
+        // Auto-size (`0 Tf`), so the caption fits whatever plate the operator
+        // drew rather than the operator having to size the plate around a
+        // fixed caption. The chosen size is reported by the builder and is a
+        // disclosed default (VT1), never a silent computed value.
+        let da = crate::vartext::default_appearance_string(
+            b"Helv",
+            0.0,
+            crate::vartext::TextColor::Gray(0.0),
+        );
+        let resources = [crate::vartext::FontResource {
+            name: b"Helv".to_vec(),
+            font: crate::fontdata::Std14::Helvetica,
+        }];
+        let appearance =
+            annot_author::build_push_button_appearance(w, h, &spec.caption, &da, &resources)?;
+
+        let ap_id = ObjId::new(self.alloc_number()?, 0);
+        let ap_span = self.stage_bytes(&appearance.content);
+        let mut ap_dict = appearance.ap_dict;
+        ap_dict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(appearance.content.len()).unwrap_or(i64::MAX)),
+        );
+        let ap_stream = Object::Stream(Stream {
+            dict: ap_dict,
+            data_span: ap_span,
+        });
+
+        let mut d = Self::widget_base_dict(&spec.name, spec.rect, page_id, &spec.tooltip);
+        d.insert(Name::from(b"DA"), Object::String(da));
+        // `/MK` (Table 189): the caption plus the border and background
+        // colours. R43 means pdfce paints none of these — the plate inside
+        // the `/AP` is what it renders — but they are written for viewers
+        // that DO synthesise a dynamic appearance, so the button looks the
+        // same there as it does here rather than losing its plate.
+        //
+        // `/CA` is written even when empty. An empty `/MK` `/CA` is a
+        // present-and-blank caption; omitting the key would make the widget
+        // say nothing about its caption at all, and a later editor would
+        // have no way to tell "no label wanted" from "never considered".
+        let mut mk = Dict::new();
+        mk.insert(
+            Name::from(b"CA"),
+            Object::String(encode_text_string(&spec.caption)),
+        );
+        mk.insert(
+            Name::from(b"BC"),
+            Object::Array(vec![
+                Object::Real(0.0),
+                Object::Real(0.0),
+                Object::Real(0.0),
+            ]),
+        );
+        mk.insert(
+            Name::from(b"BG"),
+            Object::Array(vec![
+                Object::Real(annot_author::PUSH_BUTTON_PLATE_GRAY),
+                Object::Real(annot_author::PUSH_BUTTON_PLATE_GRAY),
+                Object::Real(annot_author::PUSH_BUTTON_PLATE_GRAY),
+            ]),
+        );
+        d.insert(Name::from(b"MK"), Object::Dict(mk));
+        let mut ap = Dict::new();
+        ap.insert(Name::from(b"N"), Object::Reference(ap_id));
+        d.insert(Name::from(b"AP"), Object::Dict(ap));
+
+        let mut objects = vec![ObjectWrite {
+            id: ap_id,
+            before: None,
+            after: Some(ap_stream),
+        }];
+
+        // THE MERGE BRANCH. Nothing is stripped from the incoming widget —
+        // see the doc comment. `/Ff` stays on the field, so a second add's
+        // `--read-only` does not silently re-flag the existing button; that
+        // is the same rule the radio group's flags follow.
+        if let FieldPath::Terminal { id, shape, .. } = path {
+            let (merge_writes, _widget) =
+                self.merge_widget_into_field(id, shape, d, page_id, &slots)?;
+            objects.extend(merge_writes);
+            self.commit(Command {
+                kind: CommandKind::AddFormField,
+                objects,
+                removals: Vec::new(),
+                trailer: None,
+            });
+            return Ok(FieldAuthorOutcome {
+                field_id: id,
+                merged: true,
+                disclosures,
+            });
+        }
+
+        let FieldPath::Vacant { deepest, remaining } = path else {
+            return Err(FormAuthorError::NameIsGroupingNode {
+                fqn: spec.name.clone(),
+            }
+            .into());
+        };
+        let field_id = ObjId::new(self.alloc_number()?, 0);
+        let (parent_writes, parent, partial) =
+            self.place_new_field(deepest, &remaining, field_id)?;
+
+        d.insert(Name::from(b"FT"), Object::Name(Name::from(b"Btn")));
+        d.insert(Name::from(b"Ff"), Object::Integer(spec.field_flags()));
+        d.insert(
+            Name::from(b"T"),
+            Object::String(encode_text_string(&partial)),
+        );
+        if let Some(p) = parent {
+            d.insert(Name::from(b"Parent"), Object::Reference(p));
+        }
+
+        objects.push(ObjectWrite {
+            id: field_id,
+            before: None,
+            after: Some(Object::Dict(d)),
+        });
+        objects.extend(parent_writes);
+        objects.extend(self.annots_writes(page_id, field_id, &slots)?);
+
+        self.commit(Command {
+            kind: CommandKind::AddFormField,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+        Ok(FieldAuthorOutcome {
+            field_id,
+            merged: false,
+            disclosures,
         })
     }
 
@@ -8030,6 +8575,9 @@ impl EditSession {
             widgets_updated,
             applied_autosize,
             unencodable_chars,
+            // `/TI` is a CHOICE-field key (§12.7.4.4 Table 231). A text
+            // field has no option list to scroll.
+            top_index: None,
         })
     }
 
@@ -8373,6 +8921,58 @@ impl EditSession {
             }
         }
 
+        // §12.7.4.4 Table 231: `/I` is "an array of integers, SORTED IN
+        // ASCENDING ORDER". They are collected above in the order the caller
+        // named the selections, which is the order a human types them and not
+        // the order the spec asks for — `--value MX --value CA` against
+        // `[CA MX AR]` produces `[1 0]`, which is a conforming reader's cue
+        // that the array is not to be trusted. Sorted here rather than at the
+        // point of collection so the index↔export correspondence stays intact
+        // for the `/V` array, which is NOT sorted (its order is the caller's).
+        //
+        // Deduplicated as well: naming one option twice is not an error worth
+        // refusing, but `[0 0]` is a malformed index array either way.
+        indices.sort_unstable();
+        indices.dedup();
+
+        // `/TI` — the top index (Table 231): "the index in `Opt` of the first
+        // visible option" for a SCROLLABLE LIST BOX. Derived so that the
+        // first selected option is on screen when the form is opened.
+        //
+        // # Why this is set at all, given pdfce's own renderer ignores it
+        //
+        // pdfce's list-box appearance paints the SELECTED values only, not a
+        // scrollable option list, so `/TI` changes nothing about what pdfce
+        // draws. It changes a great deal about Acrobat, which renders a list
+        // box as a live control from `/Opt` regardless of `/AP` — fill the
+        // fortieth option of a fifty-option list and, without `/TI`, the
+        // operator opens the form to a window showing options one through six
+        // and no visible selection at all.
+        //
+        // # The rule, stated so it is checkable
+        //
+        // Scroll only when the selection is below the fold, and put it at the
+        // top of the window when scrolling: `0` while the first selection
+        // fits in the first window, otherwise `min(first, count - visible)`.
+        // The `min` is what guarantees the selection stays visible when it is
+        // near the END of the list — scrolling to `first` there would run off
+        // the bottom, and the clamp lands the window on the last full page
+        // instead, which still contains `first`.
+        //
+        // # The two approximations, named rather than left implicit
+        //
+        // The window height comes from `widgets[0]`, because `/TI` is a FIELD
+        // key while `/Rect` is a widget one: a list box shown in two places
+        // at two sizes has one top index and there is no reading under which
+        // that is not a compromise. And the font size is the resolved `/DA`
+        // size, auto-sized against that same widget when the `/DA` says `0`.
+        //
+        // Neither is fuzzy in rule 4's sense — nothing is guessed, both are
+        // derived — but the RESULT is reported in
+        // [`FillOutcome::top_index`] anyway, because it is document state
+        // pdfce wrote that the operator did not ask for.
+        // (Derived below, once the AcroForm-level `/DA` fallback exists.)
+
         // /V: single string, or an array under MultiSelect.
         let v_object = if multi {
             Object::Array(
@@ -8393,6 +8993,19 @@ impl EditSession {
             .default_appearance
             .clone()
             .unwrap_or_else(|| b"/Helv 0 Tf 0 g".to_vec());
+
+        // The `/TI` derivation, placed here because it needs the same
+        // AcroForm-level `/DA` fallback the appearance generator uses — a
+        // field with no `/DA` of its own must resolve to the form's, not to
+        // "unreadable, so leave it unscrolled".
+        let top_index = if list_box {
+            self.derive_top_index(primary, &indices, &default_da)
+        } else {
+            // A combo box is not scrollable: it shows one line, collapsed.
+            // Table 231 scopes `/TI` to list boxes, so this is an ABSENT key
+            // rather than a zero one.
+            None
+        };
 
         let mut objects: Vec<ObjectWrite> = Vec::new();
         let mut widgets_updated = 0usize;
@@ -8422,14 +9035,45 @@ impl EditSession {
             let before = self.state.get(&field.id).cloned();
             let mut updated = field_dict.clone();
             updated.insert(Name::from(b"V"), v_object.clone());
-            // /I selected-index array (§12.7.4.4): present when options matched.
-            if indices.is_empty() {
-                updated.remove(b"I");
-            } else {
+            // `/I` — the selected-index array (§12.7.4.4 Table 231). Written
+            // ONLY for a multi-select field, and removed otherwise.
+            //
+            // # Why single-select loses an entry it used to get
+            //
+            // Table 231 opens `/I` with *"for choice fields that allow
+            // multiple selection"* and closes it with a note that it "should
+            // not be used for single-selection fields". A single-select
+            // field's `/V` is one string and is unambiguous on its own, so
+            // `/I` adds a second statement of the same fact — and Table 231
+            // also says that when the two disagree, `/V` wins. A redundant
+            // key whose only defined behaviour on conflict is to be ignored
+            // is not a helpful key: it is a second thing for a later editor
+            // to forget to update.
+            //
+            // The removal is unconditional rather than "remove if we wrote
+            // it", so filling a single-select field that ALREADY carried a
+            // stale `/I` from another producer clears it instead of leaving
+            // an index array pointing at the previous selection.
+            if multi && !indices.is_empty() {
                 updated.insert(
                     Name::from(b"I"),
                     Object::Array(indices.iter().map(|i| Object::Integer(*i)).collect()),
                 );
+            } else {
+                updated.remove(b"I");
+            }
+            // `/TI` — absent means 0 (Table 231's stated default), so a
+            // top-of-list result writes no key rather than writing `0`.
+            // Removing on the absent branch matters for the same reason `/I`
+            // does: a previous fill may have scrolled this field down, and a
+            // new selection at the top must not inherit that window.
+            match top_index {
+                Some(ti) => {
+                    updated.insert(Name::from(b"TI"), Object::Integer(ti));
+                }
+                None => {
+                    updated.remove(b"TI");
+                }
             }
             if let Some(ap_id) = merged_ap {
                 let mut ap = Dict::new();
@@ -8455,6 +9099,7 @@ impl EditSession {
             widgets_updated,
             applied_autosize,
             unencodable_chars,
+            top_index,
         })
     }
 
@@ -12442,14 +13087,30 @@ mod tests {
         )
     }
 
+    /// A single-select fill stores the EXPORT value in `/V` and writes **no**
+    /// `/I`.
+    ///
+    /// # This assertion was inverted, deliberately
+    ///
+    /// It read `assert_eq!(i[0].as_int(), Some(1))` — a one-element `/I` was
+    /// expected on a single-select combo. Table 231 scopes `/I` to
+    /// `MultiSelect` fields and adds that when `/I` and `/V` disagree, `/V`
+    /// shall be used; so on a single-select field `/I` restates a fact `/V`
+    /// already carries unambiguously, and its only defined behaviour on
+    /// conflict is to be ignored. Writing it gave a later editor a second
+    /// place to forget to update.
+    ///
+    /// Kept as a NAMED absence rather than deleted, because "no `/I` here" is
+    /// the behaviour, and a test that merely stopped checking would let the
+    /// key come back.
     #[test]
-    fn choice_single_select_stores_export_and_index() {
+    fn choice_single_select_stores_the_export_and_no_index_array() {
         // Combo (131072). Two-element opts: export != display.
         let mut s = session(pdf_with_choice(
             131072,
             "[ [(r)(Red)] [(g)(Green)] [(b)(Blue)] ]",
         ));
-        // Match by display "Green" → export "g", index 1.
+        // Match by display "Green" → export "g".
         let out = s.set_choice_value("Color", &["Green"]).unwrap();
         assert_eq!(out.widgets_updated, 1);
         let Some(Object::Dict(d)) = s.value(ObjId::new(4, 0)) else {
@@ -12460,9 +13121,15 @@ mod tests {
             b"g",
             "/V stores the EXPORT value"
         );
-        let i = d.get(b"I").and_then(Object::as_array).unwrap();
-        assert_eq!(i.len(), 1);
-        assert_eq!(i[0].as_int(), Some(1));
+        assert!(
+            d.get(b"I").is_none(),
+            "§12.7.4.4 Table 231 scopes /I to MultiSelect fields; on a \
+             single-select one it is a redundant restatement of /V that /V \
+             overrides anyway"
+        );
+        // And a combo box is not scrollable, so no `/TI` either.
+        assert!(d.get(b"TI").is_none(), "a combo box has no scroll position");
+        assert_eq!(out.top_index, None);
     }
 
     #[test]
