@@ -294,6 +294,16 @@ pub enum CommandKind {
     /// name from this node's, so the subtree follows without being touched.
     /// One undo entry restores the whole apparent rename for the same reason.
     RenameFormField,
+    /// One widget annotation's `/Rect` was translated (§12.5.2).
+    ///
+    /// Exactly one dictionary is written and **no appearance is
+    /// regenerated**, because none needs to be: §12.5.5 step b derives its
+    /// matrix **A** from the appearance box's corners and the `/Rect`
+    /// corners, so translating `/Rect` without changing its extent makes
+    /// **A** a pure translation and the existing artwork moves with it,
+    /// unscaled. A regeneration here would rewrite a stream to produce
+    /// bytes the placement algorithm already produces for free.
+    MoveWidget,
     /// A text or choice field's value was set and its appearance
     /// regenerated (Pass 7, §12.7.3.3). One fill — the field's `/V` and
     /// every widget's `/AP` — is one undo entry.
@@ -1787,6 +1797,22 @@ pub enum EditError {
         index: usize,
         /// How many widgets the field actually has.
         widgets: usize,
+    },
+    /// The widget exists but has no usable `/Rect` to move.
+    ///
+    /// §12.5.2 makes `/Rect` required, so this is a malformed annotation.
+    /// pdfce refuses rather than inventing a starting rectangle: a
+    /// fabricated origin would put the widget somewhere the file never
+    /// said, and "it moved to a place nothing chose" is worse than "it did
+    /// not move".
+    #[error(
+        "widget {index} of field `{name}` has no usable /Rect (§12.5.2 requires one), so there is no rectangle to move"
+    )]
+    WidgetRectMissing {
+        /// The field's fully-qualified name.
+        name: String,
+        /// The widget's index within the field.
+        index: usize,
     },
     /// Two members of one radio group were given the same export value, and
     /// the group is not `RadiosInUnison`.
@@ -4392,6 +4418,24 @@ pub struct ImportOutcome {
 /// see afterwards — that a selection was cleared, and that emptied grouping
 /// nodes went with it — are exactly the ones that change what the document
 /// means.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WidgetMove {
+    /// The `/Rect` before the move, normalised (§7.9.5).
+    pub from: page_tree::Rect,
+    /// The `/Rect` after it.
+    pub to: page_tree::Rect,
+    /// **A disclosure, not a statistic.** How many other widgets this
+    /// field still has, standing where they were.
+    ///
+    /// A field with widgets on pages 1, 2 and 3 looks like one thing to an
+    /// operator who asked to move "the signature box". Moving one and
+    /// silently leaving two behind is the kind of partial result that reads
+    /// as a bug later, so the count is returned and the shell says it.
+    /// Zero for the ordinary single-widget field, where there is nothing to
+    /// disclose.
+    pub siblings_left_behind: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct FieldDeletion {
@@ -6354,6 +6398,113 @@ impl EditSession {
             from: fqn.to_owned(),
             to: new_fqn,
             descendants_renamed,
+        })
+    }
+
+    /// Translate one widget annotation's `/Rect` by `(dx, dy)` in default
+    /// user space (§12.5.2).
+    ///
+    /// # Why a move needs no appearance regeneration, and a resize does
+    ///
+    /// §12.5.5's placement algorithm computes a matrix **A** that maps the
+    /// transformed appearance box's lower-left and upper-right corners onto
+    /// the corresponding corners of `/Rect`. **The scale factors are
+    /// `Rect_extent / box_extent` per axis.** Translating `/Rect` leaves its
+    /// extent unchanged, so both factors stay 1 and **A** degenerates to a
+    /// pure translation — the existing artwork is carried to the new
+    /// position at its original size, by the algorithm every conforming
+    /// reader already runs.
+    ///
+    /// A **resize** is the opposite case and is deliberately not this
+    /// method: changing the extent makes those factors ≠ 1, and §12.5.5's
+    /// own table calls the aspect-ratio-mismatch result *"non-uniform
+    /// (anisotropic) scale … stretched to fill `Rect` exactly … normative,
+    /// not a bug."* A resized check box would get a distorted tick and a
+    /// resized text field stretched glyphs. Resizing therefore has to
+    /// **regenerate** through the shared generator (R92), which is a
+    /// separate capability — see this method's `WIDGET RESIZE` note in
+    /// `ROADMAP.md`.
+    ///
+    /// # A widget is not a field
+    ///
+    /// A field may own several widgets across several pages; this moves
+    /// **one appearance**, leaving its siblings where they are. That is the
+    /// same distinction [`Self::delete_widget`] draws against
+    /// [`Self::delete_field`], and `index` is into
+    /// [`forms::Field::widgets`] — the order `list-fields` prints, so the
+    /// operator can see what they are choosing between before choosing.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::FieldNotFound`] when nothing bears the name;
+    /// [`EditError::WidgetIndexOutOfRange`] when the index does not name a
+    /// widget; [`EditError::WidgetRectMissing`] when the widget has no
+    /// usable `/Rect` to move (absent or malformed — §12.5.2 requires one,
+    /// and inventing coordinates for a broken annotation would be
+    /// fabricating geometry the file never had); plus the encryption and
+    /// **strict** certification guards, for the same reason deletion takes
+    /// them: moving a widget changes the form's structure, which is what a
+    /// certification signature exists to freeze.
+    pub fn move_widget(
+        &mut self,
+        fqn: &str,
+        index: usize,
+        dx: f64,
+        dy: f64,
+    ) -> Result<WidgetMove, EditError> {
+        let (field, _) = self.deletion_preflight(fqn)?;
+        let Some(widget) = field.widgets.get(index).cloned() else {
+            return Err(EditError::WidgetIndexOutOfRange {
+                name: fqn.to_owned(),
+                index,
+                widgets: field.widgets.len(),
+            });
+        };
+        let Some(rect) = widget.rect else {
+            return Err(EditError::WidgetRectMissing {
+                name: fqn.to_owned(),
+                index,
+            });
+        };
+
+        let Some(Object::Dict(widget_dict)) = self.value(widget.id) else {
+            return Err(EditError::NotADictionary {
+                id: widget.id,
+                key: "Rect",
+            });
+        };
+        let mut updated = widget_dict.clone();
+        let moved = page_tree::Rect::from_corners(
+            rect.llx + dx,
+            rect.lly + dy,
+            rect.urx + dx,
+            rect.ury + dy,
+        );
+        updated.insert(
+            Name::from(b"Rect"),
+            Object::Array(vec![
+                Object::Real(moved.llx),
+                Object::Real(moved.lly),
+                Object::Real(moved.urx),
+                Object::Real(moved.ury),
+            ]),
+        );
+
+        self.commit(Command {
+            kind: CommandKind::MoveWidget,
+            objects: vec![ObjectWrite {
+                id: widget.id,
+                before: self.state.get(&widget.id).cloned(),
+                after: Some(Object::Dict(updated)),
+            }],
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(WidgetMove {
+            from: rect,
+            to: moved,
+            siblings_left_behind: field.widgets.len().saturating_sub(1),
         })
     }
 

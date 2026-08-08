@@ -694,3 +694,129 @@ fn a_dotted_partial_name_and_a_malformed_one_refuse_differently() {
         "the two cases must not share a message; that is the point",
     );
 }
+
+// ---------------------------------------------------------------------------
+// Widget geometry: moving one appearance without regenerating it.
+// ---------------------------------------------------------------------------
+
+/// A move lands in the SAVED BYTES, not merely in the model.
+///
+/// Asserted on the file rather than through `parse_acroform` deliberately
+/// (R159): the projection would report the new rectangle just as happily if
+/// the write never reached the document, which is exactly how a shipped
+/// flatten defect hid — the model looked right while the file was wrong.
+#[test]
+fn moving_a_widget_writes_the_new_rect_into_the_file() {
+    let mut s = session("demo-form.pdf");
+    let before = named(&form(&s), "FullName");
+    let rect = before.widgets[0]
+        .rect
+        .expect("the fixture's widget has a /Rect");
+
+    let moved = s
+        .move_widget("FullName", 0, 25.0, -10.0)
+        .expect("move applies");
+    assert_eq!(moved.from, rect, "the outcome reports where it started");
+    assert!(
+        (moved.to.llx - (rect.llx + 25.0)).abs() < 1e-9
+            && (moved.to.lly - (rect.lly - 10.0)).abs() < 1e-9,
+        "the rectangle translated by the requested delta, got {:?}",
+        moved.to,
+    );
+    assert!(
+        (moved.to.width() - rect.width()).abs() < 1e-9
+            && (moved.to.height() - rect.height()).abs() < 1e-9,
+        "a MOVE must not change the extent — that would make §12.5.5's scale \
+         factors differ from 1 and stretch the appearance",
+    );
+
+    let doc = Document::load(&fixture("demo-form.pdf")).expect("reload for the writer");
+    let (bytes, _) = save_full(&doc, &s.dirty_set(), &SaveOptions::identity()).expect("save");
+    let text = String::from_utf8_lossy(&bytes);
+    // The writer always emits a `.` for a Real (`serialize.rs`: "Object::Real(4.0)
+    // emits `4.0`, not `4`", so a re-parse yields Real rather than Integer). The
+    // assertion spells the number the way the FILE spells it — Rust's `{}` would
+    // print `45` and silently never match.
+    let wanted = format!("{:.1} {:.1}", rect.llx + 25.0, rect.lly - 10.0);
+    assert!(
+        text.contains(&wanted),
+        "the moved lower-left corner {wanted:?} is not in the saved bytes",
+    );
+}
+
+/// The appearance stream is NOT rewritten by a move.
+///
+/// This is the assertion that makes the "no regeneration needed" claim
+/// checkable rather than merely stated. §12.5.5 step b derives its scale
+/// from `Rect_extent / box_extent`, so an unchanged extent leaves the
+/// artwork alone — and if some later change starts regenerating here, the
+/// object count moves and this test says so.
+#[test]
+fn a_move_rewrites_one_object_and_leaves_the_appearance_alone() {
+    let mut s = session("demo-form.pdf");
+    let before = named(&form(&s), "FullName");
+    let ap_before = before.widgets[0].id;
+
+    s.move_widget("FullName", 0, 5.0, 5.0)
+        .expect("move applies");
+
+    let dirty = s.dirty_set();
+    assert_eq!(
+        dirty.len(),
+        1,
+        "a move is one dictionary write; {} objects were touched, which means \
+         something is regenerating that does not need to be",
+        dirty.len(),
+    );
+    assert!(
+        dirty.contains(ap_before),
+        "the one object written is the widget whose /Rect changed",
+    );
+}
+
+/// Moving one widget of a multi-widget field leaves the others, and SAYS SO.
+///
+/// A field with widgets on several pages is one thing to an operator and
+/// several to the format. Moving one silently would be a partial result that
+/// reads as a bug later, so the count is part of the outcome.
+#[test]
+fn moving_one_widget_discloses_the_siblings_it_left_behind() {
+    let mut s = session("multi-widget-form.pdf");
+    let field = named(&form(&s), "Reference");
+    assert!(
+        field.widgets.len() > 1,
+        "this test needs a multi-widget field; got {}",
+        field.widgets.len(),
+    );
+    let untouched = field.widgets[1].rect.expect("sibling has a /Rect");
+
+    let moved = s
+        .move_widget("Reference", 0, 40.0, 0.0)
+        .expect("move applies");
+    assert_eq!(
+        moved.siblings_left_behind,
+        field.widgets.len() - 1,
+        "the outcome must disclose every sibling left standing",
+    );
+
+    let after = named(&form(&s), "Reference");
+    assert_eq!(
+        after.widgets[1].rect.expect("sibling still has a /Rect"),
+        untouched,
+        "moving widget 0 must not have moved widget 1",
+    );
+}
+
+/// A widget with no usable `/Rect` is refused, not given one.
+#[test]
+fn a_widget_without_a_rect_is_refused_rather_than_placed() {
+    let mut s = session("demo-form.pdf");
+    let err = s
+        .move_widget("FullName", 99, 1.0, 1.0)
+        .expect_err("index 99 does not exist");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("widget 99"),
+        "the refusal names the index the operator gave; got {msg:?}",
+    );
+}

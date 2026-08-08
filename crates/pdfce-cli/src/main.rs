@@ -1461,6 +1461,48 @@ enum Command {
         verify_undo: bool,
     },
 
+    /// **Move a form field's widget** — translate its `/Rect` (§12.5.2).
+    ///
+    /// MOVES ONE APPEARANCE, NOT THE FIELD. A field can own widgets on
+    /// several pages; this shifts the one you name and leaves its siblings
+    /// where they are, reporting how many it left behind. That is the same
+    /// widget-versus-field distinction `delete-widget` draws against
+    /// `delete-field`.
+    ///
+    /// The artwork is NOT regenerated, and does not need to be: §12.5.5
+    /// scales the appearance onto `/Rect` by the ratio of their extents, so
+    /// a translation leaves both ratios at 1 and the existing picture is
+    /// simply carried along at its original size.
+    ///
+    /// RESIZING IS A DIFFERENT OPERATION and is deliberately not this verb.
+    /// Changing the extent makes those ratios ≠ 1, which §12.5.5 defines as
+    /// a non-uniform stretch — a resized check box would get a distorted
+    /// tick. A resize has to regenerate the appearance instead.
+    MoveWidget {
+        /// Input PDF.
+        input: PathBuf,
+        /// The field's fully-qualified name, as `list-fields` reports it.
+        #[arg(long)]
+        name: String,
+        /// Which widget to move, numbered from 0 in the order `list-fields`
+        /// reports the field's widgets.
+        #[arg(long, default_value_t = 0)]
+        index: usize,
+        /// Horizontal shift in points, positive to the right.
+        #[arg(long, allow_negative_numbers = true)]
+        dx: f64,
+        /// Vertical shift in points, positive UP — PDF user space has its
+        /// origin at the bottom-left corner (§8.3.2.3), not the top.
+        #[arg(long, allow_negative_numbers = true)]
+        dy: f64,
+        /// Output path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Which save path to use.
+        #[arg(long, value_enum, default_value_t = SaveMode::Incremental)]
+        mode: SaveMode,
+    },
+
     /// Author a new list box or drop-down (ISO 32000-1 §12.7.4.4).
     ///
     /// The field is created with its options and NO selection; `fill-field`
@@ -3277,6 +3319,15 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         } => cmd_delete_form_field(&input, &name, Some(index), &output, mode, verify_undo),
+        Command::MoveWidget {
+            input,
+            name,
+            index,
+            dx,
+            dy,
+            output,
+            mode,
+        } => cmd_move_widget(&input, &name, index, dx, dy, &output, mode),
         Command::RenameField {
             input,
             name,
@@ -9494,6 +9545,73 @@ fn cmd_rename_field(
         r.bytes_written,
         u32::from(outcome.undo_verified),
         u32::from(outcome.undo_identical),
+    );
+    finish_edit(input, &outcome)
+}
+
+/// `move-widget` — translate one widget annotation's `/Rect`.
+///
+/// The disclosure this verb owes the operator is `siblings_left_behind`: a
+/// field with widgets on three pages looks like ONE thing to someone who
+/// asked to move "the signature box", and moving one while silently leaving
+/// two behind is the kind of partial result that reads as a bug an hour
+/// later. It is printed in prose when it is non-zero, and always on the
+/// machine-readable line.
+fn cmd_move_widget(
+    input: &Path,
+    name: &str,
+    index: usize,
+    dx: f64,
+    dy: f64,
+    output: &Path,
+    mode: SaveMode,
+) -> u8 {
+    let (source, mut session) = match open_for_edit(input) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let moved = match session.move_widget(name, index, dx, dy) {
+        Ok(m) => m,
+        Err(err) => return report_edit_error(input, &err),
+    };
+
+    if moved.siblings_left_behind > 0 {
+        eprintln!(
+            "pdfce-cli: field {name:?}: moved widget {index} only — {} other widget(s) of this field stayed where they were. A field's widgets are separate appearances and can sit on different pages; move each one you want moved",
+            moved.siblings_left_behind
+        );
+    }
+
+    let outcome = match save_edited(
+        &mut session,
+        &source,
+        output,
+        mode,
+        ProducerArg::Preserve,
+        false,
+    ) {
+        Ok(outcome) => outcome,
+        Err(code) => return code,
+    };
+    let r = &outcome.report;
+    println!(
+        "move-widget {} name={name:?} index={index} dx={dx} dy={dy} from=[{} {} {} {}] to=[{} {} {} {}] siblings_left_behind={} mode={} -> {}; changed={} objects={} appended={} out_bytes={}",
+        input.display(),
+        moved.from.llx,
+        moved.from.lly,
+        moved.from.urx,
+        moved.from.ury,
+        moved.to.llx,
+        moved.to.lly,
+        moved.to.urx,
+        moved.to.ury,
+        moved.siblings_left_behind,
+        mode.name(),
+        output.display(),
+        outcome.changed,
+        r.objects_written,
+        r.bytes_appended,
+        r.bytes_written,
     );
     finish_edit(input, &outcome)
 }
