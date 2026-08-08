@@ -1,32 +1,59 @@
 ---
 name: feedback-session-log-continuation-style
-description: pdfce's SESSION_LOG.md keeps one dated header per calendar session start and appends further same-day work as "Same-day continuation N" rather than opening new date headers, even when the in-fiction/ROADMAP dates roll forward.
+description: pdfce's SESSION_LOG.md CURRENT (2026-08-08+) convention is one new `## YYYY-MM-DD (Nth filing)` top-level header PER librarian filing, appended at the TRUE END of the file (file is chronological ASCENDING, oldest first) — supersedes the earlier "Same-day continuation N" bold-paragraph convention.
 metadata:
   type: feedback
 ---
 
+**CORRECTED 2026-08-08 (thirty-sixth filing) — the convention below this
+note describes an EARLIER phase of the project and is no longer how the
+file is written.** Left in place with the correction rather than deleted,
+because the reasoning for the change is worth keeping.
+
+**Current convention, verified by grepping every `^## 2026-08-08` header
+in the file on 2026-08-08:** the project now opens a **new top-level
+`## YYYY-MM-DD (Nth filing)` header for every `pdfce-librarian` filing**,
+not just once per calendar day — by the thirty-sixth filing there were
+FOUR separate `## 2026-08-08 (...)` headers in one calendar date
+(thirty-third through thirty-sixth), each a real markdown `##`, not a
+bold paragraph. "Nth filing" counts librarian filings, ordinal-in-words
+(thirty-third, thirty-fourth, …), not Pass count or calendar continuation.
+
+**★ THE MISTAKE THIS MEMORY EXISTS TO PREVENT: the file is CHRONOLOGICAL
+ASCENDING (oldest section first — it opens with `## 2026-07-23 — project
+bootstrap` at the very top), the OPPOSITE order from `ROADMAP.md`'s
+Shipped section (reverse-chronological, newest first).** A new entry
+therefore goes at the file's TRUE END, found by reading past the last
+existing header, never inserted "before the most recent entry" the way
+Shipped-section muscle memory would suggest. This session (thirty-sixth
+filing) made exactly that error on the first attempt — used an `old_string`
+anchored to the thirty-fifth filing's header, which correctly placed the
+new text immediately BEFORE it rather than after — and had to fix it with
+a second edit. **Before appending, grep `^## 2026-08-\d\d` (or the current
+date), confirm which match is LAST in the file (highest line number, not
+just textually most recent date), and anchor the insertion after that
+match's own trailing content, not after its header.**
+
+**How to apply:** when dispatched for "session log append," (1) grep
+`^## YYYY-MM-DD` to find the current day's highest "(Nth filing)" ordinal
+so far (if any), (2) read to the genuine end of the file to find the exact
+trailing text of the LAST header (by position, not by date-recency), (3)
+append the new `## YYYY-MM-DD ((N+1)th filing) — <title>` section after
+that trailing text, never before an existing header.
+
+---
+
+**SUPERSEDED CONTENT BELOW, kept for the historical reasoning only —
+this is NOT the current convention:**
+
 `docs/SESSION_LOG.md` opened its first substantive session with
 `## 2026-07-23 — project bootstrap`, then `## 2026-07-23 — Pass 0`, then a
 single `## 2026-07-30 — scope expansion + decision-protocol setup` header
-that has since absorbed 30+ "**Same-day continuation N —** ..." bolded
-sub-entries in a row (continuation 34 was the last one before Pass 14.0's
-continuation 35), even though `ROADMAP.md`'s Shipped entries inside that
-same stretch carry dates like `2026-08-01`.
-
-**Why:** the project treats one long autonomous/interactive working session
-as a single session-log date header, and uses the "Same-day continuation N"
-convention (a bolded paragraph lead-in, NOT a markdown `##`/`###` heading)
-for every subsequent chunk of work within it — regardless of whether the
-per-Pass ship dates recorded in `ROADMAP.md` have rolled forward inside that
-same stretch. I confirmed this by grepping every `^## 2026-` header in the
-file (only three exist total) versus every `Same-day continuation` string
-(dozens), then matching the exact bold-paragraph formatting used at
-continuation 34 before writing continuation 35.
-
-**How to apply:** when dispatched for "session log append" mid-session,
-default to adding the next `Same-day continuation N` (bold paragraph, not a
-new `##` header) under the CURRENT open date section, using
-`N = (highest existing continuation number) + 1`. Only open a genuinely new
-`## YYYY-MM-DD` header when the operator/engineer explicitly signals a new
-session has started (not just that the in-story date advanced). Grep
-`Same-day continuation` first to find the current highest N before writing.
+that absorbed 30+ "**Same-day continuation N —** ..." bolded sub-entries in
+a row, even though `ROADMAP.md`'s Shipped entries inside that same stretch
+carried dates like `2026-08-01`. At the time, the project treated one long
+autonomous/interactive working session as a single session-log date
+header, using a bolded-paragraph "Same-day continuation N" lead-in (not a
+markdown heading) for every subsequent chunk of work within it. **That
+phase has since ended** — by 2026-08-07/08 the file was already using
+repeated `## YYYY-MM-DD (Nth filing)` headers per date, as described above.

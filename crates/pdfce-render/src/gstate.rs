@@ -57,6 +57,7 @@
 //! docs §1–§2 for why an untagged device colour has no "correct" RGB
 //! and pdfce is therefore choosing rather than matching.
 
+use pdfce_core::settings::CmykIntent;
 use tiny_skia::Transform;
 
 /// Line cap style (Table 54: 0 butt, 1 round, 2 projecting square).
@@ -119,11 +120,18 @@ impl Rgb {
         Self::from_triple(pdfce_core::color::rgb_to_srgb(r, g, b))
     }
 
-    /// From DeviceCMYK components (`k`/`K`) — §8.6.4.4, via the calibrated
-    /// conversion in [`pdfce_core::color::cmyk_to_srgb`] (module docs).
+    /// From DeviceCMYK components (`k`/`K`) — §8.6.4.4, via the operator's
+    /// chosen conversion in [`pdfce_core::color::cmyk_to_srgb_with`].
+    ///
+    /// The intent is a **parameter rather than a global** because §8.6.4.4
+    /// mandates no conversion at all: the answer is the operator's, so it
+    /// has to travel with the render that used it. A process-wide setting
+    /// would be one line shorter and would make two renders of the same
+    /// page differ for a reason not visible at either call site — which is
+    /// exactly the property `tools/render-parity` depends on not having.
     #[must_use]
-    pub fn from_cmyk(c: f32, m: f32, y: f32, k: f32) -> Self {
-        Self::from_triple(pdfce_core::color::cmyk_to_srgb(c, m, y, k))
+    pub fn from_cmyk(intent: CmykIntent, c: f32, m: f32, y: f32, k: f32) -> Self {
+        Self::from_triple(pdfce_core::color::cmyk_to_srgb_with(intent, c, m, y, k))
     }
 }
 

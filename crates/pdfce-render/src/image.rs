@@ -136,6 +136,7 @@ use pdfce_core::filters::{self, FilterError};
 use pdfce_core::graph::ObjectGraph;
 use pdfce_core::image_codec::{self, Codec, CodecColorModel, CodedImage, ImageCodecError};
 use pdfce_core::object::{Dict, Object};
+use pdfce_core::settings::CmykIntent;
 use pdfce_core::view::DocumentView;
 use tiny_skia::{Pixmap, PremultipliedColorU8};
 
@@ -465,6 +466,7 @@ pub fn decode(
     resources: &Dict,
     fill: Rgb,
     origin: ImageOrigin,
+    intent: CmykIntent,
 ) -> Result<DecodedImage, ImageError> {
     let width = positive_dimension(doc, dict, b"Width")?;
     let height = positive_dimension(doc, dict, b"Height")?;
@@ -530,6 +532,7 @@ pub fn decode(
         tr.alpha.as_ref(),
         tr.colour_key,
         tr.matte.as_deref(),
+        intent,
     )
 }
 
@@ -887,6 +890,7 @@ fn decode_sampled(
     alpha: Option<&AlphaPlane>,
     colour_key_entry: Option<&Object>,
     matte: Option<&[f32]>,
+    intent: CmykIntent,
 ) -> Result<DecodedImage, ImageError> {
     let data = &coded.samples;
     // Table 89 makes this filter — and only this filter — able to
@@ -902,7 +906,7 @@ fn decode_sampled(
         // `/ColorSpace` here is the inverted-inversion bug, and it would
         // produce wrong colour on exactly the files a producer took the
         // trouble to tag.
-        Some(obj) => resolve_space(doc, obj, resources, 0)?,
+        Some(obj) => resolve_space(doc, obj, resources, 0, intent)?,
         // `/ColorSpace` absent. Required for every other image (Table
         // 89: "Required for images, except those that use the JPXDecode
         // filter"), so this is malformed unless the codestream can
@@ -1126,7 +1130,7 @@ fn decode_sampled(
                     if let Some(m) = matte {
                         mask::undo_matte(&mut comps, components.min(4), m, plane_alpha);
                     }
-                    space.to_rgb(&comps)
+                    space.to_rgb(intent, &comps)
                 }
             };
             // Alpha, in the order the precedence ladder resolved: a
@@ -1325,7 +1329,7 @@ impl Space {
     }
 
     /// Convert decoded components (already clamped to 0–1) to RGB.
-    fn to_rgb(&self, comps: &[f32; 4]) -> Rgb {
+    fn to_rgb(&self, intent: CmykIntent, comps: &[f32; 4]) -> Rgb {
         let c = |i: usize| comps.get(i).copied().unwrap_or(0.0);
         match self {
             // An Indexed space never reaches here — the palette path
@@ -1338,7 +1342,7 @@ impl Space {
             // same `Rgb` constructor — so an image and a filled rectangle
             // of the "same" CMYK agree on screen by construction rather
             // than by two formulas being kept in step (gstate.rs docs).
-            Self::Cmyk => Rgb::from_cmyk(c(0), c(1), c(2), c(3)),
+            Self::Cmyk => Rgb::from_cmyk(intent, c(0), c(1), c(2), c(3)),
         }
     }
 }
@@ -1409,6 +1413,7 @@ pub(crate) fn resolve_space(
     obj: &Object,
     resources: &Dict,
     depth: usize,
+    intent: CmykIntent,
 ) -> Result<Space, ImageError> {
     if depth > MAX_COLORSPACE_DEPTH {
         return Err(ImageError::UnsupportedColorSpace(
@@ -1430,7 +1435,7 @@ pub(crate) fn resolve_space(
                     .and_then(|cs| cs.get(other))
                     .map(|o| doc.resolve(o));
                 match entry {
-                    Some(inner) => resolve_space(doc, inner, resources, depth + 1),
+                    Some(inner) => resolve_space(doc, inner, resources, depth + 1, intent),
                     None => Err(ImageError::UnsupportedColorSpace(format!(
                         "/{}",
                         String::from_utf8_lossy(other)
@@ -1438,7 +1443,7 @@ pub(crate) fn resolve_space(
                 }
             }
         },
-        Object::Array(items) => resolve_space_array(doc, items, resources, depth),
+        Object::Array(items) => resolve_space_array(doc, items, resources, depth, intent),
         _ => Err(ImageError::UnsupportedColorSpace(
             "/ColorSpace is neither a name nor an array".into(),
         )),
@@ -1451,6 +1456,7 @@ fn resolve_space_array(
     items: &[Object],
     resources: &Dict,
     depth: usize,
+    intent: CmykIntent,
 ) -> Result<Space, ImageError> {
     let family = items
         .first()
@@ -1464,7 +1470,7 @@ fn resolve_space_array(
         // real producers emit.
         _ if items.len() == 1 => {
             let name = Object::Name(pdfce_core::object::Name(family));
-            resolve_space(doc, &name, resources, depth + 1)
+            resolve_space(doc, &name, resources, depth + 1, intent)
         }
         // `[/ICCBased stream]` — §8.6.5.5. pdfce does not parse ICC
         // profiles; the spec's own fallback is the stream's `/N`
@@ -1488,7 +1494,7 @@ fn resolve_space_array(
             }
         }
         // `[/Indexed base hival lookup]` — §8.6.6.3.
-        b"Indexed" | b"I" => resolve_indexed(doc, items, resources, depth),
+        b"Indexed" | b"I" => resolve_indexed(doc, items, resources, depth, intent),
         other => Err(ImageError::UnsupportedColorSpace(format!(
             "/{}",
             String::from_utf8_lossy(other)
@@ -1513,6 +1519,7 @@ fn resolve_indexed(
     items: &[Object],
     resources: &Dict,
     depth: usize,
+    intent: CmykIntent,
 ) -> Result<Space, ImageError> {
     let base_obj =
         items
@@ -1521,7 +1528,7 @@ fn resolve_indexed(
             .ok_or(ImageError::UnsupportedColorSpace(
                 "/Indexed without a base space".into(),
             ))?;
-    let base = resolve_space(doc, base_obj, resources, depth + 1)?;
+    let base = resolve_space(doc, base_obj, resources, depth + 1, intent)?;
     if matches!(base, Space::Indexed(_)) {
         // §8.6.6.3: the base "shall not be … another Indexed space".
         return Err(ImageError::UnsupportedColorSpace(
@@ -1583,7 +1590,7 @@ fn resolve_indexed(
         for (c, slot) in comps.iter_mut().take(m).enumerate() {
             *slot = f32::from(entry.get(c).copied().unwrap_or(0)) / 255.0;
         }
-        table.push(base.to_rgb(&comps));
+        table.push(base.to_rgb(intent, &comps));
     }
     Ok(Space::Indexed(table))
 }

@@ -110,6 +110,7 @@
 //!   rendering mode 3 (the invisible OCR text layer), a `.notdef`
 //!   fallback, and a space all move `Tm` (§9.4.4).
 
+use pdfce_core::settings::CmykIntent;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -649,6 +650,14 @@ fn push_sample(list: &mut Vec<String>, value: &str) {
 /// embedded program are each another hop; `fonts` supplies the
 /// substitute faces for any font that carries no program (decision 004
 /// §6.3 — the renderer never goes looking for one itself, R19).
+// Eight parameters, one over clippy's bound, and grouping them would make
+// this worse rather than better. They are not a cohesive value — they are
+// `RenderOptions` already DECOMPOSED into the pieces the interpreter
+// actually uses, plus the two things options cannot carry (the document
+// view and the target pixmap). A `RunArgs` struct here would exist purely
+// to satisfy a count, and would have to be built at every call site from
+// the same fields.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     doc: &DocumentView<'_>,
     content: &ContentStream,
@@ -657,6 +666,7 @@ pub fn run(
     initial: GraphicsState,
     pixmap: &mut Pixmap,
     cancel: Option<&RenderCancel>,
+    cmyk_intent: CmykIntent,
 ) -> Diagnostics {
     run_nested(
         doc,
@@ -668,6 +678,7 @@ pub fn run(
         0,
         Vec::new(),
         cancel,
+        cmyk_intent,
     )
 }
 
@@ -731,6 +742,7 @@ pub fn trace_paths(
     resources: &Dict,
     fonts: &FontEnvironment,
     initial: GraphicsState,
+    cmyk_intent: CmykIntent,
 ) -> Vec<TracedPath> {
     // A tiny throwaway target: we discard the pixels, so its size only has
     // to be non-zero for `Pixmap::new` to succeed.
@@ -738,6 +750,7 @@ pub fn trace_paths(
         return Vec::new();
     };
     let mut interp = Interpreter {
+        cmyk_intent,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
         path: PathBuilder::new(),
@@ -787,8 +800,10 @@ fn run_nested(
     depth: usize,
     active: Vec<ObjId>,
     cancel: Option<&RenderCancel>,
+    cmyk_intent: CmykIntent,
 ) -> Diagnostics {
     let mut interp = Interpreter {
+        cmyk_intent,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
         path: PathBuilder::new(),
@@ -885,8 +900,10 @@ pub fn run_form_at(
     initial: GraphicsState,
     pixmap: &mut Pixmap,
     cancel: Option<&RenderCancel>,
+    cmyk_intent: CmykIntent,
 ) -> Diagnostics {
     let mut interp = Interpreter {
+        cmyk_intent,
         gs: GStateStack::new(initial),
         diag: Diagnostics::default(),
         path: PathBuilder::new(),
@@ -939,6 +956,9 @@ struct Interpreter<'a> {
     doc: &'a DocumentView<'a>,
     /// Substitute faces available to `Tf` (R19: supplied, never found).
     fonts: &'a FontEnvironment,
+    /// The operator's DeviceCMYK conversion choice (§8.6.4.4), carried
+    /// per render rather than globally — see `Rgb::from_cmyk`.
+    cmyk_intent: CmykIntent,
     /// `Tm`/`Tlm`, live only between `BT` and `ET` (§9.4.1). `None`
     /// outside a text object — which is how the positioning and showing
     /// operators detect the "shall only appear within text objects"
@@ -1089,12 +1109,12 @@ impl Interpreter<'_> {
             }
             b"k" => {
                 if let &[c, m, y, kk] = nums.as_slice() {
-                    self.gs.current.fill_color = Rgb::from_cmyk(c, m, y, kk);
+                    self.gs.current.fill_color = Rgb::from_cmyk(self.cmyk_intent, c, m, y, kk);
                 }
             }
             b"K" => {
                 if let &[c, m, y, kk] = nums.as_slice() {
-                    self.gs.current.stroke_color = Rgb::from_cmyk(c, m, y, kk);
+                    self.gs.current.stroke_color = Rgb::from_cmyk(self.cmyk_intent, c, m, y, kk);
                 }
             }
 
@@ -1950,6 +1970,7 @@ impl Interpreter<'_> {
             self.depth + 1,
             active,
             self.cancel,
+            self.cmyk_intent,
         );
         self.diag.merge(nested);
         self.diag.forms_rendered += 1;
@@ -1983,7 +2004,7 @@ impl Interpreter<'_> {
         let doc = self.doc;
         let resources = self.resources;
         let fill = self.gs.current.fill_color;
-        match image::decode(doc, dict, raw, resources, fill, origin) {
+        match image::decode(doc, dict, raw, resources, fill, origin, self.cmyk_intent) {
             Ok(decoded) => {
                 self.diag.note_image_divergence(decoded.notes);
                 // §8.9.5.3: `/Interpolate` asks for smoothing on

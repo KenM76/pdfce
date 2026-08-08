@@ -211,6 +211,35 @@ fields, barcode fields, CSV aggregation, etc.) — any of them could get
 the same operator-ruling promotion later, and the same
 stub-to-dedicated-file move should apply.
 
+**Print & prepress (PDF/X) bucket, first build (2026-08-08) — the bucket
+that finally covers colour management, added a new dispatch SHAPE worth
+naming: "two explicit named decision questions" rather than a general
+capability sweep.** The dispatching brief for this bucket didn't just ask
+"catalog X" — it named two specific, load-bearing questions up front ("is
+there a defensible correct answer for untagged CMYK→screen" and "where does
+colour accuracy stop being rendering and start needing real ICC machinery")
+and said explicitly these were decisions, not lookups. Handled by: (1)
+budgeting search effort asymmetrically toward exactly those two questions
+FIRST, before the general capability sweep (same instinct as the Forms
+"requester told me what they expect to be decisive" finding, but now
+applied to two decision questions instead of one fact); (2) once sourced,
+stating the answer explicitly, by name, in the session's `index.md` summary
+— "directly answers decision question N" — rather than letting the answer
+sit implicitly inside a per-file Behavior bullet where a time-pressed
+dispatcher would have to re-derive it; (3) when the answer to "is there a
+correct answer" turns out to be "no, even the reference product's own
+answer is a configurable house default," record that AS the answer (a
+negative/relativizing finding is still a resolved decision question, not an
+unresolved GAP) — this is a different shape from the redaction-style "sources
+conflict, pick the conservative default" pattern below: here the sources
+agree, and the agreed-upon fact is itself "there is no universal ground
+truth." A single well-chosen named-expert source (again Dov Isaacs, already
+established as a high-trust named source from the FF-H session) directly
+fetched via `community.adobe.com` was the single highest-value citation of
+the session — worth trying a targeted WebSearch for "[topic] [known expert
+name if one exists from a prior session]" before a generic capability
+search, now confirmed useful a second time.
+
 **Contested/conflicting-tier-or-fact resolution — a DIFFERENT pattern
 from the redaction removal-scope GAP above, worth telling apart.** The
 redaction pattern applies to a must_have-grade MECHANISM question with

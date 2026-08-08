@@ -4510,7 +4510,17 @@ numbered 1..={})",
     // clears it to reproduce the pre-6.0 content-only raster. The font
     // environment carries any `--font-dir` supplied faces (decision 012);
     // with no `--font-dir` it is the bundled default (R63).
-    let mut render_options = pdfce_render::RenderOptions::default().with_annotations(annotations);
+    // §8.6.4.4 mandates no CMYK conversion, so the operator's persisted
+    // choice governs (R169). Read from the same `userdata/` store the GUI
+    // uses, so `render-page` and the canvas cannot disagree about what
+    // black looks like. Loading cannot fail — a missing or broken file
+    // yields defaults plus notes, which are reported and never fatal.
+    let (settings, settings_report) =
+        pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
+    report_settings(&settings_report);
+    let mut render_options = pdfce_render::RenderOptions::default()
+        .with_annotations(annotations)
+        .with_cmyk_intent(settings.cmyk_intent);
     render_options.fonts = font_env;
     let rendered = match pdfce_render::render_page_with(&doc, page, scale, &render_options) {
         Ok(rendered) => rendered,
@@ -9279,6 +9289,68 @@ would leave dangling references and a file that claims to be tagged but is not."
         );
     }
     report_separations(output, &report.separations);
+}
+
+/// Report anything the settings load wants the operator to know.
+///
+/// Goes to stderr, never changes the exit code, and is silent on the
+/// normal case (no file, or a file read cleanly). The settings store's
+/// fail-soft contract is that a configuration problem must not stop the
+/// work — but a typo at a known line number is exactly the thing a
+/// command-line operator can fix in ten seconds if told, and never notices
+/// if not.
+fn report_settings(report: &pdfce_core::settings::LoadReport) {
+    use pdfce_core::settings::{SettingNote, StoreKind};
+
+    if report.location.kind == StoreKind::PlatformFallback
+        && let Some(dir) = report.location.directory()
+    {
+        eprintln!(
+            "pdfce-cli: settings are being read from {} because pdfce's own folder is not writable; they do not travel with the program folder.",
+            dir.display()
+        );
+    }
+    for note in &report.notes {
+        // Spelled out rather than `{:?}`-printed. A `Debug` dump is a
+        // developer's view of a struct; the operator's question is "what
+        // did I get wrong and on which line", and the answer has to be a
+        // sentence they can act on without reading pdfce's source.
+        let line = match note {
+            SettingNote::Unreadable { path, reason } => format!(
+                "the settings file at {} could not be read ({reason}); defaults are in use",
+                path.display()
+            ),
+            SettingNote::UnknownKey { key, line } => format!(
+                "line {line}: \"{key}\" is not a setting pdfce knows. It was left in the file, not removed"
+            ),
+            SettingNote::BadValue {
+                key,
+                value,
+                line,
+                using,
+            } => format!(
+                "line {line}: \"{value}\" is not a value \"{key}\" accepts, so \"{using}\" is being used instead; every other setting in the file still applies"
+            ),
+            SettingNote::Clamped {
+                key,
+                value,
+                line,
+                using,
+            } => format!(
+                "line {line}: \"{key} = {value}\" is outside the accepted range, so {using} is being used"
+            ),
+            SettingNote::Malformed { line } => format!(
+                "line {line} is not a setting (it needs the form: name = value) and was skipped"
+            ),
+            SettingNote::Duplicate { key, line } => {
+                format!("\"{key}\" is set more than once; the one on line {line} is in effect")
+            }
+            // `SettingNote` is `#[non_exhaustive]`: a note a future pdfce
+            // adds must still reach the operator, even unspelled.
+            _ => "something in the settings file was not applied as written".to_owned(),
+        };
+        eprintln!("pdfce-cli: settings: {line}.");
+    }
 }
 
 /// Render `/DeviceColorant` byte strings as a readable list.

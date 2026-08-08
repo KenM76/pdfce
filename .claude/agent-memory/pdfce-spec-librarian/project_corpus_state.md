@@ -831,6 +831,53 @@ opening the `adobe_ext\` directory). Eight sub-rules:
   reserved, no grant). **Read the Preface/IP page, not just the cover NOTICE** — the
   cover said only "All information contained herein is the property of Adobe."
 
+**28. A CLAIM-VERIFICATION dispatch (verify one owed citation; §8.7 pattern
+anchoring, Pass 46.1) — the verdict class is a THREE-way, and the load-bearing
+correction is usually to the claim's SCOPE, not its truth.** Established
+2026-08-07. The parent framed it binary ("CONFIRMED, REFUTED or UNESTABLISHED")
+and the honest answer was a fourth thing: **CONFIRMED-BUT-SCOPE-INCOMPLETE** —
+true as stated for the case the researcher had in mind (a pattern `scn`'d in a
+page content stream), silently over-general as written ("PDF patterns"). Five
+sub-rules:
+
+- **Always ask what the claim's IMPLICIT SCOPE was, then enumerate the sibling
+  cases.** Here: the same shading dictionary painted by `sh` instead of via a
+  `PatternType` 2 pattern is **CTM-relative** — the exact inverse — and ISO
+  32000-1 states the contrast **itself, in one parenthesis** inside Table 77
+  ("(By contrast, when a shading dictionary is used in a type 2 pattern, the
+  coordinates are expressed in pattern space.)"). When a spec bothers to write
+  a "by contrast" parenthesis, that is the standard flagging the exact
+  confusion the dispatch is worried about. Grep for `By contrast|This differs
+  from|rather than` near the clause.
+- **"Does it differ between X and Y?" can be answered "the distinction does not
+  exist" — and that is provable cheaply.** Table 75's and Table 76's `Matrix`
+  rows are **word-for-word identical**, both deferring to §8.7.2, whose scope
+  word is "**Every** pattern". Evidence it item-14 style (20 hits for `pattern
+  matrix`/`pattern space`/`pattern coordinate`, **none** conditioned on
+  `PatternType`). Two byte-identical table rows are stronger than any prose
+  argument that two things behave alike.
+- **A NOTE can be the only place the answer is stated plainly — say so, and pair
+  it with the `shall`.** §8.7.2 **NOTE 1** is the sentence that names *rotation
+  and scaling* and says they "have no effect on the pattern"; it is
+  *informative*. The binding modality is elsewhere (§8.3.2.4 `shall`, §8.7.3.1
+  step (b) `shall`). **Never let a code doc-comment cite the NOTE alone** — it
+  reads as normative and is not. Same discipline as item 6, applied to
+  normative-vs-informative rather than shall-vs-should.
+- **A cost estimate can be right about the DIRECTION and wrong about the LAYER.**
+  The dispatch's worry was "which toggle state costs work". Both the dispatch
+  and the answer agree ON costs, OFF is free. The finding it did not have:
+  **ON is not a content-stream edit at all** — `/Matrix` lives on the *shared
+  pattern object*, so ON requires cloning the resource + the
+  `/Resources`-inheritance guard + possibly *adding* an Optional key. Pricing a
+  feature by "more/less work" hides a layer change; name the layer.
+- **A verified-CONFIRMED claim still yields two new spec-ambiguity rows.**
+  Reading the clause properly to confirm someone else's sentence surfaced
+  PA-1 (§8.7.2 "defined as a resource" vs §8.10.1 NOTE 2 "used" diverge whenever
+  a form omits its **Optional** `/Resources`) and PA-4 (Table 75 `TilingType`
+  licences ±1 device pixel of distortion ⇒ **no pixel-stable regression test on
+  a pattern fill is possible**). A confirmation dispatch is not a cheap dispatch;
+  budget for the clause, not for the sentence.
+
 **16. Under a NO-FALLBACK-SYNTHESIS product rule (pdfce R43), per-subtype spec
 coverage collapses to a binary "AP-vs-fallback map".** Every ISO 32000-1 §12.5.6
 geometry subtype defines a fallback look from its own keys (`L`/`Vertices`/
@@ -843,3 +890,259 @@ fallback source keys, the verbatim AP-precedence quote, no-`/AP` verdict}. The
 fallback geometry is still *modeled* (recognition/round-trip data), just not
 painted. Same move applies to any future "recognize but don't act" scope
 (e.g. `Border`/`BS` styles at display time).
+
+**29. A RENDER-PIPELINE dispatch on a WHOLLY-UNINGESTED clause (image
+transparency, clause 11, 2026-08-08) — five moves, and the highest-value finding
+was an EXISTING ambiguity row that was never an ambiguity.**
+
+- **"Clause C was never ingested" is a hypothesis about the CORPUS, not about the
+  SOURCE — check the source first and say so in the first sentence of the
+  report.** The dispatch pre-authorised a "the staged source does not contain
+  clause 11, scope it as inferred" answer. ISO 32000-1:2008 contains clause 11 in
+  full. `grep -n '^11\.[0-9]'` on the cached dump settled it in one command, and
+  leading the reply with **"the source has it, nothing is from recall"** is worth
+  more to a blocked engineer than any single answer. Inverse of item 15 (where
+  the requested material genuinely was absent): **both outcomes are one grep
+  away, and guessing either way is the failure.**
+- **A "the spec is silent, no rule stated" AMBIGUITY ROW can be wrong — check
+  the clause that OWNS the feature before filing one.** `iso32000__s__8.9.5.2.md`
+  had carried "`Mask` + `SMask` both present — no precedence stated in §8.9.6"
+  in `index.md`'s spec-ambiguity table since 2026-07-30. §8.9.6 **is** silent —
+  and Table 89's `SMask` row **and** §11.6.4.3 each state the precedence
+  independently and verbatim. The row was filed correctly *for the clause read*
+  and was wrong *about the standard*. **Resolution shape: retain the row struck
+  through, mark it `RESOLVED <date>, NOT an ambiguity`, and say why it is
+  retained** (so a future session does not re-open it). Extends item 2b:
+  an ambiguity can close on a *sibling clause*, not only on a negative result.
+  General rule — **an ambiguity scoped to one clause is provisional until the
+  owning clause has been read.**
+- **ONE KEY NAME, TWO UNRELATED FEATURES, and the corpus's existing advice
+  silently covered only one.** `/SMask` is (a) an ExtGState **dictionary** entry
+  (§11.6.5.2 — needs §11.4 transparency groups, genuinely hard) and (b) an image
+  **dictionary stream** entry (§11.6.5.3 — a plain `DeviceGray` image on the unit
+  square, easy). `iso32000__s__8.4.5.md`'s "recognize-and-defer `SMask` —
+  implementing it half-way is worse than not at all" was right about (a) and was
+  being read as covering both, i.e. as *"soft masks are out of reach"*. Fixed
+  with an `AMENDMENT` (item 3) whose "what was wrong" is **"nothing, as a
+  statement about the ExtGState entry — it was over-read as a statement about
+  soft masks in general"**. Generalises item 26's overloaded-`/Ff` finding from
+  *bit positions* to *a key name across two dictionaries*, with the new twist
+  that the **derived engineering advice**, not the table, carried the error.
+  **Lead any file on an overloaded key with a `§0` side-by-side disambiguation
+  table** — that section is the deliverable, not a preamble.
+- **A POLARITY question is answered by a clause the dispatch did NOT name.**
+  §8.9.6.3 (explicit masking) is three sentences and **never names a sample
+  value**; it says the mask is "an image mask, as described in sub-clause
+  8.9.6.2", and §8.9.6.2 carries the `0 shall mark the page` / `1 shall leave
+  the previous contents unchanged` sentence. Same shape as item 23 (trace the
+  operation to its INVARIANT clause) and item 17 (trace the artifact to its
+  CONSUMER clause), third variant: **trace a clause's DEFINED-BY-REFERENCE terms
+  back to their defining clause before reporting a gap.** The payoff table is the
+  **cross-mechanism polarity matrix** — stencil `Decode [0 1]`: decoded 0 =
+  PAINT; soft mask: decoded 0.0 = INVISIBLE. **Exactly opposite**, which is what
+  makes the common producer bug (a 1-bit stencil supplied as an `/SMask`) render
+  as a negative rather than as noise.
+- **A `shall`-list table can restrict a key's DEFAULT without restricting its
+  SEMANTICS or its VALUE SET — read the restriction table against the base
+  table.** Table 145 gives `BitsPerComponent` as bare "Required" (⇒ Table 89's
+  1/2/4/8/16 all stand) and `Decode` as "Default value: `[ 0 1 ]`" (⇒ §8.9.5.2's
+  full semantics stand, so `[1 0]` **inverts alpha**). Reading Table 145 as an
+  exhaustive spec of the sub-object would have produced two wrong answers.
+  Corollary worth stating in the file: **keys the restriction table does not
+  mention keep their ordinary meaning** (`/Filter`, `/Metadata`, `/OC`,
+  `/SMaskInData` on a soft-mask image) — and one of those omissions was itself
+  an ambiguity (SM-A3, Table 145 vs Table 89 for a JPX soft-mask image).
+
+**Also this build:** the derived consolidator earned its place on the **pipeline
+ORDER** rather than on breadth — the two `shall`s an implementer most easily
+inverts (colour-key masking tests **pre-`Decode`** raw integers; `/Matte`
+un-premultiply **precedes** colour conversion) are each stated once, in different
+clauses, and neither is discoverable from the other. And the `AIS` answer is a
+**"you may ignore this, and here is the bounded reason"**: `αs = fj·M·ca` is the
+same product either way, so the flag matters only for knockout groups, group
+re-composition and anti-alias semantics — a *scoped licence to simplify* is a
+better deliverable than either "implement it" or silence.
+
+**30. A THREE-AREA, PARITY-DRIVEN SCOPING dispatch (prepress: `Separation`/
+`DeviceN`, `/OutputIntents`, overprint — 2026-08-08, 2nd build that day). Six
+moves, and the two most reusable are about MODALITY LADDERS and DEVICE-CLASS
+COLLAPSE.**
+
+- **"A sibling librarian confirmed zero hits" is a fact about the CORPUS, never
+  about the SOURCE — and this is now the SECOND same-day instance (item 29 was
+  the first).** All three areas (§8.6.6.4/.5, §8.6.7 + §11.7, §14.11.4/.5, plus
+  §7.10 which six files had *cited* without it ever being ingested) had been in
+  `_sources/PDF32000_2008.pdf` since 2026-07-30. One
+  `grep -n '^8\.6\.[0-9]' /c/tmp/iso32000_dump.txt` settled it. **The dispatch
+  itself carried the correction** ("I told an agent clause 11 was absent from the
+  corpus; it was absent from the RAG, not the source") — when a dispatch hands
+  you a lesson, apply it *and say you did*, in the first line of the report.
+- **A clause can DECLINE to define its own subject, and the defining clause is
+  elsewhere.** §8.6.7 (Overprint Control) states the parameters and then says the
+  effect "is device-dependent and **is not defined here**"; **§11.7.4** defines it
+  as the implicit `CompatibleOverprint` blend mode with a complete decision matrix
+  (Tables 148/149). A renderer built from §8.6.7 alone cannot produce a pixel.
+  Deliverable shape: **two files that open with a `§0 READ THIS FIRST` naming the
+  other and say "read both or neither"** — extends item 13's mirror cross-warning
+  from a *direction* pair to a **DECLINE/DEFINE pair**. Watch for "is not defined
+  here", "is device-dependent", "for further discussion see" — each is a pointer
+  to where the normative content actually lives.
+- **A "does the standard MANDATE X, or did vendor Y choose it?" question is
+  answered with a MODALITY LADDER, and the strongest supporting text is often an
+  informative NOTE in an unrelated clause.** For the output-intent working-space
+  substitution: §14.11.5 says the data "**shall be provided for informational
+  purposes only, and conforming readers are free to disregard it**" (an explicit
+  *permission to ignore* — stronger than silence), and the only text pointing the
+  other way is **§8.6.5.7 NOTE 3**, "an output intent dictionary, if present,
+  **may suggest** such a calibration" — a `may`, **in a NOTE**, in the CIE-space
+  clause. Verdict: **the vendor chose it.** Tabulate the ladder (rung / statement
+  / modality / clause) with an explicit bottom row **"a `shall` binding a reader
+  to adopt it — DOES NOT EXIST"**. Same normative-vs-informative discipline as
+  item 28's NOTE 1 rule, now used to *refute a mandate* rather than to source a
+  fact.
+- **DEVICE-CLASS COLLAPSE: find the one property of pdfce's target that voids
+  most of the spec area, and lead with it.** pdfce renders to an **additive**
+  display, and *six independent `shall`s* collapse the whole prepress colour
+  model: a `Separation` on an additive device "**never** applies a process
+  colorant directly … **always** reverts to the alternate space" (§8.6.6.4);
+  `NChannel` per-component reversion degrades to all-revert (§8.6.6.5);
+  `alternateSpace`/`tintTransform` "**shall always be provided**" so ignoring
+  `NChannel` is conformant; OPM 1 "**shall not apply if the device's native colour
+  space is not `DeviceCMYK`**" (§8.6.7); "**if overprinting is not supported, the
+  value of the overprint parameter shall be ignored**"; output intents are
+  disregardable. ⇒ the entire obligation is *evaluate the tint transform, honour
+  `/All`//`None`, preserve the rest*. **A collapse table is worth more to a
+  scoping dispatch than any clause detail** — it converts "implement clause 8.6.6
+  + 8.6.7 + 11.7 + 14.11" into a two-week job plus one clearly-separated
+  architectural project (n-channel compositing for overprint *simulation*).
+- **New consolidator AXIS: OBLIGED vs CHOOSING.** Item 26 established "same
+  facts, new index key" (bit position instead of field type). This build adds a
+  key that is not about content at all but about **conformance obligation** —
+  `O1…O17` (`shall`) vs `C1…C8` (`may`/silence). It is what a *scoping* dispatch
+  actually consumes, because it says where an acceptance criterion is a
+  compliance test and where it is a product decision (and therefore, under
+  pdfce's rule 4, must be *disclosed*). Two O-rows were things nobody asked
+  about: **O14** (§11.7.4.4 makes `B`/`B*`/`b`/`b*` and Tr 2/6 an implicit
+  knockout group **regardless of overprint** — probably a live render bug) and
+  **O17** (`/SeparationInfo` makes a preseparated file n pages that are logically
+  one ⇒ a page-delete/extract/merge **correctness** hazard, not a prepress topic).
+- **Refusing a conformance matrix on LICENSING grounds — check clause 3 vs the
+  Bibliography FIRST, and note this is item 27's rule producing the OPPOSITE
+  outcome.** In the rich-text build, the deferred-to document (XFA) turned out to
+  be in **clause 3, Normative references**, which made a "the spec is silent"
+  negative *closable by reference*. Here **ISO 15930 (PDF/X) is Bibliography-only
+  [1]–[5]** — so PDF/X is outside ISO 32000-1's normative scope entirely — **and**
+  it is ISO-paywalled and absent from `LEGAL.md` §2, so it is doubly out of reach.
+  `PDF/X-4` = **0 hits** (ISO 15930-7 postdates 2008). **Write no matrix**; write
+  the two-sentence NOTE the standard *does* give, plus three named closure routes
+  (operator-provided copy / veraPDF + Ghent Workgroup free secondaries / do
+  nothing — read-and-preserve needs no PDF/X rule). Item 16 discipline, applied to
+  a *conformance profile* rather than an algorithm.
+
+**Also this build:** a **fourth erratum cluster** (F-E1 `07hD` for `7Dh`; OI-E1
+§14.11.5 NOTE 2 citing Table **364** for the output-intent dictionary which is
+Table **365**; §8.6.7 NOTE 2's dangling "EXAMPLE 3 in 8.6.6"; a `¥`/`³` glyph
+artifact for `×`/`÷`) — cross-checking every cited Table/EXAMPLE number continues
+to pay. **"Re-extract before reconstructing" is now 6 for 6** (Tables 38–42,
+71–73, 148/149, 364/365 all came out row-aligned from the whole-document dump).
+And the item-4a **equation-by-character-x-position** technique had its second
+independent use (§7.10's type-0/2/3 formulas, source pages 102–105) — it is not a
+one-off; treat *any* normative formula as requiring it.
+
+**31. A CONSOLIDATION-ONLY dispatch (no clause ingested, no existing file
+edited) — the deliverable is a RE-INDEX on a PRODUCT key, and its highest-value
+output is a read-only sweep of the CONSUMER CODEBASE.** Established 2026-08-08
+building `iso32000__ref__ambiguity_settings_register.md` (3rd build that day)
+against a standing operator directive: *"where standards are ambiguous those
+should become settings that the user can choose direction one, with the initial
+installed default as the best guess of what is usually followed."* Extends
+item 26 ("same facts, new index key" — bit position) and item 30 ("new axis:
+OBLIGED vs CHOOSING") with a **third** key class: not a content key and not a
+conformance key but a **PRODUCT key — does this become an operator setting?**
+Seven sub-rules:
+
+- **A directive that reclassifies a whole SECTION TYPE is a corpus-wide event,
+  not a per-file one.** "Ambiguities become settings" converts every
+  `## Gotchas / ambiguities` section from an engineering note into a product
+  requirement backlog. The right response is ONE consolidator, not 96 edits.
+  Watch for any operator statement of the form "X should always become Y" — it
+  is a re-index request even when phrased as a policy.
+- **MEASURE the population before triaging it, and expect the dispatch's count
+  to be an OCCURRENCE count.** Dispatch said "~155 across ~15 areas". Actual:
+  **67 unique `<AREA>-<A|N><n>` IDs in 159 occurrences across 12 areas**, plus
+  **88 untagged rows** of `index.md`'s spec-ambiguity table (23 of its 111 rows
+  carry a tag) ⇒ **155 distinct findings**. The dispatch's number was right and
+  its unit was wrong. **"155 findings" and "67 IDs" are different numbers**; say
+  both, because a roadmap entry that states the wrong one under-scopes the work.
+  Cheap: `grep -rhoE '\b[A-Z]{1,4}-[AN][0-9]+\b' --exclude=index.md | sort -u`.
+- **★ THE BIGGEST FINDING CAME FROM GREPPING THE CONSUMER CODEBASE, NOT THE
+  CORPUS.** A read-only sweep of `D:\Dev\pdfce\crates\` showed **10 of the 18
+  SETTING entries are already hard-coded**, with `file:line`. One of them
+  (`annot_author.rs:43–51`) authors `/QuadPoints` in **Z/reading order against
+  §12.5.6.10's stated counterclockwise**, labelling itself *"the open spec item —
+  DECIDED here"*, disclosed in a code comment only, and resting on a corpus row
+  still marked `NEEDS VERIFICATION`. **A corpus ambiguity row does not tell you
+  whether the product already resolved it.** On any product-facing dispatch,
+  grep the code for the ambiguity's ID *and* for the mechanism, and report
+  `file:line` — that table is what makes the register actionable rather than
+  archival. (Read-only; the RAG never writes to the repo.)
+- **Grading a DEFAULT is the deliverable, not choosing one — and tier (d) will
+  be the modal tier.** Evidence tiers: (a) Acrobat, cited to `Acrobat_Features`;
+  (b) a run census; (c) other implementations **as documented** (never GPL
+  source — MIT project); (d) reasoned guess. Result here: **2 of 18 reach (a)**
+  (`/NeedAppearances` — Acrobat's own handling is *reported inconsistent*, so the
+  (a)-evidence supports *not trusting the flag*, which is not the same as
+  settling the behaviour; and, deferred, overprint preview's *"Only for PDF/X
+  files"* default), **1 reaches (c) strongly** (CMYK JPEG polarity), the rest are
+  **(d)**. Say so plainly. "We matched Acrobat" and "we guessed" must not read
+  alike, and an (a)-tier source can settle a *posture* without settling the
+  *behaviour* — grade what it actually supports.
+- **BLAST RADIUS is the column that changes the answer.** Three classes:
+  **RENDER** (free to flip), **EXTRACT** (changes search/copy **and
+  redaction-by-text coverage** ⇒ an R35 correctness setting, not a preference),
+  **BYTES** (constrained by rule 3 / R34 minimal-diff — a setting that rewrites
+  untouched objects is a *violation*, not an option). Two settings that looked
+  equivalent (`/NeedAppearances` policy vs mask filter) are a rule-3 problem and
+  a free toggle respectively. Also: an EOL/byte-cosmetic setting's *correct*
+  default is often **"match the base file"**, not any of the spec's named
+  alternatives — the shipped fixed `SP LF` is arguably wrong on pdfce's own
+  invariant, independent of the ambiguity.
+- **A triage bucket that says "NO KNOB" is a first-class deliverable — and
+  REFUSAL needs a per-row justification.** 41 determinate + 3 out-of-band + 11
+  refusal = 55 rows whose value is *stopping* a build. The out-of-band bucket
+  (item 3) is the subtle one: the standard **defers to agreement outside the
+  file** (OI-A1: *"PDF intentionally does not include a selector … a matter for
+  agreement between the purchaser and provider of production services"*), so the
+  control's WORDING is *"which one do you want"*, never *"which reading is
+  right"*. And the model implementation for the whole register already exists in
+  the codebase: **refuse by default + a named escape that states its
+  consequence** (`EditError::FieldIsRichText` +
+  `fill_text_field_downgrading_rich_text`, which clears bit 26 and removes `/RV`
+  so the field *stops being* rich text rather than being silently corrupted).
+- **A consolidation build can still MINT a new ambiguity — and it should be
+  labelled register-local until back-filed.** `IM-A1`: **§8.9.5.3 defines image
+  interpolation only for MAGNIFICATION** (*"resolution … significantly lower than
+  … the output device"*) and says **nothing about minification** — `minif` **0**,
+  `mipmap` **0**, `decimat` **0**, `down-sampl` **0**, `downsampl` **2 both
+  unrelated**. So `/Interpolate false` does **not** mandate point-sampling on the
+  way down. Found by reading the clause to triage an *existing* row. **Under a
+  no-edit constraint, mint the ID in the new file, mark it "not yet back-filed",
+  and list the back-fill in a `## Corrections owed` section** — that section is
+  how a no-edit build stays honest instead of losing findings. Also record the
+  DEFAULT you did **not** recommend: `interpret.rs` asserts *"most production
+  viewers smooth on minification"*, which is unverified ⇒ keep the status quo
+  default and file the verification, rather than flipping a default on a
+  plausible-sounding recalled claim (the URW failure shape, applied to a *product
+  default* rather than a licence).
+
+**Also this build:** the register's most useful structural finding was not a
+spec fact at all — **there is nowhere to put a setting.** `pdfce-gui/src/main.rs`
+repeatedly says UI state is *"session state only — deliberately not persisted"*
+and that persistence belongs to *"the not-yet-built **R15**"* user-state
+partition ⇒ **R15 is a prerequisite Pass for the entire directive.** When a
+dispatch asks "which settings first?", also answer **"where would one live?"** —
+a priority list with no home is a list of blocked items. The one working
+precedent is `ExtractOptions::word_gap_ratio` (default `0.20`): a named core
+field + documented default + `with_gap_ratios` builder, **with 0 CLI and 0 GUI
+hits** ⇒ the cheapest entry in the whole register is *exposing what already
+exists*, and it is the template for the other 17.

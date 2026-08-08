@@ -116,6 +116,7 @@
 use pdfce_core::graph::ObjectGraph;
 use pdfce_core::image_codec::{self, Codec, MAX_IMAGE_PIXELS};
 use pdfce_core::object::{Dict, Object};
+use pdfce_core::settings::CmykIntent;
 use pdfce_core::view::DocumentView;
 
 use crate::image::{decode_pairs, read_sample, resolve_space, row_stride};
@@ -482,7 +483,7 @@ pub fn soft_mask_plane(
     // The component check below covers it either way.
     let space = match dict.get(b"ColorSpace").map(|o| doc.resolve(o)) {
         Some(obj) => Some(
-            resolve_space(doc, obj, resources, 0)
+            resolve_space(doc, obj, resources, 0, CmykIntent::Calibrated)
                 .map_err(|e| MaskRefusal::UnsupportedColorSpace(e.to_string()))?,
         ),
         None if coded.codec == Some(Codec::Jpx) => None,

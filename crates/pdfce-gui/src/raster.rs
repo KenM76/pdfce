@@ -48,6 +48,7 @@
 //! this off-thread — and this module is the seam where it would happen,
 //! since nothing outside it knows how a texture gets made.
 
+use pdfce_core::settings::CmykIntent;
 use std::collections::HashMap;
 
 // `egui` is reached through `eframe` rather than as a direct dependency:
@@ -142,6 +143,10 @@ fn pixmap_to_color_image(pixmap: &tiny_skia::Pixmap) -> egui::ColorImage {
 /// failure or a raster-size-guard trip. The caller turns that into the
 /// `ui_text::canvas_render_failed` presentation; this function does not
 /// know about presentation and does not build user-facing prose.
+// One over clippy's bound, for the same reason `interpret::run` is: these
+// are the render's inputs already decomposed, not a value that wants a
+// name. See that function's note.
+#[allow(clippy::too_many_arguments)]
 fn rasterize(
     ctx: &egui::Context,
     id: &str,
@@ -150,13 +155,18 @@ fn rasterize(
     scale: f32,
     annotations: bool,
     fonts: &FontEnvironment,
+    cmyk_intent: CmykIntent,
 ) -> Result<(egui::TextureHandle, Diagnostics), String> {
     // Pass 6.0: paint annotation appearances (§12.5) unless the operator
     // toggled them off. `render_page` (annotations on) is the reader
     // default; the toggle threads through `render_page_with`. decision
     // 012: `fonts` carries any operator-supplied faces (bundled default
     // when the operator has configured no font folders).
-    let mut options = pdfce_render::RenderOptions::default().with_annotations(annotations);
+    // §8.6.4.4 has no mandated CMYK conversion, so the operator's choice
+    // travels with every render rather than being decided here (R169).
+    let mut options = pdfce_render::RenderOptions::default()
+        .with_annotations(annotations)
+        .with_cmyk_intent(cmyk_intent);
     options.fonts = fonts.clone();
     let rendered = pdfce_render::render_page_with_view(doc, page, scale, &options)
         .map_err(|e| e.to_string())?;
@@ -258,6 +268,7 @@ impl ThumbnailCache {
         page: &Page,
         page_index: usize,
         pixels_per_point: f32,
+        cmyk_intent: CmykIntent,
     ) {
         let (w, _) = crate::viewer::page_extent_pts(page);
         // Guard against a degenerate CropBox before dividing. A zero
@@ -283,6 +294,10 @@ impl ThumbnailCache {
             scale,
             true,
             &FontEnvironment::bundled(),
+            // Thumbnails use the operator's colour choice like everything
+            // else: a rail whose blacks differed from the canvas's would
+            // read as a rendering bug, not as a deliberate default.
+            cmyk_intent,
         ) {
             Ok((texture, _diagnostics)) => {
                 // Thumbnail diagnostics are deliberately dropped. R20's

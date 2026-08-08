@@ -24,6 +24,7 @@ pub mod select;
 /// plain-data `FontEmbedPlan` that `pdfce-core::font_embed` emits from.
 pub mod subset;
 
+use pdfce_core::settings::CmykIntent;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -295,6 +296,20 @@ pub struct RenderOptions {
     /// from this field existing. Only a caller that opts in can be
     /// cancelled.
     pub cancel: Option<crate::cancel::RenderCancel>,
+    /// How `DeviceCMYK` is converted to sRGB for display
+    /// (ISO 32000-1 §8.6.4.4).
+    ///
+    /// **Default [`CmykIntent::Calibrated`]** — agreement with what
+    /// Acrobat's default profile and pdfium produce. §8.6.4.4 mandates no
+    /// conversion at all, so this is a choice rather than a fact, which is
+    /// exactly why it is a knob: it is the operator's call, and pdfce's
+    /// job is to default it to what is usually followed.
+    ///
+    /// The visible consequence of the default is that solid black ink
+    /// (`0 0 0 1 k`) renders `#231F20` rather than `#000000`.
+    /// [`CmykIntent::NeutralBlack`] is the answer for CAD and line
+    /// drawings, where every stroke is pure K and true black is expected.
+    pub cmyk_intent: CmykIntent,
 }
 
 impl Default for RenderOptions {
@@ -307,6 +322,7 @@ impl Default for RenderOptions {
             fonts: FontEnvironment::default(),
             annotations: true,
             cancel: None,
+            cmyk_intent: CmykIntent::default(),
         }
     }
 }
@@ -325,6 +341,18 @@ impl RenderOptions {
     #[must_use]
     pub fn with_annotations(mut self, annotations: bool) -> Self {
         self.annotations = annotations;
+        self
+    }
+
+    /// Set how `DeviceCMYK` is converted for display (§8.6.4.4),
+    /// returning `self` for chaining.
+    ///
+    /// Same `#[non_exhaustive]` reasoning as [`Self::with_annotations`].
+    /// This is the seam the operator's persisted setting arrives through:
+    /// `RenderOptions::default().with_cmyk_intent(settings.cmyk_intent)`.
+    #[must_use]
+    pub fn with_cmyk_intent(mut self, intent: CmykIntent) -> Self {
+        self.cmyk_intent = intent;
         self
     }
 

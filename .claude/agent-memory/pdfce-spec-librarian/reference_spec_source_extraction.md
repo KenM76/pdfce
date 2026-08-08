@@ -28,6 +28,13 @@ and `pdfminer` installed. Extraction recipe that works:
    five cases the reconstruction had been correct, which is worth knowing but is
    *not* a licence to skip the re-extraction.
 
+3a. **CHECK `C:\tmp\iso32000_dump.txt` BEFORE RE-DUMPING.** The full 756-page
+   `pypdf` dump persists across sessions (2 124 253 B, 37 491 lines, written
+   2026-07-31; still present and correct 2026-08-07). Verify with
+   `grep -c "=== PDFPAGE" → 756`, then go straight to
+   `grep -n '^<clause> ' `. Saves the ~90 s re-dump every session. If it is ever
+   missing or the page count is wrong, re-dump per item 1.
+
 3b. **`python.exe` invoked from the Bash tool resolves a `/tmp/...` output path
    to `C:\tmp\...`, not to git-bash's `/tmp`.** Write scratch dumps to an
    explicit absolute Windows path, or `find` for the file afterwards. Cost this
@@ -37,6 +44,46 @@ and `pdfminer` installed. Extraction recipe that works:
    a regex + a cross-check on row/column counts**, not by hand. Annex D.2 was
    validated this way: 229 rows, 149/207/216/229 codes per encoding column,
    matching the published sizes of those encodings.
+
+4a. **A spec EQUATION extracts as a scrambled glyph run — recover it by
+   CHARACTER X-POSITION with `pdfminer`.** Established 2026-08-08 on ISO 32000-1
+   §11.6.5.3's `/Matte` preblend formula. `pypdf` returned
+   `c' m α cm–()×+ =` (draw order, not reading order) — plausible-looking and
+   unusable. The fix, two commands, no re-staging:
+
+   ```python
+   from pdfminer.high_level import extract_pages
+   from pdfminer.layout import LTChar, LAParams
+   for page in extract_pages(src, page_numbers=[N], laparams=LAParams()):
+       chars=[]                      # recurse: LTChar leaves are nested
+       def walk(o):
+           for e in o:
+               if isinstance(e, LTChar): chars.append(e)
+               elif hasattr(e,'__iter__'): walk(e)
+       walk(page)
+       rows={}                       # bucket by y, then sort each row by x0
+       for c in chars: rows.setdefault(round(c.y0/3)*3, []).append(c)
+       for y in sorted(rows, reverse=True):
+           print(''.join(c.get_text() for c in sorted(rows[y], key=lambda c:c.x0)))
+   ```
+   → `c'=m+α×(c–m)`, unambiguous. Same technique read §11.3.3 and all nine of
+   §11.3.8's summary formulas. This is item 25's "a figure is readable as
+   geometry" applied to *type* instead of *paths* — and it is the **only**
+   reliable way to transcribe a normative formula. Label the result *derived
+   transcription of a normative formula object* in the RAG file, and say which
+   page/index it came from.
+
+   Three operational gotchas, all cost time on 2026-08-08:
+   - **`pdfminer`'s `page_numbers` is 0-based**; the `=== PDFPAGE n ===` marker
+     in the cached `pypdf` dump is **1-based** ⇒ `page_numbers=[n-1]`.
+   - **Set `PYTHONIOENCODING=utf-8`** — printing `α`/`×` to a cp1252 console
+     raises `UnicodeEncodeError` *mid-loop*, after partial output, which reads
+     like a data problem and is not.
+   - `pdfminer` prints "contains a metadata field indicating that it should not
+     allow text extraction. Ignoring this field" on `PDF32000_2008.pdf` — noise,
+     not a failure; `logging.disable(logging.WARNING)` silences it.
+   - Subscripts land on their **own y-row** (`αr` → `α` then `r`), so bucket
+     rows loosely (`round(y/3)*3`) and expect to reassemble subscripts by eye.
 
 4b. **The strongest cross-check is against a SIBLING table already in the
    corpus** — two independently extracted datasets that must reconcile

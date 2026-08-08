@@ -60,6 +60,7 @@
 //!   6.0 report / ROADMAP residuals.
 
 use pdfce_core::annot::{Annotation, Appearance};
+use pdfce_core::settings::CmykIntent;
 // decision 018: read paths take a `DocumentView` (graph + byte source), so
 // the same code renders a loaded file or an editing session's unsaved state.
 use pdfce_core::graph::ObjectGraph;
@@ -115,6 +116,7 @@ pub(crate) fn survey_page_annotations(
     diag: &mut Diagnostics,
     pixmap: &mut Pixmap,
     cancel: Option<&crate::cancel::RenderCancel>,
+    cmyk_intent: CmykIntent,
 ) {
     // Pass 12.M2 (§8.11.3.3): the set of optional-content groups the catalog
     // /OCProperties /D config leaves OFF by default. An annotation whose /OC
@@ -159,7 +161,16 @@ pub(crate) fn survey_page_annotations(
                 // the annotation is disclosed by `annotations_total` alone.
                 if paint {
                     paint_appearance(
-                        doc, page, base_ctm, fonts, annot, *stream_id, diag, pixmap, cancel,
+                        doc,
+                        page,
+                        base_ctm,
+                        fonts,
+                        annot,
+                        *stream_id,
+                        diag,
+                        pixmap,
+                        cancel,
+                        cmyk_intent,
                     );
                 }
             }
@@ -194,6 +205,7 @@ fn paint_appearance(
     diag: &mut Diagnostics,
     pixmap: &mut Pixmap,
     cancel: Option<&crate::cancel::RenderCancel>,
+    cmyk_intent: CmykIntent,
 ) {
     // /Rect is Required (Table 164) and is the §12.5.5 placement target.
     let Some(rect) = annot.rect else {
@@ -250,6 +262,7 @@ fn paint_appearance(
         initial,
         pixmap,
         cancel,
+        cmyk_intent,
     );
     diag.merge(sub);
     diag.annotations_painted += 1;

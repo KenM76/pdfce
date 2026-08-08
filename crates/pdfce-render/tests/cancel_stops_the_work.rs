@@ -8,6 +8,7 @@
 use pdfce_core::content::ContentStream;
 use pdfce_core::document::Document;
 use pdfce_core::page_tree;
+use pdfce_core::settings::CmykIntent;
 use pdfce_core::view::DocumentView;
 use pdfce_render::cancel::RenderCancel;
 use pdfce_render::font::FontEnvironment;
@@ -123,6 +124,7 @@ fn a_cancelled_render_paints_nothing() {
         GraphicsState::default_with_ctm(base_ctm),
         &mut cancelled_pixmap,
         Some(&token),
+        CmykIntent::Calibrated,
     );
 
     let mut painted_pixmap = Pixmap::new(w, h).expect("pixmap allocates");
@@ -135,6 +137,7 @@ fn a_cancelled_render_paints_nothing() {
         GraphicsState::default_with_ctm(base_ctm),
         &mut painted_pixmap,
         None,
+        CmykIntent::Calibrated,
     );
 
     let blank = Pixmap::new(w, h).map(|mut p| {

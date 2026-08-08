@@ -580,6 +580,20 @@ const DENSE_ROW_SPACING_Y: f32 = 2.0;
 struct PdfceApp {
     /// What, if anything, is open.
     status: Status,
+    /// The operator's persisted settings (R15), loaded once at startup.
+    ///
+    /// The FIRST thing in this program to survive a restart. Everything
+    /// else in this struct is deliberately session-only, and the comments
+    /// saying so are still accurate — they were waiting for exactly this
+    /// field to exist rather than arguing against it.
+    settings: pdfce_core::settings::Settings,
+    //
+    // The store LOCATION and the load NOTES are deliberately not kept as
+    // fields. The notes are rendered into `edit_note` the moment the app
+    // is built, so holding them again would be a second copy nothing
+    // reads, and the location is re-resolved by whoever eventually saves.
+    // R151's rule cuts here too: state that no surface reaches is not
+    // groundwork, it is just state.
     /// An opt-in scripted input run ([`diag::Script`]), `None` in every normal
     /// launch. Present only when `PDFCE_DIAG_SCRIPT` was set, which is how a
     /// GUI defect gets investigated on a machine whose screen belongs to
@@ -1118,8 +1132,22 @@ impl Default for PdfceApp {
     /// Diagnostics start **collapsed**: the one-line summary is always
     /// visible (that is the R20 obligation), and the detail is there for
     /// when the summary says there is something to read.
+    ///
+    /// Settings are read from disk HERE, once, at construction — not on
+    /// every frame and not lazily on first use. `Settings::load` cannot
+    /// fail (§7's fail-soft contract), so this cannot turn a startup into
+    /// an error path; what it could not read comes back as notes rather
+    /// than as a refusal to start.
     fn default() -> Self {
+        let settings_store = pdfce_core::settings::resolve_store();
+        let (settings, settings_report) =
+            pdfce_core::settings::Settings::load(settings_store.clone());
+        // Surfaced through the existing status-bar narrator channel the
+        // moment the app exists, rather than being stored and forgotten:
+        // a disclosure nothing displays is not a disclosure.
+        let edit_note = ui_text::settings_load_note(&settings_report.notes, &settings_store);
         Self {
+            settings,
             status: Status::Idle,
             rail_expanded: true,
             // The band starts SHOWING. A ribbon whose commands are hidden on
@@ -1191,7 +1219,7 @@ impl Default for PdfceApp {
             redact_search_is_pattern: false,
             parked: Vec::new(),
             form_drafts: std::collections::HashMap::new(),
-            edit_note: None,
+            edit_note,
             recovery_note: None,
             // Pass 6.1: a visible red pen and a 2-point stroke — sensible
             // defaults an operator can change before authoring.
@@ -3619,6 +3647,7 @@ impl OpenDoc {
         raster_scale: f32,
         fonts: &pdfce_render::FontEnvironment,
         font_env_generation: u64,
+        cmyk_intent: pdfce_core::settings::CmykIntent,
     ) {
         let Some(page) = self.pages.get(self.view.page_index) else {
             self.page_texture = None;
@@ -3651,6 +3680,7 @@ impl OpenDoc {
             annotations: self.annotations_visible,
             fonts: fonts.clone(),
             font_env_generation,
+            cmyk_intent,
         });
         if let Some(result) = outcome {
             self.absorb_render(ctx, result);
@@ -12713,6 +12743,10 @@ impl PdfceApp {
         actions: &mut Vec<Action>,
         pixels_per_point: f32,
     ) {
+        // Copied out before `self.status` is borrowed mutably below —
+        // `CmykIntent` is `Copy`, so this costs nothing and keeps the
+        // borrow checker out of the rail's way.
+        let settings_cmyk_intent = self.settings.cmyk_intent;
         let Status::Open(doc) = &mut self.status else {
             return;
         };
@@ -12904,6 +12938,7 @@ impl PdfceApp {
                                                 page,
                                                 index,
                                                 pixels_per_point,
+                                                settings_cmyk_intent,
                                             );
                                         }
                                     } else if doc.thumbnails.is_pending(index) {
@@ -13828,6 +13863,9 @@ impl PdfceApp {
         // field from `self.status`, so the split borrow below is fine).
         let font_env = &self.font_env;
         let font_env_generation = self.font_env_generation;
+        // Same disjoint-field reasoning, and `CmykIntent` is `Copy`, so
+        // this is read out rather than borrowed.
+        let cmyk_intent = self.settings.cmyk_intent;
         let Status::Open(doc) = &mut self.status else {
             return;
         };
@@ -13898,10 +13936,22 @@ impl PdfceApp {
         }
 
         if stale_page || stale_annotations || stale_fonts {
-            doc.rasterize_current(ctx, wanted_scale, font_env, font_env_generation);
+            doc.rasterize_current(
+                ctx,
+                wanted_scale,
+                font_env,
+                font_env_generation,
+                cmyk_intent,
+            );
         } else if stale_scale {
             if now >= doc.zoom_commit_at {
-                doc.rasterize_current(ctx, wanted_scale, font_env, font_env_generation);
+                doc.rasterize_current(
+                    ctx,
+                    wanted_scale,
+                    font_env,
+                    font_env_generation,
+                    cmyk_intent,
+                );
             } else {
                 // Nothing else will wake egui up when the debounce
                 // expires, so schedule it.

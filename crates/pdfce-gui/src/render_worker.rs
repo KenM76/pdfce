@@ -47,6 +47,7 @@
 //! [`RenderWorker::in_flight_since`], how long the current render has
 //! been outstanding, so the shell can decide.
 
+use pdfce_core::settings::CmykIntent;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
 use std::thread::JoinHandle;
@@ -199,6 +200,9 @@ pub struct RenderRequest {
     pub annotations: bool,
     pub fonts: FontEnvironment,
     pub font_env_generation: u64,
+    /// The operator's DeviceCMYK conversion choice (§8.6.4.4), carried on
+    /// the request so a render always says which conversion produced it.
+    pub cmyk_intent: CmykIntent,
 }
 
 impl RenderWorker {
@@ -397,7 +401,9 @@ impl Drop for RenderWorker {
 
 /// The worker body. Runs on the spawned thread; touches no GUI type.
 fn render_on_worker(request: &RenderRequest, cancel: &RenderCancel) -> Outcome {
-    let mut options = pdfce_render::RenderOptions::default().with_annotations(request.annotations);
+    let mut options = pdfce_render::RenderOptions::default()
+        .with_annotations(request.annotations)
+        .with_cmyk_intent(request.cmyk_intent);
     options.fonts = request.fonts.clone();
     options.cancel = Some(cancel.clone());
 

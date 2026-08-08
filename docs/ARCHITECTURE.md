@@ -12347,3 +12347,63 @@ started).
 (the empirical/technique writeup); `D:\dev\rag\rust\jpeg_encoder_crate_inverts_cmyk_despite_doc_claim.md`
 (the crate-behaviour correction); `docs/ROADMAP.md`'s R28 annotation and
 `Pass 48.0–48.2` Shipped entry (the ledger record).
+
+- **2026-08-08 — Decision 006 §3.7's deferred colorimetry gap is CLOSED
+  by `Pass 49.0` (`edf7c02`); a duplicated naive-CMYK implementation is
+  ELIMINATED as its own finding.** Forward pointer from the §3.7 entry
+  above (2026-07-31, continuation 15): that entry deliberately deferred
+  "whether pdfce should adopt a calibrated CMYK→sRGB table" as future
+  scope, filed to `ROADMAP.md`'s Backlog rather than decided in-record.
+  **Filed by `pdfce-librarian`, no shell available to this dispatch
+  (hard rule 8) — every figure below is relayed from the operator's own
+  dispatch summary, not independently re-run or read via `git show`.**
+  - **What shipped:** a single new `pdfce-core/src/color/` module — a
+    6×6×6×6 grid of 1,296 measured sRGB nodes (15.5 KB embedded),
+    quadrilinear interpolation, no new `Cargo.toml` dependency, no ICC
+    profile read/shipped/redistributed (the table is measured render
+    output, not a lifted profile — keeps ECI's redistribution terms,
+    `LEGAL.md` §6.1, from attaching). Replaces the naive additive
+    `1.0 − min(c+k, 1.0)` formerly duplicated in
+    `pdfce-render/src/gstate.rs` **and independently re-implemented** in
+    `pdfce-core/src/vector/geometry.rs`.
+  - **Architectural finding worth its own line: the SAME naive formula
+    had been hand-copied into two crates rather than shared.** Had this
+    Pass calibrated only the render-side copy, `pdfce-core`'s own object
+    model would have kept reporting a colour the canvas no longer
+    painted — a core/render disagreement of the same *shape* rule 2's
+    GUI-core separation exists to prevent for a different axis (a
+    behavioral duplication, not a dependency leak, but the same lesson:
+    a formula used by more than one crate needs exactly one home).
+    **No `pdfce-core`/`pdfce-render` crate-boundary change** — `color`
+    lives in `pdfce-core`, `pdfce-render` depends on it as it already
+    depended on `pdfce-core` for everything else; §3's layout is
+    unchanged, only its internal module list grows by one.
+  - **Target reframed, not merely improved:** the module targets
+    *agreement with a documented default*, not colorimetric correctness
+    — §8.6.4.4 mandates nothing for untagged `DeviceCMYK`, and per the
+    Acrobat_Features prepress catalogue (landed the prior session,
+    sourced to Dov Isaacs, former Adobe Acrobat Engineering) Acrobat
+    itself resolves the same ambiguity via a user-configurable ICC
+    working-space profile. There was never a spec-mandated target this
+    module could have hit instead.
+  - **Decision 006 revisit trigger 7 (re-pin the polarity matrix before
+    any colour change lands) is satisfied** — the operator's dispatch
+    reports all 7 `cmyk_variants` polarity fixtures passing unchanged.
+    Polarity (006) and colorimetry (this entry) remain two separate,
+    non-confounded findings, exactly as 006 §3.7 insisted they must.
+  - **Numbers** (reproducing decision 006's own published figures before
+    measuring the fix, then re-measured on the same fixture/method): max
+    per-channel error `[11,37,30]` → `[3,2,2]`; pixels differing >8/255
+    37.40% → 0.00%. Corpus-paired over 81 `/DeviceCMYK`-bearing files:
+    18 improved, 63 unchanged, 0 worse. Cost ~+51 ns/converted sample.
+  - **Operator-visible consequence, carried into this record because it
+    changes what "correct" output looks like for CAD line art:** solid
+    `0 0 0 1 k` black now renders `#231F20`, not `#000000`.
+  - **§9 body note:** no dependency-classification change — no new
+    `Cargo.toml` entry was added, so §9's "every current dependency is
+    permissive" count is unaffected by this entry.
+  - **Cross-references:** `docs/ROADMAP.md`'s `Pass 49.0` Shipped entry
+    (top of *Shipped*, filed same session) carries the full delivery
+    record, including two open follow-ups this entry does not repeat
+    (the `render-parity` harness's pdfium in-process crash on
+    `bug_457855936.pdf`; the stale 2,914-vs-4,023-file corpus baseline).

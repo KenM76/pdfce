@@ -96,6 +96,22 @@ Adobe's own subdomains the way this file's title implies; it's specifically
 `helpx.adobe.com` (and `adobe.com` marketing/pricing pages) that fail hardest,
 not every Adobe property.
 
+Confirmed a fourteenth time (2026-08-08, first build of the `prepress__*.md`
+bucket — colour management/ICC/Output Preview/spot colours/overprint/output
+intents/Convert Colors): 2/2 direct `helpx.adobe.com` WebFetch attempts
+timed out (`color-management.html`, `output-intents-pdfs-acrobat-pro.html`),
+same failure mode as every prior session. But 3/3 OTHER direct WebFetch
+attempts succeeded: one `community.adobe.com` thread (the session's single
+highest-value source — a directly-quoted named Adobe engineer, Dov Isaacs,
+on untagged-DeviceCMYK handling) and one `opensource.adobe.com` SDK
+API-reference page (the Acrobat_Color layer doc) — the SECOND session in
+this RAG's history (after the 2026-08-06 rich-text-fields session) to
+successfully direct-fetch `opensource.adobe.com` content, reinforcing that
+domain specifically as reliable for Adobe SDK/API-reference material even
+though `helpx.adobe.com` and `adobe.com` marketing/help pages remain
+consistently unfetchable. `WebSearch` ran cleanly all session, no quota
+exhaustion.
+
 **How to apply:**
 - Don't spend more than **two** fetch attempts on any single
   helpx.adobe.com URL before giving up and working from `WebSearch`
@@ -181,6 +197,23 @@ attempts on Adobe-owned domains altogether unless a specific fact
 genuinely requires the full page — the hit rate on Adobe-owned domains
 (helpx AND adobe.com root) has now been consistently poor across eleven
 separate sessions/attempts.
+
+Confirmed a thirteenth time (2026-08-08, image-placement/drag-and-drop
+narrow-scope session): an unusually CLEAN session — went straight to
+`WebSearch` for every Adobe-owned-domain citation without attempting a
+single `helpx.adobe.com` or `adobe.com`-root `WebFetch` at all, and 4/4
+direct `WebFetch` attempts against non-Adobe domains succeeded
+(acrobatusers.com's drag_drop_pages tutorial, two forum.pdf-xchange.com
+threads, one community.adobe.com thread) — zero timeouts, zero 403s,
+zero ECONNRESET this session. `WebSearch` also ran cleanly with no
+quota exhaustion across roughly a dozen queries. Reinforces, rather than
+adds anything new to, the standing pattern: skip Adobe-owned domains for
+`WebFetch` by default, lean on `WebSearch` snippets for them, and treat
+vendor-forum domains (here: `forum.pdf-xchange.com`, a competitor
+product's own support forum, not previously logged in this file) as a
+NEW addition to the reliable-non-Adobe-domain list alongside
+`community.adobe.com`, `acrobatusers.com`, and the vendor-API-reference
+sites already noted above.
 
 Confirmed a ninth time (2026-08-01, extending `measure__scale_and_calibration.md`
 to try to close the static-vs-associative GAP for decision 011): `WebSearch`

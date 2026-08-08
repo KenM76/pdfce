@@ -1494,6 +1494,94 @@ Nothing else pointed at them. Use Undo to reverse this until you save."
 }
 
 /// Status-bar line noting that a structural edit left the document's
+/// Status-bar line describing what reading the settings file turned up.
+///
+/// `None` when there is nothing to say, which is the normal case: a first
+/// run with no file at all, or a file pdfce read cleanly.
+///
+/// # Why this reaches the status bar rather than a dialog
+///
+/// The settings store's fail-soft contract is explicit that a
+/// configuration problem must never be an error dialog and never cost the
+/// operator a document session. A bad line in a hand-edited file is
+/// something to mention, not something to interrupt for — but it must be
+/// mentioned *at its line number*, because the whole point of a
+/// hand-editable file is that a mistake in it is findable.
+///
+/// The fallback-location note is a separate obligation and fires even when
+/// nothing went wrong: the operator's update procedure differs between the
+/// portable folder and the platform one ("keep your `userdata` folder"
+/// means nothing if the settings are not in it), so pdfce having chosen
+/// the other home is an inference the operator has to be able to see.
+pub fn settings_load_note(
+    notes: &[pdfce_core::settings::SettingNote],
+    store: &pdfce_core::settings::StoreLocation,
+) -> Option<String> {
+    use pdfce_core::settings::{SettingNote, StoreKind};
+
+    let mut parts: Vec<String> = Vec::new();
+
+    match store.kind {
+        StoreKind::PlatformFallback => parts.push(format!(
+            "Settings are being kept in {} because pdfce's own folder is not writable. \
+They will NOT travel with the program folder.",
+            store.directory().map_or_else(
+                || "the system settings folder".to_owned(),
+                |d| d.display().to_string()
+            )
+        )),
+        StoreKind::None => parts.push(
+            "No writable location for settings was found, so any change you make will \
+last only for this session."
+                .to_owned(),
+        ),
+        StoreKind::Portable => {}
+        // `StoreKind` is `#[non_exhaustive]`. A home pdfce does not yet
+        // know how to describe is still a home worth naming, so this says
+        // where the file is rather than silently saying nothing.
+        _ => {
+            if let Some(dir) = store.directory() {
+                parts.push(format!("Settings are being kept in {}.", dir.display()));
+            }
+        }
+    }
+
+    for note in notes {
+        parts.push(match note {
+            SettingNote::Unreadable { path, reason } => {
+                format!("The settings file at {} could not be read ({reason}); defaults are in use.", path.display())
+            }
+            SettingNote::UnknownKey { key, line } => {
+                format!("Line {line}: pdfce does not recognise the setting \"{key}\". It was left in the file, not deleted.")
+            }
+            SettingNote::BadValue { key, value, line, using } => {
+                format!("Line {line}: \"{value}\" is not a value \"{key}\" accepts, so \"{using}\" is being used instead. Every other setting in the file still applies.")
+            }
+            SettingNote::Clamped { key, value, line, using } => {
+                format!("Line {line}: \"{key} = {value}\" is outside the accepted range, so {using} is being used.")
+            }
+            SettingNote::Malformed { line } => {
+                format!("Line {line} is not a setting (it needs the form: name = value) and was skipped.")
+            }
+            SettingNote::Duplicate { key, line } => {
+                format!("\"{key}\" is set more than once; the one on line {line} is the one in effect.")
+            }
+            // `SettingNote` is `#[non_exhaustive]`. A future note this
+            // build cannot spell out is still a note the operator should
+            // see exists — silently dropping it would make a newer
+            // pdfce's settings file look clean to an older one.
+            _ => "Something in the settings file was not applied as written; pdfce is using defaults where it could not read a value."
+                .to_owned(),
+        });
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" "))
+    }
+}
+
 /// page-label numbering stale.
 ///
 /// Acrobat leaves it stale too — and silent. This is the parity-plus.

@@ -28,6 +28,7 @@ use pdfce_core::content::ContentStream;
 use pdfce_core::document::Document;
 use pdfce_core::edit::EditSession;
 use pdfce_core::page_tree::{self, pages};
+use pdfce_core::settings::CmykIntent;
 use pdfce_core::vector::{Matrix, Point, Segment, VectorObject, decompose_page};
 use pdfce_core::writer::SaveOptions;
 
@@ -109,6 +110,7 @@ fn cross_check(doc: &Document) -> Vec<Vec<(f64, f64)>> {
         &page.resources,
         &pdfce_render::FontEnvironment::bundled(),
         GraphicsState::default_with_ctm(Transform::identity()),
+        CmykIntent::Calibrated,
     );
     let render: Vec<Vec<(f64, f64)>> = traced.iter().map(render_points).collect();
 

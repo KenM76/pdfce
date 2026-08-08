@@ -26522,3 +26522,128 @@ filing.**
   this session (per the dispatching operator's own constraint) —
   confirm current `pdfce-render` CMYK behaviour before relying on
   `FEATURES.md`'s retained pdfium-divergence figure as still live.
+
+## 2026-08-08 (thirty-seventh filing) — two completed bodies of work ship as `Pass 49.0` (calibrated `DeviceCMYK` conversion) and `Pass 50.0` (`/SeparationInfo` page-set repair); `R169`/`R170` minted from a standing operator directive pair; the spec-ambiguity settings register lands as a new Backlog bucket
+
+**Filed by `pdfce-librarian`, no shell available to this dispatch (hard
+rule 8) — every commit hash, figure, and gate result below is RELAYED
+from the operator's own dispatch summary (itself drawn from the two
+commit messages, per the operator), not independently re-run,
+re-measured, or read via `git show`/`git log` by this filing. Pass IDs
+were minted by grepping `ROADMAP.md` for `Pass 49`/`Pass 50` (both
+absent) rather than from any decision record's slicing list, per
+`R106`'s standing lesson from earlier this session.**
+
+**Shipped (relayed, not re-verified by this filing):**
+- `Pass 49.0` (`edf7c02`) — calibrated `DeviceCMYK`→sRGB conversion.
+  Consolidates two independently hand-copied naive `Rgb::from_cmyk`
+  implementations (`pdfce-render/src/gstate.rs` and
+  `pdfce-core/src/vector/geometry.rs`) into one new
+  `pdfce-core/src/color/` module: a 6×6×6×6 grid, 1,296 measured sRGB
+  nodes, 15.5 KB, quadrilinear interpolation, no new dependency, no ICC
+  profile shipped/read. Max per-channel error `[11,37,30]`→`[3,2,2]`,
+  pixels >8/255 different 37.40%→0.00% (decision 006's own fixture/
+  method); corpus-paired 18 improved / 63 unchanged / 0 worse over 81
+  `/DeviceCMYK` files. Decision 006 revisit trigger 7 satisfied (7/7
+  polarity fixtures unchanged). Cost ~+51 ns/sample. **Operator-visible
+  consequence: solid `0 0 0 1 k` black now renders `#231F20`, not
+  `#000000`** — lands on CAD line drawings stroked in pure K.
+- `Pass 50.0` (`a083f70`) — `/SeparationInfo` page-set repair across
+  delete/extract/split/merge (Pass 3.2). Delete left dangling page-array
+  refs uncounted; extract/split's copier dropped the Required key
+  entirely, reported only as an anonymous `dangling_references` tick.
+  Repairs the structural invariant (drop the dangling entry); refuses to
+  guess the semantic one (which pages should now be named) — a reading
+  of the existing no-repair posture (rule 4/R27), not a reversal. 18
+  tests; neutering the fix fails exactly 11, the other 7 are negative
+  controls verified by breaking-then-restoring. Found incidentally by
+  `pdfce-spec-librarian` as `O17` while extracting §14.11.5 for an
+  unrelated prepress question, and fixed the same session per the new
+  `R170`.
+
+**Both Passes reported green:** `cargo fmt --check` clean, `cargo
+clippy --workspace --all-targets -- -D warnings` clean, `cargo test
+--workspace` green (0 failed suites), `check-ui-strings.sh` clean,
+`cargo tree -p pdfce-core` — 0 GUI/windowing dependencies (rule 2).
+
+**Decisions/rulings made this session:**
+- **`R169` minted** — where the PDF standard is genuinely ambiguous,
+  pdfce's answer is a SETTING, default = best-sourced guess of common
+  practice, disclosed as a guess when it is one (operator ruling,
+  2026-08-08, verbatim in `ROADMAP.md`'s *Standing rules*). Scoped to
+  bucket-1 SETTING findings only — determinate readings, out-of-band
+  deferrals and R27 refusals are unaffected.
+- **`R170` minted** — a bug found while doing something else gets fixed
+  the same session, not filed for later (operator ruling, 2026-08-08,
+  given in the same breath as R169). `Pass 50.0` is the worked example.
+- **New Backlog bucket filed**: the spec-ambiguity settings register
+  (`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__ambiguity_settings_register.md`,
+  built by `pdfce-spec-librarian`, read in full by this filing). 155
+  recorded ambiguities/sourced silences, 67 unique tagged IDs (159
+  occurrences, 12 areas) plus 88 untagged rows — **155 and 67 are
+  different numbers, stated together deliberately.** Triage: 18 SETTING
+  · 41 determinate · 3 out-of-band · 11 refusal · 74 deferred · 8
+  insufficient coverage. **Structural finding: no settings/preferences
+  persistence exists in pdfce** — every one of the 18 is blocked on
+  **R15**'s user-state partition, which now converges FOUR separate
+  operator asks (ribbon customization, input/keymap customization,
+  dock-layout persistence, and this register). P0 build order (once R15
+  lands): `QP-A1`, `NF-A1`, `DCT-A1`, `SM-A1`, `TX-A1`, `WB-A1` — the
+  last already exists as a `pdfce-core` setting
+  (`ExtractOptions::word_gap_ratio`) with zero CLI/GUI surface, the
+  cheapest win and the template for the rest. Evidence tiers came out
+  thin: only 2 of 18 bucket-1 defaults reach tier (a), 1 reaches tier
+  (c), the rest are tier (d) reasoned guesses — reported as such, not
+  smoothed into "matches common practice."
+- **`IM-A1` minted** (new, register-local) — §8.9.5.3 defines
+  `/Interpolate` only for magnification, silent on minification. Not
+  yet back-filed to `iso32000__s__8.9.md` — owed to `pdfce-spec-librarian`.
+
+**Findings + decisions:**
+- **The QuadPoints `NEEDS VERIFICATION` note is now load-bearing, not
+  passive** — pdfce has shipped the Z-order choice
+  (`annot_author.rs:43–51`) while the producer-order verification behind
+  it has sat open since the Pass-6.0 build; affects redaction region
+  derivation (R35). **The engineer is investigating this separately**,
+  reported in progress at dispatch time; not resolved by this filing.
+- Existing Backlog bullets annotated with forward pointers rather than
+  deleted (append-only): "DeviceCMYK→RGB colorimetry," the matching
+  render-fidelity residual bullet, and "Print & prepress (PDF/X)" (whose
+  screen-conversion half is now shipped; spot-colour/`/Separation`/
+  `/DeviceN`/overprint/`/OutputIntents` remain its live scope).
+- `FEATURES.md` updated in the same filing (not a separate chore): the
+  CMYK row moved from *Planned* to *Implemented* (Fonts & rendering,
+  `core [x] / cli — / gui [x]`); a new row for the `/SeparationInfo`
+  repair added directly to *Implemented* (Document & pages, `core [x] /
+  cli [x] / gui [x]`) since it was never filed as *Planned* (R170).
+- `ARCHITECTURE.md` §12 gained a forward-pointer entry from decision
+  006 §3.7's deferred colorimetry gap to `Pass 49.0`'s closure —
+  append-only; the 006 §3.7 entry itself is untouched.
+
+**Still in flight:**
+- The QuadPoints producer-order verification (above) — separate,
+  ongoing engineer investigation; report owed to `personal_rag/pdf`
+  when it lands, per the register's own §11 recommendation.
+- `R15`'s user-state partition remains unscoped — now the named
+  prerequisite for four separate operator-requested capabilities.
+- **Both project checkers (`check-ledger-numbers.py`,
+  `check-passes-filed.py`) were NOT RUN by this filing — no Bash tool
+  available.** All ceilings (Pass families 49/50 minted, standing-rule
+  ceiling now R170, decision records unchanged at 033-on-disk/034
+  claimed-unauthored) were derived by reading `ROADMAP.md` directly, not
+  checker-verified. **Backup/git working-tree state is not asserted
+  anywhere in this filing** — no shell, hard rule 8.
+
+**For next session:**
+- **Run both checkers with a shell** before treating the Pass-family/
+  standing-rule ceilings this filing states as gate-clean.
+- Scope `R15`'s user-state partition — it is now blocking four
+  independent, already-requested capabilities, not a speculative nice-
+  to-have.
+- Once the QuadPoints investigation concludes, close the register's
+  `QP-A1` action item and, if it closes as "Acrobat emits Z," raise that
+  default's evidence tier from (d) to (a).
+- Consider dispatching `pdfce-acrobat-librarian` for the register's
+  named evidence gaps (`NF-A1`'s Acrobat behaviour is already tier (a);
+  several tier-(d) defaults could rise if Acrobat's actual behaviour is
+  looked up).

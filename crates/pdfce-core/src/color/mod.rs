@@ -179,6 +179,8 @@ mod cmyk_table;
 
 use cmyk_table::{GRID_L, NODES};
 
+use crate::settings::CmykIntent;
+
 /// Convert `DeviceGray` (§8.6.4.2) to sRGB: 0.0 = black, 1.0 = white.
 ///
 /// Note the polarity trap this exists to keep visible — `DeviceGray` 0.0 is
@@ -293,6 +295,93 @@ pub fn cmyk_to_srgb(c: f32, m: f32, y: f32, k: f32) -> [f32; 3] {
     // so this is already in range up to float rounding; the clamp is
     // belt-and-braces for the last ulp.
     [r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0)]
+}
+
+/// `DeviceCMYK` → sRGB under an explicit operator intent
+/// (ISO 32000-1 §8.6.4.4).
+///
+/// [`cmyk_to_srgb`] is this function at [`CmykIntent::Calibrated`], and
+/// stays the entry point for callers that have no intent to pass.
+///
+/// # Why an intent exists at all
+///
+/// §8.6.4.4 specifies **no** conversion — `DeviceCMYK` is device-dependent
+/// by definition, and the standard is silent by design rather than by
+/// omission. Acrobat's own answer is a user-configurable working-space
+/// profile. There is therefore no correct conversion to implement, only a
+/// choice to make, and under the operator directive of 2026-08-08 a choice
+/// the standard leaves open becomes a setting rather than a hard-coded
+/// answer — defaulted to what is usually followed, which here means
+/// agreement with the dominant reader.
+///
+/// # The three answers
+///
+/// - [`CmykIntent::Calibrated`] — the measured table. Solid black ink is a
+///   warm near-black.
+/// - [`CmykIntent::NeutralBlack`] — identical **except** where
+///   `C = M = Y = 0`, which becomes a neutral `1 − K`. This is a
+///   deliberate departure from the reference, for line art that strokes in
+///   pure K and is expected to be truly black. It changes *only* the
+///   pure-K axis; every mixed colour is untouched, so a drawing's black
+///   lines go true black while any photographic content on the same page
+///   keeps its calibrated rendering.
+/// - [`CmykIntent::Naive`] — the additive `1 − min(1, x + k)` formula pdfce
+///   used before calibration, kept solely so an operator can reproduce an
+///   older pdfce export. It misses the reference by up to 37/255 per
+///   channel.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::color::cmyk_to_srgb_with;
+/// use pdfce_core::settings::CmykIntent;
+///
+/// // The whole point of the alternative: pure K becomes true black.
+/// assert_eq!(
+///     cmyk_to_srgb_with(CmykIntent::NeutralBlack, 0.0, 0.0, 0.0, 1.0),
+///     [0.0, 0.0, 0.0]
+/// );
+///
+/// // And a colour that is NOT on the pure-K axis is left calibrated, so
+/// // the setting cannot quietly change a photograph.
+/// let mixed = (0.5, 0.2, 0.1, 0.3);
+/// assert_eq!(
+///     cmyk_to_srgb_with(CmykIntent::NeutralBlack, mixed.0, mixed.1, mixed.2, mixed.3),
+///     cmyk_to_srgb_with(CmykIntent::Calibrated, mixed.0, mixed.1, mixed.2, mixed.3)
+/// );
+/// ```
+#[must_use]
+pub fn cmyk_to_srgb_with(intent: CmykIntent, c: f32, m: f32, y: f32, k: f32) -> [f32; 3] {
+    match intent {
+        CmykIntent::Calibrated => cmyk_to_srgb(c, m, y, k),
+        CmykIntent::NeutralBlack => {
+            // "Pure K" is tested on the three chromatic channels only, and
+            // with `<= 0.0` rather than an epsilon: a content stream that
+            // says `0 0 0 1 k` writes exact zeros, and a stream that says
+            // `0.001 0 0 1 k` is asking for a tinted black and should get
+            // one. A tolerance here would silently capture near-neutrals
+            // that the author distinguished on purpose.
+            let chromatic = |v: f32| !(v.is_nan() || v <= 0.0);
+            if chromatic(c) || chromatic(m) || chromatic(y) {
+                cmyk_to_srgb(c, m, y, k)
+            } else {
+                let k = if k.is_nan() { 0.0 } else { k.clamp(0.0, 1.0) };
+                let v = 1.0 - k;
+                [v, v, v]
+            }
+        }
+        CmykIntent::Naive => {
+            // The pre-calibration formula, reproduced exactly — including
+            // its NaN handling, so that "reproduce my old export" means
+            // what it says even on a malformed stream.
+            let channel = |x: f32| {
+                let x = if x.is_nan() { 0.0 } else { x };
+                let k = if k.is_nan() { 0.0 } else { k };
+                (1.0 - (x + k).clamp(0.0, 1.0)).clamp(0.0, 1.0)
+            };
+            [channel(c), channel(m), channel(y)]
+        }
+    }
 }
 
 /// One axis of [`cmyk_to_srgb`]: the base node index of the enclosing cell and

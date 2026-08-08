@@ -245,6 +245,7 @@ pub fn render_page_with_view(
         initial,
         &mut pixmap,
         options.cancel.as_ref(),
+        options.cmyk_intent,
     );
     // Carry the page-level omission into the render diagnostics. The
     // interpreter cannot observe it — the streams it never received leave
@@ -269,6 +270,7 @@ pub fn render_page_with_view(
         &mut diagnostics,
         &mut pixmap,
         options.cancel.as_ref(),
+        options.cmyk_intent,
     );
 
     // THE ONE PLACE A CANCELLED RENDER BECOMES AN ERROR.

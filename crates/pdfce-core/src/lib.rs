@@ -97,6 +97,7 @@ pub mod pageops;
 pub mod parser;
 pub mod recover;
 pub mod redact;
+pub mod settings;
 pub mod signature;
 pub mod span;
 pub mod text_edit;
