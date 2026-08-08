@@ -11738,3 +11738,350 @@ already in *Backlog*), the heading was rewritten to lead with `Pass`, and the
 same checker then read **46**. **The Backlog defect is not fixed; these two
 IDs are simply not an eleventh instance of it.** **No gates measured by this
 filing — it ran no build and no test, and claims none.**
+
+### 2026-08-07 (thirtieth filing) — **decision record `032` is OPENED, NOT DECIDED: the vector-scale mechanism (wrap in `cm` vs rewrite operands) becomes a recorded question rather than an emergent default; `Pass 46.1` is blocked on it; ONE thing is ruled and everything else is left open**
+
+**`docs/decisions/032-vector-scale-mechanism-wrap-vs-rewrite.md` — STATUS
+OPEN.** This filing **opens** a decision record and deliberately does not
+close it. The twenty-ninth filing raised the mechanism question inside
+`ROADMAP.md`'s `Pass 46.0–46.1` §4 and said, correctly, *"Which mechanism is
+right is an ENGINEER DECISION and is NOT made here."* **This filing gives that
+ruling a container.**
+
+**WHY IT IS A RECORD AND NOT A DEFAULT — it lands squarely on project rule 3.**
+The Inkscape RAG's `transforms__*` bucket went **0 → 4 files** on 2026-08-07
+(`D:\Dev\Rag-Specialized\Inkscape_Features\`) and surfaced the finding that
+fixes the question's *shape* without answering it: **wrap-in-`cm` versus
+rewrite-operands is the same trade-off as Inkscape's *Preserved* versus
+*Optimized* transform storage** — *"the closest structural correspondence in
+the whole corpus"*, in that file's own words, and one that *"lands directly on
+a load-bearing pdfce invariant."* **Wrapping** = tiny diff, but an editor
+artefact, **nesting on repeated edits**, and **the compensating-`w` path with
+all its non-uniform problems**. **Rewriting operands** = exact stroke
+independence **for free**, but the **largest possible diff for that object**
+and the end of byte-identical operand re-emission. **Neither is universally
+right, which is the definition of a decision record.** Four options are laid
+out (always-wrap · always-rewrite · hybrid-with-a-stated-switch-rule ·
+operator-facing choice); **none is recommended.**
+
+**⚠ THE CONSTRAINT THAT BOUNDS EVERY OPTION, filed prominently because it is
+the sentence that stops someone promising it: `vector-effect:
+non-scaling-stroke` HAS NO PDF EQUIVALENT.** It is the mechanism SVG uses to
+solve the non-uniform case, and **the escape hatch an engineer scoping from
+Inkscape would assume exists.** **PDF's only device-space-referenced stroke
+width is `0 w`** — a one-device-pixel hairline, **not an arbitrary constant
+width**. **pdfce can offer non-scaling-stroke as an EDITING BEHAVIOUR, never
+as a DOCUMENT PROPERTY** — the saved file cannot carry the intent, so a later
+session or another tool has no way to know *"line weights are fixed here."*
+**No option may be justified on the grounds that a fallback exists. There is
+none.** Consequence recorded as settled: a *persisted* non-scaling-stroke
+document property is **`out_of_scope`** — *"no PDF construct exists"*, not
+*"we haven't looked."* **Absence established (R87), not assumed:**
+`git grep -c -i "non-scaling-stroke"` over tracked files → **exit 1, zero
+matches** — the concept had never entered this repository before this filing.
+
+**⚠ NON-UNIFORM + STROKE-SCALING-OFF IS UNSATISFIABLE, AND THE REFERENCE FAILS
+SILENTLY AT IT.** No scalar width cancels a non-uniform matrix — arithmetic,
+and it transfers to PDF unchanged because both formats put line width in user
+space and generate the stroke outline *before* transforming. **Launchpad
+#1335376 closed *Invalid*** on exactly that ground (*"cannot be replicated by
+adjusting stroke-width alone"*), and **Inkscape 1.4 distorts without warning
+or refusal** (UX #339) **in the very mode where the operator asked for
+constant line weight.** **Under rule 4 this is a place to be BETTER than the
+parity reference, not equal to it** — a width pdfce *chose* is inferred state
+and must be visible before it becomes document state. Three honest answers:
+refuse (decision 027's named-refusal branch, already on the table), disclose
+the residual anisotropy, or offer stroke-to-outline. **Silently fudging a
+factor is not among them.**
+
+**THREE INVERSIONS OR NON-TRANSFERS, each of which would mislead someone
+scoping from the reference. (a) PATTERNS INVERT** — a PDF pattern `/Matrix`
+maps to the page's **default** space, not the CTM at paint time, so *"don't
+transform the pattern"* is PDF's **structural default** and **ON is the branch
+requiring work**. **(b) GROUP-VS-EACH INVERTS** — SVG group scaling is one
+matrix; in PDF **per-object is cheap** (N operand rewrites over decision 011
+§2.1's already-segmented objects) and **as-a-group needs a shared wrapper.**
+**(c) MARKERS HAVE NO PDF CONSTRUCT** — arrowheads are baked geometry, so
+SVG's `markerUnits="strokeWidth"` coupling **must not be replicated** (not to
+be conflated with annotation `/LE`).
+
+**✅ THE ONE RULING, MADE BY THE OPERATOR: the rounded-corner-radii toggle is
+`out_of_scope` — UN-IMPLEMENTABLE, not unbuilt.** PDF's `re` is a **sharp**
+rectangle and rounded corners arrive as **already-flattened Bézier geometry
+with no surviving radius parameter.** There is nothing for the toggle to act
+on; radii scale with the geometry unconditionally, and that is the only
+available behaviour. Recorded so a future pass does not re-investigate: the
+answer is *"PDF flattened it before pdfce ever saw it."*
+
+**FORM FIELDS ARE A THIRD BACK-END WITH NO INKSCAPE ANALOGUE — ONE OPERATOR
+GESTURE, TWO MECHANISMS.** Widget resize is `/Rect` + `/BBox` + `/Matrix`
+consistency (§12.5.2, §12.5.5), and **`/Rect` is neither the geometric nor the
+visual bbox** — it is a *declared box the appearance is fitted into*, a third
+kind of extent Inkscape has no concept of. **Scope it from `Acrobat_Features`
++ `PDF_Spec` §12.5.5, NOT from the Inkscape RAG** (the research files say so
+themselves, twice, unprompted). **This is why `Pass 46.0` is NOT blocked by
+this record** — family (a) never reaches the wrap-vs-rewrite question; it has
+its own harder problem (§12.5.5(b)'s independent-in-x-and-y corner mapping,
+which makes a resize a *regenerate*).
+
+**WHAT DOES TRANSFER VERBATIM — the core stroke model**, recorded so a page of
+non-transfers does not leave the impression that nothing carries over.
+**§8.4.3.2**: line width is *"expressed in **user space units**"* and stroking
+paints all points within **half that width in user space** — precisely SVG's
+model — and `PDF_Spec` **already records independently** that an anisotropic
+CTM makes stroke thickness orientation-dependent. **There is no SVG-only
+wrinkle here to discount.**
+
+**GAPs FILED AS GAPs, NOT DEFAULTS, and none may be quoted as fact:** the
+**non-uniform compensation formula is UNKNOWN** — three sources describe the
+symptom, **none the arithmetic**; **R61 bars reading the source**; and
+**`sqrt(|det|)` was DELIBERATELY NOT recorded as fact** despite the SVG
+expansion-factor convention suggesting it. Whether the toggles govern the
+**numeric route** as well as the drag is unconfirmed — **pdfce should make the
+answer *"yes, identically"* by construction** rather than inherit an
+unverified one. And **⚠ set exhaustiveness: DO NOT SAY "Inkscape has exactly
+four."** Four companion behaviours are confirmed (**stroke width · rounded-
+corner radii · gradients-with-object · patterns-with-object**), plus *Store
+transformation* (Optimized | Preserved) and a **visual-vs-geometric bbox
+basis** — **neither of those last two a companion toggle** — and **there is no
+filter toggle**; that no *fifth* companion behaviour exists was not
+establishable from a reachable primary source.
+
+**⚠ TWO ITEMS RAISED AND OWED, NOT DISCHARGED.** **(1) To
+`pdfce-spec-librarian`:** the pattern-`/Matrix` anchoring clause **itself**
+needs a **§8.7.3** re-check — the researcher flagged it as not re-fetched, and
+**the whole pattern inversion rests on it.** **(2) To `pdfce-ui-specialist`:**
+Inkscape's toggle is a **hidden global mode**, which is why *"why did my
+stroke change?"* is one of its most-asked transform questions; **under rule 4
+pdfce would be choosing the stroke consequence from off-screen state**, so the
+state must be **legible at the point of the resize** (dock compartment, fixed
+anchor). **No confirm step is being asked for** — decision 024 §4.4 already
+settles that a visible, undoable direct manipulation needs none.
+
+**Body sections touched by this entry: none.** §4's API contract is not
+restated, because **no verb exists** — `Pass 46.1` is a plan entry and is now
+explicitly blocked. Ticking anything for it would be the over-optimism
+`FEATURES.md`'s maintenance contract forbids. **The capability-level record is
+`FEATURES.md`'s existing `Pass 46.1` *Planned* row, amended in place to carry
+the block**, and `ROADMAP.md`'s `Pass 46.0–46.1` §4 amendment block.
+
+**Git state — CHECKED, not inferred (librarian hard rule 8).** `git status
+--porcelain` at dispatch → **0 lines, clean** — so the `247b8fa`/`fd6eadd`
+filing the dispatch warned might still be in flight was **already committed**,
+and there was **no race to lose.** `git log --oneline -1` → **`fd6eadd`**;
+both named hashes resolve (`git log --oneline -1 <hash>` for each). `git
+remote -v` → **empty.** **Backup currency was NOT checked by this filing and
+no figure is claimed for it** — this filing had no reason to take a bundle and
+will not infer one from documents.
+
+**Checkers re-run, before and after: `check-ledger-numbers.py` exit 0 / exit
+0; `check-passes-filed.py` exit 0 / exit 0.** **Ceilings after, quoted from
+the checker rather than restated:** *"Pass families with headings: up to
+**46** (highest ID **`46.0`**)"* · *"Pass families MENTIONED: up to **46**
+(highest ID **`46.2`**)"* · standing rules **`R166`** (**`R167`** next free) ·
+decision records **`032`** (**`033`** next free). **`032` is the only number
+this filing minted.** **No Pass ID and no standing rule** — the Pass ceiling
+stays **46** and **`R167` stays free for a third consecutive filing.**
+**No gates measured — this filing ran no build, no test and no render, and
+claims none.**
+
+### 2026-08-07 (thirty-first filing, `247b8fa` + `fd6eadd`) — **F6 CLOSES, `Pass 20.6` STOPS BEING PARTIAL, AND `Pass 46.0` DELIVERS ITS FIRST SLICE — plus TWO CORRECTIONS TO REASONS THAT WERE STALE WHILE THEIR CONCLUSIONS STAYED RIGHT**
+
+**Filed as `ARCHITECTURE.md` §12 entries rather than as a numbered decision
+record. NOTHING MINTED BY THIS FILING** — no Pass ID (both commits belong to
+already-assigned IDs), no standing rule, no decision record. **The
+decision-record ceiling nevertheless moved from `031` to `032` during this
+filing, and NOT because of it** — see *Concurrency* at the end.
+
+**Why this filing is the THIRTY-FIRST and not the thirtieth:** a second
+`pdfce-librarian` ran **concurrently** on the vector-scale question and had
+already claimed *thirtieth* in this very section. **Filing ordinals are minted
+by hand with no checker behind them**, so they are not collision-safe under
+concurrency — the finding is recorded in `SESSION_LOG.md`'s *Filing hygiene*,
+and the ordinal was ceded rather than contested because the other entry was
+already on disk.
+
+#### (1) `--defaults-from` ships on all four creation verbs — F6 is CLOSED
+
+`247b8fa`. The flag takes a **template field** and copies **`/MaxLen`**
+(text), **`/Opt`** export↔display pairs (choice), and the **on-state read from
+`widgets[0]`** (check box). **A radio template copies nothing** — on-states
+live per **widget**, while the flag names a **field**, so there is no single
+value it could refer to.
+
+**Gates, engineer-measured at `247b8fa` and relayed (R87):** 2187 tests / 0
+failed (**+6** over `3d345aa`'s 2181, all six in
+`crates/pdfce-core/tests/form_field_authoring.rs`, **33 → 39** by
+`git show <rev>:… | grep -c '^#\[test\]'`), clippy 0, fmt / ui-strings /
+bypass-paths each by its own exit code, `pdfce-core` and `pdfce-render`
+GUI-free. **+635 / −5 over 3 files = 158.8 insertions per creation verb**, the
+flag attaching to all four being why one idea costs four verbs of wiring.
+
+**★★ THE ARCHITECTURAL CORRECTION, AND IT IS THE ENGINEER'S OWN RULING BEING
+CORRECTED BY ITS OWN IMPLEMENTATION.** Ruling 3 said ***"copy the common
+subset and disclose the drop."*** The build makes that sentence collapse:
+
+- **every property SHARED across the four field types is a BOOLEAN** (multiline, read-only, required, combo, sort, comb …);
+- **every boolean is EXCLUDED**, because the CLI's flags are **presence flags** — *absent* and *explicitly false* are one token, so a copy could **ADD** a property but **never turn one off**, and a single-line field could not be created from a multiline template. That is a one-way, operator-facing trap, expensive to reverse once scripts depend on it, and it is a property of **the flag shape**, not of the idea (revisit if `--no-*` pairs are ever added);
+- **every remaining copyable property is TYPE-SPECIFIC.**
+
+**Therefore there is no common subset.** The rule reduces to ***"copy nothing
+and disclose it"***, and a text template contributes **literally nothing** to a
+choice field. **The shipped behaviour is coherent — the mismatch is disclosed
+rather than silently producing a bare field. What was wrong was the RULING'S
+DESCRIPTION**, which named a mechanism (*take the intersection*) with no
+members. **It only became visibly wrong when someone tried to implement the
+sentence** — a rule that reads as a procedure but is not one survives review
+indefinitely, because review checks whether a claim is *true*, not whether it
+is *executable*. **This is the same shape as hard rule 8's own amendment and
+as (3) below: an obligation that stayed correct while its stated reason went
+stale.**
+
+**`/TU` is excluded and that exclusion is load-bearing.** **R105** exists so an
+accessibility name is never a silent default — *"I never considered it"* must
+not be able to happen quietly. **A copied tooltip satisfies R105's mechanism
+while defeating its purpose**, and so does a copied *declination*: inheriting
+*"no tooltip"* is still a decision the operator never made. **`/AA` is
+excluded** because decision 020 **F3** rules that push-button creation authors
+no action, and copying it would author actions through the back door.
+**Values are excluded** because a value is content, not a default. **A
+non-UTF-8 `/Opt` entry copies nothing** rather than being lossily converted —
+*a mangled export value is a value the form would submit*.
+
+**The two disclosures are STRUCT FIELDS**, so `any()`'s destructuring makes an
+unhandled one a **compile error**; it fired immediately on the preflight
+initializer. **A disclosure that can be forgotten will be** — the type system
+enforcing it is the same discipline as the `edit_note` trace, moved off review
+and onto the compiler.
+
+#### (2) `move_widget` ships — and a MOVE needs no appearance regeneration, which is a fact about §12.5.5 rather than an optimisation
+
+`fd6eadd`, filed as **`Pass 46.0` (PARTIAL)**. **Gates, engineer-measured and
+relayed (R87):** 2191 tests / 0 failed (**+4** over 2187, all four in
+`form_field_hierarchy.rs`, **19 → 23**), clippy 0, the rest by exit code,
+`cargo tree` 0 GUI matches for core and render. **+395 / −0 over 3 files =
+131.7 lines per file, and 395 over one delivered verb.**
+
+**The derivation.** §12.5.5 step (a) transforms `/BBox` by `/Matrix`; step (b)
+computes **A** mapping that transformed box's corners onto `/Rect`'s corners,
+so the per-axis scale is `Rect_extent / box_extent`. **pdfce authors every
+appearance with `/BBox = /Rect`, identity `/Matrix`, absolute page
+coordinates** (`annot_author.rs`'s module header states it as the placement
+discipline; `dimension/author.rs:592` does the same for ce dimensions), so both
+factors are exactly **1** before any edit. **A translation does not change
+either extent**, so both stay 1 and **A degenerates to a pure translation**:
+the artwork is carried, unscaled, **by the algorithm every conforming reader
+already runs.** Regenerating would rewrite a stream to produce bytes the format
+supplies for free. **One object is written.**
+
+**★★ THE SPLIT THAT IS THE SHAPE OF THE REST OF `Pass 46.0`, and it is an
+ARCHITECTURAL fact about how pdfce authors appearances, not a spec fact:**
+
+| family | appearance geometry | re-runnable at a new size? |
+|---|---|---|
+| **form-field widgets** (text, check box, radio, choice) | drawn **at origin** into `[0 0 w h]`, or reading `(w, h)` off `widget.rect` | **YES, already** — `build_field_text_appearance(w, h, …)` (reached from `regen_field_appearance`, `edit.rs:8097`), `build_check_box_appearances`, `build_radio_button_appearances`. All four size-parameterised and position-independent **today**. |
+| **markup annotations** (Square, Circle, Line, Polygon, Ink, FreeText, redaction marks, ce dimensions) | `/BBox == /Rect` with **ABSOLUTE** page geometry (`annot_author.rs:33` states it, `:458` writes it) | **NO** — the drawing commands hold page coordinates, so a resize means **rescaling the `MarkupSpec`** and re-authoring, a different operation rather than a different argument. |
+
+**So resize is two jobs of very different size**, and `ROADMAP.md`'s
+`Pass 46.0–46.1` §3 table does not show this because it groups by
+`/Rect`-carrying-ness rather than by appearance construction. **Resize is
+REACHABLE, not blocked** — it was cut deliberately: the dispatch needs 1–2
+`/AP` streams per type with merged-vs-`/Kids` handling, **R92** forbids a
+second generator so the shared one is the target, and §12.5.5's own table calls
+the anisotropic result *"stretched to fill Rect exactly … normative, not a
+bug"* — meaning **a half-built resize does not fail loudly, it silently ships
+distorted ticks and stretched glyphs.**
+
+**Rule 4 in the verb's return type:** a field may own widgets on several pages
+(§12.7.3.2), so `move_widget` moves **one** and returns
+`siblings_left_behind`, which the CLI states in prose when non-zero. **A
+`/Rect` that is absent or malformed is REFUSED, not fabricated** — §12.5.2
+requires the entry, so the annotation is broken, and inventing an origin would
+place the widget somewhere the file never said.
+
+#### (3) ★★ RULING — `move_dimension`'s doc comment is WRONG ABOUT ITS REASON. **AMEND THE REASON, NOT THE CONCLUSION.** *(OWED — this filing does not hold `crates/`.)*
+
+**The twenty-ninth filing raised this and declined to adjudicate. It is now
+decided.** `EditSession::move_dimension`'s *"# Why regeneration rather than
+patching `/Rect`"* block (`edit.rs:10933–10942`) says nudging `/Rect` alone
+*"would slide the box and leave the drawing inside it exactly where it was —
+visibly wrong at the first pixel."*
+
+**That is FALSE, by (2)'s derivation.** A ce dimension's `/AP` carries
+`/BBox = /Rect` and identity `/Matrix` (`dimension/author.rs:592`, `:607`) —
+the same discipline the widgets use — so translating `/Rect` gives equal
+extents, factors of 1, and a **pure translation**. **The drawing WOULD be
+carried.**
+
+**THE BEHAVIOUR IS UNCHANGED AND STAYS CORRECT**, for the reasons the
+twenty-ninth filing already identified and which have nothing to do with the
+appearance: **`/L`'s endpoints go stale** (§12.5.6.7 makes `/L` authoritative
+for any viewer that regenerates the appearance itself) and **the `/PieceInfo`
+sidecar's stored geometry goes stale**, which is what pdfce's own later edits
+read. **A `/Rect`-only patch would produce a file that LOOKS right and IS
+wrong** — strictly the worst outcome available, and a strictly better argument
+than the one in the comment. **Owed edit: `edit.rs:10937–10939`.**
+
+**★ The meta-observation, recorded because it is the SECOND instance in one
+day.** The §12.5.5 analysis was performed to justify **not** regenerating on a
+widget move. It had no stake in `move_dimension`. It nonetheless settled the
+question — **the exact shape of
+`D:\dev\rag\rust\a_measurement_taken_for_an_unrelated_purpose_can_adjudicate_a_dispute_it_had_no_stake_in.md`**,
+whose first instance (the painting-cost adjudication) was filed earlier the
+same day. **That RAG file is amended by this filing to carry the second
+instance and to widen from *measurement* to *derivation*, with the honest
+caveat that the two instances have different evidential strength** — the first
+closed on margins (1.3% vs 75%), the second on a proof, which is only as strong
+as the derivation.
+
+#### Body sections touched
+
+**§4 (API contract) — YES, and this is the first `Pass 46` verb to reach it.**
+`EditSession` gains **`move_widget`**, returning
+`WidgetMove { siblings_left_behind, … }` — an `EditSession` verb of the same
+shape as the shipped `delete_field` / `delete_widget` / `rename_field`, and
+§4's forms paragraph already describes that surface generically, **but
+`move_widget` is NOT a forms verb** — it is the first **geometry** verb over
+the annotation `/Rect` family, and that distinction is the whole reason
+`Pass 46.0` was filed outside decision 020. **`--defaults-from` adds no core
+type**; it is a CLI-side argument feeding the four existing creation verbs.
+**Nothing is ticked for resize, for any non-widget family, or for any GUI
+surface** — none exists. **The capability-level record is `FEATURES.md`'s new
+*MOVE a form-field widget* row plus its amended *CREATE* / *RENAME* /
+`Pass 46.0` rows, and `ROADMAP.md`'s `Pass 46.0 (PARTIAL)` entry and
+`Pass 20.6` COMPLETION ADDENDUM.**
+
+#### Concurrency, git and backup state — CHECKED, not inferred (librarian hard rule 8)
+
+**⚠ THE DISPATCH'S OWN PREMISE WENT STALE WHILE IT WAS BEING ACTED ON, AND
+THIS IS THE THIRD CONSECUTIVE FILING TO RECORD THAT.** The dispatch said *"no
+engineering fork is live in `crates/`; an agent is writing to
+`D:\Dev\Rag-Specialized\Inkscape_Features\`, which is **outside both your tree
+and the repo**"* and gave `git status --porcelain` = **0 lines**. **By
+mid-filing that was false:** `git status --porcelain` returned **5 lines**,
+including `M docs/ARCHITECTURE.md`, `M docs/FEATURES.md`, `M docs/ROADMAP.md`
+and an untracked `docs/decisions/032-vector-scale-mechanism-wrap-vs-rewrite.md`
+— **a concurrent `pdfce-librarian` writing into `docs/`, this role's own
+primary tree.** No work was lost (every edit here was an anchored insertion,
+never a whole-file write), but **the dispatch's isolation claim did not hold**
+and the decision-record ceiling moved underneath it.
+
+`git rev-parse HEAD` → **`fd6eadd`**; `git remote -v` → **empty, exit 0 —
+bundles remain the only copy.** Newest bundle by `ls -la D:\Dev\pdfce-backups\`
+→ **`pdfce-20260807-1941.bundle`** (8,483,256 bytes, 19:41), tip **READ by
+`git bundle list-heads`, not inferred from the filename** →
+`refs/heads/pass-8-redaction` = **`8689f7645e262bc31cb9b09b9aaada9b48ef6466`**.
+**`git rev-list --count 8689f76..HEAD` → 3.** **So the bundle is THREE behind
+— the dispatch's figure is CONFIRMED rather than corrected — and `247b8fa`,
+`a9f36bc` and `fd6eadd` are in NO bundle.** It becomes four behind the moment
+this filing is committed.
+
+**Checkers re-run before and after: `check-ledger-numbers.py` exit 0 / exit 0;
+`check-passes-filed.py` exit 0 / exit 0.** **Ceilings after, quoted from the
+checker's own output rather than restated:** *"Pass families with headings: up
+to **46** (highest ID **`46.0`**)"* · *"Pass families MENTIONED: up to **46**
+(highest ID **`46.2`**)"* · standing rules **`R166`** (**`R167`** next free —
+**a third consecutive filing to leave it free**) · decision records **`032`**
+(**`033`** next free) — **`032` was minted by the concurrent filing, not by
+this one.** **No gates measured by this filing: it ran no build, no test and no
+render, and every figure above is relayed from the engineer as HIS (R87).**

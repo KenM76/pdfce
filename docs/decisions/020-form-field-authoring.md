@@ -1633,7 +1633,33 @@ application, against a purpose-built non-default fixture.
   for subtree renames).
 
   > **★★ AMENDED 2026-08-07 (`3d345aa`) — `rename-field` IS BUILT
-  > (`Pass 20.6`, PARTIAL); `--defaults-from` IS NOT. F6 is HALF DONE.**
+  > (`Pass 20.6`, PARTIAL); ~~`--defaults-from` IS NOT. F6 is HALF DONE.~~**
+  >
+  > **★★ AMENDED AGAIN 2026-08-07 (`247b8fa`, thirty-first filing) — F6 IS
+  > CLOSED. `--defaults-from` IS BUILT, on all four creation verbs
+  > (`add-text-field`, `add-check-box`, `add-radio-button`,
+  > `add-choice-field`), and `Pass 20.6` is COMPLETE.** *(Status note only —
+  > this decision record's CONTENT is unchanged and nothing here is
+  > re-decided.)* **What it copies:** `/MaxLen` (text), `/Opt` (choice), the
+  > on-state from `widgets[0]` (check box). **A radio template copies
+  > nothing** — on-states live per WIDGET while the flag names a FIELD.
+  > **★ AND A CONSEQUENCE FOR THIS RECORD'S OWN CROSS-TYPE RULING:** with
+  > every property shared across the four types being a **boolean** (all
+  > excluded — the CLI's presence flags make *absent* and *explicitly false*
+  > one token, so copying them could ADD a property but never turn one off)
+  > and every copyable property being **type-specific**, **THERE IS NO COMMON
+  > SUBSET.** *"Copy the common subset and disclose the drop"* therefore
+  > reduces to ***"copy nothing and disclose it"*** — a template of a
+  > different type contributes **literally nothing**. The behaviour is
+  > coherent and shipped; **the DESCRIPTION was wrong, and only became
+  > visibly wrong when someone tried to implement the sentence.** Full form:
+  > `ROADMAP.md`'s `Pass 20.6` COMPLETION ADDENDUM §A.
+  > **`/TU` is excluded and that exclusion is load-bearing** — R105 exists so
+  > an accessibility name is never a silent default, and a copied tooltip
+  > satisfies R105's mechanism while defeating its purpose (as does a copied
+  > *declination*). **`/AA` is excluded because F3 rules that push-button
+  > creation authors no action**, and copying it would author actions through
+  > the back door.
   >
   > **THREE corrections to this bullet, all of them load-bearing:**
   >

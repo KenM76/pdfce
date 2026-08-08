@@ -81,7 +81,82 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
-### Pass 20.6 (PARTIAL) — **A FIELD CAN BE RENAMED, AND A ONE-FIELD REQUEST SAYS WHEN IT RENAMED SIX** — `EditSession::rename_field` + `FieldRename` in `crates/pdfce-core/src/edit.rs`, `FormAuthorError::{RenameCollision, DottedPartialName}` in `crates/pdfce-core/src/forms_author.rs`, CLI `rename-field`. **★★ THIS RETURNS TO THE OPERATOR'S OWN STANDING REQUEST — *"get form field creation/editing done next"* — after the render-performance detour (Passes 44.0 and 45.0). CREATION WAS COMPLETE; EDITING WAS NOT BUILT AT ALL, AND NOW HALF OF IT IS.** **★★ F6 IS *TWO* ITEMS, NOT FOUR, AND THIS ROADMAP HAS BEEN SAYING FOUR — see §1 below. MOVE, RESIZE AND RE-FLAG ARE *UNSCOPED*, NOT DEFERRED, and the difference is that nobody could have seen it from the plan.** **★★ THE STRUCTURAL FINDING: A SUBTREE RENAME IS *ONE OBJECT WRITE*. §12.7.3.2 derives the fully-qualified name by walking DOWN from the `/AcroForm /Fields` roots appending each node's `/T`, so changing one node's partial name re-derives the identity of that node AND of every descendant WITHOUT TOUCHING A SINGLE DESCENDANT OBJECT** — `Personal.Address` → `Location` makes `Personal.Address.Zip` into `Personal.Location.Zip` and `Zip`'s dictionary is never written. **`Field.parent` is needed to compute the BLAST RADIUS, not to perform the write** — so decision 020's *"needs `Field.parent` from F0 for subtree renames"* was true for a different reason than it reads. **★ RULE 4 IS WHY `descendants_renamed` EXISTS**: an operator who renames a group and is not told six fields moved has silently broken every FDF, JavaScript reference and submit mapping that named them, and finds out when one stops matching. **★ ENGINEER RULING, RECORDED AS RULED: A RENAME INTO A COLLISION *REFUSES* — decision 020 left this open (see the F7 bucket note at line ~6166) and it is now closed.** **★ A DEFECT INTRODUCED AND FIXED IN THE SAME COMMIT, filed as a distinct shape: reusing `PeriodInPartialName` for `A.B` produced *"contains an empty name segment"* — WHICH `A.B` DOES NOT HAVE.** **⚠ `--defaults-from <field>` IS NOT BUILT. F6 IS HALF DONE, and this roadmap must not read as though editing is complete.** **⚠ NO GUI, DELIBERATELY (R151) — F5's own per-type detail fields are still owed and a second unreachable surface would repeat the pattern.** (Pass 20.6 — the ID was assigned to F6 at decision-020 scoping time on 2026-08-03 and is used, not minted) — 2026-08-07, committed `3d345aa`, branch `pass-8-redaction`
+### Pass 46.0 (PARTIAL) — **A WIDGET CAN BE MOVED, AND THE PLACEMENT ALGORITHM DOES THE CARRYING** — `EditSession::move_widget` + `WidgetMove` in `crates/pdfce-core/src/edit.rs`, CLI `move-widget`. **★★ THE FIRST BUILT SLICE OF THE OPERATOR'S OWN 2026-08-07 REQUEST — *"form fields and everything else should be draggable and resizeable"* — FILED AS `Pass 46.0` BY THE TWENTY-NINTH FILING AND STARTED WITHIN THE HOUR.** **★★ THE FINDING, AND IT IS THE REASON MOVE IS CHEAP AND RESIZE IS NOT: A MOVE NEEDS NO APPEARANCE REGENERATION, AND THAT IS A FACT ABOUT §12.5.5 RATHER THAN A SHORTCUT.** Step (b) computes matrix **A** as the mapping of the transformed appearance box's corners onto `/Rect`'s corners, so the per-axis scale is `Rect_extent / box_extent`. **Translating leaves the extent alone, both factors stay 1, and A degenerates to a PURE TRANSLATION** — the existing artwork is carried to the new position at its original size **by the algorithm every conforming reader already runs.** Regenerating here would rewrite a stream to produce bytes the format hands over for free. **★★ RESIZE IS THE OPPOSITE CASE AND IS *REACHABLE, NOT BLOCKED* — SEE §3, WHICH IS THE SHAPE OF THE REST OF 46.0.** All four widget generators are already size-parameterised and position-independent; **markup annotations are NOT**, and that split is the real work breakdown. **★ A WIDGET IS NOT A FIELD** — a field may own widgets on several pages, so this moves **ONE** appearance and returns `siblings_left_behind`, which the CLI states in prose when non-zero (rule 4). **★ A `/Rect` THAT IS ABSENT OR MALFORMED IS *REFUSED*, NOT FABRICATED** — §12.5.2 requires the entry, so the annotation is broken, and inventing an origin would put the widget somewhere the file never said. **★ THE BYTE ASSERTION CAUGHT ITS OWN AUTHOR** — it first looked for `"45 140"` when the writer emits `"45.0 140.0"`. **⚠ RESIZE IS DELIBERATELY CUT FROM THIS COMMIT, and `Pass 46.0` STAYS PARTIAL** — the other families (markup, redaction marks, links, ce dimensions) and the whole GUI half are untouched. (Pass 46.0 — the ID was assigned by the twenty-ninth filing on 2026-08-07 and is **used, not minted**) — 2026-08-07, committed `fd6eadd`, branch `pass-8-redaction`
+
+**Gates — measured by the ENGINEER at `fd6eadd` and relayed (R87; this filing ran no build and re-states his figures as HIS).** **2191 tests / 0 failed** — against **2187** at `247b8fa`, so **+4 tests, all four in `crates/pdfce-core/tests/form_field_hierarchy.rs`, which goes 19 → 23** (counted by `git show <rev>:crates/pdfce-core/tests/form_field_hierarchy.rs | grep -c '^#\[test\]'` at both revisions; the four names read from the diff: `moving_a_widget_writes_the_new_rect_into_the_file`, `a_move_rewrites_one_object_and_leaves_the_appearance_alone`, `moving_one_widget_discloses_the_siblings_it_left_behind`, `a_widget_without_a_rect_is_refused_rather_than_placed`). **`clippy` 0 warnings · `fmt`, `ui-strings`, `bypass-paths` each read by its own exit code · `cargo tree` 0 GUI matches for `pdfce-core` and `pdfce-render`.** **Both ledger checkers 0** (re-run by this filing, before and after — see *Ledger* below).
+
+**3 files changed, +395 / −0** (`git show --stat fd6eadd`), distributed **`edit.rs` 151 · `tests/form_field_hierarchy.rs` 126 · `main.rs` 118** = **395 over 3 files = 131.7 lines per file**, and **395 over 1 delivered verb = the whole commit is one verb plus its one refusal.** **Nothing is deleted** — `−0` across all three.
+
+#### 1. ★★ Why a move needs no regeneration — the derivation, because the conclusion is not obvious from the conclusion
+
+§12.5.5's placement algorithm runs in three steps. (a) The appearance's `/BBox` is transformed by its `/Matrix`, giving a *transformed appearance box*. (b) A matrix **A** is computed that maps that box's corners onto `/Rect`'s corners. (c) `AA = A × Matrix` is concatenated and the stream is painted.
+
+**The per-axis scale factors in (b) are `Rect_extent / box_extent`.** pdfce authors every appearance with `/BBox = /Rect` and identity `/Matrix`, in absolute page coordinates (`annot_author.rs`'s module header states this as the placement discipline, and `dimension/author.rs:592` does the same for ce dimensions), so before any edit both factors are **exactly 1**.
+
+**A translation does not change either extent.** Both factors stay 1, and **A collapses to a pure translation** from the old box position to the new `/Rect` position. The reader carries the artwork, unscaled, to the new place. **This is not pdfce exploiting a tolerance — it is the normative algorithm doing precisely what it is specified to do**, and every conforming reader already runs it.
+
+**The practical consequence, stated as the rule it is:** *regenerating an appearance after a pure translation rewrites a stream to produce bytes the format supplies for free.* One object is written — the annotation dictionary — and the `/AP` stream is not touched at all.
+
+#### 2. ★ A widget is not a field, and the disclosure exists because of it
+
+§12.7.3.2 lets one field own widgets on several pages. `move-widget` names **one widget**, moves **one** `/Rect`, and returns **`siblings_left_behind`**; the CLI says it in prose when non-zero — *"moved widget 0 only — 2 other widget(s) stayed where they were."*
+
+**Rule 4 is the whole reason.** Moving one of three silently is a **partial result that reads as a bug an hour later** — the operator sees one widget move, assumes the verb is broken, and goes looking in the wrong place. **Verified on a three-widget fixture:** `[20 150 160 172]` → `[60 150 200 172]`, **one object written**, **extent preserved** (140 × 22 before and after), and the **three original `/Rect` arrays untouched in the base revision** — the incremental save appends, it does not rewrite.
+
+#### 3. ★★ RESIZE IS REACHABLE, NOT BLOCKED — and the split between the two families IS the shape of the rest of Pass 46.0
+
+**This is the section a later session should read before picking up resize.** It was established while building move and would otherwise be re-derived.
+
+| family | appearance geometry | can the generator be re-run at a new size? |
+|---|---|---|
+| **form-field widgets** (text, check box, radio, choice) | drawn **at origin** in a `[0 0 w h]` box, or read `(w, h)` off `widget.rect` | **YES — already.** `build_field_text_appearance(w, h, …)` takes the size (reached from `regen_field_appearance`, which reads `widget.rect` at `edit.rs:8097`); `build_check_box_appearances` and `build_radio_button_appearances` draw at origin into `[0 0 w h]`. **All four are size-parameterised and position-independent today.** |
+| **markup annotations** (Square, Circle, Line, Polygon, Ink, FreeText, redaction marks, ce dimensions) | `/BBox == /Rect` with **ABSOLUTE** page geometry (`annot_author.rs:33` states the discipline; `annot_author.rs:458` writes `BBox = rect`) | **NO.** The drawing commands hold page coordinates, so a resize means **rescaling the `MarkupSpec` itself** and re-authoring from it — a different operation, not a different argument. |
+
+**So resize is two jobs, not one**, and the first is much cheaper than the second. **That asymmetry is the work breakdown for the remainder of `Pass 46.0`**, and it was not visible from the Next-up entry's §3 table, which grouped by `/Rect`-carrying-ness rather than by appearance construction.
+
+**Why resize was cut from THIS commit, stated as a choice rather than an omission.** The dispatch to the appropriate generator needs **1–2 `/AP` streams per type** (`/N` alone for text and choice; `/N` **plus** the keyed on/off sub-dict for check boxes and radios) with **merged-`/AP`-vs-`/Kids`** handling, and **a half-built resize that silently stretches is the wrong-picture failure** — §12.5.5's own table calls the anisotropic result *"stretched to fill Rect exactly … normative, not a bug"*, so a distorted tick or stretched glyph is what the format will faithfully produce for anyone who ships the write without the regeneration. **R92 forbids a second generator**, so the correct path is the shared one, and the shared one is the part that needs the dispatch.
+
+#### 4. ★ `move-widget` is a NEWLY MINTED verb name, and the absence that licensed it was established rather than assumed
+
+**How the absence was established (R87):** decision 020 was grepped for geometry verbs and **rules none** — it predates this request by four days and is about **authoring**, not placement. The name follows **R161** (forms is a **verb-first** domain — `add-text-field`, `delete-widget`, `rename-field`) and the **`delete-widget` precedent** specifically, which already established *widget* as the CLI's word for the per-page half of a field. **`move-widget` is therefore consistent with the domain it joins and does not need to agree with `dimension-offset` or `object-move`** — R161 says cross-domain disagreement must **not** be "corrected."
+
+#### 5. ★ The byte assertion caught its own author — and a test that matched loosely would have passed while proving less
+
+The saved-bytes assertion first searched for **`"45 140"`**. The writer emits **`"45.0 140.0"`**.
+
+**The reason is a deliberate serializer choice, not a formatting accident:** `serialize.rs` always writes a decimal point for a `Real`, **so that a re-parse yields `Real` and not `Integer`.** An integer-valued real spelled `45` would come back as a different object type, and the round-trip would silently change the document's type-level content.
+
+**The transferable half is about the test, not the writer.** A looser assertion — parsing the `/Rect` back and comparing numbers, or matching `45` as a substring — **would have passed**, and would have proved a weaker thing: that the *model* holds the new rect, which is exactly the failure mode **R159** exists to stop (the shipped flatten defect hid behind a projection that reported what the model believed). **The strict byte match is what makes it a claim about the FILE.** Its cost was one wrong first attempt; its value is that it can only pass for the right reason.
+
+#### 6. ⚠ What is NOT built, said plainly
+
+- **RESIZE — NOT BUILT, for any family.** §3 says why, and says it is reachable. **`Pass 46.0` stays PARTIAL.**
+- **Only WIDGETS move.** Markup annotations, redaction marks, `/Link` annotations and ce dimensions all still lack a move verb under this Pass. (**ce dimensions already have `move_dimension`** from Pass 25.5 — a different verb with a different mechanism; see §7.)
+- **No GUI. Drag-and-eight-handle is untouched**, and R151's warning applies to this Pass more than most: `move_widget` is now a second core geometry verb with no shell caller.
+- **The two owed sub-decisions are still owed** — `/Popup` follow-vs-independent, and the `/Link` invisible-click-target disclosure.
+- **Rendered appearance unverified by this commit.** The §1 argument says no regeneration is *needed*; **nobody has looked at a moved widget in a viewer.** That is a claim from the spec, not from a pixel.
+
+#### 7. ★★ RULING — `move_dimension`'s doc comment is WRONG ABOUT ITS REASON, and this commit is what settled it
+
+**The twenty-ninth filing raised this and declined to adjudicate.** It is now decided, and the evidence arrived from a direction that had no stake in it.
+
+`EditSession::move_dimension`'s doc comment (`edit.rs:10933–10942`, *"# Why regeneration rather than patching `/Rect`"*) says that nudging `/Rect` alone *"would slide the box and leave the drawing inside it exactly where it was — visibly wrong at the first pixel."*
+
+**That is false, and §1's derivation is why.** A ce dimension's `/AP` carries `/BBox = /Rect` and an identity `/Matrix` (`dimension/author.rs:592`, `:607`) — the **same** authoring discipline the widgets use — so translating `/Rect` and leaving `/BBox` alone gives equal extents, scale factors of 1, and a **pure translation**. **The drawing WOULD be carried.**
+
+**THE BEHAVIOUR STAYS CORRECT AND IS NOT CHANGED.** Regeneration is right for the reasons the twenty-ninth filing already identified and which have nothing to do with the appearance: **`/L`'s endpoints go stale** (§12.5.6.7 makes `/L` authoritative for any viewer that regenerates the appearance itself), and **the `/PieceInfo` sidecar's stored geometry goes stale**, which is what pdfce's own later edits read. **Patching `/Rect` alone would produce a file that LOOKS right and IS wrong** — the worst of the available outcomes, and a strictly better argument than the one in the comment.
+
+**AMEND THE REASON, NOT THE CONCLUSION. Filed as OWED to the engineer** — this filing does not hold `crates/`, and the correction is a doc-comment edit at `edit.rs:10937–10939`.
+
+**The meta-observation, recorded because it is the second instance the same day.** The §12.5.5 analysis was performed to justify **not** regenerating on a widget move. It had no connection to `move_dimension`. It nonetheless settled an open question about it — **exactly the shape of `a_measurement_taken_for_an_unrelated_purpose_can_adjudicate_a_dispute_it_had_no_stake_in.md`**, whose first instance (the painting-cost adjudication) was filed earlier the same day. **That RAG finding is amended by this filing to carry the second instance and to widen from *measurement* to *derivation*** — see *Findings escalated* in `SESSION_LOG.md`.
+
+#### Ledger
+
+**Re-measured by RUNNING `tools/check-ledger-numbers.py` and `tools/check-passes-filed.py`**, before and after this filing, not read from prose. **NOTHING MINTED.** **`46.0` is a twenty-ninth-filing assignment being USED, and the Pass ceiling does not move for it**; standing rules **R166** (**R167** next free, and **still free after this filing** — a third consecutive filing to leave it so); operator questions **(bb)**. Claimed-but-unheaded IDs **5, 9, 9c, 10, 13, 22, 23, 31** are unaffected. **`46.2` remains named-as-free and unassigned.**
+
+**⚠ DECISION-RECORD CEILING MOVED WHILE THIS FILING RAN, AND NOT BY THIS FILING.** The dispatch stated the ceiling as **031**. The checker, re-run at the end, reads ***"decision records: 032 → next free is 033"*** — because a **CONCURRENT `pdfce-librarian` filing** (the *thirtieth*, working the `Pass 46.1` vector-scale question) created `docs/decisions/032-vector-scale-mechanism-wrap-vs-rewrite.md` **during** this one. **This filing minted nothing and does not claim 032.** The figure is quoted from the checker's own output rather than from the dispatch, **which is exactly the hard-rule-8 failure mode the dispatch's own snapshot caveat anticipated** — a ceiling read from a document lags the disk, and here it lagged by one within a single session. **See *Filing hygiene* in `SESSION_LOG.md` for the concurrency finding this produced, including why this entry is the THIRTY-FIRST filing and not the thirtieth.**
+
+### Pass 20.6 (PARTIAL → **COMPLETE**, see the ★★ COMPLETION ADDENDUM at the end of this entry) — **A FIELD CAN BE RENAMED, AND A ONE-FIELD REQUEST SAYS WHEN IT RENAMED SIX** — `EditSession::rename_field` + `FieldRename` in `crates/pdfce-core/src/edit.rs`, `FormAuthorError::{RenameCollision, DottedPartialName}` in `crates/pdfce-core/src/forms_author.rs`, CLI `rename-field`. **★★ THIS RETURNS TO THE OPERATOR'S OWN STANDING REQUEST — *"get form field creation/editing done next"* — after the render-performance detour (Passes 44.0 and 45.0). CREATION WAS COMPLETE; EDITING WAS NOT BUILT AT ALL, AND NOW HALF OF IT IS.** **★★ F6 IS *TWO* ITEMS, NOT FOUR, AND THIS ROADMAP HAS BEEN SAYING FOUR — see §1 below. MOVE, RESIZE AND RE-FLAG ARE *UNSCOPED*, NOT DEFERRED, and the difference is that nobody could have seen it from the plan.** **★★ THE STRUCTURAL FINDING: A SUBTREE RENAME IS *ONE OBJECT WRITE*. §12.7.3.2 derives the fully-qualified name by walking DOWN from the `/AcroForm /Fields` roots appending each node's `/T`, so changing one node's partial name re-derives the identity of that node AND of every descendant WITHOUT TOUCHING A SINGLE DESCENDANT OBJECT** — `Personal.Address` → `Location` makes `Personal.Address.Zip` into `Personal.Location.Zip` and `Zip`'s dictionary is never written. **`Field.parent` is needed to compute the BLAST RADIUS, not to perform the write** — so decision 020's *"needs `Field.parent` from F0 for subtree renames"* was true for a different reason than it reads. **★ RULE 4 IS WHY `descendants_renamed` EXISTS**: an operator who renames a group and is not told six fields moved has silently broken every FDF, JavaScript reference and submit mapping that named them, and finds out when one stops matching. **★ ENGINEER RULING, RECORDED AS RULED: A RENAME INTO A COLLISION *REFUSES* — decision 020 left this open (see the F7 bucket note at line ~6166) and it is now closed.** **★ A DEFECT INTRODUCED AND FIXED IN THE SAME COMMIT, filed as a distinct shape: reusing `PeriodInPartialName` for `A.B` produced *"contains an empty name segment"* — WHICH `A.B` DOES NOT HAVE.** **⚠ `--defaults-from <field>` IS NOT BUILT. F6 IS HALF DONE, and this roadmap must not read as though editing is complete.** **⚠ NO GUI, DELIBERATELY (R151) — F5's own per-type detail fields are still owed and a second unreachable surface would repeat the pattern.** (Pass 20.6 — the ID was assigned to F6 at decision-020 scoping time on 2026-08-03 and is used, not minted) — 2026-08-07, committed `3d345aa`, branch `pass-8-redaction`
 
 **Gates — measured by the ENGINEER at `3d345aa` and relayed (R87; this filing ran no build and re-states his figures as HIS).** **2181 tests / 0 failed** — against **2178** at `ce57ed5`, so **+3 tests, all three in `crates/pdfce-core/tests/form_field_hierarchy.rs`, which now holds 19** (counted by `git show 3d345aa:crates/pdfce-core/tests/form_field_hierarchy.rs | grep -c '^#\[test\]'` → **19**, and the three new names read from the diff: `renaming_a_grouping_node_renames_its_whole_subtree`, `renaming_onto_an_occupied_name_is_refused`, `a_dotted_partial_name_and_a_malformed_one_refuse_differently`). **`clippy` 0 warnings · `fmt`, `ui-strings`, `bypass-paths` each read by its own exit code · `pdfce-core` and `pdfce-render` GUI-free.** **Both ledger checkers 0** (re-run by this filing, before and after — see *Ledger* below).
 
@@ -149,7 +224,7 @@ The two inputs are genuinely different classes, and the difference is **what the
 
 #### 6. ⚠ What is NOT built, said plainly
 
-- **`--defaults-from <field>` — NOT BUILT.** F6's other half, and the item F2's own defaults question was **deferred into**. **F6 is HALF DONE.**
+- ~~**`--defaults-from <field>` — NOT BUILT.** F6's other half, and the item F2's own defaults question was **deferred into**. **F6 is HALF DONE.**~~ **[★★ DISCHARGED 2026-08-07 (thirty-first filing, `247b8fa`) — IT IS BUILT, ON ALL FOUR CREATION VERBS. F6 IS CLOSED AND THIS PASS IS NO LONGER PARTIAL. See the ★★ COMPLETION ADDENDUM at the end of this entry, whose §E states what field editing STILL does not include — resize (none), move (widgets only), re-flag (unscoped), and no GUI for either F6 item.]**
 - **Move / resize / re-flag — UNSCOPED** (§1). Not deferred, not refused, not planned. **Owed a scope decision.**
 - **No GUI, and the omission is a choice, not an oversight (R151).** F5's per-type detail fields are **still owed under Pass 20.5's ID**, and stacking a second core-only surface the shell cannot reach would repeat the exact pattern R151 exists to stop. **What a GUI half would need, recorded so it is not re-derived:** a rename affordance on the existing `forms_panel` rows, and `descendants_renamed` surfaced — **that count already crosses the core boundary on `FieldRename`, so the shell would only render it**, not compute it.
 - **Rendered appearance** — unaffected by this commit and unverified by it; a rename changes `/T`, not any `/AP`. The Pass 20.5 visual-verification obligation is **untouched, not discharged.**
@@ -196,6 +271,151 @@ assigned to it and no gate figures relayed). So §1's hypothetical — *"'field
 editing is done' would be a true statement about F6 and a false statement
 about the capability"* — **became the actual state of the repository the same
 day it was written down.**
+
+#### ★★ COMPLETION ADDENDUM (2026-08-07, thirty-first filing, `247b8fa`) — **`--defaults-from` SHIPS. F6 IS CLOSED. THIS PASS IS NO LONGER PARTIAL — AND §1's HYPOTHETICAL IS NOW LIVE.**
+
+**Nothing above is retracted.** The entry's ⚠ bullets — *"`--defaults-from` IS
+NOT BUILT"* (header) and §6's *"F6's other half … F6 is HALF DONE"* — are
+**DISCHARGED BY THIS ADDENDUM** and are left in place as the record of the
+state they described. **The `(PARTIAL)` in the heading is superseded, not
+deleted**, for the same reason.
+
+*(Filed under the existing `Pass 20.6` heading rather than as a second one:
+`tools/check-ledger-numbers.py` keys duplicates on `(section, pass-id)`, so a
+second `### Pass 20.6` heading in* Shipped *would read as a duplicate
+declaration. **This is the established project pattern** — `Pass 20.2 + 20.3`
+was completed the same way, by a COMPLETION ADDENDUM at the end of its own
+entry (`69ab966`+`834d256`+`817b268`).)*
+
+**What shipped.** `--defaults-from <field>` on **all four** creation verbs —
+`add-text-field`, `add-check-box`, `add-radio-button`, `add-choice-field`. It
+copies **`/MaxLen`** (text), **`/Opt`** (choice), and the **on-state read from
+`widgets[0]`** (check box). **A RADIO TEMPLATE COPIES NOTHING**, and that is
+stated rather than implied: a radio's on-states live **per widget**, so a radio
+field has one per member while `--defaults-from` names a **field** — there is
+no single value the flag could refer to.
+
+**Gates — measured by the ENGINEER at `247b8fa` and relayed (R87; this filing
+ran no build).** **2187 tests / 0 failed** — against **2181** at `3d345aa`, so
+**+6 tests, all six in `crates/pdfce-core/tests/form_field_authoring.rs`, which
+goes 33 → 39** (counted by
+`git show <rev>:crates/pdfce-core/tests/form_field_authoring.rs | grep -c '^#\[test\]'`
+at both revisions; names read from the diff:
+`a_choice_option_list_copies_into_the_saved_bytes`,
+`a_different_type_copies_nothing_and_discloses_it`,
+`a_radio_template_contributes_nothing`,
+`the_accessibility_name_is_never_copied`,
+`an_explicit_value_is_not_overwritten_by_the_template`,
+`a_missing_template_is_refused`). **`clippy` 0 · `fmt`, `ui-strings`,
+`bypass-paths` each read by its own exit code · `pdfce-core` and `pdfce-render`
+GUI-free.**
+
+**3 files changed, +635 / −5** (`git show --stat 247b8fa`), distributed
+**`edit.rs` 287 · `main.rs` 198 · `tests/form_field_authoring.rs` 155** =
+**640 changed lines over 3 files ≈ 213.3 per file**, and **635 insertions over
+4 creation verbs = 158.8 insertions per verb** — the flag attaches to every
+one of them, which is why it costs four verbs' worth of wiring for one idea.
+
+##### A. ★★ A CONSEQUENCE OF THE ENGINEER'S OWN RULING THAT THE BUILD EXPOSED — **the behaviour is coherent; the DESCRIPTION of it was wrong**
+
+**Filed as the engineer's, at his instruction.** Ruling 3 (twenty-eighth-filing
+era) said: ***"copy the common subset and disclose the drop."*** The
+implementation makes that sentence collapse.
+
+**The arithmetic of it:**
+
+- **Every property SHARED across the four field types is a BOOLEAN** — multiline, read-only, required, combo, sort, comb, and the rest.
+- **Every boolean is EXCLUDED** (reason in §B).
+- **Every remaining copyable property is TYPE-SPECIFIC** — `/MaxLen` is a text field's, `/Opt` is a choice field's, the on-state is a check box's.
+
+**Therefore THERE IS NO COMMON SUBSET.** *"Copy the common subset"* has an
+empty right-hand side, and the rule reduces to ***"copy nothing, and disclose
+it."*** **A text template contributes literally nothing to a choice field** —
+not a reduced set, **zero**.
+
+**The behaviour that shipped is correct**: the mismatch is **disclosed**
+(`a_different_type_copies_nothing_and_discloses_it`), so an operator who
+supplies a mismatched template is told the template did nothing rather than
+handed a bare field that looks like the flag was honoured. **What was wrong was
+the RULING'S OWN WORDING**, which described a mechanism — *take the
+intersection* — that has no members. **And it only became visible when someone
+tried to implement the sentence**, which is the recurring shape this project
+keeps paying for: a rule that reads as a procedure but is not one survives
+review indefinitely, because review checks whether it is *true*, not whether it
+is *executable*.
+
+##### B. The exclusions ARE the design, and each is stated at the code rather than left to be inferred
+
+| excluded | why |
+|---|---|
+| **every boolean** (`/Ff` bits) | The CLI's flags are **presence flags**, so *absent* and *explicitly false* are **one token**. Copying booleans would let `--defaults-from` **ADD** a property but **never turn one off** — a single-line field could not be created from a multiline template. **A one-way trap, operator-facing, and expensive to reverse once scripts depend on it.** The doc comment says to revisit if `--no-*` pairs are ever added, because the trap is a property of **the flag shape**, not of the idea. |
+| **`/TU`** (tooltip) | **Load-bearing, and the sharpest of the six. R105 exists so an accessibility name is never a silent default** — *"I never considered it"* must not be able to happen silently. **A copied tooltip satisfies R105's mechanism while defeating its purpose**, and the same holds for a copied *declination*: inheriting *"no tooltip"* is still a decision the operator never made. |
+| **values** (`/V`, `/DV`) | A value is **content**, not a default. |
+| **`/AA`** (additional actions) | Decision 020 **F3** rules that push-button creation authors **no action**. Copying `/AA` would **author actions through the back door**. |
+| **the radio export value** | Nothing to copy — on-states live **per widget**, `--defaults-from` names a **field**. |
+| **a non-UTF-8 `/Opt` entry** | **Copies NOTHING rather than being lossily converted** — *"a mangled export value is a value the form would submit"*, and no downstream consumer expects it. **Beyond the brief; see §C.** |
+
+**The two disclosures were added as STRUCT FIELDS**, so `any()`'s destructuring
+makes an unhandled one a **compile error**. It fired immediately: the preflight
+initializer would not build until both were named. **A disclosure that can be
+forgotten is a disclosure that will be** — this is the same discipline as the
+`edit_note` trace, enforced by the type system instead of by review.
+
+##### C. ★ TWO FIXES BEYOND THE BRIEF, and one of them is the day's third instance of the same defect shape
+
+**(1) Non-UTF-8 `/Opt` entries copy nothing** rather than being lossily
+converted. The argument is one sentence and it is the right one: ***a mangled
+export value is a value the form would submit.*** A display string that comes
+back as mojibake is ugly; an **export** value that comes back as mojibake is a
+**wrong submission**, silently, to a server that will accept it.
+
+**(2) `add-choice-field` reported `options=0` beside a file carrying three.**
+It printed the **argument count**, not the **authored** one.
+
+**★★ THIS IS THE THIRD INSTANCE IN ONE DAY OF A WRONG NUMBER SITTING BESIDE A
+RIGHT ONE**, after **the counter reset per outer loop** (counts inflated,
+percentages still right) and **the derived percentages**. **All three share the
+same anatomy:** the summary line and the artefact were produced by **different
+code paths reading different sources**, so the artefact was correct and the
+line describing it was not — **and only the line travels.** Nobody reads the
+`/Opt` array; everybody reads `options=N`. **See `SESSION_LOG.md`'s *Findings
+escalated* for the RAG file this instance produced.**
+
+##### D. ★ The options test is the right shape, and the reason is worth copying
+
+The copied pairs are **`[(CA) (Canada)] [(MX) (Mexico)] [(AR) (Argentina)]`** —
+**export and display DELIBERATELY DIFFERENT.**
+
+**That choice is the whole strength of the test.** A `/Opt` copy that
+**collapsed** each pair to a single string would still contain *"Canada"*, and
+would still pass any assertion that merely looked for the display text. **The
+differing pairs make collapse detectable**; identical pairs would have made the
+test pass for a defect it was written to catch. **Asserted on the SAVED BYTES**
+(R159), not through `parse_acroform`.
+
+**R162 discharged both ways by observation, not argument:** disabling the
+choice type gate **fails exactly** the mismatch and radio tests while the copy
+test stays green; making the tooltip copy **fails exactly** the R105 test.
+
+##### E. ⚠ What §1's hypothetical becomes now that F6 is closed
+
+**§1 wrote it as a hypothetical.** It is now the state of the product:
+
+> *"With `--defaults-from` and `rename-field` both built, F6 would be CLOSED,
+> and 'field property editing is done' would then be a TRUE statement about F6
+> and a FALSE statement about the capability."*
+
+**Both are built. F6 is closed. The sentence is live.** What editing does
+**NOT** include, stated here so no reader of this entry can reach the closing
+of F6 without also reading the gap:
+
+- **RESIZE — not built for any family** (`Pass 46.0`, PARTIAL — see its own entry above).
+- **MOVE — built for form-field WIDGETS ONLY** (`Pass 46.0`, `fd6eadd`), and **not** for markup annotations, redaction marks or links.
+- **RE-FLAG — still UNSCOPED**, the sole survivor of §1's three. `/Ff` bit editing (read-only, required, multiline, comb, radio-in-unison) **has no geometric component**, so `Pass 46.0` does not cover it and folding it in would be scope drift. **It is owed a decision — a new F-slice under decision 020, or a named refusal.**
+- **NO GUI for either half of F6** (R151) — `rename-field` and `--defaults-from` are both CLI-and-core only.
+
+**F6 closing does not mean field editing is done. It means F6's two named items
+are done.**
 
 ### gui/tooling — **THE RENDER WORKER STARTS SAYING WHAT IT DID** — three diagnostic traces in `crates/pdfce-gui/src/render_worker.rs` (`render-inline`, `render-async-started`, `render-async-done`). **★★ THE RENDER PATH EMITTED NO DIAGNOSTIC TRACE AT ALL, AND THAT WAS DISCOVERED BY POINTING A FILTER AT IT AND READING THE SILENCE AS EVIDENCE THAT THE RENDER HAD WORKED. IT WAS NOT EVIDENCE — THE INSTRUMENT DID NOT EXIST.** **★★ THIRD INSTANCE IN ONE DAY OF A CHANNEL BUILT FOR OBSERVABILITY BEING ITSELF UNOBSERVABLE: `edit_note` (the rule-4 disclosure path, `69db1c6`), the stale-binary trace (`gui-drive` returning zero traces for code that was never built, same commit), and now THE WORKER WHOSE ENTIRE PURPOSE IS MAKING A SLOW RENDER OBSERVABLE AND INTERRUPTIBLE.** **★★ IT DELIVERED THE FIRST IN-GUI MEASUREMENT OF THE OPERATOR'S ORIGINAL COMPLAINT — `render-async-started gen=1 budget_ms=12` → `render-async-done gen=1 ms=907 outcome=done`, with the UI thread processing frames throughout. 907 ms through `pdfce-gui`'s worker against 907 ms through the CLI, on the same CAD sheet that took 32,313 ms with a frozen window this morning. THE END-TO-END VERIFICATION OF PASS 44.0 + PASS 45.0's JOINT CLAIM, FROM THE INSTRUMENT THE OPERATOR ACTUALLY USES.** **★ THE THRESHOLD IS IN THE RECORD RATHER THAN IN A CONSTANT — `render-async-started` carries `budget_ms=12`, so a reader of the trace never has to go find `IN_FRAME_BUDGET`.** **★ `render-inline` MAKES THE *"NOTHING REGRESSES WHEN FAST"* CLAIM CHECKABLE** — Pass 44.0 asserted that a page beating the 12 ms budget never touches the async path, and until this commit that assertion had no observable consequence. **★ `render-async-done` DISTINGUISHES done / cancelled / failed — a distinction the shell ALREADY MADE and could not be seen making.** **⚠ TWO PROCESS FAILURES ARE FILED WITH IT, from the same ten minutes, because they are the day's own lesson committed while writing about it: `build rc=0` was read as a successful compile when it was `tail`'s exit status (FOURTH wrong reading from that idiom today, once making a hang look like a pass), and an empty trace filter was read as evidence the render worked.** **⚠ NO GATE FIGURES EXIST FOR THIS COMMIT** — see the gates note below. (no Pass ID — GUI-only instrumentation, +23 / −0, no behaviour change and no timing change; the same class as `1992d13` and `fa17d54`, and NOT covered by `Pass 45.0`'s widening) — 2026-08-07, committed `9681112`, branch `pass-8-redaction`
 
@@ -7142,6 +7362,16 @@ propagation duty.
   > ever decided them — and that is a materially different state from the
   > rest of this list. **`rename-field` SHIPPED** (`3d345aa`, Pass 20.6
   > PARTIAL — head of *Shipped*); `--defaults-from` did not.
+  >
+  > **★★ AMENDED AGAIN 2026-08-07 (thirty-first filing) — BOTH F6 ITEMS NOW
+  > SHIP AND F6 IS CLOSED.** `--defaults-from` landed in **`247b8fa`** on
+  > all four creation verbs; **`Pass 20.6` is no longer PARTIAL** (see its
+  > COMPLETION ADDENDUM). Of the three unscoped items, **MOVE is now partly
+  > built** — `move-widget` in **`247b8fa`**'s successor **`fd6eadd`**,
+  > filed as **`Pass 46.0` (PARTIAL)** on the operator's own request, and
+  > covering **form-field widgets only**. **RESIZE is scoped (`Pass 46.0`)
+  > but NOT BUILT for any family. RE-FLAG remains UNSCOPED** and is the sole
+  > survivor of the three.
 
 > **✅ AMENDED 2026-08-07 (same day, seventh filing).** Of the six items
 > above, **four are now discharged**: the resolver and F0's substrate
@@ -7485,8 +7715,11 @@ listed in the mixed-commit table above. **LEGAL.md §5 / rule 7 unaffected.**
   RULED**, deliberately, and **must not be inferred from
   `add-radio-button`.** R161 supplies the *shape* (forms is verb-first, so
   `add-<thing>`); it does not supply the **word**.
-- **F2's own `--defaults-from`** — deferred to **F6**, where decision 020
-  filed the property-editing family.
+- ~~**F2's own `--defaults-from`** — deferred to **F6**, where decision 020
+  filed the property-editing family.~~ **[★★ DISCHARGED 2026-08-07
+  (thirty-first filing, `247b8fa`) — BUILT, on all four creation verbs. The
+  deferral is closed and F6 with it; see the `Pass 20.6` COMPLETION
+  ADDENDUM at the head of *Shipped*.]**
 - **Positional-`/Opt` radio authoring** — **no longer an open gap**; it is a
   recorded, reasoned **refusal** (above), discharging §8.3.
 - **Comb layout not driven from `/MaxLen`**; **inherited-`/V` writes still
@@ -7829,6 +8062,12 @@ dotted-name semantics, `/TU` R105, `/Tabs` disclosure, and all of F0.
 > **move, resize and re-flag are UNSCOPED** (grep evidence in the Pass 20.6
 > entry at the head of *Shipped*, §1). **`rename-field` has since SHIPPED**;
 > `--defaults-from` has not.
+>
+> **★★ AMENDED AGAIN 2026-08-07 (thirty-first filing): `--defaults-from` HAS
+> NOW SHIPPED TOO (`247b8fa`), so F6 is CLOSED and `Pass 20.6` is no longer
+> PARTIAL.** Of the parenthetical's other three, **move is partly built**
+> (`move-widget`, `fd6eadd`, `Pass 46.0` PARTIAL — **widgets only**),
+> **resize is scoped but unbuilt**, and **re-flag is still UNSCOPED.**
 
 #### Gates — engineer-measured at `8e799e9` and relayed (R87; this librarian has no shell for build state)
 
@@ -19377,6 +19616,14 @@ reasoning for:**
    > mean it. **That is an engineer scope call now owed**, and it is filed
    > in the Backlog bucket's owed list as UNSCOPED rather than as
    > still-owed-and-scoped.
+   >
+   > **★★ UPDATED AGAIN 2026-08-07 (thirty-first filing): F6 IS CLOSED.**
+   > `--defaults-from` shipped in **`247b8fa`**, so **`Pass 20.6` is no
+   > longer PARTIAL** — and the scope call this update said was owed **was
+   > made by the OPERATOR, not the engineer**: *"form fields and everything
+   > else should be draggable and resizeable"* became **`Pass 46.0`**, whose
+   > first slice (`move-widget`, `fd6eadd`) is now shipped for **form-field
+   > widgets only**. **Resize remains unbuilt; re-flag remains UNSCOPED.**
 
 **★ The slice-2 fork escalated this rather than deciding it, and that was
 correct.** Re-sequencing a decision record's build order is above a
@@ -20424,6 +20671,22 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ### Pass 46.0–46.1 — ★★ OPERATOR REQUEST 2026-08-07 — ***"form fields and everything else should be draggable and resizeable"*** — **46.0** = the `/Rect` family, **46.1** = the content-stream family. **THE GAP WAS NAMED IN THIS FILE AND THE OPERATOR SCOPED IT WITHIN MINUTES.**
 
+> **★★ AMENDED 2026-08-07 (thirty-first filing, `fd6eadd`) — `Pass 46.0` IS NO
+> LONGER WHOLLY A PLAN. Its first slice is SHIPPED and is filed as
+> `Pass 46.0 (PARTIAL)` at the head of *Shipped*.** What that slice delivered:
+> **`move_widget` + CLI `move-widget`, for FORM-FIELD WIDGETS ONLY, core and
+> CLI, no GUI.** **What this entry below still describes accurately, and must
+> keep being read for:** **resize (no family, none of it)**, **move for the
+> other four families** (markup, redaction marks, links, ce dimensions),
+> **the whole GUI half of both Passes**, **all of `Pass 46.1`**, and **both
+> owed sub-decisions** (`/Popup` follow-vs-independent, the `/Link`
+> click-target disclosure). **The shipped entry's §3 is the one thing to read
+> FIRST if you are picking up resize** — it establishes that widget
+> generators are already size-parameterised while markup appearances hold
+> **absolute** geometry, so resize is **two jobs of very different size**, a
+> split this entry's §3 table does not make because it groups by
+> `/Rect`-carrying-ness rather than by how the appearance was constructed.
+
 > **Heading form is DELIBERATE and is itself a small fix.** This project's
 > convention for a multi-Pass family entry is `### ★ Pass 24.0–24.5 — …`, and
 > **the leading `★` makes the whole heading invisible to
@@ -20469,9 +20732,15 @@ DURING this filing** (`--defaults-from` on all four creation verbs). So the
 *"field editing is done"* sentence the twenty-eighth filing warned about is
 **no longer hypothetical**; F6's two items are both built as of `247b8fa`, and
 without these two Passes *"editing is done"* becomes **true of the plan and
-false of the product this week, not eventually.** `247b8fa` is **not filed as
+false of the product this week, not eventually.** ~~`247b8fa` is **not filed as
 shipped by this filing** — no Pass ID is assigned to it here, no gate figures
-were relayed for it, and its ship-filing is a separate dispatch.
+were relayed for it, and its ship-filing is a separate dispatch.~~
+**[★★ DISCHARGED 2026-08-07 (thirty-first filing): `247b8fa` IS filed, with gate
+figures (2187 tests / 0 failed, +6 in `form_field_authoring.rs`, clippy 0), as
+the `Pass 20.6` COMPLETION ADDENDUM. **F6 is closed**, so the sentence above is
+now a statement about the present. The COMPLETION ADDENDUM's §E is where the
+*"what editing does NOT include"* list lives, and this Pass is one of the two
+things standing between that list and the operator's expectation.]**
 
 #### 1. ★★ Two structurally different jobs, and the split is NOT "fields vs. everything else"
 
@@ -20605,6 +20874,123 @@ popup independently draggable, or does it follow its parent?) and `/Link`
 disclosure question).**
 
 #### 4. ★★ FAMILY (b) — resize is genuinely harder, and LINE WIDTH is why
+
+> **★★ AMENDED 2026-08-07 (thirtieth filing) — READ THIS BEFORE THE SECTION.
+> THIS SECTION'S QUESTION NOW HAS A DECISION RECORD, AND IT IS OPEN.**
+>
+> **`docs/decisions/032-vector-scale-mechanism-wrap-vs-rewrite.md` — STATUS
+> OPEN, NOT DECIDED.** This section said *"Which mechanism is right is an
+> ENGINEER DECISION and is NOT made here"* and was right to. **Decision 032 is
+> the container that ruling goes into.** `Pass 46.1` is **blocked on it** — the
+> "do not start the core verb" instruction below is unchanged and now has a
+> file to point at.
+>
+> **WHY IT IS A DECISION RECORD AND NOT A DEFAULT.** The Inkscape RAG's
+> `transforms__*` bucket (0 → 4 files, `D:\Dev\Rag-Specialized\Inkscape_Features\`,
+> filled 2026-08-07) surfaced the finding that settles the question's *shape*
+> without settling the question: **wrap-in-`cm` versus rewrite-operands is the
+> same trade-off as Inkscape's *Preserved* versus *Optimized* transform
+> storage**, and it **lands squarely on project rule 3**. **Wrapping** gives a
+> tiny diff but introduces an editor artefact, **nests on repeated edits**, and
+> **forces the compensating-`w` path with all its non-uniform problems.**
+> **Rewriting operands** gives exact stroke independence **for free** but is the
+> **largest possible diff for that object** and destroys byte-identical
+> re-emission of its operand text. **Neither is universally right.** Options A–D
+> (always-wrap · always-rewrite · hybrid-with-a-stated-switch-rule ·
+> operator-facing choice) are laid out in 032 §3 with consequences; **none is
+> recommended** and the operator's ruling is awaited.
+>
+> **⚠ THE FINDING THAT CONSTRAINS WHAT PDFCE CAN OFFER AT ALL, AND THE ONE
+> SENTENCE THAT STOPS SOMEONE PROMISING SOMETHING PDFCE CANNOT DELIVER:**
+> **`vector-effect: non-scaling-stroke` HAS NO PDF EQUIVALENT.** It is the
+> mechanism SVG uses to solve the non-uniform case — stroke outline generated
+> outside the transformed space, so width survives *"including non-uniform
+> scaling and shear transformations"* — and it is **the escape hatch an engineer
+> scoping from Inkscape would assume exists.** **PDF's only device-space-
+> referenced stroke width is `0 w`** — a one-device-pixel hairline, **not an
+> arbitrary constant width.** **pdfce can offer non-scaling-stroke as an EDITING
+> BEHAVIOUR, never as a DOCUMENT PROPERTY: the saved file cannot carry the
+> intent.** No option below may be justified on the grounds that there is a
+> fallback — **there is none.** (A *persisted* non-scaling-stroke document
+> property is therefore `out_of_scope` — "no PDF construct exists", not "we
+> haven't looked".)
+>
+> **⚠ NON-UNIFORM SCALE + STROKE-SCALING-OFF IS MATHEMATICALLY UNSATISFIABLE,
+> AND THE REFERENCE FAILS SILENTLY AT IT.** No scalar width can cancel a
+> non-uniform matrix — arithmetic, and it transfers to PDF unchanged.
+> **Launchpad #1335376 closed *Invalid*** on exactly that ground (*"cannot be
+> replicated by adjusting stroke-width alone"*), and **Inkscape 1.4 distorts
+> without warning or refusal** (UX #339) **in the mode where the operator
+> explicitly asked for constant line weight.** **Under project rule 4 that is a
+> place to be BETTER than the reference, not equal to it** — disclose the
+> residual anisotropy, or offer stroke-to-outline, but **do not fudge a factor
+> silently.** A width pdfce *chose* is inferred state. The named-refusal option
+> this section already puts on the table (decision 027) stays live as one of the
+> three honest answers.
+>
+> **THREE INVERSIONS OR NON-TRANSFERS, each of which would mislead someone
+> scoping from the reference** (full detail in 032 §6):
+> **(a) PATTERNS INVERT** — a PDF pattern `/Matrix` maps to the page's
+> **default** space, **not** the CTM at paint time, so *"don't transform the
+> pattern"* is PDF's **structural default** and **ON is the branch requiring
+> work**, the inverse of the SVG mental model. **⚠ OWED and carried, not
+> discharged:** the researcher flagged the `/Matrix` anchoring clause **itself**
+> as needing a `PDF_Spec` **§8.7.3** re-check — dispatch `pdfce-spec-librarian`
+> before it grounds an acceptance criterion.
+> **(b) GROUP-VS-EACH INVERTS** — SVG group scaling is one matrix; in PDF
+> **per-object is cheap** (N independent operand rewrites over decision 011
+> §2.1's already-segmented objects) and **as-a-group needs a shared wrapper.**
+> The mode must be explicit with a stated default — the difference is invisible
+> until after the operation.
+> **(c) MARKERS HAVE NO PDF CONSTRUCT** — arrowheads are baked geometry, so
+> SVG's `markerUnits="strokeWidth"` coupling (marker size follows stroke width,
+> silently) **must not be replicated.** Do not conflate with annotation `/LE`.
+>
+> **✅ ONE THING IS RULED, BY THE OPERATOR: the rounded-corner-radii toggle is
+> `out_of_scope`.** **Un-implementable, not unbuilt** — PDF's `re` is sharp and
+> rounded corners arrive as **already-flattened Bézier geometry with no
+> surviving radius**. Radii scale with the geometry, unconditionally; that is
+> the only available behaviour. Recorded so a future pass does not
+> re-investigate: *"PDF flattened it before pdfce ever saw it."*
+>
+> **FORM FIELDS ARE A THIRD BACK-END WITH NO INKSCAPE ANALOGUE — ONE OPERATOR
+> GESTURE, TWO MECHANISMS.** Widget resize is `/Rect` + `/BBox` + `/Matrix`
+> consistency (§12.5.2, §12.5.5), and **`/Rect` is neither the geometric nor the
+> visual bbox** — it is a *declared box the appearance is fitted into*. **Scope
+> widget resize from `Acrobat_Features` + `PDF_Spec` §12.5.5, NOT from the
+> Inkscape RAG.** **This is why `Pass 46.0` is NOT blocked on decision 032** —
+> family (a) never reaches the wrap-vs-rewrite question.
+>
+> **WHAT DOES TRANSFER VERBATIM: the core stroke model.** §8.4.3.2 — line width
+> is in **user space** and stroking paints all points within **half that width
+> in user space** — is precisely SVG's model, and `PDF_Spec` already records
+> independently that **an anisotropic CTM makes stroke thickness
+> orientation-dependent.** No SVG-only wrinkle to discount.
+>
+> **GAPs RECORDED AS GAPs, NOT DEFAULTS (032 §10), none of which may be quoted
+> as fact:** the **non-uniform compensation formula is UNKNOWN** — three sources
+> describe the symptom, none the arithmetic; **R61 bars reading the source**;
+> and **`sqrt(|det|)` was DELIBERATELY NOT recorded as fact** even though the
+> SVG expansion-factor convention suggests it. Whether the toggles govern the
+> **numeric route** as well as the drag is unconfirmed (**pdfce should make the
+> answer *"yes, identically"* by construction**). And **⚠ set exhaustiveness:
+> DO NOT SAY "Inkscape has exactly four."** Four companion behaviours are
+> confirmed — **scale stroke width · scale rounded-corner radii · transform
+> gradients with object · transform patterns with object** — plus *Store
+> transformation* (Optimized | Preserved) and a **visual-vs-geometric bbox
+> basis**, **neither of which is a companion toggle**; **there is no filter
+> toggle**; and that no *fifth* companion behaviour exists was not establishable
+> from a reachable primary source.
+>
+> **⚠ A UX FINDING OWED TO `pdfce-ui-specialist`, raised and not discharged:**
+> Inkscape's toggle is a **hidden global mode**, which is why *"why did my
+> stroke change?"* is one of its most-asked transform questions. **Under rule 4
+> pdfce would be choosing the stroke consequence from off-screen state** — the
+> scale factor is something the operator performed and can see; the stroke
+> consequence is not. **Make it legible at the point of the resize** (dock
+> compartment, fixed anchor — §4.4 bars anything floating at a document-derived
+> position). **No confirm step is being asked for**; decision 024 §4.4 already
+> settles that a visible, undoable direct manipulation needs none.
 
 **Move already exists** (`move_object`, Pass 9c-min, decision 011 §2.5) and
 works by **operand surgery** — rewriting the coordinate operands in place.
@@ -20744,7 +21130,15 @@ ladder). **Two arcs, two IDs.**
 - **Gated on the §4 mechanism decision** — operand-rewrite vs `cm` vs a named
   refusal of non-uniform scale on stroked content. **Do not start the core
   verb before that is ruled**; it determines the data model, not just the
-  implementation.
+  implementation. **★★ AMENDED 2026-08-07 (thirtieth filing): that decision is
+  now OPEN as a record — `docs/decisions/032-vector-scale-mechanism-wrap-vs-rewrite.md`,
+  STATUS OPEN, options A–D laid out, none recommended, awaiting the operator's
+  ruling. `Pass 46.1` IS BLOCKED ON IT.** Read §4's amendment block above
+  first — it carries the constraint that bounds every option
+  (**`vector-effect: non-scaling-stroke` has NO PDF equivalent**, so there is
+  no fallback), the **unsatisfiable** non-uniform + stroke-off case, three
+  SVG→PDF **inversions**, and one **ruling** (rounded-corner radii =
+  `out_of_scope`, un-implementable rather than unbuilt).
 - **Text and images are IN the family and OUT of the first slice unless the
   engineer says otherwise** — §4 names why each is its own problem. Images are
   the cheapest member and could reasonably lead.
@@ -20786,14 +21180,33 @@ whoever is filing is not a bar. **Ceiling stays R166; R167 next free.**
 
 #### 8. What this entry does NOT claim
 
-- **No Pass ID is minted for shipped work.** 46.0 and 46.1 are **plan
-  entries**. Nothing has been built for either.
-- **`247b8fa` is not filed here.** It landed mid-filing, it closes F6's other
+- ~~**No Pass ID is minted for shipped work.** 46.0 and 46.1 are **plan
+  entries**. Nothing has been built for either.~~ **[★★ SUPERSEDED IN PART
+  2026-08-07 (thirty-first filing): still no ID MINTED, but `46.0` is no longer
+  a pure plan entry — `fd6eadd` built its first slice and it is filed as
+  `Pass 46.0 (PARTIAL)` in *Shipped*. `46.1` remains wholly unbuilt.]**
+- ~~**`247b8fa` is not filed here.** It landed mid-filing, it closes F6's other
   half, and it needs its own ship-filing with gate figures. **This entry
-  mentions it only for the timing argument in §0.**
+  mentions it only for the timing argument in §0.**~~ **[★★ DISCHARGED
+  2026-08-07 (thirty-first filing): `247b8fa` IS NOW FILED, with gate figures,
+  as the `Pass 20.6` COMPLETION ADDENDUM. F6 is closed.]**
 - **No sequencing claim.** See the header.
-- **No verb names.** Neither Pass's CLI surface is ruled.
-- **The §3 `move_dimension` doc-comment question is RAISED, not answered.**
+- ~~**No verb names.** Neither Pass's CLI surface is ruled.~~ **[★ AMENDED
+  2026-08-07 (thirty-first filing): ONE verb name is now ruled and built —
+  **`move-widget`**, newly minted, following R161's verb-first shape and the
+  `delete-widget` precedent. **The rest of both Passes' CLI surface remains
+  unruled**, and R161 still supplies the shape rather than the word.]**
+- ~~**The §3 `move_dimension` doc-comment question is RAISED, not answered.**~~
+  **[★★ ANSWERED 2026-08-07 (thirty-first filing) — THE COMMENT IS WRONG ABOUT
+  ITS REASON AND THE BEHAVIOUR IS RIGHT. `fd6eadd`'s §12.5.5 derivation,
+  performed for an entirely different purpose, establishes that an unchanged
+  extent makes **A** a pure translation, so patching `/Rect` alone **WOULD**
+  carry the drawing — the comment's *"would leave the drawing where it was"*
+  is false. Regeneration stays correct because **`/L` and the `/PieceInfo`
+  sidecar go stale**, which is a strictly better argument. **AMEND THE REASON,
+  NOT THE CONCLUSION** — filed as OWED to the engineer (`edit.rs:10937–10939`);
+  this filing does not hold `crates/`. Full form: the `Pass 46.0 (PARTIAL)`
+  entry §7.]**
 - **`Pass 46.2` IS NOT FILED.** It is named as *free* so the number is
   **reserved against reuse** (project rule 2) without being assigned to
   anything. **Consequence a reader of the ledger checker must not
@@ -25975,6 +26388,12 @@ nothing gets forgotten, not as a commitment to build in this order.
   and **Pass 20.7** (F7, `merge --on-field-collision`) are named
   fast-follows, non-gating, filed for numbering stability only — not
   scheduled ahead of F0–F5.
+  **[★★ OVERTAKEN BY EVENTS 2026-08-07 (thirty-first filing): `Pass 20.6` ran
+  AHEAD of F0–F5's residue, on the operator's own *"get form field
+  creation/editing done next"*, and is now **COMPLETE** — `rename-field`
+  (`3d345aa`) + `--defaults-from` (`247b8fa`). **F6 is closed. `Pass 20.7`
+  (F7) is still unbuilt**, and F4's `/Tabs` dispatch and F5's residue are
+  still owed, so this sequencing sentence is history rather than plan.]**
   **The headline correction to this bucket's own prior recommendation:**
   the "build `pdfce-core`'s field model as a `/Kids` object graph from
   day one" advice above is **superseded** — the shipped flat
@@ -26021,7 +26440,12 @@ nothing gets forgotten, not as a commitment to build in this order.
   [**★ CORRECTED 2026-08-07, twenty-eighth filing: that four-item list is
   this roadmap's, not decision 020's. F6 = `--defaults-from` +
   `rename-field`. Move / resize / re-flag are UNSCOPED — see the Pass 20.6
-  entry, §1, for the grep that establishes it**] — which
+  entry, §1, for the grep that establishes it**] [**★★ AND AMENDED AGAIN
+  2026-08-07, thirty-first filing: F6's BOTH items now ship (`3d345aa` +
+  `247b8fa`) and **F6 IS CLOSED**. Of the three unscoped items, **move is
+  partly built** (`move-widget`, `fd6eadd`, `Pass 46.0` PARTIAL — **form-field
+  widgets only**), **resize is scoped but built for nothing**, and **re-flag
+  is still UNSCOPED**] — which
   the operator's own instruction names (*"creation/**editing**"*) and
   which decision 020 filed only as the non-gating fast-follow **F6**.
   **That last point is a scope gap worth the engineer's attention:** the
@@ -26118,7 +26542,12 @@ nothing gets forgotten, not as a commitment to build in this order.
   from the disclosure, which shipped), the **GUI surface** (F5, still
   requires a `pdfce-ui-specialist` dispatch first), and **field property
   editing** (F6 — the operator's own *"editing"*, and where F2's
-  `--defaults-from` was deferred to). **Comb layout** (not driven from
+  `--defaults-from` was deferred to) **[★★ F6 IS CLOSED as of 2026-08-07,
+  thirty-first filing: `rename-field` `3d345aa` + `--defaults-from` `247b8fa`.
+  It is no longer on this owed list. **But *"field property editing"* is
+  broader than F6** — resize is built for nothing, move is built for
+  form-field widgets only (`Pass 46.0` PARTIAL), and re-flag is UNSCOPED]**.
+  **Comb layout** (not driven from
   `/MaxLen`) and **inherited-`/V` writes** (still terminal-only) remain
   named limits.
   **★ AMENDMENT (2026-08-07, EIGHTH filing) — F5 IS BUILT IN PART, AND
@@ -26260,11 +26689,27 @@ nothing gets forgotten, not as a commitment to build in this order.
   AUTHORING** (F4, still BLOCKED on the spec-librarian `/Tabs` dispatch), and
   Pass 20.5's residue (per-type detail fields, `/MK`-border disclosure,
   rendered-appearance verification, the multi-page repeated-field row-label
-  fixture). **`--defaults-from` moves OFF this list on `247b8fa`'s
-  ship-filing, not on this one.**
+  fixture). ~~**`--defaults-from` moves OFF this list on `247b8fa`'s
+  ship-filing, not on this one.**~~ **[★★ IT HAS NOW MOVED OFF — thirtieth
+  filing, 2026-08-07: `247b8fa` is filed with gate figures as the `Pass 20.6`
+  COMPLETION ADDENDUM, and **F6 IS CLOSED**. This list is current as written
+  above, minus `--defaults-from`.]**
   **STILL UNSCOPED, AND OWED A DECISION RATHER THAN AN IMPLEMENTATION:**
   field **re-flag** — and **only** re-flag. **Move and resize are struck from
   this line**; they are Pass 46.0.
+  **★★ AMENDMENT (2026-08-07, THIRTIETH filing) — F6 IS CLOSED, AND THE
+  *"true of the plan, false of the product"* WARNING IS NOW LIVE RATHER THAN
+  PREDICTED.** Both F6 items ship (`3d345aa` + `247b8fa`) and **`Pass 20.6` is
+  no longer PARTIAL**. **Move is partly delivered:** `move-widget` (`fd6eadd`,
+  **`Pass 46.0` PARTIAL**) moves **form-field widgets only** — markup
+  annotations, redaction marks, links and ce dimensions are untouched by it,
+  and **RESIZE IS BUILT FOR NOTHING AT ALL.** **What this bucket must keep
+  saying out loud, because F6 closing invites the opposite reading:** *field
+  editing* today = **create + delete + fill + rename + template-defaults +
+  move-a-widget**. It does **not** include resize, does not include moving any
+  non-widget annotation, does not include re-flag, and **has no GUI for rename,
+  `--defaults-from` or `move-widget`** (R151). **Re-flag remains the one item
+  owed a SCOPE decision rather than an implementation.**
 - **XFA** — legacy Adobe forms tech. **Verify current status before
   scoping** — Adobe has been deprecating XFA in Acrobat; consult the
   spec RAG + a fresh web check before committing engineering time here.
