@@ -411,6 +411,35 @@ fn refusing_still_allows_deleting_a_page_outside_any_set() {
 }
 
 #[test]
+fn the_impact_records_which_policy_produced_it() {
+    // Added after a real defect: the CLI and GUI disclosures announced
+    // that surviving pages "had their /Pages array rewritten" under EVERY
+    // policy, which is false for `Discard` — that removes the dictionary
+    // outright. The counts were right and the sentence was wrong, which
+    // is the worse failure, because a true-looking disclosure gets
+    // believed. The fix was to carry the policy on the impact so a front
+    // end can describe what actually happened instead of assuming; this
+    // pins that it is carried.
+    let source = cmyk_preseparated();
+
+    for policy in [SeparationPolicy::Repair, SeparationPolicy::Discard] {
+        let mut s = session(&source);
+        let outcome = s
+            .delete_pages_with(&[0], policy)
+            .expect("both policies succeed");
+        assert_eq!(
+            outcome.separations.policy, policy,
+            "the impact must say which policy produced it"
+        );
+    }
+
+    // And an untouched document reports the default rather than junk.
+    let mut s = session(&source);
+    let outcome = s.delete_pages(&[4]).expect("the ordinary page");
+    assert!(outcome.separations.is_empty());
+}
+
+#[test]
 fn discarding_demotes_the_survivors_to_ordinary_pages() {
     let source = cmyk_preseparated();
     let mut s = session(&source);

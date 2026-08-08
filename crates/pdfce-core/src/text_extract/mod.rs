@@ -824,6 +824,31 @@ impl ExtractOptions {
     /// let options = ExtractOptions::default().with_gap_ratios(0.35, 0.20, 0.50);
     /// assert!((options.word_gap_ratio - 0.35).abs() < 1e-6);
     /// ```
+    /// Set only the word-gap ratio, leaving the line and backward-jump
+    /// ratios at whatever they already are.
+    ///
+    /// [`Self::with_gap_ratios`] sets all three at once, which makes it
+    /// the wrong tool for the one thing the operator can actually
+    /// configure: a caller wanting to apply a persisted `word_gap_ratio`
+    /// would otherwise have to restate the other two defaults at the call
+    /// site, and a restated default is a default that drifts.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pdfce_core::text_extract::ExtractOptions;
+    ///
+    /// let tuned = ExtractOptions::default().with_word_gap_ratio(0.35);
+    /// assert!((tuned.word_gap_ratio - 0.35).abs() < 1e-6);
+    /// // The other two are untouched.
+    /// assert!((tuned.line_gap_ratio - ExtractOptions::default().line_gap_ratio).abs() < 1e-6);
+    /// ```
+    #[must_use]
+    pub const fn with_word_gap_ratio(mut self, word: f32) -> Self {
+        self.word_gap_ratio = word;
+        self
+    }
+
     #[must_use]
     pub const fn with_gap_ratios(mut self, word: f32, line: f32, backward: f32) -> Self {
         self.word_gap_ratio = word;

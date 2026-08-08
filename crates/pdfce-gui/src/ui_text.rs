@@ -1455,7 +1455,12 @@ cannot know which page you meant."
 /// types the entry as "name **or** string", so there is no declared
 /// encoding); rendering them is this function's job, because
 /// `pdfce-core` does not own user-facing text (decision 002 R1).
-pub fn separation_set_split(pages: usize, removed: &[Vec<u8>], kept: &[Vec<u8>]) -> String {
+pub fn separation_set_split(
+    pages: usize,
+    removed: &[Vec<u8>],
+    kept: &[Vec<u8>],
+    policy: pdfce_core::pageops::SeparationPolicy,
+) -> String {
     let names = |list: &[Vec<u8>]| {
         if list.is_empty() {
             "(unnamed)".to_owned()
@@ -1466,10 +1471,21 @@ pub fn separation_set_split(pages: usize, removed: &[Vec<u8>], kept: &[Vec<u8>])
                 .join(", ")
         }
     };
+    // The closing clause has to describe what the POLICY actually did.
+    // "were updated so they no longer list the plates that left" is false
+    // under `Discard`, which removes the record entirely — and a status
+    // line that is confidently wrong is worse than one that says nothing,
+    // because the operator acts on it.
+    let did = match policy {
+        pdfce_core::pageops::SeparationPolicy::Discard => {
+            "no longer carry any record of having been printing separations"
+        }
+        _ => "were updated so they no longer list the plates that left",
+    };
     format!(
         "This is a preseparated document — several page objects are one logical \
 page, one per printing plate. Removed: {}. Kept: {}. The {pages} remaining \
-page(s) in that set were updated so they no longer list the plates that left.",
+page(s) in that set {did}.",
         names(removed),
         names(kept)
     )

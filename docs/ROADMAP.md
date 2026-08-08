@@ -81,6 +81,243 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 51.0 — settings that survive a restart, and the first ambiguity to become one — 2026-08-08, committed `2a1b0df`, branch `pass-8-redaction`
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8) — every gate result and the operator's own hex-value claims below
+are RELAYED from the operator's dispatch summary, not independently
+re-run, re-measured, or read via `git show`. `Pass 51.0` is MINTED by
+this filing, not reused — grepped `ROADMAP.md` for `Pass 51` first and
+found nothing; ceiling was **Pass 50** per the operator's own
+`check-ledger-numbers.py` run immediately before this dispatch (clean,
+no duplicates), re-confirmed by this filing's own grep since the ledger
+could have moved between that run and this commit — it had not.**
+**One thing below IS independently confirmed by this filing, not merely
+relayed: this librarian has `Read`/`Grep` (no `Bash`) this dispatch, and
+used it to read `crates/pdfce-core/src/settings/mod.rs` and grep every
+crate for `settings.separations`, `settings.cmyk_intent` and
+`SeparationPolicy::` — see the "independently confirmed" paragraph
+below, which narrows one of the operator's own framings.**
+
+**R15 is built** (decision 003 §5.6/§6.1: *"Replaceable payload and user
+state are separate… binding from the first Pass that persists
+anything"*) — the first thing in pdfce that survives a restart, four
+operator-requested features after it started blocking them (ribbon
+customization, keymap customization, dock-layout persistence, and the
+spec-ambiguity register below).
+
+- **Location: `<exe dir>/userdata/settings.txt`**, falling back to the
+  platform config directory when the program folder is not writable
+  (`ARCHITECTURE.md` §6's read-only-folder-clean requirement) —
+  **and the fallback is disclosed**, because the operator's update
+  procedure differs between the two homes (portable = the operator's to
+  preserve across a folder replace; platform = survives a replace on its
+  own, but does not travel with the program folder).
+- **`userdata` resolves a literal placeholder decision 003 left open.**
+  Decision 003 §6.3 drafted the README update sentence as *"replace the
+  program files (keep your `<user-state>` folder)"* and never named the
+  folder. `userdata` is that name now (`pdfce_core::settings::
+  USER_STATE_DIR`), chosen because it reads correctly in that exact
+  sentence, is self-describing with no docs read, and matches the
+  convention portable Windows apps already use. **The substitution is
+  owed wherever that sentence is quoted** — this filing does not edit
+  `docs/decisions/003-distribution-posture.md` itself (a decision
+  record's own text is not this librarian's tier to rewrite), so the
+  literal `<user-state>` placeholder is still sitting in that file as of
+  this filing; flagged to the engineer in this dispatch's closing report
+  as an owed follow-up, not silently left implicit.
+- **Format is a flat `key = value` text file, deliberately not
+  `serde`+`toml`.** Not a style call — a requirement. `ARCHITECTURE.md`
+  §7's fail-soft contract is **per-key** (one bad line loses one
+  setting); a `serde` derive's failure mode is **per-document** (one
+  unknown key or bad enum value fails the whole file, discarding every
+  setting the operator got right because of the one they got wrong — on
+  a file they are explicitly invited to hand-edit). The hand-rolled
+  20-line grammar also reports the **line number**, which a `serde`
+  error does not give for free. Verified end to end per the module's own
+  test suite: a file with a bad value on one line and an unknown key on
+  the next still applies every other setting and names both problems at
+  their own lines.
+- **Fail-soft table, pinned by the module's test suite (16 tests,
+  relayed count):** no file → every default, **silently** (a first run
+  is not a fault); unreadable file → every default,
+  `SettingNote::Unreadable`; unknown key → other keys still applied,
+  `SettingNote::UnknownKey`; unparseable value → that key defaults,
+  `SettingNote::BadValue`; out-of-range value → clamped,
+  `SettingNote::Clamped`; malformed line → skipped,
+  `SettingNote::Malformed`; duplicate key → last wins,
+  `SettingNote::Duplicate`. Never an error dialog, never a lost document
+  session — `Settings::load` cannot fail.
+- **It does not write on exit** — `Settings::save` is called
+  deliberately, so a crash cannot persist half a session's accidental
+  state and an operator's hand-edited file is never silently
+  reformatted. (See "independently confirmed," below, for what this
+  means today: nothing calls it yet.)
+
+**The first spec-ambiguity setting is live: `cmyk_intent`.** Closes the
+consequence `Pass 49.0` flagged but did not act on — the calibrated
+`DeviceCMYK`→sRGB conversion renders solid black ink (`0 0 0 1 k`) as a
+warm near-black rather than `#000000`, and §8.6.4.4 mandates no
+conversion at all for untagged `DeviceCMYK`, so there is no
+spec-mandated "correct" answer to default to — the textbook `R169` case.
+Three values, `pdfce_core::settings::CmykIntent`: `calibrated` (default —
+tier (a)/(c) evidence per the register: what Acrobat's own default
+profile and pdfium's calibrated table do), `neutral_black` (pure K
+alone — `C = M = Y = 0` — renders a true neutral `1 − K`; every mixed
+colour keeps the calibrated table untouched), `naive` (reproduces the
+pre-`Pass-49.0` additive formula, for an operator who needs to match an
+older pdfce export bit-for-bit).
+
+**R83 (a colour parameter is threaded per-render, never read from a
+global) is why this Pass touches more files than the setting alone would
+suggest.** `cmyk_intent` is threaded the full distance through two
+**independently wired** paths that can rot separately: `RenderOptions` →
+`Interpreter` → `Rgb::from_cmyk` for the `k`/`K` content-stream operators
+(`pdfce-render/src/gstate.rs`, `interpret.rs`), and, separately,
+`image::decode` → `Space::to_rgb` for `DeviceCMYK` image samples
+(`pdfce-render/src/mask.rs`, `image.rs`). Both `pdfce-cli`'s
+`render-page` subcommand and `pdfce-gui`'s `render_worker.rs`/`raster.rs`
+read `Settings::load(resolve_store())` once and pass the resulting
+`CmykIntent` down as an explicit argument — never a global — so two
+renders of the same page cannot differ for a reason invisible at either
+call site, the property `tools/render-parity` depends on.
+
+**Verified through the real release binary, not only the test suite,
+per the operator's dispatch:** the same fixture renders `#231F1F` by
+default (`calibrated`) and `#000000` with `cmyk_intent = neutral_black`.
+**Not read as a contradiction with `Pass 49.0`'s own stated `#231F20`**
+— `pdfce-render/tests/cmyk_intent.rs`'s
+`the_shipped_default_renders_solid_black_ink_as_a_warm_near_black` test
+(read directly by this filing) asserts a tolerance BAND around that
+figure (`r∈[0x20,0x27]`, `g∈[0x1C,0x23]`, `b∈[0x1D,0x24]`), not the exact
+value, and `#231F1F` falls inside it on every channel — filed here per
+hard rule 10 (a figure that could disagree with another one gets checked
+against it, not silently assumed consistent), and it checks out.
+
+**Independently confirmed by this filing (via `Read`/`Grep`, not
+relayed) — narrows the operator's own "17 of 18 unbuilt" framing rather
+than contradicting it:** `Settings` (`crates/pdfce-core/src/settings/
+mod.rs`) carries **three** fields, not one — `cmyk_intent`, `separations`
+(`SeparationPolicy`, the `Pass 50.0` repair/discard/refuse product
+policy) and `word_gap_ratio` — and all three **round-trip through the
+file** (load, parse, clamp/note, write). But grepping every crate for
+`settings.separations`, `settings.cmyk_intent` and `SeparationPolicy::`
+turns up **zero** call sites in `pdfce-cli` or `pdfce-gui` for
+`separations` — the delete/extract/split/merge operations `Pass 50.0`
+shipped still take whatever `SeparationPolicy` default their own
+signature carries, never the operator's persisted choice — and
+`word_gap_ratio`'s CLI call sites (`ExtractOptions::default()` at three
+sites in `pdfce-cli/src/main.rs`) confirm it is round-tripped but not
+yet consumed either. **`cmyk_intent` is the only one of the three fields
+in the store that is behaviourally live end to end.** This is a sharper
+statement of the same R151-shaped gap the operator's own dispatch
+already flagged for `word_gap_ratio` — it just turns out to apply to
+`separations` too, and the dispatch did not mention `separations` at
+all. Recorded as Backlog follow-up work, below, not as a defect in this
+Pass (the store's contract was always "reads and writes; it does not
+decide who consumes a field" — per the module's own doc comment).
+
+**Findings, beyond the setting itself:**
+- **`#[derive(Default)]` was wrong, and the round-trip test caught it in
+  minutes, not later.** `f32`'s zero default silently produced
+  `word_gap_ratio = 0.0` against the extraction engine's real default of
+  `0.20` — a second, independent answer to "what does pdfce do by
+  default," which is exactly the failure R169's whole framing exists to
+  prevent (one settings file must never introduce a second source of
+  truth for a default that already has one). Fix was not a corrected
+  constant but reading the value **off the type that owns the
+  behaviour** (`crate::text_extract::ExtractOptions::default()
+  .word_gap_ratio`), so the two cannot drift at all — a stronger
+  guarantee than a mirrored constant plus a test asserting the mirror
+  still holds. Full derivation written to
+  `D:\dev\rag\rust\derived_default_diverges_from_a_domain_default_read_it_off_the_owning_type.md`
+  (generalizes past this project).
+- **Two dead fields removed from `PdfceApp`** (`settings_store`,
+  `settings_notes`) rather than kept "for later" — the notes are
+  rendered into the status line at construction and holding them again
+  would be a second, unread copy. R151's reasoning (a shipped capability
+  needs a caller, not just an owner) applies to retained *state* as much
+  as to unreached surfaces.
+- **`#[allow(clippy::too_many_arguments)]` added with a stated reason,
+  not silently accepted**, at the two render-path call sites
+  `cmyk_intent` widened past clippy's threshold (`pdfce-render`'s
+  interpreter entry point and `pdfce-gui`'s rasterizer): the parameter
+  lists are `RenderOptions` already decomposed into exactly the pieces
+  each function uses, so wrapping them in a params struct would exist
+  purely to satisfy a count, not to communicate anything.
+
+**Gates, per the operator's dispatch (relayed, not re-run):** `cargo fmt
+--check` clean · `cargo clippy --workspace --all-targets -- -D warnings`
+clean · `cargo test --workspace` green · `check-ui-strings.sh` clean ·
+`cargo tree -p pdfce-core` shows 0 GUI/windowing dependencies (rule 2
+verified — `pdfce_core::settings` uses only `std::fmt`/`std::path`, no
+new dependency).
+
+**Backlog, not resolved by this Pass:**
+- **17 of the 18 spec-ambiguity register settings remain unbuilt** — the
+  store existing removes the blocking prerequisite, it does not build
+  the remaining knobs. P0 order stands: `QP-A1`, `NF-A1`, `DCT-A1`,
+  `SM-A1`, `TX-A1` fully unbuilt; `WB-A1` (`word_gap_ratio`) and the
+  `Pass 50.0` `separations` policy are both now *stored* but not yet
+  *consumed* — see "independently confirmed," above.
+- **No settings UI exists.** `userdata/settings.txt` is hand-editable
+  and that is the entire surface today. **`Settings::save` has no
+  caller anywhere in the workspace** (confirmed by this filing's own
+  grep — the operator's own dispatch reported the same) — the API
+  exists and is tested, but nothing in either shell writes a settings
+  file. An honest R151-shaped gap, recorded rather than rounded up.
+- **Ribbon customization, keymap customization and dock-layout
+  persistence are now unblocked**, not built — same store, separate
+  Passes. A future ribbon layout or keymap belongs in its **own file**
+  under `userdata/`, per the module's own grammar note (a layout or
+  keymap is a *document*, not a flat `key = value` setting).
+- **`docs/decisions/003-distribution-posture.md`'s literal
+  `<user-state>` placeholder is still unresolved on disk** — flagged
+  above and in this dispatch's closing report, not edited by this
+  filing.
+
+**Correction to a claim relayed in the prior (thirty-seventh) filing,
+made by the engineer's own dispatch for THIS filing and applied at its
+source below and in `SESSION_LOG.md`:** the R169 Backlog bucket's
+"Corrections owed to the spec RAG" note said the QuadPoints producer-
+order ambiguity "affects **redaction region derivation** (R35
+territory)." **That is wrong, and is corrected in place at the Backlog
+bucket itself, below, and by a dated footer on the thirty-seventh
+`SESSION_LOG.md` entry** — `redact.rs`'s `annot_regions` takes the
+bounding box of the four `/QuadPoints` (`min`/`max` over x and y), which
+is order-independent, so the CCW-vs-Z choice cannot change a redaction
+region at all. The QuadPoints question remains a live, real
+interoperability-setting candidate; it was never R35 territory.
+
+#### Ledger
+
+**Not independently run this filing — no shell (hard rule 8), same as
+every filing this session.** Derived from the operator's own
+`check-ledger-numbers.py` run immediately prior to this dispatch (clean,
+no duplicates; Pass ceiling 50; standing rules R170, next free R171;
+decisions 033, next free 034, `034` still CLAIMED-by-citation/
+UNAUTHORED) plus this filing's own re-grep of `ROADMAP.md`, since the
+ledger can move between that run and a new commit landing:
+- **Pass families:** `Pass 51` was absent from `ROADMAP.md` before this
+  filing (grepped) — **MINTED here**. New ceiling **51**, next free
+  single-number family **52**.
+- **Standing rules:** no new rule minted this filing. Ceiling stays
+  **R170**, next free **R171** — unchanged from the operator's own
+  checker run, not independently re-verified by this filing.
+- **Decision records:** unchanged. Highest file on disk remains `033`;
+  `034` stays CLAIMED-by-citation and UNAUTHORED, untouched by this
+  filing (that slot is reserved for the write-side CMYK/YCCK polarity
+  decision from `Pass 48.0–48.2`, a different topic from this Pass's
+  `userdata`/format decision — the latter is recorded as a dated
+  `ARCHITECTURE.md` §12 entry instead, per this librarian's own
+  judgment that it does not need a numbered decision-record file; flag
+  this call in the closing report in case the engineer disagrees).
+- **`SESSION_LOG.md` filings:** this is the **thirty-eighth** filing
+  (the thirty-seventh confirmed present by grep before this entry was
+  appended).
+
+---
+
 ### Pass 50.0 — deleting one printing plate stops corrupting the other three — 2026-08-08, committed `a083f70`, branch `pass-8-redaction`
 
 **Filed by `pdfce-librarian`. No shell available to this dispatch (hard
@@ -28369,30 +28606,46 @@ nothing gets forgotten, not as a commitment to build in this order.
   recorded ambiguities and sourced silences, 18 become operator
   settings, 74 belong to areas that do not exist yet, and 55 are not
   settings at all.*
-  - **★ Blocking prerequisite — this is the FOURTH operator ask
-    converging on one missing component, not a standalone item.** There
-    is no settings/preferences persistence in pdfce today —
-    `pdfce-gui/src/main.rs` states repeatedly that UI state is
-    session-only pending **R15**'s user-state partition (see *Standing
-    rules*). R15 already blocks ribbon customization and
+  - **★ Blocking prerequisite — DISCHARGED 2026-08-08 as `Pass 51.0`.**
+    There was no settings/preferences persistence in pdfce until this
+    filing — `pdfce-gui/src/main.rs` used to state repeatedly that UI
+    state was session-only pending **R15**'s user-state partition (see
+    *Standing rules*). R15 blocked ribbon customization and
     input/keyboard customization with saved configurations (both filed
-    2026-08-08, `FEATURES.md` *Planned*) and dock-layout persistence
-    (session-only, `main.rs:11290`) — this register is the fourth.
-    **Recommendation carried directly from the register: scope R15
-    before any individual knob**, not after a few knobs have already
-    accumulated ad hoc.
-  - **P0 — build these 6 first, once R15 lands** (each already has a
-    chosen behaviour in shipped, undisclosed code — the work is
-    *surfacing* an existing pick, not inventing one):
+    2026-08-08, `FEATURES.md` *Planned*), dock-layout persistence
+    (`main.rs:11290`), and this register — four converging asks. **The
+    store now exists** (`crates/pdfce-core/src/settings/mod.rs`,
+    `<exe dir>/userdata/settings.txt`, fail-soft per key) — the four
+    downstream items are UNBLOCKED, not thereby BUILT; see `Pass 51.0`'s
+    own Shipped entry for the store itself.
+  - **P0 — build these 6, now that R15 has landed.** One is DONE, two
+    are STORED-BUT-NOT-CONSUMED (a sharper status than "unbuilt" — see
+    `Pass 51.0`'s "independently confirmed" paragraph), three remain
+    fully unbuilt:
 
-    | Rank | ID | Proposed setting | Blast radius | Why first |
+    | Rank | ID | Proposed setting | Blast radius | Status |
     |---|---|---|---|---|
-    | 1 | `QP-A1` | `annots.quadpoints_order` | BYTES | pdfce authors Z/reading order **against** §12.5.6.10's stated CCW — the highest-consequence undisclosed pick in the register. **Blocked on the QuadPoints producer-order verification** — see the `Pass 50.0` Shipped entry's "Open item," above; the engineer is investigating separately |
-    | 2 | `NF-A1` | `forms.needappearances_policy` | BYTES+RENDER | tier-(a) default already available (Acrobat's own guidance: don't trust the flag) |
-    | 3 | `DCT-A1` | `images.cmyk_jpeg_polarity` | RENDER+BYTES | wrong = a photographic negative; already disclosed (R30) — the knob is the missing half |
-    | 4 | `SM-A1` | `images.mask_resample_filter` | RENDER | live since Pass 48.x; every size-mismatched mask hits it |
-    | 5 | `TX-A1` | `text.unmappable_code_sentinel` | EXTRACT | an EXTRACT setting is a correctness setting — changes redaction-by-text coverage (R35) |
-    | 6 | `WB-A1` | `text.word_gap_ratio` | EXTRACT | **★ already a `pdfce-core` setting** (`ExtractOptions::word_gap_ratio`, default `0.20`, `with_gap_ratios` builder) with **zero CLI/GUI surface** — the cheapest win in the register, and the template for the other 17 |
+    | 1 | `QP-A1` | `annots.quadpoints_order` | BYTES | Unbuilt. pdfce authors Z/reading order **against** §12.5.6.10's stated CCW — the highest-BYTES-radius undisclosed pick in the register (its severity was mis-stated as R35/redaction territory by an earlier filing; **corrected above** — it does not affect redaction). **Blocked on the QuadPoints producer-order verification** — see the `Pass 50.0` Shipped entry's "Open item"; the engineer is investigating separately |
+    | 2 | `NF-A1` | `forms.needappearances_policy` | BYTES+RENDER | Unbuilt. tier-(a) default already available (Acrobat's own guidance: don't trust the flag) |
+    | 3 | `DCT-A1` | `images.cmyk_jpeg_polarity` | RENDER+BYTES | Unbuilt. wrong = a photographic negative; already disclosed (R30) — the knob is the missing half |
+    | 4 | `SM-A1` | `images.mask_resample_filter` | RENDER | Unbuilt. live since Pass 48.x; every size-mismatched mask hits it |
+    | 5 | `TX-A1` | `text.unmappable_code_sentinel` | EXTRACT | Unbuilt. an EXTRACT setting is a correctness setting — changes redaction-by-text coverage (R35) |
+    | 6 | `WB-A1` | `text.word_gap_ratio` | EXTRACT | **STORED, NOT CONSUMED** (`Pass 51.0`) — `Settings::word_gap_ratio` round-trips through `userdata/settings.txt` (reading its default off `ExtractOptions::default()`), but no CLI/GUI call site reads `settings.word_gap_ratio` yet; `pdfce-cli` still calls `ExtractOptions::default()` directly at all 3 extraction sites |
+
+    **Not on the original P0 list, shipped anyway as `Pass 51.0`:**
+    `cmyk_intent` (§8.6.4.4's screen-conversion silence) — a **new**
+    register entry, minted by this Pass rather than by a
+    `pdfce-spec-librarian` dispatch, not yet back-filed to the corpus
+    (same pattern as `IM-A1`, below — owed). **Fully wired,
+    core→render→cli→gui, per R83** — the one P0-adjacent setting that is
+    genuinely DONE, not merely stored. Also newly STORED-BUT-NOT-
+    CONSUMED, discovered by this librarian's own grep rather than the
+    register: the `Pass 50.0` `/SeparationInfo` repair/discard/refuse
+    policy (`Settings::separations`) round-trips through the same file
+    but has zero CLI/GUI call sites — recorded as Backlog work under
+    `Pass 51.0`'s own entry, not filed as its own register ID (it is
+    `Pass 50.0`'s product-policy decision, not a spec ambiguity — see
+    that Pass's own "repair-vs-report" note).
 
   - **Evidence tiers came out thin, and that is reported rather than
     smoothed over.** Only **2 of 18** bucket-1 defaults reach tier (a)
@@ -28420,11 +28673,23 @@ nothing gets forgotten, not as a commitment to build in this order.
     now **load-bearing, not passive** — pdfce has *shipped* the Z-order
     choice (`annot_author.rs:43–51`, which calls itself "the open spec
     item — DECIDED here") while the producer-order verification behind
-    that choice has sat open since the Pass-6.0 build. This affects
-    **redaction region derivation** (R35 territory). **The engineer is
-    investigating this now, separately from this filing** — check
-    `SESSION_LOG.md` for the outcome before treating `QP-A1`'s default
-    as settled.
+    that choice has sat open since the Pass-6.0 build. ~~This affects
+    **redaction region derivation** (R35 territory).~~ **★ CORRECTED
+    2026-08-08 (`Pass 51.0` filing) — this severity claim was WRONG and
+    is struck rather than silently fixed, per this file's own
+    append-only correction discipline.** `redact.rs`'s `annot_regions`
+    takes the **bounding box** of the four `/QuadPoints` (`min`/`max`
+    over x and y), which is **order-independent** — the CCW-vs-Z choice
+    cannot change a redaction region at all. `QP-A1` remains a real
+    interoperability-setting candidate (the authoring choice in
+    `annot_author.rs` is a documented Pass-6.1 decision matching
+    Acrobat/PDFBox/pdf.js's Z/reading order); it was never `R35`
+    territory, and the P0 table's own "highest-consequence undisclosed
+    pick" framing survives on its BYTES blast radius alone, not on a
+    redaction-correctness claim. **The engineer is investigating the
+    underlying producer-order question now, separately from this
+    filing** — check `SESSION_LOG.md` for the outcome before treating
+    `QP-A1`'s default as settled.
 - **UI font coverage for non-Latin file paths and document metadata**
   (filed 2026-07-30 from decision 002 §3.2 / §10 item 10). A **live
   rendering-correctness bug today**, independent of localization:
@@ -30196,7 +30461,12 @@ not a judgment call:**
     payload and user state are separate; user state never sits loose
     among the binaries; the documented update procedure names exactly
     which files to keep. Binding from the first Pass that persists
-    anything.
+    anything. **★ BUILT `Pass 51.0`, 2026-08-08** —
+    `<exe dir>/userdata/settings.txt`, falling back (disclosed) to the
+    platform config dir when the program folder is read-only; `userdata`
+    is the concrete name for decision 003 §6.3's literal `<user-state>`
+    placeholder, which itself remains unresolved on disk as of this
+    filing (see `Pass 51.0`'s own Shipped entry).
   - **R16 — Release integrity and attribution track reality.** Every
     release publishes SHA-256 checksums for every artifact.
     `about.toml`'s `targets` lists exactly the platform triples

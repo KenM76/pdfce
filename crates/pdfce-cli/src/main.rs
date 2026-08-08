@@ -8052,7 +8052,16 @@ fn cmd_extract_text(
         }
     };
 
-    let options = ExtractOptions::default().with_artifacts(include_artifacts);
+    // The operator's persisted word-gap ratio. Extraction heuristics are
+    // the one place where a document that reads fine to a human can
+    // extract wrong, so this is a knob worth honouring rather than a
+    // constant worth defending.
+    let (settings, settings_report) =
+        pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
+    report_settings(&settings_report);
+    let options = ExtractOptions::default()
+        .with_artifacts(include_artifacts)
+        .with_word_gap_ratio(settings.word_gap_ratio);
     let extracted = match text_extract::extract_pages(&doc, &indices, &options) {
         Ok(extracted) => extracted,
         Err(err) => {
@@ -8433,7 +8442,16 @@ fn cmd_inspect_text_blocks(input: &Path, pages_spec: &str, json: bool) -> u8 {
     // Provenance is captured so the dump can disclose the surgery substrate
     // (operator span, font, size, fill colour) each recognised line rests
     // on. It costs only the pages actually inspected (R20 spirit).
-    let options = ExtractOptions::default().with_provenance(true);
+    // The operator's persisted word-gap ratio. Extraction heuristics are
+    // the one place where a document that reads fine to a human can
+    // extract wrong, so this is a knob worth honouring rather than a
+    // constant worth defending.
+    let (settings, settings_report) =
+        pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
+    report_settings(&settings_report);
+    let options = ExtractOptions::default()
+        .with_provenance(true)
+        .with_word_gap_ratio(settings.word_gap_ratio);
     let recog = BlockRecognitionOptions::default();
 
     // Accumulators for the stable summary line.
@@ -9375,11 +9393,26 @@ fn colorant_list(colorants: &[Vec<u8>]) -> String {
 /// have?* Silent on the overwhelmingly common non-preseparated document.
 fn report_separations(output: &Path, impact: &pdfce_core::pageops::SeparationImpact) {
     if impact.sets_split > 0 {
+        // The sentence must match the POLICY rather than assume one. The
+        // first version of this said arrays had been "rewritten" under
+        // every policy, which is false for `Discard` — that removes the
+        // dictionary outright. A true count with a false sentence
+        // attached is a worse disclosure than no sentence, because it
+        // gets believed.
+        let did = match impact.policy {
+            pdfce_core::pageops::SeparationPolicy::Discard => {
+                "surviving page(s) had their /SeparationInfo removed entirely, so they are now \
+ordinary pages carrying no record of which plate they were"
+            }
+            _ => {
+                "surviving page(s) had their /SeparationInfo /Pages array rewritten to name only \
+the plates that are still here"
+            }
+        };
         eprintln!(
             "pdfce-cli: {}: this is a PRESEPARATED document (ISO 32000-1 §14.11.4) — several \
 page objects are one logical page, one per printing plate. The selection split {} set(s), so \
-{} surviving page(s) had their /SeparationInfo /Pages array rewritten to name only the plates \
-that are still here. Removed: {}. Kept: {}.",
+{} {did}. Removed: {}. Kept: {}.",
             output.display(),
             impact.sets_split,
             impact.pages_changed,
@@ -12612,10 +12645,17 @@ fn cmd_extract_pages(input: &Path, pages: &str, output: &Path) -> u8 {
     };
 
     let view = DocumentView::new(&doc, doc.bytes(), doc.version());
-    let (bytes, report) = match pdfce_core::pageops::extract(&view, &selected) {
-        Ok(pair) => pair,
-        Err(err) => return report_page_op_error(&err),
-    };
+    // The operator's persisted §14.11.4 policy. Loaded here rather than
+    // taken as a default, because a setting no front end passes is a
+    // setting that does nothing.
+    let (settings, settings_report) =
+        pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
+    report_settings(&settings_report);
+    let (bytes, report) =
+        match pdfce_core::pageops::extract_with(&view, &selected, settings.separations) {
+            Ok(pair) => pair,
+            Err(err) => return report_page_op_error(&err),
+        };
     if let Err(err) = std::fs::write(output, &bytes) {
         eprintln!("pdfce-cli: {}: {err}", output.display());
         return exit::IO_ERROR;
@@ -12776,7 +12816,19 @@ fn cmd_split(
 
     let view = DocumentView::new(&doc, doc.bytes(), doc.version());
     let stem = stem_of(input);
-    let parts = match pdfce_core::pageops::split(&view, &criterion, name_template, &stem) {
+    // The operator's persisted §14.11.4 policy. Loaded here rather than
+    // taken as a default, because a setting no front end passes is a
+    // setting that does nothing.
+    let (settings, settings_report) =
+        pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
+    report_settings(&settings_report);
+    let parts = match pdfce_core::pageops::split_with(
+        &view,
+        &criterion,
+        name_template,
+        &stem,
+        settings.separations,
+    ) {
         Ok(parts) => parts,
         Err(err) => return report_page_op_error(&err),
     };
@@ -12857,7 +12909,13 @@ fn cmd_delete_pages(
             return exit::EDIT_REFUSED;
         }
     };
-    let outcome = match session.delete_pages(&selected) {
+    // The operator's persisted §14.11.4 policy. Loaded here rather than
+    // taken as a default, because a setting no front end passes is a
+    // setting that does nothing.
+    let (settings, settings_report) =
+        pdfce_core::settings::Settings::load(pdfce_core::settings::resolve_store());
+    report_settings(&settings_report);
+    let outcome = match session.delete_pages_with(&selected, settings.separations) {
         Ok(outcome) => outcome,
         Err(err) => return report_edit_error(input, &err),
     };

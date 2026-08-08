@@ -89,7 +89,7 @@ pub use separation::{
     SeparationDict, SeparationImpact, SeparationPlan, SeparationPolicy, SeparationRewrite,
     SeparationSplitRefused, any_preseparated, plan_repair, separation_of,
 };
-pub use split::{SplitCriterion, SplitPart, plan_split, render_name_template, split};
+pub use split::{SplitCriterion, SplitPart, plan_split, render_name_template, split, split_with};
 
 use crate::object::ObjId;
 use crate::page_tree::PageTreeError;
@@ -238,11 +238,35 @@ pub fn extract(
     source: &DocumentView<'_>,
     pages: &[usize],
 ) -> Result<(Vec<u8>, AssembleReport), PageOpError> {
+    extract_with(source, pages, SeparationPolicy::default())
+}
+
+/// [`extract`], with an explicit answer for preseparated page sets
+/// (§14.11.4).
+///
+/// Exists for the same reason [`crate::edit::EditSession::delete_pages_with`]
+/// does: the policy is an operator setting, and a setting a front end
+/// cannot reach is not a setting. `extract` delegates here with
+/// [`SeparationPolicy::Repair`], the documented default.
+///
+/// Extraction is the operation where this choice bites hardest — pulling
+/// one plate out of a four-plate job is a real prepress task, and it is
+/// exactly the case that splits a set.
+///
+/// # Errors
+///
+/// As [`extract`], plus [`PageOpError::SeparationSplit`] under
+/// [`SeparationPolicy::Refuse`].
+pub fn extract_with(
+    source: &DocumentView<'_>,
+    pages: &[usize],
+    separations: SeparationPolicy,
+) -> Result<(Vec<u8>, AssembleReport), PageOpError> {
     let order: Vec<PageRef> = pages.iter().map(|index| (0, *index)).collect();
     assemble(
         std::slice::from_ref(source),
         &order,
-        &AssembleOptions::default(),
+        &AssembleOptions::default().with_separations(separations),
     )
 }
 

@@ -231,6 +231,20 @@ pub struct SeparationImpact {
     /// Separation dictionaries that arrived without a usable Required
     /// `/Pages` array, and were therefore left untouched.
     pub malformed: usize,
+    /// Which policy produced this outcome.
+    ///
+    /// Carried so a front end can describe what actually happened instead
+    /// of assuming. Without it the disclosure has to hard-code one
+    /// policy's wording, and the first version of this type did exactly
+    /// that: under [`SeparationPolicy::Discard`] the CLI announced that
+    /// surviving pages "had their `/SeparationInfo` `/Pages` array
+    /// rewritten", when `Discard` had in fact removed the dictionary
+    /// outright. A true count with a false sentence attached is a worse
+    /// disclosure than no sentence, because it is believed.
+    ///
+    /// Meaningless when [`SeparationImpact::is_empty`] — nothing was
+    /// done, so no policy was exercised.
+    pub policy: SeparationPolicy,
 }
 
 impl SeparationImpact {
@@ -458,6 +472,7 @@ pub fn plan_repair<G: ObjectGraph + ?Sized>(
 
         plan.impact.sets_split += 1;
         plan.impact.pages_changed += 1;
+        plan.impact.policy = policy;
         plan.rewrites.push(SeparationRewrite {
             page: *page_id,
             dict: rewritten,
@@ -590,6 +605,7 @@ where
 
     impact.sets_split += 1;
     impact.pages_changed += 1;
+    impact.policy = policy;
     Ok(impact)
 }
 
@@ -599,6 +615,11 @@ where
 /// job split into four files reports `Cyan, Magenta, Yellow, Black` once
 /// each and not sixteen times.
 pub fn accumulate(total: &mut SeparationImpact, part: &SeparationImpact) {
+    if !part.is_empty() {
+        // One policy governs a whole operation, so the last part that did
+        // something speaks for all of them.
+        total.policy = part.policy;
+    }
     total.sets_split += part.sets_split;
     total.pages_changed += part.pages_changed;
     total.malformed += part.malformed;

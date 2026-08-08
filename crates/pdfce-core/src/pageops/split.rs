@@ -333,11 +333,42 @@ pub fn split(
     template: &str,
     stem: &str,
 ) -> Result<Vec<(SplitPart, Vec<u8>, AssembleReport)>, PageOpError> {
+    split_with(
+        source,
+        criterion,
+        template,
+        stem,
+        crate::pageops::SeparationPolicy::default(),
+    )
+}
+
+/// [`split`], with an explicit answer for preseparated page sets
+/// (§14.11.4).
+///
+/// Split is the harshest case for a preseparated file: every part takes
+/// one page, so a four-plate set is shattered into four separate
+/// documents and *every* set loses members. `split` delegates here with
+/// [`SeparationPolicy::Repair`](crate::pageops::SeparationPolicy::Repair),
+/// which leaves each part holding a conforming one-member set that still
+/// records which plate it was.
+///
+/// # Errors
+///
+/// As [`split`], plus [`PageOpError::SeparationSplit`] under
+/// [`SeparationPolicy::Refuse`](crate::pageops::SeparationPolicy::Refuse)
+/// — which, for this operation, refuses any preseparated input at all.
+pub fn split_with(
+    source: &DocumentView<'_>,
+    criterion: &SplitCriterion,
+    template: &str,
+    stem: &str,
+    separations: crate::pageops::SeparationPolicy,
+) -> Result<Vec<(SplitPart, Vec<u8>, AssembleReport)>, PageOpError> {
     let parts = plan_split(source, criterion, template, stem)?;
     let mut out = Vec::with_capacity(parts.len());
     for part in parts {
         let pages: Vec<usize> = part.pages().collect();
-        let (bytes, report) = crate::pageops::extract(source, &pages)?;
+        let (bytes, report) = crate::pageops::extract_with(source, &pages, separations)?;
         out.push((part, bytes, report));
     }
     Ok(out)

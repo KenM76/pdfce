@@ -4234,7 +4234,10 @@ impl PdfceApp {
         if selection.is_empty() {
             return;
         }
-        match doc.session_mut().delete_pages(&selection) {
+        // The operator's §14.11.4 policy, not the library default — a
+        // setting the shell never passes is a setting that does nothing.
+        let separations = self.settings.separations;
+        match doc.session_mut().delete_pages_with(&selection, separations) {
             Ok(outcome) => {
                 doc.refresh_pages();
                 doc.selected_pages.clear();
@@ -4267,6 +4270,7 @@ impl PdfceApp {
                         outcome.separations.pages_changed,
                         &outcome.separations.colorants_removed,
                         &outcome.separations.colorants_kept,
+                        outcome.separations.policy,
                     ));
                 }
                 if outcome.separations.malformed > 0 {

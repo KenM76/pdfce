@@ -2598,14 +2598,38 @@ instances (`delete_object`, `delete_redaction_mark`, and now
 - No installer. Build produces `pdfce.exe` (Windows first target) plus
   whatever DLLs/assets are needed, all in one output folder.
 - **Payload/user-state partition (decision 003 R15, binding from the
-  first Pass that persists anything):** the distribution folder is
-  split into replaceable payload (binaries, assets,
-  `THIRD_PARTY_LICENSES.md`, README) and user state (settings,
-  recents, later OCR data) in a clearly named location — because the
-  documented update procedure is "replace the folder," and replacing a
-  folder destroys whatever the user kept in it. User state never sits
-  loose among the binaries; the update instructions name exactly which
-  files to keep. The packaging smoke test verifies the partition.
+  first Pass that persists anything) — BUILT `Pass 51.0`, 2026-08-08
+  (`2a1b0df`):** the distribution folder is split into replaceable
+  payload (binaries, assets, `THIRD_PARTY_LICENSES.md`, README) and
+  user state (settings today; recents, later OCR data, ribbon/keymap
+  layouts to come) in a clearly named location — because the documented
+  update procedure is "replace the folder," and replacing a folder
+  destroys whatever the user kept in it. **The location is
+  `<exe dir>/userdata/`** — the concrete name for what this paragraph
+  and decision 003 §6.3's README copy both used to hold as a literal
+  `<user-state>` placeholder (decision 003 §6.3 itself still carries
+  the unresolved placeholder text on disk as of this entry — a
+  follow-up owed to whoever next touches that record). When
+  `userdata/` cannot be created or written (a read-only share,
+  `Program Files` without elevation), pdfce falls back to the platform
+  configuration directory and **discloses which one it used** — the
+  two locations behave differently on update, so an operator who does
+  not know which is live cannot follow the update instructions
+  correctly (fuzzy-never-sneaky, rule 4, applied to a location pdfce
+  inferred on the operator's behalf). Settings persist as a flat,
+  hand-editable `key = value` text file (`settings.txt`) with **per-key**
+  fail-soft recovery (one bad line loses one setting and names its own
+  line number; a missing file is silently every default) —
+  deliberately not `serde`+`toml`, because `ARCHITECTURE.md` §7's
+  fail-soft contract is per-key while derived deserialization fails
+  per-document. `pdfce_core::settings` (`crates/pdfce-core/src/
+  settings/mod.rs`) has zero GUI/windowing dependencies (rule 2 holds);
+  both `pdfce-cli` and `pdfce-gui` load it once at startup. User state
+  never sits loose among the binaries; the update instructions name
+  exactly which files to keep. The packaging smoke test verifies the
+  partition. **Still open:** no in-app settings editor exists yet —
+  `Settings::save` has no caller anywhere in the workspace; the file is
+  hand-edit-only until a future Pass adds a write path.
 - No registry writes, no `%APPDATA%` requirement for the app to run
   (per-user settings/recents may still use a conventional config dir,
   but the app must run read-only-folder-clean with no config present).
@@ -12407,3 +12431,75 @@ started).
     record, including two open follow-ups this entry does not repeat
     (the `render-parity` harness's pdfium in-process crash on
     `bug_457855936.pdf`; the stale 2,914-vs-4,023-file corpus baseline).
+- **2026-08-08 (`Pass 51.0`, `2a1b0df`) — R15's user-state partition is
+  BUILT, and its storage format is a deliberate, named decision, not the
+  obvious `serde`+`toml` default.** Closes the open half of the
+  2026-07-23 Pass-0 §12 entry's own note that decision 003 R15 was
+  "binding from the first Pass that persists anything" — this is that
+  first Pass. Two decisions recorded here because both are the kind a
+  future session would otherwise re-litigate from scratch:
+  - **(a) Location and name: `<exe dir>/userdata/settings.txt`,** with
+    a disclosed fallback to the platform configuration directory when
+    the program folder is not writable. `userdata` is the concrete
+    answer to decision 003 §6.3's literal `<user-state>` placeholder in
+    its drafted README copy (*"replace the program files (keep your
+    `<user-state>` folder)"*) — chosen because it reads correctly in
+    that exact sentence, needs no documentation to guess, and matches
+    the convention portable Windows applications already use. **§6's
+    body text above is updated in the same filing** to name it and
+    describe the fallback-disclosure behaviour; decision 003 §6.3's own
+    source text still carries the unresolved placeholder as of this
+    entry (flagged, not fixed here — a decision record's own prose is
+    not this document's tier to rewrite; `docs/ROADMAP.md`'s `Pass
+    51.0` Shipped entry carries the same flag to the engineer).
+  - **(b) Format: a flat, line-oriented `key = value` text file — NOT
+    `serde`+`toml`, NOT JSON.** This is a requirement, not a style
+    preference: §7's fail-soft contract (a malformed settings file must
+    never stop pdfce opening a document, and a mistake in one setting
+    must not cost every OTHER setting) is defined **per key**, while a
+    `serde` derive's failure mode is **per document** — one unknown
+    key, one misspelled enum variant, or one out-of-range number fails
+    the whole deserialization, discarding every setting the operator
+    got right because of the one line they got wrong, on a file they
+    are explicitly invited to hand-edit. Fighting that with
+    `#[serde(default)]` on every field plus a custom deserializer per
+    enum is more code than the ~20-line hand-rolled grammar it would
+    replace, and still cannot report *which line* was wrong — the
+    hand-rolled parser reports the 1-based line number for every
+    departure from the file's literal content (`SettingNote`'s seven
+    variants: `Unreadable`, `UnknownKey`, `BadValue`, `Clamped`,
+    `Malformed`, `Duplicate`, plus the silent "no file at all" case).
+    **§3's crate layout is unchanged** — `pdfce_core::settings` lives in
+    `pdfce-core` (`crates/pdfce-core/src/settings/mod.rs`), adds no new
+    `Cargo.toml` dependency (`std::fmt`/`std::path` only), and rule 2's
+    GUI-core separation holds. **A settings default is never restated
+    in this module** — each field's default is read off the type that
+    already owns the behaviour (e.g. `word_gap_ratio`'s default comes
+    from `ExtractOptions::default()`, not a mirrored literal), so there
+    is exactly one answer to "what does pdfce do by default," not two;
+    a derived-`Default` attempt shipped a silent divergence
+    (`word_gap_ratio = 0.0` vs the real `0.20`) for about ten minutes
+    before the module's own round-trip test caught it.
+  - **Not yet built, and named here so it is not mistaken for shipped:**
+    no in-app settings editor exists — `Settings::save` has no caller
+    anywhere in the workspace as of this entry. The store's read path
+    is live in both shells; its write path is hand-edit-only.
+  - **What this unblocks, without itself building any of it:** ribbon
+    customization with saved layouts, input/keyboard customization with
+    saved bindings, and dock-layout persistence — three separate
+    operator-requested capabilities that were blocked on R15 existing
+    at all (`docs/ROADMAP.md`'s spec-ambiguity-register Backlog bucket
+    names the fourth blocked item, the settings register itself). A
+    saved ribbon layout or keymap is its own **document** under
+    `userdata/`, per the module's own grammar note, not a row added to
+    this flat `key = value` file.
+  - **First consumer: `cmyk_intent`** (`calibrated`/`neutral_black`/
+    `naive`), closing the `Pass 49.0` §12 entry above's operator-visible
+    consequence (solid `0 0 0 1 k` now renders `#231F20`, not
+    `#000000`) with a disclosed, reversible choice rather than a silent
+    pick — see `docs/ROADMAP.md`'s `Pass 51.0` Shipped entry for the
+    full delivery record, the R83 threading detail (two independently
+    wired conversion paths, content-stream operators and image
+    samples), and the Backlog note that the OTHER two fields already in
+    the store (`separations`, `word_gap_ratio`) round-trip through the
+    file but have no consumer yet.
