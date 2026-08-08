@@ -12503,3 +12503,19 @@ started).
     samples), and the Backlog note that the OTHER two fields already in
     the store (`separations`, `word_gap_ratio`) round-trip through the
     file but have no consumer yet.
+    **★ CORRECTED 2026-08-08 (`7e33d52`, `Pass 51.1`) — both fields now
+    have a consumer; struck rather than silently fixed, per this file's
+    own append-only correction discipline.** `separations` reaches the
+    GUI delete path and the CLI's `delete-pages`/`extract-pages`/`split`
+    (new `pageops::extract_with`/`split_with`, mirroring the shape
+    `delete_pages_with` already had). `word_gap_ratio` reaches
+    `pdfce-cli extract-text` and the block recogniser via
+    `ExtractOptions::with_word_gap_ratio` — **CLI only, still no GUI
+    consumer and no CLI flag for either field**; `userdata/settings.txt`
+    remains the only way to set them. Caught by `pdfce-librarian`'s own
+    independent grep sweep of this filing, not by the engineer's own
+    report — the second such catch in one session. A new standing gate,
+    `tools/check-settings-consumed.py`, now fails the build on a
+    recurrence of this exact defect class (parsed + written +
+    documented, read by nothing) — see `docs/ROADMAP.md`'s `Pass 51.1`
+    Shipped entry for the full record.

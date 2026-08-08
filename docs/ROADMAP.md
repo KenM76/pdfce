@@ -81,6 +81,182 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 51.1 — two settings that did nothing, and a gate so that cannot recur — 2026-08-08, committed `7e33d52`, branch `pass-8-redaction`
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8)** — every gate result below is RELAYED from the engineer's own
+dispatch summary, not independently re-run, re-measured, or read via
+`git show`. **What IS independently confirmed by this filing, via
+`Read`/`Grep` (no `Bash`) directly against the working tree, not
+relayed:** `tools/check-settings-consumed.py` exists on disk;
+`pdfce_core::pageops::extract_with`/`split_with` exist and are called
+from `pdfce-cli` at three sites (`delete-pages`, `extract-pages`,
+`split`) plus one `pdfce-gui` site (the delete path); `ExtractOptions::
+with_word_gap_ratio` exists and is called from two `pdfce-cli` sites
+(`extract-text` and the block-recognition dump command); `Separation
+Impact` gained a `policy` field; both shells' `/SeparationInfo`
+disclosure sentences branch on it (`pdfce-cli/src/main.rs:9402`,
+`pdfce-gui/src/ui_text.rs:1479`); `crates/pdfce-core/tests/
+separation_sets.rs` carries **19** `#[test]` functions (counted
+directly, not relayed). `Pass 51.1` is **MINTED** by this filing — a
+sub-pass of the existing `Pass 51` family, not a new single-number
+family; grepped `ROADMAP.md` for `Pass 51.1` first and found nothing.
+
+**A follow-up filing to `Pass 51.0`, correcting two things that filing
+recorded as open and adding a gate against the same defect class
+recurring.** `Pass 51.0` shipped the settings store with three fields —
+`cmyk_intent` (fully wired), `separations` and `word_gap_ratio` (both
+round-tripping through `userdata/settings.txt`, documented in the
+generated file's own comments, and **consumed by zero call sites in
+either shell**). That is standing rule **R83** — a setting the operator
+can change and see no effect from is worse than no setting, because the
+operator reasonably concludes pdfce is broken rather than that the knob
+is decorative.
+
+**Both settings are now wired:**
+- **`separations` → the GUI delete path, and the CLI's
+  `delete-pages`, `extract-pages` and `split`.** The last two needed
+  two new functions, `pageops::extract_with` / `split_with` — the
+  existing `extract`/`split` wrappers built `AssembleOptions::default()`
+  internally, so **no front end could express the operator's
+  repair/discard/refuse policy at all** before this commit, on any of
+  the three operations `Pass 50.0` made policy-sensitive.
+- **`word_gap_ratio` → `extract-text` and the block recogniser**, via a
+  new `ExtractOptions::with_word_gap_ratio`. The existing `with_gap_
+  ratios` setter sets all three ratios (word/line/backward) at once,
+  which would have forced a caller applying one persisted value to
+  restate the other two defaults from memory — and a restated default
+  is a default that drifts from the type that actually owns it (the
+  same failure `Pass 51.0`'s own `#[derive(Default)]` finding named).
+  The narrower setter avoids manufacturing a second copy of a default
+  that already lives on `ExtractOptions` itself.
+- **Neither gained a dedicated CLI flag or a GUI control.**
+  `userdata/settings.txt` remains the only way to change either value —
+  same posture `cmyk_intent` already has. Consumed is not the same as
+  operator-reachable-without-hand-editing-a-file; both remain true here.
+
+**Caught by the librarian's own independent sweep, not by the
+engineer — flagged because it is the second such catch in this
+session, and the pattern is worth having in the record rather than
+treated as a one-off.** `Pass 51.0`'s own filing (the thirty-eighth
+`SESSION_LOG.md` entry) already sharpened the operator's own "17 of 18
+unbuilt" framing by finding `separations` in the identical
+stored-but-unconsumed state as `word_gap_ratio` — via this librarian's
+own grep of `crates/pdfce-core/src/settings/mod.rs` and every call
+site, not from the operator's dispatch text, which had flagged only
+`word_gap_ratio`. That finding is what this Pass discharges.
+
+**New gate: `tools/check-settings-consumed.py`.** For every `pub`
+field of `Settings` (`crates/pdfce-core/src/settings/mod.rs`): it must
+be **parsed** (a key appears in an `apply` arm), **written** (appears
+in `write_to_string`), and **consumed** (read via a `settings.<field>`
+expression somewhere outside the settings module itself — a read
+inside the module's own tests proves the round-trip works, not that
+the program does anything with the value). Deliberately does **not**
+judge whether the consumer is *correct* — that is a test's job
+(`crates/pdfce-render/tests/cmyk_intent.rs` proves `cmyk_intent`
+survives the whole distance to a rendered pixel); a grep-based gate
+that tried to judge semantics would manufacture false confidence,
+which is worse than no gate at all. **Verified by reintroducing the
+exact defect this Pass fixes**: the gate fails, names the offending
+field, and states the required fix. Exit `0` clean, `1` at least one
+unreachable field, `2` the gate itself could not run — kept distinct
+from `0` deliberately, so a broken gate cannot read as a passing one.
+Belongs beside `check-ui-strings.sh` / `check-ledger-numbers.py` /
+`check-passes-filed.py` wherever those are enumerated as the project's
+standing checks.
+
+**A second, separate defect, found by the end-to-end run rather than
+by review, and fixed in the same commit.** The `/SeparationInfo`
+disclosure (`Pass 50.0`) announced that surviving pages *"had their
+`/SeparationInfo` `/Pages` array rewritten"* under **every** policy —
+false under `SeparationPolicy::Discard`, which removes the dictionary
+outright rather than rewriting it. The counts were right and the
+sentence was wrong, which is the worse failure mode: a true-looking
+disclosure gets believed. `SeparationImpact` now carries the `policy`
+that produced the outcome, and both shells branch on it — the CLI at
+`main.rs:9402` (*"had their `/SeparationInfo` removed entirely"* under
+`Discard`, the rewritten-array wording otherwise), the GUI via
+`ui_text::separation_set_split` at `ui_text.rs:1479` (equivalent
+branch, GUI wording). Confirmed present in both files by this filing's
+own `Grep`, not merely relayed. Pinned by a new test,
+`the_impact_records_which_policy_produced_it`;
+`separation_sets.rs`'s suite is **19** `#[test]` functions total
+(confirmed by direct count), up from 18 before this commit.
+
+**Corrections to `Pass 51.0`'s own filing, applied at their source
+above and in `ARCHITECTURE.md` §12's `Pass 51.0` entry, not only
+here:**
+- Its **"STORED-NOT-CONSUMED"** status for `separations` and
+  `word_gap_ratio` is **discharged** — see the P0 table's corrected
+  `WB-A1` row and the corrected Backlog bullet, above.
+- **`WB-A1` moves from "partly discharged" to consumed by the CLI** —
+  though note there is still **no CLI flag and no GUI control** for
+  it; the settings file is the only way to set it.
+- The register-level arithmetic ("17 of the 18... remain unbuilt") is
+  now **literally** accurate rather than approximately so — see the
+  P0 table's own corrected note.
+- Everything else in `Pass 51.0`'s filing stands, unamended.
+
+**Gates, per the engineer's dispatch (relayed, not re-run):** `cargo
+fmt --check` clean · `cargo clippy --workspace --all-targets -- -D
+warnings` clean · full `cargo test --workspace` green, 0 failed suites
+· `check-ui-strings.sh` clean · `check-settings-consumed.py` clean.
+
+**Still open, unchanged by this Pass:**
+- **No settings UI.** The hand-editable file is the entire surface,
+  and `Settings::save` still has **no caller** in either shell.
+- **17 of the register's 18 settings remain unbuilt** — now genuinely
+  unblocked, just work. `QP-A1`, `NF-A1`, `DCT-A1`, `SM-A1`, `TX-A1`
+  fully unbuilt; the other 12 lower-priority register rows likewise.
+- **`docs/decisions/003-distribution-posture.md` §6.3 still carries the
+  literal `<user-state>` placeholder on disk.** The engineer correctly
+  declined to rewrite a decision record's authored text — that
+  substitution is the engineer's or the operator's call, not this
+  librarian's tier to make unilaterally — so it stays flagged rather
+  than silently edited.
+
+**`docs/FEATURES.md` updated in the same filing:** the *Persisted user
+settings* row (Shell & UX) is corrected to say all three `Settings`
+fields are now consumed, names which shell(s) reach `separations` and
+`word_gap_ratio`, and records the new gate. No row moved between
+*Implemented* and *Planned* — the store itself already had all three
+boxes ticked as of `Pass 51.0`; this Pass changes prose, not ticks.
+
+**No `ARCHITECTURE.md` §12 decision-log entry minted for this Pass** —
+this librarian's own judgment call, per the engineer's own suggestion:
+this is a correction and a gate, not a crate boundary, library choice,
+or invariant redefinition. A dated correction footer was added instead
+to `Pass 51.0`'s own §12 entry (append-only discipline — struck, not
+rewritten), pointing here. Flagged in case the engineer disagrees with
+not minting a numbered decision record.
+
+#### Ledger
+
+**Not independently run this filing — no shell (hard rule 8).**
+Derived from the operator's own dispatch text (Pass ceiling **51**
+before this filing, standing rules **R170**, decisions **033**,
+`SESSION_LOG.md` **38** filings, all as of `Pass 51.0`'s own filing)
+plus this filing's own re-grep of `ROADMAP.md`, since the ledger can
+move between that figure and a new commit landing:
+- **Pass families:** `Pass 51.1` was absent before this filing
+  (grepped) — **MINTED here**, as a sub-pass of the existing family
+  **51**, not a new single-number family. Ceiling unchanged at **51**;
+  next free single-number family remains **52**.
+- **Standing rules:** no new rule minted — this Pass applies existing
+  **R83**, it does not extend it. Ceiling stays **R170**, next free
+  **R171**, unchanged and not independently re-verified by this filing.
+- **Decision records:** unchanged. Highest file on disk remains `033`;
+  `034` stays CLAIMED-by-citation/UNAUTHORED (the unrelated write-side
+  CMYK/YCCK polarity topic from `Pass 48.0–48.2`). No new numbered
+  record minted by this filing — see the "No `ARCHITECTURE.md` §12"
+  note, above.
+- **`SESSION_LOG.md` filings:** this is the **thirty-ninth** filing
+  (the thirty-eighth confirmed present by grep before this entry was
+  appended).
+
+---
+
 ### Pass 51.0 — settings that survive a restart, and the first ambiguity to become one — 2026-08-08, committed `2a1b0df`, branch `pass-8-redaction`
 
 **Filed by `pdfce-librarian`. No shell available to this dispatch (hard
@@ -259,7 +435,16 @@ new dependency).
   the remaining knobs. P0 order stands: `QP-A1`, `NF-A1`, `DCT-A1`,
   `SM-A1`, `TX-A1` fully unbuilt; `WB-A1` (`word_gap_ratio`) and the
   `Pass 50.0` `separations` policy are both now *stored* but not yet
-  *consumed* — see "independently confirmed," above.
+  *consumed* — see "independently confirmed," above. **★ DISCHARGED
+  2026-08-08 as `Pass 51.1` (`7e33d52`), same session — both fields are
+  now consumed; caught by the librarian's own independent grep sweep of
+  this filing, not by the engineer's report, per that Pass's own
+  finding. `WB-A1` reaches `pdfce-cli extract-text`; `separations`
+  reaches the GUI delete path plus CLI `delete-pages`/`extract-pages`/
+  `split`. Neither has a dedicated CLI flag or GUI control —
+  `userdata/settings.txt` remains the only way to change either. See
+  `Pass 51.1`'s own Shipped entry and the P0 table's now-corrected `WB-
+  A1` row, above.**
 - **No settings UI exists.** `userdata/settings.txt` is hand-editable
   and that is the entire surface today. **`Settings::save` has no
   caller anywhere in the workspace** (confirmed by this filing's own
@@ -28618,10 +28803,19 @@ nothing gets forgotten, not as a commitment to build in this order.
     `<exe dir>/userdata/settings.txt`, fail-soft per key) — the four
     downstream items are UNBLOCKED, not thereby BUILT; see `Pass 51.0`'s
     own Shipped entry for the store itself.
-  - **P0 — build these 6, now that R15 has landed.** One is DONE, two
+  - **P0 — build these 6, now that R15 has landed.** ~~One is DONE, two
     are STORED-BUT-NOT-CONSUMED (a sharper status than "unbuilt" — see
     `Pass 51.0`'s "independently confirmed" paragraph), three remain
-    fully unbuilt:
+    fully unbuilt~~ **★ CORRECTED 2026-08-08 (`Pass 51.1`, `7e33d52`) —
+    the struck sentence's own arithmetic never matched the 6-row table
+    below it (it summed to 6 while the table showed 5 unbuilt + 1
+    stored, not 3 + 2 + 1); left visible rather than silently fixed,
+    per this file's own correction discipline.** Within these 6:
+    **`WB-A1` is now DONE** (the CLI reads `settings.word_gap_ratio`),
+    **the other 5 remain fully unbuilt**, and **none are
+    stored-but-not-consumed any more** — `separations` was never one of
+    the 6 (it is `Pass 50.0`'s own policy, handled separately below) so
+    its discharge does not change this count:
 
     | Rank | ID | Proposed setting | Blast radius | Status |
     |---|---|---|---|---|
@@ -28630,7 +28824,7 @@ nothing gets forgotten, not as a commitment to build in this order.
     | 3 | `DCT-A1` | `images.cmyk_jpeg_polarity` | RENDER+BYTES | Unbuilt. wrong = a photographic negative; already disclosed (R30) — the knob is the missing half |
     | 4 | `SM-A1` | `images.mask_resample_filter` | RENDER | Unbuilt. live since Pass 48.x; every size-mismatched mask hits it |
     | 5 | `TX-A1` | `text.unmappable_code_sentinel` | EXTRACT | Unbuilt. an EXTRACT setting is a correctness setting — changes redaction-by-text coverage (R35) |
-    | 6 | `WB-A1` | `text.word_gap_ratio` | EXTRACT | **STORED, NOT CONSUMED** (`Pass 51.0`) — `Settings::word_gap_ratio` round-trips through `userdata/settings.txt` (reading its default off `ExtractOptions::default()`), but no CLI/GUI call site reads `settings.word_gap_ratio` yet; `pdfce-cli` still calls `ExtractOptions::default()` directly at all 3 extraction sites |
+    | 6 | `WB-A1` | `text.word_gap_ratio` | EXTRACT | **★ DONE (`Pass 51.1`, `7e33d52`, 2026-08-08).** `ExtractOptions::with_word_gap_ratio(settings.word_gap_ratio)` reaches `pdfce-cli`'s `extract-text` subcommand and its block recogniser (`main.rs:8064`, `:8454`) — **CLI only; the GUI has no text-extraction surface to wire it into, so there is nothing there to be missing.** No dedicated `--word-gap-ratio` CLI flag exists — `userdata/settings.txt` is still the only way to change it, same as `cmyk_intent` |
 
     **Not on the original P0 list, shipped anyway as `Pass 51.0`:**
     `cmyk_intent` (§8.6.4.4's screen-conversion silence) — a **new**
@@ -28638,14 +28832,32 @@ nothing gets forgotten, not as a commitment to build in this order.
     `pdfce-spec-librarian` dispatch, not yet back-filed to the corpus
     (same pattern as `IM-A1`, below — owed). **Fully wired,
     core→render→cli→gui, per R83** — the one P0-adjacent setting that is
-    genuinely DONE, not merely stored. Also newly STORED-BUT-NOT-
+    genuinely DONE, not merely stored. ~~Also newly STORED-BUT-NOT-
     CONSUMED, discovered by this librarian's own grep rather than the
     register: the `Pass 50.0` `/SeparationInfo` repair/discard/refuse
     policy (`Settings::separations`) round-trips through the same file
     but has zero CLI/GUI call sites — recorded as Backlog work under
     `Pass 51.0`'s own entry, not filed as its own register ID (it is
     `Pass 50.0`'s product-policy decision, not a spec ambiguity — see
-    that Pass's own "repair-vs-report" note).
+    that Pass's own "repair-vs-report" note).~~ **★ DISCHARGED 2026-08-08
+    (`Pass 51.1`, `7e33d52`) — `Settings::separations` now reaches the
+    GUI delete path and the CLI's `delete-pages`/`extract-pages`/`split`
+    (new `pageops::extract_with`/`split_with`; the earlier `extract`/
+    `split` wrappers built `AssembleOptions::default()` internally, so
+    no front end could express this policy at all before this commit).
+    Still not filed as its own register ID, for the same reason given
+    above — it is a `Pass 50.0` product-policy choice, not a spec
+    ambiguity.**
+
+    **Register-level arithmetic, made exact by this correction:** of the
+    18 SETTING-classified register rows, `WB-A1` is now the first
+    genuinely built — **1 of 18 done, 17 of 18 unbuilt**, a figure that
+    is now literally true rather than approximately so (`Pass 51.0`'s
+    own Backlog bullet below already said "17 of 18," written when
+    `WB-A1` was merely stored — this Pass is what makes that sentence
+    correct rather than optimistic-by-one-notch). `cmyk_intent` is not
+    counted in the 18 — it is a new entry Pass 51.0 minted, not
+    back-filed to the corpus (above).
 
   - **Evidence tiers came out thin, and that is reported rather than
     smoothed over.** Only **2 of 18** bucket-1 defaults reach tier (a)

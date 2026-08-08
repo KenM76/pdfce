@@ -26784,3 +26784,104 @@ since neither ribbon nor keymap persistence itself shipped.
 - A settings-editing UI (`Settings::save`'s first caller) is the
   natural next step once two or three more P0 knobs exist — editing one
   setting by hand in a text file is fine; editing five is a UI's job.
+
+## 2026-08-08 (thirty-ninth filing) — `Pass 51.1` (`7e33d52`): the two settings `Pass 51.0` shipped stored-but-unconsumed are now wired, a false disclosure sentence under `SeparationPolicy::Discard` is fixed, and `tools/check-settings-consumed.py` joins the standing gates
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8) — every gate result below is RELAYED from the engineer's own
+dispatch summary, not independently re-run, re-measured, or read via
+`git show`. Independently confirmed by this filing via `Read`/`Grep`
+(no `Bash`, but source-reading tools are available and were used):
+`tools/check-settings-consumed.py` exists; `pageops::extract_with`/
+`split_with` exist and are called from three `pdfce-cli` sites plus one
+`pdfce-gui` site; `ExtractOptions::with_word_gap_ratio` exists and is
+called from two `pdfce-cli` sites; `SeparationImpact::policy` exists and
+both shells branch on it (`main.rs:9402`, `ui_text.rs:1479`);
+`separation_sets.rs` carries 19 `#[test]` functions (direct count).**
+
+**Shipped:** `Pass 51.1` (`7e33d52`) — a follow-up to `Pass 51.0`,
+correcting two things that filing recorded as open and adding a gate:
+- **`separations` wired** to the GUI delete path and the CLI's
+  `delete-pages`/`extract-pages`/`split`, via two new functions
+  (`pageops::extract_with`/`split_with`) the earlier wrappers lacked —
+  they built `AssembleOptions::default()` internally, so no front end
+  could express the operator's policy at all before this commit.
+- **`word_gap_ratio` wired** to `pdfce-cli extract-text` and the block
+  recogniser, via a new `ExtractOptions::with_word_gap_ratio` (narrower
+  than the existing `with_gap_ratios`, which would have forced a caller
+  to restate two unrelated defaults from memory).
+- **A false disclosure sentence fixed**: the `/SeparationInfo` message
+  claimed every surviving page "had their `/Pages` array rewritten"
+  regardless of policy — false under `Discard`, which removes the
+  dictionary outright. `SeparationImpact` now carries the `policy` that
+  produced the outcome; both shells branch on it. New test
+  (`the_impact_records_which_policy_produced_it`); suite is 19 tests.
+- **New gate, `tools/check-settings-consumed.py`**: fails the build if
+  any `Settings` field is parsed+written but read by nothing outside
+  the settings module. Deliberately does not judge consumer
+  correctness — that is a test's job. Verified by reintroducing the
+  exact defect it targets: fails, names the field, states the fix.
+
+**Findings + decisions:**
+- **Caught by the librarian's own independent sweep, not the
+  engineer — the second such catch this session.** `Pass 51.0`'s own
+  filing (thirty-eighth) already found `separations` in the same
+  stored-but-unconsumed state as `word_gap_ratio` via this librarian's
+  own grep, not the operator's dispatch text (which named only
+  `word_gap_ratio`). This filing is what discharges that finding.
+- **The register-level "17 of the 18... remain unbuilt" figure `Pass
+  51.0` filed is now literally accurate rather than approximately so**
+  — `WB-A1` was merely stored when that sentence was written; it is now
+  the one of 18 genuinely built, making the arithmetic exact.
+- **No `ARCHITECTURE.md` §12 entry minted** — this librarian's own
+  judgment call, per the engineer's own suggestion: a correction and a
+  gate, not a crate-boundary/library/invariant decision. A dated
+  correction footer was appended instead to `Pass 51.0`'s own §12
+  entry (append-only — struck, not rewritten), pointing here.
+
+**`docs/FEATURES.md` updated in the same filing:** the *Persisted user
+settings* row (Shell & UX) corrected — all three `Settings` fields are
+now consumed, with which shell(s) reach each named, plus the new gate.
+No row moved between *Implemented*/*Planned* — the store's three boxes
+were already ticked as of `Pass 51.0`; this is a prose correction.
+
+**Gates reported (relayed):** `cargo fmt --check` clean · `cargo
+clippy --workspace --all-targets -- -D warnings` clean · full `cargo
+test --workspace` green, 0 failed suites · `check-ui-strings.sh` clean
+· `check-settings-consumed.py` clean.
+
+**Still in flight:**
+- **No settings UI exists** — `Settings::save` has no caller anywhere
+  in the workspace, unchanged by this Pass.
+- **17 of the register's 18 settings remain unbuilt** — now genuinely
+  unblocked, just work (`QP-A1`, `NF-A1`, `DCT-A1`, `SM-A1`, `TX-A1`,
+  plus 12 lower-priority rows).
+- **Neither `separations` nor `word_gap_ratio` gained a CLI flag or a
+  GUI control** — `userdata/settings.txt` remains the only way to set
+  either.
+- `docs/decisions/003-distribution-posture.md` §6.3's literal
+  `<user-state>` placeholder is still unresolved on disk — the engineer
+  again correctly declined to edit a decision record's authored text
+  unilaterally; still flagged, not fixed, by design.
+- **Both project checkers were NOT RUN by this filing — no Bash tool
+  available.** Every ceiling above (Pass family 51 unchanged, new
+  sub-pass `51.1` minted; standing rules unchanged at R170, next free
+  R171; decisions unchanged at 033-on-disk/034 claimed-unauthored; this
+  is the 39th `SESSION_LOG.md` filing) was derived by reading
+  `ROADMAP.md`/`SESSION_LOG.md` directly plus this filing's own
+  source-tree greps, not checker-verified. **Backup/git working-tree
+  state is not asserted anywhere in this filing** — no shell, hard
+  rule 8.
+
+**For next session:**
+- **Run both checkers with a shell** before treating this filing's
+  ceilings as gate-clean.
+- Resolve `docs/decisions/003-distribution-posture.md` §6.3's
+  `<user-state>` placeholder to `userdata` — still owed, now flagged a
+  third time across three filings.
+- Build the next P0 register item — `QP-A1` remains blocked on the
+  QuadPoints producer-order verification (a separate, ongoing
+  investigation); `NF-A1`/`DCT-A1`/`SM-A1`/`TX-A1` are unblocked and
+  unbuilt, in that rank order.
+- A settings-editing UI (`Settings::save`'s first caller) remains the
+  natural next step once two or three more P0 knobs exist.
