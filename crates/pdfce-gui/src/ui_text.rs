@@ -7061,6 +7061,66 @@ pub fn create_field_export_value_tooltip() -> &'static str {
     "What the form records when this button is the one picked. Every button in a group shares the group's name and is told apart by this value."
 }
 
+/// The narrator line for an image placed by dropping it on the page
+/// (Pass 47.7).
+///
+/// Names the FORMAT, because that is the fact the operator cannot see and
+/// might doubt — "did it take my PNG or convert it to something?" — and
+/// because the format determines whether the bytes went in untouched.
+pub fn image_dropped(format: &str) -> String {
+    format!("Placed the dropped {format} at its natural size. Undo removes it.")
+}
+
+/// The full narrator line for a dropped image: the placement sentence plus
+/// whatever disclosures the placement owed (Pass 47.7).
+///
+/// The JOIN lives here rather than at the call site because the separator is
+/// operator-visible punctuation — R1 puts every such decision in this catalog,
+/// and `check-ui-strings` caught the format string when it did not.
+pub fn image_dropped_with_notes(format: &str, notes: &[String]) -> String {
+    let head = image_dropped(format);
+    if notes.is_empty() {
+        return head;
+    }
+    format!("{head} {}", notes.join(" "))
+}
+
+/// Appended when a dropped image could not be placed at the drop point
+/// (Pass 47.7).
+///
+/// Said rather than silently absorbed: an image that appears somewhere other
+/// than where it was dropped looks like a bug, and the operator has no way to
+/// know pdfce chose the fallback deliberately.
+pub fn image_dropped_off_page() -> &'static str {
+    "The drop landed outside the page, so it was centred on the page instead."
+}
+
+/// Disclosure: the image was stretched out of its own proportions.
+pub fn image_aspect_distorted() -> &'static str {
+    "It was stretched to fill the space, so its proportions changed."
+}
+
+/// Disclosure: the image is being enlarged past its own resolution.
+///
+/// Worth saying at drop time because the operator chose the size by choosing
+/// where to drop, and a soft print is discovered much later.
+pub fn image_below_screen_resolution() -> &'static str {
+    "At this size it is being enlarged past its own resolution and will look soft in print."
+}
+
+/// Disclosure: pdfce could not embed the source bytes unchanged.
+pub fn image_recompressed() -> &'static str {
+    "Its pixels had to be re-stored rather than embedded unchanged — see the image's own report for why."
+}
+
+/// Disclosure: embedded colour management was not carried over.
+///
+/// Named rather than swallowed: pdfce parses no ICC profiles, so a
+/// colour-managed image becomes a device-space one and its colours may shift.
+pub fn image_profile_dropped() -> &'static str {
+    "It carried an embedded colour profile that pdfce does not read, so its colours may shift."
+}
+
 /// The single letter drawn in a form-field's editor chrome, naming its KIND
 /// (Pass 47.3, R167).
 ///

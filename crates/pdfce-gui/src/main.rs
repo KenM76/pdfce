@@ -9304,6 +9304,17 @@ impl eframe::App for PdfceApp {
             diag::Step::Text(ref text) => {
                 raw_input.events.push(egui::Event::Text(text.clone()));
             }
+            diag::Step::Drop(ref path) => {
+                // The SAME field winit fills for a real OS drop, so the app
+                // takes an identical branch to the one a dragged file does.
+                // Only `path` is set: that is all the drop handlers read, and
+                // synthesising `bytes`/`mime` would make the harness exercise
+                // a shape the real backend never produces.
+                raw_input.dropped_files.push(egui::DroppedFile {
+                    path: Some(std::path::PathBuf::from(path)),
+                    ..Default::default()
+                });
+            }
         }
         diag::trace(|| format!("step {step:?}"));
     }
@@ -13313,6 +13324,63 @@ impl PdfceApp {
         // `image_rect` every §2 geometry call takes this frame.
         let image_rect = image_response.rect;
 
+        // A dropped image and where it landed, applied AFTER the read borrows
+        // of `doc` end — placing needs `&mut doc.session` while the canvas
+        // still borrows the page list. Same deferral shape the vector tool's
+        // `Commit` uses.
+        let mut image_drop: Option<(std::path::PathBuf, Option<egui::Pos2>)> = None;
+
+        // ★ DROP AN IMAGE ONTO THE PAGE, AT THE POINT IT WAS DROPPED.
+        //
+        // Handled HERE rather than beside the existing `.pdf` drop-to-open
+        // handler in `ui()`, because placing at the drop point needs the
+        // canvas geometry — `image_rect`, `extent`, `zoom` — and that only
+        // exists once the canvas widget has been laid out. The two handlers
+        // are mutually exclusive by extension: that one takes `.pdf`, this
+        // one takes raster formats.
+        //
+        // ⚠ THIS EXCEEDS BOTH PARITY REFERENCES RATHER THAN MATCHING THEM,
+        // and that is deliberate. The parity research found that **neither
+        // Acrobat nor PDF-XChange places a dropped image inline on the open
+        // page** — PDF-XChange opens it as a separate new document (sourced
+        // from their own developer forum), and dropping on the thumbnails
+        // panel makes a new page instead. Both reserve inline placement for a
+        // deliberate "Add Image" tool behind a file dialog.
+        //
+        // The operator asked for the drop, and separately ruled that *"if
+        // there are ways to exceed the other softwares GUI capabilities we
+        // should choose to do those things"*. So this is an exceed, recorded
+        // as one so nobody later "fixes" it to match Acrobat.
+        if let Some(dropped) = ui.ctx().input(|i| {
+            i.raw
+                .dropped_files
+                .iter()
+                .find_map(|f| f.path.clone())
+                .filter(|p| {
+                    p.extension().is_some_and(|e| {
+                        let e = e.to_ascii_lowercase();
+                        e == "png" || e == "jpg" || e == "jpeg" || e == "bmp"
+                    })
+                })
+        }) {
+            // The drop point, in page space. `pointer_latest_pos` rather than
+            // `hover_pos`: on the frame a drop lands, the pointer has already
+            // been released and `hover_pos` may be `None`.
+            let at = ui
+                .ctx()
+                .pointer_latest_pos()
+                .filter(|p| image_rect.contains(*p))
+                .and_then(|sp| {
+                    doc.pages.get(doc.view.page_index).and_then(|page| {
+                        viewer::canvas_to_pdf_space(
+                            viewer::screen_to_page(sp, image_rect, extent, zoom),
+                            page,
+                        )
+                    })
+                });
+            image_drop = Some((dropped, at));
+        }
+
         // The trace that answers "did the canvas widget see the click at all",
         // which no amount of reading the dispatch below can answer. Emitted
         // only on a frame where the pointer actually did something, so a run
@@ -13625,6 +13693,110 @@ impl PdfceApp {
                 }
                 actions.push(Action::ZoomBy(factor));
             }
+        }
+
+        // The deferred drop, applied now that the read borrows have ended.
+        if let Some((path, at)) = image_drop {
+            self.place_dropped_image(&path, at);
+        }
+    }
+
+    /// Place an image file dropped on the canvas (Pass 47.7).
+    ///
+    /// # Sizing, and why the drop point is the CENTRE
+    ///
+    /// The image is placed at its **natural size** — its pixel dimensions
+    /// read through its own DPI — centred on the drop point, then clipped to
+    /// the page. Natural size because a dropped photograph has a real
+    /// physical size and inventing a different one is a guess; centred
+    /// because the pointer is where the operator was looking, and an image
+    /// that appears with its top-left corner at the cursor lands somewhere
+    /// they were not pointing.
+    ///
+    /// A drop that misses the page — or arrives with no resolvable pointer
+    /// position — falls back to the page centre and **says so**. Silently
+    /// putting it somewhere plausible is the shape rule 4 forbids.
+    fn place_dropped_image(&mut self, path: &std::path::Path, at: Option<egui::Pos2>) {
+        let Status::Open(doc) = &mut self.status else {
+            return;
+        };
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
+            Err(err) => {
+                self.save_result = Some(SaveOutcome::Failed(err.to_string()));
+                return;
+            }
+        };
+        // Imported BEFORE anything is written, so a refusal — an unsupported
+        // format, an interlaced PNG — costs the document nothing. That purity
+        // is why `import_with` exists separately from `add_image`.
+        let imported = match pdfce_core::image_import::import_with(
+            &bytes,
+            &pdfce_core::image_import::ImportOptions::new(),
+        ) {
+            Ok(i) => i,
+            Err(err) => {
+                self.save_result = Some(SaveOutcome::Failed(err.to_string()));
+                return;
+            }
+        };
+
+        let page_index = doc.view.page_index;
+        let Some(page) = doc.pages.get(page_index) else {
+            return;
+        };
+        let crop = page.crop_box;
+        let (pw, ph) = (crop.urx - crop.llx, crop.ury - crop.lly);
+        // Natural size in points, from the image's own DPI where it declares
+        // one. `effective_dpi` is what `add_image` reports; this is the same
+        // quantity used forwards.
+        let (dpi_x, dpi_y) = imported.dpi.unwrap_or((72.0, 72.0));
+        // DISPLAYED dimensions: an EXIF-rotated photograph is placed by the
+        // shape it will appear as, not by the shape it is stored as, because
+        // `add_image` folds the rotation into the `cm` matrix. Placing by the
+        // stored shape would make a sideways phone photo land in a box of the
+        // wrong proportions.
+        let (px, py) = if imported.orientation.transposes() {
+            (imported.height, imported.width)
+        } else {
+            (imported.width, imported.height)
+        };
+        let w = f64::from(px) * 72.0 / dpi_x.max(1.0);
+        let h = f64::from(py) * 72.0 / dpi_y.max(1.0);
+        // Never larger than the page — a 6000 px photo at 72 dpi is 83 inches
+        // and would land entirely off the sheet.
+        let scale = (pw / w).min(ph / h).min(1.0);
+        let (w, h) = (w * scale, h * scale);
+
+        let centred_on_page = at.is_none();
+        let (cx, cy) = at.map_or((crop.llx + pw / 2.0, crop.lly + ph / 2.0), |p| {
+            (f64::from(p.x), f64::from(p.y))
+        });
+        // Clamp the CENTRE so the whole image stays on the page.
+        let cx = cx.clamp(crop.llx + w / 2.0, crop.urx - w / 2.0);
+        let cy = cy.clamp(crop.lly + h / 2.0, crop.ury - h / 2.0);
+        let rect = pdfce_core::page_tree::Rect::from_corners(
+            cx - w / 2.0,
+            cy - h / 2.0,
+            cx + w / 2.0,
+            cy + h / 2.0,
+        );
+
+        let spec = pdfce_core::edit::NewImage::new(page_index, rect, &imported);
+        match doc.session_mut().add_image(&spec) {
+            Ok(outcome) => {
+                doc.refresh_pages();
+                doc.ensure_object_provider();
+                let mut notes = image_disclosure_lines(&outcome.disclosures);
+                if centred_on_page {
+                    notes.push(ui_text::image_dropped_off_page().to_owned());
+                }
+                self.edit_note = Some(ui_text::image_dropped_with_notes(
+                    imported.format.name(),
+                    &notes,
+                ));
+            }
+            Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
         }
     }
 
@@ -15876,6 +16048,35 @@ fn commit_field_draft(doc: &mut OpenDoc) -> (CommitOutcome, Vec<String>) {
 /// mapping from "what core reported" to "what the operator reads" is testable
 /// without a UI — and so a newly-added disclosure has exactly one place to be
 /// wired, which is the omission that has now bitten this feature twice.
+/// The operator-facing lines an image placement owes (Pass 47.7).
+///
+/// A SUBSET of what `ImageAuthorDisclosures` carries, and the selection is
+/// the point. The CLI prints every field because a script may gate on any of
+/// them; the GUI narrator is one line in a status bar an operator reads while
+/// doing something else, so it carries only what changes what they should
+/// DO — the image was altered, or it will not look the way they expect.
+///
+/// Deliberately silent about: the effective DPI (a number, always present,
+/// and meaningless without a comparison), the requested/applied compression
+/// pair (identical on the drop path, which never asks for a re-encode), and
+/// the tagged-document note (about the document, not this placement).
+fn image_disclosure_lines(d: &pdfce_core::edit::ImageAuthorDisclosures) -> Vec<String> {
+    let mut out = Vec::new();
+    if d.aspect_distorted {
+        out.push(ui_text::image_aspect_distorted().to_owned());
+    }
+    if d.below_screen_resolution {
+        out.push(ui_text::image_below_screen_resolution().to_owned());
+    }
+    if d.recompressed.is_some() {
+        out.push(ui_text::image_recompressed().to_owned());
+    }
+    if d.colour_profile_dropped {
+        out.push(ui_text::image_profile_dropped().to_owned());
+    }
+    out
+}
+
 fn field_disclosure_lines(
     authored: &pdfce_core::edit::FieldAuthorOutcome,
     name: &str,

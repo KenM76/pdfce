@@ -134,6 +134,23 @@ pub enum Step {
     /// is, so a script isolates *"does a choice field get its options"* from
     /// the separate question *"is the type selector wired up"*.
     FieldKind(&'static str),
+    /// Drop a FILE on the canvas (`drop:D:/path/to/image.png`).
+    ///
+    /// Injects a `dropped_files` entry into the frame's `RawInput`, which is
+    /// the same seam a real OS drag-and-drop arrives through — winit fills
+    /// that field and egui hands it to the app untouched.
+    ///
+    /// Added by Pass 47.7 for the reason every other step here exists: an OS
+    /// drag-and-drop cannot be scripted from outside the process, so without
+    /// this the whole drop path — the only route to placing an image in the
+    /// GUI — would be reachable **only by the operator dragging a file with
+    /// his own hand**, which is precisely the arrangement this harness exists
+    /// to end.
+    ///
+    /// Pair it with a preceding `move:X,Y` — the placement centres on the
+    /// pointer, so a drop with the pointer off-canvas exercises the
+    /// centred-on-page fallback instead.
+    Drop(String),
     /// Flip the "show points" view option (`view:points`), Pass 36.3.
     ///
     /// Scripted directly rather than by clicking the toolbar toggle, for the
@@ -370,6 +387,9 @@ fn parse_step(s: &str) -> Option<Step> {
         "view" if rest.trim() == "points" => Some(Step::ShowPoints),
         // NOT `rest.trim()`: leading and trailing spaces are legitimate text.
         "type" if !rest.is_empty() => Some(Step::Text(rest.to_owned())),
+        // NOT `rest.trim()` on the payload's interior: a path may legitimately
+        // contain spaces, and only the ends are safe to strip.
+        "drop" if !rest.trim().is_empty() => Some(Step::Drop(rest.trim().to_owned())),
         "field-kind" => match rest.trim() {
             "text" => Some(Step::FieldKind("text")),
             "check" => Some(Step::FieldKind("check")),
