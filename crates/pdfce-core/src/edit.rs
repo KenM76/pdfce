@@ -136,6 +136,7 @@ use crate::fontdata::Std14;
 use crate::forms::{self, ButtonKind, Field, FieldType};
 use crate::forms_author::{self, FieldPath, FieldShape, FormAuthorError};
 use crate::graph::ObjectGraph;
+use crate::image_import::ImportedImage;
 use crate::object::{Dict, IndirectObject, Name, ObjId, Object, Stream};
 use crate::page_tree::{self, Page, PageSlot, PageTreeError};
 use crate::pageops::references::{DanglingReport, census_dangling};
@@ -500,6 +501,20 @@ pub enum CommandKind {
     /// pressed Delete meant exactly one of them, and before Pass 36.0 the GUI
     /// gave them the wrong one.
     DeleteNode,
+    /// A raster image was placed on a page: the image XObject, its optional
+    /// `/SMask`, the `q … cm … Do … Q` overlay stream, and the page's
+    /// `/Contents` + `/Resources /XObject` patches — all ONE undo entry.
+    ///
+    /// One gesture, one entry, for the same reason
+    /// [`Self::AddFormField`] is one: a page whose `/Resources` names an
+    /// XObject its content never invokes, or whose content invokes a name
+    /// its resources do not define, is a document no partial undo can
+    /// repair.
+    ///
+    /// Additive (R46): the page's existing content streams are not
+    /// re-serialized. A NEW stream is appended to the `/Contents` array
+    /// (§7.8.2) and the originals stay byte-verbatim.
+    AddImage,
 }
 
 /// Which geometric-markup subtype [`EditSession::add_markup`] authored,
@@ -2389,6 +2404,24 @@ pub enum EditError {
     VectorEditNoContents {
         /// The 0-based page index.
         page_index: usize,
+    },
+    /// An image was asked to be placed in a rectangle with no area.
+    ///
+    /// Its own variant rather than a reuse of
+    /// [`Self::FieldRectDegenerate`]: the two are the same *shape* of
+    /// mistake but the operator gestures that produce them are unrelated
+    /// (a click-without-drag on the canvas versus a mistyped `--rect`), and
+    /// the message a front end should show differs. §8.9.4 maps the image
+    /// onto the unit square, and scaling that square by zero produces a
+    /// singular matrix — the same degenerate-transform hole §12.5.5 leaves
+    /// for a zero-extent appearance box, and one every reader resolves
+    /// differently.
+    #[error("an image needs a rectangle with area to be placed in ({w} × {h})")]
+    ImageRectDegenerate {
+        /// The requested width.
+        w: f64,
+        /// The requested height.
+        h: f64,
     },
 }
 
@@ -11958,6 +11991,759 @@ impl EditSession {
             before: self.state.get(&catalog_id).cloned(),
             after: Some(Object::Dict(cat2)),
         })
+    }
+}
+
+// =====================================================================
+// Raster-image placement (`add_image`)
+// =====================================================================
+
+/// How an image is fitted into the rectangle the operator gave.
+///
+/// # Why there are exactly two, and why `Contain` is the default
+///
+/// §8.9.4 is blunt about what PDF itself does: the image is mapped onto the
+/// **unit square**, and the `cm` matrix scales that square to whatever size
+/// the content stream asks for. The spec's own worked example carries the
+/// warning *"if the aspect ratio of the original image … is different from
+/// 150:80, the result will be distorted."* There is no aspect preservation
+/// anywhere in the format — it is entirely the author's problem.
+///
+/// So pdfce has to choose, and the choice is disclosed either way:
+///
+/// - [`Contain`](Self::Contain) — the image keeps its shape and is centred
+///   in the rectangle, so one axis may be smaller than asked. This is the
+///   default because a distorted photograph is a defect the operator did
+///   not ask for and may not notice on a small placement, while
+///   letterboxing is visible immediately and is what every drag-a-picture
+///   gesture in every other tool does.
+/// - [`Stretch`](Self::Stretch) — the rectangle is honoured exactly. The
+///   right answer when the rectangle came from a measurement (fitting a
+///   scan to a known paper size, replacing a stamp of fixed extent) rather
+///   than from a freehand drag.
+///
+/// **Both are reachable**, which is the point: whichever pdfce defaulted
+/// to, the operator who meant the other one must be able to say so.
+///
+/// A third mode — *cover*, filling the rectangle and cropping the overflow —
+/// is deliberately absent rather than half-built: it needs a clipping path
+/// (`W n`, §8.5.4) around the `Do`, which is a different content-stream
+/// shape and a different undo story. It is a scoped-out follow-up, not an
+/// oversight.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum ImageFit {
+    /// Preserve the aspect ratio; centre the image inside the rectangle.
+    #[default]
+    Contain,
+    /// Fill the rectangle exactly, distorting the aspect ratio if needed.
+    Stretch,
+}
+
+/// An image to be placed on a page by [`EditSession::add_image`].
+///
+/// # Why this borrows an [`ImportedImage`] instead of taking file bytes
+///
+/// Placement is the second of two steps, and the split is a rule-4
+/// requirement rather than an API preference.
+/// [`image_import::import`](crate::image_import::import) is pure: it parses
+/// the file, decides every branch, and returns every disclosure — a
+/// re-compression, a dropped colour profile, an EXIF rotation, an
+/// unverifiable CMYK polarity — **before any document state changes**. A
+/// front end can therefore show the operator what is about to happen and
+/// let them back out, which a disclosure delivered alongside the finished
+/// edit cannot do.
+///
+/// It also means a single import can be placed on several pages without
+/// re-parsing, and that a refusal (an interlaced PNG, a TIFF) is reported
+/// without an [`EditSession`] existing at all.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct NewImage<'a> {
+    /// 0-based page index the image is placed on.
+    pub page_index: usize,
+    /// The rectangle, in default user space, the image is fitted into.
+    pub rect: page_tree::Rect,
+    /// How the image is fitted into [`Self::rect`].
+    pub fit: ImageFit,
+    /// The parsed image.
+    pub image: &'a ImportedImage,
+}
+
+impl<'a> NewImage<'a> {
+    /// A placement that preserves the image's aspect ratio inside `rect`.
+    #[must_use]
+    pub const fn new(page_index: usize, rect: page_tree::Rect, image: &'a ImportedImage) -> Self {
+        Self {
+            page_index,
+            rect,
+            fit: ImageFit::Contain,
+            image,
+        }
+    }
+
+    /// Fill `rect` exactly, distorting the aspect ratio if it differs.
+    #[must_use]
+    pub const fn stretching(mut self) -> Self {
+        self.fit = ImageFit::Stretch;
+        self
+    }
+
+    /// Where the image will actually land — equal to
+    /// [`rect`](Self::rect) under [`ImageFit::Stretch`], and the largest
+    /// centred sub-rectangle of the same aspect ratio under
+    /// [`ImageFit::Contain`].
+    ///
+    /// Public because a front end drawing a preview must draw the same
+    /// rectangle the edit will produce, and re-deriving the arithmetic in
+    /// the GUI is how a preview and a result drift apart.
+    ///
+    /// The aspect ratio used is the **displayed** one — an EXIF-rotated
+    /// photograph is fitted by the shape it will appear as, not by the
+    /// shape it is stored as, because the stored shape is not on screen
+    /// anywhere.
+    #[must_use]
+    pub fn placed_rect(&self) -> page_tree::Rect {
+        let rect = self.rect;
+        let (rw, rh) = (rect.urx - rect.llx, rect.ury - rect.lly);
+        if self.fit == ImageFit::Stretch {
+            return rect;
+        }
+        let (px_w, px_h) = self.image.display_size_px();
+        let (aw, ah) = (f64::from(px_w), f64::from(px_h));
+        if aw <= 0.0 || ah <= 0.0 || rw <= 0.0 || rh <= 0.0 {
+            return rect;
+        }
+        let scale = (rw / aw).min(rh / ah);
+        let (w, h) = (aw * scale, ah * scale);
+        // Centred: half the slack on each side, on whichever axis has any.
+        let dx = (rw - w) / 2.0;
+        let dy = (rh - h) / 2.0;
+        page_tree::Rect {
+            llx: rect.llx + dx,
+            lly: rect.lly + dy,
+            urx: rect.llx + dx + w,
+            ury: rect.lly + dy + h,
+        }
+    }
+}
+
+/// What image placement did, and everything about it the operator must be
+/// told.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub struct ImageAuthorOutcome {
+    /// The created image XObject's object id.
+    pub image_id: ObjId,
+    /// The created `/SMask` image's object id, when one was written.
+    pub soft_mask_id: Option<ObjId>,
+    /// The created content stream that invokes the image.
+    pub content_id: ObjId,
+    /// The name the image was given in the page's `/Resources` `/XObject`
+    /// subdictionary — the operand of the `Do` operator.
+    pub resource_name: Vec<u8>,
+    /// Where the image actually landed. Equal to the requested rectangle
+    /// under [`ImageFit::Stretch`]; a centred sub-rectangle under
+    /// [`ImageFit::Contain`].
+    pub placed_rect: page_tree::Rect,
+    /// Everything about the result the operator cannot see.
+    pub disclosures: ImageAuthorDisclosures,
+}
+
+/// The disclosures image placement owes the operator (rule 4).
+///
+/// Every field here is something pdfce **decided or inferred** and the
+/// operator cannot discover by looking at the page: a conversion that
+/// happened inside the file, a resolution the placement implies, a feature
+/// the document's own version predates, or a capability pdfce's preview
+/// does not yet have. None of them is an error; each is a true statement
+/// about a placement that was made exactly as asked.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct ImageAuthorDisclosures {
+    /// [`ImageFit::Contain`] shrank one axis, so the image does not fill the
+    /// requested rectangle.
+    pub letterboxed: bool,
+    /// [`ImageFit::Stretch`] changed the aspect ratio — the image is
+    /// distorted, as asked.
+    pub aspect_distorted: bool,
+    /// The resolution the placement implies: image pixels per inch of page,
+    /// horizontally and vertically.
+    ///
+    /// Not a warning — a number. An operator dragging a 4000-pixel photo
+    /// into a 2-inch box gets 2000 dpi (wasted bytes) and one dragging a
+    /// 100-pixel logo across a page gets 12 (visibly soft), and neither is
+    /// visible on screen at editing zoom.
+    pub effective_dpi: (f64, f64),
+    /// The effective resolution is below 72 dpi — coarser than one image
+    /// pixel per point, so the image is being enlarged past its own
+    /// resolution and will look soft in print.
+    pub below_screen_resolution: bool,
+    /// pdfce decoded and re-compressed the source rather than embedding its
+    /// bytes, for this reason. `None` means the source bytes are in the
+    /// document unchanged.
+    pub recompressed: Option<crate::image_import::RecompressReason>,
+    /// The compression policy the caller asked for.
+    pub requested_compression: crate::image_import::ImageCompression,
+    /// The compression policy that actually ran.
+    ///
+    /// Reported beside the requested one, not instead of it, because the two
+    /// legitimately differ — a BMP asked to pass through has no compressed
+    /// bytes to keep, and a PNG asked to be stored losslessly already was.
+    /// *"I chose passthrough and got a re-encode"* must not be a thing an
+    /// operator discovers by diffing bytes.
+    pub applied_compression: crate::image_import::ImageCompression,
+    /// A LOSSY source was decoded and stored losslessly at the operator's
+    /// request. See
+    /// [`ImportNotes::lossless_from_lossy`](crate::image_import::ImportNotes::lossless_from_lossy)
+    /// — the short version is that it recovers nothing and costs a great
+    /// deal of size, and someone who chose it expecting a better picture
+    /// needs telling.
+    pub lossless_from_lossy: bool,
+    /// An `/SMask` was written for the image's transparency.
+    pub soft_mask_written: bool,
+    /// **pdfce's own renderer does not composite transparency yet.**
+    ///
+    /// Set whenever this placement wrote EITHER mechanism — an `/SMask` or
+    /// a colour-key `/Mask` — because `pdfce-render` defers both
+    /// identically: it recognises the entry, counts it, and paints the base
+    /// image fully opaque
+    /// (`pdfce_render::image::ImageNotes::mask_deferred`).
+    ///
+    /// Its own field rather than a footnote on
+    /// [`Self::soft_mask_written`] because it is a statement about
+    /// **pdfce**, not about the document. The transparency is written
+    /// correctly and a conforming viewer will honour it; pdfce's preview
+    /// will not. Without this, an operator who places a transparent PNG,
+    /// sees a white box, and concludes the transparency was lost would be
+    /// drawing a reasonable — and wrong — conclusion.
+    pub transparency_not_previewed: bool,
+    /// A colour-key `/Mask` was written from a single transparent colour.
+    pub colour_key_mask_written: bool,
+    /// The source carried embedded colour-management data that pdfce did
+    /// not carry over; the image is in a device colour space and colours may
+    /// shift. See
+    /// [`ImportNotes::colour_profile_dropped`](crate::image_import::ImportNotes::colour_profile_dropped).
+    pub colour_profile_dropped: bool,
+    /// R30: a four-component JPEG whose polarity nothing in the file
+    /// declares. Passed through unchanged (R29) and named.
+    pub cmyk_polarity_unverifiable: bool,
+    /// The JPEG is progressive — legal from PDF 1.3, but §7.4.8 NOTE 5 says
+    /// it decodes slower and uses more memory inside a PDF.
+    pub progressive_jpeg: bool,
+    /// An EXIF orientation was applied to the placement matrix rather than
+    /// to the pixels.
+    pub exif_orientation_applied: Option<u8>,
+    /// A 32-bit BMP's fourth byte per pixel was ignored (it is padding, not
+    /// alpha).
+    pub bmp_fourth_byte_ignored: bool,
+    /// The image uses a feature newer than the document's declared version,
+    /// with the document's version alongside.
+    ///
+    /// pdfce does **not** rewrite `%PDF-x.y` to accommodate it: that is a
+    /// structural change to a file the operator only asked to add a picture
+    /// to, and every real producer leaves the header alone. Readers are
+    /// overwhelmingly version-tolerant, so the image will almost certainly
+    /// display — but "almost certainly" is exactly the kind of thing an
+    /// operator is entitled to be told rather than to discover.
+    pub version_ahead_of_document: Option<(crate::image_import::PdfFeature, crate::PdfVersion)>,
+    /// The document carries `/StructTreeRoot` (§14.7, Tagged PDF) and the
+    /// new image is **not** in its structure tree, so it has no alternate
+    /// text and assistive technology cannot describe it.
+    ///
+    /// The same posture form-field creation takes, and for the same reason:
+    /// pdfce has no structure-tree writer, and a half-written tag tree
+    /// claims a completeness the document does not have. An image is the
+    /// case where this bites hardest — a picture with no `/Alt` is the
+    /// canonical accessibility failure — so it is stated rather than
+    /// implied.
+    pub tagged_document: bool,
+}
+
+impl ImageAuthorDisclosures {
+    /// Whether anything at all needs saying.
+    ///
+    /// A front end that shows disclosures only when there are any needs one
+    /// question to ask, not fourteen — and a fifteenth field added later
+    /// must not silently fall out of that question, which is why this lives
+    /// beside the struct rather than in each caller.
+    #[must_use]
+    pub fn any(&self) -> bool {
+        self.letterboxed
+            || self.aspect_distorted
+            || self.below_screen_resolution
+            || self.recompressed.is_some()
+            || self.requested_compression != self.applied_compression
+            || self.lossless_from_lossy
+            || self.soft_mask_written
+            || self.colour_key_mask_written
+            || self.colour_profile_dropped
+            || self.cmyk_polarity_unverifiable
+            || self.progressive_jpeg
+            || self.exif_orientation_applied.is_some()
+            || self.bmp_fourth_byte_ignored
+            || self.version_ahead_of_document.is_some()
+            || self.tagged_document
+    }
+}
+
+impl EditSession {
+    /// Place a raster image on a page as an image XObject (§8.9.5).
+    ///
+    /// # What one call writes
+    ///
+    /// Three or four new objects and exactly one patch to the page
+    /// dictionary, all as ONE undo entry ([`CommandKind::AddImage`]):
+    ///
+    /// 1. the **image XObject** — a stream whose dictionary is Table 89's
+    ///    required set (`/Subtype /Image`, `/Width`, `/Height`,
+    ///    `/ColorSpace`, `/BitsPerComponent`) plus `/Filter` and, where the
+    ///    filter needs them, `/DecodeParms`;
+    /// 2. optionally an **`/SMask`** image, when the source carried
+    ///    transparency only a soft mask can express;
+    /// 3. the **content stream** `q a b c d e f cm /Name Do Q`, appended to
+    ///    the page's `/Contents` array (§7.8.2);
+    /// 4. the **page dictionary**, with `/Contents` extended and
+    ///    `/Resources` `/XObject` given the new name.
+    ///
+    /// # The one page-dictionary write, and why it is one
+    ///
+    /// `/Contents` and `/Resources` are two entries of the same object.
+    /// Written as two [`ObjectWrite`]s they would not compose — each is
+    /// built from the same pre-command state, so applying them in order
+    /// **overwrites** rather than merges and the last one wins. That defect
+    /// shipped once already, in [`Self::flatten_fields`], and produced
+    /// silent visual data loss: the objects were all created, and the page
+    /// referenced none of them. The rule it left behind — **at most one
+    /// `ObjectWrite` per object id per command** — is why the mutation
+    /// helpers used here take `&mut Dict`.
+    ///
+    /// # Round-trip discipline (R46, `ARCHITECTURE.md` §5)
+    ///
+    /// **Nothing existing is rewritten.** The page's original content
+    /// streams are not re-serialized, not re-compressed, and not touched:
+    /// a new stream is appended to `/Contents` and the page dictionary
+    /// re-pointed. Under the default incremental save the output is the
+    /// input plus an update section; under a full rewrite every untouched
+    /// object is re-emitted byte-identical. This is deliberately more
+    /// minimal-diff than splicing the `cm`/`Do` into the existing stream
+    /// would be, and it is what keeps the content-identity gate unperturbed
+    /// by a feature that adds page content.
+    ///
+    /// # Placement geometry (§8.9.4)
+    ///
+    /// An image XObject is defined on the **unit square**: *"the unit
+    /// square of user space, bounded by user coordinates (0, 0) and (1, 1),
+    /// corresponds to the boundary of the image in image space."* So the
+    /// whole of placement is one `cm` matrix, and this method composes it
+    /// from three factors, in this order applied to a point:
+    ///
+    /// ```text
+    ///   unit square  --O-->  oriented square  --S-->  size  --T-->  position
+    /// ```
+    ///
+    /// where `O` is the EXIF orientation
+    /// ([`Orientation::unit_square_matrix`](crate::image_import::Orientation::unit_square_matrix)),
+    /// `S` scales to the placed width and height, and `T` translates to the
+    /// placed lower-left corner. In PDF's row-vector convention
+    /// (§8.3 Table 57, `x' = a*x + c*y + e`) the composite `O × S × T` is:
+    ///
+    /// ```text
+    ///   a = oa*w      b = ob*h      c = oc*w
+    ///   d = od*h      e = oe*w + x  f = of*h + y
+    /// ```
+    ///
+    /// For the ordinary case (`O` = identity) that collapses to
+    /// `w 0 0 h x y cm` — exactly the form §8.9.4's own example uses.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::ImageRectDegenerate`] — a rectangle with no area.
+    /// - [`EditError::PageOutOfRange`] — no such page.
+    /// - [`EditError::DocumentEncrypted`] — pdfce does not author into an
+    ///   encrypted document.
+    /// - [`EditError::CertificationForbidsChange`] — a certified document.
+    ///   Placing an image changes what the page renders, so this takes the
+    ///   **strict** gate that page operations and flatten take, not the
+    ///   permissive `/P >= 2` fill gate.
+    /// - [`EditError::ObjectCreationWouldExposeHiddenObjects`],
+    ///   [`EditError::ObjectNumbersExhausted`], [`EditError::PageTree`],
+    ///   [`EditError::NotADictionary`].
+    pub fn add_image(&mut self, spec: &NewImage<'_>) -> Result<ImageAuthorOutcome, EditError> {
+        let img = spec.image;
+        let (rw, rh) = (spec.rect.urx - spec.rect.llx, spec.rect.ury - spec.rect.lly);
+        // `<=` plus an explicit NaN test rather than `!(> 0.0)`: a NaN
+        // compares false against every ordering operator, so the negated
+        // form would silently ACCEPT a NaN rectangle and hand a singular
+        // matrix to the content stream.
+        if rw <= 0.0 || rh <= 0.0 || rw.is_nan() || rh.is_nan() {
+            return Err(EditError::ImageRectDegenerate { w: rw, h: rh });
+        }
+        if self.base.trailer().contains_key(b"Encrypt") {
+            return Err(EditError::DocumentEncrypted);
+        }
+        self.check_certification()?;
+        let suppressed = self.base.suppressed_object_count();
+        if suppressed > 0 {
+            return Err(EditError::ObjectCreationWouldExposeHiddenObjects { count: suppressed });
+        }
+        let slots = self.page_slots()?;
+        let page_id = slots
+            .get(spec.page_index)
+            .ok_or(EditError::PageOutOfRange {
+                index: spec.page_index,
+                count: slots.len(),
+            })?
+            .id;
+
+        let placed = spec.placed_rect();
+        let (pw, ph) = (placed.urx - placed.llx, placed.ury - placed.lly);
+
+        // ---- the /SMask image, if any ---------------------------------
+        let mut objects: Vec<ObjectWrite> = Vec::new();
+        let soft_mask_id = match img.soft_mask.as_ref() {
+            None => None,
+            Some(mask) => {
+                let id = ObjId::new(self.alloc_number()?, 0);
+                // §11.6.5.3 is a RECORDED GAP in the spec RAG (clause 11 is
+                // uningested), so this dictionary is the conservative
+                // intersection of what §8.9 Table 89 does say and what every
+                // reader is known to accept: a DeviceGray image of identical
+                // dimensions, with no mask of its own, no /Matte and no
+                // /Decode. Do not relax it without dispatching
+                // `pdfce-spec-librarian` for §11.6.5.3.
+                let mut d = Dict::new();
+                d.insert(Name::from(b"Type"), Object::Name(Name::from(b"XObject")));
+                d.insert(Name::from(b"Subtype"), Object::Name(Name::from(b"Image")));
+                d.insert(Name::from(b"Width"), Object::Integer(i64::from(mask.width)));
+                d.insert(
+                    Name::from(b"Height"),
+                    Object::Integer(i64::from(mask.height)),
+                );
+                d.insert(
+                    Name::from(b"ColorSpace"),
+                    Object::Name(Name::from(b"DeviceGray")),
+                );
+                d.insert(
+                    Name::from(b"BitsPerComponent"),
+                    Object::Integer(i64::from(mask.bits_per_component)),
+                );
+                d.insert(
+                    Name::from(b"Filter"),
+                    Object::Name(Name::from(b"FlateDecode")),
+                );
+                d.insert(
+                    Name::from(b"Length"),
+                    Object::Integer(i64::try_from(mask.data.len()).unwrap_or(i64::MAX)),
+                );
+                let span = self.stage_bytes(&mask.data);
+                objects.push(ObjectWrite {
+                    id,
+                    before: None,
+                    after: Some(Object::Stream(Stream {
+                        dict: d,
+                        data_span: span,
+                    })),
+                });
+                Some(id)
+            }
+        };
+
+        // ---- the image XObject ----------------------------------------
+        let image_id = ObjId::new(self.alloc_number()?, 0);
+        let image_dict = Self::image_xobject_dict(img, soft_mask_id);
+        let span = self.stage_bytes(&img.data);
+        objects.push(ObjectWrite {
+            id: image_id,
+            before: None,
+            after: Some(Object::Stream(Stream {
+                dict: image_dict,
+                data_span: span,
+            })),
+        });
+
+        // ---- the content stream that draws it -------------------------
+        let name = self.free_xobject_name(page_id, &slots);
+        let [oa, ob, oc, od, oe, of] = img.orientation.unit_square_matrix();
+        let mut cb = ContentBuilder::new();
+        cb.save_state();
+        cb.concat_matrix(
+            oa * pw,
+            ob * ph,
+            oc * pw,
+            od * ph,
+            oe * pw + placed.llx,
+            of * ph + placed.lly,
+        );
+        cb.invoke_xobject(&name);
+        cb.restore_state();
+        let content = cb.into_bytes();
+        let content_id = ObjId::new(self.alloc_number()?, 0);
+        let mut sdict = Dict::new();
+        sdict.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(content.len()).unwrap_or(i64::MAX)),
+        );
+        let span = self.stage_bytes(&content);
+        objects.push(ObjectWrite {
+            id: content_id,
+            before: None,
+            after: Some(Object::Stream(Stream {
+                dict: sdict,
+                data_span: span,
+            })),
+        });
+
+        // ---- ONE page-dictionary write carrying BOTH page mutations ---
+        let Some(Object::Dict(page_dict)) = self.value(page_id) else {
+            return Err(EditError::NotADictionary {
+                id: page_id,
+                key: "Contents",
+            });
+        };
+        let mut updated = page_dict.clone();
+        self.append_page_content(&mut updated, content_id);
+        self.add_page_xobjects(&mut updated, page_id, &[(name.clone(), image_id)], &slots);
+        objects.push(ObjectWrite {
+            id: page_id,
+            before: self.state.get(&page_id).cloned(),
+            after: Some(Object::Dict(updated)),
+        });
+
+        let disclosures = self.image_disclosures(spec, &placed, soft_mask_id.is_some());
+
+        self.commit(Command {
+            kind: CommandKind::AddImage,
+            objects,
+            removals: Vec::new(),
+            trailer: None,
+        });
+
+        Ok(ImageAuthorOutcome {
+            image_id,
+            soft_mask_id,
+            content_id,
+            resource_name: name,
+            placed_rect: placed,
+            disclosures,
+        })
+    }
+
+    /// Build the image XObject's dictionary from an [`ImportedImage`]
+    /// (§8.9.5 Table 89 + §7.3.8 Table 5).
+    ///
+    /// Key order is fixed and deliberate — `/Type` `/Subtype` `/Width`
+    /// `/Height` `/ColorSpace` `/BitsPerComponent` then the filter group —
+    /// so two runs over the same input produce byte-identical output and a
+    /// diff of two saved files shows only what actually changed.
+    ///
+    /// `/Type` is written even though Table 89 marks it optional
+    /// (*"If present, shall be `XObject`"*), because §8.8's `Do` dispatches
+    /// on `/Subtype` and any tool inspecting objects generically benefits
+    /// from the type being stated. `/Decode` and `/Interpolate` are written
+    /// by **nothing**: `/Decode`'s absence is R29's whole point (Table 90's
+    /// default is the identity ramp for every space here), and
+    /// `/Interpolate` is a rendering preference the operator did not
+    /// express.
+    fn image_xobject_dict(img: &ImportedImage, soft_mask_id: Option<ObjId>) -> Dict {
+        use crate::image_import::{ImportColorSpace, ImportFilter};
+
+        let mut d = Dict::new();
+        d.insert(Name::from(b"Type"), Object::Name(Name::from(b"XObject")));
+        d.insert(Name::from(b"Subtype"), Object::Name(Name::from(b"Image")));
+        d.insert(Name::from(b"Width"), Object::Integer(i64::from(img.width)));
+        d.insert(
+            Name::from(b"Height"),
+            Object::Integer(i64::from(img.height)),
+        );
+        d.insert(
+            Name::from(b"ColorSpace"),
+            match &img.color_space {
+                ImportColorSpace::DeviceGray => Object::Name(Name::from(b"DeviceGray")),
+                ImportColorSpace::DeviceRgb => Object::Name(Name::from(b"DeviceRGB")),
+                ImportColorSpace::DeviceCmyk => Object::Name(Name::from(b"DeviceCMYK")),
+                // §8.6.6.3: `[/Indexed base hival lookup]`, where the lookup
+                // may be "a stream or (PDF 1.2) a byte string". A string is
+                // used here: a palette is at most 3 × 256 = 768 bytes, so a
+                // whole indirect stream object for it would cost more than it
+                // saves and would put a second object between the image and
+                // its colours.
+                ImportColorSpace::Indexed { hival, lookup } => Object::Array(vec![
+                    Object::Name(Name::from(b"Indexed")),
+                    Object::Name(Name::from(b"DeviceRGB")),
+                    Object::Integer(i64::from(*hival)),
+                    Object::String(lookup.clone()),
+                ]),
+            },
+        );
+        d.insert(
+            Name::from(b"BitsPerComponent"),
+            Object::Integer(i64::from(img.bits_per_component)),
+        );
+        match img.filter {
+            ImportFilter::DctDecode => {
+                d.insert(
+                    Name::from(b"Filter"),
+                    Object::Name(Name::from(b"DCTDecode")),
+                );
+                // NO /DecodeParms /ColorTransform — Table 13 makes the
+                // codestream's Adobe marker outrank it, and that marker
+                // travels with the verbatim bytes. See `image_import::jpeg`.
+            }
+            ImportFilter::Flate => {
+                d.insert(
+                    Name::from(b"Filter"),
+                    Object::Name(Name::from(b"FlateDecode")),
+                );
+            }
+            ImportFilter::FlatePngPredictor {
+                colors,
+                bits_per_component,
+                columns,
+            } => {
+                d.insert(
+                    Name::from(b"Filter"),
+                    Object::Name(Name::from(b"FlateDecode")),
+                );
+                // Table 8. Every one of these is REQUIRED for correctness,
+                // not decoration: their defaults are 1/1/8/1, and a missing
+                // /Columns alone turns the whole image into noise.
+                let mut parms = Dict::new();
+                parms.insert(Name::from(b"Predictor"), Object::Integer(15));
+                parms.insert(Name::from(b"Colors"), Object::Integer(i64::from(colors)));
+                parms.insert(
+                    Name::from(b"BitsPerComponent"),
+                    Object::Integer(i64::from(bits_per_component)),
+                );
+                parms.insert(Name::from(b"Columns"), Object::Integer(i64::from(columns)));
+                d.insert(Name::from(b"DecodeParms"), Object::Dict(parms));
+            }
+        }
+        if let Some(mask) = &img.color_key_mask {
+            // §8.9.6.4: an array of 2 × n integers in SOURCE sample space.
+            d.insert(
+                Name::from(b"Mask"),
+                Object::Array(mask.iter().copied().map(Object::Integer).collect()),
+            );
+        }
+        if let Some(id) = soft_mask_id {
+            d.insert(Name::from(b"SMask"), Object::Reference(id));
+        }
+        d.insert(
+            Name::from(b"Length"),
+            Object::Integer(i64::try_from(img.data.len()).unwrap_or(i64::MAX)),
+        );
+        d
+    }
+
+    /// Pick a `/XObject` resource name not already in use on this page.
+    ///
+    /// §7.8.3: *"The scope of a resource name shall be local to a particular
+    /// content stream"* — but a page's `/Contents` streams share ONE
+    /// resource dictionary, so a name already used by the page's existing
+    /// content would collide with the new image. The **effective** resources
+    /// are consulted, not just the page's own, because §7.7.3.4 lets a page
+    /// inherit them from an ancestor.
+    ///
+    /// The `pdfce` prefix is not decoration: it makes pdfce-authored
+    /// resources identifiable in a saved file, which is what lets a later
+    /// Pass — or a human reading the PDF — tell them from the producer's.
+    fn free_xobject_name(&self, page_id: ObjId, slots: &[PageSlot]) -> Vec<u8> {
+        let graph = self.graph();
+        let existing = self
+            .value(page_id)
+            .and_then(Object::as_dict)
+            .and_then(|p| p.get(b"Resources"))
+            .map(|o| graph.resolve(o))
+            .and_then(|o| o.as_dict().cloned())
+            .unwrap_or_else(|| self.effective_resources(page_id, slots));
+        let xobj = existing
+            .get(b"XObject")
+            .map(|o| graph.resolve(o))
+            .and_then(|o| o.as_dict().cloned())
+            .unwrap_or_default();
+        for n in 1u32.. {
+            let candidate = format!("pdfceIm{n}").into_bytes();
+            if xobj.get(candidate.as_slice()).is_none() {
+                return candidate;
+            }
+        }
+        // `1u32..` is not empty, so this is unreachable; returning a
+        // deterministic name is still better than a panic if it ever were.
+        b"pdfceIm".to_vec()
+    }
+
+    /// Assemble the disclosure set for one placement.
+    ///
+    /// Separate from [`Self::add_image`] so the arithmetic that produces the
+    /// operator-facing numbers is testable on its own and reads as one
+    /// piece — and so the placement path cannot accidentally return half of
+    /// it.
+    fn image_disclosures(
+        &self,
+        spec: &NewImage<'_>,
+        placed: &page_tree::Rect,
+        soft_mask_written: bool,
+    ) -> ImageAuthorDisclosures {
+        let img = spec.image;
+        let notes = img.notes;
+        let (pw, ph) = (placed.urx - placed.llx, placed.ury - placed.lly);
+        let (px_w, px_h) = img.display_size_px();
+        // Pixels per inch = pixels / (points / 72).
+        let dpi_x = if pw > 0.0 {
+            f64::from(px_w) * 72.0 / pw
+        } else {
+            0.0
+        };
+        let dpi_y = if ph > 0.0 {
+            f64::from(px_h) * 72.0 / ph
+        } else {
+            0.0
+        };
+
+        let requested = spec.rect;
+        let (rw, rh) = (requested.urx - requested.llx, requested.ury - requested.lly);
+        // A half-point slack tolerance: a rectangle whose aspect happens to
+        // match the image's to within half a point is not "letterboxed" in
+        // any sense the operator would recognise, and reporting it would
+        // train them to ignore the disclosure.
+        let letterboxed =
+            spec.fit == ImageFit::Contain && ((rw - pw).abs() > 0.5 || (rh - ph).abs() > 0.5);
+        let aspect_distorted = spec.fit == ImageFit::Stretch
+            && px_w > 0
+            && px_h > 0
+            && rh > 0.0
+            && ((rw / rh) - (f64::from(px_w) / f64::from(px_h))).abs() > 0.01;
+
+        let version_ahead_of_document = notes.requires_pdf_version.and_then(|feature| {
+            let doc = self.base.version();
+            let (major, minor) = feature.since();
+            let needs = crate::PdfVersion { major, minor };
+            (doc < needs).then_some((feature, doc))
+        });
+
+        ImageAuthorDisclosures {
+            letterboxed,
+            aspect_distorted,
+            effective_dpi: (dpi_x, dpi_y),
+            below_screen_resolution: dpi_x < 72.0 || dpi_y < 72.0,
+            recompressed: notes.recompressed,
+            requested_compression: notes.requested_compression,
+            applied_compression: notes.applied_compression,
+            lossless_from_lossy: notes.lossless_from_lossy,
+            soft_mask_written,
+            // Either mechanism: `pdfce-render` defers /SMask and /Mask
+            // identically and paints the base image opaque.
+            transparency_not_previewed: soft_mask_written || img.color_key_mask.is_some(),
+            colour_key_mask_written: img.color_key_mask.is_some(),
+            colour_profile_dropped: notes.colour_profile_dropped,
+            cmyk_polarity_unverifiable: notes.cmyk_polarity_unverifiable,
+            progressive_jpeg: notes.progressive_jpeg,
+            exif_orientation_applied: notes.exif_orientation,
+            bmp_fourth_byte_ignored: notes.bmp_fourth_byte_ignored,
+            version_ahead_of_document,
+            tagged_document: self.document_is_tagged(),
+        }
     }
 }
 
