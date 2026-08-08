@@ -283,9 +283,31 @@ impl LoadReport {
 /// §8.6.4.4 mandates **no** conversion at all — it is device-dependent by
 /// definition — so there is no correct answer to appeal to, and Acrobat's
 /// own answer is a user-configurable working-space profile. That makes
-/// this the textbook case for the operator directive: the standard is
-/// silent, so the choice is the operator's, with pdfce's shipped default
-/// set to what is usually followed.
+/// this the textbook case for R169: the standard is silent, so the choice
+/// is the operator's.
+///
+/// # The default is an OPERATOR RULING, and knowingly diverges
+///
+/// R169 says a shipped default should be "the best guess of what is
+/// usually followed", and by that rule the default would be
+/// [`Self::Calibrated`] — it is what Acrobat's shipped profile and pdfium
+/// both produce, which is tier-(a)/(c) evidence, the strongest in the
+/// whole ambiguity register.
+///
+/// **The default is [`Self::NeutralBlack`] anyway**, by Ken's explicit
+/// ruling of 2026-08-08 ("flip it") once he saw what the calibrated
+/// answer does to pure-K line art. This is recorded as a *divergence*
+/// rather than quietly relabelled as the consensus, because the two are
+/// different claims and a future session must not read this default as
+/// evidence of what other readers do. It is the reference-exceeding case
+/// from the other side: matching the reference is a floor, not an
+/// obligation, and here the operator judged the floor wrong for the
+/// documents he actually opens.
+///
+/// The divergence is also **narrow by construction** — only the pure-K
+/// axis moves; every mixed colour still uses the calibrated table — so
+/// what is given up is agreement on black line art specifically, not
+/// colour fidelity generally.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum CmykIntent {
@@ -293,21 +315,23 @@ pub enum CmykIntent {
     /// SWOP-family rendering that Acrobat's default profile and pdfium
     /// both produce.
     ///
-    /// **The shipped default, on tier-(a)/(c) evidence rather than
-    /// inference:** it is what the dominant reader does. Its visible
-    /// consequence is that solid black ink (`0 0 0 1 k`) renders `#231F20`
-    /// rather than `#000000`, and mid greys are slightly cool — correct
-    /// by the target, and startling on line art that strokes in pure K.
-    #[default]
+    /// **Not the shipped default, despite being the best-evidenced
+    /// answer** — see the type docs. Its visible consequence is that
+    /// solid black ink (`0 0 0 1 k`) renders `#231F20` rather than
+    /// `#000000`, and mid greys are slightly cool. Choose this when the
+    /// question is *"what will this look like in Acrobat?"* — proofing a
+    /// document for someone else's screen, or checking a render-parity
+    /// difference.
     Calibrated,
     /// As [`Self::Calibrated`], except that pure black — `C = M = Y = 0`
     /// with any `K` — is forced to a neutral grey of `1 − K`, so pure-K
     /// line art renders `#000000`.
     ///
-    /// For CAD and engineering drawings, where every line is pure K and
-    /// the expectation is true black on white. Deliberately **not** the
-    /// default: it is a departure from the reference, and defaults follow
-    /// the reference.
+    /// **The shipped default, by operator ruling** (see the type docs).
+    /// For CAD and engineering drawings, where every line is stroked in
+    /// pure K and true black on white is the expectation — which is the
+    /// document population this project's operator actually works with.
+    #[default]
     NeutralBlack,
     /// The naive additive formula pdfce used before the calibration —
     /// `1 − min(1, x + k)` per channel.
@@ -385,6 +409,30 @@ const MIN_WORD_GAP_RATIO: f32 = 0.01;
 /// Highest accepted `word_gap_ratio`. Beyond this a line never breaks
 /// into words at all.
 const MAX_WORD_GAP_RATIO: f32 = 5.0;
+
+/// The settings-file token for a separation policy.
+///
+/// Defined once and used by both [`Settings::apply`] (to say what it fell
+/// back to) and [`Settings::write_to_string`] (to write it out). Spelling
+/// a token in two places is how a writer and a parser come to disagree
+/// about the same value — the same failure the `word_gap_ratio` default
+/// already demonstrated in this module.
+const fn separation_token(policy: SeparationPolicy) -> &'static str {
+    match policy {
+        SeparationPolicy::Repair => "repair",
+        SeparationPolicy::Discard => "discard",
+        SeparationPolicy::Refuse => "refuse",
+    }
+}
+
+/// The settings-file token for a CMYK intent. See [`separation_token`].
+const fn cmyk_token(intent: CmykIntent) -> &'static str {
+    match intent {
+        CmykIntent::Calibrated => "calibrated",
+        CmykIntent::NeutralBlack => "neutral_black",
+        CmykIntent::Naive => "naive",
+    }
+}
 
 impl Settings {
     /// Load the operator's settings, always successfully.
@@ -477,7 +525,7 @@ impl Settings {
                     key: key.to_owned(),
                     value: value.to_owned(),
                     line,
-                    using: "repair".to_owned(),
+                    using: separation_token(Self::default().separations).to_owned(),
                 }),
             },
             "cmyk_intent" => match value {
@@ -488,7 +536,7 @@ impl Settings {
                     key: key.to_owned(),
                     value: value.to_owned(),
                     line,
-                    using: "calibrated".to_owned(),
+                    using: cmyk_token(Self::default().cmyk_intent).to_owned(),
                 }),
             },
             "word_gap_ratio" => match value.parse::<f32>() {
@@ -564,11 +612,14 @@ impl Settings {
         out.push_str(
             "# How CMYK colour is converted for display. The PDF standard defines no\n\
              # conversion at all (section 8.6.4.4), so this is a choice, not a fact.\n\
-             #   calibrated    = match how Acrobat and most viewers render it (default).\n\
-             #                   Solid black ink shows as a very dark warm grey, not pure\n\
-             #                   black, because that is what the reference does.\n\
-             #   neutral_black = as calibrated, but pure K prints true black. Use this\n\
-             #                   for CAD and line drawings.\n\
+             #   neutral_black = pure black ink renders true black (default). Right for\n\
+             #                   CAD and line drawings, where every line is stroked in\n\
+             #                   pure K. Only pure black differs; every mixed colour is\n\
+             #                   still the calibrated one.\n\
+             #   calibrated    = match how Acrobat and most viewers render it. Solid\n\
+             #                   black ink shows as a very dark warm grey, not pure\n\
+             #                   black, because that is what those viewers do. Use it to\n\
+             #                   check how a document will look to someone else.\n\
              #   naive         = the simple formula pdfce used before calibration. Only\n\
              #                   for reproducing an older pdfce export.\n",
         );
@@ -804,7 +855,11 @@ mod tests {
             &mut notes,
         );
         assert_eq!(settings.separations, SeparationPolicy::Discard);
-        assert_eq!(settings.cmyk_intent, CmykIntent::Calibrated, "defaulted");
+        assert_eq!(
+            settings.cmyk_intent,
+            CmykIntent::default(),
+            "an unreadable value falls back to the default, whatever it currently is"
+        );
         assert!((settings.word_gap_ratio - 0.4).abs() < f32::EPSILON);
         assert_eq!(
             notes,
@@ -812,7 +867,7 @@ mod tests {
                 key: "cmyk_intent".to_owned(),
                 value: "purple".to_owned(),
                 line: 2,
-                using: "calibrated".to_owned(),
+                using: cmyk_token(CmykIntent::default()).to_owned(),
             }]
         );
     }

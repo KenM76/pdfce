@@ -271,9 +271,35 @@ fn an_image_sample_honours_the_same_intent_as_the_k_operator() {
 
 #[test]
 fn the_default_render_options_carry_the_default_intent() {
-    // R83 again, from the other end: the no-options entry point every
-    // existing caller uses must not silently acquire a different colour
-    // rendering from this field existing.
-    assert_eq!(RenderOptions::default().cmyk_intent, CmykIntent::Calibrated);
-    assert_eq!(CmykIntent::default(), CmykIntent::Calibrated);
+    // R83 from the other end: the no-options entry point every existing
+    // caller uses must not silently acquire a DIFFERENT colour rendering
+    // from the one the operator's settings name. Asserted as an identity
+    // against `CmykIntent::default()` rather than against a named variant,
+    // so flipping the shipped default is a one-line change in the settings
+    // module and not a hunt through the test suite.
+    assert_eq!(
+        RenderOptions::default().cmyk_intent,
+        CmykIntent::default(),
+        "the options default and the setting default must be the same answer"
+    );
+}
+
+#[test]
+fn the_shipped_default_renders_pure_k_as_true_black() {
+    // The operator's ruling of 2026-08-08, pinned as a fact about the
+    // shipped product rather than left implicit in a `#[default]`
+    // attribute.
+    //
+    // This DIVERGES from Acrobat and pdfium deliberately — both render
+    // solid black ink as a warm near-black, and that is still available as
+    // `CmykIntent::Calibrated`. The divergence is narrow by construction:
+    // only the pure-K axis moves, which
+    // `neutral_black_leaves_every_colour_that_is_not_pure_k_alone` pins
+    // from the other side. If this test ever fails, the question to ask is
+    // whether the default was changed on purpose.
+    assert_eq!(
+        centre(&render(page_filled_with("0 0 0 1"), CmykIntent::default())),
+        (0, 0, 0),
+        "out of the box, black ink is black"
+    );
 }

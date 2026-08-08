@@ -1,5 +1,27 @@
 # 003 — Distribution posture: cross-platform scope and update mechanism
 
+> **AMENDED IN PLACE 2026-08-08 — R15's user-state folder now has a
+> name, and §6.3's copy carries it.** This record shipped R15 (§5.6,
+> §6.1) with the folder deliberately unnamed: §6.3's update sentence read
+> *"replace the program files (keep your `<user-state>` folder)"*, a
+> literal placeholder, because no Pass had yet persisted anything and
+> naming it early would have been a guess.
+>
+> **The name is `userdata`**, chosen when the store was actually built
+> (Pass 51.0, `crates/pdfce-core/src/settings/`) and substituted here on
+> Ken's instruction of 2026-08-08 ("fix it"). Only the placeholder moved;
+> §6.3's wording is otherwise untouched, because that section's own
+> instruction is *"use this wording; do not paraphrase it looser"* and it
+> is claim-bearing copy about what pdfce does to a user's machine.
+>
+> The substitution is now load-bearing rather than cosmetic: a user who
+> follows this sentence and deletes the wrong folder loses their
+> settings, so the sentence has to name the folder that actually exists.
+> Two other mentions of "user-state" in this record — in §5.4 (Scoop's
+> `persist` field as prior art for the problem) and §10 (the follow-up
+> action that created R15) — are prose about the *concept*, not the
+> folder, and are left exactly as they are.
+
 - **Status:** Accepted
 - **Date:** 2026-07-30
 - **Deciders:** KenAgent (autonomous-builder), on request of `pdfce-engineer`
@@ -861,7 +883,7 @@ written:
 > browser, not by pdfce.
 >
 > **Updates** are manual: download the new zip and replace the program
-> files (keep your `<user-state>` folder). pdfce will never update
+> files (keep your `userdata` folder). pdfce will never update
 > itself.
 >
 > **Supported platform:** Windows 10/11, 64-bit. pdfce's code is kept
