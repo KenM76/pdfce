@@ -78,12 +78,17 @@
 pub mod assemble;
 pub mod outline;
 pub mod references;
+pub mod separation;
 pub mod split;
 
 pub use assemble::{
     AssembleOptions, AssembleReport, DocumentView, OutlinePolicy, PageRef, assemble,
 };
 pub use references::{DanglingReport, DestinationResolver, census_dangling};
+pub use separation::{
+    SeparationDict, SeparationImpact, SeparationPlan, SeparationPolicy, SeparationRewrite,
+    SeparationSplitRefused, any_preseparated, plan_repair, separation_of,
+};
 pub use split::{SplitCriterion, SplitPart, plan_split, render_name_template, split};
 
 use crate::object::ObjId;
@@ -159,6 +164,14 @@ pub enum PageOpError {
         /// The 1-based index of the second.
         second: usize,
     },
+    /// The selection would split a preseparated page set (§14.11.4), and
+    /// the operation was configured to refuse rather than repair it.
+    ///
+    /// Raised only under [`separation::SeparationPolicy::Refuse`]; the
+    /// default policy repairs the survivors instead. See
+    /// [`crate::pageops::separation`] for why refusing is not the default.
+    #[error(transparent)]
+    SeparationSplit(#[from] separation::SeparationSplitRefused),
 }
 
 /// The point at which §7.6 document permissions will be enforced — named
@@ -282,6 +295,11 @@ pub fn merge(
         // apply a fresh scheme (or Bates numbering) after combining.
         carry_page_labels: false,
         rename_duplicate_fields: true,
+        // A merge copies every page of every source, so no preseparated
+        // set can lose a member and the policy never fires. Stated rather
+        // than defaulted, so that a future partial-merge does not inherit
+        // this answer by accident.
+        separations: SeparationPolicy::Repair,
     };
     assemble(sources, &order, &options)
 }
@@ -377,6 +395,10 @@ pub fn insert(
         // leaves it stale and reports it.
         carry_page_labels: true,
         rename_duplicate_fields: true,
+        // An insert keeps every target page and takes whole pages from the
+        // source, so a set is split only if the CALLER selected part of
+        // one — which the repair then handles.
+        separations: SeparationPolicy::Repair,
     };
     assemble(
         &[target.clone_view(), source.clone_view()],

@@ -333,6 +333,16 @@ fn the_free_list_is_a_well_formed_linked_list_headed_at_object_zero() {
 fn deleting_leaves_surviving_objects_byte_identical() {
     // §5's invariant, on the operation most likely to break it: an
     // untouched page's definition bytes must be exactly what they were.
+    //
+    // "Untouched" is doing real work in that sentence, and it acquired an
+    // exception after this test was written. A surviving page that is a
+    // member of a preseparated set (§14.11.4) which just LOST a member is
+    // not untouched: its `/SeparationInfo /Pages` array names an object
+    // that no longer exists, so re-emitting it is what preserves the
+    // document rather than what damages it. That case is pinned in
+    // `tests/separation_sets.rs`, which also asserts the converse — a set
+    // that lost nothing is byte-identical, exactly as here. This fixture
+    // is not preseparated, so the unqualified invariant holds for it.
     let source = three_page_doc();
     let before = Document::from_bytes(source.clone()).unwrap();
     let mut s = session(&source);

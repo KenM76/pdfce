@@ -140,6 +140,8 @@ use crate::image_import::ImportedImage;
 use crate::object::{Dict, IndirectObject, Name, ObjId, Object, Stream};
 use crate::page_tree::{self, Page, PageSlot, PageTreeError};
 use crate::pageops::references::{DanglingReport, census_dangling};
+use crate::pageops::separation::{SeparationImpact, SeparationPolicy, SeparationSplitRefused};
+use crate::pageops::{self};
 use crate::signature::{SaveMode, SignatureCensus, SignatureImpact, census, impact_of};
 use crate::span::ByteSpan;
 use crate::vartext::FontResource;
@@ -2205,6 +2207,14 @@ pub enum EditError {
         /// How many the document has.
         total: usize,
     },
+    /// The removal would split a preseparated page set (§14.11.4) and the
+    /// caller asked to refuse rather than repair.
+    ///
+    /// Reachable only through [`EditSession::delete_pages_with`] with
+    /// [`SeparationPolicy::Refuse`]; the default policy repairs the
+    /// surviving members instead and cannot raise this.
+    #[error(transparent)]
+    SeparationSplit(#[from] SeparationSplitRefused),
     /// Annotation authoring was attempted on an **encrypted** document
     /// (§7.6). Refused **by name** (X10, R27 posture): an annotation's
     /// `/Contents`/`/T`/`/Subj` strings are encrypted per object, and
@@ -4745,6 +4755,28 @@ pub struct DeleteOutcome {
     /// what the author meant — the fuzzy-never-sneaky rule cuts against
     /// silent repair exactly as hard as it cuts against silent breakage.
     pub dangling: DanglingReport,
+    /// What the removal did to preseparated page sets (§14.11.4), and the
+    /// one thing on this type that pdfce **does** repair.
+    ///
+    /// That is not a reversal of the no-repair posture stated on
+    /// [`DeleteOutcome::dangling`] — it is the same principle reaching the
+    /// opposite answer on a different kind of reference, and the
+    /// difference is whether pdfce has to guess.
+    ///
+    /// A bookmark whose target page left poses a **semantic** question:
+    /// which page did the author mean instead? Nothing in the file
+    /// answers it, so repointing would be pdfce inventing an intention.
+    /// A separation dictionary's `/Pages` array poses a **structural**
+    /// one: Table 364 says the array lists the members of this set, and
+    /// after the removal pdfce knows exactly which members there are.
+    /// There is no authorial intent to guess at — leaving the array
+    /// naming a freed object is not "preserving the author's choice", it
+    /// is emitting a reference to nothing.
+    ///
+    /// So: bookmarks are reported and left, separations are repaired and
+    /// reported. Both follow from fuzzy-never-sneaky; only one of them
+    /// involves a fuzzy value.
+    pub separations: SeparationImpact,
     /// What saving this edit will do to the document's signatures.
     pub signature: SignatureImpact,
 }
@@ -10418,8 +10450,47 @@ impl EditSession {
     ///   certification signature (§12.8.4).
     /// - [`EditError::WouldRemoveEveryPage`] — §7.7.3.3 requires at least
     ///   one page.
+    /// ## Preseparated page sets are repaired, not just reported
+    ///
+    /// §14.11.4 lets one logical page be several page objects — one per
+    /// printing plate — tied together by a `/SeparationInfo` dictionary
+    /// whose `/Pages` arrays Table 364 requires to be **identical** across
+    /// every member. Deleting one plate therefore falsifies every
+    /// surviving plate's array. pdfce rewrites them, and says which
+    /// colorants left; see [`DeleteOutcome::separations`] for why this one
+    /// class of broken reference is repaired when bookmarks are not.
+    ///
+    /// # Errors
+    ///
+    /// - [`EditError::CertificationForbidsChange`] — an enforced
+    ///   certification signature (§12.8.4).
+    /// - [`EditError::WouldRemoveEveryPage`] — §7.7.3.3 requires at least
+    ///   one page.
     /// - [`EditError::PageOutOfRange`], [`EditError::PageTree`].
     pub fn delete_pages(&mut self, indices: &[usize]) -> Result<DeleteOutcome, EditError> {
+        self.delete_pages_with(indices, SeparationPolicy::default())
+    }
+
+    /// [`EditSession::delete_pages`], with an explicit answer for
+    /// preseparated page sets (§14.11.4).
+    ///
+    /// Exists so the policy is reachable before there is a settings store
+    /// to reach it from: `delete_pages` delegates here with
+    /// [`SeparationPolicy::Repair`], the documented default, and when
+    /// operator settings land this is the entry point they drive. The
+    /// split also keeps the common call site free of a parameter that is
+    /// irrelevant to every document that is not preseparated.
+    ///
+    /// # Errors
+    ///
+    /// As [`EditSession::delete_pages`], plus
+    /// [`EditError::SeparationSplit`] under
+    /// [`SeparationPolicy::Refuse`] only.
+    pub fn delete_pages_with(
+        &mut self,
+        indices: &[usize],
+        separations: SeparationPolicy,
+    ) -> Result<DeleteOutcome, EditError> {
         self.check_certification()?;
 
         let slots = self.page_slots()?;
@@ -10438,6 +10509,7 @@ impl EditSession {
                 pages_removed: 0,
                 objects_freed: 0,
                 dangling: DanglingReport::default(),
+                separations: SeparationImpact::default(),
                 signature: self.signature_impact_of_save(SaveMode::Incremental),
             });
         }
@@ -10462,6 +10534,15 @@ impl EditSession {
         // Census BEFORE the splice: afterwards the removed pages are
         // gone and nothing can be found to have pointed at them.
         let dangling = census_dangling(&self.graph(), &removed_pages, &surviving);
+
+        // Same reason, second census: §14.11.4's repair reads the
+        // DEPARTING pages' `/DeviceColorant` to report which plates left,
+        // and after the sweep those objects are unreadable. Deliberately
+        // NOT folded into `DanglingReport` — every other class it counts
+        // is left broken and reported, and listing a class pdfce actually
+        // fixes under the same heading would misdescribe both.
+        let separation_plan =
+            pageops::plan_repair(&self.graph(), &surviving, &removed_pages, separations)?;
 
         // --- splice the tree ------------------------------------------
         let mut scratch: BTreeMap<ObjId, Object> = BTreeMap::new();
@@ -10556,6 +10637,21 @@ impl EditSession {
             drop_from_parent = newly_empty;
         }
 
+        // --- repair preseparated page sets (§14.11.4) ------------------
+        //
+        // Applied HERE, after the splice and before the sweep, and the
+        // order is load-bearing in both directions. After the splice,
+        // because a surviving page is a leaf and the splice only rewrites
+        // ancestor nodes, so there is nothing in `scratch` to collide
+        // with. Before the sweep, because the sweep's liveness test runs
+        // over `scratch`: with the repaired arrays in place, a removed
+        // plate is no longer referenced by its surviving siblings and the
+        // reachability answer is the true one rather than one that
+        // happens to be overridden by `freed` having been seeded first.
+        for rewrite in &separation_plan.rewrites {
+            scratch.insert(rewrite.page, Object::Dict(rewrite.dict.clone()));
+        }
+
         // --- sweep what the removed pages owned exclusively ------------
         //
         // Two closures, and the pairing is what makes this safe. The
@@ -10626,6 +10722,7 @@ impl EditSession {
             pages_removed,
             objects_freed,
             dangling,
+            separations: separation_plan.impact,
             signature: self.signature_impact_of_save(SaveMode::Incremental),
         })
     }

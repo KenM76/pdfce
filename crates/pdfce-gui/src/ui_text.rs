@@ -1435,6 +1435,56 @@ cannot know which page you meant."
     )
 }
 
+/// Status-bar line after an operation that split a preseparated page set
+/// (ISO 32000-1 §14.11.4).
+///
+/// Appended to whatever the operation's own line said, because the two
+/// facts are independent: a delete can orphan bookmarks *and* split a
+/// separation set, and collapsing them into one sentence would make the
+/// operator choose which to believe.
+///
+/// The colorants are **named, not counted**, unlike every other
+/// disclosure in this file. A separation set has one member per printing
+/// plate — four for process CMYK, a few more with spot colours — so the
+/// list is short, and the name is the whole actionable content:
+/// "3 separations removed" tells the operator nothing they can do,
+/// "removed Magenta, Yellow, Black — kept Cyan" tells them exactly what
+/// they are now holding.
+///
+/// `removed` and `kept` arrive as raw `/DeviceColorant` bytes (Table 364
+/// types the entry as "name **or** string", so there is no declared
+/// encoding); rendering them is this function's job, because
+/// `pdfce-core` does not own user-facing text (decision 002 R1).
+pub fn separation_set_split(pages: usize, removed: &[Vec<u8>], kept: &[Vec<u8>]) -> String {
+    let names = |list: &[Vec<u8>]| {
+        if list.is_empty() {
+            "(unnamed)".to_owned()
+        } else {
+            list.iter()
+                .map(|name| String::from_utf8_lossy(name).into_owned())
+                .collect::<Vec<String>>()
+                .join(", ")
+        }
+    };
+    format!(
+        "This is a preseparated document — several page objects are one logical \
+page, one per printing plate. Removed: {}. Kept: {}. The {pages} remaining \
+page(s) in that set were updated so they no longer list the plates that left.",
+        names(removed),
+        names(kept)
+    )
+}
+
+/// Status-bar line for a page whose separation dictionary arrived without
+/// the `/Pages` array §14.11.4 Table 364 requires.
+pub fn separation_dictionary_malformed(pages: usize) -> String {
+    format!(
+        "{pages} page(s) declare a printing separation but do not list which \
+pages belong to it, which the PDF standard requires. They were already like \
+that and were left alone — pdfce will not guess which pages were meant."
+    )
+}
+
 /// Status-bar line after a delete that broke nothing.
 pub fn delete_succeeded(pages: usize, objects: usize) -> String {
     format!(

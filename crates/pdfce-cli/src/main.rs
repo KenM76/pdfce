@@ -9278,6 +9278,66 @@ would leave dangling references and a file that claims to be tagged but is not."
             output.display()
         );
     }
+    report_separations(output, &report.separations);
+}
+
+/// Render `/DeviceColorant` byte strings as a readable list.
+///
+/// Table 364 types the value as "name **or** string", so it arrives as
+/// bytes with no declared encoding. Lossy UTF-8 is right for a diagnostic
+/// line: a colorant is almost always ASCII (`Cyan`, `PANTONE 485 C`), and
+/// a mangled byte should still print something an operator can match
+/// against their plate list rather than suppressing the whole message.
+fn colorant_list(colorants: &[Vec<u8>]) -> String {
+    colorants
+        .iter()
+        .map(|name| String::from_utf8_lossy(name).into_owned())
+        .collect::<Vec<String>>()
+        .join(", ")
+}
+
+/// Disclose what an operation did to preseparated page sets (§14.11.4).
+///
+/// Shared by the document producers and the in-place editors because the
+/// operator's question is the same either way: *which plates do I still
+/// have?* Silent on the overwhelmingly common non-preseparated document.
+fn report_separations(output: &Path, impact: &pdfce_core::pageops::SeparationImpact) {
+    if impact.sets_split > 0 {
+        eprintln!(
+            "pdfce-cli: {}: this is a PRESEPARATED document (ISO 32000-1 §14.11.4) — several \
+page objects are one logical page, one per printing plate. The selection split {} set(s), so \
+{} surviving page(s) had their /SeparationInfo /Pages array rewritten to name only the plates \
+that are still here. Removed: {}. Kept: {}.",
+            output.display(),
+            impact.sets_split,
+            impact.pages_changed,
+            colorant_list(&impact.colorants_removed),
+            colorant_list(&impact.colorants_kept),
+        );
+    }
+    if impact.malformed > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} page(s) carry a /SeparationInfo with no usable /Pages array, \
+which §14.11.4 Table 364 makes REQUIRED. They were already non-conforming on arrival and were \
+left exactly as they were — repairing one would mean guessing which pages belonged to the set.",
+            output.display(),
+            impact.malformed
+        );
+    }
+}
+
+/// The `separations=` metrics fragment shared by both metric tails.
+///
+/// Colorant names are deliberately absent from the machine line: they are
+/// unescaped operator-supplied bytes and the metrics format is
+/// whitespace-delimited `key=value`. The counts are the machine-readable
+/// part; the names go to the stderr prose above, where they can be
+/// arbitrary.
+fn separation_metrics(impact: &pdfce_core::pageops::SeparationImpact) -> String {
+    format!(
+        "sep_sets_split={} sep_pages_changed={} sep_malformed={}",
+        impact.sets_split, impact.pages_changed, impact.malformed
+    )
 }
 
 /// The metrics tail every document-producing subcommand shares.
@@ -9285,7 +9345,7 @@ fn assemble_metrics(report: &pdfce_core::pageops::AssembleReport, out_bytes: usi
     format!(
         "pages={} objects={} dangling={} outline_kept={} outline_dropped={} \
 fields_renamed={} fields_dropped={} dests_dropped={} labels_dropped={} labels_stale={} \
-struct_tree_dropped={} ocg_carried={} out_bytes={out_bytes}",
+struct_tree_dropped={} ocg_carried={} {} out_bytes={out_bytes}",
         report.pages,
         report.objects_copied,
         report.dangling_references,
@@ -9298,6 +9358,7 @@ struct_tree_dropped={} ocg_carried={} out_bytes={out_bytes}",
         u32::from(report.page_labels_stale),
         u32::from(report.struct_tree_dropped),
         u32::from(report.optional_content_carried),
+        separation_metrics(&report.separations),
     )
 }
 
@@ -12742,7 +12803,7 @@ fn cmd_delete_pages(
 
     println!(
         "delete-pages {} mode={} signature={} -> {}; pages_removed={} objects_freed={} \
-dangling_bookmarks={} dangling_links={} dangling_dests={} page_labels_stale={} {}",
+dangling_bookmarks={} dangling_links={} dangling_dests={} page_labels_stale={} {} {}",
         input.display(),
         mode.name(),
         signature_token(outcome.signature),
@@ -12753,6 +12814,7 @@ dangling_bookmarks={} dangling_links={} dangling_dests={} page_labels_stale={} {
         outcome.dangling.links,
         outcome.dangling.named_destinations,
         u32::from(outcome.dangling.page_labels_stale),
+        separation_metrics(&outcome.separations),
         edit_metrics(&saved)
     );
 
@@ -12776,6 +12838,10 @@ does not adjust it, so its numbering is now stale.",
             input.display()
         );
     }
+    // The one class above that pdfce repairs rather than reports — see
+    // `DeleteOutcome::separations` for why a structural invariant is
+    // repairable where an authorial destination is not.
+    report_separations(input, &outcome.separations);
     eprintln!(
         "pdfce-cli: {}: deletion removes pages from the DOCUMENT, not from the file's bytes. \
 The previous revision can still contain them. This is not redaction.",

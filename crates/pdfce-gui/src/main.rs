@@ -4227,6 +4227,24 @@ impl PdfceApp {
                     note.push(' ');
                     note.push_str(ui_text::page_labels_now_stale());
                 }
+                // §14.11.4. Independent of the dangling census above: this
+                // is the one class of broken reference pdfce repairs, so
+                // it is a separate sentence rather than a fifth counter in
+                // the "now point nowhere" line.
+                if outcome.separations.sets_split > 0 {
+                    note.push(' ');
+                    note.push_str(&ui_text::separation_set_split(
+                        outcome.separations.pages_changed,
+                        &outcome.separations.colorants_removed,
+                        &outcome.separations.colorants_kept,
+                    ));
+                }
+                if outcome.separations.malformed > 0 {
+                    note.push(' ');
+                    note.push_str(&ui_text::separation_dictionary_malformed(
+                        outcome.separations.malformed,
+                    ));
+                }
                 self.edit_note = Some(note);
             }
             // A refusal here is real and named — a certification

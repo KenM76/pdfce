@@ -115,6 +115,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 // methods on a trait object resolve without the trait being in scope.
 use crate::object::{Dict, Name, ObjId, Object, Stream};
 use crate::page_tree::{self, PageSlot};
+use crate::pageops::separation::{self, SeparationImpact, SeparationPolicy};
 use crate::span::ByteSpan;
 use crate::writer::encoder::IdentityEncoder;
 use crate::writer::{fileid, serialize, xref_out};
@@ -233,6 +234,15 @@ pub struct AssembleOptions {
     /// precedent in this cluster. Off for a single-source operation,
     /// where no collision is possible and renaming would be gratuitous.
     pub rename_duplicate_fields: bool,
+    /// What to do when the selection splits a preseparated page set
+    /// (§14.11.4).
+    ///
+    /// Defaults to [`SeparationPolicy::Repair`], which keeps the surviving
+    /// members' `/Pages` arrays truthful. See
+    /// [`crate::pageops::separation`] for the full reasoning, including
+    /// why refusing is not the default and why this is a product policy
+    /// rather than a spec ambiguity.
+    pub separations: SeparationPolicy,
 }
 
 impl Default for AssembleOptions {
@@ -246,7 +256,33 @@ impl Default for AssembleOptions {
             source_titles: Vec::new(),
             carry_page_labels: false,
             rename_duplicate_fields: false,
+            separations: SeparationPolicy::Repair,
         }
+    }
+}
+
+impl AssembleOptions {
+    /// Choose what happens when the selection splits a preseparated page
+    /// set (§14.11.4).
+    ///
+    /// A builder method rather than a public field assignment because
+    /// [`AssembleOptions`] is `#[non_exhaustive]`: callers outside
+    /// `pdfce-core` — `pdfce-cli`, `pdfce-gui`, and the integration tests
+    /// — cannot write a struct expression for it at all, so without this
+    /// the policy would be unreachable from every front end that needs it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pdfce_core::pageops::{AssembleOptions, SeparationPolicy};
+    ///
+    /// let options = AssembleOptions::default().with_separations(SeparationPolicy::Refuse);
+    /// assert_eq!(options.separations, SeparationPolicy::Refuse);
+    /// ```
+    #[must_use]
+    pub const fn with_separations(mut self, policy: SeparationPolicy) -> Self {
+        self.separations = policy;
+        self
     }
 }
 
@@ -329,6 +365,19 @@ pub struct AssembleReport {
     /// `core_ops__merge_combine_files.md` records that Acrobat has no
     /// documented coalescing here either.
     pub optional_content_carried: bool,
+    /// What the selection did to preseparated page sets (§14.11.4).
+    ///
+    /// Empty — [`SeparationImpact::is_empty`] — for every document that is
+    /// not preseparated, which is nearly all of them. Non-empty means the
+    /// output contains pages that used to be separations of a logical page
+    /// whose other plates did not come along, and the operator is being
+    /// told which plates those were.
+    ///
+    /// This is the one field here that is **not** merely informational: a
+    /// `/Pages` array left naming pages that were not copied is a
+    /// non-conforming file, so the repair it reports is a correctness fix,
+    /// not a courtesy.
+    pub separations: SeparationImpact,
 }
 
 /// One page to place in the assembled document: which source, and which
@@ -416,6 +465,10 @@ pub fn assemble(
         page_numbers.push(copier.reserve_for(source_index, id));
     }
 
+    // Accumulated across the page loop because `report` is not built
+    // until the tree is finished, below.
+    let mut separations = SeparationImpact::default();
+
     // Copy each page. `/Parent` is stripped: the new tree is built below.
     for (position, &(source_index, id)) in selected.iter().enumerate() {
         let view = sources
@@ -440,6 +493,26 @@ pub fn assemble(
             Name::from(b"Parent"),
             Object::Reference(ObjId::new(root_num, 0)),
         );
+        // §14.11.4: this page may be one plate of a preseparated set whose
+        // other plates were not selected. The generic copy above has
+        // already done the generically-right thing and the specifically-
+        // wrong one — the `/Pages` array hit the barrier, refused as a
+        // whole, and took the Required `/Pages` entry with it. Rebuild it
+        // in output space. Done HERE rather than inside `copy_dict`
+        // because this is the only place that knows it is holding a page.
+        let per_page = separation::remap_copied(
+            view.graph(),
+            page_dict,
+            &mut copied,
+            |member| {
+                selected
+                    .iter()
+                    .position(|&(source, id)| source == source_index && id == member)
+                    .and_then(|at| page_numbers.get(at).copied())
+            },
+            options.separations,
+        )?;
+        separation::accumulate(&mut separations, &per_page);
         // §7.7.3.4: attributes the old ancestors supplied would be lost.
         for (key, value) in slot.inherited.materialize_for(page_dict) {
             let mapped = copier.copy_value(view, source_index, &value, 0)?;
@@ -470,6 +543,7 @@ pub fn assemble(
 
     let mut report = AssembleReport {
         pages: page_numbers.len(),
+        separations,
         ..AssembleReport::default()
     };
 
