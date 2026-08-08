@@ -58,6 +58,19 @@ WHAT IT DOES NOT CHECK, STATED SO THE GREEN IS NOT OVERREAD
   is invisible to this tool.
 * It does not check SESSION_LOG continuation numbers. They are append-only
   and monotonic, a different failure mode.
+
+  **It DOES, since 2026-08-07, check SESSION_LOG filing ORDINALS.** Those
+  are a different thing from continuation numbers: they are used as
+  identifiers in prose across every document ("the twenty-eighth filing's
+  hypothetical", "amended by the thirtieth filing"), so a duplicate makes
+  two distinct filings indistinguishable to every later reference.
+
+  It was added because two librarians filing concurrently BOTH claimed the
+  *thirtieth* filing. The second noticed and ceded to thirty-first — by
+  reading, not by any check. Pass IDs, rule numbers and decision numbers
+  all had uniqueness enforced; ordinals were used exactly like them and had
+  nothing. A collision would have been invisible to every automated gate in
+  the repo.
 * It does not check that a referenced rule exists. `R999` in prose passes.
 * It parses Markdown with regexes. If ROADMAP's heading or rule-item
   conventions change, this silently stops covering whatever changed — the
@@ -85,6 +98,7 @@ import sys
 from collections import defaultdict
 
 ROADMAP = os.path.join("docs", "ROADMAP.md")
+SESSION_LOG = os.path.join("docs", "SESSION_LOG.md")
 DECISIONS = os.path.join("docs", "decisions")
 
 # A Pass ID: digits, optional dotted segments which may be alphanumeric
@@ -218,6 +232,63 @@ def pass_sort_key(pid: str):
     return key
 
 
+# Ordinal words used by SESSION_LOG filing headings, e.g.
+# "## 2026-08-07 (thirty-first filing) — ...". Only the DECLARATION form
+# counts: a `##` heading. Prose references ("the twenty-eighth filing's
+# hypothetical") are not declarations and must not be collected, or every
+# back-reference would read as a duplicate.
+_UNITS = [
+    "", "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
+    "eighth", "ninth", "tenth", "eleventh", "twelfth", "thirteenth",
+    "fourteenth", "fifteenth", "sixteenth", "seventeenth", "eighteenth",
+    "nineteenth",
+]
+_TENS = {
+    "twentieth": 20, "thirtieth": 30, "fortieth": 40, "fiftieth": 50,
+    "sixtieth": 60, "seventieth": 70, "eightieth": 80, "ninetieth": 90,
+}
+_TENS_PREFIX = {
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+    "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+}
+FILING_HEADING = re.compile(r"^#{2,4}\s.*?\(([a-z][a-z-]*)\s+filing\)", re.I)
+
+
+def ordinal_to_int(word):
+    """Return the integer for an ordinal word, or None if unrecognised.
+
+    Returning None rather than raising is deliberate: an unrecognised word
+    is reported as a parse gap, not a crash. A checker that dies on a
+    heading it does not understand stops covering everything else too.
+    """
+    w = word.lower()
+    if w in _UNITS:
+        return _UNITS.index(w)
+    if w in _TENS:
+        return _TENS[w]
+    if "-" in w:
+        tens, _, unit = w.partition("-")
+        if tens in _TENS_PREFIX and unit in _UNITS and _UNITS.index(unit) < 10:
+            return _TENS_PREFIX[tens] + _UNITS.index(unit)
+    return None
+
+
+def collect_filing_ordinals(text):
+    """{ordinal_int: [heading_line_numbers]} plus any unparsed words."""
+    seen = {}
+    unparsed = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        m = FILING_HEADING.match(line)
+        if not m:
+            continue
+        n = ordinal_to_int(m.group(1))
+        if n is None:
+            unparsed.append((lineno, m.group(1)))
+            continue
+        seen.setdefault(n, []).append(lineno)
+    return seen, unparsed
+
+
 def main() -> int:
     stats = "--stats" in sys.argv
     lines = read_lines(ROADMAP)
@@ -330,11 +401,41 @@ def main() -> int:
             + ", ".join(claimed_only)
             + "  <- already spoken for; do NOT reuse"
         )
+    # Filing ordinals. Reported beside the other ledgers because they are
+    # used the same way — as identifiers in prose across every document.
+    ord_lines = read_lines(SESSION_LOG)
+    ordinals, unparsed_ordinals = collect_filing_ordinals("\n".join(ord_lines))
+    for word_line, word in unparsed_ordinals:
+        print(
+            f"NOTE  {SESSION_LOG}:{word_line}: filing heading ordinal "
+            f"{word!r} not recognised — it is NOT uniqueness-checked"
+        )
+    for num, at in sorted(ordinals.items()):
+        if len(at) > 1:
+            failures += 1
+            print(
+                f"DUPLICATE filing ordinal {num} declared {len(at)}x in "
+                f"{SESSION_LOG}, lines {', '.join(str(a) for a in at)}"
+            )
+    if ordinals:
+        top = max(ordinals)
+        missing = [n for n in range(1, top) if n not in ordinals]
+        if missing:
+            print(
+                "NOTE  filing ordinals with no heading: "
+                + ", ".join(str(m) for m in missing)
+            )
+
     print(f"  standing rules      : R{max(rules)}  -> next free is R{max(rules) + 1}")
     print(
         f"  decision records    : {max(decisions):03d} "
         f"-> next free is {max(decisions) + 1:03d}"
     )
+    if ordinals:
+        print(
+            f"  SESSION_LOG filings : {max(ordinals)} "
+            f"-> next free is {max(ordinals) + 1}"
+        )
 
     if stats:
         print()
