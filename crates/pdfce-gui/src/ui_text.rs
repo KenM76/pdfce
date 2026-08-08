@@ -4307,6 +4307,30 @@ pub fn vector_object_deleted() -> &'static str {
 content, use Redact instead."
 }
 
+/// The multi-object delete report (Pass 47.0, R168) — **states the count**.
+///
+/// # Why the number is in the sentence
+///
+/// Before Pass 47.0 a multi-object Delete removed one of N and said
+/// *"Deleted the selected object"*, which is true of the one it removed and
+/// silent about the five it left. R168 requires a verb to act on the whole
+/// selection **or say why not**; this is the acting-on-all half reporting
+/// what it did, so an operator who selected six can tell six went without
+/// counting what is left on the page.
+///
+/// Singular keeps the original wording verbatim, so the one-object case —
+/// overwhelmingly the common one — reads exactly as it always has and no
+/// existing habit or screenshot is invalidated by a Pass about the plural.
+pub fn vector_objects_deleted(count: usize) -> String {
+    if count == 1 {
+        return vector_object_deleted().to_owned();
+    }
+    format!(
+        "Deleted {count} selected objects. This is undoable, and is NOT redaction — to securely \
+remove content, use Redact instead."
+    )
+}
+
 /// The "Measure" toolbar menu label (Pass 12.M2 ui-spec §1.2). A menu, not
 /// four toolbar icons, because dimensioning is used in short deliberate bursts
 /// (rule 3 — avoid primary-toolbar icon creep).

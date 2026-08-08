@@ -157,6 +157,24 @@ pub enum VectorEditError {
         "the object contains a malformed construction operator (unexpected operand count), so it cannot be moved without tearing it"
     )]
     MalformedOperand,
+    /// Two objects selected for deletion have **partially overlapping** byte
+    /// spans — each starts inside the other and runs past its end.
+    ///
+    /// Impossible in a well-formed decomposition, where objects are emitted
+    /// in paint order and therefore nest or sit apart. Its appearance means
+    /// the object model and the content buffer disagree, and splicing anyway
+    /// would emit half of one operator's operands followed by the tail of
+    /// another's — a content stream that still parses, still renders
+    /// something, and is wrong in a way no diff explains. Refused by name.
+    #[error(
+        "two selected objects have partially overlapping byte spans (one starts at {start} inside another that ends after {end}), which a paint-order decomposition cannot produce — refusing rather than splicing a torn content stream"
+    )]
+    OverlappingObjectSpans {
+        /// The later span's start offset.
+        start: usize,
+        /// The later span's end offset.
+        end: usize,
+    },
     /// Deleting this subpath would silently MOVE the next one.
     ///
     /// The following subpath was started implicitly — by a segment operator
@@ -369,8 +387,40 @@ pub fn plan_move(
     let d = inv.map_vector(Point::new(dx_page, dy_page));
     let (du, dv) = (d.x, d.y);
 
+    let mut edits = move_edits(content, obj, du, dv)?;
+    let touched = edits.len();
+
+    Ok(PlannedEdit {
+        content: splice(&content.buf, &mut edits),
+        operators_touched: touched,
+        disclosures: clip_disclosure(content, obj),
+    })
+}
+
+/// The operand rewrites a whole-object move produces, as absolute offsets
+/// into `content.buf` — **without** splicing them.
+///
+/// Factored out of [`plan_move`] so [`plan_move_many`] can collect the edits
+/// of several objects and splice them **once**. That is not a tidiness
+/// refactor: splicing per object would invalidate every later object's byte
+/// offsets, so a multi-object move built on repeated `plan_move` calls would
+/// rewrite the wrong operands from the second object onward.
+///
+/// `du`/`dv` are already in the object's **user space** — the caller does the
+/// CTM inverse, because each object has its own CTM and the conversion is
+/// therefore per-object, not per-gesture.
+///
+/// # Errors
+///
+/// [`VectorEditError::MalformedOperand`] when a construction operator carries
+/// an operand count Table 59 does not allow, which would tear the object.
+fn move_edits(
+    content: &ContentStream,
+    obj: &PathObject,
+    du: f64,
+    dv: f64,
+) -> Result<Vec<(usize, usize, Vec<u8>)>, VectorEditError> {
     let mut edits: Vec<(usize, usize, Vec<u8>)> = Vec::new();
-    let mut touched = 0usize;
     for item in ops_in_range(content, obj.tokens.start, obj.tokens.end) {
         let Some(keyword) = item.keyword(&content.buf) else {
             continue; // an inline image inside a path run: not a construction op
@@ -398,13 +448,84 @@ pub fn plan_move(
             item.byte_end(),
             emit_op(&new_nums, keyword),
         ));
-        touched += 1;
     }
+    Ok(edits)
+}
 
+/// Plan a move of **several path objects by the same page-space delta** — one
+/// splice, one rewritten content stream, one undoable command (Pass 47.0,
+/// R168).
+///
+/// # The per-object CTM is why this is not one delta applied N times
+///
+/// The gesture supplies **one page-space** displacement, but each object's
+/// construction operands live in **its own user space**. Two objects under
+/// different `cm` transforms need different operand deltas to move the same
+/// visible distance, so the CTM inverse is taken per object
+/// ([`plan_move`] does the same for one). An implementation that converted
+/// once and reused the result would move objects by visibly different amounts
+/// on any page whose producer nested transforms — which is most CAD output.
+///
+/// # Every object must be a path, and the refusal is total
+///
+/// Operand translation is path-only (text and image objects need `Tm`/`cm`
+/// surgery, a different operator family — see
+/// [`VectorEditError::NotAPath`]). If any selected object is not a path the
+/// whole move refuses: moving the paths and silently leaving the text behind
+/// is precisely the partial application R168 forbids, and it would look like
+/// a rendering bug rather than a refusal.
+///
+/// # Errors
+///
+/// [`VectorEditError::DegenerateCtm`], [`VectorEditError::MalformedOperand`]
+/// and [`VectorEditError::OverlappingObjectSpans`] as for the single-object
+/// planners. An empty `objs` plans an unchanged buffer.
+pub fn plan_move_many(
+    content: &ContentStream,
+    objs: &[&PathObject],
+    dx_page: f64,
+    dy_page: f64,
+) -> Result<PlannedEdit, VectorEditError> {
+    let mut edits: Vec<(usize, usize, Vec<u8>)> = Vec::new();
+    let mut disclosures: Vec<String> = Vec::new();
+    for obj in objs {
+        // Per-object CTM inverse — see the doc comment above for why this
+        // cannot be hoisted out of the loop.
+        let inv = obj.ctm.inverse().ok_or(VectorEditError::DegenerateCtm)?;
+        let d = inv.map_vector(Point::new(dx_page, dy_page));
+        edits.extend(move_edits(content, obj, d.x, d.y)?);
+        for note in clip_disclosure(content, obj) {
+            if !disclosures.contains(&note) {
+                disclosures.push(note);
+            }
+        }
+    }
+    // Two objects cannot rewrite the same operator: each edit is keyed on an
+    // operator's own byte range, and an operator belongs to exactly one
+    // object's token run. A shared offset would mean the decomposition
+    // assigned one operator to two objects, which is the same torn-model
+    // condition `plan_delete_many` refuses — so it is checked, not assumed.
+    edits.sort_by_key(|e| e.0);
+    // A running scan rather than `windows(2)` + indexing: this crate DENIES
+    // `clippy::indexing_slicing` (lib.rs's panic-free policy — pdfce-core
+    // parses untrusted input, so a reachable panic is a denial-of-service
+    // bug), and `w[0]`/`w[1]` are exactly the pattern it forbids even though
+    // `windows(2)` makes them provably in-bounds.
+    let mut prev_end = 0usize;
+    for (start, end, _) in &edits {
+        if *start < prev_end {
+            return Err(VectorEditError::OverlappingObjectSpans {
+                start: *start,
+                end: *end,
+            });
+        }
+        prev_end = *end;
+    }
+    let touched = edits.len();
     Ok(PlannedEdit {
         content: splice(&content.buf, &mut edits),
         operators_touched: touched,
-        disclosures: clip_disclosure(content, obj),
+        disclosures,
     })
 }
 
@@ -440,6 +561,84 @@ pub fn plan_delete(
     Ok(PlannedEdit {
         content: splice(&content.buf, &mut edits),
         operators_touched: 1,
+        disclosures: Vec::new(),
+    })
+}
+
+/// Plan a delete of **several objects at once** — one splice, one rewritten
+/// content stream, and therefore one undoable command.
+///
+/// # Why this exists rather than calling [`plan_delete`] in a loop
+///
+/// Two reasons, and the second is the load-bearing one.
+///
+/// **Indices go stale.** Each object's byte span is an offset into the
+/// content buffer this call was handed. Splicing one object out shifts every
+/// later span, so a second `plan_delete` against the same indices would cut
+/// the wrong bytes. A caller looping would have to re-decompose between every
+/// deletion — N decompositions of a CAD page that measured 129,515 paths.
+///
+/// **N commands is N undos.** The project's standing shape is *one gesture,
+/// one undo entry* (`move_nodes` refuses an N-call loop for exactly this
+/// reason). An operator who marquee-selects six strays and presses Delete
+/// once must get them back with Ctrl+Z once, not six times — and a half-undone
+/// deletion is a document state they never chose.
+///
+/// # Overlap, and why containment is DROPPED while a partial overlap REFUSES
+///
+/// Spans are sorted and de-duplicated before splicing. A span **fully
+/// contained** in an earlier one is dropped and counted: deleting a container
+/// removes its contents anyway, so the request is already satisfied and there
+/// is nothing to tell the operator. A **partial** overlap — two spans that
+/// straddle each other — cannot happen in a well-formed decomposition, where
+/// objects are laid out in paint order and nest or sit apart. If one appears,
+/// it means the model and the buffer disagree, and splicing would emit
+/// plausible-looking garbage: half of one operator's operands followed by the
+/// tail of another's. That refuses by name
+/// ([`VectorEditError::OverlappingObjectSpans`]) rather than producing a
+/// content stream nobody can diff.
+///
+/// # Errors
+///
+/// [`VectorEditError::OverlappingObjectSpans`] for the partial-overlap case
+/// above. An empty `objs` is **not** an error — it plans an unchanged buffer,
+/// so a caller need not special-case the empty selection.
+pub fn plan_delete_many(
+    content: &ContentStream,
+    objs: &[&VectorObject],
+) -> Result<PlannedEdit, VectorEditError> {
+    let mut spans: Vec<(usize, usize)> = objs
+        .iter()
+        .map(|o| {
+            let s = o.bytes();
+            (s.start, s.end())
+        })
+        .collect();
+    // Sort by start, then by DESCENDING end, so that when two spans share a
+    // start the container is seen first and the contained one is recognised
+    // as redundant rather than the other way round.
+    spans.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)));
+
+    let mut kept: Vec<(usize, usize)> = Vec::with_capacity(spans.len());
+    for (start, end) in spans {
+        match kept.last() {
+            // Fully contained in the span already accepted: redundant.
+            Some(&(_, prev_end)) if end <= prev_end => continue,
+            // Starts inside the previous span but runs past its end — the
+            // straddle that cannot occur in a well-formed decomposition.
+            Some(&(_, prev_end)) if start < prev_end => {
+                return Err(VectorEditError::OverlappingObjectSpans { start, end });
+            }
+            _ => kept.push((start, end)),
+        }
+    }
+
+    let touched = kept.len();
+    let mut edits: Vec<(usize, usize, Vec<u8>)> =
+        kept.into_iter().map(|(s, e)| (s, e, Vec::new())).collect();
+    Ok(PlannedEdit {
+        content: splice(&content.buf, &mut edits),
+        operators_touched: touched,
         disclosures: Vec::new(),
     })
 }

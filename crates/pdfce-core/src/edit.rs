@@ -3779,6 +3779,120 @@ impl EditSession {
         })
     }
 
+    /// Move **several path objects at once** by the same page-space delta, as
+    /// ONE undoable command (Pass 47.0, R168).
+    ///
+    /// The move counterpart of [`Self::delete_objects`], and it exists for the
+    /// same reason: the GUI's drag handler read
+    /// `canvas_selection.iter().next()` and moved **one of N** while the
+    /// selection outline implied all of them were coming. See
+    /// [`crate::vector::plan_move_many`] for why the CTM inverse is taken per
+    /// object rather than once per gesture.
+    ///
+    /// # A non-path in the selection refuses the WHOLE move
+    ///
+    /// Operand translation is path-only. Moving the paths and leaving a
+    /// selected text object where it was would be a partial application that
+    /// looks like a rendering fault rather than a refusal — so
+    /// [`crate::vector::VectorEditError::NotAPath`] aborts the call and
+    /// nothing moves. The caller is expected to say which object refused; the
+    /// error carries its index and kind for exactly that.
+    ///
+    /// # Errors
+    ///
+    /// `ObjectOutOfRange`, `NotAPath`, `DegenerateCtm`, `MalformedOperand`,
+    /// `OverlappingObjectSpans`, plus every refusal
+    /// [`Self::move_object`] raises.
+    pub fn move_objects(
+        &mut self,
+        page_index: usize,
+        object_indices: &[usize],
+        dx: f64,
+        dy: f64,
+    ) -> Result<Vec<String>, EditError> {
+        self.vector_surgery(CommandKind::MoveObject, page_index, |stream, model| {
+            let count = model.objects.len();
+            // Resolve and type-check EVERY index before planning, so a
+            // non-path or a stale index refuses the call rather than moving
+            // the prefix that happened to qualify.
+            let paths = object_indices
+                .iter()
+                .map(|&i| {
+                    let obj = model.objects.get(i).ok_or(
+                        crate::vector::VectorEditError::ObjectOutOfRange { index: i, count },
+                    )?;
+                    vector_object_as_path(obj, i)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(crate::vector::plan_move_many(stream, &paths, dx, dy)?)
+        })
+    }
+
+    /// Delete **several objects at once** from page `page_index`, as ONE
+    /// undoable command (Pass 47.0, R168).
+    ///
+    /// # Why this is not `delete_object` in a loop, and the rule behind it
+    ///
+    /// R168: *a verb offered on an N-target selection acts on the whole
+    /// selection, or refuses with a stated reason — never a silent subset.*
+    /// The GUI's marquee and Shift-extend have always produced a real
+    /// multi-object selection; what was missing was a verb that could consume
+    /// one. Delete read `selection.iter().next()` and removed **one of N with
+    /// no message**, which is the exact shape R168 was minted for.
+    ///
+    /// A loop over [`Self::delete_object`] does not fix it, for two reasons:
+    ///
+    /// 1. **Indices go stale between iterations.** Each call re-splices the
+    ///    content stream, shifting every later object's byte span, so the
+    ///    second index would cut the wrong bytes. Correctness would demand a
+    ///    re-decomposition per deletion — N decompositions of a page that, on
+    ///    a measured CAD sheet, holds 129,515 paths.
+    /// 2. **N commands is N undos.** One gesture must be one undo entry
+    ///    (`move_nodes`' own precedent); a half-undone multi-delete is a
+    ///    document state the operator never chose.
+    ///
+    /// So the planning happens **once**, over all the spans together —
+    /// [`crate::vector::plan_delete_many`].
+    ///
+    /// # Duplicate and out-of-range indices
+    ///
+    /// Duplicates are harmless (the planner de-duplicates spans). An
+    /// out-of-range index **refuses the whole call** rather than deleting the
+    /// valid remainder: a caller that passed one bad index has a selection
+    /// that disagrees with the document, and quietly deleting the part that
+    /// happened to resolve is the silent-subset behaviour this verb exists to
+    /// end.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::vector::VectorEditError::ObjectOutOfRange`] for an index past
+    /// the page's decomposition, `OverlappingObjectSpans` for a torn model
+    /// (see the planner), plus every refusal
+    /// [`Self::delete_object`] raises — encryption, an enforced
+    /// certification, a page with no `/Contents`.
+    pub fn delete_objects(
+        &mut self,
+        page_index: usize,
+        object_indices: &[usize],
+    ) -> Result<Vec<String>, EditError> {
+        self.vector_surgery(CommandKind::DeleteObject, page_index, |stream, model| {
+            let count = model.objects.len();
+            // Resolve EVERY index before planning anything, so an
+            // out-of-range one refuses the call rather than deleting the
+            // prefix that happened to resolve.
+            let objs = object_indices
+                .iter()
+                .map(|&i| {
+                    model
+                        .objects
+                        .get(i)
+                        .ok_or(crate::vector::VectorEditError::ObjectOutOfRange { index: i, count })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(crate::vector::plan_delete_many(stream, &objs)?)
+        })
+    }
+
     /// **Delete one subpath** of the path object at paint-order `object_index`
     /// on page `page_index`, as one undoable command (Pass 25.2).
     ///

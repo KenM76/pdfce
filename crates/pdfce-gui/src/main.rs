@@ -4167,19 +4167,34 @@ impl PdfceApp {
     /// enforced certification, an already-edited page needing reopen) is
     /// surfaced through the same channel a failed save uses.
     fn delete_selected_object(&mut self) {
-        let (page_index, object_index) = {
+        let (page_index, indices) = {
             let Status::Open(doc) = &self.status else {
                 return;
             };
-            let Some(idx) = doc.canvas_selection.iter().next().map(|t| t.0 as usize) else {
+            // EVERY selected target, not `.iter().next()`.
+            //
+            // Until Pass 47.0 this read one target out of a `BTreeSet` that
+            // could hold five, so marquee-selecting six strays and pressing
+            // Delete removed ONE, silently, with the other five still
+            // outlined as though they had gone. Nothing errored and nothing
+            // was said — R168 is the rule minted for exactly this shape, and
+            // this is its first call site.
+            let indices: Vec<usize> = doc.canvas_selection.iter().map(|t| t.0 as usize).collect();
+            if indices.is_empty() {
                 return;
-            };
-            (doc.view.page_index, idx)
+            }
+            (doc.view.page_index, indices)
         };
         let Status::Open(doc) = &mut self.status else {
             return;
         };
-        match doc.session_mut().delete_object(page_index, object_index) {
+        let deleted = indices.len();
+        // Traced because the COUNT is the whole property this Pass is about,
+        // and the observation harness had no way to see it: the canvas trace
+        // reports `sel=N` before the delete and `sel=0` after, which is
+        // equally true of a verb that removed one of N.
+        diag::trace(|| format!("delete-objects n={deleted} indices={indices:?}"));
+        match doc.session_mut().delete_objects(page_index, &indices) {
             Ok(_) => {
                 doc.canvas_selection.clear();
                 doc.vector_drag = None;
@@ -4194,7 +4209,11 @@ impl PdfceApp {
                 // base either way — so this call site looked correct.
                 doc.refresh_pages();
                 doc.ensure_object_provider();
-                self.edit_note = Some(ui_text::vector_object_deleted().to_owned());
+                // The COUNT is reported, not just "deleted". An operator who
+                // selected six and is told "object deleted" has no way to
+                // know whether six went or one did — which is the state this
+                // Pass found the application in.
+                self.edit_note = Some(ui_text::vector_objects_deleted(deleted));
             }
             Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
         }
@@ -7660,11 +7679,33 @@ impl PdfceApp {
                     Status::Open(doc)
                         if doc.entered.is_some_and(|e| e.subpath.is_some() && e.node.is_none())
                 );
+                // ★ PASS 47.0 DROPPED THE `active_tool() == VectorEdit` CLAUSE
+                // — the SECOND of two gates that between them made Delete
+                // unreachable for a canvas selection.
+                //
+                // The reasoning above ("the tool is what disambiguates") was
+                // written when object selection required the tool. It does not
+                // any more: click-select, Shift-extend and the marquee all
+                // live in the modeless branch, which runs with NO tool armed,
+                // so the common way to hold a canvas selection is precisely
+                // the state this clause excluded.
+                //
+                // Observed live on 2026-08-08: marquee seven objects
+                // (`marquee-release hits=7 newsel=7`), press Delete, fall
+                // through to `delete_selection()` — the PAGE. The ambiguity
+                // the tool was supposed to resolve is resolved better by the
+                // selection itself, which is the same argument the subpath
+                // branch above already makes for itself: *"with a subpath
+                // entered there is no ambiguity to resolve, so requiring a
+                // tool as well would be a rule with no reason behind it."*
+                // A non-empty canvas selection is the same case.
+                //
+                // Page deletion is not lost: this branch requires a NON-EMPTY
+                // canvas selection, so with nothing selected on the canvas
+                // Delete still reaches `delete_selection()` and the rail.
                 let delete_object = matches!(
                     &self.status,
-                    Status::Open(doc)
-                        if doc.active_tool() == Some(CanvasTool::VectorEdit)
-                            && !doc.canvas_selection.is_empty()
+                    Status::Open(doc) if !doc.canvas_selection.is_empty()
                 );
                 if delete_dimension {
                     self.delete_selected_dimension();
@@ -9225,8 +9266,35 @@ impl eframe::App for PdfceApp {
             self.show_pane_subject(subject);
         }
 
+        // Whether Delete should act on the CANVAS rather than on the page.
+        //
+        // ★ PASS 47.0 REMOVED THE `active_tool() == VectorEdit` GATE, and the
+        // gate was hiding a worse bug than the one this Pass set out to fix.
+        //
+        // Selection on the canvas is MODELESS — click-select, Shift-extend and
+        // the marquee all live in the `Modeless::Yes` branch, which runs when
+        // NO tool is armed. `run_vector_edit_tool` is even called with
+        // `Modeless::Yes` there specifically so a drag it declines falls
+        // through to the rubber band. So the overwhelmingly common way to end
+        // up with objects selected is with **no tool armed at all**.
+        //
+        // The old gate required VectorEdit. The result, observed live on
+        // 2026-08-08 with the scripted harness: marquee-select seven objects
+        // (`marquee-release hits=7 newsel=7`), press Delete, and
+        // `delete_selected_object` is never called — the keystroke routes to
+        // PAGE deletion instead, with seven objects still outlined on screen.
+        // A Delete that targets the page while the operator is looking at a
+        // seven-object selection is not a narrower version of the right
+        // action; it is a different one, on a different object entirely.
+        //
+        // Keyed on what is SELECTED, not on which tool is armed — which is the
+        // same principle the modeless branch's own comment states for drags:
+        // *"the gesture's meaning comes from WHAT IS UNDER THE POINTER, not
+        // from a mode."* Page deletion is unaffected: with nothing selected on
+        // the canvas this stays `false` and Delete reaches the rail exactly as
+        // before.
         let canvas_delete_target = match &self.status {
-            Status::Open(doc) if doc.active_tool() == Some(CanvasTool::VectorEdit) => {
+            Status::Open(doc) => {
                 doc.selected_dimension.is_some()
                     || doc.entered.is_some_and(|e| e.subpath.is_some())
                     || !doc.canvas_selection.is_empty()
@@ -17803,15 +17871,35 @@ fn run_vector_edit_tool(
     if doc.pages.get(page_index).is_none() {
         return false;
     }
-    let selected: Option<usize> = doc.canvas_selection.iter().next().map(|t| t.0 as usize);
+    // The WHOLE selection, and the primary within it.
+    //
+    // `selected` drives node/handle/subpath classification, which are
+    // single-object rungs by definition. `selection` drives the whole-object
+    // MOVE, which before Pass 47.0 also used `.iter().next()` and therefore
+    // dragged one of N while the outline implied all of them were coming
+    // (R168). With more than one object selected the node/handle/subpath
+    // rungs are skipped entirely — see `multi` below.
+    let selection: Vec<usize> = doc.canvas_selection.iter().map(|t| t.0 as usize).collect();
+    let selected: Option<usize> = selection.first().copied();
+    // Node editing has no meaning across a multi-object selection: there is
+    // no single anchor list, and classifying against the FIRST object's
+    // anchors while the press landed on the THIRD would move a point of a
+    // drawing the operator never aimed at. At the Object rung with several
+    // objects selected, a drag is a move.
+    let multi = selection.len() > 1;
 
     // The gesture's outcome for this frame, decided in the read/preview block
     // and applied after the read borrows end (so the &mut-self commit and the
     // provider rebuild do not fight the page/object-model borrows).
     enum Commit {
         None,
+        /// Move EVERY selected object by one page-space delta, as one
+        /// command (Pass 47.0, R168). Carries the whole selection rather
+        /// than a single `idx`: the previous single-index form silently
+        /// moved one of N while the selection outline implied all of them
+        /// were coming.
         Move {
-            idx: usize,
+            indices: Vec<usize>,
             dx: f64,
             dy: f64,
         },
@@ -18022,7 +18110,19 @@ fn run_vector_edit_tool(
             // so they are not pointing at one of its points.
             let anchors: Vec<Point> = doc
                 .entered
-                .filter(|e| e.object == idx && e.subpath.is_some())
+                // `!multi` (Pass 47.0): with several objects selected there is
+                // no single anchor list to pick from, and classifying against
+                // the FIRST object's anchors while the press landed on the
+                // THIRD would move a point of a drawing the operator never
+                // aimed at. An empty pick set makes the drag a whole-selection
+                // move, which is the honest reading of a multi-object drag.
+                //
+                // Belt and braces with the `entered` gate below rather than
+                // redundant with it: entering is itself a single-object rung,
+                // so the two agree today — but they agree by coincidence, and
+                // an explicit `!multi` states the invariant rather than
+                // leaving it to be re-derived.
+                .filter(|e| !multi && e.object == idx && e.subpath.is_some())
                 .and_then(|e| e.subpath.map(|sp| (e.object, sp)))
                 .and_then(|(obj, sp)| {
                     doc.object_model
@@ -18079,23 +18179,27 @@ fn run_vector_edit_tool(
             // anchors: a press inside a large filled shape is plainly "on it"
             // while being far from every anchor, and requiring anchor
             // proximity would make big objects undraggable.
+            // ANY selected object, not just the primary: with six objects
+            // selected, a press on the sixth is plainly "on the selection"
+            // and must start the move.
             let started_on_object = modeless == Modeless::No
-                || doc
-                    .object_model
-                    .as_ref()
-                    .and_then(|p| p.bounds(page_index, TargetId(idx as u64)))
-                    .is_some_and(|b| {
-                        let pad = canvas::screen_tolerance_to_page(
-                            canvas::SELECT_SCREEN_TOLERANCE_PX,
-                            zoom,
-                        );
-                        #[allow(
+                || selection.iter().any(|&sel| {
+                    doc.object_model
+                        .as_ref()
+                        .and_then(|p| p.bounds(page_index, TargetId(sel as u64)))
+                        .is_some_and(|b| {
+                            let pad = canvas::screen_tolerance_to_page(
+                                canvas::SELECT_SCREEN_TOLERANCE_PX,
+                                zoom,
+                            );
+                            #[allow(
                             clippy::cast_possible_truncation,
                             reason = "canvas-space bounds are f32 already; the pad is a small screen tolerance" // ui-text-exempt: clippy lint justification, never displayed
                         )]
-                        let grown = b.expand(pad as f32);
-                        grown.contains(viewer::screen_to_page(sp, image_rect, extent, zoom))
-                    });
+                            let grown = b.expand(pad as f32);
+                            grown.contains(viewer::screen_to_page(sp, image_rect, extent, zoom))
+                        })
+                });
             if !started_on_object {
                 diag::trace(|| format!("vector-drag-declined modeless sp={sp:?} obj={idx}"));
                 return false;
@@ -18320,7 +18424,9 @@ fn run_vector_edit_tool(
                 }
                 if canvas::primary_drag_stopped(image_response) {
                     commit = Commit::Move {
-                        idx: drag.object_index,
+                        // The whole selection travels, not `drag.object_index`
+                        // alone (R168, Pass 47.0).
+                        indices: selection.clone(),
                         dx,
                         dy,
                     };
@@ -18384,9 +18490,14 @@ fn run_vector_edit_tool(
         // thumbnails, provider key, marquee, selection prune), so the
         // explicit `ensure_object_provider` that follows only pulls the
         // rebuild into THIS frame rather than the next.
-        Commit::Move { idx, dx, dy } => {
-            let outcome = doc.session_mut().move_object(page_index, idx, dx, dy);
-            diag::trace(|| format!("commit-move idx={idx} dx={dx} dy={dy} -> {outcome:?}"));
+        Commit::Move { indices, dx, dy } => {
+            let outcome = doc.session_mut().move_objects(page_index, &indices, dx, dy);
+            diag::trace(|| {
+                format!(
+                    "commit-move n={} indices={indices:?} dx={dx} dy={dy} -> {outcome:?}",
+                    indices.len()
+                )
+            });
             disclose_vector_edit(doc, outcome.as_deref().unwrap_or(&[]));
             doc.vector_drag = None;
             doc.refresh_pages();
