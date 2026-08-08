@@ -14702,8 +14702,43 @@ fn run_text_edit_tool(
             state.caret = valid(caret);
             state.anchor = valid(anchor);
         }
-        // A refusal leaves `pending` in place with its message attached; the
-        // operator stays where they are and can fix or Escape.
+        // ★ `Nothing` MUST DROP AN UNMODIFIED PENDING (Pass 47.5).
+        //
+        // `commit_text_edit_draft` returns `Nothing` when the draft equals the
+        // original — deliberately, so clicking away after typing a character
+        // and deleting it again does not push a no-op onto the undo stack.
+        // But it left `pending` in place, still bound to the run the operator
+        // had just left, while the caret above had ALREADY moved to the new
+        // one. Two clicks into two text blocks were enough to reach it, with
+        // no typing at all, and everything typed afterwards went to the first
+        // block. That is the operator's 2026-08-08 report.
+        //
+        // Dropping it is safe precisely because `Nothing` means there was
+        // nothing to save: an unmodified pending is a scratch copy of the
+        // run's own text, and `ensure_pending` rebuilds one for the new caret
+        // on the next keystroke.
+        if outcome == CommitOutcome::Nothing
+            && let Some(state) = doc.text_edit.as_mut()
+            && state
+                .pending
+                .as_ref()
+                .is_some_and(|p| p.draft_text == p.original_text)
+        {
+            state.pending = None;
+        }
+        // A refusal leaves `pending` in place with its message attached, and
+        // the caret is restored to the run that pending belongs to — without
+        // that the comment's own promise ("the operator stays where they
+        // are") was false, since the caret had already been moved above.
+        if outcome == CommitOutcome::Refused
+            && let Some(state) = doc.text_edit.as_mut()
+            && let Some(run) = state.pending.as_ref().map(|p| p.run)
+            && state.caret.is_some_and(|c| c.run != run)
+        {
+            let offset = state.pending.as_ref().map_or(0, |p| p.cursor);
+            state.caret = Some(TextPosition::new(run, offset));
+            state.anchor = None;
+        }
         return;
     }
 
@@ -17287,13 +17322,78 @@ fn consume_selection_into_pending(state: &mut TextEditState) -> bool {
 /// cursor. Selection-replace is handled BEFORE this, by
 /// [`consume_selection_into_pending`], which may already have created the
 /// pending edit (in which case this is a no-op).
-fn ensure_pending(state: &mut TextEditState) {
-    if state.pending.is_some() {
-        return;
+/// What [`ensure_pending`] should do with the pending edit it finds, given
+/// where the caret now is (Pass 47.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingDisposition {
+    /// The pending edit already belongs to the caret's run — extend it.
+    Keep,
+    /// No pending edit exists — create one for the caret's run.
+    Create,
+    /// A pending edit exists on a DIFFERENT run and holds nothing the
+    /// operator typed. Drop it and build one for the caret's run.
+    Rebuild,
+    /// A pending edit exists on a different run and HAS been typed into.
+    /// Do not extend it — the keystrokes would land in a paragraph the
+    /// operator is not looking at.
+    RefuseExtend,
+}
+
+/// Decide the disposition above.
+///
+/// # Why this is a function with tests rather than a `match` inside its caller
+///
+/// It encodes the rule an operator reported broken on 2026-08-08 — *"when I
+/// positioned the cursor in a text area just above the one I had edited, it
+/// continued to edit the initial one I was in"* — and the broken version was
+/// a single line (`if state.pending.is_some() { return }`) that looked
+/// obviously right. A rule that subtle, in a path that silently writes the
+/// operator's keystrokes somewhere they cannot see, is worth being able to
+/// test without constructing a whole extracted `PageText`.
+fn pending_disposition(pending: Option<&PendingEdit>, caret_run: usize) -> PendingDisposition {
+    match pending {
+        None => PendingDisposition::Create,
+        Some(p) if p.run == caret_run => PendingDisposition::Keep,
+        // An UNMODIFIED pending is not an edit — it is a scratch copy of the
+        // run's own text, made by the click that placed the caret there. It
+        // carries nothing, so replacing it loses nothing.
+        Some(p) if p.draft_text == p.original_text => PendingDisposition::Rebuild,
+        Some(_) => PendingDisposition::RefuseExtend,
     }
+}
+
+fn ensure_pending(state: &mut TextEditState) {
     let Some(caret) = state.caret else {
         return;
     };
+    // ★ THE RUN MUST MATCH THE CARET, and until Pass 47.5 this was never
+    // checked — the guard was a bare `if state.pending.is_some() { return }`.
+    //
+    // Operator report, 2026-08-08: *"when I positioned the cursor in a text
+    // area just above the one I had edited, it continued to edit the initial
+    // one I was in."* That is this early return. A `PendingEdit` is bound to
+    // ONE run, and a click into a different block moves `state.caret` without
+    // touching it, so every later keystroke went to the run the operator had
+    // LEFT while the caret sat visibly in the one they had moved to.
+    //
+    // An UNMODIFIED pending is not an edit — it is a scratch buffer holding a
+    // copy of the run's own text, created by the first click. Replacing it
+    // costs nothing and loses nothing, so a retarget is unconditionally
+    // correct in that case.
+    //
+    // A MODIFIED pending on a different run should be unreachable: the
+    // click-out path commits it (decision 031, and the operator's own
+    // instruction *"if I click out of where I am editing that should just
+    // accept the edits"*). If it is somehow reached, typing into it would
+    // write the operator's keystrokes into a paragraph they are not looking
+    // at — so this refuses to extend it rather than guessing. Nothing is
+    // written and nothing is lost; the pending is still committable from its
+    // own Accept.
+    match pending_disposition(state.pending.as_ref(), caret.run) {
+        PendingDisposition::Keep | PendingDisposition::RefuseExtend => return,
+        PendingDisposition::Rebuild => state.pending = None,
+        PendingDisposition::Create => {}
+    }
     let Some(run) = state.page_text.runs.get(caret.run) else {
         return;
     };
@@ -20577,7 +20677,74 @@ fn form_field_commit(ended: bool, draft: &str, stored: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ChoiceDraftOption, choice_options_from_draft};
+    use super::{
+        ChoiceDraftOption, PendingDisposition, PendingEdit, choice_options_from_draft,
+        pending_disposition,
+    };
+
+    fn pending(run: usize, original: &str, draft: &str) -> PendingEdit {
+        PendingEdit {
+            run,
+            original_text: original.to_owned(),
+            draft_text: draft.to_owned(),
+            cursor: 0,
+            last_refusal: None,
+        }
+    }
+
+    /// THE REGRESSION. Operator report, 2026-08-08: clicking into a text area
+    /// above the one just edited kept editing the FIRST one.
+    ///
+    /// The cause was a bare `if state.pending.is_some() { return }` — a
+    /// pending edit is bound to one run, and a click into another block moved
+    /// the caret without touching it, so every keystroke afterwards went to
+    /// the run the operator had left. Two clicks into two blocks reached it,
+    /// with no typing at all.
+    #[test]
+    fn an_untouched_pending_on_another_run_is_rebuilt_not_kept() {
+        // The state two clicks produce: a scratch pending for run 3 (draft
+        // still equals original, because nothing was typed) and a caret the
+        // second click moved to run 7.
+        let p = pending(3, "Invoice total", "Invoice total");
+        assert_eq!(
+            pending_disposition(Some(&p), 7),
+            PendingDisposition::Rebuild,
+            "the caret is in run 7, so typing must build a pending for run 7              — keeping run 3's is what put the operator's text in the wrong              paragraph"
+        );
+    }
+
+    /// The common case is unaffected: a pending on the caret's own run is
+    /// extended, which is what makes typing accumulate without a core call
+    /// per keystroke.
+    #[test]
+    fn a_pending_on_the_carets_own_run_is_kept() {
+        let p = pending(3, "Invoice total", "Invoice tot");
+        assert_eq!(pending_disposition(Some(&p), 3), PendingDisposition::Keep);
+    }
+
+    /// No pending yet — the first keystroke after a click creates one.
+    #[test]
+    fn no_pending_means_create_one() {
+        assert_eq!(pending_disposition(None, 3), PendingDisposition::Create);
+    }
+
+    /// A pending that HAS been typed into, on a different run, is not
+    /// extended and not silently discarded.
+    ///
+    /// This state should be unreachable — the click-out path commits a
+    /// modified draft (decision 031, and the operator's own instruction that
+    /// clicking out should accept). If it is reached anyway, extending it
+    /// would write keystrokes into a paragraph the operator cannot see, and
+    /// rebuilding would throw away text they typed. Refusing does neither.
+    #[test]
+    fn a_modified_pending_on_another_run_is_neither_extended_nor_discarded() {
+        let p = pending(3, "Invoice total", "Invoice total DUE");
+        assert_eq!(
+            pending_disposition(Some(&p), 7),
+            PendingDisposition::RefuseExtend,
+            "typing must not reach run 3 while the caret is in run 7, and the              typed text must not be thrown away either"
+        );
+    }
 
     fn row(display: &str, export: &str) -> ChoiceDraftOption {
         ChoiceDraftOption {
