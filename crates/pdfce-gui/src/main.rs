@@ -2139,6 +2139,22 @@ struct FieldToolState {
 /// the page. That placement rule is decision 024 §4.4, and it comes from the
 /// operator's own report: the complaint was that confirm controls moved with
 /// the document on every zoom and scroll, not that confirming existed.
+/// One `/Opt` entry being drafted in the Create Field pane (Pass 47.4).
+///
+/// Export and display are kept as two fields rather than one string with a
+/// separator convention, for the same reason [`pdfce_core::edit::ChoiceOption`]
+/// does: §12.7.4.4 lets an element be `(Display)` when the two coincide or
+/// `[(export) (display)]` when they differ, and collapsing them is a mistake
+/// that still renders correctly while submitting the wrong value.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct ChoiceDraftOption {
+    /// What the form SUBMITS. Blank means "same as display" — the short
+    /// `(Display)` form.
+    export: String,
+    /// What the operator SEES in the list.
+    display: String,
+}
+
 #[derive(Debug, Clone)]
 struct FieldDraft {
     /// The kind captured at placement, so changing the tool's selector
@@ -2178,6 +2194,27 @@ struct FieldDraft {
     tooltip_declined: bool,
     /// A radio member's export value. Unused by the other three kinds.
     export_value: String,
+    /// A choice field's `/Opt` entries, as `export=display` pairs — only
+    /// meaningful for [`NewFieldKind::Choice`] (Pass 47.4).
+    ///
+    /// # This closed a functional bug, not a gap
+    ///
+    /// `commit_field_draft` passed `Vec::new()` **unconditionally**, so every
+    /// combo box and list box the GUI created had zero options — and
+    /// `set_choice_value` refuses any value not in `/Opt`, with no verb
+    /// anywhere that adds options later. The result was a field that could
+    /// never be filled by anything, ever, produced by the only route the GUI
+    /// offered. Core disclosed it (`FieldAuthorDisclosures::has_no_options`)
+    /// and the GUI printed the disclosure, so the application correctly
+    /// reported creating something useless and offered no way to avoid it.
+    options: Vec<ChoiceDraftOption>,
+    /// The in-progress row of the option editor, not yet added to
+    /// [`Self::options`].
+    ///
+    /// Separate from the committed list so a half-typed entry cannot reach
+    /// `/Opt` — an export value is submitted form data, and a partial one is
+    /// wrong data rather than missing data.
+    pending_option: ChoiceDraftOption,
     /// The last Accept attempt's refusal, kept visible while the operator
     /// revises — the draft is RETAINED on refusal so the rectangle need not be
     /// drawn again. Mirrors [`AddTextDraft::last_refusal`].
@@ -9147,6 +9184,19 @@ impl eframe::App for PdfceApp {
                 };
                 self.apply(Action::SelectCanvasTool(tool), ctx, ctx.pixels_per_point());
             }
+            diag::Step::FieldKind(which) => {
+                // Sets the tool's own kind, which is where the selector writes
+                // (`doc.field_tool.kind`) — the same field, not a parallel one.
+                if let Status::Open(doc) = &mut self.status {
+                    doc.field_tool.kind = match which {
+                        "check" => NewFieldKind::CheckBox,
+                        "radio" => NewFieldKind::Radio,
+                        "choice" => NewFieldKind::Choice,
+                        _ => NewFieldKind::Text,
+                    };
+                    diag::trace(|| format!("field-kind set={which}"));
+                }
+            }
             diag::Step::Escape => {
                 for pressed in [true, false] {
                     raw_input.events.push(egui::Event::Key {
@@ -15323,6 +15373,74 @@ fn place_field_options_ui(doc: &mut OpenDoc, ui: &mut egui::Ui) -> (bool, bool) 
         });
     }
 
+    // ★ THE OPTION EDITOR (Pass 47.4) — without it, every choice field this
+    // pane created carried an EMPTY `/Opt` and could never be filled by
+    // anything. `commit_field_draft` passed `Vec::new()` unconditionally,
+    // `set_choice_value` refuses any value not in `/Opt`, and no verb
+    // anywhere adds options after creation. A functional bug, not a gap.
+    if draft.kind == NewFieldKind::Choice {
+        ui.separator();
+        ui.label(ui_text::create_field_options_label());
+        // The committed rows, each removable. Shown before the entry row so
+        // the list reads top-down in the order it will appear in `/Opt` —
+        // §12.7.4.4 makes array order the DISPLAY order, so this list is not
+        // a summary of the result, it IS the result.
+        let mut remove: Option<usize> = None;
+        for (i, opt) in draft.options.iter().enumerate() {
+            ui.horizontal(|ui| {
+                if PdfceApp::icon_button(
+                    ui,
+                    icons::Icon::Close,
+                    ui_text::create_field_option_remove_tooltip(),
+                )
+                .clicked()
+                {
+                    remove = Some(i);
+                }
+                ui.label(ui_text::create_field_option_row(&opt.export, &opt.display));
+            });
+        }
+        if let Some(i) = remove {
+            draft.options.remove(i);
+        }
+        ui.horizontal(|ui| {
+            ui.label(ui_text::create_field_option_display_label());
+            ui.add(
+                egui::TextEdit::singleline(&mut draft.pending_option.display).desired_width(110.0),
+            )
+            .on_hover_text(ui_text::create_field_option_display_tooltip());
+            ui.label(ui_text::create_field_option_export_label());
+            ui.add(
+                egui::TextEdit::singleline(&mut draft.pending_option.export).desired_width(90.0),
+            )
+            .on_hover_text(ui_text::create_field_option_export_tooltip());
+            // Add is disabled on an empty DISPLAY, not on an empty export:
+            // a blank export is the legitimate short `(Display)` form, while
+            // a blank display is an option nobody can see to pick.
+            let ready = !draft.pending_option.display.trim().is_empty();
+            if ui
+                .add_enabled(ready, egui::Button::new(ui_text::create_field_option_add()))
+                .on_hover_text(ui_text::create_field_option_add_tooltip())
+                .clicked()
+            {
+                let mut row = std::mem::take(&mut draft.pending_option);
+                row.display = row.display.trim().to_owned();
+                row.export = row.export.trim().to_owned();
+                draft.options.push(row);
+            }
+        });
+        if draft.options.is_empty() {
+            // Stated BEFORE the operator commits, not disclosed after. The
+            // core still discloses `has_no_options` on the result — this is
+            // the earlier, cheaper warning that stops them getting there.
+            ui.label(
+                egui::RichText::new(ui_text::create_field_options_empty_warning())
+                    .small()
+                    .color(ui.visuals().warn_fg_color),
+            );
+        }
+    }
+
     ui.horizontal(|ui| {
         ui.label(ui_text::create_field_tooltip_label());
         ui.add_enabled(
@@ -15540,6 +15658,8 @@ fn install_field_draft(
         tooltip: String::new(),
         tooltip_declined: false,
         export_value: String::new(),
+        options: Vec::new(),
+        pending_option: ChoiceDraftOption::default(),
         last_refusal: None,
     });
 }
@@ -15558,6 +15678,30 @@ fn install_field_draft(
 /// action in decision 024's table, all of which can show the operator what
 /// they are about to get. There is no honest preview here, so none is
 /// offered — the fact is reported the moment it exists instead.
+/// Turn the Create Field pane's drafted option rows into the `/Opt` entries
+/// `add_choice_field` takes (Pass 47.4).
+///
+/// # Why this is a free function rather than three lines inside the commit
+///
+/// It carries the one rule in this path that can be silently wrong: **a blank
+/// export means the two coincide**, which §12.7.4.4 spells as the short
+/// single-string `(Display)` form rather than a two-element pair of identical
+/// strings. Both shapes render the same drop-down, so the mistake is
+/// invisible on screen and visible only in the bytes — exactly the class of
+/// defect that needs a test rather than a look, and a pure function is what
+/// makes one possible.
+fn choice_options_from_draft(rows: &[ChoiceDraftOption]) -> Vec<pdfce_core::edit::ChoiceOption> {
+    rows.iter()
+        .map(|o| {
+            if o.export.is_empty() {
+                pdfce_core::edit::ChoiceOption::plain(&o.display)
+            } else {
+                pdfce_core::edit::ChoiceOption::new(&o.export, &o.display)
+            }
+        })
+        .collect()
+}
+
 fn commit_field_draft(doc: &mut OpenDoc) -> (CommitOutcome, Vec<String>) {
     use pdfce_core::edit::{
         NewCheckBox, NewChoiceField, NewRadioButton, NewTextField, TooltipChoice,
@@ -15602,7 +15746,13 @@ fn commit_field_draft(doc: &mut OpenDoc) -> (CommitOutcome, Vec<String>) {
             doc.session_mut().add_radio_button(&spec)
         }
         NewFieldKind::Choice => {
-            let mut spec = NewChoiceField::new(page_index, &name, rect, Vec::new());
+            // The drafted options, not `Vec::new()` (Pass 47.4). An empty
+            // export means the two coincide, which is §12.7.4.4's short
+            // `(Display)` form — `ChoiceOption::plain` spells exactly that,
+            // so the distinction survives into the file rather than being
+            // flattened into a pair of identical strings.
+            let options = choice_options_from_draft(&draft.options);
+            let mut spec = NewChoiceField::new(page_index, &name, rect, options);
             spec.tooltip = tooltip;
             doc.session_mut().add_choice_field(&spec)
         }
@@ -20427,6 +20577,77 @@ fn form_field_commit(ended: bool, draft: &str, stored: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::{ChoiceDraftOption, choice_options_from_draft};
+
+    fn row(display: &str, export: &str) -> ChoiceDraftOption {
+        ChoiceDraftOption {
+            display: display.to_owned(),
+            export: export.to_owned(),
+        }
+    }
+
+    /// A blank export produces §12.7.4.4's SHORT form, not a pair of
+    /// identical strings (Pass 47.4).
+    ///
+    /// Both shapes render the same drop-down, so this is invisible on screen
+    /// and visible only in the written bytes — which is why it is a test and
+    /// not a look. `ChoiceOption::is_plain` is what `add_choice_field` asks
+    /// before choosing between `(Display)` and `[(export) (display)]`.
+    #[test]
+    fn a_blank_export_means_the_option_submits_what_it_shows() {
+        let out = choice_options_from_draft(&[row("Canada", "")]);
+        assert_eq!(out.len(), 1);
+        let opt = out.first().expect("one option");
+        // `ChoiceOption::is_plain` is core-private, so this asserts the
+        // property it tests — `export == display` — rather than widening a
+        // core API for a GUI test. Same condition, checked at the same seam
+        // the writer checks it.
+        assert_eq!(
+            opt.export, opt.display,
+            "a blank export must make the two coincide, which is what makes              `add_choice_field` emit §12.7.4.4's single-string form instead              of repeating the word twice as a pair"
+        );
+        assert_eq!(opt.display, "Canada");
+    }
+
+    /// A supplied export is kept DISTINCT from the display — the split that
+    /// makes a form submit a code while showing a label.
+    #[test]
+    fn a_supplied_export_stays_separate_from_the_display() {
+        let out = choice_options_from_draft(&[row("Mexico", "MX")]);
+        let opt = out.first().expect("one option");
+        assert_ne!(
+            opt.export, opt.display,
+            "they differ, so the writer emits a PAIR rather than a bare string"
+        );
+        assert_eq!(opt.display, "Mexico");
+        assert_eq!(
+            opt.export, "MX",
+            "the EXPORT is what the form submits — collapsing it to the              display would submit the wrong value while looking correct"
+        );
+    }
+
+    /// Order is preserved, and that is a spec requirement rather than a
+    /// convenience: §12.7.4.4 makes `/Opt` order the DISPLAY order and says a
+    /// reader never re-sorts, so the drafted order IS the operator's result.
+    #[test]
+    fn drafted_option_order_is_the_written_order() {
+        let out = choice_options_from_draft(&[
+            row("Canada", "CA"),
+            row("Mexico", "MX"),
+            row("Argentina", ""),
+        ]);
+        let displays: Vec<&str> = out.iter().map(|o| o.display.as_str()).collect();
+        assert_eq!(displays, ["Canada", "Mexico", "Argentina"]);
+    }
+
+    /// An empty draft yields an empty list — the state the pane warns about
+    /// before the operator can commit it, and the one that produced an
+    /// unfillable field before Pass 47.4.
+    #[test]
+    fn an_empty_draft_yields_no_options() {
+        assert!(choice_options_from_draft(&[]).is_empty());
+    }
+
     /// Every declared ribbon group is actually GATED to some widget
     /// (Pass 24.1 follow-up).
     ///

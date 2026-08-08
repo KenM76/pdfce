@@ -7061,6 +7061,90 @@ pub fn create_field_export_value_tooltip() -> &'static str {
     "What the form records when this button is the one picked. Every button in a group shares the group's name and is told apart by this value."
 }
 
+/// Heading of the Create Field pane's option editor (Pass 47.4).
+///
+/// The editor exists because without it every choice field this pane created
+/// carried an EMPTY `/Opt` and could never be filled — `set_choice_value`
+/// refuses any value not in the option list, and no verb adds options after
+/// creation. That was a functional bug, not a missing convenience.
+pub fn create_field_options_label() -> &'static str {
+    "Options"
+}
+
+/// Label on the option editor's DISPLAY box (Pass 47.4).
+///
+/// Display first and export second, because display is the one every choice
+/// field needs and export is the one only some do. Asking for the rarer field
+/// first would imply it is required.
+pub fn create_field_option_display_label() -> &'static str {
+    "Shows"
+}
+
+/// See [`create_field_option_display_label`].
+pub fn create_field_option_display_tooltip() -> &'static str {
+    "What the person filling the form sees in the list."
+}
+
+/// Label on the option editor's EXPORT box (Pass 47.4).
+pub fn create_field_option_export_label() -> &'static str {
+    "Submits"
+}
+
+/// See [`create_field_option_display_label`]. Names the blank-means-same rule,
+/// because it is the difference between §12.7.4.4's short `(Display)` form and
+/// its two-element `[(export) (display)]` one — and an operator who does not
+/// know it would type the same word twice.
+pub fn create_field_option_export_tooltip() -> &'static str {
+    "What the form records when this option is picked. Leave it blank to submit the same text that is shown."
+}
+
+/// The option editor's add button (Pass 47.4).
+pub fn create_field_option_add() -> &'static str {
+    "Add"
+}
+
+/// See [`create_field_option_display_label`].
+pub fn create_field_option_add_tooltip() -> &'static str {
+    "Add this option to the list. Options appear in the order you add them — a PDF viewer shows them in that order and never re-sorts."
+}
+
+/// See [`create_field_option_display_label`].
+pub fn create_field_option_remove_tooltip() -> &'static str {
+    "Remove this option."
+}
+
+/// One committed option row (Pass 47.4).
+///
+/// Shows the arrow form ONLY when the two differ. Rendering `Canada → Canada`
+/// for the common case would imply a distinction the file does not make: an
+/// entry whose export equals its display is written as the single-string
+/// `(Display)` form, not as a pair.
+pub fn create_field_option_row(export: &str, display: &str) -> String {
+    if export.is_empty() || export == display {
+        display.to_owned()
+    } else {
+        // Worded, not arrowed — and this is the one case where the
+        // 2026-08-06 "author an icon, do not reword" ruling does NOT apply.
+        // That ruling is about a CONTROL whose glyph is missing; an icon is a
+        // widget, and this is a separator inside a composed sentence where no
+        // widget can be placed. `→` (U+2192) has no face in the shipped stack
+        // either, so the honest options were a worded form or a different
+        // punctuation mark — and "submits" says what the arrow only implied.
+        format!("{display} (submits {export})")
+    }
+}
+
+/// Warning shown while a choice field's option list is still empty (Pass
+/// 47.4).
+///
+/// Stated BEFORE the operator commits rather than disclosed after. The core
+/// still reports `has_no_options` on the result — this is the earlier warning
+/// that stops them producing an unfillable field in the first place, which is
+/// the thing the disclosure alone could not do.
+pub fn create_field_options_empty_warning() -> &'static str {
+    "No options yet — a choice field with an empty list cannot be filled, and options cannot be added after it is created."
+}
+
 /// Commit control.
 pub fn create_field_accept() -> &'static str {
     "Add field"

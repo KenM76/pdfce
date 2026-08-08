@@ -271,6 +271,14 @@ pub enum Icon {
     /// shipped toolbar controls. See
     /// `docs/ui_specs/menu-affordance-and-glyph-coverage.md`.
     ChevronDown,
+    /// Dismiss / remove — drawn instead of the text glyph `✕` (U+2715),
+    /// which is absent from every font of the shipped stack (Pass 47.4).
+    ///
+    /// Authored rather than reworded, per the operator's 2026-08-06 ruling
+    /// that a missing glyph for a real control gets an icon created for it.
+    /// First use site: removing one row from the Create Field pane's option
+    /// editor.
+    Close,
     /// Zoom out (§2 #7, §3.1 "magnifier±").
     ZoomOut,
     /// Zoom in (§2 #8).
@@ -389,6 +397,7 @@ impl Icon {
         Icon::ChevronRight,
         Icon::ChevronDown,
         Icon::ChevronUp,
+        Icon::Close,
         Icon::ZoomOut,
         Icon::ZoomIn,
         Icon::FitPage,
@@ -441,6 +450,7 @@ impl Icon {
             Icon::ChevronRight => include_str!("../assets/icons/chevron-right.svg"),
             Icon::ChevronDown => include_str!("../assets/icons/chevron-down.svg"),
             Icon::ChevronUp => include_str!("../assets/icons/chevron-up.svg"),
+            Icon::Close => include_str!("../assets/icons/close.svg"),
             Icon::ZoomOut => include_str!("../assets/icons/zoom-out.svg"),
             Icon::ZoomIn => include_str!("../assets/icons/zoom-in.svg"),
             Icon::FitPage => include_str!("../assets/icons/fit-page.svg"),
@@ -487,6 +497,7 @@ impl Icon {
             Icon::Save => "save",
             Icon::Sidebar => "sidebar",
             Icon::Comment => "comment",
+            Icon::Close => "close",
             Icon::ChevronLeft => "chevron-left",
             Icon::Back => "back",
             Icon::ChevronRight => "chevron-right",

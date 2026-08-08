@@ -119,6 +119,21 @@ pub enum Step {
     /// question "is its toolbar button wired up". A harness that could only
     /// reach a tool through its button would confuse the two.
     Tool(ScriptTool),
+    /// Choose the Create Field tool's field TYPE
+    /// (`field-kind:text|check|radio|choice`).
+    ///
+    /// Added by Pass 47.4 for the reason every other `Step` in this enum was
+    /// added: **a control the observation harness cannot reach is a control
+    /// whose defects only the operator finds.** The type selector is a
+    /// `selectable_label` in the Tool Options pane, and driving it by
+    /// coordinate proved unreliable — which is itself the argument, since a
+    /// harness that can only reach a control by guessing its pixel position
+    /// re-breaks every time the pane's layout changes.
+    ///
+    /// Set directly rather than by clicking the selector, exactly as `tool:`
+    /// is, so a script isolates *"does a choice field get its options"* from
+    /// the separate question *"is the type selector wired up"*.
+    FieldKind(&'static str),
     /// Flip the "show points" view option (`view:points`), Pass 36.3.
     ///
     /// Scripted directly rather than by clicking the toolbar toggle, for the
@@ -355,6 +370,13 @@ fn parse_step(s: &str) -> Option<Step> {
         "view" if rest.trim() == "points" => Some(Step::ShowPoints),
         // NOT `rest.trim()`: leading and trailing spaces are legitimate text.
         "type" if !rest.is_empty() => Some(Step::Text(rest.to_owned())),
+        "field-kind" => match rest.trim() {
+            "text" => Some(Step::FieldKind("text")),
+            "check" => Some(Step::FieldKind("check")),
+            "radio" => Some(Step::FieldKind("radio")),
+            "choice" => Some(Step::FieldKind("choice")),
+            _ => None,
+        },
         "tool" => match rest.trim() {
             "none" => Some(Step::Tool(ScriptTool::None)),
             "obj" => Some(Step::Tool(ScriptTool::Obj)),
