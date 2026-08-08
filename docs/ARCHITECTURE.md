@@ -8724,8 +8724,10 @@ with a forward pointer.
   **Nothing else minted** — no Pass ID (20.2 was filed 2026-08-03 and
   headed by `bca60c9`'s entry; this completes it under hard rule 2), no
   new decision record. Decision records stay **031**, Pass family stays
-  **43**, operator questions stay **(bb)**. **F3's push-button verb name
-  is still NOT RULED and must not be inferred from `add-radio-button`.**
+  **43**, operator questions stay **(bb)**. ~~**F3's push-button verb name
+  is still NOT RULED and must not be inferred from `add-radio-button`.**~~
+  **[RULED 2026-08-08 — see the 2026-08-08 (thirty-second filing) entry
+  below: `add-push-button`.]**
   Full build record: `ROADMAP.md`'s COMPLETION ADDENDUM on the
   `Pass 20.2 + Pass 20.3` *Shipped* entry.
 
@@ -8799,8 +8801,11 @@ with a forward pointer.
   manipulation — and a **dirty bit is the only way to tell them apart
   after the fact**, since the resulting `/T` is identical either way.
 
-  **Push button is ABSENT rather than greyed** — its verb name is still
-  NOT RULED, so there is no capability to point a control at (**R83**),
+  **Push button is ABSENT rather than greyed** — ~~its verb name is still
+  NOT RULED, so there is no capability to point a control at~~ **[the verb
+  is RULED as of 2026-08-08 (`add-push-button`, thirty-second filing) —
+  the palette omission's recorded reason has EXPIRED; it is now a cheap,
+  un-taken follow-up, not a standing refusal]** (**R83**),
   and **R124** says an empty control teaches nothing its absence does not.
   **Default box sizes carry three different confidences, stated in the
   code**: text `150x22` and check box / radio `18x18` are community-

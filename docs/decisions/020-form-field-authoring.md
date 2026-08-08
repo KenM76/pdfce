@@ -100,7 +100,7 @@ not picked a name and one must not be invented.
 | F2 (radio) | repeated `add-field --type radio --name G --export-value V` | ~~**NOT RULED.**~~ **[§0.1, 2026-08-07: NOW RULED — `add-radio-button`.]** One call per radio MEMBER, per the radio caveat below. |
 | F2 (deletion) | `forms remove-field --name <fqn>`, `forms remove-widget --name <fqn> --index N` | ~~`remove-field`, `remove-widget`. **Note the verb is REMOVE, not DELETE** — §6 says `remove-*` and this amendment does not change it. `delete-field` is not a name this document or this ruling authorises, notwithstanding that the CLI elsewhere uses `object-delete` / `node-delete` / `dimension-delete`; reconciling `remove` vs `delete` across the surface is a separate, unruled question.~~ **[SUPERSEDED by §0.1, 2026-08-07 — the separate question is now RULED the other way: `delete-field --name <fqn>`, `delete-widget --name <fqn> --index N`. `delete` is the house word; forms is a verb-first domain.]** |
 | F3 (listbox/combobox) | `--type listbox\|combobox …` | `add-choice-field …` — **SHIPPED** (both list and combo behaviours live behind the one verb, via `--combo`-family flags) |
-| F3 (push button) | `--type pushbutton [--caption <s>]` | **NOT RULED** by name. The flat pattern implies `add-push-button`, but that is an inference from `add-check-box`, not an engineer ruling. |
+| F3 (push button) | `--type pushbutton [--caption <s>]` | ~~**NOT RULED** by name. The flat pattern implies `add-push-button`, but that is an inference from `add-check-box`, not an engineer ruling.~~ **[ARCHITECTURE.md §12, 2026-08-08 (thirty-second filing) — NOW RULED: `add-push-button`, chosen (spec's own two-word term, `add-button` is ambiguous with check box/radio, hyphenated like its siblings), not inferred. `ROADMAP.md`'s `Pass 20.3` COMPLETION ADDENDUM is canonical where this document and it now differ.]** |
 | F4 | `forms set-tab-order --mode …` / `--order …` | `set-tab-order …`. Reads cleanly flat; still BLOCKED on the `pdfce-spec-librarian` dispatch (§3.4.4) regardless of naming. |
 | F6 | `forms rename-field` | `rename-field`. Reads cleanly flat. |
 | F7 | `pdfce-cli merge --on-field-collision …` | **Unaffected** — already flat, `merge` is a shipped top-level verb. |
@@ -286,19 +286,26 @@ Pass family 43**.~~
 
 ### What §0.1 does NOT rule
 
-- **F3's push-button verb name remains `NOT RULED`, deliberately.** The
+- ~~**F3's push-button verb name remains `NOT RULED`, deliberately.** The
   flat pattern implies `add-push-button` and Ruling 1's sibling-shape
   argument would very likely reach it — but F3 was not the question in
   front of the engineer, and a name arrived at by inference is the exact
-  thing §0 and §0.1 both refuse. Its `NOT RULED` markers stand.
+  thing §0 and §0.1 both refuse. Its `NOT RULED` markers stand.~~
+  **[RULED 2026-08-08, ARCHITECTURE.md §12 (thirty-second filing) —
+  `add-push-button`, chosen on its own merits (the spec's own term,
+  `add-button` would collide with check box/radio), not inferred from
+  this entry. See `ROADMAP.md`'s `Pass 20.3` COMPLETION ADDENDUM, which
+  is canonical where it and this document now differ.]**
 - ~~**Nothing is minted** — no Pass ID, no standing rule, no new decision
   record. This is an amendment to decision 020, exactly as §0 is.~~
   **[AMENDED 2026-08-07, later the same day — the two RULINGS still mint
   nothing, but the DOMAIN-PARTITION FINDING was minted as **standing rule
   R161**. Ceilings are now **R161 / decisions 031 / Pass family 43**
   (R162 next free). See the superseded-block above and `ROADMAP.md`
-  *Standing rules*, which is canonical. F3's push-button verb name is
-  still NOT RULED and must not be inferred from R161.]**
+  *Standing rules*, which is canonical. ~~F3's push-button verb name is
+  still NOT RULED and must not be inferred from R161.~~ **[RULED
+  2026-08-08 — `add-push-button`; see the *What §0.1 does NOT rule*
+  bullet above for the pointer.]**
 - **No Pass is shipped or implied.** An engineering fork was live in
   `crates/` building F2 when this was filed; its outcome is neither
   anticipated nor recorded here, and this filing carries no commit.
@@ -1593,9 +1600,11 @@ still skips buttons (unchanged `_ => continue`).
 - CLI: ~~`--type listbox|combobox|pushbutton …`~~ **[SUPERSEDED by §0,
   2026-08-07 — flat verbs.]** Listbox + combobox SHIPPED as the single verb
   `add-choice-field [--option export=display]... [--multi-select]
-  [--editable]`. Push button: verb name **NOT RULED** (the flat pattern
-  implies `add-push-button`, but §0 does not rule it); `[--caption <s>]`
-  unaffected.
+  [--editable]`. Push button: ~~verb name **NOT RULED** (the flat pattern
+  implies `add-push-button`, but §0 does not rule it)~~ **[RULED
+  2026-08-08, ARCHITECTURE.md §12 — `add-push-button`. `NewPushButton` /
+  `EditSession::add_push_button` shipped in `baeb624`, decision 020 §6's
+  F3 CLOSED.]**; `[--caption <s>]` unaffected.
 
 ### F4 — Tab order (core + CLI) — **BLOCKED on a spec-librarian dispatch**
 

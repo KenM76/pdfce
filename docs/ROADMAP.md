@@ -6274,6 +6274,17 @@ Comb layout still not driven from `/MaxLen`; positional-`/Opt` radio authoring s
 > the **per-type detail fields** remain owed under Pass 20.5's ID.
 > **Pass 20.5 is still PARTIAL.** See the `★ ADDENDUM` at the end of that
 > entry. Everything else in this block is unchanged.
+>
+> **✅ AMENDED A FOURTH TIME, 2026-08-08 (thirty-second filing, `baeb624`)
+> — `/I`/`/TI` AND PUSH BUTTONS COME OFF THIS LIST. F3 IS CLOSED.**
+> `add_push_button`/`NewPushButton` ship (CLI `add-push-button`, RULED not
+> inferred); `/I` turns out to have been not merely missing but WRONG
+> twice (unsorted; written on single-select fields where Table 231 scopes
+> it to `MultiSelect`); `/TI` is now derived on list-box fill. See the
+> COMPLETION ADDENDUM on the `Pass 20.2 + Pass 20.3` entry. **Comb layout,
+> inherited-`/V`, `/Tabs` AUTHORING and re-flag remain owed** — F6
+> (`rename-field` + `--defaults-from`) closed 2026-08-07 (thirtieth
+> filing) and is no longer on this list either.
 
 #### Verification — measured, not asserted
 
@@ -7085,6 +7096,14 @@ costs the gate nothing.
 > rather than edited, per this section's append-only discipline — the gap
 > the row records was real at `bca60c9`, and is the reason the three later
 > commits exist.
+>
+> **⚠ THE `Pass 20.3` ROW IS NOW STALE TOO, AS OF 2026-08-08 — read the
+> ★★ COMPLETION ADDENDUM at the end of this entry before quoting it.**
+> `baeb624` delivers every item the row lists as missing: `/I` (sorted,
+> deduplicated, multi-select-only — it turns out it had been written all
+> along, wrongly), `/TI` (derived on list-box fill), and push buttons
+> (`add-push-button`, RULED not inferred). **F3 IS CLOSED.** Left in place
+> rather than edited, for the same reason the Pass 20.2 note above gives.
 
 | Slice | Decision 020's definition | `bca60c9` |
 |---|---|---|
@@ -7380,6 +7399,14 @@ propagation duty.
 > this entry). **Still owed, unchanged: `/I`/`/TI`, push buttons, and F6
 > property editing.** The list is left as filed — it is the record of what
 > `bca60c9` itself named as its own debt.
+>
+> **✅✅ AMENDED AGAIN 2026-08-08 (thirty-second filing, `baeb624`) — `/I`,
+> `/TI` and push buttons are DISCHARGED; F3 IS CLOSED.** (F6 property
+> editing closed separately, 2026-08-07 thirtieth filing — `--defaults-from`
+> — with move/resize/re-flag carved out as a SEPARATE, larger question;
+> re-flag is the sole item still unscoped — see the Backlog bucket's own
+> 2026-08-08 amendment.) **Nothing from `bca60c9`'s own debt list remains
+> owed except what F6/re-flag's own tracking already carries.**
 
 **The CLI shape still diverges from decision 020** — `add-check-box` /
 `add-choice-field` versus `forms add-field --type checkbox|listbox|…`.
@@ -21078,9 +21105,15 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 **Position in this section is FILING ORDER, NOT PRIORITY.** This entry does
 **not** resequence anything. Where these two Passes sit relative to F5's
-residue, F3's push buttons and Pass 38.5 is the **engineer's call** and is
+residue ~~, F3's push buttons~~ **[F3 CLOSED 2026-08-08, `baeb624` — see the
+`Pass 20.2 + Pass 20.3` COMPLETION ADDENDUM; off this competing-priority list]**
+and Pass 38.5 is the **engineer's call** and is
 untouched here — same posture the twenty-eighth filing took when it declined
-to resequence move/resize/re-flag on its own authority.
+to resequence move/resize/re-flag on its own authority. **Re-flag is the sole
+survivor of that three-item UNSCOPED list** (§0 below) and, unlike the two
+resolved here, still has no Pass ID and no scoping decision at all — see the
+Backlog "Form field creation/editing" bucket's 2026-08-08 amendment for the
+current, complete restatement.
 
 #### 0. ★★ The sequence, recorded because it is the roadmap doing its job
 
@@ -27087,6 +27120,29 @@ nothing gets forgotten, not as a commitment to build in this order.
   non-widget annotation, does not include re-flag, and **has no GUI for rename,
   `--defaults-from` or `move-widget`** (R151). **Re-flag remains the one item
   owed a SCOPE decision rather than an implementation.**
+  **★★ AMENDMENT (2026-08-08, thirty-second filing, `baeb624`) — F3 CLOSES.
+  `/I`, `/TI` and push buttons are OFF this bucket's owed list — the last
+  standard Acrobat field type pdfce could not create now exists
+  (`add_push_button`/`NewPushButton`, CLI `add-push-button`, RULED not
+  inferred), and `/I` turns out to have been not merely missing but WRONG
+  twice (unsorted; written on single-select fields — see the `Pass 20.2 +
+  Pass 20.3` COMPLETION ADDENDUM for the full form). `--defaults-from` now
+  copies the caption on all FIVE creation verbs, not four.**
+  **STILL OWED AND SCOPED, restated so this list is current:** **tab order
+  AUTHORING** (F4, still BLOCKED on the spec-librarian `/Tabs` dispatch),
+  and Pass 20.5's residue (per-type detail fields — push button's palette
+  entry among them, now cheap rather than blocked; `/MK`-border disclosure;
+  rendered-appearance verification, now discharged for push buttons only,
+  §8 of the addendum; the multi-page repeated-field row-label fixture).
+  **STILL UNSCOPED, AND OWED A DECISION RATHER THAN AN IMPLEMENTATION:**
+  field **re-flag** — unchanged, and now the ONLY unscoped item left in
+  this bucket. It has outlived both siblings (move, resize — `Pass 46.0`)
+  by two filings running. **No Pass ID, no standing rule, no decision
+  record minted by this amendment** — F3's closure is recorded with gate
+  figures on the `Pass 20.2 + Pass 20.3` *Shipped* entry; this bullet only
+  keeps the Backlog bucket's own restated list current, per this bucket's
+  own established convention of amending its "still owed" summary in
+  place at each filing that changes it.
 - **XFA** — legacy Adobe forms tech. **Verify current status before
   scoping** — Adobe has been deprecating XFA in Acrobat; consult the
   spec RAG + a fresh web check before committing engineering time here.
@@ -32834,12 +32890,16 @@ not a judgment call:**
      `object-delete` beside `delete-pages` re-derives the same finding,
      or worse, files it as an inconsistency to fix.
 
-  **What it does NOT do.** It does not rule any specific verb name. F3's
+  **What it does NOT do.** It does not rule any specific verb name. ~~F3's
   push-button verb name remains **NOT RULED** and must not be inferred
   from this rule (the flat pattern and forms-is-verb-first together imply
   `add-push-button`, and that inference is exactly what decision 020 §0
-  and §0.1 both refuse). R161 tells you which *shape* a new forms verb
-  takes; it does not tell you the word.
+  and §0.1 both refuse).~~ **[RULED 2026-08-08 (thirty-second filing,
+  `baeb624`) — `add-push-button`, on its own merits (the spec's own term,
+  disambiguation from check box/radio, consistency with its two hyphenated
+  siblings), not by inference from this rule. See the `Pass 20.2 +
+  Pass 20.3` COMPLETION ADDENDUM, §5 Ruling 1.]** R161 tells you which
+  *shape* a new forms verb takes; it does not tell you the word.
 
   **⚠ MEASUREMENT NOTE, and a THREE-WAY COUNT DISCREPANCY that is now
   RECONCILED (R87).** Three different counts of the CLI surface were on

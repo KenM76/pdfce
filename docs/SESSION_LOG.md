@@ -25905,3 +25905,59 @@ inside a correction block that says they are struck.
 
 **Ledger untouched.** Nothing minted, nothing renumbered; this is filing
 thirty-two's own footer and does not claim ordinal thirty-three.
+
+#### ⚠ SECOND AMENDMENT FOOTER — 2026-08-08: the *"Nth consecutive filing"* count beside `R167` is UNRELIABLE IN BOTH DIRECTIONS, and the fix is to stop treating it as a number
+
+Raised by `pdfce-librarian` on the post-filing sweep the engineer dispatched
+after the operator's correction. The librarian reported one discrepancy;
+checking it found two, and the second is not the engineer's.
+
+**What the librarian found.** This entry's body says `R167` has stayed free
+for a **FOURTH** consecutive filing; its first amendment footer says
+**fifth** — while that same footer states it *"does not claim ordinal
+thirty-three."* Both cannot hold: **if the footer is not a filing, it cannot
+increment a per-filing count.** The body is right and the footer's *fifth*
+is wrong.
+
+**What checking it found, which the librarian did not report.** The count
+was **already broken before this filing**:
+
+| line | filing | claims |
+|---|---|---|
+| 25201 | thirtieth | *"`R167` free for a **THIRD** consecutive filing"* |
+| 25388 | thirty-first | *"`R167` stays free for a **THIRD** consecutive filing"* |
+| 25390 | thirty-first | *"`R167` free — a **third** consecutive filing"* |
+
+**Two consecutive filings both called themselves the third.** So this
+entry's *fourth* inherited an off-by-one rather than introducing one, and
+the footer's *fifth* then added a second, independent error on top.
+
+**★ The finding, and it is a SECOND INSTANCE of one this log already
+carries.** The thirty-first filing's own hygiene block recorded:
+*"**filing ordinals are minted by hand with no checker behind them, so they
+are not collision-safe.** Pass IDs, standing rules and decision numbers all
+have `check-ledger-numbers.py`; the ordinal has nothing."* That finding was
+about **ordinals**. This is the same defect in a **different hand-maintained
+count in the same sentence** — and it is worse in one respect: an ordinal
+collision at least makes two filings indistinguishable, which someone
+eventually notices. **A wrong consecutive-count is invisible forever**,
+because nothing dereferences it. Three filings disagreed for two days and
+the disagreement surfaced only because an agent was asked to audit
+arithmetic.
+
+**★ THE RESOLUTION IS NOT A CORRECTED NUMBER.** Renumbering would assert a
+fourth hand-maintained figure with no more authority than the three that
+disagree. **The count is hereby DECORATIVE and is not to be relied on.** The
+load-bearing fact is the one the checker prints and nothing else:
+
+> `standing rules : R166 -> next free is R167`
+
+read from `tools/check-ledger-numbers.py`, **exit 0, re-run after the
+librarian's sweep** — which is also the first re-run of either gate since
+that sweep, because the librarian had no shell and correctly declined to
+claim gate figures it could not produce (hard rule 8, honoured under a tool
+restriction rather than around it). `check-passes-filed.py` likewise exit 0.
+
+**Nothing is renumbered, nothing is minted, and `R167` is free** — which is
+the only part of the sentence that ever mattered, and the only part with a
+machine behind it.
