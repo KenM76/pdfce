@@ -81,6 +81,451 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 48.3 — GUI drag-and-drop image placement SHIPS (`e6ad48c`); a SECOND Pass-ID collision this session found and corrected (`Pass 47.7` was NOT free either — the commit is `48.3`); a THIRD, distinct blind spot in `check-passes-filed.py` documented as a false-green hazard; the CMYK/prepress parity catalogue lands
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+commit hash, technical claim and gate result below is RELAYED from the
+dispatching engineer's own account, not independently re-run or
+re-measured by this filing.** (`Pass 48.3` — the ID was assigned by the
+thirty-fifth filing on 2026-08-08 as the still-unbuilt Backlog remainder
+of `Pass 48.0`, and is **used here, not minted**.)
+
+| Pass | Commit | What |
+|---|---|---|
+| `Pass 48.3` | `e6ad48c` | **GUI drag-and-drop image placement.** An image dropped on the canvas is handled inside the canvas widget (placement at the drop point needs canvas geometry that only exists post-layout); size comes from the image's own DPI at natural size, centred on the pointer, clamped to the page; sizing uses the image's **DISPLAYED** dimensions (post-EXIF-rotation), so a rotated photo is placed at the shape it will actually appear as, not its raw pre-rotation extent; a drop that lands outside the page falls back to page-centre and **says so** rather than silently repositioning; `import_with` runs before anything is written to the document, so a refused import costs the open file nothing. |
+
+**★ THIS DELIBERATELY EXCEEDS BOTH PARITY REFERENCES, and is recorded as
+an exceed so nobody "corrects" it toward either one.** Per the dispatch's
+account: neither Acrobat nor PDF-XChange places a dropped image inline on
+the canvas — PDF-XChange opens a dropped image as a **separate document**
+(sourced to PDF-XChange's own developer forum by the dispatching
+engineer; not independently re-verified by this filing, no shell). This
+is the operator's standing ruling in action — *"if there are ways to
+exceed the other softwares GUI capabilities we should choose to do
+those things"* — and needs to be named as a deliberate departure from
+both references, not merely an omission from the Feature RAG's parity
+table.
+
+**`diag::Step::Drop` added — the second diagnostic step this session
+added for the identical stated reason:** an OS-level file drag cannot be
+scripted from outside the process, so without an instrumented step the
+drop path is reachable **only by an operator physically dragging a file
+onto the running window** — untestable by any harness, and therefore, by
+this project's own observability standard, effectively unverifiable
+between sessions.
+
+**`check-ui-strings` caught a `format!` join at the call site** (an
+operator-visible punctuation string assembled inline rather than drawn
+from the catalog) — recorded as the gate working as designed, the same
+"tooling caught it" note this project has filed for every prior session
+this pattern has fired in.
+
+#### ⚠ PASS-ID COLLISION #2 THIS SESSION — `Pass 47.7` was not free either, and the commit is actually `Pass 48.3`
+
+Commit `e6ad48c` is subjected **"Pass 47.7: drop an image on the page and
+it lands where you dropped it."** `Pass 47.7` is **already** the
+contextual-ribbon-tab ID — filed by the thirty-third filing (2026-08-08,
+decision 033 §3.3/§7 Q5; see *Backlog* below), still unbuilt, blocked on
+`Pass 47.6`. **`Pass 47.7`'s own definition (the contextual ribbon tab)
+is untouched by this correction and remains unbuilt.**
+
+The dispatching engineer's own account names the mechanism plainly: the
+ID was minted from **memory of decision 033 §6's slicing list**, the same
+way `Pass 47.5` was minted in error earlier the same day (see the
+`Pass 47.0–47.4 + Pass 47.11` Shipped entry's own collision note,
+further down *Shipped*) — **without re-running either project checker
+after minting.** Two collisions, same session, same root cause. **Correction:
+`e6ad48c` is filed here as `Pass 48.3`** — its true identity, already
+reserved for exactly this capability ("GUI drag-and-drop image
+placement," Backlog, filed by the thirty-fifth filing) — not a new
+number.
+
+**A stronger form of the same root cause than `47.5`'s, worth stating
+precisely: `Pass 47.5` was at least a Pass-family sibling of the family
+the engineer was working in (47). `Pass 47.7` was not even the right
+CAPABILITY — a GUI drop gesture for image placement has no relationship
+to a contextual ribbon tab beyond sharing a decade of the same decision
+record's numbering.** That is the detail that makes this collision worse
+than the first, and is why it is filed as its own subsection rather than
+folded into a one-line footnote.
+
+**The generalizable finding, escalated to a new RAG file rather than
+re-derived at the next occurrence:** `docs/decisions/033`'s §6 slicing
+list is a **PROPOSAL** for what work items exist and roughly what order
+they might ship in — it is not, and was never, an **ALLOCATION** of the
+`Pass 47.x` sub-IDs those items would eventually receive. Reading it
+later and minting a sub-ID from its position in that list treats a
+scoping document as a numbering ledger, which it structurally cannot be
+— the real sub-IDs are assigned by whichever filing actually heads them,
+in whatever order shipping happens to occur, and decision 033's own list
+order was never a promise about that. Full derivation, worked against
+this exact incident:
+`D:\dev\rag\rust\a_decision_records_proposed_slicing_is_a_proposal_not_an_id_allocation.md`.
+An `R106` amendment recording both this session's Pass-ID collisions
+(`47.5`→`47.11` and `47.7`→`48.3`) is filed under *Standing rules*,
+below — see R106's fourth amendment.
+
+#### ★★ THE FALSE-GREEN HAZARD — a THIRD, distinct blind spot in `tools/check-passes-filed.py`, named precisely because the checker's own docstring already discloses two others honestly
+
+**Two commit messages now permanently claim Pass IDs that describe
+something else: `5ceb5f8` says `Pass 47.5` (its true ID is `47.11`);
+`e6ad48c` says `Pass 47.7` (its true ID is `48.3`).** Neither commit is
+pushed — there is still no git remote — so `git rebase -i` could rewrite
+both subject lines cleanly. **This filing does not do that, and the
+reasoning is recorded here so a future session does not "helpfully"
+rewrite them:** both hashes are already cited, verbatim, in prior
+filings of this document (`5ceb5f8` in the `Pass 47.0–47.4 + Pass 47.11`
+Shipped entry's own collision note; `e6ad48c` in this entry) — rewriting
+the commits after the fact would silently invalidate every citation
+that quotes them, to fix a cosmetic wrongness in a message nobody reads
+except through this document. **The commit messages stay wrong. The
+record explains why, once, here, rather than at every citation site.**
+
+**The mechanism, stated precisely because "the gate cannot detect it" is
+not quite the honest form of the claim.** `check-passes-filed.py`'s join
+key is *"this commit's short hash appears somewhere in `ROADMAP.md`"* (a
+choice its own docstring states and defends — see the tool's `WHAT IT
+CHECKS` section). It does **not** compare the Pass ID a commit's subject
+line claims against the ID of the entry the hash is actually filed
+under. So: **once `e6ad48c` is cited in this entry (as it now is), the
+checker will report it FILED** — correctly, in the narrow sense that a
+citation now exists; **but nothing about that green result asserts the
+citation is filed under the SAME ID the commit's own subject claims.**
+That mismatch is real, permanent (baked into `git log` for as long as
+this repository exists), and invisible to the checker's primary
+pass/fail signal.
+
+**It is NOT, however, fully silent, and the honest report says so.** The
+checker's secondary mechanism — grouping commits by their
+subject-parsed Pass ID and printing a `note` when more than one commit
+claims the same ID — is keyed off the **subject line**, not the filed
+location. So if a genuine `Pass 47.7` (the contextual ribbon tab) ships
+in the future with a commit subjected `Pass 47.7: …`, the checker WILL
+print `note  Pass 47.7 claimed by 2 commits: e6ad48c, <newhash>` — an
+observable signal, not silence. **What it will not do is tell a reader
+which of the two commits is the impostor**, and the checker's own
+comment on this exact mechanism (`check-passes-filed.py`, the paragraph
+above `collisions`) already states the limit: *"What it cannot
+distinguish, and does not pretend to: 'one Pass shipped in four commits'
+from 'two unrelated pieces of work under one number.' That needs a human
+reading the subjects."* A reader accustomed to this project's normal
+multi-commit Passes (34.1 in four slices, 27.2 in two) has every reason
+to read that note as ordinary and move on — which is exactly how the
+false-green risk survives even though the note fires. **The hazard is
+real and is precisely this: a TRUE signal that looks identical to a
+FALSE ALARM this project trains its readers to ignore.**
+
+**Third distinct weakness on this checker, and the earlier two are
+already on record:** the filing-commit blind spot (`e7e74f2`, a commit
+cannot cite the hash it does not yet have — see finding #11 in the
+`c3d8853`-era entry, ~line 1815) and the gap-record weakness (a hash
+cited in a table of STILL-unfiled commits counts as filed — see the
+`Pass 26.2` note, ~line 6996). Both of those were fixed or accepted with
+a named, deliberate trade-off. **This filing makes no equivalent
+recommendation and mints no standing rule.** Consistent with how the
+first weakness was handled (*"the honest fix is either a checker
+exemption... or the convention... and choosing between those is the
+engineer's, not this librarian's"* — same entry, ~line 1842): whether to
+(a) add a `KNOWN WEAKNESS` bullet to the checker's own docstring naming
+this class, honestly, alongside the other two, (b) extend the collision
+note to also diff subject text when two commits share an ID (a real
+script change, and one the checker's own author has twice preferred
+over a convention nobody has to remember), or (c) accept the residual
+risk and rely on the discipline this entry is already following — naming
+the wrong ID beside the true one, in the same paragraph, every time a
+correction like this is filed — **is the engineer's call, not this
+librarian's to make unasked.**
+
+#### The CMYK/prepress parity catalogue lands — first content in the "Print & prepress (PDF/X)" Feature RAG bucket
+
+**7 new files land in `D:\Dev\Rag-Specialized\Acrobat_Features\`**
+(`prepress__*`), per the dispatching engineer's account (relayed, not
+independently verified — that RAG is `pdfce-acrobat-librarian`'s
+territory, not written by this filing). **The headline finding changes
+what a future CMYK Pass is aiming AT:** there is **no objective
+"correct" untagged `DeviceCMYK`→screen conversion.** Sourced to Dov
+Isaacs, former Adobe Acrobat Engineering — Acrobat itself resolves the
+ambiguity through a **user-configurable working-space ICC profile**,
+defaulting to *U.S. Web Coated (SWOP) v2* — **a house default, not a
+spec mandate.** The one documented exception is a PDF/X file's own
+embedded `/OutputIntents` profile, which is normative and not a house
+choice. **Consequence for `FEATURES.md`'s CMYK row (below): pdfce is
+CHOOSING a conversion, not failing to match a target Acrobat itself does
+not have** — the row's framing is corrected accordingly.
+
+**A `pdfce-spec-librarian` dispatch is live** for `/Separation`,
+`/DeviceN`, `/OutputIntents` and overprint — **all four confirmed absent
+from the spec corpus** as of this filing. Status only; not this
+librarian's territory to close (rule 6).
+
+#### Ledger
+
+**Not independently run — no shell (hard rule 8).** Derived by reading
+`docs/ROADMAP.md`/`docs/decisions/` directly:
+- **Pass families:** `48.3` moves from *Backlog* to *Shipped* by this
+  filing — the ID was already reserved (thirty-fifth filing), so this is
+  a USE, not a mint. Family **48** highest headed is now **48.3**; next
+  free sub-ID is **48.4**. Family 47's own ceiling is unaffected — see
+  the companion `Pass 47.0–47.4 + Pass 47.11` entry, below, for that
+  family's own note.
+- **Standing rules:** `R106` gains a fourth amendment, below, recording
+  this session's **second** Pass-ID collision alongside the first (see
+  *Standing rules*). No new `R`-number minted; ceiling stays **R168**,
+  next free **R169** — **stated as of the last figure this filing can
+  read from `ROADMAP.md` itself; not re-verified against a live checker
+  run, no shell.**
+- **Decision records:** unchanged by this entry — `034` remains CLAIMED
+  and UNAUTHORED (see the companion `Pass 48.0–48.2` entry's own Ledger).
+- **Pass-ID collision running count:** this session's two corrections
+  (`47.5`→`47.11`, thirty-fifth filing; `47.7`→`48.3`, this filing) bring
+  the Pass-ID-specific count in `R106`'s own list from **four to six**
+  — enumerable directly from R106's text (Pass 13.x, Pass 18.4/18.2,
+  Pass 19.4/18.7, Pass 24.0a/24-family, plus these two). **The broader
+  "numbering collisions" tally (`R106`'s own "six" figure, which also
+  counts standing-rule and duplicate-heading collisions) is NOT
+  recomputed here** — this filing has not re-audited its full
+  composition, and a wrong recomputed total would be worse than an
+  honest gap. Owed to whichever filing next touches `R106`'s tally.
+
+---
+
+### Pass 48.0–48.2 — Image XObject placement (core + CLI), transparency rendering (`/SMask`+`/Mask`, closes Pass 1.1 item 6.3), and a JPEG write path — operator request 2026-08-08, filed AND shipped in the SAME filing (no prior Backlog bucket existed for image placement)
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — gate
+figures and technical detail below are RELAYED from the dispatching
+engineer's commit messages, not independently re-run by this filing.**
+Three commits, no prior Pass IDs, the largest unfiled debt this project
+has carried (nine commits total across this filing): `ec6556f` (image
+placement, core + CLI), `a9a0780` (transparency rendering), `889566f`
+(JPEG encoder + `Jpeg{quality}`, retiring/narrowing the
+`transparency_not_previewed` diagnostic). Minted as a new family — **48**
+— rather than folded into decision 033's family 47, because these three
+commits are a new rendering/authoring CAPABILITY (image insertion into the
+document), not GUI-usability work; family 47 is decision 033's plan and
+these commits are outside its scope.
+
+**Operator's request, verbatim, that opened this family and has no prior
+Backlog filing anywhere in this document:** *"I also need the ability to
+just drag and drop images of different formats onto the pdf workspace
+among all the other things that work this same way with other
+software."* Filed retroactively as the *Backlog* "Image insertion" bucket
+below, alongside `Pass 48.3` (the still-unbuilt GUI drop gesture).
+
+| Pass | Commit | What |
+|---|---|---|
+| `Pass 48.0` | `ec6556f` | **Image XObject placement — core + CLI only.** An image (of a supported codec — DCT/LZW/RunLength/CCITT/JBIG2/JPX, per Pass 2.1–2.3) can be placed into a page's content stream as a new `Do`-invoked XObject at an operator-specified position/size. `cli` reaches it; **`gui` does NOT** — no drag-and-drop or canvas gesture is wired yet (see `Pass 48.3`, Backlog, below). |
+| `Pass 48.1` | `a9a0780` | **Transparency rendering — `/SMask` + `/Mask` (soft/explicit/colour-key).** Closes the gap `ROADMAP.md`'s *Next fidelity slice* list has carried since Pass 1.1 as **item 6.3** ("recognized today, base image drawn opaque with a diagnostic note; needs PDF_Spec clause 11, a flagged GAP"). **The clause-11 spec gap that blocked this was an INGESTION gap, not a sourcing gap** — `_sources/PDF32000_2008.pdf` had all of §11.1–§11.7 staged the whole session; the spec RAG simply hadn't ingested it yet. `pdfce-spec-librarian` was dispatched for §11.6.5.3 this session and filed 4 new spec RAG files. **`/Mask`+`/SMask` precedence turns out to be NORMATIVE (Table 89)**, not the undefined gap the RAG previously recorded — a correction to the spec RAG's own prior state, not a new spec finding pdfce invented. `/Matte` (§11.6.5.3) became implementable as a result. |
+| `Pass 48.2` | `889566f` | **JPEG write path — `jpeg-encoder` 0.7.1 dependency, `Jpeg{quality}` config, retiring/narrowing the `transparency_not_previewed` diagnostic.** First image ENCODER pdfce has ever shipped — see the R28 exception note under *Standing rules*, below, and the CMYK-polarity finding immediately following this table. |
+
+**Operator ruling on the encoder dependency, verbatim and complete:**
+*"accept the ijg attribution line."* `jpeg-encoder` 0.7.1,
+`(MIT OR Apache-2.0) AND IJG`, `simd` feature OFF so `forbid(unsafe_code)`
+stays active project-wide. **This is R28's FIRST exception** ("no image
+encoder enters any pdfce crate without a new decision record") and
+**pdfce's first conjunctive-attribution dependency** — the license string
+carries an `AND`, not an `OR`, meaning BOTH the permissive grant and the
+IJG attribution condition apply simultaneously, not a caller's choice
+between them. The attribution sentence is generated into `about.hbs`
+(`cargo-about`), never hand-written, per standing project discipline.
+**A full decision record (docs/decisions/034-*.md) is OWED, not yet
+authored** — R28's own text requires one before an encoder "enters any
+pdfce crate," and this filing cannot write it (decision records are
+produced via the `autonomous-builder`/KenAgent protocol per
+`docs/decisions/README.md`, not by `pdfce-librarian`). See the *Ledger*
+note below — decision number **034 is CLAIMED by this filing's own
+citations but UNAUTHORED**, distinct from "next free."
+
+**★ CMYK write-side polarity — the librarian's ruling on whether this
+needs its own decision record.** The engineer's write path feeds the
+**complement of true-ink samples** into `jpeg-encoder`'s `CmykAsYcck`
+mode; because that crate performs its own internal inversion on encode
+(see the RAG finding below), the composition reduces to **exactly Adobe
+TN #5116 §13.1's forward CMYK→YCCK transform** — the same transform
+decision 006 already established as definitional on the READ side. No
+`/Decode` array is written; the output declares APP14 transform byte 2.
+**Ruled: this warrants its OWN decision record, not an amendment to
+006.** Three reasons: (1) R28's own text makes a new decision record a
+PRECONDITION for any encoder shipping at all — this isn't discretionary.
+(2) Decision 006 §7 item 2 explicitly reserved "whether pdfce should ever
+write CMYK JPEGs" as future scope, distinct from anything 006 itself
+decided; treating this as merely a 006 amendment would conflate an
+exhaustively-closed read-side record with new write-side content. (3) The
+bundle here — encoder selection, license/attribution, AND the write-side
+transform argument — is substantial enough on its own to be reviewable as
+one unit, the way every other pdfce decision record is. **Filed as OWED
+under decision number 034** (claimed, unauthored — see *Ledger*, below).
+A `personal_rag/pdf` lesson records the technique in full:
+`C:\personal_rag\pdf\lesson_20260808_write_side_cmyk_ycck_polarity_feed_complement_for_forward_transform.md`.
+
+**Three of the dispatching engineer's own briefs were WRONG this session,
+and all three were caught by the agents they were handed to — recorded
+as the through-line of this filing, not three unrelated footnotes:**
+1. A brief told the transparency agent clause 11 was ABSENT from the spec
+   RAG. It was absent from the RAG; the source PDF had it staged the
+   whole session. An ingestion gap, not a sourcing gap (see `Pass 48.1`,
+   above) — consequence: `/Matte` went from refused-by-name to
+   implementable, and `/Mask`+`/SMask` precedence went from "undefined
+   gap" to "normative, Table 89."
+2. A brief said `jpeg-encoder` "does not invert the samples" for CMYK. It
+   does — see the RAG finding below. Acting on the uncorrected brief
+   would have shipped a photographic negative on every CMYK re-encode,
+   undetectable by the crate's own round-trip tests (they check against
+   `jpeg-decoder`, which inverts every 4-component JPEG unconditionally
+   on decode — two wrongs cancelling). **Second occurrence of standing
+   rule R31** ("a reference decoder is evidence only after its own
+   conventions are verified") — first occurrence was Pillow on the READ
+   side (decision 006 §3.3); this is the WRITE-side mirror, caught before
+   shipping rather than after.
+3. A brief named `Pass 47.9` for retirement when the actually-retired
+   planned-treatment Pass was `47.8` (`Pass 47.9` is Alt-key KeyTips, a
+   P2 item unrelated to R124). Caught and flagged back rather than
+   silently substituted — see the *thirty-fourth filing*'s own account,
+   `SESSION_LOG.md`, which independently verified the same correction
+   against `ROADMAP.md` and decision 033 §6 item 10 directly.
+
+**A latent bug this session's transparency work exposed — recorded as its
+own finding, not folded into the three above (it was not a brief error,
+it was a pre-existing defect the new work happened to make visible):**
+`pdfce-render`'s `premultiplied()` computed `min(round(v × 255), alpha)` —
+a **clamp**, where premultiplied alpha requires a **multiply**.
+Bit-identical to the correct answer at `alpha == 255` (every image pdfce
+had ever painted, since nothing before this session had partial-alpha
+content), roughly double-bright at partial alpha. **The new fixtures use a
+0/85/170/255 alpha ramp specifically because binary (0-or-255) alpha
+cannot distinguish clamp from multiply** — the test design IS the finding,
+not merely the fix. Full technical writeup:
+`D:\dev\rag\rust\premultiplied_alpha_needs_multiply_not_clamp.md`.
+
+**Two GUI gates caught the engineer mid-Pass, recorded as the tooling
+working as designed, not as friction:**
+- `every_glyph_in_the_catalog_has_a_real_face` rejected a `✕` glyph with
+  no backing face; the remedy text carried the operator's own standing
+  ruling — *author an icon, do not reword* — so `close.svg` now exists as
+  a real asset rather than the string being swapped for one the gate
+  would also reject.
+- `every_group_belongs_to_exactly_one_tab` rejected four ribbon groups the
+  engineer had orphaned (removed from a tab's list without deleting the
+  group definition) rather than deleted outright.
+
+**Verified by rendering, not merely asserted, per the dispatch's own
+account (relayed, not re-run by this filing):** a placed JPEG's bytes are
+byte-identical in the saved file (349 bytes in, 349 out, SHA-256 equal); a
+CMYK re-encode writes APP14 transform 2 with **no `/Decode` array**; every
+GUI-affecting Pass in this family was observed in the running release
+build via `PrintWindow` captures, not inferred from source reading alone.
+
+**Limits, named so they are not silently expected:**
+- **No GUI drag-and-drop.** `Pass 48.0` is core+CLI only — see `Pass 48.3`
+  under *Backlog*.
+- **Three transparency cases remain unpreviewed**, named on the retired
+  `transparency_not_previewed` diagnostic field rather than left
+  unaccounted for. **The largest: `/ca`/`/CA` constant alpha is not
+  modelled in the graphics state at all** — a distinct gap from
+  `/SMask`/`/Mask`, which this Pass DOES cover. (The other two named
+  cases were not itemised in the dispatch reaching this filing; owed to
+  whoever picks up the remainder — see *For next session*,
+  `SESSION_LOG.md`.)
+- **TIFF was scoped OUT by name**, with a costed MVP recorded in the
+  dispatch reaching this filing but not reproduced here — see
+  `SESSION_LOG.md`'s *Findings + decisions* for what is preserved of it,
+  and flag to the engineer that the full costing belongs in `ROADMAP.md`
+  proper once re-supplied.
+
+#### Ledger
+
+**Both project checkers (`tools/check-ledger-numbers.py`,
+`tools/check-passes-filed.py`) were NOT RUN by this filing — no Bash tool
+was available to this dispatch** (hard rule 8's amendment: no shell, so
+this is stated plainly rather than inferred). Derived by reading
+`docs/ROADMAP.md` and `docs/decisions/` directly:
+- **Pass families:** family **48** is newly minted by this filing
+  (`48.0`–`48.2` headed above, `48.3` mentioned in *Backlog* below).
+  Highest PRE-EXISTING headed family was `47` (`47.0`–`47.4`, plus
+  `47.11` — see the companion Shipped entry immediately below this one).
+- **Decision records:** highest file in `docs/decisions/` remains `033`
+  → next free is genuinely **034** by file count, but **034 is CLAIMED by
+  this filing's own citations** (the CMYK-polarity/encoder-selection
+  record ruled OWED above) and **UNAUTHORED** — the next session must
+  either author `034-*.md` for this content or, if the engineer disagrees
+  with this filing's ruling, explicitly release the claim before a
+  DIFFERENT decision takes the number. **Do not assign 034 to unrelated
+  work without resolving this claim first.**
+- **Standing rules:** unchanged by this entry — see the companion Shipped
+  entry below for the R28/R167/R168 annotations this session made.
+
+---
+
+### Pass 47.0–47.4 + Pass 47.11 — decision 033 P0 SHIPS: multi-target correctness fix (R168), QAT restore, ribbon legibility + collapse toggle, editor chrome (R167), choice-field `/Opt` bug fix — PLUS one mid-Pass operator-reported defect fix, minted `Pass 47.11` after a Pass-ID COLLISION was found and corrected
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — gate
+figures relayed from the dispatching engineer's commit messages, not
+independently re-run by this filing.** All five items decision 033 §6
+filed as `Pass 47.0–47.4` under *Next up* (thirty-third filing) are now
+shipped, closing decision 033's entire P0 list in one session:
+
+| Pass | Commit | What |
+|---|---|---|
+| `Pass 47.0` | `5f9e68c` | **Multi-target verbs act on the whole selection or refuse (R168).** `delete_selected_object` and the drag handler no longer read `.iter().next()` — a 5-object Delete now removes five, or refuses with a stated reason; never a silent one-of-N. First consumer of R168, named as such at R168's own minting. |
+| `Pass 47.1` | `9d7e7a0` | **Quick Access Toolbar restored + status-bar zoom/page nav.** Built to the operator's RESOLVED answer to (bd) — *"your recommendation"* — which **diverges from decision 024 §3.5(d)'s original QAT list**: Open/Save a copy…/Undo/Redo only, with page navigation and zoom moved to the status bar's bottom-right rather than the QAT itself. Recorded as a divergence from the original spec, not silently absorbed into it. |
+| `Pass 47.2` | `88f5097` | **Ribbon groups become legible as a ribbon, PLUS a collapse toggle.** Two-row group bodies, captions centred beneath each group, vertical separators, mixed large/small button forms — fixes the three groups that previously rendered with no caption at all. The collapse toggle additionally builds (bf)'s RESOLVED answer: ribbon density ships as the two-row band plus a collapse toggle, "your recommendation" accepted on first asking. |
+| `Pass 47.3` | `33b86f5` | **Editor chrome for form-field widgets (R167).** A dashed, tinted outline + type glyph drawn by the editor for every widget when a form context is active — makes the Forms panel's rows locatable on the page, and is the prerequisite `Pass 47.6`'s resize handles still need. R167's own text is now backed by a shipped consumer. |
+| `Pass 47.4` | `40daa18` | **Choice-field `/Opt` bug in the Create Field pane fixed.** `commit_field_draft` no longer passes `Vec::new()` for `/Opt` unconditionally — a functional bug fix, not a capability gap; core/CLI `add-choice-field` were never affected. |
+| **`Pass 47.11`** (see collision note below) | `5ceb5f8` | **Text-edit retarget bug fix** — an operator-reported defect that arrived mid-Pass, with no prior filed ID. |
+
+**⚠ PASS-ID COLLISION FOUND AND CORRECTED — `Pass 47.5` was NOT free.**
+The dispatch reaching this filing minted `Pass 47.5` for the text-edit
+retarget bug fix, with an explicit instruction to verify the ID was
+actually free before ratifying it (*"I read the ceiling but did not
+re-run the checker after minting"*). **It was not free.** `Pass 47.5` was
+already claimed — by the thirty-third filing (2026-08-08), under
+*Backlog*, for **"Right-click context menus, canvas AND Objects tree"**
+(decision 033 §6, still unbuilt, blocked on `Pass 47.0`). This is exactly
+the collision class `tools/check-ledger-numbers.py` exists to catch, and
+the dispatch's own caution is why it was caught before filing rather than
+after. **Correction: the text-edit retarget bug fix (`5ceb5f8`) is filed
+as `Pass 47.11`** — the next genuinely free sub-ID in family 47, since
+`47.5` through `47.10` were all already claimed as of the thirty-third
+filing (`47.5` right-click menus, `47.6` canvas-selectable widgets, `47.7`
+contextual ribbon tab, `47.8` retired, `47.9` Alt KeyTips, `47.10`
+Objects-tree editing verbs — see *Backlog*, below, UNCHANGED by this
+correction). **`Pass 47.5`'s own definition (right-click menus) is
+untouched and remains unbuilt** — this correction only affects where the
+retarget-bug fix is filed, not what `47.5` means.
+
+**Gates — as relayed by the dispatching engineer, NOT independently
+re-run by this filing (no shell; hard rule 8/10 applies: figures are
+reported, not asserted as verified-here).** No aggregate test-count/pass-
+count figures were included in the dispatch reaching this filing for this
+family specifically — flagged to the engineer as owed for a future
+amendment to this entry, per hard rule 10 (every figure needs its
+denominator recorded beside it).
+
+**What P0 does NOT include, carried forward unchanged from the thirty-
+third filing's own list:** right-click menus (`Pass 47.5`, still Backlog),
+canvas-selectable widgets (`Pass 47.6`), the contextual ribbon tab
+(`Pass 47.7`), R124's planned-treatment styling (`Pass 47.8`, RETIRED —
+operator ruled "no placeholders," thirty-fourth filing), Alt KeyTips
+(`Pass 47.9`), and Objects-tree editing verbs (`Pass 47.10`) are all P1/P2
+and remain in *Backlog*, unaffected by this shipment.
+
+#### Ledger
+
+**Not independently run — no shell (hard rule 8).** Derived by reading
+`docs/ROADMAP.md`/`docs/decisions/` directly:
+- **Pass families:** `47.0`–`47.4` move from *Next up* to *Shipped* by
+  this filing. **`47.11` is newly minted** (see collision note above) —
+  next free sub-ID in family 47 is now **47.12**. `47.5`–`47.10` remain
+  exactly as the thirty-third/thirty-fourth filings left them (unbuilt,
+  `47.8` retired).
+- **Standing rules:** R167 and R168 both gain a ship-confirmation
+  annotation this filing — see *Standing rules*, below. No new number
+  minted; ceiling stays **R168**, next free **R169**.
+- **Decision records:** unchanged by this entry; see the companion
+  Pass 48.0–48.2 Shipped entry (immediately above) for this session's
+  decision-ledger activity (034 claimed, unauthored).
+
+---
+
 ### Pass 46.0 (PARTIAL) — **A WIDGET CAN BE MOVED, AND THE PLACEMENT ALGORITHM DOES THE CARRYING** — `EditSession::move_widget` + `WidgetMove` in `crates/pdfce-core/src/edit.rs`, CLI `move-widget`. **★★ THE FIRST BUILT SLICE OF THE OPERATOR'S OWN 2026-08-07 REQUEST — *"form fields and everything else should be draggable and resizeable"* — FILED AS `Pass 46.0` BY THE TWENTY-NINTH FILING AND STARTED WITHIN THE HOUR.** **★★ THE FINDING, AND IT IS THE REASON MOVE IS CHEAP AND RESIZE IS NOT: A MOVE NEEDS NO APPEARANCE REGENERATION, AND THAT IS A FACT ABOUT §12.5.5 RATHER THAN A SHORTCUT.** Step (b) computes matrix **A** as the mapping of the transformed appearance box's corners onto `/Rect`'s corners, so the per-axis scale is `Rect_extent / box_extent`. **Translating leaves the extent alone, both factors stay 1, and A degenerates to a PURE TRANSLATION** — the existing artwork is carried to the new position at its original size **by the algorithm every conforming reader already runs.** Regenerating here would rewrite a stream to produce bytes the format hands over for free. **★★ RESIZE IS THE OPPOSITE CASE AND IS *REACHABLE, NOT BLOCKED* — SEE §3, WHICH IS THE SHAPE OF THE REST OF 46.0.** All four widget generators are already size-parameterised and position-independent; **markup annotations are NOT**, and that split is the real work breakdown. **★ A WIDGET IS NOT A FIELD** — a field may own widgets on several pages, so this moves **ONE** appearance and returns `siblings_left_behind`, which the CLI states in prose when non-zero (rule 4). **★ A `/Rect` THAT IS ABSENT OR MALFORMED IS *REFUSED*, NOT FABRICATED** — §12.5.2 requires the entry, so the annotation is broken, and inventing an origin would put the widget somewhere the file never said. **★ THE BYTE ASSERTION CAUGHT ITS OWN AUTHOR** — it first looked for `"45 140"` when the writer emits `"45.0 140.0"`. **⚠ RESIZE IS DELIBERATELY CUT FROM THIS COMMIT, and `Pass 46.0` STAYS PARTIAL** — the other families (markup, redaction marks, links, ce dimensions) and the whole GUI half are untouched. (Pass 46.0 — the ID was assigned by the twenty-ninth filing on 2026-08-07 and is **used, not minted**) — 2026-08-07, committed `fd6eadd`, branch `pass-8-redaction`
 
 **Gates — measured by the ENGINEER at `fd6eadd` and relayed (R87; this filing ran no build and re-states his figures as HIS).** **2191 tests / 0 failed** — against **2187** at `247b8fa`, so **+4 tests, all four in `crates/pdfce-core/tests/form_field_hierarchy.rs`, which goes 19 → 23** (counted by `git show <rev>:crates/pdfce-core/tests/form_field_hierarchy.rs | grep -c '^#\[test\]'` at both revisions; the four names read from the diff: `moving_a_widget_writes_the_new_rect_into_the_file`, `a_move_rewrites_one_object_and_leaves_the_appearance_alone`, `moving_one_widget_discloses_the_siblings_it_left_behind`, `a_widget_without_a_rect_is_refused_rather_than_placed`). **`clippy` 0 warnings · `fmt`, `ui-strings`, `bypass-paths` each read by its own exit code · `cargo tree` 0 GUI matches for `pdfce-core` and `pdfce-render`.** **Both ledger checkers 0** (re-run by this filing, before and after — see *Ledger* below).
@@ -21073,7 +21518,7 @@ at the Encryption Backlog bucket and in SESSION_LOG continuations 20 and
 
 ## Next up
 
-### Pass 47.0–47.4 — ★★ DECISION 033 P0 — GUI usability: multi-target correctness fix, QAT restore, ribbon legibility, editor chrome, choice-field `/Opt` bug (decision 033, filed 2026-08-08 on the operator's direct instruction to plan an improved GUI layout/feature set AND *"rewrite any rules about the GUI that make it less usable and user friendly"*)
+### Pass 47.0–47.4 — ★★ DECISION 033 P0 — GUI usability: multi-target correctness fix, QAT restore, ribbon legibility, editor chrome, choice-field `/Opt` bug (decision 033, filed 2026-08-08 on the operator's direct instruction to plan an improved GUI layout/feature set AND *"rewrite any rules about the GUI that make it less usable and user friendly"*) — **★★ SCOPE DELIVERED 2026-08-08 (all five items). See the `Pass 47.0–47.4 + Pass 47.11` Shipped entry (top of *Shipped*) for the delivery record.** Retained below in place (append-only discipline) because it is the record of decision 033's original P0 planning. That same filing also delivered `Pass 47.11` — an operator-reported defect fix that arrived mid-Pass and was NOT part of decision 033's original five items — and corrected a Pass-ID collision found on an attempted `47.5` mint (`47.5` was already claimed for right-click menus; see the Shipped entry).
 
 **Source: `docs/decisions/033-gui-usability-and-the-workspace-that-does-
 nothing.md` §6 P0 list.** Read that document first — this entry
@@ -25902,6 +26347,16 @@ nothing gets forgotten, not as a commitment to build in this order.
     reading verbs would expose *"Delete selected (N)"* over a control
     that deletes one, promising exactly what **R168** forbids.
 
+  **⚠ COLLISION NOTE, added 2026-08-08 (this filing) — `Pass 47.5` below is
+  UNCHANGED, read this only for context.** A later dispatch attempted to
+  mint `Pass 47.5` a SECOND time, for an unrelated operator-reported
+  text-edit retarget bug fix, without re-reading this table first. Caught
+  before filing (the dispatch's own instruction was to verify the ID was
+  free): the retarget-bug fix is filed as `Pass 47.11` instead — see the
+  `Pass 47.0–47.4 + Pass 47.11` Shipped entry (top of *Shipped*). `Pass
+  47.5`'s own meaning (right-click context menus, still unbuilt) is
+  untouched by this note.
+
   | Pass | What | Blocked on |
   |---|---|---|
   | `Pass 47.5` | **Right-click context menus, canvas AND Objects tree.** Entries mapped only to verbs that exist: empty page → Fit/Zoom/Rotate; one object → Delete, Properties; N objects → "Delete selected (N)"; widget → Edit in Forms panel, Delete. Objects-tree menu mirrors the canvas set for that row's type plus "Reveal on canvas" (decision 033 §3.5). | `Pass 47.0` |
@@ -25985,6 +26440,50 @@ nothing gets forgotten, not as a commitment to build in this order.
   (bf) each arriving with a substantially larger operator requirement
   (mouse/keyboard customisation; ribbon customisation) filed as two new
   Backlog buckets immediately below.
+
+- **Image insertion — GUI drag-and-drop gesture. Operator request, filed
+  AND partially shipped in the same filing 2026-08-08 (`Pass 48.0`, core +
+  CLI — see the `Pass 48.0–48.2` Shipped entry, top of *Shipped*). `Pass
+  48.3` = the still-unbuilt GUI remainder.**
+
+  **Operator's request, verbatim, that opened this bucket:** *"I also need
+  the ability to just drag and drop images of different formats onto the
+  pdf workspace among all the other things that work this same way with
+  other software."* No Backlog bucket existed for image placement before
+  this filing — the core+CLI placement verb shipped (`Pass 48.0`) before a
+  Backlog entry was ever filed for the capability it belongs to, which
+  this entry corrects retroactively.
+
+  | Pass | What | Blocked on |
+  |---|---|---|
+  | `Pass 48.3` | **GUI drag-and-drop image placement.** The operator's
+    actual request — dropping an image file (of a supported codec) onto
+    the canvas workspace, the way `dropped_files`/`.pdf` file-open
+    drag-and-drop already works (Pass 3.2's `pdfce-gui` file-argument/
+    drag-onto-exe support is the existing precedent for this app
+    accepting a dropped file at all — see *Document & pages* in
+    `FEATURES.md`). `Pass 48.0`'s core `EditSession` verb and its CLI
+    surface are both reachable; only the canvas gesture and file-type
+    dispatch (image vs `.pdf`) are unbuilt. R151 applies unmodified: a
+    shipped core capability with no GUI caller is a named gap, not a
+    silent one. | `Pass 48.0` |
+
+  **★ SHIPPED 2026-08-08 as `Pass 48.3` (`e6ad48c`)** — see the
+  `Pass 48.3` Shipped entry at the top of *Shipped*, which also records a
+  Pass-ID collision correction (`e6ad48c`'s own commit subject claims
+  `Pass 47.7`, which is a different, still-unbuilt capability) and a
+  false-green hazard finding in `tools/check-passes-filed.py`. This row's
+  own description of the built gesture (drop-point placement, natural
+  size from DPI, centred on the pointer, clamped to the page, displayed
+  — post-rotation — dimensions, page-centre fallback on a miss) stays
+  accurate and is left as filed.
+
+  **Not attempted by `Pass 48.0`–`48.2`, named so it is not silently
+  expected:** no image-editing tools (crop, resize-after-place, colour
+  adjustment) — placement only; no TIFF (scoped out by name, a costed MVP
+  was recorded in the dispatch that shipped `Pass 48.0`–`48.2` but not
+  reproduced in this filing — owed to whoever picks this bucket up next,
+  see `SESSION_LOG.md`'s *For next session*).
 
 - **Ribbon customisation + persisted layout configurations — operator
   request, filed 2026-08-08, attached to (bf)'s answer; UNSCOPED, no
@@ -27613,7 +28112,21 @@ nothing gets forgotten, not as a commitment to build in this order.
   profiles; surface non-conformance reasons in a way a non-specialist
   operator can act on.
 - **Print & prepress (PDF/X)** — lower priority unless the user
-  signals otherwise; flag as backlog-only until requested.
+  signals otherwise; flag as backlog-only until requested. **★ First
+  Feature RAG content landed 2026-08-08**: 7 `prepress__*` files in
+  `D:\Dev\Rag-Specialized\Acrobat_Features\`. Headline finding: there is
+  **no objective "correct" untagged `DeviceCMYK`→screen conversion** —
+  Acrobat resolves it via a user-configurable working-space ICC profile
+  (default U.S. Web Coated SWOP v2, a house default, not a spec
+  mandate), with a PDF/X file's embedded `/OutputIntents` profile as the
+  one normative exception (sourced to Dov Isaacs, former Adobe Acrobat
+  Engineering). Any future CMYK-conversion Pass scoped from this bucket
+  should be scoped as "pdfce picks a documented default (and honors
+  `/OutputIntents` when present)," not "pdfce matches Acrobat/pdfium
+  exactly" — see `FEATURES.md`'s CMYK row for the corrected framing. A
+  `pdfce-spec-librarian` dispatch is live for `/Separation`, `/DeviceN`,
+  `/OutputIntents` and overprint — all four confirmed absent from the
+  spec corpus as of this filing.
 - **UI font coverage for non-Latin file paths and document metadata**
   (filed 2026-07-30 from decision 002 §3.2 / §10 item 10). A **live
   rendering-correctness bug today**, independent of localization:
@@ -29469,7 +29982,18 @@ not a judgment call:**
     record. LZW specifically is never written under any future
     decision (§7.4.4.1 NOTE 1 makes Flate strictly better on every
     axis but encode speed). Same posture as RC4 in the encryption
-    bucket.
+    bucket. **★ FIRST EXCEPTION EXERCISED 2026-08-08 (`Pass 48.2`,
+    `889566f`) — JPEG (DCT/YCCK) only, this clause's own escape hatch,
+    not a contradiction.** `jpeg-encoder` 0.7.1
+    (`(MIT OR Apache-2.0) AND IJG`, `simd` off, `forbid(unsafe_code)`
+    preserved) accepted on direct operator ruling — *"accept the ijg
+    attribution line"* — pdfce's first conjunctive-attribution
+    dependency. **The "new decision record" this clause requires is
+    CLAIMED as number 034 but NOT YET AUTHORED** — see the
+    `Pass 48.0–48.2` Shipped entry's *Ledger* note; this annotation is
+    the ledger's account that the record is owed, not the record itself.
+    **LZW's clause is untouched** (never written under any future
+    decision); CCITT/JBIG2/JPX remain read-only, also unaffected.
 - **CMYK/JPEG-polarity discipline R29–R31 (decision 006, 2026-07-31).**
   Binding, per `docs/decisions/006-cmyk-jpeg-inversion.md` §6.1 (the
   full-text authority if any condensation below is ambiguous):
@@ -30906,6 +31430,53 @@ not a judgment call:**
   as PROVISIONAL until `pdfce-librarian` confirms it at filing time.
   This is now **six** numbering collisions and **four** Pass-ID
   collisions on this project.
+
+  **Amendment (2026-08-08, fourth, `pdfce-librarian`) — TWO MORE Pass-ID
+  collisions, same real day, same root cause, and the root cause is now
+  named precisely.** Both against `docs/decisions/033`'s §6 slicing
+  list: `Pass 47.5` was minted for a mid-Pass text-edit retarget bug fix
+  (thirty-fifth filing, corrected to `Pass 47.11`; `47.5` was already
+  claimed for right-click menus) and, the same session, `Pass 47.7` was
+  minted for the GUI image-drop gesture (this filing, corrected to
+  `Pass 48.3`; `47.7` was already claimed for the contextual ribbon
+  tab — a capability with no relationship to the commit it was minted
+  for beyond sharing decision 033's numbering). **The generalizable
+  statement, sharper than "read the ceiling before minting" (which R106
+  already says): a decision record's proposed slicing list is a
+  PROPOSAL, never an ALLOCATION.** It describes what work items the
+  decision anticipates and a rough order; it does not reserve the
+  sub-IDs those items will eventually receive, because the real
+  sub-IDs are assigned by whichever filing actually heads each item, in
+  whatever order shipping happens to occur — which by the time a later
+  session reads the list back, has usually already diverged from the
+  list's own position order. Reading the list later and minting a
+  sub-ID from its position treats a scoping document as a numbering
+  ledger, which no scoping document can be. **This is the SAME shape as
+  this rule's own second amendment** (a ceiling computed only from
+  finished/headed records under-reports, in the direction that causes
+  collisions) but pointed the opposite way: there the record read was
+  stale relative to *itself* (concurrent drafting); here the record read
+  was stale relative to filings that happened *after* it was written,
+  which no amount of re-reading the SAME record, however carefully,
+  would have caught — only re-running the checker would. **Both
+  instances were caught by the same practice this rule already
+  prescribes** (mint with an explicit "verify before use" flag,
+  corrected at filing time), so no new procedural mitigation is added
+  here; the value of this amendment is naming the failure mode
+  precisely enough that a future session recognizes it before minting,
+  not merely before shipping. **Pass-ID collisions specifically are now
+  SIX** — enumerable by name (Pass 13.x, Pass 18.4/18.2, Pass 19.4/18.7,
+  Pass 24.0a/24-family, Pass 47.5/47.11, Pass 47.7/48.3). **The broader
+  "numbering collisions" figure (last stated as six, 2026-08-04) is
+  DELIBERATELY NOT recomputed to "eight" here** — this filing has not
+  re-audited whether any OTHER, non-Pass-ID collision occurred between
+  2026-08-04 and today that was likewise never folded into this tally
+  (exactly the kind of gap the 47.5 collision itself was, for four
+  days, before this session's own correction found it), and asserting a
+  round total on top of an unaudited base would repeat the failure this
+  rule exists to prevent rather than fix it. Owed to whichever filing
+  next re-audits the full tally. Full derivation:
+  `D:\dev\rag\rust\a_decision_records_proposed_slicing_is_a_proposal_not_an_id_allocation.md`.
 
 - **R107 — FF-C only ever ADDS font resources; it never modifies an
   existing font program or font dictionary (decision 021, 2026-08-03;
@@ -35516,7 +36087,8 @@ and
   R43 itself, it was that nothing filled the gap R43 deliberately
   leaves. Prerequisite for a resize handle on any family-(a) object
   (`Pass 46.0`/`Pass 47.6`): a resize handle on an invisible rectangle
-  is unusable.
+  is unusable. **★ SHIPPED 2026-08-08 as `Pass 47.3` (`33b86f5`)** — see
+  the `Pass 47.0–47.4 + Pass 47.11` Shipped entry.
 
 - **R168 — A verb offered on an N-target selection acts on the whole
   selection, or refuses with a stated reason, never a silent subset
@@ -35543,7 +36115,8 @@ and
   work"* would not find there. First consumer: `Pass 47.0`, filed ahead
   of `Pass 47.5`'s right-click menus for exactly this reason — a menu
   built against today's verbs would offer *"Delete selected (N)"* over
-  a control that deletes one.
+  a control that deletes one. **★ SHIPPED 2026-08-08 as `Pass 47.0`
+  (`5f9e68c`)** — see the `Pass 47.0–47.4 + Pass 47.11` Shipped entry.
 
 ## Update protocol
 

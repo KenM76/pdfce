@@ -26235,3 +26235,290 @@ a correction filing, explicitly framed as reversing prior guidance.
   with a shell before treating any ceiling in `ROADMAP.md` as gate-clean
   — unchanged from the thirty-third filing's own note, since this filing
   minted nothing new.
+
+## 2026-08-08 (thirty-fifth filing) — NINE UNFILED COMMITS CLOSE OUT: decision 033's whole P0 list SHIPS (`Pass 47.0–47.4`), a Pass-ID COLLISION is found and corrected (`Pass 47.11`), and a new family `Pass 48.0–48.2` ships image placement + transparency rendering + pdfce's FIRST image encoder — with a write-side CMYK decision RULED to need its own record (034, OWED, not authored)
+
+**Filed by `pdfce-librarian`, no shell available to this dispatch (hard
+rule 8) — every gate figure, commit hash and technical claim below is
+RELAYED from the dispatching engineer's own commit-message account, not
+independently re-run or re-measured by this filing.** This was the
+largest filing debt this project has carried: nine shipped commits with
+zero prior ROADMAP/FEATURES/SESSION_LOG presence.
+
+**Shipped (relayed, not re-verified by this filing):**
+- `Pass 47.0` (`5f9e68c`) — multi-target verbs act on the whole selection
+  or refuse (R168), first consumer of R168.
+- `Pass 47.1` (`9d7e7a0`) — Quick Access Toolbar restored + status-bar
+  zoom/page nav, built to (bd)'s resolved answer (diverges from decision
+  024 §3.5(d)'s original QAT list).
+- `Pass 47.2` (`88f5097`) — ribbon groups legible as a ribbon + a collapse
+  toggle ((bf)'s resolved answer).
+- `Pass 47.3` (`33b86f5`) — editor chrome for form-field widgets (R167).
+- `Pass 47.4` (`40daa18`) — choice-field `/Opt` bug fixed in the Create
+  Field pane.
+- `Pass 47.11` (`5ceb5f8`, **NEW ID, see collision note below**) —
+  text-edit retarget bug fix, an operator-reported defect that arrived
+  mid-Pass with no prior filed ID.
+- `Pass 48.0` (`ec6556f`) — image XObject placement, core + CLI only (no
+  GUI drag-and-drop yet).
+- `Pass 48.1` (`a9a0780`) — transparency rendering, `/SMask`+`/Mask`+
+  `/Matte`, closes Pass 1.1 item 6.3.
+- `Pass 48.2` (`889566f`) — JPEG write path, `jpeg-encoder` 0.7.1,
+  `Jpeg{quality}`, pdfce's first image encoder.
+
+All five decision-033-P0 items are now closed; decision 033's original
+five-item plan is fully delivered, one session after it was filed.
+
+**Decisions/rulings made this session:**
+- **⚠ PASS-ID COLLISION FOUND AND CORRECTED.** The dispatch reaching this
+  filing minted `Pass 47.5` for the text-edit retarget bug fix and
+  explicitly flagged it as unverified (*"I read the ceiling but did not
+  re-run the checker after minting — verify 47.5 was actually free"*). It
+  was NOT free: `Pass 47.5` was already claimed by the thirty-third
+  filing for "Right-click context menus, canvas AND Objects tree," still
+  unbuilt in *Backlog*. Corrected: the retarget-bug fix is filed as
+  **`Pass 47.11`** — the next genuinely free sub-ID in family 47, since
+  `47.5`–`47.10` were all already claimed. `Pass 47.5`'s own meaning is
+  untouched. This is exactly the collision class `check-ledger-
+  numbers.py` exists to catch, caught here by the dispatch's own
+  precaution rather than by the checker (no shell to run it).
+- **New family `48` minted** for image placement, transparency rendering
+  and the JPEG encoder — NOT folded into family 47, because these three
+  commits are a new capability (image insertion), not part of decision
+  033's GUI-usability plan. `Pass 48.3` (GUI drag-and-drop gesture) filed
+  under *Backlog* as the still-unbuilt remainder, alongside a retroactive
+  "Image insertion" Backlog bucket recording the operator's original
+  request (which had never been filed before core+CLI shipped for it).
+- **★ CMYK write-side polarity — RULED to need its OWN decision record,
+  not a 006 amendment.** The write path feeds the complement of true-ink
+  samples into `jpeg-encoder`'s `CmykAsYcck` mode; because the crate
+  inverts internally on encode, the composition reduces to exactly Adobe
+  TN #5116 §13.1's forward CMYK→YCCK transform — no `/Decode` written,
+  APP14 transform byte 2. Three reasons for the ruling: (1) R28's own
+  text makes a new decision record a PRECONDITION for any encoder
+  shipping, not a discretionary nicety; (2) decision 006 §7 item 2
+  explicitly reserved the write-side question as future scope distinct
+  from anything 006 itself decided; (3) the bundle (encoder selection,
+  license/attribution, the transform argument) is substantial enough to
+  stand as its own reviewable record. **Filed as decision number 034 —
+  CLAIMED by this filing's own citations, but NOT YET AUTHORED** (decision
+  records are produced via the `autonomous-builder`/KenAgent protocol,
+  per `docs/decisions/README.md` — not something `pdfce-librarian` writes
+  itself). Flagged to the engineer as owed.
+- **R28's first exception recorded in place** (struck-and-annotated, not
+  a new rule number) — `jpeg-encoder` 0.7.1 accepted under direct operator
+  ruling (*"accept the ijg attribution line"*), pdfce's first
+  conjunctive-attribution dependency (`(MIT OR Apache-2.0) AND IJG`).
+  LZW's clause and CCITT/JBIG2/JPX's read-only status are explicitly
+  unaffected.
+- **R167 and R168 both gain ship-confirmation annotations** — no new rule
+  numbers, just an inline note pointing at their first shipped consumers.
+
+**Findings + decisions — three of the dispatching engineer's own briefs
+were wrong this session, all three caught by the agents they were handed
+to, recorded as this session's through-line rather than three unrelated
+footnotes:**
+1. A brief said PDF spec clause 11 was ABSENT from the spec RAG — it was
+   absent from the RAG only; `_sources/PDF32000_2008.pdf` had §11.1–§11.7
+   staged the whole session. An INGESTION gap, not a sourcing gap.
+   Consequence: `/Matte` went from refused-by-name to implementable, and
+   `/Mask`+`/SMask` precedence went from "undefined gap" to normative
+   (Table 89).
+2. A brief said `jpeg-encoder` "does not invert the samples" for CMYK. It
+   does — invisible to the crate's own round-trip tests because they
+   verify against `jpeg-decoder`, which unconditionally inverts every
+   4-component JPEG on decode, so the two inversions cancel. Second
+   occurrence of standing rule R31 (first was Pillow, read side; this is
+   the write-side mirror, caught before shipping). Full writeup:
+   `D:\dev\rag\rust\jpeg_encoder_crate_inverts_cmyk_despite_doc_claim.md`.
+3. A brief named `Pass 47.9` for retirement when the actually-retired
+   Pass was `47.8` (`47.9` is Alt-key KeyTips, unrelated). Caught and
+   flagged back rather than silently substituted, independently
+   corroborated against `ROADMAP.md` and decision 033 §6 item 10.
+- **A latent premultiplied-alpha bug this session's transparency work
+  exposed, not a brief error but a pre-existing defect the new work made
+  visible.** `pdfce-render`'s `premultiplied()` computed
+  `min(round(v × 255), alpha)` — a CLAMP where premultiplied alpha
+  requires a MULTIPLY. Bit-identical at alpha 255 (every image pdfce had
+  ever painted, since nothing before this session had partial-alpha
+  content), ~2× too bright at partial alpha. The new fixtures use a
+  0/85/170/255 alpha ramp specifically because binary alpha cannot
+  distinguish clamp from multiply — the TEST DESIGN is the finding, not
+  merely the fix. Full writeup:
+  `D:\dev\rag\rust\premultiplied_alpha_needs_multiply_not_clamp.md`.
+- **Two GUI gates caught the engineer mid-Pass** — tooling working as
+  designed, not friction: `every_glyph_in_the_catalog_has_a_real_face`
+  rejected a `✕` glyph with no backing face (remedy: author `close.svg`,
+  per the operator's own standing "author an icon, don't reword" ruling);
+  `every_group_belongs_to_exactly_one_tab` rejected four ribbon groups
+  orphaned rather than deleted.
+- Verified by rendering, per the dispatch's account: a placed JPEG's
+  bytes are byte-identical in the saved file (349 in, 349 out, SHA-256
+  equal); a CMYK re-encode writes APP14 transform 2 with no `/Decode`;
+  every GUI-affecting Pass this session was observed in the running
+  release build via `PrintWindow` captures.
+
+**Still in flight:**
+- **Three transparency cases remain unpreviewed**, named on the retired
+  `transparency_not_previewed` diagnostic — the largest is `/ca`/`/CA`
+  constant alpha, not modelled in the graphics state at all. The other
+  two were not itemised in the dispatch reaching this filing.
+- **TIFF scoped out by name, with a costed MVP** recorded in the dispatch
+  but not reproduced in full here — owed to whoever picks up the "Image
+  insertion" Backlog bucket next.
+- **Decision 034 (CMYK write-side/encoder-selection) is CLAIMED but
+  UNAUTHORED** — the engineer (or a dispatched `autonomous-builder`) needs
+  to actually write `docs/decisions/034-*.md`, or explicitly release the
+  claim if this filing's ruling is overturned.
+- `Pass 47.11`'s exact defect mechanism and which of core/cli/gui it
+  reaches were **not** in the dispatch reaching this filing — `FEATURES.md`
+  carries an explicitly-unticked row pending confirmation.
+- **Both project checkers (`check-ledger-numbers.py`, `check-passes-
+  filed.py`) were NOT RUN by this filing — no Bash tool available.**
+  Ceilings above were derived by reading `ROADMAP.md`/`docs/decisions/`
+  directly. **Backup/git working-tree state is not asserted anywhere in
+  this filing** — no shell, hard rule 8.
+
+**For next session:**
+- **Run both checkers with a shell** before treating any ceiling above as
+  gate-clean.
+- **Author decision 034** (CMYK write-side polarity + `jpeg-encoder`
+  selection) — content is substantially drafted in this filing's ROADMAP
+  entries and the new `personal_rag/pdf` lesson; needs the formal
+  `autonomous-builder`/KenAgent protocol pass to become a real
+  `docs/decisions/034-*.md` file.
+- **Backfill `Pass 47.11`'s row** in `FEATURES.md` once the engineer
+  confirms which surfaces the text-edit retarget fix reaches.
+- **Backfill the two un-itemised transparency-preview gaps and the TIFF
+  MVP costing** into `ROADMAP.md`'s "Image insertion" Backlog bucket —
+  this filing preserved only what the dispatch supplied.
+- **Flag to the operator (not edited by this filing):** `docs/LEGAL.md`
+  §6 needs `jpeg-encoder` classified as pdfce's first conjunctive
+  (`AND`) attribution dependency, likely warranting its own sub-heading
+  rather than a table row; `docs/PRIOR_ART.md` should record the
+  rejected encoder candidates (`jpegli-rs`/`zenjpeg` — AGPL;
+  `mozjpeg`/`turbojpeg` — need a C toolchain, can't target wasm32, hide
+  the same IJG obligation in the linked library).
+
+## 2026-08-08 (thirty-sixth filing) — a SECOND Pass-ID collision this session (`Pass 47.7` was not free either — `Pass 48.3` SHIPS), a THIRD, distinct false-green hazard documented in `check-passes-filed.py`, `R106` gains a fourth amendment naming the root cause precisely, and the CMYK/prepress catalogue lands
+
+**Filed by `pdfce-librarian`, no shell available (hard rule 8) — every
+commit hash and technical claim below is RELAYED from the dispatching
+engineer's own account, not independently re-run or re-measured by this
+filing.**
+
+**Shipped (relayed, not re-verified by this filing):**
+- `Pass 48.3` (`e6ad48c`) — GUI drag-and-drop image placement. Drop
+  handled inside the canvas; natural size from the image's own DPI,
+  centred on the pointer, clamped to the page; sized from DISPLAYED
+  (post-EXIF-rotation) dimensions; a drop missing the page falls back to
+  page-centre and discloses it; `import_with` runs before anything is
+  written, so a refusal costs the open document nothing. **Deliberately
+  EXCEEDS both parity references** — neither Acrobat nor PDF-XChange
+  places a dropped image inline (PDF-XChange opens it as a separate
+  document, per the dispatch's account, sourced to PDF-XChange's own
+  developer forum) — recorded as an exceed, not a gap.
+
+**Decisions/rulings made this session:**
+- **⚠ SECOND PASS-ID COLLISION THIS SESSION.** `e6ad48c`'s own commit
+  subject claims `Pass 47.7` (the contextual ribbon tab, filed by the
+  thirty-third filing, still unbuilt). It is not that Pass — corrected
+  and filed here as `Pass 48.3`, its true, already-reserved identity.
+  Same root cause as the `Pass 47.5`→`47.11` collision from the
+  thirty-fifth filing: an ID minted from **memory of decision 033 §6's
+  slicing list**, without re-running either project checker after
+  minting. Worse than the first: `47.7` and the image-drop gesture share
+  no relationship beyond both numbers coming from the same decision
+  record — this one is not even a Pass-family sibling collision.
+- **`R106` (Standing rules) gains a fourth amendment** naming the root
+  cause precisely: **a decision record's proposed slicing list is a
+  PROPOSAL, never an ID ALLOCATION.** No amount of re-reading the
+  decision record recovers the true free ID — only the live ceiling
+  checker does. Pass-ID collisions on this project: **four → six**
+  (enumerated by name in the amendment). The broader "numbering
+  collisions" tally is deliberately **not** recomputed — this filing has
+  not re-audited whether other, non-Pass-ID collisions also happened in
+  the intervening four days, and a confident wrong total would repeat
+  the exact failure this rule exists to prevent.
+- **A THIRD, distinct blind spot documented in `tools/check-
+  passes-filed.py`**, alongside the two the tool's own docstring already
+  discloses honestly (the filing-commit blind spot, the gap-record
+  weakness). The checker's join is "this hash appears somewhere in
+  `ROADMAP.md`" — it never compares a commit's SUBJECT-claimed Pass ID
+  against the ID of the entry the hash is actually filed under. Once
+  `e6ad48c` is cited here (as it now is), the checker reports it FILED,
+  correctly in the narrow sense, but that says nothing about the ID
+  mismatch. **Not fully silent, and the honest report says so**: the
+  checker's collision-note mechanism groups by SUBJECT-parsed ID, so if
+  a real `Pass 47.7` ships later with its own `Pass 47.7:` subject, the
+  checker WILL print a note — but the note cannot say which of the two
+  commits is the impostor, and the checker's own comment already admits
+  it "needs a human reading the subjects," which a reader used to this
+  project's normal multi-commit Passes has every reason to skim past.
+  **No standing rule minted, no checker change made** — this filing
+  documents the hazard and lays out three options (docstring note,
+  subject-diffing the collision report, or accepting the residual risk)
+  and explicitly leaves the choice to the engineer, matching how the
+  first `check-passes-filed.py` weakness was handled.
+- **Considered and REJECTED: rewriting `5ceb5f8`/`e6ad48c`'s commit
+  messages via `git rebase`.** Both are unpushed (no remote), so it was
+  mechanically possible. Rejected because both hashes are already cited
+  verbatim in prior filings of `ROADMAP.md` — rewriting the commits
+  would silently invalidate every citation quoting them, to fix a
+  cosmetic wrongness in a message nobody reads except through this
+  document. The reasoning is recorded in `ROADMAP.md`'s `Pass 48.3`
+  entry itself, precisely so a future session does not "helpfully"
+  rewrite them.
+- **The CMYK/prepress parity catalogue lands** — 7 `prepress__*` files
+  in `D:\Dev\Rag-Specialized\Acrobat_Features\` (relayed; that RAG is
+  `pdfce-acrobat-librarian`'s territory, not written by this filing).
+  Headline finding: there is no objective "correct" untagged
+  `DeviceCMYK`→screen conversion — Acrobat itself resolves it via a
+  user-configurable working-space ICC profile (default SWOP v2, a house
+  default, not a spec mandate), sourced to Dov Isaacs (former Adobe
+  Acrobat Engineering). The one normative exception is a PDF/X file's
+  own embedded `/OutputIntents` profile. `FEATURES.md`'s CMYK row and
+  `ROADMAP.md`'s "Print & prepress" Backlog bucket are both reframed:
+  pdfce is CHOOSING a default, not failing to match a target Acrobat
+  itself does not have. A `pdfce-spec-librarian` dispatch is live for
+  `/Separation`, `/DeviceN`, `/OutputIntents` and overprint — all four
+  confirmed absent from the spec corpus.
+
+**Findings + decisions:**
+- `diag::Step::Drop` added — the second diagnostic step this session for
+  the identical stated reason: an OS-level drag cannot be scripted from
+  outside the process, so without instrumentation the drop path is
+  reachable only by an operator physically dragging a file onto the
+  running window.
+- `check-ui-strings` caught a `format!` join at the call site (an
+  operator-visible punctuation string assembled inline instead of drawn
+  from the catalog) — gate working as designed.
+
+**Still in flight:**
+- The false-green hazard's remedy (docstring note / subject-diffing /
+  accept-the-residual-risk) is an open engineer decision, not resolved
+  by this filing.
+- The "numbering collisions" running total in `R106` needs a full
+  re-audit against everything filed since 2026-08-04 — this filing
+  intentionally left it unrecomputed rather than guess.
+- **Both project checkers were NOT RUN by this filing — no Bash tool
+  available.** Ceilings above were derived by reading `ROADMAP.md`/
+  `docs/decisions/` directly. **Backup/git working-tree state is not
+  asserted anywhere in this filing** — no shell, hard rule 8.
+
+**For next session:**
+- **Run both checkers with a shell** before treating any ceiling above
+  as gate-clean, and specifically re-run `check-passes-filed.py` to
+  confirm the collision notes for `Pass 47.5` and `Pass 47.7` print as
+  expected once a genuine commit claims either ID for real.
+- **Engineer's call, flagged not decided:** whether to add a third
+  `KNOWN WEAKNESS` bullet to `check-passes-filed.py`'s own docstring, to
+  extend its collision-note to diff subject text, or to accept the
+  residual risk.
+- **Re-audit `R106`'s "numbering collisions" tally** against everything
+  filed 2026-08-04 through today, and update the running total with a
+  number this filing declined to compute from an unaudited base.
+- `crates/` colour-conversion work is in progress by a separate agent
+  this session (per the dispatching operator's own constraint) —
+  confirm current `pdfce-render` CMYK behaviour before relying on
+  `FEATURES.md`'s retained pdfium-divergence figure as still live.

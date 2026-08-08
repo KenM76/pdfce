@@ -2694,6 +2694,15 @@ art (MuPDF, Poppler, Ghostscript) is now categorically, permanently
 excluded as a real dependency** — reference-only (architecture/
 algorithms studied, never linked or copied), per `LEGAL.md` §6.1.
 
+**First conjunctive-attribution dependency: `jpeg-encoder` 0.7.1
+(2026-08-08, `Pass 48.2`, see §12's thirty-fifth-filing entry).**
+`(MIT OR Apache-2.0) AND IJG` — permissive at the grant level, with an
+IJG attribution NOTICE condition that applies unconditionally alongside
+it (an `AND`, not a caller's choice between license terms). Accepted on
+direct operator ruling; the attribution sentence is generated into
+`about.hbs`, never hand-written. pdfce's first shipped image ENCODER,
+under standing rule R28's own named exception (`ROADMAP.md`).
+
 ## 10. Adversarial input hardening & fuzzing
 
 `pdfce-core` parses files from the public internet by design — every
@@ -12246,3 +12255,95 @@ They live in the code's doc comments with their §-citations and in
 an implementation of Table 231, not a choice between architectures; it is
 stated in full at `EditSession::derive_top_index` and summarised in the
 addendum.
+
+---
+
+### 2026-08-08 (thirty-fifth filing) — pdfce's FIRST image encoder ships (`jpeg-encoder` 0.7.1, R28's first exception); write-side CMYK/YCCK polarity RULED to warrant its OWN decision record (034, CLAIMED, NOT YET AUTHORED)
+
+**Filed by `pdfce-librarian`, no shell available — relaying the
+dispatching engineer's account, not independently re-run.** Closes out
+the largest filing debt this project has carried: nine shipped commits
+across two Pass families (`47.0`–`47.4` + `47.11`; `48.0`–`48.2`), none
+previously recorded anywhere in `docs/`. Full detail in `ROADMAP.md`'s
+`Pass 48.0–48.2` and `Pass 47.0–47.4 + Pass 47.11` Shipped entries and
+`SESSION_LOG.md`'s thirty-fifth filing; this entry records only the
+architectural decision content.
+
+**Decision 1 — `jpeg-encoder` 0.7.1 accepted as pdfce's first image
+encoder, under R28's own escape hatch.** `docs/ROADMAP.md` standing rule
+R28 ("Read-compat only... no image encoder enters any pdfce crate without
+a new decision record") has, since decision 005 (2026-07-30), forbidden
+pdfce from WRITING any of the image codecs it reads. `Pass 48.2`
+(`889566f`, 2026-08-08) exercises R28's own named exception for the first
+time: `jpeg-encoder` 0.7.1, license `(MIT OR Apache-2.0) AND IJG` —
+**pdfce's first conjunctive-attribution dependency** (the `AND` means
+both the permissive grant and the IJG attribution condition apply
+together, not a caller's choice). `simd` feature left OFF, so
+`forbid(unsafe_code)` stays project-wide unbroken. **Accepted on direct,
+explicit operator ruling**, verbatim and complete: *"accept the ijg
+attribution line."* The attribution sentence is generated into
+`about.hbs` (`cargo-about`), never hand-written, matching every other
+attribution in `THIRD_PARTY_LICENSES.md`.
+
+**§9 body update (this filing):** `docs/ARCHITECTURE.md` §9 should note
+this as the second exception to "every current dependency is permissive"
+kept simple by classification (MIT OR Apache-2.0 is permissive; IJG's
+attribution condition is a NOTICE obligation, not copyleft) — see the
+inline addition below §9's existing MIT-license paragraph.
+
+**Decision 2 (RULED by this filing, NOT yet a full decision record) —
+the write-side CMYK/YCCK polarity technique needs its OWN decision
+record, not an amendment to decision 006.** The write path feeds the
+**complement of true-ink CMYK samples** into `jpeg-encoder`'s
+`CmykAsYcck` mode. Because that crate performs its own internal
+Adobe-style inversion on encode (verified this session — a
+previously-relayed characterization that it "does not invert" was WRONG,
+see `D:\dev\rag\rust\jpeg_encoder_crate_inverts_cmyk_despite_doc_claim.md`),
+the composition of (complement) ∘ (crate's internal inversion) reduces to
+**exactly Adobe TN #5116 §13.1's forward CMYK→YCCK transform** — the SAME
+transform decision 006 §4.1 already established as definitional on the
+READ side (`ycck_to_cmyk_in_place`'s inverse). The written stream carries
+APP14 transform byte 2; **no `/Decode` array is emitted**, because none
+is needed — a reader applying decision 006's own R29 (never invert; trust
+the transform byte) recovers correct true-ink CMYK with zero special
+handling, identical to how it already treats every other transform-2 file
+in the corpus.
+
+**Why this is ruled as its own record rather than a 006 amendment, three
+independent reasons:** (1) R28's own text makes a NEW decision record a
+PRECONDITION for any encoder entering a pdfce crate at all — this is not
+discretionary, R28 already says so. (2) Decision 006 §7 item 2 explicitly
+listed "whether pdfce should ever write CMYK JPEGs" as future scope
+**reserved**, distinct from anything §1–§6 of 006 itself decided —
+treating this as a 006 amendment would conflate an exhaustively-closed
+read-side record (§3's corpus survey, §3.6's TN #5116 primary read, R29–
+R31) with genuinely new write-side content that never went through that
+same evidentiary process. (3) The bundle here — encoder selection and its
+license, the write-side transform argument, and the interaction with R29
+— is substantial enough on its own terms to be independently reviewable,
+the same bar every other pdfce decision record meets.
+
+**Status: CLAIMED as decision number 034, NOT YET AUTHORED.** Decision
+records in this project are produced via the `autonomous-builder`/
+KenAgent protocol (`docs/decisions/README.md`) — `pdfce-librarian` records
+the ruling and the ledger claim here and in `ROADMAP.md`, but does not
+author `docs/decisions/034-*.md` itself. **`docs/decisions/` remains at
+033 files on disk as of this filing** — 034 is a claim recorded in prose
+across `ROADMAP.md`, this entry, and a `personal_rag/pdf` lesson, not yet
+a file. The next engineer session should either dispatch
+`autonomous-builder` to author 034 formally from this content, or
+explicitly release the claim if this ruling is overturned, before any
+unrelated work takes the number 034.
+
+**What this filing does NOT decide:** whether pdfce should ever write a
+transform-0 (raw CMYK, no YCCK) JPEG — the complement technique recorded
+here is specific to the YCCK write path and to this specific encoder's
+internal behaviour; a future transform-0 write path would need its own
+polarity argument. Also not decided: any GUI-facing quality control for
+`Jpeg{quality}` (folds into `Pass 48.3`'s scope when that Pass is
+started).
+
+**Cross-references:** `C:\personal_rag\pdf\lesson_20260808_write_side_cmyk_ycck_polarity_feed_complement_for_forward_transform.md`
+(the empirical/technique writeup); `D:\dev\rag\rust\jpeg_encoder_crate_inverts_cmyk_despite_doc_claim.md`
+(the crate-behaviour correction); `docs/ROADMAP.md`'s R28 annotation and
+`Pass 48.0–48.2` Shipped entry (the ledger record).
