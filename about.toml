@@ -34,6 +34,20 @@ accepted = [
     "BSD-3-Clause",
     "BSL-1.0",
     "CC0-1.0",
+    # IJG — the Independent JPEG Group's license, reached via `jpeg-encoder`
+    # (SPDX `(MIT OR Apache-2.0) AND IJG`; the AND is CONJUNCTIVE, so this id
+    # must be accepted or `cargo about generate` fails). It is PERMISSIVE:
+    # no source-disclosure obligation, nothing that touches pdfce's own MIT
+    # license (docs/LEGAL.md §6.1). What it does carry is an ATTRIBUTION
+    # obligation on binary redistribution — the sentence "this software is
+    # based in part on the work of the Independent JPEG Group" — which
+    # cargo-about does NOT generate. That sentence lives as a static
+    # "Required acknowledgements" section in about.hbs so every regeneration
+    # re-emits it. Do not add this id without that section, and do not
+    # remove that section while this id is here.
+    # Accepted by operator decision 2026-08-08 ("accept the ijg attribution
+    # line"); pdfce's FIRST conjunctive-attribution dependency.
+    "IJG",
     "ISC",
     "MIT",
     "MIT-0",

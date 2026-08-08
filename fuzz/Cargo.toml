@@ -292,3 +292,19 @@ path = "fuzz_targets/vector_edit.rs"
 test = false
 doc = false
 bench = false
+
+# Pass 46.x raster-image import: drives `image_import::import_with` over
+# adversarial PNG/JPEG/BMP containers at all four compression policies. Added
+# when `ImageCompression::Jpeg` landed pdfce's FIRST image encoder — the
+# passthrough branches copy bytes and the codecs are fuzzed by their own
+# targets, but the re-encode path reshapes decoded samples in pdfce's own
+# hand-written stride/bit-packing/palette code before handing them to
+# `jpeg-encoder`, and that reshaping is the new surface. See the target's
+# doc comment for the invariants and for why the expensive policies run
+# behind a pixel-count gate.
+[[bin]]
+name = "image_import"
+path = "fuzz_targets/image_import.rs"
+test = false
+doc = false
+bench = false

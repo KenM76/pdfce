@@ -14,6 +14,51 @@ license terms and copyright notices are reproduced in full. This file
 covers the dependencies shipped in the Windows build target; it is
 regenerated mechanically from `Cargo.lock`.
 
+## Required acknowledgements
+
+<!--
+  STATIC SECTION — emitted on EVERY regeneration, unconditionally.
+
+  WHY IT IS STATIC RATHER THAN DRIVEN BY THE CRATE LIST:
+
+  cargo-about reproduces license TEXTS. It does not, and cannot, emit a
+  license's required ACKNOWLEDGEMENT SENTENCE — that is a distinct
+  obligation with its own wording, and no field in the template model
+  carries it. So a conjunctive `... AND IJG` dependency can be fully
+  license-listed below and still leave pdfce out of compliance.
+
+  It is therefore written here as unconditional prose, NOT inside the
+  per-license iteration block below, and NOT gated on any crate being
+  present. (Do not paste a literal handlebars expression into this comment
+  to explain that — handlebars parses inside HTML comments too, and an
+  unmatched block start here is a template error, not documentation.) A
+  notice that appears only while some particular crate happens to be in
+  Cargo.lock is not an obligation being met — it is an obligation that
+  survives by luck, and the first dependency-set change that reshuffles
+  the list silently drops it. An acknowledgement that outlives the
+  dependency it was written for is merely redundant; one that vanishes
+  with it is a compliance failure. The asymmetry decides the design.
+
+  MAINTENANCE: if `jpeg-encoder` (or any other IJG-derived crate) ever
+  leaves the dependency set, this paragraph may be removed — deliberately,
+  by editing about.hbs, never by "the generator stopped emitting it."
+  See crates/pdfce-core/Cargo.toml's adoption note and docs/LEGAL.md §6.
+-->
+
+pdfce's JPEG encoder is the `jpeg-encoder` crate, whose SPDX expression is
+`(MIT OR Apache-2.0) AND IJG`. The `AND` is conjunctive: the Independent
+JPEG Group's terms bind **in addition to** the permissive ones, because the
+crate's quantization tables, Huffman tables and DCT are derived from the
+IJG's libjpeg. Those terms impose no source-disclosure obligation, but they
+do require the following acknowledgement in the documentation accompanying
+any binary redistribution, and it is made here:
+
+> **This software is based in part on the work of the Independent JPEG
+> Group.**
+
+The full IJG license text appears in the "Full license texts" section below,
+alongside the other licenses harvested from `Cargo.lock`.
+
 ## License overview
 
 {{#each overview}}

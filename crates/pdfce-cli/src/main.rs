@@ -90,7 +90,9 @@
 //!               unsupported_type3=<a> unsupported_noncmap=<b> \
 //!               unsupported_vertical=<c> unsupported_composite_not_embedded=<d> \
 //!               unsupported_unknown_subtype=<e> unsupported_unusable_program=<f> \
-//!               supplied=<g> supplied_registered=<h> contents_unresolved=<i>
+//!               supplied=<g> supplied_registered=<h> contents_unresolved=<i> \
+//!               images_masked=<j> images_mask_unsupported=<k> masks_resampled=<l> \
+//!               mattes_undone=<m> mattes_not_undone=<n>
 //! ```
 //!
 //! `render-page`'s line is deliberately split by the first `"; "` into a
@@ -133,6 +135,11 @@
 //! | `lzw_anomalies` | `lzw_framing_anomalies` | "how many LZW streams were non-conformantly framed?" |
 //! | `dct_cmyk_unverifiable` | `dct_cmyk_polarity_unverifiable` | "did the ONE polarity-ambiguous JPEG shape appear?" (decision 006 R30) |
 //! | `jpx_preblended` | `jpx_smask_in_data_preblended` | "did any JPX image arrive preblended with a backdrop (`/SMaskInData 2`)?" |
+//! | `images_masked` | `images_masked` | "how many images had their transparency COMPOSITED?" (census; a subset of `images`. The per-mechanism split — `smask` / `stencil` / `colour-key` / `jpx-embedded-alpha` — goes to stderr) |
+//! | `images_mask_unsupported` | `images_mask_unsupported` | "how many images are on the page but TOO SOLID, because their `/SMask` or `/Mask` could not be applied?" (the transparency twin of `images_unsupported`: that one means missing, this one means opaque) |
+//! | `masks_resampled` | `masks_resampled` | "how many masks had different pixel dimensions from their base image and were point-sampled across it?" (§8.9.6.3 / Table 145 — conformant and common; it exists so a pixel-parity investigation can tell resampling apart from decoding) |
+//! | `mattes_undone` | `mattes_undone` | "how many `/Matte` preblends were inverted?" (§11.6.5.3 — census, but the inversion amplifies quantisation error by `1/α`, so a near-transparent fringe that disagrees with another engine is expected rather than a bug) |
+//! | `mattes_not_undone` | `mattes_not_undone` | "how many `/Matte` preblends were NOT inverted, leaving colours shifted toward the matte colour?" (alpha still applied; the reason is in the image divergences) |
 //!
 //! `images` and `forms` are *volume*, not shortfall — they are non-zero
 //! on a perfectly faithful render and exist so a batch pipeline can tell
@@ -2827,6 +2834,9 @@ enum Command {
     /// source's layout — a PNG with an interleaved alpha channel (which
     /// becomes a base image plus a separate `/SMask`), or a BMP (which has no
     /// compressed form at all). Every such case is reported.
+    ///
+    /// `--compression jpeg` is the one way to ask for a re-encode anyway. It
+    /// is lossy by definition and is never chosen for you.
     AddImage {
         /// Input PDF.
         input: PathBuf,
@@ -2885,16 +2895,33 @@ enum Command {
         /// several-fold. Useful before further editing; not a quality
         /// improvement.
         ///
-        /// `jpeg` is REFUSED: pdfce has no image encoder, and adding one is a
-        /// decision this Pass did not make. Resolution capping ("downsample to
-        /// N dpi") is absent for the same reason — without an encoder to write
-        /// the smaller image back out it would make files LARGER, not smaller.
+        /// `jpeg` RE-ENCODES the image lossily at `--quality`. This is the
+        /// only policy that degrades the picture, and it does so on purpose.
+        /// ON A SOURCE THAT WAS ALREADY A JPEG IT IS A SECOND LOSSY PASS:
+        /// the DCT runs again over the artefacts the first one left, which
+        /// COMPOUNDS them rather than adding one predictable generation of
+        /// loss, and no quality setting undoes that. The reported
+        /// `jpeg_from_lossy=1` says when this happened; the honest fix is
+        /// usually to place the original file instead. A transparent colour
+        /// (a PNG `tRNS` on a truecolour image) is refused by name rather
+        /// than re-encoded, because lossy encoding moves the exact sample
+        /// values that transparency is matched against.
+        ///
+        /// Resolution capping ("downsample to N dpi") is still absent, but no
+        /// longer for want of an encoder: a resampler is a visible quality
+        /// decision (box vs. Lanczos) that deserves its own flag and its own
+        /// disclosure, not a silent choice hidden inside this one.
         #[arg(long, value_enum, default_value_t = CompressionArg::Passthrough)]
         compression: CompressionArg,
-        /// Encoder quality for `--compression jpeg`, 1-100.
+        /// Encoder quality for `--compression jpeg`, 1-100. Ignored by every
+        /// other policy.
         ///
-        /// Accepted and plumbed through so the option exists end to end; the
-        /// `jpeg` policy itself is refused by name until pdfce has an encoder.
+        /// Larger is better and bigger. 100 is NOT lossless — it is the
+        /// finest quantisation the scale defines, and on synthetic content
+        /// (a screenshot, a CAD export) it routinely produces a file LARGER
+        /// than `--compression lossless` would, while still losing detail.
+        /// Values outside 1-100 are rejected here at parse time and, for
+        /// library callers, refused by name rather than clamped.
         #[arg(long, default_value_t = 85, value_parser = clap::value_parser!(u8).range(1..=100))]
         quality: u8,
         /// Output path.
@@ -2923,7 +2950,8 @@ enum CompressionArg {
     Passthrough,
     /// Store the decoded samples with lossless compression.
     Lossless,
-    /// Re-encode as JPEG at `--quality`. Refused: pdfce has no encoder.
+    /// Re-encode as JPEG at `--quality` — lossy, on purpose, and a SECOND
+    /// lossy pass if the source was already a JPEG.
     Jpeg,
 }
 
@@ -4530,7 +4558,8 @@ annots_state_missing={} annots_widget={} annots_degenerate={} need_appearances={
 unsupported_type3={} unsupported_noncmap={} unsupported_vertical={} \
 unsupported_composite_not_embedded={} unsupported_unknown_subtype={} \
 unsupported_unusable_program={} supplied={} supplied_registered={} \
-contents_unresolved={}",
+contents_unresolved={} images_masked={} images_mask_unsupported={} \
+masks_resampled={} mattes_undone={} mattes_not_undone={}",
         input.display(),
         output.display(),
         rendered.pixmap.width(),
@@ -4578,6 +4607,18 @@ contents_unresolved={}",
         // page named that are not in the file, so their marks are simply
         // absent from the raster (§7.3.10 + Table 30).
         d.contents_streams_unresolved,
+        // Image transparency (§8.9.6, §11.6.5.3), appended after every
+        // pre-existing key. `images_masked` is a SUBSET of `images` —
+        // those whose `/SMask`, `/Mask` or JPX opacity channel was
+        // actually composited — and is census, not shortfall. The
+        // per-mechanism breakdown goes to stderr, where a new key cannot
+        // break a parser. `images_mask_unsupported` is the shortfall
+        // twin: the picture is on the page but too solid.
+        d.images_masked,
+        d.images_mask_unsupported,
+        d.masks_resampled,
+        d.mattes_undone,
+        d.mattes_not_undone,
     );
     report_diagnostics(d);
 
@@ -4740,6 +4781,33 @@ where it is not. Un-premultiplication arrives with the transparency model",
             "pdfce-cli: note: {} LZW stream(s) missing a ClearCode or EndOfInformation; \
 recovered, but the producer is non-conformant",
             d.lzw_framing_anomalies
+        );
+    }
+    // `images_masked` deliberately prints NOTHING here — it is
+    // verified-correct volume, and decision 006 §4.4 records what a note
+    // on known-good files does to an operator's trust in this channel.
+    // The per-mechanism breakdown is offered only as context beside a
+    // shortfall, never on its own.
+    if d.images_mask_unsupported > 0 {
+        let named: Vec<String> = d
+            .mask_refused
+            .iter()
+            .map(|(reason, count)| format!("{reason} x{count}"))
+            .collect();
+        eprintln!(
+            "pdfce-cli: note: {} image(s) carry an /SMask or /Mask that could not be applied \
+({}); they are drawn FULLY OPAQUE, so the page shows content the document intended to be \
+hidden or see-through",
+            d.images_mask_unsupported,
+            named.join(", ")
+        );
+    }
+    if d.mattes_not_undone > 0 {
+        eprintln!(
+            "pdfce-cli: note: {} soft mask(s) carry /Matte (preblended colour) whose inversion \
+was not applied; the alpha IS applied, but colours in the partially-transparent regions stay \
+shifted toward the matte colour. The reason is in the image divergences below",
+            d.mattes_not_undone
         );
     }
     if !d.image_notes.is_empty() {
@@ -10592,7 +10660,8 @@ fn cmd_add_image(args: &AddImageArgs<'_>) -> u8 {
         "add-image {} image={} format={} page={} pixels={}x{} bpc={} colorspace={} \
          filter={} verbatim={} rect={},{},{},{} placed={:.3},{:.3},{:.3},{:.3} fit={} \
          image_obj={} {} smask={} name={} dpi={} dpi_source={} eff_dpi={:.1},{:.1} \
-         compression_requested={} compression_applied={} lossless_from_lossy={} \
+         compression_requested={} compression_applied={} quality={} \
+         source_bytes={} stored_bytes={} lossless_from_lossy={} jpeg_from_lossy={} \
          letterboxed={} distorted={} low_res={} recompressed={} smask_written={} \
          transparency_not_previewed={} colour_key={} profile_dropped={} \
          cmyk_polarity_unverifiable={} progressive={} exif_orientation={} \
@@ -10635,7 +10704,12 @@ fn cmd_add_image(args: &AddImageArgs<'_>) -> u8 {
         d.effective_dpi.1,
         d.requested_compression.key(),
         d.applied_compression.key(),
+        d.jpeg_quality
+            .map_or_else(|| "-".to_owned(), |q| q.to_string()),
+        d.source_bytes,
+        d.stored_bytes,
         u32::from(d.lossless_from_lossy),
+        u32::from(d.jpeg_from_lossy),
         u32::from(d.letterboxed),
         u32::from(d.aspect_distorted),
         u32::from(d.below_screen_resolution),
@@ -10687,6 +10761,9 @@ fn compression_substitution_reason(d: &pdfce_core::edit::ImageAuthorDisclosures)
         None => {
             "The source was already stored losslessly, so its own bytes were kept unchanged rather than re-compressed — strictly better than what was asked for."
         }
+        // `LosslessRequested` and `JpegRequested` are policies the operator
+        // CHOSE, so a "substitution" involving them is not a substitution at
+        // all — their own dedicated notes below say what the choice cost.
         Some(_) => "See the note above for why.",
     }
 }
@@ -10757,6 +10834,23 @@ fn report_image_disclosures(image: &Path, outcome: &pdfce_core::edit::ImageAutho
             "pdfce-cli: {name}: this is a LOSSY source stored losslessly, as asked. That preserves exactly the pixels it decodes to — compression artefacts included — and RECOVERS NOTHING that was already lost, while typically multiplying the stored size several-fold. If the goal was a better picture rather than a stable one to edit, --compression passthrough is the cheaper answer."
         );
     }
+    // The lossy re-encode, stated in two sentences rather than one, because
+    // "your bytes changed" and "your picture got worse, twice over" are
+    // different facts and only the second is unrecoverable.
+    if d.recompressed == Some(pdfce_core::image_import::RecompressReason::JpegRequested) {
+        let q = d
+            .jpeg_quality
+            .map_or_else(|| "?".to_owned(), |q| q.to_string());
+        eprintln!(
+            "pdfce-cli: {name}: re-encoded as JPEG at quality {q}, as asked — {} bytes in, {} bytes stored. This is LOSSY: the stored picture is not the one you handed over, and no later step can recover the difference.",
+            d.source_bytes, d.stored_bytes
+        );
+        if d.jpeg_from_lossy {
+            eprintln!(
+                "pdfce-cli: {name}: that source was ALREADY a JPEG, so this is a SECOND lossy pass. The DCT has now run twice, and the second pass quantises the first pass's ringing and blocking INTO the picture rather than smoothing them out — the damage compounds, it is invisible at editing zoom, and raising --quality does not undo it. If a lossless original exists, place that instead."
+            );
+        }
+    }
     if d.letterboxed {
         let p = outcome.placed_rect;
         eprintln!(
@@ -10788,6 +10882,9 @@ fn report_image_disclosures(image: &Path, outcome: &pdfce_core::edit::ImageAutho
         // A second sentence restating the same fact is how a disclosure set
         // trains people to skim.
         Some(pdfce_core::image_import::RecompressReason::LosslessRequested) => {}
+        // Likewise: asked for, and already reported above with the size
+        // change and the generation-loss warning it earns.
+        Some(pdfce_core::image_import::RecompressReason::JpegRequested) => {}
         // `RecompressReason` is `#[non_exhaustive]`. A future reason must
         // still SAY that a re-compression happened, even before this CLI
         // learns to explain it — silence is the one unacceptable answer.
@@ -10801,11 +10898,12 @@ fn report_image_disclosures(image: &Path, outcome: &pdfce_core::edit::ImageAutho
             "pdfce-cli: {name}: the transparency was written as a soft mask (/SMask), not flattened against white — the page shows through, as it should."
         );
     }
-    if d.transparency_not_previewed {
-        eprintln!(
-            "pdfce-cli: {name}: NOTE — pdfce's own renderer does not composite image transparency yet, so `render-page` and the GUI preview will show this image OPAQUE. The document itself is correct; a conforming viewer will show the transparency."
-        );
-    }
+    // The `transparency_not_previewed` note is GONE — `pdfce-render` now
+    // composites both `/SMask` and colour-key `/Mask`, so the field is
+    // retired to a constant `false` in core and there is nothing to say.
+    // The stdout field survives (a stable-line key is a contract) and
+    // reports `0`; only the prose is removed, because prose that fires when
+    // nothing is wrong is what teaches an operator to stop reading it.
     if d.colour_key_mask_written {
         eprintln!(
             "pdfce-cli: {name}: the image declared one fully-transparent colour, written as a colour-key /Mask. The image data itself was embedded unchanged."

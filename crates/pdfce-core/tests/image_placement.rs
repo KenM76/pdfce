@@ -412,10 +412,25 @@ fn a_pngs_alpha_becomes_an_smask() {
 
     // The disclosures the operator is owed.
     assert!(out.disclosures.soft_mask_written);
+    // ★ THIS ASSERTION WAS INVERTED WHEN THE RENDERER LEARNED TO COMPOSITE.
+    //
+    // It read `assert!(out.disclosures.transparency_not_previewed)` with the
+    // reason *"pdfce-render does not composite /SMask yet, and an operator who
+    // sees an opaque preview must be told that is pdfce's gap, not a lost
+    // channel."* That was true, and the disclosure was right to exist.
+    //
+    // `pdfce-render` now composites both mechanisms `add_image` can write, so
+    // the warning would fire when nothing is wrong — which is precisely how an
+    // operator learns to stop reading the channel it arrives on.
+    //
+    // Kept as a NAMED absence rather than deleted: "this no longer warns" is
+    // the behaviour, and a test that merely stopped checking would let the
+    // warning creep back the next time someone edits the disclosure block.
     assert!(
-        out.disclosures.transparency_not_previewed,
-        "pdfce-render does not composite /SMask yet, and an operator who sees \
-         an opaque preview must be told that is pdfce's gap, not a lost channel"
+        !out.disclosures.transparency_not_previewed,
+        "the renderer composites /SMask now, so there is nothing left to warn \
+         about — a disclosure that fires when nothing is wrong is worse than \
+         no disclosure at all"
     );
 }
 
@@ -1219,31 +1234,574 @@ fn a_split_alpha_png_reports_lossless_rather_than_passthrough() {
     assert!(!img.notes.lossless_from_lossy);
 }
 
-/// The JPEG re-encode policy refuses BY NAME, before the file is even
-/// parsed, and names the policies that do work.
+// ---------------------------------------------------------------------------
+// `ImageCompression::Jpeg` — the re-encode
+//
+// Every assertion here is deliberately at the level a structural check
+// cannot reach. The failure modes this policy has are: a picture that comes
+// out inverted (renders fine, looks deliberate, decision 006), a quality knob
+// that does nothing, a clamp nobody was told about, and — the regression that
+// would matter most — a new code path that disturbs the verbatim passthrough
+// the rest of the module exists to protect.
+// ---------------------------------------------------------------------------
+
+/// Decode a bare `/DCTDecode` codestream exactly the way `pdfce-render`
+/// would, so a test can compare PIXELS rather than bytes.
+///
+/// Goes through `image_codec` rather than any second decoder for the reason
+/// **R31** gives: a reference decoder that applies its own normalisation is
+/// how a polarity investigation gets a confident wrong answer (Pillow's
+/// `CMYK;I`, the `jpeg-decoder` crate's unconditional four-component
+/// inversion). The only decoder whose conventions are already established
+/// here is pdfce's own — and it is also the one whose output actually
+/// determines what an operator sees.
+fn decode_dct(data: &[u8]) -> pdfce_core::image_codec::CodedImage {
+    struct NoGraph;
+    impl ObjectGraph for NoGraph {
+        fn value(&self, _id: ObjId) -> Option<&Object> {
+            None
+        }
+        fn trailer_entry(&self, _key: &[u8]) -> Option<&Object> {
+            None
+        }
+    }
+    let mut dict = Dict::new();
+    dict.insert(
+        Name::from(b"Filter"),
+        Object::Name(Name::from(b"DCTDecode")),
+    );
+    let graph = NoGraph;
+    let view = pdfce_core::view::DocumentView::new(
+        &graph,
+        &[],
+        pdfce_core::PdfVersion { major: 1, minor: 7 },
+    );
+    pdfce_core::image_codec::decode_image_view(&view, &dict, data, false)
+        .expect("the re-encoded codestream must decode")
+}
+
+/// The Adobe APP14 `ColorTransform` byte in a codestream, or `None` if the
+/// marker is absent.
+///
+/// Walked rather than searched for the literal `b"Adobe"` anywhere in the
+/// file, because entropy-coded scan data can contain any byte sequence at
+/// all and a naive search would happily "find" a marker inside the picture.
+fn app14_transform(jpeg: &[u8]) -> Option<u8> {
+    let mut i = 2; // past SOI
+    while i + 4 <= jpeg.len() {
+        if jpeg[i] != 0xFF {
+            return None;
+        }
+        let marker = jpeg[i + 1];
+        // SOS: everything after this is entropy-coded; stop walking.
+        if marker == 0xDA {
+            return None;
+        }
+        let len = usize::from(u16::from_be_bytes([jpeg[i + 2], jpeg[i + 3]]));
+        if marker == 0xEE {
+            let seg = jpeg.get(i + 4..i + 2 + len)?;
+            // TN #5116 §18: `Adobe` (5 bytes), version (2), flags0 (2),
+            // flags1 (2), then the one-byte colour transform code.
+            if seg.starts_with(b"Adobe") {
+                return seg.get(11).copied();
+            }
+        }
+        i += 2 + len;
+    }
+    None
+}
+
+/// The pixels an [`ImportedImage`]'s stored stream decodes to, through
+/// pdfce's own filter stack.
+///
+/// Not `flate::decode` directly: a verbatim `IDAT` passthrough is a
+/// `/Predictor 15` stream, so inflating it without un-predicting leaves the
+/// per-row filter-type bytes in place and every sample offset by its
+/// neighbour. Comparing against *that* would make a correct encoder look
+/// broken (and, worse, could make a broken one look correct).
+fn stored_samples(img: &ImportedImage) -> Vec<u8> {
+    let mut dict = Dict::new();
+    let flate = || Object::Name(Name::from(b"FlateDecode"));
+    match img.filter {
+        ImportFilter::DctDecode => return decode_dct(&img.data).samples,
+        ImportFilter::Flate => {
+            dict.insert(Name::from(b"Filter"), flate());
+        }
+        ImportFilter::FlatePngPredictor {
+            colors,
+            bits_per_component,
+            columns,
+        } => {
+            dict.insert(Name::from(b"Filter"), flate());
+            let mut parms = Dict::new();
+            parms.insert(Name::from(b"Predictor"), Object::Integer(15));
+            parms.insert(Name::from(b"Colors"), Object::Integer(i64::from(colors)));
+            parms.insert(
+                Name::from(b"BitsPerComponent"),
+                Object::Integer(i64::from(bits_per_component)),
+            );
+            parms.insert(Name::from(b"Columns"), Object::Integer(i64::from(columns)));
+            dict.insert(Name::from(b"DecodeParms"), Object::Dict(parms));
+        }
+        other => panic!("stored_samples does not know filter {other:?}"),
+    }
+    pdfce_core::filters::decode_stream(&dict, &img.data).expect("the stored stream decodes")
+}
+
+/// Mean absolute difference per sample between two equal-length buffers.
+fn mean_abs_diff(a: &[u8], b: &[u8]) -> f64 {
+    assert_eq!(a.len(), b.len(), "buffers must be comparable");
+    let total: u64 = a
+        .iter()
+        .zip(b)
+        .map(|(&x, &y)| u64::from(x.abs_diff(y)))
+        .sum();
+    total as f64 / a.len() as f64
+}
+
+/// The quality knob does something, and what it does is monotone in size
+/// while both results still resemble the source.
+///
+/// Two halves, and both are needed. A knob that changes nothing would pass
+/// a "the pixels are close" test trivially; a knob wired to the wrong thing
+/// could change the size while destroying the picture. Asserting both pins
+/// the encoder as *doing lossy compression at a selectable rate* rather than
+/// merely producing bytes.
 #[test]
-fn the_jpeg_policy_refuses_by_name_because_there_is_no_encoder() {
-    for name in ["rgb.jpg", "rgb8.png", "rgb24.bmp"] {
-        let options = ImportOptions::new().with_compression(ImageCompression::Jpeg { quality: 85 });
-        let err = image_import::import_with(&image_bytes(name), &options).unwrap_err();
-        assert_eq!(
-            err,
-            ImageImportError::CompressionUnavailable { policy: "jpeg" },
-            "{name}"
+fn two_jpeg_qualities_differ_in_size_and_both_resemble_the_source() {
+    let low = imported_as("rgb8.png", ImageCompression::Jpeg { quality: 20 });
+    let high = imported_as("rgb8.png", ImageCompression::Jpeg { quality: 95 });
+
+    assert_eq!(low.filter, ImportFilter::DctDecode);
+    assert_eq!(high.filter, ImportFilter::DctDecode);
+    assert!(
+        low.data.len() < high.data.len(),
+        "quality 20 must store fewer bytes than quality 95 ({} vs {})",
+        low.data.len(),
+        high.data.len()
+    );
+    assert_eq!(low.notes.jpeg_quality, Some(20));
+    assert_eq!(high.notes.jpeg_quality, Some(95));
+    assert_eq!(
+        high.notes.applied_compression,
+        ImageCompression::Jpeg { quality: 95 },
+        "the applied policy carries the quality that actually ran"
+    );
+
+    // The source's exact pixels are the reference. `rgb8.png` is lossless
+    // either way, so its stored stream IS the truth to compare against.
+    let exact = imported_as("rgb8.png", ImageCompression::Lossless);
+    let reference = stored_samples(&exact);
+
+    for (name, img, tolerance) in [("q20", &low, 48.0), ("q95", &high, 12.0)] {
+        let got = decode_dct(&img.data);
+        assert_eq!(got.width, exact.width, "{name}");
+        assert_eq!(got.height, exact.height, "{name}");
+        assert_eq!(got.bits_per_component, 8, "{name}: Table 89 fixes DCT at 8");
+        let delta = mean_abs_diff(&got.samples, &reference);
+        assert!(
+            delta < tolerance,
+            "{name}: mean |Δ| per sample was {delta:.2}, which is not 'approximately the source'"
         );
-        let msg = err.to_string();
-        assert!(msg.contains("passthrough"), "{msg}");
-        assert!(msg.contains("lossless"), "{msg}");
-        assert!(msg.contains("no image encoder"), "{msg}");
     }
 
-    // Refused even for bytes that are not an image at all — the policy is
-    // checked first, so the operator learns the real blocker rather than a
-    // second-order complaint about the file.
-    let options = ImportOptions::new().with_compression(ImageCompression::Jpeg { quality: 1 });
+    // Both are lossy, but neither source was: the compounding disclosure
+    // must stay OFF here, or it means nothing when it comes on.
+    assert!(!low.notes.jpeg_from_lossy);
+    assert!(!high.notes.jpeg_from_lossy);
     assert_eq!(
-        image_import::import_with(b"not an image", &options).unwrap_err(),
-        ImageImportError::CompressionUnavailable { policy: "jpeg" }
+        low.notes.recompressed,
+        Some(RecompressReason::JpegRequested)
+    );
+}
+
+/// **THE POLARITY TEST.** Re-encoding a CMYK image must not turn it into a
+/// photographic negative.
+///
+/// Asserted in SAMPLE VALUES, not in the presence of a `/Decode` array,
+/// because that is the only place the bug lives. Decision 006 §1.3: getting
+/// this wrong produces an inverse that renders cleanly, warns about nothing,
+/// and cannot be spotted by a reviewer who has not seen the original. A
+/// structural check would pass on every one of those files.
+///
+/// The invariant is round-trip stability through pdfce's own decoder:
+/// whatever ink `pdfce-render` reads out of the source, it must read
+/// approximately the same ink out of the re-encode. An inversion would show
+/// as a mean |Δ| near the complement instead of near zero.
+#[test]
+fn re_encoding_a_cmyk_jpeg_keeps_its_ink_polarity() {
+    let source = imported("cmyk.jpg");
+    let before = decode_dct(&source.data);
+
+    let re = imported_as("cmyk.jpg", ImageCompression::Jpeg { quality: 95 });
+    assert_eq!(
+        re.color_space,
+        pdfce_core::image_import::ImportColorSpace::DeviceCmyk
+    );
+    assert_eq!(re.filter, ImportFilter::DctDecode);
+
+    // The written codestream is the TRANSFORM-2 (YCCK) shape — decision
+    // 006 §4.4's benign census, not R30's ambiguous transform-0 shape. A
+    // writer that emits the shape its own diagnostic warns about has misread
+    // its rules.
+    assert_eq!(
+        app14_transform(&re.data),
+        Some(2),
+        "the re-encode must declare YCCK in its Adobe APP14 marker"
+    );
+    assert!(
+        !re.notes.cmyk_polarity_unverifiable,
+        "transform 2 is never the polarity-ambiguous shape"
+    );
+
+    let after = decode_dct(&re.data);
+    assert_eq!(after.components, 4, "four ink channels, still");
+    assert_eq!(after.width, before.width);
+    assert_eq!(after.height, before.height);
+
+    let delta = mean_abs_diff(&after.samples, &before.samples);
+    let complement: Vec<u8> = before.samples.iter().map(|&v| 255 - v).collect();
+    let inverted_delta = mean_abs_diff(&after.samples, &complement);
+    assert!(
+        delta < 16.0,
+        "the re-encode must decode to approximately the same INK: mean |Δ| was {delta:.2}"
+    );
+    assert!(
+        inverted_delta > 4.0 * delta.max(1.0),
+        "and must be nowhere near its complement (|Δ| to source {delta:.2}, \
+         |Δ| to complement {inverted_delta:.2}) — this is the photographic-negative check"
+    );
+
+    // NAMED PIXEL VALUES, in the tradition decision 006 §6.4 asked for.
+    // `cmyk.jpg`'s top-left pixel is a saturated corner, which is exactly
+    // where an inversion is unmistakable: the complement of [0, 0, 255, 255]
+    // is [255, 255, 0, 0], and no tolerance can confuse the two.
+    assert_eq!(
+        &before.samples[0..4],
+        &[0, 0, 255, 255],
+        "the fixture's top-left ink, as pdfce reads it today"
+    );
+    for c in 0..4 {
+        assert!(
+            after.samples[c].abs_diff(before.samples[c]) <= 4,
+            "top-left component {c}: {} became {} — an inversion would read {}",
+            before.samples[c],
+            after.samples[c],
+            255 - before.samples[c]
+        );
+    }
+
+    // The rest of the named pixels, so a regression reports WHICH ink moved
+    // rather than an aggregate that could hide a single blown channel.
+    for px in [0usize, 1, 5] {
+        for c in 0..4 {
+            let i = px * 4 + c;
+            let (b, a) = (before.samples[i], after.samples[i]);
+            assert!(
+                b.abs_diff(a) <= 40,
+                "pixel {px} component {c}: {b} became {a}, which is not the same ink"
+            );
+        }
+    }
+
+    // No `/Decode` is written on any branch. R29 says `/Decode` is the sole
+    // polarity control; this writer's output needs no polarity control at
+    // all, and inventing one would be the start of the argument decision 006
+    // closed.
+    let mut s = session();
+    let out = s
+        .add_image(&NewImage::new(0, rect(0.0, 0.0, 60.0, 40.0), &re))
+        .unwrap();
+    let pdf = saved(&mut s);
+    let body = object_body(&pdf, out.image_id.num);
+    assert!(contains(&body, b"/ColorSpace /DeviceCMYK"), "{body:?}");
+    assert!(contains(&body, b"/Filter /DCTDecode"), "{body:?}");
+    assert!(contains(&body, b"/BitsPerComponent 8"), "{body:?}");
+    assert!(!contains(&body, b"/Decode"), "R29 holds on every branch");
+    assert_eq!(
+        stream_payload(&body),
+        re.data,
+        "the codestream reaches the file intact"
+    );
+}
+
+/// A quality outside 1–100 is REFUSED BY NAME, not clamped — and refused
+/// before the file is parsed, so the operator hears about their flag rather
+/// than about their picture.
+#[test]
+fn an_out_of_range_jpeg_quality_is_refused_rather_than_clamped() {
+    for quality in [0u8, 101, 255] {
+        let options = ImportOptions::new().with_compression(ImageCompression::Jpeg { quality });
+        let err = image_import::import_with(&image_bytes("rgb8.png"), &options).unwrap_err();
+        assert_eq!(err, ImageImportError::InvalidQuality { quality });
+        let msg = err.to_string();
+        assert!(msg.contains("between 1 and 100"), "{msg}");
+        assert!(
+            msg.contains("does not clamp"),
+            "the message must say that nothing was substituted: {msg}"
+        );
+
+        // Checked FIRST: bytes that are not an image at all still report the
+        // quality, not a second-order complaint about the file.
+        assert_eq!(
+            image_import::import_with(b"not an image", &options).unwrap_err(),
+            ImageImportError::InvalidQuality { quality }
+        );
+    }
+
+    // The endpoints are IN range — an off-by-one here would silently make
+    // quality 100 unreachable.
+    for quality in [1u8, 100] {
+        let options = ImportOptions::new().with_compression(ImageCompression::Jpeg { quality });
+        let img = image_import::import_with(&image_bytes("rgb8.png"), &options).unwrap();
+        assert_eq!(img.notes.jpeg_quality, Some(quality));
+    }
+}
+
+/// **The regression that would matter most**: the new encoder path must not
+/// disturb the old verbatim one.
+///
+/// Two forms, because they fail differently. First, an unqualified
+/// passthrough is still byte-identical to the source's own compressed data.
+/// Second — and this is the one a "just add a match arm" change can break —
+/// a passthrough placed in the SAME SESSION as a re-encode is still
+/// byte-identical, so nothing about having run the encoder leaks into the
+/// image beside it.
+#[test]
+fn passthrough_is_still_byte_identical_after_the_encoder_exists() {
+    // Form 1: the import itself.
+    let jpeg = imported("rgb.jpg");
+    assert_eq!(
+        jpeg.data,
+        image_bytes("rgb.jpg"),
+        "the codestream, verbatim"
+    );
+    assert_eq!(jpeg.notes.recompressed, None);
+    assert_eq!(
+        jpeg.notes.applied_compression,
+        ImageCompression::Passthrough
+    );
+
+    let png = imported("rgb8.png");
+    assert_eq!(
+        png.data,
+        extract_idat(&image_bytes("rgb8.png")),
+        "IDAT, verbatim"
+    );
+
+    // Form 2: side by side with a re-encode, in one document.
+    let recoded = imported_as("rgb8.png", ImageCompression::Jpeg { quality: 60 });
+    let mut s = session();
+    let a = s
+        .add_image(&NewImage::new(0, rect(0.0, 0.0, 60.0, 40.0), &jpeg))
+        .unwrap();
+    let b = s
+        .add_image(&NewImage::new(0, rect(100.0, 0.0, 160.0, 40.0), &recoded))
+        .unwrap();
+    let c = s
+        .add_image(&NewImage::new(0, rect(200.0, 0.0, 260.0, 40.0), &png))
+        .unwrap();
+    let pdf = saved(&mut s);
+
+    assert_eq!(
+        stream_payload(&object_body(&pdf, a.image_id.num)),
+        image_bytes("rgb.jpg"),
+        "the passthrough JPEG's bytes must survive the presence of an encoder"
+    );
+    assert_eq!(
+        stream_payload(&object_body(&pdf, c.image_id.num)),
+        extract_idat(&image_bytes("rgb8.png")),
+        "and so must the passthrough PNG's IDAT"
+    );
+    let recoded_body = object_body(&pdf, b.image_id.num);
+    assert!(contains(&recoded_body, b"/Filter /DCTDecode"));
+    assert_ne!(
+        stream_payload(&recoded_body),
+        extract_idat(&image_bytes("rgb8.png")),
+        "the re-encoded one, by contrast, is genuinely different bytes"
+    );
+}
+
+/// Re-encoding an ALREADY-LOSSY source is a distinct act from re-encoding a
+/// lossless one, and is disclosed as such.
+///
+/// The two share a `RecompressReason`; they do not share a sentence. A
+/// second DCT pass quantises the first pass's artefacts *into* the picture,
+/// which is not what "lossy compression at quality 90" leads anyone to
+/// expect.
+#[test]
+fn re_encoding_a_jpeg_names_the_compounding_generation_loss() {
+    let from_lossy = imported_as("rgb.jpg", ImageCompression::Jpeg { quality: 90 });
+    let from_lossless = imported_as("rgb8.png", ImageCompression::Jpeg { quality: 90 });
+
+    assert!(
+        from_lossy.notes.jpeg_from_lossy,
+        "a JPEG source means the DCT has now run twice"
+    );
+    assert!(!from_lossless.notes.jpeg_from_lossy);
+    assert_eq!(
+        from_lossy.notes.recompressed,
+        Some(RecompressReason::JpegRequested)
+    );
+    assert_eq!(
+        from_lossy.notes.recompressed.unwrap().key(),
+        "jpeg-requested"
+    );
+
+    // The size change is reported for BOTH, without anyone having to diff
+    // the output.
+    assert_eq!(from_lossy.notes.source_bytes, image_bytes("rgb.jpg").len());
+    assert_eq!(from_lossy.notes.stored_bytes, from_lossy.data.len());
+    assert!(from_lossy.notes.stored_bytes > 0);
+
+    // And it reaches the placement disclosures, which is where a front end
+    // reads it.
+    let mut s = session();
+    let out = s
+        .add_image(&NewImage::new(0, rect(0.0, 0.0, 60.0, 40.0), &from_lossy))
+        .unwrap();
+    assert!(out.disclosures.jpeg_from_lossy);
+    assert_eq!(out.disclosures.jpeg_quality, Some(90));
+    assert_eq!(out.disclosures.source_bytes, image_bytes("rgb.jpg").len());
+    assert!(out.disclosures.any());
+}
+
+/// Size is reported for EVERY policy, not only the re-encoding ones — the
+/// question "did this get smaller?" must never need a byte diff.
+#[test]
+fn every_policy_reports_the_size_it_stored() {
+    for (name, policy) in [
+        ("rgb.jpg", ImageCompression::Passthrough),
+        ("rgb.jpg", ImageCompression::Lossless),
+        ("rgba8.png", ImageCompression::Passthrough),
+        ("rgb24.bmp", ImageCompression::Passthrough),
+    ] {
+        let img = imported_as(name, policy);
+        assert_eq!(
+            img.notes.source_bytes,
+            image_bytes(name).len(),
+            "{name} {policy:?}"
+        );
+        let expect = img.data.len() + img.soft_mask.as_ref().map_or(0, |m| m.data.len());
+        assert_eq!(img.notes.stored_bytes, expect, "{name} {policy:?}");
+        assert!(img.notes.stored_bytes > 0, "{name} {policy:?}");
+    }
+}
+
+/// A colour-key `/Mask` is refused by name rather than silently corrupted.
+///
+/// §8.9.6.4 masks by exact sample ranges and DCT moves sample values, so a
+/// re-encode would leave transparency speckled in both directions — holes in
+/// the picture and stray opaque pixels in the background — with nothing to
+/// report it afterwards. The refusal names the property of the image, not
+/// just the policy, because "use passthrough" is only actionable if the
+/// operator knows what they would be giving up.
+#[test]
+fn a_colour_key_masked_image_refuses_the_jpeg_policy_by_name() {
+    // Sanity: this fixture really does carry the colour-key mask.
+    assert!(imported("rgb-trns.png").color_key_mask.is_some());
+
+    let options = ImportOptions::new().with_compression(ImageCompression::Jpeg { quality: 85 });
+    let err = image_import::import_with(&image_bytes("rgb-trns.png"), &options).unwrap_err();
+    let ImageImportError::CompressionRefused { policy, reason } = err else {
+        panic!("expected a named compression refusal, got {err:?}");
+    };
+    assert_eq!(policy, "jpeg");
+    assert!(reason.contains("transparent"), "{reason}");
+    assert!(
+        reason.contains("passthrough") && reason.contains("lossless"),
+        "the refusal must name what DOES work: {reason}"
+    );
+
+    // The same file places perfectly well under the other policies — the
+    // refusal is about this policy, not about this file.
+    assert!(
+        imported_as("rgb-trns.png", ImageCompression::Lossless)
+            .color_key_mask
+            .is_some()
+    );
+}
+
+/// An `/SMask` survives the re-encode UNTOUCHED and lossless.
+///
+/// §8.9.5 Table 89 makes the soft mask a separate image XObject, so nothing
+/// requires it to share the base image's filter — and JPEG is at its very
+/// worst along the hard edges an alpha channel is mostly made of. The base
+/// goes lossy because that was asked for; the opacity stays exact because it
+/// was not.
+#[test]
+fn a_soft_mask_survives_the_jpeg_re_encode_unchanged() {
+    let lossless = imported("rgba8.png");
+    let recoded = imported_as("rgba8.png", ImageCompression::Jpeg { quality: 70 });
+
+    let (Some(before), Some(after)) = (&lossless.soft_mask, &recoded.soft_mask) else {
+        panic!("both imports must carry a soft mask");
+    };
+    assert_eq!(
+        before.data, after.data,
+        "the alpha channel's bytes must be identical — it was never re-encoded"
+    );
+    assert_eq!(before.bits_per_component, after.bits_per_component);
+    assert_eq!(recoded.filter, ImportFilter::DctDecode);
+    assert_eq!(
+        recoded.notes.requires_pdf_version,
+        Some(PdfFeature::SoftMask),
+        "the version floor is recomputed from what is STORED, and only the \
+         soft mask still raises it"
+    );
+
+    let mut s = session();
+    let out = s
+        .add_image(&NewImage::new(0, rect(0.0, 0.0, 60.0, 40.0), &recoded))
+        .unwrap();
+    let pdf = saved(&mut s);
+    let mask_id = out.soft_mask_id.expect("an /SMask object was written");
+    let mask_body = object_body(&pdf, mask_id.num);
+    assert!(
+        contains(&mask_body, b"/Filter /FlateDecode"),
+        "{mask_body:?}"
+    );
+    assert!(contains(&mask_body, b"/ColorSpace /DeviceGray"));
+    assert_eq!(stream_payload(&mask_body), after.data);
+}
+
+/// A palette and a sub-byte bit depth both reach the encoder correctly.
+///
+/// JPEG has neither, so the palette must be EXPANDED (never scaled — an
+/// index is not a colour, and scaling one turns a 4-bit palette image into
+/// noise) and the 4-bit samples unpacked high-order-bit-first. The result is
+/// a three-component `/DeviceRGB` image, which is the only faithful
+/// `/DCTDecode` shape for palette data.
+#[test]
+fn an_indexed_sub_byte_png_expands_to_devicergb_for_the_encoder() {
+    let source = imported("indexed4.png");
+    assert!(matches!(
+        source.color_space,
+        pdfce_core::image_import::ImportColorSpace::Indexed { .. }
+    ));
+    assert_eq!(source.bits_per_component, 4);
+
+    let re = imported_as("indexed4.png", ImageCompression::Jpeg { quality: 95 });
+    assert_eq!(
+        re.color_space,
+        pdfce_core::image_import::ImportColorSpace::DeviceRgb
+    );
+    assert_eq!(re.bits_per_component, 8);
+    assert_eq!(re.width, source.width);
+    assert_eq!(re.height, source.height);
+
+    let decoded = decode_dct(&re.data);
+    assert_eq!(decoded.components, 3);
+    assert_eq!(
+        decoded.samples.len(),
+        (source.width * source.height * 3) as usize
+    );
+    // Not a uniform block: an index mistaken for a colour, or a palette
+    // lookup that always hit entry 0, would flatten the whole image.
+    let first = decoded.samples[0];
+    assert!(
+        decoded.samples.iter().any(|&v| v.abs_diff(first) > 16),
+        "the expanded palette must still carry distinct colours"
     );
 }
 

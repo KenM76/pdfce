@@ -14,15 +14,61 @@ license terms and copyright notices are reproduced in full. This file
 covers the dependencies shipped in the Windows build target; it is
 regenerated mechanically from `Cargo.lock`.
 
+## Required acknowledgements
+
+<!--
+  STATIC SECTION — emitted on EVERY regeneration, unconditionally.
+
+  WHY IT IS STATIC RATHER THAN DRIVEN BY THE CRATE LIST:
+
+  cargo-about reproduces license TEXTS. It does not, and cannot, emit a
+  license's required ACKNOWLEDGEMENT SENTENCE — that is a distinct
+  obligation with its own wording, and no field in the template model
+  carries it. So a conjunctive `... AND IJG` dependency can be fully
+  license-listed below and still leave pdfce out of compliance.
+
+  It is therefore written here as unconditional prose, NOT inside the
+  per-license iteration block below, and NOT gated on any crate being
+  present. (Do not paste a literal handlebars expression into this comment
+  to explain that — handlebars parses inside HTML comments too, and an
+  unmatched block start here is a template error, not documentation.) A
+  notice that appears only while some particular crate happens to be in
+  Cargo.lock is not an obligation being met — it is an obligation that
+  survives by luck, and the first dependency-set change that reshuffles
+  the list silently drops it. An acknowledgement that outlives the
+  dependency it was written for is merely redundant; one that vanishes
+  with it is a compliance failure. The asymmetry decides the design.
+
+  MAINTENANCE: if `jpeg-encoder` (or any other IJG-derived crate) ever
+  leaves the dependency set, this paragraph may be removed — deliberately,
+  by editing about.hbs, never by "the generator stopped emitting it."
+  See crates/pdfce-core/Cargo.toml's adoption note and docs/LEGAL.md §6.
+-->
+
+pdfce's JPEG encoder is the `jpeg-encoder` crate, whose SPDX expression is
+`(MIT OR Apache-2.0) AND IJG`. The `AND` is conjunctive: the Independent
+JPEG Group's terms bind **in addition to** the permissive ones, because the
+crate's quantization tables, Huffman tables and DCT are derived from the
+IJG's libjpeg. Those terms impose no source-disclosure obligation, but they
+do require the following acknowledgement in the documentation accompanying
+any binary redistribution, and it is made here:
+
+> **This software is based in part on the work of the Independent JPEG
+> Group.**
+
+The full IJG license text appears in the "Full license texts" section below,
+alongside the other licenses harvested from `Cargo.lock`.
+
 ## License overview
 
-- **Apache License 2.0** — used by 130 crate(s)
+- **Apache License 2.0** — used by 133 crate(s)
 - **Unicode License v3** — used by 19 crate(s)
 - **MIT License** — used by 12 crate(s)
 - **BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License** — used by 2 crate(s)
 - **Boost Software License 1.0** — used by 2 crate(s)
 - **BSD Zero Clause License** — used by 1 crate(s)
 - **BSD 2-Clause &quot;Simplified&quot; License** — used by 1 crate(s)
+- **Independent JPEG Group License** — used by 1 crate(s)
 - **ISC License** — used by 1 crate(s)
 - **SIL Open Font License 1.1** — used by 1 crate(s)
 - **Ubuntu Font Licence v1.0** — used by 1 crate(s)
@@ -3263,6 +3309,215 @@ limitations under the License.
 ### Apache License 2.0
 
 Used by:
+- [jpeg-encoder 0.7.1](https://github.com/vstroebel/jpeg-encoder)
+
+```
+                             Apache License
+                       Version 2.0, January 2004
+                    http://www.apache.org/licenses/
+
+TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+1. Definitions.
+
+  &quot;License&quot; shall mean the terms and conditions for use, reproduction,
+  and distribution as defined by Sections 1 through 9 of this document.
+
+  &quot;Licensor&quot; shall mean the copyright owner or entity authorized by
+  the copyright owner that is granting the License.
+
+  &quot;Legal Entity&quot; shall mean the union of the acting entity and all
+  other entities that control, are controlled by, or are under common
+  control with that entity. For the purposes of this definition,
+  &quot;control&quot; means (i) the power, direct or indirect, to cause the
+  direction or management of such entity, whether by contract or
+  otherwise, or (ii) ownership of fifty percent (50%) or more of the
+  outstanding shares, or (iii) beneficial ownership of such entity.
+
+  &quot;You&quot; (or &quot;Your&quot;) shall mean an individual or Legal Entity
+  exercising permissions granted by this License.
+
+  &quot;Source&quot; form shall mean the preferred form for making modifications,
+  including but not limited to software source code, documentation
+  source, and configuration files.
+
+  &quot;Object&quot; form shall mean any form resulting from mechanical
+  transformation or translation of a Source form, including but
+  not limited to compiled object code, generated documentation,
+  and conversions to other media types.
+
+  &quot;Work&quot; shall mean the work of authorship, whether in Source or
+  Object form, made available under the License, as indicated by a
+  copyright notice that is included in or attached to the work
+  (an example is provided in the Appendix below).
+
+  &quot;Derivative Works&quot; shall mean any work, whether in Source or Object
+  form, that is based on (or derived from) the Work and for which the
+  editorial revisions, annotations, elaborations, or other modifications
+  represent, as a whole, an original work of authorship. For the purposes
+  of this License, Derivative Works shall not include works that remain
+  separable from, or merely link (or bind by name) to the interfaces of,
+  the Work and Derivative Works thereof.
+
+  &quot;Contribution&quot; shall mean any work of authorship, including
+  the original version of the Work and any modifications or additions
+  to that Work or Derivative Works thereof, that is intentionally
+  submitted to Licensor for inclusion in the Work by the copyright owner
+  or by an individual or Legal Entity authorized to submit on behalf of
+  the copyright owner. For the purposes of this definition, &quot;submitted&quot;
+  means any form of electronic, verbal, or written communication sent
+  to the Licensor or its representatives, including but not limited to
+  communication on electronic mailing lists, source code control systems,
+  and issue tracking systems that are managed by, or on behalf of, the
+  Licensor for the purpose of discussing and improving the Work, but
+  excluding communication that is conspicuously marked or otherwise
+  designated in writing by the copyright owner as &quot;Not a Contribution.&quot;
+
+  &quot;Contributor&quot; shall mean Licensor and any individual or Legal Entity
+  on behalf of whom a Contribution has been received by Licensor and
+  subsequently incorporated within the Work.
+
+2. Grant of Copyright License. Subject to the terms and conditions of
+  this License, each Contributor hereby grants to You a perpetual,
+  worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+  copyright license to reproduce, prepare Derivative Works of,
+  publicly display, publicly perform, sublicense, and distribute the
+  Work and such Derivative Works in Source or Object form.
+
+3. Grant of Patent License. Subject to the terms and conditions of
+  this License, each Contributor hereby grants to You a perpetual,
+  worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+  (except as stated in this section) patent license to make, have made,
+  use, offer to sell, sell, import, and otherwise transfer the Work,
+  where such license applies only to those patent claims licensable
+  by such Contributor that are necessarily infringed by their
+  Contribution(s) alone or by combination of their Contribution(s)
+  with the Work to which such Contribution(s) was submitted. If You
+  institute patent litigation against any entity (including a
+  cross-claim or counterclaim in a lawsuit) alleging that the Work
+  or a Contribution incorporated within the Work constitutes direct
+  or contributory patent infringement, then any patent licenses
+  granted to You under this License for that Work shall terminate
+  as of the date such litigation is filed.
+
+4. Redistribution. You may reproduce and distribute copies of the
+  Work or Derivative Works thereof in any medium, with or without
+  modifications, and in Source or Object form, provided that You
+  meet the following conditions:
+
+  (a) You must give any other recipients of the Work or
+      Derivative Works a copy of this License; and
+
+  (b) You must cause any modified files to carry prominent notices
+      stating that You changed the files; and
+
+  (c) You must retain, in the Source form of any Derivative Works
+      that You distribute, all copyright, patent, trademark, and
+      attribution notices from the Source form of the Work,
+      excluding those notices that do not pertain to any part of
+      the Derivative Works; and
+
+  (d) If the Work includes a &quot;NOTICE&quot; text file as part of its
+      distribution, then any Derivative Works that You distribute must
+      include a readable copy of the attribution notices contained
+      within such NOTICE file, excluding those notices that do not
+      pertain to any part of the Derivative Works, in at least one
+      of the following places: within a NOTICE text file distributed
+      as part of the Derivative Works; within the Source form or
+      documentation, if provided along with the Derivative Works; or,
+      within a display generated by the Derivative Works, if and
+      wherever such third-party notices normally appear. The contents
+      of the NOTICE file are for informational purposes only and
+      do not modify the License. You may add Your own attribution
+      notices within Derivative Works that You distribute, alongside
+      or as an addendum to the NOTICE text from the Work, provided
+      that such additional attribution notices cannot be construed
+      as modifying the License.
+
+  You may add Your own copyright statement to Your modifications and
+  may provide additional or different license terms and conditions
+  for use, reproduction, or distribution of Your modifications, or
+  for any such Derivative Works as a whole, provided Your use,
+  reproduction, and distribution of the Work otherwise complies with
+  the conditions stated in this License.
+
+5. Submission of Contributions. Unless You explicitly state otherwise,
+  any Contribution intentionally submitted for inclusion in the Work
+  by You to the Licensor shall be under the terms and conditions of
+  this License, without any additional terms or conditions.
+  Notwithstanding the above, nothing herein shall supersede or modify
+  the terms of any separate license agreement you may have executed
+  with Licensor regarding such Contributions.
+
+6. Trademarks. This License does not grant permission to use the trade
+  names, trademarks, service marks, or product names of the Licensor,
+  except as required for reasonable and customary use in describing the
+  origin of the Work and reproducing the content of the NOTICE file.
+
+7. Disclaimer of Warranty. Unless required by applicable law or
+  agreed to in writing, Licensor provides the Work (and each
+  Contributor provides its Contributions) on an &quot;AS IS&quot; BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+  implied, including, without limitation, any warranties or conditions
+  of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+  PARTICULAR PURPOSE. You are solely responsible for determining the
+  appropriateness of using or redistributing the Work and assume any
+  risks associated with Your exercise of permissions under this License.
+
+8. Limitation of Liability. In no event and under no legal theory,
+  whether in tort (including negligence), contract, or otherwise,
+  unless required by applicable law (such as deliberate and grossly
+  negligent acts) or agreed to in writing, shall any Contributor be
+  liable to You for damages, including any direct, indirect, special,
+  incidental, or consequential damages of any character arising as a
+  result of this License or out of the use or inability to use the
+  Work (including but not limited to damages for loss of goodwill,
+  work stoppage, computer failure or malfunction, or any and all
+  other commercial damages or losses), even if such Contributor
+  has been advised of the possibility of such damages.
+
+9. Accepting Warranty or Additional Liability. While redistributing
+  the Work or Derivative Works thereof, You may choose to offer,
+  and charge a fee for, acceptance of support, warranty, indemnity,
+  or other liability obligations and/or rights consistent with this
+  License. However, in accepting such obligations, You may act only
+  on Your own behalf and on Your sole responsibility, not on behalf
+  of any other Contributor, and only if You agree to indemnify,
+  defend, and hold each Contributor harmless for any liability
+  incurred by, or claims asserted against, such Contributor by reason
+  of your accepting any such warranty or additional liability.
+
+END OF TERMS AND CONDITIONS
+
+APPENDIX: How to apply the Apache License to your work.
+
+  To apply the Apache License to your work, attach the following
+  boilerplate notice, with the fields enclosed by brackets &quot;[]&quot;
+  replaced with your own identifying information. (Don&#x27;t include
+  the brackets!)  The text should be enclosed in the appropriate
+  comment syntax for the file format. We also recommend that a
+  file or class name and description of purpose be included on the
+  same &quot;printed page&quot; as the copyright notice for easier
+  identification within third-party archives.
+
+Copyright [yyyy] [name of copyright owner]
+
+Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
+### Apache License 2.0
+
+Used by:
 - [font-types 0.11.3](https://github.com/googlefonts/fontations)
 - [read-fonts 0.39.2](https://github.com/googlefonts/fontations)
 - [skrifa 0.42.1](https://github.com/googlefonts/fontations)
@@ -3864,6 +4119,8 @@ Used by:
 - [profiling 1.0.18](https://github.com/aclysma/profiling)
 - [quote 1.0.47](https://github.com/dtolnay/quote)
 - [raw-window-handle 0.6.2](https://github.com/rust-windowing/raw-window-handle)
+- [rustc-hash 2.1.3](https://github.com/rust-lang/rustc-hash)
+- [subsetter 0.2.6](https://github.com/typst/subsetter)
 - [syn 2.0.119](https://github.com/dtolnay/syn)
 - [syn 3.0.3](https://github.com/dtolnay/syn)
 - [thiserror-impl 2.0.19](https://github.com/dtolnay/thiserror)
@@ -4070,6 +4327,53 @@ Permission is hereby granted, free of charge, to any person or organization obta
 The copyright notices in the Software and this entire statement, including the above license grant, this restriction and the following disclaimer, must be included in all copies of the Software, in whole or in part, and all derivative works of the Software, unless such copies or derivative works are solely in the form of machine-executable object code generated by a source language processor.
 
 THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+```
+
+### Independent JPEG Group License
+
+Used by:
+- [jpeg-encoder 0.7.1](https://github.com/vstroebel/jpeg-encoder)
+
+```
+Independent JPEG Group License
+
+LEGAL ISSUES
+
+In plain English:
+
+1. We don&#x27;t promise that this software works. (But if you find any bugs, please let us know!)
+2. You can use this software for whatever you want. You don&#x27;t have to pay us.
+3. You may not pretend that you wrote this software. If you use it in a program, you must acknowledge somewhere in your documentation that you&#x27;ve used the IJG code.
+
+In legalese:
+
+The authors make NO WARRANTY or representation, either express or implied, with respect to this software, its quality, accuracy, merchantability, or fitness for a particular purpose. This software is provided &quot;AS IS&quot;, and you, its user, assume the entire risk as to its quality and accuracy.
+
+This software is copyright (C) 1991-1998, Thomas G. Lane. All Rights Reserved except as specified below.
+
+Permission is hereby granted to use, copy, modify, and distribute this software (or portions thereof) for any purpose, without fee, subject to these conditions:
+
+     (1) If any part of the source code for this software is distributed, then this README file must be included, with this copyright and no-warranty notice unaltered; and any additions, deletions, or changes to the original files must be clearly indicated in accompanying documentation.
+     (2) If only executable code is distributed, then the accompanying documentation must state that &quot;this software is based in part on the work of the Independent JPEG Group&quot;.
+     (3) Permission for use of this software is granted only if the user accepts full responsibility for any undesirable consequences; the authors accept NO LIABILITY for damages of any kind.
+
+These conditions apply to any software derived from or based on the IJG code, not just to the unmodified library. If you use our work, you ought to acknowledge us.
+
+Permission is NOT granted for the use of any IJG author&#x27;s name or company name in advertising or publicity relating to this software or products derived from it. This software may be referred to only as &quot;the Independent JPEG Group&#x27;s software&quot;.
+
+We specifically permit and encourage the use of this software as the basis of commercial products, provided that all warranty or liability claims are assumed by the product vendor.
+
+ansi2knr.c is included in this distribution by permission of L. Peter Deutsch, sole proprietor of its copyright holder, Aladdin Enterprises of Menlo Park, CA. ansi2knr.c is NOT covered by the above copyright and conditions, but instead by the usual distribution terms of the Free Software Foundation; principally, that you must include source code if you redistribute it. (See the file ansi2knr.c for full details.) However, since ansi2knr.c is not needed as part of any program generated from the IJG code, this does not limit you more than the foregoing paragraphs do.
+
+The Unix configuration script &quot;configure&quot; was produced with GNU Autoconf. It is copyright by the Free Software Foundation but is freely distributable. The same holds for its supporting scripts (config.guess, config.sub, ltconfig, ltmain.sh). Another support script, install-sh, is copyright by M.I.T. but is also freely distributable.
+
+It appears that the arithmetic coding option of the JPEG spec is covered by patents owned by IBM, AT&amp;T, and Mitsubishi. Hence arithmetic coding cannot legally be used without obtaining one or more licenses. For this reason, support for arithmetic coding has been removed from the free JPEG software. (Since arithmetic coding provides only a marginal gain over the unpatented Huffman mode, it is unlikely that very many implementations will support it.) So far as we are aware, there are no patent restrictions on the remaining code.
+
+The IJG distribution formerly included code to read and write GIF files. To avoid entanglement with the Unisys LZW patent, GIF reading support has been removed altogether, and the GIF writer has been simplified to produce &quot;uncompressed GIFs&quot;. This technique does not use the LZW algorithm; the resulting GIF files are larger than usual, but are readable by all standard GIF decoders.
+
+We are required to state that
+     &quot;The Graphics Interchange Format(c) is the Copyright property of CompuServe Incorporated. GIF(sm) is a Service Mark property of CompuServe Incorporated.&quot;
 
 ```
 

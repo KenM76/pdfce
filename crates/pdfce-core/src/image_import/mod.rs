@@ -23,14 +23,18 @@
 //!    re-compressing a scan or a CAD export degrades it every time it is
 //!    placed. There is no quality setting that makes this free, and the
 //!    operator did not ask for it.
-//! 2. **R28 forbids the encoder.** `ROADMAP.md` R28: *"Read-compat only:
+//! 2. **R28 gates the encoder.** `ROADMAP.md` R28: *"Read-compat only:
 //!    pdfce writes none of these codecs. No image encoder enters any pdfce
 //!    crate without a new decision record."* Verbatim passthrough introduces
 //!    **no encoder** — the bytes were encoded by whatever produced the file.
-//!    A transcode would introduce one, and would therefore need a decision
-//!    record this Pass does not have. The cheap path is also the only
-//!    permitted path, which is a pleasant coincidence rather than an
-//!    accident: R28 exists because writing a codec is a large, risky surface.
+//!    A transcode introduces one, and R28 held [`ImageCompression::Jpeg`] at
+//!    a refusal until the operator made that decision on 2026-08-08. It is
+//!    now implemented (see [`jpeg_encode`]), which changes what R28 means
+//!    here but not the ordering of this list: an encoder now exists, and the
+//!    default is still not to reach for it. R28's real subject was never
+//!    difficulty — it is that an encoder is a permanent, licence-bearing
+//!    surface that must be *chosen*, and choosing one does not make running
+//!    it the right default.
 //! 3. **It is faster and smaller.** A 4 MB JPEG stays 4 MB.
 //!
 //! ### Where the rule bites, per format
@@ -63,13 +67,17 @@
 //! [`ImportNotes::applied_compression`] beside the requested one, so a
 //! substitution is never something to be discovered by diffing bytes.
 //!
-//! Re-encoding as JPEG ([`ImageCompression::Jpeg`]) is **refused by name**:
-//! it needs an encoder, and R28 forbids one entering the project without a
-//! dated decision record. The option is plumbed end to end anyway, so
-//! landing that decision changes one match arm rather than a design.
-//! Resolution capping is scoped out for the same underlying reason — see
-//! [`ImageCompression`]'s own docs, which argue it would currently make
-//! files *larger*.
+//! Re-encoding as JPEG ([`ImageCompression::Jpeg`]) was **refused by name**
+//! for the whole of this module's first life: it needs an encoder, and R28
+//! forbids one entering the project without a dated decision record. That
+//! decision was made on 2026-08-08 and the policy is now implemented in
+//! [`jpeg_encode`] — read that module before touching anything
+//! four-component, because the CMYK polarity trap of decision 006 exists on
+//! the write side too and getting it wrong produces a photographic negative
+//! that *looks deliberate*. Resolution capping remains scoped out, but the
+//! reason has now changed: it is no longer "there is no encoder to write the
+//! smaller image back out" but "a resampler is a visible quality decision
+//! (box vs. Lanczos) that deserves to be chosen on its own merits."
 //!
 //! ## The PNG passthrough, and why it is sound
 //!
@@ -194,6 +202,19 @@
 
 pub mod bmp;
 pub mod jpeg;
+/// The `/DCTDecode` **writer** behind [`ImageCompression::Jpeg`].
+///
+/// The module is `pub` but exports **nothing**: its entry point is
+/// `pub(crate)` on purpose, because a second public way to produce an
+/// [`ImportedImage`] would be a way to skip [`import_with`]'s policy
+/// bookkeeping — and an image whose `applied_compression` disagrees with
+/// its bytes is precisely the disclosure failure rule 4 exists to prevent.
+///
+/// What it publishes is the **documentation**: the licence argument for
+/// pdfce's first (and only) image encoder, and the CMYK polarity derivation
+/// that decision 006 makes load-bearing. Read it before touching the
+/// four-component path.
+pub mod jpeg_encode;
 pub mod png;
 
 use crate::image_codec::{MAX_IMAGE_DIMENSION, MAX_IMAGE_PIXELS, MAX_IMAGE_SAMPLE_BYTES};
@@ -298,27 +319,53 @@ pub enum ImageImportError {
         height: u32,
     },
 
-    /// The requested [`ImageCompression`] policy is not built yet.
+    /// [`ImageCompression::Jpeg`]'s `quality` is outside 1–100.
     ///
-    /// Only [`ImageCompression::Jpeg`] reaches this today, and the reason is
-    /// structural rather than an omission: re-encoding as JPEG needs a JPEG
-    /// **encoder**, and `ROADMAP.md` **R28** forbids one entering any pdfce
-    /// crate without a dated decision record. The policy is plumbed through
-    /// end to end — spec field, CLI flag, disclosures, outcome reporting —
-    /// so landing the encoder changes one match arm rather than a design.
+    /// # Why this refuses rather than clamps
     ///
-    /// Refused by name, with the working policies named, for the same reason
-    /// every other refusal in this module is: a silently-substituted policy
-    /// would mean the operator asked for a smaller file and got a bigger one
-    /// with no explanation.
+    /// A clamp would be pdfce **choosing an encoder setting the operator did
+    /// not choose** and then baking the result permanently into a document.
+    /// Rule 4 tolerates an inference only when it is disclosed *before* it
+    /// becomes document state, and a quality of 0 or 255 is not an inference
+    /// worth disclosing — it is a plainly out-of-domain number with no
+    /// defensible reading. (`0` in particular is not "maximum compression":
+    /// libjpeg's quality scale, which `jpeg-encoder` reproduces, is defined
+    /// on 1–100 and divides by zero outside it.) Saying so and changing
+    /// nothing is both cheaper and more honest than picking a value and
+    /// hoping the operator notices.
+    ///
+    /// Checked before the file is even parsed, so the operator learns the
+    /// real blocker rather than a second-order complaint about the image.
     #[error(
-        "pdfce cannot re-encode images as {policy} yet — it has no image encoder. \
-         Use `passthrough` (the default: the source's own compressed bytes are \
-         embedded unchanged) or `lossless`."
+        "JPEG quality must be between 1 and 100 — {quality} is outside that range. \
+         pdfce does not clamp it: a quality pdfce picked is a setting you did not pick, \
+         and the result would be stored permanently."
     )]
-    CompressionUnavailable {
+    InvalidQuality {
+        /// The value the caller supplied.
+        quality: u8,
+    },
+
+    /// The requested [`ImageCompression`] policy cannot be applied to *this*
+    /// image, for a reason specific to the image rather than to pdfce.
+    ///
+    /// Distinct from [`Self::Unsupported`], which means "pdfce cannot place
+    /// this file at all": here the image places perfectly well under another
+    /// policy, and `reason` says which property of the image rules this one
+    /// out. Naming the property rather than the policy is what lets the
+    /// operator act — "use `passthrough`" is only useful advice if they know
+    /// what they are giving up.
+    ///
+    /// The one case today is a colour-key `/Mask` under
+    /// [`ImageCompression::Jpeg`] — see
+    /// [`ImportedImage::color_key_mask`] and §8.9.6.4.
+    #[error("pdfce cannot re-encode this image as {policy}: {reason}")]
+    CompressionRefused {
         /// The policy name the operator asked for.
         policy: &'static str,
+        /// The property of *this* image that rules the policy out, phrased
+        /// as a clause that completes the sentence above.
+        reason: &'static str,
     },
 
     /// The source could not be decoded for a policy that needs its samples.
@@ -458,10 +505,25 @@ pub enum RecompressReason {
     /// stored in a lossy codec, so it was decoded and stored as
     /// `/FlateDecode`.
     ///
-    /// The only reason in this enum that the operator **chose**; the other
-    /// two are properties of the file. Distinguished because "you asked for
-    /// this" and "your file forced this" deserve different sentences.
+    /// One of the two reasons in this enum the operator **chose** (the other
+    /// is [`Self::JpegRequested`]); [`Self::AlphaSplit`] and
+    /// [`Self::NoCompressedSource`] are properties of the file. Distinguished
+    /// because "you asked for this" and "your file forced this" deserve
+    /// different sentences — and because a chosen reason is not a
+    /// *substitution*, so a front end should not apologise for it.
+    ///
+    /// Costs bytes, never picture: the pixels are exactly the ones the lossy
+    /// codestream decoded to.
     LosslessRequested,
+    /// The operator asked for [`ImageCompression::Jpeg`], so the source was
+    /// decoded and re-encoded as `/DCTDecode` — **a lossy act, on purpose**.
+    ///
+    /// The second reason in this enum the operator *chose*, and the only one
+    /// that costs picture quality rather than only bytes.
+    /// [`ImportNotes::jpeg_from_lossy`] says whether the source was already
+    /// lossy, because a second DCT pass over existing artefacts compounds
+    /// them rather than merely adding one generation of loss.
+    JpegRequested,
 }
 
 impl RecompressReason {
@@ -472,6 +534,7 @@ impl RecompressReason {
             Self::AlphaSplit => "alpha-split",
             Self::NoCompressedSource => "no-compressed-source",
             Self::LosslessRequested => "lossless-requested",
+            Self::JpegRequested => "jpeg-requested",
         }
     }
 }
@@ -499,7 +562,7 @@ impl RecompressReason {
 /// |---|---|---|---|
 /// | `Passthrough` | codestream verbatim, `/DCTDecode` | `IDAT` verbatim, `/FlateDecode` + `/Predictor 15` | nothing to pass through → lossless Flate |
 /// | `Lossless` | decode + `/FlateDecode` — **much larger**, and recovers nothing | already lossless; the verbatim `IDAT` is kept | lossless Flate |
-/// | `Jpeg { quality }` | **refused by name** — no encoder (R28) | refused | refused |
+/// | `Jpeg { quality }` | decode + re-encode — **a SECOND lossy pass**, artefacts compound | decode + lossy encode — exact pixels degraded once | decode + lossy encode |
 ///
 /// The `Lossless`-on-a-JPEG row is the one that most needs saying out loud,
 /// and [`ImportNotes::lossless_from_lossy`] says it: **converting a JPEG to
@@ -509,19 +572,23 @@ impl RecompressReason {
 /// move before further editing, and the wrong move if the goal was a better
 /// picture.
 ///
-/// # Scoped out by name: downsampling / resolution capping
+/// # Still scoped out by name: downsampling / resolution capping
 ///
-/// A "resample to at most N dpi" setting is deliberately **not** in this
-/// Pass, and the reason is not effort — it is that without an encoder it
-/// would make files *bigger*. Downsampling a JPEG means decode → resample →
-/// store, and the only store pdfce can currently perform is `/FlateDecode`,
-/// which on photographic data is far larger than the DCT stream it
-/// replaced. Resolution capping only pays for itself once a lossy encoder
-/// exists to write the smaller image back out, so it belongs in the same
-/// Pass as that encoder — and it needs a resampler chosen on its own merits
-/// (box vs. Lanczos is a visible quality decision, not an implementation
-/// detail). Placing an image at a size that implies a wasteful resolution is
-/// meanwhile **reported**, via
+/// A "resample to at most N dpi" setting is deliberately **not** here, and
+/// its original justification has now expired: it used to be that without an
+/// encoder, downsampling would make files *bigger* (decode → resample →
+/// `/FlateDecode`, which on photographic data is far larger than the DCT
+/// stream it replaced). [`Jpeg`](Self::Jpeg) removes that objection
+/// entirely.
+///
+/// What survives is the **second** reason, which was always the real one: a
+/// resampler is a visible quality decision, not an implementation detail.
+/// Box, bilinear and Lanczos differ in ways an operator can see — ringing on
+/// hard edges, softness on text, moiré on a screened halftone — and picking
+/// one silently inside a compression flag would be exactly the kind of
+/// unannounced inference rule 4 forbids. It belongs in its own Pass with its
+/// own disclosure, next to the resampler choice. Placing an image at a size
+/// that implies a wasteful resolution is meanwhile **reported**, via
 /// [`ImageAuthorDisclosures::effective_dpi`](crate::edit::ImageAuthorDisclosures::effective_dpi).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
@@ -542,12 +609,34 @@ pub enum ImageCompression {
     Lossless,
     /// Re-encode as `/DCTDecode` at the given quality (1–100).
     ///
-    /// **Refused by name today** ([`ImageImportError::CompressionUnavailable`]):
-    /// pdfce has no JPEG encoder, and R28 forbids one entering the project
-    /// without a dated decision record. The variant exists so the option is
-    /// plumbed end to end and the encoder decision changes one match arm.
+    /// **A deliberate, disclosed generation loss.** Held at a refusal until
+    /// 2026-08-08 (R28 forbids an image encoder entering the project without
+    /// a dated decision, and every credible JPEG encoder carries a licence
+    /// consequence); the operator ruled, and it is now implemented against
+    /// `jpeg-encoder` — see [`jpeg_encode`]'s module documentation for the
+    /// licence argument, the CMYK polarity derivation, and what is refused.
+    ///
+    /// What it does and does not preserve:
+    ///
+    /// - The **base image** is decoded to samples and quantised. On a source
+    ///   that was already a JPEG this is a **second** lossy pass, which
+    ///   compounds artefacts rather than merely adding a generation; that
+    ///   case is disclosed separately as [`ImportNotes::jpeg_from_lossy`].
+    /// - An **`/SMask` is kept exactly** — §8.9.5 Table 89 makes the soft
+    ///   mask its own image XObject, so it stays lossless `/FlateDecode`
+    ///   rather than acquiring JPEG's worst artefacts along an alpha edge.
+    /// - A **palette is expanded** to `/DeviceRGB` (JPEG has none) and
+    ///   **16-bit samples are reduced to 8** (Table 89 fixes `/DCTDecode` at
+    ///   8-bit).
+    /// - A **colour-key `/Mask` is refused by name**
+    ///   ([`ImageImportError::CompressionRefused`]): §8.9.6.4 matches exact
+    ///   sample values, and lossy encoding moves them.
+    ///
+    /// `quality` outside 1–100 is refused rather than clamped — see
+    /// [`ImageImportError::InvalidQuality`].
     Jpeg {
-        /// Encoder quality, 1–100.
+        /// Encoder quality, 1–100. Larger is better and bigger; 100 is still
+        /// lossy.
         quality: u8,
     },
 }
@@ -775,6 +864,11 @@ pub struct ImportNotes {
     /// is 0 with no `/Decode`. Nothing in the file declares its polarity,
     /// and pdfce is passing it through unchanged (R29). If it looks like a
     /// photographic negative, that is why.
+    ///
+    /// A statement about what is **stored**, not about the source file, so
+    /// [`ImageCompression::Jpeg`] clears it: that policy writes YCCK
+    /// (transform 2), which declares its own colour transform and is never
+    /// the ambiguous shape — even when the source it re-encoded was.
     pub cmyk_polarity_unverifiable: bool,
     /// The JPEG uses the progressive frame type (SOF2).
     ///
@@ -783,9 +877,13 @@ pub struct ImportNotes {
     /// Disclosed because §7.4.8 NOTE 5 is explicit that there is *"no
     /// benefit to using progressive JPEG for stream data that is embedded
     /// in a PDF file"* — it decodes slower and uses more memory. pdfce
-    /// embeds it anyway rather than transcoding: a transcode is a
-    /// generation loss and an encoder R28 forbids. The operator is told, so
-    /// they can re-save as baseline if the file will be opened a lot.
+    /// embeds it anyway rather than transcoding: a transcode is a generation
+    /// loss, and the default policy does not spend one to fix a performance
+    /// note. The operator is told, so they can re-save as baseline if the
+    /// file will be opened a lot — or ask for
+    /// [`ImageCompression::Jpeg`], which writes baseline and therefore
+    /// clears this flag. Like [`Self::cmyk_polarity_unverifiable`], it
+    /// describes what is **stored**, not what was read.
     pub progressive_jpeg: bool,
     /// An EXIF orientation other than 1 was found and will be applied in the
     /// placement matrix rather than to the pixels.
@@ -830,6 +928,46 @@ pub struct ImportNotes {
     /// chose it hoping for a better picture got a bigger file and the same
     /// picture, and is entitled to be told so at the moment it happens.
     pub lossless_from_lossy: bool,
+    /// [`ImageCompression::Jpeg`] was applied to a source that was **already
+    /// lossy** — a second DCT pass over existing artefacts.
+    ///
+    /// Its own disclosure, separate from
+    /// [`RecompressReason::JpegRequested`], because the two acts are not the
+    /// same and rule 4 does not let them share a sentence. Re-encoding a PNG
+    /// quantises exact pixels once: the loss is real, bounded, and roughly
+    /// what the quality number predicts. Re-encoding a JPEG quantises pixels
+    /// that already carry ringing, blocking and chroma bleed, and the second
+    /// pass sharpens the first pass's artefacts into the picture rather than
+    /// smoothing them — the damage **compounds**, is invisible at editing
+    /// zoom, and is not recoverable by raising the quality.
+    ///
+    /// The honest advice when this is set is usually *"place the original
+    /// instead"*, which is advice the operator can only take if they are told.
+    pub jpeg_from_lossy: bool,
+    /// The quality the JPEG encoder actually ran at, when
+    /// [`ImageCompression::Jpeg`] was applied.
+    ///
+    /// Redundant with [`Self::applied_compression`]'s payload by
+    /// construction, and kept anyway: a front end reading one field to answer
+    /// "what quality is this stored at?" should not have to match on an enum
+    /// whose other variants have no quality at all.
+    pub jpeg_quality: Option<u8>,
+    /// Bytes of the source **file** handed to [`import_with`].
+    ///
+    /// Populated for every policy, not only the re-encoding ones, so that
+    /// "did this get smaller?" is answerable without diffing the output.
+    /// Note that it counts the whole container — a JPEG's EXIF block, a
+    /// PNG's ancillary chunks — while [`Self::stored_bytes`] counts only what
+    /// reached the PDF, so a *verbatim* passthrough legitimately shrinks.
+    pub source_bytes: usize,
+    /// Bytes of the stream(s) actually stored: [`ImportedImage::data`] plus
+    /// the [`SoftMask`]'s payload when one was written.
+    ///
+    /// Stream payloads only — the image XObject's dictionary, the content
+    /// stream and the page patch are the placement's cost, not the image's,
+    /// and folding them in here would make two unrelated numbers move
+    /// together.
+    pub stored_bytes: usize,
 }
 
 /// A PDF feature an imported image needs, and the version that introduced
@@ -1109,32 +1247,39 @@ pub fn import(data: &[u8]) -> Result<ImportedImage, ImageImportError> {
 ///
 /// Everything [`import`] can return, plus:
 ///
-/// - [`ImageImportError::CompressionUnavailable`] — [`ImageCompression::Jpeg`],
-///   which needs an encoder pdfce does not have (R28).
-/// - [`ImageImportError::DecodeFailed`] — [`ImageCompression::Lossless`] on a
-///   JPEG whose codestream the decoder rejected.
+/// - [`ImageImportError::InvalidQuality`] — [`ImageCompression::Jpeg`] with a
+///   `quality` outside 1–100, refused rather than clamped.
+/// - [`ImageImportError::CompressionRefused`] — [`ImageCompression::Jpeg`] on
+///   an image whose colour-key `/Mask` lossy encoding would corrupt.
+/// - [`ImageImportError::DecodeFailed`] — [`ImageCompression::Lossless`] or
+///   [`ImageCompression::Jpeg`] on a source whose samples could not be
+///   recovered, or whose colour model has no device colour space.
 ///
 /// # Examples
 ///
 /// ```
 /// use pdfce_core::image_import::{self, ImageCompression, ImageImportError, ImportOptions};
 ///
-/// let options = ImportOptions::new().with_compression(ImageCompression::Jpeg { quality: 85 });
+/// // An out-of-range quality is refused BEFORE the file is parsed, so the
+/// // operator learns the real blocker rather than a complaint about bytes
+/// // that were never going to be encoded.
+/// let options = ImportOptions::new().with_compression(ImageCompression::Jpeg { quality: 0 });
 /// let err = image_import::import_with(&[0xFF, 0xD8, 0xFF, 0xE0], &options).unwrap_err();
-/// assert!(matches!(
-///     err,
-///     ImageImportError::CompressionUnavailable { policy: "jpeg" }
-/// ));
+/// assert!(matches!(err, ImageImportError::InvalidQuality { quality: 0 }));
+/// assert!(err.to_string().contains("between 1 and 100"));
 /// ```
 pub fn import_with(
     data: &[u8],
     options: &ImportOptions,
 ) -> Result<ImportedImage, ImageImportError> {
-    // Refused BEFORE the file is parsed: the operator asked for something
-    // pdfce cannot do, and spending a decode on it first would only delay
-    // the same answer.
-    if let ImageCompression::Jpeg { .. } = options.compression {
-        return Err(ImageImportError::CompressionUnavailable { policy: "jpeg" });
+    // Validated BEFORE the file is parsed. A decode spent on a request that
+    // was never going to be honoured only delays the same answer, and the
+    // operator would have to read past a complaint about their file to reach
+    // the real one about their flag.
+    if let ImageCompression::Jpeg { quality } = options.compression
+        && !(jpeg_encode::MIN_QUALITY..=jpeg_encode::MAX_QUALITY).contains(&quality)
+    {
+        return Err(ImageImportError::InvalidQuality { quality });
     }
 
     let mut img = match sniff(data)? {
@@ -1143,23 +1288,42 @@ pub fn import_with(
         ImageFormat::Bmp => bmp::import(data)?,
     };
 
-    // The ONE case where a policy changes the bytes: a lossy source the
-    // operator asked to store losslessly. Every other combination is
-    // already what it should be — a PNG or BMP is lossless whichever policy
-    // was named, and `Passthrough` is what each importer produced.
-    if options.compression == ImageCompression::Lossless && img.filter == ImportFilter::DctDecode {
-        img = to_lossless(&img)?;
+    // The two cases where a policy changes the bytes the importers produced.
+    // Everything else is already what it should be — a PNG or BMP is
+    // lossless whichever of the two lossless policies was named, and
+    // `Passthrough` is what each importer emits by construction.
+    match options.compression {
+        // A lossy source the operator asked to store losslessly.
+        ImageCompression::Lossless if img.filter == ImportFilter::DctDecode => {
+            img = to_lossless(&img)?;
+        }
+        // A deliberate lossy re-encode, of any source.
+        ImageCompression::Jpeg { quality } => {
+            img = jpeg_encode::to_jpeg(&img, quality)?;
+        }
+        _ => {}
     }
 
     img.notes.requested_compression = options.compression;
-    // Derived from what happened rather than from what was asked, which is
+    // Derived from what HAPPENED rather than from what was asked, which is
     // the whole point: `Passthrough` here means, and only means, that the
     // source's own compressed bytes are in the document unchanged.
-    img.notes.applied_compression = if img.notes.recompressed.is_none() {
-        ImageCompression::Passthrough
-    } else {
-        ImageCompression::Lossless
+    img.notes.applied_compression = match img.notes.recompressed {
+        None => ImageCompression::Passthrough,
+        // The quality carried here is the one that ran, not the one
+        // requested. They are equal today (an out-of-range value is refused
+        // rather than clamped), and reading it from `notes` rather than from
+        // `options` keeps that an assertion the code makes rather than an
+        // assumption it relies on.
+        Some(RecompressReason::JpegRequested) => ImageCompression::Jpeg {
+            quality: img.notes.jpeg_quality.unwrap_or(jpeg_encode::MAX_QUALITY),
+        },
+        Some(_) => ImageCompression::Lossless,
     };
+    // Recorded for EVERY policy, so "did this get smaller?" never requires
+    // diffing the output. Set last so no branch above can forget it.
+    img.notes.source_bytes = data.len();
+    img.notes.stored_bytes = img.data.len() + img.soft_mask.as_ref().map_or(0, |m| m.data.len());
     Ok(img)
 }
 

@@ -360,6 +360,24 @@ fn renders_a_single_page_to_png_with_the_stable_stdout_line() {
             // page is incomplete and says so). Appended at the END, same
             // contract — every key above keeps its meaning and position.
             "contents_unresolved",
+            // Appended by the image-transparency slice (§8.9.6,
+            // §11.6.5.3): `/SMask`, `/Mask` (stencil and colour-key) and
+            // `/Matte` compositing. Five keys, appended at the END, same
+            // contract — every key above keeps its meaning and position.
+            //
+            // `images_masked` is CENSUS, a subset of `images`: how many
+            // images had their transparency actually composited. Its
+            // shortfall twin is `images_mask_unsupported` — the image IS
+            // on the page but too solid, which is a different operator
+            // question from `images_unsupported`'s "the image is missing".
+            // The per-mechanism split (smask / stencil / colour-key /
+            // jpx-embedded-alpha) and the per-reason refusal breakdown
+            // both go to stderr, where a new key cannot break a parser.
+            "images_masked",
+            "images_mask_unsupported",
+            "masks_resampled",
+            "mattes_undone",
+            "mattes_not_undone",
         ],
         "metrics key order is part of the stable contract"
     );

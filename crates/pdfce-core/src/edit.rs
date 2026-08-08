@@ -12200,23 +12200,50 @@ pub struct ImageAuthorDisclosures {
     /// deal of size, and someone who chose it expecting a better picture
     /// needs telling.
     pub lossless_from_lossy: bool,
+    /// An **already-lossy** source was re-encoded as JPEG, so the DCT ran a
+    /// second time over artefacts the first one left. See
+    /// [`ImportNotes::jpeg_from_lossy`](crate::image_import::ImportNotes::jpeg_from_lossy)
+    /// — the damage compounds, is invisible at editing zoom, and is not
+    /// recoverable by raising the quality.
+    pub jpeg_from_lossy: bool,
+    /// The quality the JPEG encoder ran at, when one ran.
+    pub jpeg_quality: Option<u8>,
+    /// Bytes of the source image **file**.
+    ///
+    /// Paired with [`Self::stored_bytes`] so the size effect of a
+    /// compression policy is a number the operator can read, not a diff they
+    /// have to run. Counts the whole container (EXIF, ancillary chunks),
+    /// which is why a *verbatim* passthrough can still shrink.
+    pub source_bytes: usize,
+    /// Bytes of the image stream(s) actually written — the image XObject's
+    /// payload plus its `/SMask`'s, if any.
+    pub stored_bytes: usize,
     /// An `/SMask` was written for the image's transparency.
     pub soft_mask_written: bool,
-    /// **pdfce's own renderer does not composite transparency yet.**
+    /// **RETIRED — always `false`.** Kept as a field, not deleted, because
+    /// removing it from a `#[non_exhaustive]` public struct would break
+    /// every caller that names it, and the honest value is now simply "no".
     ///
-    /// Set whenever this placement wrote EITHER mechanism — an `/SMask` or
-    /// a colour-key `/Mask` — because `pdfce-render` defers both
-    /// identically: it recognises the entry, counts it, and paints the base
-    /// image fully opaque
-    /// (`pdfce_render::image::ImageNotes::mask_deferred`).
+    /// It meant *"pdfce's own renderer does not composite transparency yet"*,
+    /// and it was true: `pdfce-render` recognised `/SMask` and `/Mask`,
+    /// counted them, and painted the base image fully opaque — so a
+    /// correctly-transparent PNG looked right in Acrobat and solid here.
     ///
-    /// Its own field rather than a footnote on
-    /// [`Self::soft_mask_written`] because it is a statement about
-    /// **pdfce**, not about the document. The transparency is written
-    /// correctly and a conforming viewer will honour it; pdfce's preview
-    /// will not. Without this, an operator who places a transparent PNG,
-    /// sees a white box, and concludes the transparency was lost would be
-    /// drawing a reasonable — and wrong — conclusion.
+    /// The transparency Pass closed that. **Both mechanisms this placement
+    /// can write are now composited**: `/SMask` (including 8- and 16-bit,
+    /// mismatched dimensions, and over an `Indexed` base) and colour-key
+    /// `/Mask`. So there is nothing left for this to warn about, and a
+    /// warning that fires when nothing is wrong trains an operator to
+    /// discount the channel it arrives on.
+    ///
+    /// ⚠ **Three transparency cases remain unpreviewed, and none is
+    /// reachable from `add_image`** — which is why they do not keep this
+    /// field alive: the ExtGState soft-mask *dictionary* (§11.6.5.2, needs
+    /// transparency groups), constant alpha `/ca` and `/CA` (§11.6.4, not
+    /// modelled in the graphics state at all — the largest remaining gap,
+    /// and it affects any document using `gs`), and JPX `/SMaskInData 2`
+    /// (a decoder gap, not a spec one). Named here so they are a known
+    /// remainder rather than something rediscovered as a regression.
     pub transparency_not_previewed: bool,
     /// A colour-key `/Mask` was written from a single transparent colour.
     pub colour_key_mask_written: bool,
@@ -12275,6 +12302,7 @@ impl ImageAuthorDisclosures {
             || self.recompressed.is_some()
             || self.requested_compression != self.applied_compression
             || self.lossless_from_lossy
+            || self.jpeg_from_lossy
             || self.soft_mask_written
             || self.colour_key_mask_written
             || self.colour_profile_dropped
@@ -12731,10 +12759,17 @@ impl EditSession {
             requested_compression: notes.requested_compression,
             applied_compression: notes.applied_compression,
             lossless_from_lossy: notes.lossless_from_lossy,
+            jpeg_from_lossy: notes.jpeg_from_lossy,
+            jpeg_quality: notes.jpeg_quality,
+            source_bytes: notes.source_bytes,
+            stored_bytes: notes.stored_bytes,
             soft_mask_written,
             // Either mechanism: `pdfce-render` defers /SMask and /Mask
             // identically and paints the base image opaque.
-            transparency_not_previewed: soft_mask_written || img.color_key_mask.is_some(),
+            // RETIRED — see the field's own documentation. `pdfce-render`
+            // composites both mechanisms this placement can write, so the
+            // honest answer is now unconditionally "no".
+            transparency_not_previewed: false,
             colour_key_mask_written: img.color_key_mask.is_some(),
             colour_profile_dropped: notes.colour_profile_dropped,
             cmyk_polarity_unverifiable: notes.cmyk_polarity_unverifiable,
