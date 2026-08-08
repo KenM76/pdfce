@@ -9371,7 +9371,7 @@ impl eframe::App for PdfceApp {
         // page that jumps on click.
         egui::Panel::bottom("status")
             .exact_size(STATUS_PANEL_HEIGHT_PTS)
-            .show(ui, |ui| self.status_bar(ui));
+            .show(ui, |ui| self.status_bar(ui, &mut actions));
         // Pass 34.1: the left dock replaces the hand-rolled thumbnail panel.
         // Same position, same toggle, same add-order (it must still precede
         // the CentralPanel and follow the full-width status bar) — what
@@ -9996,6 +9996,10 @@ impl PdfceApp {
         // tab titles use.
         let active = self.ribbon_tab;
         ui.horizontal(|ui| {
+            // The QAT comes FIRST in the row, so it occupies the same pixels
+            // no matter which tab is active — that fixedness is the whole
+            // point of it (Pass 47.1).
+            self.quick_access_toolbar(ui, actions);
             for tab in ribbon::RibbonTab::ALL {
                 let selected = tab == active;
                 let text = if selected {
@@ -10062,6 +10066,186 @@ impl PdfceApp {
         true
     }
 
+    /// The **Quick Access Toolbar** — Open, Save a copy, Undo, Redo — drawn
+    /// left of the tab strip and emitted on EVERY frame regardless of which
+    /// tab is active (Pass 47.1; R125's scope note).
+    ///
+    /// # Why this exists, and why its absence was a real defect
+    ///
+    /// Decision 024 §3.5(d) specified a QAT in these words: *"pdfce's
+    /// zoom/navigation controls are used constantly and must not end up
+    /// behind a tab switch."* It was never built. What shipped instead put
+    /// Undo/Redo in `RibbonGroup::History` on **Edit** and page navigation and
+    /// zoom in `Navigate`/`Zoom` on **View** — and R125 emits only the active
+    /// tab's band.
+    ///
+    /// The consequence, confirmed by capturing each tab of the running
+    /// application on 2026-08-08: an operator on **Measure** — this operator's
+    /// own stated primary activity — had **no undo, no zoom and no page
+    /// control** without first leaving the tab they were working in. That is
+    /// precisely the outcome decision 024 wrote the QAT to prevent.
+    ///
+    /// # These controls MOVED; they were not duplicated (R123)
+    ///
+    /// `History`, `Navigate` and `Zoom` are gone from the ribbon rather than
+    /// mirrored here. A command reachable from two places is the
+    /// two-mental-models failure `ribbon.rs`'s own module docs name, and R123
+    /// is explicit that each command lives in exactly one location.
+    ///
+    /// Page navigation and zoom do not live here either — they went to the
+    /// **status bar**, where every other PDF reader puts them. See
+    /// [`Self::status_view_controls`].
+    fn quick_access_toolbar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        if ui
+            .add(Self::icon_text(
+                ui,
+                icons::Icon::Open,
+                ui_text::open_button(),
+            ))
+            .on_hover_text(ui_text::open_tooltip())
+            .clicked()
+        {
+            actions.push(Action::Open);
+        }
+        // ★ SAVE KEEPS ITS TEXT LABEL, and that is not a styling preference.
+        //
+        // Office's QAT is conventionally icon-only, and Undo/Redo below follow
+        // it — those two glyphs are universally read. Save cannot: the label
+        // is **"Save a copy…"**, and the wording is load-bearing because pdfce
+        // never overwrites the open file unasked. A bare disk glyph says
+        // "Save" — i.e. "overwrite what I opened" — which is the small lie
+        // `ui_text::save_button`'s own doc comment was written to forbid.
+        // Convention loses to not misleading anyone.
+        //
+        // Hidden rather than disabled with no document open: there is nothing
+        // to discover about saving when nothing is open. Same posture the
+        // ribbon's File group used before this Pass moved the control here.
+        if matches!(self.status, Status::Open(_))
+            && ui
+                .add(Self::icon_text(
+                    ui,
+                    icons::Icon::Save,
+                    ui_text::save_button(),
+                ))
+                .on_hover_text(ui_text::save_tooltip())
+                .clicked()
+        {
+            actions.push(Action::Save);
+        }
+        if let Status::Open(doc) = &self.status {
+            ui.separator();
+            // Disabled rather than hidden: the absence of an Undo control and
+            // a greyed-out one say different things, and the second confirms
+            // there is nothing to undo — which is information. The tooltips
+            // name the specific operation, which is why `EditSession` hands
+            // out a structured `CommandKind` at all.
+            let (can_undo, can_redo) = (doc.session.can_undo(), doc.session.can_redo());
+            let (undo_kind, redo_kind) = (doc.session.undo_kind(), doc.session.redo_kind());
+            ui.add_enabled_ui(can_undo, |ui| {
+                if Self::icon_button(ui, icons::Icon::Undo, ui_text::undo_tooltip_for(undo_kind))
+                    .clicked()
+                {
+                    actions.push(Action::Undo);
+                }
+            });
+            ui.add_enabled_ui(can_redo, |ui| {
+                if Self::icon_button(ui, icons::Icon::Redo, ui_text::redo_tooltip_for(redo_kind))
+                    .clicked()
+                {
+                    actions.push(Action::Redo);
+                }
+            });
+        }
+        ui.separator();
+    }
+
+    /// Page navigation and zoom, pinned to the **right of the status bar**
+    /// (Pass 47.1).
+    ///
+    /// # Why the status bar and not the QAT
+    ///
+    /// Decision 024 §3.5(d) listed these among the Quick Access controls.
+    /// This Pass diverges, and the divergence is the operator's own ruling on
+    /// decision 033 §7 Q2: a QAT is conventionally three or four items, and
+    /// page-nav plus zoom is six or more. Every mainstream PDF reader —
+    /// Acrobat, PDF-XChange, Edge, Chrome — puts them **bottom-right**, which
+    /// is the position an operator's hand already knows.
+    ///
+    /// Emitted every frame, like the QAT, and for the same reason: these are
+    /// the controls decision 024 said must never sit behind a tab switch.
+    ///
+    /// Hidden entirely with no document open — there is nothing to discover
+    /// about a page control when no pages exist, and R124 (as re-amended by
+    /// the operator's *"no placeholders"* ruling) says an unavailable
+    /// capability shows nothing rather than a disabled stub.
+    fn status_view_controls(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let Status::Open(doc) = &self.status else {
+            return;
+        };
+        let count = doc.pages.len();
+        let current = doc.view.page_index + 1;
+        let (zoom_percent, fit) = (doc.view.zoom_percent(), doc.view.fit);
+        let at_first = doc.view.page_index == 0;
+
+        // Laid out right-to-left, so the cluster stays pinned to the window's
+        // right edge as the narrator text on the left grows. Read in reverse:
+        // the LAST thing added here is the LEFTMOST thing on screen.
+        if ui
+            .button(ui_text::zoom_100_button())
+            .on_hover_text(ui_text::zoom_100_tooltip())
+            .clicked()
+        {
+            actions.push(Action::ZoomActualSize);
+        }
+        // Fit modes are selectable because they are MODES: the operator can
+        // see at a glance whether the view is being kept fitted or is pinned.
+        if Self::icon_text_toggle(
+            ui,
+            icons::Icon::FitWidth,
+            fit == FitMode::Width,
+            ui_text::fit_width_button(),
+            ui_text::fit_width_tooltip(),
+        )
+        .clicked()
+        {
+            actions.push(Action::Fit(FitMode::Width));
+        }
+        if Self::icon_text_toggle(
+            ui,
+            icons::Icon::FitPage,
+            fit == FitMode::Page,
+            ui_text::fit_page_button(),
+            ui_text::fit_page_tooltip(),
+        )
+        .clicked()
+        {
+            actions.push(Action::Fit(FitMode::Page));
+        }
+        if Self::icon_button(ui, icons::Icon::ZoomIn, ui_text::zoom_in_tooltip()).clicked() {
+            actions.push(Action::ZoomIn);
+        }
+        ui.label(ui_text::zoom_percent_label(zoom_percent));
+        if Self::icon_button(ui, icons::Icon::ZoomOut, ui_text::zoom_out_tooltip()).clicked() {
+            actions.push(Action::ZoomOut);
+        }
+        ui.separator();
+        ui.add_enabled_ui(current < count, |ui| {
+            if Self::icon_button(ui, icons::Icon::ChevronRight, ui_text::next_page_tooltip())
+                .clicked()
+            {
+                actions.push(Action::NextPage);
+            }
+        });
+        ui.label(ui_text::page_nav_label(current, count));
+        ui.add_enabled_ui(!at_first, |ui| {
+            if Self::icon_button(ui, icons::Icon::ChevronLeft, ui_text::prev_page_tooltip())
+                .clicked()
+            {
+                actions.push(Action::PrevPage);
+            }
+        });
+    }
+
     fn toolbar_controls(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         use ribbon::RibbonGroup as RG;
         let tab = self.ribbon_tab;
@@ -10082,36 +10266,9 @@ impl PdfceApp {
         // sensible unit to break a toolbar on.
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
         {
-            if Self::ribbon_group(ui, tab, RG::FileOps) {
-                // Group: file.
-                if ui
-                    .add(Self::icon_text(
-                        ui,
-                        icons::Icon::Open,
-                        ui_text::open_button(),
-                    ))
-                    .on_hover_text(ui_text::open_tooltip())
-                    .clicked()
-                {
-                    actions.push(Action::Open);
-                }
-                // Save is in the file group, next to Open, and is hidden
-                // rather than disabled when nothing is open — there is
-                // nothing to discover about saving with no document.
-                if matches!(self.status, Status::Open(_))
-                    && ui
-                        .add(Self::icon_text(
-                            ui,
-                            icons::Icon::Save,
-                            ui_text::save_button(),
-                        ))
-                        .on_hover_text(ui_text::save_tooltip())
-                        .clicked()
-                {
-                    actions.push(Action::Save);
-                }
-                ui.separator();
-            }
+            // RG::FileOps is GONE from the ribbon — Open and Save moved to
+            // the Quick Access Toolbar (Pass 47.1). Moved, not mirrored: a
+            // command in two places is R123's two-mental-models failure.
 
             if tab.shows(RG::Show) || tab.shows(RG::Panels) {
                 // Group: view (rail toggle, annotation-visibility). These
@@ -10186,94 +10343,11 @@ impl PdfceApp {
                 ui.separator();
             }
 
-            // Groups: navigation and zoom. Both are meaningless without
-            // a document, so they are hidden rather than shown disabled
-            // — there is nothing to discover about a page control when
-            // no pages exist.
+            // RG::Navigate and RG::Zoom are GONE from the ribbon — page
+            // navigation and zoom moved to the STATUS BAR (Pass 47.1), where
+            // every mainstream PDF reader puts them and where they are
+            // reachable from every tab. See `status_view_controls`.
             if let Status::Open(doc) = &self.status {
-                if Self::ribbon_group(ui, tab, RG::Navigate) {
-                    let count = doc.pages.len();
-                    let current = doc.view.page_index + 1;
-
-                    ui.add_enabled_ui(doc.view.page_index > 0, |ui| {
-                        if Self::icon_button(
-                            ui,
-                            icons::Icon::ChevronLeft,
-                            ui_text::prev_page_tooltip(),
-                        )
-                        .clicked()
-                        {
-                            actions.push(Action::PrevPage);
-                        }
-                    });
-                    ui.label(ui_text::page_nav_label(current, count));
-                    ui.add_enabled_ui(current < count, |ui| {
-                        if Self::icon_button(
-                            ui,
-                            icons::Icon::ChevronRight,
-                            ui_text::next_page_tooltip(),
-                        )
-                        .clicked()
-                        {
-                            actions.push(Action::NextPage);
-                        }
-                    });
-                }
-                if Self::ribbon_group(ui, tab, RG::Zoom) {
-                    if Self::icon_button(ui, icons::Icon::ZoomOut, ui_text::zoom_out_tooltip())
-                        .clicked()
-                    {
-                        actions.push(Action::ZoomOut);
-                    }
-                    ui.label(ui_text::zoom_percent_label(doc.view.zoom_percent()));
-                    if Self::icon_button(ui, icons::Icon::ZoomIn, ui_text::zoom_in_tooltip())
-                        .clicked()
-                    {
-                        actions.push(Action::ZoomIn);
-                    }
-                    // Fit modes are shown as selectable, because they are
-                    // modes: the operator can see at a glance whether the
-                    // view is currently *being kept* fitted or is pinned.
-                    let fit_page = doc.view.fit == FitMode::Page;
-                    if Self::icon_text_toggle(
-                        ui,
-                        icons::Icon::FitPage,
-                        fit_page,
-                        ui_text::fit_page_button(),
-                        ui_text::fit_page_tooltip(),
-                    )
-                    .clicked()
-                    {
-                        actions.push(Action::Fit(FitMode::Page));
-                    }
-                    let fit_width = doc.view.fit == FitMode::Width;
-                    if Self::icon_text_toggle(
-                        ui,
-                        icons::Icon::FitWidth,
-                        fit_width,
-                        ui_text::fit_width_button(),
-                        ui_text::fit_width_tooltip(),
-                    )
-                    .clicked()
-                    {
-                        actions.push(Action::Fit(FitMode::Width));
-                    }
-                    // Deliberately the ONE un-iconified control (ui-spec
-                    // §3.2): "100%" read at a glance already says "I am at
-                    // exactly true size", and every candidate glyph (a
-                    // magnifier with a "1" badge, a "1:1" pictograph) adds a
-                    // decode step a bare percentage does not need. Iconifying
-                    // it to satisfy "icons for all features" would be worse,
-                    // not better, so it stays plain text.
-                    if ui
-                        .button(ui_text::zoom_100_button())
-                        .on_hover_text(ui_text::zoom_100_tooltip())
-                        .clicked()
-                    {
-                        actions.push(Action::ZoomActualSize);
-                    }
-                }
-
                 if Self::ribbon_group(ui, tab, RG::Pages) {
                     // Group: edit. A new group rather than additions to an
                     // existing one, exactly as the module docs anticipated:
@@ -10707,39 +10781,11 @@ impl PdfceApp {
                     ui.separator();
                 }
 
-                if Self::ribbon_group(ui, tab, RG::History) {
-                    // Group: history. Disabled rather than hidden, because
-                    // the *absence* of an Undo control and a greyed-out one
-                    // say different things — the second confirms there is
-                    // nothing to undo, which is information.
-                    // The tooltips name the specific operation rather than
-                    // saying "undo" twice: `EditSession` hands out a
-                    // structured `CommandKind` precisely so a front end can
-                    // say "Undo delete 3 pages" instead.
-                    ui.add_enabled_ui(doc.session.can_undo(), |ui| {
-                        if Self::icon_button(
-                            ui,
-                            icons::Icon::Undo,
-                            ui_text::undo_tooltip_for(doc.session.undo_kind()),
-                        )
-                        .clicked()
-                        {
-                            actions.push(Action::Undo);
-                        }
-                    });
-                    ui.add_enabled_ui(doc.session.can_redo(), |ui| {
-                        if Self::icon_button(
-                            ui,
-                            icons::Icon::Redo,
-                            ui_text::redo_tooltip_for(doc.session.redo_kind()),
-                        )
-                        .clicked()
-                        {
-                            actions.push(Action::Redo);
-                        }
-                    });
-                    ui.separator();
-                }
+                // RG::History is GONE from the ribbon — Undo and Redo moved to
+                // the Quick Access Toolbar (Pass 47.1). This was the single
+                // worst instance of the tab-gating problem: undo lived on
+                // Edit, so an operator measuring on the Measure tab could not
+                // undo without leaving their work.
             }
 
             if Self::ribbon_group(ui, tab, RG::Clipboard) {
@@ -12067,7 +12113,20 @@ impl PdfceApp {
     /// canvas. The body itself is factored into [`Self::status_bar_body`]
     /// so the cap is a pure wrapper with no re-indentation of the
     /// disclosure logic.
-    fn status_bar(&mut self, ui: &mut egui::Ui) {
+    fn status_bar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        // Page navigation and zoom, pinned right, ABOVE the scrollable
+        // disclosure stack (Pass 47.1).
+        //
+        // Above rather than inside, deliberately: the disclosure body is a
+        // `ScrollArea` capped at `STATUS_BAR_MAX_HEIGHT`, so a control placed
+        // within it would scroll out of reach on a page with a long
+        // diagnostics stack — which is exactly the sort of page an operator
+        // most wants to navigate away from.
+        ui.horizontal(|ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                self.status_view_controls(ui, actions);
+            });
+        });
         egui::ScrollArea::vertical()
             .id_salt("status-bar-scroll")
             .max_height(STATUS_BAR_MAX_HEIGHT)

@@ -1790,47 +1790,43 @@ pub fn ribbon_tab_view_tooltip() -> &'static str {
     "What is on your screen. Nothing in here changes the document — it changes how much of it you can see and what is drawn over it."
 }
 
-/// Ribbon group captions, printed under each band.
-pub fn ribbon_group_file_ops() -> &'static str {
-    "File"
-}
-/// See [`ribbon_group_file_ops`].
+/// A ribbon **group caption** — the label printed with a group of related
+/// controls (R1: every operator-visible string comes from this catalog).
+///
+/// The anchor for the sibling captions below, which reference this one rather
+/// than repeating the note. It became the anchor in Pass 47.1, when
+/// `ribbon_group_file_ops` — the previous anchor — was deleted along with its
+/// group: Open/Save/Undo/Redo moved to the Quick Access Toolbar and
+/// page-navigation/zoom to the status bar, so four `RibbonGroup` variants
+/// stopped naming anything.
 pub fn ribbon_group_document_properties() -> &'static str {
     "Document"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_clipboard() -> &'static str {
     "Clipboard"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_layout_reset() -> &'static str {
     "Layout"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_help() -> &'static str {
     "Help"
 }
-/// See [`ribbon_group_file_ops`].
-pub fn ribbon_group_history() -> &'static str {
-    "History"
-}
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_pages() -> &'static str {
     "Pages"
 }
-/// See [`ribbon_group_file_ops`].
-pub fn ribbon_group_navigate() -> &'static str {
-    "Go to"
-}
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_content_tools() -> &'static str {
     "Content"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_forms() -> &'static str {
     "Forms"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 ///
 /// "Build Form" and not "Forms": [`ribbon_group_forms`] already owns that
 /// word for FILLING, and two adjacent bands both captioned Forms would make
@@ -1839,39 +1835,35 @@ pub fn ribbon_group_forms() -> &'static str {
 pub fn ribbon_group_forms_author() -> &'static str {
     "Build Form"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_markup() -> &'static str {
     "Markup"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_notes() -> &'static str {
     "Notes"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_measure_tools() -> &'static str {
     "Measure"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_batch() -> &'static str {
     "Across files"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_fonts() -> &'static str {
     "Fonts"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_protect() -> &'static str {
     "Protect"
 }
-/// See [`ribbon_group_file_ops`].
-pub fn ribbon_group_zoom() -> &'static str {
-    "Zoom"
-}
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_show() -> &'static str {
     "Show"
 }
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_panels() -> &'static str {
     "Panels"
 }
@@ -6699,7 +6691,7 @@ pub fn close_document_tooltip() -> &'static str {
 
 // -- Comments / annotation list (shell-redesign.md §3) ----------------------
 
-/// See [`ribbon_group_file_ops`].
+/// See [`ribbon_group_document_properties`].
 pub fn ribbon_group_comments_list() -> &'static str {
     "Comments"
 }

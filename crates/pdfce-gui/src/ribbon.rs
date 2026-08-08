@@ -61,10 +61,20 @@ use crate::ui_text;
 /// arrives; renaming one is a breaking change to any saved layout, which is
 /// the honest cost and the reason the names are chosen to describe the
 /// *activity* rather than the current membership.
+///
+/// **Pass 47.1 REMOVED four variants — `FileOps`, `History`, `Navigate` and
+/// `Zoom`** — rather than leaving them declared and unclaimed. Their commands
+/// did not disappear: Open, Save, Undo and Redo became Quick Access Toolbar
+/// chrome and page navigation and zoom became status-bar chrome, because
+/// R125 emits only the ACTIVE tab's band and that put undo and zoom behind a
+/// tab switch (decision 033 §1.2, observed live).
+///
+/// Deleted rather than kept as orphans because `every_group_belongs_to_
+/// exactly_one_tab` is a real invariant, not a formality: a group claimed by
+/// no tab is unreachable, which that test calls *"worse"* than one claimed by
+/// two. Fixed chrome is not a ribbon group and should not pretend to be one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RibbonGroup {
-    /// Open / Save a copy.
-    FileOps,
     /// Document metadata (`/Info`).
     DocumentProperties,
     /// Get content OUT — copy text to the clipboard.
@@ -73,12 +83,8 @@ pub enum RibbonGroup {
     LayoutReset,
     /// Keyboard-shortcut reference.
     Help,
-    /// Undo / Redo.
-    History,
     /// Whole-page operations — rotation today.
     Pages,
-    /// Move between pages.
-    Navigate,
     /// The tools that change what is drawn: Edit Text, Add Text, Obj.
     ContentTools,
     /// Interactive-form (AcroForm) filling.
@@ -167,8 +173,6 @@ pub enum RibbonGroup {
     Fonts,
     /// Redaction — irreversible, and grouped apart for that reason.
     Protect,
-    /// Zoom and fit.
-    Zoom,
     /// What is drawn over the page: annotations, editable points.
     Show,
     /// Panel visibility.
@@ -187,15 +191,12 @@ impl RibbonGroup {
         dead_code,
         reason = "the group enumeration; swept by this module's taxonomy test and by main.rs's gated-widget test, and the list any future group-picker must read rather than re-derive" // ui-text-exempt: clippy lint justification, never displayed
     )]
-    pub const ALL: [Self; 21] = [
-        Self::FileOps,
+    pub const ALL: [Self; 17] = [
         Self::DocumentProperties,
         Self::Clipboard,
         Self::LayoutReset,
         Self::Help,
-        Self::History,
         Self::Pages,
-        Self::Navigate,
         Self::ContentTools,
         Self::Forms,
         Self::FormsAuthor,
@@ -206,7 +207,6 @@ impl RibbonGroup {
         Self::Batch,
         Self::Fonts,
         Self::Protect,
-        Self::Zoom,
         Self::Show,
         Self::Panels,
     ];
@@ -215,14 +215,11 @@ impl RibbonGroup {
     #[must_use]
     pub fn caption(self) -> &'static str {
         match self {
-            Self::FileOps => ui_text::ribbon_group_file_ops(),
             Self::DocumentProperties => ui_text::ribbon_group_document_properties(),
             Self::Clipboard => ui_text::ribbon_group_clipboard(),
             Self::LayoutReset => ui_text::ribbon_group_layout_reset(),
             Self::Help => ui_text::ribbon_group_help(),
-            Self::History => ui_text::ribbon_group_history(),
             Self::Pages => ui_text::ribbon_group_pages(),
-            Self::Navigate => ui_text::ribbon_group_navigate(),
             Self::ContentTools => ui_text::ribbon_group_content_tools(),
             Self::Forms => ui_text::ribbon_group_forms(),
             Self::FormsAuthor => ui_text::ribbon_group_forms_author(),
@@ -233,7 +230,6 @@ impl RibbonGroup {
             Self::Batch => ui_text::ribbon_group_batch(),
             Self::Fonts => ui_text::ribbon_group_fonts(),
             Self::Protect => ui_text::ribbon_group_protect(),
-            Self::Zoom => ui_text::ribbon_group_zoom(),
             Self::Show => ui_text::ribbon_group_show(),
             Self::Panels => ui_text::ribbon_group_panels(),
         }
@@ -374,15 +370,21 @@ impl RibbonTab {
     #[must_use]
     pub fn groups(self) -> &'static [RibbonGroup] {
         match self {
+            // FileOps, History, Navigate and Zoom are ABSENT from every tab
+            // as of Pass 47.1 — their commands moved to fixed chrome (Open,
+            // Save, Undo, Redo to the Quick Access Toolbar; page navigation
+            // and zoom to the status bar) because R125 emits only the active
+            // tab's band, which put undo and zoom behind a tab switch. The
+            // variants remain in `RibbonGroup` so `ALL`, `caption()` and the
+            // gating test keep compiling; a group named by no tab simply
+            // never renders. Moved, never mirrored (R123).
             Self::File => &[
-                RibbonGroup::FileOps,
                 RibbonGroup::DocumentProperties,
                 RibbonGroup::Clipboard,
                 RibbonGroup::LayoutReset,
                 RibbonGroup::Help,
             ],
             Self::Edit => &[
-                RibbonGroup::History,
                 RibbonGroup::ContentTools,
                 RibbonGroup::Forms,
                 RibbonGroup::FormsAuthor,
@@ -395,12 +397,7 @@ impl RibbonTab {
             ],
             Self::Measure => &[RibbonGroup::MeasureTools],
             Self::Tools => &[RibbonGroup::Batch, RibbonGroup::Fonts, RibbonGroup::Protect],
-            Self::View => &[
-                RibbonGroup::Navigate,
-                RibbonGroup::Zoom,
-                RibbonGroup::Show,
-                RibbonGroup::Panels,
-            ],
+            Self::View => &[RibbonGroup::Show, RibbonGroup::Panels],
         }
     }
 
