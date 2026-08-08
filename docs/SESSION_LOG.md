@@ -26119,3 +26119,119 @@ independently of that document):**
   filing itself made explicit for `Pass 47.5`, and it is a silent-data-
   loss correctness defect (5-object Delete removes 1), the highest-
   severity item in the whole plan.
+
+## 2026-08-08 (thirty-fourth filing) — the operator answers decision 033 §7 in full, and (bb) goes the OPPOSITE way from this filing's own prior reading: R124's planned-treatment clause REVOKED, `Pass 47.8` retired, two new customisation Backlog buckets filed UNSCOPED
+
+**Nothing in this filing is SHIPPED.** Pure ledger/correction work: the
+operator answered all five decision 033 §7 questions in one message,
+and one of the five answers reverses a reading this same session filed
+an hour earlier as PENDING-CONFIRMATION. Dispatched by the engineer as
+a correction filing, explicitly framed as reversing prior guidance.
+
+**Shipped:** None.
+
+**Decisions made this session:**
+- **(bb) RESOLVED, REVERSING the thirty-third filing's pending reading.**
+  Operator, verbatim and complete: *"1. no placeholders."* The
+  thirty-third filing's `★ AMENDMENT` read the operator's general
+  *"rewrite any rules about the GUI"* instruction (decision 033 §0) as
+  itself ruling (bb) IN FAVOUR of ribbon placeholders. Asked directly,
+  the operator ruled AGAINST them — for the engineer's original
+  argument, the one (bb) was filed to test. **Only the ribbon
+  planned-treatment clause is reversed**; the context-menu clause
+  (inapplicable entries omitted, not disabled) was never the placeholder
+  question and stands unchanged. R124's *Standing rules* entry now
+  carries a `★★ RE-AMENDMENT` block, struck-and-annotated, with every
+  prior word — original rule, first amendment, now this reversal — still
+  readable in sequence.
+- **The surviving distinction is now stated as R124's live governing
+  text, and it is the actual content of this correction**: "not built"
+  (no control, any surface — R124's restored original scope) is a
+  different fact from "built, but not applicable right now" (shown and
+  disabled, with the reason in the tooltip — R83's territory, untouched
+  by this ruling, and already how the Forms panel's read-only/signature/
+  push-button rows behave). The pre-reversal amendment collapsed the two
+  into one "planned" treatment; that collapse, not the placeholder idea
+  itself, was the defect this correction removes.
+- **The Microsoft ribbon-guidance citation is preserved as evidence
+  CONSIDERED AND OVERRULED, not evidence that was WRONG** — it remains
+  an accurate account of Office's own convention (disable, never hide),
+  and the operator is entitled to weigh that promise differently for his
+  own product.
+- **`Pass 47.8` RETIRED**, not deferred or re-scoped. Struck-and-annotated
+  everywhere it was named: `ROADMAP.md`'s *Backlog* table, its P0 "what
+  P0 does NOT include" prose, `FEATURES.md`'s *Planned* row, and decision
+  033's own §6 item 10.
+- **(bd), (be), (bf), (bg) all RESOLVED on first asking**, each "your
+  recommendation": QAT = Open/Save a copy…/Undo/Redo only, page nav +
+  zoom to the status bar bottom-right (**diverges from decision 024
+  §3.5(d)'s original QAT list** — recorded, not silently absorbed);
+  marquee goes direction-sensitive with a mid-drag rectangle-appearance
+  change; ribbon density ships as the two-row band plus a collapse
+  toggle; contextual tabs ship as the one reduced slot, Family B
+  revisited (not retired) after `Pass 47.6`.
+- **Two new, UNSCOPED Backlog buckets filed, no Pass ID**: ribbon
+  customisation (drag-and-drop, right-click add tab/section, saved/named
+  layouts) and input/keyboard customisation (every mouse gesture and
+  shortcut rebindable, savable configurations) — both arrived attached to
+  (bf)'s and (be)'s answers respectively, both substantially larger than
+  the questions that prompted them. **Not designed by this filing** — a
+  `pdfce-ui-specialist` dispatch on both is running concurrently per the
+  engineer's explicit instruction.
+
+**Findings + decisions:**
+- **Marking a ruling provisional is what made being wrong here cheap.**
+  The thirty-third filing's (bb) reading was wrong, and the only reason
+  it cost one correction filing instead of a shipped feature built to
+  the wrong reading is that it was filed as RULED-**PENDING-CONFIRMATION**
+  rather than RESOLVED. Nothing built against it; `Pass 47.8` was filed
+  but never started. This is the second time this session an inference
+  about the operator's intent got filed as fact and had to be corrected
+  — recorded plainly rather than smoothed over, per the dispatch's own
+  instruction.
+- **A Pass ID cited as the wrong number in the correcting dispatch was
+  caught before filing.** The dispatch instruction named `Pass 47.9` as
+  "R124's planned-treatment styling"; `ROADMAP.md` and decision 033 §6
+  item 10 both name that capability `Pass 47.8` (`Pass 47.9` is Alt-key
+  KeyTips, a P2 item with no relationship to R124). Verified against both
+  source documents before filing; `Pass 47.8` is the ID retired, `Pass
+  47.9` is untouched. Flagged back to the dispatching agent rather than
+  silently substituted.
+- **Two new operator requests share one unnamed prerequisite: a
+  persisted configuration store.** Ribbon layout, input bindings, and
+  (unasked, but adjacent) dock layout are three consumers of one store
+  that does not exist today. Named explicitly in both new Backlog
+  entries so a later scoping session does not build two or three
+  independent ones.
+- **Customisation now interacts with the (bb) ruling just settled, and
+  the interaction is flagged, not resolved.** If any command can be
+  dragged into any ribbon tab via a customisation palette, that palette
+  is a new kind of consumer for R124's rule — it may list only commands
+  with a shipped verb behind them. Left for Pass scoping; not designed
+  here.
+- Both `ribbon.rs:45-52` and `main.rs:11290` were **read directly this
+  filing** to confirm the operator's premise (a standing refusal exists
+  to reverse) before recording it as a reversal in `ROADMAP.md` — not
+  asserted from the dispatch's prose alone.
+
+**Still in flight:**
+- `pdfce-ui-specialist`'s concurrent design report on both new
+  customisation buckets — not started or awaited by this filing.
+- All of decision 033's `Pass 47.0–47.10` work is exactly where the
+  thirty-third filing left it; this filing changed no Pass status, only
+  ruling/Backlog content.
+- **Backup/git working-tree state is not asserted anywhere in this
+  filing** — no shell was available to this dispatch (hard rule 8).
+
+**For next session:**
+- Once the `pdfce-ui-specialist` report lands, scope the two new
+  customisation buckets into real Pass IDs — remember the shared
+  persisted-configuration-store prerequisite and the R124-palette
+  interaction flagged above.
+- `Pass 47.1`'s QAT acceptance criteria must be built to the resolved
+  shape (Open/Save a copy…/Undo/Redo only; page nav + zoom to the status
+  bar), not decision 024 §3.5(d)'s original list.
+- Run both checkers (`check-ledger-numbers.py`, `check-passes-filed.py`)
+  with a shell before treating any ceiling in `ROADMAP.md` as gate-clean
+  — unchanged from the thirty-third filing's own note, since this filing
+  minted nothing new.

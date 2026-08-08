@@ -21113,7 +21113,9 @@ and are not touched by any of the five items below.
 
 **What P0 does NOT include, named so it is not silently expected:**
 right-click menus, canvas-selectable widgets, the contextual ribbon
-tab, R124's planned-treatment styling, Alt KeyTips and Objects-tree
+tab, ~~R124's planned-treatment styling~~ (**RETIRED 2026-08-08 —
+`Pass 47.8` is off the board, operator ruled "no placeholders"; see
+R124's `★★ RE-AMENDMENT`, Standing rules), Alt KeyTips and Objects-tree
 editing verbs are all P1/P2 — see the *Backlog* entry filed alongside
 this one.
 
@@ -25905,7 +25907,7 @@ nothing gets forgotten, not as a commitment to build in this order.
   | `Pass 47.5` | **Right-click context menus, canvas AND Objects tree.** Entries mapped only to verbs that exist: empty page → Fit/Zoom/Rotate; one object → Delete, Properties; N objects → "Delete selected (N)"; widget → Edit in Forms panel, Delete. Objects-tree menu mirrors the canvas set for that row's type plus "Reveal on canvas" (decision 033 §3.5). | `Pass 47.0` |
   | `Pass 47.6` | **Widgets — and the rest of family (a): markup annotations, redaction marks, links, ce dimensions — become canvas-selectable.** Today the hit-tester covers page content objects only; annotations/widgets/redaction marks/links are not canvas-selectable at all (decision 033 §1.4). The named prerequisite for form-field resize. | — |
   | `Pass 47.7` | **One contextual ribbon tab, reduced form** — a single slot at the right of the strip, `▸ <armed tool>`, auto-activating on tool-arm and restoring the prior fixed tab on disappearance (decision 024 §3.3(b) rule 1, incl. its egui focus-drop caveat). Holds the armed tool's identity and a "bring to front" for the Tool pane only — not the tool's controls, which stay in the dock (decision 033 §3.3). The six-tab cap survives; this is a separate rendering region, not a seventh `RibbonTab` variant. | — |
-  | `Pass 47.8` | **R124's planned-treatment control style, applied to the scoped gaps already named elsewhere in this file** — reduced opacity + dashed outline + disabled, tooltip citing the Pass ID. `add-push-button`'s palette entry first, since its core verb shipped 2026-08-08 and the recorded reason for the palette's absence has expired. | R124's `★ AMENDMENT` (Standing rules) |
+  | ~~`Pass 47.8`~~ | ~~R124's planned-treatment control style, applied to the scoped gaps already named elsewhere in this file — reduced opacity + dashed outline + disabled, tooltip citing the Pass ID. `add-push-button`'s palette entry first, since its core verb shipped 2026-08-08 and the recorded reason for the palette's absence has expired.~~ **RETIRED 2026-08-08 (same-day continuation) by operator ruling — "no placeholders." Not deferred, not re-scoped: never pick this ID up. See R124's `★★ RE-AMENDMENT`, Standing rules, above.** | R124's `★ AMENDMENT` (Standing rules), REVERSED by R124's `★★ RE-AMENDMENT` |
   | *(`Pass 20.5`)* | Per-type field properties in the Create Field pane — multiline, initial state, the choice-option editor, incl. `/Opt` authoring (decision 033 §3.6). **Already `Pass 20.5`'s own owed remainder** (see *Planned*, below) — decision 033 adds no new ID, only a second reason to do it. | — |
 
   **P2 — named so it is not lost, not a commitment to build:**
@@ -25975,6 +25977,87 @@ nothing gets forgotten, not as a commitment to build in this order.
   (bd)–(bg)** (QAT contents; marquee direction-sensitivity vs.
   full-enclosure; ribbon density/compact-mode; one contextual tab vs.
   the full decision 024 Family-B design).
+
+  **★ ALL FIVE RESOLVED 2026-08-08 (same-day continuation) — see each
+  item's own entry under *Open operator questions*, below.** (bb)
+  reversed the pending reading (no placeholders — `Pass 47.8` retired);
+  (bd)/(be)/(bf)/(bg) all accepted "your recommendation," with (be) and
+  (bf) each arriving with a substantially larger operator requirement
+  (mouse/keyboard customisation; ribbon customisation) filed as two new
+  Backlog buckets immediately below.
+
+- **Ribbon customisation + persisted layout configurations — operator
+  request, filed 2026-08-08, attached to (bf)'s answer; UNSCOPED, no
+  Pass ID.** Operator, verbatim: *"Ribbon interface should be completely
+  customizable when a customize option is enabled. layout configurations
+  can be saved and chosen. should be able to be done with drag and drop
+  and right click to add tabs, sections etc."*
+
+  **This REVERSES a standing refusal, and is recorded as a reversal, not
+  a correction of an oversight.** `ribbon.rs:45-52`'s own module doc
+  states plainly: *"What is deliberately NOT built: reorder/hide UI, and
+  persistence"* — written the same session the ribbon shipped (Pass
+  24.1), on the operator's own then-stated "maybe in the future" framing
+  (*"we might want to make these customizable in the future like you can
+  with solidworks and ms office"*). The refusal was correct when written;
+  the operator has now moved "the future" to now.
+
+  **Shares an unnamed prerequisite with the bucket immediately below: a
+  persisted configuration store.** Neither this bucket nor the
+  mouse/keyboard one names it, and building two (or three, counting dock
+  layout — see next paragraph) separate stores would be the obvious
+  mistake this note exists to head off. Scoping should treat "where does
+  a named, saved layout/binding-set live on disk, and how is it
+  loaded/switched/exported" as ONE piece of infrastructure with (at
+  least) three consumers.
+
+  **A second existing refusal is directly adjacent and should be
+  re-examined at the same time, though the operator did not name it
+  here:** `main.rs:11290` discloses that dock layout is session-only
+  (`ui_text::dock_layout_session_only_note`) — *"a customizable ribbon
+  that also forgot itself would be worse than one that cannot be
+  customized,"* per `ribbon.rs`'s own reasoning. Dock-layout persistence
+  was not asked for in this message; flagged because it is the same
+  shape of problem and the same store would likely serve it.
+
+  **Interacts with the (bb) ruling just settled — flagged, not
+  resolved.** If the operator can drag any command into any ribbon tab
+  via a customisation palette, that palette's content is now governed by
+  R124's live rule: it may list only commands that **exist** (a shipped
+  verb behind them), never a not-yet-built one. R124 was written for a
+  fixed, engineer-authored ribbon; a customisation surface is a new kind
+  of consumer for the same rule, and nobody has scoped what "the palette
+  lists only real commands" means operationally (does it exclude
+  disabled-but-applicable controls too, or only genuinely unbuilt ones?
+  — R124/R83's existing distinction answers this in principle but has
+  never been asked to govern a *browsable list* before). Left for Pass
+  scoping.
+
+  **`pdfce-ui-specialist` is dispatched concurrently on the design of
+  both this bucket and the one below — this filing deliberately does not
+  design either; it records the request, the reversal, the shared
+  prerequisite and the R124 interaction, and stops there.**
+
+- **Input/keyboard customisation + saved configurations — operator
+  request, filed 2026-08-08, attached to (be)'s answer; UNSCOPED, no
+  Pass ID.** Operator, verbatim: *"all mouse and keyboard features
+  should be customizable with the ability to save different
+  configurations."* Broader than the marquee question it arrived beside
+  — every mouse gesture and keyboard shortcut in the app, not only
+  marquee direction-sensitivity.
+
+  **Shares the same unnamed prerequisite as the ribbon-customisation
+  bucket above: a persisted configuration store.** See that bucket's own
+  paragraph — the two requests are two consumers of one store that does
+  not exist today, and should not be scoped as two independent builds.
+
+  **Does not by itself reverse a standing refusal the way the ribbon
+  bucket does** — pdfce has no prior "keyboard shortcuts are fixed"
+  rule on record to reverse; this is new scope, not a reopened decision.
+
+  **`pdfce-ui-specialist` is dispatched concurrently on the design of
+  both this bucket and the one above — see that bucket's own closing
+  note; the same constraint applies here.**
 
 - **`Acrobat_Features` coverage gaps — ELEVEN buckets with zero
   dedicated files, and every `FEATURES.md` Acrobat verdict touching them
@@ -27890,23 +27973,60 @@ nothing gets forgotten, not as a commitment to build in this order.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
 
-**RULED this session (2026-08-08, thirty-third filing) — PENDING
-CONFIRMATION, deliberately not filed as RESOLVED:**
+**RESOLVED this session (2026-08-08, thirty-fourth filing) — the
+operator answered decision 033 §7 in full; see below. (bb) moved here
+from its prior PENDING-CONFIRMATION bucket (thirty-third filing);
+(bd)–(bg) resolved on first asking:**
 - **(bb) R124 — do unbuilt features get greyed placeholders in the
-  command surface, or does empty space stay empty? — RULED, via decision
-  033 §5.1, by a different door than a direct answer.** The operator's
-  2026-08-08 instruction (*"Rewrite any rules about the GUI that make it
-  less usable and user friendly"*, decision 033 §0) is read by this
-  filing as the ruling: R124 is amended (see *Standing rules*, R124's
-  own `★ AMENDMENT` block, above) to split by surface — a ribbon control
-  for scoped work may show a planned-treatment placeholder citing a
-  filed Pass ID; a context menu omits an inapplicable entry instead.
-  **This is RULED-PENDING-CONFIRMATION, not RESOLVED** — decision 033 §7
-  question 1 explicitly asks the operator to confirm this reading is
-  what he meant, or say he meant something narrower. Keep this
-  distinction visible: do not read (bb) as closed the way (a)/(aw)/(ax)/
-  (ay)/(bc) below are closed, until that confirmation lands. Full
-  ruling text at the item's own entry, below.
+  command surface, or does empty space stay empty? — RESOLVED, ANSWERED
+  "no placeholders."** Operator, verbatim and complete: ***"1. no
+  placeholders."*** **This is the OPPOSITE ruling from the one this
+  filing's own prior entry (thirty-third filing) held as pending**: the
+  ribbon planned-treatment clause of R124's 2026-08-08 amendment is
+  REVOKED; the context-menu clause (inapplicable entries omitted, not
+  disabled) survives, since it was never the placeholder question. The
+  operator asked for placeholders originally (decision 024 §7); the
+  engineer argued against them; **the operator has now ruled for the
+  engineer's original position.** Full ruling, the surviving
+  distinction (not-built vs. built-but-inapplicable), and the correction
+  to this filing's own prior misreading are all at R124's own entry
+  under *Standing rules*, above (the `★★ RE-AMENDMENT` block). `Pass
+  47.8` is retired, not reused.
+- **(bd) The QAT contents — RESOLVED, operator's answer: "your
+  recommendation."** QAT = Open, **Save a copy…**, Undo, Redo; page
+  navigation and zoom go to the **status bar, bottom-right** — where
+  Acrobat, PDF-XChange, Edge and Chrome all put them — **not** into the
+  QAT. This **diverges from decision 024 §3.5(d)'s original list**
+  (which put page nav/zoom in the QAT itself); the operator's answer
+  supersedes that list. `Pass 47.1`'s acceptance criteria change
+  accordingly — see its *Next up* entry, above.
+- **(be) Marquee semantics — RESOLVED, operator's answer: "your
+  recommendation," PLUS a new, larger requirement.** Direction-sensitive:
+  left-to-right encloses, right-to-left crosses (the AutoCAD convention),
+  **with the marquee rectangle changing appearance mid-drag** so the mode
+  is visible while being chosen, not only after release. **The operator
+  attached a condition substantially larger than the question asked**:
+  *"all mouse and keyboard features should be customizable with the
+  ability to save different configurations."* Filed as a new, unscoped
+  Backlog bucket — see *Input/keyboard customization*, below — not
+  folded into `Pass 47.5`/marquee itself.
+- **(bf) Ribbon density — RESOLVED, operator's answer: "your
+  recommendation," PLUS a new, larger requirement.** Two-row band with
+  captions beneath, as default, **plus an Office-style collapse toggle**
+  for the compact case. **The operator attached a condition substantially
+  larger than the question asked**: *"Ribbon interface should be
+  completely customizable when a customize option is enabled. layout
+  configurations can be saved and chosen. should be able to be done with
+  drag and drop and right click to add tabs, sections etc."* Filed as a
+  new, unscoped Backlog bucket — see *Ribbon customization*, below — not
+  folded into `Pass 47.2` itself.
+- **(bg) Contextual tabs — RESOLVED, operator's answer: "your
+  recommendation."** One reduced slot now (`▸ <armed tool>`, identity +
+  "bring to front" only, per decision 033 §3.3), exactly as `Pass 47.7`
+  specifies. **Family B (a tab per selection kind, decision 024's fuller
+  design) is REVISITED after widgets become canvas-selectable** (`Pass
+  47.6`) — not built now, not retired, explicitly deferred to that
+  point.
 
 **RESOLVED this session (continuation 108, 2026-08-06) — no longer open:**
 - **(bc) Modeless editing — should clicking a TEXT object with no tool
@@ -28799,6 +28919,20 @@ not a judgment call:**
   it less usable"* meant. Default-if-unanswered above is superseded by
   that pending confirmation, not by silence.
 
+  **★★ RESOLVED 2026-08-08 (same-day continuation) — CONFIRMATION
+  ARRIVED, AND IT REVERSES THE PENDING READING.** Operator, verbatim and
+  complete: ***"1. no placeholders."*** The pending reading above (that
+  the general rewrite-the-rules instruction ruled (bb) IN FAVOUR of
+  placeholders) **was wrong** — asked directly, the operator ruled
+  AGAINST them, for the engineer's original argument. **Only the ribbon
+  planned-treatment clause of R124's amendment is reversed; the
+  context-menu clause (omit, don't disable) stands**, since it was never
+  the placeholder question. `Pass 47.8` is retired. Full text, the
+  surviving not-built-vs.-inapplicable distinction, and the correction to
+  this session's own earlier misreading are at R124's `★★ RE-AMENDMENT`
+  block under *Standing rules*, above — that is now the entry to read for
+  (bb), not this one.
+
 - **(bc) Modeless editing — should clicking a TEXT object with no tool
   armed begin text editing?** **Filed 2026-08-06 with Pass 40.0**, which
   built the object-editing half of your *"we should be able to activate
@@ -28831,6 +28965,14 @@ not a judgment call:**
   you want added or dropped before `Pass 47.1` builds it? *Default if
   unanswered:* decision 024's list, unchanged.
 
+  **★ RESOLVED 2026-08-08 — operator's answer: "your recommendation."**
+  Accepted with a placement change from the default: QAT = Open, **Save a
+  copy…**, Undo, Redo; page navigation and zoom move to the **status
+  bar, bottom-right** (Acrobat/PDF-XChange/Edge/Chrome convention), not
+  into the QAT. **This diverges from decision 024 §3.5(d)'s list as
+  filed** — noted so `Pass 47.1`'s acceptance criteria are built to the
+  resolved shape, not the original one.
+
 - **(be) Marquee semantics have no industry consensus.** Filed
   2026-08-08 with decision 033 §7 Q3. AutoCAD makes drag DIRECTION
   decide (left-to-right encloses, right-to-left crosses); Illustrator
@@ -28839,6 +28981,16 @@ not a judgment call:**
   direction-sensitive selection? *Default if unanswered:* full
   enclosure stands.
 
+  **★ RESOLVED 2026-08-08 — operator's answer: "your recommendation."**
+  Accepted as proposed: direction-sensitive (left-to-right encloses,
+  right-to-left crosses), **with the marquee rectangle changing
+  appearance mid-drag** so which mode is active is visible while it is
+  being chosen, not only after release. **A larger, unasked-for
+  requirement arrived attached to this answer** — *"all mouse and
+  keyboard features should be customizable with the ability to save
+  different configurations"* — filed separately as *Input/keyboard
+  customization* under *Backlog*, below, not folded into this item.
+
 - **(bf) Ribbon density.** Filed 2026-08-08 with decision 033 §7 Q4,
   alongside `Pass 47.2` (ribbon group legibility) under *Next up*. A
   two-row band with captions centred beneath each group — the fix for
@@ -28846,6 +28998,13 @@ not a judgment call:**
   ribbon" complaint — costs ~60 px of vertical space against a large CAD
   sheet. Worth it as filed, or do you want a compact mode? *Default if
   unanswered:* the two-row band ships as `Pass 47.2` specifies it.
+
+  **★ RESOLVED 2026-08-08 — operator's answer: "your recommendation."**
+  Accepted as proposed, **plus** an Office-style collapse toggle for the
+  compact case. **A larger, unasked-for requirement arrived attached to
+  this answer** — full ribbon customisation (drag-and-drop, right-click
+  add tab/section, saved/named layouts) — filed separately as *Ribbon
+  customization* under *Backlog*, below, not folded into `Pass 47.2`.
 
 - **(bg) Contextual tabs: one reduced slot, or the full decision 024
   design?** Filed 2026-08-08 with decision 033 §7 Q5, alongside `Pass
@@ -28856,6 +29015,12 @@ not a judgment call:**
   blocked on Passes 22.0/23.2 either way. *Default if unanswered:* the
   reduced form ships as `Pass 47.7`; Family B stays in *Backlog*,
   unscoped.
+
+  **★ RESOLVED 2026-08-08 — operator's answer: "your recommendation."**
+  Accepted as proposed: one reduced slot ships now as `Pass 47.7`; Family
+  B is **revisited, not retired**, once widgets become canvas-selectable
+  (`Pass 47.6`) gives it a population of selection kinds worth a tab
+  each.
 
   *Default if unanswered:* **it stays unwired.** Text editing keeps
   requiring the Edit Text tool to be armed; everything else — select,
@@ -31290,31 +31455,122 @@ not a judgment call:**
   row of small grey-captioned buttons rather than a structured ribbon
   (decision 033 §1.1–§1.2, observed live, not inferred from code).
 
-  **The amended rule, in full — this is now R124's governing text:**
-  > **Empty space stays empty for UNSCOPED work; scoped work may show a
-  > *planned* control; and the rule differs by surface.**
-  > - **Ribbon / command bands:** a capability with a filed Pass ID may
+  **The amended rule, in full — this is now R124's governing text AS OF
+  2026-08-08's first ruling, SUPERSEDED IN PART by the ★★ RE-AMENDMENT
+  immediately below. Left fully visible per house style — struck, not
+  deleted:**
+  > ~~**Empty space stays empty for UNSCOPED work; scoped work may show a
+  > *planned* control; and the rule differs by surface.**~~
+  > - ~~**Ribbon / command bands:** a capability with a filed Pass ID may
   >   appear as a control in a visually distinct **planned** treatment —
   >   reduced opacity **and** a dashed outline **and** disabled, never a
   >   plain greyed clone — whose tooltip names the Pass ID and states
   >   plainly that it is not yet built. A capability with **no** Pass ID
-  >   stays absent, exactly as the original rule said.
-  > - **Context menus:** the inverse. Inapplicable entries are
-  >   **omitted**, not disabled — except the standard editing verbs,
-  >   which stay present and disabled so their absence is never mistaken
-  >   for a missing feature.
-  > - **Mechanically checkable:** a planned-treatment control that
+  >   stays absent, exactly as the original rule said.~~ **REVOKED — see
+  >   ★★ RE-AMENDMENT below. The operator's answer to decision 033 §7 Q1
+  >   was "no placeholders," full stop.**
+  > - **Context menus: SURVIVES UNCHANGED.** The inverse. Inapplicable
+  >   entries are **omitted**, not disabled — except the standard editing
+  >   verbs, which stay present and disabled so their absence is never
+  >   mistaken for a missing feature. This half was never the placeholder
+  >   question the operator ruled on, and nothing about his answer
+  >   touches it.
+  > - ~~**Mechanically checkable:** a planned-treatment control that
   >   cannot cite a Pass ID in its own tooltip is not compliant and must
-  >   be removed, not left.
+  >   be removed, not left.~~ **MOOT** — there is no longer a
+  >   planned-treatment control for this test to check.
 
-  **This closes open operator question (bb)** (*"the operator asked for
+  **This closed open operator question (bb)** (*"the operator asked for
   placeholders, the engineer argued against, and the operator has not
   ruled"*) **by a different door than a direct answer** — decision 033
-  reads the operator's rewrite-the-rules instruction as the ruling.
-  **RULED-PENDING-CONFIRMATION, not silently closed**: decision 033 §7
-  question 1 asks the operator to confirm this reading is what he meant,
-  or say he meant something narrower. See *Open operator questions*,
-  below, for the visible marker.
+  read the operator's rewrite-the-rules instruction as the ruling.
+  **Filed RULED-PENDING-CONFIRMATION, not silently closed**: decision 033
+  §7 question 1 asked the operator to confirm this reading, or say he
+  meant something narrower. **He confirmed something narrower — see
+  below.**
+
+  **★★ RE-AMENDMENT (2026-08-08, same-day continuation, operator's direct
+  answer to decision 033 §7 Q1) — THE PLANNED-TREATMENT CLAUSE IS
+  REVOKED. (bb) IS NOW RESOLVED, NOT PENDING.**
+
+  **The operator's answer, verbatim and complete:** *"1. no
+  placeholders."* Read against decision 033 §7 Q1 — *"R124's
+  planned-treatment (§5.1) is a direct reversal of an engineer argument
+  you never ruled on (question (bb)). This document reads your
+  instruction as that ruling. Confirm, or say you meant something
+  narrower."* — the operator said something narrower, and it goes the
+  OPPOSITE direction from the pending reading: **(bb) is ruled, and it is
+  ruled the ENGINEER'S ORIGINAL WAY.** The operator asked for
+  placeholders (decision 024 §7's original framing); the engineer argued
+  against them; the operator has now come down on the engineer's side.
+  That is the actual sequence of who argued what, and it is recorded
+  that way, not softened.
+
+  **What this reverses, precisely — only the ribbon planned-treatment
+  bullet above.** The context-menu bullet (inapplicable entries omitted,
+  not disabled) was never the placeholder question, is unaffected by
+  "no placeholders," and Microsoft's own guidance and the operator's
+  answer agree on it — it stands, unchanged, unstruck.
+
+  **The Microsoft ribbon-guidance citation (decision 033 §5.1, sourced
+  from `D:\Dev\Rag-Specialized\Ribbon_UX\office_ribbon.md`) is preserved
+  as evidence that was CONSIDERED AND OVERRULED, not evidence that was
+  WRONG.** It remains true of Office, and of any product that wants
+  Office's specific promise (a stable, never-reflowing ribbon across
+  every state). The operator is entitled to weigh that promise against
+  the cost of a control that can be clicked and does nothing, and rule
+  the other way for his own product. Nothing about pdfce's citation of
+  Microsoft's guidance was inaccurate; the operator simply did not adopt
+  it here.
+
+  **The distinction that survives, and is now R124's live governing
+  text — this is what "no placeholders" answers, and, just as
+  importantly, what it does NOT answer:**
+  > **Never show a control for a capability that does not exist.** This
+  > is the original R124 sentence, vindicated: *"a ribbon group is never
+  > padded with disabled placeholders for unbuilt features, and a sparse
+  > tab is not a defect."* It now governs EVERY surface — ribbon,
+  > context menu, dock panel — not scoped work only. A filed Pass ID
+  > changes nothing; a capability with no shipped verb behind it gets no
+  > control anywhere, planned-treatment or otherwise.
+  > **Do show, and disable, a control for a capability that DOES exist
+  > but does not apply to the current selection, tool or document
+  > state** — with the reason in its tooltip. This is NOT a placeholder:
+  > nothing is being promised that pdfce cannot do, only that it cannot
+  > do it right now, for a stated reason. This half is **R83's**
+  > territory (its 2026-08-07 amendment already supplies the checkable
+  > test), not R124's, and it was never in question — the Forms panel's
+  > read-only/signature/push-button rows already work exactly this way,
+  > disabled-with-a-reason rather than absent (see `FEATURES.md`'s
+  > *DELETE a form field* row).
+  >
+  > **Never confuse the two.** "Not built" and "built, but not
+  > applicable right now" are opposite facts about a control, and R124's
+  > original 2026-08-08 amendment (struck above) collapsed them — that
+  > collapse was the defect the operator's answer corrects, not the
+  > presence of the planned-treatment idea itself.
+
+  **A correction to this filing's own prior reading, recorded plainly
+  because it is the second time this session an inference about the
+  operator's intent got filed as fact.** The 2026-08-08 amendment above
+  read *"Rewrite any rules about the GUI that make it less usable and
+  user friendly"* (decision 033 §0) as itself ruling (bb) in favour of
+  placeholders. **That reading was wrong.** The general instruction was
+  about the GUI being unreachable and incomplete-FEELING, not a specific
+  ruling on R124's placeholder question — and the operator's actual
+  answer to the question, once asked directly, went the other way. **The
+  reason this cost one filing instead of a shipped feature is the
+  PENDING-CONFIRMATION marker** — the ruling was never presented as
+  settled, `Pass 47.8` was filed but not built, and no code shipped
+  against the wrong reading. Marking a ruling provisional is what made
+  being wrong here cheap; that is the finding worth keeping alongside the
+  correction itself.
+
+  **`Pass 47.8` (R124's planned-treatment control style) is RETIRED by
+  this ruling — not deferred, not re-scoped.** It should never be picked
+  up; the ID is not reused (Pass IDs are stable, hard rule 2). See the
+  *Backlog* entry's own table, below, and `FEATURES.md`'s matching
+  *Planned* row, both struck-and-annotated in the same filing.
 
 - **R125 — Only the ACTIVE tab's band is emitted (decision 024 §7,
   filed 2026-08-04, continuation 81; librarian-assigned number,
