@@ -27931,3 +27931,135 @@ leaves `text=0 paths=1`.
   — no shell, hard rule 8. This is the **forty-sixth** `SESSION_LOG.md`
   filing (the forty-fifth confirmed present by grep before this entry
   was appended).
+
+## 2026-08-09 (forty-seventh filing) — `Pass 32.0`'s GUI half SHIPS (`03c4c0f`), the Pass is COMPLETE across all three surfaces, and BOTH flags raised in filing 46 are resolved — one discharged by the wiring landing, one by naming which commit each figure described
+
+**Filed by `pdfce-librarian`, dispatched by the engineer to record the
+GUI half and resolve two flags this librarian raised in the forty-sixth
+filing. No shell available to this dispatch (hard rule 8) — `cargo
+test`/`cargo fmt`/`cargo clippy`/`check-ui-strings.sh` gate results are
+RELAYED, not independently re-run.** **Independently confirmed via
+`Read`/`Grep` directly against the working tree, extensively, before
+filing**: `PartKind`, `part_kind`/`part_hits`/`part_bounds_canvas`/
+`part_count` (`object_provider.rs:106`, `:203-247`) and every one of
+their call sites in `main.rs`; `entered_object_readout`'s `is_run`/
+`refuses_delete` branch and its exact wording (`ui_text.rs:3465-3525`);
+`part_delete_refused` (`ui_text.rs:3604`) and `delete_selected_subpath`'s
+fixed routing (`main.rs:4516-4593`), including its own inline account of
+the defect it fixes.
+
+**Shipped:**
+- `Pass 32.0` (GUI half) — the Part rung shared between path subpaths
+  and text runs via `PartKind`; a kind-aware readout (R83); the §9.4.2
+  refusal disclosed before Delete is pressed; a pre-existing
+  `SaveOutcome::Failed` misrouting fixed for both `Subpath` and `Run`.
+  **`Pass 32.0` is now COMPLETE across core, CLI and GUI.** Full record:
+  `ROADMAP.md`'s new `Pass 32.0 (GUI half)` Shipped entry (top of
+  *Shipped*).
+
+**Findings + decisions:**
+- **★ The design fact worth recording on its own, not just as
+  implementation detail**: the Point rung needs NO GUARD anywhere to
+  stay unreachable for text. `nearest_node` reaches
+  `subpath_node_points`, which pattern-matches `VectorObject::Path`
+  only — a text entry structurally cannot produce a node hit, so the
+  ladder caps itself at two rungs for text BY CONSTRUCTION, the same
+  shape as `hit_test_text_runs` not inheriting `text_hit`'s fallback
+  (filing 46). Correctness from what a query cannot reach, not from an
+  added check a later refactor could silently drop.
+- **★★ A pre-existing defect, found by the specialist's review, fixed for
+  BOTH kinds.** `delete_selected_subpath` routed every refusal —
+  including the Pass-30.0-era `DeleteWouldMoveNextSubpath` — through
+  `SaveOutcome::Failed`, the save-failure channel, for an answer that has
+  nothing to do with saving. `node_delete_refused`'s own doc comment,
+  three functions away and for the rung one level down, already states
+  the convention this violated. **Fixed for subpaths too, not only the
+  new text case** — patching only the motivating half would have left
+  the identical, older bug standing beside the fix. **Escalated to
+  `D:\dev\rag\rust\`**:
+  `a_convention_documented_on_one_function_does_not_bind_an_existing_sibling.md`.
+- **★ Flag 1 RESOLVED — DISCHARGED, correctly raised.** The four
+  `pdfce-gui` adapters filing 46 found genuinely uncalled were written
+  locally by the engineer AFTER that dispatch and BEFORE the GUI wiring
+  existed — a real, momentary R151 shape, not a misreading. All four are
+  now called from `main.rs` as of `03c4c0f`. Recorded as discharged
+  rather than deleted: a flag that turns out correct and gets acted on
+  is worth keeping visible as the record the process worked.
+- **★ Flag 2 RESOLVED — the two figures described DIFFERENT TREES, and
+  the explanation is mundane, not a defect.** Filing 46's relayed clippy
+  figure ("0 warnings") was measured against the four commits it was
+  reported alongside, where the four adapters did not exist. Filing 46's
+  own `Read`/`Grep` confirmation read the WORKING TREE, which already had
+  them. Clippy DID emit `dead_code` warnings for them while the engineer
+  built locally; they cleared when `03c4c0f` wired them in — this
+  filing's own relayed clippy figure (0 errors, 0 warnings) is measured
+  at `03c4c0f` and agrees with what filing 46 read. **The lesson, in the
+  engineer's own words**: a relayed gate figure is timestamped to a
+  commit, and handing one across without naming which commit — while the
+  tree keeps moving — lets a true figure and a true independent reading
+  look like a contradiction neither side can resolve from its own
+  evidence. Same family as the `git add -A` process note (`Pass 38.5`
+  filing). **Escalated to `D:\dev\rag\rust\`**:
+  `a_relayed_gate_figure_needs_the_commit_it_was_measured_against.md`.
+
+**Gates (relayed, measured at `03c4c0f`).** `cargo test --workspace`:
+**2616 passed, 0 failed** — unchanged from the core+CLI figure; no new
+automated tests this commit, verified instead via driven-harness traces
+(the convention prior GUI Passes 26.3/36.0/36.2 also used). `cargo fmt
+--all --check` clean. `cargo clippy --workspace --all-targets -- -D
+warnings`: **0 errors, 0 warnings — this figure and this filing's own
+confirmation now describe the SAME commit**, closing Flag 2.
+`check-ui-strings.sh` clean.
+
+**Verified end to end (engineer's own account, relayed).** Descending
+into a TEXT object: `entered=Some(EnteredObject { object: 0, subpath:
+Some(0) })` — impossible before this Pass, since `subpath_hits` returns
+empty for text. Delete on run 0: `err=Some("deleting run 0 would move
+the run after it...")`. Delete on run 3: `err=None note=Some("Run #3
+was deleted - the rest of the text object is untouched.")`.
+
+**Named follow-ups, deliberately NOT built this Pass, on the
+specialist's advice — filed as new `docs/FEATURES.md` Planned rows
+(three) plus one Backlog-only item:**
+1. Per-run decoded text in the Part-rung readout (needs a new core
+   accessor; `TextObject::preview` has no per-run boundary today).
+2. A `PartIndex` newtype replacing the shared bare `usize` — safety, not
+   a bug fix (every accessor already defends itself by kind); ~15 sites,
+   no behaviour change; no FEATURES row (no capability effect).
+3. A cascading "delete this and everything after it" verb — blocked on
+   MEASUREMENT (real inherited-chain lengths on the operator's CAD
+   file), not on design, per the specialist's explicit call.
+4. Scale-aware delete disclosure for the Part rung ("1 object deleted"
+   misdescribes a 237-run or 1194-subpath object) — recommended fixed
+   symmetrically across both kinds, not reached this session.
+
+**Still in flight:**
+- The three named follow-ups above (items 1, 3, 4), now filed as
+  unscoped `docs/FEATURES.md` Planned rows.
+- The arrow-key SINGLE-node nudge (decision 028 items 10/11) — unchanged,
+  still owed under its own entry.
+- **The five unfiled commits, still untouched, third filing running**
+  (`d3ea5de`/`1edf4e3`/`9abf5b5`/`e167867`/`01b90c4`) — not part of this
+  dispatch's scope. Flagged a third time so it is not lost.
+
+**For next session:**
+- File the five still-unfiled commits, flagged since the forty-third
+  filing, across three filings now.
+- Consider whether the three named GUI follow-ups warrant Pass IDs once
+  the operator's CAD-file inherited-chain measurement (follow-up 3) is
+  gathered.
+- **Ledger for this filing:** two new `ARCHITECTURE.md` §12 entries (the
+  `PartKind`/Point-rung-by-construction design fact; the
+  `SaveOutcome::Failed` convention-violation fix) plus one process-note
+  §12 entry (the relayed-figure/commit-mismatch lesson) plus a new §4.1
+  subsection (O). No new standing rule minted. **R151 is NOW
+  discharged for this capability** — `Pass 32.0` is reachable from every
+  surface as of this filing, closing the flag filing 46 raised. Two new
+  `D:\dev\rag\rust\` files plus their `index.md` entries. `docs/
+  FEATURES.md`'s text-run-delete row's `gui` box now reads `[x]`; three
+  new Planned rows added for the named follow-ups. `Pass 32.0` is now
+  CLOSED across core, CLI and GUI — this filing does not mint a new Pass
+  ID, it completes the existing one. Backup/git working-tree state is
+  not asserted anywhere in this filing — no shell, hard rule 8. This is
+  the **forty-seventh** `SESSION_LOG.md` filing (the forty-sixth
+  confirmed present by grep before this entry was appended).

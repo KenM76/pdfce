@@ -81,6 +81,157 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 32.0 (GUI half) — the Part rung shared between path subpaths and text runs, a kind-aware readout, and a pre-existing `SaveOutcome::Failed` misrouting fixed for BOTH kinds — 2026-08-09, committed `03c4c0f`, branch `pass-8-redaction`
+
+**★★ `Pass 32.0` IS NOW COMPLETE ACROSS ALL THREE SURFACES — core, CLI,
+GUI.** Reviewed by `pdfce-ui-specialist` first; this entry implements
+its rung ruling. Filed by `pdfce-librarian`, dispatched by the engineer.
+No shell available to this dispatch (hard rule 8) — `cargo test`/`cargo
+fmt`/`cargo clippy`/`check-ui-strings.sh` gate results below are
+RELAYED, not independently re-run. **Independently confirmed by this
+filing via `Read`/`Grep` directly against the working tree, not
+relayed:** `pub(crate) enum PartKind { Subpath, Run }` and `fn
+part_kind`/`part_hits`/`part_bounds_canvas`/`part_count` at
+`crates/pdfce-gui/src/object_provider.rs:106` and `:203-247`, all four
+called from `crates/pdfce-gui/src/main.rs` (`:3291`, `:4534`, `:18301`,
+`:18305`, `:18315`, `:18325`, `:18723`, `:19001`, `:19036`, `:19766`);
+`fn entered_object_readout(.., is_run: bool, refuses_delete: bool)` at
+`crates/pdfce-gui/src/ui_text.rs:3465`, with the `is_run` branch
+(`:3503-3515`) and the pre-Delete §9.4.2 disclosure (`:3504-3511`); `fn
+part_delete_refused` (`ui_text.rs:3604`) and the fixed
+`delete_selected_subpath` (`main.rs:4516`) routing `PartKind::Run`
+through `delete_text_run` and everything else through `delete_subpath`,
+with the `SaveOutcome::Failed`-misrouting fix and its own inline account
+at `:4575-4591`.
+
+**What shipped:**
+
+- **`PartKind` and four dispatchers** (`object_provider.rs`) — `part_kind`
+  returns `Some(Subpath)` for a path object, `Some(Run)` for a text
+  object, `None` for anything else (an image); `part_hits`/
+  `part_bounds_canvas`/`part_count` each do ONE kind match and delegate
+  to the existing `subpath_*`/`text_run_*` adapters, replacing what would
+  otherwise have been a kind match repeated at every call site — the
+  exact drift `apply_click_depth`'s own doc comment warns about under
+  R92.
+- **★ The design fact the specialist's review turned up, worth recording
+  as one**: the Point rung needs **no guard anywhere** to stay
+  unreachable for text. `nearest_node` reaches `subpath_node_points`,
+  which matches `VectorObject::Path` only — a text entry can never
+  produce a node hit, so the ladder caps itself at two rungs for text
+  **by construction**, not by a check that could be forgotten or
+  bypassed. `PartKind`'s own doc comment now states this directly (a
+  table: Delete/Drag-to-move/Descend-to-Point, one row genuinely absent
+  for `Run` rather than merely unimplemented).
+- **The readout is kind-aware, and R83 is why, not taste.** The existing
+  Part-rung sentence offers *"drag it to move just this part"* and
+  *"double-click one of its points"* — a run has **neither**: no
+  `move_text_run` verb exists anywhere in core, and a run has no anchors
+  to descend to. Reusing the path sentence would assert two affordances
+  that are not there, which R83 forbids by name, not merely by style.
+  The word is **"run," not "label"** — "label" presumes the CAD/dimension
+  case that motivated this Pass; a run is just as often a fragment of
+  ordinary prose, and "run" is already the project's own vocabulary
+  (`TextRun`, `hit_test_text_runs`) rather than a second UI-only word for
+  the same thing.
+- **The §9.4.2 refusal is disclosed BEFORE Delete is pressed, remedy in
+  the same sentence** — *"Deleting this one is refused, because the run
+  after it has no position of its own and would move — delete the later
+  run first."* On a real document some runs are deletable and some are
+  not with no visible difference between them, so the readout has to say
+  which before the keypress, not after the refusal. `O(1)` check
+  (`text_run_delete_would_move_next`), so no pointer-gating was needed
+  the way Pass 38.5's annotation-deletion preview needed one.
+
+**★★ A PRE-EXISTING DEFECT found by the specialist's review and fixed for
+BOTH kinds, not only the new one.** `delete_selected_subpath` routed
+**every** refusal — including `DeleteWouldMoveNextSubpath`, the
+Pass 30.0-era subpath guard — through `SaveOutcome::Failed`, the *"the
+document could not be written to disk"* channel, for an answer that has
+nothing to do with saving. `node_delete_refused`'s own doc comment,
+three functions away in `ui_text.rs`, already stated the convention this
+violated, **for the rung one level down**: *"Rendered as an ordinary
+note rather than as a save failure: a refused point delete is an
+expected answer at this rung, not a document that could not be
+written."* The Part rung was doing the opposite of what its own sibling
+documents, and had been since whichever Pass first wired subpath delete
+refusals to the save channel. Fixed by routing both `PartKind` branches'
+`Err` through a new `part_delete_refused` note (`ui_text.rs:3604`)
+instead — an ordinary `edit_note` carrying core's message verbatim, so
+the remedy (*"delete the later run first"* / whatever the subpath
+refusal names) survives to the operator. **Fixed for subpaths too,
+deliberately** — patching only the text half being added this Pass would
+have left the identical, older bug standing right next to the fix.
+
+**A convention stated in one function's doc comment, violated by its own
+sibling, where the sibling shipped first.** Worth its own line because
+it is a general shape, not a one-off: `node_delete_refused` documented
+the "refusal ≠ save failure" rule when it was written; `delete_selected_subpath`,
+which existed *before* `node_delete_refused` (the Part rung is one level
+above the Point rung it documents), never got the memo, because a
+doc comment on one function binds nothing about a sibling three functions
+away. **Escalated to `D:\dev\rag\rust\`** — see that RAG's new entry,
+this filing, for the general form and the generalized detection
+heuristic (grep every sibling that could violate the stated convention,
+don't trust that stating it once protects the ones that predate it).
+
+**Verified in the running application, both branches (engineer's own
+account, relayed).** Descending into a TEXT object:
+`entered=Some(EnteredObject { object: 0, subpath: Some(0) })` —
+impossible before this Pass, since `subpath_hits` returns empty for a
+text object. Delete on run 0: `err=Some("deleting run 0 would move the
+run after it...")`. Delete on run 3: `err=None note=Some("Run #3 was
+deleted - the rest of the text object is untouched.")`.
+
+**Gates (relayed, measured at `03c4c0f`).** `cargo test --workspace`:
+**2616 passed, 0 failed** — unchanged from the core+CLI figure; no new
+automated tests were added this commit, and the two behaviours above are
+verified by the driven-harness traces quoted, the same convention prior
+GUI Passes (26.3, 36.0, 36.2) have used for gesture-level verification.
+`cargo fmt --all --check` clean. `cargo clippy --workspace --all-targets
+-- -D warnings`: **0 errors, 0 warnings — and this figure and this
+filing's own `Read`/`Grep` confirmation describe the SAME commit**, see
+the resolution note appended to the Pass 32.0 (core+CLI) entry's banner,
+below. `check-ui-strings.sh` clean.
+
+**★ Resolves the R151-shape flag raised in the Pass 32.0 (core+CLI)
+Shipped entry, below — see that entry's own dated amendment footer, not
+repeated here, per append-only discipline.**
+
+**Deliberately NOT built, on the specialist's advice — named here as
+follow-ups, unscoped, no Pass ID:**
+
+1. **Per-run decoded text in the readout.** Needs a new core accessor —
+   `TextObject::preview` decodes the whole `BT`…`ET` into one string with
+   no per-run boundary retained, so the readout cannot yet say "RUN #3
+   (\"55 5/8\"\") is selected" instead of just the ordinal. Valuable and
+   separable; the on-canvas outline is already a strong disambiguator in
+   the meantime.
+2. **A `PartIndex` newtype** replacing the shared bare `usize` currently
+   used for both subpath and run ordinals. Every accessor already
+   defends itself by kind (`part_kind` gates every dispatcher), so this
+   is a safety/clarity improvement, not a bug fix — roughly 15 call
+   sites, zero behaviour change. Judged the wrong trade for this Pass.
+3. **A cascading "delete this and everything after it" verb**, for the
+   case where deleting run N would be refused N times in a row because
+   every later run inherits from the one before it. Needs real
+   inherited-chain lengths measured on the operator's CAD file first —
+   the specialist was explicit this is measurable data to gather, not a
+   design question to guess at.
+4. **`vector_objects_deleted`-style scale disclosure for a part delete**
+   — *"1 object deleted"* already misdescribes the operator's action when
+   the object held 237 runs (or, symmetrically, 1194 subpaths — the
+   identical gap the CAD-drawing path case already has). The specialist
+   recommended fixing both kinds symmetrically in one Pass rather than
+   text-only; not reached this session.
+
+**`docs/FEATURES.md`**: the *Delete one text run without deleting every
+run sharing its text object* row's `gui` box ticks in this same filing —
+`core [x]` / `cli [x]` / `gui [x]`. Three new Planned rows added for
+follow-ups 1, 3 and 4 above (follow-up 2, the `PartIndex` newtype, is an
+internal safety refactor with no capability-facing effect and gets no
+FEATURES row, per that file's own scope).
+
 ### Pass 32.0 (core + CLI) — per-RUN text deletion: deleting one label stops deleting all 237 sharing its `BT`…`ET` — 2026-08-09, committed `462fe0e`→`947ea5d`→`5bfb8fc`→`d26d269`, branch `pass-8-redaction`
 
 > **★ GUI HALF NOT SHIPPED — this Pass stays OPEN, not closed.** As of
@@ -102,6 +253,17 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 > — the adapters are real, tested-by-construction-of-their-callees
 > substrate for whatever the ui-specialist rules, not the GUI half
 > itself. `docs/FEATURES.md`'s new row (below) keeps `gui` unticked.
+>
+> **★ AMENDMENT 2026-08-09 (same day) — DISCHARGED, not withdrawn.** The
+> engineer confirms this flag was correct when raised: the four adapters
+> were written in the working tree *after* the core+CLI dispatch and
+> *before* the GUI wiring existed, so this filing was reading a genuine,
+> momentary R151 shape, not a misreading. **All four are now called from
+> `main.rs` as of `03c4c0f`** — see the `Pass 32.0 (GUI half)` Shipped
+> entry immediately above this one. Recorded as discharged rather than
+> deleted, per this document's own practice: a flag that turns out
+> correct and gets acted on is worth keeping visible as the record that
+> the process worked, not just the record that a gap once existed.
 
 **Filed by `pdfce-librarian`. No shell available to this dispatch (hard
 rule 8) — `cargo test`/`cargo fmt`/`cargo clippy`/`check-ui-strings.sh`/
@@ -248,7 +410,32 @@ reconciled, by this filing**: the four `pdfce-gui` adapters named in the
 banner above are grepped as genuinely uncalled anywhere in the
 workspace, which would ordinarily be exactly what `dead_code` exists to
 catch; this filing does not diagnose why the relayed clippy run stayed
-clean over them, only records that it did. `check-ui-strings.sh` /
+clean over them, only records that it did.
+
+> **★ AMENDMENT 2026-08-09 (same day) — RESOLVED, and the explanation is
+> mundane: the two figures described DIFFERENT TREES.** The relayed
+> clippy figure was measured against the four commits named in this
+> entry's own heading (`462fe0e`…`d26d269`), where the four adapters did
+> not yet exist. This filing's own `Read`/`Grep` confirmation was run
+> against the WORKING TREE at the moment of filing, which already had
+> them (the engineer had written them locally, ahead of the GUI wiring
+> that would call them, before this filing's dispatch). Clippy DID emit
+> `dead_code` warnings for the adapters while the engineer was building
+> against them locally, and they cleared when the GUI wiring landed
+> (`03c4c0f`) — see the `Pass 32.0 (GUI half)` Shipped entry above,
+> whose own clippy figure is measured at that exact commit and therefore
+> agrees with what this filing read.
+>
+> **The lesson is the engineer's own, stated for the record: a relayed
+> gate figure is timestamped to a commit, and handing one across without
+> naming which commit it describes — while the tree keeps moving — lets a
+> true figure and a true independent reading look like a contradiction
+> that neither side can resolve from its own evidence.** Same family as
+> the `git add -A` process note (`Pass 38.5` filing, above): a filing's
+> confirmation and a relayed figure are each correct about the state they
+> were taken against, and the failure is not naming which state that was.
+> **Escalated to `D:\dev\rag\rust\`** — see that RAG's new entry, this
+> filing, for the general form. `check-ui-strings.sh` /
 `check-bypass-paths.sh` clean (relayed). No `Cargo.toml` touched — the
 `cargo tree -p pdfce-core` / `-p pdfce-render` GUI-dependency invariant
 is unaffected and was not re-run.
@@ -25896,6 +26083,17 @@ mind (see the gate block at the top of *Shipped*).
 > 2026-08-05) is confirmed to have named both prerequisites correctly** —
 > left in place, unedited, as the record of what the core work turned out
 > to need.
+>
+> **★★ UPDATE 2026-08-09 (same day) — GUI HALF SHIPPED, `03c4c0f`.
+> `Pass 32.0` IS NOW COMPLETE ACROSS ALL THREE SURFACES.** See the
+> `Pass 32.0 (GUI half)` Shipped entry (top of *Shipped*, above the
+> core+CLI entry this banner sits under) for the full record: the Part
+> rung shared between path subpaths and text runs via a `PartKind`
+> dispatcher, a kind-aware readout (R83), and a pre-existing
+> `SaveOutcome::Failed` misrouting fixed for BOTH subpaths and runs. The
+> four `pdfce-gui` adapters flagged as uncalled substrate immediately
+> above are now called, as of this same commit — that flag is DISCHARGED,
+> not withdrawn (see its own dated amendment on the Shipped entry).
 
 **Pass ID librarian-assigned 2026-08-05** (next free after 31.0; engineer
 to confirm).

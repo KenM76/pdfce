@@ -1756,6 +1756,83 @@ chain) pattern-matching or iterating `runs` as `Bounds` directly needs
 engineer; not independently re-run by this filing — no shell, hard rule
 8).
 
+### (O) `Pass 32.0` GUI half (`03c4c0f`) — the Part rung unified across path subpaths and text runs: `PartKind`, `part_hits`/`part_bounds_canvas`/`part_count`/`part_kind`, and a `SaveOutcome::Failed` misrouting fixed for both kinds — 2026-08-09
+
+**`pdfce-gui`-internal, not core-crate public API — recorded here per
+this document's own practice of logging `pdfce-gui`-internal decisions
+that generalize beyond one commit's diff** (same footing as (M)'s
+sibling entry, "Pass 23.3 GUI half," above). Verified directly in
+`object_provider.rs`, `ui_text.rs` and `main.rs`:
+
+- **`pub(crate) enum PartKind { Subpath, Run }`**
+  (`object_provider.rs:106`) — which kind of part the shared "Part" rung
+  is standing on for a given object. Its own doc comment states the
+  design fact directly enough to reproduce here verbatim as the decision:
+  *"The rung is shared between path SUBPATHS and text RUNS, and almost
+  everything about it is identical — nearest-first hit order, an outline
+  to draw, Escape to ascend, Delete to remove. What differs is the VERB
+  SET"* — Delete routes to `delete_subpath` or `delete_text_run`; drag-
+  to-move exists only for `Subpath` (no `move_text_run` verb exists in
+  core at all); descent to the Point rung exists only for `Subpath`.
+- **★ The design fact worth its own line: the Point-rung row needs NO
+  GUARD ANYWHERE.** `nearest_node` reaches `subpath_node_points`, which
+  matches `VectorObject::Path` only — a text entry can structurally never
+  produce a node hit, so the ladder caps itself at two rungs for text
+  **by construction**, not by a check that a future refactor could
+  accidentally remove. This is the same shape as (N)'s
+  `hit_test_text_runs` NOT inheriting `text_hit`'s fallback: correctness
+  achieved by what a query CANNOT reach, rather than by a guard that
+  could be forgotten.
+- **`part_kind`/`part_hits`/`part_bounds_canvas`/`part_count`**
+  (`object_provider.rs:203-247`) — one dispatcher per query, each doing
+  exactly one `PartKind` match and delegating to the existing
+  `subpath_*`/`text_run_*` adapters, so the kind match happens ONCE
+  rather than being repeated at every call site — the exact drift
+  `apply_click_depth`'s own doc comment (`canvas.rs:372`) already warned
+  about under R92 (two places deciding "which part is under the pointer"
+  going out of step invisibly).
+- **`ui_text::entered_object_readout` gains `is_run: bool` and
+  `refuses_delete: bool` parameters** (`ui_text.rs:3465`). R83 is the
+  reason, not merely a wording preference: the existing Part-rung
+  sentence offers "drag it to move just this part" and "double-click one
+  of its points," and a run has **neither** affordance — reusing the
+  sentence would assert two things that are not there. The refusal is
+  disclosed **before** Delete is pressed (`refuses_delete`), remedy in
+  the same sentence, because on a real document some runs are deletable
+  and some are not with no visible difference — the operator needs to
+  know before the keypress, not after a refusal.
+
+**★★ A pre-existing defect, found by the specialist's review and fixed
+for BOTH kinds.** `delete_selected_subpath` (`main.rs:4516`) routed
+**every** refusal — including `VectorEditError::DeleteWouldMoveNextSubpath`,
+in place since the Pass 30.0-era subpath work — through
+`SaveOutcome::Failed`, the channel meaning *"the document could not be
+written to disk."* `ui_text::node_delete_refused`'s own doc comment,
+three functions away and for the rung one level down, already stated the
+convention this violated: *"Rendered as an ordinary note rather than as
+a save failure: a refused point delete is an expected answer at this
+rung, not a document that could not be written."* **A convention stated
+in one function's doc comment does not bind a sibling that predates
+it** — `delete_selected_subpath` existed before `node_delete_refused` was
+written to document the rule one rung down, and nothing re-checked the
+Part rung against it. Fixed by routing both `PartKind` branches' `Err`
+through a new `ui_text::part_delete_refused` (`ui_text.rs:3604`) instead
+— an ordinary `edit_note`, core's message passed through verbatim so its
+remedy survives. **Fixed for `Subpath` too, deliberately, not only the
+new `Run` case** — patching only the text half being added this Pass
+would have left the identical, older bug standing right next to the fix.
+**Escalated to `D:\dev\rag\rust\`** as its own finding (see that RAG's
+index) — the general shape (a convention documented on one function is
+not thereby true of an existing sibling) is common enough to be worth a
+standalone entry rather than folded into this Pass's own record.
+
+**Breaking? No.** `pdfce-gui`-internal only — `SaveOutcome`'s own
+variant set is unchanged; only which branch a caller routes an `Err`
+through changed. No core/CLI surface touched. Test count unchanged at
+this commit (2616, same as the core+CLI figure) — verified instead by
+driven-harness traces, per `ROADMAP.md`'s `Pass 32.0 (GUI half)` Shipped
+entry.
+
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
 **A partial sync that names its edges is worth more than a
@@ -13212,3 +13289,69 @@ started).
   Breaking? **No** — internal helper, no public signature changed; every
   existing path-only vector verb pays nothing extra (no `Tf` in a path
   stream, the font resolver is never invoked for it).
+- **2026-08-09 (`Pass 32.0` GUI half, `03c4c0f`) — the Part rung is
+  unified across path subpaths and text runs by a `PartKind` dispatcher,
+  and the Point rung's exclusion of text needs no guard because
+  `nearest_node` cannot structurally reach it.** Full signatures in
+  §4.1's new subsection (O), above — recorded here as the decision-log
+  pointer that section requires. **In one sentence**: `PartKind::{
+  Subpath, Run}` names which verb set a "Part" applies (Delete always
+  exists; drag-to-move and Point-rung descent exist only for `Subpath`),
+  and `part_hits`/`part_bounds_canvas`/`part_count`/`part_kind` each do
+  ONE kind match instead of five call sites each doing their own —
+  `apply_click_depth`'s own doc comment had already warned this class of
+  drift under R92. **The design fact worth restating on its own**: no
+  code anywhere checks "is this a text object, refuse Point-rung
+  descent" — `nearest_node`'s only path to a node is through
+  `subpath_node_points`, which pattern-matches `VectorObject::Path`, so a
+  text entry structurally cannot produce a hit there. Correctness by
+  construction, not by an added guard a later refactor could silently
+  drop — the same shape as `hit_test_text_runs` (N, above) not
+  inheriting `text_hit`'s fallback. Breaking? **No** — `pdfce-gui`-
+  internal only.
+- **2026-08-09 (`Pass 32.0` GUI half, `03c4c0f`) — a channel-routing
+  convention documented on one function does not thereby bind an
+  existing SIBLING that predates the documentation, and the fix belongs
+  to every affected kind, not only the one motivating the Pass.**
+  `delete_selected_subpath` routed every refusal — including the
+  Pass-30.0-era `DeleteWouldMoveNextSubpath` — through
+  `SaveOutcome::Failed` (the "could not write to disk" channel), for an
+  answer that has nothing to do with saving. `ui_text::
+  node_delete_refused`'s own doc comment, written later and for the rung
+  one level down, already states the rule this violated: a refused
+  delete is an ordinary expected answer at its rung, not a save failure.
+  Nothing re-checked the OLDER, Part-rung code against a convention
+  stated on a NEWER, Point-rung sibling. **Fixed for BOTH `PartKind`
+  branches in the same commit that added the second one** — the
+  `Pass 32.0` text-run case is what surfaced the review that found this,
+  but shipping the text-only fix and leaving the identical path-side bug
+  standing beside it would have been the wrong scope call. New
+  `ui_text::part_delete_refused` carries core's refusal message verbatim
+  for both kinds. **Escalated to `D:\dev\rag\rust\`** as its own finding
+  — a documented-on-one-function convention is not evidence a sibling
+  honours it; grep for the convention's violation across siblings, don't
+  trust that stating it once protects code that predates the statement.
+  Breaking? **No** — `pdfce-gui`-internal, `SaveOutcome`'s variant set
+  unchanged; only which branch an `Err` routes through changed.
+- **2026-08-09 (process note, no code) — a relayed gate figure is
+  timestamped to a commit, and handing one across without saying which
+  commit it describes, while the tree keeps moving, lets two independently
+  correct observations read as a contradiction neither side can resolve
+  from its own evidence.** This filing's `Pass 32.0 (core + CLI)` Shipped
+  entry (`ROADMAP.md`) flagged a relayed `clippy -D warnings` figure of
+  "0 warnings" as surprising beside four `pdfce-gui` adapters this
+  filing's own `Read`/`Grep` confirmed were genuinely uncalled — exactly
+  what `dead_code` exists to catch. Both were true: the relayed clippy
+  figure was measured against the four commits named in that entry's own
+  heading, where the adapters did not yet exist; this filing's own
+  confirmation read the WORKING TREE, which already had them (written
+  locally, ahead of the GUI wiring that would call them). Clippy DID warn
+  on them while the engineer built against them locally, and the warning
+  cleared when `03c4c0f` wired them in. **Same family as the `git add -A`
+  process note** (`ROADMAP.md`'s `Pass 38.5` filing, above): a filing's
+  own confirmation and a relayed figure are each correct about the state
+  they were taken against; the failure is not stating which state that
+  was. **Escalated to `D:\dev\rag\rust\`** as its own finding, generalized
+  beyond this one instance. No `ARCHITECTURE.md` body-section change —
+  process note only, recorded here per this document's own practice of
+  logging findings that generalize even when no API or invariant moved.
