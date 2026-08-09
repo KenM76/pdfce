@@ -1054,7 +1054,8 @@ for and it is now much wider than any prior block described:
   `decompose_with_fonts`
 - from **`edit`**: `Handle`, `PlannedEdit`, `VectorEditError`,
   `anchor_count`, `plan_delete`, `plan_delete_subpath`, `plan_move`,
-  `plan_move_handle`, `plan_move_node`, `plan_move_subpath`
+  `plan_move_handle`, `plan_move_node`, `plan_move_nodes`,
+  `plan_move_subpath`
 - from **`geometry`**: `Bounds`, `Matrix`, `Point`, `Rgb`,
   `cubic_from_v`, `cubic_from_y`, `rect_corners`
 - from **`hit`**: `FLATTEN_STEPS`, `MarqueeMode`, `hit_test_point`,
@@ -1569,6 +1570,90 @@ script-driven path to them.
 
 **Breaking? NO.** All additions. `cargo tree -p pdfce-core` re-verified
 at this commit: 0 GUI/windowing dependencies (§3 invariant held).
+
+### (M) `Pass 23.3` residual (`e1430d8`) — `plan_move_nodes`, `EditSession::move_nodes`, and bucket-by-operator anchor grouping — 2026-08-09
+
+**Additive.** Verified directly in `vector/edit.rs` and `edit.rs`:
+
+- **`vector::plan_move_nodes(content: &ContentStream, obj: &PathObject,
+  moves: &[(usize, Point)]) -> Result<PlannedEdit, VectorEditError>`**
+  (`vector/edit.rs:1604`) — moves an arbitrary set of on-curve anchors in
+  ONE planned edit, generalising `plan_move_node` (Pass 30.0) from one
+  anchor to N.
+- **`EditSession::move_nodes(&mut self, page_index: usize, object_index:
+  usize, moves: &[(usize, Point)]) -> Result<Vec<String>, EditError>`**
+  (`edit.rs:4353`) — the **seventh** member of (C.2)'s
+  `Vec<String>`-returning family (after `move_handle` was named the
+  sixth in section (D), above), routing through the same
+  `vector_surgery(CommandKind::MoveNode, ..)` helper `move_node` already
+  used — no new `CommandKind` variant was needed.
+- **Two new `VectorEditError` variants** (`vector/edit.rs:323`, `:335`):
+  `DuplicateNodeInMove { index: usize }` and `EmptyMove`. Neither existed
+  in (C.3)'s "current variant set" snapshot (§4.1 (C), dated 2026-08-05);
+  that snapshot is not retroactively edited, per this document's own
+  practice of dating body-section snapshots rather than silently
+  rewriting them — this bullet is the delta.
+
+**The design decision, worth its own record because it is what makes two
+previously-inexpressible cases expressible.** Anchors passed to
+`plan_move_nodes` are bucketed **by the operator that DEFINES them, not
+by node index.** Each bucket emits exactly one replacement. Two
+consequences follow directly from that choice:
+
+1. **All four corners of one `re` collapse into ONE §8.5.2.1 Table 59
+   `re`→`m l l l` expansion**, because they are, in the source bytes,
+   the four operands of a single operator — a per-node bucketing scheme
+   would instead attempt four competing edits to the same operator and
+   have no principled way to reconcile them.
+2. **An implicit `h`-reopened subpath start, which shares a byte range
+   with its own segment's endpoint, resolves as one bucket** rather than
+   two overlapping edits — and two overlapping edits is a case `splice`
+   (the byte-range replacement primitive every planned edit ultimately
+   goes through) **silently drops one half of**, not a case it errors
+   on. Bucketing by operator is what prevents that silent loss; it is
+   not merely a convenience for the `re` case above.
+
+**A bug this design surfaced, and its fix.** A bucket's operands were
+initially sourced from the bucket's FIRST site by byte position — wrong
+whenever an implicit anchor (which has no operands of its own to supply)
+sorted ahead of the bucket's editable site, producing `MalformedOperand`
+on every such request. Fixed by sourcing operands from the bucket's
+*editable* site specifically, never merely its first.
+
+**★★ A self-correction, recorded because the wrong argument was
+plausible enough to nearly ship as the justification for this verb
+existing at all.** The doc comment originally argued `move_nodes` must
+be a single core plan because a LOOP of `move_node` calls would
+**corrupt** an `re` — the second call, the argument went, would plan its
+edit against content-stream bytes the first call had already replaced.
+**This is false**, and was refuted by the author's own test rather than
+by a later reader: a real caller must re-decompose the content stream
+between calls (`plan_move_node` takes a freshly-parsed `ContentStream`,
+never a cursor into a stale one), and the bucketing design above
+preserves both anchor **count** and anchor **order** across the `re`
+expansion, so anchor index *k* names the same geometric point on every
+call. **A loop's output is therefore byte-identical to `move_nodes`'s
+single-surgery output** — the test written to prove corruption
+(`assert_ne!` on the two byte-strings) instead proved equality. **The
+real justifications are the ones already on record from `Pass 41.0`**:
+one-gesture-one-undo, and disclosure de-duplication (a one-element batch
+now shares its disclosure wording with `move_node` via new shared
+constants, verified by a dedicated text-comparison test, not merely a
+byte-comparison one). The refuted test was **kept, inverted to
+`assert_eq!`, and renamed**
+(`a_two_call_loop_matches_one_call_byte_for_byte_but_costs_two_undos`)
+rather than deleted, so it stands as the falsification's own permanent
+record. **Escalated to `D:\dev\rag\rust\`** — 10th occurrence in
+`trust_but_verify_doc_comments_are_not_evidence.md` (amended in place;
+not a new sibling), and the file's first POSITIVE instance: the other
+nine are all "a confident comment nobody re-checked," this one WAS
+checked, by its own author, in the same commit, and the falsifying test
+was preserved rather than discarded once superseded.
+
+**Breaking? NO.** All additions — two new error variants, two new
+functions. `cargo tree -p pdfce-core` unaffected: no `Cargo.toml`
+touched this Pass (relayed by the dispatching engineer; not
+independently re-run by this filing — no shell, hard rule 8).
 
 ### (I) What this sync did NOT cover — stated so the edges are honest
 
@@ -12903,3 +12988,45 @@ started).
   cost: gate on `contains_pointer()`, not `hovered()`, whenever the
   disabled case must still show its reason. Breaking? **No** — GUI-only,
   no public `pdfce-core`/`pdfce-cli` surface touched.
+- **2026-08-09 (`Pass 23.3` residual, `e1430d8`) — anchors passed to a
+  multi-node move are bucketed BY THE OPERATOR THAT DEFINES THEM, not by
+  node index, and that choice is the decision worth recording.** Full
+  signatures and rationale in §4.1's new subsection (M), above — recorded
+  here as the decision-log pointer that section requires. In one
+  sentence: bucketing by operator lets N corners of one `re` collapse
+  into ONE §8.5.2.1 Table 59 expansion instead of N competing edits to
+  the same operator, and lets an implicit `h`-reopened subpath start
+  (which shares a byte range with its own segment's endpoint) resolve as
+  one bucket instead of two overlapping edits that `splice` would
+  otherwise silently drop one half of. Not a per-node scheme with a
+  special case bolted on — the bucketing IS the mechanism that makes
+  both cases expressible at all.
+- **2026-08-09 (`Pass 23.3` residual, `e1430d8`) — a correctness argument
+  for why `move_nodes` must be a single core plan was drafted BEFORE
+  testing, and the author's own test REFUTED it; the refuted test was
+  kept, inverted, and renamed rather than deleted.** The claim: a loop of
+  `move_node` calls would corrupt an `re`, because the second call plans
+  against bytes the first already replaced. False — a real caller
+  re-decomposes the content stream between calls, and the bucket-by-
+  operator design above preserves anchor count and order across the `re`
+  expansion, so a loop's output is byte-identical to `move_nodes`'s own.
+  The real justifications were already on record from `Pass 41.0`:
+  one-gesture-one-undo, and disclosure de-duplication (now verified by a
+  dedicated text-comparison test, not merely a byte-comparison one, so a
+  one-element batch cannot silently drift from `move_node`'s own
+  wording). The test that would have proved corruption (`assert_ne!`)
+  was kept once it proved the opposite — inverted to `assert_eq!` and
+  renamed
+  `a_two_call_loop_matches_one_call_byte_for_byte_but_costs_two_undos` —
+  so the next reader who asks "could this just be a loop?" finds the
+  question already answered rather than re-deriving it and landing on
+  the wrong side. **Escalated to `D:\dev\rag\rust\`** as the 10th
+  occurrence in `trust_but_verify_doc_comments_are_not_evidence.md`
+  (amended in place, not a new sibling — that file's own 2026-08-05
+  ruling keeps this class of finding in the cross-project RAG rather
+  than `ROADMAP.md`'s Standing rules) and the file's first POSITIVE
+  instance: the other nine occurrences are all "a confident comment
+  nobody re-checked"; this one WAS checked, by its own author, in the
+  same commit, and the falsifying test was preserved as the refutation's
+  permanent record rather than discarded once superseded. Breaking?
+  **No** — additive core surface only; see §4.1 (M) for the signatures.

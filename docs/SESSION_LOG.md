@@ -27400,3 +27400,125 @@ this correction and remain owed.
   filing (the forty-first confirmed present by grep before this entry
   was appended). Backup/git working-tree state is not asserted anywhere
   in this filing — no shell, hard rule 8.
+
+## 2026-08-09 (forty-third filing) — `Pass 23.3`'s CORE residual ships (`e1430d8`): `plan_move_nodes`/`EditSession::move_nodes`, bucket-by-operator anchor grouping, and a doc-comment correctness argument the author's own test refuted and KEPT rather than deleted
+
+**Filed by `pdfce-librarian`, dispatched by the engineer to record
+`move_nodes`'s shipment. No shell available to this dispatch (hard rule
+8) — `cargo test`/`cargo fmt`/`cargo clippy`/`check-ui-strings.sh`/
+`check-bypass-paths.sh` gate results are RELAYED from the engineer's
+dispatch summary, not independently re-run.** **Independently confirmed
+via `Read`/`Grep` directly against the working tree:** `plan_move_nodes`
+(`crates/pdfce-core/src/vector/edit.rs:1604`), `move_nodes`
+(`crates/pdfce-core/src/edit.rs:4353`), `VectorEditError::EmptyMove`/
+`::DuplicateNodeInMove` (`vector/edit.rs:335`/`:323`) all exist;
+`crates/pdfce-core/tests/node_multi_move.rs` counted directly at **11**
+`#[test]` functions, matching the relayed figure.
+
+**Shipped:**
+- `Pass 23.3` — the core residual (`plan_move_nodes` + `EditSession::move_nodes`
+  + the `EmptyMove`/`DuplicateNodeInMove` refusal set), filed under the
+  existing Pass ID rather than a freshly minted one — `Pass 23.3`'s own
+  Backlog entry already carried a dated engineer restatement naming
+  exactly this as its residual scope. **No CLI, no GUI** — R151 applies,
+  named by the engineer at ship time. See `ROADMAP.md`'s new `Pass 23.3`
+  Shipped entry (top of *Shipped*) for the full build record.
+
+**Decisions made this session:** none new by this librarian filing — the
+bucket-by-operator anchor-grouping design is the engineer's, recorded as
+an `ARCHITECTURE.md` §12 dated entry (not a numbered decision, matching
+the disposition of the other additive core-surface Passes in that
+family).
+
+**Findings + decisions:**
+- **A doc-comment correctness argument was drafted before it was tested,
+  and the author's own test refuted it — the refuted test was KEPT,
+  inverted, and renamed rather than deleted.** The claim: a loop of
+  `move_node` calls would corrupt an `re` because the second call plans
+  against bytes the first already replaced. False — a real caller
+  re-decomposes between calls, and the `re` expansion preserves anchor
+  count and order, so the loop's output is byte-identical to
+  `move_nodes`'s own. The real justifications were the ones already on
+  record from `Pass 41.0`: one-gesture-one-undo and disclosure
+  de-duplication. **Escalated to `D:\dev\rag\rust\` as the 10th occurrence
+  in `trust_but_verify_doc_comments_are_not_evidence.md`** (amended in
+  place — that file's own 2026-08-05 ruling keeps this class of finding
+  in the cross-project RAG, not `ROADMAP.md`'s Standing rules; not a new
+  sibling file, per the engineer's own suggestion and this librarian's
+  read of the existing file's scope). This is the file's first POSITIVE
+  instance — nine prior occurrences are all "nobody re-checked a
+  confident comment"; this one WAS checked, by the same author, in the
+  same commit, and the falsifying test was preserved as the permanent
+  record of the refutation rather than discarded once superseded.
+- **Two bugs the tests caught in the bucket-sharing path**, both now
+  fixed: operand sourcing pulled from a bucket's first (possibly
+  implicit, operand-less) site instead of its editable one; and the
+  disclosure wording was plural-only, so a one-element batch read
+  differently from `move_node` for the identical node — now shared
+  named constants, cross-checked by a dedicated test comparing
+  disclosure TEXT, not only output bytes.
+- **★ Five commits flagged, not filed — a genuine gap, not asserted as
+  more than that.** The environment snapshot available to this dispatch
+  names five commits (`d3ea5de`, `1edf4e3`, `9abf5b5`, `e167867`,
+  `01b90c4`, most-recent-first) between the forty-second filing's
+  `fcb6544` and this Pass's `e1430d8`, none of which appear anywhere in
+  `ROADMAP.md` or `SESSION_LOG.md` (grepped directly — zero hits). This
+  filing does NOT backfill them; no engineer-supplied build detail
+  exists for them in this dispatch, only one-line `git log` subjects,
+  and inventing Shipped-entry content from a subject line would violate
+  the same evidentiary bar hard rule 8 states for git/backup state,
+  extended here to Pass content generally. **They predate this session
+  entirely and were already at `HEAD` when it started** — endorsed
+  explicitly by the dispatching engineer as the right call, not left as
+  this librarian's judgment alone. **Cleared of the test-count question**
+  (see the next finding): the arithmetic now closes without them, so
+  there is nothing left for them to explain.
+- **★ CORRECTED — the test-count arithmetic now closes exactly; this
+  filing's own first draft had it wrong.** The draft reported baseline
+  2567 + `node_multi_move.rs`'s 11 tests = 2578 against a relayed 2580,
+  a 2-test gap, and speculated (flagged, not asserted) that the five
+  commits above might explain it. **They don't, and the gap was never
+  external work — it was an incomplete count.** `plan_move_nodes`
+  carries two runnable doctests (`vector/edit.rs:1558–1603`, one `#
+  Examples` heading with two separate fenced code blocks, each
+  compiling as its own doctest) that the original count missed:
+  `cargo test -p pdfce-core --test node_multi_move` → 11 passed;
+  `cargo test -p pdfce-core --doc vector::edit::plan_move_nodes` → 2
+  passed. **2567 + 11 + 2 = 2580, exact.** Independently confirmed by
+  this filing via `Read` against the source (not merely relayed): both
+  fenced blocks exist, and the `re`-corner one asserts the exact output
+  `-1 -1 m 10 0 l 12 12 l 0 10 l h S`, pinning the bucket-by-operator
+  mechanism in `plan_move_nodes`'s public documentation, not only in the
+  test file. **The corrected figure: 13 new tests, 11 integration + 2
+  doctests.** `ROADMAP.md`'s `Pass 23.3` Shipped entry amended in place
+  to match (same-filing self-correction, not a new dated entry — the
+  original text had not yet been read by anything downstream).
+
+**Still in flight:**
+- The five unfiled commits above — owed a filing, by the engineer, with
+  real build detail this librarian does not have.
+- GUI drag wiring for multi-node move, and a `pdfce-cli` subcommand —
+  both still unbuilt (R151), both now unblocked at the core layer.
+- Arrow-key node nudge for a SINGLE node (decision 028 items 10/11) is
+  still owed and was already coupled to this capability's scoping in
+  `ROADMAP.md`/`FEATURES.md`; unaffected by this filing, still open.
+
+**For next session:**
+- File the five flagged commits (`d3ea5de`/`1edf4e3`/`9abf5b5`/`e167867`/
+  `01b90c4`) with real build detail, or confirm they are already covered
+  under an ID this librarian could not find by grep.
+- Decide/scope the GUI drag-wiring follow-on for multi-node move (no
+  Pass ID assigned yet — this filing deliberately did not mint one for
+  work that has not started).
+- **Ledger for this filing:** no new standing rule minted (the
+  self-correction finding went to `D:\dev\rag\rust\`, matching that
+  file's own prior ruling; the five-commit gap is flagged, not promoted
+  to a rule, being a single occurrence of a pattern this project's
+  `check-passes-filed.py` already exists to catch mechanically once run
+  with a shell). No new decision record beyond the `ARCHITECTURE.md`
+  §12 dated entry named above. `Pass 23.3` is the Pass ID this filing
+  used — REUSED, not minted (hard rule 2 permits this: multi-node move
+  is the same feature 23.3 always named). This is the **forty-third**
+  `SESSION_LOG.md` filing (the forty-second confirmed present by grep
+  before this entry was appended). Backup/git working-tree state is not
+  asserted anywhere in this filing — no shell, hard rule 8.

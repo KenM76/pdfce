@@ -81,6 +81,203 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 23.3 — the CORE residual discharged: `plan_move_nodes` + `EditSession::move_nodes`, bucket-by-operator anchor grouping, and a doc-comment correctness argument the author's own test refuted (core only) — 2026-08-09, committed `e1430d8`, branch `pass-8-redaction`
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8) — `cargo test`/`cargo fmt`/`cargo clippy`/`check-ui-strings.sh`/
+`check-bypass-paths.sh` gate results below are RELAYED from the
+engineer's own dispatch summary, not independently re-run.**
+**Independently confirmed by this filing via `Read`/`Grep` directly
+against the working tree, not relayed:** `pub fn plan_move_nodes` exists
+at `crates/pdfce-core/src/vector/edit.rs:1604`; `VectorEditError::EmptyMove`
+and `::DuplicateNodeInMove { index }` exist at `vector/edit.rs:335` and
+`:323`; `pub fn move_nodes` exists at `crates/pdfce-core/src/edit.rs:4353`,
+its doc comment citing both new error variants at lines 4338–4339;
+`crates/pdfce-core/tests/node_multi_move.rs` exists and contains
+**11** `#[test]` functions, counted directly — matches the relayed
+figure exactly.
+
+**⚠ FLAGGED, NOT FILED — five commits between the last-recorded work and
+this one have no `ROADMAP.md`/`SESSION_LOG.md` entry anywhere.** The
+environment snapshot available to this dispatch lists, most-recent-first:
+`01b90c4` ("the oracle can finally hear pdfce say 'I skipped something'"),
+`e167867` ("the oracle stops calling explained differences 'benign
+renderer noise'"), `9abf5b5` ("sub-pixel strokes stop rendering at 9%
+contrast"), `1edf4e3` ("text with no /Widths stops stacking on a single
+point"), `d3ea5de` ("transparency stops being ignored: /ca and /CA are
+honoured"). **None of these five hashes or subjects appear anywhere in
+`ROADMAP.md` or `SESSION_LOG.md`** (grepped directly, zero hits) — they
+sit, by subject line, between the forty-second `SESSION_LOG.md` filing's
+`fcb6544` and this Pass's `e1430d8`. **This filing does not attempt to
+backfill them.** No engineer-supplied build detail (what shipped, test
+counts, invariant checks) exists for them in this dispatch, and inventing
+Shipped-entry content from a one-line `git log` subject would violate the
+same evidentiary bar hard rule 8 states for git/backup state, applied
+here to Pass content generally. **Flagged for the engineer to file, or to
+fold into a future dispatch.** They predate this session entirely and
+were already at `HEAD` when it started. **Cleared, explicitly, of the
+test-count question below** — see the *Test results* paragraph; the
+arithmetic now closes on this Pass's own tests alone, with nothing left
+for these five commits to explain.
+
+**Why this ships under `Pass 23.3` rather than a freshly minted ID.**
+Decision 023 Q4 scoped `Pass 23.3` (Backlog, above) as three components:
+node selection set, multi-node move, node delete. The first two-thirds
+already shipped under other IDs — selection set as `Pass 41.0`
+(`66cee16`), delete as `Pass 36.1` (`23f8f8e`) — and 23.3's own Backlog
+entry already carries a dated engineer-attributed restatement of what was
+left: *"the honest reading today is '23.3 = `plan_move_nodes` + its
+refusal set,' but narrowing a decided Pass is an engineer act... nothing
+minted, nothing renumbered by this note."* **This filing treats the
+dispatching engineer's precise naming of what shipped — `plan_move_nodes`
+plus exactly `EmptyMove`/`DuplicateNodeInMove` as its refusal set — as
+that engineer act**, performed at ship time rather than pre-announced;
+this entry files it, it does not infer it. Hard rule 2 (Pass IDs never
+reused for a *different* feature) does not bar this: multi-node move is
+the SAME feature 23.3 always named, not a different one wearing its
+number. See the dated addendum on 23.3's own Backlog entry, below, and
+the amendment on `Pass 41.0`'s Shipped entry (`ROADMAP.md`, further up
+*Shipped*, dated the same day) for the two forward/backward pointers this
+discharge requires.
+
+**What shipped, core (`pdfce-core`):**
+
+- `pdfce_core::vector::plan_move_nodes(content: &ContentStream, obj:
+  &PathObject, moves: &[(usize, Point)]) -> Result<PlannedEdit,
+  VectorEditError>` — re-exported from `vector`. Moves an arbitrary set
+  of on-curve anchors in ONE planned edit.
+- `EditSession::move_nodes(&mut self, page_index: usize, object_index:
+  usize, moves: &[(usize, Point)]) -> Result<Vec<String>, EditError>` —
+  commits through the existing `CommandKind::MoveNode`, the same command
+  kind the single-node `move_node` already used, so undo/redo needed no
+  new variant.
+- Two new `VectorEditError` variants: `EmptyMove` and
+  `DuplicateNodeInMove { index }`.
+- Four new private disclosure constants, shared with `plan_move_node`
+  (singular and plural forms), so a one-element `move_nodes` batch
+  produces disclosure TEXT identical to `move_node`'s own — not merely
+  byte-identical output, the wording matches too (see the bug-fix list,
+  below).
+
+**The mechanism, stated once because it is what makes two previously
+inexpressible cases expressible.** Anchors are bucketed **by the operator
+that DEFINES them**, not by node. A single bucket emits a single
+replacement. This is what lets: (1) all four corners of one `re` — which
+are, in the source bytes, the four operands of ONE operator — collapse
+into ONE §8.5.2.1 Table 59 `re`→`m l l l` expansion instead of four
+competing edits to the same operator; and (2) an implicit `h`-reopened
+subpath start, which shares a byte range with its own segment's endpoint,
+resolve as one bucket instead of two overlapping edits that `splice`
+would otherwise silently drop one of.
+
+**★ The finding that matters most, and it is a self-correction, kept
+rather than smoothed over.** The tempting argument for why `move_nodes`
+must exist as a core verb — drafted into the doc comment before any test
+exercised it — was that a loop of `move_node` calls would **corrupt** an
+`re`, because the second call plans against bytes the first already
+replaced. **It is false**: a real caller re-decomposes the content stream
+between calls, and the expansion preserves both anchor count and order,
+so a loop's output is **byte-identical** to `move_nodes`'s. The real
+justifications are the ones already on record from `Pass 41.0`:
+one-gesture-one-undo, and disclosure de-duplication. The test that would
+have proved corruption (`assert_ne!`) was **kept rather than deleted**
+once it proved the opposite — inverted to `assert_eq!` and renamed
+`a_two_call_loop_matches_one_call_byte_for_byte_but_costs_two_undos` — so
+the next reader who asks "could this just be a loop?" finds the question
+already answered. **Escalated as a `D:\dev\rag\rust\` finding** —
+10th occurrence added to `trust_but_verify_doc_comments_are_not_evidence.md`
+(amended in place, not a new sibling; that file's own prior ruling keeps
+this class of finding out of `ROADMAP.md`'s Standing rules and in the
+cross-project RAG, where every future project sees it).
+
+**Two bugs the tests caught, both in the bucket-sharing path:**
+
+1. **Operands were sourced from the bucket's FIRST site**, wrong whenever
+   an implicit anchor (no operands of its own) sorts ahead of the
+   editable one — every operand-slot check failed with `MalformedOperand`.
+   Fixed: sourced from the bucket's *editable* site specifically.
+2. **The disclosure wording was plural-only**, so a one-element batch
+   read differently from `move_node` for the identical node. Fixed by
+   sharing named constants; `a_single_element_batch_matches_the_single_node_verb`
+   compares the disclosure TEXT, not only the bytes, so the two verbs
+   cannot drift apart again silently.
+
+**Refusals, all raised before any byte is planned (rule 4):**
+`EmptyMove` (a reported-success no-op would leave an undo entry that
+undoes nothing, and a front end looping an empty selection would be told
+"moved"); `DuplicateNodeInMove { index }` (last-wins and first-wins are
+equally defensible and give different geometry — either would be a
+guess); checked in that order, so a request that is both empty-adjacent
+**and** duplicate-containing reports the duplicate, not the emptiness.
+Any out-of-range index refuses the WHOLE batch, never a partial
+application.
+
+**Test results — RECONCILED, exact.** `cargo test --workspace`: **2580
+passed / 0 failed** (relayed). Baseline going into this Pass was **2567**
+(confirmed by this project's own forty-second `SESSION_LOG.md` filing) —
+**13 net new tests, in two groups, both now accounted for:**
+`cargo test -p pdfce-core --test node_multi_move` → **11 passed**
+(independently counted against the file directly, above) +
+`cargo test -p pdfce-core --doc vector::edit::plan_move_nodes` →
+**2 passed** (relayed by the dispatching engineer; independently
+confirmed by this filing via `Read` against `vector/edit.rs:1558–1603` —
+`plan_move_nodes`'s doc comment carries ONE `# Examples` heading with
+TWO separate ```` ``` ````-fenced blocks, each compiling as its own
+doctest). **2567 + 11 + 2 = 2580 — nothing left over.** (**Correction to
+this filing's own first draft**, which counted only the integration-test
+file and reported an unreconciled +2; the missing pair were doctests,
+not a sign of unfiled work — see the note on the five commits, above,
+now explicitly cleared.) **The `re`-corner doctest is worth its own
+sentence**: it asserts the exact output bytes
+`-1 -1 m 10 0 l 12 12 l 0 10 l h S` for a two-corner move, so the
+bucket-by-operator mechanism — one expansion carrying both moves — is
+pinned in `plan_move_nodes`'s **public documentation**, not only in
+`node_multi_move.rs`; a reader of the API surface sees the guarantee
+without opening the test file. `cargo fmt --all --check` clean
+(relayed). `cargo clippy --workspace --all-targets -- -D warnings`
+clean (relayed). `check-ui-strings.sh` clean (relayed).
+`check-bypass-paths.sh` clean (relayed). **No `Cargo.toml` touched this
+Pass** (per the dispatching engineer's account), so the
+`cargo tree -p pdfce-core` / `-p pdfce-render` GUI-dependency invariant
+is unaffected and was not re-run.
+
+**What is NOT built, said plainly.** No `pdfce-cli` subcommand. No GUI
+drag wiring. **R151 applies, named by the engineer in the shipping
+commit rather than rounded up.** `Pass 41.0`'s node-selection set
+(already shipped) is the caller this unblocks; the drag gesture itself
+does not exist yet.
+
+**`docs/FEATURES.md` updated in the same filing:** the `move_nodes`
+Planned row is REMOVED and its capability moved to *Implemented* →
+*Vector objects* (new *Move a multi-node selection together* row,
+`core [x]` / `cli [ ]` / `gui [ ]`); the *Select MULTIPLE nodes* row's
+restriction sentence is narrowed (the core verb blocking it no longer
+does); the *decision 028 remainder* row's cross-reference is repointed
+away from the now-removed Planned row; the *Pass 23.0–23.3* combined row
+ticks `core` from `[ ]` to `◐` and its prose is updated to describe the
+new discharge state.
+
+**`docs/ARCHITECTURE.md` updated in the same filing:** §4.1 gains a new
+subsection **(M)**, between (L) and (I), recording `plan_move_nodes`'s
+and `move_nodes`'s signatures and the bucket-by-operator design (also
+added to §4.1 (E)'s "full current `vector` re-export surface" listing);
+§12 gains a new dated decision-log entry at the tail, recording the
+bucket-by-operator design as the decision that makes both the `re`-corner
+case and the implicit-start case expressible, and the self-correction as
+its own recorded finding.
+
+**Ledger.** No new standing rule minted (the self-correction is filed as
+a RAG finding per the existing 2026-08-05 ruling that this CLASS of
+finding belongs in `D:\dev\rag\rust\`, not `ROADMAP.md`'s Standing
+rules — see that file's own "Standing-rule ruling" section, unchanged by
+this filing). No new decision record (the bucket-by-operator design is
+recorded as an `ARCHITECTURE.md` §12 entry, not a numbered decision —
+same disposition as prior additive core-surface Passes in this family,
+e.g. (D)/(E)/(L) above it). Backup/git working-tree state is not
+asserted anywhere in this filing — no shell, hard rule 8.
+
+---
+
 ### Pass 38.5 (annotation-deletion + CLI half only) — the general `delete_annotation` verb, three cascades, three routes, a shared preview planner, and the `/P`-aware annotation gate — 2026-08-09, committed `0a727bb`, branch `pass-8-redaction`
 
 **Filed by `pdfce-librarian`. No shell available to this dispatch (hard
@@ -11246,6 +11443,31 @@ residuals are coupled and should be scoped together.
 
 Pass 26.2's five level-survival tests still pass unchanged — **their
 premise was not disturbed**, which was checked rather than assumed.
+
+> **★★ AMENDED 2026-08-09 (`e1430d8`) — THE CORE GAP ABOVE IS CLOSED.**
+> `pdfce_core::vector::plan_move_nodes(content, obj, &[(node_index,
+> Point)])` and `EditSession::move_nodes(page_index, object_index,
+> &[(usize, Point)])` now exist, committing through the same
+> `CommandKind::MoveNode` this Pass already used for a single node. See
+> the new `Pass 23.3` Shipped entry (top of *Shipped*, dated 2026-08-09)
+> for the full build record.
+>
+> **The paragraph above is not corrected, only closed** — its claim
+> ("faking it with a loop would break the one-gesture-one-undo contract")
+> held up under test: a loop of `move_node` calls produces
+> BYTE-IDENTICAL output to one `move_nodes` call (both preserve the
+> `re`-expansion's anchor count and order), so the real cost of a loop
+> was never correctness — only undo-count and disclosure
+> de-duplication. See the `Pass 23.3` Shipped entry's self-correction
+> finding for the full derivation; it was drafted as a corruption
+> argument before being tested, and the test refuted it.
+>
+> **Still open: the GUI half.** `plan_move_nodes`/`move_nodes` have no
+> CLI subcommand and no drag-gesture wiring yet (**R151 applies**, named
+> by the engineer in the shipping commit rather than rounded up). This
+> Pass's node-selection set is the caller the wiring will use; the
+> wiring itself is separate, not-yet-Pass'd work. `docs/FEATURES.md`'s
+> `move_nodes` row ticks `core` only.
 
 ---
 
@@ -29052,6 +29274,34 @@ nothing gets forgotten, not as a commitment to build in this order.
     §7.4 itself is **not** edited — the decisions directory is
     append-only; this line is the canonical statement of 23.3's
     dependency.
+
+    > **★★ FURTHER DISCHARGE — 2026-08-09, `e1430d8`, branch
+    > `pass-8-redaction`.** **The CORE half of "multi-node move" — the
+    > last open cell in the table above — now exists.**
+    > `pdfce_core::vector::plan_move_nodes(content, obj, &[(node_index,
+    > Point)]) -> Result<PlannedEdit, VectorEditError>` and
+    > `EditSession::move_nodes(page_index, object_index, &[(usize,
+    > Point)]) -> Result<Vec<String>, EditError>` ship as this Pass's
+    > residual scope, exactly as the RE-STATEMENT above named it:
+    > **"23.3 = `plan_move_nodes` + its refusal set."** Two new
+    > `VectorEditError` variants — `EmptyMove`, `DuplicateNodeInMove
+    > { index }` — are that refusal set. See the new `Pass 23.3` Shipped
+    > entry (top of *Shipped*, dated 2026-08-09) for the full build
+    > record, the bucket-by-operator mechanism, and a self-correction
+    > finding escalated to `D:\dev\rag\rust\`.
+    >
+    > **What this does NOT close.** No CLI subcommand, no GUI drag
+    > wiring — **R151 applies**, named by the engineer in the shipping
+    > commit rather than rounded up. `Pass 41.0`'s node-selection set
+    > (already shipped, `66cee16`) is the caller this unblocks; the drag
+    > gesture itself is not built. `docs/FEATURES.md`'s new *Move a
+    > multi-node selection together* row ticks `core` only.
+    >
+    > **On the "engineer act, not a librarian inference" caveat two
+    > paragraphs above:** the engineer's own shipping dispatch named the
+    > exact scope that shipped (`plan_move_nodes` + `EmptyMove`/
+    > `DuplicateNodeInMove`) — that naming IS the restatement the caveat
+    > asked for. This addendum files it; it does not infer it.
 
   **Librarian's read on slice ordering, asked for explicitly by the
   operator, not just filed as a fact:** decision 023 §7.1 orders **23.0
