@@ -27665,3 +27665,114 @@ touched — `cargo tree` invariant unaffected, not re-run.
   filing — no shell, hard rule 8. This is the **forty-fourth**
   `SESSION_LOG.md` filing (the forty-third confirmed present by grep
   before this entry was appended).
+
+## 2026-08-09 (forty-fifth filing) — `Pass 23.3`'s CLI half SHIPS (`dbdd9a6`): `pdfce-cli nodes-move`, a clap greedy-flag defect found by running the command and fixed before ship, and `Pass 23.3` is now COMPLETE across core, GUI and CLI
+
+**Filed by `pdfce-librarian`, dispatched by the engineer to record the
+CLI half of `Pass 23.3` — the piece the forty-third and forty-fourth
+filings both flagged as the only remaining surface. No shell available
+to this dispatch (hard rule 8) — `cargo test`/`cargo fmt`/`cargo
+clippy`/`check-ui-strings.sh`/`check-bypass-paths.sh` gate results are
+RELAYED, not independently re-run.** **Independently confirmed via
+`Read`/`Grep` directly against the working tree:** `Command::NodesMove`
+at `crates/pdfce-cli/src/main.rs:2870`, its `moves: Vec<String>` field
+carrying `required = true`, `allow_hyphen_values = true` and
+deliberately no `num_args`, with the reasoning inline at `:2882–2886`;
+`crates/pdfce-cli/tests/vector_edit.rs` gained exactly **6** `#[test]`
+functions under a `nodes-move` section, counted and named individually
+in `ROADMAP.md`'s new Shipped entry, matching the relayed figure
+exactly; the count-agnostic disclosure regression
+(`!err.contains("one corner")`) confirmed at line 268, pinning the
+GUI-half wording fix against the CLI entry point too.
+
+**Shipped:**
+- `Pass 23.3` (CLI half) — `pdfce-cli nodes-move <input> --object N
+  --move NODE,X,Y [--move …] -o out [--page N] [--mode …]
+  [--verify-undo]`, over `EditSession::move_nodes` (core, `e1430d8`).
+  Filed under the existing Pass ID, same disposition as the GUI half —
+  see `ROADMAP.md`'s new `Pass 23.3 (CLI half)` Shipped entry (top of
+  *Shipped*) for the full record.
+
+**Findings + decisions:**
+- **Each `--move` is one comma-joined `NODE,X,Y` token, deliberately,
+  not three parallel repeated flags.** Three independent `Vec` lists
+  (`--node`/`--x`/`--y`) rely on staying the same length and order in
+  step; a dropped value silently pairs every anchor with the wrong
+  point while the command still reports success. One token per anchor
+  makes that defect class unrepresentable.
+- **★ A defect found by running the command, not by reading its
+  definition.** `--move` was first declared `num_args = 1..`, which
+  clap parses as GREEDY — `--move 0,1,2 -o out.pdf` swallowed `-o` and
+  `out.pdf` as further `--move` values, and every invocation died
+  reporting `--output` missing, a symptom that reads as a caller
+  mistake rather than the argument-definition bug it actually was.
+  Worse, the natural flag-ordering convention (value flags before the
+  output flag) is exactly the ordering that triggers it. A `Vec` field
+  already appends on repeat with no `num_args` needed. Regression-tested
+  by name (`the_move_flag_does_not_swallow_the_output_flag`), with the
+  swallowable flag placed immediately after the greedy one — the
+  ordering a test exercising `--move` in isolation could not have
+  caught. **Escalated to `D:\dev\rag\rust\` as a new file**,
+  `clap_num_args_1_unbounded_flag_is_greedy_and_swallows_the_next_flag.md`
+  — third clap-specific entry in that RAG (distinct in mechanism from
+  the existing i18n and Windows-debug-stack-overflow findings), indexed
+  this filing.
+- Every `--move` token parses before the file opens, so a malformed
+  fourth token in a five-token batch cannot apply the first three —
+  same discipline as the core verb's own refuse-before-write guarantee.
+  Refusals (`EmptyMove`, `DuplicateNodeInMove`, out-of-range index) all
+  exit 9; a malformed CLI argument exits 1; success exits 0 — the house
+  exit-code contract, unchanged.
+
+**Test results — reconciled, exact.** `cargo test --workspace`: **2592
+passed / 0 failed** (relayed). Baseline into this Pass was **2586** (the
+forty-fourth filing's own confirmed figure) — **+6, exactly the 6
+`nodes-move` tests counted directly against the source. 2586 + 6 = 2592
+— nothing left over.** `cargo fmt --all --check` clean (relayed).
+`cargo clippy --workspace --all-targets -- -D warnings`: 0 errors / 0
+warnings (relayed). `check-ui-strings.sh` / `check-bypass-paths.sh`
+clean (relayed). No `Cargo.toml` touched — `cargo tree` invariant
+unaffected, not re-run.
+
+**Verified end to end (engineer's own account, relayed).** The fixture
+rectangle's two bottom corners lift together: `bbox=200,50,280,110` →
+`bbox=200,80,280,110`, still `anchors=4 closed=1`, one object written,
+undo byte-identical, and the rectangle-expansion disclosure emitted
+once for the pair on stderr — matching the core and GUI halves'
+de-duplication behavior from the CLI entry point too.
+
+**★★ `Pass 23.3` is now COMPLETE across core, GUI and CLI.** All three
+of decision 023 §7.4's named components — node selection set, multi-
+node move, node delete — have shipped, and multi-node move's own
+three-surface build finished today: core `e1430d8`, GUI `6fb7ffb`, CLI
+`dbdd9a6`. The Backlog entry's own chain of addenda closes with a
+`★★★★★` mark this filing. `docs/FEATURES.md`'s *Move a multi-node
+selection together* row now reads `core [x]` / `cli [x]` / `gui [x]`;
+its *Pass 23.0–23.3* combined row now reads `◐`/`◐`/`◐`/`◐` — only
+23.0/23.1/23.2 (format/units GUI control, re-measure, container
+descent) remain unbuilt.
+
+**Still in flight:**
+- The arrow-key SINGLE-node nudge (decision 028 items 10/11) — was
+  always decision 028's own scope, only ever flagged as coupled to
+  23.3, not part of this closure; still owed under its own entry.
+- The five unfiled commits flagged by the forty-third filing
+  (`d3ea5de`/`1edf4e3`/`9abf5b5`/`e167867`/`01b90c4`) — untouched by
+  this filing, still owed by the engineer.
+
+**For next session:**
+- Confirm whether the arrow-key node-nudge scope (decision 028 items
+  10/11) is next up, now that its only named coupling has cleared.
+- File the five flagged commits, still owed since the forty-third
+  filing.
+- **Ledger for this filing:** no new decision record (shell-wiring
+  completion of already-decided scope, not a new architectural choice)
+  — nothing added to `ARCHITECTURE.md` §12. No new standing rule
+  minted; R151 is now discharged for this capability (shipped core
+  capability reachable from every surface). One new `D:\dev\rag\rust\`
+  file plus its `index.md` entry. `Pass 23.3` is the Pass ID this
+  filing used — COMPLETED, not minted, closing the same ID the core and
+  GUI halves shipped under. Backup/git working-tree state is not
+  asserted anywhere in this filing — no shell, hard rule 8. This is the
+  **forty-fifth** `SESSION_LOG.md` filing (the forty-fourth confirmed
+  present by grep before this entry was appended).

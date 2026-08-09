@@ -81,6 +81,120 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### Pass 23.3 (CLI half) — `pdfce-cli nodes-move`, and the last of 23.3's three named components now ships on every surface — 2026-08-09, committed `dbdd9a6`, branch `pass-8-redaction`
+
+**Filed by `pdfce-librarian`. No shell available to this dispatch (hard
+rule 8) — `cargo test`/`cargo fmt`/`cargo clippy`/`check-ui-strings.sh`/
+`check-bypass-paths.sh` gate results below are RELAYED from the
+engineer's own dispatch summary, not independently re-run.**
+**Independently confirmed by this filing via `Read`/`Grep` directly
+against the working tree, not relayed:** `Command::NodesMove` exists at
+`crates/pdfce-cli/src/main.rs:2870`, its own doc comment (`:2841–2869`)
+restating the batch-vs-loop rationale already on record from the core
+half (one undo entry; anchors sharing an operator rewritten together)
+and naming both refusals by variant; the `moves: Vec<String>` field
+carries `long = "move"`, `required = true`, `allow_hyphen_values =
+true` and **deliberately no `num_args`**, with an inline comment
+(`:2882–2886`) stating why in the engineer's own words — matches the
+dispatch summary's account exactly; `crates/pdfce-cli/tests/
+vector_edit.rs` gained a `nodes-move` section (`:207` on) with **6**
+`#[test]` functions, counted directly by name:
+`nodes_move_lifts_two_corners_of_one_rectangle_in_one_command`,
+`nodes_move_refuses_a_duplicated_anchor`,
+`nodes_move_refuses_the_whole_batch_for_one_bad_index`,
+`nodes_move_rejects_a_malformed_move_token_by_name`,
+`the_move_flag_does_not_swallow_the_output_flag`,
+`nodes_move_accepts_negative_coordinates` — matching the relayed figure
+exactly. The count-agnostic disclosure regression is confirmed at
+`:268`: `!err.contains("one corner")`, pinning the wording fix filed
+under `Pass 23.3 (GUI half)`, below, against the CLI surface too.
+
+**What shipped (`pdfce-cli`):**
+
+- `pdfce-cli nodes-move <input> --object N --move NODE,X,Y [--move …]
+  -o out [--page N] [--mode …] [--verify-undo]` — the batch form of the
+  existing `node-move`, over `EditSession::move_nodes` (core, shipped
+  earlier the same day as `e1430d8`).
+- Every `--move` token is a single comma-joined `NODE,X,Y` value, not
+  three parallel repeated flags — **deliberately**: three independent
+  `Vec` lists (`--node`/`--x`/`--y`) rely on staying the same length and
+  order, and a dropped value silently pairs every anchor with the wrong
+  point while the command still reports success. One token per anchor
+  makes that class of defect unrepresentable.
+- **Every token parses before the file opens** — a malformed fourth
+  `--move` in a five-token batch cannot apply the first three.
+- Refusals inherited from core (`EmptyMove`, `DuplicateNodeInMove`,
+  out-of-range index) all exit **9**; a malformed CLI argument (bad
+  token shape, non-numeric field) exits **1**; success exits **0** —
+  the house exit-code contract, unchanged.
+- Out-of-range index refuses the **whole batch**, asserted by checking
+  the output file does not exist (matches core's own refuse-before-
+  write guarantee, see the `Pass 23.3` core-half Shipped entry).
+
+**★ The finding, and it is a defect FOUND BY RUNNING the command, not
+by reading its definition.** `--move` was first declared with
+`num_args = 1..`, which clap parses as GREEDY: `--move 0,1,2 -o
+out.pdf` swallows `-o` and `out.pdf` as further `--move` values, and
+every invocation died reporting `--output` missing — a failure mode
+that reads as a caller mistake (forgot `-o`) rather than what it
+actually was (an argument-definition bug), and the natural
+flag-ordering convention (value flags before the output flag) is
+exactly the ordering that triggers it. A `Vec` field already appends on
+repeat with no `num_args` needed at all. Regression-tested by name
+(`the_move_flag_does_not_swallow_the_output_flag`), with the swallowable
+flag placed immediately after the greedy one — the ordering a test
+with `--move` in isolation could not have caught. **Escalated to
+`D:\dev\rag\rust\` as a new file**,
+`clap_num_args_1_unbounded_flag_is_greedy_and_swallows_the_next_flag.md`
+— third clap-specific entry in that RAG, distinct in mechanism from the
+existing two (i18n text, Windows debug stack overflow); indexed this
+filing.
+
+**Test results.** `cargo test --workspace`: **2592 passed / 0 failed**
+(relayed). Baseline going into this Pass was **2586** (`Pass 23.3 (GUI
+half)`'s own Shipped entry, below) — **+6, exactly the 6 `nodes-move`
+tests counted directly above. 2586 + 6 = 2592 — nothing left over.**
+`cargo fmt --all --check` clean (relayed). `cargo clippy --workspace
+--all-targets -- -D warnings`: **0 errors, 0 warnings** (relayed).
+`check-ui-strings.sh` clean (relayed). `check-bypass-paths.sh` clean
+(relayed). **No `Cargo.toml` touched this Pass**, so the `cargo tree -p
+pdfce-core` / `-p pdfce-render` GUI-dependency invariant is unaffected
+and was not re-run.
+
+**Verified end to end (engineer's own account, relayed).** The fixture
+rectangle's two bottom corners lift together:
+`bbox=200,50,280,110` → `bbox=200,80,280,110`, still `anchors=4
+closed=1`, **one** object written, undo byte-identical, and the
+rectangle-expansion disclosure emitted **once** for the pair on stderr
+— not twice, confirming the de-duplication rule already shipped with
+the core half applies identically from the CLI entry point.
+
+**★★ `Pass 23.3` is now COMPLETE across all three surfaces.** All three
+of decision 023 §7.4's named components — node selection set, multi-
+node move, node delete — have shipped, and multi-node move's own three-
+surface build is now finished: core `e1430d8`, GUI `6fb7ffb`, CLI
+`dbdd9a6`, all 2026-08-09. See the Backlog entry's own final addendum,
+below, for the closing pointer, and `docs/FEATURES.md`'s *Move a
+multi-node selection together* row (now `core [x]` / `cli [x]` / `gui
+[x]`) and *Pass 23.0–23.3* combined row (now `◐`/`◐`/`◐`/`◐` — only
+23.0/23.1/23.2 remain unbuilt) for the capability-shaped view.
+
+**`docs/FEATURES.md` updated in the same filing:** the *Move a
+multi-node selection together* row ticks `cli` from `[ ]` to `[x]`; the
+*Pass 23.0–23.3* combined row's `cli` column moves `[ ]` → `◐` (same
+disposition as its `core`/`gui` columns — built for 23.3's slice only);
+the earlier `move_nodes`-removal note gets a same-day addendum pointing
+at this completion.
+
+**Ledger.** No new decision record — this is a shell-wiring completion
+of an already-decided scope, not a new architectural choice; nothing
+added to `ARCHITECTURE.md` §12. No new standing rule minted; R151 is
+now discharged for this capability (a shipped core capability with a
+reachable caller on all three surfaces). Backup/git working-tree state
+is not asserted anywhere in this filing — no shell, hard rule 8.
+
+---
+
 ### Pass 23.3 (GUI half) — the multi-node drag gesture wired: `Commit::Nodes` replaces `Commit::Node`, `node_drag_moves` + `ObjectProvider::object_node_points`, and R168's SECOND instance closed — 2026-08-09, committed `6fb7ffb`, branch `pass-8-redaction`
 
 **Filed by `pdfce-librarian`. No shell available to this dispatch (hard
@@ -29533,6 +29647,21 @@ nothing gets forgotten, not as a commitment to build in this order.
     > subcommand for multi-node move, and the arrow-key SINGLE-node nudge
     > this note already flagged as coupled to it (decision 028 items
     > 10/11), still owed.**
+    >
+    > **★★★★★ `PASS 23.3` COMPLETE — 2026-08-09, `dbdd9a6`, same day.**
+    > The last item named directly above — a `pdfce-cli` subcommand for
+    > multi-node move — now exists: `pdfce-cli nodes-move <input>
+    > --object N --move NODE,X,Y [--move …] -o out`. See the new `Pass
+    > 23.3 (CLI half)` Shipped entry (top of *Shipped*) for the full
+    > record, including a clap greedy-flag defect found and fixed before
+    > ship, escalated to `D:\dev\rag\rust\`. **`Pass 23.3` as decision
+    > 023 §7.4 scoped it — node selection set, multi-node move, node
+    > delete — is now shipped on every surface that applies to it.**
+    > **The arrow-key SINGLE-node nudge (decision 028 items 10/11) is
+    > NOT part of this closure** — it was always decision 028's own
+    > scope, only ever flagged here as coupled, and remains owed under
+    > its own entry (see the *decision 028 remainder* row in
+    > `docs/FEATURES.md`).
 
   **Librarian's read on slice ordering, asked for explicitly by the
   operator, not just filed as a fact:** decision 023 §7.1 orders **23.0
