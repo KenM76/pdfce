@@ -3993,6 +3993,38 @@ impl PdfceApp {
         self.open_path(path);
     }
 
+    /// Set the status-bar note, and TRACE it.
+    ///
+    /// # Why every disclosure must go through one function
+    ///
+    /// `edit_note` is the status bar's narrator — rule 4's obligations land
+    /// in it: the inferred value, the cleared selection, the released group
+    /// name, the refusal a verb reported instead of succeeding. The
+    /// `pending_note` drain has traced its share since Pass 34.2, with a
+    /// doc comment stating exactly why: *"a disclosure that silently
+    /// stopped firing would look identical to one that fired and said
+    /// something."*
+    ///
+    /// **That reasoning applied to a third of the channel.** The drain
+    /// covers only the notes panels raise under a `&mut OpenDoc` borrow;
+    /// every canvas-level disclosure — delete, node edit, subpath edit,
+    /// markup, copy — assigned `self.edit_note` directly and was invisible
+    /// to the observation harness. Found while driving the object-delete
+    /// scale disclosure and seeing no `edit-note` line for a note that had
+    /// certainly fired.
+    ///
+    /// So this is the single choke point, and the trace is at the
+    /// ASSIGNMENT rather than at each producer — one place every note
+    /// passes through cannot be forgotten by the next feature that adds
+    /// one, which is the same argument the drain's own comment makes.
+    fn set_edit_note(&mut self, note: String) {
+        diag::trace(|| {
+            // ui-text-exempt: diagnostic trace, never displayed in the UI
+            format!("edit-note {note:?}")
+        });
+        self.edit_note = Some(note);
+    }
+
     /// Load `path` and set [`Self::status`] to the appropriate outcome.
     ///
     /// The three-way branch is the module docs' "three ways to fail":
@@ -4204,7 +4236,7 @@ impl PdfceApp {
         let saved = matches!(outcome, SaveOutcome::Saved { .. });
         self.save_result = Some(outcome);
         if saved && pending_marks > 0 {
-            self.edit_note = Some(ui_text::redact_save_kept_pending_marks(pending_marks));
+            self.set_edit_note(ui_text::redact_save_kept_pending_marks(pending_marks));
         }
     }
 
@@ -4310,7 +4342,7 @@ impl PdfceApp {
                         outcome.separations.malformed,
                     ));
                 }
-                self.edit_note = Some(note);
+                self.set_edit_note(note);
             }
             // A refusal here is real and named — a certification
             // signature that forbids the change, or the last page. It
@@ -4390,7 +4422,7 @@ impl PdfceApp {
                 // selected six and is told "object deleted" has no way to
                 // know whether six went or one did — which is the state this
                 // Pass found the application in.
-                self.edit_note = Some(ui_text::vector_objects_deleted(deleted, parts));
+                self.set_edit_note(ui_text::vector_objects_deleted(deleted, parts));
             }
             Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
         }
@@ -4431,7 +4463,7 @@ impl PdfceApp {
                 doc.dimension_drag = None;
                 doc.refresh_pages();
                 doc.ensure_object_provider();
-                self.edit_note = Some(ui_text::dimension_deleted().to_owned());
+                self.set_edit_note(ui_text::dimension_deleted().to_owned());
             }
             Err(ref err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
         }
@@ -4512,10 +4544,10 @@ impl PdfceApp {
                     note.push(' ');
                     note.push_str(&d);
                 }
-                self.edit_note = Some(note);
+                self.set_edit_note(note);
             }
             Err(err) => {
-                self.edit_note = Some(ui_text::node_delete_refused(&err.to_string()));
+                self.set_edit_note(ui_text::node_delete_refused(&err.to_string()));
             }
         }
         // Traced AFTER the outcome is applied, carrying what the operator will
@@ -4581,7 +4613,7 @@ impl PdfceApp {
                 // `provider_page` still equals the current page.
                 doc.refresh_pages();
                 doc.ensure_object_provider();
-                self.edit_note = Some(match kind {
+                self.set_edit_note(match kind {
                     Some(object_provider::PartKind::Run) => {
                         ui_text::text_run_deleted(subpath_index)
                     }
@@ -4605,7 +4637,7 @@ impl PdfceApp {
             // wiring, and fixed for BOTH kinds rather than only the new one —
             // patching the text half alone would leave the identical path-side
             // bug standing next to the fix.
-            Err(err) => self.edit_note = Some(ui_text::part_delete_refused(&err.to_string())),
+            Err(err) => self.set_edit_note(ui_text::part_delete_refused(&err.to_string())),
         }
         // Traced AFTER the outcome is applied, and carrying what the operator
         // will actually be told. A trace of the return value alone would have
@@ -4725,7 +4757,7 @@ impl PdfceApp {
             }
         };
         match outcome {
-            Ok(()) => self.edit_note = Some(ui_text::markup_added(kind.label())),
+            Ok(()) => self.set_edit_note(ui_text::markup_added(kind.label())),
             Err(msg) => self.save_result = Some(SaveOutcome::Failed(msg)),
         }
     }
@@ -4810,7 +4842,7 @@ impl PdfceApp {
         };
         match outcome {
             Ok(()) => {
-                self.edit_note = Some(ui_text::markup_added(kind.label()));
+                self.set_edit_note(ui_text::markup_added(kind.label()));
                 self.pending_text_kind = None;
                 self.text_input.clear();
             }
@@ -4880,7 +4912,7 @@ impl PdfceApp {
                 doc.selected_pages = (at..at + selection.len()).collect();
                 doc.selection_anchor = doc.selected_pages.iter().next().copied();
                 doc.clamp_selection();
-                self.edit_note = Some(ui_text::reorder_succeeded(selection.len()));
+                self.set_edit_note(ui_text::reorder_succeeded(selection.len()));
             }
             Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
         }
@@ -4973,7 +5005,7 @@ impl PdfceApp {
                         note.push(' ');
                         note.push_str(ui_text::extract_note_unsigned_output());
                     }
-                    self.edit_note = Some(note);
+                    self.set_edit_note(note);
                     None
                 }
                 Err(err) => Some(err.to_string()),
@@ -5081,7 +5113,7 @@ impl PdfceApp {
             // and the operator is told, rather than left with a button
             // that appeared to do nothing.
             self.copy_result = None;
-            self.edit_note = Some(ui_text::copy_text_no_extractable_text().to_owned());
+            self.set_edit_note(ui_text::copy_text_no_extractable_text().to_owned());
             return;
         };
 
@@ -5094,7 +5126,7 @@ impl PdfceApp {
         // button".
         if d.codes_total == 0 && text.is_empty() {
             self.copy_result = None;
-            self.edit_note = Some(ui_text::copy_text_no_extractable_text().to_owned());
+            self.set_edit_note(ui_text::copy_text_no_extractable_text().to_owned());
             return;
         }
 
@@ -6575,7 +6607,7 @@ impl PdfceApp {
                     )
                 });
                 doc.refresh_pages();
-                self.edit_note = Some(ui_text::forms_flattened(
+                self.set_edit_note(ui_text::forms_flattened(
                     outcome.fields_flattened,
                     outcome.widgets_burned,
                     outcome.pages_touched,
@@ -6607,7 +6639,7 @@ impl PdfceApp {
         match doc.session_mut().regenerate_appearances() {
             Ok(outcome) => {
                 doc.refresh_pages();
-                self.edit_note = Some(ui_text::forms_appearances_regenerated(
+                self.set_edit_note(ui_text::forms_appearances_regenerated(
                     outcome.regenerated,
                     outcome.need_appearances_cleared,
                     outcome.applied_autosize,
@@ -6631,7 +6663,7 @@ impl PdfceApp {
             return;
         };
         let Some(data) = doc.session.export_form_data() else {
-            self.edit_note = Some(ui_text::forms_no_acroform().to_owned());
+            self.set_edit_note(ui_text::forms_no_acroform().to_owned());
             return;
         };
         let Some(path) = rfd::FileDialog::new()
@@ -6673,7 +6705,7 @@ impl PdfceApp {
         } else {
             data.to_fdf(Some(&hint))
         };
-        self.edit_note = Some(match std::fs::write(&path, &bytes) {
+        self.set_edit_note(match std::fs::write(&path, &bytes) {
             Ok(()) => {
                 let mut note =
                     ui_text::forms_data_exported(data.fields.len(), &path.display().to_string());
@@ -6708,7 +6740,7 @@ impl PdfceApp {
         let bytes = match std::fs::read(&path) {
             Ok(b) => b,
             Err(err) => {
-                self.edit_note = Some(ui_text::forms_data_import_failed(&err.to_string()));
+                self.set_edit_note(ui_text::forms_data_import_failed(&err.to_string()));
                 return;
             }
         };
@@ -6725,7 +6757,7 @@ impl PdfceApp {
         let data = match parsed {
             Ok(d) => d,
             Err(err) => {
-                self.edit_note = Some(ui_text::forms_data_import_failed(&err.to_string()));
+                self.set_edit_note(ui_text::forms_data_import_failed(&err.to_string()));
                 return;
             }
         };
@@ -6747,7 +6779,7 @@ impl PdfceApp {
                     note.push(' ');
                     note.push_str(&ui_text::forms_data_rich_text_dropped(rich));
                 }
-                self.edit_note = Some(note);
+                self.set_edit_note(note);
             }
             Err(err) => {
                 self.save_result = Some(SaveOutcome::Failed(err.to_string()));
@@ -6996,7 +7028,7 @@ impl PdfceApp {
         match doc.session_mut().add_redaction(page_index, &spec) {
             Ok(_) => {
                 doc.refresh_pages();
-                self.edit_note = Some(ui_text::redact_whole_page_marked(page_index + 1));
+                self.set_edit_note(ui_text::redact_whole_page_marked(page_index + 1));
             }
             Err(err) => {
                 self.save_result = Some(SaveOutcome::Failed(ui_text::redact_mark_failed(
@@ -7037,11 +7069,11 @@ impl PdfceApp {
         };
         match marked {
             Ok(created) if created.is_empty() => {
-                self.edit_note = Some(ui_text::redact_search_no_matches(&query));
+                self.set_edit_note(ui_text::redact_search_no_matches(&query));
             }
             Ok(created) => {
                 doc.refresh_pages();
-                self.edit_note = Some(ui_text::redact_search_marked(created.len(), &query));
+                self.set_edit_note(ui_text::redact_search_marked(created.len(), &query));
             }
             Err(err) => {
                 self.save_result = Some(SaveOutcome::Failed(ui_text::redact_mark_failed(
@@ -7070,7 +7102,7 @@ impl PdfceApp {
         match doc.session_mut().delete_redaction_mark(annot_id) {
             Ok(()) => {
                 doc.refresh_pages();
-                self.edit_note = Some(ui_text::redact_mark_removed(page_number));
+                self.set_edit_note(ui_text::redact_mark_removed(page_number));
             }
             Err(err) => {
                 self.save_result = Some(SaveOutcome::Failed(ui_text::redact_mark_remove_failed(
@@ -7168,7 +7200,7 @@ impl PdfceApp {
         match write_atomic(&path, &pending.prepared.bytes) {
             Ok(()) => {
                 self.save_result = None;
-                self.edit_note = Some(if residuals == 0 {
+                self.set_edit_note(if residuals == 0 {
                     ui_text::redact_apply_succeeded_clean(&path, regions, pages)
                 } else {
                     ui_text::redact_apply_succeeded_residual(&path, regions, residuals)
@@ -7531,7 +7563,7 @@ impl PdfceApp {
             .map(|(part, _, _)| part.name.clone())
             .collect();
         if !clashes.is_empty() {
-            self.edit_note = Some(ui_text::split_would_overwrite(&clashes));
+            self.set_edit_note(ui_text::split_would_overwrite(&clashes));
             return;
         }
         for (part, bytes, _) in &parts {
@@ -7540,7 +7572,7 @@ impl PdfceApp {
                 return;
             }
         }
-        self.edit_note = Some(ui_text::split_written(parts.len(), &dir));
+        self.set_edit_note(ui_text::split_written(parts.len(), &dir));
     }
 
     /// The Insert-pages tool (Pass 3.5, GUI).
@@ -7654,7 +7686,7 @@ impl PdfceApp {
         match pdfce_core::pageops::insert(&target_view, &source_view, &source_pages, position) {
             Ok((bytes, _)) => match std::fs::write(&out, &bytes) {
                 Ok(()) => {
-                    self.edit_note = Some(ui_text::insert_written(source_pages.len(), &out));
+                    self.set_edit_note(ui_text::insert_written(source_pages.len(), &out));
                 }
                 Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
             },
@@ -7906,7 +7938,7 @@ impl PdfceApp {
                         note.push(' ');
                         note.push_str(ui_text::merge_note_unsigned_output());
                     }
-                    self.edit_note = Some(note);
+                    self.set_edit_note(note);
                 }
                 Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
             },
@@ -8103,7 +8135,7 @@ impl PdfceApp {
                 // survive a restart. Adopting only on a successful write
                 // would silently ignore a deliberate choice.
                 self.settings = draft.working;
-                self.edit_note = Some(match self.settings.save(&self.settings_store) {
+                self.set_edit_note(match self.settings.save(&self.settings_store) {
                     Ok(()) => self
                         .settings_store
                         .path
@@ -8441,7 +8473,7 @@ impl PdfceApp {
                 if matches!(self.save_result, Some(SaveOutcome::Saved { .. })) {
                     // A durable record, because a modal is dismissed and
                     // forgotten and this question gets asked again later.
-                    self.edit_note = Some(ui_text::save_signature_invalidated_note().to_owned());
+                    self.set_edit_note(ui_text::save_signature_invalidated_note().to_owned());
                 }
                 return;
             }
@@ -9842,7 +9874,7 @@ impl eframe::App for PdfceApp {
                 // ui-text-exempt: diagnostic trace, never displayed in the UI
                 format!("edit-note {note:?}")
             });
-            self.edit_note = Some(note);
+            self.set_edit_note(note);
         }
         // Pass 34.2: same channel, same reason, for a pane-raise request. The
         // Measure tool's "Dimension Groups" button runs under `&mut OpenDoc`
@@ -14266,7 +14298,7 @@ impl PdfceApp {
                 if centred_on_page {
                     notes.push(ui_text::image_dropped_off_page().to_owned());
                 }
-                self.edit_note = Some(ui_text::image_dropped_with_notes(
+                self.set_edit_note(ui_text::image_dropped_with_notes(
                     imported.format.name(),
                     &notes,
                 ));
