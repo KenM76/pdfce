@@ -275,3 +275,72 @@ fn aiming_the_text_verb_at_a_path_object_is_refused() {
     // ...and the real text object still works.
     s.delete_text_run(0, 1, 0).expect("object 1 is the text");
 }
+
+// ---------------------------------------------------------------------------
+// `hit_test_text_runs` — WHICH run, not merely whether
+// ---------------------------------------------------------------------------
+
+use pdfce_core::vector::{Point, hit_test_text_runs};
+
+fn page_model(name: &str) -> pdfce_core::vector::PageObjects {
+    let bytes = std::fs::read(fixture(name)).expect("fixture");
+    let doc = Document::from_bytes(bytes).expect("parses");
+    let pages = page_tree::pages(&doc).expect("pages");
+    decompose_page(&doc.view(), pages.first().expect("page"), Matrix::IDENTITY).expect("decomposes")
+}
+
+/// A click inside one label's box picks **that** run.
+///
+/// `hit_test_point` has answered *whether* a text object was hit since
+/// Pass 18.5, which is what stopped a 237-label object being a page-wide
+/// hit — but a shell that wants to delete "this label" needs the index,
+/// and that is what this adds.
+#[test]
+fn a_click_inside_a_run_reports_that_run_first() {
+    let model = page_model("runs-two-explicit.pdf");
+    let VectorObject::Text(t) = &model.objects[0] else {
+        panic!("object 0 is not text");
+    };
+    for want in 0..t.runs.len() {
+        let b = t.runs[want].bounds;
+        let mid = Point::new((b.min.x + b.max.x) / 2.0, (b.min.y + b.max.y) / 2.0);
+        let hits = hit_test_text_runs(&model, 0, mid, 0.5);
+        assert_eq!(
+            hits.first().copied(),
+            Some(want),
+            "a click in the middle of run {want} must report it first; got {hits:?}",
+        );
+    }
+}
+
+/// A click nowhere near any label reports nothing — the per-run query does
+/// **not** inherit `text_hit`'s page-bbox fallback.
+///
+/// That fallback exists to keep an unmeasurable object *selectable*, which
+/// is the right answer to "did I hit this object". It is the wrong answer
+/// to "which run", because naming run 0 for an object whose runs were
+/// never laid out hands the caller a target it can then delete — the wrong
+/// one, silently.
+#[test]
+fn a_click_in_the_gap_between_labels_reports_no_run() {
+    let model = page_model("runs-two-explicit.pdf");
+    let VectorObject::Text(t) = &model.objects[0] else {
+        panic!("object 0 is not text");
+    };
+    // Well right of both labels, still inside the object's enclosing box.
+    let far = Point::new(t.page_bbox.max.x + 200.0, t.page_bbox.min.y + 1.0);
+    assert!(
+        hit_test_text_runs(&model, 0, far, 0.5).is_empty(),
+        "a miss must be a miss",
+    );
+}
+
+/// A non-text object and an out-of-range index both report nothing rather
+/// than panicking or guessing.
+#[test]
+fn the_run_hit_test_is_empty_for_a_non_text_or_missing_object() {
+    let model = page_model("runs-single.pdf");
+    // Object 0 is the rule (a path), object 1 the text.
+    assert!(hit_test_text_runs(&model, 0, Point::new(300.0, 396.0), 2.0).is_empty());
+    assert!(hit_test_text_runs(&model, 99, Point::new(0.0, 0.0), 2.0).is_empty());
+}

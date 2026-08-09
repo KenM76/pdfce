@@ -239,6 +239,67 @@ fn text_hit(t: &TextObject, point: Point, tolerance: f64) -> bool {
         .any(|r| r.bounds.inflate(tolerance).contains(point))
 }
 
+/// Which **runs** (show operators) of the text object at `object_index` a
+/// point hits, nearest first — the text-side twin of
+/// [`hit_test_subpaths`] (`Pass 32.0`).
+///
+/// # Why an object is not the unit an operator means, again
+///
+/// A producer may put every label on a sheet inside one `BT`…`ET`.
+/// Measured on a real SolidWorks export: **one text object holding all 237
+/// dimension labels**. `hit_test_point` already tests per-run boxes so
+/// such an object is not a page-wide hit ([`text_hit`], Pass 18.5) — but
+/// it answers *whether*, not *which*, and a shell that wants to delete
+/// "this label" needs the index.
+///
+/// # Ordering
+///
+/// **Nearest first, by distance to the run's box**, and by the same
+/// argument [`hit_test_subpaths`] makes: runs inside one text object have
+/// no z-order among themselves to inherit, so "the label I clicked on" is
+/// the nearest one and any other order would be arbitrary dressed up as
+/// meaningful. A point *inside* a run's box counts at distance zero.
+///
+/// # Contract
+///
+/// - Empty for a non-text object, an out-of-range index, or no hit.
+/// - Empty when the object has no laid-out runs — no resolvable font, or
+///   past `MAX_TEXT_RUNS`. **Deliberately not a fallback to `page_bbox`**,
+///   unlike [`text_hit`]: that fallback keeps an unmeasurable object
+///   *selectable*, which is the honest answer for "did I hit this object".
+///   Here the question is "which run", and inventing run 0 for an object
+///   whose runs were never laid out would name a target the caller could
+///   then delete — the wrong one, silently.
+/// - `tolerance` is in page units and is applied exactly as
+///   [`text_hit`] applies it, so a click that selects the text object can
+///   always then select one of its runs.
+#[must_use]
+pub fn hit_test_text_runs(
+    model: &PageObjects,
+    object_index: usize,
+    point: Point,
+    tolerance: f64,
+) -> Vec<usize> {
+    let Some(VectorObject::Text(text)) = model.objects.get(object_index) else {
+        return Vec::new();
+    };
+    let mut hits: Vec<(f64, usize)> = Vec::new();
+    for (i, run) in text.runs.iter().enumerate() {
+        let b = run.bounds;
+        if !b.inflate(tolerance).contains(point) {
+            continue;
+        }
+        // Distance to the box, zero inside it. A run box is an axis-aligned
+        // rectangle, so this is the per-axis outside-distance hypotenuse —
+        // there is no outline to walk as there is for a subpath.
+        let dx = (b.min.x - point.x).max(point.x - b.max.x).max(0.0);
+        let dy = (b.min.y - point.y).max(point.y - b.max.y).max(0.0);
+        hits.push((dx.hypot(dy), i));
+    }
+    hits.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    hits.into_iter().map(|(_, i)| i).collect()
+}
+
 /// Which **subpaths** of the path object at `object_index` a point hits,
 /// nearest first.
 ///

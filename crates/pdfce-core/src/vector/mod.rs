@@ -76,7 +76,7 @@ pub use edit::{
 pub use geometry::{Bounds, Matrix, Point, Rgb, cubic_from_v, cubic_from_y, rect_corners};
 pub use hit::{
     FLATTEN_STEPS, MarqueeMode, hit_test_point, hit_test_point_all, hit_test_rect,
-    hit_test_subpaths, subpath_bounds,
+    hit_test_subpaths, hit_test_text_runs, subpath_bounds,
 };
 pub use snap::{
     AxisConstraint, MAX_CANDIDATES, MAX_NEIGHBOURHOOD_SEGMENTS, SNAP_FLATTEN_STEPS, SnapCandidate,
