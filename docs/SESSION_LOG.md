@@ -28186,3 +28186,346 @@ new wording test). `cargo fmt --all --check` clean. `cargo clippy
   asserted anywhere in this filing — no shell, hard rule 8. This is the
   **forty-eighth** `SESSION_LOG.md` filing (the forty-seventh confirmed
   present by grep before this entry was appended).
+
+## 2026-08-09 (forty-ninth filing) — the five commits flagged unfiled since the forty-third filing are FILED: three render-fidelity bugs from a prior session's benign-bucket audit (`d3ea5de`/`1edf4e3`/`9abf5b5`), and two fixes to the audit's own oracle (`e167867`/`01b90c4`) — six consecutive "Still in flight" mentions closed
+
+**Filed by `pdfce-librarian`, dispatched explicitly to discharge the
+five-commit filing debt this project has carried since the forty-third
+filing (2026-08-09).** Sourcing is stated once, here, because it governs
+every entry below and this filing's own dispatch was explicit about it:
+**this librarian did not write these five commits and has not run their
+tests.** The dispatching engineer read all five commit messages and
+diffstats in full (`C:\Users\Ken\.claude\jobs\7bad3e9b\tmp\five.txt`,
+also read directly by this filing) from a prior same-day session
+(05:20–06:18). Every figure in the five `ROADMAP.md` Shipped entries
+this filing adds is **quoted from the commit message, not independently
+verified.** No shell available to this dispatch (hard rule 8) — the
+usual "relayed vs. independently confirmed" split does not apply the
+way it does to an engineer-dispatch filing, because there was no
+engineer dispatch summary for these five: the ENTIRE basis is the
+commit-message text itself, attributed as such throughout.
+
+**Shipped (five entries, no Pass ID on any — see each entry's own
+reasoning, echoing the `Font-fix`/`9681112`/`b5b9f23` precedent already
+in `ROADMAP.md` that a Shipped entry's importance and its Pass-ID
+eligibility are different questions):**
+- **`d3ea5de` — transparency stops being silently discarded: `/ca`/`/CA`
+  constant alpha now read and honoured.** §11.6.4.4 Table 58. Was a
+  double-invisible bug (page rendered opaque; nothing disclosed the
+  drop) — ~120 flagged veraPDF pages, one whose own bookmark names the
+  exact defect. `GraphicsState` gains the two alpha fields, placed there
+  specifically so §8.4.2's `q`/`Q` save/restore is free. Clamped, not
+  refused, out of range. Five tests, three fail without the fix, plus
+  two deliberate cross-contamination controls (`/ca` must not lighten a
+  stroke, `/CA` must not lighten a fill).
+- **`1edf4e3` — non-embedded standard-14-alias text (e.g. `/Arial`, no
+  `/Widths`) stops stacking on one point.** `MissingWidth`'s zero default
+  was winning because the metrics ladder and the shape-selection ladder
+  (`select::by_name`) consulted the alias table independently — fixed by
+  a new `metrics_std14` bridging function, deliberately scoped to
+  metrics only (not encoding) and non-embedded fonts only. Three tests,
+  all fail without the fix; two guard specifically against a
+  copy-paste-to-Helvetica regression that an ink-count metric would have
+  missed.
+- **`9abf5b5` — sub-pixel stroke widths (incl. `0 w`) stop rendering at
+  ~9% contrast.** Two bugs in one line: a fixed user-space `0.1`
+  constant where §8.4.3.2 means device space, floored instead at one
+  device pixel via the CTM's singular-value geometric mean (correct
+  under shear/rotation, unlike `sx` alone). **Carries this batch's one
+  explicitly OWED follow-up**: clamping a non-zero sub-pixel width is
+  ruled a **product choice** (both reference renderers clamp; the
+  standard is silent), and is filed under R169 as a new,
+  not-yet-back-filed settings-register entry. Four tests, three fail
+  without the fix; the commit's own account of getting the first test
+  threshold wrong (127 read as a failure when it was correct
+  anti-aliasing) is carried forward verbatim as a testing-methodology
+  note.
+- **`e167867` — the render-parity oracle stops calling explained
+  differences "benign renderer noise."** Two defects: the gap-disclosure
+  check ran AFTER the below-band check, so 45.2% of the "benign" bucket
+  (1,656/3,668 pages) was actually pdfce's own disclosed gaps scoring
+  small by coincidence — including a page pdfce renders **completely
+  blank**. And the bucket name asserted a cause ("benign" = anti-aliasing
+  noise) nobody had measured; a structural audit run the same session
+  found 4 confirmed pdfce bugs living inside it, 3 of which are the
+  entries above. No Pass ID — Python tooling fix, not a pdfce-code
+  change.
+- **`01b90c4` — the oracle can finally hear pdfce say "I skipped
+  something."** `pdfce-cli`'s stderr `"note: N structural oddity(ies)
+  tolerated"` was never parsed by the harness; 202 of the 2,015
+  clean-by-construction pages (10.0%) — the population that DEFINES the
+  benign band — were privately disclosing a skip while helping calibrate
+  the threshold that decides what counts as noise elsewhere. Fixed: a
+  tolerating page no longer counts as clean-by-construction, deliberately
+  NOT credited as a gap explanation (the counter is a ~30-site catch-all
+  mixing harmless and content-altering cases). Owed, named at the site:
+  split the counter by category. No Pass ID — tooling.
+
+**Decisions made this session** (recorded, not made by this filing —
+each commit's own scope ruling, filed to `ARCHITECTURE.md` §12 as four
+dated entries): the `GraphicsState`-placement rationale for `ca`/`CA`
+(§8.4.2 save/restore for free); the `metrics_std14`/`std14_for_fallback`
+bridge as the durable "shape and metrics selection must share one alias
+table" design point; the sub-pixel-clamp-is-a-product-choice ruling plus
+the geometric-mean-of-singular-values conversion technique; and the
+render-parity harness's "a tolerating page is not clean-by-construction"
+population definition.
+
+**Findings + decisions:**
+- **The two oracle fixes are a matched pair, and their shared shape is
+  worth stating once: an unaudited channel in a differential-testing
+  harness does not just hide its OWN defect — it can corrupt the
+  POPULATION the harness uses to calibrate everything else.** `e167867`'s
+  ordering bug let small-but-explained divergences masquerade as
+  evidence that "benign" really means benign; `01b90c4`'s stdout-only
+  parsing let tolerating pages sit inside the very set used to derive the
+  band those divergences are measured against. Escalated to
+  `D:\dev\rag\rust\` as two new findings (below) — see the RAG bullets
+  in *For next session* for the exact filenames.
+- **A possible sixth unfiled commit was surfaced, not resolved.**
+  `d3ea5de`'s own message references a companion bug — "`gs` itself
+  being a no-op" — as already fixed, "the second bug from the same
+  audit." This filing grepped `ROADMAP.md`/`SESSION_LOG.md` for any
+  `gs`-no-op fix and found none. It may be filed under an ID this search
+  missed (a plausible candidate: something inside the already-shipped
+  `Pass 48.x`/`49.x`/`50.x` family, none of which this filing re-checked
+  line-by-line for this specific claim), or it may be a genuine sixth
+  unfiled item from the same 05:20–06:18 session. **Flagged for the
+  engineer to confirm — see *For next session*.**
+- **`docs/FEATURES.md`**: *Fonts & rendering* row for *Transparency
+  rendering* has its stale "Limit: `/ca`/`/CA` NOT modelled" sentence
+  struck (not deleted) and marked fixed. The *Rasterize page content*
+  row gains a short addendum naming the font-metrics and stroke-width
+  fixes — a note, not a new row, since both are correctness fixes to an
+  already-`[x]`-ticked capability.
+- **`docs/ROADMAP.md`**: two new Backlog bullets (the R169 sub-pixel
+  clamp-policy register entry; the render-parity `tolerated`-counter
+  split), both cross-referenced from their owning Shipped entry. The
+  original forty-third-filing flag (`Pass 23.3` (CORE) entry) gets a
+  forward-pointer amendment marking it discharged, per this file's own
+  correction discipline.
+
+**Gates.** None independently run — no shell (hard rule 8), and (unlike
+every other recent filing) there was no engineer dispatch summary to
+relay gate figures FROM either; the only evidence available for these
+five commits is their own commit messages, which state per-fix test
+counts (quoted in each `ROADMAP.md` entry) but no workspace-wide
+`cargo test`/`clippy`/`fmt` totals. **This filing deliberately does not
+attempt to reconcile a cumulative test-count figure against the
+`Pass 23.3` entry's own "2567 baseline, nothing left over" arithmetic**
+(`ROADMAP.md`, the amended `Pass 38.5`-family entry) — doing so would
+require either an assumption about chronological ordering this filing
+cannot verify without a shell, or inventing a number. Left as an open
+question rather than resolved by guessing.
+
+**Still in flight:**
+- Filing 47's two remaining named follow-ups (per-run decoded text in
+  the Part-rung readout; the cascading delete-cascade verb) — unchanged,
+  untouched by this filing.
+- The arrow-key single-node nudge (decision 028 items 10/11) — unchanged.
+- **NEW, this filing: the R169 sub-pixel stroke-width clamp-policy
+  register entry** — named and Backlog-filed, not built; not yet
+  back-filed to the canonical spec-ambiguity register
+  (`pdfce-spec-librarian`'s territory).
+- **NEW, this filing: the render-parity `tolerated`-counter split**
+  (content-affecting vs. structural) — named and Backlog-filed, not
+  built.
+- **NEW, this filing: the possible sixth unfiled commit** (`gs`-no-op)
+  referenced by `d3ea5de` — not located, not resolved.
+
+**For next session:**
+- Confirm whether the `gs`-no-op fix `d3ea5de` references is already
+  filed somewhere this librarian's grep missed, or file it as a sixth
+  recovered commit.
+- Consider scoping the R169 sub-pixel-clamp settings knob into a real
+  Pass — it is the only item in this batch with a named product decision
+  still unbuilt.
+- Two new `D:\dev\rag\rust\` findings written this filing:
+  `a_disclosed_gap_is_an_explanation_not_evidence_of_smallness.md`
+  (`e167867`) and
+  `an_unaudited_diagnostic_channel_can_corrupt_the_calibration_population_that_defines_its_own_threshold.md`
+  (`01b90c4`) — both added to that RAG's `index.md` in this same filing.
+- **Ledger for this filing:** no new Pass ID (all five entries filed
+  without one, per each entry's own reasoning). Pass-family single-number
+  ceiling unchanged at **51**, next free **52**. Standing rules
+  unchanged: **R172**, next free **R173** — none of the four
+  `ARCHITECTURE.md` §12 decisions minted a new pdfce standing rule (all
+  four are either `pdfce-render`-internal design points or a test-tooling
+  definition, matching the disposition already used for comparable
+  entries this session). Decision records (`docs/decisions/`) untouched
+  — `034` remains CLAIMED/UNAUTHORED, unrelated topic. Four new
+  `ARCHITECTURE.md` §12 entries (one per render/oracle fix, filed as a
+  single dated block). Two new `D:\dev\rag\rust\` files + their
+  `index.md` bullets. Backup/git working-tree state is not asserted
+  anywhere in this filing — no shell, hard rule 8. This is the
+  **forty-ninth** `SESSION_LOG.md` filing (the forty-eighth confirmed
+  present by grep before this entry was appended).
+
+## 2026-08-09 (fiftieth filing) — the "possible sixth commit" flagged at the forty-ninth filing was FIVE MORE, from a SEPARATE pre-publication-audit session; `817d518`'s confidentiality-leak removal + live publish blocker gets its own Open operator question, and a `git grep -c` scale error gets its own RAG finding
+
+**Filed by `pdfce-librarian`, dispatched explicitly to run down the
+forty-ninth filing's own flagged loose end ("a possible sixth unfiled
+commit was surfaced, not resolved").** Sourcing, stated once because it
+governs every entry below: **this librarian did not write any of these
+five commits and has not run their tests.** The engineer's own dispatch
+read all five commit messages and diffstats in full
+(`C:\Users\Ken\.claude\jobs\7bad3e9b\tmp\five2.txt`, also read directly
+by this filing) and reported that pulling the thread named in
+`d3ea5de`'s own message found **five** commits, not one, from a
+**2026-08-08 21:53 – 2026-08-09 00:56 pre-publication-audit session
+distinct from the render-parity session the forty-ninth filing
+discharged.** No shell available to this dispatch (hard rule 8) — as at
+the forty-ninth filing, the entire basis for every figure below is the
+commit-message text itself.
+
+**Shipped (five entries, no Pass ID on any, filed at the TOP of
+`ROADMAP.md`'s *Shipped* — see that entry's own placement caveat: true
+chronological ordering against the surrounding entries is NOT verified,
+no shell to run `git log`):**
+- **`8672cbc` — a full rewrite stops changing two bytes in every
+  cross-reference table entry.** `xref_entry_eol` defaults to
+  `MatchSource`, read once per save from the base file's own last `xref`
+  section. Framed by the commit as `R33`/§5.6's "never normalize" logic
+  one level finer than the existing section-FORM match (classic table
+  vs. stream) — now the per-entry two-byte TERMINATOR is matched too.
+  Also bundles the first render-parity tooling files
+  (`panel_zoom.py`/`tolerated_scan.py`/`benign_structure.py`/
+  `acrobat_shot.ps1`) that the rest of this block was built with.
+- **`62dda19` — README.md rewritten true before anyone could read it.**
+  ★★ Records, for the first time in `ROADMAP.md`/`SESSION_LOG.md`, that
+  **Ken gave the go-ahead to publish publicly.** Corrects a License line
+  that told readers pdfce may NOT be treated as licensed/redistributable
+  — wrong since 2026-08-01 (MIT) — and a Status line claiming no Rust
+  workspace exists. Every load-bearing claim (60 CLI subcommands, no
+  HTTP/TLS client, no JS engine) checked against the actual crate/lock
+  state, not asserted. States explicitly that a publish-safety audit was
+  still running — the audit that found `817d518`, below, roughly two
+  hours later.
+- **`365856f` — `gs` was a silent no-op on essentially every real
+  file.** `apply_ext_gstate` never resolved indirect `/ExtGState`
+  references (§7.3.10 permits them; producers overwhelmingly use them),
+  so line width/cap/join/dash silently did nothing. The affected page
+  had scored `clean=1` in the render-parity harness's "benign" bucket —
+  a silent bug helping define the very threshold that excused it, the
+  same shape the forty-ninth filing's `e167867`/`01b90c4` entries
+  measured for a different mechanism. This is the companion bug
+  `d3ea5de`'s own message referenced, and the thread that led to finding
+  the other four.
+- **`817d518` — ★★★ a third party's confidential material is removed
+  from the working tree, but NOT from git history.** `tools/
+  realdrawings-smoke/` deleted (its own README said nothing in it was to
+  be committed; all three files were). A false `ROADMAP.md` claim
+  ("nothing proprietary is committed") struck in place, not quietly
+  rewritten. Every engineering FINDING preserved, only identifying
+  strings redacted, per the stated rule "a MEASUREMENT is the value and
+  an IDENTITY is not." **Catches its own audit's arithmetic error before
+  acting on it**: reported "~170 times," actually 3 (8 in the tree) —
+  `git grep -c` counts matching lines, not occurrences (new RAG finding,
+  below). **Names a live, unresolved publish blocker**: the material
+  still exists in 288 earlier commits; publishing needs a rewrite/
+  squash/accept ruling this project has not made. Filed as new **Open
+  operator question (bh)** in `ROADMAP.md` — see *Findings + decisions*.
+- **`9a2bc15` — public-facing docs corrected + a CI gate that could
+  never fail is repaired.** CONTRIBUTING.md's stale-licence line was the
+  **seventh** instance of a defect `LEGAL.md` §7's 2026-08-07 sweep
+  should have caught (it enumerated six files outside `docs/` and missed
+  this one). SECURITY.md/CODE_OF_CONDUCT.md now name GitHub security
+  advisories instead of a placeholder contact. The "verify no HTTP/TLS
+  client" CI gate had a literal backslash-n instead of a line
+  continuation and could never fail — repaired and proven live against a
+  `clap` control. Cites **R171** (already minted, fortieth filing) for a
+  fourth instance; mints nothing new.
+
+**Decisions recorded** (each commit's own scope ruling, filed to
+`ARCHITECTURE.md` §12 as a single dated block, two items): the §5.6
+finer-grain xref-entry-terminator match (`8672cbc`); the general
+"every `pdfce-render` resource-dictionary lookup site resolves indirect
+references" contract, now written down for the first time (`365856f`).
+`62dda19`/`817d518`/`9a2bc15` carry no architectural content by design —
+publish-readiness/legal/CI-hygiene, filed only in `ROADMAP.md`/
+`SESSION_LOG.md`, and, for `817d518`'s live blocker, flagged toward
+`docs/LEGAL.md` rather than edited there (outside this librarian's five
+storage tiers).
+
+**Findings + decisions:**
+- **★★ The publish-gate story changed twice in one evening, and neither
+  half was recorded until this filing.** `62dda19` (22:13) records the
+  operator's go-ahead to publish; `817d518` (00:52 the next morning)
+  shows that go-ahead is not, by itself, sufficient — a second,
+  independent blocker (git-history exposure of confidential material)
+  exists and needs its own ruling. Filed as `ROADMAP.md`'s new **Open
+  operator question (bh)**, with three named options (rewrite history /
+  squash to a fresh initial commit / accept the exposure) and no safe
+  default — the section's own "defaults apply if unanswered" framing is
+  explicitly noted as NOT covering this item.
+- **`git grep -c` counts matching LINES, not occurrences — a new
+  cross-project RAG finding**, escalated to `D:\dev\rag\rust\` (this is
+  a generic git-tooling gotcha, not pdfce-specific; no dedicated `git`
+  subdir exists on this machine, so it is filed in `rust/` per that
+  subdir's existing methodology-family precedent). Same shape as this
+  project's own `state_every_denominator`/R164 family: a correct finding
+  riding beside an incorrect scale, caught only by re-deriving the
+  arithmetic before acting on the larger number.
+- **`docs/LEGAL.md` is flagged, not edited, for the second load-bearing
+  reason this session**: it already owns the project's publish-gate
+  posture (rule 8, §1, §7) and needs an entry for both the
+  confidentiality incident and the three-way history decision — but it
+  sits outside `pdfce-librarian`'s five storage tiers, so this filing
+  records the pointer in `ROADMAP.md` (Open operator question (bh)) and
+  in `ARCHITECTURE.md` §12, and flags it in this librarian's own report,
+  rather than editing it on assumption.
+- **`docs/FEATURES.md`**: *Fonts & rendering*'s *Rasterize page content*
+  row gains a third bug-fix addendum (the `gs`/ExtGState resolution fix)
+  — a note, not a new row, same treatment as the two fixes the
+  forty-ninth filing already added there.
+
+**Gates.** None independently run — no shell (hard rule 8), and (as at
+the forty-ninth filing) there was no engineer dispatch summary to relay
+workspace-wide `cargo test`/`clippy`/`fmt` totals from; the only
+evidence for these five commits is their own messages, which state
+per-fix test counts (quoted in each `ROADMAP.md` entry) but no
+cumulative figures.
+
+**Still in flight:**
+- Filing 47's two remaining named follow-ups (per-run decoded text in
+  the Part-rung readout; the cascading delete-cascade verb) — unchanged.
+- The arrow-key single-node nudge (decision 028 items 10/11) — unchanged.
+- The R169 sub-pixel clamp-policy register entry and the render-parity
+  `tolerated`-counter split (both named at the forty-ninth filing) —
+  unchanged, untouched by this filing.
+- **NEW, this filing: Open operator question (bh)** — the git-history
+  rewrite/squash/accept decision. No safe default; genuinely blocking.
+
+**For next session:**
+- **★ The unfiled-commit backlog is BELIEVED empty after this filing,
+  NOT verified empty** — stated explicitly because "believed closed" has
+  now been wrong twice (the forty-third-through-forty-ninth chain, and
+  this one), both times found incomplete by a thread in a commit
+  message rather than an exhaustive walk. **Recommended for the next
+  dispatch with a shell**: run `git log --all --oneline` once and diff
+  it against every hash named across `ROADMAP.md`/`SESSION_LOG.md`, so
+  the backlog can be asserted empty rather than believed empty a third
+  time.
+- Rule on Open operator question (bh) — the git-history decision — before
+  any push is attempted; there is no safe default to fall back on.
+- Give `docs/LEGAL.md` its own entry for the confidentiality incident and
+  the history decision (flagged, not actioned, by this librarian —
+  outside its five storage tiers).
+- One new `D:\dev\rag\rust\` finding written this filing:
+  `git_grep_c_counts_matching_lines_not_occurrences.md` — added to that
+  RAG's `index.md` in this same filing.
+- **Ledger for this filing:** no new Pass ID (all five entries filed
+  without one, matching the forty-ninth filing's own disposition).
+  Pass-family single-number ceiling unchanged at **51**, next free
+  **52**. Standing rules unchanged: **R172**, next free **R173** — `365856f`'s
+  commit message cites `R171` for an unrelated instance (already minted,
+  fortieth filing); nothing new minted by this filing. Decision records
+  (`docs/decisions/`) untouched. **Operator-question ceiling moves (bg)
+  → (bh), next free (bi)** — one new item, no safe default. Two new
+  `ARCHITECTURE.md` §12 decision items (one dated block) + one §5.6 body
+  update. One new `D:\dev\rag\rust\` file + its `index.md` bullet.
+  `docs/LEGAL.md` NOT edited — outside this librarian's remit, flagged
+  instead. Backup/git working-tree state is not asserted anywhere in
+  this filing — no shell, hard rule 8. This is the **fiftieth**
+  `SESSION_LOG.md` filing (the forty-ninth confirmed present by grep
+  before this entry was appended).

@@ -81,6 +81,368 @@ start of every session. Maintained by `pdfce-librarian`, dispatched by
 
 ## Shipped
 
+### ★★★ FIVE MORE UNFILED COMMITS SURFACE — a SEPARATE work stream from the ones discharged at the forty-ninth filing, found by pulling the thread `d3ea5de`'s own message pointed at — 2026-08-09, filed this dispatch (fiftieth filing)
+
+**The forty-ninth filing's own closing line — "six consecutive 'Still in
+flight' mentions closed" — was correct about what it closed and wrong
+about the backlog being empty.** `d3ea5de`'s commit message referenced a
+companion no-op bug in the render pipeline; pulling that thread (not a
+fresh `git log` sweep) found `365856f`, and reading the neighbourhood
+around it found four more, all from a **2026-08-08 21:53 – 2026-08-09
+00:56 pre-publication-audit session distinct from the render-parity
+session the forty-ninth filing discharged**. **Hash-grepped against
+`ROADMAP.md`/`SESSION_LOG.md`: zero hits for any of the five before this
+filing** (`8dc02a1`, which also looked unfiled, is itself excluded — it
+IS a filing commit, editing these same three docs).
+
+**Attribution, identical in shape to the forty-ninth filing's own
+caveat, extended:** this librarian did not write any of these five, has
+not re-run their tests, and has not independently re-verified any
+figure below. Every number is quoted from the commit messages and
+diffstats in `C:\Users\Ken\.claude\jobs\7bad3e9b\tmp\five2.txt`, the
+sole source for this block. Where the dispatching engineer's own report
+corrected a figure from an audit these commits acted on (see `817d518`,
+below), that correction is carried as a quote, not re-derived.
+
+**Placement caveat, stated rather than silently assumed away:** these
+five entries are filed at the TOP of *Shipped*, ahead of `b5b9f23`. This
+dispatch has no shell and cannot run `git log` to confirm true
+commit-time ordering against the surrounding entries — the five commits'
+own timestamps (2026-08-08 21:53 through 2026-08-09 00:56) are not
+compared against `b5b9f23`'s own commit time, which the existing entry
+does not state. Top-of-list placement is chosen for findability, not
+asserted as a verified chronological position; a future filing that
+confirms the true ordering should re-file this block without treating
+that as a correction of substance.
+
+**Branch note:** the git-status snapshot available at dispatch time
+shows only `pass-8-redaction` with a five-commit tip matching the
+forty-ninth filing's own block (`01b90c4`…`d3ea5de`) — none of these
+five new hashes appear in it. They are therefore very likely on a
+different branch (a pre-publication-audit line of work); this dispatch
+cannot confirm which one, and does not guess.
+
+**★ SIGNIFICANT, NOT MERELY UNFILED: `62dda19`'s message states plainly
+that "Ken gave the go-ahead to publish publicly."** This fact appears
+nowhere in `ROADMAP.md`, `SESSION_LOG.md`, or `LEGAL.md` before this
+filing (grepped, zero hits). It changes the live status of project rule
+8's publish gate — see that commit's own entry below, and new **Open
+operator question (bh)**, further down this file, for why the gate is
+not thereby fully open.
+
+**★★ THE SET IS BELIEVED EMPTY AFTER THIS FILING, NOT VERIFIED EMPTY —
+stated explicitly because "believed closed" has now been wrong twice**
+(the forty-third-through-forty-ninth filings' own six-filing "still in
+flight" chain, and now this). Both prior closures were found incomplete
+by a THREAD IN A COMMIT MESSAGE, not by an exhaustive walk of `git log
+--all`. This dispatch has no shell to run that walk. **Recommended for
+the next dispatch that DOES have a shell**: `git log --all --oneline`
+diffed against every hash named across `ROADMAP.md`/`SESSION_LOG.md`,
+once, so the backlog can be asserted empty rather than believed empty
+for a third time.
+
+---
+
+### xref: a full rewrite stops changing two bytes in every table entry — `xref_entry_eol` defaults to `MatchSource`, derived from the base file's own form rather than a RAG-uncited "common choice" — 2026-08-08 21:53, committed `8672cbc` (branch not independently confirmed — no shell this dispatch)
+
+**No Pass ID — settings-default correction + invariant refinement, same
+treatment as the render-fidelity fixes below and at the forty-ninth
+filing.**
+
+Operator instruction, quoted in the commit: *"change the shipped default
+so that we match the file's existing 2-byte EOL."* §7.5.4 fixes a
+cross-reference entry at exactly 20 bytes "including the end-of-line
+marker" and then permits **three** spellings of those two bytes — `SP
+LF`, `SP CR`, `CR LF` — with no rule preferring any. pdfce had always
+written `SP LF` unconditionally. **Consequence**: a full rewrite of a
+`CR LF` file under a fixed `SP LF` default changes two bytes in EVERY
+ENTRY OF THE TABLE — on a 5,000-object file, a 10,000-byte diff in a
+document nobody edited, precisely the diff minimal-diff editing exists
+to prevent (project rule 3; `ARCHITECTURE.md` §5).
+
+**Mechanism**: new `xref::observed_entry_eol` finds the last `xref`
+keyword, steps over the subsection header, and reads bytes 18..20 of the
+first record — validating the record as an entry FIRST, so a file whose
+table starts unexpectedly cannot have stray bytes misread as an EOL.
+`save.rs` resolves the setting ONCE, in the only layer holding both the
+setting and the base bytes, so an incremental save and a full rewrite of
+the same file can never disagree. Framed by the commit itself as `R33`
+one level finer than `Document::section_shape`'s existing coarser-grain
+match (classic table vs. stream) — see `ARCHITECTURE.md` §5.6/§12 (this
+filing) for the mirrored decision-log entry and body update.
+
+**Evidence tier improves rather than moving sideways**: the OLD default
+rested on the RAG's uncited claim that `SP LF` is "the common choice"
+(the register's own §11.3 had it pending a downgrade to a guess); the
+NEW default rests on nothing external — it derives the answer from the
+file in front of it. The uncited claim now governs only the fallback,
+where there is genuinely nothing to match.
+
+**Two tests amended rather than deleted, per the relayed message**:
+`the_defaults_are_exactly_what_pdfce_emitted_before_the_settings_existed`
+had kept passing across this change by coincidence — its fixture happens
+to be an `SP LF` file, so `MatchSource` resolved to `SP LF` while the
+test's own name still claimed the defaults hadn't moved. Renamed to what
+it actually proves. The settings module's own defaults guard now records
+this as the one deliberate exception, with the operator's words, plus an
+assertion that the fallback is still what `xref_out.rs` always emitted.
+
+**Verification, per the relayed message**: `a_full_rewrite_keeps_the_
+files_own_entry_eol` fails under the old fixed form and passes under the
+new (neutering check); then through the release binary —
+`pdfce-cli rotate --mode full` on a `CR LF` fixture emits 5 `CR LF`
+pairs and 0 `SP LF` pairs.
+
+**Two defects fixed en route (relayed, not independently re-verified)**:
+a line-start check that sliced (could panic, and was pointless — an
+indented `xref` keyword is not a table the entry parser would accept
+anyway); a test block appended after `mod tests` (structural, not
+behavioral).
+
+**Also bundled in this commit (per diffstat) — the START of the
+render-parity tooling family the rest of this block and the forty-ninth
+filing's own render fixes were built with**: `panel_zoom.py`,
+`tolerated_scan.py`, `benign_structure.py`, `acrobat_shot.ps1`, plus two
+`out-*.log` files. Not attributed as THIS commit's own render-fidelity
+finding — only as the delivery vehicle for `365856f`, below.
+
+**Diffstat**: 13 files, +1662/−40 — `settings/mod.rs` +138 net,
+`writer/save.rs`, `writer/xref_out.rs`, `xref.rs` +130,
+`tests/xref_eol.rs` +147, `gui/settings_panel.rs`, `gui/ui_text.rs`, plus
+five `tools/render-parity/` files.
+
+---
+
+### README.md rewritten true before anyone could read it — Ken's go-ahead to publish publicly is recorded here for the first time, and a stale-licence line that told readers they may NOT use MIT-licensed code is corrected — 2026-08-08 22:13, committed `62dda19`
+
+**No Pass ID — publish-readiness documentation, not a feature Pass.**
+
+**★★ Ken gave the go-ahead to publish publicly.** Quoted from the
+commit message: *"Ken gave the go-ahead to publish publicly."* **This is
+recorded in `ROADMAP.md`/`SESSION_LOG.md` for the first time by this
+filing** — grepped both files before this edit, zero hits. It is a
+material change to project rule 8's publish gate and is carried forward
+into new **Open operator question (bh)**, below, because `817d518`
+(further down this block) shows the gate is not, by itself, sufficient
+to push.
+
+**What was wrong before this commit**, per the relayed message: the
+README's Status line read *"Pre-code. As of 2026-07-23 this repository
+contains project scaffolding ... no Rust workspace exists yet"* — false
+by a wide margin (four crates, sixty CLI subcommands, fifty-odd shipped
+Passes at commit time). Its License line read *"Not yet chosen. Do not
+treat this project as publicly licensed or redistributable until
+that's resolved"* — wrong since 2026-08-01 (`LEGAL.md` §1: MIT). The
+commit message calls this **"the single worst thing that could have
+gone public on a repository being deliberately opened under MIT: it
+tells readers they may NOT use the code."** The README had also carried
+`D:\dev\rag\...` absolute paths into public view and described the two
+private reference RAGs, while never once mentioning `docs/FEATURES.md`
+— the one file that actually answers "what can it do."
+
+**The rewrite** leads with what works and what does not, points at
+`FEATURES.md` instead of restating a list that will rot, and keeps
+"feature parity with Acrobat Pro" as a stated GOAL with "it is not there
+yet" immediately after — an aspiration is fine to publish, an implied
+claim is not.
+
+**Every load-bearing claim was checked, per the relayed message, not
+asserted**: 60 CLI subcommands counted from `pdfce-cli --help`; "no HTTP
+client and no TLS stack" via `cargo tree -e normal` across the whole
+workspace, zero matches for reqwest/hyper/rustls/native-tls/openssl/
+ureq/curl (named in the message as *"the one I would least like to be
+wrong about"* — a privacy promise on a public repo); no JavaScript
+engine (zero `Cargo.lock` matches); toolchain pin and MIT `LICENSE` both
+read from the files. The privacy/platform/signing section is lifted
+**verbatim** from decision 003 §6.3, per that record's own instruction
+("use this wording; do not paraphrase it looser").
+
+**The commit message states explicitly**: *"Nothing is pushed yet — a
+publish-safety audit of the tree and history is still running."* That
+audit is what found `817d518`'s confidentiality leak roughly two hours
+later — see below.
+
+**Diffstat**: `README.md`, 142 insertions / 66 deletions, 1 file.
+
+---
+
+### Render fix: `gs` was a silent no-op on essentially every real file — indirect `/ExtGState` references were never resolved, and the affected page had been counted CLEAN by the very oracle it was undermining — 2026-08-08 22:32, committed `365856f`
+
+**No Pass ID — root-cause render-fidelity fix, same filing class as
+`d3ea5de`/`1edf4e3`/`9abf5b5` at the forty-ninth filing. Companion
+commit `d3ea5de`'s own message is what pointed this dispatch at this
+bug in the first place.**
+
+**Mechanism**: `interpret::apply_ext_gstate` resolved NEITHER the
+`/ExtGState` sub-dictionary NOR the named entry inside it. §7.3.10 lets
+any value be an indirect reference and producers overwhelmingly write
+`/ExtGState << /GS0 12 0 R >>`, so `as_dict()` on a `Reference` returned
+`None`, the whole chain collapsed to the `tolerated += 1` arm, and the
+`gs` operator did NOTHING: no line width, cap, join, dash — and no
+diagnostic an operator would read as "the graphics state you asked for
+was ignored." Every OTHER resource lookup in the same file already
+resolved references (`/Font` ~line 1428, `/XObject` ~line 1799), which
+is what makes this a slip rather than a policy, and what would make it
+easy to reintroduce without the new §12 decision-log entry recording the
+general contract (see `ARCHITECTURE.md` §12, this filing).
+
+**Measured** (relayed): `pdfium/testing/resources/multiple_graphics_
+states.pdf`, 748 of 60,000 pixels change. Acrobat and pdfium agree with
+each other and disagreed with pre-fix pdfce.
+
+**★★ THE PART THAT MATTERS MORE THAN THE FIX**, quoted because the
+project's render-parity harness depends on exactly this reasoning: this
+page sat in the `benign-renderer-noise` bucket, and it was `clean=1` —
+pdfce disclosed no gap for it, so it counted as "clean by construction"
+and HELPED DEFINE THE THRESHOLD THAT EXCUSED IT. A silent bug does not
+merely escape the oracle; it raises the bar that hides other bugs. That
+was the forty-ninth filing's own stated hypothesis for a different bug;
+here it is measured a second time, on 100 pages, by a different
+mechanism.
+
+**Three tests, per the relayed message**: two fail without the fix —
+inline vs. indirect entry, and inline vs. indirect sub-dictionary, which
+are separate failure paths. The third is the control that gives them
+meaning: without it, both would pass on a renderer that ignored `gs`
+entirely, because two identical no-ops compare equal.
+
+**FEATURES.md consequence**: addendum to the *Rasterize page content*
+row (Fonts & rendering) — filed in the same edit as this Shipped entry,
+below. **ARCHITECTURE.md consequence**: new §12 decision-log entry
+recording the general "every resource lookup site resolves references"
+contract — also filed this edit.
+
+**Diffstat**: `interpret.rs` +29/−1; new test file
+`tests/ext_gstate_indirect.rs` +174; `tools/render-parity/acrobat_shot.
+ps1` +15; `tools/render-parity/out-benign-audit-run.log` +126. 4 files,
++343/−1.
+
+---
+
+### ★★ A third party's confidential material is removed from the WORKING TREE — but not from git history: publishing gains a SECOND, independent blocker, and a mis-scaled audit figure is caught before it drove a far larger edit — 2026-08-09 00:52, committed `817d518`
+
+**No Pass ID — legal/process remediation, not a feature Pass.**
+
+**What was found and removed**: `tools/realdrawings-smoke/` is DELETED
+(three files: `.gitignore`, `README.md`, `realdrawings_smoke.py`). Its
+own README said *"Nothing in this directory is to be committed at
+all"* — and all three files were committed. `ROADMAP.md`'s own entry
+describing this harness claimed *"nothing proprietary is committed"*,
+which was FALSE: the RESULTS were gitignored, the harness itself was
+not. **That claim was struck in place, per the commit, rather than
+quietly rewritten** — a false confidentiality assurance is exactly the
+sentence a later reader would trust.
+
+**Redaction, not deletion, of the engineering content**: a named drawing
+identifier, its path, and two strings lifted from the drawing's own text
+were redacted to a neutral placeholder across `ROADMAP.md`,
+`SESSION_LOG.md`, `gui-drive.ps1`, and one agent-memory file. **Every
+engineering FINDING survives unchanged** — the operating rule, quoted
+from the commit: *"a MEASUREMENT is the value and an IDENTITY is not."*
+"One path object with 1,194 subpaths, one text object with 237 runs,
+painted second-from-last" is what invalidated the assumption that a
+visible line is an object, and it shapes pdfce's whole selection model
+— none of it needed the filename. Decision 008's corpus census keeps
+its numbers (2,500 sampled of 25,203) and loses only its provenance
+(the operator's employer and document store).
+
+**★★★ THE ARITHMETIC-ERROR FINDING — escalated as its own methodology
+lesson, not folded silently into the redaction.** The audit this commit
+acted on reported the drawing identifier appearing *"~170 times across
+docs/ROADMAP.md."* It appears **3 times** in that file, and **8 times**
+in the whole tree. Root cause, quoted: *"`git grep -c` counts matching
+LINES, not occurrences."* The FINDING was real; the SCALE reported was
+not — and acting on the reported scale would have meant a far more
+invasive edit to the engineering record than the actual leak justified.
+**This is the same class of failure `ROADMAP.md`'s own "state every
+denominator" / R164 family already tracks — a wrong SCALE riding beside
+a correct FINDING — now surfacing on a new instrument.** Escalated to
+`D:\dev\rag\rust\` in this filing (see below) rather than left as a
+single-project observation, since `git grep -c` is a generic tool
+gotcha, not pdfce-specific.
+
+**★★★★★ THE LIVE PUBLISH BLOCKER — quoted in full, because it is a
+standing instruction, not a summary**: *"THIS DOES NOT CLEAR GIT
+HISTORY. Nothing has ever been deleted from this repository — 819 paths
+ever, 746 tracked before this commit, every difference a directory
+object — so all of the above still exists in 288 earlier commits.
+Publishing remains blocked on a decision about history: rewrite it,
+squash to a fresh initial commit, or accept it."* **This is a SECOND,
+INDEPENDENT blocker on top of project rule 8's own go-ahead gate — and
+that gate's go-ahead was GIVEN in the same evening** (`62dda19`, above,
+22:13: *"Ken gave the go-ahead to publish publicly"*). Rule 8's gate is
+therefore no longer, by itself, what stands between this repository and
+a public push.
+
+**This librarian's own handling of that blocker, stated because
+`LEGAL.md` is where a reader would look for it and this filing does not
+edit `LEGAL.md`**: `docs/LEGAL.md` is outside `pdfce-librarian`'s five
+storage tiers (`ROADMAP.md`, `SESSION_LOG.md`, `ARCHITECTURE.md` §12,
+`D:\dev\rag\rust\`/`egui\`, `personal_rag\pdf\`) — per this dispatch's
+own instruction, an out-of-remit file gets a pointer filed elsewhere,
+not an edit made on assumption. The blocker is instead recorded as new
+**Open operator question (bh)**, below, and flagged directly in this
+librarian's report to the operator/engineer: `LEGAL.md` needs its own
+entry recording both the confidentiality incident and the three-way
+history decision, alongside the already-recorded rule-8 gate.
+
+**Diffstat**: 8 files changed, 30 insertions / 487 deletions — net a
+large deletion (the 391-line harness script alone accounts for most of
+it).
+
+---
+
+### Public-facing docs corrected (CONTRIBUTING/SECURITY/CODE_OF_CONDUCT), and a CI gate NAMED "verify no HTTP/TLS client" that could never fail is repaired and proven live — R171 CITED, not re-minted — 2026-08-09 00:56, committed `9a2bc15`
+
+**No Pass ID — publish-readiness documentation + CI-hygiene fix.**
+
+**CONTRIBUTING.md** carried the same stale "license not yet finalized"
+defect the pre-`62dda19` README carried — per the relayed message,
+`LEGAL.md` §7's 2026-08-07 sweep enumerated six files outside `docs/`
+and MISSED this one, making it the **seventh** instance of that defect
+class. It also still claimed no Cargo workspace exists. **SECURITY.md**
+pointed reporters at *"whatever private channel is currently in use for
+this project"* — meaningless to a stranger — and **CODE_OF_CONDUCT.md**'s
+contact was *"not yet finalized — TODO before first public release."*
+Both now name GitHub security advisories, a channel a public reporter
+can actually reach.
+
+**★★ THE CI GATE THAT COULD NEVER FAIL**: the line named *"verify no
+HTTP/TLS client"* contained a literal backslash-n instead of a line
+continuation, so bash ran `cargo tree ... n` — an extra argument — which
+errored into `2>/dev/null`, produced no output, and left the `if`
+permanently false. Quoted from the message: *"A gate that cannot fail is
+worse than no gate: it is a public claim of verification that verifies
+nothing"* — and `README.md` (`62dda19`, above) now invites a reader to
+check exactly this property. **Repaired and proven live rather than
+assumed**: the same pattern matched `clap` as a control; the deny list
+matched nothing across the crates (the no-network claim holds on its own
+merits, independently of the gate that failed to check it).
+
+**R171 CITED, not re-minted — verified against `ROADMAP.md`'s own
+Standing rules by this filing.** The commit message reads *"Both
+stale-doc classes share one cause and it is now a standing rule
+(R171)"*, which could be misread as newly minting R171. **It is not
+new**: `R171` — *"a constant, default, or token that must agree with
+another place in the codebase is READ off the one place that owns it,
+never RESTATED"* — was already minted at the fortieth filing
+(2026-08-08), and this commit is citing it, correctly, for a fourth
+instance (the licence text restated across eight files). **No new
+standing-rule number is consumed by this entry.**
+
+**Also recorded, per the operator's 2026-08-08 instruction, quoted in
+the message**: *"FEATURES.md is kept true at HEAD rather than at
+release time, so it may describe capabilities no tag contains."* Now
+said explicitly in CONTRIBUTING and SECURITY so a downloader isn't
+misled by a features list running ahead of the tagged code they have.
+Matches this librarian's own persistent-memory note
+(`finished-feature-updates-features-md.md`).
+
+**Diffstat**: `.github/workflows/ci.yml`, `CODE_OF_CONDUCT.md`,
+`CONTRIBUTING.md`, `SECURITY.md` — 4 files, +23/−15.
+
+---
+
 ### gui/tooling — edit_note's drain traced its SHARE, not its WHOLE: `set_edit_note` becomes the single choke point, 34 direct-assignment call sites converted — 2026-08-09, committed `b5b9f23`, branch `pass-8-redaction`
 
 **Filed by `pdfce-librarian`. No shell available to this dispatch (hard
@@ -1004,6 +1366,14 @@ test-count question below** — see the *Test results* paragraph; the
 arithmetic now closes on this Pass's own tests alone, with nothing left
 for these five commits to explain.
 
+**★ DISCHARGED 2026-08-09 (forty-ninth filing) — all five now filed,
+five entries below `Pass 38.5`'s own Shipped entry** (further down
+*Shipped*, between it and this entry — chronological order preserved:
+`fcb6544` < the five < `e1430d8`). Reconstructed from the commit
+messages alone (`C:\Users\Ken\.claude\jobs\7bad3e9b\tmp\five.txt`), not
+independently re-run. This flag stood across six consecutive
+`SESSION_LOG.md` filings (43–48) before being closed.
+
 **Why this ships under `Pass 23.3` rather than a freshly minted ID.**
 Decision 023 Q4 scoped `Pass 23.3` (Backlog, above) as three components:
 node selection set, multi-node move, node delete. The first two-thirds
@@ -1159,6 +1529,108 @@ recorded as an `ARCHITECTURE.md` §12 entry, not a numbered decision —
 same disposition as prior additive core-surface Passes in this family,
 e.g. (D)/(E)/(L) above it). Backup/git working-tree state is not
 asserted anywhere in this filing — no shell, hard rule 8.
+
+---
+
+### render-parity oracle: `tolerated` structural-oddity notes on stderr now reach the harness — a tolerating page no longer counts as clean-by-construction — 2026-08-09, committed `01b90c4`, branch `pass-8-redaction` (no Pass ID — tooling only)
+
+**★ FIFTH AND LAST OF FIVE COMMITS FIRST FLAGGED UNFILED AT THE FORTY-THIRD FILING** (`ROADMAP.md`'s `Pass 23.3` (CORE) entry, above, and six consecutive `SESSION_LOG.md` "Still in flight" mentions, filings 43–48). **Filed by `pdfce-librarian`, reconstructed entirely from the commit's own message and diffstat** (`C:\Users\Ken\.claude\jobs\7bad3e9b\tmp\five.txt`, read in full by this filing) — **a prior session's work (2026-08-09, 05:20–06:18), not this dispatch's own, and not independently re-run or re-measured.** No shell available to this dispatch (hard rule 8); every figure below is quoted from the commit message. This entry and the four below it are ordered oldest-first within the block (matching the file's own reverse-chronological convention — `01b90c4` is the newest of the five, so it is filed first, immediately below the newer, already-filed `Pass 38.5` amendment).
+
+**Defect.** `pdfce-cli` prints `"note: N structural oddity(ies) tolerated"` to **stderr** whenever it proceeds past a malformed-but-recoverable structure — the one channel pdfce uses to say "I skipped something." `render_pdfce()`, the render-parity harness's own call into the CLI, parsed only **stdout**, so that channel was structurally invisible to the instrument built to catch exactly this. **442 of 3,714 measured pages (11.9%) emit the note; 202 of the 2,015 clean-by-construction pages do (10.0%)** — and clean-by-construction is the population that *defines* the benign band elsewhere in the harness, so 202 pages were privately disclosing a skip while simultaneously helping set the threshold that decides which divergences are small enough to ignore. **Quoted directly, because it is the sentence to keep:** *"That is the mechanism by which a silent bug raises the bar that hides other bugs, and it is now closed."*
+
+**Fix.** A tolerating page no longer counts as clean-by-construction. "Clean" asserts the page rendered fully, so any divergence on it can only be renderer noise; a page that tolerated a structural oddity is making the opposite claim about itself — it may still be fine, but it cannot be part of the population that defines what fine looks like. **Deliberately NOT added to the gap-explanation list**: `tolerated` is a ~30-site catch-all conflating harmless cases ("unbalanced Q") with content-altering ones ("`gs` was a no-op," which hid the real bug the four commits below found), so treating it as an *explanation* would excuse divergences it does not actually explain. Excluding it from the band instead is the conservative half — it can only tighten the band and make bug candidates easier to see, never hide one.
+
+**★ Owed follow-up, named at the site by the commit itself, not built by it:** splitting the `tolerated` counter into content-affecting vs. structural sub-categories. **Filed to Backlog, below** (*render-parity oracle hardening — split the `tolerated` counter*).
+
+**Scale caveat, carried forward verbatim per rule 10a (a total belongs beside its per-sample figure, with the denominator stated):** on the 220-file sample used to validate this fix, the band-defining set fell to **17 pages** — "a large exclusion and a thin basis for a p99.9 at that scale." On the **full** corpus the same exclusion is **2,015 − 202 = 1,813**, "which is not thin." The commit states both explicitly so the 17-page figure is not read alarmingly out of context.
+
+**Test/gate results.** None stated in the commit beyond the sample figures above. `tools/render-parity` is Python tooling, outside `cargo test`'s scope; **not independently re-run by this filing.**
+
+**`docs/FEATURES.md`:** no row — test-tooling, not a pdfce capability, same exclusion already applied to `9681112`'s render-worker tracing.
+
+**`docs/ARCHITECTURE.md`:** new §12 entry, below, recording "a tolerating page is not clean-by-construction" as the durable population definition.
+
+---
+
+### render-parity oracle: the benign/gap classifier is reordered — a page pdfce itself disclosed a gap for is never again filed as "renderer noise" — 2026-08-09, committed `e167867`, branch `pass-8-redaction` (no Pass ID — tooling only)
+
+**Second-newest of the five unfiled commits (see the entry immediately above for the shared attribution/sourcing statement — identical for this entry, not repeated in full).**
+
+**Defect.** The harness's gap-disclosure check ran **after** its below-band ("benign") check: `if frac32 <= band: bucket = "benign"` came first, so a page pdfce had **itself** disclosed a gap for (an `image-unsupported` note, a skipped filter, anything) was filed as ordinary renderer noise whenever the *pixel* divergence happened to score below the band. On the full corpus this was **1,656 of 3,668 pages, 45.2% of the bucket** — including `pdfbox/.../merge/multitiff.pdf`, which pdfce renders **completely blank**, disclosed as `image-unsupported`, at frac32 0.0798 against a band of 0.0882: comfortably inside "benign" under the old ordering, and comfortably wrong.
+
+**Quoted directly, because it is the sentence that fixes the reasoning, not just the code:** *"A disclosed gap is an EXPLANATION. Discarding it because the difference it explains is small gets the logic exactly backwards: scoring below the band tells you the difference is small, not that it is anti-aliasing."* Measured on a 220-file sample after the reorder: **121 pages move to "disclosed gap, below band" against 63 genuinely below-band with nothing disclosed** — roughly two thirds of the old bucket was mislabelled.
+
+**A second defect, one line apart in the same commit: the bucket NAME asserted a cause the harness had never checked.** "Benign" claimed the divergence was anti-aliasing noise; nobody had looked. A structural audit run the same session measured it directly: **84% of the bucket is genuinely edge-shaped, 15.4% contains a contiguous region no shared edge explains, and FOUR confirmed pdfce bugs were living inside it — three of which are the render-fidelity fixes filed immediately below this entry.** The summary now prints these figures alongside the bucket name instead of leaving the name to imply a verdict it never earned; a new `-small` suffix keeps "small and explained" visibly distinct from "large and explained" (collapsing the two would trade one loss of information for another).
+
+**Also fixed in the same commit:** the gap-reason histogram keyed on the single old bucket name — left unfixed, splitting the bucket in two would have silently halved every count in it.
+
+**Test/gate results.** None stated beyond the 220-file sample figures above; Python tooling, outside `cargo test`'s scope; **not independently re-run.**
+
+**`docs/FEATURES.md`:** no row, tooling only. **`docs/ARCHITECTURE.md`:** no §12 entry — this is a classifier bug fix, not a durable definitional decision the way `01b90c4`'s "tolerating ≠ clean" is. **Escalated instead to `D:\dev\rag\rust\`** (below) as a generalizable oracle-design finding: a differential-testing harness that checks a magnitude threshold before it checks its own disclosure channel will systematically mislabel every case where the disclosed cause happens to produce a small pixel delta — the two checks answer different questions ("is this explained" vs. "is this small"), and the second is not evidence about the first.
+
+---
+
+### Render fix: sub-pixel stroke widths (`0 w` and near-zero) stop rendering at ~9% contrast — floored to one DEVICE pixel via the CTM's singular values — 2026-08-09, committed `9abf5b5`, branch `pass-8-redaction` (no Pass ID — root-cause render-fidelity fix, `Font-fix`-style filing; fourth bug found by the benign-bucket audit)
+
+**Third-newest of the five unfiled commits (see the `01b90c4` entry, three entries above, for the shared attribution/sourcing statement).**
+
+**Two defects in one line.** `stroke_params` mapped `0 w` (§8.4.3.2's "the thinnest line the device can render") to a fixed `0.1` **user-space** units. §8.4.3.2 is a statement about **device** space, so a user-space constant is wrong in both directions: at low zoom `0.1` units is a fraction of a device pixel and anti-aliases to near-invisible; at high zoom the same `0.1` units becomes a visibly thick line. The same missing user→device conversion left every thin-but-nonzero stroke width faint. **Measured:** `0.1 w` rendered at **0.17 device pixels**, grey 233 — about **9% contrast** — across nine qpdf `form-*.pdf` files sharing an identical 482-pixel signature, silently. pdfium and Acrobat both draw a solid ~1px line for the same input.
+
+**Fix.** Stroke width is now floored at **one device pixel**, converted through the CTM by the **geometric mean of its singular values** — not `sx` alone, which is wrong under rotation and shear (a shear can make `sx` arbitrarily small while the on-screen line stays fully visible; the geometric mean of the two singular values is invariant to which axis the shear compresses).
+
+**★ Scope note, quoted directly because it is a product decision recorded as owed, not merely a spec reading:** *"§8.4.3.2 mandates the minimum only for `0 w`, so clamping a NON-ZERO sub-pixel width is a product choice, not a requirement. Both reference renderers clamp, so clamping is the right default — but the standard is silent and rendering literally is a defensible reading, so that knob is OWED under R169 rather than skipped."* **New Backlog item filed below** (*render settings — sub-pixel stroke-width clamp policy, new R169 register entry*) and a matching `ARCHITECTURE.md` §12 entry.
+
+**Testing note, carried forward verbatim because it is a finding about test design, not only about this bug:** the commit's own first version of the headline test demanded grey < 80 and measured 127, and was nearly read as "the fix doesn't work." 127 is *correct* — a one-device-pixel line centred on a pixel boundary anti-aliases across two rows at half coverage each; the absolute threshold was measuring anti-alias placement, not the defect. The shipped headline test instead asserts `0.1 w` renders **identically** to `1 w` (alignment-independent); the others assert contrast against the shipped grey-233 baseline rather than an untestable ideal.
+
+**Tests, per the commit (not independently re-run): four tests in `crates/pdfce-render/tests/hairline_minimum.rs`, three of which fail without the fix.** The fourth passes either way on purpose — it pins that a comfortably-wide stroke still scales with zoom, so this stays a floor rather than a redefinition that silently thickens every drawing. Diffstat: `crates/pdfce-render/src/interpret.rs` (part of +49), `crates/pdfce-render/tests/hairline_minimum.rs` +162 (new file); 2 files changed, 206 insertions, 5 deletions.
+
+**`docs/FEATURES.md`:** amended below (*Fonts & rendering*, row for *Rasterize page content*) — a short addendum, not a new row; this is a correctness fix to already-shipped rasterization, not a new capability.
+
+**`docs/ARCHITECTURE.md`:** new §12 entry, below, recording the clamp-is-a-product-choice ruling and the geometric-mean-of-singular-values technique as the reusable shape.
+
+---
+
+### Render fix: non-embedded standard-14-alias text (e.g. `/BaseFont /Arial`, no `/Widths`, no embedded program) stops stacking on a single point — `MissingWidth`'s zero default no longer wins when the shape-selection layer already knew the metrics — 2026-08-09, committed `1edf4e3`, branch `pass-8-redaction` (no Pass ID — root-cause render-fidelity fix; third bug found by the benign-bucket audit)
+
+**Fourth-newest of the five unfiled commits (see the `01b90c4` entry, four entries above, for the shared attribution/sourcing statement).**
+
+**Defect.** `/BaseFont /Arial`, no `/Widths`, no embedded font program. Arial is not one of the fourteen standard names, so the width ladder (`/Widths` → standard-14 AFM → `/MissingWidth`) fell all the way through to `/MissingWidth`, **whose default is zero**. Every glyph advanced by nothing and the whole run stacked on one point. **Measured on `pdfium/testing/resources/bookmarks.pdf`:** "Page1" rendered as an unreadable pile while pdfium and Acrobat both laid it out correctly — both alias Arial to Helvetica for metrics.
+
+**The shapes and the metrics were deciding independently what font this was.** `select::by_name` already mapped Arial to the `Sans` slot to choose which face's *glyphs* to draw — pdfce was already drawing Helvetica's shapes, just advancing them by zero. `std14_for_fallback` bridges the two enumerations, which describe the same fourteen faces from opposite ends (shape-selection vs. metrics lookup).
+
+**Two deliberate scope guards, both stated as boundaries rather than gaps:**
+1. **Metrics only, not encoding.** `std14` also drives §9.6.6.1's symbolic-classification logic in `encoding_table`; widening it there would change which *encoding* a non-embedded Arial gets. A separate `metrics_std14` keeps this a metrics-only fix.
+2. **Non-embedded only.** A font that ships its own program and omits `/Widths` should take advances from that program, not from Helvetica's AFM table — untouched by this commit.
+
+**A disclosure gap the commit surfaces but does not itself fix — flagged here rather than left to expire.** pdfce reports `substituted=1` on this path, which says the *shapes* are pdfce's; it says nothing about advances being synthesized too, so the one signal an operator had pointed at the wrong problem. Not filed as a formal Backlog item — the commit does not name it as owed the way the other two follow-ups above are — but recorded so a future disclosure audit does not have to re-derive it.
+
+**Tests, per the commit: three tests in `crates/pdfce-render/tests/nonstd14_widths.rs`, all three failing without the fix.** Two exist specifically because an ink-*count* metric would have passed on the original bug (eight glyphs stacked on one point ink a similar pixel count to eight glyphs laid out correctly) — the tests assert ink *width*, and two of the three guard against a copy-paste that routes every alias to Helvetica (one asserts Arial matches Helvetica exactly; one asserts the serif and monospaced aliases reach their *own* families). Diffstat: `crates/pdfce-render/src/text.rs` +75, `crates/pdfce-render/tests/nonstd14_widths.rs` +151 (new file); 2 files changed, 224 insertions, 2 deletions.
+
+**`docs/FEATURES.md`:** amended below alongside the stroke-width fix — same short addendum, not a new row.
+
+**`docs/ARCHITECTURE.md`:** new §12 entry, below, recording the `metrics_std14`/`std14_for_fallback` bridge as the durable design point — shape-selection and metrics-selection must consult the same alias table or they can silently disagree about what font a name means.
+
+---
+
+### Render fix: transparency stops being silently discarded — `/ca` (non-stroking) and `/CA` (stroking) constant alpha are now read and honoured — 2026-08-09, committed `d3ea5de`, branch `pass-8-redaction` (no Pass ID — root-cause render-fidelity fix; second bug found by the benign-bucket audit)
+
+**Oldest of the five unfiled commits (see the `01b90c4` entry, five entries above, for the shared attribution/sourcing statement).**
+
+**Defect, invisible twice over.** §11.6.4.4 Table 58's constant alpha (`/ca` non-stroking, `/CA` stroking) was read by neither `pdfce-core` nor `pdfce-render`: `apply_ext_gstate` fell through to a comment stating the keys were "deferred" **with no counter tracking that they were being skipped**, and `solid()` hard-coded paint alpha to 255. Every opacity instruction in every document died at that one line — the page rendered fully opaque, **and nothing told the operator a transparency instruction had been dropped.** **Measured impact:** ~120 flagged pages across the veraPDF PDF/A transparency and colour-space suites. On one of them, the fixture's **own bookmark** reads *"The ExtGState contains the /ca key with value 0.5"* — pdfce painted the glyph solid black while pdfium and Acrobat both painted it 50% grey.
+
+**Design point worth recording as durable, not incidental:** the two alpha values now live on `GraphicsState` rather than beside the paint call, because §8.4.2 requires `q`/`Q` to save and restore graphics-state parameters — putting `ca`/`CA` on `GraphicsState` gets that save/restore behaviour for free instead of it needing to be hand-written at every push/pop site.
+
+**Endpoints and controls, both deliberately pinned by tests.** Alpha `0` must leave the paper untouched; alpha `1` must be byte-identical to no `/ca` at all. And — the control that matters more than it looks — `/ca` must **not** lighten a *stroke*, and `/CA` must **not** lighten a *fill*; conflating the two keys is an easy mistake that still *looks* right (the page renders transparent, just on the wrong operation), and a test only asserting "it got lighter" would not catch it.
+
+**Clamped, not refused, out of range.** §11.6.4.4 gives the valid range as 0..1; a malformed value is judged not to be a reason to abandon the whole page, and a number outside the range has an obvious intended reading at each end (clamp to the nearer bound).
+
+**★ A companion bug named in the commit but not part of this diff, and NOT located by this filing — flagged rather than resolved.** Quoted: *"the second bug from the same [benign-bucket] audit, after `gs` itself being a no-op — and the two compound: on a file where the ExtGState was indirect, pdfce never even reached the alpha it was also ignoring."* This filing grepped `ROADMAP.md`/`SESSION_LOG.md` for a `gs`-no-op fix and found none. **It may already be filed under an ID this search missed, or it may be a genuine sixth unfiled commit.** See *For next session*, `SESSION_LOG.md`'s forty-ninth filing.
+
+**Tests, per the commit: five tests in `crates/pdfce-render/tests/constant_alpha.rs`, three of which fail without the fix.** The other two are the deliberate controls described above. Diffstat: `crates/pdfce-render/src/gstate.rs` +23, `crates/pdfce-render/src/interpret.rs` +45, `crates/pdfce-render/tests/constant_alpha.rs` +161 (new file); 3 files changed, 222 insertions, 7 deletions.
+
+**`docs/FEATURES.md`:** *Fonts & rendering* row for *Transparency rendering* amended below — its stated "Limit: `/ca`/`/CA` constant alpha is NOT modelled" is now false and is struck, not silently deleted, per this file's own correction discipline.
+
+**`docs/ARCHITECTURE.md`:** new §12 entry, below, recording the `GraphicsState`-placement rationale as the durable design point.
 
 ---
 
@@ -29151,6 +29623,36 @@ Grouped by rough Acrobat Pro feature area. Each bucket gets scoped into
 real Pass entries as the engineer reaches it — this list exists so
 nothing gets forgotten, not as a commitment to build in this order.
 
+- **★ NEW R169 register entry, named but not built — sub-pixel
+  stroke-width clamp policy** (owed by the render fix filed 2026-08-09
+  under *Shipped*, `9abf5b5` — "sub-pixel strokes stop rendering at 9%
+  contrast"). §8.4.3.2 mandates a device-pixel-floor minimum only for
+  `0 w`; pdfce now floors both `0 w` **and** genuinely non-zero
+  sub-pixel widths to one device pixel, and clamping the latter is a
+  **product choice**, not a spec requirement — both reference renderers
+  (pdfium, Acrobat) clamp, so clamping is the shipped default, but the
+  standard is silent and rendering the literal (near-invisible) width
+  is a defensible reading. Per R169, this belongs in the settings
+  register alongside `cmyk_intent`/`WB-A1`/etc.
+  (`D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__ambiguity_settings_register.md`)
+  — **minted here in prose, same pattern `cmyk_intent` used, NOT yet
+  back-filed to the corpus** (that is `pdfce-spec-librarian`'s territory
+  — flag it, don't write it, per hard rule 6). Proposed name:
+  `render.hairline_clamp_policy` (`clamp_to_device_pixel` default /
+  `literal`). Blast radius: RENDER only, no bytes written. Not yet
+  scoped to a Pass.
+- **render-parity oracle hardening — split the `tolerated`
+  structural-oddity counter into content-affecting vs. structural
+  sub-categories** (owed by the fix filed 2026-08-09 under *Shipped*,
+  `01b90c4` — "the oracle can finally hear pdfce say 'I skipped
+  something'"). The counter is currently a ~30-site catch-all conflating
+  harmless cases ("unbalanced Q") with content-altering ones ("`gs` was
+  a no-op," which hid a real bug this session's own audit found).
+  Splitting it would let a future oracle pass treat the two
+  sub-categories differently instead of excluding both alike from the
+  clean-by-construction population (the current, conservative
+  disposition). Tooling only (`tools/render-parity/render_parity.py`);
+  no Pass ID needed unless scoped as its own engineering work.
 - **GUI usability P1/P2 — decision 033 §6 (filed 2026-08-08).** Six new
   Pass IDs plus two cross-references to already-filed remainders. P0 of
   this same plan is filed under *Next up* as `Pass 47.0–47.4`; read
@@ -31604,6 +32106,44 @@ nothing gets forgotten, not as a commitment to build in this order.
   `UNESTABLISHED` above is an invitation to check, not a finding.
 
 ## Open operator questions (as of 2026-08-02 — answer any, all default to the stated fallback if not answered)
+
+**NEW this filing (fiftieth filing, 2026-08-09) — filed OPEN, not yet
+answered. Operator-question ceiling moves (bg) → (bh), next free (bi):**
+- **(bh) Git-history handling before any public push — three options
+  named, none chosen, and NO safe default exists.** `817d518`
+  (2026-08-09, filed as Shipped above) removed a third party's
+  confidential material (a real company's drawing identifier, its path,
+  and two strings from the drawing's own text) from the WORKING TREE,
+  but, quoted verbatim from that commit's own message: **"THIS DOES NOT
+  CLEAR GIT HISTORY."** The same material still exists in **288 earlier
+  commits** (819 paths ever, 746 tracked before that commit, every
+  difference a directory object). **This is a SECOND, INDEPENDENT
+  blocker on publishing, layered on top of project rule 8's own
+  go-ahead gate** — and the go-ahead itself was GIVEN in the same work
+  session (`62dda19`, filed as Shipped above, 2026-08-08 22:13: *"Ken
+  gave the go-ahead to publish publicly"*, recorded in `ROADMAP.md` for
+  the first time by this filing). Rule 8's gate is therefore no longer
+  the only thing standing between this repository and a public push.
+  **Three named options, none recommended by the commit that found the
+  problem**: (1) rewrite history (scrub the material from every commit
+  that carries it — e.g. `git filter-repo`/BFG); (2) squash to a fresh
+  initial commit (discard history entirely, keep only the current tree);
+  (3) accept the exposure (publish with the material still recoverable
+  from history, on the reasoning that the working-tree fix plus
+  provenance-scrub already done is sufficient). **This section's own
+  "answer any, all default to the stated fallback if not answered)"
+  framing does not cover this item** — there is no safe default;
+  publishing without a ruling risks the exact confidentiality leak
+  `817d518` was written to close.
+  **This librarian's own remit note**: `docs/LEGAL.md` is outside
+  `pdfce-librarian`'s five storage tiers (`ROADMAP.md`, `SESSION_LOG.md`,
+  `ARCHITECTURE.md` §12, `D:\dev\rag\rust\`/`egui\`, `personal_rag\pdf\`)
+  — per this dispatch's own instruction, an out-of-remit file gets a
+  pointer, not an edit made on assumption. **`LEGAL.md` needs its own
+  entry recording both the confidentiality incident and this three-way
+  history decision, alongside its already-recorded rule-8 publish-gate
+  entry** — flagged directly to the engineer/operator in this
+  dispatch's report, not actioned here.
 
 **RESOLVED this session (2026-08-08, thirty-fourth filing) — the
 operator answered decision 033 §7 in full; see below. (bb) moved here

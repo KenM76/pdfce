@@ -2142,6 +2142,17 @@ already used, and never chooses:
   **copied FROM THE `%PDF-` MARKER since 2026-08-07; any bytes BEFORE
   it are dropped by a full rewrite. See the narrowing at the end of
   this section — it is the one deliberate exception §5.6 has.**
+- **(added 2026-08-08, `8672cbc`) — the rule now also applies ONE LEVEL
+  BELOW section-form matching.** Even *within* an unchanged classic
+  §7.5.4 table, the per-entry two-byte terminator (`SP LF` / `SP CR` /
+  `CR LF` — §7.5.4 permits all three, no preference stated) is matched
+  from the base file rather than fixed to `SP LF`. `xref_entry_eol`
+  defaults to `MatchSource`, read once per save by
+  `xref::observed_entry_eol` from the last `xref` section's first entry.
+  Same reasoning as the rest of this section: a fixed spelling changes
+  bytes in every entry of a table nobody logically touched. See §12's
+  2026-08-09 decision-log entry (the `8672cbc`/`365856f` pair) for the
+  full mechanism and the evidence-tier argument for the default change.
 
 **A full rewrite of a hybrid file is refused by name** rather than
 flattened. §7.5.8.4 describes a hybrid as a three-part unit a writer
@@ -13443,3 +13454,233 @@ started).
   invariant or API-surface shift; recorded here for the decision-log's
   own completeness, per this document's practice of logging every
   Pass-bearing decision even when no body section moves.
+
+- **2026-08-09 (`d3ea5de`, `1edf4e3`, `9abf5b5`, `e167867`, `01b90c4` —
+  five commits recovered from a prior same-day session, 05:20–06:18,
+  first flagged unfiled at `ROADMAP.md`'s forty-third filing and
+  discharged at the forty-ninth) — four render-fidelity/oracle
+  decisions, filed together because they share one sourcing caveat:
+  reconstructed entirely from each commit's own message and diffstat
+  (`C:\Users\Ken\.claude\jobs\7bad3e9b\tmp\five.txt`), not independently
+  re-run or re-measured by this filing (no shell, hard rule 8). Full
+  Shipped-entry detail, including each fix's own test evidence, is in
+  `ROADMAP.md`'s five matching entries (between the `Pass 38.5` and
+  `Pass 23.3` (CORE) Shipped entries); this entry records only the
+  architectural decision content, per this document's own split between
+  the decision log (here) and the body sections it points at.
+
+  1. **`GraphicsState` gains `ca`/`CA` constant-alpha fields (`d3ea5de`)
+     — placement chosen for §8.4.2's `q`/`Q` save/restore, not for
+     convenience.** §11.6.4.4 Table 58's constant alpha was read by
+     neither `pdfce-core` nor `pdfce-render` before this commit;
+     `apply_ext_gstate` silently dropped both keys and `solid()`
+     hard-coded paint alpha to 255, discarding every opacity instruction
+     in every document with no disclosure. The two alpha values now live
+     on `GraphicsState` rather than beside the paint call **because**
+     §8.4.2 requires `q`/`Q` to save and restore graphics-state
+     parameters — a field on `GraphicsState` gets that behaviour for
+     free; a field anywhere else would need hand-written save/restore
+     logic that could drift from the spec's own scoping rule. Out-of-
+     range values (outside 0..1) are **clamped, not refused** — a
+     malformed alpha is not judged a reason to abandon the page, and
+     each bound has an obvious intended reading. Breaking? **No** —
+     `pdfce-render`-internal; no public `pdfce-core` signature changed.
+     No `ARCHITECTURE.md` body-section change — `GraphicsState` is
+     `pdfce-render`-internal and outside §4/§4.1's `pdfce-core`-only
+     scope.
+
+  2. **Font-metrics fallback for a non-embedded standard-14 ALIAS
+     (e.g. `/BaseFont /Arial`) now shares the SAME alias table the
+     shape-selection layer already used (`1edf4e3`) — `metrics_std14`
+     bridges `select::by_name`'s `std14` enumeration into the width
+     ladder, deliberately narrow on two axes.** Before this commit, a
+     non-embedded `/Arial` with no `/Widths` fell through the width
+     ladder (`/Widths` → standard-14 AFM → `/MissingWidth`) to
+     `/MissingWidth`'s zero default — every glyph advanced by nothing —
+     **while the shape-selection code (`select::by_name`) already knew
+     to alias Arial to Helvetica for the GLYPHS drawn.** The two
+     enumerations (which face to draw vs. which AFM metrics to use) were
+     consulted independently and could disagree. **Scoped deliberately
+     to metrics only, not encoding**: `std14` also drives §9.6.6.1's
+     symbolic-classification logic in `encoding_table`, and widening the
+     bridge there would be a second, unrelated behaviour change riding
+     on the same commit — a new `metrics_std14` function keeps this a
+     metrics-only fix. **Scoped deliberately to non-embedded fonts
+     only**: a font shipping its own program and omitting `/Widths`
+     should take advances from that program, not from Helvetica's AFM
+     table — untouched by this commit. **Durable design point**: any
+     future font-identity decision (shape, metrics, encoding, or a
+     fourth axis not yet added) that consults a std14-alias table must
+     consult the SAME table the others use, or the axes can silently
+     disagree about what font a name means — exactly what happened here
+     for two of the three. Breaking? **No** — `pdfce-render`-internal.
+     No `ARCHITECTURE.md` body-section change.
+
+  3. **Sub-pixel stroke-width flooring uses the geometric mean of the
+     CTM's singular values, not `sx` alone, and clamping a genuinely
+     non-zero sub-pixel width is RULED a product choice, not a spec
+     reading (`9abf5b5`) — R169 register entry OWED, not yet built.**
+     §8.4.3.2's "thinnest line the device can render" is a statement
+     about DEVICE space; `stroke_params` mapped `0 w` to a fixed `0.1`
+     USER-space constant, wrong in both directions depending on zoom,
+     and left every thin-but-nonzero width faint on the way to the
+     correct floor (measured: `0.1 w` at 0.17 device pixels, ~9%
+     contrast, across nine qpdf fixtures). **Fix**: floor at one device
+     pixel, converted through the CTM by the geometric mean of its two
+     singular values — invariant to which axis a shear compresses,
+     where `sx` alone is not. **The ruling, quoted from the commit
+     because it is the decision, not merely a fix description**:
+     "§8.4.3.2 mandates the minimum only for `0 w`, so clamping a
+     NON-ZERO sub-pixel width is a product choice, not a requirement.
+     Both reference renderers clamp, so clamping is the right default —
+     but the standard is silent and rendering literally is a defensible
+     reading, so that knob is OWED under R169 rather than skipped."
+     **Filed as a new R169 settings-register entry in `ROADMAP.md`'s
+     Backlog, in prose, same pattern `cmyk_intent` used — NOT yet
+     back-filed to `D:\Dev\Rag-Specialized\PDF_Spec\iso32000\iso32000__ref__ambiguity_settings_register.md`**
+     (that corpus is `pdfce-spec-librarian`'s territory; this librarian
+     flags rather than writes it, per hard rule 6). Breaking? **No** —
+     `pdfce-render`-internal. No `ARCHITECTURE.md` body-section change
+     — no public API moved; the reusable technique (magnitude
+     conversion under a sheared/rotated CTM via singular-value geometric
+     mean, not per-axis scale alone) is recorded here for any future
+     site needing the same conversion.
+
+  4. **The render-parity harness's "clean-by-construction" population
+     now EXCLUDES any page that emitted a `tolerated`-structural-oddity
+     note (`01b90c4`) — a definitional decision the harness's own band
+     derivation depends on, recorded here because it is durable rather
+     than a one-off bug fix.** `pdfce-cli` prints
+     `"note: N structural oddity(ies) tolerated"` to stderr whenever it
+     proceeds past a malformed-but-recoverable structure; the harness
+     previously parsed only stdout, so 202 of the 2,015 pages defining
+     the benign-divergence band were silently disclosing a skip while
+     simultaneously calibrating the threshold that decides which
+     divergences elsewhere count as noise. **The ruling**: a tolerating
+     page no longer counts as clean-by-construction, because "clean"
+     asserts the page rendered FULLY (so any divergence can only be
+     renderer noise) and a tolerating page is making the opposite claim
+     about itself. **Deliberately NOT treated as a gap explanation** —
+     `tolerated` is a ~30-site catch-all mixing harmless and
+     content-altering cases, so crediting it as an explanation would
+     excuse divergences it does not actually explain; exclusion from the
+     band is the conservative half. **Owed, named at the site**:
+     splitting the counter into content-affecting vs. structural
+     sub-categories — filed to `ROADMAP.md` Backlog. This is a
+     test-tooling definition (`tools/render-parity/`), not a pdfce
+     product invariant — recorded here anyway because §12's own practice
+     is to log every decision with forward consequences, even
+     tooling-internal ones, so a later oracle change can find the
+     reasoning instead of re-deriving it. No `ARCHITECTURE.md`
+     body-section change — no pdfce crate touched.
+
+- **2026-08-09 (`8672cbc`, `62dda19`, `365856f`, `817d518`, `9a2bc15` —
+  five MORE commits recovered from a SEPARATE, earlier pre-publication
+  work session, 2026-08-08 21:53 – 2026-08-09 00:56, found by pulling the
+  thread `d3ea5de`'s own message pointed at; first flagged unfiled at
+  `ROADMAP.md`'s fiftieth filing. Distinct from the `d3ea5de`-family
+  block immediately above — do not conflate the two "five commits"
+  groups.) — two invariant/architectural decisions. Filed by
+  `pdfce-librarian`, no shell available to this dispatch (hard rule 8) —
+  every figure below is quoted from the commit messages and diffstats in
+  `C:\Users\Ken\.claude\jobs\7bad3e9b\tmp\five2.txt`, not independently
+  re-run or re-measured. Full delivery detail (tests, diffstats,
+  attribution caveats) is in `ROADMAP.md`'s five matching Shipped
+  entries; this entry records only the architectural content. Three of
+  the five (`62dda19`, `817d518`, `9a2bc15`) carry no architectural
+  decision — publish-readiness/legal/CI-hygiene content, filed only in
+  `ROADMAP.md`/`SESSION_LOG.md` (and, for `817d518`'s live git-history
+  blocker, flagged toward `docs/LEGAL.md`, which is outside this
+  librarian's five storage tiers and therefore not edited here).**
+
+  1. **§5.6 "Never normalize" gains a finer grain: within an unchanged
+     cross-reference FORM, the two-byte entry TERMINATOR is now also
+     matched from the base file, not fixed (`8672cbc`) — `xref_entry_eol`
+     defaults to `MatchSource`.** §7.5.4 fixes a cross-reference entry at
+     exactly 20 bytes "including the end-of-line marker" and permits
+     three spellings of those two bytes — `SP LF`, `SP CR`, `CR LF` —
+     with no preference stated. pdfce had always written `SP LF`
+     unconditionally, which under §5.6's own logic is exactly the
+     defect §5.6 exists to prevent one level up (matching the SECTION's
+     form — classic table vs. stream — while still normalizing something
+     *inside* that form): a full rewrite of a `CR LF` file changed two
+     bytes in EVERY entry of the table, a 10,000-byte diff on a
+     5,000-object file nobody edited. **Mechanism**: a new
+     `xref::observed_entry_eol` finds the last `xref` keyword, steps over
+     the subsection header, and reads bytes 18..20 of the FIRST record —
+     validating the record as an entry before trusting those bytes, so a
+     table whose start position is unexpected cannot have stray bytes
+     misread as an EOL. `save.rs` resolves the setting exactly ONCE, in
+     the only layer holding both the setting and the base bytes, so an
+     incremental save and a full rewrite of the same file can never
+     disagree. **Evidence-tier note, because it is the reason this
+     counts as a decision and not merely a bug fix**: the OLD default
+     rested on an uncited RAG claim ("`SP LF` is the common choice",
+     already flagged for a downgrade in the register's own §11.3); the
+     NEW default rests on nothing external at all — it reads the answer
+     off the file in front of it. The uncited claim now governs only the
+     fallback path (no base file to match, e.g. a from-scratch write).
+     **§5.6 body update (this filing)**: add a cross-reference at the end
+     of §5.6's bullet list noting that "never normalize" now also applies
+     ONE LEVEL BELOW section-form matching — the per-entry terminator
+     bytes within an unchanged classic table are matched from source too,
+     via `xref::observed_entry_eol` (R33's own logic, one level finer;
+     see this §12 entry for the full mechanism and evidence-tier
+     argument). Breaking? **No** — `pdfce-core`-internal settings
+     default; the existing `xref_entry_eol` field (from `Pass 51.3`) is
+     unchanged in shape, only its DEFAULT VALUE moves.
+
+  2. **Every resource-dictionary lookup site in `pdfce-render`'s
+     interpreter resolves indirect references before structural
+     inspection — `apply_ext_gstate` (`gs`) is brought into line with the
+     `/Font` and `/XObject` lookup sites that already did this
+     (`365856f`).** §7.3.10 permits any dictionary VALUE to be an
+     indirect reference, and producers overwhelmingly write
+     `/ExtGState << /GS0 12 0 R >>` rather than an inline sub-dictionary.
+     `apply_ext_gstate` resolved neither the `/ExtGState` sub-dictionary
+     nor the named entry inside it — `as_dict()` on a `Reference`
+     returned `None`, the whole chain fell into the `tolerated += 1` arm,
+     and `gs` did NOTHING: no line width, cap, join, dash, or constant
+     alpha, and no diagnostic an operator would read as "the graphics
+     state you asked for was ignored." **This is recorded as a decision
+     rather than only a bug fix because of what it establishes going
+     forward**: `interpret.rs` has no single written contract that every
+     resource lookup resolves references, only two prior sites
+     (`/Font` ~line 1428, `/XObject` ~line 1799) that happened to do it
+     consistently and one (`/ExtGState`) that didn't — this entry is the
+     closest thing to that contract existing in writing, and any future
+     resource-family lookup added to `interpret.rs` (a new `ExtGState`
+     sub-key, a Pattern or Shading dictionary, etc.) should cite it
+     rather than re-derive the same resolve-before-inspect rule from
+     scratch. **Measured** (`pdfium/testing/resources/multiple_graphics_
+     states.pdf`): 748 of 60,000 pixels changed; Acrobat and pdfium agree
+     with each other and had disagreed with pre-fix pdfce. **The
+     render-parity consequence is the sharper finding**: the affected
+     page sat in the harness's `benign-renderer-noise` bucket at
+     `clean=1` — pdfce disclosed no gap, so the page counted as "clean by
+     construction" and HELPED DEFINE the very threshold that excused it.
+     A silent interpreter bug does not merely escape the oracle; it
+     raises the bar that hides other bugs, now measured on 100 pages
+     rather than only hypothesised (see the `01b90c4`/`e167867` decisions
+     immediately above, same general shape, different mechanism). No
+     dedicated `ARCHITECTURE.md` body section exists for
+     `pdfce-render`'s interpreter resource-resolution contract — this
+     `§12` entry is recorded as the closest thing to one rather than
+     force-fitting an edit into an unrelated section; a future session
+     scoping such a section should start here. Breaking? **No** —
+     `pdfce-render`-internal.
+
+  **The publish-blocker finding (`817d518`) is deliberately NOT recorded
+  as an architectural decision here** — it is a legal/process finding
+  (a third party's confidential material was found committed, removed
+  from the working tree, and found to remain reachable in 288 earlier
+  commits, blocking any public push pending a rewrite/squash/accept
+  ruling this project has not yet made) rather than a crate-boundary,
+  library, or invariant decision. It is filed as `ROADMAP.md`'s new
+  **Open operator question (bh)**, and `docs/LEGAL.md` — which already
+  owns the project's publish-gate posture (rule 8, §1, §7) — is flagged
+  as needing its own entry for both the confidentiality incident and the
+  three-way history decision. `docs/LEGAL.md` sits outside this
+  librarian's five storage tiers (`ROADMAP.md`, `SESSION_LOG.md`, this
+  §12, `D:\dev\rag\rust\`/`egui\`, `personal_rag\pdf\`), so it is flagged
+  here and in `ROADMAP.md` rather than edited on assumption.
