@@ -1,0 +1,31 @@
+# commits-filed-baseline.txt — the unfiled-commit DEBT, not an allowlist.
+#
+# Every hash here is a code commit with no presence in docs/ROADMAP.md or
+# docs/SESSION_LOG.md, as measured on 2026-08-09 when
+# tools/check-commits-filed.py was written. They predate the gate.
+#
+# A gate that fails at baseline enforces nothing and trains everyone who
+# sees it red to ignore it — check-ui-strings.sh's header records that
+# exact failure. So the known debt lives here and the gate fails only on
+# commits OUTSIDE it, which stops the backlog growing while it is worked
+# down.
+#
+# REMOVING a line, once that commit is filed, is the intended workflow.
+# ADDING one is not: a new unfiled commit is precisely what this gate
+# exists to catch, and silencing it here would be the false-green shape
+# R106 has been amended four times over.
+#
+# Each is worth filing on its merits — several are operator-visible fixes
+# whose reasoning exists nowhere but the commit message.
+
+338076a  # filing ordinals stop being the one identifier nothing checks
+17131b6  # the harness refuses to drive a binary older than the code
+1f319c0  # icons: a missing glyph gets AUTHORED, and the tree reveals the rest
+b8f96b1  # disclose: exporting form data silently dropped rich-text formatting
+55a0732  # GUI-gap sweep 5/N: radio groups and choice fields are editable
+587e520  # harden: /Ff bit 26 cannot be decoded wrong any more
+0febeb6  # fix: the group controls fitted a 520 px window, not a 370 px dock
+24b392c  # tools: gui-drive.ps1 drives through the diag script, not PostMessage
+ae59ce3  # Pass 24.0 (part): tool panels anchor to the viewport
+b0b387b  # Correct two false claims about panning
+9141ded  # Tool property bars: draggable, and the measure box closable

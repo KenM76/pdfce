@@ -190,6 +190,19 @@ jobs:
       - name: check the disclosure channel goes through its traced setter
         run: bash tools/check-disclosure-channel.sh
 
+      # Every CODE commit is named in the record. `check-passes-filed.py`
+      # already covers commits that CLAIM a Pass ID; most claim none, and
+      # for those it is blind — which is how eleven commits, including a
+      # dropped-transparency fix and the removal of a third party's
+      # confidential material, reached HEAD with no roadmap presence at all.
+      #
+      # Both times that backlog was discovered it was an accident. This is
+      # the exhaustive walk that replaces the accident. See the script's
+      # header for the ratchet, and why the known debt lives in a file
+      # rather than in a green gate that guards nothing.
+      - name: check that every code commit is filed
+        run: python tools/check-commits-filed.py
+
   cross-check:
     name: cross-target compile check (macOS / wasm32)
     runs-on: ubuntu-latest
