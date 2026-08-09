@@ -28529,3 +28529,111 @@ cumulative figures.
   this filing — no shell, hard rule 8. This is the **fiftieth**
   `SESSION_LOG.md` filing (the forty-ninth confirmed present by grep
   before this entry was appended).
+
+## 2026-08-09 (fifty-first filing) — the fiftieth filing's own recommendation is carried out: a shell runs the exhaustive walk, `check-commits-filed.py` replaces two accidents with a mechanism, and eleven more commits are named OWED rather than filed
+
+**Filed by `pdfce-librarian`, dispatched with two commits (`e296a76`,
+`190c205`) and a request to rule on the ratchet those commits use to
+introduce a gate into a codebase with known pre-existing debt.** Full
+detail lives in the matching `ROADMAP.md` Shipped entry (top of
+*Shipped* as of this filing) — this entry is the session-log mirror,
+not a restatement.
+
+**Sourcing.** This librarian has no shell (hard rule 8) and did not run
+the git walk, the test suite, or any gate. What was independently
+confirmed by direct `Read` of the working tree: `tools/
+check-commits-filed.py` exists with the exclusion logic described
+below; `tools/commits-filed-baseline.txt` exists and contains exactly
+the eleven hashes filed as owed, matching the relayed list verbatim.
+The 316/65/12 walk figures and the `cargo test` total are relayed from
+the dispatching engineer, not re-derived here.
+
+**Shipped:**
+- No Pass ID — `e296a76`: `tools/check-disclosure-channel.sh` (new gate,
+  enforces `ARCHITECTURE.md` §4.1(P), proven to fail before being
+  trusted per R162) + `tools/check-ledger-numbers.py` (staged-ship
+  qualifier now joins the dedup key, so a legitimate multi-surface ship
+  like `Pass 23.3 (CLI half)`/`(GUI half)` is distinguished from a real
+  collision, and reported rather than silently absorbed).
+- No Pass ID — `190c205`: `tools/check-commits-filed.py`, the exhaustive
+  hash-presence walk that `check-passes-filed.py` structurally cannot
+  perform (it only sees commits that claim a Pass ID; most claim none).
+  Ships with `tools/commits-filed-baseline.txt`, a shrink-only ledger of
+  the eleven pre-existing unfiled commits this gate was written around.
+
+**Decisions made this session:**
+- **This librarian's ruling on the baseline-ratchet question, asked for
+  explicitly by the dispatching engineer: it is a ratchet, not a
+  rationalization.** Four grounds (full argument in the `ROADMAP.md`
+  entry): it converts invisible debt into counted, named, greppable
+  debt; it is the literal mitigation this project already wrote down
+  for a permanently-red gate training readers to ignore red
+  (`check-ui-strings.sh`'s own header); the debt is bounded (eleven
+  lines, not an open tolerance); and it does not silence a *twelfth*
+  unfiled commit, only the eleven named in advance. Named limit,
+  not silently accepted: nothing in the script itself stops a future
+  filer from *adding* a line to quiet the gate — that half is
+  convention-enforced, not code-enforced, the same shape the
+  same-filing propagation duty already accepts elsewhere in this
+  project. Recommended, not mandated: a follow-on check that the
+  baseline file's own line count never grows run-over-run.
+- **The eleven owed commits stay in `tools/commits-filed-baseline.txt`
+  AND get a second record in `ROADMAP.md`** — both, not either, per
+  this project's own "an obligation needs a record on both sides: one
+  that says it is owed, one that says it was paid" pattern.
+
+**Findings + decisions:**
+- **The backlog is now verified via a mechanism, not believed empty via
+  memory — but "verified empty" is not the correct claim to make, and
+  this filing does not make it.** Eleven named commits are known-unfiled
+  and tracked; the gate guarantees no *twelfth* joins that count
+  undetected going forward, for any commit dated on or after 2026-08-01
+  touching `crates/`/`tools/`/`fixtures/`, **as long as the
+  baseline-file discipline holds** (convention-enforced, see ruling
+  above). Scope caveat, stated because hard rule 8 asks for precision:
+  the gate defaults to `--since 2026-08-01`; the 2026-07-23–07-31 window
+  is outside its coverage and was not walked by this measurement.
+- One flag worth separating from the other ten: `ae59ce3`'s own subject
+  — *"Pass 24.0 (part): tool panels anchor to the viewport"* — claims
+  the **already-named** `Pass 24.0` entry under *Next up* (staged per
+  R141's "Pass N (part)" convention). If the code matches, filing this
+  commit is not new-Pass work, it is a hash citation against the
+  existing entry and possibly a status correction on it (currently
+  reads "NOT STARTED" for everything but 24.1). Not resolved by this
+  filing — reading `ae59ce3` in full is what settles it.
+- `b8f96b1` ("disclose: exporting form data silently dropped rich-text
+  formatting") is flagged ahead of the other nine as both
+  operator-visible and a disclosure defect — project rule 4's exact
+  territory.
+
+**Still in flight:**
+- The eleven owed commits themselves — none read in full by this
+  librarian, none filed as shipped work; see the `ROADMAP.md` entry's
+  numbered list for hash + one-line subject each.
+- Open operator question (bh) — the git-history rewrite/squash/accept
+  decision — unchanged, untouched by this filing.
+- `docs/LEGAL.md`'s owed entry for the confidentiality incident and the
+  history decision — still flagged, not actioned, outside this
+  librarian's five storage tiers.
+- The 2026-07-23–07-31 coverage gap named above — nobody has walked it
+  yet, with or without a shell.
+
+**For next session:**
+- Read the eleven owed commits' full messages (`git show <hash>`) and
+  file each properly — the `ae59ce3`/Pass-24.0 connection and the
+  `b8f96b1` disclosure defect first.
+- Consider (engineer's call, not mandated by this filing): a check that
+  `tools/commits-filed-baseline.txt` never grows run-over-run, closing
+  the one convention-only gap in an otherwise code-enforced gate.
+- **Ledger for this filing:** no new Pass ID. Pass-family ceiling
+  unchanged at **51**, next free **52**. Standing rules unchanged at
+  **R172**, next free **R173** — both gate defects filed as instances
+  of R162/the R106 false-green family, not new amendments. Decision
+  records (`docs/decisions/`) untouched. `ARCHITECTURE.md` §12 NOT
+  edited this filing — no crate boundary, library choice or invariant
+  was redrawn, only enforcement of ones already written down.
+  Operator-question ceiling unchanged at **(bh)**, next free **(bi)**.
+  Backup/git working-tree state not asserted anywhere in this filing —
+  no shell, hard rule 8. This is the **fifty-first** `SESSION_LOG.md`
+  filing (the fiftieth confirmed present by direct read before this
+  entry was appended).
