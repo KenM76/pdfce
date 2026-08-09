@@ -19,3 +19,129 @@
   [1900/3668] 1054s (0.55s/page)
   [2000/3668] 1086s (0.54s/page)
   [2100/3668] 1115s (0.53s/page)
+  [2200/3668] 1143s (0.52s/page)
+  [2300/3668] 1171s (0.51s/page)
+  [2400/3668] 1199s (0.50s/page)
+  [2500/3668] 1228s (0.49s/page)
+  [2600/3668] 1257s (0.48s/page)
+  [2700/3668] 1301s (0.48s/page)
+  [2800/3668] 1365s (0.49s/page)
+  [2900/3668] 1420s (0.49s/page)
+  [3000/3668] 1473s (0.49s/page)
+  [3100/3668] 1497s (0.48s/page)
+  [3200/3668] 1542s (0.48s/page)
+  [3300/3668] 1602s (0.49s/page)
+  [3400/3668] 1662s (0.49s/page)
+  [3500/3668] 1720s (0.49s/page)
+  [3600/3668] 1778s (0.49s/page)
+=== benign-bucket structural audit ===
+source: out-corpus-4023/per-page.tsv   bucket: 'benign'
+sampling: census: all 3668 rows of bucket 'benign'
+analysed: 3668 ok, 0 errors, 1853s
+constants (declared before the run): pixel-delta>32, edge-grad>32, edge-radius=2px, 8-conn
+
+--- metric drift vs the recorded baseline (current CLI vs pinned) ---
+  |frac32_now - frac32_recorded|: mean=0.000002 p99=0.000005 max=0.000005
+
+--- distributions ---
+  frac32_now             n= 3668 mean=0.00266 p50=0.00054 p90=0.00923 p99=0.03811 max=0.07982
+  shared_edge_frac       n= 3221 mean=0.88356 p50=1.00000 p90=1.00000 p99=1.00000 max=1.00000
+  n_off                  n= 3668 mean=1032.72137 p50=0.00000 p90=991.00000 p99=14362.00000 max=120672.00000
+  off_lcc_px             n= 3668 mean=849.39531 p50=0.00000 p90=329.30000 p99=10657.24000 max=120672.00000
+  off_lcc_frac_of_page   n= 3668 mean=0.00070 p50=0.00000 p90=0.00027 p99=0.01072 max=0.07982
+  over_maxthick          n= 3221 mean=4.02994 p50=1.41421 p90=3.16228 p99=44.00000 max=173.25415
+  over_thick2_frac       n= 3221 mean=0.09316 p50=0.00000 p90=0.39960 p99=0.95504 max=0.97969
+
+--- pages whose over-threshold pixels are NOT shared-edge-explained ---
+    (largest contiguous unexplained region, threshold ladder)
+  off_lcc_px >=    10 :   565 pages (15.40%)
+  off_lcc_px >=    25 :   547 pages (14.91%)
+  off_lcc_px >=    50 :   537 pages (14.64%)
+  off_lcc_px >=   100 :   521 pages (14.20%)
+  off_lcc_px >=   200 :   410 pages (11.18%)
+  off_lcc_px >=   400 :   345 pages (9.41%)
+  off_lcc_px >=  1000 :   264 pages (7.20%)
+  off_lcc_px >=  2500 :   212 pages (5.78%)
+  off_lcc_px >=  5000 :   201 pages (5.48%)
+
+--- ranked head (worst-first by off_lcc_px) ---
+  off_lcc= 120672px ( 7.98% of page) sol=0.30 thick= 61.3 sharedEdge=0.000 frac32=0.07982 clean=0
+      external/pdfbox/pdfbox/src/test/resources/input/merge/multitiff.pdf p1  bbox=240,611,778,1344 pdfce=255,255,255 pdfium=0,0,0
+  off_lcc= 116151px ( 7.95% of page) sol=0.92 thick= 87.0 sharedEdge=0.000 frac32=0.07947 clean=1
+      external/veraPDF-corpus/TWG test files/TWG test suite A019-pdfa2-pass-a.pdf p1  bbox=0,0,91,1374 pdfce=255,255,255 pdfium=50,195,224
+  off_lcc=  89960px ( 5.95% of page) sol=0.78 thick=168.6 sharedEdge=0.059 frac32=0.06324 clean=0
+      external/veraPDF-corpus/PDF_A-3b/6.8 Embedded files/veraPDF test suite 6-8-t02-fail-b.pdf p1  bbox=327,174,666,513 pdfce=0,0,0 pdfium=103,174,194
+  off_lcc=  89960px ( 5.95% of page) sol=0.78 thick=168.6 sharedEdge=0.059 frac32=0.06324 clean=0
+      external/veraPDF-corpus/PDF_A-3b/6.8 Embedded files/veraPDF test suite 6-8-t02-pass-b.pdf p1  bbox=327,174,666,513 pdfce=0,0,0 pdfium=103,174,194
+  off_lcc=  89960px ( 5.95% of page) sol=0.78 thick=168.6 sharedEdge=0.059 frac32=0.06324 clean=0
+      external/veraPDF-corpus/PDF_A-3b/6.8 Embedded files/veraPDF test suite 6-8-t02-pass-f.pdf p1  bbox=327,174,666,513 pdfce=0,0,0 pdfium=103,174,194
+  off_lcc=  89960px ( 5.95% of page) sol=0.78 thick=168.6 sharedEdge=0.059 frac32=0.06324 clean=0
+      external/veraPDF-corpus/TWG test files/TWG test suite A027-pdfa3-fail-b.pdf p1  bbox=327,174,666,513 pdfce=0,0,0 pdfium=103,174,194
+  off_lcc=  89960px ( 5.95% of page) sol=0.78 thick=168.6 sharedEdge=0.059 frac32=0.06324 clean=0
+      external/veraPDF-corpus/TWG test files/TWG test suite A027-pdfa3-pass-b.pdf p1  bbox=327,174,666,513 pdfce=0,0,0 pdfium=103,174,194
+  off_lcc=  89960px ( 5.95% of page) sol=0.78 thick=168.6 sharedEdge=0.059 frac32=0.06324 clean=0
+      external/veraPDF-corpus/TWG test files/TWG test suite A027-pdfa3-pass-f.pdf p1  bbox=327,174,666,513 pdfce=0,0,0 pdfium=103,174,194
+  off_lcc=  43973px ( 2.91% of page) sol=0.73 thick= 11.7 sharedEdge=0.039 frac32=0.03341 clean=0
+      external/veraPDF-corpus/Isartor test files/PDFA-1b/6.3 Fonts/6.3.4 Embedded font programs/isartor-6-3-4-t01-fail-h.pdf p1  bbox=173,420,520,593 pdfce=1,1,1 pdfium=240,240,240
+  off_lcc=  34701px ( 2.30% of page) sol=1.00 thick= 65.0 sharedEdge=0.048 frac32=0.04447 clean=0
+      external/pdfbox/pdfbox/src/test/resources/input/rendering/test-landscape2.pdf p1  bbox=102,126,370,254 pdfce=0,0,0 pdfium=255,211,211
+  off_lcc=  34260px ( 4.54% of page) sol=0.28 thick= 18.0 sharedEdge=0.000 frac32=0.04537 clean=0
+      external/veraPDF-corpus/PDF_A-2b/6.2 Graphics/6.2.4.3 Uncalibrated -Device colour spaces/veraPDF test suite 6-2-4-3-t01-fail-g.pdf p1  bbox=261,261,608,608 pdfce=255,255,255 pdfium=74,204,204
+  off_lcc=  34260px ( 4.54% of page) sol=0.28 thick= 18.0 sharedEdge=0.000 frac32=0.04537 clean=0
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.4 Colour spaces/6.2.4.3 Uncalibrated -Device colour spaces/veraPDF test suite 6-2-4-3-t01-fail-g.pdf p1  bbox=261,261,608,608 pdfce=255,255,255 pdfium=74,204,204
+  off_lcc=  34260px ( 4.54% of page) sol=0.28 thick= 18.0 sharedEdge=0.000 frac32=0.04537 clean=0
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.4 Colour spaces/6.2.4.3 Uncalibrated -Device colour spaces/veraPDF test suite 6-2-4-3-t04-fail-g.pdf p1  bbox=261,261,608,608 pdfce=255,255,255 pdfium=99,204,204
+  off_lcc=  33507px ( 2.29% of page) sol=1.00 thick= 86.0 sharedEdge=0.011 frac32=0.04412 clean=0
+      external/qpdf/qpdf/qtest/qpdf/damaged-inline-image.pdf p1  bbox=173,138,343,333 pdfce=255,255,255 pdfium=16,16,14
+  off_lcc=  33507px ( 2.29% of page) sol=1.00 thick= 86.0 sharedEdge=0.045 frac32=0.02399 clean=0
+      external/qpdf/qpdf/qtest/qpdf/damaged-inline-image-out.pdf p1  bbox=173,138,343,333 pdfce=255,255,255 pdfium=16,16,14
+  off_lcc=  30276px ( 2.07% of page) sol=1.00 thick= 87.0 sharedEdge=0.358 frac32=0.03230 clean=1
+      external/qpdf/qpdf/qtest/qpdf/large-inline-image.pdf p1  bbox=444,1076,617,1249 pdfce=26,26,26 pdfium=255,255,255
+  off_lcc=  23776px ( 1.57% of page) sol=0.79 thick= 86.5 sharedEdge=0.000 frac32=0.01574 clean=0
+      external/veraPDF-corpus/Isartor test files/PDFA-1b/6.2 Graphics/6.2.3 Colour spaces/6.2.3.3 Uncalibrated colour spaces/isartor-6-2-3-3-t02-fail-g.pdf p1  bbox=348,247,520,419 pdfce=255,255,255 pdfium=127,128,128
+  off_lcc=  19797px ( 1.31% of page) sol=0.65 thick= 45.6 sharedEdge=0.014 frac32=0.01334 clean=1
+      external/veraPDF-corpus/Isartor test files/PDFA-1b/6.4 Transparency/isartor-6-4-t01-fail-a.pdf p1  bbox=347,246,520,420 pdfce=3,104,154 pdfium=254,254,255
+  off_lcc=  18722px ( 2.56% of page) sol=0.69 thick= 71.2 sharedEdge=0.323 frac32=0.03783 clean=0
+      external/pdf20examples/PDF 2.0 image with BPC.pdf p1  bbox=132,220,294,385 pdfce=255,255,255 pdfium=151,74,24
+  off_lcc=  17273px ( 2.29% of page) sol=0.54 thick= 31.9 sharedEdge=0.125 frac32=0.02942 clean=1
+      external/veraPDF-corpus/PDF_A-2b/6.2 Graphics/6.2.10 Transparency/veraPDF test suite 6-2-10-t07-fail-a.pdf p1  bbox=95,128,338,259 pdfce=175,193,219 pdfium=211,224,237
+  off_lcc=  17273px ( 2.29% of page) sol=0.54 thick= 31.9 sharedEdge=0.125 frac32=0.02942 clean=1
+      external/veraPDF-corpus/PDF_A-2b/6.2 Graphics/6.2.10 Transparency/veraPDF test suite 6-2-10-t07-fail-e.pdf p1  bbox=95,128,338,259 pdfce=175,193,219 pdfium=211,224,237
+  off_lcc=  17273px ( 2.29% of page) sol=0.54 thick= 31.9 sharedEdge=0.125 frac32=0.02942 clean=1
+      external/veraPDF-corpus/PDF_A-2b/6.2 Graphics/6.2.10 Transparency/veraPDF test suite 6-2-10-t07-fail-g.pdf p1  bbox=95,128,338,259 pdfce=175,193,219 pdfium=211,224,237
+  off_lcc=  17273px ( 2.29% of page) sol=0.54 thick= 31.9 sharedEdge=0.125 frac32=0.02942 clean=1
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.9 Transparency/veraPDF test suite 6-2-9-t07-fail-a.pdf p1  bbox=95,128,338,259 pdfce=175,193,219 pdfium=211,224,237
+  off_lcc=  17273px ( 2.29% of page) sol=0.54 thick= 31.9 sharedEdge=0.125 frac32=0.02942 clean=1
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.9 Transparency/veraPDF test suite 6-2-9-t07-fail-e.pdf p1  bbox=95,128,338,259 pdfce=175,193,219 pdfium=211,224,237
+  off_lcc=  17273px ( 2.29% of page) sol=0.54 thick= 31.9 sharedEdge=0.125 frac32=0.02942 clean=1
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.9 Transparency/veraPDF test suite 6-2-9-t07-fail-g.pdf p1  bbox=95,128,338,259 pdfce=175,193,219 pdfium=211,224,237
+  off_lcc=  16620px ( 2.20% of page) sol=0.48 thick= 31.9 sharedEdge=0.095 frac32=0.02665 clean=1
+      external/veraPDF-corpus/PDF_A-2b/6.2 Graphics/6.2.10 Transparency/veraPDF test suite 6-2-10-t07-fail-c.pdf p1  bbox=113,128,339,280 pdfce=176,193,219 pdfium=214,226,239
+  off_lcc=  16620px ( 2.20% of page) sol=0.48 thick= 31.9 sharedEdge=0.095 frac32=0.02665 clean=1
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.9 Transparency/veraPDF test suite 6-2-9-t07-fail-c.pdf p1  bbox=113,128,339,280 pdfce=176,193,219 pdfium=214,226,239
+  off_lcc=  14362px ( 0.98% of page) sol=0.54 thick= 27.5 sharedEdge=0.000 frac32=0.00983 clean=1
+      external/veraPDF-corpus/PDF_A-2b/6.2 Graphics/6.2.10 Transparency/veraPDF test suite 6-2-10-t03-fail-d.pdf p1  bbox=69,125,260,263 pdfce=9,9,9 pdfium=255,255,255
+  off_lcc=  14362px ( 0.98% of page) sol=0.54 thick= 27.5 sharedEdge=0.000 frac32=0.00983 clean=1
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.9 Transparency/veraPDF test suite 6-2-9-t03-fail-d.pdf p1  bbox=69,125,260,263 pdfce=9,9,9 pdfium=255,255,255
+  off_lcc=  12280px ( 0.84% of page) sol=0.53 thick= 27.2 sharedEdge=0.000 frac32=0.00939 clean=1
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.4 Colour spaces/6.2.4.3 Uncalibrated -Device colour spaces/veraPDF test suite 6-2-4-3-t04-fail-d.pdf p1  bbox=70,125,259,245 pdfce=176,195,221 pdfium=231,237,244
+  off_lcc=  11941px ( 0.79% of page) sol=0.70 thick= 50.7 sharedEdge=0.132 frac32=0.00911 clean=0
+      external/veraPDF-corpus/Isartor test files/PDFA-1b/6.2 Graphics/6.2.3 Colour spaces/6.2.3.4 Separation and DeviceN colour spaces/isartor-6-2-3-4-t01-fail-b.pdf p1  bbox=228,304,364,427 pdfce=0,0,0 pdfium=255,247,154
+  off_lcc=  11890px ( 0.79% of page) sol=0.71 thick= 50.7 sharedEdge=0.134 frac32=0.00909 clean=0
+      external/veraPDF-corpus/Isartor test files/PDFA-1b/6.2 Graphics/6.2.3 Colour spaces/6.2.3.4 Separation and DeviceN colour spaces/isartor-6-2-3-4-t01-fail-a.pdf p1  bbox=228,304,363,426 pdfce=0,0,0 pdfium=94,132,156
+  off_lcc=  11870px ( 0.79% of page) sol=0.70 thick= 31.3 sharedEdge=0.141 frac32=0.01526 clean=1
+      external/veraPDF-corpus/Isartor test files/PDFA-1b/6.4 Transparency/isartor-6-4-t05-fail-a.pdf p1  bbox=280,251,416,374 pdfce=255,153,102 pdfium=241,170,134
+  off_lcc=  11869px ( 0.79% of page) sol=0.71 thick= 50.6 sharedEdge=0.137 frac32=0.00911 clean=0
+      external/veraPDF-corpus/Isartor test files/PDFA-1b/6.2 Graphics/6.2.3 Colour spaces/6.2.3.3 Uncalibrated colour spaces/isartor-6-2-3-3-t02-fail-f.pdf p1  bbox=228,304,363,426 pdfce=0,0,0 pdfium=127,126,128
+  off_lcc=  10676px ( 0.73% of page) sol=0.58 thick= 33.0 sharedEdge=0.267 frac32=0.01092 clean=0
+      external/veraPDF-corpus/PDF_A-2b/6.2 Graphics/6.2.4.2 ICCBased colour spaces/veraPDF test suite 6-2-4-2-t02-fail-a.pdf p1  bbox=72,145,257,243 pdfce=0,0,0 pdfium=207,98,86
+  off_lcc=  10676px ( 0.73% of page) sol=0.58 thick= 33.0 sharedEdge=0.267 frac32=0.01092 clean=0
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.4 Colour spaces/6.2.4.2 ICCBased colour spaces/veraPDF test suite 6-2-4-2-t02-fail-a.pdf p1  bbox=72,145,257,243 pdfce=0,0,0 pdfium=207,98,86
+  off_lcc=  10676px ( 0.73% of page) sol=0.58 thick= 33.0 sharedEdge=0.267 frac32=0.01092 clean=0
+      external/veraPDF-corpus/TWG test files/TWG test suite A024-pdfa2-fail-a.pdf p1  bbox=72,145,257,243 pdfce=0,0,0 pdfium=207,98,86
+  off_lcc=  10648px ( 0.73% of page) sol=0.58 thick= 33.0 sharedEdge=0.220 frac32=0.01022 clean=0
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.4 Colour spaces/6.2.4.2 ICCBased colour spaces/veraPDF test suite 6-2-4-2-t03-fail-c.pdf p1  bbox=72,145,257,243 pdfce=0,0,0 pdfium=245,223,221
+  off_lcc=  10648px ( 0.73% of page) sol=0.58 thick= 33.0 sharedEdge=0.220 frac32=0.01022 clean=0
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.4 Colour spaces/6.2.4.2 ICCBased colour spaces/veraPDF test suite 6-2-4-2-t03-fail-d.pdf p1  bbox=72,145,257,243 pdfce=0,0,0 pdfium=245,223,221
+  off_lcc=  10648px ( 0.73% of page) sol=0.58 thick= 33.0 sharedEdge=0.220 frac32=0.01022 clean=0
+      external/veraPDF-corpus/PDF_A-4/6.2 Graphics/6.2.4 Colour spaces/6.2.4.2 ICCBased colour spaces/veraPDF test suite 6-2-4-2-t03-fail-f.pdf p1  bbox=72,145,257,243 pdfce=0,0,0 pdfium=245,223,221

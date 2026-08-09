@@ -1719,8 +1719,35 @@ impl Interpreter<'_> {
             ContentTokenKind::Operand(Object::Name(n)) => Some(n.as_bytes()),
             _ => None,
         });
+        // BOTH lookups resolve. Neither did until 2026-08-08, and the
+        // consequence was that `gs` was a SILENT NO-OP on essentially
+        // every real file.
+        //
+        // §7.3.10 lets any value be an indirect reference, and producers
+        // overwhelmingly write `/ExtGState << /GS0 12 0 R >>` — the named
+        // entry is a reference far more often than not. `as_dict()` on a
+        // `Reference` returns `None`, so the whole chain collapsed to the
+        // `tolerated += 1` arm below: no line width, no line cap, no dash
+        // pattern, and no diagnostic an operator would recognise as "the
+        // graphics state you asked for was ignored".
+        //
+        // Every other resource lookup in this file already resolved —
+        // `/Font` at ~1428, `/XObject` at ~1799 — which is what makes this
+        // a slip rather than a policy. Found by the benign-bucket audit
+        // (`tools/render-parity/benign_structure.py`) on
+        // `pdfium/testing/resources/multiple_graphics_states.pdf`, where
+        // pdfium and Acrobat agree with each other and pdfce painted an
+        // opaque rectangle with a 1 px stroke instead of a 25%-alpha one
+        // with a 4-unit stroke.
         let ext = name
-            .and_then(|n| self.resources.get(b"ExtGState")?.as_dict()?.get(n))
+            .and_then(|n| {
+                self.resources
+                    .get(b"ExtGState")
+                    .map(|o| self.doc.resolve(o))?
+                    .as_dict()?
+                    .get(n)
+            })
+            .map(|o| self.doc.resolve(o))
             .and_then(Object::as_dict);
         let Some(ext) = ext else {
             self.diag.tolerated += 1;

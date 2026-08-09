@@ -3,6 +3,21 @@
     Open a PDF in Adobe Acrobat and capture the Acrobat window as a PNG.
 
 .DESCRIPTION
+    WHAT IS ACTUALLY INSTALLED HERE: Adobe Acrobat **READER**, not Acrobat Pro.
+    Adobe uses the same `\Acrobat DC\Acrobat\Acrobat.exe` path for both, and the
+    paid features are licence-gated at runtime rather than absent from disk, so
+    the path is NOT evidence of which product is present. Reader shares the
+    rendering engine, which is the only thing this script uses and the only
+    thing a render audit needs. It cannot verify any Acrobat *Pro* behaviour;
+    a finding that depends on Pro capability must say it was not checkable
+    here rather than let a Reader observation stand in for a Pro one.
+
+    STRICTLY VIEW-ONLY. Do not drive Edit / Convert / Prepare / Redact /
+    Preflight / Compare from this script or by hand while it runs: in Reader
+    those raise a modal purchase prompt on the operator's real screen, which is
+    useless to an audit and may not dismiss itself. This script only opens a
+    document and asks its window to paint itself.
+
     A THIRD-OPINION tiebreaker for the render-parity audit. `render_parity.py`
     compares pdfce against pdfium; when they disagree, nothing in that harness
     says WHICH is wrong. Acrobat is the project's actual parity target, so a
