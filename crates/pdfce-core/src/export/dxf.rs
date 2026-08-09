@@ -891,3 +891,171 @@ fn fmt(v: f64) -> String {
     let s = format!("{v:.6}");
     if s.contains('.') { s } else { format!("{s}.0") }
 }
+
+// ---------------------------------------------------------------------------
+// Deriving the export scale from the measure tool (`Pass 52.2` substrate)
+// ---------------------------------------------------------------------------
+
+/// One dimension group's opinion about what scale the drawing is at.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DxfScaleCandidate {
+    /// The group's operator-facing name, so a conflict can be reported in
+    /// the operator's own words rather than as a bare number.
+    pub group: String,
+    /// Real-world units per paper unit — [`DxfOptions::scale`] directly.
+    pub scale: f64,
+    /// The units that group measures in, mapped to what DXF can say.
+    pub units: DxfUnits,
+}
+
+/// What pdfce can INFER about a page's drawing scale from the ce dimensions
+/// already on it.
+///
+/// # Why this is a three-case type and not an `Option<f64>`
+///
+/// Rule 4 (*fuzzy, never sneaky*): a value pdfce inferred must be visible
+/// before it becomes document state, and rejectable. An `Option<f64>` can
+/// express *"here is a number"* and *"here is no number"* — but the case
+/// that actually hurts is the third one, and it collapses into `None`
+/// where nobody can see it.
+///
+/// The three cases ask genuinely different things of the operator:
+///
+/// - [`Self::Uncalibrated`] — pdfce has **no idea**. Exporting at `1.0`
+///   anyway is the exact trap this whole feature exists to avoid: a 1:2
+///   detail arrives at half size and looks entirely plausible. The caller
+///   must say so, not quietly pick 1.
+/// - [`Self::Calibrated`] — pdfce has an answer and can pre-fill it. This
+///   is an inference, so it is shown before it is used.
+/// - [`Self::Conflicting`] — two groups disagree about what scale the same
+///   page is at. There is no correct automatic answer: a sheet with a 1:1
+///   plan and a 1:5 detail is a normal drawing, and DXF has one scale.
+///   Picking the first would export half the sheet wrong, silently.
+///
+/// Making the third case a variant means a caller cannot handle it by
+/// accident — it has to be matched.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DxfScaleSuggestion {
+    /// No group has a scale set, so nothing can be inferred.
+    Uncalibrated,
+    /// Every calibrated group agrees.
+    Calibrated {
+        /// Real-world units per paper unit — [`DxfOptions::scale`].
+        scale: f64,
+        /// The DXF units implied by the group's own unit.
+        units: DxfUnits,
+        /// The group the figure came from, named so the disclosure can say
+        /// *where* the number is from rather than only what it is.
+        group: String,
+        /// How many calibrated groups agreed on it. More than one is
+        /// corroboration worth showing; it is not a different answer.
+        agreeing: usize,
+    },
+    /// Calibrated groups disagree — every candidate, in group order.
+    Conflicting {
+        /// Each distinct opinion, first-seen order preserved so the list is
+        /// stable across calls and does not reshuffle under the operator.
+        candidates: Vec<DxfScaleCandidate>,
+    },
+}
+
+impl DxfUnits {
+    /// The DXF unit that best carries `unit`.
+    ///
+    /// Feet and metres have `$INSUNITS` codes of their own, but this
+    /// writer emits only inches and millimetres, so each is mapped onto
+    /// whichever of those shares its measurement system. The NUMBERS stay
+    /// exact either way — [`DxfScaleSuggestion`]'s scale is dimensionless
+    /// (real units per paper unit) and `per_point` supplies the rest — so
+    /// this choice affects only what the header declares, never the
+    /// geometry.
+    #[must_use]
+    pub const fn for_unit(unit: crate::dimension::Unit) -> Self {
+        use crate::dimension::Unit;
+        match unit {
+            Unit::Millimeter | Unit::Centimeter | Unit::Meter => Self::Millimetres,
+            Unit::Inch | Unit::DecimalFeet | Unit::FeetInches => Self::Inches,
+        }
+    }
+}
+
+/// How close two groups' scales must be to count as the same answer.
+///
+/// Relative, not absolute: a 1:100 site plan and a 1:1 detail differ by two
+/// orders of magnitude, and one absolute epsilon cannot serve both.
+const SCALE_AGREEMENT_TOLERANCE: f64 = 1e-9;
+
+/// Infer the drawing scale for a DXF export from a page's ce dimensions.
+///
+/// # The conversion, and why it is unit-independent
+///
+/// [`ScaleState::effective_scale`](crate::dimension::ScaleState::effective_scale)
+/// answers *"how many of the group's display units is one PDF point?"* —
+/// which is a different question for a millimetre group than for an inch
+/// group even when both describe the same 1:2 drawing.
+///
+/// Dividing by the unit's own true-scale baseline cancels the unit out and
+/// leaves a **dimensionless drawing scale**: real units per paper unit,
+/// `1.0` at full size and `2.0` on a 1:2 view. That is exactly
+/// [`DxfOptions::scale`], and it is what makes two groups measuring the
+/// same sheet in different units comparable at all — without it, a
+/// millimetre group and an inch group describing one 1:1 drawing would
+/// look like a conflict.
+///
+/// # What it deliberately does not do
+///
+/// It does not pick a winner when groups disagree, and it does not fall
+/// back to `1.0` when nothing is calibrated. Both would be pdfce quietly
+/// deciding something it does not know — see [`DxfScaleSuggestion`].
+#[must_use]
+pub fn suggest_scale(model: &crate::dimension::DimensionModel) -> DxfScaleSuggestion {
+    let mut candidates: Vec<DxfScaleCandidate> = Vec::new();
+    let mut agreeing = 0usize;
+
+    for group in model.groups() {
+        let unit = group.format.unit;
+        let Some(per_point) = group.scale.effective_scale(unit) else {
+            continue; // NeverSet — this group has no opinion
+        };
+        let baseline = unit.baseline_per_point();
+        // A zero or non-finite baseline cannot happen for any `Unit`, but
+        // the division is guarded rather than trusted: a NaN reaching
+        // `DxfOptions::scale` would multiply every coordinate in the file.
+        if !baseline.is_finite() || baseline <= 0.0 {
+            continue;
+        }
+        let scale = per_point / baseline;
+        if !scale.is_finite() || scale <= 0.0 {
+            continue;
+        }
+        agreeing += 1;
+        // Compared against what is already recorded rather than sorted
+        // afterwards, so first-seen order survives and the list a caller
+        // shows does not reorder itself between calls.
+        let known = candidates
+            .iter()
+            .any(|c| (c.scale - scale).abs() <= SCALE_AGREEMENT_TOLERANCE * scale.abs().max(1.0));
+        if !known {
+            candidates.push(DxfScaleCandidate {
+                group: group.name.clone(),
+                scale,
+                units: DxfUnits::for_unit(unit),
+            });
+        }
+    }
+
+    // Matched as a SLICE PATTERN rather than on `len()` plus an index: the
+    // one-candidate arm then binds the element itself, so there is no
+    // indexing operation for the reader (or `clippy::indexing_slicing`) to
+    // have to prove cannot panic.
+    match candidates.as_slice() {
+        [] => DxfScaleSuggestion::Uncalibrated,
+        [only] => DxfScaleSuggestion::Calibrated {
+            scale: only.scale,
+            units: only.units,
+            group: only.group.clone(),
+            agreeing,
+        },
+        _ => DxfScaleSuggestion::Conflicting { candidates },
+    }
+}

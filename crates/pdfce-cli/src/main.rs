@@ -2779,8 +2779,18 @@ enum Command {
         units: DxfUnitArg,
         /// Drawing scale — real-world units per paper unit. `2` for a 1:2
         /// view, `0.5` for a 2:1 view.
-        #[arg(long, default_value_t = 1.0)]
-        scale: f64,
+        ///
+        /// OMIT IT and pdfce derives the scale from the ce dimensions
+        /// already on the page: if the drawing has been calibrated with the
+        /// measure tool's "scale by known dimension", that answer is exactly
+        /// what this needs, and the derived figure is printed before the
+        /// file is written. With nothing calibrated, the export falls back
+        /// to paper scale and says so loudly. If two dimension groups
+        /// disagree — a 1:1 plan and a 1:5 detail on one sheet — the export
+        /// is REFUSED and both are listed, because DXF carries one scale and
+        /// picking either silently exports half the sheet wrong.
+        #[arg(long)]
+        scale: Option<f64>,
         /// Emit Bezier curves verbatim as SPLINEs instead of recognising
         /// circles and arcs.
         #[arg(long)]
@@ -13162,22 +13172,47 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
 ///   operator who is not told opens it in SOLIDWORKS and concludes the
 ///   export lost things at random. That sentence is needed BEFORE the file
 ///   is opened, not after.
-/// - Read-only on the input: no `EditSession`, no save path, nothing that
-///   could write back to the PDF.
+/// - **Read-only on the input.** An `EditSession` IS constructed — it is
+///   the only route to the `/PieceInfo` dimension sidecar, which is where
+///   the drawing's calibration lives — but nothing is mutated and no save
+///   path is reachable from here. The session is a reader in this function
+///   and the absence of any `save` call is what makes that true.
+///
+/// ## Scale: derived when not given, and REFUSED when ambiguous
+///
+/// `--scale` is optional. Omitted, the page's ce dimensions are consulted
+/// (`suggest_scale`) and the three outcomes are handled differently on
+/// purpose:
+///
+/// - **Calibrated** — the derived figure is printed BEFORE the file is
+///   written, naming the group it came from. That is rule 4: an inference
+///   is disclosed, not applied silently.
+/// - **Uncalibrated** — falls back to paper scale with the loud warning
+///   this command already carried. pdfce genuinely does not know, and
+///   saying so is the honest answer.
+/// - **Conflicting** — the export is REFUSED and every candidate listed.
+///   A sheet with a 1:1 plan and a 1:5 detail is an ordinary drawing and
+///   DXF carries one scale; choosing either would export half the sheet
+///   wrong by a factor of five, and it would look entirely plausible.
+///   `--scale` resolves it, which is what the refusal says.
 fn cmd_export_dxf(
     input: &Path,
     page: u32,
     output: &Path,
     units: DxfUnitArg,
-    scale: f64,
+    scale: Option<f64>,
     fit_arcs: bool,
     text: bool,
 ) -> u8 {
-    use pdfce_core::export::dxf::{DxfOptions, DxfText, DxfUnits, write_dxf};
+    use pdfce_core::export::dxf::{
+        DxfOptions, DxfScaleSuggestion, DxfText, DxfUnits, suggest_scale, write_dxf,
+    };
 
-    if !scale.is_finite() || scale <= 0.0 {
+    if let Some(s) = scale
+        && (!s.is_finite() || s <= 0.0)
+    {
         eprintln!(
-            "pdfce-cli: {}: --scale must be a positive number; {scale} would collapse or mirror the drawing",
+            "pdfce-cli: {}: --scale must be a positive number; {s} would collapse or mirror the drawing",
             input.display()
         );
         return exit::RUNTIME_ERROR;
@@ -13189,7 +13224,11 @@ fn cmd_export_dxf(
             return exit_code_for_doc(&err);
         }
     };
-    let pages = match pdfce_core::page_tree::pages(&doc) {
+    // Read-only: see the contract above. This exists solely to reach the
+    // `/PieceInfo` sidecar the drawing's calibration lives in.
+    let session = pdfce_core::edit::EditSession::new(doc);
+    let doc = &session;
+    let pages = match doc.pages() {
         Ok(p) => p,
         Err(err) => {
             eprintln!("pdfce-cli: {}: {err}", input.display());
@@ -13215,6 +13254,52 @@ fn cmd_export_dxf(
             eprintln!("pdfce-cli: {}: {err}", input.display());
             return exit::RUNTIME_ERROR;
         }
+    };
+
+    // ---- resolve the drawing scale (see this function's contract) ----
+    //
+    // Done AFTER decomposition so a page that cannot be read fails on that
+    // rather than on a scale question the operator would then have answered
+    // for nothing.
+    let suggestion = suggest_scale(&doc.dimension_model());
+    let scale = match scale {
+        Some(explicit) => explicit,
+        None => match &suggestion {
+            DxfScaleSuggestion::Calibrated {
+                scale,
+                group,
+                agreeing,
+                ..
+            } => {
+                // Rule 4: the inference is stated BEFORE the file is
+                // written, naming its source, so the operator can see what
+                // pdfce concluded and re-run with --scale if it is wrong.
+                eprintln!(
+                    "pdfce-cli: {}: using scale {scale} derived from the ce dimension group {group:?}{} — the drawing is calibrated, so this export is at REAL size, not paper size. Pass --scale to override.",
+                    input.display(),
+                    if *agreeing > 1 {
+                        format!(" (and {} other calibrated group(s) agree)", agreeing - 1)
+                    } else {
+                        String::new()
+                    }
+                );
+                *scale
+            }
+            DxfScaleSuggestion::Uncalibrated => 1.0,
+            DxfScaleSuggestion::Conflicting { candidates } => {
+                eprintln!(
+                    "pdfce-cli: {}: REFUSED — this page's ce dimension groups disagree about its scale, and a DXF carries only one. Nothing was written.",
+                    input.display()
+                );
+                for c in candidates {
+                    eprintln!("    {:?} says scale {}", c.group, c.scale);
+                }
+                eprintln!(
+                    "  A 1:1 plan and a 1:5 detail on one sheet is an ordinary drawing, so pdfce will not pick for you: choosing wrong exports part of the sheet at the wrong size and the result looks entirely plausible. Pass --scale <n> to say which, or export the views separately."
+                );
+                return exit::RUNTIME_ERROR;
+            }
+        },
     };
 
     let opts = DxfOptions {
@@ -13259,9 +13344,15 @@ fn cmd_export_dxf(
             out.skipped_images
         );
     }
-    if (scale - 1.0).abs() < f64::EPSILON {
+    // Gated on the page being UNCALIBRATED, not merely on the scale being
+    // 1. A group calibrated to an explicit 1:1 is a real answer that the
+    // operator gave, and warning them that pdfce might not know the scale
+    // when it demonstrably does is the shape of disclosure that gets
+    // learned-past and then ignored when it matters.
+    if (scale - 1.0).abs() < f64::EPSILON && matches!(suggestion, DxfScaleSuggestion::Uncalibrated)
+    {
         eprintln!(
-            "pdfce-cli: {}: exported at PAPER scale (--scale 1). If this page is a scaled view — a 1:2 detail, say — the geometry is that fraction of real size and will look entirely plausible. Pass --scale 2 for 1:2, and so on.",
+            "pdfce-cli: {}: exported at PAPER scale. Nothing on this page is calibrated, so pdfce does not know what scale the drawing is at — if it is a scaled view, a 1:2 detail say, the geometry is that fraction of real size and will look entirely plausible. Either measure a known feature in the GUI (the scale then comes across automatically) or pass --scale 2 for 1:2, and so on.",
             input.display()
         );
     }
