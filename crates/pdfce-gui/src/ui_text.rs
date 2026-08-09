@@ -5272,13 +5272,42 @@ content, use Redact instead."
 /// Singular keeps the original wording verbatim, so the one-object case —
 /// overwhelmingly the common one — reads exactly as it always has and no
 /// existing habit or screenshot is invalidated by a Pass about the plural.
-pub fn vector_objects_deleted(count: usize) -> String {
+/// `parts` is how many subpaths (for paths) or runs (for text) the deleted
+/// objects held between them — **the scale disclosure**, added with
+/// `Pass 32.0`'s GUI half on `pdfce-ui-specialist`'s recommendation.
+///
+/// # Why a count of OBJECTS is not enough
+///
+/// "1 object deleted" is literally true and materially misleading when that
+/// object held every label on the sheet. This is R168's own argument one
+/// level deeper: R168 was minted because an operator told *"object
+/// deleted"* could not tell whether six went or one did — and the same
+/// operator, told *"1 object deleted"*, cannot tell whether it held one
+/// line or 237.
+///
+/// Both extremes are measured on the operator's own drawing: one text
+/// object holding **237** dimension labels, and one path object holding
+/// **1194** subpaths for a single isometric view. Deleting either reads as
+/// a small action and is not one.
+///
+/// **Only said when it adds something.** Objects with one part each — or
+/// parts pdfce could not count — produce the original sentence verbatim,
+/// so the overwhelmingly common case keeps its existing wording and the
+/// disclosure appears exactly when it is news.
+pub fn vector_objects_deleted(count: usize, parts: usize) -> String {
+    // `parts > count` is the only case worth a word: three objects of one
+    // part each tells the operator nothing they did not just do.
+    let scale = if parts > count {
+        format!(" They held {parts} separate part(s) between them.")
+    } else {
+        String::new()
+    };
     if count == 1 {
-        return vector_object_deleted().to_owned();
+        return format!("{}{scale}", vector_object_deleted());
     }
     format!(
-        "Deleted {count} selected objects. This is undoable, and is NOT redaction — to securely \
-remove content, use Redact instead."
+        "Deleted {count} selected objects.{scale} This is undoable, and is NOT redaction — to \
+securely remove content, use Redact instead."
     )
 }
 

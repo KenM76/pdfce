@@ -4328,7 +4328,7 @@ impl PdfceApp {
     /// enforced certification, an already-edited page needing reopen) is
     /// surfaced through the same channel a failed save uses.
     fn delete_selected_object(&mut self) {
-        let (page_index, indices) = {
+        let (page_index, indices, parts) = {
             let Status::Open(doc) = &self.status else {
                 return;
             };
@@ -4344,7 +4344,23 @@ impl PdfceApp {
             if indices.is_empty() {
                 return;
             }
-            (doc.view.page_index, indices)
+            // HOW MUCH is inside them, counted NOW — after the delete the
+            // objects are gone and the number is unrecoverable.
+            //
+            // "1 object deleted" is literally true and materially misleading
+            // when that object held every label on the sheet. This is R168's
+            // own argument one level down: R168 said an operator told
+            // "object deleted" cannot tell whether six went or one did; the
+            // same operator, told "1 object deleted", cannot tell whether it
+            // held one line or 237. Measured on the operator's own drawing,
+            // both extremes are real — one text object with 237 runs, one
+            // path object with 1194 subpaths.
+            let parts: usize = doc
+                .object_model
+                .as_ref()
+                .map(|p| indices.iter().map(|i| p.part_count(*i)).sum())
+                .unwrap_or(0);
+            (doc.view.page_index, indices, parts)
         };
         let Status::Open(doc) = &mut self.status else {
             return;
@@ -4374,7 +4390,7 @@ impl PdfceApp {
                 // selected six and is told "object deleted" has no way to
                 // know whether six went or one did — which is the state this
                 // Pass found the application in.
-                self.edit_note = Some(ui_text::vector_objects_deleted(deleted));
+                self.edit_note = Some(ui_text::vector_objects_deleted(deleted, parts));
             }
             Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
         }
@@ -23549,6 +23565,46 @@ mod tests {
 
     fn pt(x: f64, y: f64) -> pdfce_core::vector::Point {
         pdfce_core::vector::Point::new(x, y)
+    }
+
+    /// **The scale disclosure** — "1 object deleted" must say when that one
+    /// object held 237 parts, and must stay silent when it held one.
+    ///
+    /// The silence half is the one worth pinning: a disclosure that fires
+    /// on every delete is one the operator learns to skip, and then it is
+    /// not there on the day it matters.
+    #[test]
+    fn the_delete_note_reports_scale_only_when_it_is_news() {
+        // One object, one part: the original sentence, verbatim.
+        let plain = ui_text::vector_objects_deleted(1, 1);
+        assert!(
+            !plain.contains("separate part"),
+            "an ordinary one-part delete must not grow a clause: {plain}",
+        );
+        assert_eq!(plain, ui_text::vector_object_deleted());
+
+        // One object holding 237 runs — the measured CAD case.
+        let big = ui_text::vector_objects_deleted(1, 237);
+        assert!(
+            big.contains("237 separate part(s)"),
+            "the scale must be stated when it is news: {big}",
+        );
+        assert!(
+            big.starts_with(ui_text::vector_object_deleted()),
+            "and it EXTENDS the existing sentence rather than replacing it,              so an operator's existing habit still reads: {big}",
+        );
+
+        // Three objects of one part each: nothing to add.
+        let flat = ui_text::vector_objects_deleted(3, 3);
+        assert!(!flat.contains("separate part"), "{flat}");
+        assert!(flat.contains("Deleted 3 selected objects."), "{flat}");
+
+        // Parts uncountable (no object model) must not read as "zero parts".
+        let unknown = ui_text::vector_objects_deleted(2, 0);
+        assert!(
+            !unknown.contains("separate part"),
+            "0 parts means 'not counted', never 'held nothing': {unknown}",
+        );
     }
 
     /// **The R168 rule at the Node rung.** Dragging one anchor of a
