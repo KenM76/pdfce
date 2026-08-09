@@ -1,0 +1,54 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo test:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo doc:*)",
+      "Bash(cargo tree:*)",
+      "Bash(cargo run -q -p pdfce-cli:*)",
+      "Bash(cargo run -p pdfce-cli:*)",
+
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git rev-list:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+
+      "Bash(python tools/check-:*)",
+      "Bash(python tools/gen-:*)",
+      "Bash(bash tools/check-:*)",
+      "Bash(pwsh -NoProfile -File tools/:*)",
+
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(tr:*)",
+      "Bash(cut:*)",
+      "Bash(xargs:*)",
+      "Bash(printf:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+
+      "Read",
+      "Glob",
+      "Grep",
+      "Edit",
+      "Write"
+    ],
+    "deny": [
+      "Bash(git push:*)",
+      "Bash(git remote add:*)",
+      "Bash(gh repo create:*)",
+      "Bash(gh release:*)",
+      "Bash(cargo publish:*)"
+    ]
+  }
+}

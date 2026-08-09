@@ -2741,6 +2741,51 @@ enum Command {
     /// visible), and when the subpaths found in the operators disagree in count
     /// with the geometry (the index could then name a different line from the
     /// one intended). Deleting the only subpath deletes the object.
+    /// **Export a page's vector geometry as DXF** — the format SOLIDWORKS,
+    /// AutoCAD and plasma-table controllers import natively.
+    ///
+    /// WHY THIS EXISTS. SOLIDWORKS gates its own PDF import on Adobe Acrobat
+    /// or Illustrator being installed and licensed. It imports DXF with no
+    /// Adobe dependency at all — so this does not work around that gate, it
+    /// makes it irrelevant.
+    ///
+    /// SCALE IS THE THING TO GET RIGHT. A PDF drawing is at PAPER scale, so a
+    /// 1:2 detail view exports at half size and looks entirely plausible.
+    /// Pass `--scale 2` for a 1:2 view. Every generic PDF-to-DXF converter
+    /// skips this and says nothing.
+    ///
+    /// Circles and arcs are RECOGNISED, not flattened: PDF has no arc
+    /// primitive, so a hole arrives as four Bezier curves, and emitting those
+    /// as fine polylines is what turns forty washers into a 767 KB file.
+    /// `--no-fit-arcs` disables it if you want the curves verbatim.
+    ///
+    /// The output carries no `MATERIAL` object and no group code 94, so it
+    /// loads in AutoCAD LT 2004 and older CAM controllers that reject both.
+    ///
+    /// NOT A ROUND TRIP TO A MODEL. A PDF of a CAD drawing is printed output
+    /// — derived geometry. You get sketch entities, never features and never
+    /// dimensions as constraints.
+    ExportDxf {
+        /// Input PDF.
+        input: PathBuf,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+        /// Output `.dxf` path.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Output units.
+        #[arg(long, value_enum, default_value_t = DxfUnitArg::In)]
+        units: DxfUnitArg,
+        /// Drawing scale — real-world units per paper unit. `2` for a 1:2
+        /// view, `0.5` for a 2:1 view.
+        #[arg(long, default_value_t = 1.0)]
+        scale: f64,
+        /// Emit Bezier curves verbatim as SPLINEs instead of recognising
+        /// circles and arcs.
+        #[arg(long)]
+        no_fit_arcs: bool,
+    },
     /// **Delete ONE text run** — one show operator — out of a text object
     /// (`Pass 32.0`, ISO 32000-1 §9.4).
     ///
@@ -3267,6 +3312,18 @@ enum RoundTripMode {
 }
 
 /// `/Producer` policy, as a CLI value.
+/// `--units` for `export-dxf`, mapped to the DXF header's `$INSUNITS`.
+///
+/// Short names because they are typed: `--units mm` reads better than
+/// `--units millimetres` and is what a drawing office would say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum DxfUnitArg {
+    /// Inches ($INSUNITS 1).
+    In,
+    /// Millimetres ($INSUNITS 4).
+    Mm,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 enum ProducerArg {
     /// Write `/Producer (pdfce <version>)` into an existing `/Info`.
@@ -4156,6 +4213,14 @@ fn run() -> ExitCode {
             mode,
             verify_undo,
         }),
+        Command::ExportDxf {
+            input,
+            page,
+            output,
+            units,
+            scale,
+            no_fit_arcs,
+        } => cmd_export_dxf(&input, page, &output, units, scale, !no_fit_arcs),
         Command::TextRunDelete {
             input,
             page,
@@ -13074,6 +13139,130 @@ appended={} out_bytes={} undo_verified={} undo_identical={}",
         u32::from(outcome.undo_identical),
     );
     finish_edit(input, &outcome)
+}
+
+/// `export-dxf` — a page's vector geometry as CAD-importable DXF.
+///
+/// ## Contract
+///
+/// - One `export-dxf …` line carrying `entities=`, the per-kind counts, and
+///   what was skipped, then `0` on success.
+/// - **What did NOT make it into the file goes to stderr in prose.** A
+///   drawing that is half annotation exports as geometry alone, and an
+///   operator who is not told opens it in SOLIDWORKS and concludes the
+///   export lost things at random. That sentence is needed BEFORE the file
+///   is opened, not after.
+/// - Read-only on the input: no `EditSession`, no save path, nothing that
+///   could write back to the PDF.
+fn cmd_export_dxf(
+    input: &Path,
+    page: u32,
+    output: &Path,
+    units: DxfUnitArg,
+    scale: f64,
+    fit_arcs: bool,
+) -> u8 {
+    use pdfce_core::export::dxf::{DxfOptions, DxfUnits, write_dxf};
+
+    if !scale.is_finite() || scale <= 0.0 {
+        eprintln!(
+            "pdfce-cli: {}: --scale must be a positive number; {scale} would collapse or mirror the drawing",
+            input.display()
+        );
+        return exit::RUNTIME_ERROR;
+    }
+    let doc = match pdfce_core::document::Document::load(input) {
+        Ok(doc) => doc,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit_code_for_doc(&err);
+        }
+    };
+    let pages = match pdfce_core::page_tree::pages(&doc) {
+        Ok(p) => p,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+    let index = (page.max(1) - 1) as usize;
+    let Some(target) = pages.get(index) else {
+        eprintln!(
+            "pdfce-cli: {}: no page {page} — the document has {} page(s)",
+            input.display(),
+            pages.len()
+        );
+        return exit::RUNTIME_ERROR;
+    };
+    let model = match pdfce_core::vector::decompose_page(
+        &doc.view(),
+        target,
+        pdfce_core::vector::Matrix::IDENTITY,
+    ) {
+        Ok(m) => m,
+        Err(err) => {
+            eprintln!("pdfce-cli: {}: {err}", input.display());
+            return exit::RUNTIME_ERROR;
+        }
+    };
+
+    let opts = DxfOptions {
+        units: match units {
+            DxfUnitArg::In => DxfUnits::Inches,
+            DxfUnitArg::Mm => DxfUnits::Millimetres,
+        },
+        scale,
+        fit_arcs,
+        ..DxfOptions::default()
+    };
+    let (dxf, out) = write_dxf(&model, &opts);
+    if let Err(err) = std::fs::write(output, dxf.as_bytes()) {
+        eprintln!("pdfce-cli: {}: {err}", output.display());
+        return exit::IO_ERROR;
+    }
+
+    // The disclosures, in prose, on stderr — see this function's contract.
+    if out.skipped_text > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} text object(s) were NOT exported — this DXF carries geometry only, so any dimensions, labels and notes on the drawing are absent from it. Their outlines are not there either; the text was never converted to curves.",
+            input.display(),
+            out.skipped_text
+        );
+    }
+    if out.skipped_images > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} image(s) were NOT exported — DXF has no raster entity in the subset pdfce writes, so a scanned or rendered region of the page is simply missing rather than blank.",
+            input.display(),
+            out.skipped_images
+        );
+    }
+    if (scale - 1.0).abs() < f64::EPSILON {
+        eprintln!(
+            "pdfce-cli: {}: exported at PAPER scale (--scale 1). If this page is a scaled view — a 1:2 detail, say — the geometry is that fraction of real size and will look entirely plausible. Pass --scale 2 for 1:2, and so on.",
+            input.display()
+        );
+    }
+
+    let entities = out.polylines + out.circles + out.arcs + out.splines;
+    println!(
+        "export-dxf {} page {} -> {}; entities={entities} polylines={} circles={} arcs={} splines={} skipped_text={} skipped_images={} units={} scale={} fit_arcs={}",
+        input.display(),
+        page.max(1),
+        output.display(),
+        out.polylines,
+        out.circles,
+        out.arcs,
+        out.splines,
+        out.skipped_text,
+        out.skipped_images,
+        match units {
+            DxfUnitArg::In => "in",
+            DxfUnitArg::Mm => "mm",
+        },
+        scale,
+        u32::from(fit_arcs),
+    );
+    exit::SUCCESS
 }
 
 /// `text-run-delete` — remove one show operator from a text object

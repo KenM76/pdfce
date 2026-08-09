@@ -78,6 +78,7 @@ pub mod content;
 pub mod dimension;
 pub mod document;
 pub mod edit;
+pub mod export;
 pub mod fdf;
 pub mod filters;
 pub mod font_embed;
