@@ -271,6 +271,35 @@ impl ObjectModelProvider {
         Vec::new()
     }
 
+    /// **Every** anchor of the path object at paint-order `index`, each with
+    /// its object-scoped index — [`Self::subpath_node_points`] flattened
+    /// across all subpaths.
+    ///
+    /// # Why the whole object and not one subpath
+    ///
+    /// A multi-node **selection** is object-scoped: nothing stops an
+    /// operator Ctrl-clicking one anchor on a shape's outer subpath and
+    /// another on a hole inside it, and `selected_nodes` holds both by their
+    /// object-scoped index. A multi-node **drag** therefore has to look up
+    /// positions across the whole object — asking per-subpath would mean
+    /// the caller re-deriving which subpath each selected index falls in,
+    /// which is exactly the offset arithmetic `subpath_node_points` exists
+    /// to keep in one place.
+    ///
+    /// Empty for a non-path object, for the same reason
+    /// [`Self::subpath_count`] returns `0`: a text run has no anchors, and a
+    /// loop over none of them is the right amount of work.
+    pub(crate) fn object_node_points(&self, index: usize) -> Vec<(usize, Point)> {
+        let Some(VectorObject::Path(path)) = self.objects.objects.get(index) else {
+            return Vec::new();
+        };
+        path.page_subpaths()
+            .iter()
+            .flat_map(|sp| sp.anchors())
+            .enumerate()
+            .collect()
+    }
+
     /// The Bézier control points ("handles") of one subpath, each tagged with
     /// the **object-scoped index of the node it belongs to** and which side of
     /// that node it shapes.

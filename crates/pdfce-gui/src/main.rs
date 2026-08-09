@@ -19184,10 +19184,22 @@ fn run_vector_edit_tool(
             dx: f64,
             dy: f64,
         },
-        Node {
+        /// Move EVERY selected node of one object, as one command
+        /// (**R168**, the Node-rung twin of [`Commit::Move`]).
+        ///
+        /// Carries `moves` rather than a single `node`/`to` pair for
+        /// word-for-word the reason `Commit::Move` carries `indices`: the
+        /// previous single-node form silently moved one of N while the
+        /// canvas painted all N as selected. `Pass 41.0` shipped the
+        /// selection set; the drag never caught up with it.
+        ///
+        /// Absolute targets, not a delta, because
+        /// `EditSession::move_nodes` takes absolute positions — see
+        /// [`node_drag_moves`], which computes them and owns the
+        /// grabbed-inside-vs-outside-the-selection rule.
+        Nodes {
             idx: usize,
-            node: usize,
-            to: Point,
+            moves: Vec<(usize, Point)>,
         },
         /// A Bézier handle drag: one control point moves, the on-curve node
         /// it belongs to stays where it is.
@@ -19599,6 +19611,19 @@ fn run_vector_edit_tool(
                 // every frame of a drag on an object that may hold thousands
                 // of them. The committed result comes from core's own surgery
                 // either way, so the preview can only ever be a guide.
+                // COMPUTED ONCE, for the preview AND the commit below, so
+                // what the operator watches is by construction what lands.
+                // Two derivations of "where do these nodes go" would be two
+                // chances to disagree, and the one that disagrees silently is
+                // the preview — the operator would simply have been shown a
+                // lie and had no way to tell.
+                let drag_anchors = doc
+                    .object_model
+                    .as_ref()
+                    .map(|p| p.object_node_points(drag.object_index))
+                    .unwrap_or_default();
+                let node_moves = node_drag_moves(node, target, &doc.selected_nodes, &drag_anchors);
+
                 if let Some(prov) = doc.object_model.as_ref()
                     && let Some(e) = doc.entered.filter(|e| e.object == drag.object_index)
                     && let Some(sp_i) = e.subpath
@@ -19607,7 +19632,14 @@ fn run_vector_edit_tool(
                     let path: Vec<egui::Pos2> = pts
                         .iter()
                         .filter_map(|(i, p)| {
-                            let q = if *i == node { target } else { *p };
+                            // EVERY moved node is displaced in the preview,
+                            // not only the grabbed one (R168). Showing one
+                            // anchor travel and then committing five is the
+                            // same broken promise as the reverse.
+                            let q = node_moves
+                                .iter()
+                                .find(|(n, _)| n == i)
+                                .map_or(*p, |(_, q)| *q);
                             to_screen(q)
                         })
                         .collect();
@@ -19618,8 +19650,13 @@ fn run_vector_edit_tool(
                         ));
                     }
                 }
-                if let Some(s) = to_screen(target) {
-                    if snapped {
+                // A marker on EVERY travelling anchor. The grabbed one keeps
+                // the snap indicator — it is the only one that snapped, and
+                // decorating its passengers with a snap mark would claim they
+                // had each found a snap target of their own.
+                for (n, q) in &node_moves {
+                    let Some(s) = to_screen(*q) else { continue };
+                    if snapped && *n == node {
                         painter.extend(canvas::snap_marker_shapes(
                             s,
                             pdfce_core::vector::SnapKind::Node,
@@ -19630,10 +19667,13 @@ fn run_vector_edit_tool(
                     painter.circle_stroke(s, 4.0, egui::Stroke::new(1.5, preview_color));
                 }
                 if canvas::primary_drag_stopped(image_response) {
-                    commit = Commit::Node {
+                    // R168: the whole node selection travels, not just the
+                    // anchor the pointer caught — and it travels to exactly
+                    // the positions the preview above just drew, because both
+                    // read the same `node_moves`.
+                    commit = Commit::Nodes {
                         idx: drag.object_index,
-                        node,
-                        to: target,
+                        moves: node_moves,
                     };
                 }
             } else if let Some(sp_i) = doc
@@ -19803,9 +19843,22 @@ fn run_vector_edit_tool(
             doc.refresh_pages();
             doc.ensure_object_provider();
         }
-        Commit::Node { idx, node, to } => {
-            let outcome = doc.session_mut().move_node(page_index, idx, node, to);
-            diag::trace(|| format!("commit-node idx={idx} node={node} to={to:?} -> {outcome:?}"));
+        Commit::Nodes { idx, moves } => {
+            // Through `move_nodes` even for a single node. The two verbs are
+            // proven byte-identical for a one-element batch
+            // (`node_multi_move.rs`'s
+            // `a_single_element_batch_matches_the_single_node_verb`, which
+            // compares the disclosure TEXT as well as the content), so one
+            // call site is one behaviour — where a branch on
+            // `moves.len() == 1` would be two paths that have to be kept in
+            // step for no gain.
+            let outcome = doc.session_mut().move_nodes(page_index, idx, &moves);
+            diag::trace(|| {
+                format!(
+                    "commit-nodes idx={idx} n={} moves={moves:?} -> {outcome:?}",
+                    moves.len()
+                )
+            });
             disclose_vector_edit(doc, outcome.as_deref().unwrap_or(&[]));
             doc.vector_drag = None;
             doc.refresh_pages();
@@ -21424,6 +21477,88 @@ fn dimension_groups_section(doc: &mut OpenDoc, ui: &mut egui::Ui) {
 /// cannot produce the input, extract the rule and unit-test it, and say
 /// plainly that a test is a SUBSTITUTE for in-app verification rather than an
 /// equivalent to it.
+/// Which nodes a drag moves, and to where — the multi-node half of **R168**
+/// applied to the Node rung.
+///
+/// `grabbed` is the anchor the drag caught, `target` is where it was
+/// released (already snapped, if it snapped). `selected` is the operator's
+/// node-selection set and `anchors` is every anchor of the object, both
+/// object-scoped.
+///
+/// # The defect this closes
+///
+/// `Pass 41.0` shipped a multi-node selection set and the canvas has drawn
+/// every member as selected ever since. The drag did not: it committed
+/// `EditSession::move_node` for the **one** anchor it caught, so selecting
+/// three nodes and dragging one moved one — silently, with the other two
+/// still painted as selected. That is precisely what R168 forbids ("a
+/// multi-target verb acts on the whole selection or refuses"), and it is
+/// the same defect `Pass 47.0` fixed for whole-object moves, where
+/// `Commit::Move` was widened from a single index to `indices: Vec<usize>`
+/// for word-for-word the same reason.
+///
+/// # The rule, and the one case that is NOT a multi-move
+///
+/// A drag on an anchor **inside** the selection translates the whole
+/// selection **rigidly**: the delta is taken from the grabbed anchor, so
+/// its own snap is honoured exactly and every other selected anchor keeps
+/// its offset from it. Dragging a node out of a selected pair does not
+/// distort the pair.
+///
+/// A drag on an anchor **outside** the selection moves only that anchor.
+/// This is not an oversight and matches every other direct-manipulation
+/// surface in the app: grabbing something you had not selected acts on the
+/// thing under the pointer, not on a selection elsewhere on the page. The
+/// alternative — dragging the selection by a handle that is not part of it
+/// — has no precedent here and would be a surprise.
+///
+/// # Returns
+///
+/// `(node, absolute target)` pairs for [`pdfce_core::edit::EditSession::move_nodes`],
+/// which takes **absolute** positions rather than a delta. Always non-empty
+/// (it contains at least `grabbed`), and never contains a duplicate — core
+/// refuses both, and producing either here would turn an ordinary drag into
+/// a refusal the operator cannot explain.
+///
+/// An anchor named in `selected` that `anchors` does not have is **dropped**
+/// rather than guessed at: a stale selection index survives an undo that
+/// changed the object's anchor count, and moving "whichever anchor now has
+/// that number" would move something the operator never selected.
+fn node_drag_moves(
+    grabbed: usize,
+    target: pdfce_core::vector::Point,
+    selected: &BTreeSet<usize>,
+    anchors: &[(usize, pdfce_core::vector::Point)],
+) -> Vec<(usize, pdfce_core::vector::Point)> {
+    let lookup = |n: usize| anchors.iter().find(|(i, _)| *i == n).map(|(_, p)| *p);
+    // Only a grab INSIDE a multi-node selection travels as a group.
+    if selected.len() < 2 || !selected.contains(&grabbed) {
+        return vec![(grabbed, target)];
+    }
+    let Some(from) = lookup(grabbed) else {
+        // The grabbed anchor is not in the object's anchor list at all —
+        // impossible from a live hit-test, and if it happens the honest move
+        // is the one the operator directly performed, not a group translation
+        // computed from a delta we cannot compute.
+        return vec![(grabbed, target)];
+    };
+    let (dx, dy) = (target.x - from.x, target.y - from.y);
+    selected
+        .iter()
+        .filter_map(|n| {
+            // The grabbed node goes to `target` EXACTLY, not to
+            // `from + delta` — they are the same number, but computing it the
+            // long way would let a future change to the delta introduce a
+            // rounding difference between where the operator dropped the node
+            // and where it lands.
+            if *n == grabbed {
+                return Some((grabbed, target));
+            }
+            lookup(*n).map(|p| (*n, pdfce_core::vector::Point::new(p.x + dx, p.y + dy)))
+        })
+        .collect()
+}
+
 fn node_selection_after_click(
     picked: Option<usize>,
     additive: bool,
@@ -23334,6 +23469,121 @@ mod tests {
 
     fn nodes(v: &[usize]) -> BTreeSet<usize> {
         v.iter().copied().collect()
+    }
+
+    /// Page-space anchors, object-scoped indices — what
+    /// `ObjectProvider::object_node_points` hands `node_drag_moves`.
+    fn anchors(v: &[(f64, f64)]) -> Vec<(usize, pdfce_core::vector::Point)> {
+        v.iter()
+            .enumerate()
+            .map(|(i, (x, y))| (i, pdfce_core::vector::Point::new(*x, *y)))
+            .collect()
+    }
+
+    fn pt(x: f64, y: f64) -> pdfce_core::vector::Point {
+        pdfce_core::vector::Point::new(x, y)
+    }
+
+    /// **The R168 rule at the Node rung.** Dragging one anchor of a
+    /// three-anchor selection moves all three, rigidly.
+    ///
+    /// Until this was wired, the drag committed `move_node` for the grabbed
+    /// anchor alone while the canvas painted all three as selected — the
+    /// same defect `Pass 47.0` fixed for whole-object moves.
+    #[test]
+    fn dragging_one_node_of_a_selection_moves_the_whole_selection_rigidly() {
+        let a = anchors(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]);
+        // Grab node 1 at (10,0) and drop it at (13,4): delta (+3,+4).
+        let moves = node_drag_moves(1, pt(13.0, 4.0), &nodes(&[0, 1, 2]), &a);
+        assert_eq!(
+            moves,
+            vec![(0, pt(3.0, 4.0)), (1, pt(13.0, 4.0)), (2, pt(13.0, 14.0)),],
+            "every selected anchor keeps its offset from the grabbed one — a              drag translates the selection, it does not distort it",
+        );
+        assert!(
+            !moves.iter().any(|(n, _)| *n == 3),
+            "anchor 3 was not selected and must not move",
+        );
+    }
+
+    /// The grabbed anchor lands on the target EXACTLY, not on
+    /// `from + delta` — they are the same number today, and computing it the
+    /// long way would let a later change put the operator's own node
+    /// somewhere other than where they dropped it.
+    #[test]
+    fn the_grabbed_node_lands_exactly_on_its_target() {
+        let a = anchors(&[(0.1, 0.2), (0.3, 0.4)]);
+        let target = pt(7.7, 8.8);
+        let moves = node_drag_moves(0, target, &nodes(&[0, 1]), &a);
+        assert_eq!(moves[0], (0, target));
+    }
+
+    /// **Grabbing an anchor OUTSIDE the selection moves only that anchor.**
+    ///
+    /// Not an oversight: every other direct-manipulation surface here acts
+    /// on the thing under the pointer, and dragging a selection by a handle
+    /// that is not part of it has no precedent in this app.
+    #[test]
+    fn grabbing_a_node_outside_the_selection_moves_only_it() {
+        let a = anchors(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)]);
+        let moves = node_drag_moves(2, pt(99.0, 99.0), &nodes(&[0, 1]), &a);
+        assert_eq!(moves, vec![(2, pt(99.0, 99.0))]);
+    }
+
+    /// A single-node selection behaves exactly as it did before this rule
+    /// existed — one node, one target, no delta arithmetic.
+    #[test]
+    fn a_single_node_selection_is_an_ordinary_single_move() {
+        let a = anchors(&[(0.0, 0.0), (10.0, 0.0)]);
+        assert_eq!(
+            node_drag_moves(1, pt(4.0, 5.0), &nodes(&[1]), &a),
+            vec![(1, pt(4.0, 5.0))],
+        );
+        // ...and so does an EMPTY selection, which is reachable: a drag can
+        // grab an anchor the operator never clicked.
+        assert_eq!(
+            node_drag_moves(1, pt(4.0, 5.0), &nodes(&[]), &a),
+            vec![(1, pt(4.0, 5.0))],
+        );
+    }
+
+    /// A STALE selection index — one the object no longer has, after an undo
+    /// changed its anchor count — is DROPPED, not guessed at.
+    ///
+    /// Moving "whichever anchor now carries that number" would move
+    /// something the operator never selected, which is worse than moving one
+    /// fewer node.
+    #[test]
+    fn a_stale_selection_index_is_dropped_rather_than_guessed() {
+        let a = anchors(&[(0.0, 0.0), (10.0, 0.0)]);
+        let moves = node_drag_moves(0, pt(1.0, 1.0), &nodes(&[0, 1, 47]), &a);
+        assert_eq!(
+            moves,
+            vec![(0, pt(1.0, 1.0)), (1, pt(11.0, 1.0))],
+            "47 does not exist on this object and is silently left out",
+        );
+    }
+
+    /// The result never contains a duplicate and is never empty — core
+    /// refuses both, and producing either here would turn an ordinary drag
+    /// into a refusal the operator could not explain.
+    #[test]
+    fn the_move_list_is_always_valid_input_for_core() {
+        let a = anchors(&[(0.0, 0.0), (10.0, 0.0), (20.0, 0.0)]);
+        for selected in [nodes(&[]), nodes(&[1]), nodes(&[0, 1, 2]), nodes(&[0, 99])] {
+            for grabbed in 0..3 {
+                let moves = node_drag_moves(grabbed, pt(5.0, 5.0), &selected, &a);
+                assert!(!moves.is_empty(), "empty batch would be refused by core");
+                let mut seen = BTreeSet::new();
+                for (n, _) in &moves {
+                    assert!(seen.insert(*n), "duplicate {n} would be refused by core");
+                }
+                assert!(
+                    moves.iter().any(|(n, _)| *n == grabbed),
+                    "the anchor the operator actually grabbed must always move",
+                );
+            }
+        }
     }
 
     /// A plain click REPLACES the selection, exactly as it does for objects.

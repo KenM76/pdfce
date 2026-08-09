@@ -1305,8 +1305,23 @@ fn push_edit(
 /// pinned by `node_multi_move.rs`'s
 /// `a_single_element_batch_matches_the_single_node_verb`, which compares
 /// the disclosure text and not just the bytes.
+///
+/// # ★ The wording is deliberately COUNT-AGNOSTIC — do not re-add a number
+///
+/// It read *"Moving **one corner** on its own"* until a multi-node drag was
+/// driven in the running application and moved **two** corners of one
+/// rectangle, at which point the sentence was simply false about what the
+/// operator had just done. Nothing caught it: every test asserted the
+/// constant against itself, so the text was self-consistent and wrong.
+///
+/// The singular/plural axis this constant sits on is *how many SHAPES were
+/// rewritten* ([`RECT_EXPANDED_DISCLOSURE_PLURAL`]), **not** how many
+/// corners moved. Mixing the two axes into one sentence is what made it
+/// wrong, and re-introducing a corner count would do it again — the shape
+/// is rewritten for the same reason whether one corner moved or four, and
+/// the number is not something the operator can act on.
 const RECT_EXPANDED_DISCLOSURE: &str = "This shape was stored as a rectangle, which can only describe a box with square \
-     corners. Moving one corner on its own makes it a four-sided shape that is no longer \
+     corners. Moving a corner independently makes it a four-sided shape that is no longer \
      a box, so it has been rewritten as four lines. It draws identically; dragging the \
      corner back will not restore the original rectangle form.";
 
