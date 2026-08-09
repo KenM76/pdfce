@@ -4308,6 +4308,67 @@ impl EditSession {
         })
     }
 
+    /// **Drag a multi-node SELECTION** — move every named anchor of one path
+    /// object to its own target, as ONE undoable command.
+    ///
+    /// `moves` pairs an anchor index (decomposition order, same as
+    /// [`Self::move_node`]) with its page-space destination. Typically a
+    /// front end computes these as *"every selected node, plus the drag
+    /// delta"*, but nothing here requires the targets be a rigid
+    /// translation — each node goes exactly where it is told.
+    ///
+    /// # The obligation this discharges, and why a loop could not
+    ///
+    /// The GUI has had a multi-node selection set since `Pass 41.0` and no
+    /// way to move it. `Pass 41.0`'s own note said an N-call
+    /// [`Self::move_node`] loop was refused because it would break
+    /// one-gesture-one-undo — N entries on the undo stack for one drag.
+    ///
+    /// That is the visible reason. The **correctness** reason is stronger:
+    /// all four corners of an `re` rectangle are described by the same four
+    /// operands of the same operator, so the second call of a loop would
+    /// plan against byte offsets the first call had already replaced. Two
+    /// corners of a rectangle is an ordinary selection. See
+    /// [`crate::vector::plan_move_nodes`] for the bucket-by-operator
+    /// mechanism that makes it correct.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::VectorEdit`] — including
+    /// [`EmptyMove`](crate::vector::VectorEditError::EmptyMove) and
+    /// [`DuplicateNodeInMove`](crate::vector::VectorEditError::DuplicateNodeInMove),
+    /// both refused rather than absorbed — plus the object/node range,
+    /// non-path-target and singular-CTM refusals [`Self::move_node`] raises,
+    /// and [`EditError::PageOutOfRange`],
+    /// [`EditError::VectorEditNoContents`], [`EditError::VectorEditContent`],
+    /// [`EditError::DocumentEncrypted`],
+    /// [`EditError::CertificationForbidsChange`]. Every refusal happens
+    /// before any mutation (rule 4).
+    ///
+    /// # Returns
+    ///
+    /// The same [disclosures](crate::vector::PlannedEdit::disclosures)
+    /// [`Self::move_node`] returns, **de-duplicated**: a drag that expands
+    /// three rectangles says so once, not three times.
+    pub fn move_nodes(
+        &mut self,
+        page_index: usize,
+        object_index: usize,
+        moves: &[(usize, crate::vector::Point)],
+    ) -> Result<Vec<String>, EditError> {
+        self.vector_surgery(CommandKind::MoveNode, page_index, |stream, model| {
+            let count = model.objects.len();
+            let obj = model.objects.get(object_index).ok_or(
+                crate::vector::VectorEditError::ObjectOutOfRange {
+                    index: object_index,
+                    count,
+                },
+            )?;
+            let path = vector_object_as_path(obj, object_index)?;
+            Ok(crate::vector::plan_move_nodes(stream, path, moves)?)
+        })
+    }
+
     /// **Drag a Bézier handle** of the path object at paint-order
     /// `object_index` on page `page_index`: move one control point of node
     /// `node_index` to the page-space point `to`, leaving the on-curve node

@@ -101,6 +101,8 @@
 //! re-emitted through [`emit_number`], which is total. The fuzz target
 //! `fuzz/fuzz_targets/vector_edit.rs` drives exactly these shapes.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use crate::content::{ContentStream, ContentToken, ContentTokenKind};
 use crate::text_edit::edit::splice;
 use crate::writer::content::emit_number;
@@ -304,6 +306,33 @@ pub enum VectorEditError {
         /// How many anchors the object has, in decomposition order.
         count: usize,
     },
+    /// A **multi-node** drag named the same anchor twice.
+    ///
+    /// # Refused rather than resolved, because either resolution is a guess
+    ///
+    /// The two available rules — last-one-wins, and first-one-wins — are
+    /// equally defensible and produce different geometry, so picking one
+    /// silently would move a node to a position the caller did not
+    /// unambiguously ask for. A selection set cannot legitimately contain a
+    /// duplicate (it is a set), so a duplicate here means the caller built
+    /// its request wrongly, and saying so is more useful than absorbing it.
+    ///
+    /// Checked **before** any planning, so a rejected request has changed
+    /// nothing (rule 4).
+    #[error("node index {index} was named more than once in one multi-node move")]
+    DuplicateNodeInMove {
+        /// The 0-based anchor index that appeared twice.
+        index: usize,
+    },
+    /// A **multi-node** drag named no nodes at all.
+    ///
+    /// Refused rather than treated as a successful no-op: an empty move
+    /// that reported success would put an entry on the undo stack that
+    /// undoes nothing, and a front end looping over an empty selection
+    /// would get "moved" back rather than discovering its selection was
+    /// empty.
+    #[error("a multi-node move must name at least one node")]
+    EmptyMove,
 }
 
 /// The result of a successful surgery plan: the **new decoded content
@@ -1264,6 +1293,44 @@ fn push_edit(
     edits.push((item.byte_start(), item.byte_end(), bytes));
 }
 
+/// What an operator is told when an `re` rectangle had to be expanded into
+/// four lines to place a corner independently (§8.5.2.1 Table 59).
+///
+/// # A constant because TWO functions owe the same sentence
+///
+/// [`plan_move_node`] and [`plan_move_nodes`] must word this identically —
+/// a one-node batch and a single-node call describe the same event, and an
+/// operator who saw the wording change would reasonably conclude something
+/// else had changed too. Held as a constant so the two cannot drift, and
+/// pinned by `node_multi_move.rs`'s
+/// `a_single_element_batch_matches_the_single_node_verb`, which compares
+/// the disclosure text and not just the bytes.
+const RECT_EXPANDED_DISCLOSURE: &str = "This shape was stored as a rectangle, which can only describe a box with square \
+     corners. Moving one corner on its own makes it a four-sided shape that is no longer \
+     a box, so it has been rewritten as four lines. It draws identically; dragging the \
+     corner back will not restore the original rectangle form.";
+
+/// [`RECT_EXPANDED_DISCLOSURE`] for a multi-node drag that expanded **more
+/// than one** rectangle — said once, not once per shape.
+const RECT_EXPANDED_DISCLOSURE_PLURAL: &str = "More than one of these shapes was stored as a rectangle, which can only describe a \
+     box with square corners. Moving a corner on its own makes a shape that is no longer \
+     a box, so each has been rewritten as four lines. They draw identically; dragging the \
+     corners back will not restore the original rectangle form.";
+
+/// What an operator is told when a subpath's reused start had no
+/// coordinates of its own and an `m` was materialised for it (§8.5.2.1).
+///
+/// A constant for the same reason as [`RECT_EXPANDED_DISCLOSURE`].
+const IMPLICIT_START_DISCLOSURE: &str = "This point had no coordinates of its own — the file re-used the start of the shape \
+     before it. A move instruction naming the point has been added so it can be placed \
+     independently.";
+
+/// [`IMPLICIT_START_DISCLOSURE`] for a multi-node drag that materialised
+/// more than one such start.
+const IMPLICIT_START_DISCLOSURE_PLURAL: &str = "More than one of these points had no coordinates of its own — the file re-used the \
+     start of an earlier shape for each. A move instruction naming each point has been \
+     added so they can be placed independently.";
+
 /// Plan a **node drag**: rewrite the single anchor `node_index` of `obj` to
 /// the page-space point `to_page` (anchor/corner move only — adjacent
 /// Bézier control-point "handle" editing is a named fast-follow, decision
@@ -1385,18 +1452,7 @@ pub fn plan_move_node(
             Ok(PlannedEdit {
                 content: splice(&content.buf, &mut edits),
                 operators_touched: 1,
-                disclosures: [
-                    clip,
-                    vec![
-                        "This shape was stored as a rectangle, which can only describe a \
-                     box with square corners. Moving one corner on its own makes it a \
-                     four-sided shape that is no longer a box, so it has been rewritten \
-                     as four lines. It draws identically; dragging the corner back will \
-                     not restore the original rectangle form."
-                            .to_owned(),
-                    ],
-                ]
-                .concat(),
+                disclosures: [clip, vec![RECT_EXPANDED_DISCLOSURE.to_owned()]].concat(),
             })
         }
 
@@ -1420,19 +1476,333 @@ pub fn plan_move_node(
             Ok(PlannedEdit {
                 content: splice(&content.buf, &mut edits),
                 operators_touched: 1,
-                disclosures: [
-                    clip,
-                    vec![
-                        "This point had no coordinates of its own — the file re-used the \
-                     start of the shape before it. A move instruction naming the point \
-                     has been added so it can be placed independently."
-                            .to_owned(),
-                    ],
-                ]
-                .concat(),
+                disclosures: [clip, vec![IMPLICIT_START_DISCLOSURE.to_owned()]].concat(),
             })
         }
     }
+}
+
+/// Plan a **multi-node drag**: move every anchor named in `moves` to its own
+/// target, as ONE surgery over one content stream.
+///
+/// # Why this exists rather than a loop over [`plan_move_node`]
+///
+/// **One gesture must be one undo.** The GUI has had a multi-node selection
+/// set since `Pass 41.0` and could not move it, because N calls to
+/// `plan_move_node` would put N entries on the undo stack for one drag —
+/// the operator presses Ctrl+Z once and half their nodes stay moved.
+///
+/// **And N calls owe the same disclosure N times.** Expanding two `re`
+/// rectangles in one drag would tell the operator the same paragraph twice;
+/// this verb de-duplicates, and switches to singular wording when exactly
+/// one shape provoked it.
+///
+/// ## What is NOT a reason, having been checked
+///
+/// It is tempting to argue that a loop would **corrupt** an `re`: all four
+/// corners are described by the same four operands of one operator, and
+/// [`plan_move_node`] handles a single corner by expanding that operator
+/// into its §8.5.2.1 `m`/`l`/`l`/`l`/`h` equivalent, so a second call would
+/// be planning against bytes the first already replaced.
+///
+/// **That argument is wrong, and the test suite proves it rather than
+/// asserting it** (`node_multi_move.rs`). A caller that re-decomposes
+/// between calls — which it must, since `plan_move_node` takes a
+/// `ContentStream` — gets fresh offsets, and the expansion preserves both
+/// the anchor **count** and the anchor **order**, so index *k* still names
+/// the same geometric point afterwards. The loop produces byte-identical
+/// output to this function for that case.
+///
+/// The reason to record the refutation instead of quietly dropping it: it
+/// is the argument a future reader will reconstruct when they wonder
+/// whether this verb could be deleted, and they should find it already
+/// tested and answered.
+///
+/// # The mechanism: group by the OPERATOR, not by the node
+///
+/// Each anchor knows the byte range of the operator that defines it. Anchors
+/// are therefore bucketed by `byte_start`, and **each bucket produces exactly
+/// one replacement** covering that range:
+///
+/// - four `re` corners in one bucket → one expansion, with all four
+///   requested corners applied to it before it is emitted;
+/// - an `m`/`l`/`c`/`v`/`y` endpoint → its own operand pair rewritten, every
+///   other operand byte-verbatim;
+/// - an [implicit](AnchorKind::Implicit) reused subpath start → the omitted
+///   `m` written in front of the segment that inherits it, **and if that same
+///   segment also carries a moved endpoint, both changes land in the one
+///   replacement** rather than as two overlapping edits (which `splice`
+///   would silently drop).
+///
+/// The buckets are disjoint by construction, so the splice is
+/// non-overlapping without needing to be checked for it.
+///
+/// # Errors
+///
+/// [`VectorEditError::EmptyMove`] for an empty request;
+/// [`VectorEditError::DuplicateNodeInMove`] when one anchor is named twice
+/// (refused rather than resolved — see that variant);
+/// [`VectorEditError::NodeOutOfRange`] for an index past the anchor count;
+/// [`VectorEditError::DegenerateCtm`]; [`VectorEditError::MalformedOperand`].
+/// **Every refusal happens before any byte is planned**, so a rejected
+/// request leaves the caller exactly where it was (rule 4).
+///
+/// # Returns
+///
+/// The [disclosures](PlannedEdit::disclosures) the surgery owes, **each at
+/// most once however many nodes provoked it** — a five-corner drag across
+/// two rectangles should not tell the operator the same paragraph five
+/// times. [`PlannedEdit::operators_touched`] counts **operators**, not
+/// nodes, so moving four corners of one rectangle reports 1.
+///
+/// # Examples
+///
+/// Two ordinary anchors, two operators rewritten, everything else verbatim:
+///
+/// ```
+/// use pdfce_core::content::ContentStream;
+/// use pdfce_core::vector::{decompose, NoXObjects, Matrix, Point, VectorObject};
+/// use pdfce_core::vector::edit::plan_move_nodes;
+///
+/// let cs = ContentStream::parse(b"10 20 m 100 200 l 50 60 l S".to_vec()).unwrap();
+/// let model = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+/// let VectorObject::Path(path) = &model.objects[0] else { unreachable!() };
+/// let plan = plan_move_nodes(
+///     &cs,
+///     path,
+///     &[(0, Point::new(11.0, 21.0)), (2, Point::new(51.0, 61.0))],
+/// )
+/// .unwrap();
+/// assert_eq!(plan.content, b"11 21 m 100 200 l 51 61 l S");
+/// assert_eq!(plan.operators_touched, 2);
+/// ```
+///
+/// Two corners of ONE rectangle — the case an N-call loop cannot do,
+/// because both are the same four operands of the same operator:
+///
+/// ```
+/// use pdfce_core::content::ContentStream;
+/// use pdfce_core::vector::{decompose, NoXObjects, Matrix, Point, VectorObject};
+/// use pdfce_core::vector::edit::plan_move_nodes;
+///
+/// let cs = ContentStream::parse(b"0 0 10 10 re S".to_vec()).unwrap();
+/// let model = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+/// let VectorObject::Path(path) = &model.objects[0] else { unreachable!() };
+/// // Corner 0 is (0,0); corner 2 is (10,10). Drag both outwards.
+/// let plan = plan_move_nodes(
+///     &cs,
+///     path,
+///     &[(0, Point::new(-1.0, -1.0)), (2, Point::new(12.0, 12.0))],
+/// )
+/// .unwrap();
+/// // ONE expansion carrying BOTH moves — corners 1 and 3 keep the
+/// // coordinates the original `re` implied.
+/// assert_eq!(plan.content, b"-1 -1 m 10 0 l 12 12 l 0 10 l h S");
+/// assert_eq!(plan.operators_touched, 1);
+/// assert_eq!(plan.disclosures.len(), 1);
+/// ```
+pub fn plan_move_nodes(
+    content: &ContentStream,
+    obj: &PathObject,
+    moves: &[(usize, Point)],
+) -> Result<PlannedEdit, VectorEditError> {
+    if moves.is_empty() {
+        return Err(VectorEditError::EmptyMove);
+    }
+    // Duplicate check FIRST, before any lookup: a request that names node 3
+    // twice is malformed whether or not node 3 exists, and reporting the
+    // out-of-range error for it would send the caller after the wrong bug.
+    let mut seen = BTreeSet::new();
+    for (index, _) in moves {
+        if !seen.insert(*index) {
+            return Err(VectorEditError::DuplicateNodeInMove { index: *index });
+        }
+    }
+
+    let inv = obj.ctm.inverse().ok_or(VectorEditError::DegenerateCtm)?;
+    let anchors = enumerate_anchors(content, obj.tokens.start, obj.tokens.end);
+    let count = anchors.len();
+
+    // Resolve every request before planning anything, so an out-of-range
+    // index in position 7 does not leave positions 0..6 already spliced.
+    let mut resolved: Vec<(usize, Point)> = Vec::with_capacity(moves.len());
+    for (index, to_page) in moves {
+        if *index >= count {
+            return Err(VectorEditError::NodeOutOfRange {
+                index: *index,
+                count,
+            });
+        }
+        resolved.push((*index, inv.map_point(*to_page)));
+    }
+
+    // Bucket by the operator each anchor lives in. `BTreeMap` so the buckets
+    // come out in byte order, which makes the emitted edit list already
+    // sorted the way `splice` wants it.
+    let mut buckets: BTreeMap<usize, Vec<(usize, Point)>> = BTreeMap::new();
+    for (index, to_user) in resolved {
+        let Some(site) = anchors.get(index) else {
+            return Err(VectorEditError::NodeOutOfRange { index, count });
+        };
+        buckets
+            .entry(site.byte_start)
+            .or_default()
+            .push((index, to_user));
+    }
+
+    let mut edits: Vec<(usize, usize, Vec<u8>)> = Vec::with_capacity(buckets.len());
+    // COUNTED, not flagged, so the disclosure can be singular when exactly
+    // one shape provoked it — which is what makes a one-element batch say
+    // precisely what `plan_move_node` says for the same node, and lets a
+    // front end use one verb for both cases without the wording changing
+    // under it. Pinned by `a_single_element_batch_matches_the_single_node_verb`.
+    let mut rects_expanded = 0usize;
+    let mut implicits_written = 0usize;
+
+    for (_, group) in buckets {
+        // Every anchor in a bucket shares one operator, so any of them
+        // supplies its byte range and its operands.
+        let Some(first) = group.first().and_then(|(i, _)| anchors.get(*i)) else {
+            return Err(VectorEditError::MalformedOperand);
+        };
+        let (byte_start, byte_end) = (first.byte_start, first.byte_end);
+
+        // --- (2) The `re` case: one expansion carrying every moved corner.
+        if group
+            .iter()
+            .filter_map(|(i, _)| anchors.get(*i))
+            .any(|s| matches!(s.kind, AnchorKind::Rectangle { .. }))
+        {
+            let [x, y, w, h] = first.operands[..] else {
+                return Err(VectorEditError::MalformedOperand);
+            };
+            let mut pts = rect_corners(x, y, w, h);
+            for (index, to_user) in &group {
+                let Some(site) = anchors.get(*index) else {
+                    return Err(VectorEditError::MalformedOperand);
+                };
+                // A bucket holding an `re` corner cannot also hold an
+                // Editable or Implicit anchor — `re` opens and closes its own
+                // subpath, so nothing else is defined by those bytes. Refused
+                // rather than assumed, because silently ignoring the other
+                // kind would drop a node the caller asked to move.
+                let AnchorKind::Rectangle { corner } = site.kind else {
+                    return Err(VectorEditError::MalformedOperand);
+                };
+                let Some(p) = pts.get_mut(corner) else {
+                    return Err(VectorEditError::NodeOutOfRange {
+                        index: *index,
+                        count,
+                    });
+                };
+                *p = *to_user;
+            }
+            let mut out = Vec::new();
+            for (i, p) in pts.iter().enumerate() {
+                if i > 0 {
+                    out.push(b' ');
+                }
+                out.extend_from_slice(&emit_op(&[p.x, p.y], if i == 0 { b"m" } else { b"l" }));
+            }
+            out.extend_from_slice(b" h");
+            edits.push((byte_start, byte_end, out));
+            rects_expanded += 1;
+            continue;
+        }
+
+        // --- (1)+(3) Editable pairs rewritten in place, and an implicit
+        // start written in front of the same operator when both land here.
+        //
+        // The operands come from the bucket's EDITABLE site, not from
+        // `first`. An `Implicit` anchor is not defined by operands of its
+        // own — it borrows the byte range of the segment that inherits it —
+        // so if the implicit anchor happened to sort first, `first.operands`
+        // would be the wrong list (or empty) and every `Editable` slot check
+        // below would fail with `MalformedOperand`. Found by
+        // `an_implicit_start_and_its_segments_endpoint_share_one_replacement`,
+        // which is the only shape where a bucket holds both kinds.
+        let editable_site = group
+            .iter()
+            .filter_map(|(i, _)| anchors.get(*i))
+            .find(|s| matches!(s.kind, AnchorKind::Editable));
+        let mut operands = editable_site.map_or_else(Vec::new, |s| s.operands.clone());
+        let keyword = editable_site.map_or_else(Vec::new, |s| s.keyword.clone());
+        let mut editable_touched = false;
+        let mut implicit_at: Option<Point> = None;
+        for (index, to_user) in &group {
+            let Some(site) = anchors.get(*index) else {
+                return Err(VectorEditError::MalformedOperand);
+            };
+            match site.kind {
+                AnchorKind::Editable => {
+                    let x_slot = site.pair_index * 2;
+                    let y_slot = x_slot + 1;
+                    if x_slot >= operands.len() || y_slot >= operands.len() {
+                        return Err(VectorEditError::MalformedOperand);
+                    }
+                    if let Some(x) = operands.get_mut(x_slot) {
+                        *x = to_user.x;
+                    }
+                    if let Some(y) = operands.get_mut(y_slot) {
+                        *y = to_user.y;
+                    }
+                    editable_touched = true;
+                }
+                AnchorKind::Implicit => implicit_at = Some(*to_user),
+                AnchorKind::Rectangle { .. } => {
+                    // Unreachable: the `re` branch above claimed any bucket
+                    // containing one. Guarded rather than assumed.
+                    return Err(VectorEditError::MalformedOperand);
+                }
+            }
+        }
+
+        // The operator itself: re-emitted when an endpoint moved, otherwise
+        // the ORIGINAL bytes, so an implicit-only move leaves the segment it
+        // prefixes byte-verbatim (rule 3 inside one operator).
+        let body: Vec<u8> = if editable_touched {
+            emit_op(&operands, &keyword)
+        } else {
+            content
+                .buf
+                .get(byte_start..byte_end)
+                .ok_or(VectorEditError::MalformedOperand)?
+                .to_vec()
+        };
+        let out = if let Some(p) = implicit_at {
+            implicits_written += 1;
+            let mut m = emit_op(&[p.x, p.y], b"m");
+            m.push(b' ');
+            m.extend_from_slice(&body);
+            m
+        } else {
+            body
+        };
+        edits.push((byte_start, byte_end, out));
+    }
+
+    // Disclosures, de-duplicated: each shape change is described ONCE
+    // however many nodes provoked it, and in the SINGULAR when exactly one
+    // did — which is what makes a one-element batch word its result exactly
+    // as `plan_move_node` words the same node's.
+    let mut disclosures = clip_disclosure(content, obj);
+    match rects_expanded {
+        0 => {}
+        1 => disclosures.push(RECT_EXPANDED_DISCLOSURE.to_owned()),
+        _ => disclosures.push(RECT_EXPANDED_DISCLOSURE_PLURAL.to_owned()),
+    }
+    match implicits_written {
+        0 => {}
+        1 => disclosures.push(IMPLICIT_START_DISCLOSURE.to_owned()),
+        _ => disclosures.push(IMPLICIT_START_DISCLOSURE_PLURAL.to_owned()),
+    }
+
+    let operators_touched = edits.len();
+    Ok(PlannedEdit {
+        content: splice(&content.buf, &mut edits),
+        operators_touched,
+        disclosures,
+    })
 }
 
 /// Which of a node's two Bézier control points ("handles") to move.
