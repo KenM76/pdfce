@@ -3445,12 +3445,31 @@ click rows to select objects you cannot see."
 /// consequence as *"I still don't seem to have a way to edit/delete nodes"*,
 /// when node editing in fact worked and they were simply never told they had
 /// arrived.
+///
+/// # `Pass 32.0`: the same rung, two different verb sets
+///
+/// The Part rung is now shared between a path's SUBPATHS and a text
+/// object's RUNS, and `is_run` selects the wording. Not cosmetic: the
+/// path sentence offers *"drag it to move just this part"* and
+/// *"double-click one of its points"*, and **a run has neither** — no
+/// `move_text_run` verb exists anywhere in core, and a run has no anchors
+/// to descend to. Reusing the path sentence would assert two affordances
+/// that are not there, which R83 forbids by name.
+///
+/// `refuses_delete` states the §9.4.2 guard **before** the operator
+/// presses Delete rather than after it refuses: a run whose successor
+/// inherits its position cannot be deleted without moving that successor,
+/// and on a real document some runs are deletable and some are not with no
+/// visible difference between them. The remedy — delete the later run
+/// first — always works, so it goes in the same sentence as the refusal.
 pub fn entered_object_readout(
     object: usize,
     subpath: Option<usize>,
     node: Option<usize>,
     parts: Option<usize>,
     stacked: Option<(usize, usize)>,
+    is_run: bool,
+    refuses_delete: bool,
 ) -> String {
     let scope = match parts {
         Some(n) => format!("object #{object}, which is drawn as {n} separate part(s)"),
@@ -3476,6 +3495,24 @@ pub fn entered_object_readout(
             "Inside {scope} — POINT #{n} of part #{sp} is selected. Drag it to move it, click \
 another point to pick it, or press Escape to go back up to the whole part."
         ),
+        // A text RUN and a path SUBPATH share this rung and NOT its verb
+        // set, so they cannot share this sentence (`Pass 32.0`). A run has
+        // no drag-to-move (no core verb exists) and no Point rung beneath
+        // it (no anchors), so the path wording would name two affordances
+        // that are not there — R83's prohibition, not a wording preference.
+        (Some(sp), None) if is_run => {
+            let delete = if refuses_delete {
+                // Stated BEFORE the operator presses Delete, not after it
+                // refuses. The remedy is the actionable half and it is
+                // always available, so it goes in the same breath.
+                " Deleting this one is refused, because the run after it has no position of its own and would move — delete the later run first."
+            } else {
+                " Press Delete to remove just this run."
+            };
+            format!(
+                "Inside {scope} — RUN #{sp} is selected{stack}.{delete} Press Escape to go back to whole objects."
+            )
+        }
         (Some(sp), None) => format!(
             "Inside {scope} — PART #{sp} is selected{stack}. Drag it to move just this part, \
 double-click one of its points to work on the points, press Delete to remove the part, or press \
@@ -3524,6 +3561,48 @@ pub fn subpath_deleted(index: usize) -> String {
         "Part #{index} was deleted. You are back to whole objects — press Ctrl+Z to undo, or \
 double-click the object to work inside it again."
     )
+}
+
+/// Status note after deleting one text RUN of a text object (`Pass 32.0`).
+///
+/// The twin of [`subpath_deleted`], and deliberately worded to the same
+/// shape — same ordinal-as-history framing (the remaining runs renumber, so
+/// "run #2 was deleted" stays true afterwards where "run #2 is selected"
+/// would not), same explicit naming of undo.
+///
+/// **"Run", not "label".** "Label" presumes the CAD/dimension case that
+/// motivated this Pass; a run is just as often a fragment of ordinary
+/// prose. "Run" is the honest structural word and it is already the
+/// project's vocabulary in code (`TextRun`, `hit_test_text_runs`) — a
+/// UI-only synonym would be a second word for one thing.
+pub fn text_run_deleted(index: usize) -> String {
+    format!(
+        "Run #{index} was deleted — the rest of the text object is untouched. You are back to whole objects — press Ctrl+Z to undo, or double-click the object to work inside it again."
+    )
+}
+
+/// Status note when deleting a part (a subpath or a text run) is REFUSED.
+///
+/// # Why this is a note and not a save failure
+///
+/// It used to be neither: `delete_selected_subpath` routed every refusal
+/// through `SaveOutcome::Failed`, the "the document could not be written to
+/// disk" channel, for an answer that has nothing to do with saving.
+/// [`node_delete_refused`] — three functions below, for the rung one level
+/// down — already states the rule this broke: a refused delete is an
+/// expected answer at that rung, not a document that could not be written.
+///
+/// # The message is core's, verbatim
+///
+/// Both refusals this can carry —
+/// `DeleteWouldMoveNextSubpath` and `DeleteWouldMoveNextRun` — already name
+/// their own remedy, and the run one's remedy ("delete the later run
+/// first") is the operator's whole way forward. Paraphrasing it here would
+/// be a second wording of one fact, and the first thing a paraphrase loses
+/// is the part that tells you what to do (R1/R20, the convention
+/// `node_delete_refused` already follows).
+pub fn part_delete_refused(reason: &str) -> String {
+    format!("That part was not deleted. {reason}")
 }
 
 /// Status note when Delete is pressed while a POINT is selected (Pass 36.0).

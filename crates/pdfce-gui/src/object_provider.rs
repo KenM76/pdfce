@@ -85,6 +85,31 @@ pub struct ObjectModelProvider {
     to_pdf: Option<Transform>,
 }
 
+/// Which KIND of part the "Part" rung is standing on for a given object.
+///
+/// The rung is shared between path SUBPATHS and text RUNS (`Pass 32.0`),
+/// and almost everything about it is identical — nearest-first hit order,
+/// an outline to draw, Escape to ascend, Delete to remove. What differs is
+/// the **verb set**, and that is exactly what this tells a caller:
+///
+/// | | `Subpath` | `Run` |
+/// |---|---|---|
+/// | Delete | `delete_subpath` | `delete_text_run` |
+/// | Drag to move | `move_subpath` | **nothing — no core verb exists** |
+/// | Descend to Point | yes | no (a run has no anchors) |
+///
+/// The Point-rung row needs no guard anywhere: `nearest_node` reaches
+/// `subpath_node_points`, which matches `VectorObject::Path` only, so a
+/// text entry can never produce a node hit. The ladder caps itself at two
+/// rungs for text by construction rather than by a check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PartKind {
+    /// A subpath of a path object.
+    Subpath,
+    /// A show operator ("run") of a text object.
+    Run,
+}
+
 impl ObjectModelProvider {
     /// Build a provider for `page` (at `page_index`) from `view`.
     ///
@@ -171,6 +196,130 @@ impl ObjectModelProvider {
             FALLBACK_SELECT_TOLERANCE
         };
         pdfce_core::vector::hit_test_subpaths(&self.objects, object, pdf, tolerance)
+    }
+
+    /// What kind of part the object at `index` is decomposed into, or
+    /// `None` for an object with no Part rung at all (an image).
+    pub(crate) fn part_kind(&self, index: usize) -> Option<PartKind> {
+        match self.objects.objects.get(index) {
+            Some(VectorObject::Path(_)) => Some(PartKind::Subpath),
+            Some(VectorObject::Text(_)) => Some(PartKind::Run),
+            _ => None,
+        }
+    }
+
+    /// Which part of `object` a canvas-space click lands on — **whichever
+    /// kind of part that object has** (`Pass 32.0`).
+    ///
+    /// ONE dispatcher rather than a kind match at each call site. The
+    /// alternative is the duplicated-predicate drift `apply_click_depth`'s
+    /// own doc comment warns about under R92: two places deciding "which
+    /// part is under the pointer" go out of step invisibly, and the
+    /// operator finds that descending works for a drawing and not for a
+    /// label.
+    pub(crate) fn part_hits(&self, object: usize, point: Pos2, tolerance: f64) -> Vec<usize> {
+        match self.part_kind(object) {
+            Some(PartKind::Subpath) => self.subpath_hits(object, point, tolerance),
+            Some(PartKind::Run) => self.text_run_hits(object, point, tolerance),
+            None => Vec::new(),
+        }
+    }
+
+    /// A part's bounds in **canvas** space, for drawing its outline —
+    /// whichever kind of part it is. The dispatcher for
+    /// [`Self::subpath_bounds_canvas`] / [`Self::text_run_bounds_canvas`],
+    /// for the same R92 reason as [`Self::part_hits`].
+    pub(crate) fn part_bounds_canvas(&self, object: usize, part: usize) -> Option<Rect> {
+        match self.part_kind(object) {
+            Some(PartKind::Subpath) => self.subpath_bounds_canvas(object, part),
+            Some(PartKind::Run) => self.text_run_bounds_canvas(object, part),
+            None => None,
+        }
+    }
+
+    /// How many parts the object at `index` has, whichever kind they are.
+    pub(crate) fn part_count(&self, index: usize) -> usize {
+        match self.part_kind(index) {
+            Some(PartKind::Subpath) => self.subpath_count(index),
+            Some(PartKind::Run) => self.text_run_count(index),
+            None => 0,
+        }
+    }
+    /// Which **run** (show operator) of the text object at `object` a
+    /// canvas-space click lands on — the text-side twin of
+    /// [`Self::subpath_hits`] (`Pass 32.0`).
+    ///
+    /// A thin adapter over [`pdfce_core::vector::hit_test_text_runs`], with
+    /// the same canvas→PDF conversion and the same degenerate-tolerance
+    /// fallback its sibling uses. Sharing that fallback matters for the same
+    /// reason: without it a click could select a text object and then find
+    /// none of its runs, which reads as "the second level is broken" rather
+    /// than "the tolerance was zero".
+    ///
+    /// Nearest first. **Empty for a non-text object, an out-of-range index,
+    /// or a text object whose runs could not be laid out** — the core query
+    /// deliberately does not fall back to the object's enclosing box there,
+    /// because naming run 0 for an object whose runs were never measured
+    /// would hand a caller a deletable target that is the wrong one.
+    pub(crate) fn text_run_hits(&self, object: usize, point: Pos2, tolerance: f64) -> Vec<usize> {
+        let Some(pdf) = self.canvas_to_pdf(point) else {
+            return Vec::new();
+        };
+        let tolerance = if tolerance.is_finite() && tolerance > 0.0 {
+            tolerance
+        } else {
+            FALLBACK_SELECT_TOLERANCE
+        };
+        pdfce_core::vector::hit_test_text_runs(&self.objects, object, pdf, tolerance)
+    }
+
+    /// How many runs the text object at `object` has, or `0` for anything
+    /// else — the text twin of [`Self::subpath_count`], and `0` for the same
+    /// reason it is: a path has no runs, and a loop over none of them is
+    /// exactly the right amount of work.
+    pub(crate) fn text_run_count(&self, object: usize) -> usize {
+        match self.objects.objects.get(object) {
+            Some(VectorObject::Text(t)) => t.runs.len(),
+            _ => 0,
+        }
+    }
+
+    /// A text run's bounds in **canvas** space, for drawing its outline.
+    ///
+    /// Same argument as [`Self::subpath_bounds_canvas`]: the object's own
+    /// bounds would draw a rectangle around every label on the sheet and
+    /// tell the operator they had selected the whole thing again — which is
+    /// the misunderstanding entering the object exists to resolve. On the
+    /// measured CAD export that rectangle spans the entire drawing.
+    pub(crate) fn text_run_bounds_canvas(&self, object: usize, run: usize) -> Option<Rect> {
+        let Some(VectorObject::Text(t)) = self.objects.objects.get(object) else {
+            return None;
+        };
+        self.pdf_bounds_to_canvas(t.runs.get(run)?.bounds)
+    }
+
+    /// Whether deleting run `run` of text object `object` would be refused
+    /// because the run AFTER it has no position of its own (§9.4.2).
+    ///
+    /// A pure query the shell asks **before** offering the control (R83),
+    /// answered from the same `positioned_by` flag
+    /// [`pdfce_core::edit::EditSession::delete_text_run`] refuses on — so a
+    /// disabled affordance and the verb cannot disagree about which runs are
+    /// deletable.
+    ///
+    /// `false` for a non-text object or an out-of-range index: there is no
+    /// deletion to refuse.
+    pub(crate) fn text_run_delete_would_move_next(&self, object: usize, run: usize) -> bool {
+        let Some(VectorObject::Text(t)) = self.objects.objects.get(object) else {
+            return false;
+        };
+        // The LAST run is never refused — nothing follows it to be moved.
+        // And a single-run object deletes the whole text object, which the
+        // core verb allows unconditionally.
+        t.runs.len() > 1
+            && t.runs.get(run + 1).is_some_and(|next| {
+                next.positioned_by == pdfce_core::vector::RunPositioning::Inherited
+            })
     }
 
     /// A subpath's bounds in **canvas** space, for drawing its outline.

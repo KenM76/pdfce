@@ -3278,11 +3278,17 @@ impl OpenDoc {
         } else {
             self.entered.map(|e| e.object)
         };
+        // `part_hits`, not `subpath_hits` (`Pass 32.0`): the Part rung is
+        // shared between a path's SUBPATHS and a text object's RUNS, and the
+        // provider owns the one kind match. Two places deciding "which part
+        // is under the pointer" is the duplicated-predicate drift this
+        // function's own doc comment warns about under R92 — it would show up
+        // as descending working for a drawing and not for a label.
         let hits: Vec<usize> = probe
             .and_then(|o| {
                 self.object_model
                     .as_ref()
-                    .map(|p| p.subpath_hits(o, canvas_pos, tol))
+                    .map(|p| p.part_hits(o, canvas_pos, tol))
             })
             .unwrap_or_default();
 
@@ -4508,7 +4514,7 @@ impl PdfceApp {
     }
 
     fn delete_selected_subpath(&mut self) {
-        let (page_index, object_index, subpath_index) = {
+        let (page_index, object_index, subpath_index, kind) = {
             let Status::Open(doc) = &self.status else {
                 return;
             };
@@ -4518,14 +4524,32 @@ impl PdfceApp {
             let Some(subpath) = entered.subpath else {
                 return;
             };
-            (doc.view.page_index, entered.object, subpath)
+            // WHICH VERB depends on the object kind (`Pass 32.0`). The Part
+            // rung is shared between a path's subpaths and a text object's
+            // runs, and everything about it is the same except the verb set —
+            // so this is the one place that has to ask.
+            let kind = doc
+                .object_model
+                .as_ref()
+                .and_then(|p| p.part_kind(entered.object));
+            (doc.view.page_index, entered.object, subpath, kind)
         };
         let Status::Open(doc) = &mut self.status else {
             return;
         };
-        let outcome = doc
-            .session_mut()
-            .delete_subpath(page_index, object_index, subpath_index);
+        let outcome = match kind {
+            Some(object_provider::PartKind::Run) => {
+                doc.session_mut()
+                    .delete_text_run(page_index, object_index, subpath_index)
+            }
+            // `Subpath`, and `None` — an object with no Part rung cannot have
+            // been entered, so the fall-through only reaches a path, and the
+            // path verb's own out-of-range refusal covers the impossible case
+            // rather than a silent return that would look like a dead key.
+            _ => doc
+                .session_mut()
+                .delete_subpath(page_index, object_index, subpath_index),
+        };
         let reported = outcome
             .as_ref()
             .map_err(std::string::ToString::to_string)
@@ -4541,9 +4565,31 @@ impl PdfceApp {
                 // `provider_page` still equals the current page.
                 doc.refresh_pages();
                 doc.ensure_object_provider();
-                self.edit_note = Some(ui_text::subpath_deleted(subpath_index));
+                self.edit_note = Some(match kind {
+                    Some(object_provider::PartKind::Run) => {
+                        ui_text::text_run_deleted(subpath_index)
+                    }
+                    _ => ui_text::subpath_deleted(subpath_index),
+                });
             }
-            Err(err) => self.save_result = Some(SaveOutcome::Failed(err.to_string())),
+            // ★ FIXED HERE, A PRE-EXISTING DEFECT: this used to be
+            // `self.save_result = Some(SaveOutcome::Failed(...))` — the
+            // "the document could not be written to disk" channel — for
+            // every refusal, including `DeleteWouldMoveNextSubpath`, which
+            // is an ordinary expected answer at this rung.
+            //
+            // `node_delete_refused`'s own doc comment, three functions away
+            // in `ui_text.rs`, states the convention this violated: *"Rendered
+            // as an ordinary note rather than as a save failure: a refused
+            // point delete is an expected answer at this rung, not a document
+            // that could not be written."* The Part rung was doing the
+            // opposite of what its own sibling documents.
+            //
+            // Found by `pdfce-ui-specialist` while reviewing the text-run
+            // wiring, and fixed for BOTH kinds rather than only the new one —
+            // patching the text half alone would leave the identical path-side
+            // bug standing next to the fix.
+            Err(err) => self.edit_note = Some(ui_text::part_delete_refused(&err.to_string())),
         }
         // Traced AFTER the outcome is applied, and carrying what the operator
         // will actually be told. A trace of the return value alone would have
@@ -18243,12 +18289,31 @@ fn selection_readout(doc: &OpenDoc, ui: &mut egui::Ui, expanded: &mut bool) {
     // — which is the number that explains why clicking a line selected an
     // entire view in the first place.
     if let Some(entered) = doc.entered {
-        let parts = doc.object_model.as_ref().and_then(|p| {
-            match p.page_objects().objects.get(entered.object) {
-                Some(pdfce_core::vector::VectorObject::Path(path)) => Some(path.subpaths.len()),
-                _ => None,
-            }
-        });
+        // Kind-aware since `Pass 32.0`: a text object's parts are its RUNS,
+        // and the path wording describes two things a run does not have — a
+        // drag-to-move verb (no core `move_text_run` exists at all) and a
+        // Point rung beneath it (a run has no anchors). Saying either would
+        // assert an affordance that is not there, which is R83's own
+        // prohibition rather than a matter of taste.
+        let kind = doc
+            .object_model
+            .as_ref()
+            .and_then(|p| p.part_kind(entered.object));
+        let parts = doc
+            .object_model
+            .as_ref()
+            .map(|p| p.part_count(entered.object))
+            .filter(|n| *n > 0);
+        // Whether the run currently standing at the Part rung refuses
+        // deletion (§9.4.2). O(1) — one flag lookup, no document walk — so
+        // it is safe to ask every frame, unlike the annotation preview that
+        // had to be gated on `contains_pointer()`.
+        let refuses_delete = entered.node.is_none()
+            && entered.subpath.is_some_and(|part| {
+                doc.object_model
+                    .as_ref()
+                    .is_some_and(|p| p.text_run_delete_would_move_next(entered.object, part))
+            });
         ui.label(ui_text::entered_object_readout(
             entered.object,
             entered.subpath,
@@ -18257,6 +18322,8 @@ fn selection_readout(doc: &OpenDoc, ui: &mut egui::Ui, expanded: &mut bool) {
             doc.subpath_cycle
                 .filter(|c| Some(c.produced) == entered.subpath)
                 .map(|c| (c.position(), c.total)),
+            matches!(kind, Some(object_provider::PartKind::Run)),
+            refuses_delete,
         ))
         .on_hover_text(ui_text::entered_object_tooltip());
     }
@@ -18653,7 +18720,7 @@ fn draw_selection_outlines(
     if let Some(entered) = doc.entered
         && let Some(sp) = entered.subpath
         && let Some(provider) = doc.object_model.as_ref()
-        && let Some(b) = provider.subpath_bounds_canvas(entered.object, sp)
+        && let Some(b) = provider.part_bounds_canvas(entered.object, sp)
         && let Some(page) = doc.pages.get(doc.view.page_index)
     {
         let painter = ui.painter_at(image_rect);
@@ -18930,7 +18997,8 @@ fn draw_selection_outlines(
             && let Some(provider) = doc.object_model.as_ref()
         {
             let painter = ui.painter_at(image_rect);
-            let part_count = provider.subpath_count(entered.object);
+            // Kind-aware (`Pass 32.0`): a text object's parts are its runs.
+            let part_count = provider.part_count(entered.object);
             diag::trace(|| format!("show-points object={} parts={part_count}", entered.object));
             let mut budget = canvas::MAX_DRAWN_NODES;
             let mut undrawn = 0usize;
@@ -18964,15 +19032,14 @@ fn draw_selection_outlines(
                 }
             }
             if undrawn > 0 {
-                let b =
-                    provider
-                        .subpath_bounds_canvas(entered.object, sp)
-                        .map_or(image_rect, |bb| {
-                            egui::Rect::from_two_pos(
-                                viewer::page_to_screen(bb.min, image_rect, extent, zoom),
-                                viewer::page_to_screen(bb.max, image_rect, extent, zoom),
-                            )
-                        });
+                let b = provider
+                    .part_bounds_canvas(entered.object, sp)
+                    .map_or(image_rect, |bb| {
+                        egui::Rect::from_two_pos(
+                            viewer::page_to_screen(bb.min, image_rect, extent, zoom),
+                            viewer::page_to_screen(bb.max, image_rect, extent, zoom),
+                        )
+                    });
                 painter.text(
                     b.left_top() + egui::vec2(4.0, -32.0),
                     egui::Align2::LEFT_TOP,
@@ -19696,7 +19763,7 @@ fn run_vector_edit_tool(
                 // operator watching the canvas still had no warning.
                 let (dx, dy) = drag.delta(ptr);
                 if let Some(prov) = doc.object_model.as_ref()
-                    && let Some(r) = prov.subpath_bounds_canvas(drag.object_index, sp_i)
+                    && let Some(r) = prov.part_bounds_canvas(drag.object_index, sp_i)
                 {
                     let d_screen = to_screen(Point::new(dx, dy))
                         .zip(to_screen(Point::new(0.0, 0.0)))
