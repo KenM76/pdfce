@@ -280,11 +280,15 @@ fn write_classic_entry(
     // The EOL pair — one of §7.5.4's three permitted forms, chosen by the
     // operator's `EOL-A1` setting. Each is exactly two bytes, which is
     // what keeps the entry at 20 and the `debug_assert_eq!` below honest.
-    out.extend_from_slice(match eol {
-        XrefEntryEol::SpaceLf => b" \n",
-        XrefEntryEol::SpaceCr => b" \r",
-        XrefEntryEol::CrLf => b"\r\n",
-    });
+    //
+    // `MatchSource` must already have been resolved by the save path,
+    // which is the only layer holding the base file's bytes. Its
+    // `bytes()` falls back to `SP LF` here rather than panicking: a
+    // writer that aborted mid-table because a setting reached it
+    // unresolved would turn a configuration slip into a lost save, and
+    // the fallback is the form pdfce emitted for its whole life before
+    // this setting existed.
+    out.extend_from_slice(&eol.bytes());
     debug_assert_eq!(out.len() - start, CLASSIC_ENTRY_LEN);
     Ok(())
 }

@@ -276,10 +276,25 @@ fn the_writer_honours_both_answers_to_the_trailing_eol_question() {
 }
 
 #[test]
-fn the_defaults_are_exactly_what_pdfce_emitted_before_the_settings_existed() {
+fn an_sp_lf_source_round_trips_identically_under_the_defaults() {
     // R169's non-negotiable: adding a knob changes no observable
     // behaviour. `SaveOptions::identity()` carries the defaults, and the
     // explicit-default save must be byte-identical to it.
+    //
+    // AMENDED 2026-08-08, and the amendment matters more than the test.
+    // The `xref_entry_eol` default is no longer `SpaceLf` — it is
+    // `MatchSource`, on the operator's ruling. This test kept passing
+    // across that change, which made it briefly the most misleading test
+    // in the suite: its NAME still claimed the defaults had not moved,
+    // and it only passed because `classic_source()` happens to be an
+    // `SP LF` file, so `MatchSource` resolves to `SpaceLf` and the bytes
+    // agree by coincidence rather than by contract.
+    //
+    // What it now asserts is the true and still-valuable thing: for a
+    // source in this form the default and the explicit form agree. The
+    // case that DISTINGUISHES them — a `CR LF` source, where the default
+    // deliberately no longer emits `SP LF` — is
+    // `a_full_rewrite_keeps_the_files_own_entry_eol` below.
     let doc = Document::from_bytes(classic_source()).expect("fixture loads");
     let (implicit, _) =
         save_full(&doc, &DirtySet::empty(), &SaveOptions::identity()).expect("save_full");
@@ -299,4 +314,134 @@ fn the_defaults_are_exactly_what_pdfce_emitted_before_the_settings_existed() {
         implicit.ends_with(b"%%EOF\n"),
         "default lost its trailing EOL"
     );
+}
+
+// ---------------------------------------------------------------------------
+// EOL-A1: the default now MATCHES THE SOURCE (operator ruling, 2026-08-08)
+// ---------------------------------------------------------------------------
+
+/// `observed_entry_eol` reads back exactly what each fixture was written
+/// with.
+///
+/// The fixtures are the ground truth here: `tools/gen-xref-eol-fixtures.py`
+/// wrote each one with a named form, so this is a genuine round trip
+/// through the file rather than a function agreeing with itself.
+#[test]
+fn the_source_files_own_eol_is_read_back_correctly() {
+    for (name, want) in [
+        ("entry-splf.pdf", XrefEntryEol::SpaceLf),
+        ("entry-spcr.pdf", XrefEntryEol::SpaceCr),
+        ("entry-crlf.pdf", XrefEntryEol::CrLf),
+    ] {
+        let bytes = std::fs::read(fixture(name)).expect("fixture");
+        assert_eq!(
+            xref::observed_entry_eol(&bytes),
+            Some(want),
+            "{name} declares {want:?}"
+        );
+    }
+}
+
+/// The headline: **a full rewrite preserves the file's own EOL form.**
+///
+/// This is the defect the operator ruled on. Under the old fixed `SP LF`
+/// default, rewriting `entry-crlf.pdf` changed two bytes in every entry of
+/// a document nobody had edited — the exact diff rule 3's minimal-diff
+/// discipline exists to prevent. Asserted on the SAVED BYTES (R159), and
+/// on the count of each form rather than on one entry, so a rewrite that
+/// got the first entry right and the rest wrong still fails.
+#[test]
+fn a_full_rewrite_keeps_the_files_own_entry_eol() {
+    for (name, want) in [
+        ("entry-splf.pdf", XrefEntryEol::SpaceLf),
+        ("entry-spcr.pdf", XrefEntryEol::SpaceCr),
+        ("entry-crlf.pdf", XrefEntryEol::CrLf),
+    ] {
+        let bytes = std::fs::read(fixture(name)).expect("fixture");
+        let doc = Document::from_bytes(bytes).expect("fixture loads");
+        // `SaveOptions::identity()` carries the DEFAULT setting, which is
+        // now `MatchSource` — so this asserts the shipped behaviour, not a
+        // specially-configured one.
+        let (out, _) =
+            save_full(&doc, &DirtySet::empty(), &SaveOptions::identity()).expect("save_full");
+        assert_eq!(
+            xref::observed_entry_eol(&out),
+            Some(want),
+            "{name}: a rewrite must not change the file's EOL form"
+        );
+
+        // And every entry agrees, not merely the first one.
+        let wanted_pair = want.bytes();
+        let table_at = out
+            .windows(5)
+            .position(|w| w == b"\nxref")
+            .expect("a classic table");
+        let tail = out.get(table_at..).expect("table tail");
+        let wrong: usize = [
+            XrefEntryEol::SpaceLf,
+            XrefEntryEol::SpaceCr,
+            XrefEntryEol::CrLf,
+        ]
+        .into_iter()
+        .filter(|form| form.bytes() != wanted_pair)
+        .map(|form| {
+            let pair = form.bytes();
+            tail.windows(20)
+                .filter(|w| {
+                    w.get(10) == Some(&b' ')
+                        && matches!(w.get(17), Some(b'n' | b'f'))
+                        && w.get(18..20) == Some(&pair[..])
+                })
+                .count()
+        })
+        .sum();
+        assert_eq!(wrong, 0, "{name}: some entries used a different form");
+    }
+}
+
+/// An explicit choice still wins over the source.
+///
+/// `MatchSource` is a default, not a policy — an operator who names a form
+/// gets that form even when the file disagrees.
+#[test]
+fn an_explicit_form_overrides_what_the_source_used() {
+    let bytes = std::fs::read(fixture("entry-crlf.pdf")).expect("fixture");
+    let doc = Document::from_bytes(bytes).expect("fixture loads");
+    let (out, _) = save_full(
+        &doc,
+        &DirtySet::empty(),
+        &SaveOptions::identity().with_xref_entry_eol(XrefEntryEol::SpaceLf),
+    )
+    .expect("save_full");
+    assert_eq!(
+        xref::observed_entry_eol(&out),
+        Some(XrefEntryEol::SpaceLf),
+        "an explicitly chosen form is not overridden by the source"
+    );
+}
+
+/// With nothing to match, the fallback is the form pdfce always emitted.
+///
+/// Covers the three "nothing to match" cases named on the enum: no `xref`
+/// keyword at all, an empty buffer, and a `startxref` with no table (which
+/// also guards the trap that `startxref` ENDS in `xref` and must not be
+/// mistaken for a table header).
+#[test]
+fn with_no_classic_table_to_match_the_fallback_is_space_lf() {
+    for buf in [
+        &b""[..],
+        &b"%PDF-1.7\nnot a table at all\n"[..],
+        &b"%PDF-1.7\ntrailer\n<< >>\nstartxref\n9\n%%EOF\n"[..],
+    ] {
+        assert_eq!(
+            xref::observed_entry_eol(buf),
+            None,
+            "nothing here is a classic entry table"
+        );
+        assert_eq!(
+            XrefEntryEol::MatchSource.resolve(buf),
+            XrefEntryEol::SpaceLf,
+            "the fallback is what pdfce emitted before this setting existed"
+        );
+    }
 }

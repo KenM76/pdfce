@@ -709,40 +709,89 @@ pub enum MissingAppearanceState {
 /// offered here — a settings file is not a licence to emit a
 /// non-conforming file.
 ///
-/// # Default: [`Self::SpaceLf`] — **EVIDENCE TIER (c), DOWNGRADE PENDING**
+/// # Default: [`Self::MatchSource`] — the register's own recommendation
 ///
-/// The spec RAG records `SP LF` as *"the common choice"*, which is tier-(c)
-/// shaped (*what other implementations do, as documented*). But the
-/// register's own §11.3 flags that this claim **carries no citation** and
-/// should either gain one or be down-graded to tier (d) in place. Treat it
-/// as tier (c) provisionally and tier (d) if pressed; do not quote it as
-/// settled.
+/// **Changed on the operator's ruling of 2026-08-08** ("change the shipped
+/// default so that we match the file's existing 2-byte EOL"), replacing a
+/// fixed `SP LF`.
 ///
-/// # The register recommends a fourth option pdfce does not implement
+/// `iso32000__ref__ambiguity_settings_register.md` §5.11 recommended
+/// exactly this and pdfce shipped the fixed form anyway, because
+/// implementing "match the source" needed an observation of the base
+/// file's bytes that no channel carried. The register said plainly that
+/// the shipped default was *"arguably wrong on pdfce's own invariant"*,
+/// and it was right: **rule 3 says objects pdfce did not logically touch
+/// are re-emitted byte-identical, and a full rewrite of a `CR LF` file
+/// under a fixed `SP LF` changes two bytes in every entry of the table.**
+/// On a 5,000-object file that is a 10,000-byte diff in a document nobody
+/// edited — the exact diff minimal-diff editing exists to prevent.
 ///
-/// `iso32000__ref__ambiguity_settings_register.md` §5.11's RECOMMENDED
-/// DEFAULT is **not** a fixed form at all — it is *"match the base file's
-/// existing form on a full rewrite; `SP LF` for a new file"*, on the
-/// ground that a full rewrite changing two bytes in every xref entry of an
-/// otherwise-untouched file is precisely the diff rule 3 / R34 exists to
-/// avoid. That option is **not offered here**, because implementing it
-/// means carrying an observation of the base file's bytes into the writer
-/// and pdfce has no such channel today. The shipped fixed `SP LF` is kept
-/// as the default per the no-behaviour-change rule; the divergence from
-/// the register's recommendation is recorded rather than quietly resolved.
+/// The channel now exists: [`crate::xref::observed_entry_eol`] reads the
+/// form back out of the base file, and the writer resolves
+/// [`Self::MatchSource`] against it. This is the same idea
+/// `Document::section_shape` already served at a coarser grain — *the base
+/// file's own form* (R33) — one level finer.
+///
+/// **Evidence tier is no longer (d)-shaped at all**, which is the quiet
+/// win here. The old default rested on the RAG's uncited claim that
+/// `SP LF` is *"the common choice"* — flagged in the register's §11.3 as
+/// carrying no source and pending a downgrade. The new default rests on
+/// nothing external: it derives the answer from the file in front of it,
+/// so there is no guess left to grade. The uncited claim now governs only
+/// the fallback, where there is genuinely nothing to match.
 ///
 /// **BYTES blast radius, zero render effect.** Every value is conforming,
 /// so no operator disclosure is needed when one is chosen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum XrefEntryEol {
-    /// `SP LF` (`20 0A`). **The shipped default.**
+    /// Write whichever of the three forms the file being saved already
+    /// used, falling back to `SP LF` when there is nothing to match.
+    ///
+    /// **The shipped default.** "Nothing to match" means a
+    /// cross-reference *stream* file (§7.5.8 is binary and has no entry
+    /// EOL), a file whose table is non-conforming at that position, or a
+    /// document pdfce assembled from nothing — see
+    /// [`crate::xref::observed_entry_eol`].
     #[default]
+    MatchSource,
+    /// Always `SP LF` (`20 0A`), whatever the source used.
     SpaceLf,
-    /// `SP CR` (`20 0D`).
+    /// Always `SP CR` (`20 0D`).
     SpaceCr,
-    /// `CR LF` (`0D 0A`).
+    /// Always `CR LF` (`0D 0A`).
     CrLf,
+}
+
+impl XrefEntryEol {
+    /// The concrete two bytes to emit, resolving [`Self::MatchSource`]
+    /// against the file being saved.
+    ///
+    /// `base` is the bytes of the document this save is derived from —
+    /// empty for a document assembled from nothing. Kept as a method on
+    /// the setting rather than a branch in the writer so that every
+    /// caller resolves it the same way; a second resolution site is how
+    /// an incremental save and a full rewrite would come to disagree
+    /// about the same file.
+    #[must_use]
+    pub fn resolve(self, base: &[u8]) -> Self {
+        match self {
+            Self::MatchSource => crate::xref::observed_entry_eol(base).unwrap_or(Self::SpaceLf),
+            other => other,
+        }
+    }
+
+    /// The two bytes themselves. [`Self::MatchSource`] resolves to the
+    /// fallback here, so callers that have a base file must call
+    /// [`Self::resolve`] first.
+    #[must_use]
+    pub const fn bytes(self) -> [u8; 2] {
+        match self {
+            Self::SpaceLf | Self::MatchSource => *b" \n",
+            Self::SpaceCr => *b" \r",
+            Self::CrLf => *b"\r\n",
+        }
+    }
 }
 
 /// Whether the writer puts an end-of-line byte after the final `%%EOF`
@@ -979,6 +1028,7 @@ const fn missing_as_token(policy: MissingAppearanceState) -> &'static str {
 /// [`separation_token`].
 const fn xref_entry_eol_token(eol: XrefEntryEol) -> &'static str {
     match eol {
+        XrefEntryEol::MatchSource => "match_source",
         XrefEntryEol::SpaceLf => "space_lf",
         XrefEntryEol::SpaceCr => "space_cr",
         XrefEntryEol::CrLf => "cr_lf",
@@ -1187,6 +1237,7 @@ impl Settings {
                 }),
             },
             "xref_entry_eol" => match value {
+                "match_source" => self.xref_entry_eol = XrefEntryEol::MatchSource,
                 "space_lf" => self.xref_entry_eol = XrefEntryEol::SpaceLf,
                 "space_cr" => self.xref_entry_eol = XrefEntryEol::SpaceCr,
                 "cr_lf" => self.xref_entry_eol = XrefEntryEol::CrLf,
@@ -1406,10 +1457,16 @@ impl Settings {
             "# Two invisible bookkeeping bytes at the end of every line of a saved\n\
              # file's index table. The standard permits exactly these three and no\n\
              # others (section 7.5.4). Nothing on screen changes; only the saved\n\
-             # bytes do. Change it only to match another tool byte-for-byte.\n\
-             #   space_lf = space then line-feed (default)\n\
-             #   space_cr = space then carriage-return\n\
-             #   cr_lf    = carriage-return then line-feed\n",
+             # bytes do.\n\
+             #\n\
+             # The default keeps whatever form the file you opened already used,\n\
+             # so saving a document pdfce did not otherwise change does not\n\
+             # rewrite two bytes in every line of its index for no reason.\n\
+             #   match_source = keep the form the file already uses (default);\n\
+             #                  space_lf for a file that has none\n\
+             #   space_lf     = always space then line-feed\n\
+             #   space_cr     = always space then carriage-return\n\
+             #   cr_lf        = always carriage-return then line-feed\n",
         );
         let _ = writeln!(
             out,
@@ -1660,10 +1717,33 @@ mod tests {
             MissingAppearanceState::PaintNothing,
             "a multi-entry /N with no /AS painted nothing"
         );
+        // THE ONE DELIBERATE EXCEPTION, and it is an operator ruling, not
+        // a later session flipping a default on its own authority — which
+        // is the thing this test exists to prevent.
+        //
+        // Ken, 2026-08-08: "change the shipped default so that we match
+        // the file's existing 2-byte EOL." The register had recommended
+        // exactly that and said the shipped fixed `SP LF` was "arguably
+        // wrong on pdfce's own invariant": a full rewrite of a `CR LF`
+        // file changes two bytes in every entry of a document nobody
+        // edited, which is the diff rule 3 exists to prevent.
+        //
+        // The guarantee this test protects is NOT broken by that, and the
+        // distinction is worth being precise about. `MatchSource` on an
+        // `SP LF` source resolves to `SP LF` — so for every file pdfce
+        // previously round-tripped byte-identically it still does. What
+        // changed is the answer for files pdfce was previously getting
+        // WRONG. Pinned from both sides: the resolution below, and
+        // `tests/xref_eol.rs::a_full_rewrite_keeps_the_files_own_entry_eol`.
         assert_eq!(
             d.xref_entry_eol,
+            XrefEntryEol::MatchSource,
+            "operator ruling 2026-08-08: the default matches the source file"
+        );
+        assert_eq!(
+            XrefEntryEol::MatchSource.resolve(b""),
             XrefEntryEol::SpaceLf,
-            "xref_out.rs emitted `SP LF`"
+            "with nothing to match, the answer is still what xref_out.rs always emitted"
         );
         assert_eq!(
             d.trailing_eol,

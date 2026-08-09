@@ -311,6 +311,15 @@ pub fn save_incremental(
     }
 
     let base = doc.bytes();
+    // Resolve `EOL-A1` against the FILE BEING SAVED, once, here.
+    //
+    // This is the only layer that has both the operator's setting and the
+    // base file's bytes, which is exactly why the default can now be
+    // "match the source" at all. Resolving once rather than at each
+    // `write_classic_table` call keeps an incremental save and a full
+    // rewrite of the same document from ever disagreeing about its form.
+    let entry_eol = options.xref_entry_eol.resolve(base);
+
     let mut out = base.to_vec();
     // R45: replacement values may carry authored appearance streams whose
     // spans point past the base file into the session's staging buffer.
@@ -473,7 +482,7 @@ pub fn save_incremental(
     let section_offset = out.len() as u64;
     match doc.section_shape() {
         SectionShape::Classic { .. } => {
-            xref_out::write_classic_table(&mut out, &entries, options.xref_entry_eol)?;
+            xref_out::write_classic_table(&mut out, &entries, entry_eol)?;
             xref_out::write_classic_tail(&mut out, &trailer, section_offset, options.trailing_eol);
         }
         SectionShape::Stream { id, widths } => {
@@ -542,6 +551,15 @@ pub fn save_full(
     options: &SaveOptions,
 ) -> Result<(Vec<u8>, SaveReport), WriteError> {
     let base = doc.bytes();
+    // Resolve `EOL-A1` against the FILE BEING SAVED, once, here.
+    //
+    // This is the only layer that has both the operator's setting and the
+    // base file's bytes, which is exactly why the default can now be
+    // "match the source" at all. Resolving once rather than at each
+    // `write_classic_table` call keeps an incremental save and a full
+    // rewrite of the same document from ever disagreeing about its form.
+    let entry_eol = options.xref_entry_eol.resolve(base);
+
     // R45: authored appearance streams live in the staging buffer past the
     // base file; replacement/created objects serialize against `base ++
     // staging`. `base` alone (zero-copy) when nothing was authored.
@@ -847,7 +865,7 @@ pub fn save_full(
     let section_offset = out.len() as u64;
     match xref_stream_id {
         None => {
-            xref_out::write_classic_table(&mut out, &entries, options.xref_entry_eol)?;
+            xref_out::write_classic_table(&mut out, &entries, entry_eol)?;
             xref_out::write_classic_tail(&mut out, &trailer, section_offset, options.trailing_eol);
         }
         Some(id) => {

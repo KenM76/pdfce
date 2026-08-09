@@ -1089,6 +1089,136 @@ fn parse_fixed_decimal(field: &[u8]) -> Option<u64> {
     Some(value)
 }
 
+// ---------------------------------------------------------------------------
+// Observing the base file's own entry EOL (§7.5.4, spec ambiguity EOL-A1)
+// ---------------------------------------------------------------------------
+
+/// Read back the 2-byte entry EOL a file's own classic cross-reference
+/// table used (§7.5.4).
+///
+/// # Why this exists
+///
+/// §7.5.4 fixes the entry at *"exactly 20 bytes long, including the
+/// end-of-line marker"* and then permits **three** spellings of those two
+/// bytes — `SP CR`, `SP LF`, `CR LF` — with no rule preferring any of
+/// them. That is the ambiguity catalogued as `EOL-A1`, and until this
+/// function existed pdfce answered it by always writing `SP LF`.
+///
+/// Always writing one form is wrong on pdfce's **own** invariant. Rule 3
+/// says objects pdfce did not logically touch are re-emitted
+/// byte-identical; a full rewrite of a `CR LF` file under a fixed `SP LF`
+/// changes two bytes in **every entry of the table** — a 10,000-byte diff
+/// on a 5,000-object file nobody edited. Minimal-diff editing exists to
+/// prevent exactly that, so the setting's default is now
+/// [`XrefEntryEol::MatchSource`] and this is what resolves it.
+///
+/// It is the same principle `Document::section_shape` already serves at a
+/// coarser grain — *the base file's own form* (R33). This is that idea one
+/// level finer: not merely "was it a table or a stream", but "which of the
+/// three legal spellings did it use".
+///
+/// # How it decides, and why it reads only the first entry
+///
+/// Finds the **last** `xref` keyword in the file (the newest section in an
+/// incrementally-updated file, which is the form a rewrite should match),
+/// steps over the subsection header, and reads bytes 18..20 of the first
+/// 20-byte record.
+///
+/// One entry, not a survey, because §7.5.4's fixed width means a file that
+/// mixed forms *within* a table would already be malformed in a way the
+/// entry parser rejects — so the first entry either speaks for all of them
+/// or the file does not load at all. Sampling more would cost a scan to
+/// answer a question the format has already answered.
+///
+/// # When it returns `None`
+///
+/// - The file has no classic `xref` table (a cross-reference **stream**
+///   file — §7.5.8 has no entry EOL at all, being binary).
+/// - The bytes at the expected position are not one of the three legal
+///   pairs, i.e. the file is non-conforming here.
+/// - There is no file yet: a document pdfce assembles from nothing has no
+///   base form to match.
+///
+/// In every one of those cases the caller falls back to `SP LF`, which is
+/// what pdfce emitted before this existed — so a file with nothing to
+/// match is written exactly as it always was.
+#[must_use]
+pub fn observed_entry_eol(buf: &[u8]) -> Option<crate::settings::XrefEntryEol> {
+    use crate::settings::XrefEntryEol;
+
+    // The LAST `xref` keyword: in an incrementally-updated file the newest
+    // section is the one a rewrite is replacing, so it is the one whose
+    // form should carry forward.
+    let at = last_xref_keyword(buf)?;
+
+    // `xref` then an EOL, then the subsection header `first count`, then
+    // its EOL, then the entries.
+    let mut pos = skip_one_eol(buf, at + 4);
+    // Step over the subsection header line. Deliberately tolerant: it is
+    // digits and spaces, and anything else means this is not a table the
+    // entry parser would have accepted either.
+    let header_start = pos;
+    while matches!(buf.get(pos), Some(b'0'..=b'9' | b' ')) {
+        pos += 1;
+    }
+    if pos == header_start {
+        return None;
+    }
+    pos = skip_one_eol(buf, pos);
+
+    let record = buf.get(pos..pos + 20)?;
+    // Confirm it really is an entry before trusting its last two bytes —
+    // otherwise a file whose table starts unexpectedly would have its
+    // trailing bytes read as an EOL and silently set the output's form.
+    parse_entry(record)?;
+    match (record.get(18), record.get(19)) {
+        (Some(b' '), Some(b'\n')) => Some(XrefEntryEol::SpaceLf),
+        (Some(b' '), Some(b'\r')) => Some(XrefEntryEol::SpaceCr),
+        (Some(b'\r'), Some(b'\n')) => Some(XrefEntryEol::CrLf),
+        _ => None,
+    }
+}
+
+/// Byte offset of the last `xref` keyword that begins a line.
+///
+/// Anchored to a line start so the `startxref` keyword — which ends in the
+/// same four letters — cannot be mistaken for a table header. That is not
+/// hypothetical: `startxref` appears in every classic file, *after* the
+/// table, so a naive search for `xref` would find it first when scanning
+/// backwards and land on the offset digits instead of an entry.
+fn last_xref_keyword(buf: &[u8]) -> Option<usize> {
+    let mut found = None;
+    let mut i = 0usize;
+    while let Some(rel) = buf.get(i..).and_then(|tail| find_subslice(tail, b"xref")) {
+        let at = i + rel;
+        // A line start, and NOT the tail of `startxref` — which ends in the
+        // same four letters and appears in every classic file, *after* the
+        // table. Without that exclusion this would return the offset digits
+        // following it instead of an entry.
+        //
+        // Deliberately strict about the preceding byte. An earlier version
+        // also tolerated leading spaces on the line; it was both panicky (it
+        // sliced) and pointless, because a table whose `xref` keyword is
+        // indented is not one the entry parser above would have accepted
+        // either — so tolerating it here could only ever produce an EOL
+        // reading for a file that does not load.
+        let at_line_start = at == 0 || matches!(buf.get(at - 1), Some(b'\r' | b'\n'));
+        let is_startxref = at >= 5 && buf.get(at - 5..at) == Some(b"start");
+        if at_line_start && !is_startxref {
+            found = Some(at);
+        }
+        i = at + 4;
+    }
+    found
+}
+
+/// First index of `needle` in `haystack`.
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,

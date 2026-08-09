@@ -2630,13 +2630,28 @@ pub fn setting_xref_eol_radius() -> &'static str {
 
 /// Space+LF label.
 pub fn setting_xref_eol_space_lf() -> &'static str {
-    "Space then newline (pdfce's default)"
+    "Always space then newline"
 }
 
 /// Space+LF explanation.
 pub fn setting_xref_eol_space_lf_note() -> &'static str {
-    "What pdfce has always written. Change this only if a specific tool in \
-your workflow demands otherwise."
+    "What pdfce wrote for every file before it learned to match. Choose a \
+fixed form only if a specific tool in your workflow demands one."
+}
+
+/// Match-the-source label.
+pub fn setting_xref_eol_match_source() -> &'static str {
+    "Keep whatever the file already uses (pdfce's default)"
+}
+
+/// Match-the-source explanation — says what the alternative COSTS, which
+/// is the whole reason this is the default.
+pub fn setting_xref_eol_match_source_note() -> &'static str {
+    "Saving a document pdfce did not otherwise change leaves its index \
+untouched. Picking a fixed form below would rewrite two bytes on every \
+line of the index of every file that used a different one — a large change \
+to a file you did not edit. Files that have no index of this kind get a \
+space then a newline."
 }
 
 /// Space+CR label.

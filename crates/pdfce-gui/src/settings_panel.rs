@@ -642,6 +642,13 @@ fn xref_eol_setting(ui: &mut egui::Ui, draft: &mut Draft) {
     option(
         ui,
         v,
+        XrefEntryEol::MatchSource,
+        ui_text::setting_xref_eol_match_source(),
+        Some(ui_text::setting_xref_eol_match_source_note()),
+    );
+    option(
+        ui,
+        v,
         XrefEntryEol::SpaceLf,
         ui_text::setting_xref_eol_space_lf(),
         Some(ui_text::setting_xref_eol_space_lf_note()),

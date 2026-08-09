@@ -1,0 +1,19 @@
+  [500/3714]
+  [1000/3714]
+  [1500/3714]
+  [2000/3714]
+  [2500/3714]
+  [3000/3714]
+  [3500/3714]
+
+=== tolerated-oddity disclosure the parity harness never reads ===
+pages probed                                   : 3714
+  render failed now (excluded from ratios)     : 0
+pages with tolerated > 0                       : 442  (11.9%)
+  ...AND recorded clean-by-construction        : 202
+  ...AND bucketed 'benign-renderer-noise'      : 202
+
+A clean-by-construction page is one the band is DERIVED from. Every
+page in the third line above told pdfce-cli's operator that the
+interpreter could not act on something, and still helped set the
+threshold that decides which divergences are called benign.
