@@ -175,6 +175,21 @@ jobs:
       - name: check that operator-visible strings live in ui_text.rs
         run: bash tools/check-ui-strings.sh
 
+      # ARCHITECTURE.md 4.1(P): a field carrying a DISCLOSURE OBLIGATION is
+      # assigned only inside its own traced setter, so every note that
+      # reaches the operator also reaches the observation harness.
+      #
+      # Runs beside the string gate because it guards the same surface from
+      # the other side: R1 asks whether the words live where they can be
+      # reviewed; this asks whether they can be SEEN to have been said.
+      #
+      # The rule it enforces was broken at 34 sites and nobody noticed,
+      # because the failure mode of a disclosure channel with no trace is
+      # that "fired" and "never fired" look identical. See the script's
+      # header for how it was found.
+      - name: check the disclosure channel goes through its traced setter
+        run: bash tools/check-disclosure-channel.sh
+
   cross-check:
     name: cross-target compile check (macOS / wasm32)
     runs-on: ubuntu-latest

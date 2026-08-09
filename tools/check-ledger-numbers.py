@@ -175,8 +175,33 @@ def collect_passes(lines: list[str], secs):
         if not re.match(r"^#{2,4} (?:★ )?Pass ", ln):
             continue
         prefix = ln.split("—")[0]
+        # A STAGED-SHIP QUALIFIER makes two entries for one Pass legitimate.
+        #
+        # `Pass 32.0 (core + CLI)` and `Pass 32.0 (GUI half)` are ONE Pass
+        # shipped in stages, each filed as it landed — which is the
+        # append-only discipline working, not an ID collision. The hazard
+        # this check exists for is a Pass ID minted twice for UNRELATED
+        # work; two qualified halves of one Pass are the opposite of that.
+        #
+        # So the qualifier joins the key. That makes the check STRICTER
+        # where it matters, not looser: two entries both qualified
+        # `(GUI half)`, or two both unqualified, still collide — and those
+        # are the shapes that actually mean somebody re-used an ID. Before
+        # this, `Pass 32.0 (core + CLI)` twice and `Pass 32.0 (core + CLI)`
+        # + `Pass 32.0 (GUI half)` were indistinguishable, so the gate
+        # reported the harmless case and had no way to be louder about the
+        # harmful one.
+        #
+        # Deliberately NOT a blanket "ignore repeats in Shipped": that would
+        # be weakening a gate to make it green, which is the false-green
+        # shape R106 has been amended four times over. A qualifier must be
+        # PRESENT and DISTINCT to earn the exemption.
+        qualifier = ""
+        q = re.search(r"Pass " + PASS_ID + r"\s*\(([^)]{1,40})\)", prefix)
+        if q:
+            qualifier = " ".join(q.group(1).split()).lower()
         for pid in re.findall(rf"Pass ({PASS_ID})", prefix):
-            found[(section_of(secs, n), pid)].append((n, ln.strip()[:100]))
+            found[(section_of(secs, n), pid, qualifier)].append((n, ln.strip()[:100]))
     return found
 
 
@@ -315,11 +340,32 @@ def main() -> int:
     failures = 0
 
     dup_passes = {k: v for k, v in passes.items() if len(v) > 1}
-    for (sec, pid), hits in sorted(dup_passes.items()):
+    for (sec, pid, qual), hits in sorted(dup_passes.items()):
         failures += 1
-        print(f"DUPLICATE Pass {pid} declared {len(hits)}x in section [{sec}]:")
+        how = f" (both qualified '{qual}')" if qual else " (neither qualified)"
+        print(f"DUPLICATE Pass {pid} declared {len(hits)}x in section [{sec}]{how}:")
         for n, text in hits:
             print(f"    {ROADMAP}:{n}: {text}")
+        print(
+            "    Two entries for one Pass are legitimate ONLY when each carries a"
+        )
+        print(
+            "    DISTINCT staged-ship qualifier, e.g. `Pass N.n (core + CLI)` and"
+        )
+        print("    `Pass N.n (GUI half)`. Same qualifier, or none, is a real collision.")
+
+    # Staged ships are REPORTED, not silently accepted. A Pass filed across
+    # several entries is a fact a reader of this output should see — and if
+    # a qualifier was added purely to quiet the gate, this is where that
+    # shows up as an entry nobody expected.
+    staged = defaultdict(list)
+    for (sec, pid, qual), hits in passes.items():
+        if qual:
+            staged[(sec, pid)].extend((n, qual) for n, _ in hits)
+    for (sec, pid), parts in sorted(staged.items()):
+        if len(parts) > 1:
+            names = ", ".join(f"'{q}'" for _, q in sorted(parts))
+            print(f"note  Pass {pid} filed in {len(parts)} stages in [{sec}]: {names}")
 
     dup_rules = {k: v for k, v in rules.items() if len(v) > 1}
     for num, hits in sorted(dup_rules.items()):
@@ -351,7 +397,9 @@ def main() -> int:
     # the file, and claimed-but-unheaded families are called out by name —
     # they are precisely the ones a reader cannot see by skimming.
     heading_families = defaultdict(list)
-    for _, pid in passes:
+    # Keys are now (section, id, qualifier) — the qualifier joined the key
+    # when staged ships were recognised. The ceiling cares only about the id.
+    for _, pid, _ in passes:
         heading_families[pid.split(".")[0]].append(pid)
 
     mentioned = defaultdict(list)
