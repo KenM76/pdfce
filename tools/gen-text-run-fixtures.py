@@ -142,6 +142,42 @@ def runs_inherited() -> bytes:
     )
 
 
+def runs_two_explicit() -> bytes:
+    """Two runs, each placed by its own ``Tm`` — neither inherits.
+
+    The baseline for deletion: removing either must leave the other
+    byte-verbatim, including its own positioning operator. Distinct from
+    ``runs-inherited.pdf`` precisely because NOTHING here is refused, so a
+    test can assert what a successful per-run delete looks like without
+    first navigating the §9.4.2 guard.
+    """
+    return page(
+        b"BT\n/F1 10 Tf\n"
+        b"1 0 0 1 72 700 Tm\n(ALPHA) Tj\n"
+        b"1 0 0 1 72 680 Tm\n(BETA) Tj\n"
+        b"ET\n"
+    )
+
+
+def runs_single() -> bytes:
+    """ONE run, next to an unrelated path.
+
+    Deleting the only run must take the whole ``BT``...``ET`` with it (a text
+    object that shows nothing is not an object) and must leave the path
+    verbatim — which is what makes this fixture different from a page
+    holding nothing else: without the path, "the text object was removed"
+    and "the whole content stream was emptied" look identical.
+    """
+    return page(
+        b"q 1 w 0 0 0 RG\n"
+        b"72 396 m 540 396 l S\n"
+        b"Q\n"
+        b"BT\n/F1 10 Tf\n"
+        b"1 0 0 1 72 700 Tm\n(ONLY) Tj\n"
+        b"ET\n"
+    )
+
+
 def runs_tj_array() -> bytes:
     """One run, spelled as a kerned `TJ` array."""
     return page(
@@ -158,6 +194,8 @@ def main() -> int:
     for name, data in (
         ("runs-inherited.pdf", runs_inherited()),
         ("runs-tj-array.pdf", runs_tj_array()),
+        ("runs-two-explicit.pdf", runs_two_explicit()),
+        ("runs-single.pdf", runs_single()),
     ):
         p = out_dir / name
         p.write_bytes(data)

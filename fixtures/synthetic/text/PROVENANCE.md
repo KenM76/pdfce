@@ -120,9 +120,17 @@ measured at all.
 against it. That is R162 (an assertion that cannot come out false), and
 it is the whole reason `runs-inherited.pdf` exists.
 
+Two more, added with the deletion verb itself:
+
+| File | Claim it makes falsifiable |
+|---|---|
+| `runs-two-explicit.pdf` | The **baseline** for a successful per-run delete. Two runs, each placed by its own `Tm`, so nothing is refused — removing either must leave the other byte-verbatim *including its own positioning operator*. Distinct from `runs-inherited.pdf` precisely because a test can assert what success looks like without first navigating the §9.4.2 guard. |
+| `runs-single.pdf` | Deleting the **only** run removes the whole `BT`…`ET` (a text object that shows nothing is not an object), **and leaves the unrelated path verbatim**. The path is the load-bearing part: without something else on the page, "the text object was removed" and "the content stream was emptied" produce identical assertions. |
+
 ## Regenerating
 
 ```
 python tools/gen-scattered-text-fixtures.py   # scattered-text-one-object.pdf
-python tools/gen-text-run-fixtures.py         # runs-inherited.pdf, runs-tj-array.pdf
+python tools/gen-text-run-fixtures.py         # runs-inherited, runs-tj-array,
+                                              # runs-two-explicit, runs-single
 ```

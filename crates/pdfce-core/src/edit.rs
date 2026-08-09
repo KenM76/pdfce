@@ -505,6 +505,16 @@ pub enum CommandKind {
     /// an operator scanning what they did. See
     /// [`EditSession::delete_subpath`].
     DeleteSubpath,
+    /// ONE show operator was deleted out of a text object (`Pass 32.0`),
+    /// leaving its siblings inside the same `BT`…`ET` byte-verbatim.
+    ///
+    /// Its own kind rather than a reuse of [`Self::DeleteObject`], because
+    /// the operator-facing sentence differs and the difference is the whole
+    /// point of the Pass: *"delete this label"* against *"delete all 237
+    /// labels"*. An Undo tooltip that said "delete text object" over a
+    /// one-label removal would describe the very behaviour this Pass
+    /// exists to stop.
+    DeleteTextRun,
     /// ONE **subpath** of a path object was moved (Pass 28.0): its
     /// construction operands were translated while the object's other
     /// subpaths kept their exact bytes. See [`EditSession::move_subpath`].
@@ -2654,6 +2664,31 @@ fn find_pattern_matches(hay: &str, pattern: &str, case_insensitive: bool) -> Vec
 /// needs `Tm`/`cm`-operand surgery, a different operator family, deferred to
 /// a fast-follow. Deletion does not go through this narrowing (it is a pure
 /// byte-span removal that works on any kind).
+/// Narrow a decomposed object to a TEXT object, or refuse by name.
+///
+/// The mirror of [`vector_object_as_path`], and it reuses that function's
+/// [`NotAPath`](crate::vector::VectorEditError::NotAPath) variant rather
+/// than minting a `NotAText`: the variant already carries the index and the
+/// kind that WAS found, which is the information the caller needs, and one
+/// message shape for "you pointed a typed verb at the wrong object kind" is
+/// easier to act on than two that differ only in which kind was wanted.
+fn vector_object_as_text(
+    obj: &crate::vector::VectorObject,
+    index: usize,
+) -> Result<&crate::vector::TextObject, crate::vector::VectorEditError> {
+    match obj {
+        crate::vector::VectorObject::Text(t) => Ok(t),
+        crate::vector::VectorObject::Path(_) => Err(crate::vector::VectorEditError::NotAPath {
+            index,
+            kind: "path",
+        }),
+        crate::vector::VectorObject::Image(_) => Err(crate::vector::VectorEditError::NotAPath {
+            index,
+            kind: "image",
+        }),
+    }
+}
+
 fn vector_object_as_path(
     obj: &crate::vector::VectorObject,
     index: usize,
@@ -4191,6 +4226,59 @@ impl EditSession {
                 stream,
                 path,
                 subpath_index,
+            )?)
+        })
+    }
+
+    /// **Delete ONE text run** — one show operator — out of a text object,
+    /// leaving every other run inside the same `BT`…`ET` byte-verbatim
+    /// (`Pass 32.0`).
+    ///
+    /// # The defect this closes
+    ///
+    /// Text deletion has been object-granular since Pass 9c-min, and a CAD
+    /// exporter's `BT`…`ET` boundary reflects its own batching rather than
+    /// anything the draughtsman drew: on the operator's drawing **one text
+    /// object holds all 237 dimension labels**, so deleting "a label"
+    /// deleted every one of them. The hit-test half has been per-run since
+    /// Pass 18.5, so a run could already be selected and could not be
+    /// removed.
+    ///
+    /// `run_index` is into [`TextObject::runs`](crate::vector::TextObject::runs)
+    /// in content order — the same numbering the hit test returns.
+    ///
+    /// # Errors
+    ///
+    /// [`EditError::VectorEdit`] — including
+    /// [`TextRunOutOfRange`](crate::vector::VectorEditError::TextRunOutOfRange)
+    /// and
+    /// [`DeleteWouldMoveNextRun`](crate::vector::VectorEditError::DeleteWouldMoveNextRun),
+    /// the §9.4.2 guard: a following run with no positioning operator of its
+    /// own starts wherever this one ends, so removing this one would slide
+    /// it. That refusal names its remedy — delete the later run first — plus
+    /// [`EditError::NotAPath`]'s text-object counterpart for a non-text
+    /// target, [`EditError::PageOutOfRange`],
+    /// [`EditError::VectorEditNoContents`], [`EditError::VectorEditContent`],
+    /// [`EditError::DocumentEncrypted`],
+    /// [`EditError::CertificationForbidsChange`]. Every refusal happens
+    /// before any mutation (rule 4).
+    pub fn delete_text_run(
+        &mut self,
+        page_index: usize,
+        object_index: usize,
+        run_index: usize,
+    ) -> Result<Vec<String>, EditError> {
+        self.vector_surgery(CommandKind::DeleteTextRun, page_index, |stream, model| {
+            let count = model.objects.len();
+            let obj = model.objects.get(object_index).ok_or(
+                crate::vector::VectorEditError::ObjectOutOfRange {
+                    index: object_index,
+                    count,
+                },
+            )?;
+            let text = vector_object_as_text(obj, object_index)?;
+            Ok(crate::vector::plan_delete_text_run(
+                stream, text, run_index,
             )?)
         })
     }

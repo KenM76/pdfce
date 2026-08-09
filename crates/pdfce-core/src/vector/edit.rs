@@ -107,7 +107,7 @@ use crate::content::{ContentStream, ContentToken, ContentTokenKind};
 use crate::text_edit::edit::splice;
 use crate::writer::content::emit_number;
 
-use super::decompose::{PathObject, VectorObject};
+use super::decompose::{PathObject, RunPositioning, TextObject, VectorObject};
 use super::geometry::{Point, rect_corners};
 
 /// Why a vector-edit surgery could not be planned.
@@ -322,6 +322,43 @@ pub enum VectorEditError {
     #[error("node index {index} was named more than once in one multi-node move")]
     DuplicateNodeInMove {
         /// The 0-based anchor index that appeared twice.
+        index: usize,
+    },
+    /// A per-run text edit named a run index the text object does not have.
+    #[error("text run index {index} is out of range (the object has {count} run(s))")]
+    TextRunOutOfRange {
+        /// The 0-based run index that was asked for.
+        index: usize,
+        /// How many show operators the text object has, in content order.
+        count: usize,
+    },
+    /// Deleting this text run would silently MOVE the next one.
+    ///
+    /// The **exact twin** of [`Self::DeleteWouldMoveNextSubpath`], one
+    /// object kind over. §9.4.2 leaves the text matrix advanced past the
+    /// string a show operator drew, so a following show operator with no
+    /// positioning operator between them starts *wherever this one left the
+    /// pen*. Its origin is INHERITED and written nowhere, so excising this
+    /// run slides the next one back — a byte-minimal edit that passes
+    /// `--verify-undo` and every content-identity check, and is still
+    /// wrong.
+    ///
+    /// # Why refused rather than repaired
+    ///
+    /// Materialising the next run's origin is possible in principle — emit
+    /// the `Td` the producer omitted — but it requires knowing the advance
+    /// the deleted string produced, to the precision the font's own metrics
+    /// give, and being wrong by a fraction of a point moves a label the
+    /// operator never selected. Decision 027's posture applies: refuse what
+    /// has no good reading rather than guess at it. The remedy is available
+    /// and is stated in the message — delete the runs in the other order,
+    /// which never inherits.
+    #[error(
+        "deleting run {index} would move the run after it, which starts where this one ends \
+         rather than at a position of its own; delete the later run first"
+    )]
+    DeleteWouldMoveNextRun {
+        /// The run whose deletion was refused.
         index: usize,
     },
     /// A **multi-node** drag named no nodes at all.
@@ -823,6 +860,119 @@ pub fn plan_delete_subpath(
     // two tokens together.
     let end = extend_over_whitespace(&content.buf, site.1, obj.bytes.end());
     let mut edits = vec![(site.0, end, Vec::new())];
+    Ok(PlannedEdit {
+        content: splice(&content.buf, &mut edits),
+        operators_touched: 1,
+        disclosures: Vec::new(),
+    })
+}
+
+/// Plan the deletion of **one show operator** out of a text object
+/// (`Pass 32.0`, ISO 32000-1 §9.4).
+///
+/// # The defect this closes, measured on the operator's own drawing
+///
+/// Deletion has been object-granular since Pass 9c-min, and the operator's
+/// mental unit is the **run**. A SolidWorks export puts *every* label on a
+/// sheet inside **one** `BT`…`ET`, so on `cad-drawing-a.pdf` deleting "a
+/// dimension label" removes **all 237 of them at once**.
+///
+/// This is the text-side twin of [`plan_delete_subpath`] (Pass 25.2), and
+/// deliberately the same shape: the hit-test half has been per-run since
+/// Pass 18.5, so a run could already be *selected* and could not be
+/// *removed*.
+///
+/// # What it does
+///
+/// Removes exactly that run's operator bytes — the span
+/// [`TextRun::bytes`] recorded at decomposition, so the index and the bytes
+/// cannot describe different things — and re-emits everything else
+/// verbatim. Trailing whitespace goes with it, bounded by the text
+/// object's own span, so removing 237 labels does not leave 237 orphaned
+/// runs of spaces.
+///
+/// **Deleting the only run deletes the text object**, exactly as deleting
+/// the only subpath deletes the path object: a `BT`…`ET` that shows
+/// nothing is not an object.
+///
+/// # The refusal that earns its code
+///
+/// [`VectorEditError::DeleteWouldMoveNextRun`] when the **following** run's
+/// position is [`RunPositioning::Inherited`] — §9.4.2 leaves the pen
+/// advanced past the string just drawn, so that run starts wherever this
+/// one ends and has no coordinates of its own. Excising this run slides it.
+/// The edit would be byte-minimal, would round-trip, would pass
+/// `--verify-undo`, and would be wrong — which is precisely the class
+/// decision 027 says to refuse rather than guess at.
+///
+/// The message names the remedy, because there is one and it always works:
+/// **delete the later run first.** A run that inherits from a run that is
+/// already gone is not a case this can produce.
+///
+/// # Errors
+///
+/// [`VectorEditError::TextRunOutOfRange`],
+/// [`VectorEditError::DeleteWouldMoveNextRun`]. Both are raised before any
+/// content byte is produced.
+///
+/// # Examples
+///
+/// ```
+/// use pdfce_core::content::ContentStream;
+/// use pdfce_core::vector::{decompose, NoXObjects, Matrix, VectorObject};
+/// use pdfce_core::vector::edit::plan_delete_text_run;
+///
+/// // Two runs, each placed by its own `Tm`, so neither inherits.
+/// let src = b"BT /F1 10 Tf 1 0 0 1 10 700 Tm (A) Tj 1 0 0 1 10 680 Tm (B) Tj ET".to_vec();
+/// let cs = ContentStream::parse(src).unwrap();
+/// let model = decompose(&cs, Matrix::IDENTITY, &NoXObjects);
+/// # if let Some(VectorObject::Text(t)) = model.objects.first() {
+/// # if t.runs.len() == 2 {
+/// let VectorObject::Text(text) = &model.objects[0] else { unreachable!() };
+/// let plan = plan_delete_text_run(&cs, text, 0).unwrap();
+/// assert!(!String::from_utf8_lossy(&plan.content).contains("(A)"));
+/// assert!(String::from_utf8_lossy(&plan.content).contains("(B)"));
+/// # }}
+/// ```
+pub fn plan_delete_text_run(
+    content: &ContentStream,
+    obj: &TextObject,
+    run_index: usize,
+) -> Result<PlannedEdit, VectorEditError> {
+    let count = obj.runs.len();
+    let Some(run) = obj.runs.get(run_index) else {
+        return Err(VectorEditError::TextRunOutOfRange {
+            index: run_index,
+            count,
+        });
+    };
+
+    // The last one standing: a text object that shows nothing is not an
+    // object. Same rule, same reason, as `plan_delete_subpath`'s.
+    if count == 1 {
+        let span = obj.bytes;
+        let mut edits = vec![(span.start, span.end(), Vec::new())];
+        return Ok(PlannedEdit {
+            content: splice(&content.buf, &mut edits),
+            operators_touched: 1,
+            disclosures: Vec::new(),
+        });
+    }
+
+    // The §9.4.2 guard — see `DeleteWouldMoveNextRun`. Checked against the
+    // NEXT run only: a run that inherits from something further back is not
+    // a shape the model can produce, since inheritance is always from the
+    // immediately preceding show operator.
+    if obj
+        .runs
+        .get(run_index + 1)
+        .is_some_and(|next| next.positioned_by == RunPositioning::Inherited)
+    {
+        return Err(VectorEditError::DeleteWouldMoveNextRun { index: run_index });
+    }
+
+    let end = extend_over_whitespace(&content.buf, run.bytes.end(), obj.bytes.end());
+    let mut edits = vec![(run.bytes.start, end, Vec::new())];
     Ok(PlannedEdit {
         content: splice(&content.buf, &mut edits),
         operators_touched: 1,
