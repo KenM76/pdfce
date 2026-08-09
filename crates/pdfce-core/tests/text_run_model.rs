@@ -234,3 +234,90 @@ fn the_scattered_text_fixture_has_only_explicit_runs() {
          needs revisiting",
     );
 }
+
+// ---------------------------------------------------------------------------
+// Per-run text (`TextObject::run_text`)
+// ---------------------------------------------------------------------------
+
+/// **Each run reports its OWN string, not the object's whole preview.**
+///
+/// This is the assertion the accessor exists for. `TextObject::preview`
+/// decodes a whole `BT`…`ET` into one running string, so before this
+/// existed the only answer to *"what does run 2 say?"* was
+/// `"ALPHABETAGAMMADELTA"` — the same answer for all four runs.
+///
+/// The exclusions carry the weight. Checking only that run 1 contains
+/// `"BETA"` would pass against an implementation that returned the whole
+/// preview for every index (R162 — an assertion that cannot come out
+/// false), because the preview contains `"BETA"` too. Requiring EQUALITY,
+/// and requiring the other three names to be absent, is what makes this
+/// fail if the ranges are wrong.
+#[test]
+fn each_run_reports_its_own_string_and_not_the_objects_whole_preview() {
+    let (text, _) = text_of("runs-inherited.pdf");
+    let names = ["ALPHA", "BETA", "GAMMA", "DELTA"];
+    assert_eq!(text.runs.len(), 4, "the fixture has four show operators");
+
+    for (i, expected) in names.iter().enumerate() {
+        let got = text
+            .run_text(i)
+            .unwrap_or_else(|| panic!("run {i} has no readable text"));
+        assert_eq!(
+            got, *expected,
+            "run {i} should read exactly {expected:?}, got {got:?} — if this \
+             is the whole concatenation, the range is not being sliced"
+        );
+        for (j, other) in names.iter().enumerate() {
+            if i != j {
+                assert!(
+                    !got.contains(other),
+                    "run {i} ({got:?}) leaked run {j}'s text ({other:?})"
+                );
+            }
+        }
+    }
+}
+
+/// **An out-of-range index is `None`, not a panic and not run 0.**
+///
+/// The DXF exporter walks runs by index; a wrapping or clamping accessor
+/// would emit a duplicate label rather than stopping.
+#[test]
+fn an_out_of_range_run_index_is_none() {
+    let (text, _) = text_of("runs-inherited.pdf");
+    assert!(text.run_text(4).is_none(), "index 4 of a 4-run object");
+    assert!(text.run_text(usize::MAX).is_none());
+}
+
+/// **The ranges tile the preview in order, with no gap and no overlap.**
+///
+/// A structural check that does not depend on the fixture's particular
+/// words: concatenating every run's text must reproduce the preview
+/// exactly. If two ranges overlapped, the concatenation would be longer
+/// than the preview; if one were dropped or short, shorter.
+#[test]
+fn the_run_ranges_tile_the_preview_exactly() {
+    let (text, _) = text_of("runs-inherited.pdf");
+    let joined: String = (0..text.runs.len())
+        .map(|i| text.run_text(i).expect("readable"))
+        .collect();
+    let pdfce_core::vector::TextPreview::Decoded { text: whole, .. } = &text.preview else {
+        panic!("the fixture decodes");
+    };
+    assert_eq!(
+        &joined, whole,
+        "the per-run ranges must tile the preview with no gap or overlap"
+    );
+    let mut prev_end = 0;
+    for (i, run) in text.runs.iter().enumerate() {
+        assert_eq!(
+            run.text_start, prev_end,
+            "run {i} does not abut its predecessor"
+        );
+        assert!(
+            run.text_end >= run.text_start,
+            "run {i} has a backwards range"
+        );
+        prev_end = run.text_end;
+    }
+}

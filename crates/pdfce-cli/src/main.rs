@@ -2785,6 +2785,15 @@ enum Command {
         /// circles and arcs.
         #[arg(long)]
         no_fit_arcs: bool,
+        /// Leave the page's text out of the DXF entirely.
+        ///
+        /// By default each text run becomes a TEXT entity on its own layer
+        /// (`PDFCE_TEXT`), so the drawing's dimensions and notes are
+        /// readable and can be switched off in one click without touching
+        /// the geometry. Pass this when the destination is a cutting table
+        /// and any stray entity is a hazard.
+        #[arg(long)]
+        no_text: bool,
     },
     /// **Delete ONE text run** — one show operator — out of a text object
     /// (`Pass 32.0`, ISO 32000-1 §9.4).
@@ -4220,7 +4229,8 @@ fn run() -> ExitCode {
             units,
             scale,
             no_fit_arcs,
-        } => cmd_export_dxf(&input, page, &output, units, scale, !no_fit_arcs),
+            no_text,
+        } => cmd_export_dxf(&input, page, &output, units, scale, !no_fit_arcs, !no_text),
         Command::TextRunDelete {
             input,
             page,
@@ -13161,8 +13171,9 @@ fn cmd_export_dxf(
     units: DxfUnitArg,
     scale: f64,
     fit_arcs: bool,
+    text: bool,
 ) -> u8 {
-    use pdfce_core::export::dxf::{DxfOptions, DxfUnits, write_dxf};
+    use pdfce_core::export::dxf::{DxfOptions, DxfText, DxfUnits, write_dxf};
 
     if !scale.is_finite() || scale <= 0.0 {
         eprintln!(
@@ -13213,6 +13224,11 @@ fn cmd_export_dxf(
         },
         scale,
         fit_arcs,
+        text: if text {
+            DxfText::Entities
+        } else {
+            DxfText::Omit
+        },
         ..DxfOptions::default()
     };
     let (dxf, out) = write_dxf(&model, &opts);
@@ -13229,6 +13245,13 @@ fn cmd_export_dxf(
             out.skipped_text
         );
     }
+    if out.unreadable_text > 0 {
+        eprintln!(
+            "pdfce-cli: {}: {} text run(s) could NOT be read and are absent from the DXF — pdfce could not map their character codes to characters (a font with no /ToUnicode, typically). This is different from --no-text: these are labels you can see on the page that pdfce cannot transcribe, so the DXF is missing text you will expect to find in it.",
+            input.display(),
+            out.unreadable_text
+        );
+    }
     if out.skipped_images > 0 {
         eprintln!(
             "pdfce-cli: {}: {} image(s) were NOT exported — DXF has no raster entity in the subset pdfce writes, so a scanned or rendered region of the page is simply missing rather than blank.",
@@ -13243,9 +13266,9 @@ fn cmd_export_dxf(
         );
     }
 
-    let entities = out.polylines + out.circles + out.arcs + out.splines;
+    let entities = out.polylines + out.circles + out.arcs + out.splines + out.text_entities;
     println!(
-        "export-dxf {} page {} -> {}; entities={entities} polylines={} circles={} arcs={} splines={} skipped_text={} skipped_images={} units={} scale={} fit_arcs={}",
+        "export-dxf {} page {} -> {}; entities={entities} polylines={} circles={} arcs={} splines={} text={} unreadable_text={} skipped_text={} skipped_images={} units={} scale={} fit_arcs={}",
         input.display(),
         page.max(1),
         output.display(),
@@ -13253,6 +13276,8 @@ fn cmd_export_dxf(
         out.circles,
         out.arcs,
         out.splines,
+        out.text_entities,
+        out.unreadable_text,
         out.skipped_text,
         out.skipped_images,
         match units {

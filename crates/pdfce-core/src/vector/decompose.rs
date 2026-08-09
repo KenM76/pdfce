@@ -708,6 +708,48 @@ pub struct TextObject {
     pub bytes: ByteSpan,
 }
 
+impl TextObject {
+    /// The decoded characters of run `index`, or `None` when this object
+    /// has no such run or its text is not readable.
+    ///
+    /// # Why `None` covers three different situations, and why that is right
+    ///
+    /// `None` is returned when the index is out of range, when the preview
+    /// is [`TextPreview::Unavailable`] / [`TextPreview::Undecodable`] /
+    /// [`TextPreview::Empty`], and when the run opened after the preview hit
+    /// [`MAX_TEXT_PREVIEW_CHARS`]. Callers that need to TELL those apart —
+    /// a GUI readout wanting to say *"no font resolver"* rather than *"no
+    /// text"* — read [`Self::preview`] directly, which is why every one of
+    /// those distinctions is preserved there. What this accessor promises
+    /// is narrower and is the promise its callers actually need: **the text
+    /// it returns is this run's text, or it returns nothing.** It never
+    /// returns the object's whole string as a stand-in for one run, which
+    /// is the failure a DXF export would otherwise ship as 237 dimension
+    /// labels stacked at a single insertion point.
+    ///
+    /// # Empty string vs `None`
+    ///
+    /// A run whose show operand was `()` — legal, and emitted by real
+    /// producers as a positioning no-op — yields `Some("")`. That is a
+    /// deliberate distinction from `None`: the run exists and is readable,
+    /// it just says nothing, and a caller deciding whether to emit a DXF
+    /// `TEXT` entity needs "readable but empty" to mean *skip*, not
+    /// *unreadable*.
+    #[must_use]
+    pub fn run_text(&self, index: usize) -> Option<&str> {
+        let run = self.runs.get(index)?;
+        let TextPreview::Decoded { text, .. } = &self.preview else {
+            return None;
+        };
+        // `get` rather than an index: the range is clamped at construction,
+        // but a char-boundary miss would still panic on a slice, and a CJK
+        // preview is exactly where that lands. `get` returns `None` on a
+        // non-boundary offset instead — a label that cannot be read, not a
+        // crash mid-export.
+        text.get(run.text_range())
+    }
+}
+
 /// How a show operator's origin was established — the text-side analogue of
 /// a subpath's start being explicit or reused (`Pass 30.0`).
 ///
@@ -760,6 +802,47 @@ pub struct TextRun {
     pub bytes: ByteSpan,
     /// Whether deleting what precedes this run would move it.
     pub positioned_by: RunPositioning,
+    /// Byte range of this run's decoded text within the enclosing
+    /// [`TextObject::preview`] — read it through
+    /// [`TextObject::run_text`], which handles the truncation case.
+    ///
+    /// # Why a RANGE and not a `String`
+    ///
+    /// The preview is accumulated once, character by character, as the
+    /// walker decodes each show operator (§9.10.2's mapping ladder). A
+    /// per-run `String` would be a second copy of the same bytes on every
+    /// run, and on the measured CAD export — one text object holding all
+    /// 237 dimension labels — that is 237 allocations for text the object
+    /// already stores contiguously.
+    ///
+    /// # What needed it
+    ///
+    /// `TextObject::preview` decodes a whole `BT`…`ET` into ONE running
+    /// string with no boundary retained, so *"the text of run 6"* was not
+    /// expressible. That blocked two things at once: naming the selected
+    /// run in the GUI's rung readout (`pdfce-ui-specialist` filed it as
+    /// owed), and emitting one DXF `TEXT` entity per label instead of one
+    /// carrying all 237 concatenated at a single point.
+    ///
+    /// Stored as a start/end PAIR rather than a `Range<usize>` because
+    /// `Range` is not `Copy`, and `TextRun` is copied per candidate on
+    /// every hit-test pass. Read it through [`Self::text_range`].
+    pub text_start: usize,
+    /// End of [`Self::text_start`]'s range, exclusive.
+    pub text_end: usize,
+}
+
+impl TextRun {
+    /// This run's byte range within the enclosing
+    /// [`TextObject::preview`] — see [`Self::text_start`].
+    ///
+    /// Prefer [`TextObject::run_text`], which resolves the range against
+    /// the right preview and handles the unreadable cases; this is for
+    /// callers that already hold the string.
+    #[must_use]
+    pub fn text_range(&self) -> core::ops::Range<usize> {
+        self.text_start..self.text_end
+    }
 }
 
 /// A selectable object on a page — the unit the GUI target provider hands
@@ -1396,6 +1479,13 @@ struct TextAccum {
     /// well-formed and round-trip cleanly, so nothing downstream could
     /// catch it.
     current_run_tokens: Option<TokenRange>,
+    /// Byte offset into [`Self::preview`] at which the run currently being
+    /// laid out began — becomes the start of [`TextRun::text`].
+    ///
+    /// Captured when a show operator opens a run rather than when it
+    /// closes, because `decode_show_string` has already appended this
+    /// run's characters to `preview` by the time `close_text_run` runs.
+    current_run_text_start: usize,
     /// Whether a positioning operator has run since the last show operator
     /// closed — see [`RunPositioning`].
     ///
@@ -1462,6 +1552,7 @@ impl TextAccum {
             origins: Bounds::EMPTY,
             runs: Vec::new(),
             current_run_tokens: None,
+            current_run_text_start: 0,
             positioned_since_run: true,
             current_run: Bounds::EMPTY,
             runs_overflowed: false,
@@ -1629,6 +1720,11 @@ impl<'a> Decomposer<'a> {
                     start: first,
                     end: op_index + 1,
                 });
+                // Latched HERE, one dispatch before `show_string` decodes,
+                // because by the time `close_text_run` sees the run its
+                // characters are already in `preview` and the start offset
+                // is unrecoverable.
+                t.current_run_text_start = t.preview.len();
             }
         }
 
@@ -2268,6 +2364,13 @@ impl<'a> Decomposer<'a> {
         };
         t.positioned_since_run = false;
         let run_tokens = t.current_run_tokens.take();
+        // Clamped to the preview's current length so a run that opened
+        // AFTER the MAX_TEXT_PREVIEW_CHARS cap stopped appending yields an
+        // empty range rather than a backwards one. `start > end` would
+        // panic the slice in `run_text`, and on exactly the documents this
+        // exists for — a CAD sheet whose labels run past the cap.
+        let text_start = t.current_run_text_start.min(t.preview.len());
+        let text_end = t.preview.len();
 
         if t.current_run.is_empty() {
             return;
@@ -2298,6 +2401,8 @@ impl<'a> Decomposer<'a> {
             tokens,
             bytes,
             positioned_by,
+            text_start,
+            text_end,
         });
     }
 

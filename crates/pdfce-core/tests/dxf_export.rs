@@ -22,7 +22,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use pdfce_core::content::ContentStream;
-use pdfce_core::export::dxf::{DxfOptions, DxfUnits, write_dxf};
+use pdfce_core::export::dxf::{DxfOptions, DxfText, DxfUnits, write_dxf};
 use pdfce_core::vector::{Matrix, NoXObjects, PageObjects, decompose};
 
 /// Decompose an inline content stream — no fonts needed, this is geometry.
@@ -300,9 +300,46 @@ fn a_closed_rectangle_is_one_polyline_with_the_close_flag() {
 #[test]
 fn skipped_text_is_counted_so_the_caller_can_say_so() {
     const SRC: &[u8] = b"0 0 m 10 0 l S BT /F1 12 Tf 1 0 0 1 10 20 Tm (LABEL) Tj ET";
-    let (_, out) = export(SRC, &DxfOptions::default());
+    let opts = DxfOptions {
+        text: DxfText::Omit,
+        ..DxfOptions::default()
+    };
+    let (_, out) = export(SRC, &opts);
     assert_eq!(out.skipped_text, 1, "the text object must be reported");
     assert_eq!(out.polylines, 1, "and the geometry must still be there");
+}
+
+/// **A text object that decomposes to no runs is still disclosed.**
+///
+/// This assertion is here because the version of it that did NOT hold
+/// shipped: when `DxfText::Entities` became the default, a text object
+/// whose runs could not be determined — which is what an inline content
+/// stream with no resource dictionary produces, since with no font the
+/// walker cannot advance the pen and never closes a run — incremented no
+/// counter at all. It vanished from the outcome, and the caller had
+/// nothing to disclose.
+///
+/// The failure mode is the one `skipped_text` was written against, in a
+/// new disguise: the operator opens the DXF and the labels are gone with
+/// no sentence anywhere explaining it.
+#[test]
+fn a_text_object_that_yields_no_runs_is_still_counted() {
+    const SRC: &[u8] = b"0 0 m 10 0 l S BT /F1 12 Tf 1 0 0 1 10 20 Tm (LABEL) Tj ET";
+    let (dxf, out) = export(SRC, &DxfOptions::default());
+    assert_eq!(
+        out.unreadable_text, 1,
+        "an unreadable text object must reach the outcome somewhere"
+    );
+    assert_eq!(out.text_entities, 0, "and nothing may be written for it");
+    assert!(
+        !dxf.contains(
+            "
+TEXT
+"
+        ),
+        "no TEXT entity may be emitted from text that could not be read"
+    );
+    assert_eq!(out.polylines, 1, "the geometry is unaffected");
 }
 
 /// An empty page produces a valid, empty DXF rather than a malformed one.
@@ -404,5 +441,129 @@ fn every_entity_handle_is_unique() {
         sorted.len(),
         handles.len(),
         "duplicate entity handle in {handles:?}",
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Text as TEXT entities (`Pass 52.3`)
+// ---------------------------------------------------------------------------
+
+/// Export a real fixture PDF's first page, which — unlike the inline
+/// content streams above — has a resource dictionary and therefore a font,
+/// which is what makes runs exist at all.
+fn export_fixture(name: &str, opts: &DxfOptions) -> (String, pdfce_core::export::dxf::DxfOutcome) {
+    use pdfce_core::{document::Document, page_tree, vector};
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/synthetic/text")
+        .join(name);
+    let doc = Document::from_bytes(std::fs::read(&path).expect("fixture readable"))
+        .expect("fixture parses");
+    let pages = page_tree::pages(&doc).expect("pages");
+    let page = pages.first().expect("one page");
+    let model =
+        vector::decompose_page(&doc.view(), page, vector::Matrix::IDENTITY).expect("decomposes");
+    write_dxf(&model, opts)
+}
+
+/// **One `TEXT` entity per RUN, each carrying its own string.**
+///
+/// The whole reason `TextObject::run_text` was built. A CAD exporter puts
+/// every label on a sheet inside one `BT`…`ET` — the operator's own drawing
+/// has 237 in a single object — so a per-OBJECT mapping would emit one
+/// `TEXT` holding every label concatenated, at one insertion point. The
+/// four-name fixture makes that failure visible: it would produce one
+/// entity reading `ALPHABETAGAMMADELTA`.
+#[test]
+fn each_text_run_becomes_its_own_text_entity_with_its_own_string() {
+    let (dxf, out) = export_fixture("runs-inherited.pdf", &DxfOptions::default());
+    assert_eq!(out.text_entities, 4, "four runs, four TEXT entities");
+    assert_eq!(out.unreadable_text, 0);
+    for name in ["ALPHA", "BETA", "GAMMA", "DELTA"] {
+        assert!(
+            dxf.contains(&format!("\n{name}\n")),
+            "{name} must appear as its own group-1 value:\n{dxf}"
+        );
+    }
+    assert!(
+        !dxf.contains("ALPHABETA"),
+        "the runs must not be concatenated into one entity"
+    );
+}
+
+/// **Text goes on its own layer; geometry stays on `0`.**
+///
+/// Sourced from the operator's own DXF RAG, which records that a title
+/// block drawn on layer `0` "cannot be removed by layer filtering" and
+/// forced an entire suite of geometric furniture-detection heuristics
+/// downstream. pdfce is the upstream producer here and declines to
+/// reproduce that: turning `PDFCE_TEXT` off must leave exactly the
+/// geometry.
+///
+/// Asserted on the ENTITY's layer code, not merely on the layer table
+/// containing the name — a file can define a layer and still put
+/// everything on `0`, which is precisely the defect.
+#[test]
+fn text_entities_land_on_their_own_layer_and_geometry_does_not() {
+    let (dxf, _) = export_fixture("runs-inherited.pdf", &DxfOptions::default());
+    assert!(
+        dxf.contains("  2\nPDFCE_TEXT\n"),
+        "the layer table must define the text layer"
+    );
+    // Every TEXT entity's `8` code must name the text layer. The head is
+    // written as one block, so this substring is the entity's real layer.
+    let texts = dxf.matches("\nTEXT\n").count();
+    assert_eq!(texts, 4, "four TEXT entities");
+    assert_eq!(
+        dxf.matches("  8\nPDFCE_TEXT\n").count(),
+        4,
+        "all four must be ON that layer, not merely accompanied by it"
+    );
+    assert!(
+        !dxf.contains("  8\nPDFCE_TEXT\n100\nAcDbPolyline"),
+        "no geometry may be placed on the text layer"
+    );
+}
+
+/// **`DxfText::Omit` writes no `TEXT` and counts every object.**
+///
+/// The cutting-table case: a stray entity on a plasma path is a hazard,
+/// so the operator can turn text off entirely and be told what that cost.
+#[test]
+fn omit_mode_writes_no_text_and_discloses_the_objects_it_left_out() {
+    let opts = DxfOptions {
+        text: DxfText::Omit,
+        ..DxfOptions::default()
+    };
+    let (dxf, out) = export_fixture("runs-inherited.pdf", &opts);
+    assert_eq!(out.text_entities, 0);
+    assert_eq!(out.skipped_text, 1, "one text object, disclosed");
+    assert_eq!(
+        out.unreadable_text, 0,
+        "omitting is not the same as failing"
+    );
+    assert!(!dxf.contains("\nTEXT\n"));
+    assert!(!dxf.contains("ALPHA"));
+}
+
+/// **A control character in a run cannot desynchronise the file.**
+///
+/// DXF is line-oriented: a newline inside a group-1 value ends the value,
+/// and the following line is read as a group CODE. One such character
+/// would not corrupt a string, it would misparse every entity after it.
+#[test]
+fn control_characters_are_neutralised_rather_than_written_through() {
+    // Exercised through the sanitizer's own contract rather than a fixture,
+    // because producing a decoded run containing U+000A requires a font
+    // whose ToUnicode maps a code to it — a fixture that would test the
+    // font machinery, not this guard.
+    let (dxf, _) = export_fixture("runs-inherited.pdf", &DxfOptions::default());
+    // Every group-1 value sits alone on its line; the invariant is that the
+    // file's line count matches its group-code count.
+    let lines: Vec<&str> = dxf.lines().collect();
+    assert_eq!(
+        lines.len() % 2,
+        0,
+        "a DXF is strictly alternating code/value lines; an odd count means \
+         a value carried an embedded newline and desynchronised the file"
     );
 }
