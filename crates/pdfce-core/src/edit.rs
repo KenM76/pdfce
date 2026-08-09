@@ -8136,8 +8136,22 @@ impl EditSession {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(EditError::DocumentEncrypted);
         }
-        // Guard 2 (X11): enforced certification. Conservative reuse.
-        self.check_certification()?;
+        // Guard 2 (X11): enforced certification — the ANNOTATION-aware gate
+        // since `Pass 38.5`, not the strict one it used to take.
+        //
+        // §12.8.2.2 Table 254 `P = 3`: "the same as for 2, as well as
+        // **annotation creation**, deletion, and modification". Authoring a
+        // markup annotation IS annotation creation, so the strict gate was
+        // refusing the one operation such a document was certified TO
+        // allow — a document signed specifically for comment review was
+        // read-only to pdfce's whole markup surface.
+        //
+        // Widened as part of `Pass 38.5` rather than filed for later: the
+        // deletion half of that Pass established the gate and the clause,
+        // and leaving creation on the strict one would have left pdfce
+        // able to delete a comment on a `/P 3` document but not to write
+        // one — a split with no basis in Table 254.
+        self.check_certification_for_annotation()?;
         // Guard 4: geometry must draw something.
         validate_geometry(spec)?;
 
@@ -8248,7 +8262,19 @@ impl EditSession {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(EditError::DocumentEncrypted);
         }
-        self.check_certification()?;
+        // The ANNOTATION-aware gate (`Pass 38.5`), and the distinction it
+        // rests on is the one this whole feature turns on: **marking is not
+        // applying.** A `/Redact` mark is an annotation (§12.5.6.23) and
+        // nothing more — it removes no content, and `apply_redactions` is a
+        // separate call the operator makes deliberately. So authoring one is
+        // "annotation creation" under §12.8.2.2 Table 254, which `P = 3`
+        // permits, and refusing it there would refuse a review annotation on
+        // a document certified for review.
+        //
+        // The destructive half is unaffected: `crate::redact::apply_redactions`
+        // rewrites content streams, which is not an annotation change, and it
+        // does not come through this gate at all.
+        self.check_certification_for_annotation()?;
         if spec.quads.is_empty() {
             return Err(EditError::EmptyGeometry);
         }
@@ -8369,7 +8395,18 @@ impl EditSession {
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(EditError::DocumentEncrypted);
         }
-        self.check_certification()?;
+        // The ANNOTATION-aware gate (`Pass 38.5`) — removing a mark is
+        // annotation deletion and nothing else, which §12.8.2.2 Table 254
+        // `P = 3` permits. It also removes NOTHING from the document: an
+        // unapplied mark never took anything away, so this is the reverse
+        // of marking, not the reverse of redacting.
+        //
+        // This matters beyond the direct caller. `delete_annotation` ROUTES
+        // a `/Redact` target here, so before this change a `/P 3` document
+        // let pdfce delete every annotation EXCEPT a redaction mark — and
+        // the routing would have made that look like a bug in the general
+        // verb rather than in this one's gate.
+        self.check_certification_for_annotation()?;
 
         // Locate the mark by walking the SESSION's own page list and
         // annotations — never the base document — so a mark authored this
@@ -8545,10 +8582,20 @@ impl EditSession {
     /// comment-review document, which is exactly what `P = 3` is *for*,
     /// stops being read-only for no reason.
     ///
-    /// A delegated route runs the **destination verb's** gate, which is the
-    /// strict one. That is not an oversight: a ce dimension's deletion also
-    /// rewrites the catalog `/PieceInfo` sidecar, which is not an annotation
-    /// change and is not in Table 254's `P = 3` list.
+    /// A delegated route runs the **destination verb's** gate, and the two
+    /// destinations now differ — correctly, and the difference is the
+    /// clause, not an accident:
+    ///
+    /// - [`Self::delete_redaction_mark`] takes the **annotation** gate, same
+    ///   as this verb. Removing an unapplied mark is annotation deletion and
+    ///   nothing else.
+    /// - [`Self::delete_dimension`] keeps the **strict** gate, because it
+    ///   also rewrites the catalog `/PieceInfo` sidecar — not an annotation
+    ///   change, and not in Table 254's `P = 3` list.
+    ///
+    /// So on a `/P 3` document, deleting a ce dimension is refused while
+    /// deleting every other annotation is allowed. That is the standard's
+    /// answer, not pdfce's preference.
     ///
     /// # Errors
     ///
@@ -9380,11 +9427,16 @@ impl EditSession {
         page_index: usize,
         spec: &TextAnnotSpec,
     ) -> Result<ObjId, EditError> {
-        // Guards, identical order to add_markup (X10, X11, /Size).
+        // Guards, identical order to add_markup (X10, X11, /Size) — and
+        // identical GATE as of `Pass 38.5`: the annotation-aware one, since
+        // a FreeText or Stamp is annotation creation, which §12.8.2.2
+        // Table 254 `P = 3` permits. "Identical to add_markup" is load
+        // bearing here; the two verbs author the same kind of object and a
+        // divergence between their gates would be arbitrary.
         if self.base.trailer().contains_key(b"Encrypt") {
             return Err(EditError::DocumentEncrypted);
         }
-        self.check_certification()?;
+        self.check_certification_for_annotation()?;
 
         let slots = self.page_slots()?;
         let count = slots.len();

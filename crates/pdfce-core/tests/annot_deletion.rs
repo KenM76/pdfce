@@ -583,6 +583,51 @@ fn p3_permits_deleting_a_comment_and_still_refuses_deleting_a_field() {
     );
 }
 
+/// **`/P 3` permits annotation CREATION too, and the gate had to be
+/// widened for that as well** (§12.8.2.2 Table 254: *"annotation
+/// creation, deletion, and modification"* — all three words).
+///
+/// Found while filing the deletion half: `add_markup`,
+/// `add_text_annotation` and `add_redaction` all took the STRICT gate, so
+/// pdfce could delete a comment on a `/P 3` document and not write one —
+/// a split with no basis in Table 254. Asserted here rather than in a
+/// markup test file because the claim is about the GATE, and this file is
+/// where the gate's fixtures live.
+#[test]
+fn p3_permits_authoring_an_annotation_as_well_as_deleting_one() {
+    use pdfce_core::annot_author::{Color, MarkupSpec};
+
+    let mut s = session("annot/certified-p3.pdf");
+    let spec = MarkupSpec::Square {
+        rect: pdfce_core::page_tree::Rect {
+            llx: 10.0,
+            lly: 10.0,
+            urx: 60.0,
+            ury: 40.0,
+        },
+        border: Some(Color::Gray(0.0)),
+        interior: None,
+        border_width: 1.0,
+    };
+    s.add_markup(0, &spec).expect(
+        "/P 3 permits ANNOTATION CREATION. Refusing here means pdfce can \
+         delete a comment on this document but not write one, which Table \
+         254 does not say anywhere",
+    );
+
+    // And the falsifier, on the same axis: at /P 2 it must still refuse.
+    let mut p2 = session("annot/certified-p2-annot.pdf");
+    assert!(
+        matches!(
+            p2.add_markup(0, &spec),
+            Err(EditError::CertificationForbidsChange { permission: 2 })
+        ),
+        "/P 2 permits form filling, template instantiation and signing — \
+         not annotations. If this succeeds, the widening went too far and \
+         the gate is no longer reading /P",
+    );
+}
+
 /// The falsifier. The same file with one digit changed refuses, which is
 /// what makes the test above an assertion about `/P` rather than about
 /// nothing.
